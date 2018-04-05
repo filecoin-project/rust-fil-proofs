@@ -533,7 +533,7 @@ impl MPCParameters {
         &mut self,
         pubkey: &PublicKey,
         privkey: &PrivateKey
-    )
+    ) -> [u8; 64]
     {
         fn batch_exp<C: CurveAffine>(bases: &mut [C], coeff: C::Scalar) {
             let coeff = coeff.into_repr();
@@ -591,6 +591,146 @@ impl MPCParameters {
         self.params.vk.delta_g2 = self.params.vk.delta_g2.mul(privkey.delta).into_affine();
 
         self.contributions.push(pubkey.clone());
+
+        {
+            let sink = io::sink();
+            let mut sink = HashWriter::new(sink);
+            pubkey.write(&mut sink).unwrap();
+            let h = sink.into_hash();
+            let mut response = [0u8; 64];
+            response.copy_from_slice(h.as_ref());
+            response
+        }
+    }
+
+    pub fn verify<C: Circuit<Bls12>>(
+        &self,
+        circuit: C
+    ) -> Result<Vec<[u8; 64]>, ()>
+    {
+        let initial_params = new_parameters(circuit).map_err(|_| ())?;
+
+        // H/L will change, but should have same length
+        if initial_params.params.h.len() != self.params.h.len() {
+            return Err(());
+        }
+        if initial_params.params.l.len() != self.params.l.len() {
+            return Err(());
+        }
+
+        // A/B_G1/B_G2 doesn't change at all
+        if initial_params.params.a != self.params.a {
+            return Err(());
+        }
+        if initial_params.params.b_g1 != self.params.b_g1 {
+            return Err(());
+        }
+        if initial_params.params.b_g2 != self.params.b_g2 {
+            return Err(());
+        }
+
+        // alpha/beta/gamma don't change
+        if initial_params.params.vk.alpha_g1 != self.params.vk.alpha_g1 {
+            return Err(());
+        }
+        if initial_params.params.vk.beta_g1 != self.params.vk.beta_g1 {
+            return Err(());
+        }
+        if initial_params.params.vk.beta_g2 != self.params.vk.beta_g2 {
+            return Err(());
+        }
+        if initial_params.params.vk.gamma_g2 != self.params.vk.gamma_g2 {
+            return Err(());
+        }
+
+        // IC shouldn't change, as gamma doesn't change
+        if initial_params.params.vk.ic != self.params.vk.ic {
+            return Err(());
+        }
+
+        // cs_hash should be the same
+        if &initial_params.cs_hash[..] != &self.cs_hash[..] {
+            return Err(());
+        }
+
+        let sink = io::sink();
+        let mut sink = HashWriter::new(sink);
+        sink.write_all(&initial_params.cs_hash[..]).unwrap();
+
+        let mut current_delta = G1Affine::one();
+        let mut result = vec![];
+
+        for pubkey in &self.contributions {
+            let mut our_sink = sink.clone();
+            our_sink.write_all(pubkey.s.into_uncompressed().as_ref()).unwrap();
+            our_sink.write_all(pubkey.s_delta.into_uncompressed().as_ref()).unwrap();
+
+            sink.write_all(pubkey.delta_after.into_uncompressed().as_ref()).unwrap();
+
+            let h = our_sink.into_hash();
+
+            // The transcript must be consistent
+            if &pubkey.transcript[..] != h.as_ref() {
+                return Err(());
+            }
+
+            let r = hash_to_g2(h.as_ref()).into_affine();
+
+            // Check the signature of knowledge
+            if !same_ratio((r, pubkey.r_delta), (pubkey.s, pubkey.s_delta)) {
+                return Err(());
+            }
+
+            // Check the change from the old delta is consistent
+            if !same_ratio(
+                (current_delta, pubkey.delta_after),
+                (r, pubkey.r_delta)
+            ) {
+                return Err(());
+            }
+
+            current_delta = pubkey.delta_after;
+
+            {
+                let sink = io::sink();
+                let mut sink = HashWriter::new(sink);
+                pubkey.write(&mut sink).unwrap();
+                let h = sink.into_hash();
+                let mut response = [0u8; 64];
+                response.copy_from_slice(h.as_ref());
+                result.push(response);
+            }
+        }
+
+        // Current parameters should have consistent delta in G1
+        if current_delta != self.params.vk.delta_g1 {
+            return Err(());
+        }
+
+        // Current parameters should have consistent delta in G2
+        if !same_ratio(
+            (G1Affine::one(), current_delta),
+            (G2Affine::one(), self.params.vk.delta_g2)
+        ) {
+            return Err(());
+        }
+
+        // H and L queries should be updated with delta^-1
+        if !same_ratio(
+            merge_pairs(&initial_params.params.h, &self.params.h),
+            (self.params.vk.delta_g2, G2Affine::one()) // reversed for inverse
+        ) {
+            return Err(());
+        }
+
+        if !same_ratio(
+            merge_pairs(&initial_params.params.l, &self.params.l),
+            (self.params.vk.delta_g2, G2Affine::one()) // reversed for inverse
+        ) {
+            return Err(());
+        }
+
+        Ok(result)
     }
 }
 
@@ -683,122 +823,23 @@ impl PartialEq for PublicKey {
     }
 }
 
-pub fn verify_transform(
+pub fn verify_transform<C: Circuit<Bls12>>(
+    circuit: C,
     before: &MPCParameters,
     after: &MPCParameters
-) -> bool
+) -> Result<Vec<[u8; 64]>, ()>
 {
-    // Parameter size doesn't change!
-    if before.params.vk.ic.len() != after.params.vk.ic.len() {
-        return false;
-    }
-
-    if before.params.h.len() != after.params.h.len() {
-        return false;
-    }
-
-    if before.params.l.len() != after.params.l.len() {
-        return false;
-    }
-
-    if before.params.a.len() != after.params.a.len() {
-        return false;
-    }
-
-    if before.params.b_g1.len() != after.params.b_g1.len() {
-        return false;
-    }
-
-    if before.params.b_g2.len() != after.params.b_g2.len() {
-        return false;
-    }
-
-    // IC shouldn't change at all, since gamma = 1
-    if before.params.vk.ic != after.params.vk.ic {
-        return false;
-    }
-
-    // Transformations involve a single new contribution
+    // Transformation involves a single new object
     if after.contributions.len() != (before.contributions.len() + 1) {
-        return false;
+        return Err(());
     }
 
-    // All of the previous pubkeys should be the same
+    // None of the previous transformations should change
     if &before.contributions[..] != &after.contributions[0..before.contributions.len()] {
-        return false;
+        return Err(());
     }
 
-    let pubkey = after.contributions.last().unwrap();
-
-    // The new pubkey's claimed value of delta should match the
-    // parameters
-    if pubkey.delta_after != after.params.vk.delta_g1 {
-        return false;
-    }
-
-    // The `cs_hash` should not change. It's initialized at the beginning
-    if &before.cs_hash[..] != &after.cs_hash[..] {
-        return false;
-    }
-
-    // H(cs_hash | <deltas> | s | s_delta)
-    let h = {
-        let sink = io::sink();
-        let mut sink = HashWriter::new(sink);
-
-        sink.write_all(&before.cs_hash[..]).unwrap();
-        for pubkey in &before.contributions {
-            sink.write_all(pubkey.delta_after.into_uncompressed().as_ref()).unwrap();
-        }
-        sink.write_all(pubkey.s.into_uncompressed().as_ref()).unwrap();
-        sink.write_all(pubkey.s_delta.into_uncompressed().as_ref()).unwrap();
-
-        sink.into_hash()
-    };
-
-    // The transcript must be consistent
-    if &pubkey.transcript[..] != h.as_ref() {
-        return false;
-    }
-
-    let r = hash_to_g2(h.as_ref()).into_affine();
-
-    // Check the signature of knowledge
-    if !same_ratio((r, pubkey.r_delta), (pubkey.s, pubkey.s_delta)) {
-        return false;
-    }
-
-    // Check the change from the old delta is consistent
-    if !same_ratio(
-        (before.params.vk.delta_g1, after.params.vk.delta_g1),
-        (r, pubkey.r_delta)
-    ) {
-        return false;
-    }
-
-    if !same_ratio(
-        (before.params.vk.delta_g2, after.params.vk.delta_g2),
-        (pubkey.s, pubkey.s_delta)
-    ) {
-        return false;
-    }
-
-    // H and L queries should be updated
-    if !same_ratio(
-        merge_pairs(&before.params.h, &after.params.h),
-        (pubkey.r_delta, r) // reversed for inverse
-    ) {
-        return false;
-    }
-
-    if !same_ratio(
-        merge_pairs(&before.params.l, &after.params.l),
-        (pubkey.r_delta, r) // reversed for inverse
-    ) {
-        return false;
-    }
-
-    true
+    after.verify(circuit)
 }
 
 /// Checks if pairs have the same ratio.
@@ -944,6 +985,15 @@ fn hash_to_g2(mut digest: &[u8]) -> G2
 pub struct HashWriter<W: Write> {
     writer: W,
     hasher: Blake2b
+}
+
+impl Clone for HashWriter<io::Sink> {
+    fn clone(&self) -> HashWriter<io::Sink> {
+        HashWriter {
+            writer: io::sink(),
+            hasher: self.hasher.clone()
+        }
+    }
 }
 
 impl<W: Write> HashWriter<W> {
