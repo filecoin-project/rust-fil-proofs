@@ -14,7 +14,8 @@ use typenum::consts::U64;
 
 use byteorder::{
     BigEndian,
-    ReadBytesExt
+    ReadBytesExt,
+    WriteBytesExt
 };
 
 use std::{
@@ -477,7 +478,53 @@ pub struct MPCParameters {
     contributions: Vec<PublicKey>
 }
 
+impl PartialEq for MPCParameters {
+    fn eq(&self, other: &MPCParameters) -> bool {
+        self.params == other.params &&
+        &self.cs_hash[..] == &other.cs_hash[..] &&
+        self.contributions == other.contributions
+    }
+}
+
 impl MPCParameters {
+    pub fn write<W: Write>(
+        &self,
+        mut writer: W
+    ) -> io::Result<()>
+    {
+        self.params.write(&mut writer)?;
+        writer.write_all(&self.cs_hash)?;
+
+        writer.write_u32::<BigEndian>(self.contributions.len() as u32)?;
+        for pubkey in &self.contributions {
+            pubkey.write(&mut writer)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn read<R: Read>(
+        mut reader: R,
+        checked: bool
+    ) -> io::Result<MPCParameters>
+    {
+        let params = Parameters::read(&mut reader, checked)?;
+
+        let mut cs_hash = [0u8; 64];
+        reader.read_exact(&mut cs_hash)?;
+
+        let contributions_len = reader.read_u32::<BigEndian>()? as usize;
+
+        let mut contributions = vec![];
+        for _ in 0..contributions_len {
+            contributions.push(PublicKey::read(&mut reader)?);
+        }
+
+        Ok(MPCParameters {
+            params, cs_hash, contributions
+        })
+    }
+
     pub fn params(&self) -> &Parameters<Bls12> {
         &self.params
     }
@@ -565,6 +612,65 @@ pub struct PublicKey {
 
     /// Hash of the transcript (used for mapping to r)
     transcript: [u8; 64],
+}
+
+impl PublicKey {
+    pub fn write<W: Write>(
+        &self,
+        mut writer: W
+    ) -> io::Result<()>
+    {
+        writer.write_all(self.delta_after.into_uncompressed().as_ref())?;
+        writer.write_all(self.s.into_uncompressed().as_ref())?;
+        writer.write_all(self.s_delta.into_uncompressed().as_ref())?;
+        writer.write_all(self.r_delta.into_uncompressed().as_ref())?;
+        writer.write_all(&self.transcript)?;
+
+        Ok(())
+    }
+
+    pub fn read<R: Read>(
+        mut reader: R
+    ) -> io::Result<PublicKey>
+    {
+        let mut g1_repr = G1Uncompressed::empty();
+        let mut g2_repr = G2Uncompressed::empty();
+
+        reader.read_exact(g1_repr.as_mut())?;
+        let delta_after = g1_repr.into_affine().map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+
+        if delta_after.is_zero() {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "point at infinity"));
+        }
+
+        reader.read_exact(g1_repr.as_mut())?;
+        let s = g1_repr.into_affine().map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+
+        if s.is_zero() {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "point at infinity"));
+        }
+
+        reader.read_exact(g1_repr.as_mut())?;
+        let s_delta = g1_repr.into_affine().map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+
+        if s_delta.is_zero() {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "point at infinity"));
+        }
+
+        reader.read_exact(g2_repr.as_mut())?;
+        let r_delta = g2_repr.into_affine().map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+
+        if r_delta.is_zero() {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "point at infinity"));
+        }
+
+        let mut transcript = [0u8; 64];
+        reader.read_exact(&mut transcript)?;
+
+        Ok(PublicKey {
+            delta_after, s, s_delta, r_delta, transcript
+        })
+    }
 }
 
 impl PartialEq for PublicKey {
