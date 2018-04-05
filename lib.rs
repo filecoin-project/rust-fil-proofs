@@ -1,10 +1,27 @@
 extern crate pairing;
 extern crate bellman;
+extern crate rand;
+extern crate byteorder;
+extern crate blake2;
+extern crate num_cpus;
+extern crate crossbeam;
+extern crate generic_array;
+extern crate typenum;
+
+use blake2::{Blake2b, Digest};
+use generic_array::GenericArray;
+use typenum::consts::U64;
+
+use byteorder::{
+    BigEndian,
+    ReadBytesExt
+};
 
 use std::{
     io::{
         self,
         Read,
+        Write,
         BufReader
     },
     fs::{
@@ -17,10 +34,12 @@ use std::{
 
 use pairing::{
     Engine,
+    PrimeField,
     Field,
     EncodedPoint,
     CurveAffine,
     CurveProjective,
+    Wnaf,
     bls12_381::{
         Bls12,
         Fr,
@@ -45,6 +64,13 @@ use bellman::{
         VerifyingKey
     },
     multicore::Worker
+};
+
+use rand::{
+    Rng,
+    Rand,
+    ChaChaRng,
+    SeedableRng
 };
 
 /// This is our assembly structure that we'll use to synthesize the
@@ -156,7 +182,7 @@ impl<E: Engine> ConstraintSystem<E> for KeypairAssembly<E> {
 
 pub fn new_parameters<C>(
     circuit: C,
-) -> Result<Parameters<Bls12>, SynthesisError>
+) -> Result<MPCParameters, SynthesisError>
     where C: Circuit<Bls12>
 {
     let mut assembly = KeypairAssembly {
@@ -412,7 +438,7 @@ pub fn new_parameters<C>(
         ic: ic.into_iter().map(|e| e.into_affine()).collect()
     };
 
-    Ok(Parameters {
+    let params = Parameters {
         vk: vk,
         h: Arc::new(h),
         l: Arc::new(l.into_iter().map(|e| e.into_affine()).collect()),
@@ -421,5 +447,426 @@ pub fn new_parameters<C>(
         a: Arc::new(a_g1.into_iter().filter(|e| !e.is_zero()).map(|e| e.into_affine()).collect()),
         b_g1: Arc::new(b_g1.into_iter().filter(|e| !e.is_zero()).map(|e| e.into_affine()).collect()),
         b_g2: Arc::new(b_g2.into_iter().filter(|e| !e.is_zero()).map(|e| e.into_affine()).collect())
+    };
+
+    let h = {
+        let sink = io::sink();
+        let mut sink = HashWriter::new(sink);
+
+        params.write(&mut sink).unwrap();
+
+        sink.into_hash()
+    };
+
+    let mut cs_hash = [0; 64];
+    cs_hash.copy_from_slice(h.as_ref());
+
+    Ok(MPCParameters {
+        params: params,
+        cs_hash: cs_hash,
+        contributions: vec![]
     })
+}
+
+/// MPC parameters are just like bellman `Parameters` except, when serialized,
+/// they contain a transcript of contributions at the end, which can be verified.
+#[derive(Clone)]
+pub struct MPCParameters {
+    params: Parameters<Bls12>,
+    cs_hash: [u8; 64],
+    contributions: Vec<PublicKey>
+}
+
+impl MPCParameters {
+    pub fn params(&self) -> &Parameters<Bls12> {
+        &self.params
+    }
+
+    pub fn transform(
+        &mut self,
+        pubkey: &PublicKey,
+        privkey: &PrivateKey
+    )
+    {
+        fn batch_exp<C: CurveAffine>(bases: &mut [C], coeff: C::Scalar) {
+            let coeff = coeff.into_repr();
+
+            let mut projective = vec![C::Projective::zero(); bases.len()];
+            let cpus = num_cpus::get();
+            let chunk_size = if bases.len() < cpus {
+                1
+            } else {
+                bases.len() / cpus
+            };
+
+            // Perform wNAF over multiple cores, placing results into `projective`.
+            crossbeam::scope(|scope| {
+                for (bases, projective) in bases.chunks_mut(chunk_size)
+                                                       .zip(projective.chunks_mut(chunk_size))
+                {
+                    scope.spawn(move || {
+                        let mut wnaf = Wnaf::new();
+
+                        for (base, projective) in bases.iter_mut()
+                                                       .zip(projective.iter_mut())
+                        {
+                            *projective = wnaf.base(base.into_projective(), 1).scalar(coeff);
+                        }
+                    });
+                }
+            });
+
+            // Perform batch normalization
+            crossbeam::scope(|scope| {
+                for projective in projective.chunks_mut(chunk_size)
+                {
+                    scope.spawn(move || {
+                        C::Projective::batch_normalization(projective);
+                    });
+                }
+            });
+
+            // Turn it all back into affine points
+            for (projective, affine) in projective.iter().zip(bases.iter_mut()) {
+                *affine = projective.into_affine();
+            }
+        }
+
+        let delta_inv = privkey.delta.inverse().unwrap();
+        let mut l = (&self.params.l[..]).to_vec();
+        let mut h = (&self.params.h[..]).to_vec();
+        batch_exp(&mut l, delta_inv);
+        batch_exp(&mut h, delta_inv);
+        self.params.l = Arc::new(l);
+        self.params.h = Arc::new(h);
+
+        self.params.vk.delta_g1 = self.params.vk.delta_g1.mul(privkey.delta).into_affine();
+        self.params.vk.delta_g2 = self.params.vk.delta_g2.mul(privkey.delta).into_affine();
+
+        self.contributions.push(pubkey.clone());
+    }
+}
+
+#[derive(Clone)]
+pub struct PublicKey {
+    /// This is the delta (in G1) after the transformation, kept so that we
+    /// can check correctness of the public keys without having the entire
+    /// interstitial parameters for each contribution.
+    delta_after: G1Affine,
+
+    /// Random element chosen by the contributor.
+    s: G1Affine,
+
+    /// That element, taken to the contributor's secret delta.
+    s_delta: G1Affine,
+
+    /// r is H(last_pubkey | s | s_delta), r_delta proves knowledge of delta
+    r_delta: G2Affine,
+
+    /// Hash of the transcript (used for mapping to r)
+    transcript: [u8; 64],
+}
+
+impl PartialEq for PublicKey {
+    fn eq(&self, other: &PublicKey) -> bool {
+        self.delta_after == other.delta_after &&
+        self.s == other.s &&
+        self.s_delta == other.s_delta &&
+        self.r_delta == other.r_delta &&
+        &self.transcript[..] == &other.transcript[..]
+    }
+}
+
+pub fn verify_transform(
+    before: &MPCParameters,
+    after: &MPCParameters
+) -> bool
+{
+    // Parameter size doesn't change!
+    if before.params.vk.ic.len() != after.params.vk.ic.len() {
+        return false;
+    }
+
+    if before.params.h.len() != after.params.h.len() {
+        return false;
+    }
+
+    if before.params.l.len() != after.params.l.len() {
+        return false;
+    }
+
+    if before.params.a.len() != after.params.a.len() {
+        return false;
+    }
+
+    if before.params.b_g1.len() != after.params.b_g1.len() {
+        return false;
+    }
+
+    if before.params.b_g2.len() != after.params.b_g2.len() {
+        return false;
+    }
+
+    // IC shouldn't change at all, since gamma = 1
+    if before.params.vk.ic != after.params.vk.ic {
+        return false;
+    }
+
+    // Transformations involve a single new contribution
+    if after.contributions.len() != (before.contributions.len() + 1) {
+        return false;
+    }
+
+    // All of the previous pubkeys should be the same
+    if &before.contributions[..] != &after.contributions[0..before.contributions.len()] {
+        return false;
+    }
+
+    let pubkey = after.contributions.last().unwrap();
+
+    // The new pubkey's claimed value of delta should match the
+    // parameters
+    if pubkey.delta_after != after.params.vk.delta_g1 {
+        return false;
+    }
+
+    // The `cs_hash` should not change. It's initialized at the beginning
+    if &before.cs_hash[..] != &after.cs_hash[..] {
+        return false;
+    }
+
+    // H(cs_hash | <deltas> | s | s_delta)
+    let h = {
+        let sink = io::sink();
+        let mut sink = HashWriter::new(sink);
+
+        sink.write_all(&before.cs_hash[..]).unwrap();
+        for pubkey in &before.contributions {
+            sink.write_all(pubkey.delta_after.into_uncompressed().as_ref()).unwrap();
+        }
+        sink.write_all(pubkey.s.into_uncompressed().as_ref()).unwrap();
+        sink.write_all(pubkey.s_delta.into_uncompressed().as_ref()).unwrap();
+
+        sink.into_hash()
+    };
+
+    // The transcript must be consistent
+    if &pubkey.transcript[..] != h.as_ref() {
+        return false;
+    }
+
+    let r = hash_to_g2(h.as_ref()).into_affine();
+
+    // Check the signature of knowledge
+    if !same_ratio((r, pubkey.r_delta), (pubkey.s, pubkey.s_delta)) {
+        return false;
+    }
+
+    // Check the change from the old delta is consistent
+    if !same_ratio(
+        (before.params.vk.delta_g1, after.params.vk.delta_g1),
+        (r, pubkey.r_delta)
+    ) {
+        return false;
+    }
+
+    if !same_ratio(
+        (before.params.vk.delta_g2, after.params.vk.delta_g2),
+        (pubkey.s, pubkey.s_delta)
+    ) {
+        return false;
+    }
+
+    // H and L queries should be updated
+    if !same_ratio(
+        merge_pairs(&before.params.h, &after.params.h),
+        (pubkey.r_delta, r) // reversed for inverse
+    ) {
+        return false;
+    }
+
+    if !same_ratio(
+        merge_pairs(&before.params.l, &after.params.l),
+        (pubkey.r_delta, r) // reversed for inverse
+    ) {
+        return false;
+    }
+
+    true
+}
+
+/// Checks if pairs have the same ratio.
+fn same_ratio<G1: CurveAffine>(
+    g1: (G1, G1),
+    g2: (G1::Pair, G1::Pair)
+) -> bool
+{
+    g1.0.pairing_with(&g2.1) == g1.1.pairing_with(&g2.0)
+}
+
+/// Computes a random linear combination over v1/v2.
+///
+/// Checking that many pairs of elements are exponentiated by
+/// the same `x` can be achieved (with high probability) with
+/// the following technique:
+///
+/// Given v1 = [a, b, c] and v2 = [as, bs, cs], compute
+/// (a*r1 + b*r2 + c*r3, (as)*r1 + (bs)*r2 + (cs)*r3) for some
+/// random r1, r2, r3. Given (g, g^s)...
+///
+/// e(g, (as)*r1 + (bs)*r2 + (cs)*r3) = e(g^s, a*r1 + b*r2 + c*r3)
+///
+/// ... with high probability.
+fn merge_pairs<G: CurveAffine>(v1: &[G], v2: &[G]) -> (G, G)
+{
+    use std::sync::{Arc, Mutex};
+    use rand::{thread_rng};
+
+    assert_eq!(v1.len(), v2.len());
+
+    let chunk = (v1.len() / num_cpus::get()) + 1;
+
+    let s = Arc::new(Mutex::new(G::Projective::zero()));
+    let sx = Arc::new(Mutex::new(G::Projective::zero()));
+
+    crossbeam::scope(|scope| {
+        for (v1, v2) in v1.chunks(chunk).zip(v2.chunks(chunk)) {
+            let s = s.clone();
+            let sx = sx.clone();
+
+            scope.spawn(move || {
+                // We do not need to be overly cautious of the RNG
+                // used for this check.
+                let rng = &mut thread_rng();
+
+                let mut wnaf = Wnaf::new();
+                let mut local_s = G::Projective::zero();
+                let mut local_sx = G::Projective::zero();
+
+                for (v1, v2) in v1.iter().zip(v2.iter()) {
+                    let rho = G::Scalar::rand(rng);
+                    let mut wnaf = wnaf.scalar(rho.into_repr());
+                    let v1 = wnaf.base(v1.into_projective());
+                    let v2 = wnaf.base(v2.into_projective());
+
+                    local_s.add_assign(&v1);
+                    local_sx.add_assign(&v2);
+                }
+
+                s.lock().unwrap().add_assign(&local_s);
+                sx.lock().unwrap().add_assign(&local_sx);
+            });
+        }
+    });
+
+    let s = s.lock().unwrap().into_affine();
+    let sx = sx.lock().unwrap().into_affine();
+
+    (s, sx)
+}
+
+pub struct PrivateKey {
+    delta: Fr
+}
+
+pub fn keypair<R: Rng>(
+    rng: &mut R,
+    current: &MPCParameters,
+) -> (PublicKey, PrivateKey)
+{
+    // Sample random delta
+    let delta: Fr = rng.gen();
+
+    // Compute delta s-pair in G1
+    let s = G1::rand(rng).into_affine();
+    let s_delta = s.mul(delta).into_affine();
+
+    // H(cs_hash | <deltas> | s | s_delta)
+    let h = {
+        let sink = io::sink();
+        let mut sink = HashWriter::new(sink);
+
+        sink.write_all(&current.cs_hash[..]).unwrap();
+        for pubkey in &current.contributions {
+            sink.write_all(pubkey.delta_after.into_uncompressed().as_ref()).unwrap();
+        }
+        sink.write_all(s.into_uncompressed().as_ref()).unwrap();
+        sink.write_all(s_delta.into_uncompressed().as_ref()).unwrap();
+
+        sink.into_hash()
+    };
+
+    // This avoids making a weird assumption about the hash into the
+    // group.
+    let mut transcript = [0; 64];
+    transcript.copy_from_slice(h.as_ref());
+
+    // Compute delta s-pair in G2
+    let r = hash_to_g2(h.as_ref()).into_affine();
+    let r_delta = r.mul(delta).into_affine();
+
+    (
+        PublicKey {
+            delta_after: current.params.vk.delta_g1.mul(delta).into_affine(),
+            s: s,
+            s_delta: s_delta,
+            r_delta: r_delta,
+            transcript: transcript
+        },
+        PrivateKey {
+            delta: delta
+        }
+    )
+}
+
+/// Hashes to G2 using the first 32 bytes of `digest`. Panics if `digest` is less
+/// than 32 bytes.
+fn hash_to_g2(mut digest: &[u8]) -> G2
+{
+    assert!(digest.len() >= 32);
+
+    let mut seed = Vec::with_capacity(8);
+
+    for _ in 0..8 {
+        seed.push(digest.read_u32::<BigEndian>().expect("assertion above guarantees this to work"));
+    }
+
+    ChaChaRng::from_seed(&seed).gen()
+}
+
+/// Abstraction over a writer which hashes the data being written.
+pub struct HashWriter<W: Write> {
+    writer: W,
+    hasher: Blake2b
+}
+
+impl<W: Write> HashWriter<W> {
+    /// Construct a new `HashWriter` given an existing `writer` by value.
+    pub fn new(writer: W) -> Self {
+        HashWriter {
+            writer: writer,
+            hasher: Blake2b::default()
+        }
+    }
+
+    /// Destroy this writer and return the hash of what was written.
+    pub fn into_hash(self) -> GenericArray<u8, U64> {
+        self.hasher.result()
+    }
+}
+
+impl<W: Write> Write for HashWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let bytes = self.writer.write(buf)?;
+
+        if bytes > 0 {
+            self.hasher.input(&buf[0..bytes]);
+        }
+
+        Ok(bytes)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.writer.flush()
+    }
 }
