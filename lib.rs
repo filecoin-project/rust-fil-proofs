@@ -1,3 +1,206 @@
+//! # zk-SNARK MPCs, made easy.
+//!
+//! ## Make your circuit
+//!
+//! Grab the [`bellman`](https://github.com/ebfull/bellman) and
+//! [`pairing`](https://github.com/ebfull/bellman) crates. Bellman
+//! provides a trait called `Circuit`, which you must implement
+//! for your computation.
+//!
+//! Here's a silly example: proving you know the cube root of
+//! a field element.
+//!
+//! ```rust
+//! extern crate pairing;
+//! extern crate bellman;
+//! 
+//! use pairing::{Engine, Field};
+//! use bellman::{
+//!     Circuit,
+//!     ConstraintSystem,
+//!     SynthesisError,
+//! };
+//! 
+//! struct CubeRoot<E: Engine> {
+//!     cube_root: Option<E::Fr>
+//! }
+//! 
+//! impl<E: Engine> Circuit<E> for CubeRoot<E> {
+//!     fn synthesize<CS: ConstraintSystem<E>>(
+//!         self,
+//!         cs: &mut CS
+//!     ) -> Result<(), SynthesisError>
+//!     {
+//!         // Witness the cube root
+//!         let root = cs.alloc(|| "root", || {
+//!             self.cube_root.ok_or(SynthesisError::AssignmentMissing)
+//!         })?;
+//! 
+//!         // Witness the square of the cube root
+//!         let square = cs.alloc(|| "square", || {
+//!             self.cube_root
+//!                 .ok_or(SynthesisError::AssignmentMissing)
+//!                 .map(|mut root| {root.square(); root })
+//!         })?;
+//! 
+//!         // Enforce that `square` is root^2
+//!         cs.enforce(
+//!             || "squaring",
+//!             |lc| lc + root,
+//!             |lc| lc + root,
+//!             |lc| lc + square 
+//!         );
+//! 
+//!         // Witness the cube, as a public input
+//!         let cube = cs.alloc_input(|| "cube", || {
+//!             self.cube_root
+//!                 .ok_or(SynthesisError::AssignmentMissing)
+//!                 .map(|root| {
+//!                     let mut tmp = root;
+//!                     tmp.square();
+//!                     tmp.mul_assign(&root);
+//!                     tmp
+//!                 })
+//!         })?;
+//! 
+//!         // Enforce that `cube` is root^3
+//!         // i.e. that `cube` is `root` * `square`
+//!         cs.enforce(
+//!             || "cubing",
+//!             |lc| lc + root,
+//!             |lc| lc + square,
+//!             |lc| lc + cube
+//!         );
+//!
+//!         Ok(())
+//!     }
+//! }
+//! ```
+//!
+//! ## Create some proofs
+//!
+//! Now that we have `CubeRoot<E>` implementing `Circuit`,
+//! let's create some parameters and make some proofs.
+//!
+//! ```rust,ignore
+//! extern crate rand; 
+//!
+//! use pairing::bls12_381::{Bls12, Fr};
+//! use bellman::groth16::{
+//!     generate_random_parameters,
+//!     create_random_proof,
+//!     prepare_verifying_key,
+//!     verify_proof
+//! };
+//! use rand::{OsRng, Rand};
+//! 
+//! let rng = &mut OsRng::new();
+//! 
+//! // Create public parameters for our circuit
+//! let params = {
+//!     let circuit = CubeRoot::<Bls12> {
+//!         cube_root: None
+//!     };
+//! 
+//!     generate_random_parameters::<Bls12, _, _>(
+//!         circuit,
+//!         rng
+//!     ).unwrap()
+//! };
+//! 
+//! // Prepare the verifying key for verification
+//! let pvk = prepare_verifying_key(&params.vk);
+//! 
+//! // Let's start making proofs!
+//! for _ in 0..50 {
+//!     // Verifier picks a cube in the field.
+//!     // Let's just make a random one.
+//!     let root = Fr::rand(rng);
+//!     let mut cube = root;
+//!     cube.square();
+//!     cube.mul_assign(&root);
+//! 
+//!     // Prover gets the cube, figures out the cube
+//!     // root, and makes the proof:
+//!     let proof = create_random_proof(
+//!         CubeRoot::<Bls12> {
+//!             cube_root: Some(root)
+//!         }, &params, rng
+//!     ).unwrap();
+//! 
+//!     // Verifier checks the proof against the cube
+//!     assert!(verify_proof(&pvk, &proof, &[cube]).unwrap());
+//! }
+//! ```
+//! ## Creating parameters
+//!
+//! Notice in the previous example that we created our zk-SNARK
+//! parameters by calling `generate_random_parameters`. However,
+//! if you wanted you could have called `generate_parameters`
+//! with some secret numbers you chose, and kept them for
+//! yourself. Given those numbers, you can create false proofs.
+//!
+//! In order to convince others you didn't, a multi-party
+//! computation (MPC) can be used. The MPC has the property that
+//! only one participant needs to be honest for the parameters to
+//! be secure. This crate (`phase2`) is about creating parameters
+//! securely using such an MPC.
+//!
+//! Let's start by using `phase2` to create some base parameters
+//! for our circuit:
+//!
+//! ```rust,ignore
+//! extern crate phase2;
+//!
+//! let mut params = phase2::MPCParameters::new(CubeRoot {
+//!     cube_root: None
+//! }).unwrap();
+//! ```
+//!
+//! The first time you try this, it will try to read a file like
+//! `phase1radix2m2` from the current directory. You need to grab
+//! that from the Powers of Tau.
+//! 
+//! These parameters are not safe to use; false proofs can be
+//! created for them. Let's contribute some randomness to these
+//! parameters.
+//!
+//! ```rust,ignore
+//! // Create a random keypair for our parameters
+//! let (pubkey, privkey) = phase2::keypair(rng, &params);
+//!
+//! // Contribute to the parameters. Remember this hash, it's
+//! // how we know our contribution is in the parameters!
+//! let hash = params.contribute(&pubkey, &privkey);
+//!
+//! // Throw away the private key!
+//! drop(privkey);
+//! ```
+//!
+//! These parameters are now secure to use, so long as you destroyed
+//! the privkey. That may not be convincing to others, so let them
+//! contribute randomness too! `params` can be serialized and sent
+//! elsewhere, where they can do the same thing and send new
+//! parameters back to you. Only one person needs to destroy the
+//! `privkey` for the final parameters to be secure.
+//!
+//! Once you're done setting up the parameters, you can verify the
+//! parameters:
+//!
+//! ```rust,ignore
+//! let contributions = params.verify(CubeRoot {
+//!     cube_root: None
+//! }).expect("parameters should be valid!");
+//!
+//! // We need to check the `contributions` to see if our `hash`
+//! // is in it (see above, when we first contributed)
+//! assert!(phase2::contains_contribution(&contributions, &hash));
+//! ```
+//!
+//! Great, now if you're happy, grab the Groth16 `Parameters` with
+//! `params.params()`, so that you can interact with the bellman APIs
+//! just as before.
+
 extern crate pairing;
 extern crate bellman;
 extern crate rand;
@@ -181,294 +384,6 @@ impl<E: Engine> ConstraintSystem<E> for KeypairAssembly<E> {
     }
 }
 
-pub fn new_parameters<C>(
-    circuit: C,
-) -> Result<MPCParameters, SynthesisError>
-    where C: Circuit<Bls12>
-{
-    let mut assembly = KeypairAssembly {
-        num_inputs: 0,
-        num_aux: 0,
-        num_constraints: 0,
-        at_inputs: vec![],
-        bt_inputs: vec![],
-        ct_inputs: vec![],
-        at_aux: vec![],
-        bt_aux: vec![],
-        ct_aux: vec![]
-    };
-
-    // Allocate the "one" input variable
-    assembly.alloc_input(|| "", || Ok(Fr::one()))?;
-
-    // Synthesize the circuit.
-    circuit.synthesize(&mut assembly)?;
-
-    // Input constraints to ensure full density of IC query
-    // x * 0 = 0
-    for i in 0..assembly.num_inputs {
-        assembly.enforce(|| "",
-            |lc| lc + Variable::new_unchecked(Index::Input(i)),
-            |lc| lc,
-            |lc| lc,
-        );
-    }
-
-    // Compute the size of our evaluation domain
-    let mut m = 1;
-    let mut exp = 0;
-    while m < assembly.num_constraints {
-        m *= 2;
-        exp += 1;
-
-        // Powers of Tau ceremony can't support more than 2^21
-        if exp > 21 {
-            return Err(SynthesisError::PolynomialDegreeTooLarge)
-        }
-    }
-
-    // Try to load "phase1radix2m{}"
-    let f = match File::open(format!("phase1radix2m{}", exp)) {
-        Ok(f) => f,
-        Err(e) => {
-            panic!("Couldn't load phase1radix2m{}: {:?}", exp, e);
-        }
-    };
-    let f = &mut BufReader::with_capacity(1024 * 1024, f);
-
-    let read_g1 = |reader: &mut BufReader<File>| -> io::Result<G1Affine> {
-        let mut repr = G1Uncompressed::empty();
-        reader.read_exact(repr.as_mut())?;
-
-        repr.into_affine_unchecked()
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
-        .and_then(|e| if e.is_zero() {
-            Err(io::Error::new(io::ErrorKind::InvalidData, "point at infinity"))
-        } else {
-            Ok(e)
-        })
-    };
-
-    let read_g2 = |reader: &mut BufReader<File>| -> io::Result<G2Affine> {
-        let mut repr = G2Uncompressed::empty();
-        reader.read_exact(repr.as_mut())?;
-
-        repr.into_affine_unchecked()
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
-        .and_then(|e| if e.is_zero() {
-            Err(io::Error::new(io::ErrorKind::InvalidData, "point at infinity"))
-        } else {
-            Ok(e)
-        })
-    };
-
-    let alpha = read_g1(f)?;
-    let beta_g1 = read_g1(f)?;
-    let beta_g2 = read_g2(f)?;
-
-    let mut coeffs_g1 = Vec::with_capacity(m);
-    for _ in 0..m {
-        coeffs_g1.push(read_g1(f)?);
-    }
-
-    let mut coeffs_g2 = Vec::with_capacity(m);
-    for _ in 0..m {
-        coeffs_g2.push(read_g2(f)?);
-    }
-
-    let mut alpha_coeffs_g1 = Vec::with_capacity(m);
-    for _ in 0..m {
-        alpha_coeffs_g1.push(read_g1(f)?);
-    }
-
-    let mut beta_coeffs_g1 = Vec::with_capacity(m);
-    for _ in 0..m {
-        beta_coeffs_g1.push(read_g1(f)?);
-    }
-
-    // These are `Arc` so that later it'll be easier
-    // to use multiexp during QAP evaluation (which
-    // requires a futures-based API)
-    let coeffs_g1 = Arc::new(coeffs_g1);
-    let coeffs_g2 = Arc::new(coeffs_g2);
-    let alpha_coeffs_g1 = Arc::new(alpha_coeffs_g1);
-    let beta_coeffs_g1 = Arc::new(beta_coeffs_g1);
-
-    let mut h = Vec::with_capacity(m - 1);
-    for _ in 0..(m - 1) {
-        h.push(read_g1(f)?);
-    }
-
-    let mut ic = vec![G1::zero(); assembly.num_inputs];
-    let mut l = vec![G1::zero(); assembly.num_aux];
-    let mut a_g1 = vec![G1::zero(); assembly.num_inputs + assembly.num_aux];
-    let mut b_g1 = vec![G1::zero(); assembly.num_inputs + assembly.num_aux];
-    let mut b_g2 = vec![G2::zero(); assembly.num_inputs + assembly.num_aux];
-
-    fn eval(
-        // Lagrange coefficients for tau
-        coeffs_g1: Arc<Vec<G1Affine>>,
-        coeffs_g2: Arc<Vec<G2Affine>>,
-        alpha_coeffs_g1: Arc<Vec<G1Affine>>,
-        beta_coeffs_g1: Arc<Vec<G1Affine>>,
-
-        // QAP polynomials
-        at: &[Vec<(Fr, usize)>],
-        bt: &[Vec<(Fr, usize)>],
-        ct: &[Vec<(Fr, usize)>],
-
-        // Resulting evaluated QAP polynomials
-        a_g1: &mut [G1],
-        b_g1: &mut [G1],
-        b_g2: &mut [G2],
-        ext: &mut [G1],
-
-        // Worker
-        worker: &Worker
-    )
-    {
-        // Sanity check
-        assert_eq!(a_g1.len(), at.len());
-        assert_eq!(a_g1.len(), bt.len());
-        assert_eq!(a_g1.len(), ct.len());
-        assert_eq!(a_g1.len(), b_g1.len());
-        assert_eq!(a_g1.len(), b_g2.len());
-        assert_eq!(a_g1.len(), ext.len());
-
-        // Evaluate polynomials in multiple threads
-        worker.scope(a_g1.len(), |scope, chunk| {
-            for ((((((a_g1, b_g1), b_g2), ext), at), bt), ct) in
-                a_g1.chunks_mut(chunk)
-                .zip(b_g1.chunks_mut(chunk))
-                .zip(b_g2.chunks_mut(chunk))
-                .zip(ext.chunks_mut(chunk))
-                .zip(at.chunks(chunk))
-                .zip(bt.chunks(chunk))
-                .zip(ct.chunks(chunk))
-            {
-                let coeffs_g1 = coeffs_g1.clone();
-                let coeffs_g2 = coeffs_g2.clone();
-                let alpha_coeffs_g1 = alpha_coeffs_g1.clone();
-                let beta_coeffs_g1 = beta_coeffs_g1.clone();
-
-                scope.spawn(move || {
-                    for ((((((a_g1, b_g1), b_g2), ext), at), bt), ct) in
-                        a_g1.iter_mut()
-                        .zip(b_g1.iter_mut())
-                        .zip(b_g2.iter_mut())
-                        .zip(ext.iter_mut())
-                        .zip(at.iter())
-                        .zip(bt.iter())
-                        .zip(ct.iter())
-                    {
-                        for &(coeff, lag) in at {
-                            a_g1.add_assign(&coeffs_g1[lag].mul(coeff));
-                            ext.add_assign(&beta_coeffs_g1[lag].mul(coeff));
-                        }
-
-                        for &(coeff, lag) in bt {
-                            b_g1.add_assign(&coeffs_g1[lag].mul(coeff));
-                            b_g2.add_assign(&coeffs_g2[lag].mul(coeff));
-                            ext.add_assign(&alpha_coeffs_g1[lag].mul(coeff));
-                        }
-
-                        for &(coeff, lag) in ct {
-                            ext.add_assign(&coeffs_g1[lag].mul(coeff));
-                        }
-                    }
-
-                    // Batch normalize
-                    G1::batch_normalization(a_g1);
-                    G1::batch_normalization(b_g1);
-                    G2::batch_normalization(b_g2);
-                    G1::batch_normalization(ext);
-                });
-            }
-        });
-    }
-
-    let worker = Worker::new();
-
-    // Evaluate for inputs.
-    eval(
-        coeffs_g1.clone(),
-        coeffs_g2.clone(),
-        alpha_coeffs_g1.clone(),
-        beta_coeffs_g1.clone(),
-        &assembly.at_inputs,
-        &assembly.bt_inputs,
-        &assembly.ct_inputs,
-        &mut a_g1[0..assembly.num_inputs],
-        &mut b_g1[0..assembly.num_inputs],
-        &mut b_g2[0..assembly.num_inputs],
-        &mut ic,
-        &worker
-    );
-
-    // Evaluate for auxillary variables.
-    eval(
-        coeffs_g1.clone(),
-        coeffs_g2.clone(),
-        alpha_coeffs_g1.clone(),
-        beta_coeffs_g1.clone(),
-        &assembly.at_aux,
-        &assembly.bt_aux,
-        &assembly.ct_aux,
-        &mut a_g1[assembly.num_inputs..],
-        &mut b_g1[assembly.num_inputs..],
-        &mut b_g2[assembly.num_inputs..],
-        &mut l,
-        &worker
-    );
-
-    // Don't allow any elements be unconstrained, so that
-    // the L query is always fully dense.
-    for e in l.iter() {
-        if e.is_zero() {
-            return Err(SynthesisError::UnconstrainedVariable);
-        }
-    }
-
-    let vk = VerifyingKey {
-        alpha_g1: alpha,
-        beta_g1: beta_g1,
-        beta_g2: beta_g2,
-        gamma_g2: G2Affine::one(),
-        delta_g1: G1Affine::one(),
-        delta_g2: G2Affine::one(),
-        ic: ic.into_iter().map(|e| e.into_affine()).collect()
-    };
-
-    let params = Parameters {
-        vk: vk,
-        h: Arc::new(h),
-        l: Arc::new(l.into_iter().map(|e| e.into_affine()).collect()),
-
-        // Filter points at infinity away from A/B queries
-        a: Arc::new(a_g1.into_iter().filter(|e| !e.is_zero()).map(|e| e.into_affine()).collect()),
-        b_g1: Arc::new(b_g1.into_iter().filter(|e| !e.is_zero()).map(|e| e.into_affine()).collect()),
-        b_g2: Arc::new(b_g2.into_iter().filter(|e| !e.is_zero()).map(|e| e.into_affine()).collect())
-    };
-
-    let h = {
-        let sink = io::sink();
-        let mut sink = HashWriter::new(sink);
-
-        params.write(&mut sink).unwrap();
-
-        sink.into_hash()
-    };
-
-    let mut cs_hash = [0; 64];
-    cs_hash.copy_from_slice(h.as_ref());
-
-    Ok(MPCParameters {
-        params: params,
-        cs_hash: cs_hash,
-        contributions: vec![]
-    })
-}
-
 /// MPC parameters are just like bellman `Parameters` except, when serialized,
 /// they contain a transcript of contributions at the end, which can be verified.
 #[derive(Clone)]
@@ -487,49 +402,313 @@ impl PartialEq for MPCParameters {
 }
 
 impl MPCParameters {
-    pub fn write<W: Write>(
-        &self,
-        mut writer: W
-    ) -> io::Result<()>
+    /// Create new Groth16 parameters (compatible with bellman) for a
+    /// given circuit. The resulting parameters are unsafe to use
+    /// until there are contributions (see `transform`).
+    pub fn new<C>(
+        circuit: C,
+    ) -> Result<MPCParameters, SynthesisError>
+        where C: Circuit<Bls12>
     {
-        self.params.write(&mut writer)?;
-        writer.write_all(&self.cs_hash)?;
+        let mut assembly = KeypairAssembly {
+            num_inputs: 0,
+            num_aux: 0,
+            num_constraints: 0,
+            at_inputs: vec![],
+            bt_inputs: vec![],
+            ct_inputs: vec![],
+            at_aux: vec![],
+            bt_aux: vec![],
+            ct_aux: vec![]
+        };
 
-        writer.write_u32::<BigEndian>(self.contributions.len() as u32)?;
-        for pubkey in &self.contributions {
-            pubkey.write(&mut writer)?;
+        // Allocate the "one" input variable
+        assembly.alloc_input(|| "", || Ok(Fr::one()))?;
+
+        // Synthesize the circuit.
+        circuit.synthesize(&mut assembly)?;
+
+        // Input constraints to ensure full density of IC query
+        // x * 0 = 0
+        for i in 0..assembly.num_inputs {
+            assembly.enforce(|| "",
+                |lc| lc + Variable::new_unchecked(Index::Input(i)),
+                |lc| lc,
+                |lc| lc,
+            );
         }
 
-        Ok(())
-    }
+        // Compute the size of our evaluation domain
+        let mut m = 1;
+        let mut exp = 0;
+        while m < assembly.num_constraints {
+            m *= 2;
+            exp += 1;
 
-    pub fn read<R: Read>(
-        mut reader: R,
-        checked: bool
-    ) -> io::Result<MPCParameters>
-    {
-        let params = Parameters::read(&mut reader, checked)?;
-
-        let mut cs_hash = [0u8; 64];
-        reader.read_exact(&mut cs_hash)?;
-
-        let contributions_len = reader.read_u32::<BigEndian>()? as usize;
-
-        let mut contributions = vec![];
-        for _ in 0..contributions_len {
-            contributions.push(PublicKey::read(&mut reader)?);
+            // Powers of Tau ceremony can't support more than 2^21
+            if exp > 21 {
+                return Err(SynthesisError::PolynomialDegreeTooLarge)
+            }
         }
+
+        // Try to load "phase1radix2m{}"
+        let f = match File::open(format!("phase1radix2m{}", exp)) {
+            Ok(f) => f,
+            Err(e) => {
+                panic!("Couldn't load phase1radix2m{}: {:?}", exp, e);
+            }
+        };
+        let f = &mut BufReader::with_capacity(1024 * 1024, f);
+
+        let read_g1 = |reader: &mut BufReader<File>| -> io::Result<G1Affine> {
+            let mut repr = G1Uncompressed::empty();
+            reader.read_exact(repr.as_mut())?;
+
+            repr.into_affine_unchecked()
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+            .and_then(|e| if e.is_zero() {
+                Err(io::Error::new(io::ErrorKind::InvalidData, "point at infinity"))
+            } else {
+                Ok(e)
+            })
+        };
+
+        let read_g2 = |reader: &mut BufReader<File>| -> io::Result<G2Affine> {
+            let mut repr = G2Uncompressed::empty();
+            reader.read_exact(repr.as_mut())?;
+
+            repr.into_affine_unchecked()
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+            .and_then(|e| if e.is_zero() {
+                Err(io::Error::new(io::ErrorKind::InvalidData, "point at infinity"))
+            } else {
+                Ok(e)
+            })
+        };
+
+        let alpha = read_g1(f)?;
+        let beta_g1 = read_g1(f)?;
+        let beta_g2 = read_g2(f)?;
+
+        let mut coeffs_g1 = Vec::with_capacity(m);
+        for _ in 0..m {
+            coeffs_g1.push(read_g1(f)?);
+        }
+
+        let mut coeffs_g2 = Vec::with_capacity(m);
+        for _ in 0..m {
+            coeffs_g2.push(read_g2(f)?);
+        }
+
+        let mut alpha_coeffs_g1 = Vec::with_capacity(m);
+        for _ in 0..m {
+            alpha_coeffs_g1.push(read_g1(f)?);
+        }
+
+        let mut beta_coeffs_g1 = Vec::with_capacity(m);
+        for _ in 0..m {
+            beta_coeffs_g1.push(read_g1(f)?);
+        }
+
+        // These are `Arc` so that later it'll be easier
+        // to use multiexp during QAP evaluation (which
+        // requires a futures-based API)
+        let coeffs_g1 = Arc::new(coeffs_g1);
+        let coeffs_g2 = Arc::new(coeffs_g2);
+        let alpha_coeffs_g1 = Arc::new(alpha_coeffs_g1);
+        let beta_coeffs_g1 = Arc::new(beta_coeffs_g1);
+
+        let mut h = Vec::with_capacity(m - 1);
+        for _ in 0..(m - 1) {
+            h.push(read_g1(f)?);
+        }
+
+        let mut ic = vec![G1::zero(); assembly.num_inputs];
+        let mut l = vec![G1::zero(); assembly.num_aux];
+        let mut a_g1 = vec![G1::zero(); assembly.num_inputs + assembly.num_aux];
+        let mut b_g1 = vec![G1::zero(); assembly.num_inputs + assembly.num_aux];
+        let mut b_g2 = vec![G2::zero(); assembly.num_inputs + assembly.num_aux];
+
+        fn eval(
+            // Lagrange coefficients for tau
+            coeffs_g1: Arc<Vec<G1Affine>>,
+            coeffs_g2: Arc<Vec<G2Affine>>,
+            alpha_coeffs_g1: Arc<Vec<G1Affine>>,
+            beta_coeffs_g1: Arc<Vec<G1Affine>>,
+
+            // QAP polynomials
+            at: &[Vec<(Fr, usize)>],
+            bt: &[Vec<(Fr, usize)>],
+            ct: &[Vec<(Fr, usize)>],
+
+            // Resulting evaluated QAP polynomials
+            a_g1: &mut [G1],
+            b_g1: &mut [G1],
+            b_g2: &mut [G2],
+            ext: &mut [G1],
+
+            // Worker
+            worker: &Worker
+        )
+        {
+            // Sanity check
+            assert_eq!(a_g1.len(), at.len());
+            assert_eq!(a_g1.len(), bt.len());
+            assert_eq!(a_g1.len(), ct.len());
+            assert_eq!(a_g1.len(), b_g1.len());
+            assert_eq!(a_g1.len(), b_g2.len());
+            assert_eq!(a_g1.len(), ext.len());
+
+            // Evaluate polynomials in multiple threads
+            worker.scope(a_g1.len(), |scope, chunk| {
+                for ((((((a_g1, b_g1), b_g2), ext), at), bt), ct) in
+                    a_g1.chunks_mut(chunk)
+                    .zip(b_g1.chunks_mut(chunk))
+                    .zip(b_g2.chunks_mut(chunk))
+                    .zip(ext.chunks_mut(chunk))
+                    .zip(at.chunks(chunk))
+                    .zip(bt.chunks(chunk))
+                    .zip(ct.chunks(chunk))
+                {
+                    let coeffs_g1 = coeffs_g1.clone();
+                    let coeffs_g2 = coeffs_g2.clone();
+                    let alpha_coeffs_g1 = alpha_coeffs_g1.clone();
+                    let beta_coeffs_g1 = beta_coeffs_g1.clone();
+
+                    scope.spawn(move || {
+                        for ((((((a_g1, b_g1), b_g2), ext), at), bt), ct) in
+                            a_g1.iter_mut()
+                            .zip(b_g1.iter_mut())
+                            .zip(b_g2.iter_mut())
+                            .zip(ext.iter_mut())
+                            .zip(at.iter())
+                            .zip(bt.iter())
+                            .zip(ct.iter())
+                        {
+                            for &(coeff, lag) in at {
+                                a_g1.add_assign(&coeffs_g1[lag].mul(coeff));
+                                ext.add_assign(&beta_coeffs_g1[lag].mul(coeff));
+                            }
+
+                            for &(coeff, lag) in bt {
+                                b_g1.add_assign(&coeffs_g1[lag].mul(coeff));
+                                b_g2.add_assign(&coeffs_g2[lag].mul(coeff));
+                                ext.add_assign(&alpha_coeffs_g1[lag].mul(coeff));
+                            }
+
+                            for &(coeff, lag) in ct {
+                                ext.add_assign(&coeffs_g1[lag].mul(coeff));
+                            }
+                        }
+
+                        // Batch normalize
+                        G1::batch_normalization(a_g1);
+                        G1::batch_normalization(b_g1);
+                        G2::batch_normalization(b_g2);
+                        G1::batch_normalization(ext);
+                    });
+                }
+            });
+        }
+
+        let worker = Worker::new();
+
+        // Evaluate for inputs.
+        eval(
+            coeffs_g1.clone(),
+            coeffs_g2.clone(),
+            alpha_coeffs_g1.clone(),
+            beta_coeffs_g1.clone(),
+            &assembly.at_inputs,
+            &assembly.bt_inputs,
+            &assembly.ct_inputs,
+            &mut a_g1[0..assembly.num_inputs],
+            &mut b_g1[0..assembly.num_inputs],
+            &mut b_g2[0..assembly.num_inputs],
+            &mut ic,
+            &worker
+        );
+
+        // Evaluate for auxillary variables.
+        eval(
+            coeffs_g1.clone(),
+            coeffs_g2.clone(),
+            alpha_coeffs_g1.clone(),
+            beta_coeffs_g1.clone(),
+            &assembly.at_aux,
+            &assembly.bt_aux,
+            &assembly.ct_aux,
+            &mut a_g1[assembly.num_inputs..],
+            &mut b_g1[assembly.num_inputs..],
+            &mut b_g2[assembly.num_inputs..],
+            &mut l,
+            &worker
+        );
+
+        // Don't allow any elements be unconstrained, so that
+        // the L query is always fully dense.
+        for e in l.iter() {
+            if e.is_zero() {
+                return Err(SynthesisError::UnconstrainedVariable);
+            }
+        }
+
+        let vk = VerifyingKey {
+            alpha_g1: alpha,
+            beta_g1: beta_g1,
+            beta_g2: beta_g2,
+            gamma_g2: G2Affine::one(),
+            delta_g1: G1Affine::one(),
+            delta_g2: G2Affine::one(),
+            ic: ic.into_iter().map(|e| e.into_affine()).collect()
+        };
+
+        let params = Parameters {
+            vk: vk,
+            h: Arc::new(h),
+            l: Arc::new(l.into_iter().map(|e| e.into_affine()).collect()),
+
+            // Filter points at infinity away from A/B queries
+            a: Arc::new(a_g1.into_iter().filter(|e| !e.is_zero()).map(|e| e.into_affine()).collect()),
+            b_g1: Arc::new(b_g1.into_iter().filter(|e| !e.is_zero()).map(|e| e.into_affine()).collect()),
+            b_g2: Arc::new(b_g2.into_iter().filter(|e| !e.is_zero()).map(|e| e.into_affine()).collect())
+        };
+
+        let h = {
+            let sink = io::sink();
+            let mut sink = HashWriter::new(sink);
+
+            params.write(&mut sink).unwrap();
+
+            sink.into_hash()
+        };
+
+        let mut cs_hash = [0; 64];
+        cs_hash.copy_from_slice(h.as_ref());
 
         Ok(MPCParameters {
-            params, cs_hash, contributions
+            params: params,
+            cs_hash: cs_hash,
+            contributions: vec![]
         })
     }
 
-    pub fn params(&self) -> &Parameters<Bls12> {
+    /// Get the underlying Groth16 `Parameters`
+    pub fn get_params(&self) -> &Parameters<Bls12> {
         &self.params
     }
 
-    pub fn transform(
+    /// Contributes some randomness to the parameters. Only one
+    /// contributor needs to destroy their `PrivateKey` to keep
+    /// the parameters secure. See `keypair()` for creating
+    /// keypairs.
+    ///
+    /// This function returns a "hash" that is bound to the
+    /// contribution. Contributors can use this hash to make
+    /// sure their contribution is in the final parameters, by
+    /// checking to see if it appears in the output of
+    /// `MPCParameters::verify`.
+    pub fn contribute(
         &mut self,
         pubkey: &PublicKey,
         privkey: &PrivateKey
@@ -592,6 +771,7 @@ impl MPCParameters {
 
         self.contributions.push(pubkey.clone());
 
+        // Calculate the hash of the public key and return it
         {
             let sink = io::sink();
             let mut sink = HashWriter::new(sink);
@@ -603,12 +783,17 @@ impl MPCParameters {
         }
     }
 
+    /// Verify the correctness of the parameters, given a circuit
+    /// instance. This will return all of the hashes that
+    /// contributors obtained when they ran
+    /// `MPCParameters::contribute`, for ensuring that contributions
+    /// exist in the final parameters.
     pub fn verify<C: Circuit<Bls12>>(
         &self,
         circuit: C
     ) -> Result<Vec<[u8; 64]>, ()>
     {
-        let initial_params = new_parameters(circuit).map_err(|_| ())?;
+        let initial_params = MPCParameters::new(circuit).map_err(|_| ())?;
 
         // H/L will change, but should have same length
         if initial_params.params.h.len() != self.params.h.len() {
@@ -732,8 +917,51 @@ impl MPCParameters {
 
         Ok(result)
     }
+
+    /// Serialize these parameters. The serialized parameters
+    /// can be read by bellman as Groth16 `Parameters`.
+    pub fn write<W: Write>(
+        &self,
+        mut writer: W
+    ) -> io::Result<()>
+    {
+        self.params.write(&mut writer)?;
+        writer.write_all(&self.cs_hash)?;
+
+        writer.write_u32::<BigEndian>(self.contributions.len() as u32)?;
+        for pubkey in &self.contributions {
+            pubkey.write(&mut writer)?;
+        }
+
+        Ok(())
+    }
+
+    /// Deserialize these parameters.
+    pub fn read<R: Read>(
+        mut reader: R,
+        checked: bool
+    ) -> io::Result<MPCParameters>
+    {
+        let params = Parameters::read(&mut reader, checked)?;
+
+        let mut cs_hash = [0u8; 64];
+        reader.read_exact(&mut cs_hash)?;
+
+        let contributions_len = reader.read_u32::<BigEndian>()? as usize;
+
+        let mut contributions = vec![];
+        for _ in 0..contributions_len {
+            contributions.push(PublicKey::read(&mut reader)?);
+        }
+
+        Ok(MPCParameters {
+            params, cs_hash, contributions
+        })
+    }
 }
 
+/// This allows others to verify that you contributed. The hash produced
+/// by `MPCParameters::contribute` is just a BLAKE2b hash of this object.
 #[derive(Clone)]
 pub struct PublicKey {
     /// This is the delta (in G1) after the transformation, kept so that we
@@ -755,7 +983,7 @@ pub struct PublicKey {
 }
 
 impl PublicKey {
-    pub fn write<W: Write>(
+    fn write<W: Write>(
         &self,
         mut writer: W
     ) -> io::Result<()>
@@ -769,7 +997,7 @@ impl PublicKey {
         Ok(())
     }
 
-    pub fn read<R: Read>(
+    fn read<R: Read>(
         mut reader: R
     ) -> io::Result<PublicKey>
     {
@@ -823,11 +1051,16 @@ impl PartialEq for PublicKey {
     }
 }
 
-pub fn verify_transform<C: Circuit<Bls12>>(
+/// Verify a contribution, given the old parameters and
+/// the new parameters. This is basically a wrapper around
+/// `MPCParameters::verify` which just checks that a new
+/// contribution was added and none of the existing
+/// contributions were changed.
+pub fn verify_contribution<C: Circuit<Bls12>>(
     circuit: C,
     before: &MPCParameters,
     after: &MPCParameters
-) -> Result<Vec<[u8; 64]>, ()>
+) -> Result<[u8; 64], ()>
 {
     // Transformation involves a single new object
     if after.contributions.len() != (before.contributions.len() + 1) {
@@ -839,7 +1072,7 @@ pub fn verify_transform<C: Circuit<Bls12>>(
         return Err(());
     }
 
-    after.verify(circuit)
+    after.verify(circuit).map(|v| *v.last().unwrap())
 }
 
 /// Checks if pairs have the same ratio.
@@ -912,10 +1145,15 @@ fn merge_pairs<G: CurveAffine>(v1: &[G], v2: &[G]) -> (G, G)
     (s, sx)
 }
 
+/// This needs to be destroyed by at least one participant
+/// for the final parameters to be secure.
 pub struct PrivateKey {
     delta: Fr
 }
 
+/// Compute a keypair, given the current parameters. Keypairs
+/// cannot be reused for multiple contributions or contributions
+/// in different parameters.
 pub fn keypair<R: Rng>(
     rng: &mut R,
     current: &MPCParameters,
@@ -982,7 +1220,7 @@ fn hash_to_g2(mut digest: &[u8]) -> G2
 }
 
 /// Abstraction over a writer which hashes the data being written.
-pub struct HashWriter<W: Write> {
+struct HashWriter<W: Write> {
     writer: W,
     hasher: Blake2b
 }
@@ -1025,4 +1263,21 @@ impl<W: Write> Write for HashWriter<W> {
     fn flush(&mut self) -> io::Result<()> {
         self.writer.flush()
     }
+}
+
+/// This is a cheap helper utility that exists purely
+/// because Rust still doesn't have type-level integers
+/// and so doesn't implement `PartialEq` for `[T; 64]`
+pub fn contains_contribution(
+    contributions: &[[u8; 64]],
+    my_contribution: &[u8; 64]
+) -> bool
+{
+    for contrib in contributions {
+        if &contrib[..] == &my_contribution[..] {
+            return true
+        }
+    }
+
+    return false
 }
