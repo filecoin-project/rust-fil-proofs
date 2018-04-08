@@ -404,7 +404,7 @@ impl PartialEq for MPCParameters {
 impl MPCParameters {
     /// Create new Groth16 parameters (compatible with bellman) for a
     /// given circuit. The resulting parameters are unsafe to use
-    /// until there are contributions (see `transform`).
+    /// until there are contributions (see `contribute()`).
     pub fn new<C>(
         circuit: C,
     ) -> Result<MPCParameters, SynthesisError>
