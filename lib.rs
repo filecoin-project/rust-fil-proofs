@@ -199,15 +199,11 @@ extern crate pairing;
 extern crate bellman;
 extern crate rand;
 extern crate byteorder;
-extern crate blake2;
+extern crate blake2_rfc;
 extern crate num_cpus;
 extern crate crossbeam;
-extern crate generic_array;
-extern crate typenum;
 
-use blake2::{Blake2b, Digest};
-use generic_array::GenericArray;
-use typenum::consts::U64;
+use blake2_rfc::blake2b::Blake2b;
 
 use byteorder::{
     BigEndian,
@@ -1344,13 +1340,15 @@ impl<W: Write> HashWriter<W> {
     pub fn new(writer: W) -> Self {
         HashWriter {
             writer: writer,
-            hasher: Blake2b::default()
+            hasher: Blake2b::new(64)
         }
     }
 
     /// Destroy this writer and return the hash of what was written.
-    pub fn into_hash(self) -> GenericArray<u8, U64> {
-        self.hasher.result()
+    pub fn into_hash(self) -> [u8; 64] {
+        let mut tmp = [0u8; 64];
+        tmp.copy_from_slice(self.hasher.finalize().as_ref());
+        tmp
     }
 }
 
@@ -1359,7 +1357,7 @@ impl<W: Write> Write for HashWriter<W> {
         let bytes = self.writer.write(buf)?;
 
         if bytes > 0 {
-            self.hasher.input(&buf[0..bytes]);
+            self.hasher.update(&buf[0..bytes]);
         }
 
         Ok(bytes)
