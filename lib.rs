@@ -166,23 +166,17 @@
 //! parameters.
 //!
 //! ```rust,ignore
-//! // Create a random keypair for our parameters
-//! let (pubkey, privkey) = phase2::keypair(rng, &params);
-//!
-//! // Contribute to the parameters. Remember this hash, it's
-//! // how we know our contribution is in the parameters!
-//! let hash = params.contribute(&pubkey, &privkey);
-//!
-//! // Throw away the private key!
-//! drop(privkey);
+//! // Contribute randomness to the parameters. Remember this hash,
+//! // it's how we know our contribution is in the parameters!
+//! let hash = params.contribute(rng);
 //! ```
 //!
-//! These parameters are now secure to use, so long as you destroyed
-//! the privkey. That may not be convincing to others, so let them
+//! These parameters are now secure to use, so long as you weren't
+//! malicious. That may not be convincing to others, so let them
 //! contribute randomness too! `params` can be serialized and sent
 //! elsewhere, where they can do the same thing and send new
-//! parameters back to you. Only one person needs to destroy the
-//! `privkey` for the final parameters to be secure.
+//! parameters back to you. Only one person needs to be honest for
+//! the final parameters to be secure.
 //!
 //! Once you're done setting up the parameters, you can verify the
 //! parameters:
@@ -699,9 +693,8 @@ impl MPCParameters {
     }
 
     /// Contributes some randomness to the parameters. Only one
-    /// contributor needs to destroy their `PrivateKey` to keep
-    /// the parameters secure. See `keypair()` for creating
-    /// keypairs.
+    /// contributor needs to be honest for the parameters to be
+    /// secure.
     ///
     /// This function returns a "hash" that is bound to the
     /// contribution. Contributors can use this hash to make
@@ -938,7 +931,9 @@ impl MPCParameters {
         Ok(())
     }
 
-    /// Deserialize these parameters.
+    /// Deserialize these parameters. If `checked` is false,
+    /// we won't perform curve validity and group order
+    /// checks.
     pub fn read<R: Read>(
         mut reader: R,
         checked: bool
