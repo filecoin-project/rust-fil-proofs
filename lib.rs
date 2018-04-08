@@ -852,7 +852,7 @@ impl MPCParameters {
             our_sink.write_all(pubkey.s.into_uncompressed().as_ref()).unwrap();
             our_sink.write_all(pubkey.s_delta.into_uncompressed().as_ref()).unwrap();
 
-            sink.write_all(pubkey.delta_after.into_uncompressed().as_ref()).unwrap();
+            pubkey.write(&mut sink).unwrap();
 
             let h = our_sink.into_hash();
 
@@ -1118,7 +1118,7 @@ pub fn verify_contribution(
     sink.write_all(&before.cs_hash[..]).unwrap();
 
     for pubkey in &before.contributions {
-        sink.write_all(pubkey.delta_after.into_uncompressed().as_ref()).unwrap();
+        pubkey.write(&mut sink).unwrap();
     }
 
     let pubkey = after.contributions.last().unwrap();
@@ -1276,14 +1276,14 @@ fn keypair<R: Rng>(
     let s = G1::rand(rng).into_affine();
     let s_delta = s.mul(delta).into_affine();
 
-    // H(cs_hash | <deltas> | s | s_delta)
+    // H(cs_hash | <previous pubkeys> | s | s_delta)
     let h = {
         let sink = io::sink();
         let mut sink = HashWriter::new(sink);
 
         sink.write_all(&current.cs_hash[..]).unwrap();
         for pubkey in &current.contributions {
-            sink.write_all(pubkey.delta_after.into_uncompressed().as_ref()).unwrap();
+            pubkey.write(&mut sink).unwrap();
         }
         sink.write_all(s.into_uncompressed().as_ref()).unwrap();
         sink.write_all(s_delta.into_uncompressed().as_ref()).unwrap();
