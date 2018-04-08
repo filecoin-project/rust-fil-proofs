@@ -760,7 +760,7 @@ impl MPCParameters {
             }
         }
 
-        let delta_inv = privkey.delta.inverse().unwrap();
+        let delta_inv = privkey.delta.inverse().expect("nonzero");
         let mut l = (&self.params.l[..]).to_vec();
         let mut h = (&self.params.h[..]).to_vec();
         batch_exp(&mut l, delta_inv);
