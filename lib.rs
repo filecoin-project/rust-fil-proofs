@@ -159,7 +159,7 @@
 //!
 //! The first time you try this, it will try to read a file like
 //! `phase1radix2m2` from the current directory. You need to grab
-//! that from the Powers of Tau.
+//! that from the [Powers of Tau](https://lists.z.cash.foundation/pipermail/zapps-wg/2018/000362.html).
 //! 
 //! These parameters are not safe to use; false proofs can be
 //! created for them. Let's contribute some randomness to these
