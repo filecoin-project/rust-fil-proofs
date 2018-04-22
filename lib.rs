@@ -3,7 +3,7 @@
 //! ## Make your circuit
 //!
 //! Grab the [`bellman`](https://github.com/ebfull/bellman) and
-//! [`pairing`](https://github.com/ebfull/bellman) crates. Bellman
+//! [`pairing`](https://github.com/ebfull/pairing) crates. Bellman
 //! provides a trait called `Circuit`, which you must implement
 //! for your computation.
 //!
