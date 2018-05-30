@@ -1,0 +1,23 @@
+[package]
+name = "proofs"
+version = "0.1.0"
+authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
+
+[dependencies]
+# sapling-crypto = { git = "https://github.com/zcash-hackworks/sapling-crypto", branch = "master" }
+rand = "0.4"
+# digest = "0.7"
+# bellman = "0.1"
+# byteorder = "1"
+
+# [dependencies.pairing]
+# version = "0.14.2"
+# features = ["expose-arith"]
+
+# [dependencies.blake2-rfc]
+# git = "https://github.com/gtank/blake2-rfc"
+# rev = "7a5b5fc99ae483a0043db7547fb79a6fa44b88a9"
+
+# [features]
+# default = ["u128-support"]
+# u128-support = ["pairing/u128-support"]
