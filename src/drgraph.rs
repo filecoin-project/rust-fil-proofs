@@ -1,9 +1,19 @@
 use std::collections::HashMap;
 use std::cmp;
 use rand::{Rng, thread_rng};
+use merkle::MerkleTree;
+use ring::digest::{Algorithm, SHA256};
 
+use util::data_at_node;
+
+static DIGEST: &'static Algorithm = &SHA256;
+
+/// A DAG.
 pub struct Graph {
+    /// How many nodes are in this graph.
     nodes: usize,
+    /// List of predecessors. An entry `(v, vec![u, w])` means
+    /// there is an edge from `v -> u` and `v -> w`.
     pred: HashMap<usize, Vec<usize>>,
 }
 
@@ -13,8 +23,7 @@ pub enum Sampling {
 }
 
 impl Graph {
-    // Creates a new graph. If no sampling is passed, it does not contain
-    // any edges.
+    /// Creates a new graph. If no sampling is passed, it does not contain any edges.
     pub fn new(nodes: usize, sampling: Option<Sampling>) -> Graph {
         match sampling {
             Some(Sampling::DR) => dr_sample(nodes),
@@ -30,7 +39,7 @@ impl Graph {
         }
     }
 
-    // Inserts a directed edge from u -> v.
+    /// Inserts a directed edge from u -> v.
     pub fn add_edge(&mut self, u: usize, v: usize) {
         self.pred.entry(u).or_insert(Vec::new());
         if let Some(edges) = self.pred.get_mut(&u) {
@@ -38,11 +47,32 @@ impl Graph {
         }
     }
 
-    // Returns the expected size of all nodes in the graph.
+    /// Returns the expected size of all nodes in the graph.
     pub fn expected_size(&self, node_size: usize) -> usize {
         self.nodes * node_size
     }
+
+    /// Returns the commitment hash for the given data.
+    pub fn commit(&self, data: &[u8], node_size: usize) -> Vec<u8> {
+        let t = self.merkle_tree(data, node_size);
+        (*t.root_hash()).clone()
+    }
+
+    /// Builds a merkle tree based on the given data.
+    pub fn merkle_tree<'a>(&self, data: &'a [u8], node_size: usize) -> MerkleTree<&'a [u8]> {
+        // TODO: proper error handling
+        if data.len() != node_size * self.nodes {
+            panic!("missmatch of data, node_size and nodes");
+        }
+
+        let v = (0..self.nodes)
+            .map(|i| data_at_node(data, i + 1, node_size))
+            .collect();
+
+        MerkleTree::from_vec(DIGEST, v)
+    }
 }
+
 
 fn dr_sample(n: usize) -> Graph {
     assert!(n > 1, "graph too small");
@@ -64,7 +94,6 @@ fn get_random_parent(v: usize) -> usize {
     let mut rng = thread_rng();
     let j: usize = rng.gen_range(1, floor_log2(v) + 1);
     let g = cmp::min(v - 1, 2_usize.pow(j as u32));
-    println!("{} {} {} {}", g / 2, v, j, g);
     let min = cmp::max(g / 2, 2);
     let r = if min == g { min } else { rng.gen_range(min, g) };
 
@@ -138,4 +167,52 @@ fn test_graph_add_edge() {
 
     assert_eq!(g.pred.get(&2), None);
     assert_eq!(g.pred.get(&3), None);
+}
+
+#[test]
+fn test_graph_commit() {
+    let mut g = Graph::new(10, None);
+
+    g.add_edge(1, 2);
+    g.add_edge(1, 3);
+
+    let data = vec![1u8; 20];
+
+    assert_eq!(
+        g.commit(data.as_slice(), 2),
+        vec![
+            41,
+            172,
+            166,
+            152,
+            175,
+            190,
+            32,
+            60,
+            193,
+            111,
+            60,
+            58,
+            27,
+            215,
+            67,
+            107,
+            182,
+            81,
+            187,
+            214,
+            244,
+            11,
+            18,
+            219,
+            226,
+            159,
+            224,
+            10,
+            43,
+            83,
+            192,
+            31,
+        ]
+    );
 }
