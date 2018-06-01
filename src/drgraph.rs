@@ -1,12 +1,15 @@
 use std::collections::HashMap;
 use std::cmp;
+use std::iter::FromIterator;
 use rand::{Rng, thread_rng};
-use merkle::MerkleTree;
-use ring::digest::{Algorithm, SHA256};
-
+use hasher;
 use util::data_at_node;
+use merkle_light::merkle;
 
-static DIGEST: &'static Algorithm = &SHA256;
+type TREE_HASH_FN = hasher::RingSHA256Hash;
+type TREE_ALGORITHM = hasher::SHA256Algorithm;
+
+pub type MerkleTree = merkle::MerkleTree<TREE_HASH_FN, TREE_ALGORITHM>;
 
 /// A DAG.
 pub struct Graph {
@@ -55,21 +58,27 @@ impl Graph {
     /// Returns the commitment hash for the given data.
     pub fn commit(&self, data: &[u8], node_size: usize) -> Vec<u8> {
         let t = self.merkle_tree(data, node_size);
-        (*t.root_hash()).clone()
+        t.root().to_vec()
     }
 
     /// Builds a merkle tree based on the given data.
-    pub fn merkle_tree<'a>(&self, data: &'a [u8], node_size: usize) -> MerkleTree<&'a [u8]> {
+    pub fn merkle_tree<'a>(&self, data: &'a [u8], node_size: usize) -> MerkleTree {
         // TODO: proper error handling
         if data.len() != node_size * self.nodes {
             panic!("missmatch of data, node_size and nodes");
         }
 
-        let v = (0..self.nodes)
-            .map(|i| data_at_node(data, i + 1, node_size))
-            .collect();
+        merkle::MerkleTree::from_data((0..self.nodes).map(
+            |i| data_at_node(data, i + 1, node_size),
+        ))
+    }
 
-        MerkleTree::from_vec(DIGEST, v)
+    pub fn parents(&self, node: usize) -> Option<&Vec<usize>> {
+        self.pred.get(&node)
+    }
+
+    pub fn size(&self) -> usize {
+        self.nodes
     }
 }
 
@@ -177,42 +186,5 @@ fn test_graph_commit() {
     g.add_edge(1, 3);
 
     let data = vec![1u8; 20];
-
-    assert_eq!(
-        g.commit(data.as_slice(), 2),
-        vec![
-            41,
-            172,
-            166,
-            152,
-            175,
-            190,
-            32,
-            60,
-            193,
-            111,
-            60,
-            58,
-            27,
-            215,
-            67,
-            107,
-            182,
-            81,
-            187,
-            214,
-            244,
-            11,
-            18,
-            219,
-            226,
-            159,
-            224,
-            10,
-            43,
-            83,
-            192,
-            31,
-        ]
-    );
+    assert_eq!(g.commit(data.as_slice(), 2).len(), 32);
 }

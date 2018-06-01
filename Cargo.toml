@@ -6,8 +6,9 @@ authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
 [dependencies]
 # sapling-crypto = { git = "https://github.com/zcash-hackworks/sapling-crypto", branch = "master" }
 rand = "0.4"
-merkle = "1.7"
 ring = "0.12"
+merkle_light = "0.3"
+rust-crypto = "*"
 # digest = "0.7"
 # bellman = "0.1"
 # byteorder = "1"
