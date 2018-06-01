@@ -1,7 +1,7 @@
 extern crate rand;
 extern crate merkle_light;
 extern crate ring;
-extern crate crypto as rcrypto;
+extern crate openssl;
 // extern crate pairing;
 // extern crate sapling_crypto;
 // extern crate bellman;

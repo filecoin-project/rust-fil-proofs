@@ -71,8 +71,8 @@ impl PoRep<PublicParams> for DrgPoRep {
         pp: &'b PublicParams,
         prover_id: &'b [u8],
         data: &'b [u8],
-    ) -> &'b [u8] {
-        unimplemented!()
+    ) -> Vec<u8> {
+        vde::decode(&pp.graph, pp.lambda, prover_id, data)
     }
 
     fn extract<'a>(
@@ -81,7 +81,7 @@ impl PoRep<PublicParams> for DrgPoRep {
         prover_id: &'a [u8],
         data: &'a [u8],
         node: usize,
-    ) -> &'a [u8] {
+    ) -> Vec<u8> {
         unimplemented!()
     }
 }
@@ -92,6 +92,7 @@ fn test_setup() {
     let lambda = 16;
     let prover_id = vec![1u8; 16];
     let data = vec![2u8; 16 * 3];
+    // create a copy, so we can compare roundtrips
     let mut data_copy = data.clone();
     let challenge = 1;
 
@@ -107,4 +108,10 @@ fn test_setup() {
     let pp = dp.setup(&sp);
 
     let (tau, aux) = dp.replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice());
+
+    assert_ne!(data, data_copy);
+
+    let decoded_data = dp.extract_all(&pp, prover_id.as_slice(), data_copy.as_mut_slice());
+
+    assert_eq!(data, decoded_data);
 }

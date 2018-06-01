@@ -45,6 +45,6 @@ impl ProverAux {
 
 pub trait PoRep<T> {
     fn replicate<'a>(&'a self, &'a T, &'a [u8], &'a mut [u8]) -> (Tau, ProverAux);
-    fn extract_all<'a>(&'a self, &'a T, &'a [u8], &'a [u8]) -> &'a [u8];
-    fn extract<'a>(&'a self, &'a T, &'a [u8], &'a [u8], usize) -> &'a [u8];
+    fn extract_all<'a>(&'a self, &'a T, &'a [u8], &'a [u8]) -> Vec<u8>;
+    fn extract<'a>(&'a self, &'a T, &'a [u8], &'a [u8], usize) -> Vec<u8>;
 }

@@ -73,8 +73,10 @@ impl Graph {
         ))
     }
 
-    pub fn parents(&self, node: usize) -> Option<&Vec<usize>> {
-        self.pred.get(&node)
+    pub fn parents(&self, node: usize) -> Vec<usize> {
+        self.pred.get(&node).map(|p| (*p).clone()).unwrap_or(
+            Vec::new(),
+        )
     }
 
     pub fn size(&self) -> usize {
@@ -176,6 +178,9 @@ fn test_graph_add_edge() {
 
     assert_eq!(g.pred.get(&2), None);
     assert_eq!(g.pred.get(&3), None);
+
+    assert_eq!(g.parents(1), vec![2, 3]);
+    assert_eq!(g.parents(2), Vec::new());
 }
 
 #[test]
