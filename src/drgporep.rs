@@ -81,13 +81,13 @@ impl<'a> PoRep<'a> for DrgPoRep {
         prover_id: &[u8],
         data: &mut [u8],
     ) -> Result<(porep::Tau, porep::ProverAux)> {
-        let tree_d = pp.graph.merkle_tree(data, pp.lambda);
-        let comm_d = pp.graph.commit(data, pp.lambda);
+        let tree_d = pp.graph.merkle_tree(data, pp.lambda)?;
+        let comm_d = pp.graph.commit(data, pp.lambda)?;
 
-        vde::encode(&pp.graph, pp.lambda, prover_id, data);
+        vde::encode(&pp.graph, pp.lambda, prover_id, data)?;
 
-        let tree_r = pp.graph.merkle_tree(data, pp.lambda);
-        let comm_r = pp.graph.commit(data, pp.lambda);
+        let tree_r = pp.graph.merkle_tree(data, pp.lambda)?;
+        let comm_r = pp.graph.commit(data, pp.lambda)?;
         Ok((
             porep::Tau::new(comm_d, comm_r),
             porep::ProverAux::new(tree_d, tree_r),
@@ -99,7 +99,7 @@ impl<'a> PoRep<'a> for DrgPoRep {
         prover_id: &'b [u8],
         data: &'b [u8],
     ) -> Result<Vec<u8>> {
-        Ok(vde::decode(&pp.graph, pp.lambda, prover_id, data))
+        vde::decode(&pp.graph, pp.lambda, prover_id, data)
     }
 
     fn extract(pp: &PublicParams, prover_id: &[u8], data: &[u8], node: usize) -> Result<Vec<u8>> {

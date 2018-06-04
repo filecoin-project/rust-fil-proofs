@@ -2,6 +2,7 @@ extern crate merkle_light;
 extern crate openssl;
 extern crate rand;
 extern crate ring;
+#[macro_use]
 extern crate failure;
 // extern crate pairing;
 // extern crate sapling_crypto;

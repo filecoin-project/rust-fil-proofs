@@ -5,6 +5,7 @@ use rand::{Rng, thread_rng};
 use hasher;
 use util::data_at_node;
 use merkle_light::merkle;
+use error::Result;
 
 type TREE_HASH_FN = hasher::RingSHA256Hash;
 type TREE_ALGORITHM = hasher::SHA256Algorithm;
@@ -56,21 +57,20 @@ impl Graph {
     }
 
     /// Returns the commitment hash for the given data.
-    pub fn commit(&self, data: &[u8], node_size: usize) -> Vec<u8> {
-        let t = self.merkle_tree(data, node_size);
-        t.root().to_vec()
+    pub fn commit(&self, data: &[u8], node_size: usize) -> Result<Vec<u8>> {
+        let t = self.merkle_tree(data, node_size)?;
+        Ok(t.root().to_vec())
     }
 
     /// Builds a merkle tree based on the given data.
-    pub fn merkle_tree<'a>(&self, data: &'a [u8], node_size: usize) -> MerkleTree {
-        // TODO: proper error handling
+    pub fn merkle_tree<'a>(&self, data: &'a [u8], node_size: usize) -> Result<MerkleTree> {
         if data.len() != node_size * self.nodes {
-            panic!("missmatch of data, node_size and nodes");
+            return Err(format_err!("missmatch of data, node_size and nodes"));
         }
 
-        merkle::MerkleTree::from_data((0..self.nodes).map(
-            |i| data_at_node(data, i + 1, node_size),
-        ))
+        Ok(merkle::MerkleTree::from_data((0..self.nodes).map(|i| {
+            data_at_node(data, i + 1, node_size).expect("data_at_node math failed")
+        })))
     }
 
     pub fn parents(&self, node: usize) -> Vec<usize> {
@@ -191,5 +191,5 @@ fn test_graph_commit() {
     g.add_edge(1, 3);
 
     let data = vec![1u8; 20];
-    assert_eq!(g.commit(data.as_slice(), 2).len(), 32);
+    assert_eq!(g.commit(data.as_slice(), 2).unwrap().len(), 32);
 }
