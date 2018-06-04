@@ -3,6 +3,9 @@ use porep::{self, PoRep};
 use drgraph::{Graph, Sampling};
 use vde;
 
+use error::Result;
+use proof::ProofScheme;
+
 pub struct PublicInputs<'a> {
     prover_id: &'a [u8],
     challenge: usize,
@@ -29,59 +32,77 @@ pub struct PublicParams {
     graph: Graph,
 }
 
+pub struct Proof {}
+
 pub struct DrgPoRep {}
 
 impl DrgPoRep {
     pub fn new() -> DrgPoRep {
         DrgPoRep {}
     }
+}
 
-    pub fn setup(&self, sp: &SetupParams) -> PublicParams {
+impl<'a> ProofScheme<'a> for DrgPoRep {
+    type PublicParams = PublicParams;
+    type SetupParams = SetupParams;
+    type PublicInputs = PublicInputs<'a>;
+    type PrivateInputs = PrivateInputs<'a>;
+    type Proof = Proof;
+
+    fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
         let graph = Graph::new(sp.drg.n, Some(Sampling::Bucket(sp.drg.m)));
 
-        PublicParams {
+        Ok(PublicParams {
             lambda: sp.lambda,
             graph: graph,
-        }
+        })
+    }
+
+    fn prove(
+        pub_params: &Self::PublicParams,
+        pub_inputs: &Self::PublicInputs,
+        priv_inputs: &Self::PrivateInputs,
+    ) -> Result<Self::Proof> {
+        unimplemented!();
+    }
+
+    fn verify(
+        pub_params: &Self::PublicParams,
+        pub_inputs: &Self::PublicInputs,
+        proof: &Self::Proof,
+    ) -> Result<bool> {
+        unimplemented!();
     }
 }
 
-impl PoRep<PublicParams> for DrgPoRep {
-    fn replicate<'a>(
-        &self,
-        pp: &'a PublicParams,
-        prover_id: &'a [u8],
-        data: &'a mut [u8],
-    ) -> (porep::Tau, porep::ProverAux) {
-        let tree_d = pp.graph.merkle_tree(data, pp.lambda);
-        let comm_d = pp.graph.commit(data, pp.lambda);
+impl<'a> PoRep<'a> for DrgPoRep {
+    fn replicate(
+        pp: &PublicParams,
+        prover_id: &[u8],
+        data: &mut [u8],
+    ) -> Result<(porep::Tau, porep::ProverAux)> {
+        let tree_d = pp.graph.merkle_tree(data, pp.lambda)?;
+        let comm_d = pp.graph.commit(data, pp.lambda)?;
 
-        vde::encode(&pp.graph, pp.lambda, prover_id, data);
+        vde::encode(&pp.graph, pp.lambda, prover_id, data)?;
 
-        let tree_r = pp.graph.merkle_tree(data, pp.lambda);
-        let comm_r = pp.graph.commit(data, pp.lambda);
-        (
+        let tree_r = pp.graph.merkle_tree(data, pp.lambda)?;
+        let comm_r = pp.graph.commit(data, pp.lambda)?;
+        Ok((
             porep::Tau::new(comm_d, comm_r),
             porep::ProverAux::new(tree_d, tree_r),
-        )
+        ))
     }
 
-    fn extract_all<'a, 'b>(
-        &'a self,
+    fn extract_all<'b>(
         pp: &'b PublicParams,
         prover_id: &'b [u8],
         data: &'b [u8],
-    ) -> Vec<u8> {
+    ) -> Result<Vec<u8>> {
         vde::decode(&pp.graph, pp.lambda, prover_id, data)
     }
 
-    fn extract<'a>(
-        &'a self,
-        pp: &'a PublicParams,
-        prover_id: &'a [u8],
-        data: &'a [u8],
-        node: usize,
-    ) -> Vec<u8> {
+    fn extract(pp: &PublicParams, prover_id: &[u8], data: &[u8], node: usize) -> Result<Vec<u8>> {
         unimplemented!()
     }
 }
@@ -104,14 +125,15 @@ fn test_setup() {
         },
     };
 
-    let dp = DrgPoRep::new();
-    let pp = dp.setup(&sp);
+    let pp = DrgPoRep::setup(&sp).unwrap();
 
-    let (tau, aux) = dp.replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice());
+    let (tau, aux) = DrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice())
+        .unwrap();
 
     assert_ne!(data, data_copy);
 
-    let decoded_data = dp.extract_all(&pp, prover_id.as_slice(), data_copy.as_mut_slice());
+    let decoded_data = DrgPoRep::extract_all(&pp, prover_id.as_slice(), data_copy.as_mut_slice())
+        .unwrap();
 
     assert_eq!(data, decoded_data);
 }
