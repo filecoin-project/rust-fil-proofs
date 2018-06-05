@@ -15,6 +15,10 @@ extern crate lazy_static;
 #[cfg(test)]
 #[macro_use]
 extern crate hex_literal;
+#[cfg(test)]
+extern crate tempfile;
+
+extern crate memmap;
 
 pub mod circuit;
 pub mod crypto;
@@ -26,6 +30,7 @@ pub mod layered_drgporep;
 pub mod merklepor;
 pub mod porep;
 pub mod proof;
+pub mod writer;
 
 mod util;
 mod vde;
