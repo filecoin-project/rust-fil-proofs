@@ -9,15 +9,15 @@ use proof::ProofScheme;
 
 #[derive(Debug)]
 pub struct PublicInputs<'a> {
-    prover_id: &'a [u8],
-    challenge: usize,
-    tau: &'a porep::Tau,
+    pub prover_id: &'a [u8],
+    pub challenge: usize,
+    pub tau: &'a porep::Tau,
 }
 
 #[derive(Debug)]
 pub struct PrivateInputs<'a> {
-    replica: &'a [u8],
-    aux: &'a porep::ProverAux,
+    pub replica: &'a [u8],
+    pub aux: &'a porep::ProverAux,
 }
 
 #[derive(Debug)]
@@ -34,8 +34,8 @@ pub struct DrgParams {
 
 #[derive(Debug)]
 pub struct PublicParams {
-    lambda: usize,
-    graph: Graph,
+    pub lambda: usize,
+    pub graph: Graph,
 }
 
 #[derive(Debug)]

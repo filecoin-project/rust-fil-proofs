@@ -83,8 +83,7 @@ mod test {
             .collect::<Vec<bool>>();
 
         // pull bits from returned result
-        let actual = out
-            .iter()
+        let actual = out.iter()
             .map(|v| v.get_value().unwrap())
             .collect::<Vec<bool>>();
 

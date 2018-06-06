@@ -97,6 +97,10 @@ impl Graph {
     }
 }
 
+pub fn permute(g: Graph, keys: &[u32]) -> Graph {
+    unimplemented!();
+}
+
 fn dr_sample(n: usize) -> Graph {
     assert!(n > 1, "graph too small");
 
