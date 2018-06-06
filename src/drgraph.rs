@@ -1,16 +1,16 @@
 use error::Result;
-use hasher;
+use hasher::pedersen;
 use merkle_light::{merkle, proof};
 use rand::{thread_rng, Rng};
 use std::cmp;
 use std::collections::{HashMap, HashSet};
 use util::data_at_node;
 
-type TreeHashType = hasher::sha256::RingSHA256Hash;
-pub type TreeAlgorithm = hasher::sha256::SHA256Algorithm;
+pub type TreeHash = pedersen::PedersenHash;
+pub type TreeAlgorithm = pedersen::PedersenAlgorithm;
 
-pub type MerkleTree = merkle::MerkleTree<TreeHashType, TreeAlgorithm>;
-pub type MerkleProof = proof::Proof<TreeHashType>;
+pub type MerkleTree = merkle::MerkleTree<TreeHash, TreeAlgorithm>;
+pub type MerkleProof = proof::Proof<TreeHash>;
 
 /// A DAG.
 #[derive(Debug)]
@@ -59,9 +59,9 @@ impl Graph {
     }
 
     /// Returns the commitment hash for the given data.
-    pub fn commit(&self, data: &[u8], node_size: usize) -> Result<Vec<u8>> {
+    pub fn commit(&self, data: &[u8], node_size: usize) -> Result<TreeHash> {
         let t = self.merkle_tree(data, node_size)?;
-        Ok(t.root().to_vec())
+        Ok(t.root())
     }
 
     /// Builds a merkle tree based on the given data.
@@ -70,10 +70,12 @@ impl Graph {
             return Err(format_err!("missmatch of data, node_size and nodes"));
         }
 
-        Ok(MerkleTree::from_data((0..self.nodes).map(|i| {
-            let d = data_at_node(data, i + 1, node_size).expect("data_at_node math failed");
+        if !(node_size == 16 || node_size == 32 || node_size == 64) {
+            return Err(format_err!("invalid node size, must be 16, 32 or 64"));
+        }
 
-            d
+        Ok(MerkleTree::from_data((0..self.nodes).map(|i| {
+            data_at_node(data, i + 1, node_size).expect("data_at_node math failed")
         })))
     }
 
@@ -210,22 +212,24 @@ mod test {
 
     #[test]
     fn test_graph_commit() {
-        let mut g = Graph::new(10, None);
+        let mut g = Graph::new(3, None);
 
         g.add_edge(1, 2);
         g.add_edge(1, 3);
 
-        let data = vec![1u8; 20];
-        assert_eq!(g.commit(data.as_slice(), 2).unwrap().len(), 32);
+        let data = vec![1u8; 3 * 16];
+        g.commit(data.as_slice(), 16).unwrap();
+        // TODO: add assertion
     }
 
     #[test]
-    fn test_prove_verify() {
+    fn test_gen_proof() {
         let g = Graph::new(5, Some(Sampling::Bucket(3)));
         let data = vec![2u8; 16 * 5];
 
         let tree = g.merkle_tree(data.as_slice(), 16).unwrap();
         let proof = tree.gen_proof(2);
+
         assert!(proof.validate::<TreeAlgorithm>());
     }
 }

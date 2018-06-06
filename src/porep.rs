@@ -1,4 +1,4 @@
-use drgraph::MerkleTree;
+use drgraph::{MerkleTree, TreeHash};
 use error::Result;
 use proof::ProofScheme;
 
@@ -10,11 +10,11 @@ pub struct PublicParams {
 
 #[derive(Debug)]
 pub struct Tau {
-    pub comm_r: Vec<u8>,
-    pub comm_d: Vec<u8>,
+    pub comm_r: TreeHash,
+    pub comm_d: TreeHash,
 }
 impl Tau {
-    pub fn new(comm_d: Vec<u8>, comm_r: Vec<u8>) -> Tau {
+    pub fn new(comm_d: TreeHash, comm_r: TreeHash) -> Tau {
         Tau {
             comm_d: comm_d,
             comm_r: comm_r,

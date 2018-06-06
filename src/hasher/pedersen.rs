@@ -133,25 +133,22 @@ impl From<PedersenHash> for Fr {
 }
 
 pub fn merkle_tree_from_u64(data: Vec<u64>) -> MerkleTree {
-    MerkleTree::from_iter(
-        data.into_iter()
-            .map(|x| pedersen_hash_u64::<Bls12>(x, &HASH_PARAMS).into()),
-    )
+    MerkleTree::from_iter(data.into_iter().map(|x| pedersen_hash_u64(x).into()))
 }
 
-pub fn pedersen_hash_u64<E: JubjubEngine>(value: u64, params: &E::Params) -> E::Fr {
+pub fn pedersen_hash_u64(value: u64) -> Fr {
     let mut contents = vec![];
 
     // Writing the value in little endian
     (&mut contents).write_u64::<LittleEndian>(value).unwrap();
 
-    pedersen_hash::<E, _>(
+    pedersen_hash::<Bls12, _>(
         // TODO: what is the right type of personalization?
         Personalization::NoteCommitment,
         contents
             .into_iter()
             .flat_map(|byte| (0..8).map(move |i| ((byte >> i) & 1) == 1)),
-        params,
+        &HASH_PARAMS,
     ).into_xy()
         .0
 }
