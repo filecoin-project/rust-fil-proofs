@@ -43,8 +43,8 @@ mod tests {
     use super::*;
     use circuit::test::*;
     use hasher::pedersen::merkle_tree_from_u64;
-    use pairing::Field;
     use pairing::bls12_381::*;
+    use pairing::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
 

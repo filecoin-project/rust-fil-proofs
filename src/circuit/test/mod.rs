@@ -417,19 +417,22 @@ impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
 
 #[test]
 fn test_cs() {
-    use pairing::PrimeField;
     use pairing::bls12_381::{Bls12, Fr};
+    use pairing::PrimeField;
 
     let mut cs = TestConstraintSystem::<Bls12>::new();
     assert!(cs.is_satisfied());
     assert_eq!(cs.num_constraints(), 0);
-    let a = cs.namespace(|| "a")
+    let a = cs
+        .namespace(|| "a")
         .alloc(|| "var", || Ok(Fr::from_str("10").unwrap()))
         .unwrap();
-    let b = cs.namespace(|| "b")
+    let b = cs
+        .namespace(|| "b")
         .alloc(|| "var", || Ok(Fr::from_str("4").unwrap()))
         .unwrap();
-    let c = cs.alloc(|| "product", || Ok(Fr::from_str("40").unwrap()))
+    let c = cs
+        .alloc(|| "product", || Ok(Fr::from_str("40").unwrap()))
         .unwrap();
 
     cs.enforce(|| "mult", |lc| lc + a, |lc| lc + b, |lc| lc + c);

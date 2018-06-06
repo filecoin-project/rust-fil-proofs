@@ -1,6 +1,6 @@
 use bit_vec::BitVec;
-use pairing::PrimeFieldRepr;
 use pairing::bls12_381::{Bls12, FrRepr};
+use pairing::PrimeFieldRepr;
 use sapling_crypto::jubjub::JubjubBls12;
 use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 use std::slice;

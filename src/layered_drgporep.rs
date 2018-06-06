@@ -25,7 +25,7 @@ pub struct EncodingProof {
     node: drgraph::MerkleProof,
 }
 
-impl<'a> Into<EncodingProof> for drgporep::Proof<'a> {
+impl<'a> Into<EncodingProof> for drgporep::Proof {
     fn into(self) -> EncodingProof {
         let p = self
             .replica_parents
@@ -41,17 +41,43 @@ impl<'a> Into<EncodingProof> for drgporep::Proof<'a> {
     }
 }
 
+impl<'a> Into<drgporep::Proof> for EncodingProof {
+    fn into(self) -> drgporep::Proof {
+        let p = self
+            .replica_parents
+            .into_iter()
+            .map(|input| (input.0, input.1.into()))
+            .collect::<Vec<_>>();
+
+        drgporep::Proof {
+            replica_node: self.replica_node.into(),
+            replica_parents: p,
+            node: self.node,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct DataProof {
     proof: drgraph::MerkleProof,
     data: Vec<u8>,
+    //data: &'a Vec,
 }
 
-impl<'a> Into<DataProof> for drgporep::DataProof<'a> {
+impl<'a> Into<DataProof> for drgporep::DataProof {
     fn into(self) -> DataProof {
         DataProof {
             proof: self.proof,
             data: self.data.to_vec().clone(),
+        }
+    }
+}
+
+impl Into<drgporep::DataProof> for DataProof {
+    fn into(self) -> drgporep::DataProof {
+        drgporep::DataProof {
+            proof: self.proof,
+            data: self.data.clone(),
         }
     }
 }
@@ -136,11 +162,11 @@ impl<'a> ProofScheme<'a> for LayeredDrgPorep {
                 aux: priv_inputs.aux,
             };
 
-            let encoding_proof = DrgPoRep::prove(&pp, pub_inputs, &new_priv_inputs)?;
+            let drg_proof = DrgPoRep::prove(&pp, pub_inputs, &new_priv_inputs)?;
             let permutation_proof = PermutationProof {};
 
             proofs.push(Proof {
-                encoding_proof: encoding_proof.into(),
+                encoding_proof: drg_proof.into(),
                 permutation_proof: permutation_proof,
             });
         }
@@ -148,10 +174,17 @@ impl<'a> ProofScheme<'a> for LayeredDrgPorep {
     }
 
     fn verify(
-        _pub_params: &Self::PublicParams,
+        pub_params: &Self::PublicParams,
         pub_inputs: &Self::PublicInputs,
         proof: &Self::Proof,
     ) -> Result<bool> {
+        for layer in 0..pub_params.layers {
+            let res = DrgPoRep::verify(
+                &pub_params.drgPorepPublicParams,
+                &pub_inputs,
+                &proof[layer].encoding_proof.clone().into(),
+            )?;
+        }
         unimplemented!()
     }
 }
