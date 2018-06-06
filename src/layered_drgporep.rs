@@ -1,7 +1,7 @@
 use drgporep::{self, DrgPoRep};
 use drgraph;
 use error::Result;
-use porep::PoRep;
+use porep::{self, PoRep};
 use proof::ProofScheme;
 
 #[derive(Debug)]
@@ -16,19 +16,59 @@ pub struct PublicParams {
     layers: usize,
 }
 
-type EncodingProof<'a> = drgporep::Proof<'a>;
+pub type ReplicaParents = Vec<(usize, DataProof)>;
+
+#[derive(Debug, Clone)]
+pub struct EncodingProof {
+    replica_node: DataProof,
+    replica_parents: ReplicaParents,
+    node: drgraph::MerkleProof,
+}
+
+impl<'a> Into<EncodingProof> for drgporep::Proof<'a> {
+    fn into(self) -> EncodingProof {
+        let p = self
+            .replica_parents
+            .into_iter()
+            .map(|input| (input.0, input.1.into()))
+            .collect::<Vec<_>>();
+
+        EncodingProof {
+            replica_node: self.replica_node.into(),
+            replica_parents: p,
+            node: self.node,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DataProof {
+    proof: drgraph::MerkleProof,
+    data: Vec<u8>,
+}
+
+impl<'a> Into<DataProof> for drgporep::DataProof<'a> {
+    fn into(self) -> DataProof {
+        DataProof {
+            proof: self.proof,
+            data: self.data.to_vec().clone(),
+        }
+    }
+}
+
 type PublicInputs<'a> = drgporep::PublicInputs<'a>;
 type PrivateInputs<'a> = drgporep::PrivateInputs<'a>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PermutationProof {}
 
-pub struct Proof<'a> {
-    pub encoding_proof: EncodingProof<'a>,
+#[derive(Debug, Clone)]
+pub struct Proof {
+    pub encoding_proof: EncodingProof,
     pub permutation_proof: PermutationProof,
 }
 
-impl<'a> Proof<'a> {
+impl Proof {
     pub fn new(encoding_proof: EncodingProof, permutation_proof: PermutationProof) -> Proof {
         Proof {
             encoding_proof: encoding_proof,
@@ -45,13 +85,13 @@ impl LayeredDrgPorep {
     }
 }
 
-fn permute(pp: drgporep::PublicParams, layer: usize) -> drgporep::PublicParams {
+fn permute(pp: &drgporep::PublicParams, layer: usize) -> drgporep::PublicParams {
     if layer == 0 {
-        return pp;
+        return (*pp).clone();
     }
 
     return drgporep::PublicParams {
-        graph: drgraph::permute(pp.graph, &[1, 2, 3, 4]),
+        graph: drgraph::permute(&pp.graph, &[1, 2, 3, 4]),
         lambda: pp.lambda,
     };
 }
@@ -63,7 +103,7 @@ impl<'a> ProofScheme<'a> for LayeredDrgPorep {
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<'a>;
     type PrivateInputs = PrivateInputs<'a>;
-    type Proof = &'a [Proof<'a>];
+    type Proof = Vec<Proof>;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
         let dpSp = DrgPoRep::setup(&sp.drgPorepSetupParams)?;
@@ -82,18 +122,17 @@ impl<'a> ProofScheme<'a> for LayeredDrgPorep {
         priv_inputs: &Self::PrivateInputs,
     ) -> Result<Self::Proof> {
         let mut proofs = Vec::new();
-        let pp = pub_params.drgPorepPublicParams;
+        let pp = &pub_params.drgPorepPublicParams;
+
+        let mut scratch = priv_inputs.replica.to_vec().clone();
 
         for layer in 0..pub_params.layers {
-            let pp = permute(pp, layer);
+            let pp = permute(&pp, layer);
 
-            let r = priv_inputs.replica.iter().map(|x| *x).collect::<Vec<u8>>();
-            let rr = &mut r[..];
-
-            <DrgPoRep as PoRep>::replicate(&pp, pub_inputs.prover_id, rr);
+            <DrgPoRep as PoRep>::replicate(&pp, pub_inputs.prover_id, scratch.as_mut_slice());
 
             let new_priv_inputs = PrivateInputs {
-                replica: rr,
+                replica: scratch.as_slice(),
                 aux: priv_inputs.aux,
             };
 
@@ -101,11 +140,11 @@ impl<'a> ProofScheme<'a> for LayeredDrgPorep {
             let permutation_proof = PermutationProof {};
 
             proofs.push(Proof {
-                encoding_proof: encoding_proof,
+                encoding_proof: encoding_proof.into(),
                 permutation_proof: permutation_proof,
             });
         }
-        Ok(proofs.as_slice())
+        Ok(proofs)
     }
 
     fn verify(

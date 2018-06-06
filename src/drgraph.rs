@@ -13,7 +13,7 @@ pub type MerkleTree = merkle::MerkleTree<TreeHash, TreeAlgorithm>;
 pub type MerkleProof = proof::Proof<TreeHash>;
 
 /// A DAG.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Graph {
     /// How many nodes are in this graph.
     nodes: usize,
@@ -97,7 +97,7 @@ impl Graph {
     }
 }
 
-pub fn permute(g: Graph, keys: &[u32]) -> Graph {
+pub fn permute(g: &Graph, keys: &[u32]) -> Graph {
     unimplemented!();
 }
 

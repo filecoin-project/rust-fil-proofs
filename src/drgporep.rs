@@ -32,7 +32,7 @@ pub struct DrgParams {
     m: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PublicParams {
     pub lambda: usize,
     pub graph: Graph,
@@ -48,9 +48,9 @@ pub type ReplicaParents<'a> = Vec<(usize, DataProof<'a>)>;
 
 #[derive(Debug)]
 pub struct Proof<'a> {
-    replica_node: DataProof<'a>,
-    replica_parents: ReplicaParents<'a>,
-    node: MerkleProof,
+    pub replica_node: DataProof<'a>,
+    pub replica_parents: ReplicaParents<'a>,
+    pub node: MerkleProof,
 }
 
 impl<'a> Proof<'a> {
