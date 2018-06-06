@@ -97,5 +97,5 @@ fn create_key(id: &[u8], parents: &Vec<usize>, data: &[u8], node_size: usize) ->
         },
     )?;
 
-    Ok(crypto::kdf(ciphertexts.as_slice()))
+    Ok(crypto::kdf::kdf(ciphertexts.as_slice()))
 }

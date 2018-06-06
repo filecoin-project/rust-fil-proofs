@@ -149,7 +149,7 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
             },
         );
 
-        let key = kdf(ciphertexts.as_slice());
+        let key = kdf::kdf(ciphertexts.as_slice());
         let unsealed = decode(&key, proof.replica_node.data)?;
 
         if !proof.node.validate_with_data::<TreeAlgorithm>(&unsealed) {

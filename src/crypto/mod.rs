@@ -4,15 +4,10 @@ use error::Result;
 use ring::digest::{Context, SHA256};
 
 pub mod feistel;
+pub mod kdf;
 pub mod pedersen;
 
 // TODO: move below
-
-pub fn kdf(data: &[u8]) -> Vec<u8> {
-    let mut context = Context::new(&SHA256);
-    context.update(data);
-    context.clone().finish().as_ref().into()
-}
 
 pub fn encode(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>> {
     if key.len() != 32 {
