@@ -1,48 +1,124 @@
+
 version: 2
-
 jobs:
-  build:
+  cargo_fetch:
     docker:
-      # The image used to build our project, build
-      # your own using the Dockerfile provided below
-      # and replace here. I put my own image here for
-      # the example.
-      - image: abronan/rust-circleci:latest
-
-    environment:
-      # Set your codecov token if your repository is private.
-      # CODECOV_TOKEN: <your-token>
-
+      - image: rust:latest
+    working_directory: /mnt/crate
     steps:
       - checkout
       - restore_cache:
-          key: project-cache
-      - run:
-          name: Check formatting
-          command: |
-            rustfmt --version
-            cargo fmt -- --write-mode=diff
-      - run:
-          name: Nightly Build
-          command: |
-            rustup run nightly rustc --version --verbose
-            rustup run nightly cargo --version --verbose
-            rustup run nightly cargo build
-      - run:
-          name: Stable Build
-          command: |
-            rustup run stable rustc --version --verbose
-            rustup run stable cargo --version --verbose
-            rustup run stable cargo build
-      - run:
-          name: Test
-          command: rustup run stable cargo test
-#      - run:
-#          name: Upload Coverage
-#          command: ./scripts/codecov.sh
-      - save_cache:
-          key: project-cache
+          keys:
+            - cargo-v1-{{ checksum "Cargo.toml" }}-
+            - cargo-v1-
+      - run: cargo update
+      - run: cargo fetch
+      - persist_to_workspace:
+          root: "."
           paths:
-            - "~/.cargo"
-            - "./target"
-            
+            - Cargo.lock
+      - save_cache:
+          key: cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}
+          paths:
+            - /usr/local/cargo/registry
+            - /usr/local/cargo/git
+  test:
+    docker:
+      - image: rust:latest
+    working_directory: /mnt/crate
+    steps:
+      - checkout
+      - attach_workspace:
+          at: "."
+      - restore_cache:
+          keys:
+            - cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}
+      - run:
+          name: Print version information
+          command: rustc --version; cargo --version
+      - run:
+          name: Build and test
+          command: cargo test --verbose --frozen
+      - run:
+          name: Prune the output files
+          command: |
+            for file in target/debug/* target/debug/.??*; do
+              [ -d $file -o ! -x $file ] && rm -r $file
+            done
+      - persist_to_workspace:
+          root: "."
+          paths:
+            - target/debug/*
+  test_release:
+    docker:
+      - image: rust:latest
+    working_directory: /mnt/crate
+    steps:
+      - checkout
+      - attach_workspace:
+          at: "."
+      - restore_cache:
+          keys:
+            - cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}
+      - run:
+          name: Print version information
+          command: rustc --version; cargo --version
+      - run:
+          name: Build and test in release profile
+          command: cargo test --verbose --frozen --release
+  test_nightly:
+    docker:
+      - image: rustlang/rust:nightly
+    working_directory: /mnt/crate
+    steps:
+      - checkout
+      - attach_workspace:
+          at: "."
+      - restore_cache:
+          keys:
+            - cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}
+      - run:
+          name: Print version information
+          command: rustc --version; cargo --version
+      - run:
+          name: Build and test with nightly Rust
+          command: cargo test --verbose --frozen
+  rustfmt:
+    docker:
+      - image: rustlang/rust:nightly
+    working_directory: /mnt/crate
+    steps:
+      - checkout
+      - attach_workspace:
+          at: "."
+      - restore_cache:
+          keys:
+            - cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}
+      - run:
+          name: Print version information
+          command: rustc --version; cargo --version
+      - run:
+          name: Install rustfmt-nightly
+          # this is not cheap, but I did not find a better way
+          command: cargo install rustfmt-nightly --force
+      - run:
+          name: Run cargo fmt
+          command: cargo fmt -- --check
+
+workflows:
+  version: 2
+  test_all:
+    jobs:
+      - cargo_fetch
+      - rustfmt:
+          requires:
+            - cargo_fetch
+      - test:
+          requires:
+            - cargo_fetch
+      - test_release:
+          requires:
+            - cargo_fetch
+      - test_nightly:
+          requires:
+            - cargo_fetch
