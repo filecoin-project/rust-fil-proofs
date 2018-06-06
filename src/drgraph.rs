@@ -1,24 +1,25 @@
-use std::collections::HashMap;
-use std::cmp;
-use std::iter::FromIterator;
-use rand::{Rng, thread_rng};
-use hasher;
-use util::data_at_node;
-use merkle_light::merkle;
 use error::Result;
+use hasher;
+use merkle_light::{merkle, proof};
+use rand::{thread_rng, Rng};
+use std::cmp;
+use std::collections::HashMap;
+use std::iter::FromIterator;
+use util::data_at_node;
 
-type TREE_HASH_FN = hasher::RingSHA256Hash;
-type TREE_ALGORITHM = hasher::SHA256Algorithm;
+type TREE_HASH_TYPE = hasher::RingSHA256Hash;
+pub type TREE_ALGORITHM = hasher::SHA256Algorithm;
 
-pub type MerkleTree = merkle::MerkleTree<TREE_HASH_FN, TREE_ALGORITHM>;
+pub type MerkleTree = merkle::MerkleTree<TREE_HASH_TYPE, TREE_ALGORITHM>;
+pub type MerkleProof = proof::Proof<TREE_HASH_TYPE>;
 
 /// A DAG.
 pub struct Graph {
     /// How many nodes are in this graph.
-    nodes: usize,
+    pub nodes: usize,
     /// List of predecessors. An entry `(v, vec![u, w])` means
     /// there is an edge from `v -> u` and `v -> w`.
-    pred: HashMap<usize, Vec<usize>>,
+    pub pred: HashMap<usize, Vec<usize>>,
 }
 
 pub enum Sampling {
@@ -74,16 +75,16 @@ impl Graph {
     }
 
     pub fn parents(&self, node: usize) -> Vec<usize> {
-        self.pred.get(&node).map(|p| (*p).clone()).unwrap_or(
-            Vec::new(),
-        )
+        self.pred
+            .get(&node)
+            .map(|p| (*p).clone())
+            .unwrap_or(Vec::new())
     }
 
     pub fn size(&self) -> usize {
         self.nodes
     }
 }
-
 
 fn dr_sample(n: usize) -> Graph {
     assert!(n > 1, "graph too small");
@@ -99,7 +100,6 @@ fn dr_sample(n: usize) -> Graph {
 
     graph
 }
-
 
 fn get_random_parent(v: usize) -> usize {
     let mut rng = thread_rng();
@@ -132,7 +132,11 @@ fn bucket_sample(n: usize, m: usize) -> Graph {
 
                 let cache_hit = {
                     let cache_entry = cache.get(&(i, j));
-                    if let Some(c) = cache_entry { *c } else { false }
+                    if let Some(c) = cache_entry {
+                        *c
+                    } else {
+                        false
+                    }
                 };
                 if i != j && !cache_hit {
                     cache.insert((j, i), true);
@@ -152,44 +156,59 @@ fn bucket_sample(n: usize, m: usize) -> Graph {
     graph
 }
 
-#[test]
-fn test_graph_dr_sampling() {
-    let g = Graph::new(10, Some(Sampling::DR));
-    assert_eq!(g.nodes, 10);
+#[cfg(test)]
+mod test {
+    use super::*;
 
-    assert_eq!(g.pred.len(), 8);
-}
+    #[test]
+    fn test_graph_dr_sampling() {
+        let g = Graph::new(10, Some(Sampling::DR));
+        assert_eq!(g.nodes, 10);
 
-#[test]
-fn test_graph_bucket_sampling() {
-    let g = Graph::new(10, Some(Sampling::Bucket(3)));
-    assert_eq!(g.nodes, 10);
-}
+        assert_eq!(g.pred.len(), 8);
+    }
 
-#[test]
-fn test_graph_add_edge() {
-    let mut g = Graph::new(10, None);
+    #[test]
+    fn test_graph_bucket_sampling() {
+        let g = Graph::new(10, Some(Sampling::Bucket(3)));
+        assert_eq!(g.nodes, 10);
+    }
 
-    g.add_edge(1, 2);
-    g.add_edge(1, 3);
+    #[test]
+    fn test_graph_add_edge() {
+        let mut g = Graph::new(10, None);
 
-    let edges1 = g.pred.get(&1).unwrap();
-    assert_eq!(*edges1, vec![2, 3]);
+        g.add_edge(1, 2);
+        g.add_edge(1, 3);
 
-    assert_eq!(g.pred.get(&2), None);
-    assert_eq!(g.pred.get(&3), None);
+        let edges1 = g.pred.get(&1).unwrap();
+        assert_eq!(*edges1, vec![2, 3]);
 
-    assert_eq!(g.parents(1), vec![2, 3]);
-    assert_eq!(g.parents(2), Vec::new());
-}
+        assert_eq!(g.pred.get(&2), None);
+        assert_eq!(g.pred.get(&3), None);
 
-#[test]
-fn test_graph_commit() {
-    let mut g = Graph::new(10, None);
+        assert_eq!(g.parents(1), vec![2, 3]);
+        assert_eq!(g.parents(2), Vec::new());
+    }
 
-    g.add_edge(1, 2);
-    g.add_edge(1, 3);
+    #[test]
+    fn test_graph_commit() {
+        let mut g = Graph::new(10, None);
 
-    let data = vec![1u8; 20];
-    assert_eq!(g.commit(data.as_slice(), 2).unwrap().len(), 32);
+        g.add_edge(1, 2);
+        g.add_edge(1, 3);
+
+        let data = vec![1u8; 20];
+        assert_eq!(g.commit(data.as_slice(), 2).unwrap().len(), 32);
+    }
+
+    #[test]
+    fn test_prove_verify() {
+        let g = Graph::new(5, Some(Sampling::Bucket(3)));
+        let data = vec![2u8; 16 * 5];
+
+        let tree = g.merkle_tree(data.as_slice(), 16).unwrap();
+        let proof = tree.gen_proof(2);
+        assert!(proof.validate::<TREE_ALGORITHM>());
+    }
 }

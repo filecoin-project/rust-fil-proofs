@@ -90,7 +90,7 @@ fn feistel(right: u32, key: u32, right_mask: u32) -> u32 {
 fn sha256_digest(data: &[u8]) -> Vec<u8> {
     let mut context = Context::new(&SHA256);
     context.update(data);
-    context.clone().finish().as_ref().into()
+    context.finish().as_ref().into()
 }
 
 #[test]

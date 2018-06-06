@@ -7,7 +7,7 @@ authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
 # sapling-crypto = { git = "https://github.com/zcash-hackworks/sapling-crypto", branch = "master" }
 rand = "0.4"
 ring = "0.12"
-merkle_light = "0.3"
+merkle_light = { git = "https://github.com/dignifiedquire/merkle_light", branch = "master" }
 openssl = "*"
 failure = "0.1"
 # digest = "0.7"

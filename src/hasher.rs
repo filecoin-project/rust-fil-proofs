@@ -28,7 +28,7 @@ impl Hasher for SHA256Algorithm {
 
     #[inline]
     fn finish(&self) -> u64 {
-        unimplemented!()
+        unreachable!("unused by Algorithm -- should never be called")
     }
 }
 
@@ -51,7 +51,12 @@ impl Algorithm<RingSHA256Hash> for SHA256Algorithm {
         leaf
     }
 
-    fn node(&mut self, left: RingSHA256Hash, right: RingSHA256Hash) -> RingSHA256Hash {
+    fn node(
+        &mut self,
+        left: RingSHA256Hash,
+        right: RingSHA256Hash,
+        height: usize,
+    ) -> RingSHA256Hash {
         // TODO: second preimage attack fix
         left.hash(self);
         right.hash(self);
@@ -106,11 +111,11 @@ fn test_ring_sha256_node() {
     let h11 = h1;
     let h12 = h2;
     let h13 = h3;
-    let h21 = a.node(h11, h12);
+    let h21 = a.node(h11, h12, 1);
     a.reset();
-    let h22 = a.node(h13, h13);
+    let h22 = a.node(h13, h13, 1);
     a.reset();
-    let h31 = a.node(h21, h22);
+    let h31 = a.node(h21, h22, 1);
     a.reset();
 
     let l1 = a.leaf(h1);
@@ -156,7 +161,6 @@ fn test_ring_sha256_node() {
         format!("{}", HexSlice::new(t.root().as_ref())),
         "e24f0cd2064e5b756515d6977d2b27629f4c8d1b86675f49f5124fea25827b6a"
     );
-
 }
 
 // fn sha256_digest(data: &[u8]) -> Vec<u8> {

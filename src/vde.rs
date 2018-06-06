@@ -1,8 +1,7 @@
-
-use drgraph;
-use util::{data_at_node_offset, data_at_node};
 use crypto;
+use drgraph;
 use error::Result;
+use util::{data_at_node, data_at_node_offset};
 
 /// encodes the data and overwrites the original data slice.
 pub fn encode<'a>(
@@ -16,9 +15,7 @@ pub fn encode<'a>(
 
     (0..graph.size())
         .rev()
-        .map(|i| {
-            recursive_encode(graph, lambda, prover_id, &mut cache, data, i + 1)
-        })
+        .map(|i| recursive_encode(graph, lambda, prover_id, &mut cache, data, i + 1))
         .collect()
 }
 
@@ -39,9 +36,7 @@ fn recursive_encode(
     let parents = graph.parents(node);
     parents
         .iter()
-        .map(|parent| {
-            recursive_encode(graph, lambda, prover_id, cache, data, *parent)
-        })
+        .map(|parent| recursive_encode(graph, lambda, prover_id, cache, data, *parent))
         .collect::<Result<()>>()?;
 
     // -- create sealing key for this ndoe
@@ -74,7 +69,7 @@ pub fn decode<'a>(
     })
 }
 
-fn decode_block<'a>(
+pub fn decode_block<'a>(
     graph: &'a drgraph::Graph,
     lambda: usize,
     prover_id: &'a [u8],
@@ -88,17 +83,18 @@ fn decode_block<'a>(
     crypto::decode(key.as_slice(), node_data)
 }
 
-
 fn create_key(id: &[u8], parents: &Vec<usize>, data: &[u8], node_size: usize) -> Result<Vec<u8>> {
     // ciphertexts will become a buffer of the layout
     // id | encodedParentNode1 | encodedParentNode1 | ...
-    let ciphertexts = parents.iter().fold(Ok(id.to_vec()), |acc: Result<Vec<u8>>,
-     parent: &usize| {
-        acc.and_then(|mut acc| {
-            acc.extend(data_at_node(data, *parent, node_size)?.to_vec());
-            Ok(acc)
-        })
-    })?;
+    let ciphertexts = parents.iter().fold(
+        Ok(id.to_vec()),
+        |acc: Result<Vec<u8>>, parent: &usize| {
+            acc.and_then(|mut acc| {
+                acc.extend(data_at_node(data, *parent, node_size)?.to_vec());
+                Ok(acc)
+            })
+        },
+    )?;
 
     Ok(crypto::kdf(ciphertexts.as_slice()))
 }
