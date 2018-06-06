@@ -1,12 +1,14 @@
 use drgraph::MerkleTree;
-use proof::ProofScheme;
 use error::Result;
+use proof::ProofScheme;
 
+#[derive(Debug)]
 pub struct PublicParams {
     pub lambda: usize,
     pub time: usize,
 }
 
+#[derive(Debug)]
 pub struct Tau {
     pub comm_r: Vec<u8>,
     pub comm_d: Vec<u8>,
@@ -20,17 +22,19 @@ impl Tau {
     }
 }
 
-
+#[derive(Debug)]
 pub struct PublicInputs<'a> {
     pub id: &'a [u8],
     pub r: usize,
     pub tau: Tau,
 }
 
+#[derive(Debug)]
 pub struct PrivateInputs<'a> {
     pub replica: &'a [u8],
 }
 
+#[derive(Debug)]
 pub struct ProverAux {
     pub tree_d: MerkleTree,
     pub tree_r: MerkleTree,

@@ -48,6 +48,7 @@ fn recursive_encode(
     let end = start + lambda;
 
     let encoded = crypto::encode(key.as_slice(), &data[start..end])?;
+
     data[start..end].clone_from_slice(encoded.as_slice());
     cache[node - 1] = true;
 

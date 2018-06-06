@@ -3,23 +3,23 @@ use hasher;
 use merkle_light::{merkle, proof};
 use rand::{thread_rng, Rng};
 use std::cmp;
-use std::collections::HashMap;
-use std::iter::FromIterator;
+use std::collections::{HashMap, HashSet};
 use util::data_at_node;
 
-type TREE_HASH_TYPE = hasher::RingSHA256Hash;
-pub type TREE_ALGORITHM = hasher::SHA256Algorithm;
+type TreeHashType = hasher::RingSHA256Hash;
+pub type TreeAlgorithm = hasher::SHA256Algorithm;
 
-pub type MerkleTree = merkle::MerkleTree<TREE_HASH_TYPE, TREE_ALGORITHM>;
-pub type MerkleProof = proof::Proof<TREE_HASH_TYPE>;
+pub type MerkleTree = merkle::MerkleTree<TreeHashType, TreeAlgorithm>;
+pub type MerkleProof = proof::Proof<TreeHashType>;
 
 /// A DAG.
+#[derive(Debug)]
 pub struct Graph {
     /// How many nodes are in this graph.
-    pub nodes: usize,
+    nodes: usize,
     /// List of predecessors. An entry `(v, vec![u, w])` means
     /// there is an edge from `v -> u` and `v -> w`.
-    pub pred: HashMap<usize, Vec<usize>>,
+    pred: HashMap<usize, HashSet<usize>>,
 }
 
 pub enum Sampling {
@@ -46,9 +46,10 @@ impl Graph {
 
     /// Inserts a directed edge from u -> v.
     pub fn add_edge(&mut self, u: usize, v: usize) {
-        self.pred.entry(u).or_insert(Vec::new());
+        self.pred.entry(u).or_insert(HashSet::with_capacity(1));
+
         if let Some(edges) = self.pred.get_mut(&u) {
-            edges.push(v);
+            edges.insert(v);
         }
     }
 
@@ -69,18 +70,26 @@ impl Graph {
             return Err(format_err!("missmatch of data, node_size and nodes"));
         }
 
-        Ok(merkle::MerkleTree::from_data((0..self.nodes).map(|i| {
-            data_at_node(data, i + 1, node_size).expect("data_at_node math failed")
+        Ok(MerkleTree::from_data((0..self.nodes).map(|i| {
+            let d = data_at_node(data, i + 1, node_size).expect("data_at_node math failed");
+
+            d
         })))
     }
 
+    /// Returns a sorted list of all parents of this node.
     pub fn parents(&self, node: usize) -> Vec<usize> {
         self.pred
             .get(&node)
-            .map(|p| (*p).clone())
+            .map(|p| {
+                let mut res = p.iter().map(|v| *v).collect::<Vec<usize>>();
+                res.sort();
+                res
+            })
             .unwrap_or(Vec::new())
     }
 
+    /// Returns the size of the node.
     pub fn size(&self) -> usize {
         self.nodes
     }
@@ -146,13 +155,6 @@ fn bucket_sample(n: usize, m: usize) -> Graph {
         }
     }
 
-    // reorder
-    for v in 1..size {
-        if let Some(edges) = graph.pred.get_mut(&v) {
-            edges.sort();
-        }
-    }
-
     graph
 }
 
@@ -181,14 +183,29 @@ mod test {
         g.add_edge(1, 2);
         g.add_edge(1, 3);
 
-        let edges1 = g.pred.get(&1).unwrap();
-        assert_eq!(*edges1, vec![2, 3]);
+        let edges1 = g.parents(1);
+        assert_eq!(edges1, vec![2, 3]);
 
-        assert_eq!(g.pred.get(&2), None);
-        assert_eq!(g.pred.get(&3), None);
+        assert_eq!(g.parents(2).len(), 0);
+        assert_eq!(g.parents(3).len(), 0);
 
         assert_eq!(g.parents(1), vec![2, 3]);
         assert_eq!(g.parents(2), Vec::new());
+
+        // double insert
+        g.add_edge(1, 4);
+        g.add_edge(1, 4);
+
+        let edges2 = g.parents(1);
+
+        assert_eq!(edges2, vec![2, 3, 4]);
+
+        // sorted parents
+
+        g.add_edge(2, 7);
+        g.add_edge(2, 1);
+
+        assert_eq!(g.parents(2), vec![1, 7]);
     }
 
     #[test]
@@ -209,6 +226,6 @@ mod test {
 
         let tree = g.merkle_tree(data.as_slice(), 16).unwrap();
         let proof = tree.gen_proof(2);
-        assert!(proof.validate::<TREE_ALGORITHM>());
+        assert!(proof.validate::<TreeAlgorithm>());
     }
 }
