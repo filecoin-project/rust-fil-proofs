@@ -6,8 +6,8 @@ use std::cmp;
 use std::collections::{HashMap, HashSet};
 use util::data_at_node;
 
-type TreeHashType = hasher::RingSHA256Hash;
-pub type TreeAlgorithm = hasher::SHA256Algorithm;
+type TreeHashType = hasher::sha256::RingSHA256Hash;
+pub type TreeAlgorithm = hasher::sha256::SHA256Algorithm;
 
 pub type MerkleTree = merkle::MerkleTree<TreeHashType, TreeAlgorithm>;
 pub type MerkleProof = proof::Proof<TreeHashType>;
