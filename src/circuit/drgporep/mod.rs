@@ -48,6 +48,8 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRep<'a, E> {
         assert_eq!(self.data_node_path.len(), self.replica_node_path.len());
         assert_eq!(self.prover_id.len(), 32);
 
+        // TODO: assert the parents are actually the parents of the replica_node
+
         // validate the replica node merkle proof
 
         {
