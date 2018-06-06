@@ -1,12 +1,12 @@
-use std::slice;
-use pairing::PrimeFieldRepr;
-use pairing::bls12_381::{Bls12, FrRepr};
-use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
-use sapling_crypto::jubjub::JubjubBls12;
 use bit_vec::BitVec;
+use pairing::bls12_381::{Bls12, FrRepr};
+use pairing::PrimeFieldRepr;
+use sapling_crypto::jubjub::JubjubBls12;
+use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
+use std::slice;
 
 lazy_static! {
-   static ref JJ_PARAMS: JubjubBls12 = JubjubBls12::new();
+    static ref JJ_PARAMS: JubjubBls12 = JubjubBls12::new();
 }
 
 pub fn pedersen_jubjub_internal(_height: i32, bytes: &[u8]) -> Vec<u8> {
@@ -37,38 +37,8 @@ mod test {
         let x = b"some bytes";
         let hashed = pedersen_jubjub_internal(0, x);
         let expected = vec![
-            108,
-            164,
-            213,
-            82,
-            12,
-            14,
-            65,
-            228,
-            59,
-            219,
-            147,
-            122,
-            119,
-            177,
-            0,
-            1,
-            93,
-            87,
-            127,
-            178,
-            192,
-            144,
-            2,
-            91,
-            113,
-            203,
-            31,
-            99,
-            205,
-            169,
-            184,
-            97,
+            108, 164, 213, 82, 12, 14, 65, 228, 59, 219, 147, 122, 119, 177, 0, 1, 93, 87, 127,
+            178, 192, 144, 2, 91, 113, 203, 31, 99, 205, 169, 184, 97,
         ];
         assert_eq!(expected, hashed);
     }

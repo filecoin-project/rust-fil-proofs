@@ -1,14 +1,14 @@
-use merkle_light::hash::Algorithm;
-use merkle_light::merkle;
-use std::mem;
-use std::hash::Hasher;
-use std::iter::FromIterator;
-use pairing::{PrimeField, BitIterator};
-use pairing::bls12_381::{Bls12, FrRepr, Fr};
-use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
-use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 use bit_vec::BitVec;
 use byteorder::{LittleEndian, WriteBytesExt};
+use merkle_light::hash::Algorithm;
+use merkle_light::merkle;
+use pairing::bls12_381::{Bls12, Fr, FrRepr};
+use pairing::{BitIterator, PrimeField};
+use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
+use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
+use std::hash::Hasher;
+use std::iter::FromIterator;
+use std::mem;
 
 lazy_static! {
     static ref HASH_PARAMS: JubjubBls12 = JubjubBls12::new();
@@ -51,7 +51,6 @@ impl PartialOrd for PedersenHash {
         Some((self.0).into_repr().cmp(&other.0.into_repr()))
     }
 }
-
 
 pub type MerkleTree = merkle::MerkleTree<PedersenHash, PedersenAlgorithm>;
 
@@ -109,14 +108,13 @@ impl Algorithm<PedersenHash> for PedersenAlgorithm {
 
         pedersen_hash::<Bls12, _>(
             Personalization::MerkleTree(height),
-            lhs.into_iter().take(Fr::NUM_BITS as usize).chain(
-                rhs.into_iter().take(Fr::NUM_BITS as usize),
-            ),
+            lhs.into_iter()
+                .take(Fr::NUM_BITS as usize)
+                .chain(rhs.into_iter().take(Fr::NUM_BITS as usize)),
             &HASH_PARAMS,
         ).into_xy()
             .0
             .into()
-
     }
 }
 
@@ -135,11 +133,11 @@ impl From<PedersenHash> for Fr {
 }
 
 pub fn merkle_tree_from_u64(data: Vec<u64>) -> MerkleTree {
-    MerkleTree::from_iter(data.into_iter().map(|x| {
-        pedersen_hash_u64::<Bls12>(x, &HASH_PARAMS).into()
-    }))
+    MerkleTree::from_iter(
+        data.into_iter()
+            .map(|x| pedersen_hash_u64::<Bls12>(x, &HASH_PARAMS).into()),
+    )
 }
-
 
 pub fn pedersen_hash_u64<E: JubjubEngine>(value: u64, params: &E::Params) -> E::Fr {
     let mut contents = vec![];
@@ -150,14 +148,13 @@ pub fn pedersen_hash_u64<E: JubjubEngine>(value: u64, params: &E::Params) -> E::
     pedersen_hash::<E, _>(
         // TODO: what is the right type of personalization?
         Personalization::NoteCommitment,
-        contents.into_iter().flat_map(|byte| {
-            (0..8).map(move |i| ((byte >> i) & 1) == 1)
-        }),
+        contents
+            .into_iter()
+            .flat_map(|byte| (0..8).map(move |i| ((byte >> i) & 1) == 1)),
         params,
     ).into_xy()
         .0
 }
-
 
 #[cfg(test)]
 mod tests {

@@ -1,6 +1,6 @@
 use pairing::{Engine, Field, PrimeField, PrimeFieldRepr};
 
-use bellman::{LinearCombination, SynthesisError, ConstraintSystem, Variable, Index};
+use bellman::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -22,7 +22,12 @@ enum NamedObject {
 pub struct TestConstraintSystem<E: Engine> {
     named_objects: HashMap<String, NamedObject>,
     current_namespace: Vec<String>,
-    constraints: Vec<(LinearCombination<E>, LinearCombination<E>, LinearCombination<E>, String)>,
+    constraints: Vec<(
+        LinearCombination<E>,
+        LinearCombination<E>,
+        LinearCombination<E>,
+        String,
+    )>,
     inputs: Vec<(E::Fr, String)>,
     aux: Vec<(E::Fr, String)>,
 }
@@ -259,19 +264,14 @@ impl<E: Engine> TestConstraintSystem<E> {
 
     pub fn set(&mut self, path: &str, to: E::Fr) {
         match self.named_objects.get(path) {
-            Some(&NamedObject::Var(ref v)) => {
-                match v.get_unchecked() {
-                    Index::Input(index) => self.inputs[index].0 = to,
-                    Index::Aux(index) => self.aux[index].0 = to,
-                }
-            }
-            Some(e) => {
-                panic!(
-                    "tried to set path `{}` to value, but `{:?}` already exists there.",
-                    path,
-                    e
-                )
-            }
+            Some(&NamedObject::Var(ref v)) => match v.get_unchecked() {
+                Index::Input(index) => self.inputs[index].0 = to,
+                Index::Aux(index) => self.aux[index].0 = to,
+            },
+            Some(e) => panic!(
+                "tried to set path `{}` to value, but `{:?}` already exists there.",
+                path, e
+            ),
             _ => panic!("no variable exists at path: {}", path),
         }
     }
@@ -302,19 +302,14 @@ impl<E: Engine> TestConstraintSystem<E> {
 
     pub fn get(&mut self, path: &str) -> E::Fr {
         match self.named_objects.get(path) {
-            Some(&NamedObject::Var(ref v)) => {
-                match v.get_unchecked() {
-                    Index::Input(index) => self.inputs[index].0,
-                    Index::Aux(index) => self.aux[index].0,
-                }
-            }
-            Some(e) => {
-                panic!(
-                    "tried to get value of path `{}`, but `{:?}` exists there (not a variable)",
-                    path,
-                    e
-                )
-            }
+            Some(&NamedObject::Var(ref v)) => match v.get_unchecked() {
+                Index::Input(index) => self.inputs[index].0,
+                Index::Aux(index) => self.aux[index].0,
+            },
+            Some(e) => panic!(
+                "tried to get value of path `{}`, but `{:?}` exists there (not a variable)",
+                path, e
+            ),
             _ => panic!("no variable exists at path: {}", path),
         }
     }
@@ -428,13 +423,16 @@ fn test_cs() {
     let mut cs = TestConstraintSystem::<Bls12>::new();
     assert!(cs.is_satisfied());
     assert_eq!(cs.num_constraints(), 0);
-    let a = cs.namespace(|| "a")
+    let a = cs
+        .namespace(|| "a")
         .alloc(|| "var", || Ok(Fr::from_str("10").unwrap()))
         .unwrap();
-    let b = cs.namespace(|| "b")
+    let b = cs
+        .namespace(|| "b")
         .alloc(|| "var", || Ok(Fr::from_str("4").unwrap()))
         .unwrap();
-    let c = cs.alloc(|| "product", || Ok(Fr::from_str("40").unwrap()))
+    let c = cs
+        .alloc(|| "product", || Ok(Fr::from_str("40").unwrap()))
         .unwrap();
 
     cs.enforce(|| "mult", |lc| lc + a, |lc| lc + b, |lc| lc + c);

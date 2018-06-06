@@ -1,4 +1,3 @@
-
 use error::Result;
 
 pub fn data_at_node_offset(v: usize, node_size: usize) -> usize {

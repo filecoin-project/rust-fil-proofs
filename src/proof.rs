@@ -1,6 +1,4 @@
-
 use error::Result;
-
 
 /// The methods that any proof scheme needs to implement
 pub trait ProofScheme<'a> {
