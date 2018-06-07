@@ -1,7 +1,5 @@
-use openssl::symm::{Cipher, Crypter, Mode};
-
 use error::Result;
-use ring::digest::{Context, SHA256};
+use openssl::symm::{Cipher, Crypter, Mode};
 
 pub mod feistel;
 pub mod kdf;
