@@ -6,23 +6,23 @@ use proof::ProofScheme;
 
 #[derive(Debug)]
 pub struct SetupParams {
-    drgPorepSetupParams: drgporep::SetupParams,
-    layers: usize,
+    pub drgPorepSetupParams: drgporep::SetupParams,
+    pub layers: usize,
 }
 
 #[derive(Debug)]
 pub struct PublicParams {
-    drgPorepPublicParams: drgporep::PublicParams,
-    layers: usize,
+    pub drgPorepPublicParams: drgporep::PublicParams,
+    pub layers: usize,
 }
 
 pub type ReplicaParents = Vec<(usize, DataProof)>;
 
 #[derive(Debug, Clone)]
 pub struct EncodingProof {
-    replica_node: DataProof,
-    replica_parents: ReplicaParents,
-    node: drgraph::MerkleProof,
+    pub replica_node: DataProof,
+    pub replica_parents: ReplicaParents,
+    pub node: drgraph::MerkleProof,
 }
 
 impl<'a> Into<EncodingProof> for drgporep::Proof {
@@ -103,11 +103,11 @@ impl Proof {
     }
 }
 
-pub struct LayeredDrgPorep {}
+pub struct LayeredDrgPoRep {}
 
-impl LayeredDrgPorep {
-    pub fn new() -> LayeredDrgPorep {
-        LayeredDrgPorep {}
+impl LayeredDrgPoRep {
+    pub fn new() -> LayeredDrgPoRep {
+        LayeredDrgPoRep {}
     }
 }
 
@@ -117,10 +117,22 @@ fn permute(pp: &drgporep::PublicParams, layer: usize) -> drgporep::PublicParams 
     }
 
     return drgporep::PublicParams {
-        graph: drgraph::permute(&pp.graph, &[1, 2, 3, 4]),
+        graph: pp.graph.permute(&[1, 2, 3, 4]),
         lambda: pp.lambda,
     };
 }
+
+fn invert_permute(pp: &drgporep::PublicParams, layer: usize) -> drgporep::PublicParams {
+    if layer == 0 {
+        return (*pp).clone();
+    }
+
+    return drgporep::PublicParams {
+        graph: pp.graph.invert_permute(&[1, 2, 3, 4]),
+        lambda: pp.lambda,
+    };
+}
+
 
 //static DP: DrgPoRep = DrgPoRep {};
 
@@ -128,7 +140,7 @@ type Tau<'a> = &'a [porep::Tau];
 
 type ProverAux<'a> = &'a [porep::ProverAux];
 
-impl<'a> ProofScheme<'a> for LayeredDrgPorep {
+impl<'a> ProofScheme<'a> for LayeredDrgPoRep {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<'a>;
@@ -201,7 +213,47 @@ impl<'a> ProofScheme<'a> for LayeredDrgPorep {
     }
 }
 
-impl<'a> PoRep<'a, Vec<porep::Tau>, Vec<porep::ProverAux>> for LayeredDrgPorep {
+fn permute_and_replicate_layer(
+    drgpp: &drgporep::PublicParams,
+    layer: usize,
+    prover_id: &[u8],
+    data: &mut [u8],
+    mut taus: Vec<porep::Tau>,
+    mut auxs: Vec<porep::ProverAux>,
+) -> Result<(Vec<porep::Tau>, Vec<porep::ProverAux>)> {
+    if layer == 0 {
+        return Ok((taus, auxs));
+    }
+    println!("data in: {:?}\n", data);
+    let permuted = &permute(&drgpp, layer);
+    let (tau, aux) = DrgPoRep::replicate(permuted, prover_id, data).unwrap();
+    println!("replicated: {:?}\n", data);
+
+    taus.push(tau);
+    auxs.push(aux);
+
+    permute_and_replicate_layer(permuted, layer - 1, prover_id, data, taus, auxs)
+}
+
+//fn extract_and_invert_permute_layer<'a, 'b>(
+//    drgpp: &drgporep::PublicParams,
+//    layer: usize,
+//    prover_id: &[u8],
+//    data: &'a mut [u8],
+//) -> Result< &'a[u8]> {
+//    if layer == 0 {
+//        return Ok(data);
+//    }
+//    println!("data in: {:?}\n", data);
+//    let _res = DrgPoRep::extract_all(&drgpp, prover_id, data).unwrap();
+//    println!("extracted: {:?}\n", data);
+//    let inverted = &invert_permute(&drgpp, layer);
+//
+//
+//   extract_and_invert_permute_layer(inverted, layer - 1, prover_id, data)
+//}
+
+impl<'a> PoRep<'a, Vec<porep::Tau>, Vec<porep::ProverAux>> for LayeredDrgPoRep {
     fn replicate(
         pp: &PublicParams,
         prover_id: &[u8],
@@ -209,16 +261,16 @@ impl<'a> PoRep<'a, Vec<porep::Tau>, Vec<porep::ProverAux>> for LayeredDrgPorep {
     ) -> Result<(Vec<porep::Tau>, Vec<porep::ProverAux>)> {
         let mut taus = Vec::new();
         let mut auxs = Vec::new();
-        let dpp = &pp.drgPorepPublicParams;
+        let drgpp = &pp.drgPorepPublicParams;
 
-        for layer in 0..pp.layers {
-            let dpp = &permute(dpp, layer);
-            let (tau, aux) = DrgPoRep::replicate(dpp, prover_id, data)?;
+        /*for layer in 0..pp.layers {
+            drgpp = permute(&drgpp, layer);
+            let (tau, aux) = DrgPoRep::replicate(&drgpp, prover_id, data)?;
             taus.push(tau);
             auxs.push(aux);
         }
-
-        Ok((taus, auxs))
+        Ok((taus, auxs))*/
+        permute_and_replicate_layer(drgpp, pp.layers, prover_id, data, taus, auxs)
     }
 
     fn extract_all<'b>(
@@ -226,15 +278,61 @@ impl<'a> PoRep<'a, Vec<porep::Tau>, Vec<porep::ProverAux>> for LayeredDrgPorep {
         prover_id: &'b [u8],
         data: &'b [u8],
     ) -> Result<Vec<u8>> {
-        let mut res = DrgPoRep::extract_all(&pp.drgPorepPublicParams, prover_id, data)?;
-
-        for layer in 0..pp.layers {
-            res = DrgPoRep::extract_all(&pp.drgPorepPublicParams, prover_id, data)?;
-        }
-        Ok(res)
+        unimplemented!();
+//
+//        let mut drgpp = &&pp.drgPorepPublicParams;
+////        Ok(extract_and_invert_permute_layer(&pp.drgPorepPublicParams, pp.layers, prover_id, data)?.to_vec())
+//        println!("data to extract: {:?}\n", data);
+//        let mut res = DrgPoRep::extract_all(drgpp, prover_id, data)?;
+//        println!("extracted: {:?}\n", res);
+//
+//        for layer in 0..pp.layers {
+//            res = DrgPoRep::extract_all(drgpp, prover_id, res.as_slice())?;
+//            drgpp = &&invert_permute(&&pp.drgPorepPublicParams, layer);
+//            println!("extracted: {:?}\n", res);
+//        }
+//        Ok(res)
     }
 
     fn extract(pp: &PublicParams, prover_id: &[u8], data: &[u8], node: usize) -> Result<Vec<u8>> {
         DrgPoRep::extract(&pp.drgPorepPublicParams, prover_id, data, node)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use rand::{Rng, SeedableRng, XorShiftRng};
+
+    #[test]
+    fn test_layered_extract_all() {
+        let lambda = 16;
+        let prover_id = vec![1u8; 16];
+        let data = vec![2u8; 16 * 3];
+        // create a copy, so we can compare roundtrips
+        let mut data_copy = data.clone();
+
+        let sp = SetupParams {
+            drgPorepSetupParams: drgporep::SetupParams {
+                lambda: lambda,
+                drg: drgporep::DrgParams {
+                    n: data.len() / lambda,
+                    m: 10,
+                },
+            },
+            layers: 5,
+        };
+
+        let pp = LayeredDrgPoRep::setup(&sp).unwrap();
+
+        LayeredDrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
+
+        assert_ne!(data, data_copy);
+
+        let decoded_data =
+            LayeredDrgPoRep::extract_all(&pp, prover_id.as_slice(), data_copy.as_mut_slice())
+                .unwrap();
+
+        assert_eq!(data, decoded_data);
     }
 }

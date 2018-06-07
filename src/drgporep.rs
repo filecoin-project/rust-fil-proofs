@@ -22,14 +22,14 @@ pub struct PrivateInputs<'a> {
 
 #[derive(Debug)]
 pub struct SetupParams {
-    lambda: usize,
-    drg: DrgParams,
+    pub lambda: usize,
+    pub drg: DrgParams,
 }
 
 #[derive(Debug)]
 pub struct DrgParams {
-    n: usize,
-    m: usize,
+    pub n: usize,
+    pub m: usize,
 }
 
 #[derive(Debug, Clone)]

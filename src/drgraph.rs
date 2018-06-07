@@ -14,7 +14,7 @@ pub type MerkleTree = merkle::MerkleTree<TreeHash, TreeAlgorithm>;
 pub type MerkleProof = proof::Proof<TreeHash>;
 
 /// A DAG.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Graph {
     /// How many nodes are in this graph.
     nodes: usize,
@@ -96,40 +96,48 @@ impl Graph {
     pub fn size(&self) -> usize {
         self.nodes
     }
-}
+    pub fn permute(&self, keys: &[u32]) -> Graph {
+        let mut tmp: HashMap<usize, HashSet<usize>> = HashMap::new();
+        let nodes: u32 = self.nodes as u32;
+        let p: HashMap<usize, usize> = (0..self.nodes)
+            .map(|i| (i + 1, feistel::permute(nodes, i as u32, keys) as usize + 1))
+            .collect();
 
-pub fn permute(g: &Graph, keys: &[u32]) -> Graph {
-    let mut final_pred: HashMap<usize, HashSet<usize>> = HashMap::new();
+        for (key, preds) in self.pred.iter() {
+            for pred in preds {
+                tmp.entry(p[key]).or_insert(HashSet::new());
 
-    let mut p: HashMap<usize, usize> = HashMap::new();
-
-    for i in 0..g.nodes {
-        p.insert(
-            i + 1,
-            feistel::permute(g.nodes as u32, i as u32, keys) as usize + 1,
-        );
-    }
-
-    let v: Vec<(&usize, &mut HashSet<usize>)> = g.pred
-        .iter()
-        .map(|(key, preds)| (key, &mut HashSet::<usize>::new()))
-        .collect();
-
-    let mut tmp: HashMap<usize, &mut HashSet<usize>> = v.iter().map(|(k, v)| (**k, *v)).collect();
-
-    for (key, preds) in g.pred.clone().iter_mut() {
-        for (i, pred) in preds.iter().enumerate() {
-            tmp[&(p[key])].insert(p[pred] as usize);
+                if let Some(val) = tmp.get_mut(&p[key]) {
+                    val.insert(p[pred]);
+                }
+            }
         }
-    }
-    for (k, v) in tmp.iter() {
-        final_pred[k] = **v.clone();
-    }
 
-    let mut permuted = Graph::new(g.nodes, None);
+        let mut permuted = Graph::new(self.nodes, None);
+        permuted.pred = tmp;
+        permuted
+    }
+    pub fn invert_permute(&self, keys: &[u32]) -> Graph {
+        let mut tmp: HashMap<usize, HashSet<usize>> = HashMap::new();
+        let nodes: u32 = self.nodes as u32;
+        let p: HashMap<usize, usize> = (0..self.nodes)
+            .map(|i| (i + 1, feistel::invert_permute(nodes, i as u32, keys) as usize + 1))
+            .collect();
 
-    permuted.pred = final_pred;
-    permuted
+        for (key, preds) in self.pred.iter() {
+            for pred in preds {
+                tmp.entry(p[key]).or_insert(HashSet::new());
+
+                if let Some(val) = tmp.get_mut(&p[key]) {
+                    val.insert(p[pred]);
+                }
+            }
+        }
+
+        let mut permuted = Graph::new(self.nodes, None);
+        permuted.pred = tmp;
+        permuted
+    }
 }
 
 fn dr_sample(n: usize) -> Graph {
@@ -266,5 +274,22 @@ mod test {
         let proof = tree.gen_proof(2);
 
         assert!(proof.validate::<TreeAlgorithm>());
+    }
+
+    #[test]
+    fn test_permute() {
+        let keys = vec![1, 2, 3, 4];
+        let graph = Graph::new(5, Some(Sampling::Bucket(3)));
+        let permuted_graph = graph.permute(keys.as_slice());
+
+        assert_eq!(graph.size(), permuted_graph.size());
+
+        // TODO: this is not a great test, but at least we know they were mutated
+        assert_ne!(graph, permuted_graph);
+
+        // going back
+        let permuted_twice_graph = permuted_graph.permute(keys.as_slice());
+
+        assert_eq!(graph, permuted_twice_graph);
     }
 }
