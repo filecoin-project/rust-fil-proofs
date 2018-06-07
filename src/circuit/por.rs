@@ -13,9 +13,9 @@ use sapling_crypto::primitives::ValueCommitment;
 pub fn proof_of_retrievability<E, CS>(
     cs: &mut CS,
     params: &E::Params,
-    value_commitment: ValueCommitment<E>,
+    value_commitment: Option<ValueCommitment<E>>,
     auth_path: Vec<Option<(E::Fr, bool)>>,
-    root: E::Fr,
+    root: Option<E::Fr>,
 ) -> Result<(), SynthesisError>
 where
     E: JubjubEngine,
@@ -25,7 +25,7 @@ where
         // Get the value in little-endian bit order
         let bits = expose_value_commitment(
             cs.namespace(|| "value commitment"),
-            Some(value_commitment),
+            value_commitment,
             params,
         )?;
 
@@ -103,8 +103,9 @@ where
         let real_root_value = root;
 
         // Allocate the "real" root that will be exposed.
-        let rt =
-            num::AllocatedNum::alloc(cs.namespace(|| "conditional root"), || Ok(real_root_value))?;
+        let rt = num::AllocatedNum::alloc(cs.namespace(|| "conditional root"), || {
+            real_root_value.ok_or(SynthesisError::AssignmentMissing)
+        })?;
 
         // cur  * 1 = rt
         // enforce cur and rt are equal
@@ -215,9 +216,9 @@ mod tests {
             proof_of_retrievability(
                 &mut cs,
                 params,
-                value_commitment.clone(),
+                Some(value_commitment.clone()),
                 auth_path.clone(),
-                root.into(),
+                Some(root.into()),
             ).unwrap();
 
             assert!(cs.is_satisfied());

@@ -6,7 +6,6 @@ use sapling_crypto::jubjub::JubjubEngine;
 pub fn kdf<E, CS>(
     cs: &mut CS,
     id: Vec<Boolean>,
-    // TODO: should this be &[u8] or &[Boolean]?
     parents: Vec<Vec<Boolean>>,
     persona: &[u8],
 ) -> Result<Vec<Boolean>, SynthesisError>

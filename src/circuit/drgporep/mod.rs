@@ -17,28 +17,30 @@ pub struct DrgPoRep<'a, E: JubjubEngine> {
     pub params: &'a E::Params,
 
     /// The replica node being proven.
-    pub replica_node_commitment: ValueCommitment<E>,
+    pub replica_node_commitment: Option<ValueCommitment<E>>,
 
     /// The path of the replica node being proven.
     pub replica_node_path: MerklePath<E>,
 
     /// The merkle root of the replica.
-    pub replica_root: E::Fr,
+    pub replica_root: Option<E::Fr>,
 
     /// A list of all parents in the replica, with their value and their merkle path.
-    pub replica_parents: Vec<(ValueCommitment<E>, MerklePath<E>)>,
+    pub replica_parents_commitments: Vec<Option<ValueCommitment<E>>>,
+
+    pub replica_parents_paths: Vec<MerklePath<E>>,
 
     /// The data node being proven.
-    pub data_node_commitment: ValueCommitment<E>,
+    pub data_node_commitment: Option<ValueCommitment<E>>,
 
     /// The path of the data node being proven.
     pub data_node_path: MerklePath<E>,
 
     /// The merkle root of the data.
-    pub data_root: E::Fr,
+    pub data_root: Option<E::Fr>,
 
     /// The id of the prover
-    pub prover_id: &'a [u8],
+    pub prover_id: Option<&'a [u8]>,
 }
 
 impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRep<'a, E> {
@@ -46,7 +48,6 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRep<'a, E> {
         // ensure that all inputs are well formed
 
         assert_eq!(self.data_node_path.len(), self.replica_node_path.len());
-        assert_eq!(self.prover_id.len(), 32);
 
         // TODO: assert the parents are actually the parents of the replica_node
 
@@ -65,13 +66,13 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRep<'a, E> {
 
         // validate each replica_parents merkle proof
         {
-            for (i, replica_parent) in self.replica_parents.iter().enumerate() {
+            for i in 0..self.replica_parents_commitments.len() {
                 let mut ns = cs.namespace(|| format!("replica parent: {}", i));
                 proof_of_retrievability(
                     &mut ns,
                     self.params,
-                    replica_parent.0.clone(),
-                    replica_parent.1.clone(),
+                    self.replica_parents_commitments[i].clone(),
+                    self.replica_parents_paths[i].clone(),
                     self.replica_root.clone(),
                 )?;
             }
@@ -80,7 +81,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRep<'a, E> {
         // get the prover_id in bits
         let prover_id_bits: Vec<Boolean> = {
             let mut ns = cs.namespace(|| "prover_id_bits");
-            BitVec::from_bytes(self.prover_id)
+            BitVec::from_bytes(self.prover_id.ok_or(SynthesisError::AssignmentMissing)?)
                 .iter()
                 .enumerate()
                 .map(|(i, b)| {
@@ -95,13 +96,16 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRep<'a, E> {
         // get the parents int bits
         let parents_bits: Vec<Vec<Boolean>> = {
             let mut ns = cs.namespace(|| "parents to bits");
-            self.replica_parents
-                .iter()
+            self.replica_parents_commitments
+                .into_iter()
                 .enumerate()
-                .map(|(i, (val, _))| -> Result<Vec<Boolean>, SynthesisError> {
+                .map(|(i, val)| -> Result<Vec<Boolean>, SynthesisError> {
                     boolean::u64_into_boolean_vec_le(
                         ns.namespace(|| format!("bit [{}]", i)),
-                        Some(val.value),
+                        Some(
+                            val.map(|v| v.value)
+                                .ok_or(SynthesisError::AssignmentMissing)?,
+                        ),
                     )
                 })
                 .collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?
@@ -128,7 +132,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRep<'a, E> {
         )?;
         let expected_bits = expose_value_commitment(
             cs.namespace(|| "data node commitment"),
-            Some(self.data_node_commitment),
+            self.data_node_commitment,
             self.params,
         )?;
 

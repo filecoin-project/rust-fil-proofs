@@ -9,18 +9,19 @@ pub struct ParallelProofOfRetrievability<'a, E: JubjubEngine> {
     pub params: &'a E::Params,
 
     /// Pedersen commitment to the value.
-    pub value_commitments: Vec<ValueCommitment<E>>,
+    pub value_commitments: Vec<Option<ValueCommitment<E>>>,
 
     /// The authentication path of the commitment in the tree.
     pub auth_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
 
     /// The root
-    pub root: E::Fr,
+    pub root: Option<E::Fr>,
 }
 
 impl<'a, E: JubjubEngine> Circuit<E> for ParallelProofOfRetrievability<'a, E> {
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        assert_eq!(self.value_commitments.len(), self.auth_paths.len());
+        // TODO: bring back
+        // assert_eq!(self.value_commitments.len(), self.auth_paths.len());
 
         for i in 0..self.value_commitments.len() {
             let mut ns = cs.namespace(|| format!("round: {}", i));
@@ -56,13 +57,18 @@ mod tests {
 
         // TODO: go for 10, currently pretty slow
         for _ in 0..1 {
-            let value_commitments: Vec<ValueCommitment<_>> = (0..par_depth)
-                .map(|_| ValueCommitment {
-                    value: rng.gen(),
-                    randomness: rng.gen(),
+            let value_commitments: Vec<Option<_>> = (0..par_depth)
+                .map(|_| {
+                    Some(ValueCommitment {
+                        value: rng.gen(),
+                        randomness: rng.gen(),
+                    })
                 })
                 .collect();
-            let values = value_commitments.iter().map(|v| v.clone().value).collect();
+            let values = value_commitments
+                .iter()
+                .map(|v| v.clone().unwrap().value)
+                .collect();
 
             let tree = merkle_tree_from_u64(values);
             let auth_paths: Vec<Vec<Option<(Fr, bool)>>> = (0..par_depth)
@@ -89,7 +95,7 @@ mod tests {
                 params: params,
                 value_commitments: value_commitments.clone(),
                 auth_paths: auth_paths.clone(),
-                root: root.into(),
+                root: Some(root.into()),
             };
 
             instance.synthesize(&mut cs).unwrap();
