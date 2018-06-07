@@ -1,3 +1,4 @@
+use crypto::feistel;
 use error::Result;
 use hasher::pedersen;
 use merkle_light::{merkle, proof};
@@ -98,7 +99,37 @@ impl Graph {
 }
 
 pub fn permute(g: &Graph, keys: &[u32]) -> Graph {
-    unimplemented!();
+    let mut final_pred: HashMap<usize, HashSet<usize>> = HashMap::new();
+
+    let mut p: HashMap<usize, usize> = HashMap::new();
+
+    for i in 0..g.nodes {
+        p.insert(
+            i + 1,
+            feistel::permute(g.nodes as u32, i as u32, keys) as usize + 1,
+        );
+    }
+
+    let v: Vec<(&usize, &mut HashSet<usize>)> = g.pred
+        .iter()
+        .map(|(key, preds)| (key, &mut HashSet::<usize>::new()))
+        .collect();
+
+    let mut tmp: HashMap<usize, &mut HashSet<usize>> = v.iter().map(|(k, v)| (**k, *v)).collect();
+
+    for (key, preds) in g.pred.clone().iter_mut() {
+        for (i, pred) in preds.iter().enumerate() {
+            tmp[&(p[key])].insert(p[pred] as usize);
+        }
+    }
+    for (k, v) in tmp.iter() {
+        final_pred[k] = **v.clone();
+    }
+
+    let mut permuted = Graph::new(g.nodes, None);
+
+    permuted.pred = final_pred;
+    permuted
 }
 
 fn dr_sample(n: usize) -> Graph {

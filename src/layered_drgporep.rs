@@ -124,6 +124,10 @@ fn permute(pp: &drgporep::PublicParams, layer: usize) -> drgporep::PublicParams 
 
 //static DP: DrgPoRep = DrgPoRep {};
 
+type Tau<'a> = &'a [porep::Tau];
+
+type ProverAux<'a> = &'a [porep::ProverAux];
+
 impl<'a> ProofScheme<'a> for LayeredDrgPorep {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
@@ -155,7 +159,11 @@ impl<'a> ProofScheme<'a> for LayeredDrgPorep {
         for layer in 0..pub_params.layers {
             let pp = permute(&pp, layer);
 
-            <DrgPoRep as PoRep>::replicate(&pp, pub_inputs.prover_id, scratch.as_mut_slice());
+            <DrgPoRep as PoRep<porep::Tau, porep::ProverAux>>::replicate(
+                &pp,
+                pub_inputs.prover_id,
+                scratch.as_mut_slice(),
+            );
 
             let new_priv_inputs = PrivateInputs {
                 replica: scratch.as_slice(),
@@ -184,7 +192,49 @@ impl<'a> ProofScheme<'a> for LayeredDrgPorep {
                 &pub_inputs,
                 &proof[layer].encoding_proof.clone().into(),
             )?;
+
+            if !res {
+                return Ok(false);
+            }
         }
-        unimplemented!()
+        Ok(true)
+    }
+}
+
+impl<'a> PoRep<'a, Vec<porep::Tau>, Vec<porep::ProverAux>> for LayeredDrgPorep {
+    fn replicate(
+        pp: &PublicParams,
+        prover_id: &[u8],
+        data: &mut [u8],
+    ) -> Result<(Vec<porep::Tau>, Vec<porep::ProverAux>)> {
+        let mut taus = Vec::new();
+        let mut auxs = Vec::new();
+        let dpp = &pp.drgPorepPublicParams;
+
+        for layer in 0..pp.layers {
+            let dpp = &permute(dpp, layer);
+            let (tau, aux) = DrgPoRep::replicate(dpp, prover_id, data)?;
+            taus.push(tau);
+            auxs.push(aux);
+        }
+
+        Ok((taus, auxs))
+    }
+
+    fn extract_all<'b>(
+        pp: &'b PublicParams,
+        prover_id: &'b [u8],
+        data: &'b [u8],
+    ) -> Result<Vec<u8>> {
+        let mut res = DrgPoRep::extract_all(&pp.drgPorepPublicParams, prover_id, data)?;
+
+        for layer in 0..pp.layers {
+            res = DrgPoRep::extract_all(&pp.drgPorepPublicParams, prover_id, data)?;
+        }
+        Ok(res)
+    }
+
+    fn extract(pp: &PublicParams, prover_id: &[u8], data: &[u8], node: usize) -> Result<Vec<u8>> {
+        DrgPoRep::extract(&pp.drgPorepPublicParams, prover_id, data, node)
     }
 }

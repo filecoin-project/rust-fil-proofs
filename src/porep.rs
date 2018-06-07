@@ -49,8 +49,8 @@ impl ProverAux {
     }
 }
 
-pub trait PoRep<'a>: ProofScheme<'a> {
-    fn replicate(&'a Self::PublicParams, &[u8], &mut [u8]) -> Result<(Tau, ProverAux)>;
+pub trait PoRep<'a, T, A>: ProofScheme<'a> {
+    fn replicate(&'a Self::PublicParams, &[u8], &mut [u8]) -> Result<(T, A)>; // Tau, ProverAux
     fn extract_all(&'a Self::PublicParams, &[u8], &[u8]) -> Result<Vec<u8>>;
     fn extract(&'a Self::PublicParams, &[u8], &[u8], usize) -> Result<Vec<u8>>;
 }

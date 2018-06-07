@@ -160,7 +160,7 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
     }
 }
 
-impl<'a> PoRep<'a> for DrgPoRep {
+impl<'a> PoRep<'a, porep::Tau, porep::ProverAux> for DrgPoRep {
     fn replicate(
         pp: &PublicParams,
         prover_id: &[u8],

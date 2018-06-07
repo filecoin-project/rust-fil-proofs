@@ -1,6 +1,6 @@
 use ring::digest::{Context, SHA256};
 
-fn permute(num_elements: u32, index: u32, keys: &[u32]) -> u32 {
+pub fn permute(num_elements: u32, index: u32, keys: &[u32]) -> u32 {
     let mut u = encode(num_elements, index, keys);
 
     while u >= num_elements {
