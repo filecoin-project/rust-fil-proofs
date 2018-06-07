@@ -23,6 +23,7 @@ pub mod drgporep;
 pub mod drgraph;
 pub mod error;
 pub mod hasher;
+pub mod merklepor;
 pub mod porep;
 pub mod proof;
 

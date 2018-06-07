@@ -40,8 +40,8 @@ pub struct PublicParams {
 
 #[derive(Debug)]
 pub struct DataProof<'a> {
-    proof: MerkleProof,
-    data: &'a [u8],
+    pub proof: MerkleProof,
+    pub data: &'a [u8],
 }
 
 pub type ReplicaParents<'a> = Vec<(usize, DataProof<'a>)>;
