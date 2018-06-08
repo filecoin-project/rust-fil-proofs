@@ -213,6 +213,14 @@ impl<'a> ProofScheme<'a> for LayeredDrgPoRep {
     }
 }
 
+fn permute_layers(drgpp: drgporep::PublicParams, layer:usize) -> drgporep::PublicParams {
+    if layer == 0 {
+        return drgpp;
+    }
+    let permuted = permute(&drgpp, layer);
+    permute_layers(permuted, layer-1)
+}
+
 fn permute_and_replicate_layer(
     drgpp: &drgporep::PublicParams,
     layer: usize,
@@ -224,34 +232,30 @@ fn permute_and_replicate_layer(
     if layer == 0 {
         return Ok((taus, auxs));
     }
-    println!("data in: {:?}\n", data);
-    let permuted = &permute(&drgpp, layer);
-    let (tau, aux) = DrgPoRep::replicate(permuted, prover_id, data).unwrap();
-    println!("replicated: {:?}\n", data);
+    let permuted = permute(&drgpp, layer);
+    let (tau, aux) = DrgPoRep::replicate(&permuted, prover_id, data).unwrap();
 
-    taus.push(tau);
-    auxs.push(aux);
-
-    permute_and_replicate_layer(permuted, layer - 1, prover_id, data, taus, auxs)
+    taus.push(tau); auxs.push(aux);
+    permute_and_replicate_layer(&permuted, layer - 1, prover_id, data, taus, auxs)
 }
 
-//fn extract_and_invert_permute_layer<'a, 'b>(
-//    drgpp: &drgporep::PublicParams,
-//    layer: usize,
-//    prover_id: &[u8],
-//    data: &'a mut [u8],
-//) -> Result< &'a[u8]> {
-//    if layer == 0 {
-//        return Ok(data);
-//    }
-//    println!("data in: {:?}\n", data);
-//    let _res = DrgPoRep::extract_all(&drgpp, prover_id, data).unwrap();
-//    println!("extracted: {:?}\n", data);
-//    let inverted = &invert_permute(&drgpp, layer);
-//
-//
-//   extract_and_invert_permute_layer(inverted, layer - 1, prover_id, data)
-//}
+fn extract_and_invert_permute_layer<'a, 'b>(
+    drgpp: &drgporep::PublicParams,
+    layer: usize,
+    prover_id: &[u8],
+    mut data: &'a mut [u8],
+) -> Result< &'a[u8]> {
+    if layer == 0 {
+        return Ok(data);
+    }
+    let mut res = DrgPoRep::extract_all(&drgpp, prover_id, data).unwrap();
+    let inverted = &invert_permute(&drgpp, layer);
+
+    for (i, r) in res.iter_mut().enumerate() {
+        data[i] = *r;
+    }
+    extract_and_invert_permute_layer(inverted, layer - 1, prover_id, data)
+}
 
 impl<'a> PoRep<'a, Vec<porep::Tau>, Vec<porep::ProverAux>> for LayeredDrgPoRep {
     fn replicate(
@@ -261,16 +265,7 @@ impl<'a> PoRep<'a, Vec<porep::Tau>, Vec<porep::ProverAux>> for LayeredDrgPoRep {
     ) -> Result<(Vec<porep::Tau>, Vec<porep::ProverAux>)> {
         let mut taus = Vec::new();
         let mut auxs = Vec::new();
-        let drgpp = &pp.drgPorepPublicParams;
-
-        /*for layer in 0..pp.layers {
-            drgpp = permute(&drgpp, layer);
-            let (tau, aux) = DrgPoRep::replicate(&drgpp, prover_id, data)?;
-            taus.push(tau);
-            auxs.push(aux);
-        }
-        Ok((taus, auxs))*/
-        permute_and_replicate_layer(drgpp, pp.layers, prover_id, data, taus, auxs)
+        permute_and_replicate_layer(&pp.drgPorepPublicParams, pp.layers, prover_id, data, taus, auxs)
     }
 
     fn extract_all<'b>(
@@ -278,23 +273,15 @@ impl<'a> PoRep<'a, Vec<porep::Tau>, Vec<porep::ProverAux>> for LayeredDrgPoRep {
         prover_id: &'b [u8],
         data: &'b [u8],
     ) -> Result<Vec<u8>> {
-        unimplemented!();
-//
-//        let mut drgpp = &&pp.drgPorepPublicParams;
-////        Ok(extract_and_invert_permute_layer(&pp.drgPorepPublicParams, pp.layers, prover_id, data)?.to_vec())
-//        println!("data to extract: {:?}\n", data);
-//        let mut res = DrgPoRep::extract_all(drgpp, prover_id, data)?;
-//        println!("extracted: {:?}\n", res);
-//
-//        for layer in 0..pp.layers {
-//            res = DrgPoRep::extract_all(drgpp, prover_id, res.as_slice())?;
-//            drgpp = &&invert_permute(&&pp.drgPorepPublicParams, layer);
-//            println!("extracted: {:?}\n", res);
-//        }
-//        Ok(res)
+        let mut d: Vec<u8> = data.to_vec();
+        let dd = d.as_mut_slice();
+
+        Ok(extract_and_invert_permute_layer(&pp.drgPorepPublicParams, pp.layers, prover_id, dd)?.to_vec())
     }
 
     fn extract(pp: &PublicParams, prover_id: &[u8], data: &[u8], node: usize) -> Result<Vec<u8>> {
+        unimplemented!();
+        // This is probably not right.
         DrgPoRep::extract(&pp.drgPorepPublicParams, prover_id, data, node)
     }
 }
@@ -327,10 +314,15 @@ mod test {
 
         LayeredDrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
 
+        let permuted_params = PublicParams {
+            drgPorepPublicParams: permute_layers(pp.drgPorepPublicParams, pp.layers),
+            layers: pp.layers,
+        };
+
         assert_ne!(data, data_copy);
 
         let decoded_data =
-            LayeredDrgPoRep::extract_all(&pp, prover_id.as_slice(), data_copy.as_mut_slice())
+            LayeredDrgPoRep::extract_all(&permuted_params, prover_id.as_slice(), data_copy.as_mut_slice())
                 .unwrap();
 
         assert_eq!(data, decoded_data);
