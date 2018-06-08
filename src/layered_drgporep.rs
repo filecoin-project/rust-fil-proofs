@@ -171,7 +171,7 @@ impl<'a> ProofScheme<'a> for LayeredDrgPoRep {
         for layer in 0..pub_params.layers {
             let pp = permute(&pp, layer);
 
-            <DrgPoRep as PoRep<porep::Tau, porep::ProverAux>>::replicate(
+            <DrgPoRep as PoRep>::replicate(
                 &pp,
                 pub_inputs.prover_id,
                 scratch.as_mut_slice(),
@@ -257,12 +257,16 @@ fn extract_and_invert_permute_layer<'a, 'b>(
     extract_and_invert_permute_layer(inverted, layer - 1, prover_id, data)
 }
 
-impl<'a> PoRep<'a, Vec<porep::Tau>, Vec<porep::ProverAux>> for LayeredDrgPoRep {
+//<'a, Vec<porep::Tau>, Vec<porep::ProverAux>
+impl<'a, 'c> PoRep<'a> for LayeredDrgPoRep {
+    type Tau = Vec<porep::Tau>;
+    type ProverAux = Vec<porep::ProverAux>;
+
     fn replicate(
-        pp: &PublicParams,
+        pp: &'a PublicParams,
         prover_id: &[u8],
         data: &mut [u8],
-    ) -> Result<(Vec<porep::Tau>, Vec<porep::ProverAux>)> {
+    ) -> Result<(Self::Tau, Self::ProverAux)> {
         let mut taus = Vec::new();
         let mut auxs = Vec::new();
         permute_and_replicate_layer(&pp.drgPorepPublicParams, pp.layers, prover_id, data, taus, auxs)
@@ -281,8 +285,6 @@ impl<'a> PoRep<'a, Vec<porep::Tau>, Vec<porep::ProverAux>> for LayeredDrgPoRep {
 
     fn extract(pp: &PublicParams, prover_id: &[u8], data: &[u8], node: usize) -> Result<Vec<u8>> {
         unimplemented!();
-        // This is probably not right.
-        DrgPoRep::extract(&pp.drgPorepPublicParams, prover_id, data, node)
     }
 }
 
@@ -327,4 +329,62 @@ mod test {
 
         assert_eq!(data, decoded_data);
     }
+
+    /*fn prove_verify(lambda: usize, n: usize) {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let prover_id = vec![1u8; 16];
+        let data = vec![2u8; 16 * 3];
+        // create a copy, so we can compare roundtrips
+        let mut data_copy = data.clone();
+
+
+        for i in 1..10 {
+            let m = i * 10;
+            let lambda = lambda;
+            let prover_id = vec![rng.gen(); lambda];
+            let data = vec![rng.gen(); lambda * n];
+            // create a copy, so we can comare roundtrips
+            let mut data_copy = data.clone();
+            let challenge = 1;
+
+            let sp = SetupParams {
+                drgPorepSetupParams: drgporep::SetupParams {
+                    lambda: lambda,
+                    drg: drgporep::DrgParams {
+                        n: n,
+                        m: m,
+                    },
+                },
+                layers: 5,
+            };
+
+            let pp = LayeredDrgPoRep::setup(&sp).unwrap();
+
+            let (taus, auxs) =
+                LayeredDrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
+
+            assert_ne!(data, data_copy);
+
+            let pub_inputs = PublicInputs {
+                prover_id: prover_id.as_slice(),
+                challenge: challenge,
+                tau: &tau,
+            };
+
+            let priv_inputs = PrivateInputs {
+                replica: data_copy.as_slice(),
+                aux: &aux,
+            };
+
+            let proof = LayeredDrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
+            assert!(LayeredDrgPoRep::verify(&pp, &pub_inputs, &proof).unwrap());
+        }
+    }
+
+    #[test]
+    fn test_prove_verify_16_2() {
+        prove_verify(16, 2);
+    }
+*/
 }

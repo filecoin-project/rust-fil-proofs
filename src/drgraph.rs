@@ -118,12 +118,13 @@ impl Graph {
         permuted
     }
     pub fn invert_permute(&self, keys: &[u32]) -> Graph {
-        let mut tmp: HashMap<usize, HashSet<usize>> = HashMap::new();
         let nodes: u32 = self.nodes as u32;
         let p: HashMap<usize, usize> = (0..self.nodes)
             .map(|i| (i + 1, feistel::invert_permute(nodes, i as u32, keys) as usize + 1))
             .collect();
 
+        // This is just a deep copy with transformation.
+        let mut tmp: HashMap<usize, HashSet<usize>> = HashMap::new();
         for (key, preds) in self.pred.iter() {
             for pred in preds {
                 tmp.entry(p[key]).or_insert(HashSet::new());

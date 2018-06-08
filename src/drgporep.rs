@@ -159,8 +159,11 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
         Ok(true)
     }
 }
+//, porep::Tau, porep::ProverAux
+impl<'a> PoRep<'a> for DrgPoRep {
+    type Tau = porep::Tau;
+    type ProverAux = porep::ProverAux;
 
-impl<'a> PoRep<'a, porep::Tau, porep::ProverAux> for DrgPoRep {
     fn replicate(
         pp: &PublicParams,
         prover_id: &[u8],
