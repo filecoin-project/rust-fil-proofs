@@ -118,7 +118,7 @@ impl LayeredDrgPoRep {
     }
 }
 
-fn permute(pp: &drgporep::PublicParams, layer: usize) -> drgporep::PublicParams {
+fn permute(pp: &drgporep::PublicParams) -> drgporep::PublicParams {
     return drgporep::PublicParams {
         graph: pp.graph.permute(&[1, 2, 3, 4]),
         lambda: pp.lambda,
@@ -228,7 +228,7 @@ fn prove_layers(
         permutation_proof: PermutationProof {},
     });
 
-    let pp = &permute(pp, layers);
+    let pp = &permute(pp);
 
     if layers == 1 {
         Ok(proofs)
@@ -280,12 +280,11 @@ impl<'a, 'c> PoRep<'a> for LayeredDrgPoRep {
     }
 }
 
-fn permute_layers(drgpp: drgporep::PublicParams, layer: usize) -> drgporep::PublicParams {
-    if layer == 0 {
-        return drgpp;
+fn permute_layers(mut drgpp: drgporep::PublicParams, layers: usize) -> drgporep::PublicParams {
+    for _ in 0..layers {
+        drgpp = permute(&drgpp);
     }
-    let permuted = permute(&drgpp, layer);
-    permute_layers(permuted, layer - 1)
+    drgpp
 }
 
 fn extract_and_invert_permute_layers<'a, 'b>(
@@ -295,6 +294,7 @@ fn extract_and_invert_permute_layers<'a, 'b>(
     mut data: &'a mut [u8],
 ) -> Result<&'a [u8]> {
     assert!(layers > 0);
+
     let inverted = &invert_permute(&drgpp, layers);
     let mut res = DrgPoRep::extract_all(&inverted, prover_id, data).unwrap();
 
@@ -326,14 +326,7 @@ fn permute_and_replicate_layers(
     if layers == 1 {
         Ok((taus, auxs))
     } else {
-        permute_and_replicate_layers(
-            &permute(&drgpp, layers),
-            layers - 1,
-            prover_id,
-            data,
-            taus,
-            auxs,
-        )
+        permute_and_replicate_layers(&permute(&drgpp), layers - 1, prover_id, data, taus, auxs)
     }
 }
 

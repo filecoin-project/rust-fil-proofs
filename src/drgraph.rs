@@ -1,6 +1,5 @@
 use crypto::feistel;
 use error::Result;
-use hasher;
 use hasher::pedersen;
 use merkle_light::{merkle, proof};
 use rand::{thread_rng, Rng};
@@ -8,10 +7,15 @@ use std::cmp;
 use std::collections::{HashMap, HashSet};
 use util::data_at_node;
 
-//pub type TreeHash = pedersen::PedersenHash;
-//pub type TreeAlgorithm = pedersen::PedersenAlgorithm;
-pub type TreeHash = hasher::sha256::RingSHA256Hash;
-pub type TreeAlgorithm = hasher::sha256::SHA256Algorithm;
+pub type TreeHash = pedersen::PedersenHash;
+pub type TreeAlgorithm = pedersen::PedersenAlgorithm;
+
+// NOTE: Swapping in SHA256 is so much faster that this is effectively necessary when
+// developing/debugging and running tests repeatedly.
+
+//use hasher;
+//pub type TreeHash = hasher::sha256::RingSHA256Hash;
+//pub type TreeAlgorithm = hasher::sha256::SHA256Algorithm;
 
 pub type MerkleTree = merkle::MerkleTree<TreeHash, TreeAlgorithm>;
 pub type MerkleProof = proof::Proof<TreeHash>;
