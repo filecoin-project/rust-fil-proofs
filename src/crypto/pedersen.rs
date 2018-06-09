@@ -29,7 +29,7 @@ pub extern "C" fn pedersen_jubjub(height: i32, size: usize, bytes: *mut u8) -> *
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
 
     #[test]

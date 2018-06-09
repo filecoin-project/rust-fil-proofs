@@ -1,7 +1,9 @@
 use crypto::feistel;
 use error::Result;
 use hasher::pedersen;
+use merkle_light::hash::{Algorithm, Hashable};
 use merkle_light::{merkle, proof};
+use pairing::bls12_381::Fr;
 use rand::{thread_rng, Rng};
 use std::cmp;
 use std::collections::{HashMap, HashSet};
@@ -19,6 +21,99 @@ pub type TreeAlgorithm = pedersen::PedersenAlgorithm;
 
 pub type MerkleTree = merkle::MerkleTree<TreeHash, TreeAlgorithm>;
 pub type MerkleProof = proof::Proof<TreeHash>;
+
+/// Representation of a MerklePath.
+/// Each element in the `path` vector consists of a tuple `(hash, is_right)`, with `hash` being the the hash of the node at the current level and `is_right` a boolean indicating if the path is taking the right path.
+/// The first element is the hash of leaf itself, and the last is the root hash.
+#[derive(Debug, Clone)]
+pub struct MerklePath {
+    path: Vec<(TreeHash, bool)>,
+    root: TreeHash,
+    leaf: TreeHash,
+}
+
+impl MerklePath {
+    /// Convert the merkle path into the format expected by the circuits, which is a vector of options of the tuples.
+    /// This does __not__ include the root and the leaf.
+    pub fn as_options(&self) -> Vec<Option<(Fr, bool)>> {
+        self.path
+            .iter()
+            .map(|v| Some((v.0.into(), v.1)))
+            .collect::<Vec<_>>()
+    }
+
+    /// Validates the MerklePath
+    pub fn validate(&self) -> bool {
+        println!("validating: {:?}", self.path);
+        let mut a = TreeAlgorithm::default();
+
+        self.root() == (0..self.path.len()).fold(self.leaf, |h, i| {
+            a.reset();
+            let is_right = self.path[i].1;
+
+            let (left, right) = if is_right {
+                (self.path[i].0, h)
+            } else {
+                (h, self.path[i].0)
+            };
+            println!("{:?} {:?}, {}", left, right, i);
+            a.node(left, right, i)
+        })
+    }
+
+    /// Validates that the data, hashes to the leave of the merkel path.
+    pub fn validate_data(&self, data: &Hashable<TreeAlgorithm>) -> bool {
+        let mut a = TreeAlgorithm::default();
+        data.hash(&mut a);
+        let item_hash = a.hash();
+        let leaf_hash = a.leaf(item_hash);
+        println!("leaf_hash: {:?}", leaf_hash);
+        leaf_hash == self.leaf()
+    }
+
+    /// Returns the hash of leaf that this MerklePath represents.
+    pub fn leaf(&self) -> TreeHash {
+        self.leaf
+    }
+
+    /// Returns the root hash
+    pub fn root(&self) -> TreeHash {
+        self.root
+    }
+
+    /// Returns the length of the proof. That is all path elements plus 1 for the
+    /// leaf and 1 for the root.
+    pub fn len(&self) -> usize {
+        self.path.len() + 2
+    }
+
+    pub fn is_empty() -> bool {
+        // never empty, because root and leaf have to exist.
+        false
+    }
+}
+
+impl Into<MerklePath> for proof::Proof<TreeHash> {
+    fn into(self) -> MerklePath {
+        MerklePath {
+            path: self
+                .lemma()
+                .iter()
+                .skip(1)
+                .zip(self.path().iter())
+                .map(|(hash, is_left)| (*hash, !is_left))
+                .collect::<Vec<_>>(),
+            root: self.root(),
+            leaf: self.item(),
+        }
+    }
+}
+
+pub fn proof_into_options(p: proof::Proof<TreeHash>) -> Vec<Option<(Fr, bool)>> {
+    let p: MerklePath = p.into();
+    p.as_options()
+}
+
 
 /// A DAG.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -217,8 +312,9 @@ fn bucket_sample(n: usize, m: usize) -> Graph {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
+    use rand::{self, Rng};
 
     #[test]
     fn test_graph_dr_sampling() {
@@ -304,5 +400,31 @@ mod test {
         let permuted_twice_graph = permuted_graph.permute(keys.as_slice());
 
         assert_eq!(graph, permuted_twice_graph);
+    }
+
+    #[test]
+    fn test_merklepath() {
+        let g = Graph::new(10, Some(Sampling::Bucket(5)));
+        let mut rng = rand::thread_rng();
+        let data: Vec<u8> = (0..16 * 10).map(|_| rng.gen()).collect();
+
+        let tree = g.merkle_tree(data.as_slice(), 16).unwrap();
+        for i in 0..10 {
+            let proof = tree.gen_proof(i);
+
+            assert!(proof.validate::<TreeAlgorithm>());
+            println!("proof: {:?} {:?}", proof.lemma(), proof.path());
+            let len = proof.lemma().len();
+            let mp: MerklePath = proof.into();
+
+            assert_eq!(mp.len(), len);
+
+            assert!(mp.validate(), "failed to validate valid merkle path");
+            let data_slice = &data[i * 16..(i + 1) * 16].to_vec();
+            assert!(
+                mp.validate_data(&data_slice),
+                "failed to validate valid data"
+            );
+        }
     }
 }

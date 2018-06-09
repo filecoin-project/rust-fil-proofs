@@ -42,6 +42,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for ParallelProofOfRetrievability<'a, E> {
 mod tests {
     use super::*;
     use circuit::test::*;
+    use drgraph::proof_into_options;
     use hasher::pedersen::merkle_tree_from_u64;
     use pairing::bls12_381::*;
     use pairing::Field;
@@ -72,19 +73,7 @@ mod tests {
 
             let tree = merkle_tree_from_u64(values);
             let auth_paths: Vec<Vec<Option<(Fr, bool)>>> = (0..par_depth)
-                .map(|i| {
-                    let merkle_proof = tree.gen_proof(i);
-                    // below we construct the auth_path, such that it matches the expecations
-                    // of our circuit
-                    let auth_path: Vec<Option<(Fr, bool)>> = merkle_proof
-                    .lemma()
-                    .iter()
-                    .skip(1) // the lemma has the leaf as first elemtn, need to skip
-                    .zip(merkle_proof.path().iter())
-                    .map(|(hash, is_left)| Some(((*hash).into(), !is_left)))
-                    .collect::<Vec<Option<(Fr, bool)>>>();
-                    auth_path
-                })
+                .map(|i| proof_into_options(tree.gen_proof(i)))
                 .collect();
 
             let root = tree.root();

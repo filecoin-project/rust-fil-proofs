@@ -22,7 +22,7 @@ pub type ReplicaParents = Vec<(usize, DataProof)>;
 pub struct EncodingProof {
     pub replica_node: DataProof,
     pub replica_parents: ReplicaParents,
-    pub node: drgraph::MerkleProof,
+    pub node: drgraph::MerklePath,
 }
 
 impl<'a> Into<EncodingProof> for drgporep::Proof<'a> {
@@ -43,7 +43,7 @@ impl<'a> Into<EncodingProof> for drgporep::Proof<'a> {
 
 #[derive(Debug, Clone)]
 pub struct DataProof {
-    proof: drgraph::MerkleProof,
+    proof: drgraph::MerklePath,
     data: Vec<u8>,
 }
 

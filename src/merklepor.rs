@@ -1,5 +1,5 @@
 use drgporep::DataProof;
-use drgraph::{MerkleTree, TreeAlgorithm};
+use drgraph::MerkleTree;
 use error::Result;
 use proof::ProofScheme;
 use util::data_at_node;
@@ -52,8 +52,8 @@ impl<'a> ProofScheme<'a> for MerklePoR {
         let data = data_at_node(priv_inputs.data, challenge + 1, pub_params.lambda)?;
 
         Ok(Proof {
-            proof: tree.gen_proof(challenge),
-            data: data,
+            proof: tree.gen_proof(challenge).into(),
+            data,
         })
     }
 
@@ -64,16 +64,12 @@ impl<'a> ProofScheme<'a> for MerklePoR {
     ) -> Result<bool> {
         // TODO: check hash of the replicaNode.data matches hash
 
-        if !proof.proof.validate::<TreeAlgorithm>() {
-            Ok(false)
-        } else {
-            Ok(true)
-        }
+        Ok(proof.proof.validate())
     }
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     use drgraph::{Graph, Sampling};
 

@@ -28,7 +28,7 @@ where
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::kdf;
     use bellman::ConstraintSystem;
     use blake2_rfc::blake2s::Blake2s;

@@ -69,7 +69,7 @@ impl Algorithm<RingSHA256Hash> for SHA256Algorithm {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     use merkle_light::merkle::MerkleTree;
     use std::iter::FromIterator;

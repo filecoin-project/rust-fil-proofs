@@ -176,6 +176,7 @@ where
 mod tests {
     use super::*;
     use circuit::test::*;
+    use drgraph::proof_into_options;
     use hasher::pedersen::merkle_tree_from_u64;
     use pairing::bls12_381::*;
     use pairing::Field;
@@ -202,13 +203,8 @@ mod tests {
             let merkle_proof = tree.gen_proof(leaf_count);
             // below we construct the auth_path, such that it matches the expecations
             // of our circuit
-            let auth_path: Vec<Option<(Fr, bool)>> = merkle_proof
-                .lemma()
-                .iter()
-                .skip(1) // the lemma has the leaf as first elemtn, need to skip
-                .zip(merkle_proof.path().iter())
-                .map(|(hash, is_left)| Some(((*hash).into(), !is_left)))
-                .collect::<Vec<Option<(Fr, bool)>>>();
+            let auth_path = proof_into_options(merkle_proof);
+
             let root = tree.root();
 
             let mut cs = TestConstraintSystem::<Bls12>::new();

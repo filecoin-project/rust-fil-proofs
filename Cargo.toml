@@ -23,9 +23,9 @@ features = ["expose-arith"]
 git = "https://github.com/gtank/blake2-rfc"
 rev = "c7c458429c429b81fea845421f5ab859710fa8af"
 
-# [features]
-# default = ["u128-support"]
-# u128-support = ["pairing/u128-support"]
+[features]
+default = ["u128-support"]
+u128-support = ["pairing/u128-support"]
 
 [dev-dependencies]
 criterion = "0.1.2"

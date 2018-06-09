@@ -10,7 +10,7 @@ pub fn kdf(data: &[u8]) -> Vec<u8> {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::kdf;
 
     #[test]
