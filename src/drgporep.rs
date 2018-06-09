@@ -39,26 +39,26 @@ pub struct PublicParams {
 }
 
 #[derive(Debug)]
-pub struct DataProof {
+pub struct DataProof<'a> {
     pub proof: MerkleProof,
-    pub data: Vec<u8>, //&'a [u8]
+    pub data: &'a [u8],
 }
 
-pub type ReplicaParents = Vec<(usize, DataProof)>;
+pub type ReplicaParents<'a> = Vec<(usize, DataProof<'a>)>;
 
 #[derive(Debug)]
-pub struct Proof {
-    pub replica_node: DataProof,
-    pub replica_parents: ReplicaParents,
+pub struct Proof<'a> {
+    pub replica_node: DataProof<'a>,
+    pub replica_parents: ReplicaParents<'a>,
     pub node: MerkleProof,
 }
 
-impl<'a> Proof {
+impl<'a> Proof<'a> {
     pub fn new(
-        replica_node: DataProof,
-        replica_parents: ReplicaParents,
+        replica_node: DataProof<'a>,
+        replica_parents: ReplicaParents<'a>,
         node: MerkleProof,
-    ) -> Proof {
+    ) -> Proof<'a> {
         Proof {
             replica_node: replica_node,
             replica_parents: replica_parents,
@@ -80,7 +80,7 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<'a>;
     type PrivateInputs = PrivateInputs<'a>;
-    type Proof = Proof;
+    type Proof = Proof<'a>;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
         let graph = Graph::new(sp.drg.n, Some(Sampling::Bucket(sp.drg.m)));
@@ -105,7 +105,7 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
         let d = data_at_node(replica, challenge + 1, pub_params.lambda)?;
         let replica_node = DataProof {
             proof: tree_r.gen_proof(challenge),
-            data: d.to_vec(),
+            data: d,
         };
 
         let parents = pub_params.graph.parents(challenge + 1);
@@ -116,7 +116,7 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
                 p,
                 DataProof {
                     proof: tree_r.gen_proof(p - 1),
-                    data: data_at_node(replica, p, pub_params.lambda)?.to_vec(),
+                    data: data_at_node(replica, p, pub_params.lambda)?,
                 },
             ));
         }
@@ -149,12 +149,12 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
         let ciphertexts = proof.replica_parents.iter().fold(
             pub_inputs.prover_id.to_vec(),
             |mut acc, (_, p)| {
-                acc.extend(p.data.as_slice());
+                acc.extend(p.data);
                 acc
             },
         );
         let key = kdf::kdf(ciphertexts.as_slice());
-        let unsealed = decode(&key, proof.replica_node.data.as_slice())?;
+        let unsealed = decode(&key, proof.replica_node.data)?;
         if !proof.node.validate_with_data::<TreeAlgorithm>(&unsealed) {
             //return Err(format_err!("Commitments of original node were incorrect"));
             return Ok(false);
@@ -163,7 +163,7 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
         Ok(true)
     }
 }
-//, porep::Tau, porep::ProverAux
+
 impl<'a> PoRep<'a> for DrgPoRep {
     type Tau = porep::Tau;
     type ProverAux = porep::ProverAux;

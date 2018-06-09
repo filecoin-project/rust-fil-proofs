@@ -21,7 +21,7 @@ pub struct PrivateInputs<'a> {
     pub tree: &'a MerkleTree,
 }
 
-pub type Proof<'a> = DataProof;
+pub type Proof<'a> = DataProof<'a>;
 
 #[derive(Debug)]
 pub struct SetupParams {}
@@ -53,7 +53,7 @@ impl<'a> ProofScheme<'a> for MerklePoR {
 
         Ok(Proof {
             proof: tree.gen_proof(challenge),
-            data: data.to_vec(),
+            data: data,
         })
     }
 
