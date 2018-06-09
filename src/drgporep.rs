@@ -131,13 +131,18 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
         pub_inputs: &Self::PublicInputs,
         proof: &Self::Proof,
     ) -> Result<bool> {
+        // We should return false, not Err here -- though having the failure information is
+        // useful when debugging. What to do…
+
         if !proof.replica_node.proof.validate::<TreeAlgorithm>() {
-            return Err(format_err!("Commitments of replica node were incorrect"));
+            //return Err(format_err!("Commitments of replica node were incorrect"));
+            return Ok(false);
         }
 
         for (_, p) in proof.replica_parents.iter() {
             if !p.proof.validate::<TreeAlgorithm>() {
-                return Err(format_err!("Commitments of parents were incorrect"));
+                //return Err(format_err!("Commitments of parents were incorrect"));
+                return Ok(false);
             }
         }
 
@@ -148,12 +153,11 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
                 acc
             },
         );
-
         let key = kdf::kdf(ciphertexts.as_slice());
         let unsealed = decode(&key, proof.replica_node.data.as_slice())?;
-
         if !proof.node.validate_with_data::<TreeAlgorithm>(&unsealed) {
-            return Err(format_err!("Commitments of original node were incorrect"));
+            //return Err(format_err!("Commitments of original node were incorrect"));
+            return Ok(false);
         }
 
         Ok(true)

@@ -1,5 +1,6 @@
 use crypto::feistel;
 use error::Result;
+use hasher;
 use hasher::pedersen;
 use merkle_light::{merkle, proof};
 use rand::{thread_rng, Rng};
@@ -7,8 +8,10 @@ use std::cmp;
 use std::collections::{HashMap, HashSet};
 use util::data_at_node;
 
-pub type TreeHash = pedersen::PedersenHash;
-pub type TreeAlgorithm = pedersen::PedersenAlgorithm;
+//pub type TreeHash = pedersen::PedersenHash;
+//pub type TreeAlgorithm = pedersen::PedersenAlgorithm;
+pub type TreeHash = hasher::sha256::RingSHA256Hash;
+pub type TreeAlgorithm = hasher::sha256::SHA256Algorithm;
 
 pub type MerkleTree = merkle::MerkleTree<TreeHash, TreeAlgorithm>;
 pub type MerkleProof = proof::Proof<TreeHash>;
@@ -20,7 +23,7 @@ pub struct Graph {
     nodes: usize,
     /// List of predecessors. An entry `(v, vec![u, w])` means
     /// there is an edge from `v -> u` and `v -> w`.
-    pred: HashMap<usize, HashSet<usize>>,
+    pub pred: HashMap<usize, HashSet<usize>>,
 }
 
 pub enum Sampling {
@@ -120,7 +123,12 @@ impl Graph {
     pub fn invert_permute(&self, keys: &[u32]) -> Graph {
         let nodes: u32 = self.nodes as u32;
         let p: HashMap<usize, usize> = (0..self.nodes)
-            .map(|i| (i + 1, feistel::invert_permute(nodes, i as u32, keys) as usize + 1))
+            .map(|i| {
+                (
+                    i + 1,
+                    feistel::invert_permute(nodes, i as u32, keys) as usize + 1,
+                )
+            })
             .collect();
 
         // This is just a deep copy with transformation.
