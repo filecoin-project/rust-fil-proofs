@@ -15,10 +15,7 @@ pub struct Tau {
 }
 impl Tau {
     pub fn new(comm_d: TreeHash, comm_r: TreeHash) -> Tau {
-        Tau {
-            comm_d: comm_d,
-            comm_r: comm_r,
-        }
+        Tau { comm_d, comm_r }
     }
 }
 
@@ -42,10 +39,7 @@ pub struct ProverAux {
 
 impl ProverAux {
     pub fn new(tree_d: MerkleTree, tree_r: MerkleTree) -> ProverAux {
-        ProverAux {
-            tree_d: tree_d,
-            tree_r: tree_r,
-        }
+        ProverAux { tree_d, tree_r }
     }
 }
 

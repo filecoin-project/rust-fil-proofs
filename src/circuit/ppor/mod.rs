@@ -30,7 +30,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for ParallelProofOfRetrievability<'a, E> {
                 self.params,
                 self.value_commitments[i].clone(),
                 self.auth_paths[i].clone(),
-                self.root.clone(),
+                self.root,
             )?;
         }
 

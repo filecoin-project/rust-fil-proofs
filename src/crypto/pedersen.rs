@@ -21,8 +21,8 @@ pub fn pedersen_jubjub_internal(_height: i32, bytes: &[u8]) -> Vec<u8> {
 }
 
 #[no_mangle]
-pub extern "C" fn pedersen_jubjub(height: i32, size: usize, bytes: *mut u8) -> *mut u8 {
-    let byte_slice = unsafe { slice::from_raw_parts(bytes, size) };
+pub unsafe extern "C" fn pedersen_jubjub(height: i32, size: usize, bytes: *mut u8) -> *mut u8 {
+    let byte_slice = slice::from_raw_parts(bytes, size);
     let mut x = pedersen_jubjub_internal(height, byte_slice);
 
     x.as_mut_ptr()

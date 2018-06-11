@@ -66,7 +66,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRep<'a, E> {
                 self.params,
                 self.replica_node_commitment.clone(),
                 self.replica_node_path.clone(),
-                self.replica_root.clone(),
+                self.replica_root,
             )?;
         }
 
@@ -79,7 +79,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRep<'a, E> {
                     self.params,
                     self.replica_parents_commitments[i].clone(),
                     self.replica_parents_paths[i].clone(),
-                    self.replica_root.clone(),
+                    self.replica_root,
                 )?;
             }
         }
@@ -91,7 +91,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRep<'a, E> {
             let values = match self.prover_id {
                 Some(value) => BitVec::from_bytes(value)
                     .iter()
-                    .map(|v| Some(v))
+                    .map(Some)
                     .collect::<Vec<_>>(),
                 None => vec![None; PROVER_ID_BITS],
             };

@@ -60,20 +60,15 @@ impl<'a> Proof<'a> {
         node: MerklePath,
     ) -> Proof<'a> {
         Proof {
-            replica_node: replica_node,
-            replica_parents: replica_parents,
-            node: node,
+            replica_node,
+            replica_parents,
+            node,
         }
     }
 }
 
+#[derive(Default)]
 pub struct DrgPoRep {}
-
-impl DrgPoRep {
-    pub fn new() -> DrgPoRep {
-        DrgPoRep {}
-    }
-}
 
 impl<'a> ProofScheme<'a> for DrgPoRep {
     type PublicParams = PublicParams;
@@ -87,7 +82,7 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
 
         Ok(PublicParams {
             lambda: sp.lambda,
-            graph: graph,
+            graph,
         })
     }
 
@@ -104,7 +99,7 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
 
         let d = data_at_node(replica, challenge + 1, pub_params.lambda)?;
         let replica_node = DataProof {
-            proof: tree_r.gen_proof(challenge),
+            proof: tree_r.gen_proof(challenge).into(),
             data: d,
         };
 
@@ -115,14 +110,14 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
             replica_parents.push((
                 p,
                 DataProof {
-                    proof: tree_r.gen_proof(p - 1),
+                    proof: tree_r.gen_proof(p - 1).into(),
                     data: data_at_node(replica, p, pub_params.lambda)?,
                 },
             ));
         }
 
         let node_proof = tree_d.gen_proof(challenge);
-        let proof = Proof::new(replica_node, replica_parents, node_proof);
+        let proof = Proof::new(replica_node, replica_parents, node_proof.into());
         Ok(proof)
     }
 

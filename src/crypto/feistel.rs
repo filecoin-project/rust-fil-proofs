@@ -34,8 +34,8 @@ fn encode(num_elements: u32, index: u32, keys: &[u32]) -> u32 {
     let mut left = (index & left_mask) >> half_bits;
     let mut right = index & right_mask;
 
-    for i in 0..4 {
-        let (l, r) = (right, left ^ feistel(right, keys[i], right_mask));
+    for key in keys.iter().take(4) {
+        let (l, r) = (right, left ^ feistel(right, *key, right_mask));
         left = l;
         right = r;
     }
@@ -80,8 +80,10 @@ fn feistel(right: u32, key: u32, right_mask: u32) -> u32 {
 
     let hash = sha256_digest(&data);
 
-    let r =
-        (hash[0] as u32) << 24 | (hash[1] as u32) << 16 | (hash[2] as u32) << 8 | (hash[3] as u32);
+    let r = u32::from(hash[0]) << 24
+        | u32::from(hash[1]) << 16
+        | u32::from(hash[2]) << 8
+        | u32::from(hash[3]);
 
     r & right_mask
 }

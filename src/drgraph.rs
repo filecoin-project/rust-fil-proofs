@@ -86,11 +86,6 @@ impl MerklePath {
     pub fn len(&self) -> usize {
         self.path.len() + 2
     }
-
-    pub fn is_empty() -> bool {
-        // never empty, because root and leaf have to exist.
-        false
-    }
 }
 
 impl Into<MerklePath> for proof::Proof<TreeHash> {
@@ -113,7 +108,6 @@ pub fn proof_into_options(p: proof::Proof<TreeHash>) -> Vec<Option<(Fr, bool)>> 
     let p: MerklePath = p.into();
     p.as_options()
 }
-
 
 /// A DAG.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -138,7 +132,7 @@ impl Graph {
             Some(Sampling::Bucket(m)) => bucket_sample(nodes, m),
             None => {
                 Graph {
-                    nodes: nodes,
+                    nodes,
                     // TODO: use int optimized hash function
                     // TODO: estimate capacity based on nodes
                     pred: HashMap::new(),
@@ -149,7 +143,9 @@ impl Graph {
 
     /// Inserts a directed edge from u -> v.
     pub fn add_edge(&mut self, u: usize, v: usize) {
-        self.pred.entry(u).or_insert(HashSet::with_capacity(1));
+        self.pred
+            .entry(u)
+            .or_insert_with(|| HashSet::with_capacity(1));
 
         if let Some(edges) = self.pred.get_mut(&u) {
             edges.insert(v);
@@ -187,11 +183,11 @@ impl Graph {
         self.pred
             .get(&node)
             .map(|p| {
-                let mut res = p.iter().map(|v| *v).collect::<Vec<usize>>();
+                let mut res = p.iter().cloned().collect::<Vec<_>>();
                 res.sort();
                 res
             })
-            .unwrap_or(Vec::new())
+            .unwrap_or_else(Vec::new)
     }
 
     /// Returns the size of the node.
@@ -205,9 +201,9 @@ impl Graph {
             .map(|i| (i + 1, feistel::permute(nodes, i as u32, keys) as usize + 1))
             .collect();
 
-        for (key, preds) in self.pred.iter() {
+        for (key, preds) in &self.pred {
             for pred in preds {
-                tmp.entry(p[key]).or_insert(HashSet::new());
+                tmp.entry(p[key]).or_insert_with(HashSet::new);
 
                 if let Some(val) = tmp.get_mut(&p[key]) {
                     val.insert(p[pred]);
@@ -232,9 +228,9 @@ impl Graph {
 
         // This is just a deep copy with transformation.
         let mut tmp: HashMap<usize, HashSet<usize>> = HashMap::new();
-        for (key, preds) in self.pred.iter() {
+        for (key, preds) in &self.pred {
             for pred in preds {
-                tmp.entry(p[key]).or_insert(HashSet::new());
+                tmp.entry(p[key]).or_insert_with(HashSet::new);
 
                 if let Some(val) = tmp.get_mut(&p[key]) {
                     val.insert(p[pred]);

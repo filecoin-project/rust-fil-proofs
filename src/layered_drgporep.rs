@@ -79,32 +79,27 @@ pub struct Proof {
 impl Proof {
     pub fn new(encoding_proof: EncodingProof, permutation_proof: PermutationProof) -> Proof {
         Proof {
-            encoding_proof: encoding_proof,
-            permutation_proof: permutation_proof,
+            encoding_proof,
+            permutation_proof,
         }
     }
 }
 
+#[derive(Default)]
 pub struct LayeredDrgPoRep {}
 
-impl LayeredDrgPoRep {
-    pub fn new() -> LayeredDrgPoRep {
-        LayeredDrgPoRep {}
+fn permute(pp: &drgporep::PublicParams) -> drgporep::PublicParams {
+    drgporep::PublicParams {
+        graph: pp.graph.permute(&[1, 2, 3, 4]),
+        lambda: pp.lambda,
     }
 }
 
-fn permute(pp: &drgporep::PublicParams) -> drgporep::PublicParams {
-    return drgporep::PublicParams {
-        graph: pp.graph.permute(&[1, 2, 3, 4]),
-        lambda: pp.lambda,
-    };
-}
-
 fn invert_permute(pp: &drgporep::PublicParams) -> drgporep::PublicParams {
-    return drgporep::PublicParams {
+    drgporep::PublicParams {
         graph: pp.graph.invert_permute(&[1, 2, 3, 4]),
         lambda: pp.lambda,
-    };
+    }
 }
 
 impl<'a> ProofScheme<'a> for LayeredDrgPoRep {
@@ -149,14 +144,14 @@ impl<'a> ProofScheme<'a> for LayeredDrgPoRep {
         pub_inputs: &Self::PublicInputs,
         proof: &Self::Proof,
     ) -> Result<bool> {
-        for layer in 0..pub_params.layers {
+        for (layer, proof_layer) in proof.iter().enumerate() {
             let new_pub_inputs = drgporep::PublicInputs {
                 prover_id: pub_inputs.prover_id,
                 challenge: pub_inputs.challenge,
                 tau: &pub_inputs.tau[layer],
             };
 
-            let ep = &proof[layer].encoding_proof;
+            let ep = &proof_layer.encoding_proof;
             let parents: Vec<_> = ep
                 .replica_parents
                 .iter()
@@ -283,14 +278,7 @@ impl<'a, 'c> PoRep<'a> for LayeredDrgPoRep {
     }
 }
 
-fn permute_layers(mut drgpp: drgporep::PublicParams, layers: usize) -> drgporep::PublicParams {
-    for _ in 0..layers {
-        drgpp = permute(&drgpp);
-    }
-    drgpp
-}
-
-fn extract_and_invert_permute_layers<'a, 'b>(
+fn extract_and_invert_permute_layers<'a>(
     drgpp: &drgporep::PublicParams,
     layers: usize,
     prover_id: &[u8],
@@ -337,6 +325,13 @@ fn permute_and_replicate_layers(
 mod tests {
     use super::*;
     use rand::{Rng, SeedableRng, XorShiftRng};
+
+    fn permute_layers(mut drgpp: drgporep::PublicParams, layers: usize) -> drgporep::PublicParams {
+        for _ in 0..layers {
+            drgpp = permute(&drgpp);
+        }
+        drgpp
+    }
 
     #[test]
     fn test_layered_extract_all() {

@@ -8,7 +8,6 @@ use sapling_crypto::jubjub::JubjubBls12;
 use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 use std::hash::Hasher;
 use std::iter::FromIterator;
-use std::mem;
 
 lazy_static! {
     static ref HASH_PARAMS: JubjubBls12 = JubjubBls12::new();
@@ -65,7 +64,7 @@ impl AsRef<[u8]> for PedersenHash {
         // TODO: figure out a safe way for this
         let r = self.0.into_repr();
         assert_eq!(r.as_ref().len(), 4);
-        unsafe { mem::transmute::<&[u64], &[u8]>(r.as_ref()) }
+        unsafe { &*(r.as_ref() as *const [u64] as *const [u8]) }
     }
 }
 

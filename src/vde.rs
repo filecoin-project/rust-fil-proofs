@@ -84,7 +84,7 @@ pub fn decode_block<'a>(
     crypto::decode(key.as_slice(), node_data)
 }
 
-fn create_key(id: &[u8], parents: &Vec<usize>, data: &[u8], node_size: usize) -> Result<Vec<u8>> {
+fn create_key(id: &[u8], parents: &[usize], data: &[u8], node_size: usize) -> Result<Vec<u8>> {
     // ciphertexts will become a buffer of the layout
     // id | encodedParentNode1 | encodedParentNode1 | ...
     let ciphertexts = parents.iter().fold(
