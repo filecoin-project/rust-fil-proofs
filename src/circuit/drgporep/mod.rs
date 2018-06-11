@@ -192,7 +192,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRep<'a, E> {
     }
 }
 
-#[cfg(test)]
+#[cfg(test_expensive)]
 mod tests {
     use super::*;
     use bellman::groth16::*;
