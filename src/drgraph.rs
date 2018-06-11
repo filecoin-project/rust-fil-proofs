@@ -20,19 +20,18 @@ pub type TreeAlgorithm = pedersen::PedersenAlgorithm;
 //pub type TreeAlgorithm = hasher::sha256::SHA256Algorithm;
 
 pub type MerkleTree = merkle::MerkleTree<TreeHash, TreeAlgorithm>;
-pub type MerkleProof = proof::Proof<TreeHash>;
 
-/// Representation of a MerklePath.
+/// Representation of a merkle proof.
 /// Each element in the `path` vector consists of a tuple `(hash, is_right)`, with `hash` being the the hash of the node at the current level and `is_right` a boolean indicating if the path is taking the right path.
 /// The first element is the hash of leaf itself, and the last is the root hash.
 #[derive(Debug, Clone)]
-pub struct MerklePath {
+pub struct MerkleProof {
     path: Vec<(TreeHash, bool)>,
     root: TreeHash,
     leaf: TreeHash,
 }
 
-impl MerklePath {
+impl MerkleProof {
     /// Convert the merkle path into the format expected by the circuits, which is a vector of options of the tuples.
     /// This does __not__ include the root and the leaf.
     pub fn as_options(&self) -> Vec<Option<(Fr, bool)>> {
@@ -42,7 +41,7 @@ impl MerklePath {
             .collect::<Vec<_>>()
     }
 
-    /// Validates the MerklePath
+    /// Validates the MerkleProof
     pub fn validate(&self) -> bool {
         println!("validating: {:?}", self.path);
         let mut a = TreeAlgorithm::default();
@@ -71,7 +70,7 @@ impl MerklePath {
         leaf_hash == self.leaf()
     }
 
-    /// Returns the hash of leaf that this MerklePath represents.
+    /// Returns the hash of leaf that this MerkleProof represents.
     pub fn leaf(&self) -> TreeHash {
         self.leaf
     }
@@ -88,9 +87,9 @@ impl MerklePath {
     }
 }
 
-impl Into<MerklePath> for proof::Proof<TreeHash> {
-    fn into(self) -> MerklePath {
-        MerklePath {
+impl Into<MerkleProof> for proof::Proof<TreeHash> {
+    fn into(self) -> MerkleProof {
+        MerkleProof {
             path: self
                 .lemma()
                 .iter()
@@ -105,7 +104,7 @@ impl Into<MerklePath> for proof::Proof<TreeHash> {
 }
 
 pub fn proof_into_options(p: proof::Proof<TreeHash>) -> Vec<Option<(Fr, bool)>> {
-    let p: MerklePath = p.into();
+    let p: MerkleProof = p.into();
     p.as_options()
 }
 
@@ -411,7 +410,7 @@ mod tests {
             assert!(proof.validate::<TreeAlgorithm>());
             println!("proof: {:?} {:?}", proof.lemma(), proof.path());
             let len = proof.lemma().len();
-            let mp: MerklePath = proof.into();
+            let mp: MerkleProof = proof.into();
 
             assert_eq!(mp.len(), len);
 

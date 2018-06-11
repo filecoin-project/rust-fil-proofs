@@ -1,5 +1,5 @@
 use crypto::{decode, kdf};
-use drgraph::{Graph, MerklePath, Sampling};
+use drgraph::{Graph, MerkleProof, Sampling};
 use porep::{self, PoRep};
 use util::data_at_node;
 use vde::{self, decode_block};
@@ -40,7 +40,7 @@ pub struct PublicParams {
 
 #[derive(Debug)]
 pub struct DataProof<'a> {
-    pub proof: MerklePath,
+    pub proof: MerkleProof,
     pub data: &'a [u8],
 }
 
@@ -50,14 +50,14 @@ pub type ReplicaParents<'a> = Vec<(usize, DataProof<'a>)>;
 pub struct Proof<'a> {
     pub replica_node: DataProof<'a>,
     pub replica_parents: ReplicaParents<'a>,
-    pub node: MerklePath,
+    pub node: MerkleProof,
 }
 
 impl<'a> Proof<'a> {
     pub fn new(
         replica_node: DataProof<'a>,
         replica_parents: ReplicaParents<'a>,
-        node: MerklePath,
+        node: MerkleProof,
     ) -> Proof<'a> {
         Proof {
             replica_node,
