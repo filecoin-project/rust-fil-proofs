@@ -7,6 +7,9 @@ extern crate failure;
 extern crate bellman;
 extern crate blake2_rfc;
 extern crate byteorder;
+extern crate num_bigint;
+extern crate num_integer;
+extern crate num_traits;
 extern crate pairing;
 extern crate sapling_crypto;
 #[macro_use]

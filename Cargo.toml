@@ -8,6 +8,10 @@ sapling-crypto = { git = "https://github.com/zcash-hackworks/sapling-crypto", br
 rand = "0.4"
 ring = "0.12"
 merkle_light = { git = "https://github.com/dignifiedquire/merkle_light", branch = "master" }
+num = "0.1"
+num-bigint = "0.2"
+num-integer = "0.1"
+num-traits = "0.2"
 openssl = "*"
 failure = "0.1"
 bellman = "0.1"
