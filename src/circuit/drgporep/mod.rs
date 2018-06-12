@@ -9,189 +9,315 @@ use sapling_crypto::primitives::ValueCommitment;
 use circuit::kdf::kdf;
 use circuit::por::{expose_value_commitment, proof_of_retrievability};
 
+// TODO: what is the right size?
+// TODO: can we make this configurable at runtime?
 /// How many bits are in a single prover_id
 const PROVER_ID_BITS: usize = 256;
 
-pub type MerklePath<E: JubjubEngine> = Vec<Option<(E::Fr, bool)>>;
-
 /// This is an instance of the `DrgPoRep` circuit.
-pub struct DrgPoRep<'a, E: JubjubEngine> {
-    /// parameters for  the curve
-    pub params: &'a E::Params,
+///
+/// # Arguments
+///
+/// * `cs` - Constraint System
+/// * `params` - parameters for the curve
+/// * `replica_node_commitement` - The replica node being proven.
+/// * `replica_node_path` - The path of the replica node being proven.
+/// * `replica_root` - The merkle root of the replica.
+/// * `replica_parents_commitements` - A list of all parents in the replica, with their value.
+/// * `replica_parents_paths` - A list of all parents paths in the replica.
+/// * `data_node_commitement` - The data node being proven.
+/// * `data_node_path` - The path of the data node being proven.
+/// * `data_root` - The merkle root of the data.
+/// * `prover_id` - The id of the prover
+///
+pub fn drgporep<E, CS>(
+    cs: &mut CS,
+    params: &E::Params,
+    replica_node_commitment: Option<ValueCommitment<E>>,
+    replica_node_path: Vec<Option<(E::Fr, bool)>>,
+    replica_root: Option<E::Fr>,
+    replica_parents_commitments: Vec<Option<ValueCommitment<E>>>,
+    replica_parents_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
+    data_node_commitment: Option<ValueCommitment<E>>,
+    data_node_path: Vec<Option<(E::Fr, bool)>>,
+    data_root: Option<E::Fr>,
+    prover_id: Option<&[u8]>,
+) -> Result<(), SynthesisError>
+where
+    E: JubjubEngine,
+    CS: ConstraintSystem<E>,
+{
+    // ensure that all inputs are well formed
 
-    /// The replica node being proven.
-    pub replica_node_commitment: Option<ValueCommitment<E>>,
+    assert_eq!(data_node_path.len(), replica_node_path.len());
+    if let Some(prover_id) = prover_id {
+        assert_eq!(prover_id.len(), PROVER_ID_BITS / 8);
+    }
 
-    /// The path of the replica node being proven.
-    pub replica_node_path: MerklePath<E>,
+    // TODO: assert the parents are actually the parents of the replica_node
 
-    /// The merkle root of the replica.
-    pub replica_root: Option<E::Fr>,
+    // validate the replica node merkle proof
 
-    /// A list of all parents in the replica, with their value and their merkle path.
-    pub replica_parents_commitments: Vec<Option<ValueCommitment<E>>>,
+    {
+        let mut ns = cs.namespace(|| "replica_node merkle proof");
+        proof_of_retrievability(
+            &mut ns,
+            params,
+            replica_node_commitment.clone(),
+            replica_node_path.clone(),
+            replica_root,
+        )?;
+    }
 
-    pub replica_parents_paths: Vec<MerklePath<E>>,
-
-    /// The data node being proven.
-    pub data_node_commitment: Option<ValueCommitment<E>>,
-
-    /// The path of the data node being proven.
-    pub data_node_path: MerklePath<E>,
-
-    /// The merkle root of the data.
-    pub data_root: Option<E::Fr>,
-
-    /// The id of the prover
-    pub prover_id: Option<&'a [u8]>,
-}
-
-impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRep<'a, E> {
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        // ensure that all inputs are well formed
-
-        assert_eq!(self.data_node_path.len(), self.replica_node_path.len());
-        if let Some(prover_id) = self.prover_id {
-            assert_eq!(prover_id.len(), PROVER_ID_BITS / 8);
-        }
-
-        // TODO: assert the parents are actually the parents of the replica_node
-
-        // validate the replica node merkle proof
-
-        {
-            let mut ns = cs.namespace(|| "replica_node merkle proof");
+    // validate each replica_parents merkle proof
+    {
+        for i in 0..replica_parents_commitments.len() {
+            let mut ns = cs.namespace(|| format!("replica parent: {}", i));
             proof_of_retrievability(
                 &mut ns,
-                self.params,
-                self.replica_node_commitment.clone(),
-                self.replica_node_path.clone(),
-                self.replica_root,
+                params,
+                replica_parents_commitments[i].clone(),
+                replica_parents_paths[i].clone(),
+                replica_root,
             )?;
         }
+    }
 
-        // validate each replica_parents merkle proof
-        {
-            for i in 0..self.replica_parents_commitments.len() {
-                let mut ns = cs.namespace(|| format!("replica parent: {}", i));
-                proof_of_retrievability(
-                    &mut ns,
-                    self.params,
-                    self.replica_parents_commitments[i].clone(),
-                    self.replica_parents_paths[i].clone(),
-                    self.replica_root,
-                )?;
-            }
+    // get the prover_id in bits
+    let prover_id_bits: Vec<Boolean> = {
+        let mut ns = cs.namespace(|| "prover_id_bits");
+
+        let values = match prover_id {
+            Some(value) => BitVec::from_bytes(value)
+                .iter()
+                .map(Some)
+                .collect::<Vec<_>>(),
+            None => vec![None; PROVER_ID_BITS],
+        };
+
+        values
+            .into_iter()
+            .enumerate()
+            .map(|(i, b)| {
+                Ok(Boolean::from(AllocatedBit::alloc(
+                    ns.namespace(|| format!("bit {}", i)),
+                    b,
+                )?))
+            })
+            .collect::<Result<Vec<_>, SynthesisError>>()?
+    };
+
+    // get the parents int bits
+    let parents_bits: Vec<Vec<Boolean>> = {
+        let mut ns = cs.namespace(|| "parents to bits");
+        replica_parents_commitments
+            .into_iter()
+            .enumerate()
+            .map(|(i, val)| -> Result<Vec<Boolean>, SynthesisError> {
+                boolean::u64_into_boolean_vec_le(
+                    ns.namespace(|| format!("bit [{}]", i)),
+                    val.map(|v| v.value),
+                )
+            })
+            .collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?
+    };
+
+    // generate the encryption key
+    let key = {
+        let mut ns = cs.namespace(|| "kdf");
+        kdf(
+            &mut ns,
+            prover_id_bits,
+            parents_bits,
+            // TODO: what about the persona??
+            b"12345678",
+        )?
+    };
+
+    // decrypt the data of the replica_node
+    // TODO: what encryption?
+    let decoded_bits = boolean::u64_into_boolean_vec_le(
+        cs.namespace(|| "decoded data"),
+        // TODO: actual value
+        Some(0u64),
+    )?;
+    let expected_bits = expose_value_commitment(
+        cs.namespace(|| "data node commitment"),
+        data_node_commitment,
+        params,
+    )?;
+
+    // build the linar combination for decoded
+    let decoded_lc = {
+        let mut lc = LinearCombination::zero();
+        let mut coeff = E::Fr::one();
+
+        for bit in decoded_bits {
+            lc = lc + &bit.lc(CS::one(), coeff);
+            coeff.double();
         }
 
-        // get the prover_id in bits
-        let prover_id_bits: Vec<Boolean> = {
-            let mut ns = cs.namespace(|| "prover_id_bits");
+        lc
+    };
 
-            let values = match self.prover_id {
-                Some(value) => BitVec::from_bytes(value)
-                    .iter()
-                    .map(Some)
-                    .collect::<Vec<_>>(),
-                None => vec![None; PROVER_ID_BITS],
+    // build the linar combination for expected
+    let expected_lc = {
+        let mut lc = LinearCombination::zero();
+        let mut coeff = E::Fr::one();
+
+        for bit in expected_bits {
+            lc = lc + &bit.lc(CS::one(), coeff);
+            coeff.double();
+        }
+
+        lc
+    };
+
+    // ensure the encrypted data and data_node match
+    {
+        // expected * 1 = decoded
+        cs.enforce(
+            || "encrypted matches data_node constraint",
+            |_| expected_lc,
+            |lc| lc + CS::one(),
+            |_| decoded_lc,
+        );
+    }
+
+    // TODO: what values need `inputize` called on?
+
+    // profit!
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use byteorder::{LittleEndian, ReadBytesExt};
+    use circuit::test::*;
+    use drgporep;
+    use drgraph::proof_into_options;
+    use hasher::pedersen::merkle_tree_from_u64;
+    use pairing::bls12_381::*;
+    use pairing::Field;
+    use porep::PoRep;
+    use proof::ProofScheme;
+    use rand::{Rng, SeedableRng, XorShiftRng};
+    use sapling_crypto::jubjub::{self, JubjubBls12};
+    use util::data_at_node;
+
+    #[test]
+    fn test_drgporep_input_circuit_with_bls12_381() {
+        let params = &JubjubBls12::new();
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let lambda = 32;
+        let n = 10;
+
+        for i in 0..5 {
+            let m = i * 10;
+            let prover_id: Vec<u8> = (0..lambda).map(|_| rng.gen()).collect();
+            let mut data: Vec<u8> = (0..lambda * n).map(|_| rng.gen()).collect();
+            let challenge = i;
+
+            let sp = drgporep::SetupParams {
+                lambda,
+                drg: drgporep::DrgParams { n, m },
             };
 
-            values
-                .into_iter()
-                .enumerate()
-                .map(|(i, b)| {
-                    Ok(Boolean::from(AllocatedBit::alloc(
-                        ns.namespace(|| format!("bit {}", i)),
-                        b,
-                    )?))
-                })
-                .collect::<Result<Vec<_>, SynthesisError>>()?
-        };
+            let pp = drgporep::DrgPoRep::setup(&sp).expect("failed to create drgporep setup");
 
-        // get the parents int bits
-        let parents_bits: Vec<Vec<Boolean>> = {
-            let mut ns = cs.namespace(|| "parents to bits");
-            self.replica_parents_commitments
-                .into_iter()
-                .enumerate()
-                .map(|(i, val)| -> Result<Vec<Boolean>, SynthesisError> {
-                    boolean::u64_into_boolean_vec_le(
-                        ns.namespace(|| format!("bit [{}]", i)),
-                        val.map(|v| v.value),
-                    )
-                })
-                .collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?
-        };
+            let (tau, aux) =
+                drgporep::DrgPoRep::replicate(&pp, prover_id.as_slice(), data.as_mut_slice())
+                    .expect("failed to replicate");
 
-        // generate the encryption key
-        let key = {
-            let mut ns = cs.namespace(|| "kdf");
-            kdf(
-                &mut ns,
-                prover_id_bits,
-                parents_bits,
-                // TODO: what about the persona??
-                b"12345678",
-            )?
-        };
+            let pub_inputs = drgporep::PublicInputs {
+                prover_id: prover_id.as_slice(),
+                challenge,
+                tau: &tau,
+            };
+            let priv_inputs = drgporep::PrivateInputs {
+                replica: data.as_slice(),
+                aux: &aux,
+            };
 
-        // decrypt the data of the replica_node
-        // TODO: what encryption?
-        let decoded_bits = boolean::u64_into_boolean_vec_le(
-            cs.namespace(|| "decoded data"),
-            // TODO: actual value
-            Some(0u64),
-        )?;
-        let expected_bits = expose_value_commitment(
-            cs.namespace(|| "data node commitment"),
-            self.data_node_commitment,
-            self.params,
-        )?;
+            let mut proof_nc =
+                drgporep::DrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).expect("failed to prove");
 
-        // build the linar combination for decoded
-        let decoded_lc = {
-            let mut lc = LinearCombination::zero();
-            let mut coeff = E::Fr::one();
-
-            for bit in decoded_bits {
-                lc = lc + &bit.lc(CS::one(), coeff);
-                coeff.double();
-            }
-
-            lc
-        };
-
-        // build the linar combination for expected
-        let expected_lc = {
-            let mut lc = LinearCombination::zero();
-            let mut coeff = E::Fr::one();
-
-            for bit in expected_bits {
-                lc = lc + &bit.lc(CS::one(), coeff);
-                coeff.double();
-            }
-
-            lc
-        };
-
-        // ensure the encrypted data and data_node match
-        {
-            // expected * 1 = decoded
-            cs.enforce(
-                || "encrypted matches data_node constraint",
-                |_| expected_lc,
-                |lc| lc + CS::one(),
-                |_| decoded_lc,
+            assert!(
+                drgporep::DrgPoRep::verify(&pp, &pub_inputs, &proof_nc).expect("failed to verify"),
+                "failed to verif (non circuit)"
             );
+
+            let replica_node_commitment = Some(ValueCommitment {
+                // TODO: formalize how this happens, as this is currently lossy
+                // we would need 4 u64, not just a single
+                value: proof_nc
+                    .replica_node
+                    .data
+                    .read_u64::<LittleEndian>()
+                    .expect("failed to read replica data as u64"),
+                randomness: jubjub::fs::Fs::zero(),
+            });
+
+            let replica_node_path = proof_nc.replica_node.proof.as_options();
+            let replica_root = Some(proof_nc.replica_node.proof.root().into());
+            let replica_parents_commitments = proof_nc
+                .replica_parents
+                .iter()
+                .map(|(_, mut parent)| {
+                    Some(ValueCommitment {
+                        value: parent
+                            .data
+                            .read_u64::<LittleEndian>()
+                            .expect("failed to read replica parent data as u64"),
+                        randomness: jubjub::fs::Fs::zero(),
+                    })
+                })
+                .collect();
+            let replica_parents_paths = proof_nc
+                .replica_parents
+                .iter()
+                .map(|(_, parent)| parent.proof.as_options())
+                .collect();
+            let data_node_commitment = Some(ValueCommitment {
+                // TODO: formalize how this happens, as this is currently lossy
+                // we would need 4 u64, not just a single
+                value: data_at_node(&data, challenge, lambda)
+                    .expect("failed to read original data")
+                    .read_u64::<LittleEndian>()
+                    .expect("failed to read original data as u64"),
+                randomness: jubjub::fs::Fs::zero(),
+            });
+            let data_node_path = proof_nc.node.as_options();
+            let data_root = Some(proof_nc.node.root().into());
+            let prover_id = Some(prover_id.as_slice());
+
+            let mut cs = TestConstraintSystem::<Bls12>::new();
+            drgporep(
+                &mut cs,
+                params,
+                replica_node_commitment,     //: Option<ValueCommitment<E>>,
+                replica_node_path,           //: Vec<Option<(E::Fr, bool)>>,
+                replica_root,                //: Option<E::Fr>,
+                replica_parents_commitments, //: Vec<Option<ValueCommitment<E>>>,
+                replica_parents_paths,       //: Vec<Vec<Option<(E::Fr, bool)>>>,
+                data_node_commitment,        //: Option<ValueCommitment<E>>,
+                data_node_path,              //: Vec<Option<(E::Fr, bool)>>,
+                data_root,                   //: Option<E::Fr>,
+                prover_id,                   //: Option<&[u8]>,
+            ).expect("failed to synthesize circuit");
+
+            assert!(cs.is_satisfied());
+            assert_eq!(cs.num_constraints(), 7827);
+            assert_eq!(cs.num_inputs(), 49); // depends on how many leafs we prove
+                                             // TODO: go through all inputs and assert them
+            assert_eq!(cs.get_input(0, "ONE"), Fr::one());
         }
-
-        // TODO: what values need `inputize` called on?
-
-        // profit!
-        Ok(())
     }
 }
 
+// TODO: move somewhere else. `benches` or `examples` probably
 #[cfg(test_expensive)]
 mod tests {
     use super::*;
