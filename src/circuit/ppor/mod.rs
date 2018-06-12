@@ -58,14 +58,14 @@ mod tests {
 
         let par_depth = 16;
         let commitment_size = 32;
-        // TODO: go for 10, currently pretty slow
-        for _ in 0..1 {
+
+        for _ in 0..5 {
             let data: Vec<u8> = (0..commitment_size * par_depth)
                 .map(|_| rng.gen())
                 .collect();
 
             let value_commitments: Vec<Option<_>> = (0..par_depth)
-                .map(|i| Some(data_at_node(data.as_slice(), i, commitment_size).unwrap()))
+                .map(|i| Some(data_at_node(data.as_slice(), i + 1, commitment_size).unwrap()))
                 .collect();
 
             let graph = drgraph::Graph::new(par_depth, None);
@@ -87,13 +87,22 @@ mod tests {
                 root: Some(root.into()),
             };
 
-            instance.synthesize(&mut cs).unwrap();
+            instance
+                .synthesize(&mut cs)
+                .expect("failed to synthesize circuit");
 
-            assert!(cs.is_satisfied());
+            assert!(cs.is_satisfied(), "constraints not satisfied");
 
-            assert_eq!(cs.num_inputs(), 49); // depends on how many leafs we prove
+            assert_eq!(cs.num_inputs(), 17, "wrong number of inputs");
             assert_eq!(cs.get_input(0, "ONE"), Fr::one());
-            assert_eq!(cs.get_input(3, "round: 0/root/input variable"), root.into());
+            assert_eq!(cs.get_input(1, "round: 0/root/input variable"), root.into());
+            assert_eq!(cs.get_input(2, "round: 1/root/input variable"), root.into());
+            assert_eq!(cs.get_input(3, "round: 2/root/input variable"), root.into());
+
+            assert_eq!(
+                cs.get_input(16, "round: 15/root/input variable"),
+                root.into()
+            );
         }
     }
 }
