@@ -1,5 +1,6 @@
 use bellman::{ConstraintSystem, SynthesisError};
-use pairing::Field;
+use pairing::Engine;
+use sapling_crypto::circuit::boolean::{AllocatedBit, Boolean};
 use sapling_crypto::circuit::{boolean, ecc, num, pedersen_hash};
 use sapling_crypto::jubjub::{FixedGenerators, JubjubEngine};
 use sapling_crypto::primitives::ValueCommitment;
@@ -13,7 +14,8 @@ use sapling_crypto::primitives::ValueCommitment;
 pub fn proof_of_retrievability<E, CS>(
     cs: &mut CS,
     params: &E::Params,
-    value_commitment: Option<ValueCommitment<E>>,
+    value_commitment: Option<&[u8]>,
+    value_commitment_size: usize,
     auth_path: Vec<Option<(E::Fr, bool)>>,
     root: Option<E::Fr>,
 ) -> Result<(), SynthesisError>
@@ -21,30 +23,15 @@ where
     E: JubjubEngine,
     CS: ConstraintSystem<E>,
 {
-    let value_bits = {
-        // Get the value in little-endian bit order
-        let bits = expose_value_commitment(
-            cs.namespace(|| "value commitment"),
-            value_commitment,
-            params,
-        )?;
-
-        // Compute the value's as a linear combination of the bits.
-        let mut value_num: num::Num<E> = num::Num::zero();
-        let mut coeff = E::Fr::one();
-        for bit in &bits {
-            value_num = value_num.add_bool_with_coeff(CS::one(), bit, coeff);
-            coeff.double();
-        }
-
-        bits
-    };
-
-    assert_eq!(value_bits.len(), 64);
+    let value_bits = bytes_into_boolean_vec(
+        cs.namespace(|| "value into bits"),
+        value_commitment,
+        value_commitment_size,
+    )?;
 
     // Compute the hash of the value
     let cm = pedersen_hash::pedersen_hash(
-        cs.namespace(|| "note content hash"),
+        cs.namespace(|| "value hash"),
         pedersen_hash::Personalization::NoteCommitment,
         &value_bits,
         params,
@@ -110,7 +97,7 @@ where
         // cur  * 1 = rt
         // enforce cur and rt are equal
         cs.enforce(
-            || "conditionally enforce correct root",
+            || "enforce root is correct",
             |lc| lc + cur.get_variable(),
             |lc| lc + CS::one(),
             |lc| lc + rt.get_variable(),
@@ -121,6 +108,39 @@ where
     }
 
     Ok(())
+}
+
+pub fn bytes_into_boolean_vec<E: Engine, CS: ConstraintSystem<E>>(
+    mut cs: CS,
+    value: Option<&[u8]>,
+    size: usize,
+) -> Result<Vec<boolean::Boolean>, SynthesisError> {
+    let values = match value {
+        Some(value) => {
+            let mut tmp = Vec::with_capacity(size);
+
+            for input_byte in value {
+                for bit_i in 0..8 {
+                    tmp.push(Some((input_byte >> bit_i) & 1u8 == 1u8))
+                }
+            }
+            tmp
+        }
+        None => vec![None; size],
+    };
+
+    let bits = values
+        .into_iter()
+        .enumerate()
+        .map(|(i, b)| {
+            Ok(Boolean::from(AllocatedBit::alloc(
+                cs.namespace(|| format!("bit {}", i)),
+                b,
+            )?))
+        })
+        .collect::<Result<Vec<_>, SynthesisError>>()?;
+
+    Ok(bits)
 }
 
 /// Exposes a Pedersen commitment to the value as an input to the circuit.
@@ -176,12 +196,12 @@ where
 mod tests {
     use super::*;
     use circuit::test::*;
-    use drgraph::proof_into_options;
-    use hasher::pedersen::merkle_tree_from_u64;
+    use drgraph::{self, proof_into_options};
     use pairing::bls12_381::*;
     use pairing::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
+    use util::data_at_node;
 
     #[test]
     fn test_por_input_circuit_with_bls12_381() {
@@ -189,21 +209,16 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaf_count = 32;
+        let leaf_size = 32;
 
-        for _ in 0..10 {
-            let value_commitment = ValueCommitment {
-                value: rng.gen(),
-                randomness: rng.gen(),
-            };
+        for i in 0..10 {
+            let data: Vec<u8> = (0..leaf_count * leaf_size).map(|_| rng.gen()).collect();
 
-            let mut values: Vec<u64> = (0..leaf_count).map(|_| rng.gen()).collect();
-            values.push(value_commitment.value);
-
-            let tree = merkle_tree_from_u64(values);
-            let merkle_proof = tree.gen_proof(leaf_count);
-            // below we construct the auth_path, such that it matches the expecations
-            // of our circuit
+            let graph = drgraph::Graph::new(leaf_count, Some(drgraph::Sampling::Bucket(3)));
+            let tree = graph.merkle_tree(data.as_slice(), leaf_size).unwrap();
+            let merkle_proof = tree.gen_proof(i);
             let auth_path = proof_into_options(merkle_proof);
+            let value_commitment = data_at_node(data.as_slice(), i + 1, leaf_size).unwrap();
 
             let root = tree.root();
 
@@ -212,15 +227,43 @@ mod tests {
             proof_of_retrievability(
                 &mut cs,
                 params,
-                Some(value_commitment.clone()),
+                Some(value_commitment),
+                leaf_size * 8,
                 auth_path.clone(),
                 Some(root.into()),
             ).unwrap();
 
-            assert!(cs.is_satisfied());
-            assert_eq!(cs.num_inputs(), 4);
-            assert_eq!(cs.get_input(0, "ONE"), Fr::one());
-            assert_eq!(cs.get_input(3, "root/input variable"), root.into());
+            assert_eq!(cs.num_inputs(), 2, "wrong number of inputs");
+            assert_eq!(cs.num_constraints(), 7609, "wrong number of constraints");
+            assert_eq!(cs.get_input(0, "ONE"), Fr::one(), "wrong input 0");
+            assert_eq!(
+                cs.get_input(1, "root/input variable"),
+                root.into(),
+                "wrong input 1"
+            );
+
+            println!("{:?}", cs.which_is_unsatisfied().unwrap());
+            assert!(cs.is_satisfied(), "constraints are not all satisfied");
         }
+    }
+
+    #[test]
+    fn test_bytes_into_boolean_vec() {
+        let mut cs = TestConstraintSystem::<Bls12>::new();
+
+        let data = vec![255, 0];
+        let bits: Vec<bool> = bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), 8)
+            .unwrap()
+            .iter()
+            .map(|b| b.get_value().unwrap())
+            .collect();
+
+        assert_eq!(
+            bits,
+            vec![
+                true, true, true, true, true, true, true, true, false, false, false, false, false,
+                false, false, false,
+            ]
+        );
     }
 }

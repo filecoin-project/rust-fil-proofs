@@ -38,7 +38,7 @@ pub struct PublicParams {
     pub graph: Graph,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DataProof<'a> {
     pub proof: MerkleProof,
     pub data: &'a [u8],

@@ -1,20 +1,17 @@
-use bellman::{Circuit, ConstraintSystem, LinearCombination, SynthesisError};
-use bit_vec::BitVec;
-use pairing::bls12_381::{Fr, FrRepr};
-use pairing::{Field, PrimeField};
-use sapling_crypto::circuit::boolean::{self, AllocatedBit, Boolean};
+use bellman::{ConstraintSystem, LinearCombination, SynthesisError};
+use pairing::Field;
+use sapling_crypto::circuit::boolean::{self, Boolean};
 use sapling_crypto::jubjub::JubjubEngine;
-use sapling_crypto::primitives::ValueCommitment;
 
 use circuit::kdf::kdf;
-use circuit::por::{expose_value_commitment, proof_of_retrievability};
+use circuit::por::{bytes_into_boolean_vec, proof_of_retrievability};
 
 // TODO: what is the right size?
 // TODO: can we make this configurable at runtime?
 /// How many bits are in a single prover_id
 const PROVER_ID_BITS: usize = 256;
 
-/// This is an instance of the `DrgPoRep` circuit.
+/// DRG base Proof of Replication.
 ///
 /// # Arguments
 ///
@@ -33,12 +30,13 @@ const PROVER_ID_BITS: usize = 256;
 pub fn drgporep<E, CS>(
     cs: &mut CS,
     params: &E::Params,
-    replica_node_commitment: Option<ValueCommitment<E>>,
+    commitment_size: usize,
+    replica_node_commitment: Option<&[u8]>,
     replica_node_path: Vec<Option<(E::Fr, bool)>>,
     replica_root: Option<E::Fr>,
-    replica_parents_commitments: Vec<Option<ValueCommitment<E>>>,
+    replica_parents_commitments: Vec<Option<&[u8]>>,
     replica_parents_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
-    data_node_commitment: Option<ValueCommitment<E>>,
+    data_node_commitment: Option<&[u8]>,
     data_node_path: Vec<Option<(E::Fr, bool)>>,
     data_root: Option<E::Fr>,
     prover_id: Option<&[u8]>,
@@ -63,7 +61,8 @@ where
         proof_of_retrievability(
             &mut ns,
             params,
-            replica_node_commitment.clone(),
+            replica_node_commitment,
+            commitment_size,
             replica_node_path.clone(),
             replica_root,
         )?;
@@ -76,47 +75,44 @@ where
             proof_of_retrievability(
                 &mut ns,
                 params,
-                replica_parents_commitments[i].clone(),
+                replica_parents_commitments[i],
+                commitment_size,
                 replica_parents_paths[i].clone(),
                 replica_root,
             )?;
         }
     }
+    // validate data node commitment
+    {
+        let mut ns = cs.namespace(|| "data node commitment");
+        proof_of_retrievability(
+            &mut ns,
+            params,
+            data_node_commitment,
+            commitment_size,
+            data_node_path,
+            data_root,
+        )?;
+    }
 
     // get the prover_id in bits
-    let prover_id_bits: Vec<Boolean> = {
-        let mut ns = cs.namespace(|| "prover_id_bits");
+    let prover_id_bits = bytes_into_boolean_vec(
+        cs.namespace(|| "prover_id bits"),
+        prover_id,
+        commitment_size,
+    )?;
 
-        let values = match prover_id {
-            Some(value) => BitVec::from_bytes(value)
-                .iter()
-                .map(Some)
-                .collect::<Vec<_>>(),
-            None => vec![None; PROVER_ID_BITS],
-        };
-
-        values
-            .into_iter()
-            .enumerate()
-            .map(|(i, b)| {
-                Ok(Boolean::from(AllocatedBit::alloc(
-                    ns.namespace(|| format!("bit {}", i)),
-                    b,
-                )?))
-            })
-            .collect::<Result<Vec<_>, SynthesisError>>()?
-    };
-
-    // get the parents int bits
+    // get the parents into bits
     let parents_bits: Vec<Vec<Boolean>> = {
         let mut ns = cs.namespace(|| "parents to bits");
         replica_parents_commitments
             .into_iter()
             .enumerate()
             .map(|(i, val)| -> Result<Vec<Boolean>, SynthesisError> {
-                boolean::u64_into_boolean_vec_le(
-                    ns.namespace(|| format!("bit [{}]", i)),
-                    val.map(|v| v.value),
+                bytes_into_boolean_vec(
+                    ns.namespace(|| format!("parent {}", i)),
+                    val,
+                    commitment_size,
                 )
             })
             .collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?
@@ -141,10 +137,10 @@ where
         // TODO: actual value
         Some(0u64),
     )?;
-    let expected_bits = expose_value_commitment(
-        cs.namespace(|| "data node commitment"),
+    let expected_bits = bytes_into_boolean_vec(
+        cs.namespace(|| "data node bits"),
         data_node_commitment,
-        params,
+        commitment_size,
     )?;
 
     // build the linar combination for decoded
@@ -196,8 +192,6 @@ mod tests {
     use byteorder::{LittleEndian, ReadBytesExt};
     use circuit::test::*;
     use drgporep;
-    use drgraph::proof_into_options;
-    use hasher::pedersen::merkle_tree_from_u64;
     use pairing::bls12_381::*;
     use pairing::Field;
     use porep::PoRep;
@@ -214,7 +208,7 @@ mod tests {
         let lambda = 32;
         let n = 10;
 
-        for i in 0..5 {
+        for i in 1..5 {
             let m = i * 10;
             let prover_id: Vec<u8> = (0..lambda).map(|_| rng.gen()).collect();
             let mut data: Vec<u8> = (0..lambda * n).map(|_| rng.gen()).collect();
@@ -249,46 +243,24 @@ mod tests {
                 "failed to verif (non circuit)"
             );
 
-            let replica_node_commitment = Some(ValueCommitment {
-                // TODO: formalize how this happens, as this is currently lossy
-                // we would need 4 u64, not just a single
-                value: proof_nc
-                    .replica_node
-                    .data
-                    .read_u64::<LittleEndian>()
-                    .expect("failed to read replica data as u64"),
-                randomness: jubjub::fs::Fs::zero(),
-            });
+            let replica_node_commitment = Some(proof_nc.replica_node.data);
 
             let replica_node_path = proof_nc.replica_node.proof.as_options();
             let replica_root = Some(proof_nc.replica_node.proof.root().into());
             let replica_parents_commitments = proof_nc
                 .replica_parents
-                .iter()
-                .map(|(_, mut parent)| {
-                    Some(ValueCommitment {
-                        value: parent
-                            .data
-                            .read_u64::<LittleEndian>()
-                            .expect("failed to read replica parent data as u64"),
-                        randomness: jubjub::fs::Fs::zero(),
-                    })
-                })
+                .clone()
+                .into_iter()
+                .map(|(_, mut parent)| Some(parent.data))
                 .collect();
             let replica_parents_paths = proof_nc
                 .replica_parents
                 .iter()
                 .map(|(_, parent)| parent.proof.as_options())
                 .collect();
-            let data_node_commitment = Some(ValueCommitment {
-                // TODO: formalize how this happens, as this is currently lossy
-                // we would need 4 u64, not just a single
-                value: data_at_node(&data, challenge, lambda)
-                    .expect("failed to read original data")
-                    .read_u64::<LittleEndian>()
-                    .expect("failed to read original data as u64"),
-                randomness: jubjub::fs::Fs::zero(),
-            });
+            let data_node_commitment =
+                Some(data_at_node(&data, challenge, lambda).expect("failed to read original data"));
+
             let data_node_path = proof_nc.node.as_options();
             let data_root = Some(proof_nc.node.root().into());
             let prover_id = Some(prover_id.as_slice());
@@ -297,6 +269,7 @@ mod tests {
             drgporep(
                 &mut cs,
                 params,
+                lambda,
                 replica_node_commitment,     //: Option<ValueCommitment<E>>,
                 replica_node_path,           //: Vec<Option<(E::Fr, bool)>>,
                 replica_root,                //: Option<E::Fr>,
@@ -308,10 +281,10 @@ mod tests {
                 prover_id,                   //: Option<&[u8]>,
             ).expect("failed to synthesize circuit");
 
-            assert!(cs.is_satisfied());
-            assert_eq!(cs.num_constraints(), 7827);
-            assert_eq!(cs.num_inputs(), 49); // depends on how many leafs we prove
-                                             // TODO: go through all inputs and assert them
+            assert!(cs.is_satisfied(), "constraints not satisfied");
+            assert_eq!(cs.num_constraints(), 7827, "wrong number of constraints");
+            assert_eq!(cs.num_inputs(), 49, "wrong number of inputs");
+            // TODO: go through all inputs and assert them
             assert_eq!(cs.get_input(0, "ONE"), Fr::one());
         }
     }
