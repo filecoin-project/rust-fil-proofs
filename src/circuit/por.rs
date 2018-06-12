@@ -1,4 +1,5 @@
 use bellman::{ConstraintSystem, SynthesisError};
+use bit_vec::BitVec;
 use pairing::Engine;
 use sapling_crypto::circuit::boolean::{AllocatedBit, Boolean};
 use sapling_crypto::circuit::{boolean, ecc, num, pedersen_hash};
@@ -116,16 +117,7 @@ pub fn bytes_into_boolean_vec<E: Engine, CS: ConstraintSystem<E>>(
     size: usize,
 ) -> Result<Vec<boolean::Boolean>, SynthesisError> {
     let values = match value {
-        Some(value) => {
-            let mut tmp = Vec::with_capacity(size);
-
-            for input_byte in value {
-                for bit_i in 0..8 {
-                    tmp.push(Some((input_byte >> bit_i) & 1u8 == 1u8))
-                }
-            }
-            tmp
-        }
+        Some(value) => BitVec::from_bytes(value).iter().map(Some).collect(),
         None => vec![None; size],
     };
 
@@ -208,15 +200,16 @@ mod tests {
         let params = &JubjubBls12::new();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let leaf_count = 32;
+        let leaf_count = 6;
         let leaf_size = 32;
 
-        for i in 0..10 {
+        for i in 0..6 {
             let data: Vec<u8> = (0..leaf_count * leaf_size).map(|_| rng.gen()).collect();
 
             let graph = drgraph::Graph::new(leaf_count, Some(drgraph::Sampling::Bucket(3)));
             let tree = graph.merkle_tree(data.as_slice(), leaf_size).unwrap();
             let merkle_proof = tree.gen_proof(i);
+            let leaf = merkle_proof.item();
             let auth_path = proof_into_options(merkle_proof);
             let value_commitment = data_at_node(data.as_slice(), i + 1, leaf_size).unwrap();
 
@@ -234,7 +227,7 @@ mod tests {
             ).unwrap();
 
             assert_eq!(cs.num_inputs(), 2, "wrong number of inputs");
-            assert_eq!(cs.num_constraints(), 7609, "wrong number of constraints");
+            assert_eq!(cs.num_constraints(), 4845, "wrong number of constraints");
             assert_eq!(cs.get_input(0, "ONE"), Fr::one(), "wrong input 0");
             assert_eq!(
                 cs.get_input(1, "root/input variable"),
@@ -242,7 +235,6 @@ mod tests {
                 "wrong input 1"
             );
 
-            println!("{:?}", cs.which_is_unsatisfied().unwrap());
             assert!(cs.is_satisfied(), "constraints are not all satisfied");
         }
     }
