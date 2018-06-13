@@ -1,5 +1,3 @@
-use bit_vec::BitVec;
-use byteorder::{LittleEndian, WriteBytesExt};
 use merkle_light::hash::Algorithm;
 use merkle_light::merkle;
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
@@ -7,7 +5,8 @@ use pairing::{BitIterator, PrimeField};
 use sapling_crypto::jubjub::JubjubBls12;
 use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 use std::hash::Hasher;
-use std::iter::FromIterator;
+
+use util::bytes_into_bits;
 
 lazy_static! {
     static ref HASH_PARAMS: JubjubBls12 = JubjubBls12::new();
@@ -71,7 +70,7 @@ impl AsRef<[u8]> for PedersenHash {
 impl Hasher for PedersenAlgorithm {
     #[inline]
     fn write(&mut self, msg: &[u8]) {
-        let bv = BitVec::from_bytes(msg);
+        let bv = bytes_into_bits(msg);
         let pt = pedersen_hash::<Bls12, _>(Personalization::NoteCommitment, bv, &HASH_PARAMS);
         self.0 = pt.into_xy().0
     }
@@ -129,27 +128,6 @@ impl From<PedersenHash> for Fr {
     fn from(val: PedersenHash) -> Self {
         val.0
     }
-}
-
-pub fn merkle_tree_from_u64(data: Vec<u64>) -> MerkleTree {
-    MerkleTree::from_iter(data.into_iter().map(|x| pedersen_hash_u64(x).into()))
-}
-
-pub fn pedersen_hash_u64(value: u64) -> Fr {
-    let mut contents = vec![];
-
-    // Writing the value in little endian
-    (&mut contents).write_u64::<LittleEndian>(value).unwrap();
-
-    pedersen_hash::<Bls12, _>(
-        // TODO: what is the right type of personalization?
-        Personalization::NoteCommitment,
-        contents
-            .into_iter()
-            .flat_map(|byte| (0..8).map(move |i| ((byte >> i) & 1) == 1)),
-        &HASH_PARAMS,
-    ).into_xy()
-        .0
 }
 
 #[cfg(test)]

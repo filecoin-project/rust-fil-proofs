@@ -11,7 +11,6 @@ merkle_light = { git = "https://github.com/dignifiedquire/merkle_light", branch 
 openssl = "*"
 failure = "0.1"
 bellman = "0.1"
-bit-vec = "0.5.0"
 byteorder = "1"
 lazy_static = "1.0"
 

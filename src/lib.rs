@@ -5,7 +5,6 @@ extern crate ring;
 #[macro_use]
 extern crate failure;
 extern crate bellman;
-extern crate bit_vec;
 extern crate blake2_rfc;
 extern crate byteorder;
 extern crate pairing;

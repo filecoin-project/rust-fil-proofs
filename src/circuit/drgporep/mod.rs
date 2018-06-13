@@ -4,7 +4,8 @@ use sapling_crypto::circuit::boolean::{self, Boolean};
 use sapling_crypto::jubjub::JubjubEngine;
 
 use circuit::kdf::kdf;
-use circuit::por::{bytes_into_boolean_vec, proof_of_retrievability};
+use circuit::por::proof_of_retrievability;
+use util::bytes_into_boolean_vec;
 
 // TODO: what is the right size?
 // TODO: can we make this configurable at runtime?
@@ -121,13 +122,7 @@ where
     // generate the encryption key
     let key = {
         let mut ns = cs.namespace(|| "kdf");
-        kdf(
-            &mut ns,
-            prover_id_bits,
-            parents_bits,
-            // TODO: what about the persona??
-            b"12345678",
-        )?
+        kdf(&mut ns, prover_id_bits, parents_bits)?
     };
 
     // decrypt the data of the replica_node
@@ -189,7 +184,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use byteorder::{LittleEndian, ReadBytesExt};
     use circuit::test::*;
     use drgporep;
     use pairing::bls12_381::*;
@@ -197,7 +191,7 @@ mod tests {
     use porep::PoRep;
     use proof::ProofScheme;
     use rand::{Rng, SeedableRng, XorShiftRng};
-    use sapling_crypto::jubjub::{self, JubjubBls12};
+    use sapling_crypto::jubjub::JubjubBls12;
     use util::data_at_node;
 
     #[test]

@@ -1,10 +1,8 @@
 use bellman::{ConstraintSystem, SynthesisError};
-use bit_vec::BitVec;
-use pairing::Engine;
-use sapling_crypto::circuit::boolean::{AllocatedBit, Boolean};
-use sapling_crypto::circuit::{boolean, ecc, num, pedersen_hash};
-use sapling_crypto::jubjub::{FixedGenerators, JubjubEngine};
-use sapling_crypto::primitives::ValueCommitment;
+use sapling_crypto::circuit::{boolean, num, pedersen_hash};
+use sapling_crypto::jubjub::JubjubEngine;
+
+use util::bytes_into_boolean_vec;
 
 /// create a proof of retrievability with the following inputs:
 ///
@@ -111,79 +109,6 @@ where
     Ok(())
 }
 
-pub fn bytes_into_boolean_vec<E: Engine, CS: ConstraintSystem<E>>(
-    mut cs: CS,
-    value: Option<&[u8]>,
-    size: usize,
-) -> Result<Vec<boolean::Boolean>, SynthesisError> {
-    let values = match value {
-        Some(value) => BitVec::from_bytes(value).iter().map(Some).collect(),
-        None => vec![None; size],
-    };
-
-    let bits = values
-        .into_iter()
-        .enumerate()
-        .map(|(i, b)| {
-            Ok(Boolean::from(AllocatedBit::alloc(
-                cs.namespace(|| format!("bit {}", i)),
-                b,
-            )?))
-        })
-        .collect::<Result<Vec<_>, SynthesisError>>()?;
-
-    Ok(bits)
-}
-
-/// Exposes a Pedersen commitment to the value as an input to the circuit.
-pub fn expose_value_commitment<E, CS>(
-    mut cs: CS,
-    value_commitment: Option<ValueCommitment<E>>,
-    params: &E::Params,
-) -> Result<Vec<boolean::Boolean>, SynthesisError>
-where
-    E: JubjubEngine,
-    CS: ConstraintSystem<E>,
-{
-    // Booleanize the value into little-endian bit order
-    let value_bits = boolean::u64_into_boolean_vec_le(
-        cs.namespace(|| "value"),
-        value_commitment.as_ref().map(|c| c.value),
-    )?;
-
-    // Compute the value in the exponent
-    let value = ecc::fixed_base_multiplication(
-        cs.namespace(|| "compute the value in the exponent"),
-        FixedGenerators::ValueCommitmentValue,
-        &value_bits,
-        params,
-    )?;
-
-    // Booleanize the randomness. This does not ensure
-    // the bit representation is "in the field" because
-    // it doesn't matter for security.
-    let rcv = boolean::field_into_boolean_vec_le(
-        cs.namespace(|| "rcv"),
-        value_commitment.as_ref().map(|c| c.randomness),
-    )?;
-
-    // Compute the randomness in the exponent
-    let rcv = ecc::fixed_base_multiplication(
-        cs.namespace(|| "computation of rcv"),
-        FixedGenerators::ValueCommitmentRandomness,
-        &rcv,
-        params,
-    )?;
-
-    // Compute the Pedersen commitment to the value
-    let cv = value.add(cs.namespace(|| "computation of cv"), &rcv, params)?;
-
-    // Expose the commitment as an input to the circuit
-    cv.inputize(cs.namespace(|| "commitment point"))?;
-
-    Ok(value_bits)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -209,7 +134,6 @@ mod tests {
             let graph = drgraph::Graph::new(leaf_count, Some(drgraph::Sampling::Bucket(3)));
             let tree = graph.merkle_tree(data.as_slice(), leaf_size).unwrap();
             let merkle_proof = tree.gen_proof(i);
-            let leaf = merkle_proof.item();
             let auth_path = proof_into_options(merkle_proof);
             let value_commitment = data_at_node(data.as_slice(), i + 1, leaf_size).unwrap();
 
@@ -237,25 +161,5 @@ mod tests {
 
             assert!(cs.is_satisfied(), "constraints are not all satisfied");
         }
-    }
-
-    #[test]
-    fn test_bytes_into_boolean_vec() {
-        let mut cs = TestConstraintSystem::<Bls12>::new();
-
-        let data = vec![255, 0];
-        let bits: Vec<bool> = bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), 8)
-            .unwrap()
-            .iter()
-            .map(|b| b.get_value().unwrap())
-            .collect();
-
-        assert_eq!(
-            bits,
-            vec![
-                true, true, true, true, true, true, true, true, false, false, false, false, false,
-                false, false, false,
-            ]
-        );
     }
 }
