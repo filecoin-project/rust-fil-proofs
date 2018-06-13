@@ -39,7 +39,6 @@ fn sloth_dec<'a>(
 ) -> BigUint {
     let (c, k) = (ciphertext, key);
 
-    println!("exp: {:?}", exp);
     // Compute c^exp - k mod p
     (c.modpow(exp, &p) - k).mod_floor(&p)
 }
@@ -67,27 +66,14 @@ fn sloth_enc_bytes_by_chunk(
         .chunks(chunk_size)
         .flat_map(|chunk| {
             let plaintext_chunk = BigUint::from_bytes_le(chunk);
-            let enc = sloth_enc(key, &plaintext_chunk, p, v).to_bytes_le();
-            println!(
-                "chunk {:?} length: {:?}; encoded chunk {:?} length: {:?}; out_size: {:?}",
-                chunk,
-                chunk.len(),
-                enc,
-                enc.len(),
-                out_size,
-            );
-            println!(
-                "capacity: {:?}; out_size:{:?}; enc.len() {}",
-                capacity,
-                out_size,
-                enc.len()
-            );
+            let mut enc = sloth_enc(key, &plaintext_chunk, p, v).to_bytes_le();
+            let padding_size = out_size - enc.len();
+            for i in 0..padding_size {
+                enc.push(0);
+            }
             if enc.len() != out_size {
-                unimplemented!("encoded chunk wrong size")
-                let padding_needed = out_size - enc.len();
-                // FIXME: prepend padding and return.
+                unreachable!("encoded chunk wrong size");
             };
-
             enc
         })
         .collect()
@@ -111,7 +97,6 @@ fn sloth_dec_bytes_by_chunk(
 ) -> Vec<u8> {
     let in_size = bytes_needed(p);
     let capacity = bytes_capacity(p);
-    println!("DECRYPTING in_size {}; capacity {}; ", in_size, capacity);
     assert!(chunk_size <= in_size);
     assert!(bytes_needed(&key) <= capacity);
     ciphertext
@@ -119,15 +104,6 @@ fn sloth_dec_bytes_by_chunk(
         .flat_map(|chunk| {
             let ciphertext_chunk = BigUint::from_bytes_le(chunk);
             let dec = sloth_dec(&key, &ciphertext_chunk, p, v, exp).to_bytes_le();
-            println!(
-                "DEC chunk {:?} length: {:?}; decoded chunk {:?} length: {:?}; in_size: {:?}",
-                chunk,
-                chunk.len(),
-                dec,
-                dec.len(),
-                in_size
-            );
-            println!("decrypted: {:?}", dec);
             dec
         })
         .collect()
@@ -149,28 +125,17 @@ fn sloth_dec_bytes(
 }
 
 fn bytes_capacity(p: &BigUint) -> usize {
-    let raw_bits = p.bits();
-    let shift = raw_bits - 1;
-    let full: BigUint = &((p >> shift) << raw_bits) - BigUint::from(1 as u64);
-    assert!(full.bits() == raw_bits);
-
-    let safe_bits = if *p == full { raw_bits } else { raw_bits - 1 };
-    let capacity = safe_bits / 8;
-    println!(
-        "raw {}; shift {}; full {}; safe {}; capacity {}",
-        raw_bits, shift, full, safe_bits, capacity
-    );
-    capacity
+    p.bits() / 8
 }
 
 fn bytes_needed(p: &BigUint) -> usize {
     let bits = p.bits();
-    println!("p.bits() {}", bits);
-    if (bits % 8 == 0) {
+    let needed = if (bits % 8 == 0) {
         bits / 8
     } else {
         (bits + 7) / 8
-    }
+    };
+    needed
 }
 
 #[cfg(test)]
@@ -197,15 +162,12 @@ mod tests {
 
     fn sloth_enc_dec_bytes(key: &[u8], plaintext: &[u8], p: &BigUint, v: &BigUint, exp: &BigUint) {
         let k = b"thekey";
-        println!("-->plaintext bytes {}", plaintext.len());
         let encrypted = sloth_enc_bytes(key, plaintext, p, v);
-        println!("-->encrypted bytes {}", encrypted.len());
         assert_ne!(&encrypted, &plaintext);
 
         // TODO: Add tests more explicitly establishing the expected length of ciphertext.
         assert!(&encrypted.len() >= &plaintext.len());
         let decrypted = sloth_dec_bytes(key, &encrypted, p, v, exp);
-        println!("-->decrypted bytes {}", decrypted.len());
         assert_eq!(&decrypted, &plaintext);
     }
 
