@@ -47,7 +47,7 @@ fn recursive_encode(
     let start = data_at_node_offset(node, lambda);
     let end = start + lambda;
 
-    let encoded = crypto::encode(key.as_slice(), &data[start..end])?;
+    let encoded = crypto::xor::encode(key.as_slice(), &data[start..end])?;
 
     data[start..end].clone_from_slice(encoded.as_slice());
     cache[node - 1] = true;
@@ -81,7 +81,7 @@ pub fn decode_block<'a>(
     let key = create_key(prover_id, &parents, data, lambda)?;
     let node_data = data_at_node(data, v, lambda)?;
 
-    crypto::decode(key.as_slice(), node_data)
+    crypto::xor::decode(key.as_slice(), node_data)
 }
 
 fn create_key(id: &[u8], parents: &[usize], data: &[u8], node_size: usize) -> Result<Vec<u8>> {

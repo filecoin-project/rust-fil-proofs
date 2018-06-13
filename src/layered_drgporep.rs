@@ -378,8 +378,8 @@ mod tests {
         for i in 1..2 {
             let m = i * 10;
             let lambda = lambda;
-            let prover_id = vec![rng.gen(); lambda];
-            let data = vec![rng.gen(); lambda * n];
+            let prover_id: Vec<u8> = (0..lambda).map(|_| rng.gen()).collect();
+            let data: Vec<u8> = (0..lambda * n).map(|_| rng.gen()).collect();
             // create a copy, so we can compare roundtrips
             let mut data_copy = data.clone();
             let challenge = 1;

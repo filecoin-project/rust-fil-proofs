@@ -1,4 +1,4 @@
-use crypto::{decode, kdf};
+use crypto::{kdf, xor};
 use drgraph::{Graph, MerkleProof, Sampling};
 use porep::{self, PoRep};
 use util::data_at_node;
@@ -147,7 +147,7 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
             },
         );
         let key = kdf::kdf(ciphertexts.as_slice());
-        let unsealed = decode(&key, proof.replica_node.data)?;
+        let unsealed = xor::decode(&key, proof.replica_node.data)?;
 
         Ok(proof.node.validate_data(&unsealed))
     }
