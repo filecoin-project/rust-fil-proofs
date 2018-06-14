@@ -9,8 +9,7 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - cargo-v1-{{ checksum "Cargo.toml" }}-
-            - cargo-v1-
+            - cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}
       - run: cargo update
       - run: cargo fetch
       - persist_to_workspace:
@@ -105,12 +104,37 @@ jobs:
           name: Run cargo fmt
           command: cargo fmt -- --check
 
+  clippy:
+    docker:
+      - image: rustlang/rust:nightly
+    working_directory: /mnt/crate
+    steps:
+      - checkout
+      - attach_workspace:
+          at: "."
+      - restore_cache:
+          keys:
+            - cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}
+      - run:
+          name: Print version information
+          command: rustc --version; cargo --version
+      - run:
+          name: Install clippy
+          # this is not cheap, but I did not find a better way
+          command: cargo install clippy --force
+      - run:
+          name: Run cargo clippy
+          command: cargo clippy
+
 workflows:
   version: 2
   test_all:
     jobs:
       - cargo_fetch
       - rustfmt:
+          requires:
+            - cargo_fetch
+      - clippy:
           requires:
             - cargo_fetch
       - test:
