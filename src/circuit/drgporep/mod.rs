@@ -8,13 +8,14 @@ use circuit::por::proof_of_retrievability;
 use circuit::xor::xor;
 use util::bytes_into_boolean_vec;
 
-/// DRG base Proof of Replication.
+/// DRG based Proof of Replication.
 ///
 /// # Arguments
 ///
 /// * `cs` - Constraint System
 /// * `params` - parameters for the curve
-/// * `replica_node_commitement` - The replica node being proven.
+/// * `commitment_size` - The size of the individual data leaves.
+/// * `replica_node_commitment` - The replica node being proven.
 /// * `replica_node_path` - The path of the replica node being proven.
 /// * `replica_root` - The merkle root of the replica.
 /// * `replica_parents_commitements` - A list of all parents in the replica, with their value.

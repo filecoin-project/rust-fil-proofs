@@ -4,12 +4,15 @@ use sapling_crypto::jubjub::JubjubEngine;
 
 use util::bytes_into_boolean_vec;
 
-/// create a proof of retrievability with the following inputs:
+/// Create a proof of retrievability.
 ///
-/// params - params for the bls curve
-/// value_commitment - Pedersen commitment to the value
-/// auth_path - The authentication path of the commitment in the tree
-/// root - merkle root of the tree
+/// # Arguments
+///
+/// * `params` - The params for the bls curve.
+/// * `value_commitment` - The value of the leaf.
+/// * `value_commitment_size` - The size of the leaf.
+/// * `auth_path` - The authentication path of the leaf in the tree.
+/// * `root` - The merkle root of the tree.
 pub fn proof_of_retrievability<E, CS>(
     cs: &mut CS,
     params: &E::Params,
