@@ -45,6 +45,7 @@ impl Iterator for BigUintDigits {
     }
 }
 
+#[derive(Debug)]
 struct Chunks<'a> {
     input: &'a [u8],
     size: usize,
