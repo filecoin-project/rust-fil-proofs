@@ -56,22 +56,22 @@ mod tests {
         let params = &JubjubBls12::new();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let par_depth = 16;
+        let commitment_count = 16;
         let commitment_size = 32;
 
         for _ in 0..5 {
-            let data: Vec<u8> = (0..commitment_size * par_depth)
+            let data: Vec<u8> = (0..commitment_size * commitment_count)
                 .map(|_| rng.gen())
                 .collect();
 
-            let value_commitments: Vec<Option<_>> = (0..par_depth)
+            let value_commitments: Vec<Option<_>> = (0..commitment_count)
                 .map(|i| Some(data_at_node(data.as_slice(), i + 1, commitment_size).unwrap()))
                 .collect();
 
-            let graph = drgraph::Graph::new(par_depth, None);
+            let graph = drgraph::Graph::new(commitment_count, None);
             let tree = graph.merkle_tree(data.as_slice(), commitment_size).unwrap();
 
-            let auth_paths: Vec<Vec<Option<(Fr, bool)>>> = (0..par_depth)
+            let auth_paths: Vec<Vec<Option<(Fr, bool)>>> = (0..commitment_count)
                 .map(|i| proof_into_options(tree.gen_proof(i)))
                 .collect();
 

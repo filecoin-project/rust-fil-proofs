@@ -3,6 +3,8 @@ use sapling_crypto::circuit::blake2s::blake2s;
 use sapling_crypto::circuit::boolean::Boolean;
 use sapling_crypto::jubjub::JubjubEngine;
 
+const EMPTY_PERSONA: [u8; 8] = [0u8; 8];
+
 pub fn kdf<E, CS>(
     cs: &mut CS,
     id: Vec<Boolean>,
@@ -15,15 +17,13 @@ where
     // ciphertexts will become a buffer of the layout
     // id | encodedParentNode1 | encodedParentNode1 | ...
     let ciphertexts = parents.into_iter().fold(id, |mut acc, parent| {
-        for bit in parent {
-            acc.push(bit);
-        }
+        acc.extend(parent);
         acc
     });
 
     {
         let cs = cs.namespace(|| "blake2s");
-        blake2s(cs, ciphertexts.as_slice(), &[0u8; 8])
+        blake2s(cs, ciphertexts.as_slice(), &EMPTY_PERSONA)
     }
 }
 
