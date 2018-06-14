@@ -190,7 +190,7 @@ mod tests {
         pack_test(&[1; 987], p.clone(), 31, true);
         pack_test(&[1; 987], p.clone(), 30, false); // 30 is not enough.
 
-        // But in the unaligned case, 987 bytes requires 32 31-byte chunks to fit completely, for a total of 1024 bytes.
+        // But in the unaligned case, 987 bytes requires 32 31-byte chunks to fit completely, for a total of 32 x 32 encrypted = 1024  bytes.
         // Packing into base-p still takes 31 * 32 = 992 bytes, for a savings of 1024 - 992 = 32 bytes.
 
         // TODO: formalize this computation to allow selection of an optimal chunk-size,
