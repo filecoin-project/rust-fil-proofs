@@ -1,0 +1,96 @@
+use bellman::{ConstraintSystem, SynthesisError};
+use sapling_crypto::circuit::boolean::Boolean;
+use sapling_crypto::jubjub::JubjubEngine;
+
+pub fn xor<E, CS>(
+    cs: &mut CS,
+    key: &[Boolean],
+    input: &[Boolean],
+) -> Result<Vec<Boolean>, SynthesisError>
+where
+    E: JubjubEngine,
+    CS: ConstraintSystem<E>,
+{
+    let key_len = key.len();
+    assert_eq!(key_len, 32 * 8);
+
+    input
+        .iter()
+        .enumerate()
+        .map(|(i, byte)| {
+            Boolean::xor(
+                cs.namespace(|| format!("xor bit: {}", i)),
+                byte,
+                &key[i % key_len],
+            )
+        })
+        .collect::<Result<Vec<_>, SynthesisError>>()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::xor;
+    use bellman::ConstraintSystem;
+    use circuit::test::TestConstraintSystem;
+    use crypto;
+    use pairing::bls12_381::Bls12;
+    use rand::{Rng, SeedableRng, XorShiftRng};
+    use sapling_crypto::circuit::boolean::Boolean;
+    use util::{bits_into_bytes, bytes_into_boolean_vec};
+
+    #[test]
+    fn test_xor_input_circut() {
+        let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        for i in 0..10 {
+            let mut cs = TestConstraintSystem::<Bls12>::new();
+
+            let key: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
+            let data: Vec<u8> = (0..(i + 1) * 32).map(|_| rng.gen()).collect();
+
+            let key_bits: Vec<Boolean> = {
+                let mut cs = cs.namespace(|| "key");
+                bytes_into_boolean_vec(&mut cs, Some(key.as_slice()), key.len()).unwrap()
+            };
+
+            let data_bits: Vec<Boolean> = {
+                let mut cs = cs.namespace(|| "data bits");
+                bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).unwrap()
+            };
+
+            let out_bits = xor(&mut cs, key_bits.as_slice(), data_bits.as_slice()).unwrap();
+
+            assert!(cs.is_satisfied(), "constraints not satisfied");
+            assert_eq!(out_bits.len(), data_bits.len(), "invalid output length");
+
+            // convert Vec<Boolean> to Vec<u8>
+            let actual = bits_into_bytes(
+                out_bits
+                    .iter()
+                    .map(|v| v.get_value().unwrap())
+                    .collect::<Vec<bool>>()
+                    .as_slice(),
+            );
+
+            let expected = crypto::xor::encode(key.as_slice(), data.as_slice()).unwrap();
+
+            assert_eq!(expected, actual, "circuit and non circuit do not match");
+
+            // -- roundtrip
+            let roundtrip_bits = {
+                let mut cs = cs.namespace(|| "roundtrip");
+                xor(&mut cs, key_bits.as_slice(), out_bits.as_slice()).unwrap()
+            };
+
+            let roundtrip = bits_into_bytes(
+                roundtrip_bits
+                    .iter()
+                    .map(|v| v.get_value().unwrap())
+                    .collect::<Vec<bool>>()
+                    .as_slice(),
+            );
+
+            assert_eq!(data, roundtrip, "failed to roundtrip");
+        }
+    }
+}

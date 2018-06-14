@@ -43,7 +43,6 @@ impl MerkleProof {
 
     /// Validates the MerkleProof
     pub fn validate(&self) -> bool {
-        println!("validating: {:?}", self.path);
         let mut a = TreeAlgorithm::default();
 
         self.root() == (0..self.path.len()).fold(self.leaf, |h, i| {
@@ -55,7 +54,7 @@ impl MerkleProof {
             } else {
                 (h, self.path[i].0)
             };
-            println!("{:?} {:?}, {}", left, right, i);
+
             a.node(left, right, i)
         })
     }
@@ -66,7 +65,7 @@ impl MerkleProof {
         data.hash(&mut a);
         let item_hash = a.hash();
         let leaf_hash = a.leaf(item_hash);
-        println!("leaf_hash: {:?}", leaf_hash);
+
         leaf_hash == self.leaf()
     }
 
@@ -408,7 +407,6 @@ mod tests {
             let proof = tree.gen_proof(i);
 
             assert!(proof.validate::<TreeAlgorithm>());
-            println!("proof: {:?} {:?}", proof.lemma(), proof.path());
             let len = proof.lemma().len();
             let mp: MerkleProof = proof.into();
 
