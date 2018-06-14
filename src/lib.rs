@@ -1,3 +1,4 @@
+#![feature(extern_prelude)]
 extern crate merkle_light;
 extern crate openssl;
 extern crate rand;
@@ -5,6 +6,7 @@ extern crate ring;
 #[macro_use]
 extern crate failure;
 extern crate bellman;
+extern crate bigdecimal;
 extern crate blake2_rfc;
 extern crate byteorder;
 extern crate num_bigint;
