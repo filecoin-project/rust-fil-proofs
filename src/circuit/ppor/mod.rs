@@ -93,16 +93,11 @@ mod tests {
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
 
-            assert_eq!(cs.num_inputs(), 17, "wrong number of inputs");
+            assert_eq!(cs.num_inputs(), 33, "wrong number of inputs");
             assert_eq!(cs.get_input(0, "ONE"), Fr::one());
-            assert_eq!(cs.get_input(1, "round: 0/root/input variable"), root.into());
-            assert_eq!(cs.get_input(2, "round: 1/root/input variable"), root.into());
-            assert_eq!(cs.get_input(3, "round: 2/root/input variable"), root.into());
-
-            assert_eq!(
-                cs.get_input(16, "round: 15/root/input variable"),
-                root.into()
-            );
+            assert_eq!(cs.get_input(2, "round: 0/root/input variable"), root.into());
+            assert_eq!(cs.get_input(4, "round: 1/root/input variable"), root.into());
+            assert_eq!(cs.get_input(6, "round: 2/root/input variable"), root.into());
         }
     }
 }

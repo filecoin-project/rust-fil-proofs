@@ -99,6 +99,10 @@ impl MerkleProof {
 
         out
     }
+
+    pub fn path(&self) -> &Vec<(TreeHash, bool)> {
+        &self.path
+    }
 }
 
 impl Into<MerkleProof> for proof::Proof<TreeHash> {
@@ -179,7 +183,12 @@ impl Graph {
     /// Builds a merkle tree based on the given data.
     pub fn merkle_tree<'a>(&self, data: &'a [u8], node_size: usize) -> Result<MerkleTree> {
         if data.len() != node_size * self.nodes {
-            return Err(format_err!("missmatch of data, node_size and nodes"));
+            return Err(format_err!(
+                "missmatch of data, node_size and nodes {} != {} * {}",
+                data.len(),
+                node_size,
+                self.nodes
+            ));
         }
 
         if !(node_size == 16 || node_size == 32 || node_size == 64) {
