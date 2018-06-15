@@ -69,4 +69,19 @@ mod tests {
         assert!(cs.is_satisfied());
         assert_eq!(out, decrypted);
     }
+    #[test]
+    fn test_snark_sloth_dec_bad() {
+        let key = Fr::from_str("11111111").unwrap();
+        let key_bad = Fr::from_str("11111112").unwrap();
+        let plaintext = Fr::from_str("123456789").unwrap();
+        let ciphertext = sloth::encode::<Bls12>(&key, &plaintext);
+
+        // Vanilla
+        let decrypted = sloth::decode::<Bls12>(&key, &ciphertext);
+        let mut cs = TestConstraintSystem::<Bls12>::new();
+        let out = decode(&mut cs, key_bad, ciphertext).unwrap();
+
+        assert!(cs.is_satisfied());
+        assert_ne!(out, decrypted);
+    }
 }
