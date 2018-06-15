@@ -25,6 +25,7 @@ use util::bytes_into_boolean_vec;
 /// * `data_node_path` - The path of the data node being proven.
 /// * `data_root` - The merkle root of the data.
 /// * `prover_id` - The id of the prover
+/// * `m` -
 ///
 ///
 /// # Public Inputs
@@ -54,6 +55,7 @@ pub fn drgporep<E, CS>(
     data_node_path: Vec<Option<(E::Fr, bool)>>,
     data_root: Option<E::Fr>,
     prover_id: Option<&[u8]>,
+    m: usize,
 ) -> Result<(), SynthesisError>
 where
     E: JubjubEngine,
@@ -120,10 +122,13 @@ where
     };
 
     // generate the encryption key
-    let key = {
-        let mut ns = cs.namespace(|| "kdf");
-        kdf(&mut ns, prover_id_bits, parents_bits)?
-    };
+    let key = kdf(
+        cs.namespace(|| "kdf"),
+        params,
+        prover_id_bits,
+        parents_bits,
+        m,
+    )?;
 
     // decrypt the data of the replica_node
     let encoded_bits = bytes_into_boolean_vec(
@@ -281,6 +286,7 @@ mod tests {
             data_node_path,
             data_root,
             prover_id,
+            m,
         ).expect("failed to synthesize circuit");
 
         if !cs.is_satisfied() {

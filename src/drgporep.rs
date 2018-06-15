@@ -26,7 +26,7 @@ pub struct SetupParams {
     pub drg: DrgParams,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DrgParams {
     pub n: usize,
     pub m: usize,
@@ -89,6 +89,8 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
         let graph = Graph::new(sp.drg.n, Some(Sampling::Bucket(sp.drg.m)));
 
+        println!("graph: {:?}", graph);
+
         Ok(PublicParams {
             lambda: sp.lambda,
             graph,
@@ -106,7 +108,11 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
         let tree_r = &priv_inputs.aux.tree_r;
         let replica = priv_inputs.replica;
 
-        let d = data_at_node(replica, challenge + 1, pub_params.lambda)?;
+        let d = if challenge == 0 {
+            &b""[..]
+        } else {
+            data_at_node(replica, challenge + 1, pub_params.lambda)?
+        };
         let replica_node = DataProof {
             proof: tree_r.gen_proof(challenge).into(),
             data: d,
@@ -131,7 +137,7 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
     }
 
     fn verify(
-        _pub_params: &Self::PublicParams,
+        pub_params: &Self::PublicParams,
         pub_inputs: &Self::PublicInputs,
         proof: &Self::Proof,
     ) -> Result<bool> {
@@ -139,26 +145,39 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
         // useful when debugging. What to do…
 
         if !proof.replica_node.proof.validate() {
+            println!("invalid replica node");
             return Ok(false);
         }
 
         for (_, p) in &proof.replica_parents {
             if !p.proof.validate() {
+                println!("invalid replica parent: {:?}", p);
                 return Ok(false);
             }
         }
 
-        let ciphertexts = proof.replica_parents.iter().fold(
+        // we can't prove node 1 for now
+        let challenge = pub_inputs.challenge % pub_params.graph.size();
+        if challenge == 0 {
+            return Ok(true);
+        }
+
+        let key_input = proof.replica_parents.iter().fold(
             pub_inputs.prover_id.to_vec(),
             |mut acc, (_, p)| {
                 acc.extend(p.data);
                 acc
             },
         );
-        let key = kdf::kdf(ciphertexts.as_slice());
+        let key = kdf::kdf(key_input.as_slice(), pub_params.graph.degree);
         let unsealed = xor::decode(&key, proof.replica_node.data)?;
 
-        Ok(proof.node.validate_data(&unsealed))
+        if !proof.node.validate_data(&unsealed) {
+            println!("invalid data {:?}", unsealed);
+            return Ok(false);
+        }
+
+        Ok(true)
     }
 }
 
@@ -203,10 +222,10 @@ mod tests {
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]
-    fn test_extract_all() {
-        let lambda = 16;
-        let prover_id = vec![1u8; 16];
-        let data = vec![2u8; 16 * 3];
+    fn extract_all() {
+        let lambda = 32;
+        let prover_id = vec![1u8; 32];
+        let data = vec![2u8; 32 * 3];
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
 
@@ -222,81 +241,76 @@ mod tests {
 
         DrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
 
-        assert_ne!(data, data_copy);
+        assert_ne!(data, data_copy, "replication did not change data");
 
         let decoded_data =
             DrgPoRep::extract_all(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
 
-        assert_eq!(data, decoded_data);
+        assert_eq!(data, decoded_data, "failed to extract data");
     }
 
-    fn prove_verify(lambda: usize, n: usize) {
+    fn prove_verify(lambda: usize, n: usize, i: usize) {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        for i in 1..10 {
-            let m = i * 10;
-            let lambda = lambda;
-            let prover_id = vec![rng.gen(); lambda];
-            let data = vec![rng.gen(); lambda * n];
-            // create a copy, so we can comare roundtrips
-            let mut data_copy = data.clone();
-            let challenge = 1;
+        let m = i * 10;
+        let lambda = lambda;
 
-            let sp = SetupParams {
-                lambda: lambda,
-                drg: DrgParams { n: n, m: m },
-            };
+        let prover_id: Vec<u8> = (0..lambda).map(|_| rng.gen()).collect();
+        let data: Vec<u8> = (0..lambda * n).map(|_| rng.gen()).collect();
 
-            let pp = DrgPoRep::setup(&sp).unwrap();
+        // create a copy, so we can comare roundtrips
+        let mut data_copy = data.clone();
+        let challenge = i;
 
-            let (tau, aux) =
-                DrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
+        let sp = SetupParams {
+            lambda,
+            drg: DrgParams { n, m },
+        };
 
-            assert_ne!(data, data_copy);
+        let pp = DrgPoRep::setup(&sp).unwrap();
 
-            let pub_inputs = PublicInputs {
-                prover_id: prover_id.as_slice(),
-                challenge: challenge,
-                tau: &tau,
-            };
+        let (tau, aux) =
+            DrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
 
-            let priv_inputs = PrivateInputs {
-                replica: data_copy.as_slice(),
-                aux: &aux,
-            };
+        assert_ne!(data, data_copy, "replication did not change data");
 
-            let proof = DrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
-            assert!(DrgPoRep::verify(&pp, &pub_inputs, &proof).unwrap());
+        let pub_inputs = PublicInputs {
+            prover_id: prover_id.as_slice(),
+            challenge: challenge,
+            tau: &tau,
+        };
+
+        let priv_inputs = PrivateInputs {
+            replica: data_copy.as_slice(),
+            aux: &aux,
+        };
+
+        let proof = DrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
+        assert!(
+            DrgPoRep::verify(&pp, &pub_inputs, &proof).unwrap(),
+            "failed to verify"
+        );
+    }
+
+    table_tests!{
+        prove_verify {
+            prove_verify_32_2_1(32, 2, 1);
+            prove_verify_32_2_2(32, 2, 2);
+            prove_verify_32_2_3(32, 2, 3);
+            prove_verify_32_2_4(32, 2, 4);
+            prove_verify_32_2_5(32, 2, 5);
+
+            prove_verify_32_3_1(32, 3, 1);
+            prove_verify_32_3_2(32, 3, 2);
+            prove_verify_32_3_3(32, 3, 3);
+            prove_verify_32_3_4(32, 3, 4);
+            prove_verify_32_3_5(32, 3, 5);
+
+            prove_verify_32_10_1(32, 10, 1);
+            prove_verify_32_10_2(32, 10, 2);
+            prove_verify_32_10_3(32, 10, 3);
+            prove_verify_32_10_4(32, 10, 4);
+            prove_verify_32_10_5(32, 10, 5);
         }
-    }
-
-    #[test]
-    fn test_prove_verify_16_2() {
-        prove_verify(16, 2);
-    }
-
-    #[test]
-    fn test_prove_verify_16_3() {
-        prove_verify(16, 3);
-    }
-
-    #[test]
-    fn test_prove_verify_16_10() {
-        prove_verify(16, 10);
-    }
-
-    #[test]
-    fn test_prove_verify_32_2() {
-        prove_verify(32, 2);
-    }
-
-    #[test]
-    fn test_prove_verify_32_3() {
-        prove_verify(32, 3);
-    }
-
-    #[test]
-    fn test_prove_verify_32_10() {
-        prove_verify(32, 10);
     }
 }

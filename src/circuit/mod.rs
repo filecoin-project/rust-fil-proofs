@@ -1,5 +1,6 @@
 pub mod drgporep;
 pub mod kdf;
+pub mod pedersen;
 pub mod por;
 pub mod ppor;
 pub mod sloth;

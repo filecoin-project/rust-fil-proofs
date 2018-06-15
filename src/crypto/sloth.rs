@@ -1,5 +1,5 @@
 use error::Result;
-use fr32::{bytes_into_frs, fr_into_bytes, Fr32, Fr32Vec};
+use fr32::{bytes_into_frs, fr_into_bytes, Fr32Vec};
 use pairing::{Engine, Field};
 
 /// The `v` constant for sloth.
