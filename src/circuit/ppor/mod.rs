@@ -4,15 +4,24 @@ use sapling_crypto::jubjub::JubjubEngine;
 use circuit::por::proof_of_retrievability;
 
 /// This is an instance of the `ParallelProofOfRetrievability` circuit.
+///
+/// # Public Inputs
+///
+/// This circuit expects the following public inputs.
+///
+/// * for i in 0..values.len()
+///   * [0] - packed version of `value` as bits. (might be more than one Fr)
+///   * [1] - packed version of the `is_right` components of the auth_path.
+///   * [2] - the merkle root of the tree.
 pub struct ParallelProofOfRetrievability<'a, E: JubjubEngine> {
     /// Paramters for the engine.
     pub params: &'a E::Params,
 
     /// Pedersen commitment to the value.
-    pub value_commitments: Vec<Option<&'a [u8]>>,
+    pub values: Vec<Option<&'a [u8]>>,
 
     /// The size of a single commitment in bits.
-    pub commitment_size: usize,
+    pub lambda: usize,
 
     /// The authentication path of the commitment in the tree.
     pub auth_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
@@ -23,15 +32,14 @@ pub struct ParallelProofOfRetrievability<'a, E: JubjubEngine> {
 
 impl<'a, E: JubjubEngine> Circuit<E> for ParallelProofOfRetrievability<'a, E> {
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        assert_eq!(self.value_commitments.len(), self.auth_paths.len());
+        assert_eq!(self.values.len(), self.auth_paths.len());
 
-        for i in 0..self.value_commitments.len() {
-            let mut ns = cs.namespace(|| format!("round: {}", i));
+        for i in 0..self.values.len() {
             proof_of_retrievability(
-                &mut ns,
+                cs.namespace(|| format!("round: {}", i)),
                 self.params,
-                self.value_commitments[i],
-                self.commitment_size,
+                self.values[i],
+                self.lambda,
                 self.auth_paths[i].clone(),
                 self.root,
             )?;
@@ -102,14 +110,14 @@ mod tests {
             }
 
             let auth_paths: Vec<_> = proofs.iter().map(|p| p.proof.as_options()).collect();
-            let value_commitments: Vec<_> = proofs.iter().map(|p| Some(p.data)).collect();
+            let values: Vec<_> = proofs.iter().map(|p| Some(p.data)).collect();
 
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
             let instance = ParallelProofOfRetrievability {
                 params,
-                commitment_size: pub_params.lambda,
-                value_commitments: value_commitments,
+                lambda: pub_params.lambda,
+                values: values,
                 auth_paths: auth_paths,
                 root: Some(tree.root().into()),
             };
@@ -120,7 +128,7 @@ mod tests {
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
 
-            assert_eq!(cs.num_inputs(), 33, "wrong number of inputs");
+            assert_eq!(cs.num_inputs(), 65, "wrong number of inputs");
             assert_eq!(cs.get_input(0, "ONE"), Fr::one());
         }
     }
