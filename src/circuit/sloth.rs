@@ -18,7 +18,7 @@ where
     // [  0  1  0  0  0 ] // a
     // [  0  1  0  0  0 ] // b
     // [  0  0  1  0  0 ] // c
-    // c1 * c1 = out
+    // c1 * c1 = c2
     tmp_value.square();
     let c2 = cs.alloc(|| "c2", || Ok(tmp_value))?;
     cs.enforce(|| "c2 = (c)^2", |lc| lc + c, |lc| lc + c, |lc| lc + c2);
@@ -28,7 +28,7 @@ where
     // [  0  0  1  0  0 ] // a
     // [  0  0  1  0  0 ] // b
     // [  0  0  0  1  0 ] // c
-    // c2 * c2 = out
+    // c2 * c2 = c4
     tmp_value.square();
     let c4 = cs.alloc(|| "c4", || Ok(tmp_value))?;
     cs.enforce(|| "c4 = (c2)^2", |lc| lc + c2, |lc| lc + c2, |lc| lc + c4);
