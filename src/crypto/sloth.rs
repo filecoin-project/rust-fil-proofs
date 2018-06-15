@@ -11,23 +11,131 @@ lazy_static! {
     static ref TWO: BigUint = BigUint::from(1 as u64);
 }
 
-fn big_from_u64(x: u64) -> BigUint {
-    match BigUint::from_u64(x) {
-        Some(b) => b,
-        None => panic!(),
+trait Sloth {
+    type T;
+    type Err;
+
+    fn enc<'a>(
+        key: &Self::T,
+        plaintext: &Self::T,
+        p: &Self::T,
+        v: &Self::T,
+    ) -> Result<Self::T, Self::Err>;
+
+    fn dec<'a>(
+        key: &Self::T,
+        ciphertext: &Self::T,
+        p: &Self::T,
+        v: &Self::T,
+        exp: &Self::T,
+    ) -> Result<Self::T, Self::Err>;
+}
+
+struct IntSloth {}
+impl Sloth for IntSloth {
+    type T = BigUint;
+    type Err = ();
+
+    fn enc(
+        key: &BigUint,
+        plaintext: &BigUint,
+        p: &BigUint,
+        v: &BigUint,
+    ) -> Result<BigUint, Self::Err> {
+        let (x, k) = (plaintext, key);
+
+        // Compute (x+k)^v mod p.
+        Ok((x + k).modpow(&v, &p))
+    }
+
+    fn dec<'a>(
+        key: &BigUint,
+        ciphertext: &BigUint,
+        p: &BigUint,
+        v: &BigUint,
+        exp: &BigUint,
+    ) -> Result<BigUint, Self::Err> {
+        let (c, k) = (ciphertext, key);
+
+        // Compute c^exp - k mod p
+        Ok((c.modpow(exp, &p) - k).mod_floor(&p))
     }
 }
 
+fn dec(key: &Fr, ciphertext: &Fr, p: &Fr, v: &Fr, exp: &Fr) -> Result<Fr, PrimeFieldDecodingError> {
+    unimplemented!();
+}
+
+fn big(x: u64) -> BigUint {
+    BigUint::from_u64(x).unwrap()
+}
+
 // For later use…
-fn to_fr(n: u64) -> Result<Fr, PrimeFieldDecodingError> {
-    Fr::from_repr(<Fr as PrimeField>::Repr::from(n))
+fn to_fr(n: u64) -> Fr {
+    Fr::from_repr(<Fr as PrimeField>::Repr::from(n)).unwrap()
 }
 
 fn sloth_enc(key: &BigUint, plaintext: &BigUint, p: &BigUint, v: &BigUint) -> BigUint {
-    let (x, k) = (plaintext, key);
+    IntSloth::enc(key, plaintext, p, v).unwrap()
+}
 
-    // Compute (x+k)^v mod p.
-    (x + k).modpow(&v, &p)
+fn big_from_fr(fr: &Fr) -> BigUint {
+    let mut k = vec![];
+    fr.into_repr().write_le(&mut k);
+    BigUint::from_bytes_le(&k)
+}
+
+fn fr_from_bytes(bytes: &[u8]) -> Fr {
+    let mut u = [0u64; 4];
+
+    for i in 0..4 {
+        let mut acc: u64 = 0;
+        for j in 0..4 {
+            acc <<= 8;
+            let index = (i * 4) + (3 - j);
+            let byte = if index >= bytes.len() {
+                0
+            } else {
+                bytes[index]
+            };
+            acc += byte as u64;
+        }
+        u[3 - i] = acc;
+        acc = 0;
+    }
+
+    fr_from_u64s(u)
+}
+
+fn fr_from_u64s(u64s: [u64; 4]) -> Fr {
+    let mut acc = to_fr(0u64);
+
+    let mut xxx = to_fr(0xffffu64);
+    xxx.add_assign(&to_fr(1));
+
+    for u in u64s.iter() {
+        let bf = to_fr(*u);
+        acc.mul_assign(&xxx);
+        acc.add_assign(&bf);
+    }
+    acc
+}
+
+fn sloth_enc_fr(key: &Fr, plaintext: &Fr) -> Fr {
+    let k = big_from_fr(key);
+    let x = big_from_fr(plaintext);
+    let sloth_p = BigUint::parse_bytes(
+        b"20974350070050476191779096203274386335076221000211055129041463479975432473805",
+        10,
+    ).unwrap();
+    let sloth_v: BigUint = BigUint::parse_bytes(
+        b"52435875175126190479447740508185965837690552500527637822603658699938581184513",
+        10,
+    ).unwrap();
+    let res = IntSloth::enc(&k, &x, &sloth_p, &sloth_v).unwrap();
+    let bytes = res.to_bytes_le();
+
+    *key
 }
 
 fn sloth_dec<'a>(
@@ -37,18 +145,7 @@ fn sloth_dec<'a>(
     v: &BigUint,
     exp: &BigUint,
 ) -> BigUint {
-    let (c, k) = (ciphertext, key);
-
-    // Compute c^exp - k mod p
-    (c.modpow(exp, &p) - k).mod_floor(&p)
-}
-
-fn sloth_enc_fr(key: Fr, plaintext: Fr, v: &[u64]) -> Result<Fr, PrimeFieldDecodingError> {
-    unimplemented!();
-}
-
-fn sloth_dec_x<'a>(key: Fr, ciphertext: Fr, v: &[u64]) -> Result<Fr, PrimeFieldDecodingError> {
-    unimplemented!();
+    IntSloth::dec(key, ciphertext, p, v, exp).unwrap()
 }
 
 fn sloth_enc_bytes_by_chunk(
@@ -186,13 +283,44 @@ mod tests {
             &exp,
         );
     }
+    #[test]
+    fn test_biguint_bytes() {
+        let b = BigUint::from(0u64);
+        let bytes = b.to_bytes_le();
+
+        println!("bytes: {:?}", bytes);
+
+        let fr = FrRepr::from(123456789u64);
+        println!("fr: {:?}", fr);
+
+        let sloth_p = BigUint::parse_bytes(
+            b"52435875175126190479447740508185965837690552500527637822603658699938581184513",
+            10,
+        ).unwrap();
+        let p_bytes = BigUint::to_bytes_le(&sloth_p);
+        let p_fr = fr_from_bytes(&p_bytes);
+        println!("p_fr: {:?}", p_fr);
+
+        println!(
+            "MODULUS: {:?}",
+            FrRepr([
+                0xffffffff00000001,
+                0x53bda402fffe5bfe,
+                0x3339d80809a1d805,
+                0x73eda753299d7d48,
+            ])
+        );
+        let xxx = BigUint::parse_bytes(b"123", 10).unwrap();
+        let xxx_bytes = fr_from_bytes(&BigUint::to_bytes_le(&xxx));
+        println!("xxx: {:?}", xxx_bytes);
+    }
 
     #[test]
     fn test_sloth_good_params() {
         // These params are from the original Go implementation and are known good.
         let p = b"135741874269561010210788515394321418560783524050838812444665528300130001644649";
         let v = b"90494582846374006807192343596214279040522349367225874963110352200086667763099";
-        sloth_enc_dec_many(p, v, big_from_u64(3));
+        sloth_enc_dec_many(p, v, big(3));
     }
 
     #[test]
@@ -201,6 +329,6 @@ mod tests {
         let p = b"52435875175126190479447740508185965837690552500527637822603658699938581184513";
         // v is computed. NOTE: this fails in Go too, so seems to be wrong.
         let v = b"20974350070050476191779096203274386335076221000211055129041463479975432473805";
-        sloth_enc_dec_many(p, v, big_from_u64(5));
+        sloth_enc_dec_many(p, v, big(5));
     }
 }
