@@ -84,6 +84,21 @@ impl MerkleProof {
     pub fn len(&self) -> usize {
         self.path.len() + 2
     }
+
+    /// Serialize into bytes.
+    /// TODO: probably improve
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+
+        for (hash, is_right) in self.path.iter() {
+            out.extend(hash.as_ref());
+            out.push(*is_right as u8);
+        }
+        out.extend(self.leaf().as_ref());
+        out.extend(self.root().as_ref());
+
+        out
+    }
 }
 
 impl Into<MerkleProof> for proof::Proof<TreeHash> {

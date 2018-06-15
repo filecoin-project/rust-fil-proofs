@@ -44,6 +44,15 @@ pub struct DataProof<'a> {
     pub data: &'a [u8],
 }
 
+impl<'a> DataProof<'a> {
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut out = self.proof.serialize();
+        out.extend(self.data);
+
+        out
+    }
+}
+
 pub type ReplicaParents<'a> = Vec<(usize, DataProof<'a>)>;
 
 #[derive(Debug)]

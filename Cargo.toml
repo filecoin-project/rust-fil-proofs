@@ -14,6 +14,8 @@ bellman = "0.1"
 byteorder = "1"
 lazy_static = "1.0"
 memmap = "0.6"
+num-bigint = "0.2"
+num-traits = "0.2"
 
 [dependencies.pairing]
 version = "0.14.2"

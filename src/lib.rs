@@ -15,11 +15,15 @@ extern crate lazy_static;
 #[cfg(test)]
 #[macro_use]
 extern crate hex_literal;
+
 #[cfg(test)]
 extern crate tempfile;
 
 extern crate memmap;
+extern crate num_bigint;
+extern crate num_traits;
 
+pub mod batchpost;
 pub mod circuit;
 pub mod crypto;
 pub mod drgporep;
