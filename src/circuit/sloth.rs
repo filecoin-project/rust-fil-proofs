@@ -1,14 +1,10 @@
 use bellman::{ConstraintSystem, SynthesisError};
-use pairing::Field;
-use sapling_crypto::jubjub::JubjubEngine;
+use pairing::{Engine, Field};
 
-pub fn sloth_dec<E, CS>(
-    cs: &mut CS,
-    k_value: E::Fr,
-    c_value: E::Fr,
-) -> Result<E::Fr, SynthesisError>
+/// Circuit version of sloth decoding.
+pub fn decode<E, CS>(cs: &mut CS, k_value: E::Fr, c_value: E::Fr) -> Result<E::Fr, SynthesisError>
 where
-    E: JubjubEngine,
+    E: Engine,
     CS: ConstraintSystem<E>,
 {
     // Compute (c)^5-k mod p.
@@ -53,25 +49,22 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::sloth_dec;
+    use super::*;
     use circuit::test::TestConstraintSystem;
-    use crypto::sloth::BlsSloth;
-    use pairing::bls12_381::Bls12;
-    use pairing::bls12_381::Fr;
+    use crypto::sloth;
+    use pairing::bls12_381::{Bls12, Fr};
     use pairing::PrimeField;
-    // use sapling_crypto::jubjub::JubjubEngine;
-    // use bellman::ConstraintSystem;
 
     #[test]
     fn test_snark_sloth_dec() {
         let key = Fr::from_str("11111111").unwrap();
         let plaintext = Fr::from_str("123456789").unwrap();
-        let ciphertext = BlsSloth::enc(&key, &plaintext);
+        let ciphertext = sloth::encode::<Bls12>(&key, &plaintext);
 
         // Vanilla
-        let decrypted = BlsSloth::dec(&key, &ciphertext);
+        let decrypted = sloth::decode::<Bls12>(&key, &ciphertext);
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        let out = sloth_dec(&mut cs, key, ciphertext).unwrap();
+        let out = decode(&mut cs, key, ciphertext).unwrap();
 
         assert!(cs.is_satisfied());
         assert_eq!(out, decrypted);

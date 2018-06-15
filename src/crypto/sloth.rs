@@ -1,61 +1,47 @@
-use num_bigint::BigUint;
-use pairing::bls12_381::Fr;
-use pairing::Field;
-use pairing::{PrimeField, PrimeFieldRepr};
+use pairing::{Engine, Field};
 
-lazy_static! {
-    static ref SLOTH_V: BigUint = BigUint::parse_bytes(
-        b"20974350070050476191779096203274386335076221000211055129041463479975432473805",
-        10,
-    ).unwrap();
-    static ref SLOTH_P: BigUint = BigUint::parse_bytes(
-        b"52435875175126190479447740508185965837690552500527637822603658699938581184513",
-        10,
-    ).unwrap();
+// is the same as in `Fr::from_str("20974350070050476191779096203274386335076221000211055129041463479975432473805").unwrap().into_repr()`
+const SLOTH_V: [u64; 4] = [
+    3689348813023923405,
+    2413663763415232921,
+    16233882818423549954,
+    3341406743785779740,
+];
+
+/// Sloth based encoding.
+pub fn encode<E: Engine>(key: &E::Fr, plaintext: &E::Fr) -> E::Fr {
+    let mut tmp = plaintext.clone();
+    tmp.add_assign(key); // c + k
+    tmp.pow(&SLOTH_V) // (c + k)^v
 }
 
-fn big_from_fr(fr: &Fr) -> BigUint {
-    let mut k = vec![];
-    fr.into_repr().write_le(&mut k).unwrap();
-    BigUint::from_bytes_le(&k)
-}
+/// Sloth based decoding
+pub fn decode<E: Engine>(key: &E::Fr, ciphertext: &E::Fr) -> E::Fr {
+    let mut tmp = ciphertext.pow(&[5]); // c^5
+    tmp.sub_assign(key); // c^5 - k
 
-pub struct BlsSloth {}
-impl BlsSloth {
-    pub fn enc(key: &Fr, plaintext: &Fr) -> Fr {
-        let (x, k) = (big_from_fr(plaintext), big_from_fr(key));
-
-        // Compute (x+k)^v mod p.
-        let res = (x + k).modpow(&SLOTH_V, &SLOTH_P);
-
-        // TODO: this can be done more efficiently
-        let fr = Fr::from_str(&res.to_str_radix(10)).unwrap();
-        fr
-    }
-
-    pub fn dec<'a>(key: &Fr, ciphertext: &Fr) -> Fr {
-        let (c, k) = (ciphertext, key);
-
-        let mut tmp = c.clone();
-        tmp.square(); // c^2
-        tmp.square(); // (c^2)^2
-        tmp.mul_assign(c); // (c^2)^2 * c = c^5
-        tmp.sub_assign(k);
-
-        tmp
-    }
+    tmp
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pairing::bls12_381::Fr;
+    use pairing::bls12_381::{Bls12, Fr, FrRepr};
+    use pairing::PrimeField;
+
+    const MODULUS: [u64; 4] = [
+        0xffffffff00000001,
+        0x53bda402fffe5bfe,
+        0x3339d80809a1d805,
+        0x73eda753299d7d48,
+    ];
+
     #[test]
     fn test_sloth_bls_12() {
         let key = Fr::from_str("11111111").unwrap();
         let plaintext = Fr::from_str("123456789").unwrap();
-        let ciphertext = BlsSloth::enc(&key, &plaintext);
-        let decrypted = BlsSloth::dec(&key, &ciphertext);
+        let ciphertext = encode::<Bls12>(&key, &plaintext);
+        let decrypted = decode::<Bls12>(&key, &ciphertext);
         assert_eq!(plaintext, decrypted);
         assert_ne!(plaintext, ciphertext);
     }
@@ -65,8 +51,22 @@ mod tests {
         let key = Fr::from_str("11111111").unwrap();
         let key_fake = Fr::from_str("11111112").unwrap();
         let plaintext = Fr::from_str("123456789").unwrap();
-        let ciphertext = BlsSloth::enc(&key, &plaintext);
-        let decrypted = BlsSloth::dec(&key_fake, &ciphertext);
+        let ciphertext = encode::<Bls12>(&key, &plaintext);
+        let decrypted = decode::<Bls12>(&key_fake, &ciphertext);
         assert_ne!(plaintext, decrypted);
+    }
+
+    prop_compose! {
+        fn arb_fr()(a in 0..MODULUS[0], b in 0..MODULUS[1], c in 0..MODULUS[2], d in 0..MODULUS[3]) -> Fr {
+            Fr::from_repr(FrRepr([a, b, c, d])).unwrap()
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn sloth_roundtrip(key in arb_fr(), plaintext in arb_fr()) {
+            let ciphertext = encode::<Bls12>(&key, &plaintext);
+            assert_eq!(decode::<Bls12>(&key, &ciphertext), plaintext);
+        }
     }
 }

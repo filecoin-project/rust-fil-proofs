@@ -29,6 +29,10 @@ extern crate num_bigint;
 extern crate num_traits;
 
 pub mod batchpost;
+#[cfg(test)]
+#[macro_use]
+extern crate proptest;
+
 pub mod circuit;
 pub mod crypto;
 pub mod drgporep;
