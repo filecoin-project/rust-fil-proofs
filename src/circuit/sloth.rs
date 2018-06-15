@@ -14,16 +14,16 @@ where
     // Compute (c)^5-k mod p.
 
     let mut tmp_value = c_value;
-    let mut c = cs.alloc(|| "c", || Ok(tmp_value))?;
+    let c = cs.alloc(|| "c", || Ok(tmp_value))?;
 
     tmp_value.square();
-    let mut c2 = cs.alloc(|| "c2", || Ok(tmp_value))?;
+    let c2 = cs.alloc(|| "c2", || Ok(tmp_value))?;
     cs.enforce(|| "c2 = (c)^2", |lc| lc + c, |lc| lc + c, |lc| lc + c2);
 
     tmp_value.square();
-    let mut tmp_c4 = tmp_value.clone();
+    let tmp_c4 = tmp_value.clone();
 
-    let mut c4 = cs.alloc(|| "c4", || Ok(tmp_value))?;
+    let c4 = cs.alloc(|| "c4", || Ok(tmp_value))?;
     cs.enforce(|| "c4 = (c2)^2", |lc| lc + c2, |lc| lc + c2, |lc| lc + c4);
 
     //    1  c c2 c4 out
@@ -34,7 +34,7 @@ where
     tmp_value.mul_assign(&c_value);
     tmp_value.sub_assign(&k_value);
 
-    let mut output = cs.alloc(|| "output", || Ok(tmp_value))?;
+    let output = cs.alloc(|| "output", || Ok(tmp_value))?;
 
     let mut k_cs = k_value;
     let c4_inv = tmp_c4.inverse().unwrap();
