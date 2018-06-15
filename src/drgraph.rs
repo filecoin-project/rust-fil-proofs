@@ -90,7 +90,7 @@ impl MerkleProof {
     pub fn serialize(&self) -> Vec<u8> {
         let mut out = Vec::new();
 
-        for (hash, is_right) in self.path.iter() {
+        for (hash, is_right) in &self.path {
             out.extend(hash.as_ref());
             out.push(*is_right as u8);
         }

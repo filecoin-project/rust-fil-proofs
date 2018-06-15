@@ -36,8 +36,7 @@ mod tests {
     use crypto;
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
-    use sapling_crypto::circuit::blake2s;
-    use sapling_crypto::circuit::boolean::{AllocatedBit, Boolean};
+    use sapling_crypto::circuit::boolean::Boolean;
     use util::{bits_into_bytes, bytes_into_boolean_vec};
 
     #[test]
@@ -71,7 +70,6 @@ mod tests {
             acc.extend(parent);
             acc
         });
-        let input_len = input_bytes.len();
 
         // convert Vec<Boolean> to Vec<u8>
         let actual = bits_into_bytes(
