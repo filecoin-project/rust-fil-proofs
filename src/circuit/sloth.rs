@@ -14,25 +14,34 @@ where
     let c = cs.alloc(|| "c", || Ok(tmp_value))?;
 
     // c^2
+    //    1  c c2 c4 out
+    // [  0  1  0  0  0 ] // a
+    // [  0  1  0  0  0 ] // b
+    // [  0  0  1  0  0 ] // c
+    // c1 * c1 = out
     tmp_value.square();
     let c2 = cs.alloc(|| "c2", || Ok(tmp_value))?;
     cs.enforce(|| "c2 = (c)^2", |lc| lc + c, |lc| lc + c, |lc| lc + c2);
 
     // c^4
+    //    1  c c2 c4 out
+    // [  0  0  1  0  0 ] // a
+    // [  0  0  1  0  0 ] // b
+    // [  0  0  0  1  0 ] // c
+    // c2 * c2 = out
     tmp_value.square();
     let c4 = cs.alloc(|| "c4", || Ok(tmp_value))?;
     cs.enforce(|| "c4 = (c2)^2", |lc| lc + c2, |lc| lc + c2, |lc| lc + c4);
 
+    // c^4*c - k
     //    1  c c2 c4 out
     // [  0  0  0  1  0 ] // a
     // [  0  1  0  0  0 ] // b
     // [  k  0  0  0  1 ] // c
-
-    // c^4*c - k
+    // (c4)*(c) = out + k => c^4*c-k = out
     tmp_value.mul_assign(&c_value);
     tmp_value.sub_assign(&k_value);
     let output = cs.alloc(|| "output", || Ok(tmp_value))?;
-    // (c4)*(c) = out + k => c^4*c-k = out
     cs.enforce(
         || "c5 = (c4)*c - k",
         |lc| lc + c4,
