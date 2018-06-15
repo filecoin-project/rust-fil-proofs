@@ -20,9 +20,9 @@ fn big_from_fr(fr: &Fr) -> BigUint {
     BigUint::from_bytes_le(&k)
 }
 
-struct BlsSloth {}
+pub struct BlsSloth {}
 impl BlsSloth {
-    fn enc(key: &Fr, plaintext: &Fr) -> Fr {
+    pub fn enc(key: &Fr, plaintext: &Fr) -> Fr {
         let (x, k) = (big_from_fr(plaintext), big_from_fr(key));
 
         // Compute (x+k)^v mod p.
@@ -33,7 +33,7 @@ impl BlsSloth {
         fr
     }
 
-    fn dec<'a>(key: &Fr, ciphertext: &Fr) -> Fr {
+    pub fn dec<'a>(key: &Fr, ciphertext: &Fr) -> Fr {
         let (c, k) = (ciphertext, key);
 
         let mut tmp = c.clone();
