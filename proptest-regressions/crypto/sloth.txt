@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+xs 2333654024 1879057395 1148234502 4254212597 # shrinks to key = Fr(FrRepr([0, 0, 0, 0])), plaintext = Fr(FrRepr([6433232347557286543, 14241240406459990354, 3113366375994539378, 2168360237581758600]))
