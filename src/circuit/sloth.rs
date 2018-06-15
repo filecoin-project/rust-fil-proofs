@@ -9,39 +9,35 @@ where
 {
     // Compute (c)^5-k mod p.
 
+    // c
     let mut tmp_value = c_value;
     let c = cs.alloc(|| "c", || Ok(tmp_value))?;
 
+    // c^2
     tmp_value.square();
     let c2 = cs.alloc(|| "c2", || Ok(tmp_value))?;
     cs.enforce(|| "c2 = (c)^2", |lc| lc + c, |lc| lc + c, |lc| lc + c2);
 
+    // c^4
     tmp_value.square();
-    let tmp_c4 = tmp_value.clone();
-
     let c4 = cs.alloc(|| "c4", || Ok(tmp_value))?;
     cs.enforce(|| "c4 = (c2)^2", |lc| lc + c2, |lc| lc + c2, |lc| lc + c4);
 
     //    1  c c2 c4 out
     // [  0  0  0  1  0 ] // a
     // [  0  1  0  0  0 ] // b
-    // [  0  0  0  0  1 ] // c
+    // [  k  0  0  0  1 ] // c
 
+    // c^4*c - k
     tmp_value.mul_assign(&c_value);
     tmp_value.sub_assign(&k_value);
-
     let output = cs.alloc(|| "output", || Ok(tmp_value))?;
-
-    let mut k_cs = k_value;
-    let c4_inv = tmp_c4.inverse().unwrap();
-    k_cs.mul_assign(&c4_inv);
-
-    // (c4)*(c- k_cs*1) = [c4*c - c4*k_cs] = [c^5 - c4 * (k/c4)] = c^5-k
+    // (c4)*(c) = out + k => c^4*c-k = out
     cs.enforce(
         || "c5 = (c4)*c - k",
         |lc| lc + c4,
-        |lc| lc + c - (k_cs, CS::one()),
-        |lc| lc + output,
+        |lc| lc + c,
+        |lc| lc + output + (k_value, CS::one()),
     );
 
     Ok(tmp_value)
