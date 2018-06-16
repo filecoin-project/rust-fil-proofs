@@ -41,5 +41,7 @@ pub mod porep;
 pub mod proof;
 pub mod writer;
 
+mod demo;
+
 mod util;
 mod vde;
