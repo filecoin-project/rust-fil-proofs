@@ -90,7 +90,7 @@ impl MerkleProof {
     pub fn serialize(&self) -> Vec<u8> {
         let mut out = Vec::new();
 
-        for (hash, is_right) in self.path.iter() {
+        for (hash, is_right) in &self.path {
             out.extend(hash.as_ref());
             out.push(*is_right as u8);
         }
@@ -98,6 +98,10 @@ impl MerkleProof {
         out.extend(self.root().as_ref());
 
         out
+    }
+
+    pub fn path(&self) -> &Vec<(TreeHash, bool)> {
+        &self.path
     }
 }
 
@@ -179,7 +183,12 @@ impl Graph {
     /// Builds a merkle tree based on the given data.
     pub fn merkle_tree<'a>(&self, data: &'a [u8], node_size: usize) -> Result<MerkleTree> {
         if data.len() != node_size * self.nodes {
-            return Err(format_err!("missmatch of data, node_size and nodes"));
+            return Err(format_err!(
+                "missmatch of data, node_size and nodes {} != {} * {}",
+                data.len(),
+                node_size,
+                self.nodes
+            ));
         }
 
         if !(node_size == 16 || node_size == 32 || node_size == 64) {

@@ -154,7 +154,7 @@ mod tests {
         assert_eq!(t.leafs(), 4);
 
         let mut a = PedersenAlgorithm::new();
-        let leafs: Vec<PedersenHash> = values
+        let leaves: Vec<PedersenHash> = values
             .iter()
             .map(|v| {
                 v.hash(&mut a);
@@ -164,14 +164,14 @@ mod tests {
             })
             .collect();
 
-        assert_eq!(t[0], leafs[0]);
-        assert_eq!(t[1], leafs[1]);
-        assert_eq!(t[2], leafs[2]);
-        assert_eq!(t[3], leafs[3]);
+        assert_eq!(t[0], leaves[0]);
+        assert_eq!(t[1], leaves[1]);
+        assert_eq!(t[2], leaves[2]);
+        assert_eq!(t[3], leaves[3]);
 
-        let i1 = a.node(leafs[0], leafs[1], 0);
+        let i1 = a.node(leaves[0], leaves[1], 0);
         a.reset();
-        let i2 = a.node(leafs[2], leafs[3], 0);
+        let i2 = a.node(leaves[2], leaves[3], 0);
         a.reset();
 
         assert_eq!(t[4], i1);
