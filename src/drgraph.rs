@@ -1,3 +1,5 @@
+#![cfg_attr(feature = "cargo-clippy", allow(len_without_is_empty))]
+
 use crypto::feistel;
 use error::Result;
 use hasher::pedersen;
@@ -143,6 +145,7 @@ pub enum Sampling {
 
 impl Graph {
     /// Creates a new graph. If no sampling is passed, it does not contain any edges.
+    #[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
     pub fn new(nodes: usize, sampling: Option<Sampling>) -> Graph {
         match sampling {
             Some(Sampling::DR) => dr_sample(nodes),

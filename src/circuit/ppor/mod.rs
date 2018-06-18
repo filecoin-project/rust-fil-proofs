@@ -24,7 +24,7 @@ pub struct ParallelProofOfRetrievability<'a, E: JubjubEngine> {
     pub lambda: usize,
 
     /// The authentication path of the commitment in the tree.
-    pub auth_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
+    pub auth_paths: &'a [Vec<Option<(E::Fr, bool)>>],
 
     /// The root of the underyling merkle tree.
     pub root: Option<E::Fr>,
@@ -118,7 +118,7 @@ mod tests {
                 params,
                 lambda: pub_params.lambda,
                 values: values,
-                auth_paths: auth_paths,
+                auth_paths: &auth_paths,
                 root: Some(tree.root().into()),
             };
 

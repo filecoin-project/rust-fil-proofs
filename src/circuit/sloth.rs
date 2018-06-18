@@ -68,7 +68,6 @@ mod tests {
     use circuit::test::TestConstraintSystem;
     use crypto::sloth;
     use pairing::bls12_381::{Bls12, Fr};
-    use pairing::PrimeField;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]
