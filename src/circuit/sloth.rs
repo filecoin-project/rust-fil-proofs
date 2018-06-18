@@ -77,10 +77,10 @@ mod tests {
         for _ in 0..10 {
             let key: Fr = rng.gen();
             let plaintext: Fr = rng.gen();
-            let ciphertext = sloth::encode::<Bls12>(&key, &plaintext, 10);
+            let ciphertext = sloth::encode_element::<Bls12>(&key, &plaintext, 10);
 
             // Vanilla
-            let decrypted = sloth::decode::<Bls12>(&key, &ciphertext, 10);
+            let decrypted = sloth::decode_element::<Bls12>(&key, &ciphertext, 10);
             let mut cs = TestConstraintSystem::<Bls12>::new();
             let out = decode(cs.namespace(|| "sloth"), &key, &ciphertext, 10).unwrap();
 
@@ -98,9 +98,9 @@ mod tests {
             let key_bad: Fr = rng.gen();
             let plaintext: Fr = rng.gen();
 
-            let ciphertext = sloth::encode::<Bls12>(&key, &plaintext, 10);
+            let ciphertext = sloth::encode_element::<Bls12>(&key, &plaintext, 10);
 
-            let decrypted = sloth::decode::<Bls12>(&key, &ciphertext, 10);
+            let decrypted = sloth::decode_element::<Bls12>(&key, &ciphertext, 10);
             let mut cs = TestConstraintSystem::<Bls12>::new();
             let out = decode(cs.namespace(|| "sloth"), &key_bad, &ciphertext, 10).unwrap();
 
@@ -117,9 +117,9 @@ mod tests {
             let key: Fr = rng.gen();
             let plaintext: Fr = rng.gen();
 
-            let ciphertext = sloth::encode::<Bls12>(&key, &plaintext, 10);
+            let ciphertext = sloth::encode_element::<Bls12>(&key, &plaintext, 10);
 
-            let decrypted = sloth::decode::<Bls12>(&key, &ciphertext, 10);
+            let decrypted = sloth::decode_element::<Bls12>(&key, &ciphertext, 10);
 
             let mut cs = TestConstraintSystem::<Bls12>::new();
             let out9 = decode(cs.namespace(|| "sloth 9"), &key, &ciphertext, 9).unwrap();
