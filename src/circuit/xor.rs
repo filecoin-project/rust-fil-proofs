@@ -36,7 +36,7 @@ mod tests {
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::circuit::boolean::Boolean;
-    use util::{bits_into_bytes, bytes_into_boolean_vec};
+    use util::{bits_to_bytes, bytes_into_boolean_vec};
 
     #[test]
     fn test_xor_input_circut() {
@@ -64,7 +64,7 @@ mod tests {
             assert_eq!(out_bits.len(), data_bits.len(), "invalid output length");
 
             // convert Vec<Boolean> to Vec<u8>
-            let actual = bits_into_bytes(
+            let actual = bits_to_bytes(
                 out_bits
                     .iter()
                     .map(|v| v.get_value().unwrap())
@@ -82,7 +82,7 @@ mod tests {
                 xor(&mut cs, key_bits.as_slice(), out_bits.as_slice()).unwrap()
             };
 
-            let roundtrip = bits_into_bytes(
+            let roundtrip = bits_to_bytes(
                 roundtrip_bits
                     .iter()
                     .map(|v| v.get_value().unwrap())

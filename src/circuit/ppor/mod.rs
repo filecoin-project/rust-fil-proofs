@@ -53,7 +53,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for ParallelProofOfRetrievability<'a, E> {
 mod tests {
     use super::*;
     use circuit::test::*;
-    use drgraph::{self, proof_into_options};
+    use drgraph;
     use merklepor;
     use pairing::bls12_381::*;
     use pairing::Field;
