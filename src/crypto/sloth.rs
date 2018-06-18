@@ -1,3 +1,5 @@
+use error::Result;
+use fr32::{bytes_into_fr, bytes_into_frs, fr_into_bytes, make_fr32, Fr32};
 use pairing::{Engine, Field};
 
 /// The `v` constant for sloth.
@@ -12,8 +14,38 @@ const SLOTH_V: [u64; 4] = [
 /// The number five, as an array so we can use it in `pow`.
 const FIVE: [u64; 1] = [5];
 
+pub fn encode<'a, E: Engine>(
+    mut key: &[u8],
+    mut plaintext: &[u8],
+    rounds: usize,
+) -> Result<Vec<u8>> {
+    let mut key = make_fr32(key)?;
+    let k = bytes_into_fr::<E>(&mut key)?;
+    let frs = bytes_into_frs::<E>(&mut plaintext)?;
+    Ok(frs
+        .into_iter()
+        .map(|fr| encode_element::<E>(&k, &fr, rounds))
+        .flat_map(|fr| fr_into_bytes::<E>(&fr))
+        .collect())
+}
+
+pub fn decode<'a, E: Engine>(
+    mut key: &[u8],
+    mut ciphertext: &[u8],
+    rounds: usize,
+) -> Result<Vec<u8>> {
+    let mut key = make_fr32(key)?;
+    let k = bytes_into_fr::<E>(&mut key)?;
+    let frs = bytes_into_frs::<E>(&mut ciphertext)?;
+    Ok(frs
+        .into_iter()
+        .map(|fr| decode_element::<E>(&k, &fr, rounds))
+        .flat_map(|fr| fr_into_bytes::<E>(&fr))
+        .collect())
+}
+
 /// Sloth based encoding.
-pub fn encode<E: Engine>(key: &E::Fr, plaintext: &E::Fr, rounds: usize) -> E::Fr {
+pub fn encode_element<E: Engine>(key: &E::Fr, plaintext: &E::Fr, rounds: usize) -> E::Fr {
     let mut ciphertext = *plaintext;
 
     for _ in 0..rounds {
@@ -25,7 +57,7 @@ pub fn encode<E: Engine>(key: &E::Fr, plaintext: &E::Fr, rounds: usize) -> E::Fr
 }
 
 /// Sloth based decoding.
-pub fn decode<E: Engine>(key: &E::Fr, ciphertext: &E::Fr, rounds: usize) -> E::Fr {
+pub fn decode_element<E: Engine>(key: &E::Fr, ciphertext: &E::Fr, rounds: usize) -> E::Fr {
     let mut plaintext = *ciphertext;
 
     for _ in 0..rounds {
@@ -54,10 +86,35 @@ mod tests {
     fn sloth_bls_12() {
         let key = Fr::from_str("11111111").unwrap();
         let plaintext = Fr::from_str("123456789").unwrap();
-        let ciphertext = encode::<Bls12>(&key, &plaintext, 10);
-        let decrypted = decode::<Bls12>(&key, &ciphertext, 10);
+        let ciphertext = encode_element::<Bls12>(&key, &plaintext, 10);
+        let decrypted = decode_element::<Bls12>(&key, &ciphertext, 10);
         assert_eq!(plaintext, decrypted);
         assert_ne!(plaintext, ciphertext);
+    }
+
+    #[test]
+    fn test_sloth_bls_12_bytes() {
+        let key = b"kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk";
+        let plaintext = b"Exactly thirty-two bytes in all.".to_vec();
+        let ciphertext = encode::<Bls12>(&key[..], &plaintext[..], 10).unwrap();
+        let decrypted = decode::<Bls12>(&key[..], &ciphertext, 10).unwrap();
+        assert_eq!(plaintext, decrypted);
+        assert_ne!(plaintext, ciphertext);
+    }
+
+    #[test]
+    fn test_sloth_bls_12_bytes_bad() {
+        let key = b"kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk";
+        let plaintext = b"Not quite the right number of bytes.".to_vec();
+        let ciphertext = encode::<Bls12>(&key[..], &plaintext[..], 10);
+        assert!(ciphertext.is_err());
+    }
+    #[test]
+    fn test_sloth_bls_12_bytes_bad_key() {
+        let key = b"kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk-----------------";
+        let plaintext = b"Exactly thirty-two bytes in all.".to_vec();
+        let ciphertext = encode::<Bls12>(&key[..], &plaintext[..], 10);
+        assert!(ciphertext.is_err());
     }
 
     #[test]
@@ -65,8 +122,18 @@ mod tests {
         let key = Fr::from_str("11111111").unwrap();
         let key_fake = Fr::from_str("11111112").unwrap();
         let plaintext = Fr::from_str("123456789").unwrap();
-        let ciphertext = encode::<Bls12>(&key, &plaintext, 10);
-        let decrypted = decode::<Bls12>(&key_fake, &ciphertext, 10);
+        let ciphertext = encode_element::<Bls12>(&key, &plaintext, 10);
+        let decrypted = decode_element::<Bls12>(&key_fake, &ciphertext, 10);
+        assert_ne!(plaintext, decrypted);
+    }
+
+    #[test]
+    fn test_sloth_bls_12_fake_bytes() {
+        let key = b"kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk";
+        let key_fake = b"jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj";
+        let plaintext = b"Exactly thirty-two bytes in all.".to_vec();
+        let ciphertext = encode::<Bls12>(&key[..], &plaintext, 10).unwrap();
+        let decrypted = decode::<Bls12>(&key_fake[..], &ciphertext, 10).unwrap();
         assert_ne!(plaintext, decrypted);
     }
 
@@ -79,8 +146,8 @@ mod tests {
     proptest!{
         #[test]
         fn sloth_bls_roundtrip(key in arb_fr(), plaintext in arb_fr()) {
-            let ciphertext = encode::<Bls12>(&key, &plaintext, 10);
-            assert_eq!(decode::<Bls12>(&key, &ciphertext, 10), plaintext);
+            let ciphertext = encode_element::<Bls12>(&key, &plaintext, 10);
+            assert_eq!(decode_element::<Bls12>(&key, &ciphertext, 10), plaintext);
         }
     }
 }
