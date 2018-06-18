@@ -37,7 +37,7 @@ mod tests {
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::circuit::boolean::Boolean;
-    use util::{bits_into_bytes, bytes_into_boolean_vec};
+    use util::{bits_to_bytes, bytes_into_boolean_vec};
 
     #[test]
     fn test_kdf_input_circut() {
@@ -72,7 +72,7 @@ mod tests {
         });
 
         // convert Vec<Boolean> to Vec<u8>
-        let actual = bits_into_bytes(
+        let actual = bits_to_bytes(
             out.iter()
                 .map(|v| v.get_value().unwrap())
                 .collect::<Vec<bool>>()

@@ -59,12 +59,12 @@ impl<'a> Into<DataProof> for drgporep::DataProof<'a> {
 pub struct PublicInputs<'a> {
     pub prover_id: &'a [u8],
     pub challenge: usize,
-    pub tau: Tau,
+    pub tau: Vec<porep::Tau>,
 }
 
 pub struct PrivateInputs<'a> {
     pub replica: &'a [u8],
-    pub aux: &'a ProverAux,
+    pub aux: &'a [porep::ProverAux],
 }
 
 #[derive(Debug, Clone)]
@@ -129,14 +129,18 @@ impl<'a> ProofScheme<'a> for LayeredDrgPoRep {
             replica: priv_inputs.replica,
         };
 
+        let mut proofs = Vec::with_capacity(pub_params.layers);
+
         prove_layers(
             &pub_params.drg_porep_public_params,
             pub_inputs,
             &drg_priv_inputs,
             priv_inputs.aux,
             pub_params.layers,
-            Vec::new(),
-        )
+            &mut proofs,
+        )?;
+
+        Ok(proofs)
     }
 
     fn verify(
@@ -193,10 +197,10 @@ fn prove_layers(
     pp: &drgporep::PublicParams,
     pub_inputs: &PublicInputs,
     priv_inputs: &drgporep::PrivateInputs,
-    aux: &ProverAux,
+    aux: &[porep::ProverAux],
     layers: usize,
-    mut proofs: Vec<Proof>,
-) -> Result<Vec<Proof>> {
+    proofs: &mut Vec<Proof>,
+) -> Result<()> {
     assert!(layers > 0);
 
     let mut scratch = priv_inputs.replica.to_vec().clone();
@@ -219,35 +223,35 @@ fn prove_layers(
 
     let pp = &permute(pp);
 
-    if layers == 1 {
-        Ok(proofs)
-    } else {
-        prove_layers(pp, pub_inputs, &new_priv_inputs, aux, layers - 1, proofs)
+    if layers != 1 {
+        prove_layers(pp, pub_inputs, &new_priv_inputs, aux, layers - 1, proofs)?;
     }
+
+    Ok(())
 }
 
-type Tau = Vec<porep::Tau>;
-type ProverAux = Vec<porep::ProverAux>;
-
 impl<'a, 'c> PoRep<'a> for LayeredDrgPoRep {
-    type Tau = Tau;
-    type ProverAux = ProverAux;
+    type Tau = Vec<porep::Tau>;
+    type ProverAux = Vec<porep::ProverAux>;
 
     fn replicate(
         pp: &'a PublicParams,
         prover_id: &[u8],
         data: &mut [u8],
     ) -> Result<(Self::Tau, Self::ProverAux)> {
-        let taus = Vec::new();
-        let auxs = Vec::new();
+        let mut taus = Vec::with_capacity(pp.layers);
+        let mut auxs = Vec::with_capacity(pp.layers);
+
         permute_and_replicate_layers(
             &pp.drg_porep_public_params,
             pp.layers,
             prover_id,
             data,
-            taus,
-            auxs,
-        )
+            &mut taus,
+            &mut auxs,
+        )?;
+
+        Ok((taus, auxs))
     }
 
     fn extract_all<'b>(
@@ -255,17 +259,16 @@ impl<'a, 'c> PoRep<'a> for LayeredDrgPoRep {
         prover_id: &'b [u8],
         data: &'b [u8],
     ) -> Result<Vec<u8>> {
-        let mut d: Vec<u8> = data.to_vec();
-        let dd = d.as_mut_slice();
+        let mut data = data.to_vec();
 
-        Ok(
-            extract_and_invert_permute_layers(
-                &pp.drg_porep_public_params,
-                pp.layers,
-                prover_id,
-                dd,
-            )?.to_vec(),
-        )
+        extract_and_invert_permute_layers(
+            &pp.drg_porep_public_params,
+            pp.layers,
+            prover_id,
+            &mut data,
+        )?;
+
+        Ok(data)
     }
 
     fn extract(
@@ -283,7 +286,7 @@ fn extract_and_invert_permute_layers<'a>(
     layers: usize,
     prover_id: &[u8],
     data: &'a mut [u8],
-) -> Result<&'a [u8]> {
+) -> Result<()> {
     assert!(layers > 0);
 
     let inverted = &invert_permute(&drgpp);
@@ -293,11 +296,11 @@ fn extract_and_invert_permute_layers<'a>(
         data[i] = *r;
     }
 
-    if layers == 1 {
-        Ok(data)
-    } else {
-        extract_and_invert_permute_layers(inverted, layers - 1, prover_id, data)
+    if layers != 1 {
+        extract_and_invert_permute_layers(inverted, layers - 1, prover_id, data)?;
     }
+
+    Ok(())
 }
 
 fn permute_and_replicate_layers(
@@ -305,20 +308,20 @@ fn permute_and_replicate_layers(
     layers: usize,
     prover_id: &[u8],
     data: &mut [u8],
-    mut taus: Vec<porep::Tau>,
-    mut auxs: Vec<porep::ProverAux>,
-) -> Result<(Vec<porep::Tau>, Vec<porep::ProverAux>)> {
+    taus: &mut Vec<porep::Tau>,
+    auxs: &mut Vec<porep::ProverAux>,
+) -> Result<()> {
     assert!(layers > 0);
     let (tau, aux) = DrgPoRep::replicate(&drgpp, prover_id, data).unwrap();
 
     taus.push(tau);
     auxs.push(aux);
 
-    if layers == 1 {
-        Ok((taus, auxs))
-    } else {
-        permute_and_replicate_layers(&permute(&drgpp), layers - 1, prover_id, data, taus, auxs)
+    if layers != 1 {
+        permute_and_replicate_layers(&permute(&drgpp), layers - 1, prover_id, data, taus, auxs)?;
     }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -334,7 +337,7 @@ mod tests {
     }
 
     #[test]
-    fn test_layered_extract_all() {
+    fn layered_extract_all() {
         let lambda = 16;
         let prover_id = vec![1u8; 16];
         let data = vec![2u8; 16 * 3];
@@ -414,17 +417,17 @@ mod tests {
     }
 
     #[test]
-    fn test_layered_prove_verify_16_2() {
+    fn layered_prove_verify_16_2() {
         layered_prove_verify(16, 4);
     }
 
     #[test]
-    fn test_layered_prove_verify_16_3() {
+    fn layered_prove_verify_16_3() {
         layered_prove_verify(16, 3);
     }
 
     #[test]
-    fn test_layered_prove_verify_16_10() {
+    fn layered_prove_verify_16_10() {
         layered_prove_verify(16, 10);
     }
 
@@ -435,12 +438,12 @@ mod tests {
     // }
 
     #[test]
-    fn test_layered_prove_verify_32_3() {
+    fn layered_prove_verify_32_3() {
         layered_prove_verify(32, 3);
     }
 
     #[test]
-    fn test_layered_prove_verify_32_10() {
+    fn layered_prove_verify_32_10() {
         layered_prove_verify(32, 10);
     }
 }

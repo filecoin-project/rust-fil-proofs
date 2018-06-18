@@ -55,6 +55,7 @@ pub fn bytes_into_boolean_vec<E: Engine, CS: ConstraintSystem<E>>(
     Ok(bits)
 }
 
+#[allow(dead_code)]
 #[inline]
 fn bool_to_u8(bit: bool, offset: usize) -> u8 {
     if bit {
@@ -65,7 +66,8 @@ fn bool_to_u8(bit: bool, offset: usize) -> u8 {
 }
 
 /// Converts a slice of bools into their byte representation, in little endian.
-pub fn bits_into_bytes(bits: &[bool]) -> Vec<u8> {
+#[allow(dead_code)]
+pub fn bits_to_bytes(bits: &[bool]) -> Vec<u8> {
     bits.chunks(8)
         .map(|bits| {
             bool_to_u8(bits[7], 7)
@@ -99,7 +101,7 @@ mod tests {
                 bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), 8).unwrap()
             };
 
-            let bytes_actual: Vec<u8> = bits_into_bytes(
+            let bytes_actual: Vec<u8> = bits_to_bytes(
                 bools
                     .iter()
                     .map(|b| b.get_value().unwrap())
@@ -122,11 +124,11 @@ mod tests {
     #[test]
     fn test_bits_into_bytes() {
         assert_eq!(
-            bits_into_bytes(&[true, false, false, false, false, false, false, false]),
+            bits_to_bytes(&[true, false, false, false, false, false, false, false]),
             vec![1]
         );
         assert_eq!(
-            bits_into_bytes(&[true, true, true, true, true, true, true, true]),
+            bits_to_bytes(&[true, true, true, true, true, true, true, true]),
             vec![255]
         );
     }
@@ -144,7 +146,7 @@ mod tests {
             let bytes: Vec<u8> = (0..i).map(|_| rng.gen()).collect();
 
             let bits = bytes_into_bits(bytes.as_slice());
-            assert_eq!(bits_into_bytes(bits.as_slice()), bytes);
+            assert_eq!(bits_to_bytes(bits.as_slice()), bytes);
         }
     }
 }

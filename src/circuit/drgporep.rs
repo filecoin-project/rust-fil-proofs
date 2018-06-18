@@ -46,10 +46,10 @@ pub fn drgporep<E, CS>(
     params: &E::Params,
     lambda: usize,
     replica_node: Option<&[u8]>,
-    replica_node_path: Vec<Option<(E::Fr, bool)>>,
+    replica_node_path: &[Option<(E::Fr, bool)>],
     replica_root: Option<E::Fr>,
     replica_parents: Vec<Option<&[u8]>>,
-    replica_parents_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
+    replica_parents_paths: &[Vec<Option<(E::Fr, bool)>>],
     data_node: Option<&[u8]>,
     data_node_path: Vec<Option<(E::Fr, bool)>>,
     data_root: Option<E::Fr>,
@@ -80,7 +80,7 @@ where
         params,
         replica_node,
         lambda,
-        replica_node_path.clone(),
+        replica_node_path.to_owned(),
         replica_root,
     )?;
 
@@ -247,7 +247,7 @@ mod tests {
             .into_iter()
             .map(|(_, parent)| Some(parent.data))
             .collect();
-        let replica_parents_paths = proof_nc
+        let replica_parents_paths: Vec<_> = proof_nc
             .replica_parents
             .iter()
             .map(|(_, parent)| parent.proof.as_options())
@@ -273,10 +273,10 @@ mod tests {
             params,
             lambda,
             replica_node,
-            replica_node_path,
+            &replica_node_path,
             replica_root,
             replica_parents,
-            replica_parents_paths,
+            &replica_parents_paths,
             data_node,
             data_node_path,
             data_root,
