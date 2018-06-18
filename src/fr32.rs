@@ -1,38 +1,16 @@
 use pairing::bls12_381::Bls12;
 use pairing::{Engine, PrimeField, PrimeFieldRepr};
-use std::{self, error, fmt};
 
-#[derive(Debug, Clone)]
+#[derive(Fail, Debug)]
+#[fail(display = "Bytes could not be converted to Fr")]
 pub struct BadFrBytesError;
 
 pub type Fr32 = [u8];
-type Fr32Vec = Vec<u8>;
-type Fr32Ary = [u8; 32];
+pub type Fr32Vec = Vec<u8>;
+pub type Fr32Ary = [u8; 32];
 
-impl fmt::Display for BadFrBytesError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "bytes could not be converted to Fr")
-    }
-}
-
-impl std::error::Error for BadFrBytesError {
-    fn description(&self) -> &str {
-        "bytes could not be converted to Fr"
-    }
-
-    fn cause(&self) -> Option<&std::error::Error> {
-        // Generic error, underlying cause isn't tracked.
-        None
-    }
-}
-
-pub fn make_fr32(bytes: &[u8]) -> Result<&Fr32, BadFrBytesError> {
-    if bytes.len() != 32 {
-        return Err(BadFrBytesError);
-    }
-    Ok(bytes)
-}
-
+// Takes a slice of bytes and returns an Fr if byte slice is exactly 32 bytes and does not overflow.
+// Otherwise, returns a BadFrBytesError.
 pub fn bytes_into_fr<E: Engine>(bytes: &mut &Fr32) -> Result<E::Fr, BadFrBytesError> {
     if bytes.len() != 32 {
         return Err(BadFrBytesError);
@@ -43,21 +21,24 @@ pub fn bytes_into_fr<E: Engine>(bytes: &mut &Fr32) -> Result<E::Fr, BadFrBytesEr
     E::Fr::from_repr(fr_repr).map_err(|_| BadFrBytesError)
 }
 
+// Takes an Fr and returns a vector of exactly 32 bytes guaranteed to contain a valid Fr.
 pub fn fr_into_bytes<E: Engine>(fr: &E::Fr) -> Fr32Vec {
     let mut out = Vec::new();
     fr.into_repr().write_le(&mut out).unwrap();
     out
 }
 
+// Takes a slice of bytes and returns a vector of Fr -- or an error if either bytes is not a multiple of 32 bytes
+// or any 32-byte chunk overflows and does not contain a valid Fr.
 pub fn bytes_into_frs<E: Engine>(bytes: &mut &[u8]) -> Result<Vec<E::Fr>, BadFrBytesError> {
-    let mut result = Vec::new();
-    for mut chunk in bytes.chunks(32) {
-        let fr = bytes_into_fr::<E>(&mut chunk)?;
-        result.push(fr);
-    }
-    Ok(result)
+    bytes
+        .chunks(32)
+        .map(|ref mut chunk| bytes_into_fr::<E>(chunk))
+        .collect()
 }
 
+// Takes a slice of Frs and returns a vector of bytes, guaranteed to have a size which is a multiple of 32,
+// with every 32-byte chunk representing a valid Fr.
 pub fn frs_into_bytes<E: Engine>(frs: &[E::Fr]) -> Fr32Vec {
     frs.iter().flat_map(|fr| fr_into_bytes::<E>(fr)).collect()
 }
