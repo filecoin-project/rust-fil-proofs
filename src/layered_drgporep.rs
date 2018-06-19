@@ -356,8 +356,10 @@ mod tests {
             layers: 5,
         };
 
+        println!("setup");
         let pp = LayeredDrgPoRep::setup(&sp).unwrap();
 
+        println!("replicate");
         LayeredDrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
 
         let permuted_params = PublicParams {
@@ -367,6 +369,7 @@ mod tests {
 
         assert_ne!(data, data_copy);
 
+        println!("exract_all");
         let decoded_data = LayeredDrgPoRep::extract_all(
             &permuted_params,
             prover_id.as_slice(),

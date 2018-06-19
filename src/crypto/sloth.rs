@@ -14,7 +14,7 @@ const SLOTH_V: [u64; 4] = [
 /// The number five, as an array so we can use it in `pow`.
 const FIVE: [u64; 1] = [5];
 
-pub fn encode<'a, E: Engine>(key: &E::Fr, mut plaintext: &[u8], rounds: usize) -> Result<Fr32Vec> {
+pub fn encode<E: Engine>(key: &E::Fr, mut plaintext: &[u8], rounds: usize) -> Result<Fr32Vec> {
     let frs = bytes_into_frs::<E>(&mut plaintext)?;
     Ok(frs
         .into_iter()
@@ -23,7 +23,7 @@ pub fn encode<'a, E: Engine>(key: &E::Fr, mut plaintext: &[u8], rounds: usize) -
         .collect())
 }
 
-pub fn decode<'a, E: Engine>(key: &E::Fr, mut ciphertext: &[u8], rounds: usize) -> Result<Vec<u8>> {
+pub fn decode<E: Engine>(key: &E::Fr, mut ciphertext: &[u8], rounds: usize) -> Result<Vec<u8>> {
     let frs = bytes_into_frs::<E>(&mut ciphertext)?;
     Ok(frs
         .into_iter()

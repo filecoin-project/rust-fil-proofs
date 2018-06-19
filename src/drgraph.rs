@@ -170,6 +170,7 @@ impl Graph {
         self.add_edges(u, &[v])
     }
 
+    /// Inserts directed edges from `u -> v_i` for each element `v_i` in `vs`.
     pub fn add_edges(&mut self, u: usize, vs: &[usize]) -> Result<()> {
         if u > self.nodes || u < 1 {
             return Err(format_err!("u: {} is not a valid node", u));
@@ -225,7 +226,7 @@ impl Graph {
         self.pred
             .get(&node)
             .map(|p| {
-                let mut res = p.iter().cloned().collect::<Vec<_>>();
+                let mut res = p.to_vec();
                 res.sort();
                 res
             })
