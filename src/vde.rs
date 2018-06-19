@@ -48,7 +48,7 @@ fn recursive_encode(
     println!("prover_id: {}", prover_id.len());
     println!("node: {}", node);
 
-    let key = create_key(prover_id, node, &parents, data, lambda, graph.degree)?;
+    let key = create_key(prover_id, node, &parents, data, lambda, graph.degree())?;
 
     // -- seal this node
     let start = data_at_node_offset(node, lambda);
@@ -85,7 +85,7 @@ pub fn decode_block<'a>(
     v: usize,
 ) -> Result<Vec<u8>> {
     let parents = graph.parents(v);
-    let key = create_key(prover_id, v, &parents, data, lambda, graph.degree)?;
+    let key = create_key(prover_id, v, &parents, data, lambda, graph.degree())?;
     let node_data = data_at_node(data, v, lambda)?;
 
     crypto::xor::decode(key.as_slice(), node_data)

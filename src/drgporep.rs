@@ -169,7 +169,7 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
                 acc
             },
         );
-        let key = kdf::kdf(key_input.as_slice(), pub_params.graph.degree);
+        let key = kdf::kdf(key_input.as_slice(), pub_params.graph.degree());
         let unsealed = xor::decode(&key, proof.replica_node.data)?;
 
         if !proof.node.validate_data(&unsealed) {

@@ -137,7 +137,7 @@ pub struct Graph {
     /// there is an edge from `v -> u` and `v -> w`.
     pub pred: HashMap<usize, Vec<usize>>,
     /// The degree of the graph (you can assume it is the _same_ for every node).
-    pub degree: usize,
+    degree: usize,
 }
 
 pub enum Sampling {
@@ -181,10 +181,21 @@ impl Graph {
             }
         }
 
+        let degree = self.degree();
+
         self.pred
             .entry(u)
-            .or_insert_with(|| Vec::with_capacity(vs.len()));
+            .or_insert_with(|| Vec::with_capacity(degree));
         let edges = self.pred.get_mut(&u).unwrap();
+
+        // TODO: @nicola do we want this check?
+        if edges.len() + vs.len() > degree {
+            return Err(format_err!(
+                "can not add more edges than the degree of the graph: {}",
+                degree,
+            ));
+        }
+
         edges.extend(vs);
 
         Ok(())
@@ -236,6 +247,11 @@ impl Graph {
     /// Returns the size of the node.
     pub fn size(&self) -> usize {
         self.nodes
+    }
+
+    /// Returns the degree of the graph.
+    pub fn degree(&self) -> usize {
+        self.degree
     }
 
     pub fn permute(&self, keys: &[u32]) -> Graph {
@@ -407,6 +423,7 @@ mod tests {
     #[test]
     fn graph_add_edge() {
         let mut g = Graph::new(10, None);
+        g.degree = 10;
 
         g.add_edge(1, 2).unwrap();
         g.add_edge(1, 3).unwrap();
@@ -437,8 +454,23 @@ mod tests {
     }
 
     #[test]
+    fn add_edges() {
+        let mut g = Graph::new(3, None);
+
+        assert_eq!(g.degree(), 0);
+        assert!(g.add_edges(1, &[2]).is_err());
+
+        g.degree = 3;
+        g.add_edges(1, &[2, 3]).unwrap();
+        g.add_edges(1, &[2]).unwrap();
+
+        assert!(g.add_edges(1, &[4]).is_err());
+    }
+
+    #[test]
     fn graph_commit() {
         let mut g = Graph::new(3, None);
+        g.degree = 10;
 
         g.add_edge(1, 2).unwrap();
         g.add_edge(1, 3).unwrap();
