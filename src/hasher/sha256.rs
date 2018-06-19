@@ -125,7 +125,7 @@ mod tests {
         a.reset();
         let h22 = a.node(h13, h13, 1);
         a.reset();
-        let h31 = a.node(h21, h22, 1);
+        let _h31 = a.node(h21, h22, 1);
         a.reset();
 
         let l1 = a.leaf(h1);
