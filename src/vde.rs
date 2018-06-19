@@ -35,7 +35,8 @@ fn recursive_encode(
 
     let parents = graph.parents(node);
 
-    if node != 1 {
+    // TODO: unsuck
+    if node != parents[0] {
         parents
             .iter()
             .map(|parent| recursive_encode(graph, lambda, prover_id, cache, data, *parent))
@@ -105,8 +106,9 @@ fn create_key(
         Ok(id.to_vec()),
         |acc: Result<Vec<u8>>, parent: &usize| {
             acc.and_then(|mut acc| {
-                if node == 1 {
-                    // special super shitty case
+                // special super shitty case
+                // TODO: unsuck
+                if node == parents[0] {
                     acc.extend(vec![0u8; node_size]);
                 } else {
                     acc.extend(data_at_node(data, *parent, node_size)?.to_vec());

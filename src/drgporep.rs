@@ -157,6 +157,7 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
         }
 
         // we can't prove node 1 for now
+        // TODO: unsuck
         let challenge = pub_inputs.challenge % pub_params.graph.size();
         if challenge == 0 {
             return Ok(true);

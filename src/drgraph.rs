@@ -267,10 +267,6 @@ impl Graph {
                 tmp.entry(p[key]).or_insert_with(Vec::new);
 
                 if let Some(val) = tmp.get_mut(&p[key]) {
-                    println!(
-                        "pushing: {:?} {:?} {:?} {:?} {:?}",
-                        val, pred, p[key], p, key
-                    );
                     val.push(p[pred]);
                 }
             }
@@ -278,6 +274,8 @@ impl Graph {
 
         let mut permuted = Graph::new(self.nodes, None);
         permuted.pred = tmp;
+        permuted.degree = self.degree;
+
         permuted
     }
     pub fn invert_permute(&self, keys: &[u32]) -> Graph {
@@ -305,6 +303,7 @@ impl Graph {
 
         let mut permuted = Graph::new(self.nodes, None);
         permuted.pred = tmp;
+        permuted.degree = self.degree;
         permuted
     }
 }
@@ -317,6 +316,7 @@ fn dr_sample(n: usize) -> Result<Graph> {
     // dr_sample always has degree two
     graph.degree = 2;
 
+    // TODO: unsuck
     // enforce every node to have two edges
     graph.add_edges(1, &[1, 1])?;
     graph.add_edges(2, &[1, 1])?;
@@ -343,6 +343,7 @@ fn floor_log2(i: usize) -> usize {
     ((i as f64).log2() + 0.5).floor() as usize
 }
 
+// TODO: unsuck
 fn bucket_sample(n: usize, m: usize) -> Result<Graph> {
     assert!(m > 1, "m must be larger than 1");
 
