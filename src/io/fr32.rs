@@ -143,7 +143,7 @@ impl<W: Write> Fr32Writer<W> {
         )
     }
 
-    fn finish(&mut self) -> Result<usize> {
+    pub fn finish(&mut self) -> Result<usize> {
         if self.prefix_size > 0 {
             assert!(self.prefix_size <= 8);
             let b = self.prefix.clone();
