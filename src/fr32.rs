@@ -4,8 +4,22 @@ use pairing::{Engine, PrimeField, PrimeFieldRepr};
 #[fail(display = "Bytes could not be converted to Fr")]
 pub struct BadFrBytesError;
 
+// Contains 32 bytes whose little-endian value represents an Fr.
+// Invariants:
+// - Value MUST represent a valid Fr.
+// - Length must be 32.
 pub type Fr32 = [u8];
+
+// Contains one or more 32-byte chunks whose little-endian values represent Frs.
+// Invariants:
+// - Value of each 32-byte chunks MUST represent valid Frs.
+// - Total length must be a multiple of 32.
+// That is to say: each 32-byte chunk taken alone must be a valid Fr32.
 pub type Fr32Vec = Vec<u8>;
+
+// Array whose little-endian value represents an Fr.
+// Invariants:
+// - Value MUST represent a valid Fr.
 pub type Fr32Ary = [u8; 32];
 
 // Takes a slice of bytes and returns an Fr if byte slice is exactly 32 bytes and does not overflow.
