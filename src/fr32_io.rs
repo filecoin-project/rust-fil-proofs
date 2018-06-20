@@ -174,24 +174,18 @@ impl<R: Read + Debug> Read for Fr32Reader<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     fn write_test(bytes: &[u8]) -> (usize, Vec<u8>) {
-        use std::io::{Seek, SeekFrom};
-        use tempfile;
+        let mut data = Vec::new();
 
-        let tmpfile = tempfile::NamedTempFile::new().unwrap();
-        let mut tmp2 = tmpfile.reopen().unwrap();
+        let write_count = {
+            let mut writer = Fr32Writer::new(&mut data);
+            let mut count = writer.write(&bytes).unwrap();
+            count += writer.finish().unwrap();
+            count
+        };
 
-        let mut writer = Fr32Writer::new(tmpfile);
-        let mut write_count = writer.write(&bytes).unwrap();
-        write_count += writer.finish().unwrap();
-
-        // Seek to start
-        tmp2.seek(SeekFrom::Start(0)).unwrap();
-        // Read
-        let mut buffer = Vec::new();
-        tmp2.read_to_end(&mut buffer).unwrap();
-
-        (write_count, buffer)
+        (write_count, data)
     }
 
     #[test]
