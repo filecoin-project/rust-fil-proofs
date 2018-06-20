@@ -17,15 +17,15 @@ extern crate ring;
 extern crate sapling_crypto;
 
 #[cfg(test)]
-#[macro_use]
-extern crate hex_literal;
-
-#[cfg(test)]
 extern crate tempfile;
 
 #[cfg(test)]
 #[macro_use]
 extern crate proptest;
+
+#[cfg(test)]
+#[macro_use]
+mod test_helper;
 
 pub mod batchpost;
 

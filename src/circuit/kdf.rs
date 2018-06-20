@@ -1,14 +1,16 @@
 use bellman::{ConstraintSystem, SynthesisError};
-use sapling_crypto::circuit::blake2s::blake2s;
 use sapling_crypto::circuit::boolean::Boolean;
 use sapling_crypto::jubjub::JubjubEngine;
 
-const EMPTY_PERSONA: [u8; 8] = [0u8; 8];
+use circuit::pedersen::pedersen_md_no_padding;
 
+/// Key derivation function, using pedersen hashes as the underlying primitive.
 pub fn kdf<E, CS>(
-    cs: &mut CS,
+    mut cs: CS,
+    params: &E::Params,
     id: Vec<Boolean>,
     parents: Vec<Vec<Boolean>>,
+    m: usize,
 ) -> Result<Vec<Boolean>, SynthesisError>
 where
     E: JubjubEngine,
@@ -21,30 +23,33 @@ where
         acc
     });
 
-    {
-        let cs = cs.namespace(|| "blake2s");
-        blake2s(cs, ciphertexts.as_slice(), &EMPTY_PERSONA)
-    }
+    assert_eq!(ciphertexts.len(), 8 * 32 * (1 + m), "invalid input length");
+
+    pedersen_md_no_padding(cs.namespace(|| "pedersen"), params, ciphertexts.as_slice())
 }
 
 #[cfg(test)]
 mod tests {
     use super::kdf;
     use bellman::ConstraintSystem;
-    use blake2_rfc::blake2s::Blake2s;
     use circuit::test::TestConstraintSystem;
-    use crypto;
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::circuit::boolean::Boolean;
+    use sapling_crypto::jubjub::JubjubBls12;
+
+    use crypto;
     use util::{bits_to_bytes, bytes_into_boolean_vec};
 
     #[test]
-    fn test_kdf_input_circut() {
+    fn kdf_circuit() {
         let mut cs = TestConstraintSystem::<Bls12>::new();
         let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let params = &JubjubBls12::new();
+
+        let m = 20;
         let id: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
-        let parents: Vec<Vec<u8>> = (0..20)
+        let parents: Vec<Vec<u8>> = (0..m)
             .map(|_| (0..32).map(|_| rng.gen()).collect())
             .collect();
 
@@ -61,9 +66,16 @@ mod tests {
                 bytes_into_boolean_vec(&mut cs, Some(p.as_slice()), p.len()).unwrap()
             })
             .collect();
-        let out = kdf(&mut cs, id_bits.clone(), parents_bits.clone()).unwrap();
+        let out = kdf(
+            cs.namespace(|| "kdf"),
+            &params,
+            id_bits.clone(),
+            parents_bits.clone(),
+            m,
+        ).unwrap();
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
+        assert_eq!(cs.num_constraints(), 27917);
         assert_eq!(out.len(), 32 * 8, "invalid output length");
 
         let input_bytes = parents.iter().fold(id, |mut acc, parent| {
@@ -79,17 +91,7 @@ mod tests {
                 .as_slice(),
         );
 
-        let expected = crypto::kdf::kdf(input_bytes.as_slice());
-
-        let mut h = Blake2s::with_params(32, &[], &[], &[0u8; 8]);
-        h.update(input_bytes.as_slice());
-        let h_result = h.finalize();
-
-        assert_eq!(
-            h_result.as_bytes().to_vec(),
-            expected,
-            "non circuit and Blake2s do not match"
-        );
+        let expected = crypto::kdf::kdf(input_bytes.as_slice(), m);
         assert_eq!(expected, actual, "circuit and non circuit do not match");
     }
 }

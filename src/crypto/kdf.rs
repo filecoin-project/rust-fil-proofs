@@ -1,8 +1,16 @@
-use crypto::blake2s::blake2s;
+use crypto::pedersen::pedersen_md_no_padding;
 
-/// Key derivation function, based on blake2s.
-pub fn kdf(data: &[u8]) -> Vec<u8> {
-    blake2s(data)
+/// Key derivation function, based on pedersen hashing.
+pub fn kdf(data: &[u8], m: usize) -> Vec<u8> {
+    assert_eq!(
+        data.len(),
+        32 * (1 + m),
+        "invalid input length: data.len(): {} m: {}",
+        data.len(),
+        m
+    );
+
+    pedersen_md_no_padding(data)
 }
 
 #[cfg(test)]
@@ -10,11 +18,26 @@ mod tests {
     use super::kdf;
 
     #[test]
-    fn test_kdf() {
-        // Test vector from BLAKE2 testvectors
-        let data = hex!("00010203");
-        let expected = hex!("0cc70e00348b86ba2944d0c32038b25c55584f90df2304f55fa332af5fb01e20");
+    fn kdf_valid_block_len() {
+        let m = 1;
+        let size = 32 * (1 + m);
 
-        assert_eq!(kdf(&data), expected);
+        let data = vec![1u8; size];
+        let expected = vec![
+            122, 242, 246, 175, 171, 132, 8, 235, 194, 175, 245, 82, 88, 212, 189, 229, 223, 31,
+            184, 94, 171, 13, 127, 7, 246, 17, 141, 159, 131, 46, 6, 94,
+        ];
+
+        let res = kdf(&data, m);
+        assert_eq!(res.len(), 32);
+        assert_eq!(res, expected);
+    }
+
+    #[test]
+    #[should_panic]
+    fn kdf_invalid_block_len() {
+        let data = vec![2u8; 1234];
+
+        kdf(&data, 44);
     }
 }

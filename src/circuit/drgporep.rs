@@ -25,6 +25,7 @@ use util::bytes_into_boolean_vec;
 /// * `data_node_path` - The path of the data node being proven.
 /// * `data_root` - The merkle root of the data.
 /// * `prover_id` - The id of the prover
+/// * `m` -
 ///
 ///
 /// # Public Inputs
@@ -54,6 +55,7 @@ pub fn drgporep<E, CS>(
     data_node_path: Vec<Option<(E::Fr, bool)>>,
     data_root: Option<E::Fr>,
     prover_id: Option<&[u8]>,
+    m: usize,
 ) -> Result<(), SynthesisError>
 where
     E: JubjubEngine,
@@ -120,10 +122,13 @@ where
     };
 
     // generate the encryption key
-    let key = {
-        let mut ns = cs.namespace(|| "kdf");
-        kdf(&mut ns, prover_id_bits, parents_bits)?
-    };
+    let key = kdf(
+        cs.namespace(|| "kdf"),
+        params,
+        prover_id_bits,
+        parents_bits,
+        m,
+    )?;
 
     // decrypt the data of the replica_node
     let encoded_bits = bytes_into_boolean_vec(
@@ -195,18 +200,24 @@ mod tests {
     use util::{bytes_into_bits, data_at_node};
 
     #[test]
-    fn test_drgporep_input_circuit_with_bls12_381() {
+    fn drgporep_input_circuit_with_bls12_381() {
         let params = &JubjubBls12::new();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let lambda = 32;
-        let n = 10;
-        let m = 20;
+        let n = 12;
+        let m = 6;
+        let challenge = 2;
 
         let prover_id: Vec<u8> = (0..lambda).map(|_| rng.gen()).collect();
         let mut data: Vec<u8> = (0..lambda * n).map(|_| rng.gen()).collect();
+
+        // TODO: don't clone evertything
         let original_data = data.clone();
-        let challenge = 1;
+        let data_node = Some(
+            data_at_node(&original_data, challenge + 1, lambda)
+                .expect("failed to read original data"),
+        );
 
         let sp = drgporep::SetupParams {
             lambda,
@@ -229,12 +240,12 @@ mod tests {
             aux: &aux,
         };
 
-        let mut proof_nc =
+        let proof_nc =
             drgporep::DrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).expect("failed to prove");
 
         assert!(
             drgporep::DrgPoRep::verify(&pp, &pub_inputs, &proof_nc).expect("failed to verify"),
-            "failed to verif (non circuit)"
+            "failed to verify (non circuit)"
         );
 
         let replica_node = Some(proof_nc.replica_node.data);
@@ -252,10 +263,6 @@ mod tests {
             .iter()
             .map(|(_, parent)| parent.proof.as_options())
             .collect();
-        let data_node = Some(
-            data_at_node(&original_data, challenge + 1, lambda)
-                .expect("failed to read original data"),
-        );
 
         let data_node_path = proof_nc.node.as_options();
         let data_root = Some(proof_nc.node.root().into());
@@ -281,6 +288,7 @@ mod tests {
             data_node_path,
             data_root,
             prover_id,
+            m,
         ).expect("failed to synthesize circuit");
 
         if !cs.is_satisfied() {
@@ -291,8 +299,8 @@ mod tests {
         }
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_inputs(), 15, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 40979, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 35, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 59165, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 

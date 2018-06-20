@@ -34,14 +34,22 @@ fn recursive_encode(
     // -- seal all parents of this node
 
     let parents = graph.parents(node);
-    parents
-        .iter()
-        .map(|parent| recursive_encode(graph, lambda, prover_id, cache, data, *parent))
-        .collect::<Result<()>>()?;
+
+    // TODO: unsuck
+    if node != parents[0] {
+        parents
+            .iter()
+            .map(|parent| recursive_encode(graph, lambda, prover_id, cache, data, *parent))
+            .collect::<Result<()>>()?;
+    }
 
     // -- create sealing key for this ndoe
 
-    let key = create_key(prover_id, &parents, data, lambda)?;
+    println!("parents: {}", parents.len());
+    println!("prover_id: {}", prover_id.len());
+    println!("node: {}", node);
+
+    let key = create_key(prover_id, node, &parents, data, lambda, graph.degree())?;
 
     // -- seal this node
     let start = data_at_node_offset(node, lambda);
@@ -78,24 +86,37 @@ pub fn decode_block<'a>(
     v: usize,
 ) -> Result<Vec<u8>> {
     let parents = graph.parents(v);
-    let key = create_key(prover_id, &parents, data, lambda)?;
+    let key = create_key(prover_id, v, &parents, data, lambda, graph.degree())?;
     let node_data = data_at_node(data, v, lambda)?;
 
     crypto::xor::decode(key.as_slice(), node_data)
 }
 
-fn create_key(id: &[u8], parents: &[usize], data: &[u8], node_size: usize) -> Result<Vec<u8>> {
+fn create_key(
+    id: &[u8],
+    node: usize,
+    parents: &[usize],
+    data: &[u8],
+    node_size: usize,
+    m: usize,
+) -> Result<Vec<u8>> {
     // ciphertexts will become a buffer of the layout
     // id | encodedParentNode1 | encodedParentNode1 | ...
     let ciphertexts = parents.iter().fold(
         Ok(id.to_vec()),
         |acc: Result<Vec<u8>>, parent: &usize| {
             acc.and_then(|mut acc| {
-                acc.extend(data_at_node(data, *parent, node_size)?.to_vec());
+                // special super shitty case
+                // TODO: unsuck
+                if node == parents[0] {
+                    acc.extend(vec![0u8; node_size]);
+                } else {
+                    acc.extend(data_at_node(data, *parent, node_size)?.to_vec());
+                }
                 Ok(acc)
             })
         },
     )?;
 
-    Ok(crypto::kdf::kdf(ciphertexts.as_slice()))
+    Ok(crypto::kdf::kdf(ciphertexts.as_slice(), m))
 }

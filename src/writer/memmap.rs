@@ -104,7 +104,7 @@ mod test {
     fn test_writer() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let lambda = 16;
+        let lambda = 32;
         let prover_id: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
         let data: Vec<u8> = (0..1024).map(|_| rng.gen()).collect();
 

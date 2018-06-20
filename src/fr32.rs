@@ -1,4 +1,3 @@
-use pairing::bls12_381::Bls12;
 use pairing::{Engine, PrimeField, PrimeFieldRepr};
 
 #[derive(Fail, Debug)]
@@ -46,6 +45,8 @@ pub fn frs_into_bytes<E: Engine>(frs: &[E::Fr]) -> Fr32Vec {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pairing::bls12_381::Bls12;
+
     fn bytes_fr_test<E: Engine>(bytes: Fr32Ary, expect_success: bool) {
         let mut b = &bytes[..];
         let fr_result = bytes_into_fr::<E>(&mut b);
