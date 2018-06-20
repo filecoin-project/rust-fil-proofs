@@ -247,6 +247,44 @@ mod tests {
         assert_eq!(data, decoded_data, "failed to extract data");
     }
 
+    #[test]
+    fn extract() {
+        let lambda = 32;
+        let prover_id = vec![1u8; 32];
+        let nodes = 3;
+        let data = vec![2u8; 32 * nodes];
+        println!("data: {:?}", data);
+        // create a copy, so we can compare roundtrips
+        let mut data_copy = data.clone();
+
+        let sp = SetupParams {
+            lambda: lambda,
+            drg: DrgParams {
+                n: data.len() / lambda,
+                m: 10,
+            },
+        };
+
+        let pp = DrgPoRep::setup(&sp).unwrap();
+
+        DrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
+
+        assert_ne!(data, data_copy, "replication did not change data");
+
+        for i in 1..nodes + 1 {
+            let decoded_data =
+                DrgPoRep::extract(&pp, prover_id.as_slice(), data_copy.as_mut_slice(), i).unwrap();
+
+            let original_data = data_at_node(&data, i, lambda).unwrap();
+
+            assert_eq!(
+                original_data,
+                decoded_data.as_slice(),
+                "failed to extract data"
+            );
+        }
+    }
+
     fn prove_verify(lambda: usize, n: usize, i: usize) {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
