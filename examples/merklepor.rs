@@ -22,9 +22,10 @@ fn main() {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
     let lambda = 32;
-    // TODO: need this many leaves to simulate roughly 1GB
-    // (1024 * 1024 *1024) / 32 = 33 554 432;
-    let leaves = (1024 * 1024) / 32;
+    // TODO: this should go up to 1GB
+    // 1024 * 1024 *1024
+    let data_size = 1024 * 1024 * 500;
+    let leaves = data_size / 32;
     let m = 6;
     let tree_depth = (leaves as f64).log2().ceil() as usize;
     // TODO: go to 100
@@ -33,13 +34,14 @@ fn main() {
     let mut total_param = Duration::new(0, 0);
 
     println!(
-        "leaves {}, m = {}, tree_depth = {}, challenge_count = {}",
-        leaves, m, tree_depth, challenge_count
+        "data_size {}bytes, m = {}, tree_depth = {}, challenge_count = {}",
+        data_size, m, tree_depth, challenge_count
     );
-    println!("Creating sample parameters...");
 
+    println!("Creating sample parameters...");
     let start = Instant::now();
 
+    println!("\tgroth params {:?}", start.elapsed());
     let groth_params = generate_random_parameters::<Bls12, _, _>(
         circuit::ppor::ParallelProofOfRetrievability {
             params: jubjub_params,
@@ -51,28 +53,28 @@ fn main() {
     ).unwrap();
 
     // Prepare the verification key (for proof verification)
+    println!("\tverifying key {:?}", start.elapsed());
     let pvk = prepare_verifying_key(&groth_params.vk);
 
     total_param += start.elapsed();
 
+    println!("\tgraph {:?}", start.elapsed());
     const SAMPLES: usize = 5;
 
     let mut proof_vec = vec![];
     let mut total_proving = Duration::new(0, 0);
     let mut total_verifying = Duration::new(0, 0);
 
-    let data: Vec<u8> = (0..leaves)
-        .flat_map(|_| fr32::fr_into_bytes::<Bls12>(&rng.gen()))
-        .collect();
+    println!("\tgraph:data {:?}", start.elapsed());
+    let el = fr32::fr_into_bytes::<Bls12>(&rng.gen());
+    let data: Vec<u8> = (0..leaves).flat_map(|_| el.clone()).collect();
 
+    println!("\tgraph:sampling {:?}", start.elapsed());
     let graph = drgraph::Graph::new(leaves, Some(drgraph::Sampling::Bucket(m)));
+
+    println!("\tgraph:merkle_tree {:?}", start.elapsed());
     let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
-
-    // -- MerklePoR
-
     let pub_params = merklepor::PublicParams { lambda, leaves };
-
-    println!("Sampling..");
 
     let pb = ProgressBar::new((SAMPLES * 2) as u64);
     pb.set_style(
@@ -158,7 +160,6 @@ fn main() {
 
                 let mut input = vec![proof_nonc[j].data];
                 input.extend(packed_auth_path);
-                input.push(pub_inputs[j].commitment.into());
                 input
             })
             .collect();
