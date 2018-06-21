@@ -33,6 +33,7 @@ u128-support = ["pairing/u128-support"]
 criterion = "0.1.2"
 tempfile = "3"
 proptest = "0.7"
+indicatif = "0.9"
 
 [[bench]]
 name = "pedersen"
