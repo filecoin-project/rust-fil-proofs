@@ -146,7 +146,7 @@ fn main() {
 
         // -- generate public inputs
 
-        let expected_inputs: Vec<_> = (0..challenge_count)
+        let mut expected_inputs: Vec<_> = (0..challenge_count)
             .flat_map(|j| {
                 let auth_path_bits: Vec<bool> = proof_nonc[j]
                     .proof
@@ -162,6 +162,9 @@ fn main() {
                 input
             })
             .collect();
+
+        // add the root as the last one
+        expected_inputs.push(pub_inputs[0].commitment.into());
 
         // -- verify proof with public inputs
         pb.inc(1);
