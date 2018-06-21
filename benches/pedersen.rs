@@ -4,10 +4,11 @@ extern crate proofs;
 
 use criterion::Criterion;
 use proofs::crypto::pedersen;
+use proofs::util::bytes_into_bits;
 
 fn pedersen_benchmark(c: &mut Criterion) {
-    c.bench_function("pedersen_jub_jub_internal", |b| {
-        b.iter(|| pedersen::pedersen_jubjub_internal(0, b"some bytes"))
+    c.bench_function("pedersen_compression", |b| {
+        b.iter(|| pedersen::pedersen_compression(&bytes_into_bits(b"some bytes")))
     });
 }
 
