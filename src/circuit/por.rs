@@ -25,7 +25,6 @@ pub fn proof_of_retrievability<E, CS>(
     mut cs: CS,
     params: &E::Params,
     value: Option<&E::Fr>,
-    _lambda: usize,
     auth_path: Vec<Option<(E::Fr, bool)>>,
     root: Option<E::Fr>,
 ) -> Result<(), SynthesisError>
@@ -201,7 +200,6 @@ mod tests {
                 cs.namespace(|| "por"),
                 params,
                 Some(&proof.data),
-                pub_params.lambda * 8,
                 proof.proof.as_options(),
                 Some(pub_inputs.commitment.into()),
             ).unwrap();

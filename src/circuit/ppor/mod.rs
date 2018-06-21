@@ -20,9 +20,6 @@ pub struct ParallelProofOfRetrievability<'a, E: JubjubEngine> {
     /// Pedersen commitment to the value.
     pub values: Vec<Option<&'a E::Fr>>,
 
-    /// The size of a single commitment in bits.
-    pub lambda: usize,
-
     /// The authentication path of the commitment in the tree.
     pub auth_paths: &'a [Vec<Option<(E::Fr, bool)>>],
 
@@ -39,7 +36,6 @@ impl<'a, E: JubjubEngine> Circuit<E> for ParallelProofOfRetrievability<'a, E> {
                 cs.namespace(|| format!("round: {}", i)),
                 self.params,
                 self.values[i],
-                self.lambda,
                 self.auth_paths[i].clone(),
                 self.root,
             )?;
@@ -121,7 +117,6 @@ mod tests {
 
             let instance = ParallelProofOfRetrievability {
                 params,
-                lambda: pub_params.lambda,
                 values: values,
                 auth_paths: &auth_paths,
                 root: Some(tree.root().into()),
