@@ -2,8 +2,6 @@ use bellman::{ConstraintSystem, SynthesisError};
 use sapling_crypto::circuit::{boolean, multipack, num, pedersen_hash};
 use sapling_crypto::jubjub::JubjubEngine;
 
-use util::bytes_into_boolean_vec;
-
 /// Create a proof of retrievability.
 ///
 /// # Arguments
@@ -26,8 +24,8 @@ use util::bytes_into_boolean_vec;
 pub fn proof_of_retrievability<E, CS>(
     mut cs: CS,
     params: &E::Params,
-    value: Option<&[u8]>,
-    lambda: usize,
+    value: Option<&E::Fr>,
+    _lambda: usize,
     auth_path: Vec<Option<(E::Fr, bool)>>,
     root: Option<E::Fr>,
 ) -> Result<(), SynthesisError>
@@ -35,9 +33,18 @@ where
     E: JubjubEngine,
     CS: ConstraintSystem<E>,
 {
-    let value_bits = bytes_into_boolean_vec(cs.namespace(|| "value into bits"), value, lambda)?;
+    let value_num = num::AllocatedNum::alloc(cs.namespace(|| "value"), || {
+        Ok(*value.ok_or_else(|| SynthesisError::AssignmentMissing)?)
+    })?;
 
-    multipack::pack_into_inputs(cs.namespace(|| "packed value"), &value_bits)?;
+    value_num.inputize(cs.namespace(|| "value num"))?;
+
+    let mut value_bits = value_num.into_bits_le(cs.namespace(|| "value bits"))?;
+
+    // sad face, need to pad to make all algorithms the same
+    while value_bits.len() < 256 {
+        value_bits.push(boolean::Boolean::Constant(false));
+    }
 
     // Compute the hash of the value
     let cm = pedersen_hash::pedersen_hash(
@@ -107,7 +114,7 @@ where
         let real_root_value = root;
 
         // Allocate the "real" root that will be exposed.
-        let rt = num::AllocatedNum::alloc(cs.namespace(|| "conditional root"), || {
+        let rt = num::AllocatedNum::alloc(cs.namespace(|| "root value"), || {
             real_root_value.ok_or(SynthesisError::AssignmentMissing)
         })?;
 
@@ -132,6 +139,7 @@ mod tests {
     use super::*;
     use circuit::test::*;
     use drgraph;
+    use fr32::{bytes_into_fr, fr_into_bytes};
     use merklepor;
     use pairing::bls12_381::*;
     use pairing::Field;
@@ -139,7 +147,7 @@ mod tests {
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::circuit::multipack;
     use sapling_crypto::jubjub::JubjubBls12;
-    use util::{bytes_into_bits, data_at_node};
+    use util::data_at_node;
 
     #[test]
     fn test_por_input_circuit_with_bls12_381() {
@@ -152,7 +160,9 @@ mod tests {
         for i in 0..6 {
             // -- Basic Setup
 
-            let data: Vec<u8> = (0..leaves * lambda).map(|_| rng.gen()).collect();
+            let data: Vec<u8> = (0..leaves)
+                .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+                .collect();
 
             let graph = drgraph::Graph::new(leaves, Some(drgraph::Sampling::Bucket(16)));
             let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
@@ -167,8 +177,10 @@ mod tests {
 
             let priv_inputs = merklepor::PrivateInputs {
                 tree: &tree,
-                leaf: data_at_node(data.as_slice(), pub_inputs.challenge + 1, pub_params.lambda)
-                    .unwrap(),
+                leaf: bytes_into_fr::<Bls12>(
+                    data_at_node(data.as_slice(), pub_inputs.challenge + 1, pub_params.lambda)
+                        .unwrap(),
+                ).unwrap(),
             };
 
             // create a non circuit proof
@@ -188,14 +200,14 @@ mod tests {
             proof_of_retrievability(
                 cs.namespace(|| "por"),
                 params,
-                Some(proof.data),
+                Some(&proof.data),
                 pub_params.lambda * 8,
                 proof.proof.as_options(),
                 Some(pub_inputs.commitment.into()),
             ).unwrap();
 
-            assert_eq!(cs.num_inputs(), 5, "wrong number of inputs");
-            assert_eq!(cs.num_constraints(), 4848, "wrong number of constraints");
+            assert_eq!(cs.num_inputs(), 4, "wrong number of inputs");
+            assert_eq!(cs.num_constraints(), 4847, "wrong number of constraints");
 
             let auth_path_bits: Vec<bool> = proof
                 .proof
@@ -204,41 +216,33 @@ mod tests {
                 .map(|(_, is_right)| *is_right)
                 .collect();
             let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
-            let data_bits = bytes_into_bits(proof.data);
-            let packed_data_bits = multipack::compute_multipacking::<Bls12>(&data_bits);
 
-            let mut expected_inputs = packed_data_bits;
+            let mut expected_inputs = vec![proof.data];
             expected_inputs.extend(packed_auth_path);
             expected_inputs.push(pub_inputs.commitment.into());
-
-            assert!(cs.verify(&expected_inputs));
 
             assert_eq!(cs.get_input(0, "ONE"), Fr::one(), "wrong input 0");
 
             assert_eq!(
-                cs.get_input(1, "por/packed value/input 0"),
+                cs.get_input(1, "por/value num/input variable"),
                 expected_inputs[0],
-                "wrong packed_data"
+                "wrong data"
             );
 
             assert_eq!(
-                cs.get_input(2, "por/packed value/input 1"),
+                cs.get_input(2, "por/packed auth_path/input 0"),
                 expected_inputs[1],
-                "wrong packed_data"
-            );
-
-            assert_eq!(
-                cs.get_input(3, "por/packed auth_path/input 0"),
-                expected_inputs[2],
                 "wrong packed_auth_path"
             );
+
             assert_eq!(
-                cs.get_input(4, "por/root/input variable"),
-                expected_inputs[3],
-                "wrong input root"
+                cs.get_input(3, "por/root/input variable"),
+                expected_inputs[2],
+                "wrong root input"
             );
 
             assert!(cs.is_satisfied(), "constraints are not all satisfied");
+            assert!(cs.verify(&expected_inputs), "failed to verify inputs");
         }
     }
 }

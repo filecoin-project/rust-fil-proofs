@@ -1,13 +1,16 @@
 use crypto;
 use drgraph;
 use error::Result;
+use fr32::{bytes_into_fr, fr_into_bytes};
+use pairing::bls12_381::{Bls12, Fr};
+use pairing::{Field, PrimeField, PrimeFieldRepr};
 use util::{data_at_node, data_at_node_offset};
 
 /// encodes the data and overwrites the original data slice.
 pub fn encode<'a>(
     graph: &'a drgraph::Graph,
     lambda: usize,
-    prover_id: &'a [u8],
+    prover_id: &'a Fr,
     data: &'a mut [u8],
 ) -> Result<()> {
     // cache to keep track of which parts have been encrypted yet
@@ -22,8 +25,8 @@ pub fn encode<'a>(
 fn recursive_encode(
     graph: &drgraph::Graph,
     lambda: usize,
-    prover_id: &[u8],
-    cache: &mut Vec<bool>,
+    prover_id: &Fr,
+    cache: &mut [bool],
     data: &mut [u8],
     node: usize,
 ) -> Result<()> {
@@ -45,18 +48,19 @@ fn recursive_encode(
 
     // -- create sealing key for this ndoe
 
-    println!("parents: {}", parents.len());
-    println!("prover_id: {}", prover_id.len());
-    println!("node: {}", node);
-
     let key = create_key(prover_id, node, &parents, data, lambda, graph.degree())?;
 
     // -- seal this node
+
     let start = data_at_node_offset(node, lambda);
     let end = start + lambda;
+    let fr = bytes_into_fr::<Bls12>(&data[start..end])?;
 
-    let encoded = crypto::xor::encode(key.as_slice(), &data[start..end])?;
-
+    let encoded = fr_into_bytes::<Bls12>(&crypto::sloth::encode::<Bls12>(
+        &key,
+        &fr,
+        crypto::sloth::DEFAULT_ROUNDS,
+    ));
     data[start..end].clone_from_slice(encoded.as_slice());
     cache[node - 1] = true;
 
@@ -66,13 +70,19 @@ fn recursive_encode(
 pub fn decode<'a>(
     graph: &'a drgraph::Graph,
     lambda: usize,
-    prover_id: &'a [u8],
+    prover_id: &'a Fr,
     data: &'a [u8],
 ) -> Result<Vec<u8>> {
     // TODO: parallelize
     (0..graph.size()).fold(Ok(Vec::with_capacity(data.len())), |acc, i| {
         acc.and_then(|mut acc| {
-            acc.extend(decode_block(graph, lambda, prover_id, data, i + 1)?);
+            acc.extend(fr_into_bytes::<Bls12>(&decode_block(
+                graph,
+                lambda,
+                prover_id,
+                data,
+                i + 1,
+            )?));
             Ok(acc)
         })
     })
@@ -81,35 +91,41 @@ pub fn decode<'a>(
 pub fn decode_block<'a>(
     graph: &'a drgraph::Graph,
     lambda: usize,
-    prover_id: &'a [u8],
+    prover_id: &'a Fr,
     data: &'a [u8],
     v: usize,
-) -> Result<Vec<u8>> {
+) -> Result<Fr> {
     let parents = graph.parents(v);
     let key = create_key(prover_id, v, &parents, data, lambda, graph.degree())?;
-    let node_data = data_at_node(data, v, lambda)?;
+    let fr = bytes_into_fr::<Bls12>(&data_at_node(data, v, lambda)?)?;
 
-    crypto::xor::decode(key.as_slice(), node_data)
+    // TODO: round constant
+    Ok(crypto::sloth::decode::<Bls12>(
+        &key,
+        &fr,
+        crypto::sloth::DEFAULT_ROUNDS,
+    ))
 }
 
 fn create_key(
-    id: &[u8],
+    id: &Fr,
     node: usize,
     parents: &[usize],
     data: &[u8],
     node_size: usize,
     m: usize,
-) -> Result<Vec<u8>> {
+) -> Result<Fr> {
     // ciphertexts will become a buffer of the layout
     // id | encodedParentNode1 | encodedParentNode1 | ...
+
     let ciphertexts = parents.iter().fold(
-        Ok(id.to_vec()),
+        Ok(fr_into_bytes::<Bls12>(id)),
         |acc: Result<Vec<u8>>, parent: &usize| {
             acc.and_then(|mut acc| {
                 // special super shitty case
                 // TODO: unsuck
                 if node == parents[0] {
-                    acc.extend(vec![0u8; node_size]);
+                    Fr::zero().into_repr().write_le(&mut acc)?;
                 } else {
                     acc.extend(data_at_node(data, *parent, node_size)?.to_vec());
                 }
@@ -118,5 +134,5 @@ fn create_key(
         },
     )?;
 
-    Ok(crypto::kdf::kdf(ciphertexts.as_slice(), m))
+    Ok(crypto::kdf::kdf::<Bls12>(ciphertexts.as_slice(), m))
 }

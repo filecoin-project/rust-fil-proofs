@@ -1,6 +1,7 @@
 use drgporep::DataProof;
 use drgraph::{MerkleTree, TreeHash};
 use error::Result;
+use pairing::bls12_381::Fr;
 use proof::ProofScheme;
 
 /// The parameters shared between the prover and verifier.
@@ -25,13 +26,13 @@ pub struct PublicInputs {
 #[derive(Debug)]
 pub struct PrivateInputs<'a> {
     /// The data of the leaf.
-    pub leaf: &'a [u8],
+    pub leaf: Fr,
     /// The underlying merkle tree.
     pub tree: &'a MerkleTree,
 }
 
 /// The proof that is returned from `prove`.
-pub type Proof<'a> = DataProof<'a>;
+pub type Proof = DataProof;
 
 #[derive(Debug)]
 pub struct SetupParams {}
@@ -45,7 +46,7 @@ impl<'a> ProofScheme<'a> for MerklePoR {
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs;
     type PrivateInputs = PrivateInputs<'a>;
-    type Proof = Proof<'a>;
+    type Proof = Proof;
 
     fn setup(_sp: &SetupParams) -> Result<PublicParams> {
         unimplemented!("not used");
@@ -86,26 +87,35 @@ impl<'a> ProofScheme<'a> for MerklePoR {
 mod tests {
     use super::*;
     use drgraph::{Graph, Sampling};
+    use fr32::{bytes_into_fr, fr_into_bytes};
+    use pairing::bls12_381::Bls12;
+    use rand::{Rng, SeedableRng, XorShiftRng};
     use util::data_at_node;
 
     #[test]
     fn test_merklepor() {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
         let pub_params = PublicParams {
-            lambda: 16,
+            lambda: 32,
             leaves: 32,
         };
 
-        let data = vec![3u8; 16 * 32];
+        let data: Vec<u8> = (0..32)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
+
         let graph = Graph::new(32, Some(Sampling::Bucket(16)));
-        let tree = graph.merkle_tree(data.as_slice(), 16).unwrap();
+        let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
 
         let pub_inputs = PublicInputs {
             challenge: 3,
             commitment: tree.root(),
         };
 
-        let leaf =
-            data_at_node(data.as_slice(), pub_inputs.challenge + 1, pub_params.lambda).unwrap();
+        let leaf = bytes_into_fr::<Bls12>(
+            data_at_node(data.as_slice(), pub_inputs.challenge + 1, pub_params.lambda).unwrap(),
+        ).unwrap();
 
         let priv_inputs = PrivateInputs { tree: &tree, leaf };
 

@@ -18,7 +18,7 @@ pub struct ParallelProofOfRetrievability<'a, E: JubjubEngine> {
     pub params: &'a E::Params,
 
     /// Pedersen commitment to the value.
-    pub values: Vec<Option<&'a [u8]>>,
+    pub values: Vec<Option<&'a E::Fr>>,
 
     /// The size of a single commitment in bits.
     pub lambda: usize,
@@ -54,6 +54,7 @@ mod tests {
     use super::*;
     use circuit::test::*;
     use drgraph;
+    use fr32::{bytes_into_fr, fr_into_bytes};
     use merklepor;
     use pairing::bls12_381::*;
     use pairing::Field;
@@ -72,7 +73,9 @@ mod tests {
         let pub_params = merklepor::PublicParams { lambda, leaves };
 
         for _ in 0..5 {
-            let data: Vec<u8> = (0..lambda * leaves).map(|_| rng.gen()).collect();
+            let data: Vec<u8> = (0..leaves)
+                .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+                .collect();
 
             let graph = drgraph::Graph::new(leaves, None);
             let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
@@ -86,10 +89,12 @@ mod tests {
             let priv_inputs: Vec<_> = (0..leaves)
                 .map(|i| merklepor::PrivateInputs {
                     tree: &tree,
-                    leaf: data_at_node(
-                        data.as_slice(),
-                        pub_inputs[i].challenge + 1,
-                        pub_params.lambda,
+                    leaf: bytes_into_fr::<Bls12>(
+                        data_at_node(
+                            data.as_slice(),
+                            pub_inputs[i].challenge + 1,
+                            pub_params.lambda,
+                        ).unwrap(),
                     ).unwrap(),
                 })
                 .collect();
@@ -110,7 +115,7 @@ mod tests {
             }
 
             let auth_paths: Vec<_> = proofs.iter().map(|p| p.proof.as_options()).collect();
-            let values: Vec<_> = proofs.iter().map(|p| Some(p.data)).collect();
+            let values: Vec<_> = proofs.iter().map(|p| Some(&p.data)).collect();
 
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
@@ -128,7 +133,7 @@ mod tests {
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
 
-            assert_eq!(cs.num_inputs(), 65, "wrong number of inputs");
+            assert_eq!(cs.num_inputs(), 49, "wrong number of inputs");
             assert_eq!(cs.get_input(0, "ONE"), Fr::one());
         }
     }

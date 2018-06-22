@@ -2,9 +2,11 @@ use byteorder::{LittleEndian, WriteBytesExt};
 use crypto::blake2s::blake2s;
 use drgraph::{MerkleTree, TreeHash};
 use error::Result;
+use fr32::bytes_into_fr;
 use merklepor;
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
+use pairing::bls12_381::Bls12;
 use proof::ProofScheme;
 use util::data_at_node;
 
@@ -20,8 +22,8 @@ pub struct PublicParams {
 pub struct SetupParams {}
 
 #[derive(Debug)]
-pub struct Proof<'a> {
-    pub proofs: Vec<merklepor::Proof<'a>>,
+pub struct Proof {
+    pub proofs: Vec<merklepor::Proof>,
     pub challenges: Vec<usize>,
 }
 
@@ -52,7 +54,7 @@ impl<'a> ProofScheme<'a> for BatchPoST {
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<'a>;
     type PrivateInputs = PrivateInputs<'a>;
-    type Proof = Proof<'a>;
+    type Proof = Proof;
 
     fn setup(_sp: &Self::SetupParams) -> Result<Self::PublicParams> {
         // merklepor does not have a setup currently
@@ -83,7 +85,11 @@ impl<'a> ProofScheme<'a> for BatchPoST {
                     challenge,
                 },
                 &merklepor::PrivateInputs {
-                    leaf: data_at_node(priv_inputs.data, challenge + 1, pub_params.params.lambda)?,
+                    leaf: bytes_into_fr::<Bls12>(data_at_node(
+                        priv_inputs.data,
+                        challenge + 1,
+                        pub_params.params.lambda,
+                    )?)?,
                     tree: priv_inputs.tree,
                 },
             )?;
@@ -193,22 +199,29 @@ fn derive_challenge(
 mod tests {
     use super::*;
     use drgraph::{Graph, Sampling};
+    use fr32::fr_into_bytes;
     use merklepor;
+    use pairing::bls12_381::Bls12;
+    use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]
     fn test_batchpost() {
-        let prover_id = vec![1u8; 32];
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let prover_id = fr_into_bytes::<Bls12>(&rng.gen());
         let pub_params = PublicParams {
             params: merklepor::PublicParams {
-                lambda: 16,
+                lambda: 32,
                 leaves: 32,
             },
             batch_count: 10,
         };
 
-        let data = vec![3u8; 16 * 32];
+        let data: Vec<u8> = (0..32)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
         let graph = Graph::new(32, Some(Sampling::Bucket(16)));
-        let tree = graph.merkle_tree(data.as_slice(), 16).unwrap();
+        let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
 
         let pub_inputs = PublicInputs {
             challenge: 3,

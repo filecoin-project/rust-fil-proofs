@@ -95,6 +95,8 @@ where
 mod test {
     use super::*;
     use drgporep::{DrgParams, DrgPoRep, SetupParams};
+    use fr32::fr_into_bytes;
+    use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use std::fs::File;
     use std::io::{Read, Write};
@@ -105,8 +107,10 @@ mod test {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let lambda = 32;
-        let prover_id: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
-        let data: Vec<u8> = (0..1024).map(|_| rng.gen()).collect();
+        let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
+        let data: Vec<u8> = (0..32)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
 
         let dir = tempfile::tempdir().unwrap();
         let data_path = dir.path().join("data01");

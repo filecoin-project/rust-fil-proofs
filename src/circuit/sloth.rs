@@ -1,65 +1,67 @@
 use bellman::{ConstraintSystem, SynthesisError};
+use crypto;
 use pairing::{Engine, Field};
+use sapling_crypto::circuit::num;
+
+pub const DEFAULT_ROUNDS: usize = crypto::sloth::DEFAULT_ROUNDS;
 
 /// Circuit version of sloth decoding.
 pub fn decode<E, CS>(
     mut cs: CS,
-    key: &E::Fr,
-    ciphertext: &E::Fr,
+    key: &num::AllocatedNum<E>,
+    ciphertext: Option<&E::Fr>,
     rounds: usize,
-) -> Result<E::Fr, SynthesisError>
+) -> Result<num::AllocatedNum<E>, SynthesisError>
 where
     E: Engine,
     CS: ConstraintSystem<E>,
 {
-    let mut plaintext = *ciphertext;
+    let mut plaintext = num::AllocatedNum::alloc(cs.namespace(|| "plaintext"), || {
+        Ok(*ciphertext.ok_or_else(|| SynthesisError::AssignmentMissing)?)
+    })?;
 
     for i in 0..rounds {
         let cs = &mut cs.namespace(|| format!("round {}", i));
 
-        // c
-        let mut tmp_value = plaintext;
-        let c = cs.alloc(|| "c", || Ok(tmp_value))?;
+        let c = plaintext;
+        let c2 = c.square(cs.namespace(|| "c^2"))?;
+        let c4 = c2.square(cs.namespace(|| "c^4"))?;
+        let c5 = c4.mul(cs.namespace(|| "c^5"), &c)?;
 
-        // c^2
-        //    1  c c2 c4 out
-        // [  0  1  0  0  0 ] // a
-        // [  0  1  0  0  0 ] // b
-        // [  0  0  1  0  0 ] // c
-        // c1 * c1 = c2
-        tmp_value.square();
-        let c2 = cs.alloc(|| "c2", || Ok(tmp_value))?;
-        cs.enforce(|| "c2 = (c)^2", |lc| lc + c, |lc| lc + c, |lc| lc + c2);
-
-        // c^4
-        //    1  c c2 c4 out
-        // [  0  0  1  0  0 ] // a
-        // [  0  0  1  0  0 ] // b
-        // [  0  0  0  1  0 ] // c
-        // c2 * c2 = c4
-        tmp_value.square();
-        let c4 = cs.alloc(|| "c4", || Ok(tmp_value))?;
-        cs.enforce(|| "c4 = (c2)^2", |lc| lc + c2, |lc| lc + c2, |lc| lc + c4);
-
-        // c^4*c - k
-        //    1  c c2 c4 out
-        // [  0  0  0  1  0 ] // a
-        // [  0  1  0  0  0 ] // b
-        // [  k  0  0  0  1 ] // c
-        // (c4)*(c) = out + k => c^4*c-k = out
-        tmp_value.mul_assign(&plaintext);
-        tmp_value.sub_assign(key);
-        let output = cs.alloc(|| "output", || Ok(tmp_value))?;
-        cs.enforce(
-            || "c5 = (c4)*c - k",
-            |lc| lc + c4,
-            |lc| lc + c,
-            |lc| lc + output + (*key, CS::one()),
-        );
-        plaintext = tmp_value;
+        plaintext = sub(cs.namespace(|| "c^5 - k"), &c5, key)?;
     }
 
     Ok(plaintext)
+}
+
+fn sub<E: Engine, CS: ConstraintSystem<E>>(
+    mut cs: CS,
+    a: &num::AllocatedNum<E>,
+    b: &num::AllocatedNum<E>,
+) -> Result<num::AllocatedNum<E>, SynthesisError> {
+    let res = num::AllocatedNum::alloc(cs.namespace(|| "sub num"), || {
+        let mut tmp = a
+            .get_value()
+            .ok_or_else(|| SynthesisError::AssignmentMissing)?;
+        tmp.sub_assign(
+            &b.get_value()
+                .ok_or_else(|| SynthesisError::AssignmentMissing)?,
+        );
+
+        Ok(tmp)
+    })?;
+
+    //    res = a-b
+    // => res + b = a
+    // => (res + b) * 1 = a
+    cs.enforce(
+        || "subtraction constraint",
+        |lc| lc + res.get_variable() + b.get_variable(),
+        |lc| lc + CS::one(),
+        |lc| lc + a.get_variable(),
+    );
+
+    Ok(res)
 }
 
 #[cfg(test)]
@@ -77,15 +79,20 @@ mod tests {
         for _ in 0..10 {
             let key: Fr = rng.gen();
             let plaintext: Fr = rng.gen();
-            let ciphertext = sloth::encode_element::<Bls12>(&key, &plaintext, 10);
+            let ciphertext = sloth::encode::<Bls12>(&key, &plaintext, 10);
 
             // Vanilla
-            let decrypted = sloth::decode_element::<Bls12>(&key, &ciphertext, 10);
+            let decrypted = sloth::decode::<Bls12>(&key, &ciphertext, 10);
+
+            assert_eq!(plaintext, decrypted, "vanilla failed");
+
             let mut cs = TestConstraintSystem::<Bls12>::new();
-            let out = decode(cs.namespace(|| "sloth"), &key, &ciphertext, 10).unwrap();
+
+            let key_num = num::AllocatedNum::alloc(cs.namespace(|| "key"), || Ok(key)).unwrap();
+            let out = decode(cs.namespace(|| "sloth"), &key_num, Some(&ciphertext), 10).unwrap();
 
             assert!(cs.is_satisfied());
-            assert_eq!(out, decrypted);
+            assert_eq!(out.get_value().unwrap(), decrypted, "no interop");
         }
     }
 
@@ -98,14 +105,22 @@ mod tests {
             let key_bad: Fr = rng.gen();
             let plaintext: Fr = rng.gen();
 
-            let ciphertext = sloth::encode_element::<Bls12>(&key, &plaintext, 10);
+            let ciphertext = sloth::encode::<Bls12>(&key, &plaintext, 10);
 
-            let decrypted = sloth::decode_element::<Bls12>(&key, &ciphertext, 10);
+            let decrypted = sloth::decode::<Bls12>(&key, &ciphertext, 10);
             let mut cs = TestConstraintSystem::<Bls12>::new();
-            let out = decode(cs.namespace(|| "sloth"), &key_bad, &ciphertext, 10).unwrap();
+            let key_bad_num =
+                num::AllocatedNum::alloc(cs.namespace(|| "key bad"), || Ok(key_bad)).unwrap();
+
+            let out = decode(
+                cs.namespace(|| "sloth"),
+                &key_bad_num,
+                Some(&ciphertext),
+                10,
+            ).unwrap();
 
             assert!(cs.is_satisfied());
-            assert_ne!(out, decrypted);
+            assert_ne!(out.get_value().unwrap(), decrypted);
         }
     }
 
@@ -117,21 +132,59 @@ mod tests {
             let key: Fr = rng.gen();
             let plaintext: Fr = rng.gen();
 
-            let ciphertext = sloth::encode_element::<Bls12>(&key, &plaintext, 10);
+            let ciphertext = sloth::encode::<Bls12>(&key, &plaintext, 10);
+            let decrypted = sloth::decode::<Bls12>(&key, &ciphertext, 10);
 
-            let decrypted = sloth::decode_element::<Bls12>(&key, &ciphertext, 10);
+            {
+                let mut cs = TestConstraintSystem::<Bls12>::new();
+                let key_num = num::AllocatedNum::alloc(cs.namespace(|| "key"), || Ok(key)).unwrap();
 
-            let mut cs = TestConstraintSystem::<Bls12>::new();
-            let out9 = decode(cs.namespace(|| "sloth 9"), &key, &ciphertext, 9).unwrap();
-            let mut cs = TestConstraintSystem::<Bls12>::new();
-            let out10 = decode(cs.namespace(|| "sloth 10"), &key, &ciphertext, 10).unwrap();
-            let mut cs = TestConstraintSystem::<Bls12>::new();
-            let out11 = decode(cs.namespace(|| "sloth 11"), &key, &ciphertext, 11).unwrap();
+                let out9 =
+                    decode(cs.namespace(|| "sloth 9"), &key_num, Some(&ciphertext), 9).unwrap();
 
+                assert!(cs.is_satisfied());
+                assert_ne!(out9.get_value().unwrap(), decrypted);
+            }
+
+            {
+                let mut cs = TestConstraintSystem::<Bls12>::new();
+                let key_num = num::AllocatedNum::alloc(cs.namespace(|| "key"), || Ok(key)).unwrap();
+                let out10 =
+                    decode(cs.namespace(|| "sloth 10"), &key_num, Some(&ciphertext), 10).unwrap();
+
+                assert!(cs.is_satisfied());
+                assert_eq!(out10.get_value().unwrap(), decrypted);
+            }
+
+            {
+                let mut cs = TestConstraintSystem::<Bls12>::new();
+                let key_num = num::AllocatedNum::alloc(cs.namespace(|| "key"), || Ok(key)).unwrap();
+                let out11 =
+                    decode(cs.namespace(|| "sloth 11"), &key_num, Some(&ciphertext), 11).unwrap();
+
+                assert!(cs.is_satisfied());
+                assert_ne!(out11.get_value().unwrap(), decrypted);
+            }
+        }
+    }
+
+    #[test]
+    fn sub_constraint() {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        for _ in 0..100 {
+            let mut cs = TestConstraintSystem::<Bls12>::new();
+
+            let a = num::AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(rng.gen())).unwrap();
+            let b = num::AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(rng.gen())).unwrap();
+
+            let res = sub(cs.namespace(|| "a-b"), &a, &b).unwrap();
+
+            let mut tmp = a.get_value().unwrap().clone();
+            tmp.sub_assign(&b.get_value().unwrap());
+
+            assert_eq!(res.get_value().unwrap(), tmp);
             assert!(cs.is_satisfied());
-            assert_ne!(out9, decrypted);
-            assert_eq!(out10, decrypted);
-            assert_ne!(out11, decrypted);
         }
     }
 }

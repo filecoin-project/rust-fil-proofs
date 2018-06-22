@@ -1,8 +1,9 @@
-use pairing::bls12_381::{Bls12, FrRepr};
+use pairing::bls12_381::{Bls12, Fr, FrRepr};
 use pairing::PrimeFieldRepr;
 use sapling_crypto::jubjub::JubjubBls12;
 use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 
+use fr32::bytes_into_frs;
 use util::{bits_to_bytes, bytes_into_bits};
 
 lazy_static! {
@@ -12,7 +13,7 @@ lazy_static! {
 pub const PEDERSEN_BLOCK_SIZE: usize = 256;
 
 /// Pedersen hashing for inputs that have length mulitple of the block size `256`. Based on pedersen hashes and a Merkle-Damgard construction.
-pub fn pedersen_md_no_padding(data: &[u8]) -> Vec<u8> {
+pub fn pedersen_md_no_padding(data: &[u8]) -> Fr {
     let data_bits = bytes_into_bits(data);
 
     assert!(
@@ -33,7 +34,10 @@ pub fn pedersen_md_no_padding(data: &[u8]) -> Vec<u8> {
         cur = pedersen_compression(&cur);
     }
 
-    bits_to_bytes(&cur)
+    let frs = bytes_into_frs::<Bls12>(&bits_to_bytes(&cur))
+        .expect("pedersen must generate valid fr elements");
+    assert_eq!(frs.len(), 1);
+    frs[0]
 }
 
 pub fn pedersen_compression(bits: &[bool]) -> Vec<bool> {
@@ -50,6 +54,8 @@ pub fn pedersen_compression(bits: &[bool]) -> Vec<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pairing::bls12_381::Fr;
+    use pairing::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]
@@ -70,8 +76,7 @@ mod tests {
         for i in 2..6 {
             let x: Vec<u8> = (0..i * 32).map(|_| rng.gen()).collect();
             let hashed = pedersen_md_no_padding(x.as_slice());
-
-            assert_eq!(hashed.len(), 32);
+            assert_ne!(hashed, Fr::zero());
         }
     }
 }

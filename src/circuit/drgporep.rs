@@ -1,12 +1,11 @@
-use bellman::{ConstraintSystem, LinearCombination, SynthesisError};
-use pairing::Field;
-use sapling_crypto::circuit::boolean::Boolean;
-use sapling_crypto::circuit::multipack;
+use bellman::{ConstraintSystem, SynthesisError};
+use sapling_crypto::circuit::boolean::{self, Boolean};
+use sapling_crypto::circuit::{multipack, num};
 use sapling_crypto::jubjub::JubjubEngine;
 
 use circuit::kdf::kdf;
 use circuit::por::proof_of_retrievability;
-use circuit::xor::xor;
+use circuit::sloth;
 use util::bytes_into_boolean_vec;
 
 /// DRG based Proof of Replication.
@@ -46,12 +45,12 @@ pub fn drgporep<E, CS>(
     mut cs: CS,
     params: &E::Params,
     lambda: usize,
-    replica_node: Option<&[u8]>,
+    replica_node: Option<&E::Fr>,
     replica_node_path: &[Option<(E::Fr, bool)>],
     replica_root: Option<E::Fr>,
-    replica_parents: Vec<Option<&[u8]>>,
+    replica_parents: Vec<Option<&E::Fr>>,
     replica_parents_paths: &[Vec<Option<(E::Fr, bool)>>],
-    data_node: Option<&[u8]>,
+    data_node: Option<&E::Fr>,
     data_node_path: Vec<Option<(E::Fr, bool)>>,
     data_root: Option<E::Fr>,
     prover_id: Option<&[u8]>,
@@ -116,7 +115,16 @@ where
             .into_iter()
             .enumerate()
             .map(|(i, val)| -> Result<Vec<Boolean>, SynthesisError> {
-                bytes_into_boolean_vec(cs.namespace(|| format!("parent {}", i)), val, lambda)
+                let mut v = boolean::field_into_boolean_vec_le(
+                    cs.namespace(|| format!("parent {}", i)),
+                    val.cloned(),
+                )?;
+                // sad padding is sad
+                while v.len() < 256 {
+                    v.push(boolean::Boolean::Constant(false));
+                }
+
+                Ok(v)
             })
             .collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?
     };
@@ -130,55 +138,25 @@ where
         m,
     )?;
 
-    // decrypt the data of the replica_node
-    let encoded_bits = bytes_into_boolean_vec(
-        cs.namespace(|| "replica node commitment bits"),
+    let decoded = sloth::decode(
+        cs.namespace(|| "decode replica node commitment"),
+        &key,
         replica_node,
-        lambda,
+        sloth::DEFAULT_ROUNDS,
     )?;
 
-    let decoded_bits = {
-        let mut cs = cs.namespace(|| "decode replica node commitment");
-        xor(&mut cs, key.as_slice(), encoded_bits.as_slice())?
-    };
-
-    let expected_bits =
-        bytes_into_boolean_vec(cs.namespace(|| "data node bits"), data_node, lambda)?;
-
-    // build the linar combination for decoded
-    let decoded_lc = {
-        let mut lc = LinearCombination::zero();
-        let mut coeff = E::Fr::one();
-
-        for bit in decoded_bits {
-            lc = lc + &bit.lc(CS::one(), coeff);
-            coeff.double();
-        }
-
-        lc
-    };
-
-    // build the linar combination for expected
-    let expected_lc = {
-        let mut lc = LinearCombination::zero();
-        let mut coeff = E::Fr::one();
-
-        for bit in expected_bits {
-            lc = lc + &bit.lc(CS::one(), coeff);
-            coeff.double();
-        }
-
-        lc
-    };
+    let expected = num::AllocatedNum::alloc(cs.namespace(|| "data node"), || {
+        Ok(*data_node.ok_or_else(|| SynthesisError::AssignmentMissing)?)
+    })?;
 
     // ensure the encrypted data and data_node match
     {
         // expected * 1 = decoded
         cs.enforce(
             || "encrypted matches data_node constraint",
-            |_| expected_lc,
+            |lc| lc + expected.get_variable(),
             |lc| lc + CS::one(),
-            |_| decoded_lc,
+            |lc| lc + decoded.get_variable(),
         );
     }
 
@@ -191,13 +169,14 @@ mod tests {
     use super::*;
     use circuit::test::*;
     use drgporep;
+    use fr32::{bytes_into_fr, fr_into_bytes};
     use pairing::bls12_381::*;
     use pairing::Field;
     use porep::PoRep;
     use proof::ProofScheme;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
-    use util::{bytes_into_bits, data_at_node};
+    use util::data_at_node;
 
     #[test]
     fn drgporep_input_circuit_with_bls12_381() {
@@ -209,15 +188,19 @@ mod tests {
         let m = 6;
         let challenge = 2;
 
-        let prover_id: Vec<u8> = (0..lambda).map(|_| rng.gen()).collect();
-        let mut data: Vec<u8> = (0..lambda * n).map(|_| rng.gen()).collect();
+        let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
+        let mut data: Vec<u8> = (0..n)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
 
         // TODO: don't clone evertything
         let original_data = data.clone();
-        let data_node = Some(
+        let dn = bytes_into_fr::<Bls12>(
             data_at_node(&original_data, challenge + 1, lambda)
                 .expect("failed to read original data"),
-        );
+        ).unwrap();
+
+        let data_node = Some(&dn);
 
         let sp = drgporep::SetupParams {
             lambda,
@@ -225,13 +208,13 @@ mod tests {
         };
 
         let pp = drgporep::DrgPoRep::setup(&sp).expect("failed to create drgporep setup");
-
         let (tau, aux) =
             drgporep::DrgPoRep::replicate(&pp, prover_id.as_slice(), data.as_mut_slice())
                 .expect("failed to replicate");
 
+        let prover_id_fr = bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap();
         let pub_inputs = drgporep::PublicInputs {
-            prover_id: prover_id.as_slice(),
+            prover_id: &prover_id_fr,
             challenge,
             tau: &tau,
         };
@@ -248,15 +231,14 @@ mod tests {
             "failed to verify (non circuit)"
         );
 
-        let replica_node = Some(proof_nc.replica_node.data);
+        let replica_node = Some(&proof_nc.replica_node.data);
 
         let replica_node_path = proof_nc.replica_node.proof.as_options();
         let replica_root = Some(proof_nc.replica_node.proof.root().into());
         let replica_parents = proof_nc
             .replica_parents
-            .clone()
-            .into_iter()
-            .map(|(_, parent)| Some(parent.data))
+            .iter()
+            .map(|(_, parent)| Some(&parent.data))
             .collect();
         let replica_parents_paths: Vec<_> = proof_nc
             .replica_parents
@@ -299,23 +281,12 @@ mod tests {
         }
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_inputs(), 35, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 59165, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 27, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 58126, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
-        let prover_id_bits = bytes_into_bits(&prover_id.unwrap());
-        let prover_id_packed = multipack::compute_multipacking::<Bls12>(&prover_id_bits);
-
-        assert_eq!(prover_id_packed.len(), 2);
-        assert_eq!(
-            cs.get_input(1, "drgporep/prover_id/input 0"),
-            prover_id_packed[0]
-        );
-        assert_eq!(
-            cs.get_input(2, "drgporep/prover_id/input 1"),
-            prover_id_packed[1]
-        );
+        assert_eq!(cs.get_input(1, "drgporep/prover_id/input 0"), prover_id_fr,);
     }
 }
 

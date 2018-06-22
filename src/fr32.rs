@@ -24,7 +24,7 @@ pub type Fr32Ary = [u8; 32];
 
 // Takes a slice of bytes and returns an Fr if byte slice is exactly 32 bytes and does not overflow.
 // Otherwise, returns a BadFrBytesError.
-pub fn bytes_into_fr<E: Engine>(bytes: &mut &Fr32) -> Result<E::Fr, BadFrBytesError> {
+pub fn bytes_into_fr<E: Engine>(bytes: &[u8]) -> Result<E::Fr, BadFrBytesError> {
     if bytes.len() != 32 {
         return Err(BadFrBytesError);
     }
@@ -43,10 +43,10 @@ pub fn fr_into_bytes<E: Engine>(fr: &E::Fr) -> Fr32Vec {
 
 // Takes a slice of bytes and returns a vector of Fr -- or an error if either bytes is not a multiple of 32 bytes
 // or any 32-byte chunk overflows and does not contain a valid Fr.
-pub fn bytes_into_frs<E: Engine>(bytes: &mut &[u8]) -> Result<Vec<E::Fr>, BadFrBytesError> {
+pub fn bytes_into_frs<E: Engine>(bytes: &[u8]) -> Result<Vec<E::Fr>, BadFrBytesError> {
     bytes
         .chunks(32)
-        .map(|ref mut chunk| bytes_into_fr::<E>(chunk))
+        .map(|ref chunk| bytes_into_fr::<E>(chunk))
         .collect()
 }
 

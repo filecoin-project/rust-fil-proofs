@@ -1,5 +1,6 @@
 use bellman::{ConstraintSystem, SynthesisError};
 use sapling_crypto::circuit::boolean::Boolean;
+use sapling_crypto::circuit::num;
 use sapling_crypto::jubjub::JubjubEngine;
 
 use circuit::pedersen::pedersen_md_no_padding;
@@ -11,7 +12,7 @@ pub fn kdf<E, CS>(
     id: Vec<Boolean>,
     parents: Vec<Vec<Boolean>>,
     m: usize,
-) -> Result<Vec<Boolean>, SynthesisError>
+) -> Result<num::AllocatedNum<E>, SynthesisError>
 where
     E: JubjubEngine,
     CS: ConstraintSystem<E>,
@@ -33,13 +34,13 @@ mod tests {
     use super::kdf;
     use bellman::ConstraintSystem;
     use circuit::test::TestConstraintSystem;
+    use crypto;
+    use fr32::fr_into_bytes;
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::circuit::boolean::Boolean;
     use sapling_crypto::jubjub::JubjubBls12;
-
-    use crypto;
-    use util::{bits_to_bytes, bytes_into_boolean_vec};
+    use util::bytes_into_boolean_vec;
 
     #[test]
     fn kdf_circuit() {
@@ -48,10 +49,9 @@ mod tests {
         let params = &JubjubBls12::new();
 
         let m = 20;
-        let id: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
-        let parents: Vec<Vec<u8>> = (0..m)
-            .map(|_| (0..32).map(|_| rng.gen()).collect())
-            .collect();
+
+        let id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
+        let parents: Vec<Vec<u8>> = (0..m).map(|_| fr_into_bytes::<Bls12>(&rng.gen())).collect();
 
         let id_bits: Vec<Boolean> = {
             let mut cs = cs.namespace(|| "id");
@@ -75,23 +75,19 @@ mod tests {
         ).unwrap();
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_constraints(), 27917);
-        assert_eq!(out.len(), 32 * 8, "invalid output length");
+        assert_eq!(cs.num_constraints(), 27661);
 
         let input_bytes = parents.iter().fold(id, |mut acc, parent| {
             acc.extend(parent);
             acc
         });
 
-        // convert Vec<Boolean> to Vec<u8>
-        let actual = bits_to_bytes(
-            out.iter()
-                .map(|v| v.get_value().unwrap())
-                .collect::<Vec<bool>>()
-                .as_slice(),
-        );
+        let expected = crypto::kdf::kdf::<Bls12>(input_bytes.as_slice(), m);
 
-        let expected = crypto::kdf::kdf(input_bytes.as_slice(), m);
-        assert_eq!(expected, actual, "circuit and non circuit do not match");
+        assert_eq!(
+            expected,
+            out.get_value().unwrap(),
+            "circuit and non circuit do not match"
+        );
     }
 }

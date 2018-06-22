@@ -1,7 +1,7 @@
-use merkle_light::hash::Algorithm;
+use merkle_light::hash::{Algorithm, Hashable};
 use merkle_light::merkle;
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
-use pairing::{BitIterator, PrimeField};
+use pairing::{BitIterator, PrimeField, PrimeFieldRepr};
 use sapling_crypto::jubjub::JubjubBls12;
 use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 use std::hash::Hasher;
@@ -18,6 +18,14 @@ pub struct PedersenAlgorithm(Fr);
 impl Default for PedersenAlgorithm {
     fn default() -> PedersenAlgorithm {
         PedersenAlgorithm::new()
+    }
+}
+
+impl Hashable<PedersenAlgorithm> for Fr {
+    fn hash(&self, state: &mut PedersenAlgorithm) {
+        let mut bytes = Vec::with_capacity(32);
+        self.into_repr().write_le(&mut bytes).unwrap();
+        state.write(&bytes);
     }
 }
 

@@ -1,5 +1,8 @@
-use crypto::{kdf, xor};
+use crypto::{kdf, sloth};
 use drgraph::{Graph, MerkleProof, Sampling};
+use fr32::{bytes_into_fr, fr_into_bytes};
+use pairing::bls12_381::{Bls12, Fr};
+use pairing::{PrimeField, PrimeFieldRepr};
 use porep::{self, PoRep};
 use util::data_at_node;
 use vde::{self, decode_block};
@@ -9,7 +12,7 @@ use proof::ProofScheme;
 
 #[derive(Debug)]
 pub struct PublicInputs<'a> {
-    pub prover_id: &'a [u8],
+    pub prover_id: &'a Fr,
     pub challenge: usize,
     pub tau: &'a porep::Tau,
 }
@@ -39,35 +42,35 @@ pub struct PublicParams {
 }
 
 #[derive(Debug, Clone)]
-pub struct DataProof<'a> {
+pub struct DataProof {
     pub proof: MerkleProof,
-    pub data: &'a [u8],
+    pub data: Fr,
 }
 
-impl<'a> DataProof<'a> {
+impl DataProof {
     pub fn serialize(&self) -> Vec<u8> {
         let mut out = self.proof.serialize();
-        out.extend(self.data);
+        self.data.into_repr().write_le(&mut out).unwrap();
 
         out
     }
 }
 
-pub type ReplicaParents<'a> = Vec<(usize, DataProof<'a>)>;
+pub type ReplicaParents = Vec<(usize, DataProof)>;
 
-#[derive(Debug)]
-pub struct Proof<'a> {
-    pub replica_node: DataProof<'a>,
-    pub replica_parents: ReplicaParents<'a>,
+#[derive(Debug, Clone)]
+pub struct Proof {
+    pub replica_node: DataProof,
+    pub replica_parents: ReplicaParents,
     pub node: MerkleProof,
 }
 
-impl<'a> Proof<'a> {
+impl Proof {
     pub fn new(
-        replica_node: DataProof<'a>,
-        replica_parents: ReplicaParents<'a>,
+        replica_node: DataProof,
+        replica_parents: ReplicaParents,
         node: MerkleProof,
-    ) -> Proof<'a> {
+    ) -> Proof {
         Proof {
             replica_node,
             replica_parents,
@@ -84,7 +87,7 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<'a>;
     type PrivateInputs = PrivateInputs<'a>;
-    type Proof = Proof<'a>;
+    type Proof = Proof;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
         let graph = Graph::new(sp.drg.n, Some(Sampling::Bucket(sp.drg.m)));
@@ -109,14 +112,12 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
         let tree_r = &priv_inputs.aux.tree_r;
         let replica = priv_inputs.replica;
 
-        let d = if challenge == 0 {
-            &b""[..]
-        } else {
-            data_at_node(replica, challenge + 1, pub_params.lambda)?
-        };
+        let data =
+            bytes_into_fr::<Bls12>(data_at_node(replica, challenge + 1, pub_params.lambda)?)?;
+
         let replica_node = DataProof {
             proof: tree_r.gen_proof(challenge).into(),
-            data: d,
+            data,
         };
 
         let parents = pub_params.graph.parents(challenge + 1);
@@ -127,7 +128,7 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
                 p,
                 DataProof {
                     proof: tree_r.gen_proof(p - 1).into(),
-                    data: data_at_node(replica, p, pub_params.lambda)?,
+                    data: bytes_into_fr::<Bls12>(data_at_node(replica, p, pub_params.lambda)?)?,
                 },
             ));
         }
@@ -161,14 +162,17 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
         }
 
         let key_input = proof.replica_parents.iter().fold(
-            pub_inputs.prover_id.to_vec(),
+            fr_into_bytes::<Bls12>(pub_inputs.prover_id),
             |mut acc, (_, p)| {
-                acc.extend(p.data);
+                acc.extend(fr_into_bytes::<Bls12>(&p.data));
                 acc
             },
         );
-        let key = kdf::kdf(key_input.as_slice(), pub_params.graph.degree());
-        let unsealed = xor::decode(&key, proof.replica_node.data)?;
+        let key = kdf::kdf::<Bls12>(key_input.as_slice(), pub_params.graph.degree());
+        let unsealed: Fr =
+            sloth::decode::<Bls12>(&key, &proof.replica_node.data, sloth::DEFAULT_ROUNDS);
+
+        println!("leaf: {:?}", proof.node.leaf());
 
         if !proof.node.validate_data(&unsealed) {
             println!("invalid data {:?}", unsealed);
@@ -191,10 +195,16 @@ impl<'a> PoRep<'a> for DrgPoRep {
         let tree_d = pp.graph.merkle_tree(data, pp.lambda)?;
         let comm_d = pp.graph.commit(data, pp.lambda)?;
 
-        vde::encode(&pp.graph, pp.lambda, prover_id, data)?;
+        vde::encode(
+            &pp.graph,
+            pp.lambda,
+            &bytes_into_fr::<Bls12>(prover_id)?,
+            data,
+        )?;
 
         let tree_r = pp.graph.merkle_tree(data, pp.lambda)?;
         let comm_r = pp.graph.commit(data, pp.lambda)?;
+
         Ok((
             porep::Tau::new(comm_d, comm_r),
             porep::ProverAux::new(tree_d, tree_r),
@@ -206,11 +216,22 @@ impl<'a> PoRep<'a> for DrgPoRep {
         prover_id: &'b [u8],
         data: &'b [u8],
     ) -> Result<Vec<u8>> {
-        vde::decode(&pp.graph, pp.lambda, prover_id, data)
+        vde::decode(
+            &pp.graph,
+            pp.lambda,
+            &bytes_into_fr::<Bls12>(prover_id)?,
+            data,
+        )
     }
 
     fn extract(pp: &PublicParams, prover_id: &[u8], data: &[u8], node: usize) -> Result<Vec<u8>> {
-        decode_block(&pp.graph, pp.lambda, prover_id, data, node)
+        Ok(fr_into_bytes::<Bls12>(&decode_block(
+            &pp.graph,
+            pp.lambda,
+            &bytes_into_fr::<Bls12>(prover_id)?,
+            data,
+            node,
+        )?))
     }
 }
 
@@ -291,8 +312,10 @@ mod tests {
         let m = i * 10;
         let lambda = lambda;
 
-        let prover_id: Vec<u8> = (0..lambda).map(|_| rng.gen()).collect();
-        let data: Vec<u8> = (0..lambda * n).map(|_| rng.gen()).collect();
+        let prover_id = fr_into_bytes::<Bls12>(&rng.gen());
+        let data: Vec<u8> = (0..n)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
 
         // create a copy, so we can comare roundtrips
         let mut data_copy = data.clone();
@@ -311,7 +334,7 @@ mod tests {
         assert_ne!(data, data_copy, "replication did not change data");
 
         let pub_inputs = PublicInputs {
-            prover_id: prover_id.as_slice(),
+            prover_id: &bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
             challenge: challenge,
             tau: &tau,
         };

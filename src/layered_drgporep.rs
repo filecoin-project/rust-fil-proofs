@@ -1,6 +1,7 @@
 use drgporep::{self, DrgPoRep};
-use drgraph;
 use error::Result;
+use fr32::fr_into_bytes;
+use pairing::bls12_381::{Bls12, Fr};
 use porep::{self, PoRep};
 use proof::ProofScheme;
 
@@ -17,47 +18,11 @@ pub struct PublicParams {
 }
 
 pub type ReplicaParents = Vec<(usize, DataProof)>;
-
-#[derive(Debug, Clone)]
-pub struct EncodingProof {
-    pub replica_node: DataProof,
-    pub replica_parents: ReplicaParents,
-    pub node: drgraph::MerkleProof,
-}
-
-impl<'a> Into<EncodingProof> for drgporep::Proof<'a> {
-    fn into(self) -> EncodingProof {
-        let p = self
-            .replica_parents
-            .into_iter()
-            .map(|input| (input.0, input.1.into()))
-            .collect::<Vec<_>>();
-
-        EncodingProof {
-            replica_node: self.replica_node.into(),
-            replica_parents: p,
-            node: self.node,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct DataProof {
-    proof: drgraph::MerkleProof,
-    data: Vec<u8>,
-}
-
-impl<'a> Into<DataProof> for drgporep::DataProof<'a> {
-    fn into(self) -> DataProof {
-        DataProof {
-            proof: self.proof,
-            data: self.data.to_vec().clone(),
-        }
-    }
-}
+pub type EncodingProof = drgporep::Proof;
+pub type DataProof = drgporep::DataProof;
 
 pub struct PublicInputs<'a> {
-    pub prover_id: &'a [u8],
+    pub prover_id: &'a Fr,
     pub challenge: usize,
     pub tau: Vec<porep::Tau>,
 }
@@ -167,7 +132,7 @@ impl<'a> ProofScheme<'a> for LayeredDrgPoRep {
                         drgporep::DataProof {
                             // TODO: investigate if clone can be avoided by using a referenc in drgporep::DataProof
                             proof: p.1.proof.clone(),
-                            data: p.1.data.as_slice(),
+                            data: p.1.data,
                         },
                     )
                 })
@@ -179,7 +144,7 @@ impl<'a> ProofScheme<'a> for LayeredDrgPoRep {
                     replica_node: drgporep::DataProof {
                         // TODO: investigate if clone can be avoided by using a referenc in drgporep::DataProof
                         proof: ep.replica_node.proof.clone(),
-                        data: ep.replica_node.data.as_slice(),
+                        data: ep.replica_node.data,
                     },
                     replica_parents: parents,
                     // TODO: investigate if clone can be avoided by using a referenc in drgporep::DataProof
@@ -206,7 +171,8 @@ fn prove_layers(
     assert!(layers > 0);
 
     let mut scratch = priv_inputs.replica.to_vec().clone();
-    <DrgPoRep as PoRep>::replicate(&pp, pub_inputs.prover_id, scratch.as_mut_slice())?;
+    let prover_id = fr_into_bytes::<Bls12>(pub_inputs.prover_id);
+    <DrgPoRep as PoRep>::replicate(&pp, &prover_id, scratch.as_mut_slice())?;
 
     let new_priv_inputs = drgporep::PrivateInputs {
         replica: scratch.as_slice(),
@@ -219,7 +185,7 @@ fn prove_layers(
     };
     let drg_proof = DrgPoRep::prove(&pp, &drgporep_pub_inputs, &new_priv_inputs)?;
     proofs.push(Proof {
-        encoding_proof: drg_proof.into(),
+        encoding_proof: drg_proof,
         permutation_proof: PermutationProof {},
     });
 
@@ -329,6 +295,8 @@ fn permute_and_replicate_layers(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fr32::bytes_into_fr;
+    use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     fn permute_layers(mut drgpp: drgporep::PublicParams, layers: usize) -> drgporep::PublicParams {
@@ -383,8 +351,10 @@ mod tests {
 
         let m = i * 10;
         let lambda = lambda;
-        let prover_id: Vec<u8> = (0..lambda).map(|_| rng.gen()).collect();
-        let data: Vec<u8> = (0..lambda * n).map(|_| rng.gen()).collect();
+        let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
+        let data: Vec<u8> = (0..n)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
         let challenge = i;
@@ -403,7 +373,7 @@ mod tests {
         assert_ne!(data, data_copy);
 
         let pub_inputs = PublicInputs {
-            prover_id: prover_id.as_slice(),
+            prover_id: &bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
             challenge,
             tau: tau,
         };

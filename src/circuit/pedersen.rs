@@ -1,6 +1,6 @@
 use bellman::{ConstraintSystem, SynthesisError};
 use sapling_crypto::circuit::boolean::Boolean;
-use sapling_crypto::circuit::pedersen_hash;
+use sapling_crypto::circuit::{num, pedersen_hash};
 use sapling_crypto::jubjub::JubjubEngine;
 
 use crypto::pedersen::PEDERSEN_BLOCK_SIZE;
@@ -10,7 +10,7 @@ pub fn pedersen_md_no_padding<E, CS>(
     mut cs: CS,
     params: &E::Params,
     data: &[Boolean],
-) -> Result<Vec<Boolean>, SynthesisError>
+) -> Result<num::AllocatedNum<E>, SynthesisError>
 where
     E: JubjubEngine,
     CS: ConstraintSystem<E>,
@@ -28,6 +28,7 @@ where
 
     let mut chunks = data.chunks(PEDERSEN_BLOCK_SIZE);
     let mut cur: Vec<Boolean> = chunks.nth(0).unwrap().to_vec();
+    let chunks_len = chunks.len();
 
     for (i, block) in chunks.enumerate() {
         let mut cs = cs.namespace(|| format!("block {}", i));
@@ -35,10 +36,29 @@ where
             // TODO: no cloning
             cur.push(b.clone());
         }
-        cur = pedersen_compression(cs.namespace(|| "initial hash"), params, &cur)?;
+        if i == chunks_len - 1 {
+            // last round, skip
+        } else {
+            cur = pedersen_compression(cs.namespace(|| "hash"), params, &cur)?;
+        }
     }
 
-    Ok(cur)
+    // hash and return a num at the end
+    pedersen_compression_num(cs.namespace(|| "last hash"), params, &cur)
+}
+
+pub fn pedersen_compression_num<E: JubjubEngine, CS: ConstraintSystem<E>>(
+    mut cs: CS,
+    params: &E::Params,
+    bits: &[Boolean],
+) -> Result<num::AllocatedNum<E>, SynthesisError> {
+    Ok(pedersen_hash::pedersen_hash(
+        cs.namespace(|| "inner hash"),
+        pedersen_hash::Personalization::NoteCommitment,
+        &bits,
+        params,
+    )?.get_x()
+        .clone())
 }
 
 pub fn pedersen_compression<E: JubjubEngine, CS: ConstraintSystem<E>>(
@@ -46,13 +66,7 @@ pub fn pedersen_compression<E: JubjubEngine, CS: ConstraintSystem<E>>(
     params: &E::Params,
     bits: &[Boolean],
 ) -> Result<Vec<Boolean>, SynthesisError> {
-    let h = pedersen_hash::pedersen_hash(
-        cs.namespace(|| "inner hash"),
-        pedersen_hash::Personalization::NoteCommitment,
-        &bits,
-        params,
-    )?.get_x()
-        .clone();
+    let h = pedersen_compression_num(cs.namespace(|| "compression"), params, bits)?;
     let mut out = h.into_bits_le(cs.namespace(|| "h into bits"))?;
 
     // needs padding, because x does not always translate to exactly 256 bits
@@ -73,7 +87,7 @@ mod tests {
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::circuit::boolean::Boolean;
     use sapling_crypto::jubjub::JubjubBls12;
-    use util::{bits_to_bytes, bytes_into_boolean_vec};
+    use util::bytes_into_boolean_vec;
 
     #[test]
     fn test_pedersen_input_circut() {
@@ -92,16 +106,14 @@ mod tests {
                 pedersen_md_no_padding(cs.namespace(|| "pedersen"), params, &data_bits).unwrap();
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
-            assert_eq!(out.len(), 32 * 8, "invalid output length");
 
             let expected = crypto::pedersen::pedersen_md_no_padding(data.as_slice());
-            let actual = bits_to_bytes(
-                &out.iter()
-                    .map(|b| b.get_value().unwrap())
-                    .collect::<Vec<_>>(),
-            );
 
-            assert_eq!(expected, actual, "circuit and non circuit do not match");
+            assert_eq!(
+                expected,
+                out.get_value().unwrap(),
+                "circuit and non circuit do not match"
+            );
         }
     }
 }
