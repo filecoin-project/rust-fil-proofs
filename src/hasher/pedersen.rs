@@ -2,15 +2,11 @@ use merkle_light::hash::{Algorithm, Hashable};
 use merkle_light::merkle;
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
 use pairing::{BitIterator, PrimeField, PrimeFieldRepr};
-use sapling_crypto::jubjub::JubjubBls12;
 use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 use std::hash::Hasher;
 
+use crypto::pedersen;
 use util::bytes_into_bits;
-
-lazy_static! {
-    static ref HASH_PARAMS: JubjubBls12 = JubjubBls12::new();
-}
 
 #[derive(Debug, Copy, Clone)]
 pub struct PedersenAlgorithm(Fr);
@@ -79,7 +75,8 @@ impl Hasher for PedersenAlgorithm {
     #[inline]
     fn write(&mut self, msg: &[u8]) {
         let bv = bytes_into_bits(msg);
-        let pt = pedersen_hash::<Bls12, _>(Personalization::NoteCommitment, bv, &HASH_PARAMS);
+        let pt =
+            pedersen_hash::<Bls12, _>(Personalization::NoteCommitment, bv, &pedersen::JJ_PARAMS);
         self.0 = pt.into_xy().0
     }
 
@@ -117,7 +114,7 @@ impl Algorithm<PedersenHash> for PedersenAlgorithm {
             lhs.into_iter()
                 .take(Fr::NUM_BITS as usize)
                 .chain(rhs.into_iter().take(Fr::NUM_BITS as usize)),
-            &HASH_PARAMS,
+            &pedersen::JJ_PARAMS,
         ).into_xy()
             .0
             .into()

@@ -23,9 +23,8 @@ extern crate tempfile;
 #[macro_use]
 extern crate proptest;
 
-#[cfg(test)]
 #[macro_use]
-mod test_helper;
+pub mod test_helper;
 
 pub mod batchpost;
 

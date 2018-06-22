@@ -34,6 +34,7 @@ criterion = "0.2.3"
 tempfile = "3"
 proptest = "0.7"
 indicatif = "0.9"
+clap = "2"
 
 [[bench]]
 name = "pedersen"

@@ -1,4 +1,6 @@
 extern crate bellman;
+#[macro_use]
+extern crate clap;
 extern crate indicatif;
 extern crate pairing;
 extern crate proofs;
@@ -6,36 +8,27 @@ extern crate rand;
 extern crate sapling_crypto;
 
 use bellman::groth16::*;
+use clap::{App, Arg};
 use indicatif::{ProgressBar, ProgressStyle};
-use pairing::bls12_381::Bls12;
-use rand::{Rng, SeedableRng, XorShiftRng};
+use pairing::bls12_381::{Bls12, Fr};
+use rand::{SeedableRng, XorShiftRng};
 use sapling_crypto::circuit::multipack;
 use sapling_crypto::jubjub::JubjubBls12;
 use std::time::{Duration, Instant};
 
-use proofs::proof::ProofScheme;
-use proofs::util::data_at_node;
-use proofs::{circuit, drgraph, fr32, merklepor};
+use proofs::circuit;
+use proofs::test_helper::random_merkle_path;
 
-fn main() {
+fn do_the_work(data_size: usize, challenge_count: usize) {
     let jubjub_params = &JubjubBls12::new();
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-    let lambda = 32;
-    // TODO: this should go up to 1GB
-    // 1024 * 1024 *1024
-    let data_size = 1024 * 1024 * 500;
     let leaves = data_size / 32;
-    let m = 6;
     let tree_depth = (leaves as f64).log2().ceil() as usize;
-    // TODO: go to 100
-    let challenge_count = 1;
-
-    let mut total_param = Duration::new(0, 0);
 
     println!(
-        "data_size {}bytes, m = {}, tree_depth = {}, challenge_count = {}",
-        data_size, m, tree_depth, challenge_count
+        "data_size {}bytes, tree_depth = {}, challenge_count = {}",
+        data_size, tree_depth, challenge_count
     );
 
     println!("Creating sample parameters...");
@@ -56,8 +49,6 @@ fn main() {
     println!("\tverifying key {:?}", start.elapsed());
     let pvk = prepare_verifying_key(&groth_params.vk);
 
-    total_param += start.elapsed();
-
     println!("\tgraph {:?}", start.elapsed());
     const SAMPLES: usize = 5;
 
@@ -65,16 +56,7 @@ fn main() {
     let mut total_proving = Duration::new(0, 0);
     let mut total_verifying = Duration::new(0, 0);
 
-    println!("\tgraph:data {:?}", start.elapsed());
-    let el = fr32::fr_into_bytes::<Bls12>(&rng.gen());
-    let data: Vec<u8> = (0..leaves).flat_map(|_| el.clone()).collect();
-
-    println!("\tgraph:sampling {:?}", start.elapsed());
-    let graph = drgraph::Graph::new(leaves, drgraph::Sampling::Bucket(m));
-
-    println!("\tgraph:merkle_tree {:?}", start.elapsed());
-    let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
-    let pub_params = merklepor::PublicParams { lambda, leaves };
+    let (auth_path, leaf, root) = random_merkle_path(rng, tree_depth);
 
     let pb = ProgressBar::new((SAMPLES * 2) as u64);
     pb.set_style(
@@ -87,52 +69,19 @@ fn main() {
 
     for _ in 0..SAMPLES {
         pb.inc(1);
-        let pub_inputs: Vec<_> = (0..challenge_count)
-            .map(|j| merklepor::PublicInputs {
-                challenge: j + 1,
-                commitment: tree.root(),
-            })
-            .collect();
-
-        let priv_inputs: Vec<_> = (0..challenge_count)
-            .map(|j| merklepor::PrivateInputs {
-                tree: &tree,
-                leaf: fr32::bytes_into_fr::<Bls12>(
-                    data_at_node(
-                        data.as_slice(),
-                        pub_inputs[j].challenge + 1,
-                        pub_params.lambda,
-                    ).unwrap(),
-                ).unwrap(),
-            })
-            .collect();
-
-        // create a non circuit proof
-        let proof_nonc: Vec<_> = (0..challenge_count)
-            .map(|j| {
-                merklepor::MerklePoR::prove(&pub_params, &pub_inputs[j], &priv_inputs[j]).unwrap()
-            })
-            .collect();
-
-        // make sure it verifies
-        for j in 0..challenge_count {
-            assert!(
-                merklepor::MerklePoR::verify(&pub_params, &pub_inputs[j], &proof_nonc[j]).unwrap(),
-                "failed to verify merklepor proof"
-            );
-        }
 
         let start = Instant::now();
         proof_vec.truncate(0);
+        let auth_paths: Vec<_> = (0..challenge_count).map(|_| auth_path.clone()).collect();
+        let values: Vec<_> = (0..challenge_count).map(|_| Some(&leaf)).collect();
 
         {
-            let auth_paths: Vec<_> = proof_nonc.iter().map(|p| p.proof.as_options()).collect();
             // create an instance of our circut (with the witness)
             let c = circuit::ppor::ParallelProofOfRetrievability {
                 params: jubjub_params,
-                values: proof_nonc.iter().map(|p| Some(&p.data)).collect(),
+                values: values.clone(),
                 auth_paths: &auth_paths,
-                root: Some(pub_inputs[0].commitment.into()),
+                root: Some(root),
             };
 
             // create groth16 proof
@@ -148,24 +97,21 @@ fn main() {
 
         // -- generate public inputs
 
-        let mut expected_inputs: Vec<_> = (0..challenge_count)
+        let mut expected_inputs: Vec<Fr> = (0..challenge_count)
             .flat_map(|j| {
-                let auth_path_bits: Vec<bool> = proof_nonc[j]
-                    .proof
-                    .path()
-                    .iter()
-                    .map(|(_, is_right)| *is_right)
-                    .collect();
-                let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
+                let auth_path_bits: Vec<bool> =
+                    auth_paths[j].iter().map(|p| p.unwrap().1).collect();
+                let packed_auth_path: Vec<Fr> =
+                    multipack::compute_multipacking::<Bls12>(&auth_path_bits);
 
-                let mut input = vec![proof_nonc[j].data];
+                let mut input = vec![*values[j].unwrap()];
                 input.extend(packed_auth_path);
                 input
             })
             .collect();
 
         // add the root as the last one
-        expected_inputs.push(pub_inputs[0].commitment.into());
+        expected_inputs.push(root);
 
         // -- verify proof with public inputs
         pb.inc(1);
@@ -188,10 +134,31 @@ fn main() {
     pb.finish_and_clear();
     println!(
         "Average proving time: {:?} seconds\n\
-         Average verifying time: {:?} seconds\n\
-         Param generation time: {:?} seconds",
-        proving_avg,
-        verifying_avg,
-        total_param.as_secs()
+         Average verifying time: {:?} seconds",
+        proving_avg, verifying_avg,
     );
+}
+
+fn main() {
+    let matches = App::new("Multi Challenge MerklePoR")
+        .version("1.0")
+        .arg(
+            Arg::with_name("size")
+                .required(true)
+                .long("size")
+                .help("The data size in MB")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("challenges")
+                .long("challenges")
+                .help("How many challenges to execute, defaults to 1")
+                .takes_value(true),
+        )
+        .get_matches();
+
+    let data_size = value_t!(matches, "size", usize).unwrap() * 1024 * 1024;
+    let challenge_count = value_t!(matches, "challenges", usize).unwrap_or_else(|_| 1);
+
+    do_the_work(data_size, challenge_count);
 }
