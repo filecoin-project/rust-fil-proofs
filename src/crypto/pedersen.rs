@@ -7,7 +7,7 @@ use fr32::bytes_into_frs;
 use util::{bits_to_bytes, bytes_into_bits};
 
 lazy_static! {
-    static ref JJ_PARAMS: JubjubBls12 = JubjubBls12::new();
+    pub static ref JJ_PARAMS: JubjubBls12 = JubjubBls12::new();
 }
 
 pub const PEDERSEN_BLOCK_SIZE: usize = 256;
