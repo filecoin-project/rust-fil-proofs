@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use proofs::circuit;
 use proofs::test_helper::random_merkle_path;
 
-fn do_the_work(data_size: usize, m: usize, challenge_count: usize) {
+fn do_the_work(data_size: usize, challenge_count: usize) {
     let jubjub_params = &JubjubBls12::new();
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
@@ -27,8 +27,8 @@ fn do_the_work(data_size: usize, m: usize, challenge_count: usize) {
     let tree_depth = (leaves as f64).log2().ceil() as usize;
 
     println!(
-        "data_size {}bytes, m = {}, tree_depth = {}, challenge_count = {}",
-        data_size, m, tree_depth, challenge_count
+        "data_size {}bytes, tree_depth = {}, challenge_count = {}",
+        data_size, tree_depth, challenge_count
     );
 
     println!("Creating sample parameters...");
@@ -150,12 +150,6 @@ fn main() {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("m")
-                .long("m")
-                .help("The m, defaults to 6")
-                .takes_value(true),
-        )
-        .arg(
             Arg::with_name("challenges")
                 .long("challenges")
                 .help("How many challenges to execute, defaults to 1")
@@ -164,8 +158,7 @@ fn main() {
         .get_matches();
 
     let data_size = value_t!(matches, "size", usize).unwrap() * 1024 * 1024;
-    let m = value_t!(matches, "m", usize).unwrap_or_else(|_| 6);
     let challenge_count = value_t!(matches, "challenges", usize).unwrap_or_else(|_| 1);
 
-    do_the_work(data_size, m, challenge_count);
+    do_the_work(data_size, challenge_count);
 }
