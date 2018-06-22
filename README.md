@@ -4,7 +4,7 @@
 
 [Install Rust.](https://www.rust-lang.org/en-US/install.html)
 
-Configure to use nightly: 
+Configure to use nightly:
 
 ```
 > rustup default nightly
@@ -20,4 +20,20 @@ Configure to use nightly:
 
 ```
 > cargo test
+```
+
+
+## Examples
+
+Build
+
+```
+> cargo build --examples --release
+```
+
+Running them
+
+```
+> ./target/release/examples/merklepor
+> ./target/release/examples/drgporep
 ```

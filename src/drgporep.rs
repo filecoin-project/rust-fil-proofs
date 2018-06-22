@@ -170,8 +170,6 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
         let unsealed: Fr =
             sloth::decode::<Bls12>(&key, &proof.replica_node.data, sloth::DEFAULT_ROUNDS);
 
-        println!("leaf: {:?}", proof.node.leaf());
-
         if !proof.node.validate_data(&unsealed) {
             println!("invalid data {:?}", unsealed);
             return Ok(false);
@@ -272,7 +270,7 @@ mod tests {
         let prover_id = vec![1u8; 32];
         let nodes = 3;
         let data = vec![2u8; 32 * nodes];
-        println!("data: {:?}", data);
+
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
 
