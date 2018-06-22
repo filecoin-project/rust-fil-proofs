@@ -163,7 +163,7 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
                 .collect();
 
-            let graph = drgraph::Graph::new(leaves, Some(drgraph::Sampling::Bucket(16)));
+            let graph = drgraph::Graph::new(leaves, drgraph::Sampling::Bucket(16));
             let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
 
             // -- MerklePoR

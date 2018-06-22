@@ -220,7 +220,7 @@ mod tests {
         let data: Vec<u8> = (0..32)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
-        let graph = Graph::new(32, Some(Sampling::Bucket(16)));
+        let graph = Graph::new(32, Sampling::Bucket(16));
         let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
 
         let pub_inputs = PublicInputs {

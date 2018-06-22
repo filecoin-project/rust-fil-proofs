@@ -70,7 +70,7 @@ fn main() {
     let data: Vec<u8> = (0..leaves).flat_map(|_| el.clone()).collect();
 
     println!("\tgraph:sampling {:?}", start.elapsed());
-    let graph = drgraph::Graph::new(leaves, Some(drgraph::Sampling::Bucket(m)));
+    let graph = drgraph::Graph::new(leaves, drgraph::Sampling::Bucket(m));
 
     println!("\tgraph:merkle_tree {:?}", start.elapsed());
     let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();

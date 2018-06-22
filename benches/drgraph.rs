@@ -13,13 +13,13 @@ fn drgraph(c: &mut Criterion) {
             "bucket/m=6",
             |b, i| {
                 b.iter(|| {
-                    black_box(Graph::new(*i, Some(Sampling::Bucket(6))));
+                    black_box(Graph::new(*i, Sampling::Bucket(6)));
                 })
             },
             params,
         ).with_function("dr", |b, i| {
             b.iter(|| {
-                black_box(Graph::new(*i, Some(Sampling::DR)));
+                black_box(Graph::new(*i, Sampling::DR));
             })
         }),
     );

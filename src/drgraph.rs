@@ -8,7 +8,6 @@ use merkle_light::{merkle, proof};
 use pairing::bls12_381::Fr;
 use rand::{thread_rng, Rng};
 use std::cmp;
-use std::collections::HashMap;
 use util::data_at_node;
 
 pub type TreeHash = pedersen::PedersenHash;
@@ -133,9 +132,10 @@ pub fn proof_into_options(p: proof::Proof<TreeHash>) -> Vec<Option<(Fr, bool)>> 
 pub struct Graph {
     /// How many nodes are in this graph.
     nodes: usize,
-    /// List of predecessors. An entry `(v, vec![u, w])` means
-    /// there is an edge from `v -> u` and `v -> w`.
-    pub pred: HashMap<usize, Vec<usize>>,
+    /// List of predecessors.
+    /// For each node the parents are in  `node * degree` to `(node + 1) * degree`.
+    /// An entry `v` for node `u`, means there is an edge from `u -> v`.
+    pred: Vec<usize>,
     /// The degree of the graph (you can assume it is the _same_ for every node).
     degree: usize,
 }
@@ -148,20 +148,20 @@ pub enum Sampling {
 impl Graph {
     /// Creates a new graph. If no sampling is passed, it does not contain any edges.
     #[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
-    pub fn new(nodes: usize, sampling: Option<Sampling>) -> Graph {
+    pub fn new(nodes: usize, sampling: Sampling) -> Graph {
         // unwrapping the sampling methods, because it would be an implementation error
         // if those fail.
         match sampling {
-            Some(Sampling::DR) => dr_sample(nodes).unwrap(),
-            Some(Sampling::Bucket(m)) => bucket_sample(nodes, m).unwrap(),
-            None => {
-                Graph {
-                    nodes,
-                    // TODO: use int optimized hash function
-                    pred: HashMap::with_capacity(nodes),
-                    degree: 0,
-                }
-            }
+            Sampling::DR => dr_sample(nodes).unwrap(),
+            Sampling::Bucket(m) => bucket_sample(nodes, m).unwrap(),
+        }
+    }
+
+    pub fn new_empty(nodes: usize, degree: usize) -> Graph {
+        Graph {
+            nodes,
+            pred: vec![0; nodes * degree],
+            degree,
         }
     }
 
@@ -183,21 +183,33 @@ impl Graph {
 
         let degree = self.degree();
 
-        self.pred
-            .entry(u)
-            .or_insert_with(|| Vec::with_capacity(degree));
-        let edges = self.pred.get_mut(&u).unwrap();
-
-        // TODO: @nicola do we want this check?
-        if edges.len() + vs.len() > degree {
+        if vs.len() > degree {
             return Err(format_err!(
-                "can not add more edges than the degree of the graph: {}",
-                degree,
+                "can not add more edges than the degree of the graph: {} > {}",
+                vs.len(),
+                degree
             ));
         }
 
-        edges.extend(vs);
+        let start = (u - 1) * degree;
+        let end = u * degree;
+        let edges = &mut self.pred[start..end];
+        let first = match edges.iter().position(|edge| *edge == 0) {
+            Some(el) => el,
+            None => {
+                return Err(format_err!(
+                    "can not add anymore edges: {:?} {}",
+                    edges,
+                    degree
+                ))
+            }
+        };
 
+        edges[first..first + vs.len()].copy_from_slice(vs);
+
+        // sort on insert, so we only ever do it once
+        // but need to skip 0s from being sorted in
+        edges[0..first + vs.len()].sort();
         Ok(())
     }
 
@@ -233,20 +245,27 @@ impl Graph {
     }
 
     /// Returns a sorted list of all parents of this node.
-    pub fn parents(&self, node: usize) -> Vec<usize> {
-        self.pred
-            .get(&node)
-            .map(|p| {
-                let mut res = p.to_vec();
-                res.sort();
-                res
-            })
-            .unwrap_or_else(Vec::new)
+    pub fn parents(&self, node: usize) -> &[usize] {
+        let degree = self.degree;
+        let start = (node - 1) * degree;
+        let end = node * degree;
+
+        let edges = &self.pred[start..end];
+
+        match edges.iter().position(|edge| *edge == 0) {
+            Some(el) => &edges[0..el],
+            None => edges,
+        }
     }
 
     /// Returns the size of the node.
     pub fn size(&self) -> usize {
         self.nodes
+    }
+
+    /// Returns the tree depth.
+    pub fn depth(&self) -> u64 {
+        (self.size() as f64).log2().ceil() as u64
     }
 
     /// Returns the degree of the graph.
@@ -255,55 +274,34 @@ impl Graph {
     }
 
     pub fn permute(&self, keys: &[u32]) -> Graph {
-        let mut tmp: HashMap<usize, Vec<usize>> = HashMap::new();
         let nodes = self.nodes as u32;
+        let mut permuted = Graph::new_empty(self.nodes, self.degree);
 
-        let p: HashMap<usize, usize> = (0..self.nodes)
-            .map(|i| (i + 1, feistel::permute(nodes, i as u32, keys) as usize + 1))
+        let p: Vec<usize> = (0..self.nodes)
+            .map(|i| feistel::permute(nodes, i as u32, keys) as usize + 1)
             .collect();
 
-        for (key, preds) in &self.pred {
-            for pred in preds {
-                tmp.entry(p[key]).or_insert_with(Vec::new);
-
-                if let Some(val) = tmp.get_mut(&p[key]) {
-                    val.push(p[pred]);
-                }
-            }
+        for (key, preds) in self.pred.chunks(self.degree).enumerate() {
+            let edges: Vec<_> = preds.iter().map(|pred| p[pred - 1]).collect();
+            permuted.add_edges(p[key], edges.as_slice()).unwrap();
         }
-
-        let mut permuted = Graph::new(self.nodes, None);
-        permuted.pred = tmp;
-        permuted.degree = self.degree;
 
         permuted
     }
+
     pub fn invert_permute(&self, keys: &[u32]) -> Graph {
-        let nodes: u32 = self.nodes as u32;
-        let p: HashMap<usize, usize> = (0..self.nodes)
-            .map(|i| {
-                (
-                    i + 1,
-                    feistel::invert_permute(nodes, i as u32, keys) as usize + 1,
-                )
-            })
+        let nodes = self.nodes as u32;
+        let mut permuted = Graph::new_empty(self.nodes, self.degree);
+
+        let p: Vec<usize> = (0..self.nodes)
+            .map(|i| feistel::invert_permute(nodes, i as u32, keys) as usize + 1)
             .collect();
 
-        // This is just a deep copy with transformation.
-        let mut tmp: HashMap<usize, Vec<usize>> = HashMap::new();
-        for (key, preds) in &self.pred {
-            for pred in preds {
-                tmp.entry(p[key]).or_insert_with(Vec::new);
-
-                if let Some(val) = tmp.get_mut(&p[key]) {
-                    val.push(p[pred]);
-                }
-            }
+        for (key, preds) in self.pred.chunks(self.degree).enumerate() {
+            let edges: Vec<_> = preds.iter().map(|pred| p[pred - 1]).collect();
+            permuted.add_edges(p[key], edges.as_slice()).unwrap();
         }
 
-        let mut permuted = Graph::new(self.nodes, None);
-        permuted.pred = tmp;
-        permuted.degree = self.degree;
         permuted
     }
 }
@@ -311,10 +309,7 @@ impl Graph {
 fn dr_sample(n: usize) -> Result<Graph> {
     assert!(n > 1, "graph too small");
 
-    let mut graph = Graph::new(n, None);
-
-    // dr_sample always has degree two
-    graph.degree = 2;
+    let mut graph = Graph::new_empty(n, 2);
 
     // TODO: unsuck
     // enforce every node to have two edges
@@ -348,9 +343,7 @@ fn bucket_sample(n: usize, m: usize) -> Result<Graph> {
     assert!(m > 1, "m must be larger than 1");
 
     let g_dash = dr_sample(n * m)?;
-
-    let mut g = Graph::new(n, None);
-    g.degree = m;
+    let mut g = Graph::new_empty(n, m);
 
     let size = g_dash.nodes;
 
@@ -371,11 +364,14 @@ fn bucket_sample(n: usize, m: usize) -> Result<Graph> {
 
     // tmp fix: pad all parents
     for v in 2..g.nodes + 1 {
-        let parents = g.parents(v);
+        let parents = g.parents(v).to_vec();
+
         let parents_len = parents.len();
         let el = parents[parents_len - 1];
 
-        g.add_edges(v, &vec![el; m - parents_len])?;
+        if parents.len() < g.degree() {
+            g.add_edges(v, &vec![el; m - parents_len])?;
+        }
     }
 
     Ok(g)
@@ -389,9 +385,8 @@ mod tests {
     #[test]
     fn graph_dr_sampling() {
         for size in 2..12 {
-            let g = Graph::new(size, Some(Sampling::DR));
+            let g = Graph::new(size, Sampling::DR);
             assert_eq!(g.nodes, size);
-            assert_eq!(g.pred.len(), size);
 
             for i in 1..size {
                 assert_eq!(g.parents(i).len(), 2);
@@ -403,17 +398,16 @@ mod tests {
     fn graph_bucket_sample() {
         for size in vec![3, 10, 200, 2000] {
             for m in 2..12 {
-                let g = Graph::new(size, Some(Sampling::Bucket(m)));
+                let g = Graph::new(size, Sampling::Bucket(m));
                 assert_eq!(g.nodes, size, "wrong nodes count");
 
-                assert_eq!(g.pred.len(), size);
                 for i in 1..(size + 1) {
                     let parents = g.parents(i);
                     assert_eq!(parents.len(), m, "wrong number of parents");
 
                     if i != 1 {
                         for parent in parents {
-                            assert_ne!(i, parent);
+                            assert_ne!(i, *parent);
                         }
                     }
                 }
@@ -423,45 +417,42 @@ mod tests {
 
     #[test]
     fn graph_add_edge() {
-        let mut g = Graph::new(10, None);
-        g.degree = 10;
+        let mut g = Graph::new_empty(10, 10);
 
         g.add_edge(1, 2).unwrap();
         g.add_edge(1, 3).unwrap();
 
-        let edges1 = g.parents(1);
-        assert_eq!(edges1, vec![2, 3]);
+        assert_eq!(g.parents(1).to_vec(), vec![2, 3]);
 
         assert_eq!(g.parents(2).len(), 0);
         assert_eq!(g.parents(3).len(), 0);
 
-        assert_eq!(g.parents(1), vec![2, 3]);
-        assert_eq!(g.parents(2), Vec::new());
+        assert_eq!(g.parents(1).to_vec(), vec![2, 3]);
+        assert_eq!(g.parents(2).len(), 0);
 
         // double insert
         g.add_edge(1, 4).unwrap();
         g.add_edge(1, 4).unwrap();
 
-        let edges2 = g.parents(1);
-
-        assert_eq!(edges2, vec![2, 3, 4, 4]);
+        assert_eq!(g.parents(1).to_vec(), vec![2, 3, 4, 4]);
 
         // sorted parents
 
         g.add_edge(2, 7).unwrap();
         g.add_edge(2, 1).unwrap();
 
-        assert_eq!(g.parents(2), vec![1, 7]);
+        assert_eq!(g.parents(2).to_vec(), vec![1, 7]);
     }
 
     #[test]
     fn add_edges() {
-        let mut g = Graph::new(3, None);
+        let mut g = Graph::new_empty(3, 0);
 
         assert_eq!(g.degree(), 0);
         assert!(g.add_edges(1, &[2]).is_err());
 
         g.degree = 3;
+        g.pred = vec![0; g.nodes * 3];
         g.add_edges(1, &[2, 3]).unwrap();
         g.add_edges(1, &[2]).unwrap();
 
@@ -470,8 +461,7 @@ mod tests {
 
     #[test]
     fn graph_commit() {
-        let mut g = Graph::new(3, None);
-        g.degree = 10;
+        let mut g = Graph::new_empty(3, 10);
 
         g.add_edge(1, 2).unwrap();
         g.add_edge(1, 3).unwrap();
@@ -483,7 +473,7 @@ mod tests {
 
     #[test]
     fn gen_proof() {
-        let g = Graph::new(5, Some(Sampling::Bucket(3)));
+        let g = Graph::new(5, Sampling::Bucket(3));
         let data = vec![2u8; 16 * 5];
 
         let tree = g.merkle_tree(data.as_slice(), 16).unwrap();
@@ -495,7 +485,8 @@ mod tests {
     #[test]
     fn permute() {
         let keys = vec![1, 2, 3, 4];
-        let graph = Graph::new(5, Some(Sampling::Bucket(3)));
+        let graph = Graph::new(5, Sampling::Bucket(3));
+
         let permuted_graph = graph.permute(keys.as_slice());
 
         assert_eq!(
@@ -518,7 +509,7 @@ mod tests {
 
     #[test]
     fn merklepath() {
-        let g = Graph::new(10, Some(Sampling::Bucket(5)));
+        let g = Graph::new(10, Sampling::Bucket(5));
         let mut rng = rand::thread_rng();
         let data: Vec<u8> = (0..16 * 10).map(|_| rng.gen()).collect();
 
