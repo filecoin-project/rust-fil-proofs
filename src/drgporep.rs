@@ -90,9 +90,7 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
     type Proof = Proof;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
-        let graph = Graph::new(sp.drg.n, Some(Sampling::Bucket(sp.drg.m)));
-
-        println!("graph: {:?}", graph);
+        let graph = Graph::new(sp.drg.n, Sampling::Bucket(sp.drg.m));
 
         Ok(PublicParams {
             lambda: sp.lambda,
@@ -125,10 +123,10 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
 
         for p in parents {
             replica_parents.push((
-                p,
+                *p,
                 DataProof {
                     proof: tree_r.gen_proof(p - 1).into(),
-                    data: bytes_into_fr::<Bls12>(data_at_node(replica, p, pub_params.lambda)?)?,
+                    data: bytes_into_fr::<Bls12>(data_at_node(replica, *p, pub_params.lambda)?)?,
                 },
             ));
         }

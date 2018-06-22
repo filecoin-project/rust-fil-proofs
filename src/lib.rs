@@ -41,6 +41,6 @@ pub mod layered_drgporep;
 pub mod merklepor;
 pub mod porep;
 pub mod proof;
+pub mod util;
 
-mod util;
 mod vde;

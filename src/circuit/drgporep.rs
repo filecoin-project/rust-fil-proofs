@@ -80,7 +80,6 @@ where
         cs.namespace(|| "replica_node merkle proof"),
         params,
         replica_node,
-        lambda,
         replica_node_path.to_owned(),
         replica_root,
     )?;
@@ -92,7 +91,6 @@ where
                 cs.namespace(|| format!("replica parent: {}", i)),
                 params,
                 replica_parents[i],
-                lambda,
                 replica_parents_paths[i].clone(),
                 replica_root,
             )?;
@@ -103,7 +101,6 @@ where
         cs.namespace(|| "data node commitment"),
         params,
         data_node,
-        lambda,
         data_node_path,
         data_root,
     )?;

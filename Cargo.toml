@@ -30,10 +30,15 @@ default = ["u128-support"]
 u128-support = ["pairing/u128-support"]
 
 [dev-dependencies]
-criterion = "0.1.2"
+criterion = "0.2.3"
 tempfile = "3"
 proptest = "0.7"
+indicatif = "0.9"
 
 [[bench]]
 name = "pedersen"
+harness = false
+
+[[bench]]
+name = "drgraph"
 harness = false
