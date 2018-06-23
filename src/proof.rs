@@ -6,7 +6,7 @@ pub trait ProofScheme<'a> {
     type SetupParams;
     type PublicInputs;
     type PrivateInputs;
-    type Proof;
+    type Proof: Clone;
 
     fn setup(&Self::SetupParams) -> Result<Self::PublicParams>;
     fn prove(&Self::PublicParams, &Self::PublicInputs, &Self::PrivateInputs)

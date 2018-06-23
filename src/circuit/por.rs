@@ -1,10 +1,8 @@
-use bellman::{groth16, Circuit as BellmanCircuit, ConstraintSystem, SynthesisError};
+use bellman::{Circuit as BellmanCircuit, ConstraintSystem, SynthesisError};
 use compound_proof::CompoundProof;
 use drgporep;
-use error;
 use merklepor;
 use pairing::bls12_381::Bls12;
-use rand::{SeedableRng, XorShiftRng};
 use sapling_crypto::circuit::{boolean, multipack, num, pedersen_hash};
 use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 
@@ -27,83 +25,26 @@ pub struct PoR<'a, E: JubjubEngine> {
     root: Option<E::Fr>,
 }
 
-#[derive(Debug)]
-pub struct MerklePor {}
+fn make_por<'a>(
+    params: &'a JubjubBls12,
+    pub_in: merklepor::PublicInputs,
+    proof: &'a drgporep::DataProof,
+) -> PoR<'a, Bls12> {
+    PoR::<Bls12> {
+        params: params,
+        value: Some(&proof.data),
+        auth_path: proof.proof.as_options(),
+        root: Some(pub_in.commitment.into()),
+    }
+}
 
-impl<'a, E> CompoundProof<'a, E> for MerklePor
+impl<'a, E> CompoundProof<'a, E> for PoR<'a, Bls12>
 where
+    PoR<'a, Bls12>: BellmanCircuit<E>,
     E: JubjubEngine,
 {
     type Circuit = PoR<'a, E>;
     type VanillaProof = merklepor::MerklePoR;
-
-    fn circuit_proof(
-        pub_in: merklepor::PublicInputs,
-        proof: drgporep::DataProof,
-    ) -> error::Result<(groth16::Proof<Bls12>, drgporep::DataProof)> {
-        let params = JubjubBls12::new();
-        let proof_copy = proof.clone();
-
-        let por = PoR::<Bls12> {
-            params: &params,
-            value: Some(&proof.data),
-            auth_path: proof.proof.as_options(),
-            root: Some(pub_in.commitment.into()),
-        };
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-        let groth_params = groth16::generate_random_parameters::<Bls12, _, _>(por, rng)?;
-
-        // Avoids reuse of moved value -- but is there a better way?
-        let por2 = PoR::<Bls12> {
-            params: &params,
-            value: Some(&proof.data),
-            auth_path: proof.proof.as_options(),
-            root: Some(pub_in.commitment.into()),
-        };
-
-        let groth_proof = groth16::create_random_proof(por2, &groth_params, rng)?;
-        let mut proof_vec = vec![];
-        groth_proof.write(&mut proof_vec)?;
-        let gp = groth16::Proof::<Bls12>::read(&proof_vec[..])?;
-
-        Ok((gp, proof_copy))
-    }
-
-    fn verify(
-        pub_in: merklepor::PublicInputs,
-        proofs: (groth16::Proof<Bls12>, drgporep::DataProof),
-    ) -> error::Result<bool> {
-        let (groth_proof, proof) = proofs;
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-        let params = {
-            let por = PoR::<Bls12> {
-                params: &JubjubBls12::new(),
-                value: Some(&proof.data),
-                auth_path: proof.proof.as_options(),
-                root: Some(pub_in.commitment.into()),
-            };
-            groth16::generate_random_parameters(por, rng)?
-        };
-
-        let auth_path_bits: Vec<bool> = proof
-            .proof
-            .path()
-            .iter()
-            .map(|(_, is_right)| *is_right)
-            .collect();
-
-        let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
-        let mut expected_input = vec![proof.data];
-        expected_input.extend(packed_auth_path);
-
-        // add the root as the last one
-        expected_input.push(pub_in.commitment.into());
-
-        // Prepare the verification key (for proof verification)
-        let pvk = groth16::prepare_verifying_key(&params.vk);
-
-        Ok(groth16::verify_proof(&pvk, &groth_proof, &expected_input)?)
-    }
 }
 
 impl<'a, E: JubjubEngine> BellmanCircuit<E> for PoR<'a, E> {
