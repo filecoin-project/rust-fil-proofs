@@ -3,7 +3,7 @@ use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use circuit;
 use circuit::por;
 use drgporep;
-use error;
+use error::Result;
 use merklepor;
 use pairing::bls12_381::Bls12;
 use pairing::Engine;
@@ -20,7 +20,7 @@ where
 
     fn setup(
         setup_params: &<Self::VanillaProof as ProofScheme<'a>>::SetupParams,
-    ) -> error::Result<<Self::VanillaProof as ProofScheme<'a>>::PublicParams> {
+    ) -> Result<<Self::VanillaProof as ProofScheme<'a>>::PublicParams> {
         <Self::VanillaProof as ProofScheme<'a>>::setup(setup_params)
     }
 
@@ -28,25 +28,25 @@ where
         pub_params: <Self::VanillaProof as ProofScheme<'a>>::PublicParams,
         pub_in: <Self::VanillaProof as ProofScheme<'a>>::PublicInputs,
         priv_in: <Self::VanillaProof as ProofScheme<'a>>::PrivateInputs,
-    ) -> error::Result<(
+    ) -> Result<(
         groth16::Proof<E>,
         <Self::VanillaProof as ProofScheme<'a>>::Proof,
     )> {
         let vanilla_proof =
             <Self::VanillaProof as ProofScheme<'a>>::prove(&pub_params, &pub_in, &priv_in)?;
 
-        Ok(Self::circuit_proof(pub_in, vanilla_proof)?)
+        Self::circuit_proof(pub_in, vanilla_proof)
     }
 
     fn circuit_proof_constraints(
         pub_in: <Self::VanillaProof as ProofScheme<'a>>::PublicInputs,
         vanilla_proof: <Self::VanillaProof as ProofScheme<'a>>::Proof,
-    ) -> error::Result<circuit::test::TestConstraintSystem<E>>; //error::Result<Self::Circuit>;
+    ) -> Result<circuit::test::TestConstraintSystem<E>>; //error::Result<Self::Circuit>;
 
     fn circuit_proof(
         pub_in: <Self::VanillaProof as ProofScheme<'a>>::PublicInputs,
         vanilla_proof: <Self::VanillaProof as ProofScheme<'a>>::Proof,
-    ) -> error::Result<(
+    ) -> Result<(
         groth16::Proof<E>,
         <Self::VanillaProof as ProofScheme<'a>>::Proof,
     )>;
@@ -58,7 +58,7 @@ where
             groth16::Proof<E>,
             <Self::VanillaProof as ProofScheme<'a>>::Proof,
         ),
-    ) -> error::Result<bool>;
+    ) -> Result<bool>;
 }
 
 #[cfg(test)]

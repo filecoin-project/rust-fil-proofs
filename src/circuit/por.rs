@@ -63,7 +63,7 @@ where
         let mut cs = circuit::test::TestConstraintSystem::<E>::new();
 
         // FIXME: error handling
-        por.synthesize(&mut cs).unwrap();
+        por.synthesize(&mut cs)?;
 
         Ok(cs)
     }
@@ -82,7 +82,7 @@ where
             root: Some(pub_in.commitment.into()),
         };
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-        let groth_params = groth16::generate_random_parameters::<Bls12, _, _>(por, rng).unwrap();
+        let groth_params = groth16::generate_random_parameters::<Bls12, _, _>(por, rng)?;
 
         // Avoids reuse of moved value -- but is there a better way?
         let por2 = PoR::<Bls12> {
@@ -92,12 +92,11 @@ where
             root: Some(pub_in.commitment.into()),
         };
 
-        let groth_proof = groth16::create_random_proof(por2, &groth_params, rng).unwrap();
+        let groth_proof = groth16::create_random_proof(por2, &groth_params, rng)?;
         let mut proof_vec = vec![];
-        groth_proof.write(&mut proof_vec).unwrap();
+        groth_proof.write(&mut proof_vec)?;
 
-        // FIXME: error-handling
-        Ok((groth16::Proof::read(&proof_vec[..]).unwrap(), proof_copy))
+        Ok((groth16::Proof::read(&proof_vec[..])?, proof_copy))
     }
 
     fn verify(
@@ -114,7 +113,7 @@ where
                 auth_path: proof.proof.as_options(),
                 root: Some(pub_in.commitment.into()),
             };
-            groth16::generate_random_parameters(por, rng).unwrap()
+            groth16::generate_random_parameters(por, rng)?
         };
 
         let auth_path_bits: Vec<bool> = proof
@@ -134,7 +133,8 @@ where
         // Prepare the verification key (for proof verification)
         let pvk = groth16::prepare_verifying_key(&params.vk);
 
-        Ok(groth16::verify_proof(&pvk, &groth_proof, &expected_input).unwrap())
+        Ok(groth16::verify_proof(&pvk, &groth_proof, &expected_input)?)
+        //unimplemented!();
     }
 }
 
