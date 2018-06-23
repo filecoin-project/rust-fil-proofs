@@ -25,16 +25,21 @@ pub struct PoR<'a, E: JubjubEngine> {
     root: Option<E::Fr>,
 }
 
-fn make_por<'a>(
-    params: &'a JubjubBls12,
-    pub_in: merklepor::PublicInputs,
-    proof: &'a drgporep::DataProof,
-) -> PoR<'a, Bls12> {
-    PoR::<Bls12> {
-        params: params,
-        value: Some(&proof.data),
-        auth_path: proof.proof.as_options(),
-        root: Some(pub_in.commitment.into()),
+impl<'a, E> PoR<'a, E>
+where
+    E: JubjubEngine,
+{
+    fn make(
+        params: &'a JubjubBls12,
+        pub_in: merklepor::PublicInputs,
+        proof: &'a drgporep::DataProof,
+    ) -> PoR<'a, Bls12> {
+        PoR::<Bls12> {
+            params: params,
+            value: Some(&proof.data),
+            auth_path: proof.proof.as_options(),
+            root: Some(pub_in.commitment.into()),
+        }
     }
 }
 
