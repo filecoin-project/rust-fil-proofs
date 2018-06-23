@@ -69,7 +69,6 @@ where
     }
 
     fn verify(
-        pub_params: merklepor::PublicParams,
         pub_in: merklepor::PublicInputs,
         proofs: (groth16::Proof<E>, drgporep::DataProof),
     ) -> error::Result<bool> {

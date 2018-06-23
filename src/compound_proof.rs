@@ -41,7 +41,6 @@ where
     )>;
 
     fn verify(
-        pub_params: <Self::VanillaProof as ProofScheme<'a>>::PublicParams,
         pub_in: <Self::VanillaProof as ProofScheme<'a>>::PublicInputs,
         proof: (
             groth16::Proof<E>,
