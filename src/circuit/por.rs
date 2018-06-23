@@ -1,19 +1,12 @@
-use bellman;
-use bellman::groth16::{self, ParameterSource, Parameters};
-use bellman::{Circuit as BellmanCircuit, ConstraintSystem, SynthesisError};
-use circuit;
+use bellman::{groth16, Circuit as BellmanCircuit, ConstraintSystem, SynthesisError};
 use compound_proof::CompoundProof;
 use drgporep;
 use error;
-use hasher::pedersen;
 use merklepor;
-use pairing;
 use pairing::bls12_381::Bls12;
-use pairing::Engine;
-use rand::{Rng, SeedableRng, XorShiftRng};
+use rand::{SeedableRng, XorShiftRng};
 use sapling_crypto::circuit::{boolean, multipack, num, pedersen_hash};
 use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
-use std::convert;
 
 /// Proof of retrievability.
 ///
@@ -40,33 +33,9 @@ pub struct MerklePor {}
 impl<'a, E> CompoundProof<'a, E> for MerklePor
 where
     E: JubjubEngine,
-    circuit::test::TestConstraintSystem<E>: bellman::ConstraintSystem<pairing::bls12_381::Bls12>,
 {
     type Circuit = PoR<'a, E>;
     type VanillaProof = merklepor::MerklePoR;
-
-    // We might want this for testing.
-    fn circuit_proof_constraints(
-        pub_inputs: merklepor::PublicInputs,
-        proof: drgporep::DataProof,
-    ) -> error::Result<circuit::test::TestConstraintSystem<E>> {
-        let params = &JubjubBls12::new();
-
-        let por = PoR::<Bls12> {
-            params: params,
-            value: Some(&proof.data),
-            auth_path: proof.proof.as_options(),
-            root: Some(pub_inputs.commitment.into()),
-        };
-
-        // FIXME: Allow for non-test.
-        let mut cs = circuit::test::TestConstraintSystem::<E>::new();
-
-        // FIXME: error handling
-        por.synthesize(&mut cs)?;
-
-        Ok(cs)
-    }
 
     fn circuit_proof(
         pub_in: merklepor::PublicInputs,
@@ -134,7 +103,6 @@ where
         let pvk = groth16::prepare_verifying_key(&params.vk);
 
         Ok(groth16::verify_proof(&pvk, &groth_proof, &expected_input)?)
-        //unimplemented!();
     }
 }
 

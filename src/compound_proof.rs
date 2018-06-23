@@ -1,14 +1,8 @@
-use bellman::groth16::{self, Proof};
-use bellman::{Circuit, ConstraintSystem, SynthesisError};
-use circuit;
-use circuit::por;
-use drgporep;
+use bellman::groth16;
+use bellman::Circuit;
 use error::Result;
-use merklepor;
-use pairing::bls12_381::Bls12;
 use pairing::Engine;
 use proof::ProofScheme;
-use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 
 pub trait CompoundProof<'a, E: Engine>
 where
@@ -38,11 +32,6 @@ where
         Self::circuit_proof(pub_in, vanilla_proof)
     }
 
-    fn circuit_proof_constraints(
-        pub_in: <Self::VanillaProof as ProofScheme<'a>>::PublicInputs,
-        vanilla_proof: <Self::VanillaProof as ProofScheme<'a>>::Proof,
-    ) -> Result<circuit::test::TestConstraintSystem<E>>; //error::Result<Self::Circuit>;
-
     fn circuit_proof(
         pub_in: <Self::VanillaProof as ProofScheme<'a>>::PublicInputs,
         vanilla_proof: <Self::VanillaProof as ProofScheme<'a>>::Proof,
@@ -59,12 +48,4 @@ where
             <Self::VanillaProof as ProofScheme<'a>>::Proof,
         ),
     ) -> Result<bool>;
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-
-    fn test_compound_proof() {}
 }
