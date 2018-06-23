@@ -1,6 +1,7 @@
 use bellman::groth16;
 use bellman::Circuit;
 use error::Result;
+use pairing::bls12_381::Bls12;
 use pairing::Engine;
 use proof::ProofScheme;
 
@@ -23,7 +24,7 @@ where
         pub_in: <Self::VanillaProof as ProofScheme<'a>>::PublicInputs,
         priv_in: <Self::VanillaProof as ProofScheme<'a>>::PrivateInputs,
     ) -> Result<(
-        groth16::Proof<E>,
+        groth16::Proof<Bls12>,
         <Self::VanillaProof as ProofScheme<'a>>::Proof,
     )> {
         let vanilla_proof =
@@ -36,14 +37,14 @@ where
         pub_in: <Self::VanillaProof as ProofScheme<'a>>::PublicInputs,
         vanilla_proof: <Self::VanillaProof as ProofScheme<'a>>::Proof,
     ) -> Result<(
-        groth16::Proof<E>,
+        groth16::Proof<Bls12>,
         <Self::VanillaProof as ProofScheme<'a>>::Proof,
     )>;
 
     fn verify(
         pub_in: <Self::VanillaProof as ProofScheme<'a>>::PublicInputs,
         proof: (
-            groth16::Proof<E>,
+            groth16::Proof<Bls12>,
             <Self::VanillaProof as ProofScheme<'a>>::Proof,
         ),
     ) -> Result<bool>;

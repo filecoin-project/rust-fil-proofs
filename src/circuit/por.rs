@@ -40,7 +40,7 @@ where
     fn circuit_proof(
         pub_in: merklepor::PublicInputs,
         proof: drgporep::DataProof,
-    ) -> error::Result<(groth16::Proof<E>, drgporep::DataProof)> {
+    ) -> error::Result<(groth16::Proof<Bls12>, drgporep::DataProof)> {
         let params = JubjubBls12::new();
         let proof_copy = proof.clone();
 
@@ -64,13 +64,14 @@ where
         let groth_proof = groth16::create_random_proof(por2, &groth_params, rng)?;
         let mut proof_vec = vec![];
         groth_proof.write(&mut proof_vec)?;
+        let gp = groth16::Proof::<Bls12>::read(&proof_vec[..])?;
 
-        Ok((groth16::Proof::read(&proof_vec[..])?, proof_copy))
+        Ok((gp, proof_copy))
     }
 
     fn verify(
         pub_in: merklepor::PublicInputs,
-        proofs: (groth16::Proof<E>, drgporep::DataProof),
+        proofs: (groth16::Proof<Bls12>, drgporep::DataProof),
     ) -> error::Result<bool> {
         let (groth_proof, proof) = proofs;
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
