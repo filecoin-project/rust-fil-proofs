@@ -29,6 +29,7 @@ pub mod test_helper;
 pub mod batchpost;
 
 pub mod circuit;
+pub mod compound_proof;
 pub mod crypto;
 pub mod drgporep;
 pub mod drgraph;
