@@ -42,6 +42,13 @@ impl MerkleProof {
             .collect::<Vec<_>>()
     }
 
+    pub fn as_pairs(&self) -> Vec<(Fr, bool)> {
+        self.path
+            .iter()
+            .map(|v| (v.0.into(), v.1))
+            .collect::<Vec<_>>()
+    }
+
     /// Validates the MerkleProof
     pub fn validate(&self) -> bool {
         let mut a = TreeAlgorithm::default();

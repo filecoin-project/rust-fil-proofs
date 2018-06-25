@@ -1,10 +1,13 @@
-use bellman::{Circuit as BellmanCircuit, ConstraintSystem, SynthesisError};
+use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use compound_proof::CompoundProof;
 use drgporep;
+use hasher::pedersen;
 use merklepor;
 use pairing::bls12_381::Bls12;
+use pairing::Engine;
 use sapling_crypto::circuit::{boolean, multipack, num, pedersen_hash};
-use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
+use sapling_crypto::jubjub::JubjubEngine;
+use std::convert;
 
 /// Proof of retrievability.
 ///
@@ -17,42 +20,58 @@ use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 /// * `root` - The merkle root of the tree.
 ///
 
-#[derive(Debug)]
-pub struct PoR<'a, E: JubjubEngine> {
-    params: &'a E::Params,
-    value: Option<&'a E::Fr>,
+pub struct PoR<E: JubjubEngine> {
+    params: <E as JubjubEngine>::Params,
+    value: Option<E::Fr>,
     auth_path: Vec<Option<(E::Fr, bool)>>,
     root: Option<E::Fr>,
 }
 
-impl<'a, E> PoR<'a, E>
+pub struct CompoundPoR {}
+
+impl<'a, 'b, E> CompoundProof<'a, 'b, E> for CompoundPoR
 where
     E: JubjubEngine,
+    <E as Engine>::Fr: convert::From<pedersen::PedersenHash>,
 {
-    fn make(
-        params: &'a JubjubBls12,
-        pub_in: merklepor::PublicInputs,
-        proof: &'a drgporep::DataProof,
-    ) -> PoR<'a, Bls12> {
-        PoR::<Bls12> {
+    type Circuit = PoR<E>;
+    type VanillaProof = merklepor::MerklePoR;
+    fn make_circuit(
+        public_inputs: &merklepor::PublicInputs,
+        proof: &drgporep::DataProof,
+        params: E::Params,
+    ) -> PoR<E>
+    where
+        E: Engine,
+    {
+        PoR::<E> {
             params: params,
-            value: Some(&proof.data),
+            value: Some(proof.data),
             auth_path: proof.proof.as_options(),
-            root: Some(pub_in.commitment.into()),
+            root: Some(public_inputs.commitment.into()),
         }
+    }
+
+    fn inputize(
+        pub_inputs: &merklepor::PublicInputs,
+        proof: &drgporep::DataProof,
+    ) -> Vec<<Bls12 as Engine>::Fr> {
+        let auth_path_bits: Vec<bool> = proof
+            .proof
+            .path()
+            .iter()
+            .map(|(_, is_right)| *is_right)
+            .collect();
+        let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
+
+        let mut inputs = vec![proof.data];
+        inputs.extend(packed_auth_path);
+        inputs.push(pub_inputs.commitment.into());
+        inputs
     }
 }
 
-impl<'a, E> CompoundProof<'a, E> for PoR<'a, Bls12>
-where
-    PoR<'a, Bls12>: BellmanCircuit<E>,
-    E: JubjubEngine,
-{
-    type Circuit = PoR<'a, E>;
-    type VanillaProof = merklepor::MerklePoR;
-}
-
-impl<'a, E: JubjubEngine> BellmanCircuit<E> for PoR<'a, E> {
+impl<E: JubjubEngine> Circuit<E> for PoR<E> {
     /// # Public Inputs
     ///
     /// This circuit expects the following public inputs.
@@ -62,14 +81,17 @@ impl<'a, E: JubjubEngine> BellmanCircuit<E> for PoR<'a, E> {
     /// * [2] - the merkle root of the tree.
     ///
     /// Note: All public inputs must be provided as `E::Fr`.
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError>
+    where
+        E: JubjubEngine,
+    {
         let params = self.params;
         let value = self.value;
         let auth_path = self.auth_path;
         let root = self.root;
         {
             let value_num = num::AllocatedNum::alloc(cs.namespace(|| "value"), || {
-                Ok(*value.ok_or_else(|| SynthesisError::AssignmentMissing)?)
+                Ok(value.ok_or_else(|| SynthesisError::AssignmentMissing)?)
             })?;
 
             value_num.inputize(cs.namespace(|| "value num"))?;
@@ -86,7 +108,7 @@ impl<'a, E: JubjubEngine> BellmanCircuit<E> for PoR<'a, E> {
                 cs.namespace(|| "value hash"),
                 pedersen_hash::Personalization::NoteCommitment,
                 &value_bits,
-                params,
+                &params,
             )?;
 
             // This is an injective encoding, as cur is a
@@ -134,7 +156,7 @@ impl<'a, E: JubjubEngine> BellmanCircuit<E> for PoR<'a, E> {
                     cs.namespace(|| "computation of pedersen hash"),
                     pedersen_hash::Personalization::MerkleTree(i),
                     &preimage,
-                    params,
+                    &params,
                 )?.get_x()
                     .clone(); // Injective encoding
 
@@ -174,8 +196,8 @@ impl<'a, E: JubjubEngine> BellmanCircuit<E> for PoR<'a, E> {
 
 pub fn proof_of_retrievability<E, CS>(
     mut cs: CS,
-    params: &E::Params,
-    value: Option<&E::Fr>,
+    params: E::Params,
+    value: Option<E::Fr>,
     auth_path: Vec<Option<(E::Fr, bool)>>,
     root: Option<E::Fr>,
 ) -> Result<(), SynthesisError>
@@ -258,9 +280,9 @@ mod tests {
 
             let por = PoR::<Bls12> {
                 params: params,
-                value: Some(&proof.data),
-                auth_path: proof.proof.as_options(),
-                root: Some(pub_inputs.commitment.into()),
+                value: Cell::new(Some(proof.data)),
+                auth_path: Cell::new(proof.proof.as_options()),
+                root: Cell::new(Some(pub_inputs.commitment.into())),
             };
 
             por.synthesize(&mut cs).unwrap();
