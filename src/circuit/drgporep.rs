@@ -43,14 +43,14 @@ use util::bytes_into_boolean_vec;
 /// * [r + 2] data commitment (root hash)
 pub fn drgporep<E, CS>(
     mut cs: CS,
-    params: E::Params,
+    params: &E::Params,
     lambda: usize,
-    replica_node: Option<E::Fr>,
+    replica_node: Option<&E::Fr>,
     replica_node_path: &[Option<(E::Fr, bool)>],
     replica_root: Option<E::Fr>,
-    replica_parents: Vec<Option<E::Fr>>,
+    replica_parents: Vec<Option<&E::Fr>>,
     replica_parents_paths: &[Vec<Option<(E::Fr, bool)>>],
-    data_node: Option<E::Fr>,
+    data_node: Option<&E::Fr>,
     data_node_path: Vec<Option<(E::Fr, bool)>>,
     data_root: Option<E::Fr>,
     prover_id: Option<&[u8]>,
@@ -78,7 +78,7 @@ where
     // validate the replica node merkle proof
     proof_of_retrievability(
         cs.namespace(|| "replica_node merkle proof"),
-        params,
+        &params,
         replica_node,
         replica_node_path.to_owned(),
         replica_root,
@@ -89,7 +89,7 @@ where
         for i in 0..replica_parents.len() {
             proof_of_retrievability(
                 cs.namespace(|| format!("replica parent: {}", i)),
-                params,
+                &params,
                 replica_parents[i],
                 replica_parents_paths[i].clone(),
                 replica_root,
@@ -99,7 +99,7 @@ where
     // validate data node commitment
     proof_of_retrievability(
         cs.namespace(|| "data node commitment"),
-        params,
+        &params,
         data_node,
         data_node_path,
         data_root,
@@ -114,7 +114,7 @@ where
             .map(|(i, val)| -> Result<Vec<Boolean>, SynthesisError> {
                 let mut v = boolean::field_into_boolean_vec_le(
                     cs.namespace(|| format!("parent {}", i)),
-                    val,
+                    val.cloned(),
                 )?;
                 // sad padding is sad
                 while v.len() < 256 {
@@ -143,7 +143,7 @@ where
     )?;
 
     let expected = num::AllocatedNum::alloc(cs.namespace(|| "data node"), || {
-        Ok(data_node.ok_or_else(|| SynthesisError::AssignmentMissing)?)
+        Ok(*data_node.ok_or_else(|| SynthesisError::AssignmentMissing)?)
     })?;
 
     // ensure the encrypted data and data_node match
@@ -197,7 +197,7 @@ mod tests {
                 .expect("failed to read original data"),
         ).unwrap();
 
-        let data_node = Some(dn);
+        let data_node = Some(&dn);
 
         let sp = drgporep::SetupParams {
             lambda,
@@ -228,14 +228,14 @@ mod tests {
             "failed to verify (non circuit)"
         );
 
-        let replica_node = Some(proof_nc.replica_node.data);
+        let replica_node = Some(&proof_nc.replica_node.data);
 
         let replica_node_path = proof_nc.replica_node.proof.as_options();
         let replica_root = Some(proof_nc.replica_node.proof.root().into());
         let replica_parents = proof_nc
             .replica_parents
             .iter()
-            .map(|(_, parent)| Some(parent.data))
+            .map(|(_, parent)| Some(&parent.data))
             .collect();
         let replica_parents_paths: Vec<_> = proof_nc
             .replica_parents

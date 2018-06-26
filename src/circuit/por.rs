@@ -2,11 +2,12 @@ use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use compound_proof::CompoundProof;
 use drgporep;
 use hasher::pedersen;
-use merklepor;
-use pairing::bls12_381::Bls12;
+use merklepor::MerklePoR;
+use pairing::bls12_381::{Bls12, Fr};
 use pairing::Engine;
+use proof::ProofScheme;
 use sapling_crypto::circuit::{boolean, multipack, num, pedersen_hash};
-use sapling_crypto::jubjub::JubjubEngine;
+use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 use std::convert;
 
 /// Proof of retrievability.
@@ -20,31 +21,23 @@ use std::convert;
 /// * `root` - The merkle root of the tree.
 ///
 
-pub struct PoR<E: JubjubEngine> {
-    params: <E as JubjubEngine>::Params,
+pub struct PoR<'a, E: JubjubEngine> {
+    params: &'a E::Params,
     value: Option<E::Fr>,
     auth_path: Vec<Option<(E::Fr, bool)>>,
     root: Option<E::Fr>,
 }
 
-pub struct CompoundPoR {}
+pub struct PoRCompound {}
 
-impl<'a, 'b, E> CompoundProof<'a, 'b, E> for CompoundPoR
-where
-    E: JubjubEngine,
-    <E as Engine>::Fr: convert::From<pedersen::PedersenHash>,
-{
-    type Circuit = PoR<E>;
-    type VanillaProof = merklepor::MerklePoR;
-    fn make_circuit(
-        public_inputs: &merklepor::PublicInputs,
-        proof: &drgporep::DataProof,
-        params: E::Params,
-    ) -> PoR<E>
-    where
-        E: Engine,
-    {
-        PoR::<E> {
+// can only implment for Bls12 because merklepor is not generic over the engine.
+impl<'a> CompoundProof<'a, Bls12, MerklePoR, PoR<'a, Bls12>> for PoRCompound {
+    fn make_circuit<'b>(
+        public_inputs: &<MerklePoR as ProofScheme>::PublicInputs,
+        proof: &'b <MerklePoR as ProofScheme>::Proof,
+        params: &'a JubjubBls12,
+    ) -> PoR<'a, Bls12> {
+        PoR::<Bls12> {
             params: params,
             value: Some(proof.data),
             auth_path: proof.proof.as_options(),
@@ -53,9 +46,9 @@ where
     }
 
     fn inputize(
-        pub_inputs: &merklepor::PublicInputs,
-        proof: &drgporep::DataProof,
-    ) -> Vec<<Bls12 as Engine>::Fr> {
+        pub_inputs: &<MerklePoR as ProofScheme>::PublicInputs,
+        proof: &<MerklePoR as ProofScheme>::Proof,
+    ) -> Vec<Fr> {
         let auth_path_bits: Vec<bool> = proof
             .proof
             .path()
@@ -71,7 +64,7 @@ where
     }
 }
 
-impl<E: JubjubEngine> Circuit<E> for PoR<E> {
+impl<'a, E: JubjubEngine> Circuit<E> for PoR<'a, E> {
     /// # Public Inputs
     ///
     /// This circuit expects the following public inputs.
@@ -85,7 +78,7 @@ impl<E: JubjubEngine> Circuit<E> for PoR<E> {
     where
         E: JubjubEngine,
     {
-        let params = self.params;
+        let params = &self.params;
         let value = self.value;
         let auth_path = self.auth_path;
         let root = self.root;
@@ -108,7 +101,7 @@ impl<E: JubjubEngine> Circuit<E> for PoR<E> {
                 cs.namespace(|| "value hash"),
                 pedersen_hash::Personalization::NoteCommitment,
                 &value_bits,
-                &params,
+                params,
             )?;
 
             // This is an injective encoding, as cur is a
@@ -156,7 +149,7 @@ impl<E: JubjubEngine> Circuit<E> for PoR<E> {
                     cs.namespace(|| "computation of pedersen hash"),
                     pedersen_hash::Personalization::MerkleTree(i),
                     &preimage,
-                    &params,
+                    params,
                 )?.get_x()
                     .clone(); // Injective encoding
 
@@ -196,8 +189,8 @@ impl<E: JubjubEngine> Circuit<E> for PoR<E> {
 
 pub fn proof_of_retrievability<E, CS>(
     mut cs: CS,
-    params: E::Params,
-    value: Option<E::Fr>,
+    params: &E::Params,
+    value: Option<&E::Fr>,
     auth_path: Vec<Option<(E::Fr, bool)>>,
     root: Option<E::Fr>,
 ) -> Result<(), SynthesisError>
@@ -207,7 +200,7 @@ where
 {
     let por = PoR::<E> {
         params: params,
-        value: value,
+        value: value.map(|v| *v),
         auth_path: auth_path,
         root: root,
     };
@@ -280,9 +273,9 @@ mod tests {
 
             let por = PoR::<Bls12> {
                 params: params,
-                value: Cell::new(Some(proof.data)),
-                auth_path: Cell::new(proof.proof.as_options()),
-                root: Cell::new(Some(pub_inputs.commitment.into())),
+                value: Some(proof.data),
+                auth_path: proof.proof.as_options(),
+                root: Some(pub_inputs.commitment.into()),
             };
 
             por.synthesize(&mut cs).unwrap();
