@@ -3,8 +3,9 @@ use error;
 use pairing::Engine;
 use sapling_crypto::circuit::boolean::{self, AllocatedBit, Boolean};
 
+/// Returnst the start position of the data, 0-indexed.
 pub fn data_at_node_offset(v: usize, node_size: usize) -> usize {
-    (v - 1) * node_size
+    v * node_size
 }
 
 /// Returns the byte slice representing one node (of uniform size, node_size) at position v in data.

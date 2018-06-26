@@ -1,5 +1,5 @@
 use crypto::{kdf, sloth};
-use drgraph::{Graph, MerkleProof, Sampling};
+use drgraph::{BucketGraph, Graph, MerkleProof};
 use fr32::{bytes_into_fr, fr_into_bytes};
 use pairing::bls12_381::{Bls12, Fr};
 use pairing::{PrimeField, PrimeFieldRepr};
@@ -36,9 +36,9 @@ pub struct DrgParams {
 }
 
 #[derive(Debug, Clone)]
-pub struct PublicParams {
+pub struct PublicParams<G: Graph> {
     pub lambda: usize,
-    pub graph: Graph,
+    pub graph: G,
 }
 
 #[derive(Debug, Clone)]
@@ -83,14 +83,14 @@ impl Proof {
 pub struct DrgPoRep {}
 
 impl<'a> ProofScheme<'a> for DrgPoRep {
-    type PublicParams = PublicParams;
+    type PublicParams = PublicParams<BucketGraph>;
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<'a>;
     type PrivateInputs = PrivateInputs<'a>;
     type Proof = Proof;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
-        let graph = Graph::new(sp.drg.n, Sampling::Bucket(sp.drg.m));
+        let graph = BucketGraph::new(sp.drg.n, sp.drg.m);
 
         Ok(PublicParams {
             lambda: sp.lambda,
@@ -110,23 +110,22 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
         let tree_r = &priv_inputs.aux.tree_r;
         let replica = priv_inputs.replica;
 
-        let data =
-            bytes_into_fr::<Bls12>(data_at_node(replica, challenge + 1, pub_params.lambda)?)?;
+        let data = bytes_into_fr::<Bls12>(data_at_node(replica, challenge, pub_params.lambda)?)?;
 
         let replica_node = DataProof {
             proof: tree_r.gen_proof(challenge).into(),
             data,
         };
 
-        let parents = pub_params.graph.parents(challenge + 1);
+        let parents = pub_params.graph.parents(challenge);
         let mut replica_parents = Vec::with_capacity(parents.len());
 
         for p in parents {
             replica_parents.push((
-                *p,
+                p,
                 DataProof {
-                    proof: tree_r.gen_proof(p - 1).into(),
-                    data: bytes_into_fr::<Bls12>(data_at_node(replica, *p, pub_params.lambda)?)?,
+                    proof: tree_r.gen_proof(p).into(),
+                    data: bytes_into_fr::<Bls12>(data_at_node(replica, p, pub_params.lambda)?)?,
                 },
             ));
         }
@@ -184,7 +183,7 @@ impl<'a> PoRep<'a> for DrgPoRep {
     type ProverAux = porep::ProverAux;
 
     fn replicate(
-        pp: &PublicParams,
+        pp: &PublicParams<BucketGraph>,
         prover_id: &[u8],
         data: &mut [u8],
     ) -> Result<(porep::Tau, porep::ProverAux)> {
@@ -208,7 +207,7 @@ impl<'a> PoRep<'a> for DrgPoRep {
     }
 
     fn extract_all<'b>(
-        pp: &'b PublicParams,
+        pp: &'b PublicParams<BucketGraph>,
         prover_id: &'b [u8],
         data: &'b [u8],
     ) -> Result<Vec<u8>> {
@@ -220,7 +219,12 @@ impl<'a> PoRep<'a> for DrgPoRep {
         )
     }
 
-    fn extract(pp: &PublicParams, prover_id: &[u8], data: &[u8], node: usize) -> Result<Vec<u8>> {
+    fn extract(
+        pp: &PublicParams<BucketGraph>,
+        prover_id: &[u8],
+        data: &[u8],
+        node: usize,
+    ) -> Result<Vec<u8>> {
         Ok(fr_into_bytes::<Bls12>(&decode_block(
             &pp.graph,
             pp.lambda,
@@ -288,7 +292,7 @@ mod tests {
 
         assert_ne!(data, data_copy, "replication did not change data");
 
-        for i in 1..nodes + 1 {
+        for i in 0..nodes {
             let decoded_data =
                 DrgPoRep::extract(&pp, prover_id.as_slice(), data_copy.as_mut_slice(), i).unwrap();
 
@@ -331,7 +335,7 @@ mod tests {
 
         let pub_inputs = PublicInputs {
             prover_id: &bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
-            challenge: challenge,
+            challenge,
             tau: &tau,
         };
 
@@ -350,14 +354,14 @@ mod tests {
     table_tests!{
         prove_verify {
             prove_verify_32_2_1(32, 2, 1);
-            // prove_verify_32_2_2(32, 2, 2);
+            #[ignore] prove_verify_32_2_2(32, 2, 2);
             prove_verify_32_2_3(32, 2, 3);
-            // prove_verify_32_2_4(32, 2, 4);
+            #[ignore] prove_verify_32_2_4(32, 2, 4);
             prove_verify_32_2_5(32, 2, 5);
 
             prove_verify_32_3_1(32, 3, 1);
             prove_verify_32_3_2(32, 3, 2);
-            // prove_verify_32_3_3(32, 3, 3);
+            #[ignore] prove_verify_32_3_3(32, 3, 3);
             prove_verify_32_3_4(32, 3, 4);
             prove_verify_32_3_5(32, 3, 5);
 

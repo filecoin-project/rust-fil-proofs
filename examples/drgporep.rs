@@ -113,8 +113,8 @@ fn do_the_work(data_size: usize, m: usize) {
     };
 
     // Prepare the verification key (for proof verification)
-    println!("\tverifying key {:?}", start.elapsed());
-    let pvk = prepare_verifying_key(&groth_params.vk);
+    // println!("\tverifying key {:?}", start.elapsed());
+    // let pvk = prepare_verifying_key(&groth_params.vk);
 
     println!("\tgraph {:?}", start.elapsed());
     const SAMPLES: u32 = 5;
@@ -132,7 +132,7 @@ fn do_the_work(data_size: usize, m: usize) {
             .progress_chars("#>-"),
     );
 
-    for i in 0..SAMPLES {
+    for _ in 0..SAMPLES {
         pb.inc(1);
 
         proof_vec.truncate(0);
@@ -189,8 +189,7 @@ fn do_the_work(data_size: usize, m: usize) {
             .map(|(_, parent)| parent.proof.as_options())
             .collect();
         let data_node = bytes_into_fr::<Bls12>(
-            data_at_node(&original_data, challenge + 1, lambda)
-                .expect("failed to read original data"),
+            data_at_node(&original_data, challenge, lambda).expect("failed to read original data"),
         ).unwrap();
 
         let data_node_path = proof_nc.node.as_options();

@@ -193,8 +193,7 @@ mod tests {
         // TODO: don't clone evertything
         let original_data = data.clone();
         let dn = bytes_into_fr::<Bls12>(
-            data_at_node(&original_data, challenge + 1, lambda)
-                .expect("failed to read original data"),
+            data_at_node(&original_data, challenge, lambda).expect("failed to read original data"),
         ).unwrap();
 
         let data_node = Some(&dn);

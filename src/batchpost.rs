@@ -87,7 +87,7 @@ impl<'a> ProofScheme<'a> for BatchPoST {
                 &merklepor::PrivateInputs {
                     leaf: bytes_into_fr::<Bls12>(data_at_node(
                         priv_inputs.data,
-                        challenge + 1,
+                        challenge,
                         pub_params.params.lambda,
                     )?)?,
                     tree: priv_inputs.tree,
@@ -198,7 +198,7 @@ fn derive_challenge(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use drgraph::{Graph, Sampling};
+    use drgraph::{BucketGraph, Graph};
     use fr32::fr_into_bytes;
     use merklepor;
     use pairing::bls12_381::Bls12;
@@ -220,7 +220,7 @@ mod tests {
         let data: Vec<u8> = (0..32)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
-        let graph = Graph::new(32, Sampling::Bucket(16));
+        let graph = BucketGraph::new(32, 16);
         let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
 
         let pub_inputs = PublicInputs {

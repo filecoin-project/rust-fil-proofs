@@ -144,7 +144,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for ParallelProofOfRetrievability<'a, E> {
 mod tests {
     use super::*;
     use circuit::test::*;
-    use drgraph;
+    use drgraph::{BucketGraph, Graph};
     use fr32::{bytes_into_fr, fr_into_bytes};
     use merklepor;
     use pairing::bls12_381::*;
@@ -168,7 +168,7 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
                 .collect();
 
-            let graph = drgraph::Graph::new(leaves, drgraph::Sampling::Bucket(6));
+            let graph = BucketGraph::new(leaves, 6);
             let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
 
             let pub_inputs: Vec<_> = (0..leaves)
@@ -181,11 +181,8 @@ mod tests {
                 .map(|i| merklepor::PrivateInputs {
                     tree: &tree,
                     leaf: bytes_into_fr::<Bls12>(
-                        data_at_node(
-                            data.as_slice(),
-                            pub_inputs[i].challenge + 1,
-                            pub_params.lambda,
-                        ).unwrap(),
+                        data_at_node(data.as_slice(), pub_inputs[i].challenge, pub_params.lambda)
+                            .unwrap(),
                     ).unwrap(),
                 })
                 .collect();

@@ -86,7 +86,7 @@ impl<'a> ProofScheme<'a> for MerklePoR {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use drgraph::{Graph, Sampling};
+    use drgraph::{BucketGraph, Graph};
     use fr32::{bytes_into_fr, fr_into_bytes};
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
@@ -105,7 +105,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph = Graph::new(32, Sampling::Bucket(16));
+        let graph = BucketGraph::new(32, 16);
         let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
 
         let pub_inputs = PublicInputs {
@@ -114,7 +114,7 @@ mod tests {
         };
 
         let leaf = bytes_into_fr::<Bls12>(
-            data_at_node(data.as_slice(), pub_inputs.challenge + 1, pub_params.lambda).unwrap(),
+            data_at_node(data.as_slice(), pub_inputs.challenge, pub_params.lambda).unwrap(),
         ).unwrap();
 
         let priv_inputs = PrivateInputs { tree: &tree, leaf };

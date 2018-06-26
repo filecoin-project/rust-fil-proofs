@@ -7,8 +7,8 @@ use pairing::{Field, PrimeField, PrimeFieldRepr};
 use util::{data_at_node, data_at_node_offset};
 
 /// encodes the data and overwrites the original data slice.
-pub fn encode<'a>(
-    graph: &'a drgraph::Graph,
+pub fn encode<'a, G: drgraph::Graph>(
+    graph: &'a G,
     lambda: usize,
     prover_id: &'a Fr,
     data: &'a mut [u8],
@@ -18,19 +18,19 @@ pub fn encode<'a>(
 
     (0..graph.size())
         .rev()
-        .map(|i| recursive_encode(graph, lambda, prover_id, &mut cache, data, i + 1))
+        .map(|i| recursive_encode(graph, lambda, prover_id, &mut cache, data, i))
         .collect()
 }
 
-fn recursive_encode(
-    graph: &drgraph::Graph,
+fn recursive_encode<G: drgraph::Graph>(
+    graph: &G,
     lambda: usize,
     prover_id: &Fr,
     cache: &mut [bool],
     data: &mut [u8],
     node: usize,
 ) -> Result<()> {
-    if cache[node - 1] {
+    if cache[node] {
         return Ok(());
     }
 
@@ -62,13 +62,13 @@ fn recursive_encode(
         crypto::sloth::DEFAULT_ROUNDS,
     ));
     data[start..end].clone_from_slice(encoded.as_slice());
-    cache[node - 1] = true;
+    cache[node] = true;
 
     Ok(())
 }
 
-pub fn decode<'a>(
-    graph: &'a drgraph::Graph,
+pub fn decode<'a, G: drgraph::Graph>(
+    graph: &'a G,
     lambda: usize,
     prover_id: &'a Fr,
     data: &'a [u8],
@@ -77,19 +77,15 @@ pub fn decode<'a>(
     (0..graph.size()).fold(Ok(Vec::with_capacity(data.len())), |acc, i| {
         acc.and_then(|mut acc| {
             acc.extend(fr_into_bytes::<Bls12>(&decode_block(
-                graph,
-                lambda,
-                prover_id,
-                data,
-                i + 1,
+                graph, lambda, prover_id, data, i,
             )?));
             Ok(acc)
         })
     })
 }
 
-pub fn decode_block<'a>(
-    graph: &'a drgraph::Graph,
+pub fn decode_block<'a, G: drgraph::Graph>(
+    graph: &'a G,
     lambda: usize,
     prover_id: &'a Fr,
     data: &'a [u8],
