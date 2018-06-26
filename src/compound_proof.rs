@@ -1,8 +1,6 @@
 use bellman::groth16;
 use bellman::Circuit;
 use error::Result;
-use pairing::bls12_381::Bls12;
-use pairing::Engine;
 use proof::ProofScheme;
 use rand::{SeedableRng, XorShiftRng};
 use sapling_crypto::jubjub::JubjubEngine;

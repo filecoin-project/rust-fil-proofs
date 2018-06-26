@@ -1,14 +1,10 @@
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use compound_proof::CompoundProof;
-use drgporep;
-use hasher::pedersen;
 use merklepor::MerklePoR;
 use pairing::bls12_381::{Bls12, Fr};
-use pairing::Engine;
 use proof::ProofScheme;
 use sapling_crypto::circuit::{boolean, multipack, num, pedersen_hash};
 use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
-use std::convert;
 
 /// Proof of retrievability.
 ///
@@ -38,7 +34,7 @@ impl<'a> CompoundProof<'a, Bls12, MerklePoR, PoR<'a, Bls12>> for PoRCompound {
         params: &'a JubjubBls12,
     ) -> PoR<'a, Bls12> {
         PoR::<Bls12> {
-            params: params,
+            params,
             value: Some(proof.data),
             auth_path: proof.proof.as_options(),
             root: Some(public_inputs.commitment.into()),
@@ -199,10 +195,10 @@ where
     CS: ConstraintSystem<E>,
 {
     let por = PoR::<E> {
-        params: params,
-        value: value.map(|v| *v),
-        auth_path: auth_path,
-        root: root,
+        params,
+        value: value.cloned(),
+        auth_path,
+        root,
     };
 
     por.synthesize(&mut cs)
@@ -215,7 +211,6 @@ mod tests {
     use drgraph;
     use fr32::{bytes_into_fr, fr_into_bytes};
     use merklepor;
-    use pairing::bls12_381::*;
     use pairing::Field;
     use proof::ProofScheme;
     use rand::{Rng, SeedableRng, XorShiftRng};
