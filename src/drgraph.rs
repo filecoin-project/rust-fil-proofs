@@ -1,5 +1,6 @@
 #![cfg_attr(feature = "cargo-clippy", allow(len_without_is_empty))]
 
+use crypto::feistel;
 use error::Result;
 use hasher::pedersen;
 use merkle_light::hash::{Algorithm, Hashable};
@@ -7,6 +8,7 @@ use merkle_light::{merkle, proof};
 use pairing::bls12_381::Fr;
 use rand::{ChaChaRng, OsRng, Rng, SeedableRng};
 use std::cmp;
+use std::collections::HashMap;
 use util::data_at_node;
 
 pub type TreeHash = pedersen::PedersenHash;
@@ -210,14 +212,11 @@ pub trait Graph: ::std::fmt::Debug + Clone + PartialEq + Eq {
         (self.size() as f64).log2().ceil() as u64
     }
 
-    fn permute(&self, _keys: &[u32]) -> Self {
-        // TODO: how should this work?
-        unimplemented!("??");
-    }
-
-    fn invert_permute(&self, _keys: &[u32]) -> Self {
-        // TODO: how should this work?
-        unimplemented!("??")
+    // zigzag returns a new graph with expansion component inverted and a distinct
+    // base DRG graph -- with the direction of drg connections reversed. (i.e. from high-to-low nodes).
+    // The name is 'weird', but so is the operation -- hence the choice.
+    fn zigzag(&self) -> Self {
+        unimplemented!();
     }
 
     /// Returns a sorted list of all parents of this node.
@@ -230,29 +229,25 @@ pub trait Graph: ::std::fmt::Debug + Clone + PartialEq + Eq {
     fn degree(&self) -> usize;
 
     /// Constructs a new graph.
-    fn new(nodes: usize, degree: usize) -> Self;
+    fn new(nodes: usize, degree: usize, expansion_degree: usize) -> Self;
 }
+
+pub const DEFAULT_EXPANSION_DEGREE: usize = 8;
 
 /// Bucket sampling algorithm.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BucketGraph {
     nodes: usize,
-    degree: usize,
+    base_degree: usize,
+    expansion_degree: usize,
     seed: [u32; 7],
+    reversed: bool,
 }
 
-impl Graph for BucketGraph {
-    fn new(nodes: usize, degree: usize) -> Self {
-        BucketGraph {
-            nodes,
-            degree,
-            seed: OsRng::new().unwrap().gen(),
-        }
-    }
-
+impl BucketGraph {
     #[inline]
-    fn parents(&self, node: usize) -> Vec<usize> {
-        let m = self.degree;
+    fn parents_aux(&self, node: usize) -> Vec<usize> {
+        let m = self.base_degree;
 
         match node {
             // Special case for the first node, it self references.
@@ -282,15 +277,110 @@ impl Graph for BucketGraph {
                             return node - 1;
                         }
 
+                        assert!(out <= node);
+
                         out
                     })
                     .collect();
-
-                parents.sort();
-
                 parents
             }
         }
+    }
+
+    fn correspondent(&self, node: usize, i: usize) -> usize {
+        let a = (node * self.expansion_degree) as u32 + i as u32;
+        let feistel_keys = &[1, 2, 3, 4];
+
+        let transformed = if self.reversed {
+            feistel::invert_permute(
+                self.size() as u32 * self.expansion_degree as u32,
+                a,
+                feistel_keys,
+            )
+        } else {
+            feistel::permute(
+                self.size() as u32 * self.expansion_degree as u32,
+                a,
+                feistel_keys,
+            )
+        };
+        let b = transformed as usize / self.expansion_degree;
+
+        b
+    }
+
+    #[inline]
+    fn expanded_parents(&self, node: usize) -> Vec<usize> {
+        (0..self.expansion_degree)
+            .filter_map(|i| {
+                let other = self.correspondent(node, i);
+                if self.reversed {
+                    if other > node {
+                        Some(other)
+                    } else {
+                        None
+                    }
+                } else {
+                    if other < node {
+                        Some(other)
+                    } else {
+                        None
+                    }
+                }
+            })
+            .collect()
+    }
+
+    #[inline]
+    fn real_index(&self, i: usize) -> usize {
+        if self.reversed {
+            (self.size() - 1) - i
+        } else {
+            i
+        }
+    }
+}
+
+impl Graph for BucketGraph {
+    fn new(nodes: usize, base_degree: usize, expansion_degree: usize) -> Self {
+        BucketGraph {
+            nodes,
+            base_degree,
+            expansion_degree,
+            seed: OsRng::new().unwrap().gen(),
+            reversed: false,
+        }
+    }
+
+    #[inline]
+    fn parents(&self, raw_node: usize) -> Vec<usize> {
+        // If graph is reversed, use real_index to convert index to reversed index.
+        // So we convert a raw reversed node to an unreversed node, calculate its parents,
+        // then convert the parents to reversed.
+
+        let drg_parents = self
+            .parents_aux(self.real_index(raw_node))
+            .iter()
+            .map(|i| self.real_index(*i))
+            .collect::<Vec<_>>();
+
+        let mut parents = drg_parents;
+        // expanded_parents takes raw_node
+        let expanded_parents = self.expanded_parents(raw_node);
+
+        parents.extend(expanded_parents.iter());
+
+        // Pad so all nodes have correct degree.
+        for _ in 0..(self.degree() - parents.len()) {
+            if self.reversed {
+                parents.push(self.size() - 1);
+            } else {
+                parents.push(0);
+            }
+        }
+        assert!(parents.len() == self.degree());
+        parents.sort();
+        parents
     }
 
     #[inline]
@@ -300,7 +390,19 @@ impl Graph for BucketGraph {
 
     #[inline]
     fn degree(&self) -> usize {
-        self.degree
+        self.base_degree + self.expansion_degree
+    }
+
+    // To zigzag a graph, we just toggle its reversed field.
+    // All the real work happens when we calculate node parents on-demand.
+    fn zigzag(&self) -> Self {
+        BucketGraph {
+            nodes: self.nodes,
+            base_degree: self.base_degree,
+            expansion_degree: self.expansion_degree,
+            seed: self.seed,
+            reversed: !self.reversed,
+        }
     }
 }
 
@@ -313,22 +415,23 @@ mod tests {
     fn graph_bucket() {
         for size in vec![3, 10, 200, 2000] {
             for degree in 2..12 {
-                println!("size: {}, degree: {}", size, degree);
-                let g = BucketGraph::new(size, degree);
+                let g = BucketGraph::new(size, degree, DEFAULT_EXPANSION_DEGREE);
 
                 assert_eq!(g.size(), size, "wrong nodes count");
 
-                assert_eq!(g.parents(0), vec![0; degree as usize]);
-                assert_eq!(g.parents(1), vec![0; degree as usize]);
+                assert_eq!(g.parents_aux(0), vec![0; degree as usize]);
+                assert_eq!(g.parents_aux(1), vec![0; degree as usize]);
 
                 for i in 2..size {
+                    let pa1 = g.parents_aux(i);
+                    let pa2 = g.parents_aux(i);
+
+                    assert_eq!(pa1.len(), degree);
+                    assert_eq!(pa1, pa2, "different parents on the same node");
+
                     let p1 = g.parents(i);
                     let p2 = g.parents(i);
 
-                    assert_eq!(p1.len(), degree);
-                    assert_eq!(p1, p2, "different parents on the same node");
-
-                    println!("parents({}): {:?}", i, p1);
                     for parent in p1 {
                         // TODO: fix me
                         assert_ne!(i, parent, "self reference found");
@@ -344,7 +447,7 @@ mod tests {
 
     #[test]
     fn graph_commit() {
-        let g = BucketGraph::new(3, 10);
+        let g = BucketGraph::new(3, 10, DEFAULT_EXPANSION_DEGREE);
 
         let data = vec![1u8; 3 * 16];
         g.commit(data.as_slice(), 16).unwrap();
@@ -353,7 +456,7 @@ mod tests {
 
     #[test]
     fn gen_proof() {
-        let g = BucketGraph::new(5, 3);
+        let g = BucketGraph::new(5, 3, DEFAULT_EXPANSION_DEGREE);
         let data = vec![2u8; 16 * 5];
 
         let tree = g.merkle_tree(data.as_slice(), 16).unwrap();
@@ -363,34 +466,8 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
-    fn permute() {
-        let keys = vec![1, 2, 3, 4];
-        let graph = BucketGraph::new(5, 3);
-
-        let permuted_graph = graph.permute(keys.as_slice());
-
-        assert_eq!(
-            graph.size(),
-            permuted_graph.size(),
-            "graphs are not the same size"
-        );
-
-        // TODO: this is not a great test, but at least we know they were mutated
-        assert_ne!(graph, permuted_graph, "graph was not permuted");
-
-        // going back
-        let permuted_twice_graph = permuted_graph.permute(keys.as_slice());
-
-        assert_eq!(
-            graph, permuted_twice_graph,
-            "graph was not the same after permuation back"
-        );
-    }
-
-    #[test]
     fn merklepath() {
-        let g = BucketGraph::new(10, 5);
+        let g = BucketGraph::new(10, 5, DEFAULT_EXPANSION_DEGREE);
         let mut rng = rand::thread_rng();
         let data: Vec<u8> = (0..16 * 10).map(|_| rng.gen()).collect();
 
@@ -411,5 +488,83 @@ mod tests {
                 "failed to validate valid data"
             );
         }
+    }
+
+    fn assert_graph_ascending<G: Graph>(g: G) {
+        for i in 0..g.size() {
+            for p in g.parents(i) {
+                if i == 0 {
+                    assert!(p == i);
+                } else {
+                    assert!(p < i);
+                }
+            }
+        }
+    }
+
+    fn assert_graph_descending<G: Graph>(g: G) {
+        for i in 0..g.size() {
+            let parents = g.parents(i);
+            for p in parents {
+                if i == g.size() - 1 {
+                    assert!(p == i);
+                } else {
+                    assert!(p > i);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn bucketgraph_zigzags() {
+        let g = BucketGraph::new(50, 5, 8);
+        let gz = g.zigzag();
+
+        assert_graph_ascending(g);
+        assert_graph_descending(gz);
+    }
+
+    #[test]
+    fn expansion() {
+        // We need a graph.
+        let g = BucketGraph::new(25, 5, 8);
+
+        // We're going to fully realize the expansion-graph component, in a HashMap.
+        let mut gcache: HashMap<usize, Vec<usize>> = HashMap::new();
+
+        // Populate the HashMap with each node's 'expanded parents'.
+        for i in 0..g.size() {
+            let parents = g.expanded_parents(i);
+            gcache.insert(i, parents);
+        }
+
+        // Here's the zigzag version of the graph.
+        let gz = g.zigzag();
+
+        // And a HashMap to hold the expanded parents.
+        let mut gzcache: HashMap<usize, Vec<usize>> = HashMap::new();
+
+        for i in 0..gz.size() {
+            let parents = gz.expanded_parents(i);
+
+            // Check to make sure all (expanded) node-parent relationships also exist in reverse,
+            // in the original graph's Hashmap.
+            for p in &parents {
+                assert!(gcache[&p].contains(&i));
+            }
+            // And populate the zigzag's HashMap.
+            gzcache.insert(i, parents);
+        }
+
+        // And then do the same check to make sure all (expanded) node-parent relationships from the original
+        // are present in the zigzag, just reversed.
+        for i in 0..g.size() {
+            let parents = g.expanded_parents(i);
+            for p in parents {
+                assert!(gzcache[&p].contains(&i));
+            }
+        }
+        // Having checked both ways, we know the graph and its zigzag counterpart have 'expanded' components
+        // which are each other's inverses. It's important that this be true.
     }
 }

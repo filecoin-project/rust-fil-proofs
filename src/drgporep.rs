@@ -1,5 +1,5 @@
 use crypto::{kdf, sloth};
-use drgraph::{BucketGraph, Graph, MerkleProof};
+use drgraph::{BucketGraph, Graph, MerkleProof, DEFAULT_EXPANSION_DEGREE};
 use fr32::{bytes_into_fr, fr_into_bytes};
 use pairing::bls12_381::{Bls12, Fr};
 use pairing::{PrimeField, PrimeFieldRepr};
@@ -31,8 +31,14 @@ pub struct SetupParams {
 
 #[derive(Debug, Clone)]
 pub struct DrgParams {
+    // Number of nodes
     pub n: usize,
+
+    // Base degree of DRG
     pub m: usize,
+
+    // Expansion degree (how many nodes are added during expansion)
+    pub exp: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -90,7 +96,7 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
     type Proof = Proof;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
-        let graph = BucketGraph::new(sp.drg.n, sp.drg.m);
+        let graph = BucketGraph::new(sp.drg.n, sp.drg.m, sp.drg.exp);
 
         Ok(PublicParams {
             lambda: sp.lambda,
@@ -149,13 +155,13 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
         }
 
         let expected_parents = pub_params.graph.parents(challenge);
-        let actual_parents = proof
+        let parents_as_expected = proof
             .replica_parents
             .iter()
-            .map(|x| x.0)
-            .collect::<Vec<_>>();
+            .zip(expected_parents)
+            .all(|(actual, expected)| actual.0 == expected);
 
-        if expected_parents != actual_parents {
+        if !parents_as_expected {
             println!("proof parents were not those provided in public parameters");
             return Ok(false);
         }
@@ -262,6 +268,7 @@ mod tests {
             drg: DrgParams {
                 n: data.len() / lambda,
                 m: 10,
+                exp: 8,
             },
         };
 
@@ -292,6 +299,7 @@ mod tests {
             drg: DrgParams {
                 n: data.len() / lambda,
                 m: 10,
+                exp: DEFAULT_EXPANSION_DEGREE,
             },
         };
 
@@ -324,7 +332,7 @@ mod tests {
     ) {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let m = i * 10;
+        let m = 5;
         let lambda = lambda;
 
         let prover_id = fr_into_bytes::<Bls12>(&rng.gen());
@@ -338,7 +346,11 @@ mod tests {
 
         let sp = SetupParams {
             lambda,
-            drg: DrgParams { n, m },
+            drg: DrgParams {
+                n,
+                m,
+                exp: DEFAULT_EXPANSION_DEGREE,
+            },
         };
 
         let pp = DrgPoRep::setup(&sp).unwrap();
@@ -365,10 +377,11 @@ mod tests {
             // Only one 'wrong' option will be tested at a time.
             assert!(!use_wrong_challenge);
             let real_parents = real_proof.replica_parents;
-            // A real node will never have all parents equal to 1.
             let fake_parents = real_parents
                 .iter()
-                .map(|(p, data_proof)| (1, data_proof.clone()))
+                // Incrementing each parent node will give us a different parent set.
+                // It's fine to be out of range, since this only needs to fail.
+                .map(|(i, data_proof)| (i + 1, data_proof.clone()))
                 .collect::<Vec<_>>();
 
             let proof = Proof::new(

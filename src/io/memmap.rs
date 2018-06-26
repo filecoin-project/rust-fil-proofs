@@ -95,6 +95,7 @@ where
 mod test {
     use super::*;
     use drgporep::{DrgParams, DrgPoRep, SetupParams};
+    use drgraph::DEFAULT_EXPANSION_DEGREE;
     use fr32::fr_into_bytes;
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
@@ -126,6 +127,7 @@ mod test {
             drg: DrgParams {
                 n: data.len() / lambda,
                 m: 10,
+                exp: DEFAULT_EXPANSION_DEGREE,
             },
         };
 

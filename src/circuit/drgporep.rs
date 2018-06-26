@@ -54,7 +54,7 @@ pub fn drgporep<E, CS>(
     data_node_path: Vec<Option<(E::Fr, bool)>>,
     data_root: Option<E::Fr>,
     prover_id: Option<&[u8]>,
-    m: usize,
+    degree: usize,
 ) -> Result<(), SynthesisError>
 where
     E: JubjubEngine,
@@ -132,7 +132,7 @@ where
         &params,
         prover_id_bits,
         parents_bits,
-        m,
+        degree,
     )?;
 
     let decoded = sloth::decode(
@@ -183,6 +183,7 @@ mod tests {
         let lambda = 32;
         let n = 12;
         let m = 6;
+        let exp = 8;
         let challenge = 2;
 
         let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
@@ -200,7 +201,7 @@ mod tests {
 
         let sp = drgporep::SetupParams {
             lambda,
-            drg: drgporep::DrgParams { n, m },
+            drg: drgporep::DrgParams { n, m, exp },
         };
 
         let pp = drgporep::DrgPoRep::setup(&sp).expect("failed to create drgporep setup");
@@ -269,7 +270,7 @@ mod tests {
             data_node_path,
             data_root,
             prover_id,
-            m,
+            m + exp,
         ).expect("failed to synthesize circuit");
 
         if !cs.is_satisfied() {
@@ -280,8 +281,8 @@ mod tests {
         }
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_inputs(), 27, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 58126, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 51, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 119006, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
