@@ -1,67 +1,86 @@
 use bellman::groth16;
 use bellman::Circuit;
 use error::Result;
+//use pairing::Engine;
 use proof::ProofScheme;
 use rand::{SeedableRng, XorShiftRng};
 use sapling_crypto::jubjub::JubjubEngine;
 
+//pub struct PublicParams<'a, E: JubjubEngine, S: ProofScheme<'a>> {
+//    vanilla_params: S::PublicParams,
+//    engine_params: &'a E::Params,
+//}
+
+pub struct Proof<'a, E: JubjubEngine, S: ProofScheme<'a>> {
+    circuit_proof: groth16::Proof<E>,
+    vanilla_proof: S::Proof,
+    engine_params: groth16::Parameters<E>,
+}
+
 pub trait CompoundProof<'a, E: JubjubEngine, S: ProofScheme<'a>, C: Circuit<E>> {
+    fn setup(sp: &S::SetupParams) -> Result<S::PublicParams> {
+        /*Ok(PublicParams {
+            vanilla_params: S::setup(sp)?,
+            engine_params: E::Params::new(), // FIXME: we need this to work -- ask ebfull.
+        })*/
+        S::setup(sp)
+    }
+
     fn prove<'b>(
-        circuit: &'b C,
+        // Get rid of these and replace with PublicParams as below, once safe to do so.
         pub_params: S::PublicParams,
+        params: &'a E::Params,
+
+        //pub_params: PublicParams<'a, E, S>,
         pub_in: S::PublicInputs,
         priv_in: S::PrivateInputs,
-        params: &'a E::Params,
-    ) -> Result<(groth16::Proof<E>, S::Proof, groth16::Parameters<E>)>
-    where
-        &'b C: Circuit<E>,
-    {
+    ) -> Result<Proof<'a, E, S>> {
         let vanilla_proof = S::prove(&pub_params, &pub_in, &priv_in)?;
 
-        let (circuit_proof, groth_params) =
-            Self::circuit_proof(circuit, pub_in, &vanilla_proof, params)?;
+        let (groth_proof, groth_params) = Self::circuit_proof(pub_in, &vanilla_proof, params)?;
 
-        Ok((circuit_proof, vanilla_proof, groth_params))
+        Ok(Proof {
+            circuit_proof: groth_proof,
+            vanilla_proof: vanilla_proof,
+            engine_params: groth_params,
+        })
+    }
+
+    fn verify(public_inputs: &S::PublicInputs, proof: Proof<'a, E, S>) -> Result<bool> {
+        let pvk = groth16::prepare_verifying_key(&proof.engine_params.vk);
+        let inputs = Self::inputize(public_inputs, &proof.vanilla_proof);
+
+        Ok(groth16::verify_proof(
+            &pvk,
+            &proof.circuit_proof,
+            inputs.as_slice(),
+        )?)
     }
 
     fn circuit_proof<'b>(
-        circuit: &'b C,
         pub_in: S::PublicInputs,
         vanilla_proof: &S::Proof,
         params: &'a E::Params,
-    ) -> Result<(groth16::Proof<E>, groth16::Parameters<E>)>
-    where
-        &'b C: Circuit<E>,
-    {
+    ) -> Result<(groth16::Proof<E>, groth16::Parameters<E>)> {
         // TODO: better random numbers
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-        let groth_params = groth16::generate_random_parameters::<E, _, _>(circuit, rng)?;
 
         // TODO: don't do this, we should store the circuit
-        let gp = {
-            let vp = vanilla_proof;
-            let circuit = Self::make_circuit(&pub_in, &vp, params);
+        let vp = vanilla_proof;
+        let circuit = Self::make_circuit(&pub_in, &vp, params);
 
-            // TODO: don't do this, we should store the circuit
-            let groth_proof = groth16::create_random_proof(circuit, &groth_params, rng)?;
-            let mut proof_vec = vec![];
-            groth_proof.write(&mut proof_vec)?;
-            groth16::Proof::<E>::read(&proof_vec[..])?
-        };
+        let groth_params = groth16::generate_random_parameters::<E, _, _>(circuit, rng)?;
+
+        // FIXME: Don't do this -- either Circuit must implement Copy,
+        // or generate_random_parameters/generate_parameters must borrow circuit.
+        let circuit = Self::make_circuit(&pub_in, &vp, params);
+
+        let groth_proof = groth16::create_random_proof(circuit, &groth_params, rng)?;
+        let mut proof_vec = vec![];
+        groth_proof.write(&mut proof_vec)?;
+        let gp = groth16::Proof::<E>::read(&proof_vec[..])?;
 
         Ok((gp, groth_params))
-    }
-
-    fn verify(
-        groth_params: groth16::Parameters<E>,
-        vanilla_proof: &S::Proof,
-        proof: groth16::Proof<E>,
-        public_inputs: &S::PublicInputs,
-    ) -> Result<bool> {
-        let pvk = groth16::prepare_verifying_key(&groth_params.vk);
-        let inputs = Self::inputize(public_inputs, vanilla_proof);
-
-        Ok(groth16::verify_proof(&pvk, &proof, inputs.as_slice())?)
     }
 
     fn inputize(pub_in: &S::PublicInputs, vanilla_proof: &S::Proof) -> Vec<E::Fr>;
