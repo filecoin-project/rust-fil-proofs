@@ -1,15 +1,22 @@
 use bellman::groth16;
 use bellman::Circuit;
 use error::Result;
-//use pairing::Engine;
 use proof::ProofScheme;
 use rand::{SeedableRng, XorShiftRng};
 use sapling_crypto::jubjub::JubjubEngine;
 
-//pub struct PublicParams<'a, E: JubjubEngine, S: ProofScheme<'a>> {
-//    vanilla_params: S::PublicParams,
-//    engine_params: &'a E::Params,
-//}
+pub struct SetupParams<'a, E: JubjubEngine, S: ProofScheme<'a>>
+where
+    <S as ProofScheme<'a>>::SetupParams: 'a,
+{
+    vanilla_params: &'a <S as ProofScheme<'a>>::SetupParams,
+    engine_params: &'a E::Params,
+}
+
+pub struct PublicParams<'a, E: JubjubEngine, S: ProofScheme<'a>> {
+    vanilla_params: S::PublicParams,
+    engine_params: E::Params,
+}
 
 pub struct Proof<'a, E: JubjubEngine, S: ProofScheme<'a>> {
     circuit_proof: groth16::Proof<E>,
@@ -17,27 +24,23 @@ pub struct Proof<'a, E: JubjubEngine, S: ProofScheme<'a>> {
     engine_params: groth16::Parameters<E>,
 }
 
-pub trait CompoundProof<'a, E: JubjubEngine, S: ProofScheme<'a>, C: Circuit<E>> {
-    fn setup(sp: &S::SetupParams) -> Result<S::PublicParams> {
-        /*Ok(PublicParams {
-            vanilla_params: S::setup(sp)?,
-            engine_params: E::Params::new(), // FIXME: we need this to work -- ask ebfull.
-        })*/
-        S::setup(sp)
+pub trait CompoundProof<'a, 'c, E: JubjubEngine, S: ProofScheme<'a>, C: Circuit<E>> {
+    fn setup(sp: SetupParams<E, S>) -> Result<PublicParams<E, S>> {
+        Ok(PublicParams {
+            vanilla_params: &S::setup(sp.vanilla_params)?.clone(),
+            engine_params: &sp.engine_params.clone(),
+        })
     }
 
     fn prove<'b>(
-        // Get rid of these and replace with PublicParams as below, once safe to do so.
-        pub_params: S::PublicParams,
-        params: &'a E::Params,
-
-        //pub_params: PublicParams<'a, E, S>,
+        pub_params: PublicParams<'a, E, S>,
         pub_in: S::PublicInputs,
         priv_in: S::PrivateInputs,
     ) -> Result<Proof<'a, E, S>> {
         let vanilla_proof = S::prove(&pub_params, &pub_in, &priv_in)?;
 
-        let (groth_proof, groth_params) = Self::circuit_proof(pub_in, &vanilla_proof, params)?;
+        let (groth_proof, groth_params) =
+            Self::circuit_proof(pub_in, &vanilla_proof, pub_params.engine_params)?;
 
         Ok(Proof {
             circuit_proof: groth_proof,

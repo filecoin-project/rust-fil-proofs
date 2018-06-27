@@ -27,7 +27,7 @@ pub struct PoR<'a, E: JubjubEngine> {
 pub struct PoRCompound {}
 
 // can only implment for Bls12 because merklepor is not generic over the engine.
-impl<'a> CompoundProof<'a, Bls12, MerklePoR, PoR<'a, Bls12>> for PoRCompound {
+impl<'a, 'c> CompoundProof<'a, 'c, Bls12, MerklePoR, PoR<'a, Bls12>> for PoRCompound {
     fn make_circuit<'b>(
         public_inputs: &<MerklePoR as ProofScheme>::PublicInputs,
         proof: &'b <MerklePoR as ProofScheme>::Proof,
