@@ -7,16 +7,14 @@ extern crate sapling_crypto;
 
 use bellman::groth16::*;
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
-use pairing::bls12_381::{Bls12, Fr};
+use pairing::bls12_381::Bls12;
 use proofs::example_helper::Example;
 use rand::Rng;
 use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 
-use proofs::fr32::{bytes_into_fr, fr_into_bytes};
-use proofs::porep::PoRep;
-use proofs::proof::ProofScheme;
-use proofs::util::data_at_node;
-use proofs::{circuit, drgporep};
+use proofs::circuit;
+use proofs::fr32::fr_into_bytes;
+use proofs::test_helper::fake_drgpoprep_proof;
 
 struct DrgPoRepExample<'a, E: JubjubEngine> {
     params: &'a E::Params,
@@ -55,6 +53,8 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepExample<'a, E> {
 
 #[derive(Default)]
 struct DrgPoRepApp {}
+
+const SLOTH_ROUNDS: usize = 1;
 
 impl Example<Bls12> for DrgPoRepApp {
     fn name() -> String {
@@ -102,97 +102,41 @@ impl Example<Bls12> for DrgPoRepApp {
         rng: &mut R,
         engine_params: &JubjubBls12,
         groth_params: &Parameters<Bls12>,
-        _tree_depth: usize,
+        tree_depth: usize,
         _challenge_count: usize,
-        leaves: usize,
+        _leaves: usize,
         lambda: usize,
         m: usize,
     ) -> Proof<Bls12> {
-        let prover_id: Fr = rng.gen();
-        let prover_id_bytes = fr_into_bytes::<Bls12>(&prover_id);
-        let mut data: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
-            .collect();
-        let original_data = data.clone();
-        let challenge = 2;
+        let (
+            prover_id,
+            replica_node,
+            replica_node_path,
+            replica_root,
+            replica_parents,
+            replica_parents_paths,
+            data_node,
+            data_node_path,
+            data_root,
+        ) = fake_drgpoprep_proof(rng, tree_depth, m, SLOTH_ROUNDS);
 
-        let sp = drgporep::SetupParams {
-            lambda,
-            drg: drgporep::DrgParams { n: leaves, m },
-        };
-
-        let pp = drgporep::DrgPoRep::setup(&sp).expect("failed to create drgporep setup");
-
-        let (tau, aux) =
-            drgporep::DrgPoRep::replicate(&pp, prover_id_bytes.as_slice(), data.as_mut_slice())
-                .expect("failed to replicate");
-
-        let pub_inputs = drgporep::PublicInputs {
-            prover_id: &prover_id,
-            challenge,
-            tau: &tau,
-        };
-        let priv_inputs = drgporep::PrivateInputs {
-            replica: data.as_slice(),
-            aux: &aux,
-        };
-
-        let proof_nc =
-            drgporep::DrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).expect("failed to prove");
-
-        assert!(
-            drgporep::DrgPoRep::verify(&pp, &pub_inputs, &proof_nc).expect("failed to verify"),
-            "failed to verify (non circuit)"
-        );
-
-        let replica_node = Some(&proof_nc.replica_node.data);
-
-        let replica_node_path = proof_nc.replica_node.proof.as_options();
-        let replica_root = Some(proof_nc.replica_node.proof.root().into());
-        let replica_parents: Vec<_> = proof_nc
-            .replica_parents
-            .iter()
-            .map(|(_, parent)| Some(&parent.data))
-            .collect();
-        let replica_parents_paths: Vec<_> = proof_nc
-            .replica_parents
-            .iter()
-            .map(|(_, parent)| parent.proof.as_options())
-            .collect();
-        let data_node = bytes_into_fr::<Bls12>(
-            data_at_node(&original_data, challenge, lambda).expect("failed to read original data"),
-        ).unwrap();
-
-        let data_node_path = proof_nc.node.as_options();
-        let data_root = Some(proof_nc.node.root().into());
-        let prover_id = Some(prover_id_bytes.as_slice());
-
-        assert!(
-            proof_nc.node.validate(challenge),
-            "failed to verify data commitment"
-        );
-        assert!(
-            proof_nc.node.validate_data(&data_node),
-            "failed to verify data commitment with data"
-        );
         // create an instance of our circut (with the witness)
         let c = DrgPoRepExample {
             params: engine_params,
             lambda: lambda * 8,
-            replica_node,
+            replica_node: Some(&replica_node),
             replica_node_path: &replica_node_path,
-            replica_root,
-            replica_parents,
+            replica_root: Some(replica_root),
+            replica_parents: replica_parents.iter().map(|parent| Some(parent)).collect(),
             replica_parents_paths: &replica_parents_paths,
             data_node: Some(&data_node),
-            data_node_path,
-            data_root,
-            prover_id,
+            data_node_path: data_node_path.clone(),
+            data_root: Some(data_root),
+            prover_id: Some(prover_bytes.as_slice()),
             m,
         };
 
-        // create groth16 proof
-        create_random_proof(c, groth_params, rng).expect("failed to create random proof")
+        create_random_proof(c, groth_params, rng).expect("failed to create proof")
     }
 
     fn verify_proof(
