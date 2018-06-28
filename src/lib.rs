@@ -24,7 +24,12 @@ extern crate tempfile;
 extern crate proptest;
 
 #[macro_use]
+extern crate clap;
+
+#[macro_use]
 pub mod test_helper;
+
+pub mod example_helper;
 
 pub mod batchpost;
 
