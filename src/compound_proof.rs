@@ -5,12 +5,13 @@ use proof::ProofScheme;
 use rand::{SeedableRng, XorShiftRng};
 use sapling_crypto::jubjub::JubjubEngine;
 
-pub struct SetupParams<'a, E: JubjubEngine, S: ProofScheme<'a>>
+pub struct SetupParams<'a, 'b: 'a, E: JubjubEngine, S: ProofScheme<'a>>
 where
-    <S as ProofScheme<'a>>::SetupParams: 'a,
+    <S as ProofScheme<'a>>::SetupParams: 'b,
 {
-    vanilla_params: &'a <S as ProofScheme<'a>>::SetupParams,
-    engine_params: &'a E::Params,
+    vanilla_params: &'b <S as ProofScheme<'a>>::SetupParams,
+    // TODO: would be nice to use a reference, but that requires E::Params to impl Clone or Copy I think
+    engine_params: E::Params,
 }
 
 pub struct PublicParams<'a, E: JubjubEngine, S: ProofScheme<'a>> {
@@ -24,27 +25,27 @@ pub struct Proof<'a, E: JubjubEngine, S: ProofScheme<'a>> {
     engine_params: groth16::Parameters<E>,
 }
 
-pub trait CompoundProof<'a, 'c, E: JubjubEngine, S: ProofScheme<'a>, C: Circuit<E>> {
-    fn setup(sp: SetupParams<E, S>) -> Result<PublicParams<E, S>> {
+pub trait CompoundProof<'a, E: JubjubEngine, S: ProofScheme<'a>, C: Circuit<E>> {
+    fn setup<'b>(sp: SetupParams<'a, 'b, E, S>) -> Result<PublicParams<'a, E, S>> {
         Ok(PublicParams {
-            vanilla_params: &S::setup(sp.vanilla_params)?.clone(),
-            engine_params: &sp.engine_params.clone(),
+            vanilla_params: S::setup(sp.vanilla_params)?,
+            engine_params: sp.engine_params,
         })
     }
 
-    fn prove<'b>(
-        pub_params: PublicParams<'a, E, S>,
+    fn prove(
+        pub_params: &'a PublicParams<'a, E, S>,
         pub_in: S::PublicInputs,
         priv_in: S::PrivateInputs,
     ) -> Result<Proof<'a, E, S>> {
-        let vanilla_proof = S::prove(&pub_params, &pub_in, &priv_in)?;
+        let vanilla_proof = S::prove(&pub_params.vanilla_params, &pub_in, &priv_in)?;
 
         let (groth_proof, groth_params) =
-            Self::circuit_proof(pub_in, &vanilla_proof, pub_params.engine_params)?;
+            Self::circuit_proof(pub_in, &vanilla_proof, &pub_params.engine_params)?;
 
         Ok(Proof {
             circuit_proof: groth_proof,
-            vanilla_proof: vanilla_proof,
+            vanilla_proof,
             engine_params: groth_params,
         })
     }
@@ -60,7 +61,7 @@ pub trait CompoundProof<'a, 'c, E: JubjubEngine, S: ProofScheme<'a>, C: Circuit<
         )?)
     }
 
-    fn circuit_proof<'b>(
+    fn circuit_proof(
         pub_in: S::PublicInputs,
         vanilla_proof: &S::Proof,
         params: &'a E::Params,
