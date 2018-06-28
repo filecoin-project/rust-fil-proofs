@@ -284,4 +284,37 @@ mod tests {
 
         assert_eq!(cs.get_input(1, "drgporep/prover_id/input 0"), prover_id_fr,);
     }
+
+    #[test]
+    fn drgporep_input_circuit_num_constraints() {
+        let params = &JubjubBls12::new();
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        // 32 bytes per node
+        let lambda = 32;
+        // 1 GB
+        let n = (1024 * 1024 * 1024) / 32;
+        let m = 6;
+        let tree_depth = (n as f64).log2().ceil() as usize;
+
+        let mut cs = TestConstraintSystem::<Bls12>::new();
+        drgporep(
+            cs.namespace(|| "drgporep"),
+            params,
+            lambda * 8,
+            Some(&rng.gen()),
+            &vec![Some(rng.gen()); tree_depth],
+            Some(rng.gen()),
+            vec![Some(&rng.gen()); m],
+            &vec![vec![Some(rng.gen()); tree_depth]; m],
+            Some(&rng.gen()),
+            vec![Some(rng.gen()); tree_depth],
+            Some(rng.gen()),
+            Some(&vec![rng.gen(); 32]),
+            m,
+        ).expect("failed to synthesize circuit");
+
+        assert_eq!(cs.num_inputs(), 27, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 290302, "wrong number of constraints");
+    }
 }
