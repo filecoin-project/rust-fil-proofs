@@ -16,6 +16,7 @@ lazy_static = "1.0"
 memmap = "0.6"
 num-bigint = "0.2"
 num-traits = "0.2"
+clap = "2"
 
 [dependencies.pairing]
 version = "0.14.2"
@@ -34,7 +35,6 @@ criterion = "0.2.3"
 tempfile = "3"
 proptest = "0.7"
 indicatif = "0.9"
-clap = "2"
 
 [[bench]]
 name = "pedersen"
