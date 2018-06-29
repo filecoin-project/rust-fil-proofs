@@ -41,22 +41,8 @@ impl<'a> CompoundProof<'a, Bls12, MerklePoR, PoR<'a, Bls12>> for PoRCompound {
         }
     }
 
-    fn inputize(
-        pub_inputs: &<MerklePoR as ProofScheme>::PublicInputs,
-        proof: &<MerklePoR as ProofScheme>::Proof,
-    ) -> Vec<Fr> {
-        let auth_path_bits: Vec<bool> = proof
-            .proof
-            .path()
-            .iter()
-            .map(|(_, is_right)| *is_right)
-            .collect();
-        let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
-
-        let mut inputs = vec![proof.data];
-        inputs.extend(packed_auth_path);
-        inputs.push(pub_inputs.commitment.into());
-        inputs
+    fn inputize(pub_inputs: &<MerklePoR as ProofScheme>::PublicInputs) -> Vec<Fr> {
+        vec![pub_inputs.commitment.into()]
     }
 }
 

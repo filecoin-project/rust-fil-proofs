@@ -19,9 +19,8 @@ pub struct PublicParams<'a, E: JubjubEngine, S: ProofScheme<'a>> {
     engine_params: E::Params,
 }
 
-pub struct Proof<'a, E: JubjubEngine, S: ProofScheme<'a>> {
+pub struct Proof<E: JubjubEngine> {
     circuit_proof: groth16::Proof<E>,
-    vanilla_proof: S::Proof,
     engine_params: groth16::Parameters<E>,
 }
 
@@ -37,7 +36,7 @@ pub trait CompoundProof<'a, E: JubjubEngine, S: ProofScheme<'a>, C: Circuit<E>> 
         pub_params: &'a PublicParams<'a, E, S>,
         pub_in: S::PublicInputs,
         priv_in: S::PrivateInputs,
-    ) -> Result<Proof<'a, E, S>> {
+    ) -> Result<Proof<E>> {
         let vanilla_proof = S::prove(&pub_params.vanilla_params, &pub_in, &priv_in)?;
 
         let (groth_proof, groth_params) =
@@ -45,14 +44,13 @@ pub trait CompoundProof<'a, E: JubjubEngine, S: ProofScheme<'a>, C: Circuit<E>> 
 
         Ok(Proof {
             circuit_proof: groth_proof,
-            vanilla_proof,
             engine_params: groth_params,
         })
     }
 
-    fn verify(public_inputs: &S::PublicInputs, proof: Proof<'a, E, S>) -> Result<bool> {
+    fn verify(public_inputs: &S::PublicInputs, proof: Proof<E>) -> Result<bool> {
         let pvk = groth16::prepare_verifying_key(&proof.engine_params.vk);
-        let inputs = Self::inputize(public_inputs, &proof.vanilla_proof);
+        let inputs = Self::inputize(public_inputs);
 
         Ok(groth16::verify_proof(
             &pvk,
@@ -87,7 +85,7 @@ pub trait CompoundProof<'a, E: JubjubEngine, S: ProofScheme<'a>, C: Circuit<E>> 
         Ok((gp, groth_params))
     }
 
-    fn inputize(pub_in: &S::PublicInputs, vanilla_proof: &S::Proof) -> Vec<E::Fr>;
+    fn inputize(pub_in: &S::PublicInputs) -> Vec<E::Fr>;
 
     fn make_circuit(
         public_inputs: &S::PublicInputs,
