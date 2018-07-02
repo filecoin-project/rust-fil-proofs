@@ -6,5 +6,8 @@ pub mod ppor;
 pub mod sloth;
 pub mod xor;
 
+// FIXME: Can we make a config like for test?
+pub mod bench;
+
 #[cfg(test)]
 pub mod test;
