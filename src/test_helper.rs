@@ -2,7 +2,7 @@ use crypto;
 use fr32::{bytes_into_fr, fr_into_bytes};
 use pairing::bls12_381::{Bls12, Fr};
 use pairing::{BitIterator, PrimeField};
-use rand::{Rng, XorShiftRng};
+use rand::Rng;
 use sapling_crypto::pedersen_hash;
 use util::{bits_to_bytes, bytes_into_bits};
 
@@ -21,8 +21,8 @@ macro_rules! table_tests {
     }
 }
 
-pub fn random_merkle_path(
-    rng: &mut XorShiftRng,
+pub fn random_merkle_path<R: Rng>(
+    rng: &mut R,
     tree_depth: usize,
 ) -> (Vec<Option<(Fr, bool)>>, Fr, Fr) {
     let auth_path: Vec<Option<(Fr, bool)>> = vec![Some((rng.gen(), rng.gen())); tree_depth];

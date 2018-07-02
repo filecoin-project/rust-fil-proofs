@@ -17,6 +17,10 @@ memmap = "0.6"
 num-bigint = "0.2"
 num-traits = "0.2"
 clap = "2"
+log = "0.4"
+env_logger = "0.5"
+indicatif = "0.9"
+colored = "1.6"
 
 [dependencies.pairing]
 version = "0.14.2"
@@ -31,10 +35,10 @@ default = ["u128-support"]
 u128-support = ["pairing/u128-support"]
 
 [dev-dependencies]
-criterion = {version = "0.2.3"}
+criterion = "0.2.3"
 tempfile = "3"
 proptest = "0.7"
-indicatif = "0.9"
+
 
 [[bench]]
 name = "pedersen"

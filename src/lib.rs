@@ -25,6 +25,11 @@ extern crate proptest;
 
 #[macro_use]
 extern crate clap;
+extern crate env_logger;
+extern crate indicatif;
+#[macro_use]
+extern crate log;
+extern crate colored;
 
 #[macro_use]
 pub mod test_helper;
