@@ -6,37 +6,51 @@ extern crate rand;
 extern crate sapling_crypto;
 
 use bellman::groth16::*;
-use indicatif::{ProgressBar, ProgressStyle};
 use pairing::bls12_381::{Bls12, Fr};
-use rand::{SeedableRng, XorShiftRng};
+use pairing::Field;
+use rand::Rng;
 use sapling_crypto::circuit::multipack;
 use sapling_crypto::jubjub::JubjubBls12;
-use std::time::{Duration, Instant};
 
 use proofs::circuit;
 use proofs::example_helper::Example;
 use proofs::test_helper::random_merkle_path;
 
-struct MerklePorApp {}
+struct MerklePorApp {
+    auth_paths: Vec<Vec<Option<(Fr, bool)>>>,
+    root: Fr,
+    leaf: Fr,
+}
 
-impl Example for MerklePorApp {
-    fn do_the_work(data_size: usize, challenge_count: usize) {
-        let jubjub_params = &JubjubBls12::new();
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+impl Default for MerklePorApp {
+    fn default() -> Self {
+        MerklePorApp {
+            auth_paths: Vec::default(),
+            leaf: Fr::zero(),
+            root: Fr::zero(),
+        }
+    }
+}
 
-        let leaves = data_size / 32;
-        let tree_depth = (leaves as f64).log2().ceil() as usize;
+impl Example<Bls12> for MerklePorApp {
+    fn name() -> String {
+        "Multi-Challenge MerklePor".to_string()
+    }
 
-        println!(
-            "data_size {}bytes, tree_depth = {}, challenge_count = {}",
-            data_size, tree_depth, challenge_count
-        );
+    fn generate_engine_params() -> JubjubBls12 {
+        JubjubBls12::new()
+    }
 
-        println!("Creating sample parameters...");
-        let start = Instant::now();
-
-        println!("\tgroth params {:?}", start.elapsed());
-        let groth_params = generate_random_parameters::<Bls12, _, _>(
+    fn generate_groth_params<R: Rng>(
+        &mut self,
+        rng: &mut R,
+        jubjub_params: &JubjubBls12,
+        tree_depth: usize,
+        challenge_count: usize,
+        _lambda: usize,
+        _m: usize,
+    ) -> Parameters<Bls12> {
+        generate_random_parameters::<Bls12, _, _>(
             circuit::ppor::ParallelProofOfRetrievability {
                 params: jubjub_params,
                 values: vec![None; challenge_count],
@@ -44,104 +58,80 @@ impl Example for MerklePorApp {
                 root: None,
             },
             rng,
-        ).unwrap();
+        ).unwrap()
+    }
 
-        // Prepare the verification key (for proof verification)
-        println!("\tverifying key {:?}", start.elapsed());
-        let pvk = prepare_verifying_key(&groth_params.vk);
+    fn samples() -> usize {
+        5
+    }
 
-        println!("\tgraph {:?}", start.elapsed());
-        const SAMPLES: usize = 5;
-
-        let mut proof_vec = vec![];
-        let mut total_proving = Duration::new(0, 0);
-        let mut total_verifying = Duration::new(0, 0);
-
+    fn create_proof<R: Rng>(
+        &mut self,
+        rng: &mut R,
+        engine_params: &JubjubBls12,
+        groth_params: &Parameters<Bls12>,
+        tree_depth: usize,
+        challenge_count: usize,
+        _leaves: usize,
+        _lambda: usize,
+        _m: usize,
+    ) -> Proof<Bls12> {
         let (auth_path, leaf, root) = random_merkle_path(rng, tree_depth);
+        self.root = root;
+        self.leaf = leaf;
+        self.auth_paths = (0..challenge_count).map(|_| auth_path.clone()).collect();
+        let values = (0..challenge_count).map(|_| Some(&self.leaf)).collect();
 
-        let pb = ProgressBar::new((SAMPLES * 2) as u64);
-        pb.set_style(
-            ProgressStyle::default_bar()
-                .template(
-                    "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
-                )
-                .progress_chars("#>-"),
-        );
+        // create an instance of our circut (with the witness)
+        let proof = {
+            let c = circuit::ppor::ParallelProofOfRetrievability {
+                params: engine_params,
+                values,
+                auth_paths: &self.auth_paths,
+                root: Some(self.root),
+            };
 
-        for _ in 0..SAMPLES {
-            pb.inc(1);
+            // create groth16 proof
+            create_random_proof(c, groth_params, rng).expect("failed to create proof")
+        };
 
-            let start = Instant::now();
-            proof_vec.truncate(0);
-            let auth_paths: Vec<_> = (0..challenge_count).map(|_| auth_path.clone()).collect();
-            let values: Vec<_> = (0..challenge_count).map(|_| Some(&leaf)).collect();
+        proof
+    }
 
-            {
-                // create an instance of our circut (with the witness)
-                let c = circuit::ppor::ParallelProofOfRetrievability {
-                    params: jubjub_params,
-                    values: values.clone(),
-                    auth_paths: &auth_paths,
-                    root: Some(root),
-                };
+    fn verify_proof(
+        &mut self,
+        proof: &Proof<Bls12>,
+        pvk: &PreparedVerifyingKey<Bls12>,
+    ) -> Option<bool> {
+        // -- generate public inputs
 
-                // create groth16 proof
-                let proof =
-                    create_random_proof(c, &groth_params, rng).expect("failed to create proof");
+        let auth_paths = self.auth_paths.clone();
+        let len = auth_paths.len();
 
-                proof.write(&mut proof_vec).unwrap();
-            }
+        // regen values, avoids storing
+        let values: Vec<_> = (0..len).map(|_| Some(&self.leaf)).collect();
 
-            total_proving += start.elapsed();
+        let mut expected_inputs: Vec<Fr> = (0..len)
+            .flat_map(|j| {
+                let auth_path_bits: Vec<bool> =
+                    auth_paths[j].iter().map(|p| p.unwrap().1).collect();
+                let packed_auth_path: Vec<Fr> =
+                    multipack::compute_multipacking::<Bls12>(&auth_path_bits);
 
-            let start = Instant::now();
-            let proof = Proof::<Bls12>::read(&proof_vec[..]).unwrap();
+                let mut input = vec![*values[j].unwrap()];
+                input.extend(packed_auth_path);
+                input
+            })
+            .collect();
 
-            // -- generate public inputs
+        // add the root as the last one
+        expected_inputs.push(self.root);
 
-            let mut expected_inputs: Vec<Fr> = (0..challenge_count)
-                .flat_map(|j| {
-                    let auth_path_bits: Vec<bool> =
-                        auth_paths[j].iter().map(|p| p.unwrap().1).collect();
-                    let packed_auth_path: Vec<Fr> =
-                        multipack::compute_multipacking::<Bls12>(&auth_path_bits);
-
-                    let mut input = vec![*values[j].unwrap()];
-                    input.extend(packed_auth_path);
-                    input
-                })
-                .collect();
-
-            // add the root as the last one
-            expected_inputs.push(root);
-
-            // -- verify proof with public inputs
-            pb.inc(1);
-            assert!(
-                verify_proof(&pvk, &proof, &expected_inputs).expect("failed to verify proof"),
-                "failed to verify circuit proof"
-            );
-
-            total_verifying += start.elapsed();
-        }
-
-        let proving_avg = total_proving / SAMPLES as u32;
-        let proving_avg =
-            proving_avg.subsec_nanos() as f64 / 1_000_000_000f64 + (proving_avg.as_secs() as f64);
-
-        let verifying_avg = total_verifying / SAMPLES as u32;
-        let verifying_avg = verifying_avg.subsec_nanos() as f64 / 1_000_000_000f64
-            + (verifying_avg.as_secs() as f64);
-
-        pb.finish_and_clear();
-        println!(
-            "Average proving time: {:?} seconds\n\
-             Average verifying time: {:?} seconds",
-            proving_avg, verifying_avg,
-        );
+        // -- verify proof with public inputs
+        Some(verify_proof(pvk, proof, &expected_inputs).expect("failed to verify proof"))
     }
 }
 
 fn main() {
-    MerklePorApp::main("Multi-Challenge MerklePor")
+    MerklePorApp::main()
 }
