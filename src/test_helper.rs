@@ -79,7 +79,7 @@ pub fn fake_drgpoprep_proof<R: Rng>(
     // get commR
     let subtree = MerkleTree::from_data(leaves);
     let subtree_root: Fr = subtree.root().into();
-    let subtree_depth = subtree.height();
+    let subtree_depth = subtree.height() - 1; // .height() inludes the leave
     let remaining_depth = tree_depth - subtree_depth;
     let (remaining_path, replica_root) =
         random_merkle_path_with_value(rng, remaining_depth, &subtree_root, remaining_depth);
@@ -100,6 +100,8 @@ pub fn fake_drgpoprep_proof<R: Rng>(
         subtree_path.extend(&remaining_path);
         subtree_path
     };
+
+    assert_eq!(data_node_path.len(), replica_node_path.len());
 
     (
         prover_id,

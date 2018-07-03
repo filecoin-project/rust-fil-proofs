@@ -13,7 +13,7 @@ Configure to use nightly:
 ## Build
 
 ```
-> cargo build
+> cargo build --release --features u128-support
 ```
 
 ## Test
@@ -28,7 +28,7 @@ Configure to use nightly:
 Build
 
 ```
-> cargo build --examples --release
+> cargo build --examples --release --features u128-support
 ```
 
 Running them
