@@ -78,7 +78,7 @@ where
     // validate the replica node merkle proof
     proof_of_retrievability(
         cs.namespace(|| "replica_node merkle proof"),
-        params,
+        &params,
         replica_node,
         replica_node_path.to_owned(),
         replica_root,
@@ -89,7 +89,7 @@ where
         for i in 0..replica_parents.len() {
             proof_of_retrievability(
                 cs.namespace(|| format!("replica parent: {}", i)),
-                params,
+                &params,
                 replica_parents[i],
                 replica_parents_paths[i].clone(),
                 replica_root,
@@ -99,7 +99,7 @@ where
     // validate data node commitment
     proof_of_retrievability(
         cs.namespace(|| "data node commitment"),
-        params,
+        &params,
         data_node,
         data_node_path,
         data_root,
@@ -129,7 +129,7 @@ where
     // generate the encryption key
     let key = kdf(
         cs.namespace(|| "kdf"),
-        params,
+        &params,
         prover_id_bits,
         parents_bits,
         m,

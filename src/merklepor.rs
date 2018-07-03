@@ -41,6 +41,9 @@ pub struct SetupParams {}
 #[derive(Debug, Default)]
 pub struct MerklePoR {}
 
+const LAMBDA: usize = 32;
+const LEAVES: usize = 32;
+
 impl<'a> ProofScheme<'a> for MerklePoR {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
@@ -49,7 +52,10 @@ impl<'a> ProofScheme<'a> for MerklePoR {
     type Proof = Proof;
 
     fn setup(_sp: &SetupParams) -> Result<PublicParams> {
-        unimplemented!("not used");
+        Ok(PublicParams {
+            lambda: LAMBDA,
+            leaves: LEAVES,
+        })
     }
 
     fn prove(

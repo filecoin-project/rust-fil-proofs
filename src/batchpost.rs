@@ -21,7 +21,7 @@ pub struct PublicParams {
 #[derive(Debug)]
 pub struct SetupParams {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Proof {
     pub proofs: Vec<merklepor::Proof>,
     pub challenges: Vec<usize>,
