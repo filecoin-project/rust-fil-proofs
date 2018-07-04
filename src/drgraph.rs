@@ -88,8 +88,7 @@ impl MerkleProof {
         let mut a = TreeAlgorithm::default();
 
         if path_index(&self.path) != node {
-            // FIXME: Temporarily disable index checking to verify failing test.
-            //   return false;
+            return false;
         }
 
         self.root() == (0..self.path.len()).fold(self.leaf, |h, i| {

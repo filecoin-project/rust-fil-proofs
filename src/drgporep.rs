@@ -148,6 +148,18 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
             return Ok(false);
         }
 
+        let expected_parents = pub_params.graph.parents(challenge);
+        let actual_parents = proof
+            .replica_parents
+            .iter()
+            .map(|x| x.0)
+            .collect::<Vec<_>>();
+
+        if expected_parents != actual_parents {
+            println!("proof parents were not those provided in public parameters");
+            return Ok(false);
+        }
+
         for (parent_node, p) in &proof.replica_parents {
             if !p.proof.validate(*parent_node) {
                 println!("invalid replica parent: {:?}", p);
