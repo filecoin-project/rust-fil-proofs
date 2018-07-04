@@ -85,7 +85,7 @@ impl<'a> ProofScheme<'a> for MerklePoR {
             return Err(format_err!("invalid root"));
         }
 
-        Ok(proof.proof.validate_data(&proof.data))
+        Ok(proof.proof.validate_data(&proof.data) && proof.proof.validate(pub_inputs.challenge))
     }
 }
 
