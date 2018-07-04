@@ -88,7 +88,8 @@ impl MerkleProof {
         let mut a = TreeAlgorithm::default();
 
         if path_index(&self.path) != node {
-            return false;
+            // FIXME: Temporarily disable this vital check, in order to verify that regression tests catch this bug.
+            //return false;
         }
 
         self.root() == (0..self.path.len()).fold(self.leaf, |h, i| {

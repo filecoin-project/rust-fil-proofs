@@ -143,6 +143,8 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
         let challenge = pub_inputs.challenge % pub_params.graph.size();
         assert_ne!(challenge, 0, "can not prove the first node");
 
+        println!("verifying with challenge: {}", challenge);
+
         // We should return false, not Err here -- though having the failure information is
         // useful when debugging. What to do…
 
@@ -306,7 +308,7 @@ mod tests {
         }
     }
 
-    fn prove_verify(lambda: usize, n: usize, i: usize) {
+    fn prove_verify(lambda: usize, n: usize, i: usize, use_wrong_challenge: bool) {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let m = i * 10;
@@ -344,32 +346,52 @@ mod tests {
             aux: &aux,
         };
 
-        let proof = DrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
-        assert!(
-            DrgPoRep::verify(&pp, &pub_inputs, &proof).unwrap(),
-            "failed to verify"
-        );
+        if use_wrong_challenge {
+            let pub_inputs_with_wrong_challenge_for_proof = PublicInputs {
+                prover_id: &bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
+                challenge: if challenge == 1 { 2 } else { 1 },
+                tau: &tau,
+            };
+            let proof = DrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
+            let verified =
+                DrgPoRep::verify(&pp, &pub_inputs_with_wrong_challenge_for_proof, &proof).unwrap();
+            assert!(
+                !verified,
+                "wrongly verified proof which does not match challenge in public input"
+            );
+        } else {
+            let proof = DrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
+            assert!(
+                DrgPoRep::verify(&pp, &pub_inputs, &proof).unwrap(),
+                "failed to verify"
+            );
+        }
     }
 
     table_tests!{
         prove_verify {
-            prove_verify_32_2_1(32, 2, 1);
-            #[ignore] prove_verify_32_2_2(32, 2, 2);
-            prove_verify_32_2_3(32, 2, 3);
-            #[ignore] prove_verify_32_2_4(32, 2, 4);
-            prove_verify_32_2_5(32, 2, 5);
+            prove_verify_32_2_1(32, 2, 1, false);
+            #[ignore] prove_verify_32_2_2(32, 2, 2, false);
+            prove_verify_32_2_3(32, 2, 3, false);
+            #[ignore] prove_verify_32_2_4(32, 2, 4, false);
+            prove_verify_32_2_5(32, 2, 5, false);
 
-            prove_verify_32_3_1(32, 3, 1);
-            prove_verify_32_3_2(32, 3, 2);
-            #[ignore] prove_verify_32_3_3(32, 3, 3);
-            prove_verify_32_3_4(32, 3, 4);
-            prove_verify_32_3_5(32, 3, 5);
+            prove_verify_32_3_1(32, 3, 1, false);
+            prove_verify_32_3_2(32, 3, 2, false);
+            #[ignore] prove_verify_32_3_3(32, 3, 3, false);
+            prove_verify_32_3_4(32, 3, 4, false);
+            prove_verify_32_3_5(32, 3, 5, false);
 
-            prove_verify_32_10_1(32, 10, 1);
-            prove_verify_32_10_2(32, 10, 2);
-            prove_verify_32_10_3(32, 10, 3);
-            prove_verify_32_10_4(32, 10, 4);
-            prove_verify_32_10_5(32, 10, 5);
+            prove_verify_32_10_1(32, 10, 1, false);
+            prove_verify_32_10_2(32, 10, 2, false);
+            prove_verify_32_10_3(32, 10, 3, false);
+            prove_verify_32_10_4(32, 10, 4, false);
+            prove_verify_32_10_5(32, 10, 5, false);
         }
+    }
+
+    #[test]
+    fn test_drgporep_verifies_using_challenge() {
+        prove_verify(32, 5, 1, true);
     }
 }

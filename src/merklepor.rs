@@ -85,7 +85,10 @@ impl<'a> ProofScheme<'a> for MerklePoR {
             return Err(format_err!("invalid root"));
         }
 
-        Ok(proof.proof.validate_data(&proof.data) && proof.proof.validate(pub_inputs.challenge))
+        let data_valid = proof.proof.validate_data(&proof.data);
+        let path_valid = proof.proof.validate(pub_inputs.challenge);
+
+        Ok(data_valid && path_valid)
     }
 }
 
@@ -175,6 +178,46 @@ mod tests {
         let verified = MerklePoR::verify(&pub_params, &pub_inputs, &bad_proof).unwrap();
 
         // A bad proof should not be verified!
+        assert!(!verified);
+    }
+
+    #[test]
+    fn test_merklepor_validates_challenge_identity() {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let pub_params = PublicParams {
+            lambda: 32,
+            leaves: 32,
+        };
+
+        let data: Vec<u8> = (0..32)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
+
+        let graph = BucketGraph::new(32, 16);
+        let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
+
+        let pub_inputs = PublicInputs {
+            challenge: 3,
+            commitment: tree.root(),
+        };
+
+        let leaf = bytes_into_fr::<Bls12>(
+            data_at_node(data.as_slice(), pub_inputs.challenge, pub_params.lambda).unwrap(),
+        ).unwrap();
+
+        let priv_inputs = PrivateInputs { tree: &tree, leaf };
+
+        let proof = MerklePoR::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+
+        let different_pub_inputs = PublicInputs {
+            challenge: 999,
+            commitment: tree.root(),
+        };
+
+        let verified = MerklePoR::verify(&pub_params, &different_pub_inputs, &proof).unwrap();
+
+        // A proof created with a the wrong challenge not be verified!
         assert!(!verified);
     }
 }
