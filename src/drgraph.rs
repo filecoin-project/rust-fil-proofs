@@ -31,6 +31,12 @@ pub struct MerkleProof {
     leaf: TreeHash,
 }
 
+fn path_index(path: &[(TreeHash, bool)]) -> usize {
+    path.iter().rev().fold(0, |acc, (_, is_right)| {
+        (acc << 1) + if *is_right { 1 } else { 0 }
+    })
+}
+
 impl MerkleProof {
     /// Convert the merkle path into the format expected by the circuits, which is a vector of options of the tuples.
     /// This does __not__ include the root and the leaf.
@@ -48,9 +54,13 @@ impl MerkleProof {
             .collect::<Vec<_>>()
     }
 
-    /// Validates the MerkleProof
-    pub fn validate(&self) -> bool {
+    /// Validates the MerkleProof and that it corresponds to the supplied node.
+    pub fn validate(&self, node: usize) -> bool {
         let mut a = TreeAlgorithm::default();
+
+        if path_index(&self.path) != node {
+            return false;
+        }
 
         self.root() == (0..self.path.len()).fold(self.leaf, |h, i| {
             a.reset();
@@ -365,7 +375,7 @@ mod tests {
 
             assert_eq!(mp.len(), len);
 
-            assert!(mp.validate(), "failed to validate valid merkle path");
+            assert!(mp.validate(i), "failed to validate valid merkle path");
             let data_slice = &data[i * 16..(i + 1) * 16].to_vec();
             assert!(
                 mp.validate_data(&data_slice),

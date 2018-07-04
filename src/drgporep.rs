@@ -146,13 +146,13 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
         // We should return false, not Err here -- though having the failure information is
         // useful when debugging. What to do…
 
-        if !proof.replica_node.proof.validate() {
+        if !proof.replica_node.proof.validate(challenge) {
             println!("invalid replica node");
             return Ok(false);
         }
 
-        for (_, p) in &proof.replica_parents {
-            if !p.proof.validate() {
+        for (parent_node, p) in &proof.replica_parents {
+            if !p.proof.validate(*parent_node) {
                 println!("invalid replica parent: {:?}", p);
                 return Ok(false);
             }
