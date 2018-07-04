@@ -92,7 +92,7 @@ impl<'a> ProofScheme<'a> for MerklePoR {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use drgraph::{BucketGraph, Graph};
+    use drgraph::{hash_leaf, make_proof_for_test, BucketGraph, Graph};
     use fr32::{bytes_into_fr, fr_into_bytes};
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
@@ -128,5 +128,53 @@ mod tests {
         let proof = MerklePoR::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
 
         assert!(MerklePoR::verify(&pub_params, &pub_inputs, &proof).unwrap());
+    }
+
+    // Construct a proof that satisfies a cursory validation:
+    // Data and proof are minimally consistent.
+    // Proof root matches that requested in public inputs.
+    // However, note that data has no relationship to anything,
+    // and proof path does not actually prove that data was in the tree corresponding to expected root.
+    fn make_bogus_proof(pub_inputs: &PublicInputs, rng: &mut XorShiftRng) -> DataProof {
+        let bogus_leaf = bytes_into_fr::<Bls12>(&fr_into_bytes::<Bls12>(&rng.gen())).unwrap();
+        let hashed_leaf = hash_leaf(&bogus_leaf);
+
+        DataProof {
+            data: bogus_leaf,
+            proof: make_proof_for_test(
+                pub_inputs.commitment,
+                hashed_leaf,
+                vec![(hashed_leaf, true)],
+            ),
+        }
+    }
+
+    #[test]
+    fn test_merklepor_actually_validates() {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let pub_params = PublicParams {
+            lambda: 32,
+            leaves: 32,
+        };
+
+        let data: Vec<u8> = (0..32)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
+
+        let graph = BucketGraph::new(32, 16);
+        let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
+
+        let pub_inputs = PublicInputs {
+            challenge: 3,
+            commitment: tree.root(),
+        };
+
+        let bad_proof = make_bogus_proof(&pub_inputs, rng);
+
+        let verified = MerklePoR::verify(&pub_params, &pub_inputs, &bad_proof).unwrap();
+
+        // A bad proof should not be verified!
+        assert!(!verified);
     }
 }

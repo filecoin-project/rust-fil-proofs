@@ -37,6 +37,35 @@ fn path_index(path: &[(TreeHash, bool)]) -> usize {
     })
 }
 
+pub fn hash_leaf(data: &Hashable<TreeAlgorithm>) -> TreeHash {
+    let mut a = TreeAlgorithm::default();
+    data.hash(&mut a);
+    let item_hash = a.hash();
+    let leaf_hash = a.leaf(item_hash);
+
+    leaf_hash
+}
+
+pub fn hash_node(data: &Hashable<TreeAlgorithm>) -> TreeHash {
+    let mut a = TreeAlgorithm::default();
+    data.hash(&mut a);
+    let item_hash = a.hash();
+
+    item_hash
+}
+
+pub fn make_proof_for_test(
+    root: TreeHash,
+    leaf: TreeHash,
+    path: Vec<(TreeHash, bool)>,
+) -> MerkleProof {
+    MerkleProof {
+        path: path,
+        root: root,
+        leaf: leaf,
+    }
+}
+
 impl MerkleProof {
     /// Convert the merkle path into the format expected by the circuits, which is a vector of options of the tuples.
     /// This does __not__ include the root and the leaf.
@@ -76,7 +105,7 @@ impl MerkleProof {
         })
     }
 
-    /// Validates that the data, hashes to the leave of the merkel path.
+    /// Validates that the data hashes to the leaf of the merkle path.
     pub fn validate_data(&self, data: &Hashable<TreeAlgorithm>) -> bool {
         let mut a = TreeAlgorithm::default();
         data.hash(&mut a);
