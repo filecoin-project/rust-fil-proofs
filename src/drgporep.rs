@@ -143,16 +143,25 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
         let challenge = pub_inputs.challenge % pub_params.graph.size();
         assert_ne!(challenge, 0, "can not prove the first node");
 
-        // We should return false, not Err here -- though having the failure information is
-        // useful when debugging. What to do…
-
-        if !proof.replica_node.proof.validate() {
+        if !proof.replica_node.proof.validate(challenge) {
             println!("invalid replica node");
             return Ok(false);
         }
 
-        for (_, p) in &proof.replica_parents {
-            if !p.proof.validate() {
+        let expected_parents = pub_params.graph.parents(challenge);
+        let actual_parents = proof
+            .replica_parents
+            .iter()
+            .map(|x| x.0)
+            .collect::<Vec<_>>();
+
+        if expected_parents != actual_parents {
+            println!("proof parents were not those provided in public parameters");
+            return Ok(false);
+        }
+
+        for (parent_node, p) in &proof.replica_parents {
+            if !p.proof.validate(*parent_node) {
                 println!("invalid replica parent: {:?}", p);
                 return Ok(false);
             }
@@ -306,7 +315,13 @@ mod tests {
         }
     }
 
-    fn prove_verify(lambda: usize, n: usize, i: usize) {
+    fn prove_verify_aux(
+        lambda: usize,
+        n: usize,
+        i: usize,
+        use_wrong_challenge: bool,
+        use_wrong_parents: bool,
+    ) {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let m = i * 10;
@@ -344,11 +359,63 @@ mod tests {
             aux: &aux,
         };
 
-        let proof = DrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
-        assert!(
-            DrgPoRep::verify(&pp, &pub_inputs, &proof).unwrap(),
-            "failed to verify"
-        );
+        let real_proof = DrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
+
+        if use_wrong_parents {
+            // Only one 'wrong' option will be tested at a time.
+            assert!(!use_wrong_challenge);
+            let real_parents = real_proof.replica_parents;
+            // A real node will never have all parents equal to 1.
+            let fake_parents = real_parents
+                .iter()
+                .map(|(p, data_proof)| (1, data_proof.clone()))
+                .collect::<Vec<_>>();
+
+            let proof = Proof::new(
+                real_proof.replica_node,
+                fake_parents,
+                real_proof.node.into(),
+            );
+
+            assert!(
+                !DrgPoRep::verify(&pp, &pub_inputs, &proof).unwrap(),
+                "verified in error -- with wrong parents"
+            );
+            return;
+        }
+
+        let proof = real_proof;
+
+        if use_wrong_challenge {
+            let pub_inputs_with_wrong_challenge_for_proof = PublicInputs {
+                prover_id: &bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
+                challenge: if challenge == 1 { 2 } else { 1 },
+                tau: &tau,
+            };
+            let verified =
+                DrgPoRep::verify(&pp, &pub_inputs_with_wrong_challenge_for_proof, &proof).unwrap();
+            assert!(
+                !verified,
+                "wrongly verified proof which does not match challenge in public input"
+            );
+        } else {
+            assert!(
+                DrgPoRep::verify(&pp, &pub_inputs, &proof).unwrap(),
+                "failed to verify"
+            );
+        }
+    }
+
+    fn prove_verify(lambda: usize, n: usize, i: usize) {
+        prove_verify_aux(lambda, n, i, false, false)
+    }
+
+    fn prove_verify_wrong_challenge(lambda: usize, n: usize, i: usize) {
+        prove_verify_aux(lambda, n, i, true, false)
+    }
+
+    fn prove_verify_wrong_parents(lambda: usize, n: usize, i: usize) {
+        prove_verify_aux(lambda, n, i, false, true)
     }
 
     table_tests!{
@@ -372,4 +439,15 @@ mod tests {
             prove_verify_32_10_5(32, 10, 5);
         }
     }
+
+    #[test]
+    fn test_drgporep_verifies_using_challenge() {
+        prove_verify_wrong_challenge(32, 5, 1);
+    }
+
+    #[test]
+    fn test_drgporep_verifies_parents() {
+        prove_verify_wrong_parents(32, 5, 1);
+    }
+
 }

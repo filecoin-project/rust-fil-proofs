@@ -246,7 +246,10 @@ mod tests {
         let data_root = Some(proof_nc.node.root().into());
         let prover_id = Some(prover_id.as_slice());
 
-        assert!(proof_nc.node.validate(), "failed to verify data commitment");
+        assert!(
+            proof_nc.node.validate(challenge),
+            "failed to verify data commitment"
+        );
         assert!(
             proof_nc.node.validate_data(&data_node.unwrap()),
             "failed to verify data commitment with data"

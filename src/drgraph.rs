@@ -31,6 +31,41 @@ pub struct MerkleProof {
     leaf: TreeHash,
 }
 
+fn path_index(path: &[(TreeHash, bool)]) -> usize {
+    path.iter().rev().fold(0, |acc, (_, is_right)| {
+        (acc << 1) + if *is_right { 1 } else { 0 }
+    })
+}
+
+pub fn hash_leaf(data: &Hashable<TreeAlgorithm>) -> TreeHash {
+    let mut a = TreeAlgorithm::default();
+    data.hash(&mut a);
+    let item_hash = a.hash();
+    let leaf_hash = a.leaf(item_hash);
+
+    leaf_hash
+}
+
+pub fn hash_node(data: &Hashable<TreeAlgorithm>) -> TreeHash {
+    let mut a = TreeAlgorithm::default();
+    data.hash(&mut a);
+    let item_hash = a.hash();
+
+    item_hash
+}
+
+pub fn make_proof_for_test(
+    root: TreeHash,
+    leaf: TreeHash,
+    path: Vec<(TreeHash, bool)>,
+) -> MerkleProof {
+    MerkleProof {
+        path: path,
+        root: root,
+        leaf: leaf,
+    }
+}
+
 impl MerkleProof {
     /// Convert the merkle path into the format expected by the circuits, which is a vector of options of the tuples.
     /// This does __not__ include the root and the leaf.
@@ -48,9 +83,13 @@ impl MerkleProof {
             .collect::<Vec<_>>()
     }
 
-    /// Validates the MerkleProof
-    pub fn validate(&self) -> bool {
+    /// Validates the MerkleProof and that it corresponds to the supplied node.
+    pub fn validate(&self, node: usize) -> bool {
         let mut a = TreeAlgorithm::default();
+
+        if path_index(&self.path) != node {
+            return false;
+        }
 
         self.root() == (0..self.path.len()).fold(self.leaf, |h, i| {
             a.reset();
@@ -66,7 +105,7 @@ impl MerkleProof {
         })
     }
 
-    /// Validates that the data, hashes to the leave of the merkel path.
+    /// Validates that the data hashes to the leaf of the merkle path.
     pub fn validate_data(&self, data: &Hashable<TreeAlgorithm>) -> bool {
         let mut a = TreeAlgorithm::default();
         data.hash(&mut a);
@@ -365,7 +404,7 @@ mod tests {
 
             assert_eq!(mp.len(), len);
 
-            assert!(mp.validate(), "failed to validate valid merkle path");
+            assert!(mp.validate(i), "failed to validate valid merkle path");
             let data_slice = &data[i * 16..(i + 1) * 16].to_vec();
             assert!(
                 mp.validate_data(&data_slice),
