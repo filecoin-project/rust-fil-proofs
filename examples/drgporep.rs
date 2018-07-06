@@ -13,6 +13,7 @@ use rand::Rng;
 use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 
 use proofs::circuit;
+use proofs::circuit::bench::BenchCS;
 use proofs::fr32::fr_into_bytes;
 use proofs::test_helper::fake_drgpoprep_proof;
 
@@ -120,6 +121,8 @@ impl Example<Bls12> for DrgPoRepApp {
             data_root,
         ) = fake_drgpoprep_proof(rng, tree_depth, m, SLOTH_ROUNDS);
 
+        let prover_bytes = fr_into_bytes::<Bls12>(&prover_id);
+
         // create an instance of our circut (with the witness)
         let c = DrgPoRepExample {
             params: engine_params,
@@ -146,6 +149,48 @@ impl Example<Bls12> for DrgPoRepApp {
     ) -> Option<bool> {
         // not implemented yet
         None
+    }
+    fn create_bench<R: Rng>(
+        &mut self,
+        rng: &mut R,
+        engine_params: &JubjubBls12,
+        tree_depth: usize,
+        _challenge_count: usize,
+        _leaves: usize,
+        lambda: usize,
+        m: usize,
+    ) {
+        let (
+            prover_id,
+            replica_node,
+            replica_node_path,
+            replica_root,
+            replica_parents,
+            replica_parents_paths,
+            data_node,
+            data_node_path,
+            data_root,
+        ) = fake_drgpoprep_proof(rng, tree_depth, m, SLOTH_ROUNDS);
+
+        let prover_bytes = fr_into_bytes::<Bls12>(&prover_id);
+        // create an instance of our circut (with the witness)
+        let c = DrgPoRepExample {
+            params: engine_params,
+            lambda: lambda * 8,
+            replica_node: Some(&replica_node),
+            replica_node_path: &replica_node_path,
+            replica_root: Some(replica_root),
+            replica_parents: replica_parents.iter().map(|parent| Some(parent)).collect(),
+            replica_parents_paths: &replica_parents_paths,
+            data_node: Some(&data_node),
+            data_node_path: data_node_path.clone(),
+            data_root: Some(data_root),
+            prover_id: Some(prover_bytes.as_slice()),
+            m,
+        };
+
+        let mut cs = BenchCS::<Bls12>::new();
+        c.synthesize(&mut cs).expect("failed to synthesize circuit");
     }
 }
 

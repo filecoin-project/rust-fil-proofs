@@ -1,5 +1,5 @@
 use bellman::groth16::*;
-use clap::{App, Arg};
+use clap::{self, App, Arg, SubCommand};
 use colored::*;
 use env_logger;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -11,6 +11,27 @@ use std::io::Write;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+fn prettyb(num: usize) -> String {
+    let num = num as f64;
+    let negative = if num.is_sign_positive() { "" } else { "-" };
+    let num = num.abs();
+    let units = ["B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
+    if num < 1_f64 {
+        return format!("{}{} {}", negative, num, "B");
+    }
+    let delimiter = 1024_f64;
+    let exponent = ::std::cmp::min(
+        (num.ln() / delimiter.ln()).floor() as i32,
+        (units.len() - 1) as i32,
+    );
+    let pretty_bytes = format!("{:.2}", num / delimiter.powi(exponent))
+        .parse::<f64>()
+        .unwrap() * 1_f64;
+    let unit = units[exponent as usize];
+    format!("{}{} {}", negative, pretty_bytes, unit)
+}
+
+/// Generate a unique cache path, based on the inputs.
 fn get_cache_path(name: &str, data_size: usize, challenge_count: usize, m: usize) -> String {
     format!(
         "/tmp/filecoin-proofs-cache-{}-{}-{}-{}",
@@ -21,8 +42,17 @@ fn get_cache_path(name: &str, data_size: usize, challenge_count: usize, m: usize
     )
 }
 
+/// The available circuit types for benchmarking.
+#[derive(Debug)]
+pub enum CSType {
+    Groth,
+    Bench,
+}
+
+/// A trait that makes it easy to implement "Examples". These are really tunable benchmarking CLI tools.
 pub trait Example<E: JubjubEngine>: Default {
-    fn do_the_work(&mut self, data_size: usize, challenge_count: usize, m: usize) {
+    /// The actual work.
+    fn work_groth(&mut self, typ: CSType, data_size: usize, challenge_count: usize, m: usize) {
         let engine_params = Self::generate_engine_params();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
@@ -30,7 +60,8 @@ pub trait Example<E: JubjubEngine>: Default {
         let leaves = data_size / 32;
         let tree_depth = (leaves as f64).log2().ceil() as usize;
 
-        info!(target: "config", "data size:  {} bytes", data_size);
+        info!(target: "config", "constraint system: {:?}", typ);
+        info!(target: "config", "data size:  {}", prettyb(data_size));
         info!(target: "config", "m: {}", m);
         info!(target: "config", "tree depth: {}", tree_depth);
 
@@ -136,10 +167,63 @@ pub trait Example<E: JubjubEngine>: Default {
         info!(".")
     }
 
-    fn main() {
-        let mut instance = Self::default();
-        // set default logging level to info
+    fn work_bench(&mut self, typ: CSType, data_size: usize, challenge_count: usize, m: usize) {
+        let engine_params = Self::generate_engine_params();
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
+        let lambda = 32;
+        let leaves = data_size / 32;
+        let tree_depth = (leaves as f64).log2().ceil() as usize;
+
+        info!(target: "config", "constraint system: {:?}", typ);
+        info!(target: "config", "data size:  {}", prettyb(data_size));
+        info!(target: "config", "m: {}", m);
+        info!(target: "config", "tree depth: {}", tree_depth);
+
+        // need more samples as this is a faster operation
+        let samples = (Self::samples() * 10) as u32;
+
+        let mut total_synth = Duration::new(0, 0);
+
+        let pb = ProgressBar::new(u64::from(samples));
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template(
+                    "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
+                )
+                .progress_chars("#>-"),
+        );
+
+        for _ in 0..samples {
+            // -- create proof
+
+            let start = Instant::now();
+            self.create_bench(
+                rng,
+                &engine_params,
+                tree_depth,
+                challenge_count,
+                leaves,
+                lambda,
+                m,
+            );
+            total_synth += start.elapsed();
+            pb.inc(1);
+        }
+
+        // -- print statistics
+
+        let synth_avg = total_synth / samples;
+        let synth_avg =
+            f64::from(synth_avg.subsec_nanos()) / 1_000_000_000f64 + (synth_avg.as_secs() as f64);
+
+        info!(target: "stats", "Average synthesize time: {:?} seconds", synth_avg);
+
+        // need this, as the last item doesn't get flushed to the console sometimes
+        info!(".")
+    }
+
+    fn init_logger(&self) {
         let mut builder = env_logger::Builder::new();
         builder
             .filter_level(LevelFilter::Info)
@@ -162,8 +246,10 @@ pub trait Example<E: JubjubEngine>: Default {
                 )
             })
             .init();
+    }
 
-        let matches = App::new(Self::name())
+    fn clap(&self) -> clap::ArgMatches {
+        App::new(stringify!($name))
             .version("1.0")
             .arg(
                 Arg::with_name("size")
@@ -185,13 +271,43 @@ pub trait Example<E: JubjubEngine>: Default {
                     .default_value("6")
                     .takes_value(true),
             )
-            .get_matches();
+            .subcommand(
+                SubCommand::with_name("groth")
+                    .about("execute circuits using groth constraint system"),
+            )
+            .subcommand(
+                SubCommand::with_name("bench")
+                    .about("execute circuits using a minimal benchmarking constraint"),
+            )
+            .get_matches()
+    }
 
-        let data_size = value_t!(matches, "size", usize).unwrap() * 1024;
-        let challenge_count = value_t!(matches, "challenges", usize).unwrap();
-        let m = value_t!(matches, "m", usize).unwrap();
+    fn main() {
+        let mut instance = Self::default();
+        // set default logging level to info
 
-        instance.do_the_work(data_size, challenge_count, m);
+        instance.init_logger();
+
+        let (data_size, challenge_count, m, typ) = {
+            let matches = instance.clap();
+
+            let data_size = value_t!(matches, "size", usize).unwrap() * 1024;
+            let challenge_count = value_t!(matches, "challenges", usize).unwrap();
+            let m = value_t!(matches, "m", usize).unwrap();
+
+            let typ = match matches.subcommand_name() {
+                Some("groth") => CSType::Groth,
+                Some("bench") => CSType::Bench,
+                _ => panic!("please select a valid subcommand"),
+            };
+
+            (data_size, challenge_count, m, typ)
+        };
+
+        match typ {
+            CSType::Groth => instance.work_groth(typ, data_size, challenge_count, m),
+            CSType::Bench => instance.work_bench(typ, data_size, challenge_count, m),
+        }
     }
 
     /// The name of the application. Used for identifying caches.
@@ -229,4 +345,7 @@ pub trait Example<E: JubjubEngine>: Default {
 
     /// Verify the given proof, return `None` if not implemented.
     fn verify_proof(&mut self, &Proof<E>, &PreparedVerifyingKey<E>) -> Option<bool>;
+
+    /// Create a new bench
+    fn create_bench<R: Rng>(&mut self, &mut R, &E::Params, usize, usize, usize, usize, usize);
 }
