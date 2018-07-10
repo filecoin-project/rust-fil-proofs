@@ -52,5 +52,6 @@ pub mod merklepor;
 pub mod porep;
 pub mod proof;
 pub mod util;
+pub mod zigzag_drgporep;
 
 mod vde;

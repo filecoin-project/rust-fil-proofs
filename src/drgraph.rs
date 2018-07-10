@@ -191,7 +191,7 @@ pub trait Graph: ::std::fmt::Debug + Clone + PartialEq + Eq {
     fn merkle_tree<'a>(&self, data: &'a [u8], node_size: usize) -> Result<MerkleTree> {
         if data.len() != (node_size * self.size()) as usize {
             return Err(format_err!(
-                "missmatch of data, node_size and nodes {} != {} * {}",
+                "mismatch of data, node_size and nodes {} != {} * {}",
                 data.len(),
                 node_size,
                 self.size()
