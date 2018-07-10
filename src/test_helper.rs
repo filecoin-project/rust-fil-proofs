@@ -1,6 +1,9 @@
 use crypto;
+use drgraph::{MerkleProof, MerkleTree};
+use error;
 use fr32::{bytes_into_fr, fr_into_bytes};
 use pairing::bls12_381::{Bls12, Fr};
+use pairing::PrimeFieldRepr;
 use pairing::{BitIterator, PrimeField};
 use rand::Rng;
 use sapling_crypto::pedersen_hash;
@@ -21,18 +24,115 @@ macro_rules! table_tests {
     }
 }
 
-pub fn random_merkle_path<R: Rng>(
+pub fn fake_drgpoprep_proof<R: Rng>(
     rng: &mut R,
     tree_depth: usize,
-) -> (Vec<Option<(Fr, bool)>>, Fr, Fr) {
+    m: usize,
+    sloth_rounds: usize,
+) -> (
+    Fr,
+    Fr,
+    Vec<Option<(Fr, bool)>>,
+    Fr,
+    Vec<Fr>,
+    Vec<Vec<Option<(Fr, bool)>>>,
+    Fr,
+    Vec<Option<(Fr, bool)>>,
+    Fr,
+) {
+    let prover_id: Fr = rng.gen();
+    let challenge = m + 1;
+    // Part 1: original data inputs
+    // generate a leaf
+    let data_node: Fr = rng.gen();
+    // generate a fake merkle tree for the leaf and get commD
+    let (data_node_path, data_root) = random_merkle_path_with_value(rng, tree_depth, &data_node, 0);
+
+    // Part 2: replica data inputs
+    // generate parent nodes
+    let replica_parents: Vec<Fr> = (0..m).map(|_| rng.gen()).collect();
+    // run kdf for proverid, parent nodes
+    let ciphertexts = replica_parents
+        .iter()
+        .fold(
+            Ok(fr_into_bytes::<Bls12>(&prover_id)),
+            |acc: error::Result<Vec<u8>>, parent: &Fr| {
+                acc.and_then(|mut acc| {
+                    parent.into_repr().write_le(&mut acc)?;
+                    Ok(acc)
+                })
+            },
+        )
+        .unwrap();
+    let key = crypto::kdf::kdf::<Bls12>(ciphertexts.as_slice(), m);
+    // run sloth(key, node)
+    let replica_node: Fr = crypto::sloth::encode::<Bls12>(&key, &data_node, sloth_rounds);
+    // run fake merkle with only the first 1+m real leaves
+
+    let mut leaves = replica_parents.clone();
+    leaves.push(data_node);
+    // ensure we have an even number of leaves
+    if m + 1 % 2 != 0 {
+        leaves.push(rng.gen());
+    }
+
+    // get commR
+    let subtree = MerkleTree::from_data(leaves);
+    let subtree_root: Fr = subtree.root().into();
+    let subtree_depth = subtree.height() - 1; // .height() inludes the leave
+    let remaining_depth = tree_depth - subtree_depth;
+    let (remaining_path, replica_root) =
+        random_merkle_path_with_value(rng, remaining_depth, &subtree_root, remaining_depth);
+
+    // generate merkle path for challenged node and parents
+    let replica_parents_paths: Vec<_> = (0..m)
+        .map(|i| {
+            let subtree_proof: MerkleProof = subtree.gen_proof(i).into();
+            let mut subtree_path = subtree_proof.as_options();
+            subtree_path.extend(&remaining_path);
+            subtree_path
+        })
+        .collect();
+
+    let replica_node_path = {
+        let subtree_proof: MerkleProof = subtree.gen_proof(challenge).into();
+        let mut subtree_path = subtree_proof.as_options();
+        subtree_path.extend(&remaining_path);
+        subtree_path
+    };
+
+    assert_eq!(data_node_path.len(), replica_node_path.len());
+
+    (
+        prover_id,
+        replica_node,
+        replica_node_path,
+        replica_root,
+        replica_parents,
+        replica_parents_paths,
+        data_node,
+        data_node_path,
+        data_root,
+    )
+}
+
+pub fn random_merkle_path_with_value<R: Rng>(
+    rng: &mut R,
+    tree_depth: usize,
+    value: &Fr,
+    offset: usize,
+) -> (Vec<Option<(Fr, bool)>>, Fr) {
     let auth_path: Vec<Option<(Fr, bool)>> = vec![Some((rng.gen(), rng.gen())); tree_depth];
 
-    let value: Fr = rng.gen();
-
     // TODO: cleanup
-    let h =
-        crypto::pedersen::pedersen_compression(&bytes_into_bits(&fr_into_bytes::<Bls12>(&value)));
-    let mut cur = bytes_into_fr::<Bls12>(&bits_to_bytes(&h)).unwrap();
+    let mut cur = if offset == 0 {
+        let h = crypto::pedersen::pedersen_compression(&bytes_into_bits(&fr_into_bytes::<Bls12>(
+            &value,
+        )));
+        bytes_into_fr::<Bls12>(&bits_to_bytes(&h)).unwrap()
+    } else {
+        *value
+    };
 
     for (i, p) in auth_path.clone().into_iter().enumerate() {
         let (uncle, is_right) = p.unwrap();
@@ -50,7 +150,7 @@ pub fn random_merkle_path<R: Rng>(
         rhs.reverse();
 
         cur = pedersen_hash::pedersen_hash::<Bls12, _>(
-            pedersen_hash::Personalization::MerkleTree(i),
+            pedersen_hash::Personalization::MerkleTree(i + offset),
             lhs.into_iter()
                 .take(Fr::NUM_BITS as usize)
                 .chain(rhs.into_iter().take(Fr::NUM_BITS as usize)),
@@ -59,5 +159,16 @@ pub fn random_merkle_path<R: Rng>(
             .0;
     }
 
-    (auth_path, value, cur)
+    (auth_path, cur)
+}
+
+pub fn random_merkle_path<R: Rng>(
+    rng: &mut R,
+    tree_depth: usize,
+) -> (Vec<Option<(Fr, bool)>>, Fr, Fr) {
+    let value: Fr = rng.gen();
+
+    let (path, root) = random_merkle_path_with_value(rng, tree_depth, &value, 0);
+
+    (path, value, root)
 }
