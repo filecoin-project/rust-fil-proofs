@@ -18,6 +18,7 @@ pub fn invert_permute(num_elements: u32, index: u32, keys: &[u32]) -> u32 {
     u
 }
 
+/// common_setup performs common calculations on inputs shared by encode and decode.
 fn common_setup(num_elements: u32, index: u32) -> (u32, u32, u32, u32) {
     let mut next_pow4 = 4;
     let mut log4 = 1;
