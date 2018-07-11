@@ -126,7 +126,7 @@ mod test {
             lambda: lambda,
             drg: DrgParams {
                 nodes: data.len() / lambda,
-                m: 10,
+                degree: 10,
             },
         };
 

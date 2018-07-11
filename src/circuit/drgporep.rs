@@ -166,6 +166,7 @@ mod tests {
     use super::*;
     use circuit::test::*;
     use drgporep;
+    use drgraph::BucketGraph;
     use fr32::{bytes_into_fr, fr_into_bytes};
     use pairing::bls12_381::*;
     use pairing::Field;
@@ -181,12 +182,12 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let lambda = 32;
-        let n = 12;
-        let m = 6;
+        let nodes = 12;
+        let degree = 6;
         let challenge = 2;
 
         let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
-        let mut data: Vec<u8> = (0..n)
+        let mut data: Vec<u8> = (0..nodes)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
@@ -200,7 +201,10 @@ mod tests {
 
         let sp = drgporep::SetupParams {
             lambda,
-            drg: drgporep::DrgParams { nodes: n, m },
+            drg: drgporep::DrgParams {
+                nodes: nodes,
+                degree,
+            },
         };
 
         let pp =
@@ -270,7 +274,7 @@ mod tests {
             data_node_path,
             data_root,
             prover_id,
-            m,
+            degree,
         ).expect("failed to synthesize circuit");
 
         if !cs.is_satisfied() {

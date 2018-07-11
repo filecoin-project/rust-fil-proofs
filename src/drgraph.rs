@@ -185,7 +185,7 @@ pub trait Graph: ::std::fmt::Debug + Clone + PartialEq + Eq {
         Ok(t.root())
     }
 
-    /// Builds a merkle ntree based on the given data.
+    /// Builds a merkle tree based on the given data.
     fn merkle_tree<'a>(&self, data: &'a [u8], node_size: usize) -> Result<MerkleTree> {
         if data.len() != (node_size * self.size()) as usize {
             return Err(format_err!(
@@ -225,9 +225,9 @@ pub trait Graph: ::std::fmt::Debug + Clone + PartialEq + Eq {
 /// Bucket sampling algorithm.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BucketGraph {
-    pub nodes: usize,
-    pub base_degree: usize,
-    pub seed: [u32; 7],
+    nodes: usize,
+    base_degree: usize,
+    seed: [u32; 7],
 }
 
 impl Graph for BucketGraph {

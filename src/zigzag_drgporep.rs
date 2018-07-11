@@ -12,8 +12,8 @@ const DEFAULT_ZIGZAG_LAYERS: usize = 6;
 /// Each graph can be divided into base and expansion components.
 /// The 'base' component is an ordinary DRG. The expansion component attempts to add a target (expansion_degree) number of connections
 /// between nodes in a reversible way. Expansion connections are therefore simply inverted at each layer.
-/// Because of how DRG-sampled parents are calculated on-demand, the base components are not. Instead, a same-degree
-/// DRG with connections in the opposite direction (and using the same random seed) is used when calculating parents on-demand.
+/// Because of how DRG-sampled parents are calculated on demand, the base components are not. Instead, a same-degree
+/// DRG with connections in the opposite direction (and using the same random seed) is used when calculating parents on demand.
 /// For the algorithm to have the desired properties, it is important that the expansion components are directly inverted at each layer.
 /// However, it is fortunately not necessary that the base DRG components also have this property.
 
@@ -61,6 +61,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use drgraph::BucketGraph;
     use fr32::{bytes_into_fr, fr_into_bytes};
     use layered_drgporep::{PrivateInputs, PublicInputs, PublicParams, SetupParams};
     use pairing::bls12_381::Bls12;
@@ -82,7 +83,7 @@ mod tests {
                 lambda: lambda,
                 drg: drgporep::DrgParams {
                     nodes: data.len() / lambda,
-                    m: 10,
+                    degree: 10,
                 },
             },
             layers: DEFAULT_ZIGZAG_LAYERS,
@@ -117,7 +118,7 @@ mod tests {
     fn prove_verify(lambda: usize, n: usize, i: usize) {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let m = i * 10;
+        let degree = i * 10;
         let lambda = lambda;
         let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
         let data: Vec<u8> = (0..n)
@@ -129,7 +130,7 @@ mod tests {
         let sp = SetupParams {
             drg_porep_setup_params: drgporep::SetupParams {
                 lambda,
-                drg: drgporep::DrgParams { nodes: n, m },
+                drg: drgporep::DrgParams { nodes: n, degree },
             },
             layers: DEFAULT_ZIGZAG_LAYERS,
         };

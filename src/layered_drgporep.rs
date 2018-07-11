@@ -46,19 +46,25 @@ impl Proof {
 
 pub trait Layerable: Graph {}
 
+/// Layers provides default implementations of methods required to handle proof and verification
+/// of layered proofs of replication. Implementations must provide transform and invert_transform methods.
 pub trait Layers {
     type Graph: Layerable;
 
+    /// transform a layer's public parameters, returning new public parameters corresponding to the next layer.
     fn transform(
         pp: &drgporep::PublicParams<Self::Graph>,
         layer: usize,
         layers: usize,
     ) -> drgporep::PublicParams<Self::Graph>;
+
+    /// transform a layer's public parameters, returning new public parameters corresponding to the previous layer.
     fn invert_transform(
         pp: &drgporep::PublicParams<Self::Graph>,
         layer: usize,
         layers: usize,
     ) -> drgporep::PublicParams<Self::Graph>;
+
     fn prove_layers<'a>(
         pp: &drgporep::PublicParams<Self::Graph>,
         pub_inputs: &PublicInputs,

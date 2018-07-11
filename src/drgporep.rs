@@ -269,7 +269,7 @@ mod tests {
             lambda: lambda,
             drg: DrgParams {
                 nodes: data.len() / lambda,
-                m: 10,
+                degree: 10,
             },
         };
 
@@ -299,7 +299,7 @@ mod tests {
             lambda: lambda,
             drg: DrgParams {
                 nodes: data.len() / lambda,
-                m: 10,
+                degree: 10,
             },
         };
 
@@ -325,18 +325,18 @@ mod tests {
 
     fn prove_verify_aux(
         lambda: usize,
-        n: usize,
+        nodes: usize,
         i: usize,
         use_wrong_challenge: bool,
         use_wrong_parents: bool,
     ) {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let m = 5;
+        let degree = 5;
         let lambda = lambda;
 
         let prover_id = fr_into_bytes::<Bls12>(&rng.gen());
-        let data: Vec<u8> = (0..n)
+        let data: Vec<u8> = (0..nodes)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
@@ -346,11 +346,7 @@ mod tests {
 
         let sp = SetupParams {
             lambda,
-            drg: DrgParams {
-                nodes: n,
-                m,
-                //exp: DEFAULT_EXPANSION_DEGREE,
-            },
+            drg: DrgParams { nodes, degree },
         };
 
         let pp = DrgPoRep::<BucketGraph>::setup(&sp).unwrap();

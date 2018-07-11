@@ -33,14 +33,11 @@ impl<G: Graph> ZigZagGraph<G> {
 pub trait ZigZag: ::std::fmt::Debug + Clone + PartialEq + Eq {
     type BaseGraph: Graph;
 
-    // zigzag returns a new graph with expansion component inverted and a distinct
-    // base DRG graph -- with the direction of drg connections reversed. (i.e. from high-to-low nodes).
-    // The name is 'weird', but so is the operation -- hence the choice.
-    fn zigzag(&self) -> Self {
-        unimplemented!();
-    }
+    /// zigzag returns a new graph with expansion component inverted and a distinct
+    /// base DRG graph -- with the direction of drg connections reversed. (i.e. from high-to-low nodes).
+    /// The name is 'weird', but so is the operation -- hence the choice.
+    fn zigzag(&self) -> Self;
     /// Constructs a new graph.
-    //    fn new(nodes: usize, base_degree: usize, expansion_degree: usize) -> Self;
     fn base_graph(&self) -> Self::BaseGraph;
     fn expansion_degree(&self) -> usize;
     fn reversed(&self) -> bool;
@@ -113,9 +110,7 @@ impl<'a, G: Graph> ZigZagGraph<G> {
                 feistel_keys,
             )
         };
-        let b = transformed as usize / self.expansion_degree;
-
-        b
+        transformed as usize / self.expansion_degree
     }
 }
 
@@ -126,8 +121,8 @@ impl<'a, G: Graph> ZigZag for ZigZagGraph<G> {
         Self::new(nodes, base_degree, DEFAULT_EXPANSION_DEGREE)
     }
 
-    // To zigzag a graph, we just toggle its reversed field.
-    // All the real work happens when we calculate node parents on-demand.
+    /// To zigzag a graph, we just toggle its reversed field.
+    /// All the real work happens when we calculate node parents on-demand.
     fn zigzag(&self) -> Self {
         ZigZagGraph {
             base_graph: self.base_graph.clone(),
