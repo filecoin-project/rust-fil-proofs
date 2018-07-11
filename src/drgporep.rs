@@ -34,10 +34,10 @@ pub struct SetupParams {
 #[derive(Debug, Clone)]
 pub struct DrgParams {
     // Number of nodes
-    pub n: usize,
+    pub nodes: usize,
 
     // Base degree of DRG
-    pub m: usize,
+    pub degree: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -97,7 +97,7 @@ impl<'a, G: Graph> ProofScheme<'a> for DrgPoRep<G> {
     type Proof = Proof;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
-        let graph = G::new(sp.drg.n, sp.drg.m);
+        let graph = G::new(sp.drg.nodes, sp.drg.degree);
 
         Ok(PublicParams {
             lambda: sp.lambda,
@@ -268,7 +268,7 @@ mod tests {
         let sp = SetupParams {
             lambda: lambda,
             drg: DrgParams {
-                n: data.len() / lambda,
+                nodes: data.len() / lambda,
                 m: 10,
             },
         };
@@ -298,7 +298,7 @@ mod tests {
         let sp = SetupParams {
             lambda: lambda,
             drg: DrgParams {
-                n: data.len() / lambda,
+                nodes: data.len() / lambda,
                 m: 10,
             },
         };
@@ -347,7 +347,7 @@ mod tests {
         let sp = SetupParams {
             lambda,
             drg: DrgParams {
-                n,
+                nodes: n,
                 m,
                 //exp: DEFAULT_EXPANSION_DEGREE,
             },

@@ -125,7 +125,7 @@ mod test {
         let setup = SetupParams {
             lambda: lambda,
             drg: DrgParams {
-                n: data.len() / lambda,
+                nodes: data.len() / lambda,
                 m: 10,
             },
         };

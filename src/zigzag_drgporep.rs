@@ -70,7 +70,7 @@ mod tests {
             drg_porep_setup_params: drgporep::SetupParams {
                 lambda: lambda,
                 drg: drgporep::DrgParams {
-                    n: data.len() / lambda,
+                    nodes: data.len() / lambda,
                     m: 10,
                 },
             },
@@ -118,7 +118,7 @@ mod tests {
         let sp = SetupParams {
             drg_porep_setup_params: drgporep::SetupParams {
                 lambda,
-                drg: drgporep::DrgParams { n, m },
+                drg: drgporep::DrgParams { nodes: n, m },
             },
             layers: DEFAULT_ZIGZAG_LAYERS,
         };

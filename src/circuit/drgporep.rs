@@ -200,7 +200,7 @@ mod tests {
 
         let sp = drgporep::SetupParams {
             lambda,
-            drg: drgporep::DrgParams { n, m },
+            drg: drgporep::DrgParams { nodes: n, m },
         };
 
         let pp =
