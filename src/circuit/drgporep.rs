@@ -54,7 +54,7 @@ pub fn drgporep<E, CS>(
     data_node_path: Vec<Option<(E::Fr, bool)>>,
     data_root: Option<E::Fr>,
     prover_id: Option<&[u8]>,
-    m: usize,
+    degree: usize,
 ) -> Result<(), SynthesisError>
 where
     E: JubjubEngine,
@@ -132,7 +132,7 @@ where
         &params,
         prover_id_bits,
         parents_bits,
-        m,
+        degree,
     )?;
 
     let decoded = sloth::decode(
@@ -166,6 +166,7 @@ mod tests {
     use super::*;
     use circuit::test::*;
     use drgporep;
+    use drgraph::BucketGraph;
     use fr32::{bytes_into_fr, fr_into_bytes};
     use pairing::bls12_381::*;
     use pairing::Field;
@@ -181,16 +182,16 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let lambda = 32;
-        let n = 12;
-        let m = 6;
+        let nodes = 12;
+        let degree = 6;
         let challenge = 2;
 
         let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
-        let mut data: Vec<u8> = (0..n)
+        let mut data: Vec<u8> = (0..nodes)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        // TODO: don't clone evertything
+        // TODO: don't clone everything
         let original_data = data.clone();
         let dn = bytes_into_fr::<Bls12>(
             data_at_node(&original_data, challenge, lambda).expect("failed to read original data"),
@@ -200,10 +201,14 @@ mod tests {
 
         let sp = drgporep::SetupParams {
             lambda,
-            drg: drgporep::DrgParams { n, m },
+            drg: drgporep::DrgParams {
+                nodes: nodes,
+                degree,
+            },
         };
 
-        let pp = drgporep::DrgPoRep::setup(&sp).expect("failed to create drgporep setup");
+        let pp =
+            drgporep::DrgPoRep::<BucketGraph>::setup(&sp).expect("failed to create drgporep setup");
         let (tau, aux) =
             drgporep::DrgPoRep::replicate(&pp, prover_id.as_slice(), data.as_mut_slice())
                 .expect("failed to replicate");
@@ -269,7 +274,7 @@ mod tests {
             data_node_path,
             data_root,
             prover_id,
-            m,
+            degree,
         ).expect("failed to synthesize circuit");
 
         if !cs.is_satisfied() {

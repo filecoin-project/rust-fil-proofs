@@ -189,7 +189,7 @@ pub trait Graph: ::std::fmt::Debug + Clone + PartialEq + Eq {
     fn merkle_tree<'a>(&self, data: &'a [u8], node_size: usize) -> Result<MerkleTree> {
         if data.len() != (node_size * self.size()) as usize {
             return Err(format_err!(
-                "missmatch of data, node_size and nodes {} != {} * {}",
+                "mismatch of data, node_size and nodes {} != {} * {}",
                 data.len(),
                 node_size,
                 self.size()
@@ -210,16 +210,6 @@ pub trait Graph: ::std::fmt::Debug + Clone + PartialEq + Eq {
         (self.size() as f64).log2().ceil() as u64
     }
 
-    fn permute(&self, _keys: &[u32]) -> Self {
-        // TODO: how should this work?
-        unimplemented!("??");
-    }
-
-    fn invert_permute(&self, _keys: &[u32]) -> Self {
-        // TODO: how should this work?
-        unimplemented!("??")
-    }
-
     /// Returns a sorted list of all parents of this node.
     fn parents(&self, node: usize) -> Vec<usize>;
 
@@ -229,30 +219,21 @@ pub trait Graph: ::std::fmt::Debug + Clone + PartialEq + Eq {
     /// Returns the degree of the graph.
     fn degree(&self) -> usize;
 
-    /// Constructs a new graph.
-    fn new(nodes: usize, degree: usize) -> Self;
+    fn new(nodes: usize, base_degree: usize) -> Self;
 }
 
 /// Bucket sampling algorithm.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BucketGraph {
     nodes: usize,
-    degree: usize,
+    base_degree: usize,
     seed: [u32; 7],
 }
 
 impl Graph for BucketGraph {
-    fn new(nodes: usize, degree: usize) -> Self {
-        BucketGraph {
-            nodes,
-            degree,
-            seed: OsRng::new().unwrap().gen(),
-        }
-    }
-
     #[inline]
     fn parents(&self, node: usize) -> Vec<usize> {
-        let m = self.degree;
+        let m = self.base_degree;
 
         match node {
             // Special case for the first node, it self references.
@@ -282,11 +263,13 @@ impl Graph for BucketGraph {
                             return node - 1;
                         }
 
+                        assert!(out <= node);
+
                         out
                     })
                     .collect();
 
-                parents.sort();
+                parents.sort_unstable();
 
                 parents
             }
@@ -300,7 +283,15 @@ impl Graph for BucketGraph {
 
     #[inline]
     fn degree(&self) -> usize {
-        self.degree
+        self.base_degree
+    }
+
+    fn new(nodes: usize, base_degree: usize) -> Self {
+        BucketGraph {
+            nodes,
+            base_degree,
+            seed: OsRng::new().unwrap().gen(),
+        }
     }
 }
 
@@ -313,7 +304,6 @@ mod tests {
     fn graph_bucket() {
         for size in vec![3, 10, 200, 2000] {
             for degree in 2..12 {
-                println!("size: {}, degree: {}", size, degree);
                 let g = BucketGraph::new(size, degree);
 
                 assert_eq!(g.size(), size, "wrong nodes count");
@@ -322,13 +312,15 @@ mod tests {
                 assert_eq!(g.parents(1), vec![0; degree as usize]);
 
                 for i in 2..size {
+                    let pa1 = g.parents(i);
+                    let pa2 = g.parents(i);
+
+                    assert_eq!(pa1.len(), degree);
+                    assert_eq!(pa1, pa2, "different parents on the same node");
+
                     let p1 = g.parents(i);
                     let p2 = g.parents(i);
 
-                    assert_eq!(p1.len(), degree);
-                    assert_eq!(p1, p2, "different parents on the same node");
-
-                    println!("parents({}): {:?}", i, p1);
                     for parent in p1 {
                         // TODO: fix me
                         assert_ne!(i, parent, "self reference found");
@@ -360,32 +352,6 @@ mod tests {
         let proof = tree.gen_proof(2);
 
         assert!(proof.validate::<TreeAlgorithm>());
-    }
-
-    #[test]
-    #[ignore]
-    fn permute() {
-        let keys = vec![1, 2, 3, 4];
-        let graph = BucketGraph::new(5, 3);
-
-        let permuted_graph = graph.permute(keys.as_slice());
-
-        assert_eq!(
-            graph.size(),
-            permuted_graph.size(),
-            "graphs are not the same size"
-        );
-
-        // TODO: this is not a great test, but at least we know they were mutated
-        assert_ne!(graph, permuted_graph, "graph was not permuted");
-
-        // going back
-        let permuted_twice_graph = permuted_graph.permute(keys.as_slice());
-
-        assert_eq!(
-            graph, permuted_twice_graph,
-            "graph was not the same after permuation back"
-        );
     }
 
     #[test]

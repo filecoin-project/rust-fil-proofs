@@ -95,6 +95,7 @@ where
 mod test {
     use super::*;
     use drgporep::{DrgParams, DrgPoRep, SetupParams};
+    use drgraph::BucketGraph;
     use fr32::fr_into_bytes;
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
@@ -124,12 +125,12 @@ mod test {
         let setup = SetupParams {
             lambda: lambda,
             drg: DrgParams {
-                n: data.len() / lambda,
-                m: 10,
+                nodes: data.len() / lambda,
+                degree: 10,
             },
         };
 
-        let writer: MemmapWriter<DrgPoRep> =
+        let writer: MemmapWriter<DrgPoRep<BucketGraph>> =
             MemmapWriter::new(&setup, &data_path, &prover_id).unwrap();
 
         writer.replicate(data.len()).unwrap();

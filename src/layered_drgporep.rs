@@ -1,5 +1,5 @@
 use drgporep::{self, DrgPoRep};
-use drgraph::{BucketGraph, Graph};
+use drgraph::Graph;
 use error::Result;
 use fr32::fr_into_bytes;
 use pairing::bls12_381::{Bls12, Fr};
@@ -34,46 +34,147 @@ pub struct PrivateInputs<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub struct PermutationProof {}
-
-#[derive(Debug, Clone)]
 pub struct Proof {
-    pub encoding_proof: EncodingProof,
-    pub permutation_proof: PermutationProof,
+    pub encoding_proofs: Vec<EncodingProof>,
 }
 
 impl Proof {
-    pub fn new(encoding_proof: EncodingProof, permutation_proof: PermutationProof) -> Proof {
-        Proof {
-            encoding_proof,
-            permutation_proof,
+    pub fn new(encoding_proofs: Vec<EncodingProof>) -> Proof {
+        Proof { encoding_proofs }
+    }
+}
+
+pub trait Layerable: Graph {}
+
+/// Layers provides default implementations of methods required to handle proof and verification
+/// of layered proofs of replication. Implementations must provide transform and invert_transform methods.
+pub trait Layers {
+    type Graph: Layerable;
+
+    /// transform a layer's public parameters, returning new public parameters corresponding to the next layer.
+    fn transform(
+        pp: &drgporep::PublicParams<Self::Graph>,
+        layer: usize,
+        layers: usize,
+    ) -> drgporep::PublicParams<Self::Graph>;
+
+    /// transform a layer's public parameters, returning new public parameters corresponding to the previous layer.
+    fn invert_transform(
+        pp: &drgporep::PublicParams<Self::Graph>,
+        layer: usize,
+        layers: usize,
+    ) -> drgporep::PublicParams<Self::Graph>;
+
+    fn prove_layers<'a>(
+        pp: &drgporep::PublicParams<Self::Graph>,
+        pub_inputs: &PublicInputs,
+        priv_inputs: &drgporep::PrivateInputs,
+        aux: &[porep::ProverAux],
+        layers: usize,
+        total_layers: usize,
+        proofs: &'a mut Vec<EncodingProof>,
+    ) -> Result<&'a Vec<EncodingProof>> {
+        assert!(layers > 0);
+
+        let mut scratch = priv_inputs.replica.to_vec().clone();
+        let prover_id = fr_into_bytes::<Bls12>(pub_inputs.prover_id);
+        <DrgPoRep<Self::Graph> as PoRep>::replicate(pp, &prover_id, scratch.as_mut_slice())?;
+
+        let new_priv_inputs = drgporep::PrivateInputs {
+            replica: scratch.as_slice(),
+            aux: &aux[aux.len() - layers],
+        };
+        let drgporep_pub_inputs = drgporep::PublicInputs {
+            prover_id: pub_inputs.prover_id,
+            challenge: pub_inputs.challenge,
+            tau: &pub_inputs.tau[pub_inputs.tau.len() - layers],
+        };
+        let drg_proof = DrgPoRep::prove(&pp, &drgporep_pub_inputs, &new_priv_inputs)?;
+        proofs.push(drg_proof);
+
+        let pp = &Self::transform(pp, total_layers - layers, total_layers);
+
+        if layers != 1 {
+            Self::prove_layers(
+                pp,
+                pub_inputs,
+                &new_priv_inputs,
+                aux,
+                layers - 1,
+                layers,
+                proofs,
+            )?;
         }
+
+        Ok(proofs)
+    }
+
+    fn extract_and_invert_transform_layers<'a>(
+        drgpp: &drgporep::PublicParams<Self::Graph>,
+        layer: usize,
+        layers: usize,
+        prover_id: &[u8],
+        data: &'a mut [u8],
+    ) -> Result<()> {
+        assert!(layers > 0);
+
+        let inverted = &Self::invert_transform(&drgpp, layer, layers);
+        let mut res = DrgPoRep::extract_all(inverted, prover_id, data).unwrap();
+
+        for (i, r) in res.iter_mut().enumerate() {
+            data[i] = *r;
+        }
+
+        if layers != 1 {
+            Self::extract_and_invert_transform_layers(
+                inverted,
+                layer + 1,
+                layers - 1,
+                prover_id,
+                data,
+            )?;
+        }
+
+        Ok(())
+    }
+
+    fn transform_and_replicate_layers(
+        drgpp: &drgporep::PublicParams<Self::Graph>,
+        layer: usize,
+        layers: usize,
+        prover_id: &[u8],
+        data: &mut [u8],
+        taus: &mut Vec<porep::Tau>,
+        auxs: &mut Vec<porep::ProverAux>,
+    ) -> Result<()> {
+        assert!(layers > 0);
+        let (tau, aux) = DrgPoRep::replicate(drgpp, prover_id, data).unwrap();
+
+        taus.push(tau);
+        auxs.push(aux);
+
+        if layers != 1 {
+            Self::transform_and_replicate_layers(
+                &Self::transform(&drgpp, layer, layers),
+                layer + 1,
+                layers - 1,
+                prover_id,
+                data,
+                taus,
+                auxs,
+            )?;
+        }
+
+        Ok(())
     }
 }
 
-#[derive(Default)]
-pub struct LayeredDrgPoRep {}
-
-fn permute<G: Graph>(pp: &drgporep::PublicParams<G>) -> drgporep::PublicParams<G> {
-    drgporep::PublicParams {
-        graph: pp.graph.permute(&[1, 2, 3, 4]),
-        lambda: pp.lambda,
-    }
-}
-
-fn invert_permute<G: Graph>(pp: &drgporep::PublicParams<G>) -> drgporep::PublicParams<G> {
-    drgporep::PublicParams {
-        graph: pp.graph.invert_permute(&[1, 2, 3, 4]),
-        lambda: pp.lambda,
-    }
-}
-
-impl<'a> ProofScheme<'a> for LayeredDrgPoRep {
-    type PublicParams = PublicParams<BucketGraph>;
+impl<'a, L: Layers> ProofScheme<'a> for L {
+    type PublicParams = PublicParams<L::Graph>;
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<'a>;
     type PrivateInputs = PrivateInputs<'a>;
-    type Proof = Vec<Proof>;
+    type Proof = Proof;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
         let dp_sp = DrgPoRep::setup(&sp.drg_porep_setup_params)?;
@@ -97,16 +198,17 @@ impl<'a> ProofScheme<'a> for LayeredDrgPoRep {
 
         let mut proofs = Vec::with_capacity(pub_params.layers);
 
-        prove_layers(
+        Self::prove_layers(
             &pub_params.drg_porep_public_params,
             pub_inputs,
             &drg_priv_inputs,
             priv_inputs.aux,
             pub_params.layers,
+            pub_params.layers,
             &mut proofs,
         )?;
 
-        Ok(proofs)
+        Ok(Proof::new(proofs))
     }
 
     fn verify(
@@ -114,16 +216,22 @@ impl<'a> ProofScheme<'a> for LayeredDrgPoRep {
         pub_inputs: &Self::PublicInputs,
         proof: &Self::Proof,
     ) -> Result<bool> {
+        if !(proof.encoding_proofs.len() == pub_params.layers) {
+            return Ok(false);
+        }
+
+        let total_layers = pub_params.layers;
+        let mut pp = pub_params.drg_porep_public_params.clone();
         // TODO: verification is broken for the first node, figure out how to unbreak
         // with permuations
-        for (layer, proof_layer) in proof.iter().enumerate() {
+        for (layer, proof_layer) in proof.encoding_proofs.iter().enumerate() {
             let new_pub_inputs = drgporep::PublicInputs {
                 prover_id: pub_inputs.prover_id,
                 challenge: pub_inputs.challenge,
                 tau: &pub_inputs.tau[layer],
             };
 
-            let ep = &proof_layer.encoding_proof;
+            let ep = &proof_layer;
             let parents: Vec<_> = ep
                 .replica_parents
                 .iter()
@@ -131,27 +239,30 @@ impl<'a> ProofScheme<'a> for LayeredDrgPoRep {
                     (
                         p.0,
                         drgporep::DataProof {
-                            // TODO: investigate if clone can be avoided by using a referenc in drgporep::DataProof
+                            // TODO: investigate if clone can be avoided by using a reference in drgporep::DataProof
                             proof: p.1.proof.clone(),
                             data: p.1.data,
                         },
                     )
                 })
                 .collect();
+
             let res = DrgPoRep::verify(
-                &pub_params.drg_porep_public_params,
+                &pp,
                 &new_pub_inputs,
                 &drgporep::Proof {
                     replica_node: drgporep::DataProof {
-                        // TODO: investigate if clone can be avoided by using a referenc in drgporep::DataProof
+                        // TODO: investigate if clone can be avoided by using a reference in drgporep::DataProof
                         proof: ep.replica_node.proof.clone(),
                         data: ep.replica_node.data,
                     },
                     replica_parents: parents,
-                    // TODO: investigate if clone can be avoided by using a referenc in drgporep::DataProof
+                    // TODO: investigate if clone can be avoided by using a reference in drgporep::DataProof
                     node: ep.node.clone(),
                 },
             )?;
+
+            pp = Self::transform(&pp, layer, total_layers);
 
             if !res {
                 return Ok(false);
@@ -161,58 +272,21 @@ impl<'a> ProofScheme<'a> for LayeredDrgPoRep {
     }
 }
 
-fn prove_layers(
-    pp: &drgporep::PublicParams<BucketGraph>,
-    pub_inputs: &PublicInputs,
-    priv_inputs: &drgporep::PrivateInputs,
-    aux: &[porep::ProverAux],
-    layers: usize,
-    proofs: &mut Vec<Proof>,
-) -> Result<()> {
-    assert!(layers > 0);
-
-    let mut scratch = priv_inputs.replica.to_vec().clone();
-    let prover_id = fr_into_bytes::<Bls12>(pub_inputs.prover_id);
-    <DrgPoRep as PoRep>::replicate(pp, &prover_id, scratch.as_mut_slice())?;
-
-    let new_priv_inputs = drgporep::PrivateInputs {
-        replica: scratch.as_slice(),
-        aux: &aux[aux.len() - layers],
-    };
-    let drgporep_pub_inputs = drgporep::PublicInputs {
-        prover_id: pub_inputs.prover_id,
-        challenge: pub_inputs.challenge,
-        tau: &pub_inputs.tau[pub_inputs.tau.len() - layers],
-    };
-    let drg_proof = DrgPoRep::prove(&pp, &drgporep_pub_inputs, &new_priv_inputs)?;
-    proofs.push(Proof {
-        encoding_proof: drg_proof,
-        permutation_proof: PermutationProof {},
-    });
-
-    let pp = &permute(pp);
-
-    if layers != 1 {
-        prove_layers(pp, pub_inputs, &new_priv_inputs, aux, layers - 1, proofs)?;
-    }
-
-    Ok(())
-}
-
-impl<'a, 'c> PoRep<'a> for LayeredDrgPoRep {
+impl<'a, 'c, L: Layers> PoRep<'a> for L {
     type Tau = Vec<porep::Tau>;
     type ProverAux = Vec<porep::ProverAux>;
 
     fn replicate(
-        pp: &'a PublicParams<BucketGraph>,
+        pp: &'a PublicParams<L::Graph>,
         prover_id: &[u8],
         data: &mut [u8],
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let mut taus = Vec::with_capacity(pp.layers);
         let mut auxs = Vec::with_capacity(pp.layers);
 
-        permute_and_replicate_layers(
+        Self::transform_and_replicate_layers(
             &pp.drg_porep_public_params,
+            0,
             pp.layers,
             prover_id,
             data,
@@ -224,14 +298,15 @@ impl<'a, 'c> PoRep<'a> for LayeredDrgPoRep {
     }
 
     fn extract_all<'b>(
-        pp: &'b PublicParams<BucketGraph>,
+        pp: &'b PublicParams<L::Graph>,
         prover_id: &'b [u8],
         data: &'b [u8],
     ) -> Result<Vec<u8>> {
         let mut data = data.to_vec();
 
-        extract_and_invert_permute_layers(
+        Self::extract_and_invert_transform_layers(
             &pp.drg_porep_public_params,
+            0,
             pp.layers,
             prover_id,
             &mut data,
@@ -241,169 +316,11 @@ impl<'a, 'c> PoRep<'a> for LayeredDrgPoRep {
     }
 
     fn extract(
-        _pp: &PublicParams<BucketGraph>,
+        _pp: &PublicParams<L::Graph>,
         _prover_id: &[u8],
         _data: &[u8],
         _node: usize,
     ) -> Result<Vec<u8>> {
         unimplemented!();
-    }
-}
-
-fn extract_and_invert_permute_layers<'a>(
-    drgpp: &drgporep::PublicParams<BucketGraph>,
-    layers: usize,
-    prover_id: &[u8],
-    data: &'a mut [u8],
-) -> Result<()> {
-    assert!(layers > 0);
-
-    let inverted = &invert_permute(&drgpp);
-    let mut res = DrgPoRep::extract_all(inverted, prover_id, data).unwrap();
-
-    for (i, r) in res.iter_mut().enumerate() {
-        data[i] = *r;
-    }
-
-    if layers != 1 {
-        extract_and_invert_permute_layers(inverted, layers - 1, prover_id, data)?;
-    }
-
-    Ok(())
-}
-
-fn permute_and_replicate_layers(
-    drgpp: &drgporep::PublicParams<BucketGraph>,
-    layers: usize,
-    prover_id: &[u8],
-    data: &mut [u8],
-    taus: &mut Vec<porep::Tau>,
-    auxs: &mut Vec<porep::ProverAux>,
-) -> Result<()> {
-    assert!(layers > 0);
-    let (tau, aux) = DrgPoRep::replicate(drgpp, prover_id, data).unwrap();
-
-    taus.push(tau);
-    auxs.push(aux);
-
-    if layers != 1 {
-        permute_and_replicate_layers(&permute(&drgpp), layers - 1, prover_id, data, taus, auxs)?;
-    }
-
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use fr32::bytes_into_fr;
-    use pairing::bls12_381::Bls12;
-    use rand::{Rng, SeedableRng, XorShiftRng};
-
-    fn permute_layers(
-        mut drgpp: drgporep::PublicParams<BucketGraph>,
-        layers: usize,
-    ) -> drgporep::PublicParams<BucketGraph> {
-        for _ in 0..layers {
-            drgpp = permute(&drgpp);
-        }
-        drgpp
-    }
-
-    #[test]
-    #[ignore]
-    fn extract_all() {
-        let lambda = 32;
-        let prover_id = vec![1u8; 32];
-        let data = vec![2u8; 32 * 3];
-
-        // create a copy, so we can compare roundtrips
-        let mut data_copy = data.clone();
-
-        let sp = SetupParams {
-            drg_porep_setup_params: drgporep::SetupParams {
-                lambda: lambda,
-                drg: drgporep::DrgParams {
-                    n: data.len() / lambda,
-                    m: 10,
-                },
-            },
-            layers: 5,
-        };
-
-        let pp = LayeredDrgPoRep::setup(&sp).unwrap();
-
-        LayeredDrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
-
-        let permuted_params = PublicParams {
-            drg_porep_public_params: permute_layers(pp.drg_porep_public_params, pp.layers),
-            layers: pp.layers,
-        };
-
-        assert_ne!(data, data_copy);
-
-        let decoded_data = LayeredDrgPoRep::extract_all(
-            &permuted_params,
-            prover_id.as_slice(),
-            data_copy.as_mut_slice(),
-        ).unwrap();
-
-        assert_eq!(data, decoded_data);
-    }
-
-    fn prove_verify(lambda: usize, n: usize, i: usize) {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-
-        let m = i * 10;
-        let lambda = lambda;
-        let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
-        let data: Vec<u8> = (0..n)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
-            .collect();
-        // create a copy, so we can compare roundtrips
-        let mut data_copy = data.clone();
-        let challenge = i;
-        let sp = SetupParams {
-            drg_porep_setup_params: drgporep::SetupParams {
-                lambda,
-                drg: drgporep::DrgParams { n, m },
-            },
-            layers: 4,
-        };
-
-        let pp = LayeredDrgPoRep::setup(&sp).unwrap();
-        let (tau, aux) =
-            LayeredDrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice())
-                .unwrap();
-        assert_ne!(data, data_copy);
-
-        let pub_inputs = PublicInputs {
-            prover_id: &bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
-            challenge,
-            tau: tau,
-        };
-
-        let priv_inputs = PrivateInputs {
-            replica: data.as_slice(),
-            aux: &aux,
-        };
-
-        let proof = LayeredDrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
-        assert!(LayeredDrgPoRep::verify(&pp, &pub_inputs, &proof).unwrap());
-    }
-
-    table_tests!{
-        prove_verify {
-            // TODO: figure out why this was failing
-            // prove_verify_32_2_1(32, 2, 1);
-            // prove_verify_32_2_2(32, 2, 2);
-
-            // TODO: why u fail???
-            // prove_verify_32_3_1(32, 3, 1);
-            // prove_verify_32_3_2(32, 3, 2);
-
-            // prove_verify_32_10_1(32, 10, 1);
-            #[ignore] prove_verify_32_10_2(32, 10, 2);
-        }
     }
 }

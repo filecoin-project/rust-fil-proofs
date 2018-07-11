@@ -1,9 +1,11 @@
 use crypto::{kdf, sloth};
-use drgraph::{BucketGraph, Graph, MerkleProof};
+use drgraph::{Graph, MerkleProof};
+
 use fr32::{bytes_into_fr, fr_into_bytes};
 use pairing::bls12_381::{Bls12, Fr};
 use pairing::{PrimeField, PrimeFieldRepr};
 use porep::{self, PoRep};
+use std::marker::PhantomData;
 use util::data_at_node;
 use vde::{self, decode_block};
 
@@ -31,8 +33,11 @@ pub struct SetupParams {
 
 #[derive(Debug, Clone)]
 pub struct DrgParams {
-    pub n: usize,
-    pub m: usize,
+    // Number of nodes
+    pub nodes: usize,
+
+    // Base degree of DRG
+    pub degree: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -80,17 +85,19 @@ impl Proof {
 }
 
 #[derive(Default)]
-pub struct DrgPoRep {}
+pub struct DrgPoRep<G: Graph> {
+    phantom: PhantomData<G>,
+}
 
-impl<'a> ProofScheme<'a> for DrgPoRep {
-    type PublicParams = PublicParams<BucketGraph>;
+impl<'a, G: Graph> ProofScheme<'a> for DrgPoRep<G> {
+    type PublicParams = PublicParams<G>;
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<'a>;
     type PrivateInputs = PrivateInputs<'a>;
     type Proof = Proof;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
-        let graph = BucketGraph::new(sp.drg.n, sp.drg.m);
+        let graph = G::new(sp.drg.nodes, sp.drg.degree);
 
         Ok(PublicParams {
             lambda: sp.lambda,
@@ -149,13 +156,13 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
         }
 
         let expected_parents = pub_params.graph.parents(challenge);
-        let actual_parents = proof
+        let parents_as_expected = proof
             .replica_parents
             .iter()
-            .map(|x| x.0)
-            .collect::<Vec<_>>();
+            .zip(expected_parents)
+            .all(|(actual, expected)| actual.0 == expected);
 
-        if expected_parents != actual_parents {
+        if !parents_as_expected {
             println!("proof parents were not those provided in public parameters");
             return Ok(false);
         }
@@ -187,12 +194,12 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
     }
 }
 
-impl<'a> PoRep<'a> for DrgPoRep {
+impl<'a, G: Graph> PoRep<'a> for DrgPoRep<G> {
     type Tau = porep::Tau;
     type ProverAux = porep::ProverAux;
 
     fn replicate(
-        pp: &PublicParams<BucketGraph>,
+        pp: &Self::PublicParams,
         prover_id: &[u8],
         data: &mut [u8],
     ) -> Result<(porep::Tau, porep::ProverAux)> {
@@ -216,7 +223,7 @@ impl<'a> PoRep<'a> for DrgPoRep {
     }
 
     fn extract_all<'b>(
-        pp: &'b PublicParams<BucketGraph>,
+        pp: &'b Self::PublicParams,
         prover_id: &'b [u8],
         data: &'b [u8],
     ) -> Result<Vec<u8>> {
@@ -229,7 +236,7 @@ impl<'a> PoRep<'a> for DrgPoRep {
     }
 
     fn extract(
-        pp: &PublicParams<BucketGraph>,
+        pp: &Self::PublicParams,
         prover_id: &[u8],
         data: &[u8],
         node: usize,
@@ -247,6 +254,7 @@ impl<'a> PoRep<'a> for DrgPoRep {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use drgraph::BucketGraph;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]
@@ -260,12 +268,12 @@ mod tests {
         let sp = SetupParams {
             lambda: lambda,
             drg: DrgParams {
-                n: data.len() / lambda,
-                m: 10,
+                nodes: data.len() / lambda,
+                degree: 10,
             },
         };
 
-        let pp = DrgPoRep::setup(&sp).unwrap();
+        let pp = DrgPoRep::<BucketGraph>::setup(&sp).unwrap();
 
         DrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
 
@@ -290,12 +298,12 @@ mod tests {
         let sp = SetupParams {
             lambda: lambda,
             drg: DrgParams {
-                n: data.len() / lambda,
-                m: 10,
+                nodes: data.len() / lambda,
+                degree: 10,
             },
         };
 
-        let pp = DrgPoRep::setup(&sp).unwrap();
+        let pp = DrgPoRep::<BucketGraph>::setup(&sp).unwrap();
 
         DrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
 
@@ -317,18 +325,18 @@ mod tests {
 
     fn prove_verify_aux(
         lambda: usize,
-        n: usize,
+        nodes: usize,
         i: usize,
         use_wrong_challenge: bool,
         use_wrong_parents: bool,
     ) {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let m = i * 10;
+        let degree = 5;
         let lambda = lambda;
 
         let prover_id = fr_into_bytes::<Bls12>(&rng.gen());
-        let data: Vec<u8> = (0..n)
+        let data: Vec<u8> = (0..nodes)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
@@ -338,10 +346,10 @@ mod tests {
 
         let sp = SetupParams {
             lambda,
-            drg: DrgParams { n, m },
+            drg: DrgParams { nodes, degree },
         };
 
-        let pp = DrgPoRep::setup(&sp).unwrap();
+        let pp = DrgPoRep::<BucketGraph>::setup(&sp).unwrap();
 
         let (tau, aux) =
             DrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
@@ -365,10 +373,11 @@ mod tests {
             // Only one 'wrong' option will be tested at a time.
             assert!(!use_wrong_challenge);
             let real_parents = real_proof.replica_parents;
-            // A real node will never have all parents equal to 1.
             let fake_parents = real_parents
                 .iter()
-                .map(|(p, data_proof)| (1, data_proof.clone()))
+                // Incrementing each parent node will give us a different parent set.
+                // It's fine to be out of range, since this only needs to fail.
+                .map(|(i, data_proof)| (i + 1, data_proof.clone()))
                 .collect::<Vec<_>>();
 
             let proof = Proof::new(

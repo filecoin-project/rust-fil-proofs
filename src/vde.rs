@@ -38,6 +38,8 @@ fn recursive_encode<G: drgraph::Graph>(
 
     let parents = graph.parents(node);
 
+    assert_eq!(parents.len(), graph.degree(), "wrong number of parents");
+
     // TODO: unsuck
     if node != parents[0] {
         parents
