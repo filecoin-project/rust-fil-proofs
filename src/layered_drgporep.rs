@@ -225,7 +225,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
                 tau: &pub_inputs.tau[layer],
             };
 
-            let ep = &proof_layer; //.encoding_proofs;
+            let ep = &proof_layer;
             let parents: Vec<_> = ep
                 .replica_parents
                 .iter()
@@ -243,7 +243,6 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
 
             let res = DrgPoRep::verify(
                 &pp,
-                //&pub_params.drg_porep_public_params,
                 &new_pub_inputs,
                 &drgporep::Proof {
                     replica_node: drgporep::DataProof {
