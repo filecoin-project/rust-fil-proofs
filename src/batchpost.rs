@@ -1,6 +1,6 @@
 use byteorder::{LittleEndian, WriteBytesExt};
 use crypto::blake2s::blake2s;
-use drgraph::{MerkleTree, TreeHash, DEFAULT_EXPANSION_DEGREE};
+use drgraph::{MerkleTree, TreeHash};
 use error::Result;
 use fr32::bytes_into_fr;
 use merklepor;
@@ -220,7 +220,7 @@ mod tests {
         let data: Vec<u8> = (0..32)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
-        let graph = BucketGraph::new(32, 16, DEFAULT_EXPANSION_DEGREE);
+        let graph = BucketGraph::new(32, 16);
         let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
 
         let pub_inputs = PublicInputs {

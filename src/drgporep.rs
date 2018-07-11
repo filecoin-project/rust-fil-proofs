@@ -1,9 +1,11 @@
 use crypto::{kdf, sloth};
-use drgraph::{BucketGraph, Graph, MerkleProof, DEFAULT_EXPANSION_DEGREE};
+use drgraph::{Graph, MerkleProof};
+
 use fr32::{bytes_into_fr, fr_into_bytes};
 use pairing::bls12_381::{Bls12, Fr};
 use pairing::{PrimeField, PrimeFieldRepr};
 use porep::{self, PoRep};
+use std::marker::PhantomData;
 use util::data_at_node;
 use vde::{self, decode_block};
 
@@ -36,9 +38,6 @@ pub struct DrgParams {
 
     // Base degree of DRG
     pub m: usize,
-
-    // Expansion degree (how many nodes are added during expansion)
-    pub exp: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -86,17 +85,19 @@ impl Proof {
 }
 
 #[derive(Default)]
-pub struct DrgPoRep {}
+pub struct DrgPoRep<G: Graph> {
+    phantom: PhantomData<G>,
+}
 
-impl<'a> ProofScheme<'a> for DrgPoRep {
-    type PublicParams = PublicParams<BucketGraph>;
+impl<'a, G: Graph> ProofScheme<'a> for DrgPoRep<G> {
+    type PublicParams = PublicParams<G>;
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<'a>;
     type PrivateInputs = PrivateInputs<'a>;
     type Proof = Proof;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
-        let graph = BucketGraph::new(sp.drg.n, sp.drg.m, sp.drg.exp);
+        let graph = G::new(sp.drg.n, sp.drg.m);
 
         Ok(PublicParams {
             lambda: sp.lambda,
@@ -193,12 +194,12 @@ impl<'a> ProofScheme<'a> for DrgPoRep {
     }
 }
 
-impl<'a> PoRep<'a> for DrgPoRep {
+impl<'a, G: Graph> PoRep<'a> for DrgPoRep<G> {
     type Tau = porep::Tau;
     type ProverAux = porep::ProverAux;
 
     fn replicate(
-        pp: &PublicParams<BucketGraph>,
+        pp: &Self::PublicParams,
         prover_id: &[u8],
         data: &mut [u8],
     ) -> Result<(porep::Tau, porep::ProverAux)> {
@@ -222,7 +223,7 @@ impl<'a> PoRep<'a> for DrgPoRep {
     }
 
     fn extract_all<'b>(
-        pp: &'b PublicParams<BucketGraph>,
+        pp: &'b Self::PublicParams,
         prover_id: &'b [u8],
         data: &'b [u8],
     ) -> Result<Vec<u8>> {
@@ -235,7 +236,7 @@ impl<'a> PoRep<'a> for DrgPoRep {
     }
 
     fn extract(
-        pp: &PublicParams<BucketGraph>,
+        pp: &Self::PublicParams,
         prover_id: &[u8],
         data: &[u8],
         node: usize,
@@ -253,6 +254,7 @@ impl<'a> PoRep<'a> for DrgPoRep {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use drgraph::BucketGraph;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]
@@ -268,11 +270,10 @@ mod tests {
             drg: DrgParams {
                 n: data.len() / lambda,
                 m: 10,
-                exp: 8,
             },
         };
 
-        let pp = DrgPoRep::setup(&sp).unwrap();
+        let pp = DrgPoRep::<BucketGraph>::setup(&sp).unwrap();
 
         DrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
 
@@ -299,11 +300,10 @@ mod tests {
             drg: DrgParams {
                 n: data.len() / lambda,
                 m: 10,
-                exp: DEFAULT_EXPANSION_DEGREE,
             },
         };
 
-        let pp = DrgPoRep::setup(&sp).unwrap();
+        let pp = DrgPoRep::<BucketGraph>::setup(&sp).unwrap();
 
         DrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
 
@@ -349,11 +349,11 @@ mod tests {
             drg: DrgParams {
                 n,
                 m,
-                exp: DEFAULT_EXPANSION_DEGREE,
+                //exp: DEFAULT_EXPANSION_DEGREE,
             },
         };
 
-        let pp = DrgPoRep::setup(&sp).unwrap();
+        let pp = DrgPoRep::<BucketGraph>::setup(&sp).unwrap();
 
         let (tau, aux) =
             DrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();

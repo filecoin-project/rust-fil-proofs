@@ -1,5 +1,5 @@
 use drgporep::{self, DrgPoRep};
-use drgraph::{BucketGraph, Graph};
+use drgraph::Graph;
 use error::Result;
 use fr32::fr_into_bytes;
 use pairing::bls12_381::{Bls12, Fr};
@@ -43,19 +43,24 @@ impl Proof {
         Proof { encoding_proofs }
     }
 }
+
+pub trait Layerable: Graph {}
+
 pub trait Layers {
+    type Graph: Layerable;
+
     fn transform(
-        pp: &drgporep::PublicParams<BucketGraph>,
+        pp: &drgporep::PublicParams<Self::Graph>,
         layer: usize,
         layers: usize,
-    ) -> drgporep::PublicParams<BucketGraph>;
+    ) -> drgporep::PublicParams<Self::Graph>;
     fn invert_transform(
-        pp: &drgporep::PublicParams<BucketGraph>,
+        pp: &drgporep::PublicParams<Self::Graph>,
         layer: usize,
         layers: usize,
-    ) -> drgporep::PublicParams<BucketGraph>;
+    ) -> drgporep::PublicParams<Self::Graph>;
     fn prove_layers<'a>(
-        pp: &drgporep::PublicParams<BucketGraph>,
+        pp: &drgporep::PublicParams<Self::Graph>,
         pub_inputs: &PublicInputs,
         priv_inputs: &drgporep::PrivateInputs,
         aux: &[porep::ProverAux],
@@ -67,7 +72,7 @@ pub trait Layers {
 
         let mut scratch = priv_inputs.replica.to_vec().clone();
         let prover_id = fr_into_bytes::<Bls12>(pub_inputs.prover_id);
-        <DrgPoRep as PoRep>::replicate(pp, &prover_id, scratch.as_mut_slice())?;
+        <DrgPoRep<Self::Graph> as PoRep>::replicate(pp, &prover_id, scratch.as_mut_slice())?;
 
         let new_priv_inputs = drgporep::PrivateInputs {
             replica: scratch.as_slice(),
@@ -99,7 +104,7 @@ pub trait Layers {
     }
 
     fn extract_and_invert_transform_layers<'a>(
-        drgpp: &drgporep::PublicParams<BucketGraph>,
+        drgpp: &drgporep::PublicParams<Self::Graph>,
         layer: usize,
         layers: usize,
         prover_id: &[u8],
@@ -128,7 +133,7 @@ pub trait Layers {
     }
 
     fn transform_and_replicate_layers(
-        drgpp: &drgporep::PublicParams<BucketGraph>,
+        drgpp: &drgporep::PublicParams<Self::Graph>,
         layer: usize,
         layers: usize,
         prover_id: &[u8],
@@ -159,7 +164,7 @@ pub trait Layers {
 }
 
 impl<'a, L: Layers> ProofScheme<'a> for L {
-    type PublicParams = PublicParams<BucketGraph>;
+    type PublicParams = PublicParams<L::Graph>;
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<'a>;
     type PrivateInputs = PrivateInputs<'a>;
@@ -267,7 +272,7 @@ impl<'a, 'c, L: Layers> PoRep<'a> for L {
     type ProverAux = Vec<porep::ProverAux>;
 
     fn replicate(
-        pp: &'a PublicParams<BucketGraph>,
+        pp: &'a PublicParams<L::Graph>,
         prover_id: &[u8],
         data: &mut [u8],
     ) -> Result<(Self::Tau, Self::ProverAux)> {
@@ -288,7 +293,7 @@ impl<'a, 'c, L: Layers> PoRep<'a> for L {
     }
 
     fn extract_all<'b>(
-        pp: &'b PublicParams<BucketGraph>,
+        pp: &'b PublicParams<L::Graph>,
         prover_id: &'b [u8],
         data: &'b [u8],
     ) -> Result<Vec<u8>> {
@@ -306,7 +311,7 @@ impl<'a, 'c, L: Layers> PoRep<'a> for L {
     }
 
     fn extract(
-        _pp: &PublicParams<BucketGraph>,
+        _pp: &PublicParams<L::Graph>,
         _prover_id: &[u8],
         _data: &[u8],
         _node: usize,

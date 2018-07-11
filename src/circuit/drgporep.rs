@@ -183,7 +183,6 @@ mod tests {
         let lambda = 32;
         let n = 12;
         let m = 6;
-        let exp = 8;
         let challenge = 2;
 
         let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
@@ -191,7 +190,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        // TODO: don't clone evertything
+        // TODO: don't clone everything
         let original_data = data.clone();
         let dn = bytes_into_fr::<Bls12>(
             data_at_node(&original_data, challenge, lambda).expect("failed to read original data"),
@@ -201,10 +200,11 @@ mod tests {
 
         let sp = drgporep::SetupParams {
             lambda,
-            drg: drgporep::DrgParams { n, m, exp },
+            drg: drgporep::DrgParams { n, m },
         };
 
-        let pp = drgporep::DrgPoRep::setup(&sp).expect("failed to create drgporep setup");
+        let pp =
+            drgporep::DrgPoRep::<BucketGraph>::setup(&sp).expect("failed to create drgporep setup");
         let (tau, aux) =
             drgporep::DrgPoRep::replicate(&pp, prover_id.as_slice(), data.as_mut_slice())
                 .expect("failed to replicate");
@@ -270,7 +270,7 @@ mod tests {
             data_node_path,
             data_root,
             prover_id,
-            m + exp,
+            m,
         ).expect("failed to synthesize circuit");
 
         if !cs.is_satisfied() {
@@ -281,8 +281,8 @@ mod tests {
         }
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_inputs(), 51, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 119006, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 27, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 58126, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 

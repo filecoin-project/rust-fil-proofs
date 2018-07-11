@@ -1,31 +1,46 @@
 use drgporep;
-use drgraph::{BucketGraph, Graph};
+use drgraph::Graph;
 use layered_drgporep::Layers;
+use std::marker::PhantomData;
+use zigzag_graph::{ZigZag, ZigZagGraph};
 
 const DEFAULT_ZIGZAG_LAYERS: usize = 6;
 
 #[derive(Debug)]
-pub struct ZigZagDrgPoRep {}
+pub struct ZigZagDrgPoRep<'a, G: 'a>
+where
+    G: ZigZag,
+{
+    phantom: PhantomData<&'a G>,
+}
 
-impl Layers for ZigZagDrgPoRep {
+impl<'a, G: 'a> Layers for ZigZagDrgPoRep<'a, G>
+where
+    G: ZigZag + 'static,
+{
+    type Graph = ZigZagGraph<G>;
+
     fn transform(
-        pp: &drgporep::PublicParams<BucketGraph>,
+        pp: &drgporep::PublicParams<Self::Graph>,
         _layer: usize,
         _layers: usize,
-    ) -> drgporep::PublicParams<BucketGraph> {
-        zigzag(pp)
+    ) -> drgporep::PublicParams<Self::Graph> {
+        zigzag::<Self::Graph>(pp)
     }
 
     fn invert_transform(
-        pp: &drgporep::PublicParams<BucketGraph>,
+        pp: &drgporep::PublicParams<Self::Graph>,
         _layer: usize,
         _layers: usize,
-    ) -> drgporep::PublicParams<BucketGraph> {
-        zigzag(pp)
+    ) -> drgporep::PublicParams<Self::Graph> {
+        zigzag::<Self::Graph>(pp)
     }
 }
 
-fn zigzag<G: Graph>(pp: &drgporep::PublicParams<G>) -> drgporep::PublicParams<G> {
+fn zigzag<Z>(pp: &drgporep::PublicParams<Z>) -> drgporep::PublicParams<Z>
+where
+    Z: ZigZag + Graph,
+{
     drgporep::PublicParams {
         graph: pp.graph.zigzag(),
         lambda: pp.lambda,
@@ -35,23 +50,12 @@ fn zigzag<G: Graph>(pp: &drgporep::PublicParams<G>) -> drgporep::PublicParams<G>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use drgraph::DEFAULT_EXPANSION_DEGREE;
     use fr32::{bytes_into_fr, fr_into_bytes};
     use layered_drgporep::{PrivateInputs, PublicInputs, PublicParams, SetupParams};
     use pairing::bls12_381::Bls12;
     use porep::PoRep;
     use proof::ProofScheme;
     use rand::{Rng, SeedableRng, XorShiftRng};
-
-    fn transform_layers(
-        mut drgpp: drgporep::PublicParams<BucketGraph>,
-        layers: usize,
-    ) -> drgporep::PublicParams<BucketGraph> {
-        for _ in 0..layers {
-            drgpp = zigzag(&drgpp);
-        }
-        drgpp
-    }
 
     #[test]
     fn extract_all() {
@@ -68,18 +72,23 @@ mod tests {
                 drg: drgporep::DrgParams {
                     n: data.len() / lambda,
                     m: 10,
-                    exp: 8,
                 },
             },
             layers: DEFAULT_ZIGZAG_LAYERS,
         };
 
-        let pp = ZigZagDrgPoRep::setup(&sp).unwrap();
+        let mut pp = ZigZagDrgPoRep::<ZigZagGraph<BucketGraph>>::setup(&sp).unwrap();
+
+        // Get the public params for the last layer.
+        // In reality, this is a no-op with an even number of layers.
+        for _ in 0..pp.layers {
+            pp.drg_porep_public_params = zigzag(&pp.drg_porep_public_params);
+        }
 
         ZigZagDrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
 
         let transformed_params = PublicParams {
-            drg_porep_public_params: transform_layers(pp.drg_porep_public_params, pp.layers),
+            drg_porep_public_params: pp.drg_porep_public_params,
             layers: pp.layers,
         };
 
@@ -109,16 +118,12 @@ mod tests {
         let sp = SetupParams {
             drg_porep_setup_params: drgporep::SetupParams {
                 lambda,
-                drg: drgporep::DrgParams {
-                    n,
-                    m,
-                    exp: DEFAULT_EXPANSION_DEGREE,
-                },
+                drg: drgporep::DrgParams { n, m },
             },
             layers: DEFAULT_ZIGZAG_LAYERS,
         };
 
-        let pp = ZigZagDrgPoRep::setup(&sp).unwrap();
+        let pp = ZigZagDrgPoRep::<ZigZagGraph<BucketGraph>>::setup(&sp).unwrap();
         let (tau, aux) =
             ZigZagDrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
         assert_ne!(data, data_copy);
@@ -139,18 +144,17 @@ mod tests {
     }
 
     table_tests!{
-        prove_verify {
+        prove_verify{
             // TODO: figure out why this was failing
-             //prove_verify_32_2_1(32, 2, 1);
-             //prove_verify_32_2_2(32, 2, 2);
+            // prove_verify_32_2_1(32, 2, 1);
+            // prove_verify_32_2_2(32, 2, 2);
 
             // TODO: why u fail???
-            //prove_verify_32_3_1(32, 3, 1);
-            //prove_verify_32_3_2(32, 3, 2);
+            // prove_verify_32_3_1(32, 3, 1);
+            // prove_verify_32_3_2(32, 3, 2);
 
-             prove_verify_32_5_1(32, 5, 1);
-             prove_verify_32_5_2(32, 5, 2);
-             prove_verify_32_5_3(32, 5, 3);
-        }
-    }
+           prove_verify_32_5_1(32, 5, 1);
+           prove_verify_32_5_2(32, 5, 2);
+           prove_verify_32_5_3(32, 5, 3);
+    }}
 }

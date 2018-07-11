@@ -95,7 +95,7 @@ impl<'a> ProofScheme<'a> for MerklePoR {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use drgraph::{hash_leaf, make_proof_for_test, BucketGraph, Graph, DEFAULT_EXPANSION_DEGREE};
+    use drgraph::{hash_leaf, make_proof_for_test, BucketGraph, Graph};
     use fr32::{bytes_into_fr, fr_into_bytes};
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
@@ -114,7 +114,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph = BucketGraph::new(32, 5, DEFAULT_EXPANSION_DEGREE);
+        let graph = BucketGraph::new(32, 5);
         let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
 
         let pub_inputs = PublicInputs {
@@ -165,7 +165,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph = BucketGraph::new(32, 5, 8);
+        let graph = BucketGraph::new(32, 5);
         let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
 
         let pub_inputs = PublicInputs {
@@ -194,7 +194,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph = BucketGraph::new(32, 5, 8);
+        let graph = BucketGraph::new(32, 5);
         let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
 
         let pub_inputs = PublicInputs {
