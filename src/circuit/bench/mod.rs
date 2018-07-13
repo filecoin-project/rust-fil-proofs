@@ -65,6 +65,10 @@ impl<E: Engine> BenchCS<E> {
             c: vec![],
         }
     }
+
+    pub fn num_constraints(&self) -> usize {
+        self.a.len()
+    }
 }
 
 impl<E: Engine> ConstraintSystem<E> for BenchCS<E> {
