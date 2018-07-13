@@ -32,7 +32,32 @@ struct DrgPoRepExample<'a, E: JubjubEngine> {
     m: usize,
 }
 
-impl<'a, E: JubjubEngine> DrgPoRepExample<'a, E> {
+impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepExample<'a, E> {
+    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+        circuit::drgporep::drgporep(
+            cs.namespace(|| "drgporep"),
+            self.params,
+            self.lambda,
+            self.replica_node,
+            self.replica_node_path,
+            self.replica_root,
+            self.replica_parents,
+            self.replica_parents_paths,
+            self.data_node,
+            self.data_node_path,
+            self.data_root,
+            self.prover_id,
+            self.m,
+        )
+    }
+}
+
+#[derive(Default)]
+struct DrgPoRepApp {}
+
+const SLOTH_ROUNDS: usize = 1;
+
+impl DrgPoRepApp {
     fn create_bench_circuit<R: Rng>(
         &mut self,
         rng: &mut R,
@@ -42,7 +67,7 @@ impl<'a, E: JubjubEngine> DrgPoRepExample<'a, E> {
         _leaves: usize,
         lambda: usize,
         m: usize,
-    ) {
+    ) -> BenchCS<Bls12> {
         let (
             prover_id,
             replica_node,
@@ -73,34 +98,10 @@ impl<'a, E: JubjubEngine> DrgPoRepExample<'a, E> {
         };
 
         let mut cs = BenchCS::<Bls12>::new();
-        c.synthesize(&mut cs).expect("failed to synthesize circuit")
+        c.synthesize(&mut cs).expect("failed to synthesize circuit");
+        cs
     }
 }
-
-impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepExample<'a, E> {
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        circuit::drgporep::drgporep(
-            cs.namespace(|| "drgporep"),
-            self.params,
-            self.lambda,
-            self.replica_node,
-            self.replica_node_path,
-            self.replica_root,
-            self.replica_parents,
-            self.replica_parents_paths,
-            self.data_node,
-            self.data_node_path,
-            self.data_root,
-            self.prover_id,
-            self.m,
-        )
-    }
-}
-
-#[derive(Default)]
-struct DrgPoRepApp {}
-
-const SLOTH_ROUNDS: usize = 1;
 
 impl Example<Bls12> for DrgPoRepApp {
     fn name() -> String {
@@ -237,7 +238,7 @@ impl Example<Bls12> for DrgPoRepApp {
             m,
         );
 
-        cs.num_contraints()
+        cs.num_constraints()
     }
 }
 
