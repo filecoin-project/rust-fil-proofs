@@ -26,6 +26,17 @@ pub struct PoR<'a, E: JubjubEngine> {
 
 pub struct PoRCompound {}
 
+fn challenge_into_auth_path_bits(challenge: usize, leaves: usize) -> Vec<bool> {
+    let height = (leaves as f64).log2().ceil() as usize;
+    let mut bits = Vec::new();
+    let mut n = challenge;
+    for _ in 0..height {
+        bits.push(n & 1 == 1);
+        n >>= 1;
+    }
+    bits
+}
+
 // can only implment for Bls12 because merklepor is not generic over the engine.
 impl<'a> CompoundProof<'a, Bls12, MerklePoR, PoR<'a, Bls12>> for PoRCompound {
     fn make_circuit<'b>(
@@ -41,8 +52,18 @@ impl<'a> CompoundProof<'a, Bls12, MerklePoR, PoR<'a, Bls12>> for PoRCompound {
         }
     }
 
-    fn inputize(pub_inputs: &<MerklePoR as ProofScheme>::PublicInputs) -> Vec<Fr> {
-        vec![pub_inputs.commitment.into()]
+    fn inputize(
+        pub_inputs: &<MerklePoR as ProofScheme>::PublicInputs,
+        pub_params: &<MerklePoR as ProofScheme>::PublicParams,
+    ) -> Vec<Fr> {
+        let auth_path_bits = challenge_into_auth_path_bits(pub_inputs.challenge, pub_params.leaves);
+        let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
+
+        let mut inputs = Vec::new();
+        inputs.extend(packed_auth_path);
+        inputs.push(pub_inputs.commitment.into());
+
+        inputs
     }
 }
 
@@ -51,9 +72,11 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoR<'a, E> {
     ///
     /// This circuit expects the following public inputs.
     ///
-    /// * [0] - packed version of `value` as bits. (might be more than one Fr)
-    /// * [1] - packed version of the `is_right` components of the auth_path.
-    /// * [2] - the merkle root of the tree.
+    /// * [0] - packed version of the `is_right` components of the auth_path.
+    /// * [1] - the merkle root of the tree.
+    ///
+    /// This circuit derives the following private inputs from its fields:
+    /// * value_num - packed version of `value` as bits. (might be more than one Fr)
     ///
     /// Note: All public inputs must be provided as `E::Fr`.
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError>
@@ -68,8 +91,6 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoR<'a, E> {
             let value_num = num::AllocatedNum::alloc(cs.namespace(|| "value"), || {
                 Ok(value.ok_or_else(|| SynthesisError::AssignmentMissing)?)
             })?;
-
-            value_num.inputize(cs.namespace(|| "value num"))?;
 
             let mut value_bits = value_num.into_bits_le(cs.namespace(|| "value bits"))?;
 
@@ -194,6 +215,7 @@ where
 mod tests {
     use super::*;
     use circuit::test::*;
+    use compound_proof;
     use drgraph::{BucketGraph, Graph};
     use fr32::{bytes_into_fr, fr_into_bytes};
     use merklepor;
@@ -203,6 +225,50 @@ mod tests {
     use sapling_crypto::circuit::multipack;
     use sapling_crypto::jubjub::JubjubBls12;
     use util::data_at_node;
+
+    #[test]
+    fn test_compound() {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let leaves = 6;
+        let lambda = 32;
+        let data: Vec<u8> = (0..leaves)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
+        let graph = BucketGraph::new(leaves, 16);
+        let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
+
+        for i in 0..3 {
+            let public_inputs = merklepor::PublicInputs {
+                challenge: i,
+                commitment: tree.root(),
+            };
+
+            let setup_params = compound_proof::SetupParams {
+                vanilla_params: &merklepor::SetupParams { lambda, leaves },
+                engine_params: &JubjubBls12::new(),
+            };
+            let public_params = PoRCompound::setup(&setup_params).expect("setup failed");
+
+            let private_inputs = merklepor::PrivateInputs {
+                tree: &tree,
+                leaf: bytes_into_fr::<Bls12>(
+                    data_at_node(
+                        data.as_slice(),
+                        public_inputs.challenge,
+                        public_params.vanilla_params.lambda,
+                    ).unwrap(),
+                ).expect("failed to create Fr from node data"),
+            };
+
+            let proof = PoRCompound::prove(&public_params, &public_inputs, &private_inputs)
+                .expect("failed while proving");
+
+            let verified =
+                PoRCompound::verify(&public_inputs, &public_params.vanilla_params, proof)
+                    .expect("failed while verifying");
+            assert!(verified);
+        }
+    }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381() {
@@ -260,8 +326,8 @@ mod tests {
 
             por.synthesize(&mut cs).unwrap();
 
-            assert_eq!(cs.num_inputs(), 4, "wrong number of inputs");
-            assert_eq!(cs.num_constraints(), 4847, "wrong number of constraints");
+            assert_eq!(cs.num_inputs(), 3, "wrong number of inputs");
+            assert_eq!(cs.num_constraints(), 4846, "wrong number of constraints");
 
             let auth_path_bits: Vec<bool> = proof
                 .proof
@@ -271,27 +337,21 @@ mod tests {
                 .collect();
             let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
 
-            let mut expected_inputs = vec![proof.data];
+            let mut expected_inputs = Vec::new();
             expected_inputs.extend(packed_auth_path);
             expected_inputs.push(pub_inputs.commitment.into());
 
             assert_eq!(cs.get_input(0, "ONE"), Fr::one(), "wrong input 0");
 
             assert_eq!(
-                cs.get_input(1, "value num/input variable"),
+                cs.get_input(1, "packed auth_path/input 0"),
                 expected_inputs[0],
-                "wrong data"
-            );
-
-            assert_eq!(
-                cs.get_input(2, "packed auth_path/input 0"),
-                expected_inputs[1],
                 "wrong packed_auth_path"
             );
 
             assert_eq!(
-                cs.get_input(3, "root/input variable"),
-                expected_inputs[2],
+                cs.get_input(2, "root/input variable"),
+                expected_inputs[1],
                 "wrong root input"
             );
 
