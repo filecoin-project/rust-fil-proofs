@@ -14,11 +14,7 @@ where
     pub reversed: bool,
 }
 
-impl<'a, G> Layerable for ZigZagGraph<G>
-where
-    G: ZigZag,
-{
-}
+impl<'a, G> Layerable for ZigZagGraph<G> where G: ZigZag {}
 
 impl<G: Graph> ZigZagGraph<G> {
     fn new<'b>(nodes: usize, base_degree: usize, expansion_degree: usize) -> Self {

@@ -99,7 +99,7 @@ jobs:
       - run:
           name: Install rustfmt-nightly
           # this is not cheap, but I did not find a better way
-          command: cargo install rustfmt-nightly --force
+          command: cargo install rustfmt-nightly --version=0.8.3 --force
       - run:
           name: Run cargo fmt
           command: cargo fmt -- --check

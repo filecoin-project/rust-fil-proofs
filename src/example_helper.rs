@@ -26,7 +26,8 @@ fn prettyb(num: usize) -> String {
     );
     let pretty_bytes = format!("{:.2}", num / delimiter.powi(exponent))
         .parse::<f64>()
-        .unwrap() * 1_f64;
+        .unwrap()
+        * 1_f64;
     let unit = units[exponent as usize];
     format!("{}{} {}", negative, pretty_bytes, unit)
 }
