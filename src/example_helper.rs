@@ -195,6 +195,20 @@ pub trait Example<E: JubjubEngine>: Default {
                 .progress_chars("#>-"),
         );
 
+        info!(
+            target: "stats",
+            "Number of constraints: {}",
+            self.get_num_constraints(
+                rng,
+                &engine_params,
+                tree_depth,
+                challenge_count,
+                leaves,
+                lambda,
+                m
+            )
+        );
+
         for _ in 0..samples {
             // -- create proof
 
@@ -349,4 +363,16 @@ pub trait Example<E: JubjubEngine>: Default {
 
     /// Create a new bench
     fn create_bench<R: Rng>(&mut self, &mut R, &E::Params, usize, usize, usize, usize, usize);
+
+    /// Get the number of constraitns of the circuit
+    fn get_num_constraints<R: Rng>(
+        &mut self,
+        &mut R,
+        &E::Params,
+        usize,
+        usize,
+        usize,
+        usize,
+        usize,
+    ) -> usize;
 }

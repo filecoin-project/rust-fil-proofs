@@ -34,6 +34,37 @@ impl Default for MerklePorApp {
     }
 }
 
+impl MerklePorApp {
+    fn create_bench_circuit<R: Rng>(
+        &mut self,
+        rng: &mut R,
+        engine_params: &JubjubBls12,
+        tree_depth: usize,
+        challenge_count: usize,
+        _leaves: usize,
+        _lambda: usize,
+        _m: usize,
+    ) -> BenchCS<Bls12> {
+        let (auth_path, leaf, root) = random_merkle_path(rng, tree_depth);
+        self.root = root;
+        self.leaf = leaf;
+        self.auth_paths = (0..challenge_count).map(|_| auth_path.clone()).collect();
+        let values = (0..challenge_count).map(|_| Some(&self.leaf)).collect();
+
+        // create an instance of our circut (with the witness)
+        let c = circuit::ppor::ParallelProofOfRetrievability {
+            params: engine_params,
+            values,
+            auth_paths: &self.auth_paths,
+            root: Some(self.root),
+        };
+
+        let mut cs = BenchCS::<Bls12>::new();
+        c.synthesize(&mut cs).expect("failed to synthesize circuit");
+        cs
+    }
+}
+
 impl Example<Bls12> for MerklePorApp {
     fn name() -> String {
         "Multi-Challenge MerklePor".to_string()
@@ -139,26 +170,41 @@ impl Example<Bls12> for MerklePorApp {
         engine_params: &JubjubBls12,
         tree_depth: usize,
         challenge_count: usize,
-        _leaves: usize,
-        _lambda: usize,
-        _m: usize,
+        leaves: usize,
+        lambda: usize,
+        m: usize,
     ) {
-        let (auth_path, leaf, root) = random_merkle_path(rng, tree_depth);
-        self.root = root;
-        self.leaf = leaf;
-        self.auth_paths = (0..challenge_count).map(|_| auth_path.clone()).collect();
-        let values = (0..challenge_count).map(|_| Some(&self.leaf)).collect();
+        self.create_bench_circuit(
+            rng,
+            engine_params,
+            tree_depth,
+            challenge_count,
+            leaves,
+            lambda,
+            m,
+        );
+    }
 
-        // create an instance of our circut (with the witness)
-        let c = circuit::ppor::ParallelProofOfRetrievability {
-            params: engine_params,
-            values,
-            auth_paths: &self.auth_paths,
-            root: Some(self.root),
-        };
-
-        let mut cs = BenchCS::<Bls12>::new();
-        c.synthesize(&mut cs).expect("failed to synthesize circuit");
+    fn get_num_constraints<R: Rng>(
+        &mut self,
+        rng: &mut R,
+        engine_params: &JubjubBls12,
+        tree_depth: usize,
+        challenge_count: usize,
+        leaves: usize,
+        lambda: usize,
+        m: usize,
+    ) -> usize {
+        let cs = self.create_bench_circuit(
+            rng,
+            engine_params,
+            tree_depth,
+            challenge_count,
+            leaves,
+            lambda,
+            m,
+        );
+        cs.num_constraints()
     }
 }
 
