@@ -35,7 +35,10 @@ pub struct PrivateInputs<'a> {
 pub type Proof = DataProof;
 
 #[derive(Debug)]
-pub struct SetupParams {}
+pub struct SetupParams {
+    pub lambda: usize,
+    pub leaves: usize,
+}
 
 /// Merkle tree based proof of retrievability.
 #[derive(Debug, Default)]
@@ -51,10 +54,10 @@ impl<'a> ProofScheme<'a> for MerklePoR {
     type PrivateInputs = PrivateInputs<'a>;
     type Proof = Proof;
 
-    fn setup(_sp: &SetupParams) -> Result<PublicParams> {
+    fn setup(sp: &SetupParams) -> Result<PublicParams> {
         Ok(PublicParams {
-            lambda: LAMBDA,
-            leaves: LEAVES,
+            lambda: sp.lambda,
+            leaves: sp.leaves,
         })
     }
 
