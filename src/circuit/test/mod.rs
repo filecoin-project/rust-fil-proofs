@@ -109,7 +109,7 @@ fn hash_lc<E: Engine>(terms: &[(Variable, E::Fr)], h: &mut Blake2s) {
     }
 }
 
-fn eval_lc2<E: Engine>(terms: &[(Variable, E::Fr)], inputs: &[E::Fr], aux: &[E::Fr]) -> E::Fr {
+fn _eval_lc2<E: Engine>(terms: &[(Variable, E::Fr)], inputs: &[E::Fr], aux: &[E::Fr]) -> E::Fr {
     let mut acc = E::Fr::zero();
 
     for &(var, ref coeff) in terms {

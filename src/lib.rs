@@ -6,6 +6,7 @@ extern crate lazy_static;
 extern crate bellman;
 extern crate blake2_rfc;
 extern crate byteorder;
+extern crate libc;
 extern crate memmap;
 extern crate merkle_light;
 extern crate num_bigint;
@@ -36,8 +37,8 @@ pub mod test_helper;
 
 pub mod example_helper;
 
+pub mod api;
 pub mod batchpost;
-
 pub mod circuit;
 pub mod compound_proof;
 pub mod crypto;
