@@ -19,8 +19,8 @@ fn from_cstr(c_str: CstrT) -> String {
     }
 }
 
-fn to_cstr(s: &str) -> CstrT {
-    CString::new(s).unwrap().as_ptr()
+fn to_cstring(s: &str) -> CString {
+    CString::new(s).unwrap()
 }
 
 const DUMMY_COMM_R: Commitment = 12345;
@@ -68,7 +68,7 @@ mod tests {
     extern "C" fn sector_accessor(id: SectorID) -> SectorAccess {
         let path = format!("sector{}", id);
         println!("received path for {}: {}", id, path);
-        to_cstr(&path)
+        to_cstring(&path).as_ptr()
     }
 
     #[test]
