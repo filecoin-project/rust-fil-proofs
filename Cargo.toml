@@ -40,6 +40,8 @@ criterion = "0.2.3"
 tempfile = "3"
 proptest = "0.7"
 
+[build-dependencies]
+cbindgen = "0.6.0"
 
 [[bench]]
 name = "pedersen"
