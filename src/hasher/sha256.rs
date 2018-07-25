@@ -1,14 +1,14 @@
 use merkle_light::hash::{Algorithm, Hashable};
-use ring::digest::{Context, SHA256};
+use sha2::{Digest, Sha256};
 use std::fmt;
 use std::hash::Hasher;
 
 #[derive(Clone)]
-pub struct SHA256Algorithm(Context);
+pub struct SHA256Algorithm(Sha256);
 
 impl SHA256Algorithm {
     fn new() -> SHA256Algorithm {
-        SHA256Algorithm(Context::new(&SHA256))
+        SHA256Algorithm(Sha256::new())
     }
 }
 
@@ -27,7 +27,7 @@ impl fmt::Debug for SHA256Algorithm {
 impl Hasher for SHA256Algorithm {
     #[inline]
     fn write(&mut self, msg: &[u8]) {
-        self.0.update(msg)
+        self.0.input(msg)
     }
 
     #[inline]
@@ -36,31 +36,26 @@ impl Hasher for SHA256Algorithm {
     }
 }
 
-pub type RingSHA256Hash = [u8; 32];
+pub type SHA256Hash = [u8; 32];
 
-impl Algorithm<RingSHA256Hash> for SHA256Algorithm {
+impl Algorithm<SHA256Hash> for SHA256Algorithm {
     #[inline]
-    fn hash(&mut self) -> RingSHA256Hash {
+    fn hash(&mut self) -> SHA256Hash {
         let mut h = [0u8; 32];
-        h.copy_from_slice(self.0.clone().finish().as_ref());
+        h.copy_from_slice(self.0.clone().result().as_ref());
         h
     }
 
     #[inline]
     fn reset(&mut self) {
-        self.0 = Context::new(&SHA256);
+        self.0 = Sha256::new();
     }
 
-    fn leaf(&mut self, leaf: RingSHA256Hash) -> RingSHA256Hash {
+    fn leaf(&mut self, leaf: SHA256Hash) -> SHA256Hash {
         leaf
     }
 
-    fn node(
-        &mut self,
-        left: RingSHA256Hash,
-        right: RingSHA256Hash,
-        _height: usize,
-    ) -> RingSHA256Hash {
+    fn node(&mut self, left: SHA256Hash, right: SHA256Hash, _height: usize) -> SHA256Hash {
         // TODO: second preimage attack fix
         left.hash(self);
         right.hash(self);
@@ -98,7 +93,7 @@ mod tests {
     }
 
     #[test]
-    fn test_ring_256_hash() {
+    fn test_sha256_hash() {
         let mut a = SHA256Algorithm::new();
         "hello".hash(&mut a);
         let h1 = a.hash();
@@ -109,7 +104,7 @@ mod tests {
     }
 
     #[test]
-    fn test_ring_sha256_node() {
+    fn test_sha256_node() {
         let mut h1 = [0u8; 32];
         let mut h2 = [0u8; 32];
         let mut h3 = [0u8; 32];
@@ -159,9 +154,8 @@ mod tests {
         //     "e6a6b12f6147ce9ce87c9f2a7f41ddd9587f6ea59ccbfb33fba08e3740d96200"
         // );
 
-        let t: MerkleTree<RingSHA256Hash, SHA256Algorithm> =
-            MerkleTree::from_iter(vec![h1, h2, h3]);
-        let t2: MerkleTree<RingSHA256Hash, SHA256Algorithm> = MerkleTree::from_iter(vec![h1, h2]);
+        let t: MerkleTree<SHA256Hash, SHA256Algorithm> = MerkleTree::from_iter(vec![h1, h2, h3]);
+        let t2: MerkleTree<SHA256Hash, SHA256Algorithm> = MerkleTree::from_iter(vec![h1, h2]);
 
         assert_eq!(t2.as_slice()[0], l1.as_ref());
         assert_eq!(t2.as_slice()[1], l2.as_ref());

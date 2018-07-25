@@ -25,8 +25,8 @@ extern crate num_bigint;
 extern crate num_traits;
 extern crate pairing;
 extern crate rand;
-extern crate ring;
 extern crate sapling_crypto;
+extern crate sha2;
 
 #[cfg(test)]
 extern crate tempfile;

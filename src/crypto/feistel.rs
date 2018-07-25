@@ -1,4 +1,4 @@
-use ring::digest::{Context, SHA256};
+use sha2::{Digest, Sha256};
 
 pub fn permute(num_elements: u32, index: u32, keys: &[u32]) -> u32 {
     let mut u = encode(num_elements, index, keys);
@@ -74,7 +74,7 @@ fn feistel(right: u32, key: u32, right_mask: u32) -> u32 {
     data[6] = (key >> 8) as u8;
     data[7] = key as u8;
 
-    let hash = sha256_digest(&data);
+    let hash = Sha256::digest(&data);
 
     let r = u32::from(hash[0]) << 24
         | u32::from(hash[1]) << 16
@@ -82,12 +82,6 @@ fn feistel(right: u32, key: u32, right_mask: u32) -> u32 {
         | u32::from(hash[3]);
 
     r & right_mask
-}
-
-fn sha256_digest(data: &[u8]) -> Vec<u8> {
-    let mut context = Context::new(&SHA256);
-    context.update(data);
-    context.finish().as_ref().into()
 }
 
 #[cfg(test)]
