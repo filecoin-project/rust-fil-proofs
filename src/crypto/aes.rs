@@ -1,54 +1,31 @@
+use aes::block_cipher_trait::generic_array::GenericArray;
+use aes::Aes256;
+use block_modes::block_padding::ZeroPadding;
+use block_modes::{BlockMode, BlockModeIv, Cbc};
 use error::Result;
-use openssl::symm::{Cipher, Crypter, Mode};
 
 pub fn encode(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>> {
-    if key.len() != 32 {
-        panic!("invalid key length");
-    }
+    assert_eq!(key.len(), 32, "invalid key length");
 
-    let iv = vec![0u8; 16];
+    let iv = GenericArray::from_slice(&[0u8; 16]);
+    let mut mode = Cbc::<Aes256, ZeroPadding>::new_varkey(key, iv).expect("invalid key");
 
-    // Create a cipher context for encryption.
-    let mut encrypter = Crypter::new(
-        Cipher::aes_256_cbc(),
-        Mode::Encrypt,
-        key,
-        Some(iv.as_slice()),
-    )?;
-    encrypter.pad(false);
-
-    let block_size = Cipher::aes_256_cbc().block_size();
-    let mut ciphertext = vec![0; plaintext.len() + block_size];
-
-    let mut count = encrypter.update(plaintext, &mut ciphertext)?;
-    count += encrypter.finalize(&mut ciphertext[count..])?;
-    ciphertext.truncate(count);
+    let mut ciphertext = plaintext.to_vec();
+    mode.encrypt_nopad(&mut ciphertext)
+        .expect("failed to encrypt");
 
     Ok(ciphertext)
 }
 
 pub fn decode(key: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>> {
-    if key.len() != 32 {
-        panic!("invalid key length")
-    }
+    assert_eq!(key.len(), 32, "invalid key length");
+    let iv = GenericArray::from_slice(&[0u8; 16]);
 
-    let iv = vec![0u8; 16];
-    // Create a cipher context for decryption.
-    let mut decrypter = Crypter::new(
-        Cipher::aes_256_cbc(),
-        Mode::Decrypt,
-        key,
-        Some(iv.as_slice()),
-    )?;
-    decrypter.pad(false);
+    let mut mode = Cbc::<Aes256, ZeroPadding>::new_varkey(key, iv).expect("invalid key");
 
-    let block_size = Cipher::aes_256_cbc().block_size();
-    let mut plaintext = vec![0; ciphertext.len() + block_size];
-
-    // Decrypt 2 chunks of ciphertexts successively.
-    let mut count = decrypter.update(ciphertext, &mut plaintext)?;
-    count += decrypter.finalize(&mut plaintext[count..])?;
-    plaintext.truncate(count);
+    let mut plaintext = ciphertext.to_vec();
+    mode.decrypt_nopad(&mut plaintext)
+        .expect("failed to decrypt");
 
     Ok(plaintext)
 }

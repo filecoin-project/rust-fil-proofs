@@ -13,15 +13,16 @@ extern crate failure;
 #[macro_use]
 extern crate lazy_static;
 
+extern crate aes;
 extern crate bellman;
 extern crate blake2_rfc;
+extern crate block_modes;
 extern crate byteorder;
 extern crate libc;
 extern crate memmap;
 extern crate merkle_light;
 extern crate num_bigint;
 extern crate num_traits;
-extern crate openssl;
 extern crate pairing;
 extern crate rand;
 extern crate ring;

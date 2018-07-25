@@ -9,7 +9,6 @@ rand = "0.4"
 ring = "0.12"
 libc = "0.2"
 merkle_light = { git = "https://github.com/dignifiedquire/merkle_light", branch = "master" }
-openssl = "*"
 failure = "0.1"
 bellman = "0.1"
 byteorder = "1"
@@ -22,6 +21,8 @@ log = "0.4"
 env_logger = "0.5"
 indicatif = "0.9"
 colored = "1.6"
+aes = "0.1"
+block-modes = "0.1"
 
 [dependencies.pairing]
 version = "0.14.2"
