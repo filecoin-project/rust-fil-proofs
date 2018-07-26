@@ -1,0 +1,30 @@
+# Dockerfile for CircleCI
+# build with
+# `docker build -t dignfiedquire/rust:latest -f ./Dockerfile-ci .`
+
+FROM debian:stretch
+
+# Some of the dependencies I need to build a few libraries,
+# personalize to your needs. You can use multi-stage builds
+# to produce a lightweight image.
+RUN apt-get update && \
+    apt-get install -y curl file gcc g++ git make openssh-client \
+    autoconf automake cmake libtool libcurl4-openssl-dev libssl-dev \
+    libelf-dev libdw-dev binutils-dev zlib1g-dev libiberty-dev wget \
+    xz-utils pkg-config python
+
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+
+ENV PATH "$PATH:/root/.cargo/bin"
+ENV RUSTFLAGS "-C link-dead-code"
+ENV CFG_RELEASE_CHANNEL "nightly"
+
+RUN rustup update && \
+    rustup install nightly && \
+    rustup default nightly && \
+    rustup component add rustfmt-preview && \
+    rustup component add clippy-preview
+
+RUN bash -l -c 'echo $(rustc --print sysroot)/lib >> /etc/ld.so.conf'
+RUN bash -l -c 'echo /usr/local/lib >> /etc/ld.so.conf'
+RUN ldconfig

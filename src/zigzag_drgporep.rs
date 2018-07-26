@@ -4,8 +4,6 @@ use layered_drgporep::Layers;
 use std::marker::PhantomData;
 use zigzag_graph::{ZigZag, ZigZagGraph};
 
-const DEFAULT_ZIGZAG_LAYERS: usize = 6;
-
 /// ZigZagDrgPorep is a layered PoRep which replicates layer by layer.
 /// Between layers, the graph is 'reversed' in such a way that the dependencies expand with each iteration.
 /// This reversal is not a straightforward inversion -- so we coin the term 'zigzag' to describe the transformation.
@@ -68,6 +66,8 @@ mod tests {
     use porep::PoRep;
     use proof::ProofScheme;
     use rand::{Rng, SeedableRng, XorShiftRng};
+
+    const DEFAULT_ZIGZAG_LAYERS: usize = 6;
 
     #[test]
     fn extract_all() {

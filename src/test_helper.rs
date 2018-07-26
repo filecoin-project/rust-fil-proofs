@@ -24,22 +24,24 @@ macro_rules! table_tests {
     }
 }
 
+pub struct FakeDrgParams {
+    pub prover_id: Fr,
+    pub replica_node: Fr,
+    pub replica_node_path: Vec<Option<(Fr, bool)>>,
+    pub replica_root: Fr,
+    pub replica_parents: Vec<Fr>,
+    pub replica_parents_paths: Vec<Vec<Option<(Fr, bool)>>>,
+    pub data_node: Fr,
+    pub data_node_path: Vec<Option<(Fr, bool)>>,
+    pub data_root: Fr,
+}
+
 pub fn fake_drgpoprep_proof<R: Rng>(
     rng: &mut R,
     tree_depth: usize,
     m: usize,
     sloth_rounds: usize,
-) -> (
-    Fr,
-    Fr,
-    Vec<Option<(Fr, bool)>>,
-    Fr,
-    Vec<Fr>,
-    Vec<Vec<Option<(Fr, bool)>>>,
-    Fr,
-    Vec<Option<(Fr, bool)>>,
-    Fr,
-) {
+) -> FakeDrgParams {
     let prover_id: Fr = rng.gen();
     let challenge = m + 1;
     // Part 1: original data inputs
@@ -103,7 +105,7 @@ pub fn fake_drgpoprep_proof<R: Rng>(
 
     assert_eq!(data_node_path.len(), replica_node_path.len());
 
-    (
+    FakeDrgParams {
         prover_id,
         replica_node,
         replica_node_path,
@@ -113,7 +115,7 @@ pub fn fake_drgpoprep_proof<R: Rng>(
         data_node,
         data_node_path,
         data_root,
-    )
+    }
 }
 
 pub fn random_merkle_path_with_value<R: Rng>(

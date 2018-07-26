@@ -17,7 +17,7 @@ where
 impl<'a, G> Layerable for ZigZagGraph<G> where G: ZigZag {}
 
 impl<G: Graph> ZigZagGraph<G> {
-    fn new<'b>(nodes: usize, base_degree: usize, expansion_degree: usize) -> Self {
+    fn new(nodes: usize, base_degree: usize, expansion_degree: usize) -> Self {
         ZigZagGraph {
             base_graph: G::new(nodes, base_degree),
             expansion_degree,
@@ -39,7 +39,7 @@ pub trait ZigZag: ::std::fmt::Debug + Clone + PartialEq + Eq {
     fn reversed(&self) -> bool;
     fn expanded_parents(&self, node: usize) -> Vec<usize>;
     fn real_index(&self, i: usize) -> usize;
-    fn new_defaulted<'b>(nodes: usize, base_degree: usize) -> Self;
+    fn new_defaulted(nodes: usize, base_degree: usize) -> Self;
 }
 
 impl<Z: ZigZag> Graph for Z {
@@ -113,7 +113,7 @@ impl<'a, G: Graph> ZigZagGraph<G> {
 impl<'a, G: Graph> ZigZag for ZigZagGraph<G> {
     type BaseGraph = G;
 
-    fn new_defaulted<'b>(nodes: usize, base_degree: usize) -> Self {
+    fn new_defaulted(nodes: usize, base_degree: usize) -> Self {
         Self::new(nodes, base_degree, DEFAULT_EXPANSION_DEGREE)
     }
 
@@ -150,12 +150,10 @@ impl<'a, G: Graph> ZigZag for ZigZagGraph<G> {
                     } else {
                         None
                     }
+                } else if other < node {
+                    Some(other)
                 } else {
-                    if other < node {
-                        Some(other)
-                    } else {
-                        None
-                    }
+                    None
                 }
             })
             .collect()

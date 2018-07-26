@@ -216,7 +216,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         pub_inputs: &Self::PublicInputs,
         proof: &Self::Proof,
     ) -> Result<bool> {
-        if !(proof.encoding_proofs.len() == pub_params.layers) {
+        if proof.encoding_proofs.len() != pub_params.layers {
             return Ok(false);
         }
 

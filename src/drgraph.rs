@@ -41,17 +41,13 @@ pub fn hash_leaf(data: &Hashable<TreeAlgorithm>) -> TreeHash {
     let mut a = TreeAlgorithm::default();
     data.hash(&mut a);
     let item_hash = a.hash();
-    let leaf_hash = a.leaf(item_hash);
-
-    leaf_hash
+    a.leaf(item_hash)
 }
 
 pub fn hash_node(data: &Hashable<TreeAlgorithm>) -> TreeHash {
     let mut a = TreeAlgorithm::default();
     data.hash(&mut a);
-    let item_hash = a.hash();
-
-    item_hash
+    a.hash()
 }
 
 pub fn make_proof_for_test(
@@ -59,11 +55,7 @@ pub fn make_proof_for_test(
     leaf: TreeHash,
     path: Vec<(TreeHash, bool)>,
 ) -> MerkleProof {
-    MerkleProof {
-        path: path,
-        root: root,
-        leaf: leaf,
-    }
+    MerkleProof { path, root, leaf }
 }
 
 impl MerkleProof {
@@ -91,19 +83,18 @@ impl MerkleProof {
             return false;
         }
 
-        self.root()
-            == (0..self.path.len()).fold(self.leaf, |h, i| {
-                a.reset();
-                let is_right = self.path[i].1;
+        self.root() == (0..self.path.len()).fold(self.leaf, |h, i| {
+            a.reset();
+            let is_right = self.path[i].1;
 
-                let (left, right) = if is_right {
-                    (self.path[i].0, h)
-                } else {
-                    (h, self.path[i].0)
-                };
+            let (left, right) = if is_right {
+                (self.path[i].0, h)
+            } else {
+                (h, self.path[i].0)
+            };
 
-                a.node(left, right, i)
-            })
+            a.node(left, right, i)
+        })
     }
 
     /// Validates that the data hashes to the leaf of the merkle path.

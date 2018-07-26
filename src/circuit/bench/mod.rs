@@ -47,6 +47,7 @@ fn eval_lc<E: Engine>(terms: &[(Variable, E::Fr)], inputs: &[E::Fr], aux: &[E::F
     acc
 }
 
+#[derive(Debug)]
 pub struct BenchCS<E: Engine> {
     inputs: Vec<E::Fr>,
     aux: Vec<E::Fr>,
@@ -57,6 +58,16 @@ pub struct BenchCS<E: Engine> {
 
 impl<E: Engine> BenchCS<E> {
     pub fn new() -> Self {
+        BenchCS::default()
+    }
+
+    pub fn num_constraints(&self) -> usize {
+        self.a.len()
+    }
+}
+
+impl<E: Engine> Default for BenchCS<E> {
+    fn default() -> Self {
         BenchCS {
             inputs: vec![E::Fr::one()],
             aux: vec![],
@@ -64,10 +75,6 @@ impl<E: Engine> BenchCS<E> {
             b: vec![],
             c: vec![],
         }
-    }
-
-    pub fn num_constraints(&self) -> usize {
-        self.a.len()
     }
 }
 
