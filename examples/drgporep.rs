@@ -68,31 +68,25 @@ impl DrgPoRepApp {
         lambda: usize,
         m: usize,
     ) -> BenchCS<Bls12> {
-        let (
-            prover_id,
-            replica_node,
-            replica_node_path,
-            replica_root,
-            replica_parents,
-            replica_parents_paths,
-            data_node,
-            data_node_path,
-            data_root,
-        ) = fake_drgpoprep_proof(rng, tree_depth, m, SLOTH_ROUNDS);
+        let f = fake_drgpoprep_proof(rng, tree_depth, m, SLOTH_ROUNDS);
 
-        let prover_bytes = fr_into_bytes::<Bls12>(&prover_id);
+        let prover_bytes = fr_into_bytes::<Bls12>(&f.prover_id);
         // create an instance of our circut (with the witness)
         let c = DrgPoRepExample {
             params: engine_params,
             lambda: lambda * 8,
-            replica_node: Some(&replica_node),
-            replica_node_path: &replica_node_path,
-            replica_root: Some(replica_root),
-            replica_parents: replica_parents.iter().map(|parent| Some(parent)).collect(),
-            replica_parents_paths: &replica_parents_paths,
-            data_node: Some(&data_node),
-            data_node_path: data_node_path.clone(),
-            data_root: Some(data_root),
+            replica_node: Some(&f.replica_node),
+            replica_node_path: &f.replica_node_path,
+            replica_root: Some(f.replica_root),
+            replica_parents: f
+                .replica_parents
+                .iter()
+                .map(|parent| Some(parent))
+                .collect(),
+            replica_parents_paths: &f.replica_parents_paths,
+            data_node: Some(&f.data_node),
+            data_node_path: f.data_node_path.clone(),
+            data_root: Some(f.data_root),
             prover_id: Some(prover_bytes.as_slice()),
             m,
         };
@@ -155,32 +149,26 @@ impl Example<Bls12> for DrgPoRepApp {
         lambda: usize,
         m: usize,
     ) -> Proof<Bls12> {
-        let (
-            prover_id,
-            replica_node,
-            replica_node_path,
-            replica_root,
-            replica_parents,
-            replica_parents_paths,
-            data_node,
-            data_node_path,
-            data_root,
-        ) = fake_drgpoprep_proof(rng, tree_depth, m, SLOTH_ROUNDS);
+        let f = fake_drgpoprep_proof(rng, tree_depth, m, SLOTH_ROUNDS);
 
-        let prover_bytes = fr_into_bytes::<Bls12>(&prover_id);
+        let prover_bytes = fr_into_bytes::<Bls12>(&f.prover_id);
 
         // create an instance of our circut (with the witness)
         let c = DrgPoRepExample {
             params: engine_params,
             lambda: lambda * 8,
-            replica_node: Some(&replica_node),
-            replica_node_path: &replica_node_path,
-            replica_root: Some(replica_root),
-            replica_parents: replica_parents.iter().map(|parent| Some(parent)).collect(),
-            replica_parents_paths: &replica_parents_paths,
-            data_node: Some(&data_node),
-            data_node_path: data_node_path.clone(),
-            data_root: Some(data_root),
+            replica_node: Some(&f.replica_node),
+            replica_node_path: &f.replica_node_path,
+            replica_root: Some(f.replica_root),
+            replica_parents: f
+                .replica_parents
+                .iter()
+                .map(|parent| Some(parent))
+                .collect(),
+            replica_parents_paths: &f.replica_parents_paths,
+            data_node: Some(&f.data_node),
+            data_node_path: f.data_node_path.clone(),
+            data_root: Some(f.data_root),
             prover_id: Some(prover_bytes.as_slice()),
             m,
         };

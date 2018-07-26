@@ -68,7 +68,7 @@ impl<W: Write> Write for Fr32Writer<W> {
 impl<W: Write> Fr32Writer<W> {
     pub fn new(inner: W) -> Fr32Writer<W> {
         Fr32Writer {
-            inner: inner,
+            inner,
             prefix: 0,
             prefix_size: 0,
             bits_needed: FR_INPUT_BYTE_LIMIT,
@@ -146,7 +146,7 @@ impl<W: Write> Fr32Writer<W> {
     pub fn finish(&mut self) -> Result<usize> {
         if self.prefix_size > 0 {
             assert!(self.prefix_size <= 8);
-            let b = self.prefix.clone();
+            let b = self.prefix;
             self.ensure_write(&[b])?;
             self.flush()?;
             self.prefix_size = 0;
@@ -160,7 +160,7 @@ impl<W: Write> Fr32Writer<W> {
     fn ensure_write(&mut self, mut buffer: &[u8]) -> Result<usize> {
         let mut bytes_written = 0;
 
-        while buffer.len() > 0 {
+        while !buffer.is_empty() {
             let n = self.inner.write(buffer)?;
 
             buffer = &buffer[n..buffer.len()];
