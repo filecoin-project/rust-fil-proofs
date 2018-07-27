@@ -36,4 +36,5 @@ Running them
 ```
 > ./target/release/examples/merklepor
 > ./target/release/examples/drgporep
+> ./target/release/examples/drgporep-vanilla
 ```

@@ -1,3 +1,4 @@
+use byteorder::{LittleEndian, WriteBytesExt};
 use crypto::{kdf, sloth};
 use drgraph::{Graph, MerkleProof};
 
@@ -68,6 +69,24 @@ pub struct Proof {
     pub replica_node: DataProof,
     pub replica_parents: ReplicaParents,
     pub node: MerkleProof,
+}
+
+impl Proof {
+    pub fn serialize(&self) -> Vec<u8> {
+        vec![
+            self.replica_node.serialize(),
+            self.replica_parents
+                .iter()
+                .fold(Vec::new(), |mut acc, (s, p)| {
+                    let mut v = vec![0u8; 4];
+                    v.write_u32::<LittleEndian>(*s as u32).unwrap();
+                    acc.extend(v);
+                    acc.extend(p.serialize());
+                    acc
+                }),
+            self.node.serialize(),
+        ].concat()
+    }
 }
 
 impl Proof {
@@ -333,7 +352,6 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let degree = 5;
-        let lambda = lambda;
 
         let prover_id = fr_into_bytes::<Bls12>(&rng.gen());
         let data: Vec<u8> = (0..nodes)

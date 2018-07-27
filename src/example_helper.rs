@@ -11,7 +11,7 @@ use std::io::Write;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-fn prettyb(num: usize) -> String {
+pub fn prettyb(num: usize) -> String {
     let num = num as f64;
     let negative = if num.is_sign_positive() { "" } else { "-" };
     let num = num.abs();
@@ -29,6 +29,31 @@ fn prettyb(num: usize) -> String {
         .unwrap() * 1_f64;
     let unit = units[exponent as usize];
     format!("{}{} {}", negative, pretty_bytes, unit)
+}
+
+pub fn init_logger() {
+    let mut builder = env_logger::Builder::new();
+    builder
+        .filter_level(LevelFilter::Info)
+        .format(|buf, record| {
+            let ts = buf.timestamp();
+            let level = match record.level() {
+                Level::Trace => "TRACE".purple(),
+                Level::Debug => "DEBUG".blue(),
+                Level::Info => "INFO ".green(),
+                Level::Warn => "WARN ".yellow(),
+                Level::Error => "ERROR".red(),
+            };
+            writeln!(
+                buf,
+                "{} {} {} > {}",
+                ts,
+                level,
+                record.target(),
+                record.args()
+            )
+        })
+        .init();
 }
 
 /// Generate a unique cache path, based on the inputs.
@@ -237,31 +262,6 @@ pub trait Example<E: JubjubEngine>: Default {
         info!(".")
     }
 
-    fn init_logger(&self) {
-        let mut builder = env_logger::Builder::new();
-        builder
-            .filter_level(LevelFilter::Info)
-            .format(|buf, record| {
-                let ts = buf.timestamp();
-                let level = match record.level() {
-                    Level::Trace => "TRACE".purple(),
-                    Level::Debug => "DEBUG".blue(),
-                    Level::Info => "INFO ".green(),
-                    Level::Warn => "WARN ".yellow(),
-                    Level::Error => "ERROR".red(),
-                };
-                writeln!(
-                    buf,
-                    "{} {} {} > {}",
-                    ts,
-                    level,
-                    record.target(),
-                    record.args()
-                )
-            })
-            .init();
-    }
-
     fn clap(&self) -> clap::ArgMatches {
         App::new(stringify!($name))
             .version("1.0")
@@ -300,7 +300,7 @@ pub trait Example<E: JubjubEngine>: Default {
         let mut instance = Self::default();
         // set default logging level to info
 
-        instance.init_logger();
+        init_logger();
 
         let (data_size, challenge_count, m, typ) = {
             let matches = instance.clap();
