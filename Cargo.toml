@@ -3,6 +3,9 @@ name = "proofs"
 version = "0.1.0"
 authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
 
+[lib]
+crate-type = ["rlib", "dylib"]
+
 [dependencies]
 sapling-crypto = { git = "https://github.com/zcash-hackworks/sapling-crypto", branch = "master" }
 rand = "0.4"
