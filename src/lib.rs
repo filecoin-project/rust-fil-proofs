@@ -12,7 +12,6 @@
 extern crate failure;
 #[macro_use]
 extern crate lazy_static;
-
 extern crate aes;
 extern crate bellman;
 extern crate blake2_rfc;
@@ -27,18 +26,15 @@ extern crate pairing;
 extern crate rand;
 extern crate sapling_crypto;
 extern crate sha2;
-
 #[cfg(test)]
 extern crate tempfile;
-
 #[cfg(test)]
 #[macro_use]
 extern crate proptest;
-
 #[macro_use]
 extern crate clap;
 extern crate env_logger;
-extern crate indicatif;
+extern crate pbr;
 #[macro_use]
 extern crate log;
 extern crate colored;

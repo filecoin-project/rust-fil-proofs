@@ -1,6 +1,6 @@
 extern crate bellman;
-extern crate indicatif;
 extern crate pairing;
+extern crate pbr;
 extern crate proofs;
 extern crate rand;
 extern crate sapling_crypto;

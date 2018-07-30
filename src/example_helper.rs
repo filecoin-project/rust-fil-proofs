@@ -2,8 +2,8 @@ use bellman::groth16::*;
 use clap::{self, App, Arg, SubCommand};
 use colored::*;
 use env_logger;
-use indicatif::{ProgressBar, ProgressStyle};
 use log::{Level, LevelFilter};
+use pbr::ProgressBar;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use sapling_crypto::jubjub::JubjubEngine;
 use std::fs::File;
@@ -131,14 +131,7 @@ pub trait Example<E: JubjubEngine>: Default {
         let mut total_proving = Duration::new(0, 0);
         let mut total_verifying = Duration::new(0, 0);
 
-        let pb = ProgressBar::new(u64::from(samples * 2));
-        pb.set_style(
-            ProgressStyle::default_bar()
-                .template(
-                    "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
-                )
-                .progress_chars("#>-"),
-        );
+        let mut pb = ProgressBar::new(u64::from(samples * 2));
 
         for _ in 0..samples {
             proof_vec.truncate(0);
@@ -160,7 +153,7 @@ pub trait Example<E: JubjubEngine>: Default {
                 .write(&mut proof_vec)
                 .expect("failed to serialize proof");
             total_proving += start.elapsed();
-            pb.inc(1);
+            pb.inc();
 
             // -- verify proof
 
@@ -171,7 +164,7 @@ pub trait Example<E: JubjubEngine>: Default {
             }
 
             total_verifying += start.elapsed();
-            pb.inc(1);
+            pb.inc();
         }
 
         // -- print statistics
@@ -210,14 +203,7 @@ pub trait Example<E: JubjubEngine>: Default {
 
         let mut total_synth = Duration::new(0, 0);
 
-        let pb = ProgressBar::new(u64::from(samples));
-        pb.set_style(
-            ProgressStyle::default_bar()
-                .template(
-                    "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
-                )
-                .progress_chars("#>-"),
-        );
+        let mut pb = ProgressBar::new(u64::from(samples));
 
         info!(
             target: "stats",
@@ -247,7 +233,7 @@ pub trait Example<E: JubjubEngine>: Default {
                 m,
             );
             total_synth += start.elapsed();
-            pb.inc(1);
+            pb.inc();
         }
 
         // -- print statistics
