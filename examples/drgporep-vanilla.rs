@@ -21,13 +21,14 @@ use proofs::fr32::{bytes_into_fr, fr_into_bytes};
 use proofs::porep::PoRep;
 use proofs::proof::ProofScheme;
 
-fn do_the_work(data_size: usize, m: usize) {
+fn do_the_work(data_size: usize, m: usize, sloth_iter: usize) {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
     let challenge = 2;
     let lambda = 32;
 
     info!(target: "config", "data size: {}", prettyb(data_size));
     info!(target: "config", "m: {}", m);
+    info!(target: "config", "sloth: {}", sloth_iter);
 
     info!("generating fake data");
 
@@ -41,6 +42,7 @@ fn do_the_work(data_size: usize, m: usize) {
     let sp = SetupParams {
         lambda,
         drg: DrgParams { nodes, degree: m },
+        sloth_iter,
     };
 
     info!("running setup");
@@ -115,17 +117,23 @@ fn main() {
                 .long("size")
                 .help("The data size in KB")
                 .takes_value(true),
-        )
-        .arg(
+        ).arg(
             Arg::with_name("m")
                 .help("The size of m")
+                .long("m")
                 .default_value("6")
                 .takes_value(true),
-        )
-        .get_matches();
+        ).arg(
+            Arg::with_name("sloth")
+                .help("The number of sloth iterations, defaults to 1")
+                .long("sloth")
+                .default_value("1")
+                .takes_value(true),
+        ).get_matches();
 
     let data_size = value_t!(matches, "size", usize).unwrap() * 1024;
     let m = value_t!(matches, "m", usize).unwrap();
+    let sloth_iter = value_t!(matches, "sloth", usize).unwrap();
 
-    do_the_work(data_size, m);
+    do_the_work(data_size, m, sloth_iter);
 }

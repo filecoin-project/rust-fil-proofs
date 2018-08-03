@@ -20,6 +20,7 @@ use proofs::test_helper::fake_drgpoprep_proof;
 struct DrgPoRepExample<'a, E: JubjubEngine> {
     params: &'a E::Params,
     lambda: usize,
+    sloth_iter: usize,
     replica_node: Option<&'a E::Fr>,
     replica_node_path: &'a [Option<(E::Fr, bool)>],
     replica_root: Option<E::Fr>,
@@ -38,6 +39,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepExample<'a, E> {
             cs.namespace(|| "drgporep"),
             self.params,
             self.lambda,
+            self.sloth_iter,
             self.replica_node,
             self.replica_node_path,
             self.replica_root,
@@ -67,6 +69,7 @@ impl DrgPoRepApp {
         _leaves: usize,
         lambda: usize,
         m: usize,
+        sloth_iter: usize,
     ) -> BenchCS<Bls12> {
         let f = fake_drgpoprep_proof(rng, tree_depth, m, SLOTH_ROUNDS);
 
@@ -75,6 +78,7 @@ impl DrgPoRepApp {
         let c = DrgPoRepExample {
             params: engine_params,
             lambda: lambda * 8,
+            sloth_iter,
             replica_node: Some(&f.replica_node),
             replica_node_path: &f.replica_node_path,
             replica_root: Some(f.replica_root),
@@ -114,11 +118,13 @@ impl Example<Bls12> for DrgPoRepApp {
         _challenge_count: usize,
         lambda: usize,
         m: usize,
+        sloth_iter: usize,
     ) -> Parameters<Bls12> {
         generate_random_parameters::<Bls12, _, _>(
             DrgPoRepExample {
                 params: jubjub_params,
                 lambda: lambda * 8,
+                sloth_iter,
                 replica_node: None,
                 replica_node_path: &vec![None; tree_depth],
                 replica_root: None,
@@ -148,6 +154,7 @@ impl Example<Bls12> for DrgPoRepApp {
         _leaves: usize,
         lambda: usize,
         m: usize,
+        sloth_iter: usize,
     ) -> Proof<Bls12> {
         let f = fake_drgpoprep_proof(rng, tree_depth, m, SLOTH_ROUNDS);
 
@@ -157,6 +164,7 @@ impl Example<Bls12> for DrgPoRepApp {
         let c = DrgPoRepExample {
             params: engine_params,
             lambda: lambda * 8,
+            sloth_iter,
             replica_node: Some(&f.replica_node),
             replica_node_path: &f.replica_node_path,
             replica_root: Some(f.replica_root),
@@ -194,6 +202,7 @@ impl Example<Bls12> for DrgPoRepApp {
         leaves: usize,
         lambda: usize,
         m: usize,
+        sloth_iter: usize,
     ) {
         self.create_bench_circuit(
             rng,
@@ -203,6 +212,7 @@ impl Example<Bls12> for DrgPoRepApp {
             leaves,
             lambda,
             m,
+            sloth_iter,
         );
     }
 
@@ -215,6 +225,7 @@ impl Example<Bls12> for DrgPoRepApp {
         leaves: usize,
         lambda: usize,
         m: usize,
+        sloth_iter: usize,
     ) -> usize {
         let cs = self.create_bench_circuit(
             rng,
@@ -224,6 +235,7 @@ impl Example<Bls12> for DrgPoRepApp {
             leaves,
             lambda,
             m,
+            sloth_iter,
         );
 
         cs.num_constraints()

@@ -15,6 +15,7 @@ use util::bytes_into_boolean_vec;
 /// * `cs` - Constraint System
 /// * `params` - parameters for the curve
 /// * `lambda` - The size of the individual data leaves in bits.
+/// * `sloth_iter` - How many rounds sloth should run for.
 /// * `replica_node` - The replica node being proven.
 /// * `replica_node_path` - The path of the replica node being proven.
 /// * `replica_root` - The merkle root of the replica.
@@ -45,6 +46,7 @@ pub fn drgporep<E, CS>(
     mut cs: CS,
     params: &E::Params,
     lambda: usize,
+    sloth_iter: usize,
     replica_node: Option<&E::Fr>,
     replica_node_path: &[Option<(E::Fr, bool)>],
     replica_root: Option<E::Fr>,
@@ -122,8 +124,7 @@ where
                 }
 
                 Ok(v)
-            })
-            .collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?
+            }).collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?
     };
 
     // generate the encryption key
@@ -139,7 +140,7 @@ where
         cs.namespace(|| "decode replica node commitment"),
         &key,
         replica_node,
-        sloth::DEFAULT_ROUNDS,
+        sloth_iter,
     )?;
 
     let expected = num::AllocatedNum::alloc(cs.namespace(|| "data node"), || {
@@ -185,6 +186,7 @@ mod tests {
         let nodes = 12;
         let degree = 6;
         let challenge = 2;
+        let sloth_iter = 1;
 
         let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
         let mut data: Vec<u8> = (0..nodes)
@@ -205,6 +207,7 @@ mod tests {
                 nodes: nodes,
                 degree,
             },
+            sloth_iter,
         };
 
         let pp =
@@ -265,6 +268,7 @@ mod tests {
             cs.namespace(|| "drgporep"),
             params,
             lambda,
+            sloth_iter,
             replica_node,
             &replica_node_path,
             replica_root,
@@ -304,12 +308,14 @@ mod tests {
         let n = (1024 * 1024 * 1024) / 32;
         let m = 6;
         let tree_depth = (n as f64).log2().ceil() as usize;
+        let sloth_iter = 1;
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
         drgporep(
             cs.namespace(|| "drgporep"),
             params,
             lambda * 8,
+            sloth_iter,
             Some(&rng.gen()),
             &vec![Some(rng.gen()); tree_depth],
             Some(rng.gen()),

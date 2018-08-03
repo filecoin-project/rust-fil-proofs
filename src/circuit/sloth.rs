@@ -1,9 +1,6 @@
 use bellman::{ConstraintSystem, SynthesisError};
-use crypto;
 use pairing::{Engine, Field};
 use sapling_crypto::circuit::num;
-
-pub const DEFAULT_ROUNDS: usize = crypto::sloth::DEFAULT_ROUNDS;
 
 /// Circuit version of sloth decoding.
 pub fn decode<E, CS>(

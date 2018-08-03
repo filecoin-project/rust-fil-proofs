@@ -44,6 +44,7 @@ impl MerklePorApp {
         _leaves: usize,
         _lambda: usize,
         _m: usize,
+        _sloth_iter: usize,
     ) -> BenchCS<Bls12> {
         let (auth_path, leaf, root) = random_merkle_path(rng, tree_depth);
         self.root = root;
@@ -82,6 +83,7 @@ impl Example<Bls12> for MerklePorApp {
         challenge_count: usize,
         _lambda: usize,
         _m: usize,
+        _sloth_iter: usize,
     ) -> Parameters<Bls12> {
         generate_random_parameters::<Bls12, _, _>(
             circuit::ppor::ParallelProofOfRetrievability {
@@ -108,6 +110,7 @@ impl Example<Bls12> for MerklePorApp {
         _leaves: usize,
         _lambda: usize,
         _m: usize,
+        _sloth_iter: usize,
     ) -> Proof<Bls12> {
         let (auth_path, leaf, root) = random_merkle_path(rng, tree_depth);
         self.root = root;
@@ -154,8 +157,7 @@ impl Example<Bls12> for MerklePorApp {
                 let mut input = vec![*values[j].unwrap()];
                 input.extend(packed_auth_path);
                 input
-            })
-            .collect();
+            }).collect();
 
         // add the root as the last one
         expected_inputs.push(self.root);
@@ -173,6 +175,7 @@ impl Example<Bls12> for MerklePorApp {
         leaves: usize,
         lambda: usize,
         m: usize,
+        sloth_iter: usize,
     ) {
         self.create_bench_circuit(
             rng,
@@ -182,6 +185,7 @@ impl Example<Bls12> for MerklePorApp {
             leaves,
             lambda,
             m,
+            sloth_iter,
         );
     }
 
@@ -194,6 +198,7 @@ impl Example<Bls12> for MerklePorApp {
         leaves: usize,
         lambda: usize,
         m: usize,
+        sloth_iter: usize,
     ) -> usize {
         let cs = self.create_bench_circuit(
             rng,
@@ -203,6 +208,7 @@ impl Example<Bls12> for MerklePorApp {
             leaves,
             lambda,
             m,
+            sloth_iter,
         );
         cs.num_constraints()
     }
