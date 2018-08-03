@@ -30,6 +30,7 @@ pub struct PrivateInputs<'a> {
 pub struct SetupParams {
     pub lambda: usize,
     pub drg: DrgParams,
+    pub sloth_iter: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -48,6 +49,7 @@ pub struct DrgParams {
 pub struct PublicParams<G: Graph> {
     pub lambda: usize,
     pub graph: G,
+    pub sloth_iter: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -133,6 +135,7 @@ impl<'a, G: Graph> ProofScheme<'a> for DrgPoRep<G> {
         Ok(PublicParams {
             lambda: sp.lambda,
             graph,
+            sloth_iter: sp.sloth_iter,
         })
     }
 
@@ -247,7 +250,7 @@ impl<'a, G: Graph> ProofScheme<'a> for DrgPoRep<G> {
             });
         let key = kdf::kdf::<Bls12>(key_input.as_slice(), pub_params.graph.degree());
         let unsealed: Fr =
-            sloth::decode::<Bls12>(&key, &proof.replica_node.data, sloth::DEFAULT_ROUNDS);
+            sloth::decode::<Bls12>(&key, &proof.replica_node.data, pub_params.sloth_iter);
 
         if unsealed != proof.node.data {
             return Ok(false);
@@ -277,6 +280,7 @@ impl<'a, G: Graph> PoRep<'a> for DrgPoRep<G> {
         vde::encode(
             &pp.graph,
             pp.lambda,
+            pp.sloth_iter,
             &bytes_into_fr::<Bls12>(prover_id)?,
             data,
         )?;
@@ -298,6 +302,7 @@ impl<'a, G: Graph> PoRep<'a> for DrgPoRep<G> {
         vde::decode(
             &pp.graph,
             pp.lambda,
+            pp.sloth_iter,
             &bytes_into_fr::<Bls12>(prover_id)?,
             data,
         )
@@ -312,6 +317,7 @@ impl<'a, G: Graph> PoRep<'a> for DrgPoRep<G> {
         Ok(fr_into_bytes::<Bls12>(&decode_block(
             &pp.graph,
             pp.lambda,
+            pp.sloth_iter,
             &bytes_into_fr::<Bls12>(prover_id)?,
             data,
             node,
@@ -328,6 +334,7 @@ mod tests {
     #[test]
     fn extract_all() {
         let lambda = 32;
+        let sloth_iter = 1;
         let prover_id = vec![1u8; 32];
         let data = vec![2u8; 32 * 3];
         // create a copy, so we can compare roundtrips
@@ -340,6 +347,7 @@ mod tests {
                 degree: 10,
                 seed: new_seed(),
             },
+            sloth_iter,
         };
 
         let pp = DrgPoRep::<BucketGraph>::setup(&sp).unwrap();
@@ -357,6 +365,7 @@ mod tests {
     #[test]
     fn extract() {
         let lambda = 32;
+        let sloth_iter = 1;
         let prover_id = vec![1u8; 32];
         let nodes = 3;
         let data = vec![2u8; 32 * nodes];
@@ -371,6 +380,7 @@ mod tests {
                 degree: 10,
                 seed: new_seed(),
             },
+            sloth_iter,
         };
 
         let pp = DrgPoRep::<BucketGraph>::setup(&sp).unwrap();
@@ -407,7 +417,7 @@ mod tests {
             repeat = false;
 
             let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-
+            let sloth_iter = 1;
             let degree = 5;
             let seed = new_seed();
 
@@ -427,6 +437,7 @@ mod tests {
                     degree,
                     seed,
                 },
+                sloth_iter,
             };
 
             let pp = DrgPoRep::<BucketGraph>::setup(&sp).unwrap();

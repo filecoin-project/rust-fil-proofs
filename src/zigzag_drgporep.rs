@@ -53,6 +53,7 @@ where
     drgporep::PublicParams {
         graph: pp.graph.zigzag(),
         lambda: pp.lambda,
+        sloth_iter: pp.sloth_iter,
     }
 }
 
@@ -72,6 +73,7 @@ mod tests {
     #[test]
     fn extract_all() {
         let lambda = 32;
+        let sloth_iter = 1;
         let prover_id = vec![1u8; 32];
         let data = vec![2u8; 32 * 3];
 
@@ -86,6 +88,7 @@ mod tests {
                     degree: 10,
                     seed: new_seed(),
                 },
+                sloth_iter,
             },
             layers: DEFAULT_ZIGZAG_LAYERS,
         };
@@ -121,6 +124,7 @@ mod tests {
 
         let degree = i * 10;
         let lambda = lambda;
+        let sloth_iter = 1;
         let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
         let data: Vec<u8> = (0..n)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
@@ -136,6 +140,7 @@ mod tests {
                     degree,
                     seed: new_seed(),
                 },
+                sloth_iter,
             },
             layers: DEFAULT_ZIGZAG_LAYERS,
         };
