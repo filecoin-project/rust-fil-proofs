@@ -40,7 +40,11 @@ fn do_the_work(data_size: usize, m: usize) {
 
     let sp = SetupParams {
         lambda,
-        drg: DrgParams { nodes, degree: m },
+        drg: DrgParams {
+            nodes,
+            degree: m,
+            seed: new_seed(),
+        },
     };
 
     info!("running setup");
@@ -53,7 +57,7 @@ fn do_the_work(data_size: usize, m: usize) {
     let (tau, aux) = DrgPoRep::replicate(&pp, prover_id.as_slice(), data.as_mut_slice()).unwrap();
 
     let pub_inputs = PublicInputs {
-        prover_id: &bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
+        prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
         challenge,
         tau: &tau,
     };
@@ -115,14 +119,12 @@ fn main() {
                 .long("size")
                 .help("The data size in KB")
                 .takes_value(true),
-        )
-        .arg(
+        ).arg(
             Arg::with_name("m")
                 .help("The size of m")
                 .default_value("6")
                 .takes_value(true),
-        )
-        .get_matches();
+        ).get_matches();
 
     let data_size = value_t!(matches, "size", usize).unwrap() * 1024;
     let m = value_t!(matches, "m", usize).unwrap();

@@ -17,9 +17,9 @@ where
 impl<'a, G> Layerable for ZigZagGraph<G> where G: ZigZag {}
 
 impl<G: Graph> ZigZagGraph<G> {
-    fn new(nodes: usize, base_degree: usize, expansion_degree: usize) -> Self {
+    fn new(nodes: usize, base_degree: usize, expansion_degree: usize, seed: [u32; 7]) -> Self {
         ZigZagGraph {
-            base_graph: G::new(nodes, base_degree),
+            base_graph: G::new(nodes, base_degree, seed),
             expansion_degree,
             reversed: false,
         }
@@ -39,7 +39,7 @@ pub trait ZigZag: ::std::fmt::Debug + Clone + PartialEq + Eq {
     fn reversed(&self) -> bool;
     fn expanded_parents(&self, node: usize) -> Vec<usize>;
     fn real_index(&self, i: usize) -> usize;
-    fn new_defaulted(nodes: usize, base_degree: usize) -> Self;
+    fn new_defaulted(nodes: usize, base_degree: usize, seed: [u32; 7]) -> Self;
 }
 
 impl<Z: ZigZag> Graph for Z {
@@ -83,8 +83,12 @@ impl<Z: ZigZag> Graph for Z {
         parents
     }
 
-    fn new(nodes: usize, base_degree: usize) -> Self {
-        Z::new_defaulted(nodes, base_degree)
+    fn seed(&self) -> [u32; 7] {
+        self.base_graph().seed()
+    }
+
+    fn new(nodes: usize, base_degree: usize, seed: [u32; 7]) -> Self {
+        Z::new_defaulted(nodes, base_degree, seed)
     }
 }
 
@@ -113,8 +117,8 @@ impl<'a, G: Graph> ZigZagGraph<G> {
 impl<'a, G: Graph> ZigZag for ZigZagGraph<G> {
     type BaseGraph = G;
 
-    fn new_defaulted(nodes: usize, base_degree: usize) -> Self {
-        Self::new(nodes, base_degree, DEFAULT_EXPANSION_DEGREE)
+    fn new_defaulted(nodes: usize, base_degree: usize, seed: [u32; 7]) -> Self {
+        Self::new(nodes, base_degree, DEFAULT_EXPANSION_DEGREE, seed)
     }
 
     /// To zigzag a graph, we just toggle its reversed field.
@@ -155,8 +159,7 @@ impl<'a, G: Graph> ZigZag for ZigZagGraph<G> {
                 } else {
                     None
                 }
-            })
-            .collect()
+            }).collect()
     }
 
     #[inline]
@@ -172,7 +175,7 @@ impl<'a, G: Graph> ZigZag for ZigZagGraph<G> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use drgraph::BucketGraph;
+    use drgraph::{new_seed, BucketGraph};
     use std::collections::HashMap;
 
     fn assert_graph_ascending<G: Graph>(g: G) {
@@ -202,7 +205,7 @@ mod tests {
 
     #[test]
     fn zigzag_graph_zigzags() {
-        let g = ZigZagGraph::<BucketGraph>::new(50, 5, DEFAULT_EXPANSION_DEGREE);
+        let g = ZigZagGraph::<BucketGraph>::new(50, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
         let gz = g.zigzag();
 
         assert_graph_ascending(g);
@@ -212,7 +215,7 @@ mod tests {
     #[test]
     fn expansion() {
         // We need a graph.
-        let g = ZigZagGraph::<BucketGraph>::new(25, 5, DEFAULT_EXPANSION_DEGREE);
+        let g = ZigZagGraph::<BucketGraph>::new(25, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
 
         // We're going to fully realize the expansion-graph component, in a HashMap.
         let mut gcache: HashMap<usize, Vec<usize>> = HashMap::new();

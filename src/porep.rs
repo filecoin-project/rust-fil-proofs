@@ -8,7 +8,7 @@ pub struct PublicParams {
     pub time: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Tau {
     pub comm_r: TreeHash,
     pub comm_d: TreeHash,

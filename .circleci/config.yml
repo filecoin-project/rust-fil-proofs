@@ -3,13 +3,13 @@ version: 2
 jobs:
   cargo_fetch:
     docker:
-      - image: dignifiedquire/rust:latest
+      - image: clwk/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
       - restore_cache:
           keys:
-            - cargo-v3-{{ checksum "Cargo.toml" }}
+            - cargo-v7-{{ checksum "Cargo.toml" }}
       - run: cargo update
       - run: cargo fetch
       - persist_to_workspace:
@@ -17,13 +17,13 @@ jobs:
           paths:
             - Cargo.lock
       - save_cache:
-          key: cargo-v3-{{ checksum "Cargo.toml" }}
+          key: cargo-v7-{{ checksum "Cargo.toml" }}
           paths:
             - /root/.cargo
             - /root/.rustup
   test:
     docker:
-      - image: dignifiedquire/rust:latest
+      - image: clwk/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -31,7 +31,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v3-{{ checksum "Cargo.toml" }}
+            - cargo-v7-{{ checksum "Cargo.toml" }}
       - run:
           name: Build and test
           command: cargo +stable test --verbose --frozen
@@ -47,7 +47,7 @@ jobs:
             - target/debug/*
   test_release:
     docker:
-      - image: dignifiedquire/rust:latest
+      - image: clwk/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -55,13 +55,13 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v3-{{ checksum "Cargo.toml" }}
+            - cargo-v7-{{ checksum "Cargo.toml" }}
       - run:
           name: Build and test in release profile
           command: cargo +stable test --verbose --release --frozen
   test_nightly:
     docker:
-      - image: dignifiedquire/rust:latest
+      - image: clwk/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -69,13 +69,13 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v3-{{ checksum "Cargo.toml" }}
+            - cargo-v7-{{ checksum "Cargo.toml" }}
       - run:
           name: Build and test with nightly Rust
           command: cargo +nightly test --verbose --frozen
   rustfmt:
     docker:
-      - image: dignifiedquire/rust:latest
+      - image: clwk/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -83,14 +83,14 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v3-{{ checksum "Cargo.toml" }}
+            - cargo-v7-{{ checksum "Cargo.toml" }}
       - run:
           name: Run cargo fmt
           command: cargo fmt -- --check
 
   clippy:
     docker:
-      - image: dignifiedquire/rust:latest
+      - image: clwk/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -98,7 +98,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v3-{{ checksum "Cargo.toml" }}
+            - cargo-v7-{{ checksum "Cargo.toml" }}
       - run:
           name: Run cargo clippy
           command: cargo clippy

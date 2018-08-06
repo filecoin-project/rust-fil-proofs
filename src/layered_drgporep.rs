@@ -85,7 +85,7 @@ pub trait Layers {
             aux: &aux[aux.len() - layers],
         };
         let drgporep_pub_inputs = drgporep::PublicInputs {
-            prover_id: pub_inputs.prover_id,
+            prover_id: *pub_inputs.prover_id,
             challenge: pub_inputs.challenge,
             tau: &pub_inputs.tau[pub_inputs.tau.len() - layers],
         };
@@ -226,7 +226,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         // with permuations
         for (layer, proof_layer) in proof.encoding_proofs.iter().enumerate() {
             let new_pub_inputs = drgporep::PublicInputs {
-                prover_id: pub_inputs.prover_id,
+                prover_id: *pub_inputs.prover_id,
                 challenge: pub_inputs.challenge,
                 tau: &pub_inputs.tau[layer],
             };

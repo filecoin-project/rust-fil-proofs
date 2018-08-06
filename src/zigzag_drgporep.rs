@@ -59,7 +59,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use drgraph::BucketGraph;
+    use drgraph::{new_seed, BucketGraph};
     use fr32::{bytes_into_fr, fr_into_bytes};
     use layered_drgporep::{PrivateInputs, PublicInputs, PublicParams, SetupParams};
     use pairing::bls12_381::Bls12;
@@ -84,6 +84,7 @@ mod tests {
                 drg: drgporep::DrgParams {
                     nodes: data.len() / lambda,
                     degree: 10,
+                    seed: new_seed(),
                 },
             },
             layers: DEFAULT_ZIGZAG_LAYERS,
@@ -130,7 +131,11 @@ mod tests {
         let sp = SetupParams {
             drg_porep_setup_params: drgporep::SetupParams {
                 lambda,
-                drg: drgporep::DrgParams { nodes: n, degree },
+                drg: drgporep::DrgParams {
+                    nodes: n,
+                    degree,
+                    seed: new_seed(),
+                },
             },
             layers: DEFAULT_ZIGZAG_LAYERS,
         };

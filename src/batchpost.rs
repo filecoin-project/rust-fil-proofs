@@ -198,7 +198,7 @@ fn derive_challenge(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use drgraph::{BucketGraph, Graph};
+    use drgraph::{new_seed, BucketGraph, Graph};
     use fr32::fr_into_bytes;
     use merklepor;
     use pairing::bls12_381::Bls12;
@@ -220,7 +220,7 @@ mod tests {
         let data: Vec<u8> = (0..32)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
-        let graph = BucketGraph::new(32, 16);
+        let graph = BucketGraph::new(32, 16, new_seed());
         let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
 
         let pub_inputs = PublicInputs {

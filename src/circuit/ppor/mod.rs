@@ -17,10 +17,10 @@ pub struct ParallelProofOfRetrievability<'a, E: JubjubEngine> {
     pub params: &'a E::Params,
 
     /// Pedersen commitment to the value.
-    pub values: Vec<Option<&'a E::Fr>>,
+    pub values: Vec<Option<E::Fr>>,
 
     /// The authentication path of the commitment in the tree.
-    pub auth_paths: &'a [Vec<Option<(E::Fr, bool)>>],
+    pub auth_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
 
     /// The root of the underyling merkle tree.
     pub root: Option<E::Fr>,
@@ -44,7 +44,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for ParallelProofOfRetrievability<'a, E> {
             let auth_path = self.auth_paths[i].clone();
 
             let value_num = num::AllocatedNum::alloc(cs.namespace(|| "value"), || {
-                Ok(*value.ok_or_else(|| SynthesisError::AssignmentMissing)?)
+                value.ok_or_else(|| SynthesisError::AssignmentMissing)
             })?;
 
             value_num.inputize(cs.namespace(|| "value num"))?;
@@ -83,10 +83,10 @@ impl<'a, E: JubjubEngine> Circuit<E> for ParallelProofOfRetrievability<'a, E> {
 
                 // Witness the authentication path element adjacent
                 // at this depth.
-                let path_element = num::AllocatedNum::alloc(
-                    cs.namespace(|| "path element"),
-                    || Ok(e.ok_or(SynthesisError::AssignmentMissing)?.0),
-                )?;
+                let path_element =
+                    num::AllocatedNum::alloc(cs.namespace(|| "path element"), || {
+                        Ok(e.ok_or(SynthesisError::AssignmentMissing)?.0)
+                    })?;
 
                 // Swap the two if the current subtree is on the right
                 let (xl, xr) = num::AllocatedNum::conditionally_reverse(
@@ -111,7 +111,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for ParallelProofOfRetrievability<'a, E> {
                     &preimage,
                     params,
                 )?.get_x()
-                    .clone(); // Injective encoding
+                .clone(); // Injective encoding
 
                 auth_path_bits.push(cur_is_right);
             }
@@ -144,7 +144,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for ParallelProofOfRetrievability<'a, E> {
 mod tests {
     use super::*;
     use circuit::test::*;
-    use drgraph::{BucketGraph, Graph};
+    use drgraph::{new_seed, BucketGraph, Graph};
     use fr32::{bytes_into_fr, fr_into_bytes};
     use merklepor;
     use pairing::bls12_381::*;
@@ -168,15 +168,14 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
                 .collect();
 
-            let graph = BucketGraph::new(leaves, 6);
+            let graph = BucketGraph::new(leaves, 6, new_seed());
             let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
 
             let pub_inputs: Vec<_> = (0..leaves)
                 .map(|i| merklepor::PublicInputs {
                     challenge: i,
                     commitment: tree.root(),
-                })
-                .collect();
+                }).collect();
             let priv_inputs: Vec<_> = (0..leaves)
                 .map(|i| merklepor::PrivateInputs {
                     tree: &tree,
@@ -184,15 +183,13 @@ mod tests {
                         data_at_node(data.as_slice(), pub_inputs[i].challenge, pub_params.lambda)
                             .unwrap(),
                     ).unwrap(),
-                })
-                .collect();
+                }).collect();
 
             let proofs: Vec<_> = (0..leaves)
                 .map(|i| {
                     merklepor::MerklePoR::prove(&pub_params, &pub_inputs[i], &priv_inputs[i])
                         .unwrap()
-                })
-                .collect();
+                }).collect();
 
             for i in 0..leaves {
                 // make sure it verifies
@@ -203,14 +200,14 @@ mod tests {
             }
 
             let auth_paths: Vec<_> = proofs.iter().map(|p| p.proof.as_options()).collect();
-            let values: Vec<_> = proofs.iter().map(|p| Some(&p.data)).collect();
+            let values: Vec<_> = proofs.iter().map(|p| Some(p.data)).collect();
 
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
             let instance = ParallelProofOfRetrievability {
                 params,
                 values: values,
-                auth_paths: &auth_paths,
+                auth_paths: auth_paths,
                 root: Some(tree.root().into()),
             };
 

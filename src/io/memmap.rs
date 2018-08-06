@@ -95,7 +95,7 @@ where
 mod test {
     use super::*;
     use drgporep::{DrgParams, DrgPoRep, SetupParams};
-    use drgraph::BucketGraph;
+    use drgraph::{new_seed, BucketGraph};
     use fr32::fr_into_bytes;
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
@@ -127,6 +127,7 @@ mod test {
             drg: DrgParams {
                 nodes: data.len() / lambda,
                 degree: 10,
+                seed: new_seed(),
             },
         };
 

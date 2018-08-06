@@ -1,5 +1,6 @@
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use compound_proof::CompoundProof;
+use drgraph::graph_height;
 use merklepor::MerklePoR;
 use pairing::bls12_381::{Bls12, Fr};
 use proof::ProofScheme;
@@ -17,7 +18,7 @@ use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 /// * `root` - The merkle root of the tree.
 ///
 
-pub struct PoR<'a, E: JubjubEngine> {
+pub struct PoRCircuit<'a, E: JubjubEngine> {
     params: &'a E::Params,
     value: Option<E::Fr>,
     auth_path: Vec<Option<(E::Fr, bool)>>,
@@ -26,8 +27,8 @@ pub struct PoR<'a, E: JubjubEngine> {
 
 pub struct PoRCompound {}
 
-fn challenge_into_auth_path_bits(challenge: usize, leaves: usize) -> Vec<bool> {
-    let height = (leaves as f64).log2().ceil() as usize;
+pub fn challenge_into_auth_path_bits(challenge: usize, leaves: usize) -> Vec<bool> {
+    let height = graph_height(leaves);
     let mut bits = Vec::new();
     let mut n = challenge;
     for _ in 0..height {
@@ -38,21 +39,22 @@ fn challenge_into_auth_path_bits(challenge: usize, leaves: usize) -> Vec<bool> {
 }
 
 // can only implment for Bls12 because merklepor is not generic over the engine.
-impl<'a> CompoundProof<'a, Bls12, MerklePoR, PoR<'a, Bls12>> for PoRCompound {
-    fn make_circuit<'b>(
+impl<'a> CompoundProof<'a, Bls12, MerklePoR, PoRCircuit<'a, Bls12>> for PoRCompound {
+    fn circuit<'b>(
         public_inputs: &<MerklePoR as ProofScheme>::PublicInputs,
         proof: &'b <MerklePoR as ProofScheme>::Proof,
-        params: &'a JubjubBls12,
-    ) -> PoR<'a, Bls12> {
-        PoR::<Bls12> {
-            params,
+        _public_params: &'b <MerklePoR as ProofScheme>::PublicParams,
+        engine_params: &'a JubjubBls12,
+    ) -> PoRCircuit<'a, Bls12> {
+        PoRCircuit::<Bls12> {
+            params: engine_params,
             value: Some(proof.data),
             auth_path: proof.proof.as_options(),
             root: Some(public_inputs.commitment.into()),
         }
     }
 
-    fn inputize(
+    fn generate_public_inputs(
         pub_inputs: &<MerklePoR as ProofScheme>::PublicInputs,
         pub_params: &<MerklePoR as ProofScheme>::PublicParams,
     ) -> Vec<Fr> {
@@ -67,7 +69,7 @@ impl<'a> CompoundProof<'a, Bls12, MerklePoR, PoR<'a, Bls12>> for PoRCompound {
     }
 }
 
-impl<'a, E: JubjubEngine> Circuit<E> for PoR<'a, E> {
+impl<'a, E: JubjubEngine> Circuit<E> for PoRCircuit<'a, E> {
     /// # Public Inputs
     ///
     /// This circuit expects the following public inputs.
@@ -87,11 +89,11 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoR<'a, E> {
         let value = self.value;
         let auth_path = self.auth_path;
         let root = self.root;
+
         {
             let value_num = num::AllocatedNum::alloc(cs.namespace(|| "value"), || {
                 Ok(value.ok_or_else(|| SynthesisError::AssignmentMissing)?)
             })?;
-
             let mut value_bits = value_num.into_bits_le(cs.namespace(|| "value bits"))?;
 
             // sad face, need to pad to make all algorithms the same
@@ -126,10 +128,10 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoR<'a, E> {
 
                 // Witness the authentication path element adjacent
                 // at this depth.
-                let path_element = num::AllocatedNum::alloc(
-                    cs.namespace(|| "path element"),
-                    || Ok(e.ok_or(SynthesisError::AssignmentMissing)?.0),
-                )?;
+                let path_element =
+                    num::AllocatedNum::alloc(cs.namespace(|| "path element"), || {
+                        Ok(e.ok_or(SynthesisError::AssignmentMissing)?.0)
+                    })?;
 
                 // Swap the two if the current subtree is on the right
                 let (xl, xr) = num::AllocatedNum::conditionally_reverse(
@@ -154,7 +156,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoR<'a, E> {
                     &preimage,
                     params,
                 )?.get_x()
-                    .clone(); // Injective encoding
+                .clone(); // Injective encoding
 
                 auth_path_bits.push(cur_is_right);
             }
@@ -190,10 +192,10 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoR<'a, E> {
     }
 }
 
-pub fn proof_of_retrievability<E, CS>(
+pub fn synthesize_proof_of_retrievability<E, CS>(
     mut cs: CS,
     params: &E::Params,
-    value: Option<&E::Fr>,
+    value: Option<E::Fr>,
     auth_path: Vec<Option<(E::Fr, bool)>>,
     root: Option<E::Fr>,
 ) -> Result<(), SynthesisError>
@@ -201,9 +203,9 @@ where
     E: JubjubEngine,
     CS: ConstraintSystem<E>,
 {
-    let por = PoR::<E> {
+    let por = PoRCircuit::<E> {
         params,
-        value: value.cloned(),
+        value,
         auth_path,
         root,
     };
@@ -216,7 +218,7 @@ mod tests {
     use super::*;
     use circuit::test::*;
     use compound_proof;
-    use drgraph::{BucketGraph, Graph};
+    use drgraph::{new_seed, BucketGraph, Graph};
     use fr32::{bytes_into_fr, fr_into_bytes};
     use merklepor;
     use pairing::Field;
@@ -234,7 +236,7 @@ mod tests {
         let data: Vec<u8> = (0..leaves)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
-        let graph = BucketGraph::new(leaves, 16);
+        let graph = BucketGraph::new(leaves, 16, new_seed());
         let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
 
         for i in 0..3 {
@@ -264,7 +266,7 @@ mod tests {
                 .expect("failed while proving");
 
             let verified =
-                PoRCompound::verify(&public_inputs, &public_params.vanilla_params, proof)
+                PoRCompound::verify(&public_params.vanilla_params, &public_inputs, proof)
                     .expect("failed while verifying");
             assert!(verified);
         }
@@ -285,7 +287,7 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
                 .collect();
 
-            let graph = BucketGraph::new(leaves, 16);
+            let graph = BucketGraph::new(leaves, 16, new_seed());
             let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
 
             // -- MerklePoR
@@ -317,7 +319,7 @@ mod tests {
 
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            let por = PoR::<Bls12> {
+            let por = PoRCircuit::<Bls12> {
                 params: params,
                 value: Some(proof.data),
                 auth_path: proof.proof.as_options(),

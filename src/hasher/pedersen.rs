@@ -116,8 +116,8 @@ impl Algorithm<PedersenHash> for PedersenAlgorithm {
                 .chain(rhs.into_iter().take(Fr::NUM_BITS as usize)),
             &pedersen::JJ_PARAMS,
         ).into_xy()
-            .0
-            .into()
+        .0
+        .into()
     }
 }
 
@@ -166,8 +166,7 @@ mod tests {
                 let h = a.hash();
                 a.reset();
                 h
-            })
-            .collect();
+            }).collect();
 
         assert_eq!(t[0], leaves[0]);
         assert_eq!(t[1], leaves[1]);

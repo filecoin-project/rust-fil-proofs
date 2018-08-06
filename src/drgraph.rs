@@ -83,18 +83,19 @@ impl MerkleProof {
             return false;
         }
 
-        self.root() == (0..self.path.len()).fold(self.leaf, |h, i| {
-            a.reset();
-            let is_right = self.path[i].1;
+        self.root()
+            == (0..self.path.len()).fold(self.leaf, |h, i| {
+                a.reset();
+                let is_right = self.path[i].1;
 
-            let (left, right) = if is_right {
-                (self.path[i].0, h)
-            } else {
-                (h, self.path[i].0)
-            };
+                let (left, right) = if is_right {
+                    (self.path[i].0, h)
+                } else {
+                    (h, self.path[i].0)
+                };
 
-            a.node(left, right, i)
-        })
+                a.node(left, right, i)
+            })
     }
 
     /// Validates that the data hashes to the leaf of the merkle path.
@@ -199,7 +200,7 @@ pub trait Graph: ::std::fmt::Debug + Clone + PartialEq + Eq {
 
     /// Returns the merkle tree depth.
     fn merkle_tree_depth(&self) -> u64 {
-        (self.size() as f64).log2().ceil() as u64
+        graph_height(self.size()) as u64
     }
 
     /// Returns a sorted list of all parents of this node.
@@ -211,7 +212,12 @@ pub trait Graph: ::std::fmt::Debug + Clone + PartialEq + Eq {
     /// Returns the degree of the graph.
     fn degree(&self) -> usize;
 
-    fn new(nodes: usize, base_degree: usize) -> Self;
+    fn new(nodes: usize, base_degree: usize, seed: [u32; 7]) -> Self;
+    fn seed(&self) -> [u32; 7];
+}
+
+pub fn graph_height(size: usize) -> usize {
+    (size as f64).log2().ceil() as usize
 }
 
 /// Bucket sampling algorithm.
@@ -278,25 +284,34 @@ impl Graph for BucketGraph {
         self.base_degree
     }
 
-    fn new(nodes: usize, base_degree: usize) -> Self {
+    fn seed(&self) -> [u32; 7] {
+        self.seed
+    }
+
+    fn new(nodes: usize, base_degree: usize, seed: [u32; 7]) -> Self {
         BucketGraph {
             nodes,
             base_degree,
-            seed: OsRng::new().unwrap().gen(),
+            seed,
         }
     }
+}
+
+pub fn new_seed() -> [u32; 7] {
+    OsRng::new().unwrap().gen()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use drgraph::new_seed;
     use rand::{self, Rng};
 
     #[test]
     fn graph_bucket() {
         for size in vec![3, 10, 200, 2000] {
             for degree in 2..12 {
-                let g = BucketGraph::new(size, degree);
+                let g = BucketGraph::new(size, degree, new_seed());
 
                 assert_eq!(g.size(), size, "wrong nodes count");
 
@@ -328,7 +343,7 @@ mod tests {
 
     #[test]
     fn graph_commit() {
-        let g = BucketGraph::new(3, 10);
+        let g = BucketGraph::new(3, 10, new_seed());
 
         let data = vec![1u8; 3 * 16];
         g.commit(data.as_slice(), 16).unwrap();
@@ -337,7 +352,7 @@ mod tests {
 
     #[test]
     fn gen_proof() {
-        let g = BucketGraph::new(5, 3);
+        let g = BucketGraph::new(5, 3, new_seed());
         let data = vec![2u8; 16 * 5];
 
         let tree = g.merkle_tree(data.as_slice(), 16).unwrap();
@@ -348,7 +363,7 @@ mod tests {
 
     #[test]
     fn merklepath() {
-        let g = BucketGraph::new(10, 5);
+        let g = BucketGraph::new(10, 5, new_seed());
         let mut rng = rand::thread_rng();
         let data: Vec<u8> = (0..16 * 10).map(|_| rng.gen()).collect();
 

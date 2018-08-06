@@ -49,13 +49,13 @@ impl MerklePorApp {
         self.root = root;
         self.leaf = leaf;
         self.auth_paths = (0..challenge_count).map(|_| auth_path.clone()).collect();
-        let values = (0..challenge_count).map(|_| Some(&self.leaf)).collect();
+        let values = (0..challenge_count).map(|_| Some(self.leaf)).collect();
 
         // create an instance of our circut (with the witness)
         let c = circuit::ppor::ParallelProofOfRetrievability {
             params: engine_params,
             values,
-            auth_paths: &self.auth_paths,
+            auth_paths: self.auth_paths.clone(),
             root: Some(self.root),
         };
 
@@ -87,7 +87,7 @@ impl Example<Bls12> for MerklePorApp {
             circuit::ppor::ParallelProofOfRetrievability {
                 params: jubjub_params,
                 values: vec![None; challenge_count],
-                auth_paths: &vec![vec![None; tree_depth]; challenge_count],
+                auth_paths: vec![vec![None; tree_depth]; challenge_count],
                 root: None,
             },
             rng,
@@ -113,14 +113,14 @@ impl Example<Bls12> for MerklePorApp {
         self.root = root;
         self.leaf = leaf;
         self.auth_paths = (0..challenge_count).map(|_| auth_path.clone()).collect();
-        let values = (0..challenge_count).map(|_| Some(&self.leaf)).collect();
+        let values = (0..challenge_count).map(|_| Some(self.leaf)).collect();
 
         // create an instance of our circut (with the witness)
         let proof = {
             let c = circuit::ppor::ParallelProofOfRetrievability {
                 params: engine_params,
                 values,
-                auth_paths: &self.auth_paths,
+                auth_paths: self.auth_paths.clone(),
                 root: Some(self.root),
             };
 
@@ -154,8 +154,7 @@ impl Example<Bls12> for MerklePorApp {
                 let mut input = vec![*values[j].unwrap()];
                 input.extend(packed_auth_path);
                 input
-            })
-            .collect();
+            }).collect();
 
         // add the root as the last one
         expected_inputs.push(self.root);

@@ -9,7 +9,7 @@ pub const DEFAULT_ROUNDS: usize = crypto::sloth::DEFAULT_ROUNDS;
 pub fn decode<E, CS>(
     mut cs: CS,
     key: &num::AllocatedNum<E>,
-    ciphertext: Option<&E::Fr>,
+    ciphertext: Option<E::Fr>,
     rounds: usize,
 ) -> Result<num::AllocatedNum<E>, SynthesisError>
 where
@@ -17,7 +17,7 @@ where
     CS: ConstraintSystem<E>,
 {
     let mut plaintext = num::AllocatedNum::alloc(cs.namespace(|| "plaintext"), || {
-        Ok(*ciphertext.ok_or_else(|| SynthesisError::AssignmentMissing)?)
+        Ok(ciphertext.ok_or_else(|| SynthesisError::AssignmentMissing)?)
     })?;
 
     for i in 0..rounds {
@@ -89,7 +89,7 @@ mod tests {
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
             let key_num = num::AllocatedNum::alloc(cs.namespace(|| "key"), || Ok(key)).unwrap();
-            let out = decode(cs.namespace(|| "sloth"), &key_num, Some(&ciphertext), 10).unwrap();
+            let out = decode(cs.namespace(|| "sloth"), &key_num, Some(ciphertext), 10).unwrap();
 
             assert!(cs.is_satisfied());
             assert_eq!(out.get_value().unwrap(), decrypted, "no interop");
@@ -112,12 +112,7 @@ mod tests {
             let key_bad_num =
                 num::AllocatedNum::alloc(cs.namespace(|| "key bad"), || Ok(key_bad)).unwrap();
 
-            let out = decode(
-                cs.namespace(|| "sloth"),
-                &key_bad_num,
-                Some(&ciphertext),
-                10,
-            ).unwrap();
+            let out = decode(cs.namespace(|| "sloth"), &key_bad_num, Some(ciphertext), 10).unwrap();
 
             assert!(cs.is_satisfied());
             assert_ne!(out.get_value().unwrap(), decrypted);
@@ -140,7 +135,7 @@ mod tests {
                 let key_num = num::AllocatedNum::alloc(cs.namespace(|| "key"), || Ok(key)).unwrap();
 
                 let out9 =
-                    decode(cs.namespace(|| "sloth 9"), &key_num, Some(&ciphertext), 9).unwrap();
+                    decode(cs.namespace(|| "sloth 9"), &key_num, Some(ciphertext), 9).unwrap();
 
                 assert!(cs.is_satisfied());
                 assert_ne!(out9.get_value().unwrap(), decrypted);
@@ -150,7 +145,7 @@ mod tests {
                 let mut cs = TestConstraintSystem::<Bls12>::new();
                 let key_num = num::AllocatedNum::alloc(cs.namespace(|| "key"), || Ok(key)).unwrap();
                 let out10 =
-                    decode(cs.namespace(|| "sloth 10"), &key_num, Some(&ciphertext), 10).unwrap();
+                    decode(cs.namespace(|| "sloth 10"), &key_num, Some(ciphertext), 10).unwrap();
 
                 assert!(cs.is_satisfied());
                 assert_eq!(out10.get_value().unwrap(), decrypted);
@@ -160,7 +155,7 @@ mod tests {
                 let mut cs = TestConstraintSystem::<Bls12>::new();
                 let key_num = num::AllocatedNum::alloc(cs.namespace(|| "key"), || Ok(key)).unwrap();
                 let out11 =
-                    decode(cs.namespace(|| "sloth 11"), &key_num, Some(&ciphertext), 11).unwrap();
+                    decode(cs.namespace(|| "sloth 11"), &key_num, Some(ciphertext), 11).unwrap();
 
                 assert!(cs.is_satisfied());
                 assert_ne!(out11.get_value().unwrap(), decrypted);

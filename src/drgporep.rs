@@ -15,7 +15,7 @@ use proof::ProofScheme;
 
 #[derive(Debug)]
 pub struct PublicInputs<'a> {
-    pub prover_id: &'a Fr,
+    pub prover_id: Fr,
     pub challenge: usize,
     pub tau: &'a porep::Tau,
 }
@@ -39,6 +39,9 @@ pub struct DrgParams {
 
     // Base degree of DRG
     pub degree: usize,
+
+    // Random seed
+    pub seed: [u32; 7],
 }
 
 #[derive(Debug, Clone)]
@@ -60,6 +63,19 @@ impl DataProof {
 
         out
     }
+
+    /// proves_challenge returns true if this self.proof corresponds to challenge.
+    /// This is useful for verifying that a supplied proof is actually relevant to a given challenge.
+    pub fn proves_challenge(&self, challenge: usize) -> bool {
+        let mut c = challenge;
+        for (_, is_right) in self.proof.path().iter() {
+            if ((c & 1) == 1) ^ is_right {
+                return false;
+            };
+            c >>= 1;
+        }
+        true
+    }
 }
 
 pub type ReplicaParents = Vec<(usize, DataProof)>;
@@ -68,7 +84,7 @@ pub type ReplicaParents = Vec<(usize, DataProof)>;
 pub struct Proof {
     pub replica_node: DataProof,
     pub replica_parents: ReplicaParents,
-    pub node: MerkleProof,
+    pub node: DataProof,
 }
 
 impl Proof {
@@ -90,11 +106,7 @@ impl Proof {
 }
 
 impl Proof {
-    pub fn new(
-        replica_node: DataProof,
-        replica_parents: ReplicaParents,
-        node: MerkleProof,
-    ) -> Proof {
+    pub fn new(replica_node: DataProof, replica_parents: ReplicaParents, node: DataProof) -> Proof {
         Proof {
             replica_node,
             replica_parents,
@@ -116,7 +128,7 @@ impl<'a, G: Graph> ProofScheme<'a> for DrgPoRep<G> {
     type Proof = Proof;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
-        let graph = G::new(sp.drg.nodes, sp.drg.degree);
+        let graph = G::new(sp.drg.nodes, sp.drg.degree, sp.drg.seed);
 
         Ok(PublicParams {
             lambda: sp.lambda,
@@ -147,17 +159,33 @@ impl<'a, G: Graph> ProofScheme<'a> for DrgPoRep<G> {
         let mut replica_parents = Vec::with_capacity(parents.len());
 
         for p in parents {
-            replica_parents.push((
-                p,
+            replica_parents.push((p, {
+                let proof = tree_r.gen_proof(p);
                 DataProof {
-                    proof: tree_r.gen_proof(p).into(),
+                    proof: proof.into(),
                     data: bytes_into_fr::<Bls12>(data_at_node(replica, p, pub_params.lambda)?)?,
-                },
-            ));
+                }
+            }));
         }
 
         let node_proof = tree_d.gen_proof(challenge);
-        let proof = Proof::new(replica_node, replica_parents, node_proof.into());
+
+        let extracted = Self::extract(
+            pub_params,
+            &fr_into_bytes::<Bls12>(&pub_inputs.prover_id),
+            &replica,
+            challenge,
+        )?;
+
+        let proof = Proof::new(
+            replica_node,
+            replica_parents,
+            DataProof {
+                data: bytes_into_fr::<Bls12>(&extracted)?,
+                proof: node_proof.into(),
+            },
+        );
+
         Ok(proof)
     }
 
@@ -166,23 +194,38 @@ impl<'a, G: Graph> ProofScheme<'a> for DrgPoRep<G> {
         pub_inputs: &Self::PublicInputs,
         proof: &Self::Proof,
     ) -> Result<bool> {
+        {
+            // This was verify_proof_meta.
+            if pub_inputs.challenge >= pub_params.graph.size() {
+                return Ok(false);
+            }
+
+            if !(proof.node.proves_challenge(pub_inputs.challenge)) {
+                return Ok(false);
+            }
+
+            if !(proof.replica_node.proves_challenge(pub_inputs.challenge)) {
+                return Ok(false);
+            }
+
+            let expected_parents = pub_params.graph.parents(pub_inputs.challenge);
+            let parents_as_expected = proof
+                .replica_parents
+                .iter()
+                .zip(&expected_parents)
+                .all(|(actual, expected)| actual.0 == *expected);
+
+            if !parents_as_expected {
+                println!("proof parents were not those provided in public parameters");
+                return Ok(false);
+            }
+        }
+
         let challenge = pub_inputs.challenge % pub_params.graph.size();
         assert_ne!(challenge, 0, "can not prove the first node");
 
         if !proof.replica_node.proof.validate(challenge) {
             println!("invalid replica node");
-            return Ok(false);
-        }
-
-        let expected_parents = pub_params.graph.parents(challenge);
-        let parents_as_expected = proof
-            .replica_parents
-            .iter()
-            .zip(expected_parents)
-            .all(|(actual, expected)| actual.0 == expected);
-
-        if !parents_as_expected {
-            println!("proof parents were not those provided in public parameters");
             return Ok(false);
         }
 
@@ -193,18 +236,24 @@ impl<'a, G: Graph> ProofScheme<'a> for DrgPoRep<G> {
             }
         }
 
-        let key_input = proof.replica_parents.iter().fold(
-            fr_into_bytes::<Bls12>(pub_inputs.prover_id),
-            |mut acc, (_, p)| {
+        let prover_bytes = fr_into_bytes::<Bls12>(&pub_inputs.prover_id);
+
+        let key_input = proof
+            .replica_parents
+            .iter()
+            .fold(prover_bytes, |mut acc, (_, p)| {
                 acc.extend(fr_into_bytes::<Bls12>(&p.data));
                 acc
-            },
-        );
+            });
         let key = kdf::kdf::<Bls12>(key_input.as_slice(), pub_params.graph.degree());
         let unsealed: Fr =
             sloth::decode::<Bls12>(&key, &proof.replica_node.data, sloth::DEFAULT_ROUNDS);
 
-        if !proof.node.validate_data(&unsealed) {
+        if unsealed != proof.node.data {
+            return Ok(false);
+        }
+
+        if !proof.node.proof.validate_data(&unsealed) {
             println!("invalid data {:?}", unsealed);
             return Ok(false);
         }
@@ -273,7 +322,7 @@ impl<'a, G: Graph> PoRep<'a> for DrgPoRep<G> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use drgraph::BucketGraph;
+    use drgraph::{new_seed, BucketGraph};
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]
@@ -289,6 +338,7 @@ mod tests {
             drg: DrgParams {
                 nodes: data.len() / lambda,
                 degree: 10,
+                seed: new_seed(),
             },
         };
 
@@ -319,6 +369,7 @@ mod tests {
             drg: DrgParams {
                 nodes: data.len() / lambda,
                 degree: 10,
+                seed: new_seed(),
             },
         };
 
@@ -349,87 +400,139 @@ mod tests {
         use_wrong_challenge: bool,
         use_wrong_parents: bool,
     ) {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        assert!(i < nodes);
 
-        let degree = 5;
+        let mut repeat = true;
+        while repeat {
+            repeat = false;
 
-        let prover_id = fr_into_bytes::<Bls12>(&rng.gen());
-        let data: Vec<u8> = (0..nodes)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
-            .collect();
+            let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        // create a copy, so we can comare roundtrips
-        let mut data_copy = data.clone();
-        let challenge = i;
+            let degree = 5;
+            let seed = new_seed();
 
-        let sp = SetupParams {
-            lambda,
-            drg: DrgParams { nodes, degree },
-        };
+            let prover_id = fr_into_bytes::<Bls12>(&rng.gen());
+            let data: Vec<u8> = (0..nodes)
+                .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+                .collect();
 
-        let pp = DrgPoRep::<BucketGraph>::setup(&sp).unwrap();
+            // create a copy, so we can comare roundtrips
+            let mut data_copy = data.clone();
+            let challenge = i;
 
-        let (tau, aux) =
-            DrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
+            let sp = SetupParams {
+                lambda,
+                drg: DrgParams {
+                    nodes,
+                    degree,
+                    seed,
+                },
+            };
 
-        assert_ne!(data, data_copy, "replication did not change data");
+            let pp = DrgPoRep::<BucketGraph>::setup(&sp).unwrap();
 
-        let pub_inputs = PublicInputs {
-            prover_id: &bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
-            challenge,
-            tau: &tau,
-        };
+            let (tau, aux) =
+                DrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
 
-        let priv_inputs = PrivateInputs {
-            replica: data_copy.as_slice(),
-            aux: &aux,
-        };
+            assert_ne!(data, data_copy, "replication did not change data");
 
-        let real_proof = DrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
-
-        if use_wrong_parents {
-            // Only one 'wrong' option will be tested at a time.
-            assert!(!use_wrong_challenge);
-            let real_parents = real_proof.replica_parents;
-            let fake_parents = real_parents
-                .iter()
-                // Incrementing each parent node will give us a different parent set.
-                // It's fine to be out of range, since this only needs to fail.
-                .map(|(i, data_proof)| (i + 1, data_proof.clone()))
-                .collect::<Vec<_>>();
-
-            let proof = Proof::new(
-                real_proof.replica_node,
-                fake_parents,
-                real_proof.node.into(),
-            );
-
-            assert!(
-                !DrgPoRep::verify(&pp, &pub_inputs, &proof).unwrap(),
-                "verified in error -- with wrong parents"
-            );
-            return;
-        }
-
-        let proof = real_proof;
-
-        if use_wrong_challenge {
-            let pub_inputs_with_wrong_challenge_for_proof = PublicInputs {
-                prover_id: &bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
-                challenge: if challenge == 1 { 2 } else { 1 },
+            let pub_inputs = PublicInputs {
+                prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
+                challenge,
                 tau: &tau,
             };
-            let verified =
-                DrgPoRep::verify(&pp, &pub_inputs_with_wrong_challenge_for_proof, &proof).unwrap();
-            assert!(
-                !verified,
-                "wrongly verified proof which does not match challenge in public input"
-            );
-        } else {
-            assert!(
-                DrgPoRep::verify(&pp, &pub_inputs, &proof).unwrap(),
-                "failed to verify"
-            );
+
+            let priv_inputs = PrivateInputs {
+                replica: data_copy.as_slice(),
+                aux: &aux,
+            };
+
+            let real_proof = DrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
+
+            if use_wrong_parents {
+                // Only one 'wrong' option will be tested at a time.
+                assert!(!use_wrong_challenge);
+                let real_parents = real_proof.replica_parents;
+
+                // Parent vector claiming the wrong parents.
+                let fake_parents = real_parents
+                    .iter()
+                    // Incrementing each parent node will give us a different parent set.
+                    // It's fine to be out of range, since this only needs to fail.
+                    .map(|(i, data_proof)| (i + 1, data_proof.clone()))
+                    .collect::<Vec<_>>();
+
+                let proof = Proof::new(
+                    real_proof.replica_node.clone(),
+                    fake_parents,
+                    real_proof.node.clone().into(),
+                );
+
+                assert!(
+                    !DrgPoRep::verify(&pp, &pub_inputs, &proof).unwrap(),
+                    "verified in error -- with wrong parents"
+                );
+
+                let mut all_same = true;
+                for (p, _) in &real_parents {
+                    if *p != real_parents[0].0 {
+                        all_same = false;
+                    }
+                }
+
+                if all_same {
+                    println!("invalid test data can't scramble proofs with all same parents.");
+                    repeat = true;
+                    continue;
+                }
+
+                // Parent vector claiming the right parents but providing valid proofs for different
+                // parents.
+                let fake_proof_parents = real_parents
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (p, _))| {
+                        // Rotate the real parent proofs.
+                        let x = (i + 1) % real_parents.len();
+                        let j = real_parents[x].0;
+                        (*p, real_parents[j].1.clone())
+                    }).collect::<Vec<_>>();
+
+                let proof2 = Proof::new(
+                    real_proof.replica_node,
+                    fake_proof_parents,
+                    real_proof.node.into(),
+                );
+
+                assert!(
+                    !DrgPoRep::verify(&pp, &pub_inputs, &proof2).unwrap(),
+                    "verified in error -- with wrong parent proofs"
+                );
+
+                return ();
+            }
+
+            let proof = real_proof;
+
+            if use_wrong_challenge {
+                let pub_inputs_with_wrong_challenge_for_proof = PublicInputs {
+                    prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
+                    challenge: if challenge == 1 { 2 } else { 1 },
+                    tau: &tau,
+                };
+                let verified =
+                    DrgPoRep::verify(&pp, &pub_inputs_with_wrong_challenge_for_proof, &proof)
+                        .unwrap();
+                assert!(
+                    !verified,
+                    "wrongly verified proof which does not match challenge in public input"
+                );
+            } else {
+                assert!(
+                    DrgPoRep::verify(&pp, &pub_inputs, &proof).unwrap(),
+                    "failed to verify"
+                );
+            }
         }
     }
 
@@ -448,16 +551,9 @@ mod tests {
     table_tests!{
         prove_verify {
             prove_verify_32_2_1(32, 2, 1);
-            #[ignore] prove_verify_32_2_2(32, 2, 2);
-            prove_verify_32_2_3(32, 2, 3);
-            #[ignore] prove_verify_32_2_4(32, 2, 4);
-            prove_verify_32_2_5(32, 2, 5);
 
             prove_verify_32_3_1(32, 3, 1);
             prove_verify_32_3_2(32, 3, 2);
-            #[ignore] prove_verify_32_3_3(32, 3, 3);
-            prove_verify_32_3_4(32, 3, 4);
-            prove_verify_32_3_5(32, 3, 5);
 
             prove_verify_32_10_1(32, 10, 1);
             prove_verify_32_10_2(32, 10, 2);
@@ -474,7 +570,8 @@ mod tests {
 
     #[test]
     fn test_drgporep_verifies_parents() {
-        prove_verify_wrong_parents(32, 5, 1);
+        // Challenge a node (3) that doesn't have all the same parents.
+        prove_verify_wrong_parents(32, 7, 4);
     }
 
 }

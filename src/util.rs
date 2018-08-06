@@ -50,8 +50,7 @@ pub fn bytes_into_boolean_vec<E: Engine, CS: ConstraintSystem<E>>(
                 cs.namespace(|| format!("bit {}", i)),
                 b,
             )?))
-        })
-        .collect::<Result<Vec<_>, SynthesisError>>()?;
+        }).collect::<Result<Vec<_>, SynthesisError>>()?;
 
     Ok(bits)
 }
@@ -79,8 +78,7 @@ pub fn bits_to_bytes(bits: &[bool]) -> Vec<u8> {
                 | bool_to_u8(bits[2], 2)
                 | bool_to_u8(bits[1], 1)
                 | bool_to_u8(bits[0], 0)
-        })
-        .collect()
+        }).collect()
 }
 
 #[cfg(test)]

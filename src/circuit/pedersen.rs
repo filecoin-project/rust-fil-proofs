@@ -58,7 +58,7 @@ pub fn pedersen_compression_num<E: JubjubEngine, CS: ConstraintSystem<E>>(
         &bits,
         params,
     )?.get_x()
-        .clone())
+    .clone())
 }
 
 pub fn pedersen_compression<E: JubjubEngine, CS: ConstraintSystem<E>>(

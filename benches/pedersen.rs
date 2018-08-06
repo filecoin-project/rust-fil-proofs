@@ -33,8 +33,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for PedersenExample<'a, E> {
                     cs.namespace(|| format!("bit {}", i)),
                     *b,
                 )?))
-            })
-            .collect::<Result<Vec<_>, SynthesisError>>()?;
+            }).collect::<Result<Vec<_>, SynthesisError>>()?;
 
         let cs = cs.namespace(|| "pedersen");
         let res = circuit::pedersen::pedersen_compression_num(cs, self.params, &data)?;
@@ -92,24 +91,22 @@ fn pedersen_benchmark(c: &mut Criterion) {
 
                 black_box(proof)
             });
-        })
-            .with_function("circuit - just synthesize circuit", move |b, bytes| {
-                b.iter(|| {
-                    let mut cs = BenchCS::<Bls12>::new();
+        }).with_function("circuit - just synthesize circuit", move |b, bytes| {
+            b.iter(|| {
+                let mut cs = BenchCS::<Bls12>::new();
 
-                    let mut rng = rng2.clone();
-                    let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
+                let mut rng = rng2.clone();
+                let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
 
-                    PedersenExample {
-                        params: &jubjub_params2,
-                        data: data.as_slice(),
-                    }.synthesize(&mut cs)
-                        .unwrap();
+                PedersenExample {
+                    params: &jubjub_params2,
+                    data: data.as_slice(),
+                }.synthesize(&mut cs)
+                .unwrap();
 
-                    black_box(cs)
-                });
-            })
-            .sample_size(20),
+                black_box(cs)
+            });
+        }).sample_size(20),
     );
 }
 

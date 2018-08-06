@@ -1,5 +1,5 @@
 use drgporep::DataProof;
-use drgraph::{MerkleTree, TreeHash};
+use drgraph::{graph_height, MerkleTree, TreeHash};
 use error::Result;
 use pairing::bls12_381::Fr;
 use proof::ProofScheme;
@@ -77,14 +77,19 @@ impl<'a> ProofScheme<'a> for MerklePoR {
     }
 
     fn verify(
-        _pub_params: &Self::PublicParams,
+        pub_params: &Self::PublicParams,
         pub_inputs: &Self::PublicInputs,
         proof: &Self::Proof,
     ) -> Result<bool> {
-        if pub_inputs.commitment != proof.proof.root() {
-            return Err(format_err!("invalid root"));
-        }
+        {
+            // This was verify_proof_meta.
+            let commitments_match = pub_inputs.commitment == proof.proof.root();
+            let path_length_match = graph_height(pub_params.leaves) == proof.proof.path().len();
 
+            if !(commitments_match && path_length_match) {
+                return Ok(false);
+            }
+        }
         let data_valid = proof.proof.validate_data(&proof.data);
         let path_valid = proof.proof.validate(pub_inputs.challenge);
 
@@ -95,7 +100,7 @@ impl<'a> ProofScheme<'a> for MerklePoR {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use drgraph::{hash_leaf, make_proof_for_test, BucketGraph, Graph};
+    use drgraph::{hash_leaf, make_proof_for_test, new_seed, BucketGraph, Graph};
     use fr32::{bytes_into_fr, fr_into_bytes};
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
@@ -114,7 +119,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph = BucketGraph::new(32, 5);
+        let graph = BucketGraph::new(32, 5, new_seed());
         let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
 
         let pub_inputs = PublicInputs {
@@ -165,7 +170,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph = BucketGraph::new(32, 5);
+        let graph = BucketGraph::new(32, 5, new_seed());
         let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
 
         let pub_inputs = PublicInputs {
@@ -194,7 +199,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph = BucketGraph::new(32, 5);
+        let graph = BucketGraph::new(32, 5, new_seed());
         let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
 
         let pub_inputs = PublicInputs {

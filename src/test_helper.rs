@@ -64,8 +64,7 @@ pub fn fake_drgpoprep_proof<R: Rng>(
                     Ok(acc)
                 })
             },
-        )
-        .unwrap();
+        ).unwrap();
     let key = crypto::kdf::kdf::<Bls12>(ciphertexts.as_slice(), m);
     // run sloth(key, node)
     let replica_node: Fr = crypto::sloth::encode::<Bls12>(&key, &data_node, sloth_rounds);
@@ -81,7 +80,7 @@ pub fn fake_drgpoprep_proof<R: Rng>(
     // get commR
     let subtree = MerkleTree::from_data(leaves);
     let subtree_root: Fr = subtree.root().into();
-    let subtree_depth = subtree.height() - 1; // .height() inludes the leave
+    let subtree_depth = subtree.height() - 1; // .height() inludes the leaf
     let remaining_depth = tree_depth - subtree_depth;
     let (remaining_path, replica_root) =
         random_merkle_path_with_value(rng, remaining_depth, &subtree_root, remaining_depth);
@@ -91,10 +90,9 @@ pub fn fake_drgpoprep_proof<R: Rng>(
         .map(|i| {
             let subtree_proof: MerkleProof = subtree.gen_proof(i).into();
             let mut subtree_path = subtree_proof.as_options();
-            subtree_path.extend(&remaining_path);
+            subtree_path.extend(remaining_path.clone());
             subtree_path
-        })
-        .collect();
+        }).collect();
 
     let replica_node_path = {
         let subtree_proof: MerkleProof = subtree.gen_proof(challenge).into();
@@ -158,7 +156,7 @@ pub fn random_merkle_path_with_value<R: Rng>(
                 .chain(rhs.into_iter().take(Fr::NUM_BITS as usize)),
             &crypto::pedersen::JJ_PARAMS,
         ).into_xy()
-            .0;
+        .0;
     }
 
     (auth_path, cur)
