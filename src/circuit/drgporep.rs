@@ -22,9 +22,11 @@ use util::{bytes_into_bits, bytes_into_boolean_vec};
 ///
 /// * `params` - parameters for the curve
 /// * `lambda` - The size of the individual data leaves in bits.
+/// * `sloth_iter` - How many rounds sloth should run for.
 ///
 /// ----> Private `replica_node` - The replica node being proven.
 ///
+/// * `replica_node` - The replica node being proven.
 /// * `replica_node_path` - The path of the replica node being proven.
 /// * `replica_root` - The merkle root of the replica.
 ///
@@ -42,6 +44,7 @@ use util::{bytes_into_bits, bytes_into_boolean_vec};
 pub struct DrgPoRepCircuit<'a, E: JubjubEngine> {
     params: &'a E::Params,
     lambda: usize,
+    sloth_iter: usize,
     replica_node: Option<E::Fr>,
     replica_node_path: Vec<Option<(E::Fr, bool)>>,
     replica_root: Option<E::Fr>,
@@ -145,6 +148,7 @@ impl<'a, G: Graph> CompoundProof<'a, Bls12, DrgPoRep<G>, DrgPoRepCircuit<'a, Bls
         DrgPoRepCircuit {
             params: engine_params,
             lambda,
+            sloth_iter: public_params.sloth_iter,
             replica_node,
             replica_node_path,
             replica_root,
@@ -163,6 +167,7 @@ pub fn synthesize_drgporep<E, CS>(
     mut cs: CS,
     params: &E::Params,
     lambda: usize,
+    sloth_iter: usize,
     replica_node: Option<E::Fr>,
     replica_node_path: Vec<Option<(E::Fr, bool)>>,
     replica_root: Option<E::Fr>,
@@ -181,6 +186,7 @@ where
     DrgPoRepCircuit {
         params,
         lambda,
+        sloth_iter,
         replica_node,
         replica_node_path,
         replica_root,
@@ -325,7 +331,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
             cs.namespace(|| "decode replica node commitment"),
             &key,
             replica_node,
-            sloth::DEFAULT_ROUNDS,
+            self.sloth_iter,
         )?;
 
         let expected = num::AllocatedNum::alloc(cs.namespace(|| "data node"), || {
@@ -373,6 +379,7 @@ mod tests {
         let nodes = 12;
         let degree = 6;
         let challenge = 2;
+        let sloth_iter = 1;
 
         let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&Fr::rand(rng));
 
@@ -396,6 +403,7 @@ mod tests {
                 degree,
                 seed: new_seed(),
             },
+            sloth_iter,
         };
 
         let pp =
@@ -456,6 +464,7 @@ mod tests {
             cs.namespace(|| "drgporep"),
             params,
             lambda,
+            sloth_iter,
             replica_node,
             replica_node_path,
             replica_root,
@@ -495,12 +504,14 @@ mod tests {
         let n = (1 << 30) / 32;
         let m = 6;
         let tree_depth = graph_height(n);
+        let sloth_iter = 1;
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
         synthesize_drgporep(
             cs.namespace(|| "drgporep"),
             params,
             lambda * 8,
+            sloth_iter,
             Some(Fr::rand(rng)),
             vec![Some((Fr::rand(rng), false)); tree_depth],
             Some(Fr::rand(rng)),
@@ -526,6 +537,7 @@ mod tests {
         let nodes = 2;
         let degree = 2;
         let challenge = 1;
+        let sloth_iter = 1;
 
         let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&Fr::rand(rng));
         let mut data: Vec<u8> = (0..nodes)
@@ -540,6 +552,7 @@ mod tests {
                     degree,
                     seed: new_seed(),
                 },
+                sloth_iter,
             },
             engine_params: params,
         };
@@ -575,6 +588,7 @@ mod tests {
                     degree,
                     seed: new_seed(),
                 },
+                sloth_iter,
             },
             engine_params: params,
         };

@@ -108,6 +108,7 @@ mod test {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let lambda = 32;
+        let sloth_iter = 1;
         let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
         let data: Vec<u8> = (0..32)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
@@ -129,6 +130,7 @@ mod test {
                 degree: 10,
                 seed: new_seed(),
             },
+            sloth_iter,
         };
 
         let writer: MemmapWriter<DrgPoRep<BucketGraph>> =
