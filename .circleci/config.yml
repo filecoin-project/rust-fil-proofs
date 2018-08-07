@@ -7,9 +7,12 @@ jobs:
     working_directory: /mnt/crate
     steps:
       - checkout
+      - run:
+          name: Calculate dependencies
+          command: cargo generate-lockfile
       - restore_cache:
           keys:
-            - cargo-v7-{{ checksum "Cargo.toml" }}
+            - cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run: cargo update
       - run: cargo fetch
       - persist_to_workspace:
@@ -17,7 +20,7 @@ jobs:
           paths:
             - Cargo.lock
       - save_cache:
-          key: cargo-v7-{{ checksum "Cargo.toml" }}
+          key: cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
           paths:
             - /root/.cargo
             - /root/.rustup
@@ -31,9 +34,9 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v7-{{ checksum "Cargo.toml" }}
+            - cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
-          name: Build and test
+          name: Test (stable)
           command: cargo +stable test --verbose --frozen
       - run:
           name: Prune the output files
@@ -55,9 +58,9 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v7-{{ checksum "Cargo.toml" }}
+            - cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
-          name: Build and test in release profile
+          name: Test (stable) in release profile
           command: cargo +stable test --verbose --release --frozen
   test_nightly:
     docker:
@@ -69,9 +72,9 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v7-{{ checksum "Cargo.toml" }}
+            - cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
-          name: Build and test with nightly Rust
+          name: Test (nightly)
           command: cargo +nightly test --verbose --frozen
   rustfmt:
     docker:
@@ -83,7 +86,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v7-{{ checksum "Cargo.toml" }}
+            - cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
           name: Run cargo fmt
           command: cargo fmt -- --check
@@ -98,7 +101,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v7-{{ checksum "Cargo.toml" }}
+            - cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
           name: Run cargo clippy
           command: cargo clippy
