@@ -101,6 +101,7 @@ pub trait Example<E: JubjubEngine>: Default {
 
         info!(target: "config", "constraint system: {:?}", typ);
         info!(target: "config", "data size:  {}", prettyb(data_size));
+        info!(target: "config", "challenge count: {}", challenge_count);
         info!(target: "config", "m: {}", m);
         info!(target: "config", "sloth: {}", sloth_iter);
         info!(target: "config", "tree depth: {}", tree_depth);
@@ -219,8 +220,9 @@ pub trait Example<E: JubjubEngine>: Default {
 
         info!(target: "config", "constraint system: {:?}", typ);
         info!(target: "config", "data size:  {}", prettyb(data_size));
+        info!(target: "config", "challenge count: {}", challenge_count);
         info!(target: "config", "m: {}", m);
-        info!(target: "config", "sloth_iter: {}", sloth_iter);
+        info!(target: "config", "sloth: {}", sloth_iter);
         info!(target: "config", "tree depth: {}", tree_depth);
 
         // need more samples as this is a faster operation
