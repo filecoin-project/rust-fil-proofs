@@ -1,21 +1,25 @@
 use libc;
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
+use std::path::PathBuf;
 use std::slice;
+
+use api_impl;
 
 type CstrT = *const libc::c_char;
 
 type SectorID = i32;
-type Commitment = u32;
+type Commitment = [u8; 32];
 type ProverID = [u8; 31];
-type ChallengeSeed = [u32; 8];
-type RandomSeed = [u32; 8];
+type ChallengeSeed = [u8; 32];
+type RandomSeed = [u8; 32];
 
 // arrays cannot be passed by value in C; callers instead pass a pointer to the
 // head and Rust makes runtime assertions of length while marshaling
 type ProverIDPtr = *const u8;
-type ChallengeSeedPtr = *const u32;
-type RandomSeedPtr = *const u32;
-type ResultPtr = *const Commitment;
+type ChallengeSeedPtr = *const u8;
+type RandomSeedPtr = *const u8;
+type ResultPtr = *const u8;
+type CommitmentPtr = *const u8;
 
 type SectorAccess = CstrT;
 type SectorAccessor = extern "C" fn(i: SectorID) -> SectorAccess;
@@ -27,22 +31,6 @@ fn from_cstr(c_str: CstrT) -> String {
             .to_owned()
             .to_string()
     }
-}
-
-fn u32ptr_to_array8(x: *const u32) -> [u32; 8] {
-    let s = unsafe { slice::from_raw_parts(x, 8).to_owned() };
-
-    assert_eq!(
-        s.len(),
-        8,
-        "actual len(s) = {}, expected len(s) = {}",
-        s.len(),
-        8
-    );
-
-    let mut out: [u32; 8] = Default::default();
-    out.copy_from_slice(&s[0..8]);
-    out
 }
 
 fn u8ptr_to_array31(x: *const u8) -> [u8; 31] {
@@ -61,12 +49,24 @@ fn u8ptr_to_array31(x: *const u8) -> [u8; 31] {
     out
 }
 
-fn to_cstring(s: &str) -> CString {
-    CString::new(s).unwrap()
+fn u8ptr_to_array32(x: *const u8) -> [u8; 32] {
+    let s = unsafe { slice::from_raw_parts(x, 32).to_owned() };
+
+    assert_eq!(
+        s.len(),
+        32,
+        "actual len(s) = {}, expected len(s) = {}",
+        s.len(),
+        32
+    );
+
+    let mut out: [u8; 32] = Default::default();
+    out.copy_from_slice(&s[0..32]);
+    out
 }
 
-const DUMMY_COMM_R: Commitment = 12345;
-const DUMMY_COMM_D: Commitment = 54321;
+const DUMMY_COMM_R: Commitment = *b"12345678901234567890123456789012";
+const DUMMY_COMM_D: Commitment = *b"09876543210987654321098765432109";
 
 /// Seals a sector.
 ///
@@ -77,26 +77,27 @@ const DUMMY_COMM_D: Commitment = 54321;
 ///                           sector
 /// * `sealed`              - function pointer used to get access to sealed
 ///                           sector
-/// * `_prover_id_ptr`      - pointer to first cell in a 31-length array of u8
-/// * `_challenge_seed_ptr` - pointer to first cell in a 8-length array of u32
-/// * `_random_seed_ptr`    - pointer to first cell in a 8-length array of u32
-/// * `result_ptr`          - pointer to first cell in a 2-length array of u32,
+/// * `prover_id_ptr`       - pointer to first cell in a 31-length array of u8
+/// * `challenge_seed_ptr`  - pointer to first cell in a 32-length array of u8
+/// * `random_seed_ptr`     - pointer to first cell in a 32-length array of u8
+/// * `result_ptr`          - pointer to first cell in a 64-length array of u8,
 ///                           mutated by seal in order to pass commitments back
-///                           to caller
+///                           to caller (first 32 elements correspond to comm_r
+///                           and second 32 to comm_d)
 /// ```
 #[no_mangle]
 pub extern "C" fn seal(
     sector_id: SectorID,
     unsealed: SectorAccessor,
     sealed: SectorAccessor,
-    _prover_id_ptr: ProverIDPtr,
-    _challenge_seed_ptr: ChallengeSeedPtr,
-    _random_seed_ptr: RandomSeedPtr,
+    prover_id_ptr: ProverIDPtr,
+    challenge_seed_ptr: ChallengeSeedPtr,
+    random_seed_ptr: RandomSeedPtr,
     result_ptr: ResultPtr,
 ) -> () {
-    let prover_id = u8ptr_to_array31(_prover_id_ptr);
-    let challenge_seed = u32ptr_to_array8(_challenge_seed_ptr);
-    let random_seed = u32ptr_to_array8(_random_seed_ptr);
+    let prover_id = u8ptr_to_array31(prover_id_ptr);
+    let challenge_seed = u8ptr_to_array32(challenge_seed_ptr);
+    let random_seed = u8ptr_to_array32(random_seed_ptr);
 
     let comms = seal_internal(
         sector_id,
@@ -110,8 +111,10 @@ pub extern "C" fn seal(
     // let caller manage this memory, preventing the need for calling back into
     // Rust code later to deallocate
     unsafe {
-        *(result_ptr.offset(0 as isize) as *mut u32) = comms[0];
-        *(result_ptr.offset(1 as isize) as *mut u32) = comms[1];
+        for x in 0..32 {
+            *(result_ptr.offset(x as isize) as *mut u8) = comms[0][x];
+            *(result_ptr.offset((x + 32) as isize) as *mut u8) = comms[1][x];
+        }
     };
 }
 
@@ -123,15 +126,24 @@ fn seal_internal(
     _challenge_seed: ChallengeSeed,
     _random_seed: RandomSeed,
 ) -> [Commitment; 2] {
-    let _in_path = from_cstr(unsealed(sector_id));
-    let _out_path = from_cstr(sealed(sector_id));
+    let in_path = PathBuf::from(from_cstr(unsealed(sector_id)));
+    let out_path = PathBuf::from(from_cstr(sealed(sector_id)));
+
+    let _copied = api_impl::seal(&in_path, &out_path);
 
     [DUMMY_COMM_R, DUMMY_COMM_D]
 }
 
-#[no_mangle]
-pub extern "C" fn verifySeal(comm_r: Commitment, comm_d: Commitment) -> bool {
+fn verify_seal_internal(comm_r: Commitment, comm_d: Commitment) -> bool {
     comm_r == DUMMY_COMM_R && comm_d == DUMMY_COMM_D
+}
+
+#[no_mangle]
+pub extern "C" fn verify_seal(comm_r_ptr: CommitmentPtr, comm_d_ptr: CommitmentPtr) -> bool {
+    let comm_r = u8ptr_to_array32(comm_r_ptr);
+    let comm_d = u8ptr_to_array32(comm_d_ptr);
+
+    verify_seal_internal(comm_r, comm_d)
 }
 
 #[no_mangle]
@@ -152,6 +164,11 @@ pub extern "C" fn verifyPost() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::CString;
+
+    fn to_cstring(s: &str) -> CString {
+        CString::new(s).unwrap()
+    }
 
     extern "C" fn sector_accessor(id: SectorID) -> SectorAccess {
         let path = format!("sector{}", id);
@@ -161,10 +178,10 @@ mod tests {
 
     #[test]
     fn seal_verify() {
-        let result: [u32; 2] = [0; 2];
-        let prover_id: [u8; 31] = [1; 31];
-        let challenge_seed: [u32; 8] = [2; 8];
-        let random_seed: [u32; 8] = [3; 8];
+        let result: [u8; 64] = [0; 64];
+        let prover_id: [u8; 31] = [2; 31];
+        let challenge_seed: [u8; 32] = [3; 32];
+        let random_seed: [u8; 32] = [4; 32];
 
         seal(
             123,
@@ -176,9 +193,8 @@ mod tests {
             &result[0],
         );
 
-        assert_ne!(result[0], result[1]);
-        assert!(verifySeal(result[0], result[1]));
-        assert!(!verifySeal(result[1], result[0]));
+        assert!(verify_seal(&result[0], &result[32]));
+        assert!(!verify_seal(&result[32], &result[0]));
     }
 
     #[test]
@@ -188,12 +204,12 @@ mod tests {
             sector_accessor,
             sector_accessor,
             [1; 31],
-            [2; 8],
-            [3; 8],
+            [2; 32],
+            [3; 32],
         );
 
         assert_ne!(comms[0], comms[1]);
-        assert!(verifySeal(comms[0], comms[1]));
-        assert!(!verifySeal(comms[1], comms[0]));
+        assert!(verify_seal_internal(comms[0], comms[1]));
+        assert!(!verify_seal_internal(comms[1], comms[0]));
     }
 }

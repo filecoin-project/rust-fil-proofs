@@ -45,6 +45,7 @@ pub mod test_helper;
 pub mod example_helper;
 
 pub mod api;
+pub mod api_impl;
 pub mod batchpost;
 pub mod circuit;
 pub mod compound_proof;
