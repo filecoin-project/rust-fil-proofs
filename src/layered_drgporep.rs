@@ -86,7 +86,7 @@ pub trait Layers {
         };
         let drgporep_pub_inputs = drgporep::PublicInputs {
             prover_id: *pub_inputs.prover_id,
-            challenge: pub_inputs.challenge,
+            challenges: vec![pub_inputs.challenge],
             tau: &pub_inputs.tau[pub_inputs.tau.len() - layers],
         };
         let drg_proof = DrgPoRep::prove(&pp, &drgporep_pub_inputs, &new_priv_inputs)?;
@@ -227,13 +227,13 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         for (layer, proof_layer) in proof.encoding_proofs.iter().enumerate() {
             let new_pub_inputs = drgporep::PublicInputs {
                 prover_id: *pub_inputs.prover_id,
-                challenge: pub_inputs.challenge,
+                challenges: vec![pub_inputs.challenge],
                 tau: &pub_inputs.tau[layer],
             };
 
             let ep = &proof_layer;
             let parents: Vec<_> = ep
-                .replica_parents
+                .replica_parents[0]
                 .iter()
                 .map(|p| {
                     (
@@ -251,14 +251,14 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
                 &pp,
                 &new_pub_inputs,
                 &drgporep::Proof {
-                    replica_node: drgporep::DataProof {
+                    replica_nodes: vec![drgporep::DataProof {
                         // TODO: investigate if clone can be avoided by using a reference in drgporep::DataProof
-                        proof: ep.replica_node.proof.clone(),
-                        data: ep.replica_node.data,
-                    },
-                    replica_parents: parents,
+                        proof: ep.replica_nodes[0].proof.clone(),
+                        data: ep.replica_nodes[0].data,
+                    }],
+                    replica_parents: vec![parents],
                     // TODO: investigate if clone can be avoided by using a reference in drgporep::DataProof
-                    node: ep.node.clone(),
+                    nodes: vec![ep.nodes[0].clone()],
                 },
             )?;
 

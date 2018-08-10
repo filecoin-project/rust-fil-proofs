@@ -26,13 +26,13 @@ macro_rules! table_tests {
 
 pub struct FakeDrgParams {
     pub prover_id: Fr,
-    pub replica_node: Fr,
-    pub replica_node_path: Vec<Option<(Fr, bool)>>,
+    pub replica_nodes: Vec<Fr>,
+    pub replica_nodes_paths: Vec<Vec<Option<(Fr, bool)>>>,
     pub replica_root: Fr,
-    pub replica_parents: Vec<Fr>,
-    pub replica_parents_paths: Vec<Vec<Option<(Fr, bool)>>>,
-    pub data_node: Fr,
-    pub data_node_path: Vec<Option<(Fr, bool)>>,
+    pub replica_parents: Vec<Vec<Fr>>,
+    pub replica_parents_paths: Vec<Vec<Vec<Option<(Fr, bool)>>>>,
+    pub data_nodes: Vec<Fr>,
+    pub data_nodes_paths: Vec<Vec<Option<(Fr, bool)>>>,
     pub data_root: Fr,
 }
 
@@ -41,6 +41,7 @@ pub fn fake_drgpoprep_proof<R: Rng>(
     tree_depth: usize,
     m: usize,
     sloth_rounds: usize,
+    challenge_count: usize,
 ) -> FakeDrgParams {
     let prover_id: Fr = rng.gen();
     let challenge = m + 1;
@@ -105,13 +106,21 @@ pub fn fake_drgpoprep_proof<R: Rng>(
 
     FakeDrgParams {
         prover_id,
-        replica_node,
-        replica_node_path,
+        replica_nodes: (0..challenge_count).map(|_| replica_node).collect(),
+        replica_nodes_paths: (0..challenge_count)
+            .map(|_| replica_node_path.clone())
+            .collect(),
         replica_root,
-        replica_parents,
-        replica_parents_paths,
-        data_node,
-        data_node_path,
+        replica_parents: (0..challenge_count)
+            .map(|_| replica_parents.clone())
+            .collect(),
+        replica_parents_paths: (0..challenge_count)
+            .map(|_| replica_parents_paths.clone())
+            .collect(),
+        data_nodes: (0..challenge_count).map(|_| data_node).collect(),
+        data_nodes_paths: (0..challenge_count)
+            .map(|_| data_node_path.clone())
+            .collect(),
         data_root,
     }
 }

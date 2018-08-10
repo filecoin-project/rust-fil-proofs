@@ -14,20 +14,19 @@ use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 
 use proofs::circuit;
 use proofs::circuit::bench::BenchCS;
-use proofs::fr32::fr_into_bytes;
 use proofs::test_helper::fake_drgpoprep_proof;
 
 struct DrgPoRepExample<'a, E: JubjubEngine> {
     params: &'a E::Params,
     lambda: usize,
     sloth_iter: usize,
-    replica_node: Option<E::Fr>,
-    replica_node_path: Vec<Option<(E::Fr, bool)>>,
+    replica_nodes: Vec<Option<E::Fr>>,
+    replica_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
     replica_root: Option<E::Fr>,
-    replica_parents: Vec<Option<E::Fr>>,
-    replica_parents_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
-    data_node: Option<E::Fr>,
-    data_node_path: Vec<Option<(E::Fr, bool)>>,
+    replica_parents: Vec<Vec<Option<E::Fr>>>,
+    replica_parents_paths: Vec<Vec<Vec<Option<(E::Fr, bool)>>>>,
+    data_nodes: Vec<Option<E::Fr>>,
+    data_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
     data_root: Option<E::Fr>,
     prover_id: Option<E::Fr>,
     m: usize,
@@ -40,13 +39,13 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepExample<'a, E> {
             self.params,
             self.lambda,
             self.sloth_iter,
-            self.replica_node,
-            self.replica_node_path,
+            self.replica_nodes,
+            self.replica_nodes_paths,
             self.replica_root,
             self.replica_parents,
             self.replica_parents_paths,
-            self.data_node,
-            self.data_node_path,
+            self.data_nodes,
+            self.data_nodes_paths,
             self.data_root,
             self.prover_id,
             self.m,
@@ -65,31 +64,30 @@ impl DrgPoRepApp {
         rng: &mut R,
         engine_params: &JubjubBls12,
         tree_depth: usize,
-        _challenge_count: usize,
+        challenge_count: usize,
         _leaves: usize,
         lambda: usize,
         m: usize,
         sloth_iter: usize,
     ) -> BenchCS<Bls12> {
-        let f = fake_drgpoprep_proof(rng, tree_depth, m, SLOTH_ROUNDS);
-        let prover_bytes = fr_into_bytes::<Bls12>(&f.prover_id);
+        let f = fake_drgpoprep_proof(rng, tree_depth, m, SLOTH_ROUNDS, challenge_count);
 
         // create an instance of our circut (with the witness)
         let c = DrgPoRepExample {
             params: engine_params,
             lambda: lambda * 8,
             sloth_iter,
-            replica_node: Some(f.replica_node),
-            replica_node_path: f.replica_node_path,
+            replica_nodes: f.replica_nodes.into_iter().map(|r| Some(r)).collect(),
+            replica_nodes_paths: f.replica_nodes_paths,
             replica_root: Some(f.replica_root),
             replica_parents: f
                 .replica_parents
                 .iter()
-                .map(|parent| Some(*parent))
+                .map(|parents| parents.iter().map(|parent| Some(*parent)).collect())
                 .collect(),
             replica_parents_paths: f.replica_parents_paths,
-            data_node: Some(f.data_node),
-            data_node_path: f.data_node_path.clone(),
+            data_nodes: f.data_nodes.into_iter().map(|d| Some(d)).collect(),
+            data_nodes_paths: f.data_nodes_paths,
             data_root: Some(f.data_root),
             prover_id: Some(f.prover_id),
             m,
@@ -115,7 +113,7 @@ impl Example<Bls12> for DrgPoRepApp {
         rng: &mut R,
         jubjub_params: &JubjubBls12,
         tree_depth: usize,
-        _challenge_count: usize,
+        challenge_count: usize,
         lambda: usize,
         m: usize,
         sloth_iter: usize,
@@ -125,13 +123,13 @@ impl Example<Bls12> for DrgPoRepApp {
                 params: jubjub_params,
                 lambda: lambda * 8,
                 sloth_iter,
-                replica_node: None,
-                replica_node_path: vec![None; tree_depth],
+                replica_nodes: vec![None; challenge_count],
+                replica_nodes_paths: vec![vec![None; tree_depth]; challenge_count],
                 replica_root: None,
-                replica_parents: vec![None; m],
-                replica_parents_paths: vec![vec![None; tree_depth]; m],
-                data_node: None,
-                data_node_path: vec![None; tree_depth],
+                replica_parents: vec![vec![None; m]; challenge_count],
+                replica_parents_paths: vec![vec![vec![None; tree_depth]; m]; challenge_count],
+                data_nodes: vec![None; challenge_count],
+                data_nodes_paths: vec![vec![None; tree_depth]; challenge_count],
                 data_root: None,
                 prover_id: None,
                 m,
@@ -150,31 +148,30 @@ impl Example<Bls12> for DrgPoRepApp {
         engine_params: &JubjubBls12,
         groth_params: &Parameters<Bls12>,
         tree_depth: usize,
-        _challenge_count: usize,
+        challenge_count: usize,
         _leaves: usize,
         lambda: usize,
         m: usize,
         sloth_iter: usize,
     ) -> Proof<Bls12> {
-        let f = fake_drgpoprep_proof(rng, tree_depth, m, SLOTH_ROUNDS);
-        let prover_bytes = fr_into_bytes::<Bls12>(&f.prover_id);
+        let f = fake_drgpoprep_proof(rng, tree_depth, m, SLOTH_ROUNDS, challenge_count);
 
         // create an instance of our circut (with the witness)
         let c = DrgPoRepExample {
             params: engine_params,
             lambda: lambda * 8,
             sloth_iter,
-            replica_node: Some(f.replica_node),
-            replica_node_path: f.replica_node_path,
+            replica_nodes: f.replica_nodes.into_iter().map(|r| Some(r)).collect(),
+            replica_nodes_paths: f.replica_nodes_paths,
             replica_root: Some(f.replica_root),
             replica_parents: f
                 .replica_parents
                 .iter()
-                .map(|parent| Some(*parent))
+                .map(|parents| parents.iter().map(|parent| Some(*parent)).collect())
                 .collect(),
             replica_parents_paths: f.replica_parents_paths,
-            data_node: Some(f.data_node),
-            data_node_path: f.data_node_path.clone(),
+            data_nodes: f.data_nodes.into_iter().map(|d| Some(d)).collect(),
+            data_nodes_paths: f.data_nodes_paths,
             data_root: Some(f.data_root),
             prover_id: Some(f.prover_id),
             m,

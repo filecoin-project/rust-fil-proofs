@@ -16,7 +16,7 @@ use proof::ProofScheme;
 #[derive(Debug)]
 pub struct PublicInputs<'a> {
     pub prover_id: Fr,
-    pub challenge: usize,
+    pub challenges: Vec<usize>,
     pub tau: &'a porep::Tau,
 }
 
@@ -84,35 +84,45 @@ pub type ReplicaParents = Vec<(usize, DataProof)>;
 
 #[derive(Debug, Clone)]
 pub struct Proof {
-    pub replica_node: DataProof,
-    pub replica_parents: ReplicaParents,
-    pub node: DataProof,
+    pub replica_nodes: Vec<DataProof>,
+    pub replica_parents: Vec<ReplicaParents>,
+    pub nodes: Vec<DataProof>,
 }
 
 impl Proof {
     pub fn serialize(&self) -> Vec<u8> {
-        vec![
-            self.replica_node.serialize(),
-            self.replica_parents
-                .iter()
-                .fold(Vec::new(), |mut acc, (s, p)| {
-                    let mut v = vec![0u8; 4];
-                    v.write_u32::<LittleEndian>(*s as u32).unwrap();
-                    acc.extend(v);
-                    acc.extend(p.serialize());
-                    acc
-                }),
-            self.node.serialize(),
-        ].concat()
+        let res: Vec<_> = (0..self.nodes.len())
+            .map(|i| {
+                vec![
+                    self.replica_nodes[i].serialize(),
+                    self.replica_parents[i]
+                        .iter()
+                        .fold(Vec::new(), |mut acc, (s, p)| {
+                            let mut v = vec![0u8; 4];
+                            v.write_u32::<LittleEndian>(*s as u32).unwrap();
+                            acc.extend(v);
+                            acc.extend(p.serialize());
+                            acc
+                        }),
+                    self.nodes[i].serialize(),
+                ].concat()
+            }).collect::<Vec<Vec<u8>>>()
+            .concat();
+
+        res
     }
 }
 
 impl Proof {
-    pub fn new(replica_node: DataProof, replica_parents: ReplicaParents, node: DataProof) -> Proof {
+    pub fn new(
+        replica_nodes: Vec<DataProof>,
+        replica_parents: Vec<ReplicaParents>,
+        nodes: Vec<DataProof>,
+    ) -> Proof {
         Proof {
-            replica_node,
+            replica_nodes,
             replica_parents,
-            node,
+            nodes,
         }
     }
 }
@@ -144,50 +154,59 @@ impl<'a, G: Graph> ProofScheme<'a> for DrgPoRep<G> {
         pub_inputs: &Self::PublicInputs,
         priv_inputs: &Self::PrivateInputs,
     ) -> Result<Self::Proof> {
-        let challenge = pub_inputs.challenge % pub_params.graph.size();
-        assert_ne!(challenge, 0, "can not prove the first node");
+        let len = pub_inputs.challenges.len();
 
-        let tree_d = &priv_inputs.aux.tree_d;
-        let tree_r = &priv_inputs.aux.tree_r;
-        let replica = priv_inputs.replica;
+        let mut replica_nodes = Vec::with_capacity(len);
+        let mut replica_parents = Vec::with_capacity(len);
+        let mut data_nodes = Vec::with_capacity(len);
 
-        let data = bytes_into_fr::<Bls12>(data_at_node(replica, challenge, pub_params.lambda)?)?;
+        for i in 0..len {
+            let challenge = pub_inputs.challenges[i] % pub_params.graph.size();
+            assert_ne!(challenge, 0, "can not prove the first node");
 
-        let replica_node = DataProof {
-            proof: tree_r.gen_proof(challenge).into(),
-            data,
-        };
+            let tree_d = &priv_inputs.aux.tree_d;
+            let tree_r = &priv_inputs.aux.tree_r;
+            let replica = priv_inputs.replica;
 
-        let parents = pub_params.graph.parents(challenge);
-        let mut replica_parents = Vec::with_capacity(parents.len());
+            let data =
+                bytes_into_fr::<Bls12>(data_at_node(replica, challenge, pub_params.lambda)?)?;
 
-        for p in parents {
-            replica_parents.push((p, {
-                let proof = tree_r.gen_proof(p);
-                DataProof {
-                    proof: proof.into(),
-                    data: bytes_into_fr::<Bls12>(data_at_node(replica, p, pub_params.lambda)?)?,
-                }
-            }));
-        }
+            replica_nodes.push(DataProof {
+                proof: tree_r.gen_proof(challenge).into(),
+                data,
+            });
 
-        let node_proof = tree_d.gen_proof(challenge);
+            let parents = pub_params.graph.parents(challenge);
+            let mut replica_parentsi = Vec::with_capacity(parents.len());
 
-        let extracted = Self::extract(
-            pub_params,
-            &fr_into_bytes::<Bls12>(&pub_inputs.prover_id),
-            &replica,
-            challenge,
-        )?;
+            for p in parents {
+                replica_parentsi.push((p, {
+                    let proof = tree_r.gen_proof(p);
+                    DataProof {
+                        proof: proof.into(),
+                        data: bytes_into_fr::<Bls12>(data_at_node(replica, p, pub_params.lambda)?)?,
+                    }
+                }));
+            }
 
-        let proof = Proof::new(
-            replica_node,
-            replica_parents,
-            DataProof {
+            replica_parents.push(replica_parentsi);
+
+            let node_proof = tree_d.gen_proof(challenge);
+
+            let extracted = Self::extract(
+                pub_params,
+                &fr_into_bytes::<Bls12>(&pub_inputs.prover_id),
+                &replica,
+                challenge,
+            )?;
+
+            data_nodes.push(DataProof {
                 data: bytes_into_fr::<Bls12>(&extracted)?,
                 proof: node_proof.into(),
-            },
-        );
+            });
+        }
+
+        let proof = Proof::new(replica_nodes, replica_parents, data_nodes);
 
         Ok(proof)
     }
@@ -197,68 +216,79 @@ impl<'a, G: Graph> ProofScheme<'a> for DrgPoRep<G> {
         pub_inputs: &Self::PublicInputs,
         proof: &Self::Proof,
     ) -> Result<bool> {
-        {
-            // This was verify_proof_meta.
-            if pub_inputs.challenge >= pub_params.graph.size() {
+        for i in 0..pub_inputs.challenges.len() {
+            {
+                // This was verify_proof_meta.
+                if pub_inputs.challenges[i] >= pub_params.graph.size() {
+                    return Ok(false);
+                }
+
+                if !(proof.nodes[i].proves_challenge(pub_inputs.challenges[i])) {
+                    return Ok(false);
+                }
+
+                if !(proof.replica_nodes[i].proves_challenge(pub_inputs.challenges[i])) {
+                    return Ok(false);
+                }
+
+                let expected_parents = pub_params.graph.parents(pub_inputs.challenges[i]);
+                if proof.replica_parents[i].len() != expected_parents.len() {
+                    println!(
+                        "proof parents were not the same length as in public parameters: {} != {}",
+                        proof.replica_parents[i].len(),
+                        expected_parents.len()
+                    );
+                    return Ok(false);
+                }
+
+                let parents_as_expected = proof.replica_parents[i]
+                    .iter()
+                    .zip(&expected_parents)
+                    .all(|(actual, expected)| actual.0 == *expected);
+
+                if !parents_as_expected {
+                    println!("proof parents were not those provided in public parameters");
+                    return Ok(false);
+                }
+            }
+
+            let challenge = pub_inputs.challenges[i] % pub_params.graph.size();
+            assert_ne!(challenge, 0, "can not prove the first node");
+
+            if !proof.replica_nodes[i].proof.validate(challenge) {
+                println!("invalid replica node");
                 return Ok(false);
             }
 
-            if !(proof.node.proves_challenge(pub_inputs.challenge)) {
+            for (parent_node, p) in &proof.replica_parents[i] {
+                if !p.proof.validate(*parent_node) {
+                    println!("invalid replica parent: {:?}", p);
+                    return Ok(false);
+                }
+            }
+
+            let prover_bytes = fr_into_bytes::<Bls12>(&pub_inputs.prover_id);
+
+            let key_input =
+                proof.replica_parents[i]
+                    .iter()
+                    .fold(prover_bytes, |mut acc, (_, p)| {
+                        acc.extend(fr_into_bytes::<Bls12>(&p.data));
+                        acc
+                    });
+
+            let key = kdf::kdf::<Bls12>(key_input.as_slice(), pub_params.graph.degree());
+            let unsealed: Fr =
+                sloth::decode::<Bls12>(&key, &proof.replica_nodes[i].data, pub_params.sloth_iter);
+
+            if unsealed != proof.nodes[i].data {
                 return Ok(false);
             }
 
-            if !(proof.replica_node.proves_challenge(pub_inputs.challenge)) {
+            if !proof.nodes[i].proof.validate_data(&unsealed) {
+                println!("invalid data {:?}", unsealed);
                 return Ok(false);
             }
-
-            let expected_parents = pub_params.graph.parents(pub_inputs.challenge);
-            let parents_as_expected = proof
-                .replica_parents
-                .iter()
-                .zip(&expected_parents)
-                .all(|(actual, expected)| actual.0 == *expected);
-
-            if !parents_as_expected {
-                println!("proof parents were not those provided in public parameters");
-                return Ok(false);
-            }
-        }
-
-        let challenge = pub_inputs.challenge % pub_params.graph.size();
-        assert_ne!(challenge, 0, "can not prove the first node");
-
-        if !proof.replica_node.proof.validate(challenge) {
-            println!("invalid replica node");
-            return Ok(false);
-        }
-
-        for (parent_node, p) in &proof.replica_parents {
-            if !p.proof.validate(*parent_node) {
-                println!("invalid replica parent: {:?}", p);
-                return Ok(false);
-            }
-        }
-
-        let prover_bytes = fr_into_bytes::<Bls12>(&pub_inputs.prover_id);
-
-        let key_input = proof
-            .replica_parents
-            .iter()
-            .fold(prover_bytes, |mut acc, (_, p)| {
-                acc.extend(fr_into_bytes::<Bls12>(&p.data));
-                acc
-            });
-        let key = kdf::kdf::<Bls12>(key_input.as_slice(), pub_params.graph.degree());
-        let unsealed: Fr =
-            sloth::decode::<Bls12>(&key, &proof.replica_node.data, pub_params.sloth_iter);
-
-        if unsealed != proof.node.data {
-            return Ok(false);
-        }
-
-        if !proof.node.proof.validate_data(&unsealed) {
-            println!("invalid data {:?}", unsealed);
-            return Ok(false);
         }
 
         Ok(true)
@@ -449,7 +479,7 @@ mod tests {
 
             let pub_inputs = PublicInputs {
                 prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
-                challenge,
+                challenges: vec![challenge, challenge],
                 tau: &tau,
             };
 
@@ -466,17 +496,19 @@ mod tests {
                 let real_parents = real_proof.replica_parents;
 
                 // Parent vector claiming the wrong parents.
-                let fake_parents = real_parents
+                let fake_parents = vec![
+                    real_parents[0]
                     .iter()
                     // Incrementing each parent node will give us a different parent set.
                     // It's fine to be out of range, since this only needs to fail.
                     .map(|(i, data_proof)| (i + 1, data_proof.clone()))
-                    .collect::<Vec<_>>();
+                    .collect::<Vec<_>>(),
+                ];
 
                 let proof = Proof::new(
-                    real_proof.replica_node.clone(),
+                    real_proof.replica_nodes.clone(),
                     fake_parents,
-                    real_proof.node.clone().into(),
+                    real_proof.nodes.clone().into(),
                 );
 
                 assert!(
@@ -485,8 +517,8 @@ mod tests {
                 );
 
                 let mut all_same = true;
-                for (p, _) in &real_parents {
-                    if *p != real_parents[0].0 {
+                for (p, _) in &real_parents[0] {
+                    if *p != real_parents[0][0].0 {
                         all_same = false;
                     }
                 }
@@ -499,20 +531,22 @@ mod tests {
 
                 // Parent vector claiming the right parents but providing valid proofs for different
                 // parents.
-                let fake_proof_parents = real_parents
-                    .iter()
-                    .enumerate()
-                    .map(|(i, (p, _))| {
-                        // Rotate the real parent proofs.
-                        let x = (i + 1) % real_parents.len();
-                        let j = real_parents[x].0;
-                        (*p, real_parents[j].1.clone())
-                    }).collect::<Vec<_>>();
+                let fake_proof_parents = vec![
+                    real_parents[0]
+                        .iter()
+                        .enumerate()
+                        .map(|(i, (p, _))| {
+                            // Rotate the real parent proofs.
+                            let x = (i + 1) % real_parents[0].len();
+                            let j = real_parents[0][x].0;
+                            (*p, real_parents[0][j].1.clone())
+                        }).collect::<Vec<_>>(),
+                ];
 
                 let proof2 = Proof::new(
-                    real_proof.replica_node,
+                    real_proof.replica_nodes,
                     fake_proof_parents,
-                    real_proof.node.into(),
+                    real_proof.nodes.into(),
                 );
 
                 assert!(
@@ -528,7 +562,7 @@ mod tests {
             if use_wrong_challenge {
                 let pub_inputs_with_wrong_challenge_for_proof = PublicInputs {
                     prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
-                    challenge: if challenge == 1 { 2 } else { 1 },
+                    challenges: vec![if challenge == 1 { 2 } else { 1 }],
                     tau: &tau,
                 };
                 let verified =

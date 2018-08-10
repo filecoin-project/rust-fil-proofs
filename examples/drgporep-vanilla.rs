@@ -21,9 +21,9 @@ use proofs::fr32::{bytes_into_fr, fr_into_bytes};
 use proofs::porep::PoRep;
 use proofs::proof::ProofScheme;
 
-fn do_the_work(data_size: usize, m: usize, sloth_iter: usize) {
+fn do_the_work(data_size: usize, m: usize, sloth_iter: usize, challenge_count: usize) {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-    let challenge = 2;
+    let challenges = vec![2; challenge_count];
     let lambda = 32;
 
     info!(target: "config", "data size: {}", prettyb(data_size));
@@ -60,7 +60,7 @@ fn do_the_work(data_size: usize, m: usize, sloth_iter: usize) {
 
     let pub_inputs = PublicInputs {
         prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
-        challenge,
+        challenges,
         tau: &tau,
     };
 
@@ -133,11 +133,18 @@ fn main() {
                 .long("sloth")
                 .default_value("1")
                 .takes_value(true),
+        ).arg(
+            Arg::with_name("challenges")
+                .long("challenges")
+                .help("How many challenges to execute, defaults to 1")
+                .default_value("1")
+                .takes_value(true),
         ).get_matches();
 
     let data_size = value_t!(matches, "size", usize).unwrap() * 1024;
     let m = value_t!(matches, "m", usize).unwrap();
     let sloth_iter = value_t!(matches, "sloth", usize).unwrap();
+    let challenge_count = value_t!(matches, "challenges", usize).unwrap();
 
-    do_the_work(data_size, m, sloth_iter);
+    do_the_work(data_size, m, sloth_iter, challenge_count);
 }

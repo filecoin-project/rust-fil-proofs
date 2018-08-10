@@ -45,13 +45,13 @@ pub struct DrgPoRepCircuit<'a, E: JubjubEngine> {
     params: &'a E::Params,
     lambda: usize,
     sloth_iter: usize,
-    replica_node: Option<E::Fr>,
-    replica_node_path: Vec<Option<(E::Fr, bool)>>,
+    replica_nodes: Vec<Option<E::Fr>>,
+    replica_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
     replica_root: Option<E::Fr>,
-    replica_parents: Vec<Option<E::Fr>>,
-    replica_parents_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
-    data_node: Option<E::Fr>,
-    data_node_path: Vec<Option<(E::Fr, bool)>>,
+    replica_parents: Vec<Vec<Option<E::Fr>>>,
+    replica_parents_paths: Vec<Vec<Vec<Option<(E::Fr, bool)>>>>,
+    data_nodes: Vec<Option<E::Fr>>,
+    data_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
     data_root: Option<E::Fr>,
     prover_id: Option<E::Fr>,
     degree: usize,
@@ -76,7 +76,7 @@ impl<'a, G: Graph> CompoundProof<'a, Bls12, DrgPoRep<G>, DrgPoRepCircuit<'a, Bls
         pub_params: &<DrgPoRep<G> as ProofScheme>::PublicParams,
     ) -> Vec<Fr> {
         let prover_id = pub_in.prover_id;
-        let challenge = pub_in.challenge;
+        let challenges = &pub_in.challenges;
         let tau = pub_in.tau;
         let comm_r = tau.comm_r;
         let comm_d = tau.comm_d;
@@ -88,33 +88,39 @@ impl<'a, G: Graph> CompoundProof<'a, Bls12, DrgPoRep<G>, DrgPoRepCircuit<'a, Bls
 
         let packed_prover_id = multipack::compute_multipacking::<Bls12>(&prover_id_bits);
 
-        let parents = pub_params.graph.parents(challenge);
-
         let por_pub_params = merklepor::PublicParams { lambda, leaves };
 
-        let mut inputs = Vec::new();
-        inputs.extend(packed_prover_id);
+        challenges
+            .iter()
+            .map(|challenge| {
+                let mut input = Vec::new();
+                input.extend(packed_prover_id.clone());
 
-        let mut por_nodes = vec![challenge];
-        por_nodes.extend(parents);
+                let mut por_nodes = vec![*challenge];
+                let parents = pub_params.graph.parents(*challenge);
+                por_nodes.extend(parents);
 
-        for node in por_nodes {
-            let por_pub_inputs = merklepor::PublicInputs {
-                commitment: comm_r,
-                challenge: node,
-            };
-            let por_inputs = PoRCompound::generate_public_inputs(&por_pub_inputs, &por_pub_params);
-            inputs.extend(por_inputs);
-        }
+                for node in por_nodes {
+                    let por_pub_inputs = merklepor::PublicInputs {
+                        commitment: comm_r,
+                        challenge: node,
+                    };
+                    let por_inputs =
+                        PoRCompound::generate_public_inputs(&por_pub_inputs, &por_pub_params);
+                    input.extend(por_inputs);
+                }
 
-        let por_pub_inputs = merklepor::PublicInputs {
-            commitment: comm_d,
-            challenge,
-        };
-        let por_inputs = PoRCompound::generate_public_inputs(&por_pub_inputs, &por_pub_params);
-        inputs.extend(por_inputs);
+                let por_pub_inputs = merklepor::PublicInputs {
+                    commitment: comm_d,
+                    challenge: *challenge,
+                };
+                let por_inputs =
+                    PoRCompound::generate_public_inputs(&por_pub_inputs, &por_pub_params);
+                input.extend(por_inputs);
 
-        inputs
+                input
+            }).collect::<Vec<Vec<_>>>()
+            .concat()
     }
 
     fn circuit<'b>(
@@ -124,38 +130,65 @@ impl<'a, G: Graph> CompoundProof<'a, Bls12, DrgPoRep<G>, DrgPoRepCircuit<'a, Bls
         engine_params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> DrgPoRepCircuit<'a, Bls12> {
         let lambda = public_params.lambda;
+        let _arity = public_inputs.challenges.len();
 
-        let replica_node = Some(proof.replica_node.data);
-        let replica_node_path = proof.replica_node.proof.as_options();
-        let replica_root = Some(proof.replica_node.proof.root().into());
+        let replica_nodes = proof
+            .replica_nodes
+            .iter()
+            .map(|node| Some(node.data))
+            .collect();
+
+        let replica_nodes_paths = proof
+            .replica_nodes
+            .iter()
+            .map(|node| node.proof.as_options())
+            .collect();
+
+        let replica_root = Some(proof.replica_nodes[0].proof.root().into());
 
         let replica_parents = proof
             .replica_parents
             .iter()
-            .map(|(_, parent)| Some(parent.data))
-            .collect();
+            .map(|parents| {
+                parents
+                    .iter()
+                    .map(|(_, parent)| Some(parent.data))
+                    .collect()
+            }).collect();
 
-        let replica_parents_paths: Vec<_> = proof
+        let replica_parents_paths: Vec<Vec<_>> = proof
             .replica_parents
             .iter()
-            .map(|(_, parent)| parent.proof.as_options())
+            .map(|parents| {
+                let p: Vec<_> = parents
+                    .iter()
+                    .map(|(_, parent)| parent.proof.as_options())
+                    .collect();
+                p
+            }).collect();
+
+        let data_nodes = proof.nodes.iter().map(|node| Some(node.data)).collect();
+
+        let data_nodes_paths = proof
+            .nodes
+            .iter()
+            .map(|node| node.proof.as_options())
             .collect();
-        let data_node = Some(proof.node.data);
-        let data_node_path = proof.node.proof.as_options();
-        let data_root = Some(proof.node.proof.root().into());
+
+        let data_root = Some(proof.nodes[0].proof.root().into());
         let prover_id = Some(public_inputs.prover_id);
 
         DrgPoRepCircuit {
             params: engine_params,
             lambda,
             sloth_iter: public_params.sloth_iter,
-            replica_node,
-            replica_node_path,
+            replica_nodes,
+            replica_nodes_paths,
             replica_root,
             replica_parents,
             replica_parents_paths,
-            data_node,
-            data_node_path,
+            data_nodes,
+            data_nodes_paths,
             data_root,
             prover_id,
             degree: public_params.graph.degree(),
@@ -168,13 +201,13 @@ pub fn synthesize_drgporep<E, CS>(
     params: &E::Params,
     lambda: usize,
     sloth_iter: usize,
-    replica_node: Option<E::Fr>,
-    replica_node_path: Vec<Option<(E::Fr, bool)>>,
+    replica_nodes: Vec<Option<E::Fr>>,
+    replica_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
     replica_root: Option<E::Fr>,
-    replica_parents: Vec<Option<E::Fr>>,
-    replica_parents_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
-    data_node: Option<E::Fr>,
-    data_node_path: Vec<Option<(E::Fr, bool)>>,
+    replica_parents: Vec<Vec<Option<E::Fr>>>,
+    replica_parents_paths: Vec<Vec<Vec<Option<(E::Fr, bool)>>>>,
+    data_nodes: Vec<Option<E::Fr>>,
+    data_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
     data_root: Option<E::Fr>,
     prover_id: Option<E::Fr>,
     degree: usize,
@@ -187,13 +220,13 @@ where
         params,
         lambda,
         sloth_iter,
-        replica_node,
-        replica_node_path,
+        replica_nodes,
+        replica_nodes_paths,
         replica_root,
         replica_parents,
         replica_parents_paths,
-        data_node,
-        data_node_path,
+        data_nodes,
+        data_nodes_paths,
         data_root,
         prover_id,
         degree,
@@ -233,26 +266,12 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
         let lambda = self.lambda;
 
         let prover_id = self.prover_id;
-        let replica_node_path = self.replica_node_path;
-
         let replica_root = self.replica_root;
-        let replica_parents = self.replica_parents;
-        let replica_parents_paths = self.replica_parents_paths;
-
-        let data_node_path = self.data_node_path;
         let data_root = self.data_root;
+
         let degree = self.degree;
 
-        let replica_node = self.replica_node;
-        let data_node = self.data_node;
-
-        // ensure that all inputs are well formed
-        if data_node.is_some() && replica_node.is_some() {
-            assert_ne!(data_node, replica_node);
-        };
-        assert_eq!(data_node_path.len(), replica_node_path.len());
-
-        let mut raw_bytes; // Need let here so borrow in match lives long enough.
+        let raw_bytes; // Need let here so borrow in match lives long enough.
         let prover_id_bytes = match prover_id {
             Some(prover_id) => {
                 raw_bytes = fr_into_bytes::<E>(&prover_id);
@@ -269,84 +288,100 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
 
         multipack::pack_into_inputs(cs.namespace(|| "prover_id"), &prover_id_bits)?;
 
-        synthesize_proof_of_retrievability(
-            cs.namespace(|| "replica_node merkle proof"),
-            &params,
-            replica_node,
-            replica_node_path,
-            replica_root,
-        )?;
+        for i in 0..self.data_nodes.len() {
+            // ensure that all inputs are well formed
+            let replica_node_path = &self.replica_nodes_paths[i];
+            let replica_parents_paths = &self.replica_parents_paths[i];
+            let data_node_path = &self.data_nodes_paths[i];
 
-        // validate each replica_parents merkle proof
-        {
-            for i in 0..replica_parents.len() {
-                synthesize_proof_of_retrievability(
-                    cs.namespace(|| format!("replica parent: {}", i)),
-                    &params,
-                    replica_parents[i],
-                    replica_parents_paths[i].clone(),
-                    replica_root,
-                )?;
-            }
-        }
+            let replica_node = &self.replica_nodes[i];
+            let replica_parents = &self.replica_parents[i];
+            let data_node = &self.data_nodes[i];
 
-        // validate data node commitment
-        synthesize_proof_of_retrievability(
-            cs.namespace(|| "data node commitment"),
-            &params,
-            data_node,
-            data_node_path,
-            data_root,
-        )?;
+            if data_node.is_some() && replica_node.is_some() {
+                assert_ne!(data_node, replica_node);
+            };
+            assert_eq!(data_node_path.len(), replica_node_path.len());
 
-        // get the parents into bits
-        let parents_bits: Vec<Vec<Boolean>> = {
-            let mut cs = cs.namespace(|| "parents to bits");
-            replica_parents
-                .into_iter()
-                .enumerate()
-                .map(|(i, val)| -> Result<Vec<Boolean>, SynthesisError> {
-                    let mut v = boolean::field_into_boolean_vec_le(
-                        cs.namespace(|| format!("parent {}", i)),
-                        val,
+            synthesize_proof_of_retrievability(
+                cs.namespace(|| "replica_node merkle proof"),
+                &params,
+                *replica_node,
+                replica_node_path.clone(),
+                replica_root,
+            )?;
+
+            // validate each replica_parents merkle proof
+            {
+                for i in 0..replica_parents.len() {
+                    synthesize_proof_of_retrievability(
+                        cs.namespace(|| format!("replica parent: {}", i)),
+                        &params,
+                        replica_parents[i],
+                        replica_parents_paths[i].clone(),
+                        replica_root,
                     )?;
-                    // sad padding is sad
-                    while v.len() < 256 {
-                        v.push(boolean::Boolean::Constant(false));
-                    }
-                    Ok(v)
-                }).collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?
-        };
+                }
+            }
 
-        // generate the encryption key
-        let key = kdf(
-            cs.namespace(|| "kdf"),
-            &params,
-            prover_id_bits,
-            parents_bits,
-            degree,
-        )?;
+            // validate data node commitment
+            synthesize_proof_of_retrievability(
+                cs.namespace(|| "data node commitment"),
+                &params,
+                *data_node,
+                data_node_path.clone(),
+                data_root,
+            )?;
 
-        let decoded = sloth::decode(
-            cs.namespace(|| "decode replica node commitment"),
-            &key,
-            replica_node,
-            self.sloth_iter,
-        )?;
+            // get the parents into bits
+            let parents_bits: Vec<Vec<Boolean>> = {
+                let mut cs = cs.namespace(|| "parents to bits");
+                replica_parents
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, val)| -> Result<Vec<Boolean>, SynthesisError> {
+                        let mut v = boolean::field_into_boolean_vec_le(
+                            cs.namespace(|| format!("parent {}", i)),
+                            *val,
+                        )?;
+                        // sad padding is sad
+                        while v.len() < 256 {
+                            v.push(boolean::Boolean::Constant(false));
+                        }
+                        Ok(v)
+                    }).collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?
+            };
 
-        let expected = num::AllocatedNum::alloc(cs.namespace(|| "data node"), || {
-            data_node.ok_or_else(|| SynthesisError::AssignmentMissing)
-        })?;
+            // generate the encryption key
+            let key = kdf(
+                cs.namespace(|| "kdf"),
+                &params,
+                prover_id_bits.clone(),
+                parents_bits,
+                degree,
+            )?;
 
-        // ensure the encrypted data and data_node match
-        {
-            // expected * 1 = decoded
-            cs.enforce(
-                || "encrypted matches data_node constraint",
-                |lc| lc + expected.get_variable(),
-                |lc| lc + CS::one(),
-                |lc| lc + decoded.get_variable(),
-            );
+            let decoded = sloth::decode(
+                cs.namespace(|| "decode replica node commitment"),
+                &key,
+                *replica_node,
+                self.sloth_iter,
+            )?;
+
+            let expected = num::AllocatedNum::alloc(cs.namespace(|| "data node"), || {
+                data_node.ok_or_else(|| SynthesisError::AssignmentMissing)
+            })?;
+
+            // ensure the encrypted data and data_node match
+            {
+                // expected * 1 = decoded
+                cs.enforce(
+                    || "encrypted matches data_node constraint",
+                    |lc| lc + expected.get_variable(),
+                    |lc| lc + CS::one(),
+                    |lc| lc + decoded.get_variable(),
+                );
+            }
         }
         // profit!
         Ok(())
@@ -361,12 +396,11 @@ mod tests {
     use drgporep;
     use drgraph::{graph_height, new_seed, BucketGraph};
     use fr32::{bytes_into_fr, fr_into_bytes};
-    use pairing::bls12_381::FrRepr;
     use pairing::Field;
     use porep::PoRep;
     use proof::ProofScheme;
     use rand::Rand;
-    use rand::{Rng, SeedableRng, XorShiftRng};
+    use rand::{SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
     use util::data_at_node;
 
@@ -415,7 +449,7 @@ mod tests {
         let prover_id_fr = bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap();
         let pub_inputs = drgporep::PublicInputs {
             prover_id: prover_id_fr,
-            challenge,
+            challenges: vec![challenge],
             tau: &tau,
         };
         let priv_inputs = drgporep::PrivateInputs {
@@ -431,31 +465,29 @@ mod tests {
             "failed to verify (non circuit)"
         );
 
-        let replica_node = Some(proof_nc.replica_node.data);
+        let replica_node = Some(proof_nc.replica_nodes[0].data);
 
-        let replica_node_path = proof_nc.replica_node.proof.as_options();
-        let replica_root = Some(proof_nc.replica_node.proof.root().into());
-        let replica_parents = proof_nc
-            .replica_parents
+        let replica_node_path = proof_nc.replica_nodes[0].proof.as_options();
+        let replica_root = Some(proof_nc.replica_nodes[0].proof.root().into());
+        let replica_parents = proof_nc.replica_parents[0]
             .iter()
             .map(|(_, parent)| Some(parent.data))
             .collect();
-        let replica_parents_paths: Vec<_> = proof_nc
-            .replica_parents
+        let replica_parents_paths: Vec<_> = proof_nc.replica_parents[0]
             .iter()
             .map(|(_, parent)| parent.proof.as_options())
             .collect();
 
-        let data_node_path = proof_nc.node.proof.as_options();
-        let data_root = Some(proof_nc.node.proof.root().into());
+        let data_node_path = proof_nc.nodes[0].proof.as_options();
+        let data_root = Some(proof_nc.nodes[0].proof.root().into());
         let prover_id = Some(prover_id_fr);
 
         assert!(
-            proof_nc.node.proof.validate(challenge),
+            proof_nc.nodes[0].proof.validate(challenge),
             "failed to verify data commitment"
         );
         assert!(
-            proof_nc.node.proof.validate_data(&data_node.unwrap()),
+            proof_nc.nodes[0].proof.validate_data(&data_node.unwrap()),
             "failed to verify data commitment with data"
         );
 
@@ -465,13 +497,13 @@ mod tests {
             params,
             lambda,
             sloth_iter,
-            replica_node,
-            replica_node_path,
+            vec![replica_node],
+            vec![replica_node_path],
             replica_root,
-            replica_parents,
-            replica_parents_paths,
-            data_node,
-            data_node_path,
+            vec![replica_parents],
+            vec![replica_parents_paths],
+            vec![data_node],
+            vec![data_node_path],
             data_root,
             prover_id,
             degree,
@@ -512,13 +544,13 @@ mod tests {
             params,
             lambda * 8,
             sloth_iter,
+            vec![Some(Fr::rand(rng)); 1],
+            vec![vec![Some((Fr::rand(rng), false)); tree_depth]; 1],
             Some(Fr::rand(rng)),
-            vec![Some((Fr::rand(rng), false)); tree_depth],
-            Some(Fr::rand(rng)),
-            vec![Some(Fr::rand(rng)); m],
-            vec![vec![Some((Fr::rand(rng), false)); tree_depth]; m],
-            Some(Fr::rand(rng)),
-            vec![Some((Fr::rand(rng), false)); tree_depth],
+            vec![vec![Some(Fr::rand(rng)); m]; 1],
+            vec![vec![vec![Some((Fr::rand(rng), false)); tree_depth]; m]; 1],
+            vec![Some(Fr::rand(rng)); 1],
+            vec![vec![Some((Fr::rand(rng), false)); tree_depth]; 1],
             Some(Fr::rand(rng)),
             Some(Fr::rand(rng)),
             m,
@@ -570,7 +602,7 @@ mod tests {
 
         let public_inputs = drgporep::PublicInputs {
             prover_id: prover_id_fr,
-            challenge,
+            challenges: vec![challenge],
             tau: &tau,
         };
         let private_inputs = drgporep::PrivateInputs {
