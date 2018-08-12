@@ -22,7 +22,6 @@ type ResultPtr = *const u8;
 type CommitmentPtr = *const u8;
 
 type SectorAccess = CstrT;
-type SectorAccessor = extern "C" fn(i: SectorID) -> SectorAccess;
 
 fn from_cstr(c_str: CstrT) -> String {
     unsafe {
@@ -72,11 +71,8 @@ const DUMMY_COMM_D: Commitment = *b"09876543210987654321098765432109";
 ///
 /// # Arguments
 ///
-/// * `sector_id`           - identity of the unsealed sector
-/// * `unsealed`            - function pointer used to get access to unsealed
-///                           sector
-/// * `sealed`              - function pointer used to get access to sealed
-///                           sector
+/// * `unsealed`            - path of unsealed sector-file
+/// * `sealed`              - path of sealed sector-file
 /// * `prover_id_ptr`       - pointer to first cell in a 31-length array of u8
 /// * `challenge_seed_ptr`  - pointer to first cell in a 32-length array of u8
 /// * `random_seed_ptr`     - pointer to first cell in a 32-length array of u8
@@ -87,9 +83,8 @@ const DUMMY_COMM_D: Commitment = *b"09876543210987654321098765432109";
 /// ```
 #[no_mangle]
 pub extern "C" fn seal(
-    sector_id: SectorID,
-    unsealed: SectorAccessor,
-    sealed: SectorAccessor,
+    unsealed: SectorAccess,
+    sealed: SectorAccess,
     prover_id_ptr: ProverIDPtr,
     challenge_seed_ptr: ChallengeSeedPtr,
     random_seed_ptr: RandomSeedPtr,
@@ -99,14 +94,7 @@ pub extern "C" fn seal(
     let challenge_seed = u8ptr_to_array32(challenge_seed_ptr);
     let random_seed = u8ptr_to_array32(random_seed_ptr);
 
-    let comms = seal_internal(
-        sector_id,
-        unsealed,
-        sealed,
-        prover_id,
-        challenge_seed,
-        random_seed,
-    );
+    let comms = seal_internal(unsealed, sealed, prover_id, challenge_seed, random_seed);
 
     // let caller manage this memory, preventing the need for calling back into
     // Rust code later to deallocate
@@ -119,15 +107,14 @@ pub extern "C" fn seal(
 }
 
 fn seal_internal(
-    sector_id: SectorID,
-    unsealed: SectorAccessor,
-    sealed: SectorAccessor,
+    unsealed: SectorAccess,
+    sealed: SectorAccess,
     _prover_id: ProverID,
     _challenge_seed: ChallengeSeed,
     _random_seed: RandomSeed,
 ) -> [Commitment; 2] {
-    let in_path = PathBuf::from(from_cstr(unsealed(sector_id)));
-    let out_path = PathBuf::from(from_cstr(sealed(sector_id)));
+    let in_path = PathBuf::from(from_cstr(unsealed));
+    let out_path = PathBuf::from(from_cstr(sealed));
 
     let _copied = api_impl::seal(&in_path, &out_path);
 
@@ -166,14 +153,8 @@ mod tests {
     use super::*;
     use std::ffi::CString;
 
-    fn to_cstring(s: &str) -> CString {
-        CString::new(s).unwrap()
-    }
-
-    extern "C" fn sector_accessor(id: SectorID) -> SectorAccess {
-        let path = format!("sector{}", id);
-        println!("received path for {}: {}", id, path);
-        to_cstring(&path).as_ptr()
+    fn as_raw_ptr(s: &str) -> CstrT {
+        CString::new(s).unwrap().as_ptr()
     }
 
     #[test]
@@ -184,9 +165,8 @@ mod tests {
         let random_seed: [u8; 32] = [4; 32];
 
         seal(
-            123,
-            sector_accessor,
-            sector_accessor,
+            as_raw_ptr("sector123"),
+            as_raw_ptr("sector123"),
             &prover_id[0],
             &challenge_seed[0],
             &random_seed[0],
@@ -200,9 +180,8 @@ mod tests {
     #[test]
     fn seal_internal_verify() {
         let comms = seal_internal(
-            123,
-            sector_accessor,
-            sector_accessor,
+            as_raw_ptr("sector123"),
+            as_raw_ptr("sector123"),
             [1; 31],
             [2; 32],
             [3; 32],
