@@ -5,6 +5,7 @@ use hasher::pedersen;
 use merkle_light::hash::{Algorithm, Hashable};
 use merkle_light::{merkle, proof};
 use pairing::bls12_381::Fr;
+use parameter_cache::ParameterSetIdentifier;
 use rand::{ChaChaRng, OsRng, Rng, SeedableRng};
 use std::cmp;
 use util::data_at_node;
@@ -59,6 +60,14 @@ pub fn make_proof_for_test(
 }
 
 impl MerkleProof {
+    pub fn default(n: usize) -> MerkleProof {
+        MerkleProof {
+            path: vec![(Default::default(), false); n],
+            root: Default::default(),
+            leaf: Default::default(),
+        }
+    }
+
     /// Convert the merkle path into the format expected by the circuits, which is a vector of options of the tuples.
     /// This does __not__ include the root and the leaf.
     pub fn as_options(&self) -> Vec<Option<(Fr, bool)>> {
@@ -212,7 +221,7 @@ pub trait Graph: ::std::fmt::Debug + Clone + PartialEq + Eq {
     /// Returns the degree of the graph.
     fn degree(&self) -> usize;
 
-    fn new(nodes: usize, base_degree: usize, seed: [u32; 7]) -> Self;
+    fn new(nodes: usize, base_degree: usize, expansion_degree: usize, seed: [u32; 7]) -> Self;
     fn seed(&self) -> [u32; 7];
 }
 
@@ -221,11 +230,21 @@ pub fn graph_height(size: usize) -> usize {
 }
 
 /// Bucket sampling algorithm.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Copy)]
 pub struct BucketGraph {
     nodes: usize,
     base_degree: usize,
     seed: [u32; 7],
+}
+
+impl ParameterSetIdentifier for BucketGraph {
+    fn parameter_set_identifier(&self) -> String {
+        // NOTE: Seed is not included because it does not influence parameter generation.
+        format!(
+            "drgraph::BucketGraph{{size: {}; degree: {}}}",
+            self.nodes, self.base_degree,
+        )
+    }
 }
 
 impl Graph for BucketGraph {
@@ -288,7 +307,8 @@ impl Graph for BucketGraph {
         self.seed
     }
 
-    fn new(nodes: usize, base_degree: usize, seed: [u32; 7]) -> Self {
+    fn new(nodes: usize, base_degree: usize, expansion_degree: usize, seed: [u32; 7]) -> Self {
+        assert_eq!(expansion_degree, 0);
         BucketGraph {
             nodes,
             base_degree,
@@ -311,7 +331,7 @@ mod tests {
     fn graph_bucket() {
         for size in vec![3, 10, 200, 2000] {
             for degree in 2..12 {
-                let g = BucketGraph::new(size, degree, new_seed());
+                let g = BucketGraph::new(size, degree, 0, new_seed());
 
                 assert_eq!(g.size(), size, "wrong nodes count");
 
@@ -343,7 +363,7 @@ mod tests {
 
     #[test]
     fn graph_commit() {
-        let g = BucketGraph::new(3, 10, new_seed());
+        let g = BucketGraph::new(3, 10, 0, new_seed());
 
         let data = vec![1u8; 3 * 16];
         g.commit(data.as_slice(), 16).unwrap();
@@ -352,7 +372,7 @@ mod tests {
 
     #[test]
     fn gen_proof() {
-        let g = BucketGraph::new(5, 3, new_seed());
+        let g = BucketGraph::new(5, 3, 0, new_seed());
         let data = vec![2u8; 16 * 5];
 
         let tree = g.merkle_tree(data.as_slice(), 16).unwrap();
@@ -363,7 +383,7 @@ mod tests {
 
     #[test]
     fn merklepath() {
-        let g = BucketGraph::new(10, 5, new_seed());
+        let g = BucketGraph::new(10, 5, 0, new_seed());
         let mut rng = rand::thread_rng();
         let data: Vec<u8> = (0..16 * 10).map(|_| rng.gen()).collect();
 

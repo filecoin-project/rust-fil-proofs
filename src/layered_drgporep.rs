@@ -3,6 +3,7 @@ use drgraph::Graph;
 use error::Result;
 use fr32::fr_into_bytes;
 use pairing::bls12_381::{Bls12, Fr};
+use parameter_cache::ParameterSetIdentifier;
 use porep::{self, PoRep};
 use proof::ProofScheme;
 
@@ -13,24 +14,52 @@ pub struct SetupParams {
 }
 
 #[derive(Debug)]
-pub struct PublicParams<G: Graph> {
+pub struct PublicParams<G: Graph>
+where
+    G: ParameterSetIdentifier,
+{
     pub drg_porep_public_params: drgporep::PublicParams<G>,
     pub layers: usize,
+}
+
+impl<G> ParameterSetIdentifier for PublicParams<G>
+where
+    G: Graph + ParameterSetIdentifier,
+{
+    fn parameter_set_identifier(&self) -> String {
+        format!(
+            "layered_drgporep::PublicParams{{ drg_porep_identifier: {}, layers: {} }}",
+            self.drg_porep_public_params.parameter_set_identifier(),
+            self.layers
+        )
+    }
+}
+
+impl<'a, G: Graph> From<&'a PublicParams<G>> for PublicParams<G>
+where
+    G: ParameterSetIdentifier,
+{
+    fn from(pp: &PublicParams<G>) -> PublicParams<G> {
+        PublicParams {
+            drg_porep_public_params: pp.drg_porep_public_params.clone(),
+            layers: pp.layers,
+        }
+    }
 }
 
 pub type ReplicaParents = Vec<(usize, DataProof)>;
 pub type EncodingProof = drgporep::Proof;
 pub type DataProof = drgporep::DataProof;
 
-pub struct PublicInputs<'a> {
-    pub prover_id: &'a Fr,
+pub struct PublicInputs {
+    pub prover_id: Fr,
     pub challenge: usize,
     pub tau: Vec<porep::Tau>,
 }
 
 pub struct PrivateInputs<'a> {
     pub replica: &'a [u8],
-    pub aux: &'a [porep::ProverAux],
+    pub aux: Vec<porep::ProverAux>,
 }
 
 #[derive(Debug, Clone)]
@@ -49,7 +78,7 @@ pub trait Layerable: Graph {}
 /// Layers provides default implementations of methods required to handle proof and verification
 /// of layered proofs of replication. Implementations must provide transform and invert_transform methods.
 pub trait Layers {
-    type Graph: Layerable;
+    type Graph: Layerable + ParameterSetIdentifier;
 
     /// transform a layer's public parameters, returning new public parameters corresponding to the next layer.
     fn transform(
@@ -69,7 +98,7 @@ pub trait Layers {
         pp: &drgporep::PublicParams<Self::Graph>,
         pub_inputs: &PublicInputs,
         priv_inputs: &drgporep::PrivateInputs,
-        aux: &[porep::ProverAux],
+        aux: Vec<porep::ProverAux>,
         layers: usize,
         total_layers: usize,
         proofs: &'a mut Vec<EncodingProof>,
@@ -77,17 +106,18 @@ pub trait Layers {
         assert!(layers > 0);
 
         let mut scratch = priv_inputs.replica.to_vec().clone();
-        let prover_id = fr_into_bytes::<Bls12>(pub_inputs.prover_id);
+        let prover_id = fr_into_bytes::<Bls12>(&pub_inputs.prover_id);
         <DrgPoRep<Self::Graph> as PoRep>::replicate(pp, &prover_id, scratch.as_mut_slice())?;
 
         let new_priv_inputs = drgporep::PrivateInputs {
             replica: scratch.as_slice(),
-            aux: &aux[aux.len() - layers],
+            // TODO: Make sure this is a shallow clone, not the whole MerkleTree.
+            aux: &aux[aux.len() - layers].clone(),
         };
         let drgporep_pub_inputs = drgporep::PublicInputs {
-            prover_id: *pub_inputs.prover_id,
+            prover_id: pub_inputs.prover_id,
             challenges: vec![pub_inputs.challenge],
-            tau: &pub_inputs.tau[pub_inputs.tau.len() - layers],
+            tau: pub_inputs.tau[pub_inputs.tau.len() - layers],
         };
         let drg_proof = DrgPoRep::prove(&pp, &drgporep_pub_inputs, &new_priv_inputs)?;
         proofs.push(drg_proof);
@@ -172,7 +202,7 @@ pub trait Layers {
 impl<'a, L: Layers> ProofScheme<'a> for L {
     type PublicParams = PublicParams<L::Graph>;
     type SetupParams = SetupParams;
-    type PublicInputs = PublicInputs<'a>;
+    type PublicInputs = PublicInputs;
     type PrivateInputs = PrivateInputs<'a>;
     type Proof = Proof;
 
@@ -192,7 +222,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         priv_inputs: &Self::PrivateInputs,
     ) -> Result<Self::Proof> {
         let drg_priv_inputs = drgporep::PrivateInputs {
-            aux: &priv_inputs.aux[0],
+            aux: &priv_inputs.aux[0].clone(),
             replica: priv_inputs.replica,
         };
 
@@ -202,13 +232,16 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
             &pub_params.drg_porep_public_params,
             pub_inputs,
             &drg_priv_inputs,
-            priv_inputs.aux,
+            priv_inputs.aux.clone(),
             pub_params.layers,
             pub_params.layers,
             &mut proofs,
         )?;
 
-        Ok(Proof::new(proofs))
+        let proof = Proof::new(proofs);
+        println!("proof: {:?}", proof);
+
+        Ok(proof)
     }
 
     fn verify(
@@ -226,9 +259,9 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         // with permuations
         for (layer, proof_layer) in proof.encoding_proofs.iter().enumerate() {
             let new_pub_inputs = drgporep::PublicInputs {
-                prover_id: *pub_inputs.prover_id,
+                prover_id: pub_inputs.prover_id,
                 challenges: vec![pub_inputs.challenge],
-                tau: &pub_inputs.tau[layer],
+                tau: pub_inputs.tau[layer],
             };
 
             let ep = &proof_layer;

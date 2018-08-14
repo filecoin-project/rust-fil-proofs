@@ -3,6 +3,7 @@ use compound_proof::CompoundProof;
 use drgraph::graph_height;
 use merklepor::MerklePoR;
 use pairing::bls12_381::{Bls12, Fr};
+use parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use proof::ProofScheme;
 use sapling_crypto::circuit::{boolean, multipack, num, pedersen_hash};
 use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
@@ -36,6 +37,14 @@ pub fn challenge_into_auth_path_bits(challenge: usize, leaves: usize) -> Vec<boo
         n >>= 1;
     }
     bits
+}
+
+impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParameters<E, C, P>
+    for PoRCompound
+{
+    fn cache_prefix() -> String {
+        String::from("proof-of-retrievability")
+    }
 }
 
 // can only implment for Bls12 because merklepor is not generic over the engine.
@@ -192,25 +201,27 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoRCircuit<'a, E> {
     }
 }
 
-pub fn synthesize_proof_of_retrievability<E, CS>(
-    mut cs: CS,
-    params: &E::Params,
-    value: Option<E::Fr>,
-    auth_path: Vec<Option<(E::Fr, bool)>>,
-    root: Option<E::Fr>,
-) -> Result<(), SynthesisError>
-where
-    E: JubjubEngine,
-    CS: ConstraintSystem<E>,
-{
-    let por = PoRCircuit::<E> {
-        params,
-        value,
-        auth_path,
-        root,
-    };
+impl<'a, E: JubjubEngine> PoRCircuit<'a, E> {
+    pub fn synthesize<CS>(
+        mut cs: CS,
+        params: &E::Params,
+        value: Option<E::Fr>,
+        auth_path: Vec<Option<(E::Fr, bool)>>,
+        root: Option<E::Fr>,
+    ) -> Result<(), SynthesisError>
+    where
+        E: JubjubEngine,
+        CS: ConstraintSystem<E>,
+    {
+        let por = PoRCircuit::<E> {
+            params,
+            value,
+            auth_path,
+            root,
+        };
 
-    por.synthesize(&mut cs)
+        por.synthesize(&mut cs)
+    }
 }
 
 #[cfg(test)]
@@ -236,7 +247,7 @@ mod tests {
         let data: Vec<u8> = (0..leaves)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
-        let graph = BucketGraph::new(leaves, 16, new_seed());
+        let graph = BucketGraph::new(leaves, 16, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
 
         for i in 0..3 {
@@ -287,7 +298,7 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
                 .collect();
 
-            let graph = BucketGraph::new(leaves, 16, new_seed());
+            let graph = BucketGraph::new(leaves, 16, 0, new_seed());
             let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
 
             // -- MerklePoR

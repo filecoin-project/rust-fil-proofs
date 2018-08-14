@@ -2,22 +2,22 @@ use byteorder::{LittleEndian, WriteBytesExt};
 use crypto::{kdf, sloth};
 use drgraph::{Graph, MerkleProof};
 
+use error::Result;
 use fr32::{bytes_into_fr, fr_into_bytes};
 use pairing::bls12_381::{Bls12, Fr};
 use pairing::{PrimeField, PrimeFieldRepr};
+use parameter_cache::ParameterSetIdentifier;
 use porep::{self, PoRep};
+use proof::ProofScheme;
 use std::marker::PhantomData;
 use util::data_at_node;
 use vde::{self, decode_block};
 
-use error::Result;
-use proof::ProofScheme;
-
 #[derive(Debug)]
-pub struct PublicInputs<'a> {
+pub struct PublicInputs {
     pub prover_id: Fr,
     pub challenges: Vec<usize>,
-    pub tau: &'a porep::Tau,
+    pub tau: porep::Tau,
 }
 
 #[derive(Debug)]
@@ -41,15 +41,34 @@ pub struct DrgParams {
     // Base degree of DRG
     pub degree: usize,
 
+    pub expansion_degree: usize,
+
     // Random seed
     pub seed: [u32; 7],
 }
 
 #[derive(Debug, Clone)]
-pub struct PublicParams<G: Graph> {
+pub struct PublicParams<G: Graph>
+where
+    G: ParameterSetIdentifier,
+{
     pub lambda: usize,
     pub graph: G,
     pub sloth_iter: usize,
+}
+
+impl<G: Graph> ParameterSetIdentifier for PublicParams<G>
+where
+    G: ParameterSetIdentifier,
+{
+    fn parameter_set_identifier(&self) -> String {
+        format!(
+            "drgporep::PublicParams{{lambda: {}, graph: {}; sloth_iter: {}}}",
+            self.lambda,
+            self.graph.parameter_set_identifier(),
+            self.sloth_iter
+        )
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -59,6 +78,12 @@ pub struct DataProof {
 }
 
 impl DataProof {
+    fn default(n: usize) -> DataProof {
+        DataProof {
+            proof: MerkleProof::default(n),
+            data: Fr::from_str("0").unwrap(),
+        }
+    }
     pub fn serialize(&self) -> Vec<u8> {
         let mut out = self.proof.serialize();
         self.data.into_repr().write_le(&mut out).unwrap();
@@ -90,6 +115,15 @@ pub struct Proof {
 }
 
 impl Proof {
+    // FIXME: should we also take a number of challenges here and construct
+    // vectors of that length?
+    pub fn default(height: usize, degree: usize) -> Proof {
+        Proof {
+            replica_nodes: vec![DataProof::default(height)],
+            replica_parents: vec![vec![(0, DataProof::default(height)); degree]],
+            nodes: vec![DataProof::default(height)],
+        }
+    }
     pub fn serialize(&self) -> Vec<u8> {
         let res: Vec<_> = (0..self.nodes.len())
             .map(|i| {
@@ -111,9 +145,7 @@ impl Proof {
 
         res
     }
-}
 
-impl Proof {
     pub fn new(
         replica_nodes: Vec<DataProof>,
         replica_parents: Vec<ReplicaParents>,
@@ -127,20 +159,38 @@ impl Proof {
     }
 }
 
+impl<'a> From<&'a Proof> for Proof {
+    fn from(p: &Proof) -> Proof {
+        Proof {
+            replica_nodes: p.replica_nodes.clone(),
+            replica_parents: p.replica_parents.clone(),
+            nodes: p.nodes.clone(),
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct DrgPoRep<G: Graph> {
     phantom: PhantomData<G>,
 }
 
-impl<'a, G: Graph> ProofScheme<'a> for DrgPoRep<G> {
+impl<'a, G: Graph> ProofScheme<'a> for DrgPoRep<G>
+where
+    G: ParameterSetIdentifier,
+{
     type PublicParams = PublicParams<G>;
     type SetupParams = SetupParams;
-    type PublicInputs = PublicInputs<'a>;
+    type PublicInputs = PublicInputs;
     type PrivateInputs = PrivateInputs<'a>;
     type Proof = Proof;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
-        let graph = G::new(sp.drg.nodes, sp.drg.degree, sp.drg.seed);
+        let graph = G::new(
+            sp.drg.nodes,
+            sp.drg.degree,
+            sp.drg.expansion_degree,
+            sp.drg.seed,
+        );
 
         Ok(PublicParams {
             lambda: sp.lambda,
@@ -295,7 +345,10 @@ impl<'a, G: Graph> ProofScheme<'a> for DrgPoRep<G> {
     }
 }
 
-impl<'a, G: Graph> PoRep<'a> for DrgPoRep<G> {
+impl<'a, G: Graph> PoRep<'a> for DrgPoRep<G>
+where
+    G: ParameterSetIdentifier,
+{
     type Tau = porep::Tau;
     type ProverAux = porep::ProverAux;
 
@@ -374,7 +427,8 @@ mod tests {
             lambda: lambda,
             drg: DrgParams {
                 nodes: data.len() / lambda,
-                degree: 10,
+                degree: 5,
+                expansion_degree: 0,
                 seed: new_seed(),
             },
             sloth_iter,
@@ -407,7 +461,8 @@ mod tests {
             lambda: lambda,
             drg: DrgParams {
                 nodes: data.len() / lambda,
-                degree: 10,
+                degree: 5,
+                expansion_degree: 0,
                 seed: new_seed(),
             },
             sloth_iter,
@@ -448,7 +503,8 @@ mod tests {
 
             let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
             let sloth_iter = 1;
-            let degree = 5;
+            let degree = 10;
+            let expansion_degree = 0;
             let seed = new_seed();
 
             let prover_id = fr_into_bytes::<Bls12>(&rng.gen());
@@ -465,6 +521,7 @@ mod tests {
                 drg: DrgParams {
                     nodes,
                     degree,
+                    expansion_degree,
                     seed,
                 },
                 sloth_iter,
@@ -480,7 +537,7 @@ mod tests {
             let pub_inputs = PublicInputs {
                 prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
                 challenges: vec![challenge, challenge],
-                tau: &tau,
+                tau: tau.clone(),
             };
 
             let priv_inputs = PrivateInputs {
@@ -563,7 +620,7 @@ mod tests {
                 let pub_inputs_with_wrong_challenge_for_proof = PublicInputs {
                     prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
                     challenges: vec![if challenge == 1 { 2 } else { 1 }],
-                    tau: &tau,
+                    tau: tau,
                 };
                 let verified =
                     DrgPoRep::verify(&pp, &pub_inputs_with_wrong_challenge_for_proof, &proof)

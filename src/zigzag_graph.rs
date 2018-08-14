@@ -1,6 +1,7 @@
 use crypto::feistel;
-use drgraph::Graph;
+use drgraph::{BucketGraph, Graph};
 use layered_drgporep::Layerable;
+use parameter_cache::ParameterSetIdentifier;
 
 pub const DEFAULT_EXPANSION_DEGREE: usize = 8;
 
@@ -14,15 +15,30 @@ where
     pub reversed: bool,
 }
 
-impl<'a, G> Layerable for ZigZagGraph<G> where G: ZigZag {}
+pub type ZigZagBucketGraph = ZigZagGraph<BucketGraph>;
+
+impl<'a, G: Graph> Layerable for ZigZagGraph<G> {}
 
 impl<G: Graph> ZigZagGraph<G> {
-    fn new(nodes: usize, base_degree: usize, expansion_degree: usize, seed: [u32; 7]) -> Self {
+    pub fn new(nodes: usize, base_degree: usize, expansion_degree: usize, seed: [u32; 7]) -> Self {
         ZigZagGraph {
-            base_graph: G::new(nodes, base_degree, seed),
+            base_graph: G::new(nodes, base_degree, 0, seed),
             expansion_degree,
             reversed: false,
         }
+    }
+}
+
+impl<G> ParameterSetIdentifier for ZigZagGraph<G>
+where
+    G: Graph + ParameterSetIdentifier,
+{
+    fn parameter_set_identifier(&self) -> String {
+        format!(
+            "zigzag_graph::ZigZagGraph{{expansion_degree: {} base_graph: {} }}",
+            self.expansion_degree,
+            self.base_graph.parameter_set_identifier()
+        )
     }
 }
 
@@ -39,7 +55,12 @@ pub trait ZigZag: ::std::fmt::Debug + Clone + PartialEq + Eq {
     fn reversed(&self) -> bool;
     fn expanded_parents(&self, node: usize) -> Vec<usize>;
     fn real_index(&self, i: usize) -> usize;
-    fn new_defaulted(nodes: usize, base_degree: usize, seed: [u32; 7]) -> Self;
+    fn new_zigzag(
+        nodes: usize,
+        base_degree: usize,
+        expansion_degree: usize,
+        seed: [u32; 7],
+    ) -> Self;
 }
 
 impl<Z: ZigZag> Graph for Z {
@@ -87,8 +108,8 @@ impl<Z: ZigZag> Graph for Z {
         self.base_graph().seed()
     }
 
-    fn new(nodes: usize, base_degree: usize, seed: [u32; 7]) -> Self {
-        Z::new_defaulted(nodes, base_degree, seed)
+    fn new(nodes: usize, base_degree: usize, expansion_degree: usize, seed: [u32; 7]) -> Self {
+        Z::new_zigzag(nodes, base_degree, expansion_degree, seed)
     }
 }
 
@@ -117,8 +138,13 @@ impl<'a, G: Graph> ZigZagGraph<G> {
 impl<'a, G: Graph> ZigZag for ZigZagGraph<G> {
     type BaseGraph = G;
 
-    fn new_defaulted(nodes: usize, base_degree: usize, seed: [u32; 7]) -> Self {
-        Self::new(nodes, base_degree, DEFAULT_EXPANSION_DEGREE, seed)
+    fn new_zigzag(
+        nodes: usize,
+        base_degree: usize,
+        expansion_degree: usize,
+        seed: [u32; 7],
+    ) -> Self {
+        Self::new(nodes, base_degree, expansion_degree, seed)
     }
 
     /// To zigzag a graph, we just toggle its reversed field.

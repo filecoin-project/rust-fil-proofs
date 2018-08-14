@@ -168,7 +168,7 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
                 .collect();
 
-            let graph = BucketGraph::new(leaves, 6, new_seed());
+            let graph = BucketGraph::new(leaves, 6, 0, new_seed());
             let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
 
             let pub_inputs: Vec<_> = (0..leaves)

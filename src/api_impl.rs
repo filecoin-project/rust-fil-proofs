@@ -18,6 +18,7 @@ pub fn seal(in_path: &PathBuf, out_path: &PathBuf) -> Result<(u64)> {
         drg: DrgParams {
             nodes: SECTOR_BYTES / LAMBDA,
             degree: 5,
+            expansion_degree: 0,
             seed: new_seed(),
         },
         sloth_iter: 1,

@@ -8,7 +8,7 @@ pub struct PublicParams {
     pub time: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Tau {
     pub comm_r: TreeHash,
     pub comm_d: TreeHash,
@@ -31,7 +31,7 @@ pub struct PrivateInputs<'a> {
     pub replica: &'a [u8],
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ProverAux {
     pub tree_d: MerkleTree,
     pub tree_r: MerkleTree,

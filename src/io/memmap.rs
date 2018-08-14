@@ -128,6 +128,7 @@ mod test {
             drg: DrgParams {
                 nodes: data.len() / lambda,
                 degree: 10,
+                expansion_degree: 0,
                 seed: new_seed(),
             },
             sloth_iter,

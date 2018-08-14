@@ -1,15 +1,16 @@
 use bellman::{groth16, Circuit};
 use error::Result;
+use parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use proof::ProofScheme;
 use rand::{SeedableRng, XorShiftRng};
 use sapling_crypto::jubjub::JubjubEngine;
+use std::time::Instant;
 
 pub struct SetupParams<'a, 'b: 'a, E: JubjubEngine, S: ProofScheme<'a>>
 where
     <S as ProofScheme<'a>>::SetupParams: 'b,
 {
     pub vanilla_params: &'b <S as ProofScheme<'a>>::SetupParams,
-    // TODO: would be nice to use a reference, but that requires E::Params to impl Clone or Copy I think
     pub engine_params: &'a E::Params,
 }
 
@@ -28,7 +29,11 @@ pub struct Proof<E: JubjubEngine> {
 /// See documentation at proof::ProofScheme for details.
 /// Implementations should generally only need to supply circuit and generate_public_inputs.
 /// The remaining trait methods are used internally and implement the necessary plumbing.
-pub trait CompoundProof<'a, E: JubjubEngine, S: ProofScheme<'a>, C: Circuit<E>> {
+pub trait CompoundProof<'a, E: JubjubEngine, S: ProofScheme<'a>, C: Circuit<E>>
+where
+    S::PublicParams: ParameterSetIdentifier,
+    Self: CacheableParameters<E, C, S::PublicParams>,
+{
     // setup is equivalent to ProofScheme::setup.
     fn setup<'b>(sp: &SetupParams<'a, 'b, E, S>) -> Result<PublicParams<'a, E, S>> {
         Ok(PublicParams {
@@ -64,8 +69,21 @@ pub trait CompoundProof<'a, E: JubjubEngine, S: ProofScheme<'a>, C: Circuit<E>> 
         public_inputs: &S::PublicInputs,
         proof: Proof<E>,
     ) -> Result<bool> {
+        println!("Preparing verifying key");
+        let start = Instant::now();
         let pvk = groth16::prepare_verifying_key(&proof.groth_params.vk);
+        let pvk_time = start.elapsed();
+        println!("Preparing verifying key took: {:?}", pvk_time);
+        println!("Generating public inputs");
         let inputs = Self::generate_public_inputs(public_inputs, public_params);
+        let input_time = start.elapsed() - pvk_time;
+        println!("Generating public inputs took: {:?}", input_time);
+
+        println!("Generated input count: {}", inputs.len());
+        println!("Generated inputs: {:?}", inputs);
+        for (i, v) in inputs.iter().enumerate() {
+            println!("{}: {:?}", i, v);
+        }
 
         Ok(groth16::verify_proof(
             &pvk,
@@ -87,17 +105,28 @@ pub trait CompoundProof<'a, E: JubjubEngine, S: ProofScheme<'a>, C: Circuit<E>> 
         // TODO: better random numbers
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
+        // We need to make the circuit repeatedly because we can't clone it.
+        // Fortunately, doing so is cheap.
+        let make_circuit = || Self::circuit(&pub_in, &vanilla_proof, &pub_params, params);
+
+        let start = Instant::now();
+
         // TODO: Don't actually generate groth parameters here, certainly not random ones.
         // The parameters will need to have been generated in advance and will be constants
         // associated with a given top-level circuit.
         // They should probably be moved to PublicParams.
         // For now, this is most expedient, since we need the public/private inputs
         // in order to generate a circuit at all.
-        let circuit = Self::circuit(&pub_in, &vanilla_proof, &pub_params, params);
-        let groth_params = groth16::generate_random_parameters::<E, _, _>(circuit, rng)?;
 
-        let circuit = Self::circuit(&pub_in, &vanilla_proof, &pub_params, params);
-        let groth_proof = groth16::create_random_proof(circuit, &groth_params, rng)?;
+        println!("Getting groth params.");
+        let groth_params = Self::get_groth_params(make_circuit(), pub_params, rng)?;
+        let param_time = start.elapsed();
+        println!("Finished getting groth params: {:?}", param_time);
+
+        println!("Creating proof");
+        let groth_proof = groth16::create_random_proof(make_circuit(), &groth_params, rng)?;
+        let proof_time = start.elapsed() - param_time;
+        println!("Finished creating proof: {:?}", proof_time);
 
         let mut proof_vec = vec![];
         groth_proof.write(&mut proof_vec)?;

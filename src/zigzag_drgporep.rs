@@ -1,6 +1,7 @@
 use drgporep;
 use drgraph::Graph;
 use layered_drgporep::Layers;
+use parameter_cache::ParameterSetIdentifier;
 use std::marker::PhantomData;
 use zigzag_graph::{ZigZag, ZigZagGraph};
 
@@ -25,7 +26,7 @@ where
 
 impl<'a, G: 'a> Layers for ZigZagDrgPoRep<'a, G>
 where
-    G: ZigZag + 'static,
+    G: ZigZag + 'static + ParameterSetIdentifier,
 {
     type Graph = ZigZagGraph<G>;
 
@@ -48,7 +49,7 @@ where
 
 fn zigzag<Z>(pp: &drgporep::PublicParams<Z>) -> drgporep::PublicParams<Z>
 where
-    Z: ZigZag + Graph,
+    Z: ZigZag + Graph + ParameterSetIdentifier,
 {
     drgporep::PublicParams {
         graph: pp.graph.zigzag(),
@@ -60,13 +61,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use drgraph::{new_seed, BucketGraph};
+    use drgraph::new_seed;
     use fr32::{bytes_into_fr, fr_into_bytes};
     use layered_drgporep::{PrivateInputs, PublicInputs, PublicParams, SetupParams};
     use pairing::bls12_381::Bls12;
     use porep::PoRep;
     use proof::ProofScheme;
     use rand::{Rng, SeedableRng, XorShiftRng};
+    use zigzag_graph::ZigZagBucketGraph;
 
     const DEFAULT_ZIGZAG_LAYERS: usize = 6;
 
@@ -85,7 +87,8 @@ mod tests {
                 lambda: lambda,
                 drg: drgporep::DrgParams {
                     nodes: data.len() / lambda,
-                    degree: 10,
+                    degree: 5,
+                    expansion_degree: 5,
                     seed: new_seed(),
                 },
                 sloth_iter,
@@ -93,8 +96,7 @@ mod tests {
             layers: DEFAULT_ZIGZAG_LAYERS,
         };
 
-        let mut pp = ZigZagDrgPoRep::<ZigZagGraph<BucketGraph>>::setup(&sp).unwrap();
-
+        let mut pp = ZigZagDrgPoRep::<ZigZagBucketGraph>::setup(&sp).unwrap();
         // Get the public params for the last layer.
         // In reality, this is a no-op with an even number of layers.
         for _ in 0..pp.layers {
@@ -122,7 +124,8 @@ mod tests {
     fn prove_verify(lambda: usize, n: usize, i: usize) {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let degree = i * 10;
+        let degree = 1 + i;
+        let expansion_degree = i;
         let lambda = lambda;
         let sloth_iter = 1;
         let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
@@ -138,6 +141,7 @@ mod tests {
                 drg: drgporep::DrgParams {
                     nodes: n,
                     degree,
+                    expansion_degree,
                     seed: new_seed(),
                 },
                 sloth_iter,
@@ -145,20 +149,20 @@ mod tests {
             layers: DEFAULT_ZIGZAG_LAYERS,
         };
 
-        let pp = ZigZagDrgPoRep::<ZigZagGraph<BucketGraph>>::setup(&sp).unwrap();
+        let pp = ZigZagDrgPoRep::<ZigZagBucketGraph>::setup(&sp).unwrap();
         let (tau, aux) =
             ZigZagDrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
         assert_ne!(data, data_copy);
 
         let pub_inputs = PublicInputs {
-            prover_id: &bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
+            prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
             challenge,
             tau: tau,
         };
 
         let priv_inputs = PrivateInputs {
             replica: data.as_slice(),
-            aux: &aux,
+            aux: aux,
         };
 
         let proof = ZigZagDrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).unwrap();

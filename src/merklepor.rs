@@ -2,6 +2,7 @@ use drgporep::DataProof;
 use drgraph::{graph_height, MerkleTree, TreeHash};
 use error::Result;
 use pairing::bls12_381::Fr;
+use parameter_cache::ParameterSetIdentifier;
 use proof::ProofScheme;
 
 /// The parameters shared between the prover and verifier.
@@ -11,6 +12,15 @@ pub struct PublicParams {
     pub lambda: usize,
     /// How many leaves the underlying merkle tree has.
     pub leaves: usize,
+}
+
+impl ParameterSetIdentifier for PublicParams {
+    fn parameter_set_identifier(&self) -> String {
+        format!(
+            "merklepor::PublicParams{{lambda: {}; leaves: {}}}",
+            self.lambda, self.leaves
+        )
+    }
 }
 
 /// The inputs that are necessary for the verifier to verify the proof.
@@ -119,7 +129,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph = BucketGraph::new(32, 5, new_seed());
+        let graph = BucketGraph::new(32, 5, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
 
         let pub_inputs = PublicInputs {
@@ -170,7 +180,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph = BucketGraph::new(32, 5, new_seed());
+        let graph = BucketGraph::new(32, 5, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
 
         let pub_inputs = PublicInputs {
@@ -199,7 +209,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph = BucketGraph::new(32, 5, new_seed());
+        let graph = BucketGraph::new(32, 5, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
 
         let pub_inputs = PublicInputs {

@@ -34,7 +34,7 @@ struct DrgPoRepExample<'a, E: JubjubEngine> {
 
 impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepExample<'a, E> {
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        circuit::drgporep::synthesize_drgporep(
+        circuit::drgporep::DrgPoRepCircuit::synthesize(
             cs.namespace(|| "drgporep"),
             self.params,
             self.lambda,

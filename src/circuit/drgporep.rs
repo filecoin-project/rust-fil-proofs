@@ -5,17 +5,17 @@ use sapling_crypto::circuit::{multipack, num};
 use sapling_crypto::jubjub::JubjubEngine;
 
 use circuit::kdf::kdf;
-use circuit::por::{synthesize_proof_of_retrievability, PoRCompound};
+use circuit::por::{PoRCircuit, PoRCompound};
 use circuit::sloth;
 use compound_proof::CompoundProof;
 use drgporep::DrgPoRep;
 use drgraph::Graph;
 use fr32::fr_into_bytes;
 use merklepor;
+use parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use proof::ProofScheme;
 use std::marker::PhantomData;
 use util::{bytes_into_bits, bytes_into_boolean_vec};
-
 /// DRG based Proof of Replication.
 ///
 /// # Fields
@@ -56,11 +56,42 @@ pub struct DrgPoRepCircuit<'a, E: JubjubEngine> {
     prover_id: Option<E::Fr>,
     degree: usize,
 }
-
-impl<'a> Default for DrgPoRepCircuit<'a, Bls12> {
-    fn default() -> DrgPoRepCircuit<'a, Bls12> {
-        //params: Bls12::new
-        unimplemented!();
+impl<'a, E: JubjubEngine> DrgPoRepCircuit<'a, E> {
+    pub fn synthesize<CS>(
+        mut cs: CS,
+        params: &E::Params,
+        lambda: usize,
+        sloth_iter: usize,
+        replica_nodes: Vec<Option<E::Fr>>,
+        replica_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
+        replica_root: Option<E::Fr>,
+        replica_parents: Vec<Vec<Option<E::Fr>>>,
+        replica_parents_paths: Vec<Vec<Vec<Option<(E::Fr, bool)>>>>,
+        data_nodes: Vec<Option<E::Fr>>,
+        data_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
+        data_root: Option<E::Fr>,
+        prover_id: Option<E::Fr>,
+        degree: usize,
+    ) -> Result<(), SynthesisError>
+    where
+        E: JubjubEngine,
+        CS: ConstraintSystem<E>,
+    {
+        DrgPoRepCircuit {
+            params,
+            lambda,
+            sloth_iter,
+            replica_nodes,
+            replica_nodes_paths,
+            replica_root,
+            replica_parents,
+            replica_parents_paths,
+            data_nodes,
+            data_nodes_paths,
+            data_root,
+            prover_id,
+            degree,
+        }.synthesize(&mut cs)
     }
 }
 
@@ -68,8 +99,18 @@ pub struct DrgPoRepCompound<G: Graph> {
     phantom: PhantomData<G>,
 }
 
+impl<E: JubjubEngine, C: Circuit<E>, G: Graph, P: ParameterSetIdentifier>
+    CacheableParameters<E, C, P> for DrgPoRepCompound<G>
+{
+    fn cache_prefix() -> String {
+        String::from("drg-proof-of-replication")
+    }
+}
+
 impl<'a, G: Graph> CompoundProof<'a, Bls12, DrgPoRep<G>, DrgPoRepCircuit<'a, Bls12>>
     for DrgPoRepCompound<G>
+where
+    G: ParameterSetIdentifier,
 {
     fn generate_public_inputs(
         pub_in: &<DrgPoRep<G> as ProofScheme>::PublicInputs,
@@ -196,43 +237,6 @@ impl<'a, G: Graph> CompoundProof<'a, Bls12, DrgPoRep<G>, DrgPoRepCircuit<'a, Bls
     }
 }
 
-pub fn synthesize_drgporep<E, CS>(
-    mut cs: CS,
-    params: &E::Params,
-    lambda: usize,
-    sloth_iter: usize,
-    replica_nodes: Vec<Option<E::Fr>>,
-    replica_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
-    replica_root: Option<E::Fr>,
-    replica_parents: Vec<Vec<Option<E::Fr>>>,
-    replica_parents_paths: Vec<Vec<Vec<Option<(E::Fr, bool)>>>>,
-    data_nodes: Vec<Option<E::Fr>>,
-    data_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
-    data_root: Option<E::Fr>,
-    prover_id: Option<E::Fr>,
-    degree: usize,
-) -> Result<(), SynthesisError>
-where
-    E: JubjubEngine,
-    CS: ConstraintSystem<E>,
-{
-    DrgPoRepCircuit {
-        params,
-        lambda,
-        sloth_iter,
-        replica_nodes,
-        replica_nodes_paths,
-        replica_root,
-        replica_parents,
-        replica_parents_paths,
-        data_nodes,
-        data_nodes_paths,
-        data_root,
-        prover_id,
-        degree,
-    }.synthesize(&mut cs)
-}
-
 ///
 /// # Public Inputs
 ///
@@ -298,12 +302,9 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
             let replica_parents = &self.replica_parents[i];
             let data_node = &self.data_nodes[i];
 
-            if data_node.is_some() && replica_node.is_some() {
-                assert_ne!(data_node, replica_node);
-            };
             assert_eq!(data_node_path.len(), replica_node_path.len());
 
-            synthesize_proof_of_retrievability(
+            PoRCircuit::synthesize(
                 cs.namespace(|| "replica_node merkle proof"),
                 &params,
                 *replica_node,
@@ -314,7 +315,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
             // validate each replica_parents merkle proof
             {
                 for i in 0..replica_parents.len() {
-                    synthesize_proof_of_retrievability(
+                    PoRCircuit::synthesize(
                         cs.namespace(|| format!("replica parent: {}", i)),
                         &params,
                         replica_parents[i],
@@ -325,7 +326,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
             }
 
             // validate data node commitment
-            synthesize_proof_of_retrievability(
+            PoRCircuit::synthesize(
                 cs.namespace(|| "data node commitment"),
                 &params,
                 *data_node,
@@ -435,6 +436,7 @@ mod tests {
             drg: drgporep::DrgParams {
                 nodes: nodes,
                 degree,
+                expansion_degree: 0,
                 seed: new_seed(),
             },
             sloth_iter,
@@ -450,7 +452,7 @@ mod tests {
         let pub_inputs = drgporep::PublicInputs {
             prover_id: prover_id_fr,
             challenges: vec![challenge],
-            tau: &tau,
+            tau: tau,
         };
         let priv_inputs = drgporep::PrivateInputs {
             replica: data.as_slice(),
@@ -492,7 +494,7 @@ mod tests {
         );
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        synthesize_drgporep(
+        DrgPoRepCircuit::synthesize(
             cs.namespace(|| "drgporep"),
             params,
             lambda,
@@ -539,7 +541,7 @@ mod tests {
         let sloth_iter = 1;
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        synthesize_drgporep(
+        DrgPoRepCircuit::synthesize(
             cs.namespace(|| "drgporep"),
             params,
             lambda * 8,
@@ -561,7 +563,7 @@ mod tests {
     }
 
     #[test]
-    fn test_compound() {
+    fn drgporep_test_compound() {
         let params = &JubjubBls12::new();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
@@ -582,6 +584,7 @@ mod tests {
                 drg: drgporep::DrgParams {
                     nodes: nodes,
                     degree,
+                    expansion_degree: 0,
                     seed: new_seed(),
                 },
                 sloth_iter,
@@ -603,7 +606,7 @@ mod tests {
         let public_inputs = drgporep::PublicInputs {
             prover_id: prover_id_fr,
             challenges: vec![challenge],
-            tau: &tau,
+            tau: tau,
         };
         let private_inputs = drgporep::PrivateInputs {
             replica: data.as_slice(),
@@ -618,6 +621,7 @@ mod tests {
                 drg: drgporep::DrgParams {
                     nodes: nodes,
                     degree,
+                    expansion_degree: 0,
                     seed: new_seed(),
                 },
                 sloth_iter,
@@ -628,7 +632,6 @@ mod tests {
         let public_params =
             DrgPoRepCompound::<BucketGraph>::setup(&setup_params).expect("setup failed");
 
-        // FIXME: Uncommenting causes &tau and &aux not to live long enough, for some reason.
         let proof = DrgPoRepCompound::prove(&public_params, &public_inputs, &private_inputs)
             .expect("failed while proving");
 

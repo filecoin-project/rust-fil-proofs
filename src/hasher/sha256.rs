@@ -7,7 +7,7 @@ use std::hash::Hasher;
 pub struct SHA256Algorithm(Sha256);
 
 impl SHA256Algorithm {
-    fn new() -> SHA256Algorithm {
+    pub fn new() -> SHA256Algorithm {
         SHA256Algorithm(Sha256::new())
     }
 }
