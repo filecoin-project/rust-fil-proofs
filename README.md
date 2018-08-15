@@ -38,3 +38,7 @@ Running them
 > ./target/release/examples/drgporep
 > ./target/release/examples/drgporep-vanilla
 ```
+
+## License
+
+MIT or Apache 2.0
