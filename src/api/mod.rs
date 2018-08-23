@@ -7,9 +7,6 @@ use std::slice;
 use api_impl;
 
 type Commitment = [u8; 32];
-type ProverID = [u8; 31];
-type ChallengeSeed = [u8; 32];
-type RandomSeed = [u8; 32];
 type StatusCode = u8;
 
 // arrays cannot be passed by value in C; callers instead pass a pointer to the
@@ -17,9 +14,10 @@ type StatusCode = u8;
 type ProverIDPtr = *const u8;
 type ChallengeSeedPtr = *const u8;
 type RandomSeedPtr = *const u8;
-type ResultPtr = *const u8;
+type SealResultPtr = *const u8;
 type CommitmentPtr = *const u8;
-type SectorAccessPtr = *const libc::c_char;
+type UnsealResultPtr = *mut u64;
+type SectorAccess = *const libc::c_char;
 
 fn from_cstr(c_str: *const libc::c_char) -> String {
     unsafe {
@@ -28,22 +26,6 @@ fn from_cstr(c_str: *const libc::c_char) -> String {
             .to_owned()
             .to_string()
     }
-}
-
-fn u8ptr_to_array31(x: *const u8) -> [u8; 31] {
-    let s = unsafe { slice::from_raw_parts(x, 31).to_owned() };
-
-    assert_eq!(
-        s.len(),
-        31,
-        "actual len(s) = {}, expected len(s) = {}",
-        s.len(),
-        31
-    );
-
-    let mut out: [u8; 31] = Default::default();
-    out.copy_from_slice(&s[0..31]);
-    out
 }
 
 fn u8ptr_to_array32(x: *const u8) -> [u8; 32] {
@@ -81,18 +63,19 @@ const DUMMY_COMM_D: Commitment = *b"09876543210987654321098765432109";
 /// ```
 #[no_mangle]
 pub extern "C" fn seal(
-    unsealed: SectorAccessPtr,
-    sealed: SectorAccessPtr,
-    prover_id_ptr: ProverIDPtr,
-    challenge_seed_ptr: ChallengeSeedPtr,
-    random_seed_ptr: RandomSeedPtr,
-    result_ptr: ResultPtr,
+    unsealed_path: SectorAccess,
+    sealed_path: SectorAccess,
+    _prover_id_ptr: ProverIDPtr,
+    _challenge_seed_ptr: ChallengeSeedPtr,
+    _random_seed_ptr: RandomSeedPtr,
+    result_ptr: SealResultPtr,
 ) -> StatusCode {
-    let prover_id = u8ptr_to_array31(prover_id_ptr);
-    let challenge_seed = u8ptr_to_array32(challenge_seed_ptr);
-    let random_seed = u8ptr_to_array32(random_seed_ptr);
+    let unsealed_path_buf = PathBuf::from(from_cstr(unsealed_path));
+    let sealed_path_buf = PathBuf::from(from_cstr(sealed_path));
 
-    let result = seal_internal(unsealed, sealed, prover_id, challenge_seed, random_seed);
+    let _copied = api_impl::seal(&unsealed_path_buf, &sealed_path_buf);
+
+    let result: Result<[Commitment; 2], String> = Ok([DUMMY_COMM_R, DUMMY_COMM_D]);
 
     match result {
         Ok(comms) => {
@@ -127,7 +110,7 @@ pub extern "C" fn verify_seal(comm_r_ptr: CommitmentPtr, comm_d_ptr: CommitmentP
     let comm_r = u8ptr_to_array32(comm_r_ptr);
     let comm_d = u8ptr_to_array32(comm_d_ptr);
 
-    if verify_seal_internal(comm_r, comm_d) {
+    if comm_r == DUMMY_COMM_R && comm_d == DUMMY_COMM_D {
         0
     } else {
         20
@@ -148,6 +131,7 @@ pub extern "C" fn status_to_string(status_code: u8) -> *const libc::c_char {
         0 => CString::new("success"),
         10 => CString::new("failed to seal"),
         20 => CString::new("invalid replica and/or data commitment"),
+        30 => CString::new("failed to unseal"),
         _ => CString::new("unknown status code"),
     }.unwrap();
 
@@ -158,9 +142,39 @@ pub extern "C" fn status_to_string(status_code: u8) -> *const libc::c_char {
     p
 }
 
+/// Unseals bytes from a sealed sector-file and writes them to the output path and returns a status
+/// code indicating success or failure.
+///
+/// It is possible that the unseal operation writes a number of bytes to the output_path which is
+/// less than num_bytes.
+///
+/// # Arguments
+///
+/// * `sealed_path`   - path of sealed sector-file
+/// * `output_path`  - path where unsealed sector file's bytes should be written
+/// * `start_offset` - zero-based byte offset in original, unsealed sector-file
+/// * `num_bytes`    - number of bytes to unseal (corresponds to contents of unsealed sector-file)
+/// * `result_ptr`   - pointer to a u64, mutated by unseal in order to communicate the number of
+///                    bytes that were unsealed and written to the output_path
+/// ```
 #[no_mangle]
-pub extern "C" fn unseal() {
-    unimplemented!()
+pub extern "C" fn unseal(
+    sealed_path: SectorAccess,
+    output_path: SectorAccess,
+    start_offset: u64,
+    num_bytes: u64,
+    result_ptr: UnsealResultPtr,
+) -> StatusCode {
+    let sealed_path_buf = PathBuf::from(from_cstr(sealed_path));
+    let output_path_buf = PathBuf::from(from_cstr(output_path));
+
+    match api_impl::unseal(&sealed_path_buf, &output_path_buf, start_offset, num_bytes) {
+        Ok(num_unsealed_bytes) => {
+            unsafe { result_ptr.write(num_unsealed_bytes) };
+            0
+        }
+        Err(_) => 30,
+    }
 }
 
 #[no_mangle]
@@ -173,44 +187,33 @@ pub extern "C" fn verifyPost() {
     unimplemented!()
 }
 
-fn seal_internal(
-    unsealed: SectorAccessPtr,
-    sealed: SectorAccessPtr,
-    _prover_id: ProverID,
-    _challenge_seed: ChallengeSeed,
-    _random_seed: RandomSeed,
-) -> Result<[Commitment; 2], String> {
-    let in_path = PathBuf::from(from_cstr(unsealed));
-    let out_path = PathBuf::from(from_cstr(sealed));
-
-    let _copied = api_impl::seal(&in_path, &out_path);
-
-    Ok([DUMMY_COMM_R, DUMMY_COMM_D])
-}
-
-fn verify_seal_internal(comm_r: Commitment, comm_d: Commitment) -> bool {
-    comm_r == DUMMY_COMM_R && comm_d == DUMMY_COMM_D
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::ffi::CString;
+    use std::fs::{read_to_string, write};
+    use std::str::from_utf8_unchecked;
+    use tempfile;
 
-    fn as_raw_ptr(s: &str) -> *const libc::c_char {
-        CString::new(s).unwrap().as_ptr()
+    fn path_to_c_str(p: &PathBuf) -> *const libc::c_char {
+        let s = p.to_str().unwrap();
+        CString::new(s).unwrap().into_raw()
     }
 
     #[test]
     fn seal_verify() {
+        let dir = tempfile::tempdir().unwrap();
+        let seal_input_path = dir.path().join("unsealed");
+        let seal_output_path = dir.path().join("unsealed");
+
         let result: [u8; 64] = [0; 64];
         let prover_id: [u8; 31] = [2; 31];
         let challenge_seed: [u8; 32] = [3; 32];
         let random_seed: [u8; 32] = [4; 32];
 
         let good_seal = seal(
-            as_raw_ptr("sector123"),
-            as_raw_ptr("sector123"),
+            path_to_c_str(&seal_input_path),
+            path_to_c_str(&seal_output_path),
             &prover_id[0],
             &challenge_seed[0],
             &random_seed[0],
@@ -226,22 +229,53 @@ mod tests {
     }
 
     #[test]
-    fn seal_internal_verify() {
-        let comms = seal_internal(
-            as_raw_ptr("sector123"),
-            as_raw_ptr("sector123"),
-            [1; 31],
-            [2; 32],
-            [3; 32],
+    fn seal_unseal_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let seal_input_path = dir.path().join("unsealed00");
+        let seal_output_path = dir.path().join("sealed");
+        let unseal_output_path = dir.path().join("unsealed01");
+
+        let result: [u8; 64] = [0; 64];
+        let prover_id: [u8; 31] = [2; 31];
+        let challenge_seed: [u8; 32] = [3; 32];
+        let random_seed: [u8; 32] = [4; 32];
+        let result_ptr: &mut u64 = &mut 0;
+
+        let contents = b"hello, moto";
+        let length = contents.len();
+
+        match write(&seal_input_path, contents) {
+            Ok(_) => (),
+            Err(err) => panic!(err),
+        }
+
+        let good_seal = seal(
+            path_to_c_str(&seal_input_path),
+            path_to_c_str(&seal_output_path),
+            &prover_id[0],
+            &challenge_seed[0],
+            &random_seed[0],
+            &result[0],
         );
 
-        match comms {
-            Ok(comms) => {
-                assert_ne!(comms[0], comms[1]);
-                assert!(verify_seal_internal(comms[0], comms[1]));
-                assert!(!verify_seal_internal(comms[1], comms[0]));
-            }
-            Err(_) => panic!("seal_internal failed unexpectedly"),
-        }
+        assert_eq!(0, good_seal);
+
+        let good_unseal = unseal(
+            path_to_c_str(&seal_output_path),
+            path_to_c_str(&unseal_output_path),
+            0,
+            length as u64,
+            result_ptr,
+        );
+
+        assert_eq!(0, good_unseal);
+        assert_eq!(length as u64, *result_ptr);
+
+        let buffer = match read_to_string(unseal_output_path) {
+            Ok(s) => s,
+            Err(err) => panic!(err),
+        };
+
+        assert_eq!(unsafe { from_utf8_unchecked(contents) }, buffer);
     }
 }
