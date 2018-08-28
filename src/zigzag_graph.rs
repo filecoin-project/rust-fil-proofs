@@ -101,6 +101,13 @@ impl<Z: ZigZag> Graph for Z {
         }
         assert!(parents.len() == self.degree());
         parents.sort();
+
+        assert!(parents.iter().all(|p| if self.forward() {
+            *p <= raw_node
+        } else {
+            *p >= raw_node
+        }));
+
         parents
     }
 
@@ -110,6 +117,10 @@ impl<Z: ZigZag> Graph for Z {
 
     fn new(nodes: usize, base_degree: usize, expansion_degree: usize, seed: [u32; 7]) -> Self {
         Z::new_zigzag(nodes, base_degree, expansion_degree, seed)
+    }
+
+    fn forward(&self) -> bool {
+        !self.reversed()
     }
 }
 

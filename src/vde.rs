@@ -14,56 +14,37 @@ pub fn encode<'a, G: drgraph::Graph>(
     prover_id: &'a Fr,
     data: &'a mut [u8],
 ) -> Result<()> {
-    // cache to keep track of which parts have been encrypted yet
-    let mut cache = vec![false; graph.size()];
+    let degree = graph.degree();
 
-    (0..graph.size())
-        .rev()
-        .map(|i| recursive_encode(graph, lambda, sloth_iter, prover_id, &mut cache, data, i))
-        .collect()
-}
+    // Because a node always follows all of its parents in the data,
+    // the nodes are by definition already topologically sorted.
+    // Therefore, if we simply traverse the data in order, encoding each node in place,
+    // we can always get each parent's encodings with a simple lookup --
+    // since we will already have encoded the parent earlier in the traversal.
+    // The only subtlety is that a ZigZag graph may be reversed, so the direction
+    // of the traversal must also be.
 
-fn recursive_encode<G: drgraph::Graph>(
-    graph: &G,
-    lambda: usize,
-    sloth_iter: usize,
-    prover_id: &Fr,
-    cache: &mut [bool],
-    data: &mut [u8],
-    node: usize,
-) -> Result<()> {
-    if cache[node] {
-        return Ok(());
+    for n in 0..graph.size() {
+        let node = if graph.forward() {
+            n
+        } else {
+            // If the graph is reversed, traverse in reverse order.
+            (graph.size() - n) - 1
+        };
+
+        let parents = graph.parents(node);
+        assert_eq!(parents.len(), graph.degree(), "wrong number of parents");
+
+        let key = create_key(prover_id, node, &parents, data, lambda, degree)?;
+        let start = data_at_node_offset(node, lambda);
+        let end = start + lambda;
+        let fr = bytes_into_fr::<Bls12>(&data[start..end])?;
+
+        let encoded =
+            fr_into_bytes::<Bls12>(&crypto::sloth::encode::<Bls12>(&key, &fr, sloth_iter));
+
+        data[start..end].copy_from_slice(&encoded);
     }
-
-    // -- seal all parents of this node
-
-    let parents = graph.parents(node);
-
-    assert_eq!(parents.len(), graph.degree(), "wrong number of parents");
-
-    // TODO: unsuck
-    if node != parents[0] {
-        parents
-            .iter()
-            .map(|parent| {
-                recursive_encode(graph, lambda, sloth_iter, prover_id, cache, data, *parent)
-            }).collect::<Result<()>>()?;
-    }
-
-    // -- create sealing key for this ndoe
-
-    let key = create_key(prover_id, node, &parents, data, lambda, graph.degree())?;
-
-    // -- seal this node
-
-    let start = data_at_node_offset(node, lambda);
-    let end = start + lambda;
-    let fr = bytes_into_fr::<Bls12>(&data[start..end])?;
-
-    let encoded = fr_into_bytes::<Bls12>(&crypto::sloth::encode::<Bls12>(&key, &fr, sloth_iter));
-    data[start..end].clone_from_slice(encoded.as_slice());
-    cache[node] = true;
 
     Ok(())
 }

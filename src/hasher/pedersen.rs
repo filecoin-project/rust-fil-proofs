@@ -57,7 +57,7 @@ impl PartialOrd for PedersenHash {
 pub type MerkleTree = merkle::MerkleTree<PedersenHash, PedersenAlgorithm>;
 
 impl PedersenAlgorithm {
-    fn new() -> PedersenAlgorithm {
+    pub fn new() -> PedersenAlgorithm {
         PedersenAlgorithm(Fr::from_repr(FrRepr::from(0)).expect("failed 0"))
     }
 }

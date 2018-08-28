@@ -28,6 +28,7 @@ aes = "0.1"
 block-modes = "0.1"
 sha2 = "0.7"
 pbr = "1.0"
+tempfile = "3"
 
 [dependencies.pairing]
 version = "0.14.2"
@@ -43,7 +44,6 @@ u128-support = ["pairing/u128-support"]
 
 [dev-dependencies]
 criterion = "0.2.3"
-tempfile = "3"
 proptest = "0.7"
 
 [build-dependencies]

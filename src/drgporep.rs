@@ -414,6 +414,19 @@ mod tests {
     use drgraph::{new_seed, BucketGraph};
     use rand::{Rng, SeedableRng, XorShiftRng};
 
+    use memmap::MmapMut;
+    use memmap::MmapOptions;
+    use std::fs::File;
+    use std::io::Write;
+    use tempfile;
+
+    pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
+        let mut tmpfile: File = tempfile::tempfile().unwrap();
+        tmpfile.write_all(data).unwrap();
+
+        unsafe { MmapOptions::new().map_mut(&tmpfile).unwrap() }
+    }
+
     #[test]
     fn extract_all() {
         let lambda = 32;
@@ -421,7 +434,7 @@ mod tests {
         let prover_id = vec![1u8; 32];
         let data = vec![2u8; 32 * 3];
         // create a copy, so we can compare roundtrips
-        let mut data_copy = data.clone();
+        let mut mmapped_data_copy = file_backed_mmap_from(&data);
 
         let sp = SetupParams {
             lambda: lambda,
@@ -436,14 +449,16 @@ mod tests {
 
         let pp = DrgPoRep::<BucketGraph>::setup(&sp).unwrap();
 
-        DrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
+        DrgPoRep::replicate(&pp, prover_id.as_slice(), &mut mmapped_data_copy).unwrap();
 
-        assert_ne!(data, data_copy, "replication did not change data");
+        let mut copied = vec![0; data.len()];
+        copied.copy_from_slice(&mmapped_data_copy);
+        assert_ne!(data, copied, "replication did not change data");
 
         let decoded_data =
-            DrgPoRep::extract_all(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
+            DrgPoRep::extract_all(&pp, prover_id.as_slice(), &mut mmapped_data_copy).unwrap();
 
-        assert_eq!(data, decoded_data, "failed to extract data");
+        assert_eq!(data, decoded_data.as_slice(), "failed to extract data");
     }
 
     #[test]
@@ -455,7 +470,7 @@ mod tests {
         let data = vec![2u8; 32 * nodes];
 
         // create a copy, so we can compare roundtrips
-        let mut data_copy = data.clone();
+        let mut mmapped_data_copy = file_backed_mmap_from(&data);
 
         let sp = SetupParams {
             lambda: lambda,
@@ -470,13 +485,15 @@ mod tests {
 
         let pp = DrgPoRep::<BucketGraph>::setup(&sp).unwrap();
 
-        DrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
+        DrgPoRep::replicate(&pp, prover_id.as_slice(), &mut mmapped_data_copy).unwrap();
 
-        assert_ne!(data, data_copy, "replication did not change data");
+        let mut copied = vec![0; data.len()];
+        copied.copy_from_slice(&mmapped_data_copy);
+        assert_ne!(data, copied, "replication did not change data");
 
         for i in 0..nodes {
             let decoded_data =
-                DrgPoRep::extract(&pp, prover_id.as_slice(), data_copy.as_mut_slice(), i).unwrap();
+                DrgPoRep::extract(&pp, prover_id.as_slice(), &mmapped_data_copy, i).unwrap();
 
             let original_data = data_at_node(&data, i, lambda).unwrap();
 
@@ -513,7 +530,8 @@ mod tests {
                 .collect();
 
             // create a copy, so we can comare roundtrips
-            let mut data_copy = data.clone();
+            let mut mmapped_data_copy = file_backed_mmap_from(&data);
+
             let challenge = i;
 
             let sp = SetupParams {
@@ -530,9 +548,12 @@ mod tests {
             let pp = DrgPoRep::<BucketGraph>::setup(&sp).unwrap();
 
             let (tau, aux) =
-                DrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
+                DrgPoRep::replicate(&pp, prover_id.as_slice(), &mut mmapped_data_copy).unwrap();
 
-            assert_ne!(data, data_copy, "replication did not change data");
+            let mut copied = vec![0; data.len()];
+            copied.copy_from_slice(&mmapped_data_copy);
+
+            assert_ne!(data, copied, "replication did not change data");
 
             let pub_inputs = PublicInputs {
                 prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
@@ -541,7 +562,7 @@ mod tests {
             };
 
             let priv_inputs = PrivateInputs {
-                replica: data_copy.as_slice(),
+                replica: &mmapped_data_copy,
                 aux: &aux,
             };
 

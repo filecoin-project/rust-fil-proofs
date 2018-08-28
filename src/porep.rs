@@ -47,7 +47,20 @@ pub trait PoRep<'a>: ProofScheme<'a> {
     type Tau;
     type ProverAux;
 
-    fn replicate(&'a Self::PublicParams, &[u8], &mut [u8]) -> Result<(Self::Tau, Self::ProverAux)>; // Tau, ProverAux
-    fn extract_all(&'a Self::PublicParams, &[u8], &[u8]) -> Result<Vec<u8>>;
-    fn extract(&'a Self::PublicParams, &[u8], &[u8], usize) -> Result<Vec<u8>>;
+    fn replicate(
+        pub_params: &'a Self::PublicParams,
+        prover_id: &[u8],
+        data: &mut [u8],
+    ) -> Result<(Self::Tau, Self::ProverAux)>; // Tau, ProverAux
+    fn extract_all(
+        pub_params: &'a Self::PublicParams,
+        prover_id: &[u8],
+        replica: &[u8],
+    ) -> Result<Vec<u8>>;
+    fn extract(
+        pub_params: &'a Self::PublicParams,
+        prover_id: &[u8],
+        replica: &[u8],
+        node: usize,
+    ) -> Result<Vec<u8>>;
 }

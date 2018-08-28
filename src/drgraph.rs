@@ -1,7 +1,7 @@
 #![cfg_attr(feature = "cargo-clippy", allow(len_without_is_empty))]
 
 use error::Result;
-use hasher::pedersen;
+use hasher::pedersen::{self, PedersenAlgorithm};
 use merkle_light::hash::{Algorithm, Hashable};
 use merkle_light::{merkle, proof};
 use pairing::bls12_381::Fr;
@@ -202,8 +202,13 @@ pub trait Graph: ::std::fmt::Debug + Clone + PartialEq + Eq {
             return Err(format_err!("invalid node size, must be 16, 32 or 64"));
         }
 
-        Ok(MerkleTree::from_data((0..self.size()).map(|i| {
-            data_at_node(data, i, node_size).expect("data_at_node math failed")
+        let mut a = PedersenAlgorithm::new();
+        Ok(MerkleTree::new((0..self.size()).map(|i| {
+            let d = data_at_node(&data, i, node_size).expect("data_at_node math failed");
+            d.hash(&mut a);
+            let h = a.hash();
+            a.reset();
+            h
         })))
     }
 
@@ -223,6 +228,11 @@ pub trait Graph: ::std::fmt::Debug + Clone + PartialEq + Eq {
 
     fn new(nodes: usize, base_degree: usize, expansion_degree: usize, seed: [u32; 7]) -> Self;
     fn seed(&self) -> [u32; 7];
+
+    // Returns true if a node's parents have lower index than the node.
+    fn forward(&self) -> bool {
+        true
+    }
 }
 
 pub fn graph_height(size: usize) -> usize {
@@ -325,7 +335,16 @@ pub fn new_seed() -> [u32; 7] {
 mod tests {
     use super::*;
     use drgraph::new_seed;
+    use memmap::MmapMut;
+    use memmap::MmapOptions;
     use rand::{self, Rng};
+
+    // Create and return an object of MmapMut backed by in-memory copy of data.
+    pub fn mmap_from(data: &[u8]) -> MmapMut {
+        let mut mm = MmapOptions::new().len(data.len()).map_anon().unwrap();
+        mm.copy_from_slice(data);
+        mm
+    }
 
     #[test]
     fn graph_bucket() {
@@ -375,7 +394,8 @@ mod tests {
         let g = BucketGraph::new(5, 3, 0, new_seed());
         let data = vec![2u8; 16 * 5];
 
-        let tree = g.merkle_tree(data.as_slice(), 16).unwrap();
+        let mmapped = &mmap_from(&data);
+        let tree = g.merkle_tree(mmapped, 16).unwrap();
         let proof = tree.gen_proof(2);
 
         assert!(proof.validate::<TreeAlgorithm>());

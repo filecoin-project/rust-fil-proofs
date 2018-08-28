@@ -27,7 +27,6 @@ extern crate pairing;
 extern crate rand;
 extern crate sapling_crypto;
 extern crate sha2;
-#[cfg(test)]
 extern crate tempfile;
 #[cfg(test)]
 #[macro_use]
