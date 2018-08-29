@@ -33,7 +33,7 @@ fn file_backed_mmap_from_random_bytes(n: usize) -> MmapMut {
     let mut tmpfile: File = tempfile::tempfile().unwrap();
 
     // FIXME: Don't materialize the data first: just write it to disk.
-    for i in 0..n {
+    for _ in 0..n {
         tmpfile
             .write_all(&fr_into_bytes::<Bls12>(&rng.gen()))
             .unwrap();

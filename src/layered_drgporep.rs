@@ -265,8 +265,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
             };
 
             let ep = &proof_layer;
-            let parents: Vec<_> = ep
-                .replica_parents[0]
+            let parents: Vec<_> = ep.replica_parents[0]
                 .iter()
                 .map(|p| {
                     (
@@ -277,8 +276,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
                             data: p.1.data,
                         },
                     )
-                })
-                .collect();
+                }).collect();
 
             let res = DrgPoRep::verify(
                 &pp,

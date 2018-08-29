@@ -17,6 +17,7 @@ extern crate bellman;
 extern crate blake2_rfc;
 extern crate block_modes;
 extern crate byteorder;
+extern crate fs2;
 extern crate itertools;
 extern crate libc;
 extern crate memmap;
@@ -45,7 +46,6 @@ pub mod test_helper;
 pub mod example_helper;
 
 pub mod api;
-pub mod api_impl;
 pub mod batchpost;
 pub mod circuit;
 pub mod compound_proof;

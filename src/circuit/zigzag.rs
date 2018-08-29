@@ -96,6 +96,7 @@ where
     }
 }
 
+#[allow(dead_code)]
 struct ZigZagCompound {}
 
 impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParameters<E, C, P>
@@ -177,18 +178,15 @@ mod tests {
     use circuit::test::*;
     use compound_proof;
     use drgporep;
-    use drgraph::{graph_height, new_seed, BucketGraph};
+    use drgraph::new_seed;
     use fr32::{bytes_into_fr, fr_into_bytes};
     use layered_drgporep;
-    use pairing::bls12_381::FrRepr;
     use pairing::Field;
     use porep::{self, PoRep};
     use proof::ProofScheme;
     use rand::Rand;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
-    use util::data_at_node;
-    use zigzag_drgporep;
     use zigzag_graph::ZigZagGraph;
 
     #[test]
@@ -199,7 +197,7 @@ mod tests {
         let degree = 1;
         let expansion_degree = 1;
         let challenge = 2;
-        let challenges = vec![challenge];
+        let _challenges = vec![challenge];
         let num_layers = 2;
         let sloth_iter = 1;
 
@@ -311,7 +309,7 @@ mod tests {
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
         let layers = (0..num_layers)
-            .map(|l| {
+            .map(|_l| {
                 let public_inputs = drgporep::PublicInputs {
                     prover_id,
                     challenges: vec![challenge],
@@ -365,7 +363,7 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
-        let prover_id_fr = bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap();
+        let _prover_id_fr = bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap();
         let data: Vec<u8> = (0..n)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();

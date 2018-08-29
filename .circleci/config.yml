@@ -38,6 +38,7 @@ jobs:
       - run:
           name: Test (stable)
           command: cargo +stable test --verbose --frozen
+          no_output_timeout: 15m
       - run:
           name: Prune the output files
           command: |
@@ -76,6 +77,7 @@ jobs:
       - run:
           name: Test (nightly)
           command: cargo +nightly test --verbose --frozen
+          no_output_timeout: 15m
   rustfmt:
     docker:
       - image: clwk/rust:latest

@@ -603,6 +603,7 @@ mod tests {
 
                 if all_same {
                     println!("invalid test data can't scramble proofs with all same parents.");
+
                     repeat = true;
                     continue;
                 }

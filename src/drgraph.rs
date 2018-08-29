@@ -293,8 +293,7 @@ impl Graph for BucketGraph {
                         assert!(out <= node);
 
                         out
-                    })
-                    .collect();
+                    }).collect();
 
                 parents.sort_unstable();
 

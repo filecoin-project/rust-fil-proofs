@@ -117,7 +117,7 @@ pub trait Example<E: JubjubEngine>: Default {
         let groth_params: Parameters<E> = if cache_path.exists() {
             info!(target: "params", "reading groth params from cache: {:?}", cache_path);
             let mut f = File::open(&cache_path).expect("failed to read cache");
-            Parameters::read(&f, false).expect("failed to read cached paramse")
+            Parameters::read(&f, false).expect("failed to read cached params")
         } else {
             info!(target: "params", "generating new groth params");
             let p = self.generate_groth_params(
