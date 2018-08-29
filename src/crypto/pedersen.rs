@@ -1,5 +1,5 @@
+use byteorder::{ByteOrder, LittleEndian};
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
-use pairing::PrimeFieldRepr;
 use sapling_crypto::jubjub::JubjubBls12;
 use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 
@@ -27,28 +27,43 @@ pub fn pedersen_md_no_padding(data: &[u8]) -> Fr {
         "input must be a multiple of the blocksize"
     );
     let mut chunks = data_bits.chunks(PEDERSEN_BLOCK_SIZE);
-    let mut cur: Vec<bool> = chunks.nth(0).unwrap().to_vec();
+    let mut cur: Vec<bool> = vec![false; 2 * PEDERSEN_BLOCK_SIZE];
+    cur[0..PEDERSEN_BLOCK_SIZE].copy_from_slice(chunks.nth(0).unwrap());
 
     for block in chunks {
-        cur.extend(block);
-        cur = pedersen_compression(&cur);
+        cur[PEDERSEN_BLOCK_SIZE..].copy_from_slice(block);
+        pedersen_compression(&mut cur, 2 * PEDERSEN_BLOCK_SIZE);
     }
 
-    let frs = bytes_into_frs::<Bls12>(&bits_to_bytes(&cur))
+    let frs = bytes_into_frs::<Bls12>(&bits_to_bytes(&cur[0..PEDERSEN_BLOCK_SIZE]))
         .expect("pedersen must generate valid fr elements");
     assert_eq!(frs.len(), 1);
     frs[0]
 }
 
-pub fn pedersen_compression(bits: &[bool]) -> Vec<bool> {
-    let (x, _) =
-        pedersen_hash::<Bls12, _>(Personalization::NoteCommitment, bits.to_vec(), &JJ_PARAMS)
-            .into_xy();
-    let x: FrRepr = x.into();
-    let mut out = Vec::with_capacity(32);
-    x.write_le(&mut out).expect("failed to write result hash");
+/// bits, is the input values, which get overwritten with the result.
+pub fn pedersen_compression(bits: &mut [bool], data_len: usize) {
+    assert!(bits.len() >= PEDERSEN_BLOCK_SIZE, "bits to small");
 
-    bytes_into_bits(out.as_slice())
+    let x: FrRepr = pedersen_hash::<Bls12, _>(
+        Personalization::NoteCommitment,
+        bits.iter().take(data_len).cloned(),
+        &JJ_PARAMS,
+    ).into_xy()
+    .0
+    .into();
+
+    // write result into target vec
+    let mut scratch = vec![0u8; 8];
+    for (i, digit) in x.as_ref().iter().enumerate() {
+        LittleEndian::write_u64(&mut scratch, *digit);
+
+        for k in 0..8 {
+            for j in 0..8 {
+                bits[i * 64 + k * 8 + j] = (scratch[k] >> j) & 1u8 == 1u8
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -60,13 +75,16 @@ mod tests {
 
     #[test]
     fn test_pedersen_compression() {
-        let x = bytes_into_bits(b"some bytes");
-        let hashed = pedersen_compression(&x);
+        let data = bytes_into_bits(b"some bytes");
+        let mut x = vec![false; PEDERSEN_BLOCK_SIZE];
+        &x[0..data.len()].copy_from_slice(&data);
+
+        pedersen_compression(&mut x, data.len());
         let expected = vec![
             213, 235, 66, 156, 7, 85, 177, 39, 249, 31, 160, 247, 29, 106, 36, 46, 225, 71, 116,
             23, 1, 89, 82, 149, 45, 189, 27, 189, 144, 98, 23, 98,
         ];
-        assert_eq!(expected, bits_to_bytes(&hashed));
+        assert_eq!(expected, bits_to_bytes(&x));
     }
 
     #[test]

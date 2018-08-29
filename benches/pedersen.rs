@@ -70,9 +70,9 @@ fn pedersen_benchmark(c: &mut Criterion) {
             "non-circuit",
             |b, bytes| {
                 let mut rng = thread_rng();
-                let data: Vec<bool> = (0..bytes * 8).map(|_| rng.gen()).collect();
+                let mut data: Vec<bool> = (0..bytes * 8).map(|_| rng.gen()).collect();
 
-                b.iter(|| black_box(pedersen::pedersen_compression(&data)))
+                b.iter(|| black_box(pedersen::pedersen_compression(&data, data.len())))
             },
             params,
         ).with_function("circuit - create proof", move |b, bytes| {

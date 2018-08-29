@@ -416,7 +416,8 @@ mod tests {
         let challenge = 2;
         let sloth_iter = 1;
 
-        let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&Fr::rand(rng));
+        let prover_id_fr = Fr::rand(rng);
+        let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&prover_id_fr);
 
         let mut data: Vec<u8> = (0..nodes)
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::rand(rng)))
@@ -448,7 +449,6 @@ mod tests {
             drgporep::DrgPoRep::replicate(&pp, prover_id.as_slice(), data.as_mut_slice())
                 .expect("failed to replicate");
 
-        let prover_id_fr = bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap();
         let pub_inputs = drgporep::PublicInputs {
             prover_id: prover_id_fr,
             challenges: vec![challenge],

@@ -66,6 +66,7 @@ pub fn fake_drgpoprep_proof<R: Rng>(
                 })
             },
         ).unwrap();
+
     let key = crypto::kdf::kdf::<Bls12>(ciphertexts.as_slice(), m);
     // run sloth(key, node)
     let replica_node: Fr = crypto::sloth::encode::<Bls12>(&key, &data_node, sloth_rounds);
@@ -135,9 +136,11 @@ pub fn random_merkle_path_with_value<R: Rng>(
 
     // TODO: cleanup
     let mut cur = if offset == 0 {
-        let h = crypto::pedersen::pedersen_compression(&bytes_into_bits(&fr_into_bytes::<Bls12>(
-            &value,
-        )));
+        let data = bytes_into_bits(&fr_into_bytes::<Bls12>(&value));
+        let mut h = vec![false; crypto::pedersen::PEDERSEN_BLOCK_SIZE];
+        h[0..data.len()].copy_from_slice(&data);
+
+        crypto::pedersen::pedersen_compression(&mut h, data.len());
         bytes_into_fr::<Bls12>(&bits_to_bytes(&h)).unwrap()
     } else {
         *value

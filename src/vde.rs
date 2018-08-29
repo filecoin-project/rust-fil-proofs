@@ -3,7 +3,6 @@ use drgraph;
 use error::Result;
 use fr32::{bytes_into_fr, fr_into_bytes};
 use pairing::bls12_381::{Bls12, Fr};
-use pairing::{Field, PrimeField, PrimeFieldRepr};
 use util::{data_at_node, data_at_node_offset};
 
 /// encodes the data and overwrites the original data slice.
@@ -11,7 +10,7 @@ pub fn encode<'a, G: drgraph::Graph>(
     graph: &'a G,
     lambda: usize,
     sloth_iter: usize,
-    prover_id: &'a Fr,
+    prover_id: &'a [u8],
     data: &'a mut [u8],
 ) -> Result<()> {
     let degree = graph.degree();
@@ -53,7 +52,7 @@ pub fn decode<'a, G: drgraph::Graph>(
     graph: &'a G,
     lambda: usize,
     sloth_iter: usize,
-    prover_id: &'a Fr,
+    prover_id: &'a [u8],
     data: &'a [u8],
 ) -> Result<Vec<u8>> {
     // TODO: parallelize
@@ -71,11 +70,12 @@ pub fn decode_block<'a, G: drgraph::Graph>(
     graph: &'a G,
     lambda: usize,
     sloth_iter: usize,
-    prover_id: &'a Fr,
+    prover_id: &'a [u8],
     data: &'a [u8],
     v: usize,
 ) -> Result<Fr> {
     let parents = graph.parents(v);
+
     let key = create_key(prover_id, v, &parents, data, lambda, graph.degree())?;
     let fr = bytes_into_fr::<Bls12>(&data_at_node(data, v, lambda)?)?;
 
@@ -84,7 +84,7 @@ pub fn decode_block<'a, G: drgraph::Graph>(
 }
 
 fn create_key(
-    id: &Fr,
+    id: &[u8],
     node: usize,
     parents: &[usize],
     data: &[u8],
@@ -94,21 +94,20 @@ fn create_key(
     // ciphertexts will become a buffer of the layout
     // id | encodedParentNode1 | encodedParentNode1 | ...
 
-    let ciphertexts = parents.iter().fold(
-        Ok(fr_into_bytes::<Bls12>(id)),
-        |acc: Result<Vec<u8>>, parent: &usize| {
-            acc.and_then(|mut acc| {
-                // special super shitty case
-                // TODO: unsuck
-                if node == parents[0] {
-                    Fr::zero().into_repr().write_le(&mut acc)?;
-                } else {
-                    acc.extend(data_at_node(data, *parent, node_size)?.to_vec());
-                }
-                Ok(acc)
-            })
-        },
-    )?;
+    let mut ciphertexts = vec![0u8; 32 + node_size * parents.len()];
+    ciphertexts[0..32].copy_from_slice(id);
+
+    for (i, parent) in parents.iter().enumerate() {
+        // special super shitty case
+        // TODO: unsuck
+        if node == parents[0] {
+            // skip, as we would only write 0s, but the vector is prefilled with 0.
+        } else {
+            let start = 32 + i * node_size;
+            let end = 32 + (i + 1) * node_size;
+            ciphertexts[start..end].copy_from_slice(data_at_node(data, *parent, node_size)?);
+        }
+    }
 
     Ok(crypto::kdf::kdf::<Bls12>(ciphertexts.as_slice(), m))
 }

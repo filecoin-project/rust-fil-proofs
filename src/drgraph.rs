@@ -139,11 +139,11 @@ impl MerkleProof {
         let mut out = Vec::new();
 
         for (hash, is_right) in &self.path {
-            out.extend(hash.as_ref());
+            out.extend(hash.serialize());
             out.push(*is_right as u8);
         }
-        out.extend(self.leaf().as_ref());
-        out.extend(self.root().as_ref());
+        out.extend(self.leaf().serialize());
+        out.extend(self.root().serialize());
 
         out
     }
@@ -179,12 +179,6 @@ pub trait Graph: ::std::fmt::Debug + Clone + PartialEq + Eq {
     /// Returns the expected size of all nodes in the graph.
     fn expected_size(&self, node_size: usize) -> usize {
         self.size() * node_size
-    }
-
-    /// Returns the commitment hash for the given data.
-    fn commit(&self, data: &[u8], node_size: usize) -> Result<TreeHash> {
-        let t = self.merkle_tree(data, node_size)?;
-        Ok(t.root())
     }
 
     /// Builds a merkle tree based on the given data.
@@ -377,15 +371,6 @@ mod tests {
                 }
             }
         }
-    }
-
-    #[test]
-    fn graph_commit() {
-        let g = BucketGraph::new(3, 10, 0, new_seed());
-
-        let data = vec![1u8; 3 * 16];
-        g.commit(data.as_slice(), 16).unwrap();
-        // TODO: add assertion
     }
 
     #[test]

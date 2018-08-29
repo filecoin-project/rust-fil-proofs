@@ -358,18 +358,12 @@ where
         data: &mut [u8],
     ) -> Result<(porep::Tau, porep::ProverAux)> {
         let tree_d = pp.graph.merkle_tree(data, pp.lambda)?;
-        let comm_d = pp.graph.commit(data, pp.lambda)?;
+        let comm_d = tree_d.root();
 
-        vde::encode(
-            &pp.graph,
-            pp.lambda,
-            pp.sloth_iter,
-            &bytes_into_fr::<Bls12>(prover_id)?,
-            data,
-        )?;
+        vde::encode(&pp.graph, pp.lambda, pp.sloth_iter, prover_id, data)?;
 
         let tree_r = pp.graph.merkle_tree(data, pp.lambda)?;
-        let comm_r = pp.graph.commit(data, pp.lambda)?;
+        let comm_r = tree_r.root();
 
         Ok((
             porep::Tau::new(comm_d, comm_r),
@@ -382,13 +376,7 @@ where
         prover_id: &'b [u8],
         data: &'b [u8],
     ) -> Result<Vec<u8>> {
-        vde::decode(
-            &pp.graph,
-            pp.lambda,
-            pp.sloth_iter,
-            &bytes_into_fr::<Bls12>(prover_id)?,
-            data,
-        )
+        vde::decode(&pp.graph, pp.lambda, pp.sloth_iter, prover_id, data)
     }
 
     fn extract(
@@ -401,7 +389,7 @@ where
             &pp.graph,
             pp.lambda,
             pp.sloth_iter,
-            &bytes_into_fr::<Bls12>(prover_id)?,
+            prover_id,
             data,
             node,
         )?))
