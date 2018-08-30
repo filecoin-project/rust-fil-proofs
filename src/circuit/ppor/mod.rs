@@ -206,8 +206,8 @@ mod tests {
 
             let instance = ParallelProofOfRetrievability {
                 params,
-                values: values,
-                auth_paths: auth_paths,
+                values,
+                auth_paths,
                 root: Some(tree.root().into()),
             };
 

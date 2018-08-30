@@ -425,7 +425,7 @@ mod tests {
         let mut mmapped_data_copy = file_backed_mmap_from(&data);
 
         let sp = SetupParams {
-            lambda: lambda,
+            lambda,
             drg: DrgParams {
                 nodes: data.len() / lambda,
                 degree: 5,
@@ -461,7 +461,7 @@ mod tests {
         let mut mmapped_data_copy = file_backed_mmap_from(&data);
 
         let sp = SetupParams {
-            lambda: lambda,
+            lambda,
             drg: DrgParams {
                 nodes: data.len() / lambda,
                 degree: 5,
@@ -630,7 +630,7 @@ mod tests {
                 let pub_inputs_with_wrong_challenge_for_proof = PublicInputs {
                     prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
                     challenges: vec![if challenge == 1 { 2 } else { 1 }],
-                    tau: tau,
+                    tau,
                 };
                 let verified =
                     DrgPoRep::verify(&pp, &pub_inputs_with_wrong_challenge_for_proof, &proof)

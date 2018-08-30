@@ -84,7 +84,7 @@ mod tests {
 
         let sp = SetupParams {
             drg_porep_setup_params: drgporep::SetupParams {
-                lambda: lambda,
+                lambda,
                 drg: drgporep::DrgParams {
                     nodes: data.len() / lambda,
                     degree: 5,
@@ -157,12 +157,12 @@ mod tests {
         let pub_inputs = PublicInputs {
             prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
             challenge,
-            tau: tau,
+            tau,
         };
 
         let priv_inputs = PrivateInputs {
             replica: data.as_slice(),
-            aux: aux,
+            aux,
         };
 
         let proof = ZigZagDrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).unwrap();

@@ -435,7 +435,7 @@ mod tests {
         let sp = drgporep::SetupParams {
             lambda,
             drg: drgporep::DrgParams {
-                nodes: nodes,
+                nodes,
                 degree,
                 expansion_degree: 0,
                 seed: new_seed(),
@@ -452,7 +452,7 @@ mod tests {
         let pub_inputs = drgporep::PublicInputs {
             prover_id: prover_id_fr,
             challenges: vec![challenge],
-            tau: tau,
+            tau,
         };
         let priv_inputs = drgporep::PrivateInputs {
             replica: data.as_slice(),
@@ -582,7 +582,7 @@ mod tests {
             vanilla_params: &drgporep::SetupParams {
                 lambda,
                 drg: drgporep::DrgParams {
-                    nodes: nodes,
+                    nodes,
                     degree,
                     expansion_degree: 0,
                     seed: new_seed(),
@@ -606,7 +606,7 @@ mod tests {
         let public_inputs = drgporep::PublicInputs {
             prover_id: prover_id_fr,
             challenges: vec![challenge],
-            tau: tau,
+            tau,
         };
         let private_inputs = drgporep::PrivateInputs {
             replica: data.as_slice(),
@@ -619,7 +619,7 @@ mod tests {
             vanilla_params: &drgporep::SetupParams {
                 lambda,
                 drg: drgporep::DrgParams {
-                    nodes: nodes,
+                    nodes,
                     degree,
                     expansion_degree: 0,
                     seed: new_seed(),

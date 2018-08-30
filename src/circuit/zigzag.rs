@@ -242,7 +242,7 @@ mod tests {
 
         let priv_inputs = layered_drgporep::PrivateInputs {
             replica: data.as_slice(),
-            aux: aux,
+            aux,
         };
 
         let proof = ZigZagDrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
@@ -324,7 +324,7 @@ mod tests {
 
         let public_params = layered_drgporep::PublicParams {
             drg_porep_public_params: drgporep::PublicParams {
-                lambda: lambda,
+                lambda,
                 graph: ZigZagGraph::new(n, base_degree, expansion_degree, new_seed()),
                 sloth_iter,
             },

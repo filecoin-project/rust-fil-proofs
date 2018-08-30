@@ -331,7 +331,7 @@ mod tests {
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
             let por = PoRCircuit::<Bls12> {
-                params: params,
+                params,
                 value: Some(proof.data),
                 auth_path: proof.proof.as_options(),
                 root: Some(pub_inputs.commitment.into()),
