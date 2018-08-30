@@ -6,10 +6,29 @@ use itertools::Itertools;
 use rand::XorShiftRng;
 use sapling_crypto::jubjub::JubjubEngine;
 use sha2::{Digest, Sha256};
+
+use std::env;
 use std::fs::{self, create_dir_all};
 use std::path::{Path, PathBuf};
 
-const PARAMETER_CACHE_DIR: &str = "/tmp/filecoin-proof-parameters/";
+pub const PARAMETER_CACHE_DIR: &str = "/tmp/filecoin-proof-parameters/";
+
+fn parameter_cache_dir_name() -> String {
+    match env::var("FILECOIN_PARAMETER_CACHE") {
+        Ok(dir) => dir,
+        Err(_) => String::from(PARAMETER_CACHE_DIR),
+    }
+}
+
+fn parameter_cache_dir() -> PathBuf {
+    Path::new(&parameter_cache_dir_name()).to_path_buf()
+}
+
+pub fn parameter_cache_path(filename: &str) -> PathBuf {
+    let name = parameter_cache_dir_name();
+    let dir = Path::new(&name);
+    dir.join(filename)
+}
 
 pub trait ParameterSetIdentifier {
     fn parameter_set_identifier(&self) -> String;
@@ -45,9 +64,9 @@ where
 
         match Self::cache_identifier(pub_params) {
             Some(id) => {
-                let cache_dir = PARAMETER_CACHE_DIR;
+                let cache_dir = parameter_cache_dir();
                 create_dir_all(cache_dir)?;
-                let cache_path = Path::new(cache_dir).join(id);
+                let cache_path = parameter_cache_path(&id);
                 info!(target: "params", "checking cache_path: {:?}", cache_path);
                 let groth_params: Parameters<E> = if cache_path.exists() {
                     info!(target: "params", "reading groth params from cache: {:?}", cache_path);

@@ -8,7 +8,7 @@ use fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
 use hasher::pedersen::PedersenHash;
 use pairing::bls12_381::Bls12;
 use pairing::Engine;
-use parameter_cache::{read_cached_params, write_params_to_cache};
+use parameter_cache::{parameter_cache_path, read_cached_params, write_params_to_cache};
 use porep::{PoRep, Tau};
 use proof::ProofScheme;
 use sapling_crypto::jubjub::JubjubBls12;
@@ -30,9 +30,13 @@ type FrSafe = [u8; 31];
 /// We need a distinguished place to cache 'the' parameters corresponding to the SetupParams
 /// currently being used. These are only easily generated at replication time but need to be
 /// accessed at verification time too.
-const DUMMY_PARAMETER_CACHE: &str = "/tmp/filecoin-proof-parameters/API-dummy-parameters";
+const DUMMY_PARAMETER_CACHE_FILE: &str = "API-dummy-parameters";
 /// If we try to read the cache while another process (like a test on CI…) is writing it,
 /// things will go badly.
+
+fn dummy_parameter_cache_path() -> PathBuf {
+    parameter_cache_path(DUMMY_PARAMETER_CACHE_FILE)
+}
 
 pub const SECTOR_BYTES: usize = 64;
 pub const LAMBDA: usize = 32;
@@ -128,10 +132,7 @@ pub fn seal(
     let mut proof_bytes = [0; SNARK_BYTES];
     proof_bytes.copy_from_slice(&buf);
 
-    write_params_to_cache(
-        proof.groth_params.clone(),
-        &Path::new(DUMMY_PARAMETER_CACHE).to_path_buf(),
-    )?;
+    write_params_to_cache(proof.groth_params.clone(), &dummy_parameter_cache_path())?;
 
     // We can eventually remove these assertions for performance, but we really
     // don't want to return an invalid proof, so for now let's make sure we can't.
@@ -201,7 +202,7 @@ pub fn verify_seal(
         tau: Tau { comm_r, comm_d },
     };
     let proof = groth16::Proof::read(proof_vec)?;
-    let groth_params = read_cached_params(&Path::new(DUMMY_PARAMETER_CACHE).to_path_buf())?;
+    let groth_params = read_cached_params(&dummy_parameter_cache_path())?;
 
     let proof = compound_proof::Proof {
         circuit_proof: proof,

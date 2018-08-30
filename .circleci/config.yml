@@ -35,6 +35,9 @@ jobs:
       - restore_cache:
           keys:
             - cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - restore_cache:
+          keys:
+            - parameter-cache-{{ .Revision }}
       - run:
           name: Test (stable)
           command: cargo +stable test --verbose --frozen
@@ -60,9 +63,14 @@ jobs:
       - restore_cache:
           keys:
             - cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - parameter-cache-{{ .Revision }}
       - run:
           name: Test (stable) in release profile
           command: cargo +stable test --verbose --release --frozen
+      - save_cache:
+          key: parameter-cache-{{ .Revision }}
+          paths:
+            - /root/.filecoin-parameter-cache
   test_nightly:
     docker:
       - image: clwk/rust:latest
@@ -74,6 +82,9 @@ jobs:
       - restore_cache:
           keys:
             - cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - restore_cache:
+          keys:
+            - parameter-cache-{{ .Revision }}
       - run:
           name: Test (nightly)
           command: cargo +nightly test --verbose --frozen
@@ -119,12 +130,14 @@ workflows:
       - clippy:
           requires:
             - cargo_fetch
-      - test:
-          requires:
-            - cargo_fetch
       - test_release:
           requires:
             - cargo_fetch
+      - test:
+          requires:
+            - cargo_fetch
+            - test_release
       - test_nightly:
           requires:
             - cargo_fetch
+            - test_release
