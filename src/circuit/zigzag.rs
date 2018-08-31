@@ -3,7 +3,7 @@ use circuit::drgporep::DrgPoRepCompound;
 use compound_proof::CompoundProof;
 use drgporep::{self, DrgPoRep};
 use drgraph::{graph_height, Graph};
-use layered_drgporep::Layerable;
+use layered_drgporep::{self, Layerable};
 use pairing::bls12_381::{Bls12, Fr};
 use parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use proof::ProofScheme;
@@ -67,13 +67,14 @@ where
 {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let graph = self.public_params.drg_porep_public_params.graph.clone();
-        for (l, (public_inputs, proof)) in self.layers.iter().enumerate() {
+        for (l, (public_inputs, layer_proof)) in self.layers.iter().enumerate() {
             let height = graph_height(graph.size());
-            let proof = match proof {
-                Some(p) => {
-                    let pp: drgporep::Proof = p.into();
-                    pp
+            let proof = match layer_proof {
+                Some(wrapped_proof) => {
+                    let typed_proof: drgporep::Proof = wrapped_proof.into();
+                    typed_proof
                 }
+                // Synthesize a default drgporep if none is supplied – for use in tests, etc.
                 None => drgporep::Proof::default(height, graph.degree()),
             };
             // FIXME: Using a normal DrgPoRep circuit here performs a redundant test at each layer.
@@ -121,11 +122,12 @@ impl<'a>
     ) -> Vec<Fr> {
         let mut inputs = Vec::new();
 
-        let drgporep_pub_params = drgporep::PublicParams {
+        let mut drgporep_pub_params = drgporep::PublicParams {
             lambda: pub_params.drg_porep_public_params.lambda,
             graph: pub_params.drg_porep_public_params.graph.clone(),
             sloth_iter: pub_params.drg_porep_public_params.sloth_iter,
         };
+
         for i in 0..pub_params.layers {
             let drgporep_pub_inputs = drgporep::PublicInputs {
                 prover_id: pub_in.prover_id,
@@ -138,6 +140,13 @@ impl<'a>
                 &drgporep_pub_params,
             );
             inputs.extend(drgporep_inputs);
+
+            drgporep_pub_params =
+                <ZigZagDrgPoRep<ZigZagBucketGraph> as layered_drgporep::Layers>::transform(
+                    &drgporep_pub_params,
+                    i,
+                    pub_params.layers,
+                );
         }
         inputs
     }
@@ -150,14 +159,14 @@ impl<'a>
     ) -> ZigZagCircuit<'a, Bls12, ZigZagBucketGraph> {
         let layers = (0..(vanilla_proof.encoding_proofs.len()))
             .map(|l| {
-                let public_inputs = drgporep::PublicInputs {
+                let layer_public_inputs = drgporep::PublicInputs {
                     prover_id: public_inputs.prover_id,
                     // FIXME: add multiple challenges to public inputs.
                     challenges: vec![public_inputs.challenge],
                     tau: public_inputs.tau[l],
                 };
                 let layer_proof = vanilla_proof.encoding_proofs[l].clone();
-                (public_inputs, Some(layer_proof))
+                (layer_public_inputs, Some(layer_proof))
             }).collect();
 
         let pp: <ZigZagDrgPoRep<ZigZagBucketGraph> as ProofScheme>::PublicParams =
@@ -193,11 +202,10 @@ mod tests {
     fn zigzag_drgporep_input_circuit_with_bls12_381() {
         let params = &JubjubBls12::new();
         let lambda = 32;
-        let nodes = 8;
+        let nodes = 5;
         let degree = 1;
-        let expansion_degree = 1;
+        let expansion_degree = 2;
         let challenge = 2;
-        let _challenges = vec![challenge];
         let num_layers = 2;
         let sloth_iter = 1;
 
@@ -235,7 +243,7 @@ mod tests {
         assert_ne!(data, data_copy);
 
         let pub_inputs = layered_drgporep::PublicInputs {
-            prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
+            prover_id: prover_id_fr,
             challenge,
             tau: tau.clone(),
         };
@@ -250,24 +258,11 @@ mod tests {
 
         // End copied section.
 
-        let layers = (0..num_layers)
-            .map(|l| {
-                let public_inputs = drgporep::PublicInputs {
-                    prover_id: prover_id_fr,
-                    challenges: vec![challenge],
-                    tau: tau[l],
-                };
-                let layer_proof = proof.encoding_proofs[l].clone();
-                (public_inputs, Some(layer_proof))
-            }).collect();
-
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        ZigZagCircuit::<Bls12, ZigZagBucketGraph>::synthesize(
-            cs.namespace(|| "zigzag drgporep"),
-            params,
-            pp,
-            layers,
-        ).expect("failed to synthesize circuit");
+
+        ZigZagCompound::circuit(&pub_inputs, &proof, &pp, params)
+            .synthesize(&mut cs.namespace(|| "zigzag drgporep"))
+            .expect("failed to synthesize circuit");
 
         if !cs.is_satisfied() {
             println!(
@@ -277,8 +272,8 @@ mod tests {
         }
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_inputs(), 21, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 44308, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 25, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 56762, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
@@ -310,6 +305,7 @@ mod tests {
         let mut cs = TestConstraintSystem::<Bls12>::new();
         let layers = (0..num_layers)
             .map(|_l| {
+                // l is ignored because we assume uniform layers here.
                 let public_inputs = drgporep::PublicInputs {
                     prover_id,
                     challenges: vec![challenge],
@@ -324,7 +320,7 @@ mod tests {
 
         let public_params = layered_drgporep::PublicParams {
             drg_porep_public_params: drgporep::PublicParams {
-                lambda,
+                lambda: lambda,
                 graph: ZigZagGraph::new(n, base_degree, expansion_degree, new_seed()),
                 sloth_iter,
             },
@@ -343,12 +339,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
-    // FIXME: Circuit verification fails and needs to be debugged.
     fn zigzag_test_compound() {
         let params = &JubjubBls12::new();
         let lambda = 32;
-        let nodes = 2;
+        let nodes = 5;
         let degree = 2;
         let expansion_degree = 2;
         let challenge = 1;
@@ -363,7 +357,7 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
-        let _prover_id_fr = bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap();
+        let prover_id_fr = bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap();
         let data: Vec<u8> = (0..n)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
@@ -396,7 +390,7 @@ mod tests {
         assert_ne!(data, data_copy);
 
         let public_inputs = layered_drgporep::PublicInputs {
-            prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
+            prover_id: prover_id_fr,
             challenge,
             tau,
         };
@@ -406,6 +400,21 @@ mod tests {
             aux,
         };
 
+        // TOOD: Move this to e.g. circuit::test::compound_helper and share between all compound proofs.
+        {
+            let (circuit, inputs) =
+                ZigZagCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);
+
+            let mut cs = TestConstraintSystem::new();
+
+            let _ = circuit.synthesize(&mut cs);
+
+            assert!(cs.is_satisfied(), "TestContraintSystem was not satisfied");
+            assert!(
+                cs.verify(&inputs),
+                "failed while verifying with TestContraintSystem and generated inputs"
+            );
+        }
         let proof = ZigZagCompound::prove(&public_params, &public_inputs, &private_inputs)
             .expect("failed while proving");
 

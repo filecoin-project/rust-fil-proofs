@@ -151,4 +151,24 @@ where
         public_param: &S::PublicParams,
         engine_params: &'a E::Params,
     ) -> C;
+
+    fn circuit_for_test(
+        public_parameters: &PublicParams<'a, E, S>,
+        public_inputs: &S::PublicInputs,
+        private_inputs: &S::PrivateInputs,
+    ) -> (C, Vec<E::Fr>) {
+        let vanilla_params = &public_parameters.vanilla_params;
+        let vanilla_proof = S::prove(&vanilla_params, public_inputs, private_inputs).unwrap();
+
+        let circuit = Self::circuit(
+            &public_inputs,
+            &vanilla_proof,
+            vanilla_params,
+            &public_parameters.engine_params,
+        );
+
+        let inputs = Self::generate_public_inputs(&public_inputs, vanilla_params);
+
+        (circuit, inputs)
+    }
 }

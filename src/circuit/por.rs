@@ -280,6 +280,15 @@ mod tests {
                 PoRCompound::verify(&public_params.vanilla_params, &public_inputs, proof)
                     .expect("failed while verifying");
             assert!(verified);
+
+            let (circuit, inputs) =
+                PoRCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);
+
+            let mut cs = TestConstraintSystem::new();
+
+            let _ = circuit.synthesize(&mut cs);
+            assert!(cs.is_satisfied());
+            assert!(cs.verify(&inputs));
         }
     }
 

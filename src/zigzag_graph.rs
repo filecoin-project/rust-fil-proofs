@@ -212,7 +212,7 @@ impl<'a, G: Graph> ZigZag for ZigZagGraph<G> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use drgraph::{new_seed, BucketGraph};
+    use drgraph::new_seed;
     use std::collections::HashMap;
 
     fn assert_graph_ascending<G: Graph>(g: G) {
@@ -242,7 +242,7 @@ mod tests {
 
     #[test]
     fn zigzag_graph_zigzags() {
-        let g = ZigZagGraph::<BucketGraph>::new(50, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
+        let g = ZigZagBucketGraph::new(50, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
         let gz = g.zigzag();
 
         assert_graph_ascending(g);
@@ -252,7 +252,7 @@ mod tests {
     #[test]
     fn expansion() {
         // We need a graph.
-        let g = ZigZagGraph::<BucketGraph>::new(25, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
+        let g = ZigZagBucketGraph::new(25, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
 
         // We're going to fully realize the expansion-graph component, in a HashMap.
         let mut gcache: HashMap<usize, Vec<usize>> = HashMap::new();
