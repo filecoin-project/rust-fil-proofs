@@ -40,6 +40,13 @@ extern crate pbr;
 extern crate log;
 extern crate colored;
 
+extern crate rocksdb;
+#[macro_use]
+extern crate serde_derive;
+
+extern crate serde;
+extern crate serde_cbor;
+
 #[macro_use]
 pub mod test_helper;
 
