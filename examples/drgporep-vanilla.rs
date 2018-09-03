@@ -62,7 +62,7 @@ fn do_the_work(data_size: usize, m: usize, sloth_iter: usize, challenge_count: u
     let pub_inputs = PublicInputs {
         prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
         challenges,
-        tau,
+        tau: Some(tau),
     };
 
     let priv_inputs = PrivateInputs {

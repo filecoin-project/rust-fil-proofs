@@ -17,7 +17,7 @@ use vde::{self, decode_block};
 pub struct PublicInputs {
     pub prover_id: Fr,
     pub challenges: Vec<usize>,
-    pub tau: porep::Tau,
+    pub tau: Option<porep::Tau>,
 }
 
 #[derive(Debug)]
@@ -546,7 +546,7 @@ mod tests {
             let pub_inputs = PublicInputs {
                 prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
                 challenges: vec![challenge, challenge],
-                tau: tau.clone(),
+                tau: Some(tau.clone()),
             };
 
             let priv_inputs = PrivateInputs {
@@ -630,7 +630,7 @@ mod tests {
                 let pub_inputs_with_wrong_challenge_for_proof = PublicInputs {
                     prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
                     challenges: vec![if challenge == 1 { 2 } else { 1 }],
-                    tau,
+                    tau: Some(tau),
                 };
                 let verified =
                     DrgPoRep::verify(&pp, &pub_inputs_with_wrong_challenge_for_proof, &proof)

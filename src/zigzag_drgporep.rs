@@ -63,7 +63,7 @@ mod tests {
     use super::*;
     use drgraph::new_seed;
     use fr32::{bytes_into_fr, fr_into_bytes};
-    use layered_drgporep::{PrivateInputs, PublicInputs, PublicParams, SetupParams};
+    use layered_drgporep::{simplify_tau, PrivateInputs, PublicInputs, PublicParams, SetupParams};
     use pairing::bls12_381::Bls12;
     use porep::PoRep;
     use proof::ProofScheme;
@@ -134,7 +134,7 @@ mod tests {
             .collect();
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
-        let challenge = i;
+        let challenges = vec![i];
         let sp = SetupParams {
             drg_porep_setup_params: drgporep::SetupParams {
                 lambda,
@@ -156,13 +156,14 @@ mod tests {
 
         let pub_inputs = PublicInputs {
             prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
-            challenge,
-            tau,
+            challenges,
+            tau: Some(simplify_tau(&tau)),
         };
 
         let priv_inputs = PrivateInputs {
             replica: data.as_slice(),
             aux,
+            tau,
         };
 
         let proof = ZigZagDrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).unwrap();

@@ -16,7 +16,7 @@ use sapling_crypto::jubjub::JubjubBls12;
 use std::fs::File;
 use std::io::Write;
 use std::io::{BufWriter, Read};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 type Commitment = [u8; 32];
 
@@ -115,7 +115,7 @@ pub fn seal(
     let public_inputs = drgporep::PublicInputs {
         prover_id: prover_id_fr,
         challenges: vec![challenge],
-        tau,
+        tau: Some(tau),
     };
 
     let private_inputs = drgporep::PrivateInputs {
@@ -199,7 +199,7 @@ pub fn verify_seal(
     let public_inputs = drgporep::PublicInputs {
         prover_id: prover_id_fr,
         challenges: vec![challenge],
-        tau: Tau { comm_r, comm_d },
+        tau: Some(Tau { comm_r, comm_d }),
     };
     let proof = groth16::Proof::read(proof_vec)?;
     let groth_params = read_cached_params(&dummy_parameter_cache_path())?;

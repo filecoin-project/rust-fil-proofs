@@ -27,7 +27,7 @@ impl ParameterSetIdentifier for PublicParams {
 #[derive(Debug)]
 pub struct PublicInputs {
     /// The root hash of the underlying merkle tree.
-    pub commitment: TreeHash,
+    pub commitment: Option<TreeHash>,
     /// The challenge, which leaf to prove.
     pub challenge: usize,
 }
@@ -76,8 +76,10 @@ impl<'a> ProofScheme<'a> for MerklePoR {
         let challenge = pub_inputs.challenge % pub_params.leaves;
         let tree = priv_inputs.tree;
 
-        if pub_inputs.commitment != tree.root() {
-            return Err(format_err!("tree root and commitment do not match"));
+        if let Some(commitment) = pub_inputs.commitment {
+            if commitment != tree.root() {
+                return Err(format_err!("tree root and commitment do not match"));
+            }
         }
 
         Ok(Proof {
@@ -93,8 +95,17 @@ impl<'a> ProofScheme<'a> for MerklePoR {
     ) -> Result<bool> {
         {
             // This was verify_proof_meta.
-            let commitments_match = pub_inputs.commitment == proof.proof.root();
+            let commitments_match = match pub_inputs.commitment {
+                Some(commitment) => commitment == proof.proof.root(),
+                None => true,
+            };
+
             let path_length_match = graph_height(pub_params.leaves) == proof.proof.path().len();
+
+            println!(
+                "commitments_match: {}; path_length_match: {}",
+                commitments_match, path_length_match
+            );
 
             if !(commitments_match && path_length_match) {
                 return Ok(false);
@@ -134,7 +145,7 @@ mod tests {
 
         let pub_inputs = PublicInputs {
             challenge: 3,
-            commitment: tree.root(),
+            commitment: Some(tree.root()),
         };
 
         let leaf = bytes_into_fr::<Bls12>(
@@ -160,7 +171,7 @@ mod tests {
         DataProof {
             data: bogus_leaf,
             proof: make_proof_for_test(
-                pub_inputs.commitment,
+                pub_inputs.commitment.unwrap(),
                 hashed_leaf,
                 vec![(hashed_leaf, true)],
             ),
@@ -185,7 +196,7 @@ mod tests {
 
         let pub_inputs = PublicInputs {
             challenge: 3,
-            commitment: tree.root(),
+            commitment: Some(tree.root()),
         };
 
         let bad_proof = make_bogus_proof(&pub_inputs, rng);
@@ -214,7 +225,7 @@ mod tests {
 
         let pub_inputs = PublicInputs {
             challenge: 3,
-            commitment: tree.root(),
+            commitment: Some(tree.root()),
         };
 
         let leaf = bytes_into_fr::<Bls12>(
@@ -227,7 +238,7 @@ mod tests {
 
         let different_pub_inputs = PublicInputs {
             challenge: 999,
-            commitment: tree.root(),
+            commitment: Some(tree.root()),
         };
 
         let verified = MerklePoR::verify(&pub_params, &different_pub_inputs, &proof).unwrap();

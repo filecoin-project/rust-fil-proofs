@@ -81,7 +81,7 @@ impl<'a> ProofScheme<'a> for BatchPoST {
             let proof = merklepor::MerklePoR::prove(
                 &pub_params.params,
                 &merklepor::PublicInputs {
-                    commitment: pub_inputs.commitment,
+                    commitment: Some(pub_inputs.commitment),
                     challenge,
                 },
                 &merklepor::PrivateInputs {
@@ -132,7 +132,7 @@ impl<'a> ProofScheme<'a> for BatchPoST {
                 &pub_params.params,
                 &merklepor::PublicInputs {
                     challenge: proof.challenges[i],
-                    commitment: pub_inputs.commitment,
+                    commitment: Some(pub_inputs.commitment),
                 },
                 &proof.proofs[i],
             )? {

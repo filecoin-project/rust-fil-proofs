@@ -18,14 +18,16 @@ use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 /// * `root` - The merkle root of the tree.
 ///
 
-pub struct PoRCircuit<'a, E: JubjubEngine> {
+/// PrivatePoRCircuit is just like PorCircuit, except its root is not expected
+/// as a public input.
+pub struct PrivatePoRCircuit<'a, E: JubjubEngine> {
     params: &'a E::Params,
     value: Option<E::Fr>,
     auth_path: Vec<Option<(E::Fr, bool)>>,
     root: Option<E::Fr>,
 }
 
-pub struct PoRCompound {}
+pub struct PrivatePoRCompound {}
 
 pub fn challenge_into_auth_path_bits(challenge: usize, leaves: usize) -> Vec<bool> {
     let height = graph_height(leaves);
@@ -39,31 +41,26 @@ pub fn challenge_into_auth_path_bits(challenge: usize, leaves: usize) -> Vec<boo
 }
 
 impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParameters<E, C, P>
-    for PoRCompound
+    for PrivatePoRCompound
 {
     fn cache_prefix() -> String {
-        String::from("proof-of-retrievability")
+        String::from("private-proof-of-retrievability")
     }
 }
 
 // can only implment for Bls12 because merklepor is not generic over the engine.
-impl<'a> CompoundProof<'a, Bls12, MerklePoR, PoRCircuit<'a, Bls12>> for PoRCompound {
+impl<'a> CompoundProof<'a, Bls12, MerklePoR, PrivatePoRCircuit<'a, Bls12>> for PrivatePoRCompound {
     fn circuit<'b>(
-        public_inputs: &<MerklePoR as ProofScheme>::PublicInputs,
+        _public_inputs: &<MerklePoR as ProofScheme>::PublicInputs,
         proof: &'b <MerklePoR as ProofScheme>::Proof,
         _public_params: &'b <MerklePoR as ProofScheme>::PublicParams,
         engine_params: &'a JubjubBls12,
-    ) -> PoRCircuit<'a, Bls12> {
-        PoRCircuit::<Bls12> {
+    ) -> PrivatePoRCircuit<'a, Bls12> {
+        PrivatePoRCircuit::<Bls12> {
             params: engine_params,
             value: Some(proof.data),
             auth_path: proof.proof.as_options(),
-            root: Some(
-                public_inputs
-                    .commitment
-                    .expect("required root commitment is missing")
-                    .into(),
-            ),
+            root: proof.proof.root.0.into(),
         }
     }
 
@@ -76,19 +73,19 @@ impl<'a> CompoundProof<'a, Bls12, MerklePoR, PoRCircuit<'a, Bls12>> for PoRCompo
 
         let mut inputs = Vec::new();
         inputs.extend(packed_auth_path);
-        inputs.push(pub_inputs.commitment.unwrap().into());
+
+        println!("generated inputs ({}): {:?}", inputs.len(), inputs);
 
         inputs
     }
 }
 
-impl<'a, E: JubjubEngine> Circuit<E> for PoRCircuit<'a, E> {
+impl<'a, E: JubjubEngine> Circuit<E> for PrivatePoRCircuit<'a, E> {
     /// # Public Inputs
     ///
     /// This circuit expects the following public inputs.
     ///
     /// * [0] - packed version of the `is_right` components of the auth_path.
-    /// * [1] - the merkle root of the tree.
     ///
     /// This circuit derives the following private inputs from its fields:
     /// * value_num - packed version of `value` as bits. (might be more than one Fr)
@@ -195,9 +192,6 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoRCircuit<'a, E> {
                     |lc| lc + CS::one(),
                     |lc| lc + rt.get_variable(),
                 );
-
-                // Expose the root
-                rt.inputize(cs.namespace(|| "root"))?;
             }
 
             Ok(())
@@ -205,7 +199,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoRCircuit<'a, E> {
     }
 }
 
-impl<'a, E: JubjubEngine> PoRCircuit<'a, E> {
+impl<'a, E: JubjubEngine> PrivatePoRCircuit<'a, E> {
     pub fn synthesize<CS>(
         mut cs: CS,
         params: &E::Params,
@@ -217,7 +211,7 @@ impl<'a, E: JubjubEngine> PoRCircuit<'a, E> {
         E: JubjubEngine,
         CS: ConstraintSystem<E>,
     {
-        let por = PoRCircuit::<E> {
+        let por = PrivatePoRCircuit::<E> {
             params,
             value,
             auth_path,
@@ -257,14 +251,14 @@ mod tests {
         for i in 0..3 {
             let public_inputs = merklepor::PublicInputs {
                 challenge: i,
-                commitment: Some(tree.root()),
+                commitment: None,
             };
 
             let setup_params = compound_proof::SetupParams {
                 vanilla_params: &merklepor::SetupParams { lambda, leaves },
                 engine_params: &JubjubBls12::new(),
             };
-            let public_params = PoRCompound::setup(&setup_params).expect("setup failed");
+            let public_params = PrivatePoRCompound::setup(&setup_params).expect("setup failed");
 
             let private_inputs = merklepor::PrivateInputs {
                 tree: &tree,
@@ -277,16 +271,19 @@ mod tests {
                 ).expect("failed to create Fr from node data"),
             };
 
-            let proof = PoRCompound::prove(&public_params, &public_inputs, &private_inputs)
+            let proof = PrivatePoRCompound::prove(&public_params, &public_inputs, &private_inputs)
                 .expect("failed while proving");
 
             let verified =
-                PoRCompound::verify(&public_params.vanilla_params, &public_inputs, proof)
+                PrivatePoRCompound::verify(&public_params.vanilla_params, &public_inputs, proof)
                     .expect("failed while verifying");
             assert!(verified);
 
-            let (circuit, inputs) =
-                PoRCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);
+            let (circuit, inputs) = PrivatePoRCompound::circuit_for_test(
+                &public_params,
+                &public_inputs,
+                &private_inputs,
+            );
 
             let mut cs = TestConstraintSystem::new();
 
@@ -319,7 +316,7 @@ mod tests {
             let pub_params = merklepor::PublicParams { lambda, leaves };
             let pub_inputs = merklepor::PublicInputs {
                 challenge: i,
-                commitment: Some(tree.root()),
+                commitment: None,
             };
 
             let priv_inputs = merklepor::PrivateInputs {
@@ -343,17 +340,17 @@ mod tests {
 
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            let por = PoRCircuit::<Bls12> {
+            let por = PrivatePoRCircuit::<Bls12> {
                 params,
                 value: Some(proof.data),
                 auth_path: proof.proof.as_options(),
-                root: Some(pub_inputs.commitment.unwrap().into()),
+                root: Some(tree.root().into()),
             };
 
             por.synthesize(&mut cs).unwrap();
 
-            assert_eq!(cs.num_inputs(), 3, "wrong number of inputs");
-            assert_eq!(cs.num_constraints(), 4846, "wrong number of constraints");
+            assert_eq!(cs.num_inputs(), 2, "wrong number of inputs");
+            assert_eq!(cs.num_constraints(), 4845, "wrong number of constraints");
 
             let auth_path_bits: Vec<bool> = proof
                 .proof
@@ -365,7 +362,6 @@ mod tests {
 
             let mut expected_inputs = Vec::new();
             expected_inputs.extend(packed_auth_path);
-            expected_inputs.push(pub_inputs.commitment.unwrap().into());
 
             assert_eq!(cs.get_input(0, "ONE"), Fr::one(), "wrong input 0");
 
@@ -373,12 +369,6 @@ mod tests {
                 cs.get_input(1, "packed auth_path/input 0"),
                 expected_inputs[0],
                 "wrong packed_auth_path"
-            );
-
-            assert_eq!(
-                cs.get_input(2, "root/input variable"),
-                expected_inputs[1],
-                "wrong root input"
             );
 
             assert!(cs.is_satisfied(), "constraints are not all satisfied");

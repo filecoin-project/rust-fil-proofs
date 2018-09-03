@@ -2,7 +2,7 @@ use drgporep::{self, DrgPoRep};
 use drgraph::Graph;
 use error::Result;
 use fr32::fr_into_bytes;
-use pairing::bls12_381::{Bls12, Fr};
+use pairing::bls12_381::Bls12;
 use parameter_cache::ParameterSetIdentifier;
 use porep::{self, PoRep};
 use proof::ProofScheme;
@@ -51,25 +51,34 @@ pub type ReplicaParents = Vec<(usize, DataProof)>;
 pub type EncodingProof = drgporep::Proof;
 pub type DataProof = drgporep::DataProof;
 
-pub struct PublicInputs {
-    pub prover_id: Fr,
-    pub challenge: usize,
-    pub tau: Vec<porep::Tau>,
-}
+pub type PublicInputs = drgporep::PublicInputs;
 
 pub struct PrivateInputs<'a> {
     pub replica: &'a [u8],
     pub aux: Vec<porep::ProverAux>,
+    pub tau: Vec<porep::Tau>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Proof {
     pub encoding_proofs: Vec<EncodingProof>,
+    pub tau: Vec<porep::Tau>,
 }
 
 impl Proof {
-    pub fn new(encoding_proofs: Vec<EncodingProof>) -> Proof {
-        Proof { encoding_proofs }
+    pub fn new(encoding_proofs: Vec<EncodingProof>, tau: Vec<porep::Tau>) -> Proof {
+        Proof {
+            encoding_proofs,
+            tau,
+        }
+    }
+}
+
+/// Take a vector of taus and return a single tau with the initial data and final replica commitments.
+pub fn simplify_tau(taus: &[porep::Tau]) -> porep::Tau {
+    porep::Tau {
+        comm_r: taus[taus.len() - 1].comm_r,
+        comm_d: taus[0].comm_d,
     }
 }
 
@@ -98,6 +107,7 @@ pub trait Layers {
         pp: &drgporep::PublicParams<Self::Graph>,
         pub_inputs: &PublicInputs,
         priv_inputs: &drgporep::PrivateInputs,
+        tau: Vec<porep::Tau>,
         aux: Vec<porep::ProverAux>,
         layers: usize,
         total_layers: usize,
@@ -116,8 +126,8 @@ pub trait Layers {
         };
         let drgporep_pub_inputs = drgporep::PublicInputs {
             prover_id: pub_inputs.prover_id,
-            challenges: vec![pub_inputs.challenge],
-            tau: pub_inputs.tau[pub_inputs.tau.len() - layers],
+            challenges: pub_inputs.challenges.clone(),
+            tau: Some(tau[tau.len() - layers]),
         };
         let drg_proof = DrgPoRep::prove(&pp, &drgporep_pub_inputs, &new_priv_inputs)?;
         proofs.push(drg_proof);
@@ -129,6 +139,7 @@ pub trait Layers {
                 pp,
                 pub_inputs,
                 &new_priv_inputs,
+                tau,
                 aux,
                 layers - 1,
                 layers,
@@ -232,13 +243,14 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
             &pub_params.drg_porep_public_params,
             pub_inputs,
             &drg_priv_inputs,
+            priv_inputs.tau.clone(),
             priv_inputs.aux.clone(),
             pub_params.layers,
             pub_params.layers,
             &mut proofs,
         )?;
 
-        let proof = Proof::new(proofs);
+        let proof = Proof::new(proofs, priv_inputs.tau.clone());
         println!("proof: {:?}", proof);
 
         Ok(proof)
@@ -256,12 +268,12 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         let total_layers = pub_params.layers;
         let mut pp = pub_params.drg_porep_public_params.clone();
         // TODO: verification is broken for the first node, figure out how to unbreak
-        // with permuations
+        // with permutations
         for (layer, proof_layer) in proof.encoding_proofs.iter().enumerate() {
             let new_pub_inputs = drgporep::PublicInputs {
                 prover_id: pub_inputs.prover_id,
-                challenges: vec![pub_inputs.challenge],
-                tau: pub_inputs.tau[layer],
+                challenges: pub_inputs.challenges.clone(),
+                tau: Some(proof.tau[layer]),
             };
 
             let ep = &proof_layer;

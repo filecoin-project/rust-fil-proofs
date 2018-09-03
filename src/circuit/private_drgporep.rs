@@ -5,7 +5,7 @@ use sapling_crypto::circuit::{multipack, num};
 use sapling_crypto::jubjub::JubjubEngine;
 
 use circuit::kdf::kdf;
-use circuit::por::{PoRCircuit, PoRCompound};
+use circuit::private_por::{PrivatePoRCircuit, PrivatePoRCompound};
 use circuit::sloth;
 use compound_proof::CompoundProof;
 use drgporep::DrgPoRep;
@@ -41,7 +41,9 @@ use util::{bytes_into_bits, bytes_into_boolean_vec};
 /// * `degree` - The degree of the graph.
 ///
 
-pub struct DrgPoRepCircuit<'a, E: JubjubEngine> {
+/// PrivateDrgPoRepCircuit is just like DrgPoRepCircuit, except its root is not expected
+/// as a public input.
+pub struct PrivateDrgPoRepCircuit<'a, E: JubjubEngine> {
     params: &'a E::Params,
     lambda: usize,
     sloth_iter: usize,
@@ -56,7 +58,7 @@ pub struct DrgPoRepCircuit<'a, E: JubjubEngine> {
     prover_id: Option<E::Fr>,
     degree: usize,
 }
-impl<'a, E: JubjubEngine> DrgPoRepCircuit<'a, E> {
+impl<'a, E: JubjubEngine> PrivateDrgPoRepCircuit<'a, E> {
     pub fn synthesize<CS>(
         mut cs: CS,
         params: &E::Params,
@@ -77,7 +79,7 @@ impl<'a, E: JubjubEngine> DrgPoRepCircuit<'a, E> {
         E: JubjubEngine,
         CS: ConstraintSystem<E>,
     {
-        DrgPoRepCircuit {
+        PrivateDrgPoRepCircuit {
             params,
             lambda,
             sloth_iter,
@@ -95,20 +97,20 @@ impl<'a, E: JubjubEngine> DrgPoRepCircuit<'a, E> {
     }
 }
 
-pub struct DrgPoRepCompound<G: Graph> {
+pub struct PrivateDrgPoRepCompound<G: Graph> {
     phantom: PhantomData<G>,
 }
 
 impl<E: JubjubEngine, C: Circuit<E>, G: Graph, P: ParameterSetIdentifier>
-    CacheableParameters<E, C, P> for DrgPoRepCompound<G>
+    CacheableParameters<E, C, P> for PrivateDrgPoRepCompound<G>
 {
     fn cache_prefix() -> String {
-        String::from("drg-proof-of-replication")
+        String::from("private-drg-proof-of-replication")
     }
 }
 
-impl<'a, G: Graph> CompoundProof<'a, Bls12, DrgPoRep<G>, DrgPoRepCircuit<'a, Bls12>>
-    for DrgPoRepCompound<G>
+impl<'a, G: Graph> CompoundProof<'a, Bls12, DrgPoRep<G>, PrivateDrgPoRepCircuit<'a, Bls12>>
+    for PrivateDrgPoRepCompound<G>
 where
     G: ParameterSetIdentifier,
 {
@@ -118,11 +120,8 @@ where
     ) -> Vec<Fr> {
         let prover_id = pub_in.prover_id;
         let challenges = &pub_in.challenges;
-        let tau = pub_in.tau;
-        let (comm_r, comm_d) = match tau {
-            Some(tau) => (Some(tau.comm_r), Some(tau.comm_d)),
-            None => (None, None),
-        };
+
+        assert!(pub_in.tau.is_none());
 
         let lambda = pub_params.lambda;
         let leaves = pub_params.graph.size();
@@ -145,20 +144,22 @@ where
 
                 for node in por_nodes {
                     let por_pub_inputs = merklepor::PublicInputs {
-                        commitment: comm_r,
+                        commitment: None,
                         challenge: node,
                     };
-                    let por_inputs =
-                        PoRCompound::generate_public_inputs(&por_pub_inputs, &por_pub_params);
+                    let por_inputs = PrivatePoRCompound::generate_public_inputs(
+                        &por_pub_inputs,
+                        &por_pub_params,
+                    );
                     input.extend(por_inputs);
                 }
 
                 let por_pub_inputs = merklepor::PublicInputs {
-                    commitment: comm_d,
+                    commitment: None,
                     challenge: *challenge,
                 };
                 let por_inputs =
-                    PoRCompound::generate_public_inputs(&por_pub_inputs, &por_pub_params);
+                    PrivatePoRCompound::generate_public_inputs(&por_pub_inputs, &por_pub_params);
                 input.extend(por_inputs);
 
                 input
@@ -171,7 +172,7 @@ where
         proof: &'b <DrgPoRep<G> as ProofScheme>::Proof,
         public_params: &'b <DrgPoRep<G> as ProofScheme>::PublicParams,
         engine_params: &'a <Bls12 as JubjubEngine>::Params,
-    ) -> DrgPoRepCircuit<'a, Bls12> {
+    ) -> PrivateDrgPoRepCircuit<'a, Bls12> {
         let lambda = public_params.lambda;
         let _arity = public_inputs.challenges.len();
 
@@ -221,7 +222,7 @@ where
         let data_root = Some(proof.nodes[0].proof.root().into());
         let prover_id = Some(public_inputs.prover_id);
 
-        DrgPoRepCircuit {
+        PrivateDrgPoRepCircuit {
             params: engine_params,
             lambda,
             sloth_iter: public_params.sloth_iter,
@@ -246,12 +247,9 @@ where
 /// * [0] prover_id/0
 /// * [1] prover_id/1
 /// * [2] replica auth_path_bits
-/// * [3] replica commitment (root hash)
 /// * for i in 0..replica_parents.len()
 ///   * [ ] replica parent auth_path_bits
-///   * [ ] replica parent commitment (root hash) // Same for all.
 /// * [r + 1] data auth_path_bits
-/// * [r + 2] data commitment (root hash)
 ///
 ///  Total = 6 + (2 * replica_parents.len())
 /// # Private Inputs
@@ -263,7 +261,7 @@ where
 ///
 /// Total = 2 + replica_parents.len()
 ///
-impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
+impl<'a, E: JubjubEngine> Circuit<E> for PrivateDrgPoRepCircuit<'a, E> {
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError>
     where
         E: JubjubEngine,
@@ -306,7 +304,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
 
             assert_eq!(data_node_path.len(), replica_node_path.len());
 
-            PoRCircuit::synthesize(
+            PrivatePoRCircuit::synthesize(
                 cs.namespace(|| "replica_node merkle proof"),
                 &params,
                 *replica_node,
@@ -317,7 +315,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
             // validate each replica_parents merkle proof
             {
                 for i in 0..replica_parents.len() {
-                    PoRCircuit::synthesize(
+                    PrivatePoRCircuit::synthesize(
                         cs.namespace(|| format!("replica parent: {}", i)),
                         &params,
                         replica_parents[i],
@@ -328,7 +326,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
             }
 
             // validate data node commitment
-            PoRCircuit::synthesize(
+            PrivatePoRCircuit::synthesize(
                 cs.namespace(|| "data node commitment"),
                 &params,
                 *data_node,
@@ -447,14 +445,14 @@ mod tests {
 
         let pp =
             drgporep::DrgPoRep::<BucketGraph>::setup(&sp).expect("failed to create drgporep setup");
-        let (tau, aux) =
+        let (_tau, aux) =
             drgporep::DrgPoRep::replicate(&pp, prover_id.as_slice(), data.as_mut_slice())
                 .expect("failed to replicate");
 
         let pub_inputs = drgporep::PublicInputs {
             prover_id: prover_id_fr,
             challenges: vec![challenge],
-            tau: Some(tau),
+            tau: None,
         };
         let priv_inputs = drgporep::PrivateInputs {
             replica: data.as_slice(),
@@ -496,7 +494,7 @@ mod tests {
         );
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        DrgPoRepCircuit::synthesize(
+        PrivateDrgPoRepCircuit::synthesize(
             cs.namespace(|| "drgporep"),
             params,
             lambda,
@@ -521,8 +519,8 @@ mod tests {
         }
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_inputs(), 19, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 58118, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 11, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 58110, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
@@ -543,7 +541,7 @@ mod tests {
         let sloth_iter = 1;
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        DrgPoRepCircuit::synthesize(
+        PrivateDrgPoRepCircuit::synthesize(
             cs.namespace(|| "drgporep"),
             params,
             lambda * 8,
@@ -560,8 +558,8 @@ mod tests {
             m,
         ).expect("failed to synthesize circuit");
 
-        assert_eq!(cs.num_inputs(), 19, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 290294, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 11, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 290286, "wrong number of constraints");
     }
 
     #[test]
@@ -595,9 +593,9 @@ mod tests {
         };
 
         let public_params =
-            DrgPoRepCompound::<BucketGraph>::setup(&setup_params).expect("setup failed");
+            PrivateDrgPoRepCompound::<BucketGraph>::setup(&setup_params).expect("setup failed");
 
-        let (tau, aux) = drgporep::DrgPoRep::replicate(
+        let (_tau, aux) = drgporep::DrgPoRep::replicate(
             &public_params.vanilla_params,
             prover_id.as_slice(),
             data.as_mut_slice(),
@@ -608,7 +606,7 @@ mod tests {
         let public_inputs = drgporep::PublicInputs {
             prover_id: prover_id_fr,
             challenges: vec![challenge],
-            tau: Some(tau),
+            tau: None,
         };
         let private_inputs = drgporep::PrivateInputs {
             replica: data.as_slice(),
@@ -632,19 +630,22 @@ mod tests {
         };
 
         let public_params =
-            DrgPoRepCompound::<BucketGraph>::setup(&setup_params).expect("setup failed");
+            PrivateDrgPoRepCompound::<BucketGraph>::setup(&setup_params).expect("setup failed");
 
-        let proof = DrgPoRepCompound::prove(&public_params, &public_inputs, &private_inputs)
+        let proof = PrivateDrgPoRepCompound::prove(&public_params, &public_inputs, &private_inputs)
             .expect("failed while proving");
 
         let verified =
-            DrgPoRepCompound::verify(&public_params.vanilla_params, &public_inputs, proof)
+            PrivateDrgPoRepCompound::verify(&public_params.vanilla_params, &public_inputs, proof)
                 .expect("failed while verifying");
 
         assert!(verified);
 
-        let (circuit, inputs) =
-            DrgPoRepCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);
+        let (circuit, inputs) = PrivateDrgPoRepCompound::circuit_for_test(
+            &public_params,
+            &public_inputs,
+            &private_inputs,
+        );
 
         let mut cs = TestConstraintSystem::new();
 

@@ -174,7 +174,7 @@ mod tests {
             let pub_inputs: Vec<_> = (0..leaves)
                 .map(|i| merklepor::PublicInputs {
                     challenge: i,
-                    commitment: tree.root(),
+                    commitment: Some(tree.root()),
                 }).collect();
             let priv_inputs: Vec<_> = (0..leaves)
                 .map(|i| merklepor::PrivateInputs {

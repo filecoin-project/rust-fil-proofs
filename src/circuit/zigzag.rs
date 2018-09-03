@@ -1,5 +1,5 @@
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
-use circuit::drgporep::DrgPoRepCompound;
+use circuit::private_drgporep::PrivateDrgPoRepCompound;
 use compound_proof::CompoundProof;
 use drgporep::{self, DrgPoRep};
 use drgraph::{graph_height, Graph};
@@ -81,7 +81,7 @@ where
             // We don't need to verify merkle inclusion of the 'data' except in the first layer.
             // In subsequent layers, we already proved this and just need to assert (by constraint)
             // that the decoded data has the value which was previously proved.
-            let circuit = DrgPoRepCompound::circuit(
+            let circuit = PrivateDrgPoRepCompound::circuit(
                 public_inputs,
                 &proof,
                 &self.public_params.drg_porep_public_params,
@@ -132,10 +132,10 @@ impl<'a>
             let drgporep_pub_inputs = drgporep::PublicInputs {
                 prover_id: pub_in.prover_id,
                 // FIXME: add multiple challengeas to public inputs.
-                challenges: vec![pub_in.challenge],
-                tau: pub_in.tau[i],
+                challenges: pub_in.challenges.clone(),
+                tau: None,
             };
-            let drgporep_inputs = DrgPoRepCompound::generate_public_inputs(
+            let drgporep_inputs = PrivateDrgPoRepCompound::generate_public_inputs(
                 &drgporep_pub_inputs,
                 &drgporep_pub_params,
             );
@@ -162,8 +162,8 @@ impl<'a>
                 let layer_public_inputs = drgporep::PublicInputs {
                     prover_id: public_inputs.prover_id,
                     // FIXME: add multiple challenges to public inputs.
-                    challenges: vec![public_inputs.challenge],
-                    tau: public_inputs.tau[l],
+                    challenges: public_inputs.challenges.clone(),
+                    tau: None,
                 };
                 let layer_proof = vanilla_proof.encoding_proofs[l].clone();
                 (layer_public_inputs, Some(layer_proof))
@@ -191,7 +191,7 @@ mod tests {
     use fr32::{bytes_into_fr, fr_into_bytes};
     use layered_drgporep;
     use pairing::Field;
-    use porep::{self, PoRep};
+    use porep::PoRep;
     use proof::ProofScheme;
     use rand::Rand;
     use rand::{Rng, SeedableRng, XorShiftRng};
@@ -205,7 +205,7 @@ mod tests {
         let nodes = 5;
         let degree = 1;
         let expansion_degree = 2;
-        let challenge = 2;
+        let challenges = vec![2];
         let num_layers = 2;
         let sloth_iter = 1;
 
@@ -244,13 +244,14 @@ mod tests {
 
         let pub_inputs = layered_drgporep::PublicInputs {
             prover_id: prover_id_fr,
-            challenge,
-            tau: tau.clone(),
+            challenges,
+            tau: None,
         };
 
         let priv_inputs = layered_drgporep::PrivateInputs {
             replica: data.as_slice(),
             aux,
+            tau: tau,
         };
 
         let proof = ZigZagDrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
@@ -272,8 +273,8 @@ mod tests {
         }
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_inputs(), 25, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 56762, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 15, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 56752, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
@@ -309,10 +310,7 @@ mod tests {
                 let public_inputs = drgporep::PublicInputs {
                     prover_id,
                     challenges: vec![challenge],
-                    tau: porep::Tau {
-                        comm_r: Default::default(),
-                        comm_d: Default::default(),
-                    },
+                    tau: None,
                 };
                 let proof = None;
                 (public_inputs, proof)
@@ -334,8 +332,8 @@ mod tests {
             layers,
         ).expect("failed to synthesize circuit");
 
-        assert_eq!(cs.num_inputs(), 29, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 434072, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 17, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 434060, "wrong number of constraints");
     }
 
     #[test]
@@ -345,7 +343,7 @@ mod tests {
         let nodes = 5;
         let degree = 2;
         let expansion_degree = 2;
-        let challenge = 1;
+        let challenges = vec![1];
         let num_layers = 2;
         let sloth_iter = 1;
 
@@ -391,13 +389,14 @@ mod tests {
 
         let public_inputs = layered_drgporep::PublicInputs {
             prover_id: prover_id_fr,
-            challenge,
-            tau,
+            challenges,
+            tau: None,
         };
 
         let private_inputs = layered_drgporep::PrivateInputs {
             replica: data.as_slice(),
             aux,
+            tau,
         };
 
         // TOOD: Move this to e.g. circuit::test::compound_helper and share between all compound proofs.

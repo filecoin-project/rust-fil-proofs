@@ -28,7 +28,7 @@ pub type MerkleTree = merkle::MerkleTree<TreeHash, TreeAlgorithm>;
 #[derive(Debug, Clone)]
 pub struct MerkleProof {
     path: Vec<(TreeHash, bool)>,
-    root: TreeHash,
+    pub root: TreeHash,
     leaf: TreeHash,
 }
 
