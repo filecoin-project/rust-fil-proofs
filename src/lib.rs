@@ -14,6 +14,8 @@ extern crate failure;
 extern crate lazy_static;
 extern crate aes;
 extern crate bellman;
+#[macro_use]
+extern crate bitvec;
 extern crate blake2_rfc;
 extern crate block_modes;
 extern crate byteorder;

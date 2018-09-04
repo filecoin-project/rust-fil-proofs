@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate criterion;
 extern crate bellman;
+extern crate bitvec;
 extern crate pairing;
 extern crate proofs;
 extern crate rand;
@@ -67,12 +68,12 @@ fn pedersen_benchmark(c: &mut Criterion) {
     c.bench(
         "pedersen",
         ParameterizedBenchmark::new(
-            "non-circuit",
+            "non-circuit bytes",
             |b, bytes| {
                 let mut rng = thread_rng();
-                let mut data: Vec<bool> = (0..bytes * 8).map(|_| rng.gen()).collect();
+                let mut data: Vec<u8> = (0..bytes * 1).map(|_| rng.gen()).collect();
 
-                b.iter(|| black_box(pedersen::pedersen_compression(&data, data.len())))
+                b.iter(|| black_box(pedersen::pedersen_compression(&mut data)))
             },
             params,
         ).with_function("circuit - create proof", move |b, bytes| {

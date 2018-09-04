@@ -1,26 +1,19 @@
-use byteorder::{ByteOrder, LittleEndian};
+use bitvec::{self, BitVec};
 use merkle_light::hash::{Algorithm, Hashable};
 use merkle_light::merkle;
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
 use pairing::{PrimeField, PrimeFieldRepr};
 use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
-use std::fmt;
 use std::hash::Hasher;
 
 use crypto::pedersen;
 
-#[derive(Copy, Clone)]
-pub struct PedersenAlgorithm(Fr, [bool; 32 * 8]);
+#[derive(Copy, Clone, Debug)]
+pub struct PedersenAlgorithm(Fr);
 
 impl Default for PedersenAlgorithm {
     fn default() -> PedersenAlgorithm {
         PedersenAlgorithm::new()
-    }
-}
-
-impl fmt::Debug for PedersenAlgorithm {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "PedersenAlgorithm({:?})", self.0)
     }
 }
 
@@ -72,10 +65,7 @@ pub type MerkleTree = merkle::MerkleTree<PedersenHash, PedersenAlgorithm>;
 
 impl PedersenAlgorithm {
     pub fn new() -> PedersenAlgorithm {
-        PedersenAlgorithm(
-            Fr::from_repr(FrRepr::default()).expect("failed default"),
-            [false; 256],
-        )
+        PedersenAlgorithm(Fr::from_repr(FrRepr::default()).expect("failed default"))
     }
 }
 
@@ -90,23 +80,14 @@ impl AsRef<[u8]> for PedersenHash {
 impl Hasher for PedersenAlgorithm {
     #[inline]
     fn write(&mut self, msg: &[u8]) {
-        assert!(
-            msg.len() <= 32,
-            "can not process larger than 32byte messages"
-        );
-
-        for (i, byte) in msg.iter().enumerate() {
-            for j in 0..8 {
-                self.1[i * 8 + j] = byte >> j & 1u8 == 1u8
-            }
-        }
-
-        let pt = pedersen_hash::<Bls12, _>(
+        self.0 = pedersen_hash::<Bls12, _>(
             Personalization::NoteCommitment,
-            self.1.iter().take(msg.len() * 8).cloned(),
+            BitVec::<bitvec::LittleEndian, u8>::from(msg)
+                .iter()
+                .take(msg.len() * 8),
             &pedersen::JJ_PARAMS,
-        );
-        self.0 = pt.into_xy().0
+        ).into_xy()
+        .0;
     }
 
     #[inline]
@@ -131,30 +112,13 @@ impl Algorithm<PedersenHash> for PedersenAlgorithm {
     }
 
     fn node(&mut self, left: PedersenHash, right: PedersenHash, height: usize) -> PedersenHash {
-        let lhs = left.0.into_repr().0;
-        let rhs = right.0.into_repr().0;
+        let lhs = BitVec::<bitvec::LittleEndian, u64>::from(&left.0.into_repr().0[..]);
+        let rhs = BitVec::<bitvec::LittleEndian, u64>::from(&right.0.into_repr().0[..]);
 
-        let len = Fr::NUM_BITS as usize;
-        let mut bits = vec![false; 2 * len];
-
-        let mut slhs = vec![0u8; 8];
-        let mut srhs = vec![0u8; 8];
-        for i in 0..4 {
-            LittleEndian::write_u64(&mut slhs, lhs[i]);
-            LittleEndian::write_u64(&mut srhs, rhs[i]);
-
-            for k in 0..8 {
-                for j in 0..8 {
-                    let index = i * 64 + k * 8 + j;
-                    // skip bit 255
-                    if index == 255 {
-                        continue;
-                    }
-                    bits[index] = (slhs[k] >> j) & 1u8 == 1u8;
-                    bits[len + index] = (srhs[k] >> j) & 1u8 == 1u8;
-                }
-            }
-        }
+        let bits = lhs
+            .iter()
+            .take(Fr::NUM_BITS as usize)
+            .chain(rhs.iter().take(Fr::NUM_BITS as usize));
 
         pedersen_hash::<Bls12, _>(
             Personalization::MerkleTree(height),
@@ -185,7 +149,6 @@ mod tests {
     use super::*;
     use fr32::fr_into_bytes;
     use merkle_light::hash::Hashable;
-    use pairing::BitIterator;
 
     #[test]
     fn test_path() {
@@ -255,66 +218,5 @@ mod tests {
         assert_eq!(actual, expected);
 
         assert_eq!(t[6], root);
-    }
-
-    #[test]
-    fn test_conversion() {
-        let left = Fr::from_repr(FrRepr([1, 3, 1, 0])).unwrap();
-        let right = Fr::from_repr(FrRepr([1, 1, 2, 0])).unwrap();
-
-        let lhs = left.into_repr().0;
-        let rhs = right.into_repr().0;
-
-        let len = Fr::NUM_BITS as usize;
-        let mut bits = vec![false; 2 * len];
-
-        let mut slhs = vec![0u8; 8];
-        let mut srhs = vec![0u8; 8];
-        for i in 0..4 {
-            LittleEndian::write_u64(&mut slhs, lhs[i]);
-            println!("w {:?}", slhs);
-            LittleEndian::write_u64(&mut srhs, rhs[i]);
-
-            // iterate through each byte
-            for k in 0..8 {
-                // iterate through each bit
-                for j in 0..8 {
-                    let index = i * 64 + k * 8 + j;
-
-                    // skip bit 255
-                    if index == 255 {
-                        continue;
-                    }
-                    bits[index] = (slhs[k] >> j) & 1u8 == 1u8;
-                    bits[len + index] = (srhs[k] >> j) & 1u8 == 1u8;
-                }
-            }
-        }
-        print_bits(&bits[0..len].to_vec());
-
-        // old
-
-        let mut ol = BitIterator::new(left.into_repr()).collect::<Vec<bool>>();
-        let mut or = BitIterator::new(right.into_repr()).collect::<Vec<bool>>();
-        print_bits(&ol);
-        ol.reverse();
-        or.reverse();
-
-        let old = ol
-            .into_iter()
-            .take(Fr::NUM_BITS as usize)
-            .chain(or.into_iter().take(Fr::NUM_BITS as usize))
-            .collect::<Vec<bool>>();
-        print_bits(&old);
-
-        assert_eq!(old, bits.to_vec());
-    }
-
-    fn print_bits(v: &[bool]) {
-        let f = v
-            .iter()
-            .map(|a| if *a { 1 } else { 0 })
-            .collect::<Vec<u8>>();
-        println!("{:?}", f);
     }
 }

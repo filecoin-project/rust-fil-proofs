@@ -3,6 +3,7 @@ use drgraph;
 use error::Result;
 use fr32::{bytes_into_fr, fr_into_bytes};
 use pairing::bls12_381::{Bls12, Fr};
+use pairing::{PrimeField, PrimeFieldRepr};
 use util::{data_at_node, data_at_node_offset};
 
 /// encodes the data and overwrites the original data slice.
@@ -39,10 +40,8 @@ pub fn encode<'a, G: drgraph::Graph>(
         let end = start + lambda;
         let fr = bytes_into_fr::<Bls12>(&data[start..end])?;
 
-        let encoded =
-            fr_into_bytes::<Bls12>(&crypto::sloth::encode::<Bls12>(&key, &fr, sloth_iter));
-
-        data[start..end].copy_from_slice(&encoded);
+        let encoded = &crypto::sloth::encode::<Bls12>(&key, &fr, sloth_iter);
+        encoded.into_repr().write_le(&mut data[start..end])?;
     }
 
     Ok(())
