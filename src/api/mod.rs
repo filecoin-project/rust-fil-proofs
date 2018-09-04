@@ -124,14 +124,23 @@ pub unsafe extern "C" fn verify_seal(
 /// * `status_code` - a status code returned from an FPS operation, such as seal or verify_seal
 /// ```
 #[no_mangle]
-pub extern "C" fn status_to_string(status_code: u8) -> *const libc::c_char {
+pub extern "C" fn status_to_string(status_code: StatusCode) -> *const libc::c_char {
     let s = match status_code {
         0 => CString::new("success"),
         10 => CString::new("failed to seal"),
         20 => CString::new("invalid replica and/or data commitment"),
         21 => CString::new("unhandled verify_seal error"),
         30 => CString::new("failed to get unsealed range"),
-        _ => CString::new("unknown status code"),
+        40 => CString::new("failed to write to unsealed sector"),
+        41 => CString::new("failed to create unsealed sector"),
+        50 => CString::new("failed to open file for truncating"),
+        51 => CString::new("failed to set file length"),
+        60 => CString::new("could not read unsealed sector file metadata"),
+        70 => CString::new("could not create unsealed sector-directory"),
+        71 => CString::new("could not create unsealed sector"),
+        80 => CString::new("could not create sealed sector-directory"),
+        81 => CString::new("could not create sealed sector"),
+        n => CString::new(format!("unknown status code {}", n)),
     }.unwrap();
 
     let p = s.as_ptr();
@@ -235,10 +244,10 @@ mod tests {
     use super::*;
     use api::sss::{
         init_disk_backed_storage, new_sealed_sector_access, new_staging_sector_access,
-        DiskBackedStorage,
+        write_unsealed, DiskBackedStorage,
     };
     use std::ffi::CString;
-    use std::fs::{create_dir_all, write, File};
+    use std::fs::{create_dir_all, File};
     use std::io::Read;
     use tempfile;
 
@@ -271,11 +280,17 @@ mod tests {
         let random_seed: [u8; 32] = [4; 32];
 
         let contents = b"hello, moto";
+        let result_ptr = &mut 0u64;
 
-        match write(unsafe { util::pbuf_from_c(seal_input_path) }, contents) {
-            Ok(_) => (),
-            Err(err) => panic!(err),
-        }
+        assert_eq!(0, unsafe {
+            write_unsealed(
+                storage,
+                seal_input_path,
+                &contents[0],
+                contents.len(),
+                result_ptr,
+            )
+        });
 
         let good_seal = unsafe {
             seal(
@@ -326,15 +341,17 @@ mod tests {
         let random_seed: [u8; 32] = [4; 32];
 
         let contents = b"hello, moto";
-        let length = contents.len();
+        let result_ptr = &mut 0u64;
 
-        match write(
-            String::from(unsafe { util::str_from_c(seal_input_path) }),
-            contents,
-        ) {
-            Ok(_) => (),
-            Err(err) => panic!(err),
-        }
+        assert_eq!(0, unsafe {
+            write_unsealed(
+                storage,
+                seal_input_path,
+                &contents[0],
+                contents.len(),
+                result_ptr,
+            )
+        });
 
         let good_seal = unsafe {
             seal(
@@ -364,13 +381,11 @@ mod tests {
         let mut buf = Vec::new();
         file.read_to_end(&mut buf).unwrap();
 
-        assert_eq!(contents[..], buf[0..length]);
+        assert_eq!(contents[..], buf[0..contents.len()]);
     }
 
     #[test]
     fn seal_unsealed_range_roundtrip() {
-        let result_ptr = &mut 0u64;
-
         let storage: *mut DiskBackedStorage = create_storage();
         let seal_output_path = unsafe { new_sealed_sector_access(storage) };
         let get_unsealed_range_output_path = unsafe { new_staging_sector_access(storage) };
@@ -382,11 +397,17 @@ mod tests {
         let random_seed: [u8; 32] = [4; 32];
 
         let contents = b"hello, moto";
-        let length = contents.len();
-        match write(unsafe { util::pbuf_from_c(seal_input_path) }, contents) {
-            Ok(_) => (),
-            Err(err) => panic!(err),
-        }
+        let result_ptr = &mut 0u64;
+
+        assert_eq!(0, unsafe {
+            write_unsealed(
+                storage,
+                seal_input_path,
+                &contents[0],
+                contents.len(),
+                result_ptr,
+            )
+        });
 
         let good_seal = unsafe {
             seal(
@@ -401,7 +422,7 @@ mod tests {
         assert_eq!(0, good_seal);
 
         let offset = 5;
-        let range_length = length as u64 - offset;
+        let range_length = contents.len() as u64 - offset;
         let good_unsealed = unsafe {
             get_unsealed_range(
                 seal_output_path,

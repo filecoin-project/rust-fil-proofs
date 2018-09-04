@@ -318,7 +318,7 @@ mod tests {
 
         let public_params = layered_drgporep::PublicParams {
             drg_porep_public_params: drgporep::PublicParams {
-                lambda: lambda,
+                lambda,
                 graph: ZigZagGraph::new(n, base_degree, expansion_degree, new_seed()),
                 sloth_iter,
             },
