@@ -169,6 +169,11 @@ where
 
         let inputs = Self::generate_public_inputs(&public_inputs, vanilla_params);
 
+        assert!(
+            S::verify(vanilla_params, &public_inputs, &vanilla_proof).unwrap(),
+            "vanilla proof didn't verify"
+        );
+
         (circuit, inputs)
     }
 }

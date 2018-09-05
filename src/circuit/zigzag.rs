@@ -31,7 +31,7 @@ where
     G: 'a + ParameterSetIdentifier,
 {
     params: &'a E::Params,
-    public_params: <ZigZagDrgPoRep<'a, ZigZagBucketGraph> as ProofScheme<'a>>::PublicParams,
+    public_params: <ZigZagDrgPoRep as ProofScheme<'a>>::PublicParams,
     layers: Layers<'a, G>,
     phantom: PhantomData<E>,
 }
@@ -43,7 +43,7 @@ where
     pub fn synthesize<CS>(
         mut cs: CS,
         params: &'a <Bls12 as JubjubEngine>::Params,
-        public_params: <ZigZagDrgPoRep<'a, ZigZagBucketGraph> as ProofScheme<'a>>::PublicParams,
+        public_params: <ZigZagDrgPoRep as ProofScheme<'a>>::PublicParams,
         layers: Layers<G>,
     ) -> Result<(), SynthesisError>
     where
@@ -98,7 +98,7 @@ where
 }
 
 #[allow(dead_code)]
-struct ZigZagCompound {}
+pub struct ZigZagCompound {}
 
 impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParameters<E, C, P>
     for ZigZagCompound
@@ -108,17 +108,12 @@ impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParamet
     }
 }
 
-impl<'a>
-    CompoundProof<
-        'a,
-        Bls12,
-        ZigZagDrgPoRep<'a, ZigZagBucketGraph>,
-        ZigZagCircuit<'a, Bls12, ZigZagBucketGraph>,
-    > for ZigZagCompound
+impl<'a> CompoundProof<'a, Bls12, ZigZagDrgPoRep, ZigZagCircuit<'a, Bls12, ZigZagBucketGraph>>
+    for ZigZagCompound
 {
     fn generate_public_inputs(
-        pub_in: &<ZigZagDrgPoRep<ZigZagBucketGraph> as ProofScheme>::PublicInputs,
-        pub_params: &<ZigZagDrgPoRep<ZigZagBucketGraph> as ProofScheme>::PublicParams,
+        pub_in: &<ZigZagDrgPoRep as ProofScheme>::PublicInputs,
+        pub_params: &<ZigZagDrgPoRep as ProofScheme>::PublicParams,
     ) -> Vec<Fr> {
         let mut inputs = Vec::new();
 
@@ -131,7 +126,6 @@ impl<'a>
         for i in 0..pub_params.layers {
             let drgporep_pub_inputs = drgporep::PublicInputs {
                 prover_id: pub_in.prover_id,
-                // FIXME: add multiple challengeas to public inputs.
                 challenges: pub_in.challenges.clone(),
                 tau: None,
             };
@@ -141,20 +135,19 @@ impl<'a>
             );
             inputs.extend(drgporep_inputs);
 
-            drgporep_pub_params =
-                <ZigZagDrgPoRep<ZigZagBucketGraph> as layered_drgporep::Layers>::transform(
-                    &drgporep_pub_params,
-                    i,
-                    pub_params.layers,
-                );
+            drgporep_pub_params = <ZigZagDrgPoRep as layered_drgporep::Layers>::transform(
+                &drgporep_pub_params,
+                i,
+                pub_params.layers,
+            );
         }
         inputs
     }
 
     fn circuit<'b>(
-        public_inputs: &'b <ZigZagDrgPoRep<ZigZagBucketGraph> as ProofScheme>::PublicInputs,
-        vanilla_proof: &'b <ZigZagDrgPoRep<ZigZagBucketGraph> as ProofScheme>::Proof,
-        public_params: &'b <ZigZagDrgPoRep<ZigZagBucketGraph> as ProofScheme>::PublicParams,
+        public_inputs: &'b <ZigZagDrgPoRep as ProofScheme>::PublicInputs,
+        vanilla_proof: &'b <ZigZagDrgPoRep as ProofScheme>::Proof,
+        public_params: &'b <ZigZagDrgPoRep as ProofScheme>::PublicParams,
         engine_params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> ZigZagCircuit<'a, Bls12, ZigZagBucketGraph> {
         let layers = (0..(vanilla_proof.encoding_proofs.len()))
@@ -169,8 +162,7 @@ impl<'a>
                 (layer_public_inputs, Some(layer_proof))
             }).collect();
 
-        let pp: <ZigZagDrgPoRep<ZigZagBucketGraph> as ProofScheme>::PublicParams =
-            public_params.into();
+        let pp: <ZigZagDrgPoRep as ProofScheme>::PublicParams = public_params.into();
 
         ZigZagCircuit {
             params: engine_params,
@@ -189,7 +181,7 @@ mod tests {
     use drgporep;
     use drgraph::new_seed;
     use fr32::{bytes_into_fr, fr_into_bytes};
-    use layered_drgporep;
+    use layered_drgporep::{self, simplify_tau};
     use pairing::Field;
     use porep::PoRep;
     use proof::ProofScheme;
@@ -237,7 +229,7 @@ mod tests {
             layers: num_layers,
         };
 
-        let pp = ZigZagDrgPoRep::<ZigZagBucketGraph>::setup(&sp).unwrap();
+        let pp = ZigZagDrgPoRep::setup(&sp).unwrap();
         let (tau, aux) =
             ZigZagDrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
         assert_ne!(data, data_copy);
@@ -245,13 +237,13 @@ mod tests {
         let pub_inputs = layered_drgporep::PublicInputs {
             prover_id: prover_id_fr,
             challenges,
-            tau: None,
+            tau: Some(simplify_tau(&tau)),
         };
 
         let priv_inputs = layered_drgporep::PrivateInputs {
             replica: data.as_slice(),
             aux,
-            tau: tau,
+            tau,
         };
 
         let proof = ZigZagDrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
@@ -390,7 +382,7 @@ mod tests {
         let public_inputs = layered_drgporep::PublicInputs {
             prover_id: prover_id_fr,
             challenges,
-            tau: None,
+            tau: Some(simplify_tau(&tau)),
         };
 
         let private_inputs = layered_drgporep::PrivateInputs {

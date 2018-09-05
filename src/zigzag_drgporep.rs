@@ -2,8 +2,7 @@ use drgporep;
 use drgraph::Graph;
 use layered_drgporep::Layers;
 use parameter_cache::ParameterSetIdentifier;
-use std::marker::PhantomData;
-use zigzag_graph::{ZigZag, ZigZagGraph};
+use zigzag_graph::{ZigZag, ZigZagBucketGraph};
 
 /// ZigZagDrgPorep is a layered PoRep which replicates layer by layer.
 /// Between layers, the graph is 'reversed' in such a way that the dependencies expand with each iteration.
@@ -17,18 +16,10 @@ use zigzag_graph::{ZigZag, ZigZagGraph};
 /// However, it is fortunately not necessary that the base DRG components also have this property.
 
 #[derive(Debug)]
-pub struct ZigZagDrgPoRep<'a, G: 'a>
-where
-    G: ZigZag,
-{
-    phantom: PhantomData<&'a G>,
-}
+pub struct ZigZagDrgPoRep {}
 
-impl<'a, G: 'a> Layers for ZigZagDrgPoRep<'a, G>
-where
-    G: ZigZag + 'static + ParameterSetIdentifier,
-{
-    type Graph = ZigZagGraph<G>;
+impl<'a> Layers for ZigZagDrgPoRep where {
+    type Graph = ZigZagBucketGraph;
 
     fn transform(
         pp: &drgporep::PublicParams<Self::Graph>,
@@ -68,7 +59,6 @@ mod tests {
     use porep::PoRep;
     use proof::ProofScheme;
     use rand::{Rng, SeedableRng, XorShiftRng};
-    use zigzag_graph::ZigZagBucketGraph;
 
     const DEFAULT_ZIGZAG_LAYERS: usize = 6;
 
@@ -96,7 +86,7 @@ mod tests {
             layers: DEFAULT_ZIGZAG_LAYERS,
         };
 
-        let mut pp = ZigZagDrgPoRep::<ZigZagBucketGraph>::setup(&sp).unwrap();
+        let mut pp = ZigZagDrgPoRep::setup(&sp).unwrap();
         // Get the public params for the last layer.
         // In reality, this is a no-op with an even number of layers.
         for _ in 0..pp.layers {
@@ -149,7 +139,7 @@ mod tests {
             layers: DEFAULT_ZIGZAG_LAYERS,
         };
 
-        let pp = ZigZagDrgPoRep::<ZigZagBucketGraph>::setup(&sp).unwrap();
+        let pp = ZigZagDrgPoRep::setup(&sp).unwrap();
         let (tau, aux) =
             ZigZagDrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
         assert_ne!(data, data_copy);

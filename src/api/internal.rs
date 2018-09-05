@@ -1,17 +1,20 @@
 use bellman::groth16;
-use circuit::drgporep::DrgPoRepCompound;
+use circuit::zigzag::ZigZagCompound;
 use compound_proof::{self, CompoundProof};
-use drgporep::{self, DrgParams, DrgPoRep, SetupParams};
-use drgraph::{new_seed, BucketGraph};
+use drgporep::{self, DrgParams};
+use drgraph::new_seed;
 use error::Result;
 use fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
 use hasher::pedersen::PedersenHash;
+use layered_drgporep::{self, simplify_tau};
 use pairing::bls12_381::Bls12;
 use pairing::Engine;
 use parameter_cache::{parameter_cache_path, read_cached_params, write_params_to_cache};
 use porep::{PoRep, Tau};
 use proof::ProofScheme;
 use sapling_crypto::jubjub::JubjubBls12;
+use zigzag_drgporep::ZigZagDrgPoRep;
+use zigzag_graph::ZigZagBucketGraph;
 
 use std::fs::File;
 use std::io::Write;
@@ -38,22 +41,26 @@ fn dummy_parameter_cache_path() -> PathBuf {
     parameter_cache_path(DUMMY_PARAMETER_CACHE_FILE)
 }
 
-pub const SECTOR_BYTES: usize = 64;
 pub const LAMBDA: usize = 32;
+pub const NODES: usize = 4;
+pub const SECTOR_BYTES: usize = LAMBDA * NODES;
 
 lazy_static! {
-    pub static ref SETUP_PARAMS: SetupParams = SetupParams {
-        lambda: LAMBDA,
-        drg: DrgParams {
-            nodes: SECTOR_BYTES / LAMBDA,
-            degree: 2,
-            expansion_degree: 0,
-            seed: new_seed(),
+    pub static ref SETUP_PARAMS: layered_drgporep::SetupParams = layered_drgporep::SetupParams {
+        drg_porep_setup_params: drgporep::SetupParams {
+            lambda: LAMBDA,
+            drg: DrgParams {
+                nodes: NODES,
+                degree: 1,
+                expansion_degree: 2,
+                seed: new_seed(),
+            },
+            sloth_iter: 1
         },
-        sloth_iter: 1
+        layers: 2,
     };
-    pub static ref PUBLIC_PARAMS: drgporep::PublicParams<BucketGraph> =
-        <DrgPoRep<BucketGraph> as ProofScheme>::setup(&SETUP_PARAMS).unwrap();
+    pub static ref PUBLIC_PARAMS: layered_drgporep::PublicParams<ZigZagBucketGraph> =
+        ZigZagDrgPoRep::setup(&SETUP_PARAMS).unwrap();
     pub static ref ENGINE_PARAMS: JubjubBls12 = JubjubBls12::new();
 }
 
@@ -86,44 +93,62 @@ pub fn seal(
     for _ in data.len()..SECTOR_BYTES {
         data.push(0);
     }
+    // FIXME: We cannot do this with real sector sizes. In point of fact, our two-stage proof
+    // replicates again while proving…
+    // Instead, we will need to generate proofs while replicating the first time.
+    // Otherwise, the data at each layer is lost and needs to be regenerated from scratch
+    // at proving time. Fortunately, we anticipated this, so no API changes will be necessary.
+    let data_copy = data.clone();
 
     // Zero-pad the prover_id to 32 bytes (and therefore Fr32).
     let prover_id = pad_safe_fr(prover_id_in);
-
-    let (tau, aux) = DrgPoRep::replicate(&PUBLIC_PARAMS, &prover_id, data.as_mut_slice())?;
-
-    {
-        let f_out = File::create(out_path)?;
-        let mut buf_writer = BufWriter::new(f_out);
-        buf_writer.write_all(&data)?;
-    }
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: &(*SETUP_PARAMS),
         engine_params: &(*ENGINE_PARAMS),
     };
 
-    let compound_public_params = DrgPoRepCompound::<BucketGraph>::setup(&compound_setup_params)?;
+    let compound_public_params = ZigZagCompound::setup(&compound_setup_params)?;
+
+    let (tau, aux) = ZigZagDrgPoRep::replicate(
+        &compound_public_params.vanilla_params,
+        &prover_id,
+        data.as_mut_slice(),
+    )?;
+
+    {
+        // Write replicated data to out_path.
+        let f_out = File::create(out_path)?;
+        let mut buf_writer = BufWriter::new(f_out);
+        buf_writer.write_all(&data)?;
+    }
 
     let prover_id_fr = bytes_into_fr::<Bls12>(&prover_id)?;
 
+    let public_tau = simplify_tau(&tau);
+    // This is the commitment to the original data.
+    let comm_d = public_tau.comm_d;
+    // This is the commitment to the last layer's replica.
+    let comm_r = public_tau.comm_r;
+
     let challenge = derive_challenge(
-        fr_into_bytes::<Bls12>(&tau.comm_r.0).as_slice(),
-        fr_into_bytes::<Bls12>(&tau.comm_d.0).as_slice(),
+        fr_into_bytes::<Bls12>(&comm_r.0).as_slice(),
+        fr_into_bytes::<Bls12>(&comm_d.0).as_slice(),
         challenge_seed,
     );
-    let public_inputs = drgporep::PublicInputs {
+    let public_inputs = layered_drgporep::PublicInputs {
         prover_id: prover_id_fr,
         challenges: vec![challenge],
-        tau: Some(tau),
+        tau: Some(public_tau),
     };
 
-    let private_inputs = drgporep::PrivateInputs {
-        replica: data.as_slice(),
-        aux: &aux,
+    let private_inputs = layered_drgporep::PrivateInputs {
+        replica: data_copy.as_slice(),
+        aux,
+        tau,
     };
 
-    let proof = DrgPoRepCompound::prove(&compound_public_params, &public_inputs, &private_inputs)?;
+    let proof = ZigZagCompound::prove(&compound_public_params, &public_inputs, &private_inputs)?;
 
     let mut buf = Vec::with_capacity(SNARK_BYTES);
 
@@ -133,26 +158,25 @@ pub fn seal(
     proof_bytes.copy_from_slice(&buf);
 
     write_params_to_cache(proof.groth_params.clone(), &dummy_parameter_cache_path())?;
-
     // We can eventually remove these assertions for performance, but we really
     // don't want to return an invalid proof, so for now let's make sure we can't.
-    assert!(DrgPoRepCompound::verify(
+    assert!(ZigZagCompound::verify(
         &(*PUBLIC_PARAMS),
         &public_inputs,
         proof,
     )?);
 
     assert!(verify_seal(
-        commitment_from_fr::<Bls12>(tau.comm_r.0),
-        commitment_from_fr::<Bls12>(tau.comm_d.0),
+        commitment_from_fr::<Bls12>(comm_r.0),
+        commitment_from_fr::<Bls12>(comm_d.0),
         prover_id_in,
         challenge_seed,
         &proof_bytes,
     )?);
 
     Ok((
-        commitment_from_fr::<Bls12>(tau.comm_r.0),
-        commitment_from_fr::<Bls12>(tau.comm_d.0),
+        commitment_from_fr::<Bls12>(public_tau.comm_r.0),
+        commitment_from_fr::<Bls12>(public_tau.comm_d.0),
         proof_bytes,
     ))
 }
@@ -171,7 +195,7 @@ pub fn get_unsealed_range(
     let mut data = Vec::new();
     f_in.take(SECTOR_BYTES as u64).read_to_end(&mut data)?;
 
-    let extracted = DrgPoRep::extract_all(&(*PUBLIC_PARAMS), &prover_id, &data)?;
+    let extracted = ZigZagDrgPoRep::extract_all(&(*PUBLIC_PARAMS), &prover_id, &data)?;
 
     let f_out = File::create(output_path)?;
     let mut buf_writer = BufWriter::new(f_out);
@@ -196,7 +220,7 @@ pub fn verify_seal(
     let comm_r = PedersenHash(bytes_into_fr::<Bls12>(&comm_r)?);
     let comm_d = PedersenHash(bytes_into_fr::<Bls12>(&comm_d)?);
 
-    let public_inputs = drgporep::PublicInputs {
+    let public_inputs = layered_drgporep::PublicInputs {
         prover_id: prover_id_fr,
         challenges: vec![challenge],
         tau: Some(Tau { comm_r, comm_d }),
@@ -209,10 +233,10 @@ pub fn verify_seal(
         groth_params,
     };
 
-    DrgPoRepCompound::verify(&(*PUBLIC_PARAMS), &public_inputs, proof)
+    ZigZagCompound::verify(&(*PUBLIC_PARAMS), &public_inputs, proof)
 }
 
 fn derive_challenge(_comm_r: &[u8], _comm_d: &[u8], _challenge_seed: [u8; 32]) -> usize {
     // TODO: actually derive challenge(s).
-    1
+    2
 }

@@ -336,7 +336,7 @@ where
             }
 
             if !proof.nodes[i].proof.validate_data(&unsealed) {
-                println!("invalid data {:?}", unsealed);
+                println!("invalid data for merkle path{:?}", unsealed);
                 return Ok(false);
             }
         }
