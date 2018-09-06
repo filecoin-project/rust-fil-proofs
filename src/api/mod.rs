@@ -242,9 +242,9 @@ pub extern "C" fn verifyPost() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use api::sss::disk_backed_storage::init_disk_backed_storage;
     use api::sss::{
-        init_disk_backed_storage, new_sealed_sector_access, new_staging_sector_access,
-        write_unsealed, DiskBackedStorage,
+        new_sealed_sector_access, new_staging_sector_access, write_unsealed, SectorStore,
     };
     use std::ffi::CString;
     use std::fs::{create_dir_all, File};
@@ -255,7 +255,7 @@ mod tests {
         CString::new(s).unwrap().into_raw()
     }
 
-    fn create_storage() -> *mut DiskBackedStorage {
+    fn create_storage() -> *mut Box<SectorStore> {
         let staging_path = tempfile::tempdir().unwrap().path().to_owned();
         let sealed_path = tempfile::tempdir().unwrap().path().to_owned();
 
@@ -270,7 +270,7 @@ mod tests {
 
     #[test]
     fn seal_verify() {
-        let storage: *mut DiskBackedStorage = create_storage();
+        let storage = create_storage();
         let seal_input_path = unsafe { new_staging_sector_access(storage) };
         let seal_output_path = unsafe { new_sealed_sector_access(storage) };
 
@@ -388,7 +388,7 @@ mod tests {
 
     #[test]
     fn seal_unsealed_range_roundtrip() {
-        let storage: *mut DiskBackedStorage = create_storage();
+        let storage = create_storage();
         let seal_output_path = unsafe { new_sealed_sector_access(storage) };
         let get_unsealed_range_output_path = unsafe { new_staging_sector_access(storage) };
         let seal_input_path = unsafe { new_staging_sector_access(storage) };
