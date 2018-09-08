@@ -142,10 +142,10 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoRCircuit<'a, E> {
 
                 // Witness the authentication path element adjacent
                 // at this depth.
-                let path_element =
-                    num::AllocatedNum::alloc(cs.namespace(|| "path element"), || {
-                        Ok(e.ok_or(SynthesisError::AssignmentMissing)?.0)
-                    })?;
+                let path_element = num::AllocatedNum::alloc(
+                    cs.namespace(|| "path element"),
+                    || Ok(e.ok_or(SynthesisError::AssignmentMissing)?.0),
+                )?;
 
                 // Swap the two if the current subtree is on the right
                 let (xl, xr) = num::AllocatedNum::conditionally_reverse(
@@ -170,13 +170,13 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoRCircuit<'a, E> {
                     &preimage,
                     params,
                 )?.get_x()
-                .clone(); // Injective encoding
+                    .clone(); // Injective encoding
 
                 auth_path_bits.push(cur_is_right);
             }
 
             // allocate input for is_right auth_path
-            multipack::pack_into_inputs(cs.namespace(|| "packed auth_path"), &auth_path_bits)?;
+            multipack::pack_into_inputs(cs.namespace(|| "path"), &auth_path_bits)?;
 
             {
                 // Validate that the root of the merkle tree that we calculated is the same as the input.

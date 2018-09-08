@@ -290,16 +290,17 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
             None => None,
         };
 
-        // get the replica_id in bits
-        let replica_id_bits =
-            bytes_into_boolean_vec(cs.namespace(|| "replica_id bits"), replica_id_bytes, lambda)?;
+        // get the prover_id in bits
+        let prover_id_bits =
+            bytes_into_boolean_vec(cs.namespace(|| "prover_id_bits"), replica_id_bytes, lambda)?;
 
         multipack::pack_into_inputs(
-            cs.namespace(|| "replica_id"),
-            &replica_id_bits[0..Fr::CAPACITY as usize],
+            cs.namespace(|| "prover_id"),
+            &prover_id_bits[0..Fr::CAPACITY as usize],
         )?;
 
         for i in 0..self.data_nodes.len() {
+            let mut cs = cs.namespace(|| format!("challenge_{}", i));
             // ensure that all inputs are well formed
             let replica_node_path = &self.replica_nodes_paths[i];
             let replica_parents_paths = &self.replica_parents_paths[i];
@@ -311,83 +312,94 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
 
             assert_eq!(data_node_path.len(), replica_node_path.len());
 
-            PoRCircuit::synthesize(
-                cs.namespace(|| "replica_node merkle proof"),
-                &params,
-                *replica_node,
-                replica_node_path.clone(),
-                replica_root,
-            )?;
-
-            // validate each replica_parents merkle proof
+            // Inclusion checks
             {
-                for i in 0..replica_parents.len() {
-                    PoRCircuit::synthesize(
-                        cs.namespace(|| format!("replica parent: {}", i)),
-                        &params,
-                        replica_parents[i],
-                        replica_parents_paths[i].clone(),
-                        replica_root,
-                    )?;
+                let mut cs = cs.namespace(|| "inclusion_checks");
+
+                PoRCircuit::synthesize(
+                    cs.namespace(|| "replica_inclusion"),
+                    &params,
+                    *replica_node,
+                    replica_node_path.clone(),
+                    replica_root,
+                )?;
+
+                // validate data node commitment
+                PoRCircuit::synthesize(
+                    cs.namespace(|| "data_inclusion"),
+                    &params,
+                    *data_node,
+                    data_node_path.clone(),
+                    data_root,
+                )?;
+
+                // validate each replica_parents merkle proof
+                {
+                    for i in 0..replica_parents.len() {
+                        PoRCircuit::synthesize(
+                            cs.namespace(|| format!("parent_inclusion_{}", i)),
+                            &params,
+                            replica_parents[i],
+                            replica_parents_paths[i].clone(),
+                            replica_root,
+                        )?;
+                    }
                 }
             }
 
-            // validate data node commitment
-            PoRCircuit::synthesize(
-                cs.namespace(|| "data node commitment"),
-                &params,
-                *data_node,
-                data_node_path.clone(),
-                data_root,
-            )?;
-
-            // get the parents into bits
-            let parents_bits: Vec<Vec<Boolean>> = {
-                let mut cs = cs.namespace(|| "parents to bits");
-                replica_parents
-                    .into_iter()
-                    .enumerate()
-                    .map(|(i, val)| -> Result<Vec<Boolean>, SynthesisError> {
-                        let mut v = boolean::field_into_boolean_vec_le(
-                            cs.namespace(|| format!("parent {}", i)),
-                            *val,
-                        )?;
-                        // sad padding is sad
-                        while v.len() < 256 {
-                            v.push(boolean::Boolean::Constant(false));
-                        }
-                        Ok(v)
-                    }).collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?
-            };
-
-            // generate the encryption key
-            let key = kdf(
-                cs.namespace(|| "kdf"),
-                &params,
-                replica_id_bits.clone(),
-                parents_bits,
-                degree,
-            )?;
-
-            let decoded = sloth::decode(
-                cs.namespace(|| "decode replica node commitment"),
-                &key,
-                *replica_node,
-                self.sloth_iter,
-            )?;
-
-            let expected = num::AllocatedNum::alloc(cs.namespace(|| "data node"), || {
-                data_node.ok_or_else(|| SynthesisError::AssignmentMissing)
-            })?;
-
-            // ensure the encrypted data and data_node match
+            // Encoding checks
             {
-                constraint::equal(
-                    cs,
-                    || "encrypted matches data_node constraint",
-                    &expected,
-                    &decoded,
-                );
+                let mut cs = cs.namespace(|| "encoding_checks");
+                // get the parents into bits
+                let parents_bits: Vec<Vec<Boolean>> = {
+                    replica_parents
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, val)| -> Result<Vec<Boolean>, SynthesisError> {
+                            let mut v = boolean::field_into_boolean_vec_le(
+                                cs.namespace(|| format!("parents_{}_bits", i)),
+                                *val,
+                            )?;
+                            // sad padding is sad
+                            while v.len() < 256 {
+                                v.push(boolean::Boolean::Constant(false));
+                            }
+                            Ok(v)
+                        }).collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?
+                };
+
+                // generate the encryption key
+                let key = kdf(
+                    cs.namespace(|| "kdf"),
+                    &params,
+                    prover_id_bits.clone(),
+                    parents_bits,
+                    degree,
+                )?;
+
+                let decoded = sloth::decode(
+                    cs.namespace(|| "sloth_decode"),
+                    &key,
+                    *replica_node,
+                    self.sloth_iter,
+                )?;
+
+                // TODO this should not be here, instead, this should be the leaf Fr in the data_auth_path
+                // TODO also note that we need to change/makesurethat the leaves are the data, instead of hashes of the data
+                let expected = num::AllocatedNum::alloc(cs.namespace(|| "data node"), || {
+                    data_node.ok_or_else(|| SynthesisError::AssignmentMissing)
+                })?;
+
+                // ensure the encrypted data and data_node match
+                {
+                    constraint::equal(
+                        cs,
+                        || "equality",
+                        |lc| lc + expected.get_variable(),
+                        |lc| lc + CS::one(),
+                        |lc| lc + decoded.get_variable(),
+                    );
+                }
             }
         }
         // profit!

@@ -26,7 +26,7 @@ where
 
     assert_eq!(ciphertexts.len(), 8 * 32 * (1 + m), "invalid input length");
 
-    pedersen_md_no_padding(cs.namespace(|| "pedersen"), params, ciphertexts.as_slice())
+    pedersen_md_no_padding(cs.namespace(|| "key"), params, ciphertexts.as_slice())
 }
 
 #[cfg(test)]
@@ -64,7 +64,8 @@ mod tests {
             .map(|(i, p)| {
                 let mut cs = cs.namespace(|| format!("parents {}", i));
                 bytes_into_boolean_vec(&mut cs, Some(p.as_slice()), p.len()).unwrap()
-            }).collect();
+            })
+            .collect();
         let out = kdf(
             cs.namespace(|| "kdf"),
             &params,
