@@ -1,22 +1,8 @@
 use libc;
-use rand::{thread_rng, Rng};
 use std::borrow::Cow;
 use std::ffi::CStr;
 use std::path::PathBuf;
 use std::slice;
-
-// creates a string of size len containing uppercase alpha-chars
-pub fn rand_alpha_string(len: u8) -> String {
-    let mut str = String::new();
-    let mut rng = thread_rng();
-
-    for _ in 0..len {
-        let ch = rng.gen_range(b'A', b'Z') as char;
-        str.push(ch);
-    }
-
-    str
-}
 
 // cast from mutable to constant reference
 pub unsafe fn cast_const<'a, T>(x: *mut T) -> &'a T {

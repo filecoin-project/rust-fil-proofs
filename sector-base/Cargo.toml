@@ -1,0 +1,18 @@
+[package]
+name = "sector-base"
+version = "0.1.0"
+authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["rlib", "dylib"]
+
+[dependencies]
+libc = "0.2"
+rand = "0.5"
+
+[dev-dependencies]
+tempfile = "*"
+
+[build-dependencies]
+cbindgen = "0.6.1"

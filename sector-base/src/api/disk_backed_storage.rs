@@ -1,12 +1,15 @@
-use api::sss::SectorStore;
-use api::util;
-use libc;
 use std::ffi::CString;
 use std::fs::{create_dir_all, metadata, File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::mem::forget;
 use std::path::Path;
 use std::slice;
+
+use libc;
+
+use api::SectorStore;
+
+use super::{rand_alpha_string, str_from_c};
 
 pub struct DiskBackedStorage {
     staging_path: String,
@@ -26,8 +29,8 @@ pub unsafe extern "C" fn init_disk_backed_storage(
     sealed_dir_path: *const libc::c_char,
 ) -> *mut Box<SectorStore> {
     let m = DiskBackedStorage {
-        sealed_path: String::from(util::str_from_c(sealed_dir_path)),
-        staging_path: String::from(util::str_from_c(staging_dir_path)),
+        sealed_path: String::from(str_from_c(sealed_dir_path)),
+        staging_path: String::from(str_from_c(staging_dir_path)),
     };
 
     Box::into_raw(Box::new(Box::new(m)))
@@ -36,7 +39,7 @@ pub unsafe extern "C" fn init_disk_backed_storage(
 impl SectorStore for DiskBackedStorage {
     unsafe fn new_sealed_sector_access(&self) -> *const libc::c_char {
         let path = Path::new(&self.sealed_path);
-        let pbuf = path.join(util::rand_alpha_string(32));
+        let pbuf = path.join(rand_alpha_string(32));
 
         let create_result = match create_dir_all(&path) {
             Ok(_) => match File::create(&pbuf) {
@@ -60,7 +63,7 @@ impl SectorStore for DiskBackedStorage {
 
     unsafe fn new_staging_sector_access(&self) -> *const libc::c_char {
         let path = Path::new(&self.staging_path);
-        let pbuf = path.join(util::rand_alpha_string(32));
+        let pbuf = path.join(rand_alpha_string(32));
 
         let create_result = match create_dir_all(&path) {
             Ok(_) => match File::create(&pbuf) {
@@ -83,7 +86,7 @@ impl SectorStore for DiskBackedStorage {
     }
 
     unsafe fn num_unsealed_bytes(&self, access: *const libc::c_char, result_ptr: *mut u64) -> u8 {
-        let path = String::from(util::str_from_c(access));
+        let path = String::from(str_from_c(access));
 
         match metadata(path) {
             Ok(m) => {
@@ -96,7 +99,7 @@ impl SectorStore for DiskBackedStorage {
     }
 
     unsafe fn truncate_unsealed(&self, access: *const libc::c_char, size: u64) -> u8 {
-        let path = String::from(util::str_from_c(access));
+        let path = String::from(str_from_c(access));
 
         let access_open_opts = OpenOptions::new().write(true).open(path);
 
@@ -118,7 +121,7 @@ impl SectorStore for DiskBackedStorage {
     ) -> u8 {
         let data = slice::from_raw_parts(data_ptr as *const u8, data_len as usize);
 
-        let path = String::from(util::str_from_c(access));
+        let path = String::from(str_from_c(access));
 
         let access_open_opts = OpenOptions::new().read(true).append(true).open(path);
 
@@ -142,17 +145,17 @@ impl SectorStore for DiskBackedStorage {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use api::sss::disk_backed_storage::init_disk_backed_storage;
-    use api::sss::{
-        new_staging_sector_access, num_unsealed_bytes, truncate_unsealed, write_unsealed,
-    };
-    use api::util;
-    use api::SectorAccess;
     use std::ffi::CString;
     use std::fs::{create_dir_all, File};
     use std::io::Read;
     use tempfile;
+
+    use super::super::pbuf_from_c;
+    use super::*;
+
+    use api::disk_backed_storage::init_disk_backed_storage;
+    use api::SectorAccess;
+    use api::{new_staging_sector_access, num_unsealed_bytes, truncate_unsealed, write_unsealed};
 
     fn rust_str_to_c_str(s: &str) -> *const libc::c_char {
         CString::new(s).unwrap().into_raw()
@@ -172,7 +175,7 @@ mod tests {
     }
 
     fn read_all_bytes(access: SectorAccess) -> Vec<u8> {
-        let pbuf = unsafe { util::pbuf_from_c(access) };
+        let pbuf = unsafe { pbuf_from_c(access) };
         let mut file = File::open(pbuf).unwrap();
         let mut buf = Vec::new();
         file.read_to_end(&mut buf).unwrap();

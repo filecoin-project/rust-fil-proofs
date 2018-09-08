@@ -1,6 +1,5 @@
 extern crate bellman;
 extern crate pairing;
-extern crate proofs;
 extern crate rand;
 extern crate sapling_crypto;
 #[macro_use]
@@ -8,39 +7,20 @@ extern crate log;
 #[macro_use]
 extern crate clap;
 extern crate env_logger;
-extern crate memmap;
-extern crate tempfile;
+
+extern crate storage_proofs;
 
 use clap::{App, Arg};
 use pairing::bls12_381::Bls12;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::time::{Duration, Instant};
 
-use proofs::drgporep::*;
-use proofs::drgraph::*;
-use proofs::example_helper::{init_logger, prettyb};
-use proofs::fr32::{bytes_into_fr, fr_into_bytes};
-use proofs::porep::PoRep;
-use proofs::proof::ProofScheme;
-
-use memmap::MmapMut;
-use memmap::MmapOptions;
-use std::fs::File;
-use std::io::Write;
-
-fn file_backed_mmap_from_random_bytes(n: usize) -> MmapMut {
-    let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-    let mut tmpfile: File = tempfile::tempfile().unwrap();
-
-    // FIXME: Don't materialize the data first: just write it to disk.
-    for _ in 0..n {
-        tmpfile
-            .write_all(&fr_into_bytes::<Bls12>(&rng.gen()))
-            .unwrap();
-    }
-
-    unsafe { MmapOptions::new().map_mut(&tmpfile).unwrap() }
-}
+use storage_proofs::drgporep::*;
+use storage_proofs::drgraph::*;
+use storage_proofs::example_helper::{init_logger, prettyb};
+use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes};
+use storage_proofs::porep::PoRep;
+use storage_proofs::proof::ProofScheme;
 
 fn do_the_work(data_size: usize, m: usize, sloth_iter: usize, challenge_count: usize) {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
@@ -56,8 +36,9 @@ fn do_the_work(data_size: usize, m: usize, sloth_iter: usize, challenge_count: u
     let nodes = data_size / lambda;
 
     let prover_id = fr_into_bytes::<Bls12>(&rng.gen());
-
-    let mut mmapped = file_backed_mmap_from_random_bytes(nodes);
+    let mut data: Vec<u8> = (0..nodes)
+        .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+        .collect();
 
     let sp = SetupParams {
         lambda,
@@ -77,7 +58,7 @@ fn do_the_work(data_size: usize, m: usize, sloth_iter: usize, challenge_count: u
     let mut param_duration = Duration::new(0, 0);
 
     info!("running replicate");
-    let (tau, aux) = DrgPoRep::replicate(&pp, prover_id.as_slice(), &mut mmapped).unwrap();
+    let (tau, aux) = DrgPoRep::replicate(&pp, prover_id.as_slice(), data.as_mut_slice()).unwrap();
 
     let pub_inputs = PublicInputs {
         prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
@@ -86,7 +67,7 @@ fn do_the_work(data_size: usize, m: usize, sloth_iter: usize, challenge_count: u
     };
 
     let priv_inputs = PrivateInputs {
-        replica: &mmapped,
+        replica: data.as_slice(),
         aux: &aux,
     };
 

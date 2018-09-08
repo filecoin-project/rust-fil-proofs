@@ -3,7 +3,7 @@ version: 2
 jobs:
   cargo_fetch:
     docker:
-      - image: clwk/rust:latest
+      - image: dignifiedquire/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -12,7 +12,7 @@ jobs:
           command: cargo generate-lockfile
       - restore_cache:
           keys:
-            - cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v2-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run: cargo update
       - run: cargo fetch
       - persist_to_workspace:
@@ -20,13 +20,13 @@ jobs:
           paths:
             - Cargo.lock
       - save_cache:
-          key: cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+          key: cargo-v2-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
           paths:
             - /root/.cargo
             - /root/.rustup
   test:
     docker:
-      - image: clwk/rust:latest
+      - image: dignifiedquire/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -34,13 +34,13 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v2-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_cache:
           keys:
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (stable)
-          command: cargo +stable test --verbose --frozen
+          command: cargo +stable test --verbose --frozen --all
           no_output_timeout: 15m
       - run:
           name: Prune the output files
@@ -54,7 +54,7 @@ jobs:
             - target/debug/*
   test_release:
     docker:
-      - image: clwk/rust:latest
+      - image: dignifiedquire/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -62,18 +62,18 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v2-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (stable) in release profile
-          command: cargo +stable test --verbose --release --frozen
+          command: cargo +stable test --verbose --release --frozen --all
       - save_cache:
           key: parameter-cache-{{ .Revision }}
           paths:
             - /root/.filecoin-parameter-cache
   test_nightly:
     docker:
-      - image: clwk/rust:latest
+      - image: dignifiedquire/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -81,17 +81,17 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v2-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_cache:
           keys:
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (nightly)
-          command: cargo +nightly test --verbose --frozen
+          command: cargo +nightly test --verbose --frozen --all
           no_output_timeout: 15m
   rustfmt:
     docker:
-      - image: clwk/rust:latest
+      - image: dignifiedquire/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -99,14 +99,14 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v2-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
           name: Run cargo fmt
-          command: cargo fmt -- --check
+          command: cargo fmt --all -- --check
 
   clippy:
     docker:
-      - image: clwk/rust:latest
+      - image: dignifiedquire/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -114,10 +114,10 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v1-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v2-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
           name: Run cargo clippy
-          command: cargo clippy
+          command: cargo clippy --all
 
 workflows:
   version: 2

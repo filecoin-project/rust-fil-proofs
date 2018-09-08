@@ -1,20 +1,21 @@
 extern crate bellman;
 extern crate pairing;
 extern crate pbr;
-extern crate proofs;
 extern crate rand;
 extern crate sapling_crypto;
+
+extern crate storage_proofs;
 
 use bellman::groth16::*;
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use pairing::bls12_381::Bls12;
-use proofs::example_helper::Example;
 use rand::Rng;
 use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 
-use proofs::circuit;
-use proofs::circuit::bench::BenchCS;
-use proofs::test_helper::fake_drgpoprep_proof;
+use storage_proofs::circuit;
+use storage_proofs::circuit::bench::BenchCS;
+use storage_proofs::example_helper::Example;
+use storage_proofs::test_helper::fake_drgpoprep_proof;
 
 struct DrgPoRepExample<'a, E: JubjubEngine> {
     params: &'a E::Params,

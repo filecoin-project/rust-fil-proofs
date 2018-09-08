@@ -1,7 +1,15 @@
+use std::borrow::Cow;
+use std::ffi::CStr;
+use std::path::PathBuf;
+
+use libc;
+use rand::{thread_rng, Rng};
+
 pub mod disk_backed_storage;
 
-use api::StatusCode;
-use libc;
+pub type SectorAccess = *const libc::c_char;
+
+type StatusCode = u8;
 
 pub trait SectorStore {
     unsafe fn new_sealed_sector_access(&self) -> *const libc::c_char;
@@ -22,7 +30,7 @@ pub trait SectorStore {
 /// # Arguments
 ///
 /// * `ss_ptr` - pointer to a boxed SectorStore
-/// ```
+///
 #[no_mangle]
 pub unsafe extern "C" fn destroy_storage(ss_ptr: *mut Box<SectorStore>) -> () {
     let _ = Box::from_raw(ss_ptr);
@@ -120,4 +128,31 @@ pub unsafe extern "C" fn num_unsealed_bytes(
 ) -> StatusCode {
     let m = &mut *ss_ptr;
     m.num_unsealed_bytes(access, result_ptr)
+}
+
+// transmutes a C string to a copy-on-write Rust string
+pub unsafe fn str_from_c<'a>(x: *const libc::c_char) -> Cow<'a, str> {
+    use std::borrow::Cow;
+    if x.is_null() {
+        Cow::from("")
+    } else {
+        CStr::from_ptr(x).to_string_lossy()
+    }
+}
+// creates a string of size len containing uppercase alpha-chars
+pub fn rand_alpha_string(len: u8) -> String {
+    let mut str = String::new();
+    let mut rng = thread_rng();
+
+    for _ in 0..len {
+        let ch = rng.gen_range(b'A', b'Z') as char;
+        str.push(ch);
+    }
+
+    str
+}
+
+// transmutes a C string to a PathBuf
+pub unsafe fn pbuf_from_c(x: *const libc::c_char) -> PathBuf {
+    PathBuf::from(String::from(str_from_c(x)))
 }

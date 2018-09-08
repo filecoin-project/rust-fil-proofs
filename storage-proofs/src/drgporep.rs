@@ -564,11 +564,11 @@ mod tests {
                 // Parent vector claiming the wrong parents.
                 let fake_parents = vec![
                     real_parents[0]
-                    .iter()
-                    // Incrementing each parent node will give us a different parent set.
-                    // It's fine to be out of range, since this only needs to fail.
-                    .map(|(i, data_proof)| (i + 1, data_proof.clone()))
-                    .collect::<Vec<_>>(),
+                        .iter()
+                        // Incrementing each parent node will give us a different parent set.
+                        // It's fine to be out of range, since this only needs to fail.
+                        .map(|(i, data_proof)| (i + 1, data_proof.clone()))
+                        .collect::<Vec<_>>(),
                 ];
 
                 let proof = Proof::new(

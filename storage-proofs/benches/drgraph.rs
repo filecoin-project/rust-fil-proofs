@@ -1,9 +1,9 @@
 #[macro_use]
 extern crate criterion;
-extern crate proofs;
+extern crate storage_proofs;
 
 use criterion::{black_box, Criterion, ParameterizedBenchmark};
-use proofs::drgraph::*;
+use storage_proofs::drgraph::*;
 
 fn drgraph(c: &mut Criterion) {
     let params: Vec<_> = vec![12, 24, 128, 1024]

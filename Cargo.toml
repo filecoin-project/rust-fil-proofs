@@ -4,60 +4,19 @@ version = "0.1.0"
 authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
 license = "MIT OR Apache-2.0"
 
-[lib]
-crate-type = ["rlib", "dylib"]
-
 [dependencies]
-bitvec = "0.5"
-sapling-crypto = { git = "https://github.com/zcash-hackworks/sapling-crypto", branch = "master" }
-rand = "0.4"
-libc = "0.2"
-merkle_light = { git = "https://github.com/dignifiedquire/merkle_light", branch = "master" }
-failure = "0.1"
-bellman = "0.1"
-byteorder = "1"
-itertools = "0.7.3"
-lazy_static = "1.0"
-memmap = "0.6"
-num-bigint = "0.2"
-num-traits = "0.2"
-clap = "2"
-log = "0.4"
-env_logger = "0.5"
-colored = "1.6"
-aes = "0.1"
-block-modes = "0.1"
-sha2 = "0.7"
-pbr = "1.0"
-tempfile = "3"
-fs2 = "0.4"
+filecoin-proofs = { path = "./filecoin-proofs" }
+storage-proofs = { path = "./storage-proofs" }
+sector-base = { path = "./sector-base" }
+storage-backend = { path = "./storage-backend" }
 
-[dependencies.pairing]
-version = "0.14.2"
-features = ["expose-arith"]
-
-[dependencies.blake2-rfc]
-git = "https://github.com/gtank/blake2-rfc"
-rev = "c7c458429c429b81fea845421f5ab859710fa8af"
-
-[features]
-default = ["u128-support"]
-u128-support = ["pairing/u128-support"]
-
-[dev-dependencies]
-criterion = "0.2.3"
-proptest = "0.7"
-
-[build-dependencies]
-cbindgen = "0.6.1"
-
-[[bench]]
-name = "pedersen"
-harness = false
-
-[[bench]]
-name = "drgraph"
-harness = false
+[workspace]
+members = [
+  "filecoin-proofs",
+  "storage-proofs",
+  "sector-base",
+  "storage-backend",
+]
 
 [profile.test]
 opt-level = 1

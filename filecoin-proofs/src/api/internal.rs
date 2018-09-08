@@ -1,25 +1,28 @@
-use bellman::groth16;
-use circuit::zigzag::ZigZagCompound;
-use compound_proof::{self, CompoundProof};
-use drgporep::{self, DrgParams};
-use drgraph::new_seed;
-use error::Result;
-use fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
-use hasher::pedersen::PedersenHash;
-use layered_drgporep::{self, simplify_tau};
-use pairing::bls12_381::Bls12;
-use pairing::Engine;
-use parameter_cache::{parameter_cache_path, read_cached_params, write_params_to_cache};
-use porep::{PoRep, Tau};
-use proof::ProofScheme;
-use sapling_crypto::jubjub::JubjubBls12;
-use zigzag_drgporep::ZigZagDrgPoRep;
-use zigzag_graph::ZigZagBucketGraph;
-
 use std::fs::File;
 use std::io::Write;
 use std::io::{BufWriter, Read};
 use std::path::PathBuf;
+
+use bellman::groth16;
+use pairing::bls12_381::Bls12;
+use pairing::Engine;
+use sapling_crypto::jubjub::JubjubBls12;
+
+use storage_proofs::circuit::zigzag::ZigZagCompound;
+use storage_proofs::compound_proof::{self, CompoundProof};
+use storage_proofs::drgporep::{self, DrgParams};
+use storage_proofs::drgraph::new_seed;
+use storage_proofs::error::Result;
+use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
+use storage_proofs::hasher::pedersen::PedersenHash;
+use storage_proofs::layered_drgporep::{self, simplify_tau};
+use storage_proofs::parameter_cache::{
+    parameter_cache_path, read_cached_params, write_params_to_cache,
+};
+use storage_proofs::porep::{PoRep, Tau};
+use storage_proofs::proof::ProofScheme;
+use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
+use storage_proofs::zigzag_graph::ZigZagBucketGraph;
 
 type Commitment = [u8; 32];
 

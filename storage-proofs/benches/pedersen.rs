@@ -3,20 +3,21 @@ extern crate criterion;
 extern crate bellman;
 extern crate bitvec;
 extern crate pairing;
-extern crate proofs;
 extern crate rand;
 extern crate sapling_crypto;
+extern crate storage_proofs;
 
 use bellman::groth16::*;
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use circuit::bench::BenchCS;
 use criterion::{black_box, Criterion, ParameterizedBenchmark};
 use pairing::bls12_381::Bls12;
-use proofs::circuit;
-use proofs::crypto::pedersen;
 use rand::{thread_rng, Rng};
 use sapling_crypto::circuit::boolean::{self, Boolean};
 use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
+
+use storage_proofs::circuit;
+use storage_proofs::crypto::pedersen;
 
 struct PedersenExample<'a, E: JubjubEngine> {
     params: &'a E::Params,

@@ -1,11 +1,11 @@
-pub mod sss;
-pub mod util;
-
-use libc;
 use std::ffi::CString;
 use std::mem::forget;
 
+use libc;
+use sector_base::api::SectorAccess;
+
 mod internal;
+pub mod util;
 
 type StatusCode = u8;
 
@@ -18,7 +18,6 @@ type SealResultPtr = *const u8;
 type CommitmentPtr = *const u8;
 type SnarkProofPtr = *const u8;
 type GetUnsealedRangeResultPtr = *mut u64;
-type SectorAccess = *const libc::c_char;
 
 /// These are also defined in api::internal, but we make them explicit here for API consumers.
 /// How big, in bytes, is a SNARK proof?
@@ -38,7 +37,6 @@ pub const SECTOR_BYTES: u64 = 64;
 ///                           mutated by seal in order to pass commitments back
 ///                           to caller (first 32 elements correspond to comm_r
 ///                           and second 32 to comm_d)
-/// ```
 #[no_mangle]
 pub unsafe extern "C" fn seal(
     unsealed_path: SectorAccess,
@@ -65,12 +63,12 @@ pub unsafe extern "C" fn seal(
             // let caller manage this memory, preventing the need for calling back into
             // Rust code later to deallocate
             for x in 0..32 {
-                *(result_ptr.offset(x as isize) as *mut u8) = comm_r[x];
-                *(result_ptr.offset((x + 32) as isize) as *mut u8) = comm_d[x];
+                *(result_ptr.add(x) as *mut u8) = comm_r[x];
+                *(result_ptr.add(x + 32) as *mut u8) = comm_d[x];
             }
 
             for (i, elt) in snark_proof.iter().enumerate() {
-                *(result_ptr.offset((i + 64) as isize) as *mut u8) = *elt;
+                *(result_ptr.add(i + 64) as *mut u8) = *elt;
             }
 
             0
@@ -93,7 +91,6 @@ pub unsafe extern "C" fn seal(
 /// * `prover_id_ptr`      - pointer to first cell in a 31-length array of u8
 /// * `challenge_seed_ptr` - pointer to first cell in a 32-length array of u8
 /// * `proof_ptr`          - pointer to first cell in a SNARK_BYTES-length array of u8
-/// ```
 #[no_mangle]
 pub unsafe extern "C" fn verify_seal(
     comm_r_ptr: CommitmentPtr,
@@ -122,7 +119,6 @@ pub unsafe extern "C" fn verify_seal(
 /// # Arguments
 ///
 /// * `status_code` - a status code returned from an FPS operation, such as seal or verify_seal
-/// ```
 #[no_mangle]
 pub extern "C" fn status_to_string(status_code: StatusCode) -> *const libc::c_char {
     let s = match status_code {
@@ -165,7 +161,6 @@ pub extern "C" fn status_to_string(status_code: StatusCode) -> *const libc::c_ch
 /// * `prover_id_ptr`- pointer to first cell in a 31-length array of u8
 /// * `result_ptr`   - pointer to a u64, mutated by get_unsealed_range in order to communicate the number of
 ///                    bytes that were unsealed and written to the output_path
-/// ```
 #[no_mangle]
 pub unsafe extern "C" fn get_unsealed_range(
     sealed_path: SectorAccess,
@@ -202,7 +197,6 @@ pub unsafe extern "C" fn get_unsealed_range(
 /// * `sealed_path`  - path of sealed sector-file
 /// * `output_path`  - path where sector file's unsealed bytes should be written
 /// * `prover_id_ptr`- pointer to first cell in a 31-length array of u8
-/// ```
 #[no_mangle]
 pub unsafe extern "C" fn get_unsealed(
     sealed_path: SectorAccess,
@@ -242,8 +236,9 @@ pub extern "C" fn verifyPost() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use api::sss::disk_backed_storage::init_disk_backed_storage;
-    use api::sss::{
+
+    use sector_base::api::disk_backed_storage::init_disk_backed_storage;
+    use sector_base::api::{
         new_sealed_sector_access, new_staging_sector_access, write_unsealed, SectorStore,
     };
     use std::ffi::CString;

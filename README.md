@@ -1,5 +1,16 @@
 # Proofs for Filecoin in Rust
 
+This is a collection of crates, that implement the various aspects of generating proofs,
+for Filecoin.
+
+There are currently four different crates.
+
+- [Filecoin Proofs](./filecoin-proofs)
+- [Storage Proofs](./storage-proofs)
+- [Sector Base](./sector-base)
+- [Storage Backend](./storage-backend)
+
+
 ## Install and configure Rust
 
 [Install Rust.](https://www.rust-lang.org/en-US/install.html)
@@ -13,31 +24,15 @@ Configure to use nightly:
 ## Build
 
 ```
-> cargo build --release --features u128-support
+> cargo build --release --all
 ```
 
 ## Test
 
 ```
-> cargo test
+> cargo test --all
 ```
 
-
-## Examples
-
-Build
-
-```
-> cargo build --examples --release --features u128-support
-```
-
-Running them
-
-```
-> ./target/release/examples/merklepor
-> ./target/release/examples/drgporep
-> ./target/release/examples/drgporep-vanilla
-```
 
 ## License
 
