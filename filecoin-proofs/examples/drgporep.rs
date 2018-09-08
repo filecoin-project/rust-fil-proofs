@@ -14,6 +14,7 @@ use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 
 use storage_proofs::circuit;
 use storage_proofs::circuit::bench::BenchCS;
+use storage_proofs::circuit::test::TestConstraintSystem;
 use storage_proofs::example_helper::Example;
 use storage_proofs::test_helper::fake_drgpoprep_proof;
 
@@ -60,6 +61,45 @@ struct DrgPoRepApp {}
 const SLOTH_ROUNDS: usize = 1;
 
 impl DrgPoRepApp {
+    fn create_test_circuit<R: Rng>(
+        &mut self,
+        rng: &mut R,
+        engine_params: &JubjubBls12,
+        tree_depth: usize,
+        challenge_count: usize,
+        _leaves: usize,
+        lambda: usize,
+        m: usize,
+        sloth_iter: usize,
+    ) -> TestConstraintSystem<Bls12> {
+        let f = fake_drgpoprep_proof(rng, tree_depth, m, SLOTH_ROUNDS, challenge_count);
+
+        // create an instance of our circut (with the witness)
+        let c = DrgPoRepExample {
+            params: engine_params,
+            lambda: lambda * 8,
+            sloth_iter,
+            replica_nodes: f.replica_nodes.into_iter().map(|r| Some(r)).collect(),
+            replica_nodes_paths: f.replica_nodes_paths,
+            replica_root: Some(f.replica_root),
+            replica_parents: f
+                .replica_parents
+                .iter()
+                .map(|parents| parents.iter().map(|parent| Some(*parent)).collect())
+                .collect(),
+            replica_parents_paths: f.replica_parents_paths,
+            data_nodes: f.data_nodes.into_iter().map(|d| Some(d)).collect(),
+            data_nodes_paths: f.data_nodes_paths,
+            data_root: Some(f.data_root),
+            prover_id: Some(f.prover_id),
+            m,
+        };
+
+        let mut cs = TestConstraintSystem::<Bls12>::new();
+        c.synthesize(&mut cs).expect("failed to synthesize circuit");
+        cs
+    }
+
     fn create_bench_circuit<R: Rng>(
         &mut self,
         rng: &mut R,
@@ -211,6 +251,31 @@ impl Example<Bls12> for DrgPoRepApp {
             m,
             sloth_iter,
         );
+    }
+
+    fn pretty_print<R: Rng>(
+        &mut self,
+        rng: &mut R,
+        engine_params: &JubjubBls12,
+        tree_depth: usize,
+        challenge_count: usize,
+        leaves: usize,
+        lambda: usize,
+        m: usize,
+        sloth_iter: usize,
+    ) {
+        let cs = self.create_test_circuit(
+            rng,
+            engine_params,
+            tree_depth,
+            challenge_count,
+            leaves,
+            lambda,
+            m,
+            sloth_iter,
+        );
+
+        println!("{}", cs.pretty_print());
     }
 
     fn get_num_constraints<R: Rng>(

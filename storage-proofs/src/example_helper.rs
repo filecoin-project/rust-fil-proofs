@@ -26,8 +26,7 @@ pub fn prettyb(num: usize) -> String {
     );
     let pretty_bytes = format!("{:.2}", num / delimiter.powi(exponent))
         .parse::<f64>()
-        .unwrap()
-        * 1_f64;
+        .unwrap() * 1_f64;
     let unit = units[exponent as usize];
     format!("{}{} {}", negative, pretty_bytes, unit)
 }
@@ -53,7 +52,8 @@ pub fn init_logger() {
                 record.target(),
                 record.args()
             )
-        }).init();
+        })
+        .init();
 }
 
 /// Generate a unique cache path, based on the inputs.
@@ -79,6 +79,7 @@ fn get_cache_path(
 pub enum CSType {
     Groth,
     Bench,
+    Circuit,
 }
 
 /// A trait that makes it easy to implement "Examples". These are really tunable benchmarking CLI tools.
@@ -203,6 +204,40 @@ pub trait Example<E: JubjubEngine>: Default {
         info!(".")
     }
 
+    fn work_circuit(
+        &mut self,
+        typ: CSType,
+        data_size: usize,
+        challenge_count: usize,
+        m: usize,
+        sloth_iter: usize,
+    ) {
+        let engine_params = Self::generate_engine_params();
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let lambda = 32;
+        let leaves = data_size / 32;
+        let tree_depth = (leaves as f64).log2().ceil() as usize;
+
+        info!(target: "config", "constraint system: {:?}", typ);
+        info!(target: "config", "data size:  {}", prettyb(data_size));
+        info!(target: "config", "challenge count: {}", challenge_count);
+        info!(target: "config", "m: {}", m);
+        info!(target: "config", "sloth: {}", sloth_iter);
+        info!(target: "config", "tree depth: {}", tree_depth);
+
+        self.pretty_print(
+            rng,
+            &engine_params,
+            tree_depth,
+            challenge_count,
+            leaves,
+            lambda,
+            m,
+            sloth_iter,
+        );
+    }
+
     fn work_bench(
         &mut self,
         typ: CSType,
@@ -286,31 +321,38 @@ pub trait Example<E: JubjubEngine>: Default {
                     .long("size")
                     .help("The data size in KB")
                     .takes_value(true),
-            ).arg(
+            )
+            .arg(
                 Arg::with_name("challenges")
                     .long("challenges")
                     .help("How many challenges to execute, defaults to 1")
                     .default_value("1")
                     .takes_value(true),
-            ).arg(
+            )
+            .arg(
                 Arg::with_name("m")
                     .help("The size of m")
                     .long("m")
                     .default_value("6")
                     .takes_value(true),
-            ).arg(
+            )
+            .arg(
                 Arg::with_name("sloth")
                     .help("The number of sloth iterations, defaults to 1")
                     .long("sloth")
                     .default_value("1")
                     .takes_value(true),
-            ).subcommand(
+            )
+            .subcommand(
                 SubCommand::with_name("groth")
                     .about("execute circuits using groth constraint system"),
-            ).subcommand(
+            )
+            .subcommand(
                 SubCommand::with_name("bench")
                     .about("execute circuits using a minimal benchmarking constraint"),
-            ).get_matches()
+            )
+            .subcommand(SubCommand::with_name("circuit").about("print the constraint system"))
+            .get_matches()
     }
 
     fn main() {
@@ -330,6 +372,7 @@ pub trait Example<E: JubjubEngine>: Default {
             let typ = match matches.subcommand_name() {
                 Some("groth") => CSType::Groth,
                 Some("bench") => CSType::Bench,
+                Some("circuit") => CSType::Circuit,
                 _ => panic!("please select a valid subcommand"),
             };
 
@@ -339,6 +382,9 @@ pub trait Example<E: JubjubEngine>: Default {
         match typ {
             CSType::Groth => instance.work_groth(typ, data_size, challenge_count, m, sloth_iter),
             CSType::Bench => instance.work_bench(typ, data_size, challenge_count, m, sloth_iter),
+            CSType::Circuit => {
+                instance.work_circuit(typ, data_size, challenge_count, m, sloth_iter)
+            }
         }
     }
 
@@ -382,6 +428,18 @@ pub trait Example<E: JubjubEngine>: Default {
 
     /// Create a new bench
     fn create_bench<R: Rng>(
+        &mut self,
+        &mut R,
+        &E::Params,
+        usize,
+        usize,
+        usize,
+        usize,
+        usize,
+        usize,
+    );
+
+    fn pretty_print<R: Rng>(
         &mut self,
         &mut R,
         &E::Params,

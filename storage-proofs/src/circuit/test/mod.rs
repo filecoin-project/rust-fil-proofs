@@ -165,6 +165,16 @@ impl<E: Engine> TestConstraintSystem<E> {
     pub fn pretty_print(&self) -> String {
         let mut s = String::new();
 
+        for input in &self.inputs {
+            write!(s, "{}\n", input.1).unwrap();
+        }
+        write!(s, "\n\n").unwrap();
+
+        for aux in &self.aux {
+            write!(s, "{}\n", aux.1).unwrap();
+        }
+        write!(s, "\n\n").unwrap();
+
         let negone = {
             let mut tmp = E::Fr::one();
             tmp.negate();
