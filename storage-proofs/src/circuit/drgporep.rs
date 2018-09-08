@@ -5,7 +5,7 @@ use sapling_crypto::circuit::{multipack, num};
 use sapling_crypto::jubjub::JubjubEngine;
 
 use circuit::kdf::kdf;
-use circuit::por::{PoRCircuit, PoRCompound};
+use circuit::por::{self, PoRCompound};
 use circuit::sloth;
 use compound_proof::CompoundProof;
 use drgporep::DrgPoRep;
@@ -272,9 +272,6 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
         let lambda = self.lambda;
 
         let prover_id = self.prover_id;
-        let replica_root = self.replica_root;
-        let data_root = self.data_root;
-
         let degree = self.degree;
 
         let raw_bytes; // Need let here so borrow in match lives long enough.
@@ -294,6 +291,18 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
 
         multipack::pack_into_inputs(cs.namespace(|| "prover_id"), &prover_id_bits)?;
 
+        // Allocate the "real" root that will be exposed.
+        let data_rt = num::AllocatedNum::alloc(cs.namespace(|| "data_root_value"), || {
+            self.data_root.ok_or(SynthesisError::AssignmentMissing)
+        })?;
+        let replica_rt = num::AllocatedNum::alloc(cs.namespace(|| "replica_root_value"), || {
+            self.replica_root.ok_or(SynthesisError::AssignmentMissing)
+        })?;
+
+        // Expose the data_root
+        data_rt.inputize(cs.namespace(|| "data_root"))?;
+        replica_rt.inputize(cs.namespace(|| "replica_root"))?;
+
         for i in 0..self.data_nodes.len() {
             // ensure that all inputs are well formed
             let replica_node_path = &self.replica_nodes_paths[i];
@@ -306,34 +315,34 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
 
             assert_eq!(data_node_path.len(), replica_node_path.len());
 
-            PoRCircuit::synthesize(
+            por::make_circuit(
                 cs.namespace(|| "replica_node merkle proof"),
-                &params,
+                params,
                 *replica_node,
                 replica_node_path.clone(),
-                replica_root,
+                &replica_rt,
             )?;
 
             // validate each replica_parents merkle proof
             {
                 for i in 0..replica_parents.len() {
-                    PoRCircuit::synthesize(
+                    por::make_circuit(
                         cs.namespace(|| format!("replica parent: {}", i)),
-                        &params,
+                        params,
                         replica_parents[i],
                         replica_parents_paths[i].clone(),
-                        replica_root,
+                        &replica_rt,
                     )?;
                 }
             }
 
             // validate data node commitment
-            PoRCircuit::synthesize(
+            por::make_circuit(
                 cs.namespace(|| "data node commitment"),
-                &params,
+                params,
                 *data_node,
                 data_node_path.clone(),
-                data_root,
+                &data_rt,
             )?;
 
             // get the parents into bits
@@ -521,8 +530,8 @@ mod tests {
         }
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_inputs(), 19, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 58118, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 13, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 58112, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
@@ -560,8 +569,8 @@ mod tests {
             m,
         ).expect("failed to synthesize circuit");
 
-        assert_eq!(cs.num_inputs(), 19, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 290294, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 13, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 290288, "wrong number of constraints");
     }
 
     #[test]

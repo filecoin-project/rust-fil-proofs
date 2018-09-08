@@ -98,111 +98,111 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoRCircuit<'a, E> {
     where
         E: JubjubEngine,
     {
-        let params = &self.params;
-        let value = self.value;
-        let auth_path = self.auth_path;
-        let root = self.root;
+        // Allocate the "real" root that will be exposed.
+        let rt = num::AllocatedNum::alloc(cs.namespace(|| "root_value"), || {
+            self.root.ok_or(SynthesisError::AssignmentMissing)
+        })?;
 
-        {
-            let value_num = num::AllocatedNum::alloc(cs.namespace(|| "value"), || {
-                Ok(value.ok_or_else(|| SynthesisError::AssignmentMissing)?)
-            })?;
-            let mut value_bits = value_num.into_bits_le(cs.namespace(|| "value bits"))?;
+        // Expose the data_root
+        rt.inputize(cs.namespace(|| "root"))?;
 
-            // sad face, need to pad to make all algorithms the same
-            while value_bits.len() < 256 {
-                value_bits.push(boolean::Boolean::Constant(false));
-            }
+        make_circuit(cs, self.params, self.value, self.auth_path, &rt)?;
 
-            // Compute the hash of the value
-            let cm = pedersen_hash::pedersen_hash(
-                cs.namespace(|| "value hash"),
-                pedersen_hash::Personalization::NoteCommitment,
-                &value_bits,
-                params,
-            )?;
-
-            // This is an injective encoding, as cur is a
-            // point in the prime order subgroup.
-            let mut cur = cm.get_x().clone();
-
-            let mut auth_path_bits = Vec::with_capacity(auth_path.len());
-
-            // Ascend the merkle tree authentication path
-            for (i, e) in auth_path.into_iter().enumerate() {
-                let cs = &mut cs.namespace(|| format!("merkle tree hash {}", i));
-
-                // Determines if the current subtree is the "right" leaf at this
-                // depth of the tree.
-                let cur_is_right = boolean::Boolean::from(boolean::AllocatedBit::alloc(
-                    cs.namespace(|| "position bit"),
-                    e.map(|e| e.1),
-                )?);
-
-                // Witness the authentication path element adjacent
-                // at this depth.
-                let path_element =
-                    num::AllocatedNum::alloc(cs.namespace(|| "path element"), || {
-                        Ok(e.ok_or(SynthesisError::AssignmentMissing)?.0)
-                    })?;
-
-                // Swap the two if the current subtree is on the right
-                let (xl, xr) = num::AllocatedNum::conditionally_reverse(
-                    cs.namespace(|| "conditional reversal of preimage"),
-                    &cur,
-                    &path_element,
-                    &cur_is_right,
-                )?;
-
-                // We don't need to be strict, because the function is
-                // collision-resistant. If the prover witnesses a congruency,
-                // they will be unable to find an authentication path in the
-                // tree with high probability.
-                let mut preimage = vec![];
-                preimage.extend(xl.into_bits_le(cs.namespace(|| "xl into bits"))?);
-                preimage.extend(xr.into_bits_le(cs.namespace(|| "xr into bits"))?);
-
-                // Compute the new subtree value
-                cur = pedersen_hash::pedersen_hash(
-                    cs.namespace(|| "computation of pedersen hash"),
-                    pedersen_hash::Personalization::MerkleTree(i),
-                    &preimage,
-                    params,
-                )?.get_x()
-                .clone(); // Injective encoding
-
-                auth_path_bits.push(cur_is_right);
-            }
-
-            // allocate input for is_right auth_path
-            multipack::pack_into_inputs(cs.namespace(|| "packed auth_path"), &auth_path_bits)?;
-
-            {
-                // Validate that the root of the merkle tree that we calculated is the same as the input.
-
-                let real_root_value = root;
-
-                // Allocate the "real" root that will be exposed.
-                let rt = num::AllocatedNum::alloc(cs.namespace(|| "root value"), || {
-                    real_root_value.ok_or(SynthesisError::AssignmentMissing)
-                })?;
-
-                // cur  * 1 = rt
-                // enforce cur and rt are equal
-                cs.enforce(
-                    || "enforce root is correct",
-                    |lc| lc + cur.get_variable(),
-                    |lc| lc + CS::one(),
-                    |lc| lc + rt.get_variable(),
-                );
-
-                // Expose the root
-                rt.inputize(cs.namespace(|| "root"))?;
-            }
-
-            Ok(())
-        }
+        Ok(())
     }
+}
+
+pub fn make_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+    mut cs: CS,
+    params: &E::Params,
+    value: Option<E::Fr>,
+    auth_path: Vec<Option<(E::Fr, bool)>>,
+    root: &num::AllocatedNum<E>,
+) -> Result<(), SynthesisError> {
+    let value_num = num::AllocatedNum::alloc(cs.namespace(|| "value"), || {
+        Ok(value.ok_or_else(|| SynthesisError::AssignmentMissing)?)
+    })?;
+    let mut value_bits = value_num.into_bits_le(cs.namespace(|| "value bits"))?;
+
+    // sad face, need to pad to make all algorithms the same
+    while value_bits.len() < 256 {
+        value_bits.push(boolean::Boolean::Constant(false));
+    }
+
+    // Compute the hash of the value
+    let cm = pedersen_hash::pedersen_hash(
+        cs.namespace(|| "value hash"),
+        pedersen_hash::Personalization::NoteCommitment,
+        &value_bits,
+        params,
+    )?;
+
+    // This is an injective encoding, as cur is a
+    // point in the prime order subgroup.
+    let mut cur = cm.get_x().clone();
+
+    let mut auth_path_bits = Vec::with_capacity(auth_path.len());
+
+    // Ascend the merkle tree authentication path
+    for (i, e) in auth_path.into_iter().enumerate() {
+        let cs = &mut cs.namespace(|| format!("merkle tree hash {}", i));
+
+        // Determines if the current subtree is the "right" leaf at this
+        // depth of the tree.
+        let cur_is_right = boolean::Boolean::from(boolean::AllocatedBit::alloc(
+            cs.namespace(|| "position bit"),
+            e.map(|e| e.1),
+        )?);
+
+        // Witness the authentication path element adjacent
+        // at this depth.
+        let path_element = num::AllocatedNum::alloc(cs.namespace(|| "path element"), || {
+            Ok(e.ok_or(SynthesisError::AssignmentMissing)?.0)
+        })?;
+
+        // Swap the two if the current subtree is on the right
+        let (xl, xr) = num::AllocatedNum::conditionally_reverse(
+            cs.namespace(|| "conditional reversal of preimage"),
+            &cur,
+            &path_element,
+            &cur_is_right,
+        )?;
+
+        // We don't need to be strict, because the function is
+        // collision-resistant. If the prover witnesses a congruency,
+        // they will be unable to find an authentication path in the
+        // tree with high probability.
+        let mut preimage = vec![];
+        preimage.extend(xl.into_bits_le(cs.namespace(|| "xl into bits"))?);
+        preimage.extend(xr.into_bits_le(cs.namespace(|| "xr into bits"))?);
+
+        // Compute the new subtree value
+        cur = pedersen_hash::pedersen_hash(
+            cs.namespace(|| "computation of pedersen hash"),
+            pedersen_hash::Personalization::MerkleTree(i),
+            &preimage,
+            params,
+        )?.get_x()
+        .clone(); // Injective encoding
+
+        auth_path_bits.push(cur_is_right);
+    }
+
+    // allocate input for is_right auth_path
+    multipack::pack_into_inputs(cs.namespace(|| "packed auth_path"), &auth_path_bits)?;
+
+    {
+        // cur  * 1 = rt
+        // enforce cur and rt are equal
+        cs.enforce(
+            || "enforce root is correct",
+            |lc| lc + cur.get_variable(),
+            |lc| lc + CS::one(),
+            |lc| lc + root.get_variable(),
+        );
+    }
+
+    Ok(())
 }
 
 impl<'a, E: JubjubEngine> PoRCircuit<'a, E> {

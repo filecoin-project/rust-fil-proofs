@@ -315,7 +315,6 @@ impl<E: Engine> TestConstraintSystem<E> {
     }
 
     pub fn num_inputs(&self) -> usize {
-        println!("inputs: {:?}", self.inputs);
         self.inputs.len()
     }
 

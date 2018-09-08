@@ -251,8 +251,6 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         )?;
 
         let proof = Proof::new(proofs, priv_inputs.tau.clone());
-        println!("proof: {:?}", proof);
-
         Ok(proof)
     }
 
