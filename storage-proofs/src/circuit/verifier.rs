@@ -65,17 +65,27 @@ mod tests {
     use bellman::ConstraintSystem;
     use circuit::test::TestConstraintSystem;
     use pairing::bls12_381::Bls12;
+    use pairing::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
+    use sapling_crypto::circuit::num;
 
-    struct DummyCircuit {}
+    struct DummyCircuit<E: Engine> {
+        arg: Option<E::Fr>,
+    }
 
-    impl<E: Engine> Circuit<E> for DummyCircuit {
+    impl<E: Engine> Circuit<E> for DummyCircuit<E> {
         fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+            let val = num::AllocatedNum::alloc(cs.namespace(|| "val"), || {
+                self.arg.ok_or(SynthesisError::AssignmentMissing)
+            })?;
+
+            val.inputize(cs.namespace(|| "val_input"))?;
+
             cs.enforce(
                 || "1 * 1= 1",
                 |lc| lc + CS::one(),
                 |lc| lc + CS::one(),
-                |lc| lc + CS::one(),
+                |lc| lc + val.get_variable(),
             );
             Ok(())
         }
@@ -85,25 +95,26 @@ mod tests {
     fn verifier_circuit() {
         let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
+        let one = <Bls12 as Engine>::Fr::one();
         let params = {
-            let c = DummyCircuit {};
-            generate_random_parameters(c, &mut rng).unwrap()
+            let c = DummyCircuit::<Bls12> { arg: None };
+            generate_random_parameters(c, &mut rng).expect("failed to create random parameters")
         };
 
         let pvk = prepare_verifying_key(&params.vk);
 
         let proof = {
-            let c = DummyCircuit {};
-            create_random_proof(c, &params, &mut rng).unwrap()
+            let c = DummyCircuit { arg: Some(one) };
+            create_random_proof(c, &params, &mut rng).expect("failed to create proof")
         };
 
-        let public_inputs = vec![];
+        let public_inputs = vec![one];
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
         // Check the proof -- outside the circuit
         assert!(
-            verify_proof(&pvk, &proof, &public_inputs,).unwrap(),
+            verify_proof(&pvk, &proof, &public_inputs).expect("failed to verify proof"),
             "failed to verify proof (non-circuit)"
         );
 
