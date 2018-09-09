@@ -64,8 +64,7 @@ mod tests {
             .map(|(i, p)| {
                 let mut cs = cs.namespace(|| format!("parents {}", i));
                 bytes_into_boolean_vec(&mut cs, Some(p.as_slice()), p.len()).unwrap()
-            })
-            .collect();
+            }).collect();
         let out = kdf(
             cs.namespace(|| "kdf"),
             &params,
