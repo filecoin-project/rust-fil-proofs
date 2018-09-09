@@ -26,7 +26,8 @@ pub fn prettyb(num: usize) -> String {
     );
     let pretty_bytes = format!("{:.2}", num / delimiter.powi(exponent))
         .parse::<f64>()
-        .unwrap() * 1_f64;
+        .unwrap()
+        * 1_f64;
     let unit = units[exponent as usize];
     format!("{}{} {}", negative, pretty_bytes, unit)
 }
@@ -52,8 +53,7 @@ pub fn init_logger() {
                 record.target(),
                 record.args()
             )
-        })
-        .init();
+        }).init();
 }
 
 /// Generate a unique cache path, based on the inputs.
@@ -321,37 +321,31 @@ pub trait Example<E: JubjubEngine>: Default {
                     .long("size")
                     .help("The data size in KB")
                     .takes_value(true),
-            )
-            .arg(
+            ).arg(
                 Arg::with_name("challenges")
                     .long("challenges")
                     .help("How many challenges to execute, defaults to 1")
                     .default_value("1")
                     .takes_value(true),
-            )
-            .arg(
+            ).arg(
                 Arg::with_name("m")
                     .help("The size of m")
                     .long("m")
                     .default_value("6")
                     .takes_value(true),
-            )
-            .arg(
+            ).arg(
                 Arg::with_name("sloth")
                     .help("The number of sloth iterations, defaults to 1")
                     .long("sloth")
                     .default_value("1")
                     .takes_value(true),
-            )
-            .subcommand(
+            ).subcommand(
                 SubCommand::with_name("groth")
                     .about("execute circuits using groth constraint system"),
-            )
-            .subcommand(
+            ).subcommand(
                 SubCommand::with_name("bench")
                     .about("execute circuits using a minimal benchmarking constraint"),
-            )
-            .subcommand(SubCommand::with_name("circuit").about("print the constraint system"))
+            ).subcommand(SubCommand::with_name("circuit").about("print the constraint system"))
             .get_matches()
     }
 
