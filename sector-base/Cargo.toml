@@ -5,7 +5,7 @@ authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
 license = "MIT OR Apache-2.0"
 
 [lib]
-crate-type = ["rlib", "dylib"]
+crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 libc = "0.2"
@@ -15,4 +15,4 @@ rand = "0.5"
 tempfile = "*"
 
 [build-dependencies]
-cbindgen = "0.6.1"
+cbindgen = "0.6.3"
