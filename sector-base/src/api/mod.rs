@@ -7,13 +7,14 @@ use rand::{thread_rng, Rng};
 
 pub mod disk_backed_storage;
 
+type SectorAccess = *const libc::c_char;
 type StatusCode = u8;
 
 pub trait SectorStore {
-    unsafe fn new_sealed_sector_access(&self) -> *const libc::c_char;
-    unsafe fn new_staging_sector_access(&self) -> *const libc::c_char;
-    unsafe fn num_unsealed_bytes(&self, access: *const libc::c_char, result_ptr: *mut u64) -> u8;
-    unsafe fn truncate_unsealed(&self, access: *const libc::c_char, size: u64) -> u8;
+    unsafe fn new_sealed_sector_access(&self) -> SectorAccess;
+    unsafe fn new_staging_sector_access(&self) -> SectorAccess;
+    unsafe fn num_unsealed_bytes(&self, access: SectorAccess, result_ptr: *mut u64) -> StatusCode;
+    unsafe fn truncate_unsealed(&self, access: SectorAccess, size: u64) -> StatusCode;
     unsafe fn write_unsealed(
         &self,
         access: *const libc::c_char,
@@ -41,9 +42,7 @@ pub unsafe extern "C" fn destroy_storage(ss_ptr: *mut Box<SectorStore>) -> () {
 /// * `ss_ptr` - pointer to a boxed SectorStore
 /// ```
 #[no_mangle]
-pub unsafe extern "C" fn new_sealed_sector_access(
-    ss_ptr: *mut Box<SectorStore>,
-) -> *const libc::c_char {
+pub unsafe extern "C" fn new_sealed_sector_access(ss_ptr: *mut Box<SectorStore>) -> SectorAccess {
     let m = &mut *ss_ptr;
     m.new_sealed_sector_access()
 }
@@ -55,9 +54,7 @@ pub unsafe extern "C" fn new_sealed_sector_access(
 /// * `ptr` - pointer to a boxed SectorStore
 /// ```
 #[no_mangle]
-pub unsafe extern "C" fn new_staging_sector_access(
-    ss_ptr: *mut Box<SectorStore>,
-) -> *const libc::c_char {
+pub unsafe extern "C" fn new_staging_sector_access(ss_ptr: *mut Box<SectorStore>) -> SectorAccess {
     let m = &mut *ss_ptr;
     m.new_staging_sector_access()
 }
@@ -77,11 +74,11 @@ pub unsafe extern "C" fn new_staging_sector_access(
 #[no_mangle]
 pub unsafe extern "C" fn write_unsealed(
     ss_ptr: *mut Box<SectorStore>,
-    access: *const libc::c_char,
+    access: SectorAccess,
     data_ptr: *const u8,
     data_len: libc::size_t,
     result_ptr: *mut u64,
-) -> u8 {
+) -> StatusCode {
     let m = &mut *ss_ptr;
     m.write_unsealed(access, data_ptr, data_len, result_ptr)
 }
@@ -99,7 +96,7 @@ pub unsafe extern "C" fn write_unsealed(
 #[no_mangle]
 pub unsafe extern "C" fn truncate_unsealed(
     ss_ptr: *mut Box<SectorStore>,
-    access: *const libc::c_char,
+    access: SectorAccess,
     size: u64,
 ) -> StatusCode {
     let m = &mut *ss_ptr;
@@ -121,7 +118,7 @@ pub unsafe extern "C" fn truncate_unsealed(
 #[no_mangle]
 pub unsafe extern "C" fn num_unsealed_bytes(
     ss_ptr: *mut Box<SectorStore>,
-    access: *const libc::c_char,
+    access: SectorAccess,
     result_ptr: *mut u64,
 ) -> StatusCode {
     let m = &mut *ss_ptr;
