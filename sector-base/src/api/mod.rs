@@ -7,8 +7,6 @@ use rand::{thread_rng, Rng};
 
 pub mod disk_backed_storage;
 
-pub type SectorAccess = *const libc::c_char;
-
 type StatusCode = u8;
 
 pub trait SectorStore {

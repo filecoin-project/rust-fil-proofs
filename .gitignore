@@ -2,5 +2,5 @@
 **/*.rs.bk
 Cargo.lock
 .criterion
-**/libproofs.h
+**/*.h
 heaptrack*

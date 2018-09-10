@@ -18,7 +18,7 @@ fn main() {
     // but rather just tell the rest of the system we can't proceed.
     match c {
         Ok(res) => {
-            res.write_to_file("libproofs.h");
+            res.write_to_file("libsector_base.h");
         }
         Err(err) => {
             eprintln!("unable to generate bindings: {:?}", err);

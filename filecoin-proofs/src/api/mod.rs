@@ -2,11 +2,11 @@ use std::ffi::CString;
 use std::mem::forget;
 
 use libc;
-use sector_base::api::SectorAccess;
 
 mod internal;
 pub mod util;
 
+type SectorAccess = *const libc::c_char;
 type StatusCode = u8;
 
 // arrays cannot be passed by value in C; callers instead pass a pointer to the
