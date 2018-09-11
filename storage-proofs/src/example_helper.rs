@@ -7,6 +7,7 @@ use pbr::ProgressBar;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use sapling_crypto::jubjub::JubjubEngine;
 use std::fs::File;
+use std::io::stderr;
 use std::io::Write;
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -35,6 +36,7 @@ pub fn prettyb(num: usize) -> String {
 pub fn init_logger() {
     let mut builder = env_logger::Builder::new();
     builder
+        .target(env_logger::Target::Stdout)
         .filter_level(LevelFilter::Info)
         .format(|buf, record| {
             let ts = buf.timestamp();
@@ -100,11 +102,11 @@ pub trait Example<E: JubjubEngine>: Default {
         let tree_depth = (leaves as f64).log2().ceil() as usize;
 
         info!(target: "config", "constraint system: {:?}", typ);
-        info!(target: "config", "data size:  {}", prettyb(data_size));
-        info!(target: "config", "challenge count: {}", challenge_count);
+        info!(target: "config", "data_size:  {}", prettyb(data_size));
+        info!(target: "config", "challenge_count: {}", challenge_count);
         info!(target: "config", "m: {}", m);
         info!(target: "config", "sloth: {}", sloth_iter);
-        info!(target: "config", "tree depth: {}", tree_depth);
+        info!(target: "config", "tree_depth: {}", tree_depth);
 
         let start = Instant::now();
         let mut param_duration = Duration::new(0, 0);
@@ -148,7 +150,7 @@ pub trait Example<E: JubjubEngine>: Default {
         let mut total_proving = Duration::new(0, 0);
         let mut total_verifying = Duration::new(0, 0);
 
-        let mut pb = ProgressBar::new(u64::from(samples * 2));
+        let mut pb = ProgressBar::on(stderr(), u64::from(samples * 2));
 
         for _ in 0..samples {
             proof_vec.truncate(0);
@@ -195,9 +197,9 @@ pub trait Example<E: JubjubEngine>: Default {
         let verifying_avg = f64::from(verifying_avg.subsec_nanos()) / 1_000_000_000f64
             + (verifying_avg.as_secs() as f64);
 
-        info!(target: "stats", "Average proving time: {:?} seconds", proving_avg);
-        info!(target: "stats", "Average verifying time: {:?} seconds", verifying_avg);
-        info!(target: "stats", "Params generation time: {:?}", param_duration);
+        info!(target: "stats", "avg_proving_time: {:?} seconds", proving_avg);
+        info!(target: "stats", "avg_verifying_time: {:?} seconds", verifying_avg);
+        info!(target: "stats", "params_generation_time: {:?}", param_duration);
 
         // need this, as the last item doesn't get flushed to the console sometimes
         info!(".")
@@ -219,22 +221,22 @@ pub trait Example<E: JubjubEngine>: Default {
         let tree_depth = (leaves as f64).log2().ceil() as usize;
 
         info!(target: "config", "constraint system: {:?}", typ);
-        info!(target: "config", "data size:  {}", prettyb(data_size));
-        info!(target: "config", "challenge count: {}", challenge_count);
+        info!(target: "config", "data_size:  {}", prettyb(data_size));
+        info!(target: "config", "challenge_count: {}", challenge_count);
         info!(target: "config", "m: {}", m);
         info!(target: "config", "sloth: {}", sloth_iter);
-        info!(target: "config", "tree depth: {}", tree_depth);
+        info!(target: "config", "tree_depth: {}", tree_depth);
 
         // need more samples as this is a faster operation
         let samples = (Self::samples() * 10) as u32;
 
         let mut total_synth = Duration::new(0, 0);
 
-        let mut pb = ProgressBar::new(u64::from(samples));
+        let mut pb = ProgressBar::on(stderr(), u64::from(samples));
 
         info!(
             target: "stats",
-            "Number of constraints: {}",
+            "constraints: {}",
             self.get_num_constraints(
                 rng,
                 &engine_params,
@@ -271,7 +273,7 @@ pub trait Example<E: JubjubEngine>: Default {
         let synth_avg =
             f64::from(synth_avg.subsec_nanos()) / 1_000_000_000f64 + (synth_avg.as_secs() as f64);
 
-        info!(target: "stats", "Average synthesize time: {:?} seconds", synth_avg);
+        info!(target: "stats", "avg_synthesize_time: {:?} seconds", synth_avg);
 
         // need this, as the last item doesn't get flushed to the console sometimes
         info!(".")
