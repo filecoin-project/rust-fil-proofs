@@ -11,7 +11,7 @@ pub fn encode<'a, G: drgraph::Graph>(
     graph: &'a G,
     lambda: usize,
     sloth_iter: usize,
-    prover_id: &'a [u8],
+    replica_id: &'a [u8],
     data: &'a mut [u8],
 ) -> Result<()> {
     let degree = graph.degree();
@@ -35,7 +35,7 @@ pub fn encode<'a, G: drgraph::Graph>(
         let parents = graph.parents(node);
         assert_eq!(parents.len(), graph.degree(), "wrong number of parents");
 
-        let key = create_key(prover_id, node, &parents, data, lambda, degree)?;
+        let key = create_key(replica_id, node, &parents, data, lambda, degree)?;
         let start = data_at_node_offset(node, lambda);
         let end = start + lambda;
         let fr = bytes_into_fr::<Bls12>(&data[start..end])?;
@@ -51,14 +51,14 @@ pub fn decode<'a, G: drgraph::Graph>(
     graph: &'a G,
     lambda: usize,
     sloth_iter: usize,
-    prover_id: &'a [u8],
+    replica_id: &'a [u8],
     data: &'a [u8],
 ) -> Result<Vec<u8>> {
     // TODO: parallelize
     (0..graph.size()).fold(Ok(Vec::with_capacity(data.len())), |acc, i| {
         acc.and_then(|mut acc| {
             acc.extend(fr_into_bytes::<Bls12>(&decode_block(
-                graph, lambda, sloth_iter, prover_id, data, i,
+                graph, lambda, sloth_iter, replica_id, data, i,
             )?));
             Ok(acc)
         })
@@ -69,13 +69,13 @@ pub fn decode_block<'a, G: drgraph::Graph>(
     graph: &'a G,
     lambda: usize,
     sloth_iter: usize,
-    prover_id: &'a [u8],
+    replica_id: &'a [u8],
     data: &'a [u8],
     v: usize,
 ) -> Result<Fr> {
     let parents = graph.parents(v);
 
-    let key = create_key(prover_id, v, &parents, data, lambda, graph.degree())?;
+    let key = create_key(replica_id, v, &parents, data, lambda, graph.degree())?;
     let fr = bytes_into_fr::<Bls12>(&data_at_node(data, v, lambda)?)?;
 
     // TODO: round constant

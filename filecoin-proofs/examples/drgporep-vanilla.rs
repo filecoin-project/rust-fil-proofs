@@ -35,7 +35,7 @@ fn do_the_work(data_size: usize, m: usize, sloth_iter: usize, challenge_count: u
 
     let nodes = data_size / lambda;
 
-    let prover_id = fr_into_bytes::<Bls12>(&rng.gen());
+    let replica_id = fr_into_bytes::<Bls12>(&rng.gen());
     let mut data: Vec<u8> = (0..nodes)
         .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
         .collect();
@@ -58,10 +58,10 @@ fn do_the_work(data_size: usize, m: usize, sloth_iter: usize, challenge_count: u
     let mut param_duration = Duration::new(0, 0);
 
     info!("running replicate");
-    let (tau, aux) = DrgPoRep::replicate(&pp, prover_id.as_slice(), data.as_mut_slice()).unwrap();
+    let (tau, aux) = DrgPoRep::replicate(&pp, replica_id.as_slice(), data.as_mut_slice()).unwrap();
 
     let pub_inputs = PublicInputs {
-        prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
+        replica_id: bytes_into_fr::<Bls12>(replica_id.as_slice()).unwrap(),
         challenges,
         tau: Some(tau),
     };

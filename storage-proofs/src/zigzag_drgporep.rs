@@ -66,7 +66,7 @@ mod tests {
     fn extract_all() {
         let lambda = 32;
         let sloth_iter = 1;
-        let prover_id = vec![1u8; 32];
+        let replica_id = vec![1u8; 32];
         let data = vec![2u8; 32 * 3];
 
         // create a copy, so we can compare roundtrips
@@ -93,7 +93,7 @@ mod tests {
             pp.drg_porep_public_params = zigzag(&pp.drg_porep_public_params);
         }
 
-        ZigZagDrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
+        ZigZagDrgPoRep::replicate(&pp, replica_id.as_slice(), data_copy.as_mut_slice()).unwrap();
 
         let transformed_params = PublicParams {
             drg_porep_public_params: pp.drg_porep_public_params,
@@ -104,7 +104,7 @@ mod tests {
 
         let decoded_data = ZigZagDrgPoRep::extract_all(
             &transformed_params,
-            prover_id.as_slice(),
+            replica_id.as_slice(),
             data_copy.as_mut_slice(),
         ).unwrap();
 
@@ -118,7 +118,7 @@ mod tests {
         let expansion_degree = i;
         let lambda = lambda;
         let sloth_iter = 1;
-        let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
+        let replica_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
         let data: Vec<u8> = (0..n)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
@@ -141,11 +141,12 @@ mod tests {
 
         let pp = ZigZagDrgPoRep::setup(&sp).unwrap();
         let (tau, aux) =
-            ZigZagDrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
+            ZigZagDrgPoRep::replicate(&pp, replica_id.as_slice(), data_copy.as_mut_slice())
+                .unwrap();
         assert_ne!(data, data_copy);
 
         let pub_inputs = PublicInputs {
-            prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
+            replica_id: bytes_into_fr::<Bls12>(replica_id.as_slice()).unwrap(),
             challenges,
             tau: Some(simplify_tau(&tau)),
         };

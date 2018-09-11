@@ -12,8 +12,7 @@ type StatusCode = u8;
 // arrays cannot be passed by value in C; callers instead pass a pointer to the
 // head and Rust makes runtime assertions of length while marshaling
 type ProverIDPtr = *const u8;
-type ChallengeSeedPtr = *const u8;
-type RandomSeedPtr = *const u8;
+type SectorIDPtr = *const u8;
 type SealResultPtr = *const u8;
 type CommitmentPtr = *const u8;
 type SnarkProofPtr = *const u8;
@@ -31,8 +30,7 @@ pub const SECTOR_BYTES: u64 = 64;
 /// * `unsealed`            - path of unsealed sector-file
 /// * `sealed`              - path of sealed sector-file
 /// * `prover_id_ptr`       - pointer to first cell in a 31-length array of u8
-/// * `challenge_seed_ptr`  - pointer to first cell in a 32-length array of u8
-/// * `random_seed_ptr`     - pointer to first cell in a 32-length array of u8
+/// * `sector_id_ptr`       - pointer to first cell in a 31-length array of u8
 /// * `result_ptr`          - pointer to first cell in a 64-length array of u8,
 ///                           mutated by seal in order to pass commitments back
 ///                           to caller (first 32 elements correspond to comm_r
@@ -42,21 +40,15 @@ pub unsafe extern "C" fn seal(
     unsealed_path: SectorAccess,
     sealed_path: SectorAccess,
     prover_id_ptr: ProverIDPtr,
-    challenge_seed_ptr: ChallengeSeedPtr,
-    _random_seed_ptr: RandomSeedPtr,
+    sector_id_ptr: SectorIDPtr,
     result_ptr: SealResultPtr,
 ) -> StatusCode {
     let unsealed_path_buf = util::pbuf_from_c(unsealed_path);
     let sealed_path_buf = util::pbuf_from_c(sealed_path);
     let prover_id = util::u8ptr_to_array31(prover_id_ptr);
-    let challenge_seed = util::u8ptr_to_array32(challenge_seed_ptr);
+    let sector_id = util::u8ptr_to_array31(sector_id_ptr);
 
-    let result = internal::seal(
-        &unsealed_path_buf,
-        &sealed_path_buf,
-        prover_id,
-        challenge_seed,
-    );
+    let result = internal::seal(&unsealed_path_buf, &sealed_path_buf, prover_id, sector_id);
 
     match result {
         Ok((comm_r, comm_d, snark_proof)) => {
@@ -89,23 +81,23 @@ pub unsafe extern "C" fn seal(
 /// * `comm_d_ptr`         - pointer to first cell in a 32-length array of u8 containing the data
 ///                          commitment
 /// * `prover_id_ptr`      - pointer to first cell in a 31-length array of u8
-/// * `challenge_seed_ptr` - pointer to first cell in a 32-length array of u8
+/// * `sector_id_ptr`      - pointer to first cell in a 31-length array of u8
 /// * `proof_ptr`          - pointer to first cell in a SNARK_BYTES-length array of u8
 #[no_mangle]
 pub unsafe extern "C" fn verify_seal(
     comm_r_ptr: CommitmentPtr,
     comm_d_ptr: CommitmentPtr,
     prover_id_ptr: ProverIDPtr,
-    challenge_seed_ptr: ChallengeSeedPtr,
+    sector_id_ptr: SectorIDPtr,
     proof_ptr: SnarkProofPtr,
 ) -> StatusCode {
     let comm_r = util::u8ptr_to_array32(comm_r_ptr);
     let comm_d = util::u8ptr_to_array32(comm_d_ptr);
     let prover_id = util::u8ptr_to_array31(prover_id_ptr);
-    let challenge_seed = util::u8ptr_to_array32(challenge_seed_ptr);
+    let sector_id = util::u8ptr_to_array31(sector_id_ptr);
     let proof = util::u8ptr_to_vector(proof_ptr, SNARK_BYTES);
 
-    match internal::verify_seal(comm_r, comm_d, prover_id, challenge_seed, &proof) {
+    match internal::verify_seal(comm_r, comm_d, prover_id, sector_id, &proof) {
         Ok(true) => 0,
         Ok(false) => 20,
         Err(_) => 21,
@@ -159,6 +151,7 @@ pub extern "C" fn status_to_string(status_code: StatusCode) -> *const libc::c_ch
 /// * `start_offset` - zero-based byte offset in original, unsealed sector-file
 /// * `num_bytes`    - number of bytes to unseal and get (corresponds to contents of unsealed sector-file)
 /// * `prover_id_ptr`- pointer to first cell in a 31-length array of u8
+/// * `sector_id_ptr`- pointer to first cell in a 31-length array of u8
 /// * `result_ptr`   - pointer to a u64, mutated by get_unsealed_range in order to communicate the number of
 ///                    bytes that were unsealed and written to the output_path
 #[no_mangle]
@@ -168,16 +161,19 @@ pub unsafe extern "C" fn get_unsealed_range(
     start_offset: u64,
     num_bytes: u64,
     prover_id_ptr: ProverIDPtr,
+    sector_id_ptr: SectorIDPtr,
     result_ptr: GetUnsealedRangeResultPtr,
 ) -> StatusCode {
     let sealed_path_buf = util::pbuf_from_c(sealed_path);
     let output_path_buf = util::pbuf_from_c(output_path);
     let prover_id = util::u8ptr_to_array31(prover_id_ptr);
+    let sector_id = util::u8ptr_to_array31(sector_id_ptr);
 
     match internal::get_unsealed_range(
         &sealed_path_buf,
         &output_path_buf,
         prover_id,
+        sector_id,
         start_offset,
         num_bytes,
     ) {
@@ -197,20 +193,24 @@ pub unsafe extern "C" fn get_unsealed_range(
 /// * `sealed_path`  - path of sealed sector-file
 /// * `output_path`  - path where sector file's unsealed bytes should be written
 /// * `prover_id_ptr`- pointer to first cell in a 31-length array of u8
+/// * `sector_id_ptr`- pointer to first cell in a 31-length array of u8
 #[no_mangle]
 pub unsafe extern "C" fn get_unsealed(
     sealed_path: SectorAccess,
     output_path: SectorAccess,
     prover_id_ptr: ProverIDPtr,
+    sector_id_ptr: SectorIDPtr,
 ) -> StatusCode {
     let sealed_path_buf = util::pbuf_from_c(sealed_path);
     let output_path_buf = util::pbuf_from_c(output_path);
     let prover_id = util::u8ptr_to_array31(prover_id_ptr);
+    let sector_id = util::u8ptr_to_array31(sector_id_ptr);
 
     match internal::get_unsealed_range(
         &sealed_path_buf,
         &output_path_buf,
         prover_id,
+        sector_id,
         0,
         SECTOR_BYTES,
     ) {
@@ -271,8 +271,7 @@ mod tests {
 
         let result: [u8; 256] = [0; 256];
         let prover_id: [u8; 31] = [2; 31];
-        let challenge_seed: [u8; 32] = [3; 32];
-        let random_seed: [u8; 32] = [4; 32];
+        let sector_id: [u8; 31] = [0; 31];
 
         let contents = b"hello, moto";
         let result_ptr = &mut 0u64;
@@ -292,8 +291,7 @@ mod tests {
                 seal_input_path,
                 seal_output_path,
                 &prover_id[0],
-                &challenge_seed[0],
-                &random_seed[0],
+                &sector_id[0],
                 &result[0],
             )
         };
@@ -303,7 +301,7 @@ mod tests {
                 &result[0],
                 &result[32],
                 &prover_id[0],
-                &challenge_seed[0],
+                &sector_id[0],
                 &result[64],
             )
         };
@@ -334,8 +332,7 @@ mod tests {
 
         let result: [u8; 256] = [0; 256];
         let prover_id: [u8; 31] = [2; 31];
-        let challenge_seed: [u8; 32] = [3; 32];
-        let random_seed: [u8; 32] = [4; 32];
+        let sector_id: [u8; 31] = [0; 31];
 
         let contents = b"hello, moto";
         let result_ptr = &mut 0u64;
@@ -355,8 +352,7 @@ mod tests {
                 seal_input_path,
                 seal_output_path,
                 &prover_id[0],
-                &challenge_seed[0],
-                &random_seed[0],
+                &sector_id[0],
                 &result[0],
             )
         };
@@ -368,6 +364,7 @@ mod tests {
                 seal_output_path,
                 get_unsealed_range_output_path,
                 &prover_id[0],
+                &sector_id[0],
             )
         };
 
@@ -390,8 +387,7 @@ mod tests {
 
         let result: [u8; 256] = [0; 256];
         let prover_id: [u8; 31] = [2; 31];
-        let challenge_seed: [u8; 32] = [3; 32];
-        let random_seed: [u8; 32] = [4; 32];
+        let sector_id: [u8; 31] = [0; 31];
 
         let contents = b"hello, moto";
         let result_ptr = &mut 0u64;
@@ -411,8 +407,7 @@ mod tests {
                 seal_input_path,
                 seal_output_path,
                 &prover_id[0],
-                &challenge_seed[0],
-                &random_seed[0],
+                &sector_id[0],
                 &result[0],
             )
         };
@@ -427,6 +422,7 @@ mod tests {
                 offset,
                 range_length,
                 &prover_id[0],
+                &sector_id[0],
                 result_ptr,
             )
         };

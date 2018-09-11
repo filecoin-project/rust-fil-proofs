@@ -24,7 +24,7 @@ macro_rules! table_tests {
 }
 
 pub struct FakeDrgParams {
-    pub prover_id: Fr,
+    pub replica_id: Fr,
     pub replica_nodes: Vec<Fr>,
     pub replica_nodes_paths: Vec<Vec<Option<(Fr, bool)>>>,
     pub replica_root: Fr,
@@ -42,7 +42,7 @@ pub fn fake_drgpoprep_proof<R: Rng>(
     sloth_rounds: usize,
     challenge_count: usize,
 ) -> FakeDrgParams {
-    let prover_id: Fr = rng.gen();
+    let replica_id: Fr = rng.gen();
     let challenge = m + 1;
     // Part 1: original data inputs
     // generate a leaf
@@ -57,7 +57,7 @@ pub fn fake_drgpoprep_proof<R: Rng>(
     let ciphertexts = replica_parents
         .iter()
         .fold(
-            Ok(fr_into_bytes::<Bls12>(&prover_id)),
+            Ok(fr_into_bytes::<Bls12>(&replica_id)),
             |acc: error::Result<Vec<u8>>, parent: &Fr| {
                 acc.and_then(|mut acc| {
                     parent.into_repr().write_le(&mut acc)?;
@@ -105,7 +105,7 @@ pub fn fake_drgpoprep_proof<R: Rng>(
     assert_eq!(data_node_path.len(), replica_node_path.len());
 
     FakeDrgParams {
-        prover_id,
+        replica_id,
         replica_nodes: (0..challenge_count).map(|_| replica_node).collect(),
         replica_nodes_paths: (0..challenge_count)
             .map(|_| replica_node_path.clone())

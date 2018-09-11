@@ -37,7 +37,7 @@ use util::{bytes_into_bits, bytes_into_boolean_vec};
 ///
 /// * `data_node_path` - The path of the data node being proven.
 /// * `data_root` - The merkle root of the data.
-/// * `prover_id` - The id of the prover.
+/// * `replica_id` - The id of the replica.
 /// * `degree` - The degree of the graph.
 ///
 
@@ -55,7 +55,7 @@ pub struct PrivateDrgPoRepCircuit<'a, E: JubjubEngine> {
     data_nodes: Vec<Option<E::Fr>>,
     data_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
     data_root: Option<E::Fr>,
-    prover_id: Option<E::Fr>,
+    replica_id: Option<E::Fr>,
     degree: usize,
 }
 impl<'a, E: JubjubEngine> PrivateDrgPoRepCircuit<'a, E> {
@@ -72,7 +72,7 @@ impl<'a, E: JubjubEngine> PrivateDrgPoRepCircuit<'a, E> {
         data_nodes: Vec<Option<E::Fr>>,
         data_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
         data_root: Option<E::Fr>,
-        prover_id: Option<E::Fr>,
+        replica_id: Option<E::Fr>,
         degree: usize,
     ) -> Result<(), SynthesisError>
     where
@@ -91,7 +91,7 @@ impl<'a, E: JubjubEngine> PrivateDrgPoRepCircuit<'a, E> {
             data_nodes,
             data_nodes_paths,
             data_root,
-            prover_id,
+            replica_id,
             degree,
         }.synthesize(&mut cs)
     }
@@ -118,7 +118,7 @@ where
         pub_in: &<DrgPoRep<G> as ProofScheme>::PublicInputs,
         pub_params: &<DrgPoRep<G> as ProofScheme>::PublicParams,
     ) -> Vec<Fr> {
-        let prover_id = pub_in.prover_id;
+        let replica_id = pub_in.replica_id;
         let challenges = &pub_in.challenges;
 
         assert!(pub_in.tau.is_none());
@@ -126,9 +126,9 @@ where
         let lambda = pub_params.lambda;
         let leaves = pub_params.graph.size();
 
-        let prover_id_bits = bytes_into_bits(&fr_into_bytes::<Bls12>(&prover_id));
+        let replica_id_bits = bytes_into_bits(&fr_into_bytes::<Bls12>(&replica_id));
 
-        let packed_prover_id = multipack::compute_multipacking::<Bls12>(&prover_id_bits);
+        let packed_replica_id = multipack::compute_multipacking::<Bls12>(&replica_id_bits);
 
         let por_pub_params = merklepor::PublicParams { lambda, leaves };
 
@@ -136,7 +136,7 @@ where
             .iter()
             .map(|challenge| {
                 let mut input = Vec::new();
-                input.extend(packed_prover_id.clone());
+                input.extend(packed_replica_id.clone());
 
                 let mut por_nodes = vec![*challenge];
                 let parents = pub_params.graph.parents(*challenge);
@@ -220,7 +220,7 @@ where
             .collect();
 
         let data_root = Some(proof.nodes[0].proof.root().into());
-        let prover_id = Some(public_inputs.prover_id);
+        let replica_id = Some(public_inputs.replica_id);
 
         PrivateDrgPoRepCircuit {
             params: engine_params,
@@ -234,7 +234,7 @@ where
             data_nodes,
             data_nodes_paths,
             data_root,
-            prover_id,
+            replica_id,
             degree: public_params.graph.degree(),
         }
     }
@@ -243,9 +243,9 @@ where
 ///
 /// # Public Inputs
 ///
-///  // TODO: We should make prover_id be only a single Fr input
-/// * [0] prover_id/0
-/// * [1] prover_id/1
+///  // TODO: We should make replica_id be only a single Fr input
+/// * [0] replica_id/0
+/// * [1] replica_id/1
 /// * [2] replica auth_path_bits
 /// * for i in 0..replica_parents.len()
 ///   * [ ] replica parent auth_path_bits
@@ -269,16 +269,16 @@ impl<'a, E: JubjubEngine> Circuit<E> for PrivateDrgPoRepCircuit<'a, E> {
         let params = self.params;
         let lambda = self.lambda;
 
-        let prover_id = self.prover_id;
+        let replica_id = self.replica_id;
         let replica_root = self.replica_root;
         let data_root = self.data_root;
 
         let degree = self.degree;
 
         let raw_bytes; // Need let here so borrow in match lives long enough.
-        let prover_id_bytes = match prover_id {
-            Some(prover_id) => {
-                raw_bytes = fr_into_bytes::<E>(&prover_id);
+        let replica_id_bytes = match replica_id {
+            Some(replica_id) => {
+                raw_bytes = fr_into_bytes::<E>(&replica_id);
                 Some(raw_bytes.as_slice())
             }
             // Used in parameter generation or when circuit is created only for
@@ -286,11 +286,11 @@ impl<'a, E: JubjubEngine> Circuit<E> for PrivateDrgPoRepCircuit<'a, E> {
             None => None,
         };
 
-        // get the prover_id in bits
-        let prover_id_bits =
-            bytes_into_boolean_vec(cs.namespace(|| "prover_id bits"), prover_id_bytes, lambda)?;
+        // get the replica_id in bits
+        let replica_id_bits =
+            bytes_into_boolean_vec(cs.namespace(|| "replica_id bits"), replica_id_bytes, lambda)?;
 
-        multipack::pack_into_inputs(cs.namespace(|| "prover_id"), &prover_id_bits)?;
+        multipack::pack_into_inputs(cs.namespace(|| "replica_id"), &replica_id_bits)?;
 
         for i in 0..self.data_nodes.len() {
             // ensure that all inputs are well formed
@@ -357,7 +357,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for PrivateDrgPoRepCircuit<'a, E> {
             let key = kdf(
                 cs.namespace(|| "kdf"),
                 &params,
-                prover_id_bits.clone(),
+                replica_id_bits.clone(),
                 parents_bits,
                 degree,
             )?;
@@ -416,8 +416,8 @@ mod tests {
         let challenge = 2;
         let sloth_iter = 1;
 
-        let prover_id_fr = Fr::rand(rng);
-        let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&prover_id_fr);
+        let replica_id_fr = Fr::rand(rng);
+        let replica_id: Vec<u8> = fr_into_bytes::<Bls12>(&replica_id_fr);
 
         let mut data: Vec<u8> = (0..nodes)
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::rand(rng)))
@@ -446,11 +446,11 @@ mod tests {
         let pp =
             drgporep::DrgPoRep::<BucketGraph>::setup(&sp).expect("failed to create drgporep setup");
         let (_tau, aux) =
-            drgporep::DrgPoRep::replicate(&pp, prover_id.as_slice(), data.as_mut_slice())
+            drgporep::DrgPoRep::replicate(&pp, replica_id.as_slice(), data.as_mut_slice())
                 .expect("failed to replicate");
 
         let pub_inputs = drgporep::PublicInputs {
-            prover_id: prover_id_fr,
+            replica_id: replica_id_fr,
             challenges: vec![challenge],
             tau: None,
         };
@@ -482,7 +482,7 @@ mod tests {
 
         let data_node_path = proof_nc.nodes[0].proof.as_options();
         let data_root = Some(proof_nc.nodes[0].proof.root().into());
-        let prover_id = Some(prover_id_fr);
+        let replica_id = Some(replica_id_fr);
 
         assert!(
             proof_nc.nodes[0].proof.validate(challenge),
@@ -507,7 +507,7 @@ mod tests {
             vec![data_node],
             vec![data_node_path],
             data_root,
-            prover_id,
+            replica_id,
             degree,
         ).expect("failed to synthesize circuit");
 
@@ -524,7 +524,10 @@ mod tests {
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
-        assert_eq!(cs.get_input(1, "drgporep/prover_id/input 0"), prover_id_fr,);
+        assert_eq!(
+            cs.get_input(1, "drgporep/replica_id/input 0"),
+            replica_id_fr,
+        );
     }
 
     #[test]
@@ -573,7 +576,7 @@ mod tests {
         let challenge = 1;
         let sloth_iter = 1;
 
-        let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&Fr::rand(rng));
+        let replica_id: Vec<u8> = fr_into_bytes::<Bls12>(&Fr::rand(rng));
         let mut data: Vec<u8> = (0..nodes)
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::rand(rng)))
             .collect();
@@ -597,14 +600,14 @@ mod tests {
 
         let (_tau, aux) = drgporep::DrgPoRep::replicate(
             &public_params.vanilla_params,
-            prover_id.as_slice(),
+            replica_id.as_slice(),
             data.as_mut_slice(),
         ).expect("failed to replicate");
 
-        let prover_id_fr = bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap();
+        let replica_id_fr = bytes_into_fr::<Bls12>(replica_id.as_slice()).unwrap();
 
         let public_inputs = drgporep::PublicInputs {
-            prover_id: prover_id_fr,
+            replica_id: replica_id_fr,
             challenges: vec![challenge],
             tau: None,
         };

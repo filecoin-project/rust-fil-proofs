@@ -92,7 +92,7 @@ where
 
         // TODO: We need to add an aggregated commitment to the inputs, then compute a it as a
         // witness to the circuit and constrain the input to be equal to that.
-        // This uber-root is: H(prover_id|comm_r[0]|comm_r[1]|…comm_r[n]).
+        // This uber-root is: H(replica_id|comm_r[0]|comm_r[1]|…comm_r[n]).
         Ok(())
     }
 }
@@ -125,7 +125,7 @@ impl<'a> CompoundProof<'a, Bls12, ZigZagDrgPoRep, ZigZagCircuit<'a, Bls12, ZigZa
 
         for i in 0..pub_params.layers {
             let drgporep_pub_inputs = drgporep::PublicInputs {
-                prover_id: pub_in.prover_id,
+                replica_id: pub_in.replica_id,
                 challenges: pub_in.challenges.clone(),
                 tau: None,
             };
@@ -153,7 +153,7 @@ impl<'a> CompoundProof<'a, Bls12, ZigZagDrgPoRep, ZigZagCircuit<'a, Bls12, ZigZa
         let layers = (0..(vanilla_proof.encoding_proofs.len()))
             .map(|l| {
                 let layer_public_inputs = drgporep::PublicInputs {
-                    prover_id: public_inputs.prover_id,
+                    replica_id: public_inputs.replica_id,
                     // FIXME: add multiple challenges to public inputs.
                     challenges: public_inputs.challenges.clone(),
                     tau: None,
@@ -208,8 +208,8 @@ mod tests {
         // methods and get the assembled tests for free.
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
-        let prover_id_fr = bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap();
+        let replica_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
+        let replica_id_fr = bytes_into_fr::<Bls12>(replica_id.as_slice()).unwrap();
         let data: Vec<u8> = (0..n)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
@@ -231,11 +231,12 @@ mod tests {
 
         let pp = ZigZagDrgPoRep::setup(&sp).unwrap();
         let (tau, aux) =
-            ZigZagDrgPoRep::replicate(&pp, prover_id.as_slice(), data_copy.as_mut_slice()).unwrap();
+            ZigZagDrgPoRep::replicate(&pp, replica_id.as_slice(), data_copy.as_mut_slice())
+                .unwrap();
         assert_ne!(data, data_copy);
 
         let pub_inputs = layered_drgporep::PublicInputs {
-            prover_id: prover_id_fr,
+            replica_id: replica_id_fr,
             challenges,
             tau: Some(simplify_tau(&tau)),
         };
@@ -271,8 +272,8 @@ mod tests {
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
         assert_eq!(
-            cs.get_input(1, "zigzag drgporep/zigzag layer 0/prover_id/input 0"),
-            prover_id_fr,
+            cs.get_input(1, "zigzag drgporep/zigzag layer 0/replica_id/input 0"),
+            replica_id_fr,
         );
 
         // This test was modeled on equivalent from drgporep circuit.
@@ -291,7 +292,7 @@ mod tests {
         let num_layers = 2;
         let base_degree = 2;
         let expansion_degree = 2;
-        let prover_id = Fr::rand(rng);
+        let replica_id = Fr::rand(rng);
         let challenge = 1;
         let sloth_iter = 2;
 
@@ -300,7 +301,7 @@ mod tests {
             .map(|_l| {
                 // l is ignored because we assume uniform layers here.
                 let public_inputs = drgporep::PublicInputs {
-                    prover_id,
+                    replica_id: replica_id,
                     challenges: vec![challenge],
                     tau: None,
                 };
@@ -346,8 +347,8 @@ mod tests {
         // methods and get the assembled tests for free.
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
-        let prover_id_fr = bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap();
+        let replica_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
+        let replica_id_fr = bytes_into_fr::<Bls12>(replica_id.as_slice()).unwrap();
         let data: Vec<u8> = (0..n)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
@@ -374,13 +375,13 @@ mod tests {
         let public_params = ZigZagCompound::setup(&setup_params).unwrap();
         let (tau, aux) = ZigZagDrgPoRep::replicate(
             &public_params.vanilla_params,
-            prover_id.as_slice(),
+            replica_id.as_slice(),
             data_copy.as_mut_slice(),
         ).unwrap();
         assert_ne!(data, data_copy);
 
         let public_inputs = layered_drgporep::PublicInputs {
-            prover_id: prover_id_fr,
+            replica_id: replica_id_fr,
             challenges,
             tau: Some(simplify_tau(&tau)),
         };

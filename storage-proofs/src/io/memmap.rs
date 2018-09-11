@@ -28,7 +28,7 @@ fn open_empty(path: &PathBuf, len: u64) -> Result<MmapMut> {
 pub struct MemmapWriter<'a, T: PoRep<'a>> {
     public_params: T::PublicParams,
     master: RefCell<MmapMut>,
-    prover_id: &'a [u8],
+    replica_id: &'a [u8],
 }
 
 impl<'a, T> MemmapWriter<'a, T>
@@ -38,7 +38,7 @@ where
     pub fn new(
         setup_params: &T::SetupParams,
         data_path: &PathBuf,
-        prover_id: &'a [u8],
+        replica_id: &'a [u8],
     ) -> Result<MemmapWriter<'a, T>> {
         let public_params = T::setup(setup_params)?;
         let master = open_existing(&data_path)?;
@@ -46,7 +46,7 @@ where
         Ok(MemmapWriter {
             public_params,
             master: RefCell::new(master),
-            prover_id,
+            replica_id,
         })
     }
 
@@ -54,7 +54,7 @@ where
         let res = {
             let mut master = self.master.borrow_mut();
             let data = master.get_mut(0..len).unwrap();
-            T::replicate(&self.public_params, self.prover_id, data)?
+            T::replicate(&self.public_params, self.replica_id, data)?
         };
 
         self.master.borrow().flush()?;
@@ -66,7 +66,7 @@ where
         let decoded = {
             let mut master = self.master.borrow_mut();
             let data = master.get(0..len).unwrap();
-            T::extract_all(&self.public_params, self.prover_id, data)?
+            T::extract_all(&self.public_params, self.replica_id, data)?
         };
 
         {
@@ -109,7 +109,7 @@ mod test {
 
         let lambda = 32;
         let sloth_iter = 1;
-        let prover_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
+        let replica_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
         let data: Vec<u8> = (0..32)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
@@ -135,7 +135,7 @@ mod test {
         };
 
         let writer: MemmapWriter<DrgPoRep<BucketGraph>> =
-            MemmapWriter::new(&setup, &data_path, &prover_id).unwrap();
+            MemmapWriter::new(&setup, &data_path, &replica_id).unwrap();
 
         writer.replicate(data.len()).unwrap();
         writer.extract_all(&out_path, data.len()).unwrap();

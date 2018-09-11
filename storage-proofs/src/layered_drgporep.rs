@@ -116,8 +116,8 @@ pub trait Layers {
         assert!(layers > 0);
 
         let mut scratch = priv_inputs.replica.to_vec().clone();
-        let prover_id = fr_into_bytes::<Bls12>(&pub_inputs.prover_id);
-        <DrgPoRep<Self::Graph> as PoRep>::replicate(pp, &prover_id, scratch.as_mut_slice())?;
+        let replica_id = fr_into_bytes::<Bls12>(&pub_inputs.replica_id);
+        <DrgPoRep<Self::Graph> as PoRep>::replicate(pp, &replica_id, scratch.as_mut_slice())?;
 
         let new_priv_inputs = drgporep::PrivateInputs {
             replica: scratch.as_slice(),
@@ -125,7 +125,7 @@ pub trait Layers {
             aux: &aux[aux.len() - layers].clone(),
         };
         let drgporep_pub_inputs = drgporep::PublicInputs {
-            prover_id: pub_inputs.prover_id,
+            replica_id: pub_inputs.replica_id,
             challenges: pub_inputs.challenges.clone(),
             tau: Some(tau[tau.len() - layers]),
         };
@@ -154,13 +154,13 @@ pub trait Layers {
         drgpp: &drgporep::PublicParams<Self::Graph>,
         layer: usize,
         layers: usize,
-        prover_id: &[u8],
+        replica_id: &[u8],
         data: &'a mut [u8],
     ) -> Result<()> {
         assert!(layers > 0);
 
         let inverted = &Self::invert_transform(&drgpp, layer, layers);
-        let mut res = DrgPoRep::extract_all(inverted, prover_id, data).unwrap();
+        let mut res = DrgPoRep::extract_all(inverted, replica_id, data).unwrap();
 
         for (i, r) in res.iter_mut().enumerate() {
             data[i] = *r;
@@ -171,7 +171,7 @@ pub trait Layers {
                 inverted,
                 layer + 1,
                 layers - 1,
-                prover_id,
+                replica_id,
                 data,
             )?;
         }
@@ -183,13 +183,13 @@ pub trait Layers {
         drgpp: &drgporep::PublicParams<Self::Graph>,
         layer: usize,
         layers: usize,
-        prover_id: &[u8],
+        replica_id: &[u8],
         data: &mut [u8],
         taus: &mut Vec<porep::Tau>,
         auxs: &mut Vec<porep::ProverAux>,
     ) -> Result<()> {
         assert!(layers > 0);
-        let (tau, aux) = DrgPoRep::replicate(drgpp, prover_id, data).unwrap();
+        let (tau, aux) = DrgPoRep::replicate(drgpp, replica_id, data).unwrap();
 
         taus.push(tau);
         auxs.push(aux);
@@ -199,7 +199,7 @@ pub trait Layers {
                 &Self::transform(&drgpp, layer, layers),
                 layer + 1,
                 layers - 1,
-                prover_id,
+                replica_id,
                 data,
                 taus,
                 auxs,
@@ -271,7 +271,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         // with permutations
         for (layer, proof_layer) in proof.encoding_proofs.iter().enumerate() {
             let new_pub_inputs = drgporep::PublicInputs {
-                prover_id: pub_inputs.prover_id,
+                replica_id: pub_inputs.replica_id,
                 challenges: pub_inputs.challenges.clone(),
                 tau: Some(proof.tau[layer]),
             };
@@ -321,7 +321,7 @@ impl<'a, 'c, L: Layers> PoRep<'a> for L {
 
     fn replicate(
         pp: &'a PublicParams<L::Graph>,
-        prover_id: &[u8],
+        replica_id: &[u8],
         data: &mut [u8],
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let mut taus = Vec::with_capacity(pp.layers);
@@ -331,7 +331,7 @@ impl<'a, 'c, L: Layers> PoRep<'a> for L {
             &pp.drg_porep_public_params,
             0,
             pp.layers,
-            prover_id,
+            replica_id,
             data,
             &mut taus,
             &mut auxs,
@@ -342,7 +342,7 @@ impl<'a, 'c, L: Layers> PoRep<'a> for L {
 
     fn extract_all<'b>(
         pp: &'b PublicParams<L::Graph>,
-        prover_id: &'b [u8],
+        replica_id: &'b [u8],
         data: &'b [u8],
     ) -> Result<Vec<u8>> {
         let mut data = data.to_vec();
@@ -351,7 +351,7 @@ impl<'a, 'c, L: Layers> PoRep<'a> for L {
             &pp.drg_porep_public_params,
             0,
             pp.layers,
-            prover_id,
+            replica_id,
             &mut data,
         )?;
 
@@ -360,7 +360,7 @@ impl<'a, 'c, L: Layers> PoRep<'a> for L {
 
     fn extract(
         _pp: &PublicParams<L::Graph>,
-        _prover_id: &[u8],
+        _replica_id: &[u8],
         _data: &[u8],
         _node: usize,
     ) -> Result<Vec<u8>> {

@@ -34,7 +34,7 @@ pub struct PublicInputs<'a> {
     /// The inital challenge, which leaf to prove.
     pub challenge: usize,
     /// The prover id.
-    pub prover_id: &'a [u8],
+    pub replica_id: &'a [u8],
 }
 
 /// The inputs that are only available to the prover.
@@ -95,7 +95,7 @@ impl<'a> ProofScheme<'a> for BatchPoST {
             )?;
 
             challenge = derive_challenge(
-                pub_inputs.prover_id,
+                pub_inputs.replica_id,
                 i,
                 challenge,
                 &proof,
@@ -141,7 +141,7 @@ impl<'a> ProofScheme<'a> for BatchPoST {
             }
             // verify the challenges are correct
             let challenge = derive_challenge(
-                pub_inputs.prover_id,
+                pub_inputs.replica_id,
                 i,
                 proof.challenges[i],
                 &proof.proofs[i],
@@ -168,15 +168,15 @@ fn write_usize(target: &mut Vec<u8>, value: usize) -> ::std::result::Result<(), 
     target.write_u32::<LittleEndian>(value as u32)
 }
 
-/// Derives a new challenge, given the inputs, by concatenating the `prover_id`, the round `i`, the current `challenge` and the serialized `proof` and hashing them.
+/// Derives a new challenge, given the inputs, by concatenating the `replica_id`, the round `i`, the current `challenge` and the serialized `proof` and hashing them.
 fn derive_challenge(
-    prover_id: &[u8],
+    replica_id: &[u8],
     i: usize,
     challenge: usize,
     proof: &merklepor::Proof,
     leaves: usize,
 ) -> Result<usize> {
-    let mut bytes = prover_id.to_vec();
+    let mut bytes = replica_id.to_vec();
 
     write_usize(&mut bytes, i)?;
     write_usize(&mut bytes, challenge)?;
@@ -208,7 +208,7 @@ mod tests {
     fn test_batchpost() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let prover_id = fr_into_bytes::<Bls12>(&rng.gen());
+        let replica_id = fr_into_bytes::<Bls12>(&rng.gen());
         let pub_params = PublicParams {
             params: merklepor::PublicParams {
                 lambda: 32,
@@ -226,7 +226,7 @@ mod tests {
         let pub_inputs = PublicInputs {
             challenge: 3,
             commitment: tree.root(),
-            prover_id: prover_id.as_slice(),
+            replica_id: replica_id.as_slice(),
         };
 
         let priv_inputs = PrivateInputs {

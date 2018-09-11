@@ -1,5 +1,8 @@
+use crypto::pedersen::pedersen_md_no_padding;
 use drgraph::{MerkleTree, TreeHash};
 use error::Result;
+use fr32::fr_into_bytes;
+use pairing::bls12_381::Bls12;
 use proof::ProofScheme;
 
 #[derive(Debug)]
@@ -49,18 +52,27 @@ pub trait PoRep<'a>: ProofScheme<'a> {
 
     fn replicate(
         pub_params: &'a Self::PublicParams,
-        prover_id: &[u8],
+        replica_id: &[u8],
         data: &mut [u8],
     ) -> Result<(Self::Tau, Self::ProverAux)>; // Tau, ProverAux
     fn extract_all(
         pub_params: &'a Self::PublicParams,
-        prover_id: &[u8],
+        replica_id: &[u8],
         replica: &[u8],
     ) -> Result<Vec<u8>>;
     fn extract(
         pub_params: &'a Self::PublicParams,
-        prover_id: &[u8],
+        replica_id: &[u8],
         replica: &[u8],
         node: usize,
     ) -> Result<Vec<u8>>;
+}
+
+pub fn replica_id(prover_id: [u8; 32], sector_id: [u8; 32]) -> Vec<u8> {
+    let mut to_hash = [0; 64];
+    to_hash[..32].copy_from_slice(&prover_id);
+    to_hash[32..].copy_from_slice(&sector_id);
+    let replica_fr = pedersen_md_no_padding(&to_hash);
+
+    fr_into_bytes::<Bls12>(&replica_fr)
 }

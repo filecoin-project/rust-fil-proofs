@@ -15,7 +15,7 @@ use vde::{self, decode_block};
 
 #[derive(Debug)]
 pub struct PublicInputs {
-    pub prover_id: Fr,
+    pub replica_id: Fr,
     pub challenges: Vec<usize>,
     pub tau: Option<porep::Tau>,
 }
@@ -245,7 +245,7 @@ where
 
             let extracted = Self::extract(
                 pub_params,
-                &fr_into_bytes::<Bls12>(&pub_inputs.prover_id),
+                &fr_into_bytes::<Bls12>(&pub_inputs.replica_id),
                 &replica,
                 challenge,
             )?;
@@ -317,7 +317,7 @@ where
                 }
             }
 
-            let prover_bytes = fr_into_bytes::<Bls12>(&pub_inputs.prover_id);
+            let prover_bytes = fr_into_bytes::<Bls12>(&pub_inputs.replica_id);
 
             let key_input =
                 proof.replica_parents[i]
@@ -354,13 +354,13 @@ where
 
     fn replicate(
         pp: &Self::PublicParams,
-        prover_id: &[u8],
+        replica_id: &[u8],
         data: &mut [u8],
     ) -> Result<(porep::Tau, porep::ProverAux)> {
         let tree_d = pp.graph.merkle_tree(data, pp.lambda)?;
         let comm_d = tree_d.root();
 
-        vde::encode(&pp.graph, pp.lambda, pp.sloth_iter, prover_id, data)?;
+        vde::encode(&pp.graph, pp.lambda, pp.sloth_iter, replica_id, data)?;
 
         let tree_r = pp.graph.merkle_tree(data, pp.lambda)?;
         let comm_r = tree_r.root();
@@ -373,15 +373,15 @@ where
 
     fn extract_all<'b>(
         pp: &'b Self::PublicParams,
-        prover_id: &'b [u8],
+        replica_id: &'b [u8],
         data: &'b [u8],
     ) -> Result<Vec<u8>> {
-        vde::decode(&pp.graph, pp.lambda, pp.sloth_iter, prover_id, data)
+        vde::decode(&pp.graph, pp.lambda, pp.sloth_iter, replica_id, data)
     }
 
     fn extract(
         pp: &Self::PublicParams,
-        prover_id: &[u8],
+        replica_id: &[u8],
         data: &[u8],
         node: usize,
     ) -> Result<Vec<u8>> {
@@ -389,7 +389,7 @@ where
             &pp.graph,
             pp.lambda,
             pp.sloth_iter,
-            prover_id,
+            replica_id,
             data,
             node,
         )?))
@@ -419,7 +419,7 @@ mod tests {
     fn extract_all() {
         let lambda = 32;
         let sloth_iter = 1;
-        let prover_id = vec![1u8; 32];
+        let replica_id = vec![1u8; 32];
         let data = vec![2u8; 32 * 3];
         // create a copy, so we can compare roundtrips
         let mut mmapped_data_copy = file_backed_mmap_from(&data);
@@ -437,14 +437,14 @@ mod tests {
 
         let pp = DrgPoRep::<BucketGraph>::setup(&sp).unwrap();
 
-        DrgPoRep::replicate(&pp, prover_id.as_slice(), &mut mmapped_data_copy).unwrap();
+        DrgPoRep::replicate(&pp, replica_id.as_slice(), &mut mmapped_data_copy).unwrap();
 
         let mut copied = vec![0; data.len()];
         copied.copy_from_slice(&mmapped_data_copy);
         assert_ne!(data, copied, "replication did not change data");
 
         let decoded_data =
-            DrgPoRep::extract_all(&pp, prover_id.as_slice(), &mut mmapped_data_copy).unwrap();
+            DrgPoRep::extract_all(&pp, replica_id.as_slice(), &mut mmapped_data_copy).unwrap();
 
         assert_eq!(data, decoded_data.as_slice(), "failed to extract data");
     }
@@ -453,7 +453,7 @@ mod tests {
     fn extract() {
         let lambda = 32;
         let sloth_iter = 1;
-        let prover_id = vec![1u8; 32];
+        let replica_id = vec![1u8; 32];
         let nodes = 3;
         let data = vec![2u8; 32 * nodes];
 
@@ -473,7 +473,7 @@ mod tests {
 
         let pp = DrgPoRep::<BucketGraph>::setup(&sp).unwrap();
 
-        DrgPoRep::replicate(&pp, prover_id.as_slice(), &mut mmapped_data_copy).unwrap();
+        DrgPoRep::replicate(&pp, replica_id.as_slice(), &mut mmapped_data_copy).unwrap();
 
         let mut copied = vec![0; data.len()];
         copied.copy_from_slice(&mmapped_data_copy);
@@ -481,7 +481,7 @@ mod tests {
 
         for i in 0..nodes {
             let decoded_data =
-                DrgPoRep::extract(&pp, prover_id.as_slice(), &mmapped_data_copy, i).unwrap();
+                DrgPoRep::extract(&pp, replica_id.as_slice(), &mmapped_data_copy, i).unwrap();
 
             let original_data = data_at_node(&data, i, lambda).unwrap();
 
@@ -512,7 +512,7 @@ mod tests {
             let expansion_degree = 0;
             let seed = new_seed();
 
-            let prover_id = fr_into_bytes::<Bls12>(&rng.gen());
+            let replica_id = fr_into_bytes::<Bls12>(&rng.gen());
             let data: Vec<u8> = (0..nodes)
                 .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
                 .collect();
@@ -536,7 +536,7 @@ mod tests {
             let pp = DrgPoRep::<BucketGraph>::setup(&sp).unwrap();
 
             let (tau, aux) =
-                DrgPoRep::replicate(&pp, prover_id.as_slice(), &mut mmapped_data_copy).unwrap();
+                DrgPoRep::replicate(&pp, replica_id.as_slice(), &mut mmapped_data_copy).unwrap();
 
             let mut copied = vec![0; data.len()];
             copied.copy_from_slice(&mmapped_data_copy);
@@ -544,7 +544,7 @@ mod tests {
             assert_ne!(data, copied, "replication did not change data");
 
             let pub_inputs = PublicInputs {
-                prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
+                replica_id: bytes_into_fr::<Bls12>(replica_id.as_slice()).unwrap(),
                 challenges: vec![challenge, challenge],
                 tau: Some(tau.clone()),
             };
@@ -628,7 +628,7 @@ mod tests {
 
             if use_wrong_challenge {
                 let pub_inputs_with_wrong_challenge_for_proof = PublicInputs {
-                    prover_id: bytes_into_fr::<Bls12>(prover_id.as_slice()).unwrap(),
+                    replica_id: bytes_into_fr::<Bls12>(replica_id.as_slice()).unwrap(),
                     challenges: vec![if challenge == 1 { 2 } else { 1 }],
                     tau: Some(tau),
                 };
