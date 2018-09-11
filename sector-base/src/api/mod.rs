@@ -8,20 +8,35 @@ use rand::{thread_rng, Rng};
 pub mod disk_backed_storage;
 
 type SectorAccess = *const libc::c_char;
-type StatusCode = u8;
+type StatusCode = u32;
 
 pub trait SectorStore {
-    unsafe fn new_sealed_sector_access(&self) -> SectorAccess;
-    unsafe fn new_staging_sector_access(&self) -> SectorAccess;
+    /// if true, uses something other exact bits, correct parameters, or full proofs
+    unsafe fn is_fake(&self) -> bool;
+
+    /// if true, an artificial delay to seal
+    unsafe fn simulate_delay(&self) -> bool;
+
+    /// provisions a new sealed sector and writes the corresponding access to `result_ptr`
+    unsafe fn new_sealed_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode;
+
+    /// provisions a new staging sector and writes the corresponding access to `result_ptr`
+    unsafe fn new_staging_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode;
+
+    /// reports the number of bytes written to an unsealed sector
     unsafe fn num_unsealed_bytes(&self, access: SectorAccess, result_ptr: *mut u64) -> StatusCode;
+
+    /// sets the number of bytes in an unsealed sector identified by `access`
     unsafe fn truncate_unsealed(&self, access: SectorAccess, size: u64) -> StatusCode;
+
+    /// writes `data_len` bytes from `data_ptr` to the unsealed sector identified by `access`
     unsafe fn write_unsealed(
         &self,
         access: *const libc::c_char,
         data_ptr: *const u8,
         data_len: libc::size_t,
         result_ptr: *mut u64,
-    ) -> u8;
+    ) -> StatusCode;
 }
 
 /// Destroys a boxed SectorStore by freeing its memory.
@@ -31,32 +46,42 @@ pub trait SectorStore {
 /// * `ss_ptr` - pointer to a boxed SectorStore
 ///
 #[no_mangle]
-pub unsafe extern "C" fn destroy_storage(ss_ptr: *mut Box<SectorStore>) -> () {
+pub unsafe extern "C" fn destroy_storage(ss_ptr: *mut Box<SectorStore>) -> StatusCode {
     let _ = Box::from_raw(ss_ptr);
+
+    0
 }
 
 /// Returns a sector access in the sealed area.
 ///
 /// # Arguments
 ///
-/// * `ss_ptr` - pointer to a boxed SectorStore
+/// * `ss_ptr`     - pointer to a boxed SectorStore
+/// * `result_ptr` - pointer to location where provisioned SectorAccess will be written
 /// ```
 #[no_mangle]
-pub unsafe extern "C" fn new_sealed_sector_access(ss_ptr: *mut Box<SectorStore>) -> SectorAccess {
+pub unsafe extern "C" fn new_sealed_sector_access(
+    ss_ptr: *mut Box<SectorStore>,
+    result_ptr: *mut *const libc::c_char,
+) -> StatusCode {
     let m = &mut *ss_ptr;
-    m.new_sealed_sector_access()
+    m.new_sealed_sector_access(result_ptr)
 }
 
 /// Returns a sector access (path) in the staging area.
 ///
 /// # Arguments
 ///
-/// * `ptr` - pointer to a boxed SectorStore
+/// * `ss_ptr`     - pointer to a boxed SectorStore
+/// * `result_ptr` - pointer to location where provisioned SectorAccess will be written
 /// ```
 #[no_mangle]
-pub unsafe extern "C" fn new_staging_sector_access(ss_ptr: *mut Box<SectorStore>) -> SectorAccess {
+pub unsafe extern "C" fn new_staging_sector_access(
+    ss_ptr: *mut Box<SectorStore>,
+    result_ptr: *mut *const libc::c_char,
+) -> StatusCode {
     let m = &mut *ss_ptr;
-    m.new_staging_sector_access()
+    m.new_staging_sector_access(result_ptr)
 }
 
 /// Appends some bytes to an unsealed sector identified by `access` and returns a status code

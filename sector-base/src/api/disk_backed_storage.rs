@@ -10,10 +10,47 @@ use libc;
 use api::SectorStore;
 
 use super::{rand_alpha_string, str_from_c};
+use api::StatusCode;
 
 pub struct DiskBackedStorage {
     staging_path: String,
     sealed_path: String,
+}
+
+impl DiskBackedStorage {
+    unsafe fn new_sector_access(
+        &self,
+        root: &Path,
+        result: *mut *const libc::c_char,
+    ) -> StatusCode {
+        let pbuf = root.join(rand_alpha_string(32));
+
+        let create_result = match create_dir_all(root) {
+            Err(_) => 70,
+            Ok(_) => match File::create(&pbuf) {
+                Err(_) => 71,
+                Ok(_) => 0,
+            },
+        };
+
+        if create_result != 0 {
+            return create_result;
+        }
+
+        match pbuf.to_str() {
+            None => 72,
+            Some(str_ref) => match CString::new(str_ref) {
+                Err(_) => 73,
+                Ok(c_string) => {
+                    let ptr = c_string.as_ptr();
+                    forget(c_string);
+                    result.write(ptr);
+
+                    0
+                }
+            },
+        }
+    }
 }
 
 /// Initializes and returns a boxed DiskBackedStorage, used to dispense sector access.
@@ -37,55 +74,27 @@ pub unsafe extern "C" fn init_disk_backed_storage(
 }
 
 impl SectorStore for DiskBackedStorage {
-    unsafe fn new_sealed_sector_access(&self) -> *const libc::c_char {
-        let path = Path::new(&self.sealed_path);
-        let pbuf = path.join(rand_alpha_string(32));
-
-        let create_result = match create_dir_all(&path) {
-            Ok(_) => match File::create(&pbuf) {
-                Ok(_) => 0,
-                Err(_) => 71,
-            },
-            Err(_) => 70,
-        };
-
-        // TODO: remove this as soon as function is modified to return a status
-        // code instead of a string
-        assert_eq!(create_result, 0, "failed to create file");
-
-        let c_string = CString::new(pbuf.to_str().unwrap()).unwrap();
-        let ptr = c_string.as_ptr();
-
-        forget(c_string);
-
-        ptr
+    unsafe fn is_fake(&self) -> bool {
+        false
     }
 
-    unsafe fn new_staging_sector_access(&self) -> *const libc::c_char {
-        let path = Path::new(&self.staging_path);
-        let pbuf = path.join(rand_alpha_string(32));
-
-        let create_result = match create_dir_all(&path) {
-            Ok(_) => match File::create(&pbuf) {
-                Ok(_) => 0,
-                Err(_) => 81,
-            },
-            Err(_) => 80,
-        };
-
-        // TODO: remove this as soon as function is modified to return a status
-        // code instead of a string
-        assert_eq!(create_result, 0, "failed to create file");
-
-        let c_string = CString::new(pbuf.to_str().unwrap()).unwrap();
-        let ptr = c_string.as_ptr();
-
-        forget(c_string);
-
-        ptr
+    unsafe fn simulate_delay(&self) -> bool {
+        true
     }
 
-    unsafe fn num_unsealed_bytes(&self, access: *const libc::c_char, result_ptr: *mut u64) -> u8 {
+    unsafe fn new_sealed_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode {
+        self.new_sector_access(Path::new(&self.sealed_path), result_ptr)
+    }
+
+    unsafe fn new_staging_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode {
+        self.new_sector_access(Path::new(&self.staging_path), result_ptr)
+    }
+
+    unsafe fn num_unsealed_bytes(
+        &self,
+        access: *const libc::c_char,
+        result_ptr: *mut u64,
+    ) -> StatusCode {
         let path = String::from(str_from_c(access));
 
         match metadata(path) {
@@ -98,7 +107,7 @@ impl SectorStore for DiskBackedStorage {
         }
     }
 
-    unsafe fn truncate_unsealed(&self, access: *const libc::c_char, size: u64) -> u8 {
+    unsafe fn truncate_unsealed(&self, access: *const libc::c_char, size: u64) -> StatusCode {
         let path = String::from(str_from_c(access));
 
         let access_open_opts = OpenOptions::new().write(true).open(path);
@@ -118,7 +127,7 @@ impl SectorStore for DiskBackedStorage {
         data_ptr: *const u8,
         data_len: usize,
         result_ptr: *mut u64,
-    ) -> u8 {
+    ) -> StatusCode {
         let data = slice::from_raw_parts(data_ptr as *const u8, data_len as usize);
 
         let path = String::from(str_from_c(access));
@@ -154,8 +163,10 @@ mod tests {
     use super::*;
 
     use api::disk_backed_storage::init_disk_backed_storage;
-    use api::SectorAccess;
-    use api::{new_staging_sector_access, num_unsealed_bytes, truncate_unsealed, write_unsealed};
+    use api::{
+        new_staging_sector_access, num_unsealed_bytes, truncate_unsealed, write_unsealed,
+        SectorAccess,
+    };
 
     fn rust_str_to_c_str(s: &str) -> *const libc::c_char {
         CString::new(s).unwrap().into_raw()
@@ -186,7 +197,12 @@ mod tests {
     #[test]
     fn unsealed_sector_write_and_truncate() {
         let storage = create_storage();
-        let access = unsafe { new_staging_sector_access(storage) };
+
+        let access = unsafe {
+            let result = &mut rust_str_to_c_str("");
+            new_staging_sector_access(storage, result);
+            *result
+        };
 
         let contents = b"hello, moto";
         let write_result_ptr = &mut 0u64;

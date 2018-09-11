@@ -1,13 +1,14 @@
+use libc;
+
+use sector_base::api::SectorStore;
 use std::ffi::CString;
 use std::mem::forget;
-
-use libc;
 
 mod internal;
 pub mod util;
 
 type SectorAccess = *const libc::c_char;
-type StatusCode = u8;
+type StatusCode = u32;
 
 // arrays cannot be passed by value in C; callers instead pass a pointer to the
 // head and Rust makes runtime assertions of length while marshaling
@@ -27,6 +28,7 @@ pub const SECTOR_BYTES: u64 = 64;
 ///
 /// # Arguments
 ///
+/// * `ss_ptr`              - pointer to a boxed SectorStore
 /// * `unsealed`            - path of unsealed sector-file
 /// * `sealed`              - path of sealed sector-file
 /// * `prover_id_ptr`       - pointer to first cell in a 31-length array of u8
@@ -37,12 +39,15 @@ pub const SECTOR_BYTES: u64 = 64;
 ///                           and second 32 to comm_d)
 #[no_mangle]
 pub unsafe extern "C" fn seal(
+    ss_ptr: *mut Box<SectorStore>,
     unsealed_path: SectorAccess,
     sealed_path: SectorAccess,
     prover_id_ptr: ProverIDPtr,
     sector_id_ptr: SectorIDPtr,
     result_ptr: SealResultPtr,
 ) -> StatusCode {
+    let _ = &mut *ss_ptr; // SectorStore
+
     let unsealed_path_buf = util::pbuf_from_c(unsealed_path);
     let sealed_path_buf = util::pbuf_from_c(sealed_path);
     let prover_id = util::u8ptr_to_array31(prover_id_ptr);
@@ -76,6 +81,7 @@ pub unsafe extern "C" fn seal(
 ///
 /// # Arguments
 ///
+/// * `ss_ptr`             - pointer to a boxed SectorStore
 /// * `comm_r_ptr`         - pointer to first cell in a 32-length array of u8 contaning the replica
 ///                          commitment
 /// * `comm_d_ptr`         - pointer to first cell in a 32-length array of u8 containing the data
@@ -85,12 +91,15 @@ pub unsafe extern "C" fn seal(
 /// * `proof_ptr`          - pointer to first cell in a SNARK_BYTES-length array of u8
 #[no_mangle]
 pub unsafe extern "C" fn verify_seal(
+    ss_ptr: *mut Box<SectorStore>,
     comm_r_ptr: CommitmentPtr,
     comm_d_ptr: CommitmentPtr,
     prover_id_ptr: ProverIDPtr,
     sector_id_ptr: SectorIDPtr,
     proof_ptr: SnarkProofPtr,
 ) -> StatusCode {
+    let _ = &mut *ss_ptr; // SectorStore
+
     let comm_r = util::u8ptr_to_array32(comm_r_ptr);
     let comm_d = util::u8ptr_to_array32(comm_d_ptr);
     let prover_id = util::u8ptr_to_array31(prover_id_ptr);
@@ -104,40 +113,6 @@ pub unsafe extern "C" fn verify_seal(
     }
 }
 
-/// Returns a human-readible message for the provided status code.
-///
-/// Callers are responsible for freeing the returned string.
-///
-/// # Arguments
-///
-/// * `status_code` - a status code returned from an FPS operation, such as seal or verify_seal
-#[no_mangle]
-pub extern "C" fn status_to_string(status_code: StatusCode) -> *const libc::c_char {
-    let s = match status_code {
-        0 => CString::new("success"),
-        10 => CString::new("failed to seal"),
-        20 => CString::new("invalid replica and/or data commitment"),
-        21 => CString::new("unhandled verify_seal error"),
-        30 => CString::new("failed to get unsealed range"),
-        40 => CString::new("failed to write to unsealed sector"),
-        41 => CString::new("failed to create unsealed sector"),
-        50 => CString::new("failed to open file for truncating"),
-        51 => CString::new("failed to set file length"),
-        60 => CString::new("could not read unsealed sector file metadata"),
-        70 => CString::new("could not create unsealed sector-directory"),
-        71 => CString::new("could not create unsealed sector"),
-        80 => CString::new("could not create sealed sector-directory"),
-        81 => CString::new("could not create sealed sector"),
-        n => CString::new(format!("unknown status code {}", n)),
-    }.unwrap();
-
-    let p = s.as_ptr();
-
-    forget(s);
-
-    p
-}
-
 /// Gets bytes from a sealed sector-file and writes them, unsealed, to the output path and returns a
 /// status code indicating success or failure.
 ///
@@ -146,6 +121,7 @@ pub extern "C" fn status_to_string(status_code: StatusCode) -> *const libc::c_ch
 ///
 /// # Arguments
 ///
+/// * `ss_ptr`       - pointer to a boxed SectorStore
 /// * `sealed_path`  - path of sealed sector-file
 /// * `output_path`  - path where sector file's unsealed bytes should be written
 /// * `start_offset` - zero-based byte offset in original, unsealed sector-file
@@ -156,6 +132,7 @@ pub extern "C" fn status_to_string(status_code: StatusCode) -> *const libc::c_ch
 ///                    bytes that were unsealed and written to the output_path
 #[no_mangle]
 pub unsafe extern "C" fn get_unsealed_range(
+    ss_ptr: *mut Box<SectorStore>,
     sealed_path: SectorAccess,
     output_path: SectorAccess,
     start_offset: u64,
@@ -164,6 +141,8 @@ pub unsafe extern "C" fn get_unsealed_range(
     sector_id_ptr: SectorIDPtr,
     result_ptr: GetUnsealedRangeResultPtr,
 ) -> StatusCode {
+    let _ = &mut *ss_ptr; // SectorStore
+
     let sealed_path_buf = util::pbuf_from_c(sealed_path);
     let output_path_buf = util::pbuf_from_c(output_path);
     let prover_id = util::u8ptr_to_array31(prover_id_ptr);
@@ -190,17 +169,21 @@ pub unsafe extern "C" fn get_unsealed_range(
 ///
 /// # Arguments
 ///
+/// * `ss_ptr`       - pointer to a boxed SectorStore
 /// * `sealed_path`  - path of sealed sector-file
 /// * `output_path`  - path where sector file's unsealed bytes should be written
 /// * `prover_id_ptr`- pointer to first cell in a 31-length array of u8
 /// * `sector_id_ptr`- pointer to first cell in a 31-length array of u8
 #[no_mangle]
 pub unsafe extern "C" fn get_unsealed(
+    ss_ptr: *mut Box<SectorStore>,
     sealed_path: SectorAccess,
     output_path: SectorAccess,
     prover_id_ptr: ProverIDPtr,
     sector_id_ptr: SectorIDPtr,
 ) -> StatusCode {
+    let _ = &mut *ss_ptr; // SectorStore
+
     let sealed_path_buf = util::pbuf_from_c(sealed_path);
     let output_path_buf = util::pbuf_from_c(output_path);
     let prover_id = util::u8ptr_to_array31(prover_id_ptr);
@@ -221,6 +204,47 @@ pub unsafe extern "C" fn get_unsealed(
         },
         Err(_) => 30,
     }
+}
+
+/// Returns a human-readable message for the provided status code.
+///
+/// Callers are responsible for freeing the returned string.
+///
+/// TODO: This thing needs to be reworked such that filecoin-proofs doesn't know about the internals
+/// of the DiskBackedStorage instance of SectorStore. This may be a matter of narrowing these codes
+/// to something which communicates that the error was the caller's fault versus something
+/// unexpected which happened on the receiver side (e.g. disk failure).
+///
+/// # Arguments
+///
+/// * `status_code` - a status code returned from an FPS operation, such as seal or verify_seal
+#[no_mangle]
+pub extern "C" fn status_to_string(status_code: StatusCode) -> *const libc::c_char {
+    let s = match status_code {
+        0 => CString::new("success"),
+        10 => CString::new("failed to seal"),
+        20 => CString::new("invalid replica and/or data commitment"),
+        21 => CString::new("unhandled verify_seal error"),
+        30 => CString::new("failed to get unsealed range"),
+        40 => CString::new("failed to write to unsealed sector"),
+        41 => CString::new("failed to create unsealed sector"),
+        50 => CString::new("failed to open file for truncating"),
+        51 => CString::new("failed to set file length"),
+        60 => CString::new("could not read unsealed sector file metadata"),
+        70 => CString::new("could not create sector access parent directory"),
+        71 => CString::new("could not create sector file"),
+        72 => CString::new("could not stringify path buffer"),
+        73 => CString::new("could not create C string"),
+        80 => CString::new("could not create sealed sector-directory"),
+        81 => CString::new("could not create sealed sector"),
+        n => CString::new(format!("unknown status code {}", n)),
+    }.unwrap();
+
+    let p = s.as_ptr();
+
+    forget(s);
+
+    p
 }
 
 #[no_mangle]
@@ -250,6 +274,16 @@ mod tests {
         CString::new(s).unwrap().into_raw()
     }
 
+    /// simulates a call through the FFI to provision a SectorAccess
+    fn create_sector_access(
+        storage: *mut Box<SectorStore>,
+        f: unsafe extern "C" fn(*mut Box<SectorStore>, *mut *const libc::c_char) -> StatusCode,
+    ) -> SectorAccess {
+        let result = &mut rust_str_to_c_str("");
+        let _ = unsafe { f(storage, result) };
+        *result
+    }
+
     fn create_storage() -> *mut Box<SectorStore> {
         let staging_path = tempfile::tempdir().unwrap().path().to_owned();
         let sealed_path = tempfile::tempdir().unwrap().path().to_owned();
@@ -266,8 +300,9 @@ mod tests {
     #[test]
     fn seal_verify() {
         let storage = create_storage();
-        let seal_input_path = unsafe { new_staging_sector_access(storage) };
-        let seal_output_path = unsafe { new_sealed_sector_access(storage) };
+
+        let seal_input_path = create_sector_access(storage, new_staging_sector_access);
+        let seal_output_path = create_sector_access(storage, new_sealed_sector_access);
 
         let result: [u8; 256] = [0; 256];
         let prover_id: [u8; 31] = [2; 31];
@@ -288,6 +323,7 @@ mod tests {
 
         let good_seal = unsafe {
             seal(
+                storage,
                 seal_input_path,
                 seal_output_path,
                 &prover_id[0],
@@ -298,6 +334,7 @@ mod tests {
 
         let good_verify = unsafe {
             verify_seal(
+                storage,
                 &result[0],
                 &result[32],
                 &prover_id[0],
@@ -326,9 +363,11 @@ mod tests {
     #[test]
     fn seal_unsealed_roundtrip() {
         let storage = create_storage();
-        let seal_input_path = unsafe { new_staging_sector_access(storage) };
-        let seal_output_path = unsafe { new_sealed_sector_access(storage) };
-        let get_unsealed_range_output_path = unsafe { new_staging_sector_access(storage) };
+
+        let seal_input_path = create_sector_access(storage, new_staging_sector_access);
+        let seal_output_path = create_sector_access(storage, new_sealed_sector_access);
+        let get_unsealed_range_output_path =
+            create_sector_access(storage, new_staging_sector_access);
 
         let result: [u8; 256] = [0; 256];
         let prover_id: [u8; 31] = [2; 31];
@@ -349,6 +388,7 @@ mod tests {
 
         let good_seal = unsafe {
             seal(
+                storage,
                 seal_input_path,
                 seal_output_path,
                 &prover_id[0],
@@ -361,6 +401,7 @@ mod tests {
 
         let good_unsealed = unsafe {
             get_unsealed(
+                storage,
                 seal_output_path,
                 get_unsealed_range_output_path,
                 &prover_id[0],
@@ -381,9 +422,11 @@ mod tests {
     #[test]
     fn seal_unsealed_range_roundtrip() {
         let storage = create_storage();
-        let seal_output_path = unsafe { new_sealed_sector_access(storage) };
-        let get_unsealed_range_output_path = unsafe { new_staging_sector_access(storage) };
-        let seal_input_path = unsafe { new_staging_sector_access(storage) };
+
+        let seal_input_path = create_sector_access(storage, new_staging_sector_access);
+        let seal_output_path = create_sector_access(storage, new_sealed_sector_access);
+        let get_unsealed_range_output_path =
+            create_sector_access(storage, new_staging_sector_access);
 
         let result: [u8; 256] = [0; 256];
         let prover_id: [u8; 31] = [2; 31];
@@ -404,6 +447,7 @@ mod tests {
 
         let good_seal = unsafe {
             seal(
+                storage,
                 seal_input_path,
                 seal_output_path,
                 &prover_id[0],
@@ -417,6 +461,7 @@ mod tests {
         let range_length = contents.len() as u64 - offset;
         let good_unsealed = unsafe {
             get_unsealed_range(
+                storage,
                 seal_output_path,
                 get_unsealed_range_output_path,
                 offset,
