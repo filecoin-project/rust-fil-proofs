@@ -1,5 +1,6 @@
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use pairing::bls12_381::{Bls12, Fr};
+use pairing::PrimeField;
 use sapling_crypto::circuit::boolean::{self, Boolean};
 use sapling_crypto::circuit::{multipack, num};
 use sapling_crypto::jubjub::JubjubEngine;
@@ -128,7 +129,8 @@ where
 
         let replica_id_bits = bytes_into_bits(&fr_into_bytes::<Bls12>(&replica_id));
 
-        let packed_replica_id = multipack::compute_multipacking::<Bls12>(&replica_id_bits);
+        let packed_replica_id =
+            multipack::compute_multipacking::<Bls12>(&replica_id_bits[0..Fr::CAPACITY as usize]);
 
         let por_pub_params = merklepor::PublicParams { lambda, leaves };
 
@@ -243,7 +245,6 @@ where
 ///
 /// # Public Inputs
 ///
-///  // TODO: We should make replica_id be only a single Fr input
 /// * [0] replica_id/0
 /// * [1] replica_id/1
 /// * [2] replica auth_path_bits
@@ -290,7 +291,10 @@ impl<'a, E: JubjubEngine> Circuit<E> for PrivateDrgPoRepCircuit<'a, E> {
         let replica_id_bits =
             bytes_into_boolean_vec(cs.namespace(|| "replica_id bits"), replica_id_bytes, lambda)?;
 
-        multipack::pack_into_inputs(cs.namespace(|| "replica_id"), &replica_id_bits)?;
+        multipack::pack_into_inputs(
+            cs.namespace(|| "replica_id"),
+            &replica_id_bits[0..Fr::CAPACITY as usize],
+        )?;
 
         for i in 0..self.data_nodes.len() {
             // ensure that all inputs are well formed
@@ -519,8 +523,8 @@ mod tests {
         }
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_inputs(), 11, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 58110, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 10, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 58109, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
@@ -561,8 +565,8 @@ mod tests {
             m,
         ).expect("failed to synthesize circuit");
 
-        assert_eq!(cs.num_inputs(), 11, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 290286, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 10, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 290285, "wrong number of constraints");
     }
 
     #[test]
