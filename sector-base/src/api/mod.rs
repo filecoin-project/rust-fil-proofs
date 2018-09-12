@@ -17,6 +17,9 @@ pub trait SectorStore {
     /// if true, an artificial delay to seal
     unsafe fn simulate_delay(&self) -> bool;
 
+    /// returns the number of bytes that will fit into a sector managed by this store
+    unsafe fn num_bytes_per_sector(&self) -> u64;
+
     /// provisions a new sealed sector and writes the corresponding access to `result_ptr`
     unsafe fn new_sealed_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode;
 

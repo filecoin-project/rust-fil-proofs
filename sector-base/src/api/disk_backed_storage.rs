@@ -82,6 +82,10 @@ impl SectorStore for DiskBackedStorage {
         true
     }
 
+    unsafe fn num_bytes_per_sector(&self) -> u64 {
+        64
+    }
+
     unsafe fn new_sealed_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode {
         self.new_sector_access(Path::new(&self.sealed_path), result_ptr)
     }
