@@ -1,13 +1,9 @@
-use std::borrow::Cow;
-use std::ffi::CStr;
-use std::path::PathBuf;
-
 use libc;
-use rand::{thread_rng, Rng};
+use std::slice::from_raw_parts;
 
 pub mod disk_backed_storage;
+pub mod util;
 
-type SectorAccess = *const libc::c_char;
 type StatusCode = u32;
 
 pub trait SectorStore {
@@ -20,26 +16,20 @@ pub trait SectorStore {
     /// returns the number of bytes that will fit into a sector managed by this store
     fn max_unsealed_bytes_per_sector(&self) -> u64;
 
-    /// provisions a new sealed sector and writes the corresponding access to `result_ptr`
-    unsafe fn new_sealed_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode;
+    /// provisions a new sealed sector and reports the corresponding access
+    fn new_sealed_sector_access(&self) -> Result<String, StatusCode>;
 
-    /// provisions a new staging sector and writes the corresponding access to `result_ptr`
-    unsafe fn new_staging_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode;
+    /// provisions a new staging sector and reports the corresponding access
+    fn new_staging_sector_access(&self) -> Result<String, StatusCode>;
 
     /// reports the number of bytes written to an unsealed sector
-    unsafe fn num_unsealed_bytes(&self, access: SectorAccess, result_ptr: *mut u64) -> StatusCode;
+    fn num_unsealed_bytes(&self, access: String) -> Result<u64, StatusCode>;
 
     /// sets the number of bytes in an unsealed sector identified by `access`
-    unsafe fn truncate_unsealed(&self, access: SectorAccess, size: u64) -> StatusCode;
+    fn truncate_unsealed(&self, access: String, size: u64) -> Result<(), StatusCode>;
 
-    /// writes `data_len` bytes from `data_ptr` to the unsealed sector identified by `access`
-    unsafe fn write_unsealed(
-        &self,
-        access: *const libc::c_char,
-        data_ptr: *const u8,
-        data_len: libc::size_t,
-        result_ptr: *mut u64,
-    ) -> StatusCode;
+    /// writes `data` to the unsealed sector identified by `access`
+    fn write_unsealed(&self, access: String, data: &[u8]) -> Result<u64, StatusCode>;
 }
 
 /// Destroys a boxed SectorStore by freeing its memory.
@@ -68,7 +58,17 @@ pub unsafe extern "C" fn new_sealed_sector_access(
     result_ptr: *mut *const libc::c_char,
 ) -> StatusCode {
     let m = &mut *ss_ptr;
-    m.new_sealed_sector_access(result_ptr)
+
+    match m.new_sealed_sector_access() {
+        Ok(access) => {
+            let ptr = util::rust_str_to_c_str(&access);
+
+            result_ptr.write(ptr);
+
+            0
+        }
+        Err(n) => n,
+    }
 }
 
 /// Returns a sector access (path) in the staging area.
@@ -84,7 +84,17 @@ pub unsafe extern "C" fn new_staging_sector_access(
     result_ptr: *mut *const libc::c_char,
 ) -> StatusCode {
     let m = &mut *ss_ptr;
-    m.new_staging_sector_access(result_ptr)
+
+    match m.new_staging_sector_access() {
+        Ok(access) => {
+            let ptr = util::rust_str_to_c_str(&access);
+
+            result_ptr.write(ptr);
+
+            0
+        }
+        Err(n) => n,
+    }
 }
 
 /// Appends some bytes to an unsealed sector identified by `access` and returns a status code
@@ -102,13 +112,22 @@ pub unsafe extern "C" fn new_staging_sector_access(
 #[no_mangle]
 pub unsafe extern "C" fn write_unsealed(
     ss_ptr: *mut Box<SectorStore>,
-    access: SectorAccess,
+    access: *const libc::c_char,
     data_ptr: *const u8,
     data_len: libc::size_t,
     result_ptr: *mut u64,
 ) -> StatusCode {
     let m = &mut *ss_ptr;
-    m.write_unsealed(access, data_ptr, data_len, result_ptr)
+    let data = from_raw_parts(data_ptr, data_len);
+
+    match m.write_unsealed(util::c_str_to_rust_str(access), data) {
+        Ok(num_bytes_written) => {
+            result_ptr.write(num_bytes_written);
+
+            0
+        }
+        Err(n) => n,
+    }
 }
 
 /// Changes the size of the unsealed sector identified by `access`.
@@ -124,11 +143,15 @@ pub unsafe extern "C" fn write_unsealed(
 #[no_mangle]
 pub unsafe extern "C" fn truncate_unsealed(
     ss_ptr: *mut Box<SectorStore>,
-    access: SectorAccess,
+    access: *const libc::c_char,
     size: u64,
 ) -> StatusCode {
     let m = &mut *ss_ptr;
-    m.truncate_unsealed(access, size)
+
+    match m.truncate_unsealed(util::c_str_to_rust_str(access), size) {
+        Ok(_) => 0,
+        Err(n) => n,
+    }
 }
 
 /// Computes the number of bytes in an unsealed sector identified by `access`, returning a status
@@ -146,11 +169,19 @@ pub unsafe extern "C" fn truncate_unsealed(
 #[no_mangle]
 pub unsafe extern "C" fn num_unsealed_bytes(
     ss_ptr: *mut Box<SectorStore>,
-    access: SectorAccess,
+    access: *const libc::c_char,
     result_ptr: *mut u64,
 ) -> StatusCode {
     let m = &mut *ss_ptr;
-    m.num_unsealed_bytes(access, result_ptr)
+
+    match m.num_unsealed_bytes(util::c_str_to_rust_str(access)) {
+        Ok(n) => {
+            result_ptr.write(n);
+
+            0
+        }
+        Err(status_code) => status_code,
+    }
 }
 
 /// Produces a number corresponding to the number of bytes that can be written to one of this
@@ -172,33 +203,5 @@ pub unsafe extern "C" fn max_unsealed_bytes_per_sector(
 
     result_ptr.write(n);
 
-    // TODO: move all C-related stuff, including Result<T> to status code-marshaling, into mod.rs
     0
-}
-
-// transmutes a C string to a copy-on-write Rust string
-pub unsafe fn str_from_c<'a>(x: *const libc::c_char) -> Cow<'a, str> {
-    use std::borrow::Cow;
-    if x.is_null() {
-        Cow::from("")
-    } else {
-        CStr::from_ptr(x).to_string_lossy()
-    }
-}
-// creates a string of size len containing uppercase alpha-chars
-pub fn rand_alpha_string(len: u8) -> String {
-    let mut str = String::new();
-    let mut rng = thread_rng();
-
-    for _ in 0..len {
-        let ch = rng.gen_range(b'A', b'Z') as char;
-        str.push(ch);
-    }
-
-    str
-}
-
-// transmutes a C string to a PathBuf
-pub unsafe fn pbuf_from_c(x: *const libc::c_char) -> PathBuf {
-    PathBuf::from(String::from(str_from_c(x)))
 }

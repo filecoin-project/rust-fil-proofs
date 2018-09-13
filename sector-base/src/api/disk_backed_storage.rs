@@ -1,12 +1,9 @@
 use libc;
-use std::ffi::CString;
 use std::fs::{create_dir_all, metadata, File, OpenOptions};
 use std::io::{BufWriter, Write};
-use std::mem::forget;
 use std::path::Path;
-use std::slice;
 
-use super::{rand_alpha_string, str_from_c};
+use api::util;
 use api::{SectorStore, StatusCode};
 
 /// Initializes and returns a boxed SectorStore instance suitable for exercising the proofs code
@@ -24,8 +21,8 @@ pub unsafe extern "C" fn init_new_proof_test_sector_store(
 ) -> *mut Box<SectorStore> {
     Box::into_raw(Box::new(Box::new(RealSectorStore {
         manager: DiskManager {
-            sealed_path: String::from(str_from_c(sealed_dir_path)),
-            staging_path: String::from(str_from_c(staging_dir_path)),
+            sealed_path: String::from(util::c_str_to_rust_str(sealed_dir_path)),
+            staging_path: String::from(util::c_str_to_rust_str(staging_dir_path)),
         },
     })))
 }
@@ -46,8 +43,8 @@ pub unsafe extern "C" fn init_new_test_sector_store(
 ) -> *mut Box<SectorStore> {
     Box::into_raw(Box::new(Box::new(FastFakeSectorStore {
         manager: DiskManager {
-            sealed_path: String::from(str_from_c(sealed_dir_path)),
-            staging_path: String::from(str_from_c(staging_dir_path)),
+            sealed_path: String::from(util::c_str_to_rust_str(sealed_dir_path)),
+            staging_path: String::from(util::c_str_to_rust_str(staging_dir_path)),
         },
     })))
 }
@@ -68,8 +65,8 @@ pub unsafe extern "C" fn init_new_sector_store(
 ) -> *mut Box<SectorStore> {
     Box::into_raw(Box::new(Box::new(SlowFakeSectorStore {
         manager: DiskManager {
-            sealed_path: String::from(str_from_c(sealed_dir_path)),
-            staging_path: String::from(str_from_c(staging_dir_path)),
+            sealed_path: String::from(util::c_str_to_rust_str(sealed_dir_path)),
+            staging_path: String::from(util::c_str_to_rust_str(staging_dir_path)),
         },
     })))
 }
@@ -80,107 +77,49 @@ pub struct DiskManager {
 }
 
 impl DiskManager {
-    unsafe fn new_sector_access(
-        &self,
-        root: &Path,
-        result: *mut *const libc::c_char,
-    ) -> StatusCode {
-        let pbuf = root.join(rand_alpha_string(32));
+    fn new_sector_access(&self, root: &Path) -> Result<String, StatusCode> {
+        let pbuf = root.join(util::rand_alpha_string(32));
 
-        let create_result = match create_dir_all(root) {
-            Err(_) => 70,
-            Ok(_) => match File::create(&pbuf) {
-                Err(_) => 71,
-                Ok(_) => 0,
-            },
-        };
-
-        if create_result != 0 {
-            return create_result;
-        }
-
-        match pbuf.to_str() {
-            None => 72,
-            Some(str_ref) => match CString::new(str_ref) {
-                Err(_) => 73,
-                Ok(c_string) => {
-                    let ptr = c_string.as_ptr();
-                    forget(c_string);
-                    result.write(ptr);
-
-                    0
-                }
-            },
-        }
+        create_dir_all(root)
+            .map_err(|_| 70)
+            .and_then(|_| File::create(&pbuf).map(|_| 0).map_err(|_| 71))
+            .and_then(|_| {
+                pbuf.to_str()
+                    .map_or_else(|| Err(72), |str_ref| Ok(str_ref.to_owned()))
+            })
     }
 
-    unsafe fn new_sealed_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode {
-        self.new_sector_access(Path::new(&self.sealed_path), result_ptr)
+    fn new_sealed_sector_access(&self) -> Result<String, StatusCode> {
+        self.new_sector_access(Path::new(&self.sealed_path))
     }
 
-    unsafe fn new_staging_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode {
-        self.new_sector_access(Path::new(&self.staging_path), result_ptr)
+    fn new_staging_sector_access(&self) -> Result<String, StatusCode> {
+        self.new_sector_access(Path::new(&self.staging_path))
     }
 
-    unsafe fn num_unsealed_bytes(
-        &self,
-        access: *const libc::c_char,
-        result_ptr: *mut u64,
-    ) -> StatusCode {
-        let path = String::from(str_from_c(access));
-
-        match metadata(path) {
-            Ok(m) => {
-                result_ptr.write(m.len());
-
-                0
-            }
-            Err(_) => 60,
-        }
+    fn num_unsealed_bytes(&self, access: String) -> Result<u64, StatusCode> {
+        metadata(access).map(|m| m.len()).map_err(|_| 60)
     }
 
-    unsafe fn truncate_unsealed(&self, access: *const libc::c_char, size: u64) -> StatusCode {
-        let path = String::from(str_from_c(access));
-
-        let access_open_opts = OpenOptions::new().write(true).open(path);
-
-        match access_open_opts {
-            Ok(access_file) => match access_file.set_len(size) {
-                Ok(_) => 0,
-                Err(_) => 51,
-            },
-            Err(_) => 50,
-        }
+    fn truncate_unsealed(&self, access: String, size: u64) -> Result<(), StatusCode> {
+        OpenOptions::new()
+            .write(true)
+            .open(access)
+            .map_err(|_| 50)
+            .and_then(|file| file.set_len(size).map_err(|_| 51).map(|_| ()))
     }
 
-    unsafe fn write_unsealed(
-        &self,
-        access: *const libc::c_char,
-        data_ptr: *const u8,
-        data_len: usize,
-        result_ptr: *mut u64,
-    ) -> StatusCode {
-        let data = slice::from_raw_parts(data_ptr as *const u8, data_len as usize);
+    fn write_unsealed(&self, access: String, data: &[u8]) -> Result<u64, StatusCode> {
+        OpenOptions::new()
+            .read(true)
+            .append(true)
+            .open(access)
+            .map_err(|_| 40)
+            .and_then(|file| {
+                let mut buf = BufWriter::new(file);
 
-        let path = String::from(str_from_c(access));
-
-        let access_open_opts = OpenOptions::new().read(true).append(true).open(path);
-
-        match access_open_opts {
-            Ok(access_file) => {
-                let mut buf_writer = BufWriter::new(access_file);
-
-                match buf_writer.write(&data) {
-                    Ok(num_bytes_written) => {
-                        result_ptr.write(num_bytes_written as u64);
-
-                        0
-                    }
-                    Err(_) => 41,
-                }
-            }
-            Err(_) => 40,
-        }
+                buf.write(data).map_err(|_| 41).map(|n| n as u64)
+            })
     }
 }
 
@@ -209,35 +148,24 @@ impl SectorStore for RealSectorStore {
         128
     }
 
-    unsafe fn new_sealed_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode {
-        self.manager.new_sealed_sector_access(result_ptr)
+    fn new_sealed_sector_access(&self) -> Result<String, StatusCode> {
+        self.manager.new_sealed_sector_access()
     }
 
-    unsafe fn new_staging_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode {
-        self.manager.new_staging_sector_access(result_ptr)
+    fn new_staging_sector_access(&self) -> Result<String, StatusCode> {
+        self.manager.new_staging_sector_access()
     }
 
-    unsafe fn num_unsealed_bytes(
-        &self,
-        access: *const libc::c_char,
-        result_ptr: *mut u64,
-    ) -> StatusCode {
-        self.manager.num_unsealed_bytes(access, result_ptr)
+    fn num_unsealed_bytes(&self, access: String) -> Result<u64, StatusCode> {
+        self.manager.num_unsealed_bytes(access)
     }
 
-    unsafe fn truncate_unsealed(&self, access: *const libc::c_char, size: u64) -> StatusCode {
+    fn truncate_unsealed(&self, access: String, size: u64) -> Result<(), StatusCode> {
         self.manager.truncate_unsealed(access, size)
     }
 
-    unsafe fn write_unsealed(
-        &self,
-        access: *const libc::c_char,
-        data_ptr: *const u8,
-        data_len: usize,
-        result_ptr: *mut u64,
-    ) -> StatusCode {
-        self.manager
-            .write_unsealed(access, data_ptr, data_len, result_ptr)
+    fn write_unsealed(&self, access: String, data: &[u8]) -> Result<u64, StatusCode> {
+        self.manager.write_unsealed(access, data)
     }
 }
 
@@ -254,35 +182,24 @@ impl SectorStore for FastFakeSectorStore {
         1024
     }
 
-    unsafe fn new_sealed_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode {
-        self.manager.new_sealed_sector_access(result_ptr)
+    fn new_sealed_sector_access(&self) -> Result<String, StatusCode> {
+        self.manager.new_sealed_sector_access()
     }
 
-    unsafe fn new_staging_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode {
-        self.manager.new_staging_sector_access(result_ptr)
+    fn new_staging_sector_access(&self) -> Result<String, StatusCode> {
+        self.manager.new_staging_sector_access()
     }
 
-    unsafe fn num_unsealed_bytes(
-        &self,
-        access: *const libc::c_char,
-        result_ptr: *mut u64,
-    ) -> StatusCode {
-        self.manager.num_unsealed_bytes(access, result_ptr)
+    fn num_unsealed_bytes(&self, access: String) -> Result<u64, StatusCode> {
+        self.manager.num_unsealed_bytes(access)
     }
 
-    unsafe fn truncate_unsealed(&self, access: *const libc::c_char, size: u64) -> StatusCode {
+    fn truncate_unsealed(&self, access: String, size: u64) -> Result<(), StatusCode> {
         self.manager.truncate_unsealed(access, size)
     }
 
-    unsafe fn write_unsealed(
-        &self,
-        access: *const libc::c_char,
-        data_ptr: *const u8,
-        data_len: usize,
-        result_ptr: *mut u64,
-    ) -> StatusCode {
-        self.manager
-            .write_unsealed(access, data_ptr, data_len, result_ptr)
+    fn write_unsealed(&self, access: String, data: &[u8]) -> Result<u64, StatusCode> {
+        self.manager.write_unsealed(access, data)
     }
 }
 
@@ -296,60 +213,41 @@ impl SectorStore for SlowFakeSectorStore {
     }
 
     fn max_unsealed_bytes_per_sector(&self) -> u64 {
-        2 ^ 30
+        2 << 30
     }
 
-    unsafe fn new_sealed_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode {
-        self.manager.new_sealed_sector_access(result_ptr)
+    fn new_sealed_sector_access(&self) -> Result<String, StatusCode> {
+        self.manager.new_sealed_sector_access()
     }
 
-    unsafe fn new_staging_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode {
-        self.manager.new_staging_sector_access(result_ptr)
+    fn new_staging_sector_access(&self) -> Result<String, StatusCode> {
+        self.manager.new_staging_sector_access()
     }
 
-    unsafe fn num_unsealed_bytes(
-        &self,
-        access: *const libc::c_char,
-        result_ptr: *mut u64,
-    ) -> StatusCode {
-        self.manager.num_unsealed_bytes(access, result_ptr)
+    fn num_unsealed_bytes(&self, access: String) -> Result<u64, StatusCode> {
+        self.manager.num_unsealed_bytes(access)
     }
 
-    unsafe fn truncate_unsealed(&self, access: *const libc::c_char, size: u64) -> StatusCode {
+    fn truncate_unsealed(&self, access: String, size: u64) -> Result<(), StatusCode> {
         self.manager.truncate_unsealed(access, size)
     }
 
-    unsafe fn write_unsealed(
-        &self,
-        access: *const libc::c_char,
-        data_ptr: *const u8,
-        data_len: usize,
-        result_ptr: *mut u64,
-    ) -> StatusCode {
-        self.manager
-            .write_unsealed(access, data_ptr, data_len, result_ptr)
+    fn write_unsealed(&self, access: String, data: &[u8]) -> Result<u64, StatusCode> {
+        self.manager.write_unsealed(access, data)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::ffi::CString;
     use std::fs::{create_dir_all, File};
     use std::io::Read;
     use tempfile;
 
-    use super::super::pbuf_from_c;
     use super::*;
 
     use api::disk_backed_storage::init_new_proof_test_sector_store;
-    use api::{
-        new_staging_sector_access, num_unsealed_bytes, truncate_unsealed, write_unsealed,
-        SectorAccess,
-    };
-
-    fn rust_str_to_c_str(s: &str) -> *const libc::c_char {
-        CString::new(s).unwrap().into_raw()
-    }
+    use api::util;
+    use api::{new_staging_sector_access, num_unsealed_bytes, truncate_unsealed, write_unsealed};
 
     fn create_storage() -> *mut Box<SectorStore> {
         let staging_path = tempfile::tempdir().unwrap().path().to_owned();
@@ -358,14 +256,14 @@ mod tests {
         create_dir_all(&staging_path).expect("failed to create staging dir");
         create_dir_all(&sealed_path).expect("failed to create sealed dir");
 
-        let s1 = rust_str_to_c_str(&staging_path.to_str().unwrap().to_owned());
-        let s2 = rust_str_to_c_str(&sealed_path.to_str().unwrap().to_owned());
+        let s1 = util::rust_str_to_c_str(&staging_path.to_str().unwrap().to_owned());
+        let s2 = util::rust_str_to_c_str(&sealed_path.to_str().unwrap().to_owned());
 
         unsafe { init_new_proof_test_sector_store(s1, s2) }
     }
 
-    fn read_all_bytes(access: SectorAccess) -> Vec<u8> {
-        let pbuf = unsafe { pbuf_from_c(access) };
+    fn read_all_bytes(access: *const libc::c_char) -> Vec<u8> {
+        let pbuf = unsafe { util::pbuf_from_c(access) };
         let mut file = File::open(pbuf).unwrap();
         let mut buf = Vec::new();
         file.read_to_end(&mut buf).unwrap();
@@ -378,7 +276,7 @@ mod tests {
         let storage = create_storage();
 
         let access = unsafe {
-            let result = &mut rust_str_to_c_str("");
+            let result = &mut util::rust_str_to_c_str("");
             new_staging_sector_access(storage, result);
             *result
         };

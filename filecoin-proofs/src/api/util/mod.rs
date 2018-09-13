@@ -1,8 +1,13 @@
 use libc;
 use std::borrow::Cow;
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 use std::path::PathBuf;
 use std::slice;
+
+// produce a C string from a Rust string
+pub fn rust_str_to_c_str(s: &str) -> *const libc::c_char {
+    CString::new(s).unwrap().into_raw()
+}
 
 // cast from mutable to constant reference
 pub unsafe fn cast_const<'a, T>(x: *mut T) -> &'a T {
