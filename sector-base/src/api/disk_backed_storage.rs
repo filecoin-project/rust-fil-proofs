@@ -1,3 +1,4 @@
+use libc;
 use std::ffi::CString;
 use std::fs::{create_dir_all, metadata, File, OpenOptions};
 use std::io::{BufWriter, Write};
@@ -5,19 +6,80 @@ use std::mem::forget;
 use std::path::Path;
 use std::slice;
 
-use libc;
-
-use api::SectorStore;
-
 use super::{rand_alpha_string, str_from_c};
-use api::StatusCode;
+use api::{SectorStore, StatusCode};
 
-pub struct DiskBackedStorage {
+/// Initializes and returns a boxed SectorStore instance suitable for exercising the proofs code
+/// to its fullest capacity.
+///
+/// # Arguments
+///
+/// * `staging_dir_path` - path to the staging directory
+/// * `sealed_dir_path`  - path to the sealed directory
+/// ```
+#[no_mangle]
+pub unsafe extern "C" fn init_new_proof_test_sector_store(
+    staging_dir_path: *const libc::c_char,
+    sealed_dir_path: *const libc::c_char,
+) -> *mut Box<SectorStore> {
+    Box::into_raw(Box::new(Box::new(RealSectorStore {
+        manager: DiskManager {
+            sealed_path: String::from(str_from_c(sealed_dir_path)),
+            staging_path: String::from(str_from_c(staging_dir_path)),
+        },
+    })))
+}
+
+/// Initializes and returns a boxed SectorStore instance which is very similar to the Alpha-release
+/// SectorStore that Filecoin node-users will rely upon - but with manageably-small delays for seal
+/// and unseal.
+///
+/// # Arguments
+///
+/// * `staging_dir_path` - path to the staging directory
+/// * `sealed_dir_path`  - path to the sealed directory
+/// ```
+#[no_mangle]
+pub unsafe extern "C" fn init_new_test_sector_store(
+    staging_dir_path: *const libc::c_char,
+    sealed_dir_path: *const libc::c_char,
+) -> *mut Box<SectorStore> {
+    Box::into_raw(Box::new(Box::new(FastFakeSectorStore {
+        manager: DiskManager {
+            sealed_path: String::from(str_from_c(sealed_dir_path)),
+            staging_path: String::from(str_from_c(staging_dir_path)),
+        },
+    })))
+}
+
+/// Initializes and returns a boxed SectorStore instance which Alpha Filecoin node-users will rely
+/// upon. Some operations are substantially delayed; sealing an unsealed sector using this could
+/// take several hours.
+///
+/// # Arguments
+///
+/// * `staging_dir_path` - path to the staging directory
+/// * `sealed_dir_path`  - path to the sealed directory
+/// ```
+#[no_mangle]
+pub unsafe extern "C" fn init_new_sector_store(
+    staging_dir_path: *const libc::c_char,
+    sealed_dir_path: *const libc::c_char,
+) -> *mut Box<SectorStore> {
+    Box::into_raw(Box::new(Box::new(SlowFakeSectorStore {
+        manager: DiskManager {
+            sealed_path: String::from(str_from_c(sealed_dir_path)),
+            staging_path: String::from(str_from_c(staging_dir_path)),
+        },
+    })))
+}
+
+pub struct DiskManager {
     staging_path: String,
     sealed_path: String,
 }
 
-impl DiskBackedStorage {
+impl DiskManager {
     unsafe fn new_sector_access(
         &self,
         root: &Path,
@@ -50,40 +112,6 @@ impl DiskBackedStorage {
                 }
             },
         }
-    }
-}
-
-/// Initializes and returns a boxed DiskBackedStorage, used to dispense sector access.
-///
-/// # Arguments
-///
-/// * `staging_dir_path` - path to the staging directory
-/// * `sealed_dir_path`  - path to the sealed directory
-/// ```
-#[no_mangle]
-pub unsafe extern "C" fn init_disk_backed_storage(
-    staging_dir_path: *const libc::c_char,
-    sealed_dir_path: *const libc::c_char,
-) -> *mut Box<SectorStore> {
-    let m = DiskBackedStorage {
-        sealed_path: String::from(str_from_c(sealed_dir_path)),
-        staging_path: String::from(str_from_c(staging_dir_path)),
-    };
-
-    Box::into_raw(Box::new(Box::new(m)))
-}
-
-impl SectorStore for DiskBackedStorage {
-    unsafe fn is_fake(&self) -> bool {
-        false
-    }
-
-    unsafe fn simulate_delay(&self) -> bool {
-        true
-    }
-
-    unsafe fn num_bytes_per_sector(&self) -> u64 {
-        64
     }
 
     unsafe fn new_sealed_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode {
@@ -156,6 +184,153 @@ impl SectorStore for DiskBackedStorage {
     }
 }
 
+pub struct RealSectorStore {
+    manager: DiskManager,
+}
+
+pub struct SlowFakeSectorStore {
+    manager: DiskManager,
+}
+
+pub struct FastFakeSectorStore {
+    manager: DiskManager,
+}
+
+impl SectorStore for RealSectorStore {
+    fn is_fake(&self) -> bool {
+        false
+    }
+
+    fn simulate_delay_seconds(&self) -> Option<u32> {
+        None
+    }
+
+    fn max_unsealed_bytes_per_sector(&self) -> u64 {
+        128
+    }
+
+    unsafe fn new_sealed_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode {
+        self.manager.new_sealed_sector_access(result_ptr)
+    }
+
+    unsafe fn new_staging_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode {
+        self.manager.new_staging_sector_access(result_ptr)
+    }
+
+    unsafe fn num_unsealed_bytes(
+        &self,
+        access: *const libc::c_char,
+        result_ptr: *mut u64,
+    ) -> StatusCode {
+        self.manager.num_unsealed_bytes(access, result_ptr)
+    }
+
+    unsafe fn truncate_unsealed(&self, access: *const libc::c_char, size: u64) -> StatusCode {
+        self.manager.truncate_unsealed(access, size)
+    }
+
+    unsafe fn write_unsealed(
+        &self,
+        access: *const libc::c_char,
+        data_ptr: *const u8,
+        data_len: usize,
+        result_ptr: *mut u64,
+    ) -> StatusCode {
+        self.manager
+            .write_unsealed(access, data_ptr, data_len, result_ptr)
+    }
+}
+
+impl SectorStore for FastFakeSectorStore {
+    fn is_fake(&self) -> bool {
+        true
+    }
+
+    fn simulate_delay_seconds(&self) -> Option<u32> {
+        Some(5)
+    }
+
+    fn max_unsealed_bytes_per_sector(&self) -> u64 {
+        1024
+    }
+
+    unsafe fn new_sealed_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode {
+        self.manager.new_sealed_sector_access(result_ptr)
+    }
+
+    unsafe fn new_staging_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode {
+        self.manager.new_staging_sector_access(result_ptr)
+    }
+
+    unsafe fn num_unsealed_bytes(
+        &self,
+        access: *const libc::c_char,
+        result_ptr: *mut u64,
+    ) -> StatusCode {
+        self.manager.num_unsealed_bytes(access, result_ptr)
+    }
+
+    unsafe fn truncate_unsealed(&self, access: *const libc::c_char, size: u64) -> StatusCode {
+        self.manager.truncate_unsealed(access, size)
+    }
+
+    unsafe fn write_unsealed(
+        &self,
+        access: *const libc::c_char,
+        data_ptr: *const u8,
+        data_len: usize,
+        result_ptr: *mut u64,
+    ) -> StatusCode {
+        self.manager
+            .write_unsealed(access, data_ptr, data_len, result_ptr)
+    }
+}
+
+impl SectorStore for SlowFakeSectorStore {
+    fn is_fake(&self) -> bool {
+        true
+    }
+
+    fn simulate_delay_seconds(&self) -> Option<u32> {
+        Some(10)
+    }
+
+    fn max_unsealed_bytes_per_sector(&self) -> u64 {
+        2 ^ 30
+    }
+
+    unsafe fn new_sealed_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode {
+        self.manager.new_sealed_sector_access(result_ptr)
+    }
+
+    unsafe fn new_staging_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode {
+        self.manager.new_staging_sector_access(result_ptr)
+    }
+
+    unsafe fn num_unsealed_bytes(
+        &self,
+        access: *const libc::c_char,
+        result_ptr: *mut u64,
+    ) -> StatusCode {
+        self.manager.num_unsealed_bytes(access, result_ptr)
+    }
+
+    unsafe fn truncate_unsealed(&self, access: *const libc::c_char, size: u64) -> StatusCode {
+        self.manager.truncate_unsealed(access, size)
+    }
+
+    unsafe fn write_unsealed(
+        &self,
+        access: *const libc::c_char,
+        data_ptr: *const u8,
+        data_len: usize,
+        result_ptr: *mut u64,
+    ) -> StatusCode {
+        self.manager
+            .write_unsealed(access, data_ptr, data_len, result_ptr)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::ffi::CString;
@@ -166,7 +341,7 @@ mod tests {
     use super::super::pbuf_from_c;
     use super::*;
 
-    use api::disk_backed_storage::init_disk_backed_storage;
+    use api::disk_backed_storage::init_new_proof_test_sector_store;
     use api::{
         new_staging_sector_access, num_unsealed_bytes, truncate_unsealed, write_unsealed,
         SectorAccess,
@@ -186,7 +361,7 @@ mod tests {
         let s1 = rust_str_to_c_str(&staging_path.to_str().unwrap().to_owned());
         let s2 = rust_str_to_c_str(&sealed_path.to_str().unwrap().to_owned());
 
-        unsafe { init_disk_backed_storage(s1, s2) }
+        unsafe { init_new_proof_test_sector_store(s1, s2) }
     }
 
     fn read_all_bytes(access: SectorAccess) -> Vec<u8> {

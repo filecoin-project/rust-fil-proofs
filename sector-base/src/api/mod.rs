@@ -12,13 +12,13 @@ type StatusCode = u32;
 
 pub trait SectorStore {
     /// if true, uses something other exact bits, correct parameters, or full proofs
-    unsafe fn is_fake(&self) -> bool;
+    fn is_fake(&self) -> bool;
 
-    /// if true, an artificial delay to seal
-    unsafe fn simulate_delay(&self) -> bool;
+    /// if provided, an artificial delay to seal
+    fn simulate_delay_seconds(&self) -> Option<u32>;
 
     /// returns the number of bytes that will fit into a sector managed by this store
-    unsafe fn num_bytes_per_sector(&self) -> u64;
+    fn max_unsealed_bytes_per_sector(&self) -> u64;
 
     /// provisions a new sealed sector and writes the corresponding access to `result_ptr`
     unsafe fn new_sealed_sector_access(&self, result_ptr: *mut *const libc::c_char) -> StatusCode;
@@ -151,6 +151,29 @@ pub unsafe extern "C" fn num_unsealed_bytes(
 ) -> StatusCode {
     let m = &mut *ss_ptr;
     m.num_unsealed_bytes(access, result_ptr)
+}
+
+/// Produces a number corresponding to the number of bytes that can be written to one of this
+/// SectorStore's unsealed sectors.
+///
+/// # Arguments
+///
+/// * `ss_ptr`     - pointer to a boxed SectorStore
+/// * `result_ptr` - pointer to a u64, mutated by max_unsealed_bytes_per_sector to communicate back to
+///                  callers the number of bytes an unsealed sector
+/// ```
+#[no_mangle]
+pub unsafe extern "C" fn max_unsealed_bytes_per_sector(
+    ss_ptr: *mut Box<SectorStore>,
+    result_ptr: *mut u64,
+) -> StatusCode {
+    let m = &mut *ss_ptr;
+    let n = m.max_unsealed_bytes_per_sector();
+
+    result_ptr.write(n);
+
+    // TODO: move all C-related stuff, including Result<T> to status code-marshaling, into mod.rs
+    0
 }
 
 // transmutes a C string to a copy-on-write Rust string

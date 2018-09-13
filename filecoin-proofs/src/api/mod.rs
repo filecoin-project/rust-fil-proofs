@@ -210,10 +210,10 @@ pub unsafe extern "C" fn get_unsealed(
 ///
 /// Callers are responsible for freeing the returned string.
 ///
-/// TODO: This thing needs to be reworked such that filecoin-proofs doesn't know about the internals
-/// of the DiskBackedStorage instance of SectorStore. This may be a matter of narrowing these codes
-/// to something which communicates that the error was the caller's fault versus something
-/// unexpected which happened on the receiver side (e.g. disk failure).
+/// TODO: This thing needs to be reworked such that filecoin-proofs doesn't know about the
+/// internals of various instances of SectorStore. This may be a matter of narrowing these codes to
+/// something which communicates that the error was the caller's fault versus something unexpected
+/// which happened on the receiver side (e.g. disk failure).
 ///
 /// # Arguments
 ///
@@ -261,7 +261,7 @@ pub extern "C" fn verifyPost() {
 mod tests {
     use super::*;
 
-    use sector_base::api::disk_backed_storage::init_disk_backed_storage;
+    use sector_base::api::disk_backed_storage::init_new_proof_test_sector_store;
     use sector_base::api::{
         new_sealed_sector_access, new_staging_sector_access, write_unsealed, SectorStore,
     };
@@ -294,7 +294,7 @@ mod tests {
         let s1 = rust_str_to_c_str(&staging_path.to_str().unwrap().to_owned());
         let s2 = rust_str_to_c_str(&sealed_path.to_str().unwrap().to_owned());
 
-        unsafe { init_disk_backed_storage(s1, s2) }
+        unsafe { init_new_proof_test_sector_store(s1, s2) }
     }
 
     #[test]
