@@ -11,6 +11,9 @@ use std::env;
 use std::fs::{self, create_dir_all};
 use std::path::{Path, PathBuf};
 
+/// Bump this when circuits change to invalidate the cache.
+pub const VERSION: usize = 1;
+
 pub const PARAMETER_CACHE_DIR: &str = "/tmp/filecoin-proof-parameters/";
 
 fn parameter_cache_dir_name() -> String {
@@ -27,7 +30,7 @@ fn parameter_cache_dir() -> PathBuf {
 pub fn parameter_cache_path(filename: &str) -> PathBuf {
     let name = parameter_cache_dir_name();
     let dir = Path::new(&name);
-    dir.join(filename)
+    dir.join(format!("v{}-{}", VERSION, filename))
 }
 
 pub trait ParameterSetIdentifier {
