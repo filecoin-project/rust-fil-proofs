@@ -570,6 +570,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Slow test – run only when compiled for release.
     fn drgporep_test_compound() {
         let params = &JubjubBls12::new();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);

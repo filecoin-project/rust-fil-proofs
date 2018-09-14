@@ -298,6 +298,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Slow test – run only when compiled for release.
     fn seal_verify() {
         let storage = create_storage();
 
@@ -361,6 +362,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Slow test – run only when compiled for release.
     fn seal_unsealed_roundtrip() {
         let storage = create_storage();
 
@@ -420,6 +422,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Slow test – run only when compiled for release.
     fn seal_unsealed_range_roundtrip() {
         let storage = create_storage();
 

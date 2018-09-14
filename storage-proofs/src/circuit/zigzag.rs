@@ -330,6 +330,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Slow test – run only when compiled for release.
     fn zigzag_test_compound() {
         let params = &JubjubBls12::new();
         let lambda = 32;

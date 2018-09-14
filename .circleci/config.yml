@@ -67,10 +67,26 @@ jobs:
       - run:
           name: Test (stable) in release profile
           command: cargo +stable test --verbose --release --frozen --all
+  test_ignored_release:
+    docker:
+      - image: dignifiedquire/rust:latest
+    working_directory: /mnt/crate
+    steps:
+      - checkout
+      - attach_workspace:
+          at: "."
+      - restore_cache:
+          keys:
+            - cargo-v2-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - parameter-cache-{{ .Revision }}
+      - run:
+          name: Test (stable) in release profile
+          command: cargo +stable test --verbose --release --frozen --all -- --ignored
       - save_cache:
           key: parameter-cache-{{ .Revision }}
           paths:
             - /root/.filecoin-parameter-cache
+
   test_nightly:
     docker:
       - image: dignifiedquire/rust:latest
@@ -133,11 +149,12 @@ workflows:
       - test_release:
           requires:
             - cargo_fetch
+      - test_ignored_release:
+          requires:
+            - cargo_fetch
       - test:
           requires:
             - cargo_fetch
-            - test_release
       - test_nightly:
           requires:
             - cargo_fetch
-            - test_release
