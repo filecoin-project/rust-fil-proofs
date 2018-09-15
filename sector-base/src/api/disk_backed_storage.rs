@@ -4,7 +4,14 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 
 use api::util;
-use api::{SectorStore, StatusCode};
+use api::{SectorConfig, SectorManager, SectorStore, StatusCode};
+
+pub const REAL_SECTOR_SIZE: u64 = 128;
+pub const FAST_SECTOR_SIZE: u64 = 1024;
+pub const SLOW_SECTOR_SIZE: u64 = 1 << 30;
+
+pub const FAST_DELAY_SECONDS: u32 = 10;
+pub const SLOW_DELAY_SECONDS: u32 = 4 * 60 * 60;
 
 /// Initializes and returns a boxed SectorStore instance suitable for exercising the proofs code
 /// to its fullest capacity.
@@ -15,16 +22,16 @@ use api::{SectorStore, StatusCode};
 /// * `sealed_dir_path`  - path to the sealed directory
 /// ```
 #[no_mangle]
-pub unsafe extern "C" fn init_new_proof_test_sector_store(
+pub unsafe extern "C" fn init_new_proof_test_sector_store<'a>(
     staging_dir_path: *const libc::c_char,
     sealed_dir_path: *const libc::c_char,
 ) -> *mut Box<SectorStore> {
-    Box::into_raw(Box::new(Box::new(RealSectorStore {
-        manager: DiskManager {
-            sealed_path: String::from(util::c_str_to_rust_str(sealed_dir_path)),
-            staging_path: String::from(util::c_str_to_rust_str(staging_dir_path)),
-        },
-    })))
+    let boxed = Box::new(new_sector_store(
+        ConfiguredStore::ProofTest,
+        String::from(util::c_str_to_rust_str(sealed_dir_path)),
+        String::from(util::c_str_to_rust_str(staging_dir_path)),
+    ));
+    util::raw_ptr(boxed)
 }
 
 /// Initializes and returns a boxed SectorStore instance which is very similar to the Alpha-release
@@ -41,12 +48,12 @@ pub unsafe extern "C" fn init_new_test_sector_store(
     staging_dir_path: *const libc::c_char,
     sealed_dir_path: *const libc::c_char,
 ) -> *mut Box<SectorStore> {
-    Box::into_raw(Box::new(Box::new(FastFakeSectorStore {
-        manager: DiskManager {
-            sealed_path: String::from(util::c_str_to_rust_str(sealed_dir_path)),
-            staging_path: String::from(util::c_str_to_rust_str(staging_dir_path)),
-        },
-    })))
+    let boxed = Box::new(new_sector_store(
+        ConfiguredStore::Test,
+        String::from(util::c_str_to_rust_str(sealed_dir_path)),
+        String::from(util::c_str_to_rust_str(staging_dir_path)),
+    ));
+    util::raw_ptr(boxed)
 }
 
 /// Initializes and returns a boxed SectorStore instance which Alpha Filecoin node-users will rely
@@ -63,12 +70,13 @@ pub unsafe extern "C" fn init_new_sector_store(
     staging_dir_path: *const libc::c_char,
     sealed_dir_path: *const libc::c_char,
 ) -> *mut Box<SectorStore> {
-    Box::into_raw(Box::new(Box::new(SlowFakeSectorStore {
-        manager: DiskManager {
-            sealed_path: String::from(util::c_str_to_rust_str(sealed_dir_path)),
-            staging_path: String::from(util::c_str_to_rust_str(staging_dir_path)),
-        },
-    })))
+    let boxed = Box::new(new_sector_store(
+        ConfiguredStore::Live,
+        String::from(util::c_str_to_rust_str(sealed_dir_path)),
+        String::from(util::c_str_to_rust_str(staging_dir_path)),
+    ));
+
+    util::raw_ptr(boxed)
 }
 
 pub struct DiskManager {
@@ -76,19 +84,7 @@ pub struct DiskManager {
     sealed_path: String,
 }
 
-impl DiskManager {
-    fn new_sector_access(&self, root: &Path) -> Result<String, StatusCode> {
-        let pbuf = root.join(util::rand_alpha_string(32));
-
-        create_dir_all(root)
-            .map_err(|_| 70)
-            .and_then(|_| File::create(&pbuf).map(|_| 0).map_err(|_| 71))
-            .and_then(|_| {
-                pbuf.to_str()
-                    .map_or_else(|| Err(72), |str_ref| Ok(str_ref.to_owned()))
-            })
-    }
-
+impl SectorManager for DiskManager {
     fn new_sealed_sector_access(&self) -> Result<String, StatusCode> {
         self.new_sector_access(Path::new(&self.sealed_path))
     }
@@ -123,19 +119,116 @@ impl DiskManager {
     }
 }
 
-pub struct RealSectorStore {
-    manager: DiskManager,
+impl DiskManager {
+    fn new_sector_access(&self, root: &Path) -> Result<String, StatusCode> {
+        let pbuf = root.join(util::rand_alpha_string(32));
+
+        create_dir_all(root)
+            .map_err(|_| 70)
+            .and_then(|_| File::create(&pbuf).map(|_| 0).map_err(|_| 71))
+            .and_then(|_| {
+                pbuf.to_str()
+                    .map_or_else(|| Err(72), |str_ref| Ok(str_ref.to_owned()))
+            })
+    }
 }
 
-pub struct SlowFakeSectorStore {
-    manager: DiskManager,
+pub struct RealConfig {
+    sector_bytes: u64,
+}
+pub struct FakeConfig {
+    sector_bytes: u64,
+    delay_seconds: u32,
 }
 
-pub struct FastFakeSectorStore {
-    manager: DiskManager,
+#[derive(Debug)]
+pub enum ConfiguredStore {
+    Live,
+    Test,
+    ProofTest,
 }
 
-impl SectorStore for RealSectorStore {
+pub struct ConcreteSectorStore {
+    config: Box<SectorConfig>,
+    manager: Box<SectorManager>,
+}
+
+impl SectorStore for ConcreteSectorStore {
+    fn config(&self) -> &Box<SectorConfig> {
+        &self.config
+    }
+    fn manager(&self) -> &Box<SectorManager> {
+        &self.manager
+    }
+}
+
+pub fn new_real_sector_store(sealed_path: String, staging_path: String) -> ConcreteSectorStore {
+    ConcreteSectorStore {
+        config: Box::new(RealConfig {
+            sector_bytes: REAL_SECTOR_SIZE,
+        }),
+        manager: Box::new(DiskManager {
+            sealed_path,
+            staging_path,
+        }),
+    }
+}
+
+pub fn new_sector_store(
+    cs: ConfiguredStore,
+    sealed_path: String,
+    staging_path: String,
+) -> ConcreteSectorStore {
+    match cs {
+        ConfiguredStore::Live => new_slow_fake_sector_store(sealed_path, staging_path),
+        ConfiguredStore::Test => new_fast_fake_sector_store(sealed_path, staging_path),
+        ConfiguredStore::ProofTest => new_real_sector_store(sealed_path, staging_path),
+    }
+}
+
+pub fn new_slow_fake_sector_store(
+    sealed_path: String,
+    staging_path: String,
+) -> ConcreteSectorStore {
+    new_fake_sector_store(
+        sealed_path,
+        staging_path,
+        SLOW_SECTOR_SIZE,
+        SLOW_DELAY_SECONDS,
+    )
+}
+
+pub fn new_fast_fake_sector_store(
+    sealed_path: String,
+    staging_path: String,
+) -> ConcreteSectorStore {
+    new_fake_sector_store(
+        sealed_path,
+        staging_path,
+        FAST_SECTOR_SIZE,
+        FAST_DELAY_SECONDS,
+    )
+}
+
+fn new_fake_sector_store(
+    sealed_path: String,
+    staging_path: String,
+    sector_bytes: u64,
+    delay_seconds: u32,
+) -> ConcreteSectorStore {
+    ConcreteSectorStore {
+        config: Box::new(FakeConfig {
+            sector_bytes,
+            delay_seconds,
+        }),
+        manager: Box::new(DiskManager {
+            sealed_path,
+            staging_path,
+        }),
+    }
+}
+
+impl SectorConfig for RealConfig {
     fn is_fake(&self) -> bool {
         false
     }
@@ -145,95 +238,21 @@ impl SectorStore for RealSectorStore {
     }
 
     fn max_unsealed_bytes_per_sector(&self) -> u64 {
-        128
-    }
-
-    fn new_sealed_sector_access(&self) -> Result<String, StatusCode> {
-        self.manager.new_sealed_sector_access()
-    }
-
-    fn new_staging_sector_access(&self) -> Result<String, StatusCode> {
-        self.manager.new_staging_sector_access()
-    }
-
-    fn num_unsealed_bytes(&self, access: String) -> Result<u64, StatusCode> {
-        self.manager.num_unsealed_bytes(access)
-    }
-
-    fn truncate_unsealed(&self, access: String, size: u64) -> Result<(), StatusCode> {
-        self.manager.truncate_unsealed(access, size)
-    }
-
-    fn write_unsealed(&self, access: String, data: &[u8]) -> Result<u64, StatusCode> {
-        self.manager.write_unsealed(access, data)
+        self.sector_bytes
     }
 }
 
-impl SectorStore for FastFakeSectorStore {
+impl SectorConfig for FakeConfig {
     fn is_fake(&self) -> bool {
         true
     }
 
     fn simulate_delay_seconds(&self) -> Option<u32> {
-        Some(5)
+        Some(self.delay_seconds)
     }
 
     fn max_unsealed_bytes_per_sector(&self) -> u64 {
-        1024
-    }
-
-    fn new_sealed_sector_access(&self) -> Result<String, StatusCode> {
-        self.manager.new_sealed_sector_access()
-    }
-
-    fn new_staging_sector_access(&self) -> Result<String, StatusCode> {
-        self.manager.new_staging_sector_access()
-    }
-
-    fn num_unsealed_bytes(&self, access: String) -> Result<u64, StatusCode> {
-        self.manager.num_unsealed_bytes(access)
-    }
-
-    fn truncate_unsealed(&self, access: String, size: u64) -> Result<(), StatusCode> {
-        self.manager.truncate_unsealed(access, size)
-    }
-
-    fn write_unsealed(&self, access: String, data: &[u8]) -> Result<u64, StatusCode> {
-        self.manager.write_unsealed(access, data)
-    }
-}
-
-impl SectorStore for SlowFakeSectorStore {
-    fn is_fake(&self) -> bool {
-        true
-    }
-
-    fn simulate_delay_seconds(&self) -> Option<u32> {
-        Some(10)
-    }
-
-    fn max_unsealed_bytes_per_sector(&self) -> u64 {
-        2 << 30
-    }
-
-    fn new_sealed_sector_access(&self) -> Result<String, StatusCode> {
-        self.manager.new_sealed_sector_access()
-    }
-
-    fn new_staging_sector_access(&self) -> Result<String, StatusCode> {
-        self.manager.new_staging_sector_access()
-    }
-
-    fn num_unsealed_bytes(&self, access: String) -> Result<u64, StatusCode> {
-        self.manager.num_unsealed_bytes(access)
-    }
-
-    fn truncate_unsealed(&self, access: String, size: u64) -> Result<(), StatusCode> {
-        self.manager.truncate_unsealed(access, size)
-    }
-
-    fn write_unsealed(&self, access: String, data: &[u8]) -> Result<u64, StatusCode> {
-        self.manager.write_unsealed(access, data)
+        self.sector_bytes
     }
 }
 

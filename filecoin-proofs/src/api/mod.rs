@@ -19,10 +19,9 @@ type CommitmentPtr = *const u8;
 type SnarkProofPtr = *const u8;
 type GetUnsealedRangeResultPtr = *mut u64;
 
-/// These are also defined in api::internal, but we make them explicit here for API consumers.
+/// This is also defined in api::internal, but we make it explicit here for API consumers.
 /// How big, in bytes, is a SNARK proof?
 pub const SNARK_BYTES: usize = 192;
-pub const SECTOR_BYTES: u64 = 64;
 
 /// Seals a sector and returns a status code indicating success or failure.
 ///
@@ -46,14 +45,20 @@ pub unsafe extern "C" fn seal(
     sector_id_ptr: SectorIDPtr,
     result_ptr: SealResultPtr,
 ) -> StatusCode {
-    let _ = &mut *ss_ptr; // SectorStore
+    let sector_store = &mut **ss_ptr;
 
     let unsealed_path_buf = util::pbuf_from_c(unsealed_path);
     let sealed_path_buf = util::pbuf_from_c(sealed_path);
     let prover_id = util::u8ptr_to_array31(prover_id_ptr);
     let sector_id = util::u8ptr_to_array31(sector_id_ptr);
 
-    let result = internal::seal(&unsealed_path_buf, &sealed_path_buf, prover_id, sector_id);
+    let result = internal::seal(
+        sector_store,
+        &unsealed_path_buf,
+        &sealed_path_buf,
+        prover_id,
+        sector_id,
+    );
 
     match result {
         Ok((comm_r, comm_d, snark_proof)) => {
@@ -71,6 +76,7 @@ pub unsafe extern "C" fn seal(
             0
         }
         Err(_) => {
+            // TODO: Log FPS errors throughout.
             // TODO: make a decision about which status code to return using Err
             10
         }
@@ -98,7 +104,7 @@ pub unsafe extern "C" fn verify_seal(
     sector_id_ptr: SectorIDPtr,
     proof_ptr: SnarkProofPtr,
 ) -> StatusCode {
-    let _ = &mut *ss_ptr; // SectorStore
+    let sector_store = &mut **ss_ptr;
 
     let comm_r = util::u8ptr_to_array32(comm_r_ptr);
     let comm_d = util::u8ptr_to_array32(comm_d_ptr);
@@ -106,7 +112,7 @@ pub unsafe extern "C" fn verify_seal(
     let sector_id = util::u8ptr_to_array31(sector_id_ptr);
     let proof = util::u8ptr_to_vector(proof_ptr, SNARK_BYTES);
 
-    match internal::verify_seal(comm_r, comm_d, prover_id, sector_id, &proof) {
+    match internal::verify_seal(sector_store, comm_r, comm_d, prover_id, sector_id, &proof) {
         Ok(true) => 0,
         Ok(false) => 20,
         Err(_) => 21,
@@ -141,14 +147,19 @@ pub unsafe extern "C" fn get_unsealed_range(
     sector_id_ptr: SectorIDPtr,
     result_ptr: GetUnsealedRangeResultPtr,
 ) -> StatusCode {
-    let _ = &mut *ss_ptr; // SectorStore
-
+    // How to read: &mut **ss_ptr throughout:
+    // ss_ptr is a pointer to a Box
+    // *ss_ptr is the Box.
+    // **ss_ptr is the Box's content: a SectorStore.
+    // &mut **ss_ptr is a mutable reference to the SectorStore.
+    let sector_store = &mut **ss_ptr;
     let sealed_path_buf = util::pbuf_from_c(sealed_path);
     let output_path_buf = util::pbuf_from_c(output_path);
     let prover_id = util::u8ptr_to_array31(prover_id_ptr);
     let sector_id = util::u8ptr_to_array31(sector_id_ptr);
 
     match internal::get_unsealed_range(
+        sector_store,
         &sealed_path_buf,
         &output_path_buf,
         prover_id,
@@ -182,22 +193,24 @@ pub unsafe extern "C" fn get_unsealed(
     prover_id_ptr: ProverIDPtr,
     sector_id_ptr: SectorIDPtr,
 ) -> StatusCode {
-    let _ = &mut *ss_ptr; // SectorStore
+    let sector_store = &mut **ss_ptr;
 
     let sealed_path_buf = util::pbuf_from_c(sealed_path);
     let output_path_buf = util::pbuf_from_c(output_path);
     let prover_id = util::u8ptr_to_array31(prover_id_ptr);
     let sector_id = util::u8ptr_to_array31(sector_id_ptr);
+    let sector_bytes = sector_store.config().max_unsealed_bytes_per_sector();
 
     match internal::get_unsealed_range(
+        sector_store,
         &sealed_path_buf,
         &output_path_buf,
         prover_id,
         sector_id,
         0,
-        SECTOR_BYTES,
+        sector_bytes,
     ) {
-        Ok(num_bytes) => if num_bytes == SECTOR_BYTES {
+        Ok(num_bytes) => if num_bytes == sector_bytes {
             0
         } else {
             30
@@ -220,6 +233,9 @@ pub unsafe extern "C" fn get_unsealed(
 /// * `status_code` - a status code returned from an FPS operation, such as seal or verify_seal
 #[no_mangle]
 pub extern "C" fn status_to_string(status_code: StatusCode) -> *const libc::c_char {
+    // TODO: Use an enum for each range of StatusCodes, so use throughout is comprehensible.
+    // Also, we're comingling the status codes returned by sector-base and filecoin-proofs.
+    // Can we tease this apart?
     let s = match status_code {
         0 => CString::new("success"),
         10 => CString::new("failed to seal"),
@@ -260,8 +276,12 @@ pub extern "C" fn verifyPost() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::{thread_rng, Rng};
 
-    use sector_base::api::disk_backed_storage::init_new_proof_test_sector_store;
+    use sector_base::api::disk_backed_storage::{
+        init_new_proof_test_sector_store, init_new_sector_store, init_new_test_sector_store,
+        ConfiguredStore,
+    };
     use sector_base::api::{
         new_sealed_sector_access, new_staging_sector_access, write_unsealed, SectorStore,
     };
@@ -284,7 +304,7 @@ mod tests {
         *result
     }
 
-    fn create_storage() -> *mut Box<SectorStore> {
+    fn create_storage(cs: &ConfiguredStore) -> *mut Box<SectorStore> {
         let staging_path = tempfile::tempdir().unwrap().path().to_owned();
         let sealed_path = tempfile::tempdir().unwrap().path().to_owned();
 
@@ -294,13 +314,76 @@ mod tests {
         let s1 = rust_str_to_c_str(&staging_path.to_str().unwrap().to_owned());
         let s2 = rust_str_to_c_str(&sealed_path.to_str().unwrap().to_owned());
 
-        unsafe { init_new_proof_test_sector_store(s1, s2) }
+        match cs {
+            ConfiguredStore::Live => unsafe { init_new_sector_store(s1, s2) },
+            ConfiguredStore::Test => unsafe { init_new_test_sector_store(s1, s2) },
+            ConfiguredStore::ProofTest => unsafe { init_new_proof_test_sector_store(s1, s2) },
+        }
+    }
+
+    // TODO: create a way to run these super-slow-by-design tests manually.
+    //    fn seal_verify_live() {
+    //        seal_verify_aux(ConfiguredStore::Live);
+    //    }
+    //
+    //    fn seal_unsealed_roundtrip_live() {
+    //        seal_unsealed_roundtrip_aux(ConfiguredStore::Live);
+    //    }
+    //
+    //    fn seal_unsealed_range_roundtrip_live() {
+    //        seal_unsealed_range_roundtrip_aux(ConfiguredStore::Live);
+    //    }
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn seal_verify_test() {
+        seal_verify_aux(ConfiguredStore::Test);
     }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
-    fn seal_verify() {
-        let storage = create_storage();
+    fn seal_verify_proof_test() {
+        seal_verify_aux(ConfiguredStore::ProofTest);
+    }
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn seal_unsealed_roundtrip_test() {
+        seal_unsealed_roundtrip_aux(ConfiguredStore::Test);
+    }
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn seal_unsealed_roundtrip_proof_test() {
+        seal_unsealed_roundtrip_aux(ConfiguredStore::ProofTest);
+    }
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn seal_unsealed_range_roundtrip_test() {
+        seal_unsealed_range_roundtrip_aux(ConfiguredStore::Test);
+    }
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn seal_unsealed_range_roundtrip_proof_test() {
+        seal_unsealed_range_roundtrip_aux(ConfiguredStore::ProofTest);
+    }
+
+    fn storage_bytes(sector_store: &'static SectorStore) -> usize {
+        sector_store.config().max_unsealed_bytes_per_sector() as usize
+    }
+
+    fn make_data_for_storage(sector_store: &'static SectorStore) -> Vec<u8> {
+        let mut rng = thread_rng();
+        let length = storage_bytes(sector_store) - 50; // Leave some room for padding.
+        (0..length)
+            .map(|_| rng.gen::<u8>() & 0b00111111) // Mask out two most significant bits so data is always Fr.
+            .collect::<Vec<u8>>()
+    }
+
+    fn seal_verify_aux(cs: ConfiguredStore) {
+        let storage = create_storage(&cs);
 
         let seal_input_path = create_sector_access(storage, new_staging_sector_access);
         let seal_output_path = create_sector_access(storage, new_sealed_sector_access);
@@ -309,18 +392,23 @@ mod tests {
         let prover_id: [u8; 31] = [2; 31];
         let sector_id: [u8; 31] = [0; 31];
 
-        let contents = b"hello, moto";
+        let contents = unsafe { make_data_for_storage(&**storage) };
         let result_ptr = &mut 0u64;
 
-        assert_eq!(0, unsafe {
-            write_unsealed(
-                storage,
-                seal_input_path,
-                &contents[0],
-                contents.len(),
-                result_ptr,
-            )
-        });
+        assert_eq!(
+            0,
+            unsafe {
+                write_unsealed(
+                    storage,
+                    seal_input_path,
+                    &contents[0],
+                    contents.len(),
+                    result_ptr,
+                )
+            },
+            "write_unsealed failed for {:?}",
+            cs
+        );
 
         let good_seal = unsafe {
             seal(
@@ -333,6 +421,8 @@ mod tests {
             )
         };
 
+        assert_eq!(0, good_seal, "seal failed for {:?}", cs);
+
         let good_verify = unsafe {
             verify_seal(
                 storage,
@@ -344,8 +434,7 @@ mod tests {
             )
         };
 
-        assert_eq!(0, good_seal);
-        assert_eq!(0, good_verify);
+        assert_eq!(0, good_verify, "verification failed for {:?}", cs);
 
         // FIXME: This test will not pass until we actually make use of the commtiments in ZigZag
         // that will be implemented in https://github.com/filecoin-project/rust-proofs/issues/145
@@ -361,10 +450,8 @@ mod tests {
         // assert_eq!(20, bad_verify);
     }
 
-    #[test]
-    #[ignore] // Slow test – run only when compiled for release.
-    fn seal_unsealed_roundtrip() {
-        let storage = create_storage();
+    fn seal_unsealed_roundtrip_aux(cs: ConfiguredStore) {
+        let storage = create_storage(&cs);
 
         let seal_input_path = create_sector_access(storage, new_staging_sector_access);
         let seal_output_path = create_sector_access(storage, new_sealed_sector_access);
@@ -375,18 +462,23 @@ mod tests {
         let prover_id: [u8; 31] = [2; 31];
         let sector_id: [u8; 31] = [0; 31];
 
-        let contents = b"hello, moto";
+        let contents = unsafe { make_data_for_storage(&**storage) };
         let result_ptr = &mut 0u64;
 
-        assert_eq!(0, unsafe {
-            write_unsealed(
-                storage,
-                seal_input_path,
-                &contents[0],
-                contents.len(),
-                result_ptr,
-            )
-        });
+        assert_eq!(
+            0,
+            unsafe {
+                write_unsealed(
+                    storage,
+                    seal_input_path,
+                    &contents[0],
+                    contents.len(),
+                    result_ptr,
+                )
+            },
+            "write_unsealed failed for {:?}",
+            cs
+        );
 
         let good_seal = unsafe {
             seal(
@@ -399,7 +491,7 @@ mod tests {
             )
         };
 
-        assert_eq!(0, good_seal);
+        assert_eq!(0, good_seal, "seal failed for {:?}", cs);
 
         let good_unsealed = unsafe {
             get_unsealed(
@@ -411,20 +503,26 @@ mod tests {
             )
         };
 
-        assert_eq!(0, good_unsealed);
+        assert_eq!(0, good_unsealed, "get_unsealed failed for {:?}", cs);
 
         let mut file =
             File::open(unsafe { util::pbuf_from_c(get_unsealed_range_output_path) }).unwrap();
         let mut buf = Vec::new();
         file.read_to_end(&mut buf).unwrap();
 
-        assert_eq!(contents[..], buf[0..contents.len()]);
+        let expected_bytes = unsafe { storage_bytes(&**storage) };
+        assert_eq!(buf.len(), expected_bytes);
+
+        assert_eq!(
+            contents[..],
+            buf[0..contents.len()],
+            "original and unsealed contents differed for {:?}",
+            cs
+        );
     }
 
-    #[test]
-    #[ignore] // Slow test – run only when compiled for release.
-    fn seal_unsealed_range_roundtrip() {
-        let storage = create_storage();
+    fn seal_unsealed_range_roundtrip_aux(cs: ConfiguredStore) {
+        let storage = create_storage(&cs);
 
         let seal_input_path = create_sector_access(storage, new_staging_sector_access);
         let seal_output_path = create_sector_access(storage, new_sealed_sector_access);
@@ -435,18 +533,23 @@ mod tests {
         let prover_id: [u8; 31] = [2; 31];
         let sector_id: [u8; 31] = [0; 31];
 
-        let contents = b"hello, moto";
+        let contents = unsafe { make_data_for_storage(&**storage) };
         let result_ptr = &mut 0u64;
 
-        assert_eq!(0, unsafe {
-            write_unsealed(
-                storage,
-                seal_input_path,
-                &contents[0],
-                contents.len(),
-                result_ptr,
-            )
-        });
+        assert_eq!(
+            0,
+            unsafe {
+                write_unsealed(
+                    storage,
+                    seal_input_path,
+                    &contents[0],
+                    contents.len(),
+                    result_ptr,
+                )
+            },
+            "write_unsealed failed for {:?}",
+            cs
+        );
 
         let good_seal = unsafe {
             seal(
@@ -458,7 +561,8 @@ mod tests {
                 &result[0],
             )
         };
-        assert_eq!(0, good_seal);
+
+        assert_eq!(0, good_seal, "seal failed for {:?}", cs);
 
         let offset = 5;
         let range_length = contents.len() as u64 - offset;
@@ -475,8 +579,12 @@ mod tests {
             )
         };
 
-        assert_eq!(0, good_unsealed);
-        assert_eq!(range_length, *result_ptr);
+        assert_eq!(0, good_unsealed, "get_unsealed failed for {:?}", cs);
+        assert_eq!(
+            range_length, *result_ptr,
+            "expected range length {}; got {} for {:?}",
+            range_length, *result_ptr, cs
+        );
 
         let mut file =
             File::open(unsafe { util::pbuf_from_c(get_unsealed_range_output_path) }).unwrap();
@@ -485,7 +593,9 @@ mod tests {
 
         assert_eq!(
             contents[(offset as usize)..],
-            buf[0..(range_length as usize)]
+            buf[0..(range_length as usize)],
+            "original and unsealed_range contents differed for {:?}",
+            cs
         );
     }
 }

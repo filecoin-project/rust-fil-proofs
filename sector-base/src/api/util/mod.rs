@@ -34,3 +34,8 @@ pub fn rand_alpha_string(len: u8) -> String {
 pub unsafe fn pbuf_from_c(x: *const libc::c_char) -> PathBuf {
     PathBuf::from(String::from(c_str_to_rust_str(x)))
 }
+
+// return a forgotten raw pointer to something of type T.
+pub fn raw_ptr<T>(thing: T) -> *mut T {
+    Box::into_raw(Box::new(thing))
+}

@@ -13,7 +13,7 @@ pub struct SetupParams {
     pub layers: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PublicParams<G: Graph>
 where
     G: ParameterSetIdentifier,

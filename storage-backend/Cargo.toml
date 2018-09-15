@@ -5,3 +5,6 @@ authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
 license = "MIT OR Apache-2.0"
 
 [dependencies]
+
+[profile.test]
+opt-level = 1

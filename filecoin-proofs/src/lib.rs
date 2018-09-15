@@ -16,6 +16,7 @@ extern crate lazy_static;
 extern crate bellman;
 extern crate libc;
 extern crate pairing;
+extern crate rand;
 extern crate sapling_crypto;
 extern crate tempfile;
 

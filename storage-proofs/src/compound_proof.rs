@@ -14,6 +14,7 @@ where
     pub engine_params: &'a E::Params,
 }
 
+#[derive(Clone)]
 pub struct PublicParams<'a, E: JubjubEngine, S: ProofScheme<'a>> {
     pub vanilla_params: S::PublicParams,
     pub engine_params: &'a E::Params,
@@ -49,6 +50,11 @@ where
         priv_in: &S::PrivateInputs,
     ) -> Result<Proof<E>> {
         let vanilla_proof = S::prove(&pub_params.vanilla_params, pub_in, priv_in)?;
+
+        assert!(
+            S::verify(&pub_params.vanilla_params, pub_in, &vanilla_proof)?,
+            "Vanilla proof didn't verify!"
+        );
 
         let (groth_proof, groth_params) = Self::circuit_proof(
             pub_in,

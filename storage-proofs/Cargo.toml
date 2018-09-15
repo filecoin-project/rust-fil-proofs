@@ -52,3 +52,6 @@ harness = false
 [[bench]]
 name = "drgraph"
 harness = false
+
+[profile.test]
+opt-level = 1

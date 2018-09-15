@@ -6,7 +6,7 @@ pub mod util;
 
 type StatusCode = u32;
 
-pub trait SectorStore {
+pub trait SectorConfig {
     /// if true, uses something other exact bits, correct parameters, or full proofs
     fn is_fake(&self) -> bool;
 
@@ -15,7 +15,9 @@ pub trait SectorStore {
 
     /// returns the number of bytes that will fit into a sector managed by this store
     fn max_unsealed_bytes_per_sector(&self) -> u64;
+}
 
+pub trait SectorManager {
     /// provisions a new sealed sector and reports the corresponding access
     fn new_sealed_sector_access(&self) -> Result<String, StatusCode>;
 
@@ -32,6 +34,10 @@ pub trait SectorStore {
     fn write_unsealed(&self, access: String, data: &[u8]) -> Result<u64, StatusCode>;
 }
 
+pub trait SectorStore {
+    fn config(&self) -> &Box<SectorConfig>;
+    fn manager(&self) -> &Box<SectorManager>;
+}
 /// Destroys a boxed SectorStore by freeing its memory.
 ///
 /// # Arguments
@@ -57,9 +63,9 @@ pub unsafe extern "C" fn new_sealed_sector_access(
     ss_ptr: *mut Box<SectorStore>,
     result_ptr: *mut *const libc::c_char,
 ) -> StatusCode {
-    let m = &mut *ss_ptr;
+    let sector_store = &mut *ss_ptr;
 
-    match m.new_sealed_sector_access() {
+    match sector_store.manager().new_sealed_sector_access() {
         Ok(access) => {
             let ptr = util::rust_str_to_c_str(&access);
 
@@ -83,9 +89,9 @@ pub unsafe extern "C" fn new_staging_sector_access(
     ss_ptr: *mut Box<SectorStore>,
     result_ptr: *mut *const libc::c_char,
 ) -> StatusCode {
-    let m = &mut *ss_ptr;
+    let sector_store = &mut *ss_ptr;
 
-    match m.new_staging_sector_access() {
+    match sector_store.manager().new_staging_sector_access() {
         Ok(access) => {
             let ptr = util::rust_str_to_c_str(&access);
 
@@ -117,10 +123,13 @@ pub unsafe extern "C" fn write_unsealed(
     data_len: libc::size_t,
     result_ptr: *mut u64,
 ) -> StatusCode {
-    let m = &mut *ss_ptr;
+    let sector_store = &mut *ss_ptr;
     let data = from_raw_parts(data_ptr, data_len);
 
-    match m.write_unsealed(util::c_str_to_rust_str(access), data) {
+    match sector_store
+        .manager()
+        .write_unsealed(util::c_str_to_rust_str(access), data)
+    {
         Ok(num_bytes_written) => {
             result_ptr.write(num_bytes_written);
 
@@ -146,9 +155,12 @@ pub unsafe extern "C" fn truncate_unsealed(
     access: *const libc::c_char,
     size: u64,
 ) -> StatusCode {
-    let m = &mut *ss_ptr;
+    let sector_store = &mut *ss_ptr;
 
-    match m.truncate_unsealed(util::c_str_to_rust_str(access), size) {
+    match sector_store
+        .manager()
+        .truncate_unsealed(util::c_str_to_rust_str(access), size)
+    {
         Ok(_) => 0,
         Err(n) => n,
     }
@@ -172,9 +184,12 @@ pub unsafe extern "C" fn num_unsealed_bytes(
     access: *const libc::c_char,
     result_ptr: *mut u64,
 ) -> StatusCode {
-    let m = &mut *ss_ptr;
+    let sector_store = &mut *ss_ptr;
 
-    match m.num_unsealed_bytes(util::c_str_to_rust_str(access)) {
+    match sector_store
+        .manager()
+        .num_unsealed_bytes(util::c_str_to_rust_str(access))
+    {
         Ok(n) => {
             result_ptr.write(n);
 
@@ -198,8 +213,8 @@ pub unsafe extern "C" fn max_unsealed_bytes_per_sector(
     ss_ptr: *mut Box<SectorStore>,
     result_ptr: *mut u64,
 ) -> StatusCode {
-    let m = &mut *ss_ptr;
-    let n = m.max_unsealed_bytes_per_sector();
+    let sector_store = &mut *ss_ptr;
+    let n = sector_store.config().max_unsealed_bytes_per_sector();
 
     result_ptr.write(n);
 

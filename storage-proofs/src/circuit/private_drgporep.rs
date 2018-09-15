@@ -139,6 +139,7 @@ where
             .map(|challenge| {
                 let mut input = Vec::new();
                 input.extend(packed_replica_id.clone());
+                println!("extending input: {:?}", packed_replica_id.clone());
 
                 let mut por_nodes = vec![*challenge];
                 let parents = pub_params.graph.parents(*challenge);
