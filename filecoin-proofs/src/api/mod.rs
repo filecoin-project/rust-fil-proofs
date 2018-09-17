@@ -9,14 +9,6 @@ pub mod util;
 
 type SectorAccess = *const libc::c_char;
 type StatusCode = u32;
-
-// arrays cannot be passed by value in C; callers instead pass a pointer to the
-// head and Rust makes runtime assertions of length while marshaling
-type ProverIDPtr = *const u8;
-type SectorIDPtr = *const u8;
-type SealResultPtr = *const u8;
-type CommitmentPtr = *const u8;
-type SnarkProofPtr = *const u8;
 type GetUnsealedRangeResultPtr = *mut u64;
 
 /// This is also defined in api::internal, but we make it explicit here for API consumers.
@@ -41,37 +33,32 @@ pub unsafe extern "C" fn seal(
     ss_ptr: *mut Box<SectorStore>,
     unsealed_path: SectorAccess,
     sealed_path: SectorAccess,
-    prover_id_ptr: ProverIDPtr,
-    sector_id_ptr: SectorIDPtr,
-    result_ptr: SealResultPtr,
+    prover_id: &[u8; 31],
+    sector_id: &[u8; 31],
+    result_comm_r: &mut [u8; 32],
+    result_comm_d: &mut [u8; 32],
+    result_proof: &mut [u8; SNARK_BYTES],
 ) -> StatusCode {
     let sector_store = &mut **ss_ptr;
 
     let unsealed_path_buf = util::pbuf_from_c(unsealed_path);
     let sealed_path_buf = util::pbuf_from_c(sealed_path);
-    let prover_id = util::u8ptr_to_array31(prover_id_ptr);
-    let sector_id = util::u8ptr_to_array31(sector_id_ptr);
 
     let result = internal::seal(
         sector_store,
         &unsealed_path_buf,
         &sealed_path_buf,
-        prover_id,
-        sector_id,
+        *prover_id,
+        *sector_id,
     );
 
     match result {
         Ok((comm_r, comm_d, snark_proof)) => {
             // let caller manage this memory, preventing the need for calling back into
             // Rust code later to deallocate
-            for x in 0..32 {
-                *(result_ptr.add(x) as *mut u8) = comm_r[x];
-                *(result_ptr.add(x + 32) as *mut u8) = comm_d[x];
-            }
-
-            for (i, elt) in snark_proof.iter().enumerate() {
-                *(result_ptr.add(i + 64) as *mut u8) = *elt;
-            }
+            result_comm_r[..32].clone_from_slice(&comm_r[..32]);
+            result_comm_d[..32].clone_from_slice(&comm_d[..32]);
+            result_proof[..SNARK_BYTES].clone_from_slice(&snark_proof[..SNARK_BYTES]);
 
             0
         }
@@ -98,21 +85,22 @@ pub unsafe extern "C" fn seal(
 #[no_mangle]
 pub unsafe extern "C" fn verify_seal(
     ss_ptr: *mut Box<SectorStore>,
-    comm_r_ptr: CommitmentPtr,
-    comm_d_ptr: CommitmentPtr,
-    prover_id_ptr: ProverIDPtr,
-    sector_id_ptr: SectorIDPtr,
-    proof_ptr: SnarkProofPtr,
+    comm_r: &[u8; 32],
+    comm_d: &[u8; 32],
+    prover_id: &[u8; 31],
+    sector_id: &[u8; 31],
+    proof: &[u8; SNARK_BYTES],
 ) -> StatusCode {
     let sector_store = &mut **ss_ptr;
 
-    let comm_r = util::u8ptr_to_array32(comm_r_ptr);
-    let comm_d = util::u8ptr_to_array32(comm_d_ptr);
-    let prover_id = util::u8ptr_to_array31(prover_id_ptr);
-    let sector_id = util::u8ptr_to_array31(sector_id_ptr);
-    let proof = util::u8ptr_to_vector(proof_ptr, SNARK_BYTES);
-
-    match internal::verify_seal(sector_store, comm_r, comm_d, prover_id, sector_id, &proof) {
+    match internal::verify_seal(
+        sector_store,
+        *comm_r,
+        *comm_d,
+        *prover_id,
+        *sector_id,
+        proof,
+    ) {
         Ok(true) => 0,
         Ok(false) => 20,
         Err(_) => 21,
@@ -143,8 +131,8 @@ pub unsafe extern "C" fn get_unsealed_range(
     output_path: SectorAccess,
     start_offset: u64,
     num_bytes: u64,
-    prover_id_ptr: ProverIDPtr,
-    sector_id_ptr: SectorIDPtr,
+    prover_id: &[u8; 31],
+    sector_id: &[u8; 31],
     result_ptr: GetUnsealedRangeResultPtr,
 ) -> StatusCode {
     // How to read: &mut **ss_ptr throughout:
@@ -155,15 +143,13 @@ pub unsafe extern "C" fn get_unsealed_range(
     let sector_store = &mut **ss_ptr;
     let sealed_path_buf = util::pbuf_from_c(sealed_path);
     let output_path_buf = util::pbuf_from_c(output_path);
-    let prover_id = util::u8ptr_to_array31(prover_id_ptr);
-    let sector_id = util::u8ptr_to_array31(sector_id_ptr);
 
     match internal::get_unsealed_range(
         sector_store,
         &sealed_path_buf,
         &output_path_buf,
-        prover_id,
-        sector_id,
+        *prover_id,
+        *sector_id,
         start_offset,
         num_bytes,
     ) {
@@ -190,23 +176,21 @@ pub unsafe extern "C" fn get_unsealed(
     ss_ptr: *mut Box<SectorStore>,
     sealed_path: SectorAccess,
     output_path: SectorAccess,
-    prover_id_ptr: ProverIDPtr,
-    sector_id_ptr: SectorIDPtr,
+    prover_id: &[u8; 31],
+    sector_id: &[u8; 31],
 ) -> StatusCode {
     let sector_store = &mut **ss_ptr;
 
     let sealed_path_buf = util::pbuf_from_c(sealed_path);
     let output_path_buf = util::pbuf_from_c(output_path);
-    let prover_id = util::u8ptr_to_array31(prover_id_ptr);
-    let sector_id = util::u8ptr_to_array31(sector_id_ptr);
     let sector_bytes = sector_store.config().max_unsealed_bytes_per_sector();
 
     match internal::get_unsealed_range(
         sector_store,
         &sealed_path_buf,
         &output_path_buf,
-        prover_id,
-        sector_id,
+        *prover_id,
+        *sector_id,
         0,
         sector_bytes,
     ) {
@@ -278,6 +262,7 @@ mod tests {
     use super::*;
     use rand::{thread_rng, Rng};
 
+    use api::SNARK_BYTES;
     use sector_base::api::disk_backed_storage::{
         init_new_proof_test_sector_store, init_new_sector_store, init_new_test_sector_store,
         ConfiguredStore,
@@ -388,9 +373,11 @@ mod tests {
         let seal_input_path = create_sector_access(storage, new_staging_sector_access);
         let seal_output_path = create_sector_access(storage, new_sealed_sector_access);
 
-        let result: [u8; 256] = [0; 256];
-        let prover_id: [u8; 31] = [2; 31];
-        let sector_id: [u8; 31] = [0; 31];
+        let result_comm_r: &mut [u8; 32] = &mut [0; 32];
+        let result_comm_d: &mut [u8; 32] = &mut [0; 32];
+        let result_proof: &mut [u8; 192] = &mut [0; 192];
+        let prover_id = &[2; 31];
+        let sector_id = &[0; 31];
 
         let contents = unsafe { make_data_for_storage(&**storage) };
         let result_ptr = &mut 0u64;
@@ -415,9 +402,11 @@ mod tests {
                 storage,
                 seal_input_path,
                 seal_output_path,
-                &prover_id[0],
-                &sector_id[0],
-                &result[0],
+                prover_id,
+                sector_id,
+                result_comm_r,
+                result_comm_d,
+                result_proof,
             )
         };
 
@@ -426,11 +415,11 @@ mod tests {
         let good_verify = unsafe {
             verify_seal(
                 storage,
-                &result[0],
-                &result[32],
-                &prover_id[0],
-                &sector_id[0],
-                &result[64],
+                result_comm_r,
+                result_comm_d,
+                prover_id,
+                sector_id,
+                result_proof,
             )
         };
 
@@ -458,9 +447,11 @@ mod tests {
         let get_unsealed_range_output_path =
             create_sector_access(storage, new_staging_sector_access);
 
-        let result: [u8; 256] = [0; 256];
-        let prover_id: [u8; 31] = [2; 31];
-        let sector_id: [u8; 31] = [0; 31];
+        let result_comm_r: &mut [u8; 32] = &mut [0; 32];
+        let result_comm_d: &mut [u8; 32] = &mut [0; 32];
+        let result_proof: &mut [u8; SNARK_BYTES] = &mut [0; SNARK_BYTES];
+        let prover_id = &[2; 31];
+        let sector_id = &[0; 31];
 
         let contents = unsafe { make_data_for_storage(&**storage) };
         let result_ptr = &mut 0u64;
@@ -485,9 +476,11 @@ mod tests {
                 storage,
                 seal_input_path,
                 seal_output_path,
-                &prover_id[0],
-                &sector_id[0],
-                &result[0],
+                prover_id,
+                sector_id,
+                result_comm_r,
+                result_comm_d,
+                result_proof,
             )
         };
 
@@ -498,8 +491,8 @@ mod tests {
                 storage,
                 seal_output_path,
                 get_unsealed_range_output_path,
-                &prover_id[0],
-                &sector_id[0],
+                prover_id,
+                sector_id,
             )
         };
 
@@ -529,9 +522,11 @@ mod tests {
         let get_unsealed_range_output_path =
             create_sector_access(storage, new_staging_sector_access);
 
-        let result: [u8; 256] = [0; 256];
-        let prover_id: [u8; 31] = [2; 31];
-        let sector_id: [u8; 31] = [0; 31];
+        let result_comm_r: &mut [u8; 32] = &mut [0; 32];
+        let result_comm_d: &mut [u8; 32] = &mut [0; 32];
+        let result_proof: &mut [u8; SNARK_BYTES] = &mut [0; SNARK_BYTES];
+        let prover_id = &[2; 31];
+        let sector_id = &[0; 31];
 
         let contents = unsafe { make_data_for_storage(&**storage) };
         let result_ptr = &mut 0u64;
@@ -556,9 +551,11 @@ mod tests {
                 storage,
                 seal_input_path,
                 seal_output_path,
-                &prover_id[0],
-                &sector_id[0],
-                &result[0],
+                prover_id,
+                sector_id,
+                result_comm_r,
+                result_comm_d,
+                result_proof,
             )
         };
 
@@ -573,8 +570,8 @@ mod tests {
                 get_unsealed_range_output_path,
                 offset,
                 range_length,
-                &prover_id[0],
-                &sector_id[0],
+                prover_id,
+                sector_id,
                 result_ptr,
             )
         };
