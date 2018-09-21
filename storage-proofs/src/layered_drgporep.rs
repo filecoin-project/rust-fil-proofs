@@ -160,7 +160,7 @@ pub trait Layers {
         assert!(layers > 0);
 
         let inverted = &Self::invert_transform(&drgpp, layer, layers);
-        let mut res = DrgPoRep::extract_all(inverted, replica_id, data).unwrap();
+        let mut res = DrgPoRep::extract_all(inverted, replica_id, data)?;
 
         for (i, r) in res.iter_mut().enumerate() {
             data[i] = *r;

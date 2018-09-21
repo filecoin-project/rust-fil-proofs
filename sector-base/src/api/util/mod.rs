@@ -32,7 +32,7 @@ pub fn rand_alpha_string(len: u8) -> String {
 
 // transmutes a C string to a PathBuf
 pub unsafe fn pbuf_from_c(x: *const libc::c_char) -> PathBuf {
-    PathBuf::from(String::from(c_str_to_rust_str(x)))
+    PathBuf::from(c_str_to_rust_str(x))
 }
 
 // return a forgotten raw pointer to something of type T.

@@ -301,7 +301,7 @@ mod tests {
             .map(|_l| {
                 // l is ignored because we assume uniform layers here.
                 let public_inputs = drgporep::PublicInputs {
-                    replica_id: replica_id,
+                    replica_id,
                     challenges: vec![challenge],
                     tau: None,
                 };

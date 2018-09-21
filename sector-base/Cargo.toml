@@ -8,6 +8,7 @@ license = "MIT OR Apache-2.0"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
+storage-proofs = { path = "../storage-proofs" }
 libc = "0.2"
 rand = "0.5"
 

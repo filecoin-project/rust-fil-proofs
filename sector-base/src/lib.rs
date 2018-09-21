@@ -1,6 +1,6 @@
 #![cfg_attr(
     feature = "cargo-clippy",
-    deny(clippy_all, clippy_perf, clippy_correctness)
+    deny(all, clippy_perf, clippy_correctness)
 )]
 #![cfg_attr(feature = "cargo-clippy", allow(unreadable_literal))]
 #![cfg_attr(
@@ -10,6 +10,7 @@
 
 extern crate libc;
 extern crate rand;
+extern crate storage_proofs;
 
 #[cfg(test)]
 extern crate tempfile;

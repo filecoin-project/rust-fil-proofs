@@ -15,6 +15,9 @@ pub trait SectorConfig {
 
     /// returns the number of bytes that will fit into a sector managed by this store
     fn max_unsealed_bytes_per_sector(&self) -> u64;
+
+    /// returns the number of bytes in a sealed sector managed by this store
+    fn sector_bytes(&self) -> u64;
 }
 
 pub trait SectorManager {
@@ -35,8 +38,8 @@ pub trait SectorManager {
 }
 
 pub trait SectorStore {
-    fn config(&self) -> &Box<SectorConfig>;
-    fn manager(&self) -> &Box<SectorManager>;
+    fn config(&self) -> &SectorConfig;
+    fn manager(&self) -> &SectorManager;
 }
 /// Destroys a boxed SectorStore by freeing its memory.
 ///
@@ -57,7 +60,6 @@ pub unsafe extern "C" fn destroy_storage(ss_ptr: *mut Box<SectorStore>) -> Statu
 ///
 /// * `ss_ptr`     - pointer to a boxed SectorStore
 /// * `result_ptr` - pointer to location where provisioned SectorAccess will be written
-/// ```
 #[no_mangle]
 pub unsafe extern "C" fn new_sealed_sector_access(
     ss_ptr: *mut Box<SectorStore>,
@@ -83,7 +85,6 @@ pub unsafe extern "C" fn new_sealed_sector_access(
 ///
 /// * `ss_ptr`     - pointer to a boxed SectorStore
 /// * `result_ptr` - pointer to location where provisioned SectorAccess will be written
-/// ```
 #[no_mangle]
 pub unsafe extern "C" fn new_staging_sector_access(
     ss_ptr: *mut Box<SectorStore>,
@@ -112,9 +113,10 @@ pub unsafe extern "C" fn new_staging_sector_access(
 /// * `access`     - an unsealed sector access
 /// * `data_ptr`   - pointer to data_len-length array of bytes to write
 /// * `data_len`   - number of items in the data_ptr array
-/// * `result_ptr` - pointer to a u64, mutated by write_unsealed in order to communicate the number
-///                  of bytes that were written to the unsealed sector
-/// ```
+/// * `result_ptr` - pointer to a u64, mutated by `write_unsealed` in order to communicate the number
+///                  of bytes that were written to the unsealed sector. NOTE: the number of bytes
+///                  written refers to the input data, and therefore will never be greater than
+///                  the input length – even though the size of the data written to `access` may (will) be.
 #[no_mangle]
 pub unsafe extern "C" fn write_unsealed(
     ss_ptr: *mut Box<SectorStore>,
@@ -130,8 +132,8 @@ pub unsafe extern "C" fn write_unsealed(
         .manager()
         .write_unsealed(util::c_str_to_rust_str(access), data)
     {
-        Ok(num_bytes_written) => {
-            result_ptr.write(num_bytes_written);
+        Ok(num_data_bytes_written) => {
+            result_ptr.write(num_data_bytes_written);
 
             0
         }
@@ -148,7 +150,6 @@ pub unsafe extern "C" fn write_unsealed(
 /// * `ss_ptr` - pointer to a boxed SectorStore
 /// * `access` - an unsealed sector access
 /// * `size`   - desired number of bytes to truncate to
-/// ```
 #[no_mangle]
 pub unsafe extern "C" fn truncate_unsealed(
     ss_ptr: *mut Box<SectorStore>,
@@ -177,7 +178,6 @@ pub unsafe extern "C" fn truncate_unsealed(
 /// * `access`     - an unsealed sector access
 /// * `result_ptr` - pointer to a u64, mutated by num_unsealed_bytes to communicate back to callers
 ///                  the number of bytes in the unsealed sector
-/// ```
 #[no_mangle]
 pub unsafe extern "C" fn num_unsealed_bytes(
     ss_ptr: *mut Box<SectorStore>,
@@ -207,7 +207,6 @@ pub unsafe extern "C" fn num_unsealed_bytes(
 /// * `ss_ptr`     - pointer to a boxed SectorStore
 /// * `result_ptr` - pointer to a u64, mutated by max_unsealed_bytes_per_sector to communicate back to
 ///                  callers the number of bytes an unsealed sector
-/// ```
 #[no_mangle]
 pub unsafe extern "C" fn max_unsealed_bytes_per_sector(
     ss_ptr: *mut Box<SectorStore>,

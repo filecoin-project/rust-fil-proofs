@@ -1,253 +1,584 @@
-use fr32::Fr32Ary;
-use std::cmp;
-use std::fmt::Debug;
-use std::io::{Read, Result, Write};
+use std::cmp::min;
+use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::iter::FromIterator;
 
-pub struct Fr32Writer<W> {
-    inner: W,
-    prefix: u8,
-    prefix_size: usize,
-    bits_needed: usize,
+use bitvec::{self, BitVec};
+use itertools::Itertools;
+
+#[derive(Debug)]
+// PaddingMap represents a mapping between data and its padded equivalent.
+// Padding is at the bit-level.
+pub struct PaddingMap {
+    // The number of bits in the unpadded data.
+    data_chunk_bits: usize,
+    // The number of bits in the padded data. This must be greater than data_chunk_bits.
+    // The difference between padded_chunk_bits and data_chunk_bits is the number of zero/false bits
+    // that should be inserted as padding.
+    padded_chunk_bits: usize,
 }
 
-pub struct Fr32Reader<R> {
-    _inner: R,
+pub const FR_UNPADDED_BITS: usize = 254;
+pub const FR_PADDED_BITS: usize = 256;
+
+// This is the padding map corresponding to Fr32.
+// Most of the code in this module is general-purpose and could move elsewhere.
+// The application-specific wrappers which implicitly use Fr32 embed the FR32_PADDING_MAP.
+pub const FR32_PADDING_MAP: PaddingMap = PaddingMap {
+    data_chunk_bits: FR_UNPADDED_BITS,
+    padded_chunk_bits: FR_PADDED_BITS,
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Convenience interface for API functions – all bundling FR32_PADDING_MAP
+// parameter/return types are tuned for current caller convenience.
+
+pub fn target_unpadded_bytes<W: ?Sized>(target: &mut W) -> io::Result<u64>
+where
+    W: Seek,
+{
+    let (_, unpadded, _) = FR32_PADDING_MAP.target_offsets(target)?;
+
+    Ok(unpadded)
 }
 
-pub const FR_INPUT_BYTE_LIMIT: usize = 254;
+// Leave the actual truncation to caller, since we can't do it generically.
+// Return the length to which target should be truncated.
+// We might should also handle zero-padding what will become the final byte of target.
+// Technically, this should be okay though because that byte will always be overwritten later.
+// If we decide this is unnecessary, then we don't need to pass target at all.
+pub fn almost_truncate_to_unpadded_bytes<W: ?Sized>(
+    _target: &mut W,
+    length: u64,
+) -> io::Result<usize>
+where
+    W: Read + Write + Seek,
+{
+    let padded = FR32_PADDING_MAP.padded_bit_bytes_from_bytes(length as usize);
+    let real_length = padded.bytes_needed();
+    let _final_bit_count = padded.bits;
+    // TODO (maybe): Rewind stream and use final_bit_count to zero-pad last byte of data (post-truncation).
+    Ok(real_length)
+}
 
-impl<W: Write> Write for Fr32Writer<W> {
-    fn write(&mut self, mut buf: &[u8]) -> Result<usize> {
-        let bytes_remaining = buf.len();
-        let mut bytes_written = 0;
+pub fn unpadded_bytes(padded_bytes: u64) -> u64 {
+    FR32_PADDING_MAP.contract_bytes(padded_bytes as usize) as u64
+}
 
-        while bytes_written < bytes_remaining {
-            let (remainder, remainder_size, bytes_consumed, bytes_to_write, more) =
-                self.process_bytes(&buf);
-            if more {
-                // We read a complete chunk and should continue.
-                bytes_written += self.ensure_write(&bytes_to_write)?;
-            } else {
-                // We read an incomplete chunk, so this is the last iteration.
-                // We must have consumed all the bytes in buf.
-                assert!(buf.len() == bytes_consumed);
-                assert!(bytes_consumed < 32);
+pub fn padded_bytes(unpadded_bytes: usize) -> usize {
+    FR32_PADDING_MAP.expand_bytes(unpadded_bytes)
+}
 
-                // Write those bytes but no more (not a whole 32-byte chunk).
-                let real_length = buf.len();
-                assert!(real_length <= bytes_to_write.len());
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
-                let truncated = &bytes_to_write[0..real_length];
-                bytes_written += self.ensure_write(truncated)?;
+// Invariant: it is an error for bit_part to be > 7.
+#[derive(Debug)]
+pub struct BitByte {
+    bytes: usize,
+    bits: usize,
+}
 
-                if self.prefix_size > 0 {
-                    // Since this chunk was incomplete, what would have been the remainder was included as the last byte to write.
-                    // We shouldn't write it now, though, because we may need to write more bytes later.
-                    // However, we do need to save the prefix.
-                    self.prefix = bytes_to_write[real_length];
-                }
-
-                break;
-            }
-
-            self.prefix = remainder;
-            self.prefix_size = remainder_size;
-
-            let residual_bytes_size = buf.len() - bytes_consumed;
-            let residual_bytes = &buf[(buf.len() - residual_bytes_size)..buf.len()];
-            buf = residual_bytes;
+impl BitByte {
+    // Create a BitByte from number of bits. Guaranteed to return a well-formed value (bits < 8)
+    pub fn from_bits(bits: usize) -> BitByte {
+        BitByte {
+            bytes: bits / 8,
+            bits: bits % 8,
         }
-        Ok(bytes_written)
     }
 
-    fn flush(&mut self) -> Result<()> {
-        self.inner.flush()
+    pub fn from_bytes(bytes: usize) -> BitByte {
+        Self::from_bits(bytes * 8)
     }
-}
 
-impl<W: Write> Fr32Writer<W> {
-    pub fn new(inner: W) -> Fr32Writer<W> {
-        Fr32Writer {
-            inner,
-            prefix: 0,
-            prefix_size: 0,
-            bits_needed: FR_INPUT_BYTE_LIMIT,
-        }
+    // How many bits in the BitByte (inverse of from_bits).
+    pub fn total_bits(&self) -> usize {
+        self.bytes * 8 + self.bits
     }
-    // Tries to process bytes.
-    // Returns result of (remainder, remainder size, bytes_consumed, byte output, complete). Remainder size is in bits.
-    // Complete is true iff we read a complete chunk of data.
-    pub fn process_bytes(&mut self, bytes: &[u8]) -> (u8, usize, usize, Fr32Ary, bool) {
-        let bits_needed = self.bits_needed;
-        let full_bytes_needed = bits_needed / 8;
 
-        // The non-byte-aligned tail bits are the suffix and will become the final byte of output.
-        let suffix_size = bits_needed % 8;
+    // True if the BitByte has no bits component.
+    pub fn is_byte_aligned(&self) -> bool {
+        self.bits == 0
+    }
 
-        // Anything left in the byte containing the suffix will become the remainder.
-        let mut remainder_size = 8 - suffix_size;
-
-        // Consume as many bytes as needed, unless there aren't enough.
-        let bytes_to_consume = cmp::min(full_bytes_needed, bytes.len());
-        let mut final_byte = 0;
-        let mut bytes_consumed = bytes_to_consume;
-        let mut incomplete = false;
-
-        if bytes_to_consume <= bytes.len() {
-            if remainder_size != 0 {
-                if (bytes_to_consume + 1) > bytes.len() {
-                    // Too few bytes were sent.
-                    incomplete = true;
-                } else {
-                    // This iteration's remainder will be included in next iteration's output.
-                    self.bits_needed = FR_INPUT_BYTE_LIMIT - remainder_size;
-
-                    // The last byte we consume is special.
-                    final_byte = bytes[bytes_to_consume];
-
-                    // Increment the count of consumed bytes, since we just consumed another.
-                    bytes_consumed += 1;
-                }
-            }
+    // How many distinct bytes are needed to represent data of this size?
+    pub fn bytes_needed(&self) -> usize {
+        self.bytes + if self.bits == 0 {
+            0
         } else {
-            // Too few bytes were sent.
-            incomplete = true;
+            (self.bits + 8) / 8
         }
+    }
+}
 
-        if incomplete {
-            // Too few bytes were sent.
-
-            // We will need the unsent bits next iteration.
-            self.bits_needed = bits_needed - bytes.len();
-
-            // We only consumed the bytes that were sent.
-            bytes_consumed = bytes.len();
-
-            // The current prefix and remainder have the same size; no padding is added in this iteration.
-            remainder_size = self.prefix_size;
+impl PaddingMap {
+    pub fn new(data_bits: usize, representation_bits: usize) -> PaddingMap {
+        assert!(data_bits <= representation_bits);
+        PaddingMap {
+            data_chunk_bits: data_bits,
+            padded_chunk_bits: representation_bits,
         }
+    }
 
-        // Grab all the full bytes (excluding suffix) we intend to consume.
-        let full_bytes = &bytes[0..bytes_to_consume];
+    pub fn padding_bits(&self) -> usize {
+        self.padded_chunk_bits - self.data_chunk_bits
+    }
 
-        // The suffix is the last part of this iteration's output.
-        // The remainder will be the first part of next iteration's output.
-        let (suffix, remainder) = split_byte(final_byte, suffix_size);
-        let out_bytes = assemble_bytes(self.prefix, self.prefix_size, full_bytes, suffix);
-        (
-            remainder,
-            remainder_size,
-            bytes_consumed,
-            out_bytes,
-            !incomplete,
+    pub fn expand_bits(&self, size: usize) -> usize {
+        transform_bit_pos(size, self.data_chunk_bits, self.padded_chunk_bits)
+    }
+
+    pub fn contract_bits(&self, size: usize) -> usize {
+        transform_bit_pos(size, self.padded_chunk_bits, self.data_chunk_bits)
+    }
+
+    // Calculate padded byte size from unpadded byte size, rounding up.
+    pub fn expand_bytes(&self, bytes: usize) -> usize {
+        transform_byte_pos(bytes, self.data_chunk_bits, self.padded_chunk_bits)
+    }
+
+    // Calculate unpadded byte size from padded byte size, rounding down.
+    pub fn contract_bytes(&self, bytes: usize) -> usize {
+        transform_byte_pos(bytes, self.padded_chunk_bits, self.data_chunk_bits)
+    }
+
+    pub fn padded_bit_bytes_from_bits(&self, bits: usize) -> BitByte {
+        let expanded = self.expand_bits(bits);
+        BitByte::from_bits(expanded)
+    }
+
+    // Calculate and return bits and bytes to which a given number of bytes expands.
+    pub fn padded_bit_bytes_from_bytes(&self, bytes: usize) -> BitByte {
+        BitByte::from_bytes(self.expand_bytes(bytes))
+    }
+
+    pub fn unpadded_bit_bytes_from_bits(&self, bits: usize) -> BitByte {
+        let contracted = self.contract_bits(bits);
+        BitByte::from_bits(contracted)
+    }
+
+    pub fn unpadded_bit_bytes_from_bytes(&self, bytes: usize) -> BitByte {
+        BitByte::from_bytes(self.contract_bytes(bytes))
+    }
+
+    // Returns a BitByte representing the distance between current position and next Fr boundary.
+    // Padding is directly before the boundary.
+    pub fn next_fr_end(&self, current: &BitByte) -> BitByte {
+        let current_bits = current.total_bits();
+
+        let (previous, remainder) = div_rem(current_bits, self.padded_chunk_bits);
+
+        let next_bit_boundary = if remainder == 0 {
+            current_bits + self.padded_chunk_bits
+        } else {
+            (previous * self.padded_chunk_bits) + self.padded_chunk_bits
+        };
+
+        BitByte::from_bits(next_bit_boundary)
+    }
+
+    // For a seekable target, return
+    // - the actual padded size in bytes
+    // - the unpadded size in bytes which generated the padded size
+    // - a BitByte representing the number of bits and bytes of actual data contained
+    pub fn target_offsets<W: ?Sized>(&self, target: &mut W) -> io::Result<(u64, u64, BitByte)>
+    where
+        W: Seek,
+    {
+        // The current position in target is the number of PADDED bytes already written.
+        let padded_bytes = target.seek(SeekFrom::End(0))?;
+
+        let (unpadded_bytes, padded_bit_bytes) = self.calculate_offsets(padded_bytes)?;
+
+        Ok((padded_bytes, unpadded_bytes, padded_bit_bytes))
+    }
+
+    // For a given number of padded_bytes, calculate and return
+    // - the unpadded size in bytes which generates the padded size
+    // - a BitByte representing the number of bits and bytes of actual data contained when so generated
+    pub fn calculate_offsets(&self, padded_bytes: u64) -> io::Result<(u64, BitByte)> {
+        // Convert to unpadded equivalent, rounding down.
+        let unpadded_bytes = self.contract_bytes(padded_bytes as usize);
+
+        // Convert back to padded BUT NOW WITH BIT-LEVEL PRECISION.
+        // The result contains information about how many partial bits (if any) were in the last padded byte.
+        let padded_bit_bytes = self.padded_bit_bytes_from_bits(unpadded_bytes * 8);
+
+        Ok((unpadded_bytes as u64, padded_bit_bytes))
+    }
+}
+
+#[inline]
+fn div_rem(a: usize, b: usize) -> (usize, usize) {
+    let div = a / b;
+    let rem = a % b;
+    (div, rem)
+}
+
+fn transform_bit_pos(p: usize, from_size: usize, to_size: usize) -> usize {
+    let (div, rem) = div_rem(p, from_size);
+
+    (div * to_size) + rem
+}
+
+fn transform_byte_pos(p: usize, from_bit_size: usize, to_bit_size: usize) -> usize {
+    let bit_pos = p * 8;
+    let transformed_bit_pos = transform_bit_pos(bit_pos, from_bit_size, to_bit_size);
+    let transformed_byte_pos1 = transformed_bit_pos as f64 / 8.;
+
+    (if from_bit_size < to_bit_size {
+        transformed_byte_pos1.ceil()
+    } else {
+        transformed_byte_pos1.floor()
+    }) as usize
+}
+
+pub fn write_padded<W: ?Sized>(source: &[u8], target: &mut W) -> io::Result<usize>
+where
+    W: Read + Write + Seek,
+{
+    write_padded_aux(&FR32_PADDING_MAP, source, target)
+}
+
+fn write_padded_aux<W: ?Sized>(
+    padding_map: &PaddingMap,
+    source: &[u8],
+    target: &mut W,
+) -> io::Result<usize>
+where
+    W: Read + Write + Seek,
+{
+    let (padded_offset_bytes, _, offset) = padding_map.target_offsets(target)?;
+
+    // The next boundary marks the start of the following Fr.
+    let next_boundary = padding_map.next_fr_end(&offset);
+
+    // How many whole bytes lie between the current position and the new Fr?
+    let bytes_to_next_boundary = next_boundary.bytes - offset.bytes;
+
+    if offset.is_byte_aligned() {
+        // If current offset is byte-aligned, then write_padded_aligned's invariant is satisfied,
+        // and we can call it directly.
+        write_padded_aligned(
+            padding_map,
+            source,
+            target,
+            bytes_to_next_boundary * 8,
+            None,
+        )
+    } else {
+        // Otherwise, we need to align by filling in the previous, incomplete byte.
+        // Prefix will hold that single byte.
+        let prefix_bytes = &mut [0u8; 1];
+
+        // Seek backward far enough to read just the prefix.
+        target.seek(SeekFrom::Start(padded_offset_bytes - 1))?;
+
+        // And read it in.
+        target.read_exact(prefix_bytes)?;
+
+        // NOTE: seek position is now back to where we started.
+
+        // How many significant bits did the prefix contain?
+        let prefix_bit_count = offset.bits;
+
+        // Rewind by 1 again because we need to overwrite the previous, incomplete byte.
+        // Because we've now rewound to before the prefix, target is indeed byte-aligned.
+        // (Only the last byte was incomplete.)
+        target.seek(SeekFrom::Start(padded_offset_bytes - 1))?;
+
+        // Package up the prefix into a BitVec.
+        let mut prefix_bitvec = BitVec::<bitvec::LittleEndian, u8>::from(&prefix_bytes[..]);
+
+        // But only take the number of bits that are actually part of the prefix!
+        prefix_bitvec.truncate(prefix_bit_count);
+
+        // Now we are aligned and can write the rest. We have to pass the prefix to
+        // write_padded_aligned because we don't yet know what bits should follow the prefix.
+        write_padded_aligned(
+            padding_map,
+            source,
+            target,
+            (bytes_to_next_boundary * 8) - prefix_bit_count,
+            Some(prefix_bitvec),
         )
     }
-
-    pub fn finish(&mut self) -> Result<usize> {
-        if self.prefix_size > 0 {
-            assert!(self.prefix_size <= 8);
-            let b = self.prefix;
-            self.ensure_write(&[b])?;
-            self.flush()?;
-            self.prefix_size = 0;
-            self.prefix = 0;
-            Ok(1)
-        } else {
-            Ok(0)
-        }
-    }
-
-    fn ensure_write(&mut self, mut buffer: &[u8]) -> Result<usize> {
-        let mut bytes_written = 0;
-
-        while !buffer.is_empty() {
-            let n = self.inner.write(buffer)?;
-
-            buffer = &buffer[n..buffer.len()];
-            bytes_written += n;
-        }
-        Ok(bytes_written)
-    }
 }
 
-// Splits byte into two parts at position, pos.
-// The more significant part is right-shifted by pos bits, and both parts are returned,
-// least-significant first.
-fn split_byte(byte: u8, pos: usize) -> (u8, u8) {
-    if pos == 0 {
-        return (0, byte);
+// Invariant: the input so far MUST be byte-aligned.
+// Any prefix_bits passed will be inserted before the bits pulled from source.
+fn write_padded_aligned<W: ?Sized>(
+    padding_map: &PaddingMap,
+    source: &[u8],
+    target: &mut W,
+    next_boundary_bits: usize,
+    prefix_bits: Option<BitVec<bitvec::LittleEndian, u8>>,
+) -> io::Result<usize>
+where
+    W: Write,
+{
+    // bits_out is a sink for bits, to be written at the end.
+    // If we received prefix_bits, put them in the sink first.
+    let mut bits_out = match prefix_bits {
+        None => BitVec::<bitvec::LittleEndian, u8>::new(),
+        Some(bv) => bv,
     };
-    let b = byte >> pos;
-    let mask_size = 8 - pos;
-    let mask = (0xff >> mask_size) << mask_size;
-    let a = (byte & mask) >> mask_size;
-    (a, b)
-}
 
-// Prepend prefix to bytes, shifting all bytes left by prefix_size.
-fn assemble_bytes(mut prefix: u8, prefix_size: usize, bytes: &[u8], suffix: u8) -> Fr32Ary {
-    assert!(bytes.len() <= 31);
-    let mut out = [0u8; 32];
-    out[0] = prefix;
+    // We want to read up to the next Fr boundary, but we don't want to read the padding.
+    let next_boundary_bits = next_boundary_bits - padding_map.padding_bits();
 
-    let left_shift = prefix_size;
-    let right_shift = 8 - prefix_size;
-    for (i, b) in bytes.iter().enumerate() {
-        if prefix_size == 0 {
-            out[i] |= b;
-        } else {
-            let shifted = b << left_shift; // This may overflow 8 bits, truncating the most significant bits.
-            out[i] = prefix | shifted;
-            prefix = b >> right_shift;
+    // How many new bits do we need to write?
+    let source_bits = source.len() * 8;
+
+    // How many bits should we write in the first chunk - and should that chunk be padded?
+    let (first_bits, pad_first_chunk) = if next_boundary_bits < source_bits {
+        // If we have enough bits (more than to the next boundary), we will write all of them first,
+        // and add padding.
+        (next_boundary_bits, true)
+    } else {
+        // Otherwise, we will write everything we have – but we won't pad it.
+        (source_bits, false)
+    };
+
+    {
+        // Write the first chunk, padding if necessary.
+        let first_unpadded_chunk = BitVec::<bitvec::LittleEndian, u8>::from(source)
+            .into_iter()
+            .take(first_bits);
+
+        bits_out.extend(first_unpadded_chunk);
+
+        // pad
+        if pad_first_chunk {
+            for _ in 0..padding_map.padding_bits() {
+                bits_out.push(false)
+            }
         }
     }
-    out[bytes.len()] = prefix | suffix << left_shift;
-    out
+
+    {
+        // Write all following chunks, padding if necessary.
+        let remaining_unpadded_chunks = BitVec::<bitvec::LittleEndian, u8>::from(source)
+            .into_iter()
+            .skip(first_bits)
+            .chunks(padding_map.data_chunk_bits);
+
+        for chunk in remaining_unpadded_chunks.into_iter() {
+            let mut bits = BitVec::<bitvec::LittleEndian, u8>::from_iter(chunk);
+
+            // pad
+            while (bits.len() >= padding_map.data_chunk_bits)
+                && (bits.len() < padding_map.padded_chunk_bits)
+            {
+                bits.push(false);
+            }
+
+            bits_out.extend(bits);
+        }
+    }
+
+    let out = &bits_out.into_boxed_slice();
+    target.write_all(&out)?;
+
+    // Always return the expected number of bytes, since this function will fail if write_all does.
+    Ok(source.len())
 }
 
-impl<R: Read> Fr32Reader<R> {
-    pub fn new(inner: R) -> Fr32Reader<R> {
-        Fr32Reader { _inner: inner }
-    }
+// offset and num_bytes are based on the unpadded data, so
+// if [0, 1, ..., 255] was the original unpadded data, offset 3 and len 4 would return
+// [3, 4, 5, 6].
+pub fn write_unpadded<W: ?Sized>(
+    source: &[u8],
+    target: &mut W,
+    offset: usize,
+    len: usize,
+) -> io::Result<usize>
+where
+    W: Write,
+{
+    write_unpadded_aux(&FR32_PADDING_MAP, source, target, offset, len)
 }
 
-impl<R: Read + Debug> Read for Fr32Reader<R> {
-    fn read(&mut self, _buf: &mut [u8]) -> Result<usize> {
-        unimplemented!();
+pub fn write_unpadded_aux<W: ?Sized>(
+    padding_map: &PaddingMap,
+    source: &[u8],
+    target: &mut W,
+    offset_bytes: usize,
+    len: usize,
+) -> io::Result<usize>
+where
+    W: Write,
+{
+    let mut bits_remaining = padding_map.expand_bits(len * 8);
+    let mut offset = padding_map.padded_bit_bytes_from_bytes(offset_bytes);
+
+    let total_bits_required = offset.total_bits() + bits_remaining;
+    let source_bits = source.len() * 8;
+    assert!(
+        total_bits_required <= source_bits,
+        "requested {} bits, but source only contains {}",
+        total_bits_required,
+        source_bits
+    );
+
+    let mut bits_out = BitVec::<bitvec::LittleEndian, u8>::new();
+    while bits_remaining > 0 {
+        let start = offset.bytes;
+        let bits_to_skip = offset.bits;
+        let offset_total_bits = offset.total_bits();
+        let next_boundary = padding_map.next_fr_end(&offset);
+        let end = next_boundary.bytes;
+
+        let current_fr_bits_end = next_boundary.total_bits() - padding_map.padding_bits();
+        let bits_to_next_boundary = current_fr_bits_end - offset_total_bits;
+
+        let raw_end = min(end, source.len());
+        let raw_bits = BitVec::<bitvec::LittleEndian, u8>::from(&source[start..raw_end]);
+        let skipped = raw_bits.into_iter().skip(bits_to_skip);
+
+        let restricted = skipped.take(bits_to_next_boundary);
+
+        let bits_needed = ((end - start) * 8) - bits_to_skip;
+        let bits_to_take = min(bits_needed, bits_remaining);
+
+        let taken = restricted.take(bits_to_take);
+        bits_out.extend(taken);
+
+        bits_remaining -= bits_to_take;
+
+        offset = BitByte {
+            bytes: end,
+            bits: 0,
+        };
     }
+
+    // TODO: Don't write the whole output into a huge BitVec.
+    // Instead, write it incrementally –
+    // but ONLY when the bits waiting in bits_out are byte-aligned. i.e. a multiple of 8
+
+    let boxed_slice = bits_out.into_boxed_slice();
+
+    target.write_all(&boxed_slice)?;
+
+    Ok(len)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fr32::bytes_into_fr;
+    use pairing::bls12_381::Bls12;
+    use rand::{Rng, SeedableRng, XorShiftRng};
+    use std::io::Cursor;
 
-    fn write_test(bytes: &[u8], extra_bytes: &[u8]) -> (usize, Vec<u8>) {
-        let mut data = Vec::new();
-
-        let write_count = {
-            let mut writer = Fr32Writer::new(&mut data);
-            let mut count = writer.write(&bytes).unwrap();
-            // This tests to make sure state is correctly maintained so we can restart writing mid-32-byte chunk.
-            count += writer.write(extra_bytes).unwrap();
-            count += writer.finish().unwrap();
-            count
-        };
-
-        (write_count, data)
+    #[test]
+    fn test_position() {
+        let mut bits = 0;
+        for i in 0..10 {
+            for j in 0..8 {
+                let position = BitByte { bytes: i, bits: j };
+                assert_eq!(position.total_bits(), bits);
+                bits += 1;
+            }
+        }
     }
 
     #[test]
-    fn test_write() {
-        let source = vec![
+    fn test_write_padded() {
+        let data = vec![255u8; 151];
+        let buf = Vec::new();
+        let mut cursor = Cursor::new(buf);
+        let written = write_padded(&data, &mut cursor).unwrap();
+        let padded = cursor.into_inner();
+        assert_eq!(written, 151);
+        assert_eq!(padded.len(), FR32_PADDING_MAP.expand_bytes(151));
+        assert_eq!(&padded[0..31], &data[0..31]);
+        assert_eq!(padded[31], 0b0011_1111);
+        assert_eq!(padded[32], 0b1111_1111);
+        assert_eq!(&padded[33..63], vec![255u8; 30].as_slice());
+        assert_eq!(padded[63], 0b0011_1111);
+    }
+
+    #[test]
+    fn test_write_padded_multiple_aligned() {
+        let data = vec![255u8; 256];
+        let buf = Vec::new();
+        let mut cursor = Cursor::new(buf);
+        let mut written = write_padded(&data[0..128], &mut cursor).unwrap();
+        written += write_padded(&data[128..], &mut cursor).unwrap();
+        let padded = cursor.into_inner();
+
+        assert_eq!(written, 256);
+        assert_eq!(padded.len(), FR32_PADDING_MAP.expand_bytes(256));
+        assert_eq!(&padded[0..31], &data[0..31]);
+        assert_eq!(padded[31], 0b0011_1111);
+        assert_eq!(padded[32], 0b1111_1111);
+        assert_eq!(&padded[33..63], vec![255u8; 30].as_slice());
+        assert_eq!(padded[63], 0b0011_1111);
+    }
+
+    #[test]
+    fn test_write_padded_multiple_first_aligned() {
+        let data = vec![255u8; 265];
+        let buf = Vec::new();
+        let mut cursor = Cursor::new(buf);
+        let mut written = write_padded(&data[0..128], &mut cursor).unwrap();
+        written += write_padded(&data[128..], &mut cursor).unwrap();
+        let padded = cursor.into_inner();
+
+        assert_eq!(written, 265);
+        assert_eq!(padded.len(), FR32_PADDING_MAP.expand_bytes(265));
+        assert_eq!(&padded[0..31], &data[0..31]);
+        assert_eq!(padded[31], 0b0011_1111);
+        assert_eq!(padded[32], 0b1111_1111);
+        assert_eq!(&padded[33..63], vec![255u8; 30].as_slice());
+        assert_eq!(padded[63], 0b0011_1111);
+    }
+
+    fn validate_fr32(bytes: &[u8]) {
+        for (i, chunk) in bytes.chunks(32).enumerate() {
+            let _ = bytes_into_fr::<Bls12>(chunk).expect(&format!(
+                "{}th chunk cannot be converted to valid Fr: {:?}",
+                i + 1,
+                chunk
+            ));
+        }
+    }
+    #[test]
+    fn test_write_padded_multiple_unaligned() {
+        // Use 127 for this test because it unpads to 128 – a multiple of 32.
+        // Otherwise the last chunk will be too short and cannot be converted to Fr.
+        for i in 0..127 {
+            let data = vec![255u8; 127];
+            let buf = Vec::new();
+            let mut cursor = Cursor::new(buf);
+            let mut written = write_padded(&data[0..i], &mut cursor).unwrap();
+            written += write_padded(&data[i..], &mut cursor).unwrap();
+            let padded = cursor.into_inner();
+            validate_fr32(&padded);
+            assert_eq!(written, 127);
+            assert_eq!(padded.len(), FR32_PADDING_MAP.expand_bytes(127));
+            assert_eq!(&padded[0..31], &data[0..31]);
+            assert_eq!(padded[31], 0b0011_1111);
+            assert_eq!(padded[32], 0b1111_1111);
+            assert_eq!(&padded[33..63], vec![255u8; 30].as_slice());
+            assert_eq!(padded[63], 0b0011_1111);
+        }
+    }
+
+    #[test]
+    fn test_write_padded_alt() {
+        let mut source = vec![
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
             25, 26, 27, 28, 29, 30, 31, 0xff, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
             16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 0xff, 9, 9,
         ];
-        let extra = vec![9, 0xff];
+        // FIXME: This doesn't exercise the ability to write a second time, which is the point of the extra_bytes in write_test.
+        source.extend(vec![9, 0xff]);
 
-        let (write_count, buf) = write_test(&source, &extra);
-        assert_eq!(write_count, 69);
-        assert_eq!(buf.len(), 69);
+        let buf = Vec::new();
+        let mut cursor = Cursor::new(buf);
+        write_padded(&source, &mut cursor).unwrap();
+        let buf = cursor.into_inner();
 
         for i in 0..31 {
             assert_eq!(buf[i], i as u8 + 1);
@@ -263,5 +594,62 @@ mod tests {
         assert_eq!(buf[66], 9 << 4); // Another.
         assert_eq!(buf[67], 0xf0); // The final 0xff is split into two bytes. Here is the first half.
         assert_eq!(buf[68], 0x0f); // And here is the second.
+    }
+
+    #[test]
+    fn test_read_write_padded() {
+        let len = 1016; // Use a multiple of 254.
+        let data = vec![255u8; len];
+        let buf = Vec::new();
+        let mut cursor = Cursor::new(buf);
+        let padded_written = write_padded(&data, &mut cursor).unwrap();
+        let padded = cursor.into_inner();
+
+        assert_eq!(padded_written, len);
+        assert_eq!(padded.len(), FR32_PADDING_MAP.expand_bytes(len));
+
+        let mut unpadded = Vec::new();
+        let unpadded_written = write_unpadded(&padded, &mut unpadded, 0, len).unwrap();
+        assert_eq!(unpadded_written, len);
+        assert_eq!(data, unpadded);
+    }
+
+    #[test]
+    fn test_read_write_padded_offset() {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let len = 1016;
+        let data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
+        let buf = Vec::new();
+        let mut cursor = Cursor::new(buf);
+        write_padded(&data, &mut cursor).unwrap();
+        let padded = cursor.into_inner();
+
+        {
+            let mut unpadded = Vec::new();
+            write_unpadded(&padded, &mut unpadded, 0, 1016).unwrap();
+            let expected = &data[0..1016];
+
+            assert_eq!(expected.len(), unpadded.len());
+            assert_eq!(expected, &unpadded[..]);
+        }
+
+        {
+            let mut unpadded = Vec::new();
+            write_unpadded(&padded, &mut unpadded, 0, 44).unwrap();
+            let expected = &data[0..44];
+
+            assert_eq!(expected.len(), unpadded.len());
+            assert_eq!(expected, &unpadded[..]);
+        }
+        {
+            let mut unpadded = Vec::new();
+            let start = 1;
+            let len = 35;
+            write_unpadded(&padded, &mut unpadded, start, len).unwrap();
+            let expected = &data[start..start + len];
+
+            assert_eq!(expected, &unpadded[..]);
+        }
     }
 }

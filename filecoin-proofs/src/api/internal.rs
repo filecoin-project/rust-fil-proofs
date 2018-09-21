@@ -1,6 +1,5 @@
 use std::fs::File;
-use std::io::Write;
-use std::io::{BufWriter, Read};
+use std::io::{BufWriter, Read, Write};
 use std::path::PathBuf;
 use std::{thread, time};
 
@@ -16,6 +15,7 @@ use storage_proofs::drgraph::new_seed;
 use storage_proofs::error::Result;
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
 use storage_proofs::hasher::pedersen::PedersenHash;
+use storage_proofs::io::fr32::write_unpadded;
 use storage_proofs::layered_drgporep::{self, simplify_tau};
 use storage_proofs::parameter_cache::{
     parameter_cache_path, read_cached_params, write_params_to_cache,
@@ -72,7 +72,7 @@ fn setup_params(sector_bytes: usize) -> layered_drgporep::SetupParams {
         drg_porep_setup_params: drgporep::SetupParams {
             lambda: LAMBDA,
             drg: DrgParams {
-                nodes: nodes,
+                nodes,
                 degree: DEGREE,
                 expansion_degree: EXPANSION_DEGREE,
                 seed: new_seed(),
@@ -112,7 +112,7 @@ pub fn get_config(sector_store: &'static SectorStore) -> (bool, Option<u32>, usi
     let fake = sector_store.config().is_fake();
     let delay_seconds = sector_store.config().simulate_delay_seconds();
     let delayed = delay_seconds.is_some();
-    let sector_bytes = sector_store.config().max_unsealed_bytes_per_sector() as usize;
+    let sector_bytes = sector_store.config().sector_bytes() as usize;
     let proof_sector_bytes = if fake {
         FAKE_SECTOR_BYTES
     } else {
@@ -234,12 +234,12 @@ pub fn seal(
 }
 
 fn delay_seal(seconds: u32) {
-    let delay = time::Duration::from_secs(seconds as u64);
+    let delay = time::Duration::from_secs(u64::from(seconds));
     thread::sleep(delay);
 }
 
 fn delay_get_unsealed_range(base_seconds: u32) {
-    let delay = time::Duration::from_secs((base_seconds / 2) as u64);
+    let delay = time::Duration::from_secs(u64::from(base_seconds / 2));
     thread::sleep(delay);
 }
 
@@ -280,7 +280,8 @@ fn write_data(out_path: &PathBuf, data: &[u8]) -> Result<()> {
     // Write replicated data to out_path.
     let f_out = File::create(out_path)?;
     let mut buf_writer = BufWriter::new(f_out);
-    Ok(buf_writer.write_all(&data)?)
+    buf_writer.write_all(&data)?;
+    Ok(())
 }
 
 pub fn get_unsealed_range(
@@ -292,7 +293,7 @@ pub fn get_unsealed_range(
     offset: u64,
     num_bytes: u64,
 ) -> Result<(u64)> {
-    let (fake, delay_seconds, sector_bytes, _proof_sector_bytes) = get_config(sector_store);
+    let (fake, delay_seconds, sector_bytes, proof_sector_bytes) = get_config(sector_store);
     if let Some(delay) = delay_seconds {
         delay_get_unsealed_range(delay);
     }
@@ -311,10 +312,15 @@ pub fn get_unsealed_range(
     let unsealed = if fake {
         data
     } else {
-        ZigZagDrgPoRep::extract_all(&public_params(sector_bytes), &replica_id, &data)?
+        ZigZagDrgPoRep::extract_all(&public_params(proof_sector_bytes), &replica_id, &data)?
     };
 
-    let written = buf_writer.write(&unsealed[offset as usize..(offset + num_bytes) as usize])?;
+    let written = write_unpadded(
+        &unsealed,
+        &mut buf_writer,
+        offset as usize,
+        num_bytes as usize,
+    )?;
 
     Ok(written as u64)
 }

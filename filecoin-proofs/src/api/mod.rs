@@ -231,7 +231,7 @@ pub extern "C" fn status_to_string(status_code: StatusCode) -> *const libc::c_ch
         41 => CString::new("failed to create unsealed sector"),
         50 => CString::new("failed to open file for truncating"),
         51 => CString::new("failed to set file length"),
-        60 => CString::new("could not read unsealed sector file metadata"),
+        60 => CString::new("could not read unsealed sector file size"),
         70 => CString::new("could not create sector access parent directory"),
         71 => CString::new("could not create sector file"),
         72 => CString::new("could not stringify path buffer"),
@@ -280,7 +280,7 @@ impl Drop for GeneratePoSTResult {
 
 #[no_mangle]
 pub unsafe extern "C" fn init_generate_post_result() -> *mut GeneratePoSTResult {
-    return Box::into_raw(Box::new(Default::default()));
+    Box::into_raw(Box::new(Default::default()))
 }
 
 #[no_mangle]
@@ -345,9 +345,9 @@ pub unsafe extern "C" fn generate_post(
 #[no_mangle]
 pub extern "C" fn verify_post(_ss_ptr: *mut Box<SectorStore>, proof: &[u8; 192]) -> StatusCode {
     if proof[0] == 42 {
-        return 0;
+        0
     } else {
-        return 90;
+        90
     }
 }
 
@@ -402,51 +402,66 @@ mod tests {
 
     // TODO: create a way to run these super-slow-by-design tests manually.
     //    fn seal_verify_live() {
-    //        seal_verify_aux(ConfiguredStore::Live);
+    //        seal_verify_aux(ConfiguredStore::Live, 0);
+    //        seal_verify_aux(ConfiguredStore::Live, 5);
     //    }
     //
     //    fn seal_unsealed_roundtrip_live() {
-    //        seal_unsealed_roundtrip_aux(ConfiguredStore::Live);
+    //        seal_unsealed_roundtrip_aux(ConfiguredStore::Live, 0);
+    //        seal_unsealed_roundtrip_aux(ConfiguredStore::Live, 5);
     //    }
     //
     //    fn seal_unsealed_range_roundtrip_live() {
-    //        seal_unsealed_range_roundtrip_aux(ConfiguredStore::Live);
+    //        seal_unsealed_range_roundtrip_aux(ConfiguredStore::Live, 0);
+    //        seal_unsealed_range_roundtrip_aux(ConfiguredStore::Live, 5);
     //    }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn seal_verify_test() {
-        seal_verify_aux(ConfiguredStore::Test);
+        seal_verify_aux(ConfiguredStore::Test, 0);
+        seal_verify_aux(ConfiguredStore::Test, 5);
     }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn seal_verify_proof_test() {
-        seal_verify_aux(ConfiguredStore::ProofTest);
+        seal_verify_aux(ConfiguredStore::ProofTest, 0);
+        seal_verify_aux(ConfiguredStore::ProofTest, 5);
     }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn seal_unsealed_roundtrip_test() {
-        seal_unsealed_roundtrip_aux(ConfiguredStore::Test);
+        seal_unsealed_roundtrip_aux(ConfiguredStore::Test, 0);
+        seal_unsealed_roundtrip_aux(ConfiguredStore::Test, 5);
     }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn seal_unsealed_roundtrip_proof_test() {
-        seal_unsealed_roundtrip_aux(ConfiguredStore::ProofTest);
+        seal_unsealed_roundtrip_aux(ConfiguredStore::ProofTest, 0);
+        seal_unsealed_roundtrip_aux(ConfiguredStore::ProofTest, 5);
     }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn seal_unsealed_range_roundtrip_test() {
-        seal_unsealed_range_roundtrip_aux(ConfiguredStore::Test);
+        seal_unsealed_range_roundtrip_aux(ConfiguredStore::Test, 0);
+        seal_unsealed_range_roundtrip_aux(ConfiguredStore::Test, 5);
     }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn seal_unsealed_range_roundtrip_proof_test() {
-        seal_unsealed_range_roundtrip_aux(ConfiguredStore::ProofTest);
+        seal_unsealed_range_roundtrip_aux(ConfiguredStore::ProofTest, 0);
+        seal_unsealed_range_roundtrip_aux(ConfiguredStore::ProofTest, 5);
+    }
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn write_unsealed_overwrites_unaligned_last_bytes() {
+        write_unsealed_overwrites_unaligned_last_bytes_aux(ConfiguredStore::ProofTest);
     }
 
     #[test]
@@ -474,15 +489,19 @@ mod tests {
         sector_store.config().max_unsealed_bytes_per_sector() as usize
     }
 
-    fn make_data_for_storage(sector_store: &'static SectorStore) -> Vec<u8> {
-        let mut rng = thread_rng();
-        let length = storage_bytes(sector_store) - 50; // Leave some room for padding.
-        (0..length)
-            .map(|_| rng.gen::<u8>() & 0b00111111) // Mask out two most significant bits so data is always Fr.
-            .collect::<Vec<u8>>()
+    fn make_data_for_storage(
+        sector_store: &'static SectorStore,
+        space_for_padding: usize,
+    ) -> Vec<u8> {
+        make_random_bytes(storage_bytes(sector_store) - space_for_padding)
     }
 
-    fn seal_verify_aux(cs: ConfiguredStore) {
+    fn make_random_bytes(num_bytes_to_make: usize) -> Vec<u8> {
+        let mut rng = thread_rng();
+        (0..num_bytes_to_make).map(|_| rng.gen()).collect()
+    }
+
+    fn seal_verify_aux(cs: ConfiguredStore, byte_padding_amount: usize) {
         let storage = create_storage(&cs);
 
         let seal_input_path = create_sector_access(storage, new_staging_sector_access);
@@ -494,7 +513,7 @@ mod tests {
         let prover_id = &[2; 31];
         let sector_id = &[0; 31];
 
-        let contents = unsafe { make_data_for_storage(&**storage) };
+        let contents = unsafe { make_data_for_storage(&**storage, byte_padding_amount) };
         let result_ptr = &mut 0u64;
 
         assert_eq!(
@@ -554,7 +573,7 @@ mod tests {
         // assert_eq!(20, bad_verify);
     }
 
-    fn seal_unsealed_roundtrip_aux(cs: ConfiguredStore) {
+    fn write_unsealed_overwrites_unaligned_last_bytes_aux(cs: ConfiguredStore) {
         let storage = create_storage(&cs);
 
         let seal_input_path = create_sector_access(storage, new_staging_sector_access);
@@ -568,7 +587,125 @@ mod tests {
         let prover_id = &[2; 31];
         let sector_id = &[0; 31];
 
-        let contents = unsafe { make_data_for_storage(&**storage) };
+        // The minimal reproduction for the bug this regression test checks is to write
+        // 32 bytes, then 95 bytes.
+        // The bytes must sum to 127, since that is the required unsealed sector size.
+        // With suitable bytes (.e.g all 255),the bug always occurs when the first chunk is >= 32.
+        // It never occurs when the first chunk is < 32.
+        // The root problem was that write_unsealed was opening in append mode, so seeking backward
+        // to overwrite the last, incomplete byte, was not happening.
+        let contents_a = [255; 32];
+        let contents_b = [255; 95];
+        let result_ptr_a = &mut 0u64;
+        let result_ptr_b = &mut 0u64;
+
+        assert_eq!(
+            0,
+            unsafe {
+                write_unsealed(
+                    storage,
+                    seal_input_path,
+                    &contents_a[0],
+                    contents_a.len(),
+                    result_ptr_a,
+                )
+            },
+            "write_unsealed failed for {:?}",
+            cs
+        );
+
+        assert_eq!(
+            0,
+            unsafe {
+                write_unsealed(
+                    storage,
+                    seal_input_path,
+                    &contents_b[0],
+                    contents_b.len(),
+                    result_ptr_b,
+                )
+            },
+            "write_unsealed failed for {:?}",
+            cs
+        );
+
+        {
+            let mut file = File::open(unsafe { util::pbuf_from_c(seal_input_path) }).unwrap();
+            let mut buf = Vec::new();
+            file.read_to_end(&mut buf).unwrap();
+
+            println!("wrote ({}): {:?}", buf.len(), buf);
+        }
+
+        let good_seal = unsafe {
+            seal(
+                storage,
+                seal_input_path,
+                seal_output_path,
+                prover_id,
+                sector_id,
+                result_comm_r,
+                result_comm_d,
+                result_proof,
+            )
+        };
+
+        assert_eq!(0, good_seal, "seal failed for {:?}", cs);
+
+        let good_unsealed = unsafe {
+            get_unsealed(
+                storage,
+                seal_output_path,
+                get_unsealed_range_output_path,
+                prover_id,
+                sector_id,
+            )
+        };
+
+        assert_eq!(0, good_unsealed, "get_unsealed failed for {:?}", cs);
+
+        let mut file =
+            File::open(unsafe { util::pbuf_from_c(get_unsealed_range_output_path) }).unwrap();
+        let mut buf = Vec::new();
+        file.read_to_end(&mut buf).unwrap();
+
+        assert_eq!(
+            contents_a.len() + contents_b.len(),
+            buf.len(),
+            "length of original and unsealed contents differed for {:?}",
+            cs
+        );
+
+        assert_eq!(
+            contents_a[..],
+            buf[0..contents_a.len()],
+            "original and unsealed contents differed for {:?}",
+            cs
+        );
+
+        assert_eq!(
+            contents_b[..],
+            buf[contents_a.len()..contents_a.len() + contents_b.len()],
+            "original and unsealed contents differed for {:?}",
+            cs
+        );
+    }
+
+    fn seal_unsealed_roundtrip_aux(cs: ConfiguredStore, byte_padding_amount: usize) {
+        let storage = create_storage(&cs);
+
+        let seal_input_path = create_sector_access(storage, new_staging_sector_access);
+        let seal_output_path = create_sector_access(storage, new_sealed_sector_access);
+        let get_unsealed_range_output_path =
+            create_sector_access(storage, new_staging_sector_access);
+
+        let result_comm_r: &mut [u8; 32] = &mut [0; 32];
+        let result_comm_d: &mut [u8; 32] = &mut [0; 32];
+        let result_proof: &mut [u8; SNARK_BYTES] = &mut [0; SNARK_BYTES];
+        let prover_id = &[2; 31];
+        let sector_id = &[0; 31];
+
+        let contents = unsafe { make_data_for_storage(&**storage, byte_padding_amount) };
         let result_ptr = &mut 0u64;
 
         assert_eq!(
@@ -618,9 +755,12 @@ mod tests {
         let mut buf = Vec::new();
         file.read_to_end(&mut buf).unwrap();
 
-        let expected_bytes = unsafe { storage_bytes(&**storage) };
-        assert_eq!(buf.len(), expected_bytes);
-
+        assert_eq!(
+            contents.len(),
+            buf.len() - byte_padding_amount,
+            "length of original and unsealed contents differed for {:?}",
+            cs
+        );
         assert_eq!(
             contents[..],
             buf[0..contents.len()],
@@ -629,7 +769,7 @@ mod tests {
         );
     }
 
-    fn seal_unsealed_range_roundtrip_aux(cs: ConfiguredStore) {
+    fn seal_unsealed_range_roundtrip_aux(cs: ConfiguredStore, byte_padding_amount: usize) {
         let storage = create_storage(&cs);
 
         let seal_input_path = create_sector_access(storage, new_staging_sector_access);
@@ -643,7 +783,7 @@ mod tests {
         let prover_id = &[2; 31];
         let sector_id = &[0; 31];
 
-        let contents = unsafe { make_data_for_storage(&**storage) };
+        let contents = unsafe { make_data_for_storage(&**storage, byte_padding_amount) };
         let result_ptr = &mut 0u64;
 
         assert_eq!(
