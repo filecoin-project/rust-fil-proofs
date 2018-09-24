@@ -1,10 +1,36 @@
+use api::responses::SBResponseStatus;
+use api::responses::ToResponseStatus;
+use api::SectorManagerErr::CallerError;
+use api::SectorManagerErr::ReceiverError;
+use api::SectorManagerErr::UnclassifiedError;
 use libc;
+use std::ffi::CString;
+use std::mem;
 use std::slice::from_raw_parts;
 
 pub mod disk_backed_storage;
+pub mod responses;
 pub mod util;
 
-type StatusCode = u32;
+#[derive(Debug)]
+pub enum SectorManagerErr {
+    UnclassifiedError(String),
+    CallerError(String),
+    ReceiverError(String),
+}
+
+impl<T> ToResponseStatus for Result<T, SectorManagerErr> {
+    fn to_response_status(&self) -> SBResponseStatus {
+        match self {
+            Ok(_) => SBResponseStatus::SBSuccess,
+            Err(s_m_err) => match s_m_err {
+                UnclassifiedError(_) => SBResponseStatus::SBUnclassifiedError,
+                CallerError(_) => SBResponseStatus::SBCallerError,
+                ReceiverError(_) => SBResponseStatus::SBReceiverError,
+            },
+        }
+    }
+}
 
 pub trait SectorConfig {
     /// if true, uses something other exact bits, correct parameters, or full proofs
@@ -22,19 +48,19 @@ pub trait SectorConfig {
 
 pub trait SectorManager {
     /// provisions a new sealed sector and reports the corresponding access
-    fn new_sealed_sector_access(&self) -> Result<String, StatusCode>;
+    fn new_sealed_sector_access(&self) -> Result<String, SectorManagerErr>;
 
     /// provisions a new staging sector and reports the corresponding access
-    fn new_staging_sector_access(&self) -> Result<String, StatusCode>;
+    fn new_staging_sector_access(&self) -> Result<String, SectorManagerErr>;
 
     /// reports the number of bytes written to an unsealed sector
-    fn num_unsealed_bytes(&self, access: String) -> Result<u64, StatusCode>;
+    fn num_unsealed_bytes(&self, access: String) -> Result<u64, SectorManagerErr>;
 
     /// sets the number of bytes in an unsealed sector identified by `access`
-    fn truncate_unsealed(&self, access: String, size: u64) -> Result<(), StatusCode>;
+    fn truncate_unsealed(&self, access: String, size: u64) -> Result<(), SectorManagerErr>;
 
     /// writes `data` to the unsealed sector identified by `access`
-    fn write_unsealed(&self, access: String, data: &[u8]) -> Result<u64, StatusCode>;
+    fn write_unsealed(&self, access: String, data: &[u8]) -> Result<u64, SectorManagerErr>;
 }
 
 pub trait SectorStore {
@@ -48,35 +74,39 @@ pub trait SectorStore {
 /// * `ss_ptr` - pointer to a boxed SectorStore
 ///
 #[no_mangle]
-pub unsafe extern "C" fn destroy_storage(ss_ptr: *mut Box<SectorStore>) -> StatusCode {
+pub unsafe extern "C" fn destroy_storage(ss_ptr: *mut Box<SectorStore>) {
     let _ = Box::from_raw(ss_ptr);
-
-    0
 }
 
 /// Returns a sector access in the sealed area.
 ///
 /// # Arguments
 ///
-/// * `ss_ptr`     - pointer to a boxed SectorStore
-/// * `result_ptr` - pointer to location where provisioned SectorAccess will be written
+/// * `ss_ptr` - pointer to a boxed SectorStore
 #[no_mangle]
 pub unsafe extern "C" fn new_sealed_sector_access(
     ss_ptr: *mut Box<SectorStore>,
-    result_ptr: *mut *const libc::c_char,
-) -> StatusCode {
-    let sector_store = &mut *ss_ptr;
+) -> *mut responses::NewSealedSectorAccessResponse {
+    let mut response: responses::NewSealedSectorAccessResponse = Default::default();
 
-    match sector_store.manager().new_sealed_sector_access() {
+    let result = (*ss_ptr).manager().new_sealed_sector_access();
+
+    response.status_code = result.to_response_status();
+
+    match result {
         Ok(access) => {
-            let ptr = util::rust_str_to_c_str(&access);
-
-            result_ptr.write(ptr);
-
-            0
+            let msg = CString::new(access).unwrap();
+            response.sector_access = msg.as_ptr();
+            mem::forget(msg);
         }
-        Err(n) => n,
+        Err(err) => {
+            let msg = CString::new(format!("{:?}", err)).unwrap();
+            response.error_msg = msg.as_ptr();
+            mem::forget(msg);
+        }
     }
+
+    Box::into_raw(Box::new(response))
 }
 
 /// Returns a sector access (path) in the staging area.
@@ -84,28 +114,34 @@ pub unsafe extern "C" fn new_sealed_sector_access(
 /// # Arguments
 ///
 /// * `ss_ptr`     - pointer to a boxed SectorStore
-/// * `result_ptr` - pointer to location where provisioned SectorAccess will be written
 #[no_mangle]
 pub unsafe extern "C" fn new_staging_sector_access(
     ss_ptr: *mut Box<SectorStore>,
-    result_ptr: *mut *const libc::c_char,
-) -> StatusCode {
-    let sector_store = &mut *ss_ptr;
+) -> *mut responses::NewStagingSectorAccessResponse {
+    let mut response: responses::NewStagingSectorAccessResponse = Default::default();
 
-    match sector_store.manager().new_staging_sector_access() {
+    let result = (*ss_ptr).manager().new_staging_sector_access();
+
+    response.status_code = result.to_response_status();
+
+    match result {
         Ok(access) => {
-            let ptr = util::rust_str_to_c_str(&access);
-
-            result_ptr.write(ptr);
-
-            0
+            let msg = CString::new(access).unwrap();
+            response.sector_access = msg.as_ptr();
+            mem::forget(msg);
         }
-        Err(n) => n,
+        Err(err) => {
+            let msg = CString::new(format!("{:?}", err)).unwrap();
+            response.error_msg = msg.as_ptr();
+            mem::forget(msg);
+        }
     }
+
+    Box::into_raw(Box::new(response))
 }
 
-/// Appends some bytes to an unsealed sector identified by `access` and returns a status code
-/// indicating success or failure.
+/// Appends some bytes to an unsealed sector identified by `access` and returns the number of bytes
+/// written to the unsealed sector access.
 ///
 /// # Arguments
 ///
@@ -113,32 +149,46 @@ pub unsafe extern "C" fn new_staging_sector_access(
 /// * `access`     - an unsealed sector access
 /// * `data_ptr`   - pointer to data_len-length array of bytes to write
 /// * `data_len`   - number of items in the data_ptr array
-/// * `result_ptr` - pointer to a u64, mutated by `write_unsealed` in order to communicate the number
-///                  of bytes that were written to the unsealed sector. NOTE: the number of bytes
-///                  written refers to the input data, and therefore will never be greater than
-///                  the input length – even though the size of the data written to `access` may (will) be.
 #[no_mangle]
 pub unsafe extern "C" fn write_unsealed(
     ss_ptr: *mut Box<SectorStore>,
     access: *const libc::c_char,
     data_ptr: *const u8,
     data_len: libc::size_t,
-    result_ptr: *mut u64,
-) -> StatusCode {
-    let sector_store = &mut *ss_ptr;
+) -> *mut responses::WriteUnsealedResponse {
+    let mut response: responses::WriteUnsealedResponse = Default::default();
+
     let data = from_raw_parts(data_ptr, data_len);
 
-    match sector_store
+    let result = (*ss_ptr)
         .manager()
-        .write_unsealed(util::c_str_to_rust_str(access), data)
-    {
-        Ok(num_data_bytes_written) => {
-            result_ptr.write(num_data_bytes_written);
+        .write_unsealed(util::c_str_to_rust_str(access), data);
 
-            0
+    response.status_code = result.to_response_status();
+
+    match result {
+        Ok(num_data_bytes_written) => {
+            if num_data_bytes_written != data_len as u64 {
+                response.status_code = SBResponseStatus::SBReceiverError;
+
+                let msg = CString::new(format!(
+                    "expected to write {}-bytes, but wrote {}-bytes",
+                    data_len as u64, num_data_bytes_written
+                )).unwrap();
+                response.error_msg = msg.as_ptr();
+                mem::forget(msg);
+            }
+
+            response.num_bytes_written = num_data_bytes_written;
         }
-        Err(n) => n,
+        Err(err) => {
+            let msg = CString::new(format!("{:?}", err)).unwrap();
+            response.error_msg = msg.as_ptr();
+            mem::forget(msg);
+        }
     }
+
+    Box::into_raw(Box::new(response))
 }
 
 /// Changes the size of the unsealed sector identified by `access`.
@@ -155,20 +205,28 @@ pub unsafe extern "C" fn truncate_unsealed(
     ss_ptr: *mut Box<SectorStore>,
     access: *const libc::c_char,
     size: u64,
-) -> StatusCode {
-    let sector_store = &mut *ss_ptr;
+) -> *mut responses::TruncateUnsealedResponse {
+    let mut response: responses::TruncateUnsealedResponse = Default::default();
 
-    match sector_store
+    let result = (*ss_ptr)
         .manager()
-        .truncate_unsealed(util::c_str_to_rust_str(access), size)
-    {
-        Ok(_) => 0,
-        Err(n) => n,
+        .truncate_unsealed(util::c_str_to_rust_str(access), size);
+
+    response.status_code = result.to_response_status();
+
+    match result {
+        Ok(_) => {}
+        Err(err) => {
+            let msg = CString::new(format!("{:?}", err)).unwrap();
+            response.error_msg = msg.as_ptr();
+            mem::forget(msg);
+        }
     }
+
+    Box::into_raw(Box::new(response))
 }
 
-/// Computes the number of bytes in an unsealed sector identified by `access`, returning a status
-/// code indicating success or failure.
+/// Computes the number of bytes in an unsealed sector identified by `access`.
 ///
 /// TODO: This function could disappear if we move metadata <--> file sync into Rust.
 ///
@@ -176,46 +234,46 @@ pub unsafe extern "C" fn truncate_unsealed(
 ///
 /// * `ss_ptr`     - pointer to a boxed SectorStore
 /// * `access`     - an unsealed sector access
-/// * `result_ptr` - pointer to a u64, mutated by num_unsealed_bytes to communicate back to callers
-///                  the number of bytes in the unsealed sector
 #[no_mangle]
 pub unsafe extern "C" fn num_unsealed_bytes(
     ss_ptr: *mut Box<SectorStore>,
     access: *const libc::c_char,
-    result_ptr: *mut u64,
-) -> StatusCode {
-    let sector_store = &mut *ss_ptr;
+) -> *mut responses::NumUnsealedBytesResponse {
+    let mut response: responses::NumUnsealedBytesResponse = Default::default();
 
-    match sector_store
+    let result = (*ss_ptr)
         .manager()
-        .num_unsealed_bytes(util::c_str_to_rust_str(access))
-    {
-        Ok(n) => {
-            result_ptr.write(n);
+        .num_unsealed_bytes(util::c_str_to_rust_str(access));
 
-            0
+    response.status_code = result.to_response_status();
+
+    match result {
+        Ok(n) => {
+            response.num_bytes = n;
         }
-        Err(status_code) => status_code,
+        Err(err) => {
+            let msg = CString::new(format!("{:?}", err)).unwrap();
+            response.error_msg = msg.as_ptr();
+            mem::forget(msg);
+        }
     }
+
+    Box::into_raw(Box::new(response))
 }
 
-/// Produces a number corresponding to the number of bytes that can be written to one of this
-/// SectorStore's unsealed sectors.
+/// Returns the maximum number of unsealed (original) bytes which can be written to an unsealed
+/// sector managed by this SectorStore.
 ///
 /// # Arguments
 ///
 /// * `ss_ptr`     - pointer to a boxed SectorStore
-/// * `result_ptr` - pointer to a u64, mutated by max_unsealed_bytes_per_sector to communicate back to
-///                  callers the number of bytes an unsealed sector
 #[no_mangle]
 pub unsafe extern "C" fn max_unsealed_bytes_per_sector(
     ss_ptr: *mut Box<SectorStore>,
-    result_ptr: *mut u64,
-) -> StatusCode {
-    let sector_store = &mut *ss_ptr;
-    let n = sector_store.config().max_unsealed_bytes_per_sector();
+) -> *mut responses::MaxUnsealedBytesPerSectorResponse {
+    let mut response: responses::MaxUnsealedBytesPerSectorResponse = Default::default();
 
-    result_ptr.write(n);
+    response.num_bytes = (*ss_ptr).config().max_unsealed_bytes_per_sector();
 
-    0
+    Box::into_raw(Box::new(response))
 }

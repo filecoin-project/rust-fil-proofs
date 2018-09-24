@@ -3,7 +3,8 @@ use std::fs::{create_dir_all, File, OpenOptions};
 use std::path::Path;
 
 use api::util;
-use api::{SectorConfig, SectorManager, SectorStore, StatusCode};
+use api::SectorManagerErr;
+use api::{SectorConfig, SectorManager, SectorStore};
 use storage_proofs::io::fr32::{
     almost_truncate_to_unpadded_bytes, target_unpadded_bytes, unpadded_bytes, write_padded,
 };
@@ -85,62 +86,73 @@ pub struct DiskManager {
 }
 
 impl SectorManager for DiskManager {
-    fn new_sealed_sector_access(&self) -> Result<String, StatusCode> {
+    fn new_sealed_sector_access(&self) -> Result<String, SectorManagerErr> {
         self.new_sector_access(Path::new(&self.sealed_path))
     }
 
-    fn new_staging_sector_access(&self) -> Result<String, StatusCode> {
+    fn new_staging_sector_access(&self) -> Result<String, SectorManagerErr> {
         self.new_sector_access(Path::new(&self.staging_path))
     }
 
-    fn num_unsealed_bytes(&self, access: String) -> Result<u64, StatusCode> {
+    fn num_unsealed_bytes(&self, access: String) -> Result<u64, SectorManagerErr> {
         OpenOptions::new()
             .read(true)
             .open(access)
-            .map_err(|_| 60)
-            .map(|mut f| target_unpadded_bytes(&mut f).map_err(|_| 60))
-            .and_then(|n| n)
+            .map_err(|err| SectorManagerErr::CallerError(format!("{:?}", err)))
+            .map(|mut f| {
+                target_unpadded_bytes(&mut f)
+                    .map_err(|err| SectorManagerErr::ReceiverError(format!("{:?}", err)))
+            }).and_then(|n| n)
     }
 
-    fn truncate_unsealed(&self, access: String, size: u64) -> Result<(), StatusCode> {
+    fn truncate_unsealed(&self, access: String, size: u64) -> Result<(), SectorManagerErr> {
         // I couldn't wrap my head around all ths result mapping, so here it is all laid out.
         match OpenOptions::new().write(true).open(&access) {
             Ok(mut file) => match almost_truncate_to_unpadded_bytes(&mut file, size) {
                 Ok(padded_size) => match file.set_len(padded_size as u64) {
                     Ok(_) => Ok(()),
-                    Err(_) => Err(51),
+                    Err(err) => Err(SectorManagerErr::ReceiverError(format!("{:?}", err))),
                 },
-                Err(_) => Err(51),
+                Err(err) => Err(SectorManagerErr::ReceiverError(format!("{:?}", err))),
             },
-            Err(_) => Err(51),
+            Err(err) => Err(SectorManagerErr::CallerError(format!("{:?}", err))),
         }
     }
 
     // TODO: write_unsealed should refuse to write more data than will fit. In that case, return 0.
-    fn write_unsealed(&self, access: String, data: &[u8]) -> Result<u64, StatusCode> {
+    fn write_unsealed(&self, access: String, data: &[u8]) -> Result<u64, SectorManagerErr> {
         OpenOptions::new()
             .read(true)
             .write(true)
             .open(access)
-            .map_err(|_| 40)
+            .map_err(|err| SectorManagerErr::CallerError(format!("{:?}", err)))
             .and_then(|mut file| {
                 write_padded(data, &mut file)
-                    .map_err(|_| 41)
+                    .map_err(|err| SectorManagerErr::ReceiverError(format!("{:?}", err)))
                     .map(|n| n as u64)
             })
     }
 }
 
 impl DiskManager {
-    fn new_sector_access(&self, root: &Path) -> Result<String, StatusCode> {
+    fn new_sector_access(&self, root: &Path) -> Result<String, SectorManagerErr> {
         let pbuf = root.join(util::rand_alpha_string(32));
 
         create_dir_all(root)
-            .map_err(|_| 70)
-            .and_then(|_| File::create(&pbuf).map(|_| 0).map_err(|_| 71))
+            .map_err(|err| SectorManagerErr::ReceiverError(format!("{:?}", err)))
             .and_then(|_| {
-                pbuf.to_str()
-                    .map_or_else(|| Err(72), |str_ref| Ok(str_ref.to_owned()))
+                File::create(&pbuf)
+                    .map(|_| 0)
+                    .map_err(|err| SectorManagerErr::ReceiverError(format!("{:?}", err)))
+            }).and_then(|_| {
+                pbuf.to_str().map_or_else(
+                    || {
+                        Err(SectorManagerErr::ReceiverError(
+                            "could not create pbuf".to_string(),
+                        ))
+                    },
+                    |str_ref| Ok(str_ref.to_owned()),
+                )
             })
     }
 }
@@ -148,6 +160,7 @@ impl DiskManager {
 pub struct RealConfig {
     sector_bytes: u64,
 }
+
 pub struct FakeConfig {
     sector_bytes: u64,
     delay_seconds: u32,
@@ -284,6 +297,7 @@ mod tests {
     use super::*;
 
     use api::disk_backed_storage::init_new_proof_test_sector_store;
+    use api::responses::SBResponseStatus;
     use api::util;
     use api::{new_staging_sector_access, num_unsealed_bytes, truncate_unsealed, write_unsealed};
     use storage_proofs::io::fr32::FR32_PADDING_MAP;
@@ -312,121 +326,142 @@ mod tests {
 
     #[test]
     fn unsealed_sector_write_and_truncate() {
-        let storage = create_storage();
+        unsafe {
+            let storage = create_storage();
 
-        let access = unsafe {
-            let result = &mut util::rust_str_to_c_str("");
-            new_staging_sector_access(storage, result);
-            *result
-        };
+            let new_staging_sector_access_response = new_staging_sector_access(storage);
 
-        let contents = &[2u8; 500];
-        let write_result_ptr = &mut 0u64;
+            let access = (*new_staging_sector_access_response).sector_access;
 
-        assert_eq!(0, unsafe {
-            write_unsealed(
+            let contents = &[2u8; 500];
+
+            let write_unsealed_response = write_unsealed(
                 storage,
-                access,
+                (*new_staging_sector_access_response).sector_access,
                 &contents[0],
                 contents.len(),
-                write_result_ptr,
-            )
-        });
+            );
 
-        // buffer the file's bytes into memory after writing bytes
-        let buf = read_all_bytes(access);
-        let output_bytes_written = buf.len();
+            assert_eq!(
+                SBResponseStatus::SBSuccess,
+                (*write_unsealed_response).status_code
+            );
 
-        // ensure that we reported the correct number of written bytes
-        assert_eq!(contents.len(), *write_result_ptr as usize);
-
-        // ensure the file we wrote to contains the expected bytes
-        assert_eq!(contents[0..32], buf[0..32]);
-        assert_eq!(8u8, buf[32]);
-
-        // read the file into memory again - this time after we truncate
-        let buf = read_all_bytes(access);
-
-        // ensure the file we wrote to contains the expected bytes
-        assert_eq!(504, buf.len());
-
-        // also ensure this is the amount we calculate
-        let expected_padded_bytes = FR32_PADDING_MAP.expand_bytes(contents.len());
-        assert_eq!(expected_padded_bytes, output_bytes_written);
-
-        {
-            let num_bytes_result_ptr = &mut 0u64;
-            assert_eq!(0, unsafe {
-                num_unsealed_bytes(storage, access, num_bytes_result_ptr)
-            });
-
-            // ensure num_unsealed_bytes returns the number of data bytes written.
-            assert_eq!(500, *num_bytes_result_ptr as usize);
-        }
-
-        {
-            // Truncate to 32 unpadded bytes
-            assert_eq!(0, unsafe { truncate_unsealed(storage, access, 32) });
-
-            // read the file into memory again - this time after we truncate
+            // buffer the file's bytes into memory after writing bytes
             let buf = read_all_bytes(access);
+            let output_bytes_written = buf.len();
+
+            // ensure that we reported the correct number of written bytes
+            assert_eq!(
+                contents.len(),
+                (*write_unsealed_response).num_bytes_written as usize
+            );
 
             // ensure the file we wrote to contains the expected bytes
-            assert_eq!(33, buf.len());
-
-            // All but last bytes are identical.
             assert_eq!(contents[0..32], buf[0..32]);
-
-            // The last byte (first of new Fr) has been shifted by two bits of padding.
-            assert_eq!(contents[32] << 2, buf[32]);
-
-            let num_bytes_result_ptr = &mut 0u64;
-
-            assert_eq!(0, unsafe {
-                num_unsealed_bytes(storage, access, num_bytes_result_ptr)
-            });
-
-            // ensure that our byte-counting function works
-            assert_eq!(32, *num_bytes_result_ptr as usize);
-        }
-
-        {
-            // Truncate to 31 unpadded bytes
-            assert_eq!(0, unsafe { truncate_unsealed(storage, access, 31) });
+            assert_eq!(8u8, buf[32]);
 
             // read the file into memory again - this time after we truncate
             let buf = read_all_bytes(access);
 
             // ensure the file we wrote to contains the expected bytes
-            assert_eq!(31, buf.len());
-            assert_eq!(contents[0..31], buf[0..]);
+            assert_eq!(504, buf.len());
 
-            let num_bytes_result_ptr = &mut 0u64;
+            // also ensure this is the amount we calculate
+            let expected_padded_bytes = FR32_PADDING_MAP.expand_bytes(contents.len());
+            assert_eq!(expected_padded_bytes, output_bytes_written);
 
-            assert_eq!(0, unsafe {
-                num_unsealed_bytes(storage, access, num_bytes_result_ptr)
-            });
+            {
+                let num_unsealed_bytes_response = num_unsealed_bytes(
+                    storage,
+                    (*new_staging_sector_access_response).sector_access,
+                );
+
+                assert_eq!(
+                    SBResponseStatus::SBSuccess,
+                    (*num_unsealed_bytes_response).status_code
+                );
+
+                // ensure num_unsealed_bytes returns the number of data bytes written.
+                assert_eq!(500, (*num_unsealed_bytes_response).num_bytes as usize);
+            }
+
+            {
+                // Truncate to 32 unpadded bytes
+                assert_eq!(
+                    SBResponseStatus::SBSuccess,
+                    (*truncate_unsealed(storage, access, 32)).status_code
+                );
+
+                // read the file into memory again - this time after we truncate
+                let buf = read_all_bytes(access);
+
+                // ensure the file we wrote to contains the expected bytes
+                assert_eq!(33, buf.len());
+
+                // All but last bytes are identical.
+                assert_eq!(contents[0..32], buf[0..32]);
+
+                // The last byte (first of new Fr) has been shifted by two bits of padding.
+                assert_eq!(contents[32] << 2, buf[32]);
+
+                let num_unsealed_bytes_response = num_unsealed_bytes(storage, access);
+
+                assert_eq!(
+                    SBResponseStatus::SBSuccess,
+                    (*num_unsealed_bytes_response).status_code
+                );
+
+                // ensure that our byte-counting function works
+                assert_eq!(32, (*num_unsealed_bytes_response).num_bytes);
+            }
+
+            {
+                // Truncate to 31 unpadded bytes
+                assert_eq!(
+                    SBResponseStatus::SBSuccess,
+                    (*truncate_unsealed(storage, access, 31)).status_code
+                );
+
+                // read the file into memory again - this time after we truncate
+                let buf = read_all_bytes((*new_staging_sector_access_response).sector_access);
+
+                // ensure the file we wrote to contains the expected bytes
+                assert_eq!(31, buf.len());
+                assert_eq!(contents[0..31], buf[0..]);
+
+                let num_unsealed_bytes_response = num_unsealed_bytes(storage, access);
+
+                assert_eq!(
+                    SBResponseStatus::SBSuccess,
+                    (*num_unsealed_bytes_response).status_code
+                );
+
+                // ensure that our byte-counting function works
+                assert_eq!(buf.len(), (*num_unsealed_bytes_response).num_bytes as usize);
+            }
+
+            assert_eq!(
+                SBResponseStatus::SBSuccess,
+                (*truncate_unsealed(storage, access, 1)).status_code
+            );
+
+            // read the file into memory again - this time after we truncate
+            let buf = read_all_bytes(access);
+
+            // ensure the file we wrote to contains the expected bytes
+            assert_eq!(1, buf.len());
+            assert_eq!(contents[0..1], buf[0..]);
+
+            let num_unsealed_bytes_response = num_unsealed_bytes(storage, access);
+
+            assert_eq!(
+                SBResponseStatus::SBSuccess,
+                (*num_unsealed_bytes_response).status_code
+            );
 
             // ensure that our byte-counting function works
-            assert_eq!(buf.len(), *num_bytes_result_ptr as usize);
+            assert_eq!(buf.len(), (*num_unsealed_bytes_response).num_bytes as usize);
         }
-
-        assert_eq!(0, unsafe { truncate_unsealed(storage, access, 1) });
-
-        // read the file into memory again - this time after we truncate
-        let buf = read_all_bytes(access);
-
-        // ensure the file we wrote to contains the expected bytes
-        assert_eq!(1, buf.len());
-        assert_eq!(contents[0..1], buf[0..]);
-
-        let num_bytes_result_ptr = &mut 0u64;
-
-        assert_eq!(0, unsafe {
-            num_unsealed_bytes(storage, access, num_bytes_result_ptr)
-        });
-
-        // ensure that our byte-counting function works
-        assert_eq!(buf.len(), *num_bytes_result_ptr as usize);
     }
 }

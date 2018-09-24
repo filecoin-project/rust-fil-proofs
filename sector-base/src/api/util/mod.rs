@@ -1,5 +1,6 @@
 use libc;
 use rand::{thread_rng, Rng};
+use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 use std::path::PathBuf;
 
@@ -38,4 +39,14 @@ pub unsafe fn pbuf_from_c(x: *const libc::c_char) -> PathBuf {
 // return a forgotten raw pointer to something of type T.
 pub fn raw_ptr<T>(thing: T) -> *mut T {
     Box::into_raw(Box::new(thing))
+}
+
+// transmutes a C string to a copy-on-write Rust string
+pub unsafe fn str_from_c<'a>(x: *const libc::c_char) -> Cow<'a, str> {
+    use std::borrow::Cow;
+    if x.is_null() {
+        Cow::from("")
+    } else {
+        CStr::from_ptr(x).to_string_lossy()
+    }
 }
