@@ -4,6 +4,12 @@ pub const DEFAULT_ROUNDS: usize = 1;
 
 /// The `v` constant for sloth.
 /// This is the same as in `Fr::from_str("20974350070050476191779096203274386335076221000211055129041463479975432473805").unwrap().into_repr()`.
+///
+/// (v * 5) % (r - 1) = 1
+/// where r is the modulus of bls12_381::Fr.
+/// r = 52435875175126190479447740508185965837690552500527637822603658699938581184513
+///
+///  See ::tests::const_identities
 const SLOTH_V: [u64; 4] = [
     3_689_348_813_023_923_405,
     2_413_663_763_415_232_921,
@@ -41,16 +47,41 @@ pub fn decode<E: Engine>(key: &E::Fr, ciphertext: &E::Fr, rounds: usize) -> E::F
 #[cfg(test)]
 mod tests {
     use super::*;
+    use num_bigint::BigUint;
     use pairing::bls12_381::{Bls12, Fr, FrRepr};
     use pairing::PrimeField;
+    use std::str::FromStr;
 
     // the modulus from `bls12_381::Fr`
+    // The definition of MODULUS and comment defining r come from pairing/src/bls_12_381/fr.rs.
+    // r = 52435875175126190479447740508185965837690552500527637822603658699938581184513
     const MODULUS: [u64; 4] = [
         0xffffffff00000001,
         0x53bda402fffe5bfe,
         0x3339d80809a1d805,
         0x73eda753299d7d48,
     ];
+
+    const MODULUS_STR: &str =
+        &"52435875175126190479447740508185965837690552500527637822603658699938581184513";
+
+    const V_STR: &str =
+        &"20974350070050476191779096203274386335076221000211055129041463479975432473805";
+
+    #[test]
+    fn const_identities() {
+        let sloth_v = Fr::from_str(V_STR).unwrap();
+        assert_eq!(sloth_v, Fr::from_repr(FrRepr(SLOTH_V)).unwrap());
+
+        let v = BigUint::from_str(V_STR).unwrap();
+
+        let r = BigUint::from_str(MODULUS_STR).unwrap();
+
+        let one = BigUint::from(1u32);
+        let five = BigUint::from(5u32);
+
+        assert_eq!((v * five) % (r - &one), one);
+    }
 
     #[test]
     fn sloth_bls_12() {
