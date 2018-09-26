@@ -1,4 +1,5 @@
 use libc;
+use std::env;
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::path::Path;
 
@@ -10,12 +11,43 @@ use storage_proofs::io::fr32::{
 };
 
 // These sizes are for SEALED sectors. They are used to calculate the values of setup parameters.
-pub const REAL_SECTOR_SIZE: u64 = 128;
-pub const FAST_SECTOR_SIZE: u64 = 1024;
-pub const SLOW_SECTOR_SIZE: u64 = 1 << 30;
+// They can be overridden by setting the corresponding environment variable (with FILECOIN_PROOFS_ prefix),
+// but this is not recommended, since some sealed sector sizes are invalid. If you must set this manually,
+// ensure the chosen sector size is a multiple of 32.
 
-pub const FAST_DELAY_SECONDS: u32 = 10;
-pub const SLOW_DELAY_SECONDS: u32 = 4 * 60 * 60;
+// Sector size, in bytes, to use when testing real proofs. (real sector store)
+pub const REAL_SECTOR_SIZE: u64 = 128; // Override with FILECOIN_PROOFS_REAL_SECTOR_SIZE env var.
+
+// Sector size, in bytes, for tests which fake sealing with a subset of the data. (fast fake sector store)
+pub const FAST_SECTOR_SIZE: u64 = 1024; // Override with FILECOIN_PROOFS_FAST_SECTOR_SIZE env var.
+
+// Sector size, in bytes, during live operation -- which also fakes sealing with a subset of the data. (slow fake sector store)
+pub const SLOW_SECTOR_SIZE: u64 = 1 << 30; // Override with FILECOIN_PROOFS_SLOW_SECTOR_SIZE env var.
+
+// The delay constants can be overridden by setting the corresponding environment variable (with FILECOIN_PROOFS_ prefix)
+// For example, since SLOW_DELAY_SECONDS is used for live sealing, outside of tests,
+// setting the environment variable, FILECOIN_PROOFS_SLOW_DELAY_SECONDS to 30, will result in sealing
+// which takes approximately 30 seconds (with 15 seconds to get unsealed data).
+
+// Delay, in seconds, for tests which fake sealing with a subset of the data. (fast fake sector store)
+pub const FAST_DELAY_SECONDS: u32 = 10; // Override with FILECOIN_PROOFS_FAST_DELAY_SECONDS env var.
+
+// Delay, in seconds during live operation which also fakes sealing with a subset of the data. (slow fake sector store)
+pub const SLOW_DELAY_SECONDS: u32 = 4 * 60 * 60; // Override with FILECOIN_PROOFS_SLOW_DELAY_SECONDS env var.
+
+fn sector_size(env_var_name: &str, default: u64) -> u64 {
+    match env::var(env_var_name) {
+        Ok(bytes_string) => bytes_string.parse().unwrap_or(default),
+        Err(_) => default,
+    }
+}
+
+fn delay_seconds(env_var_name: &str, default: u32) -> u32 {
+    match env::var(env_var_name) {
+        Ok(seconds_string) => seconds_string.parse().unwrap_or(default),
+        Err(_) => default,
+    }
+}
 
 /// Initializes and returns a boxed SectorStore instance suitable for exercising the proofs code
 /// to its fullest capacity.
@@ -190,7 +222,7 @@ impl SectorStore for ConcreteSectorStore {
 pub fn new_real_sector_store(sealed_path: String, staging_path: String) -> ConcreteSectorStore {
     ConcreteSectorStore {
         config: Box::new(RealConfig {
-            sector_bytes: REAL_SECTOR_SIZE,
+            sector_bytes: sector_size("FILECOIN_PROOFS_SECTOR_SIZE", REAL_SECTOR_SIZE),
         }),
         manager: Box::new(DiskManager {
             sealed_path,
@@ -218,8 +250,8 @@ pub fn new_slow_fake_sector_store(
     new_fake_sector_store(
         sealed_path,
         staging_path,
-        SLOW_SECTOR_SIZE,
-        SLOW_DELAY_SECONDS,
+        sector_size("FILECOIN_PROOFS_SLOW_SECTOR_SIZE", SLOW_SECTOR_SIZE),
+        delay_seconds("FILECOIN_PROOFS_SLOW_DELAY_SECONDS", SLOW_DELAY_SECONDS),
     )
 }
 
@@ -230,8 +262,8 @@ pub fn new_fast_fake_sector_store(
     new_fake_sector_store(
         sealed_path,
         staging_path,
-        FAST_SECTOR_SIZE,
-        FAST_DELAY_SECONDS,
+        sector_size("FILECOIN_PROOFS_FAST_SECTOR_SIZE", FAST_SECTOR_SIZE),
+        delay_seconds("FILECOIN_PROOFS_FAST_DELAY_SECONDS", FAST_DELAY_SECONDS),
     )
 }
 
