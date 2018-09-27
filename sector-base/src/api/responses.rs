@@ -94,19 +94,19 @@ pub unsafe extern "C" fn destroy_new_staging_sector_access_response(
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-/// WriteUnsealedResponse
-/////////////////////////
+/// WriteAndPreprocesssResponse
+///////////////////////////////
 
 #[repr(C)]
-pub struct WriteUnsealedResponse {
+pub struct WriteAndPreprocessResponse {
     pub status_code: SBResponseStatus,
     pub error_msg: *const libc::c_char,
     pub num_bytes_written: u64,
 }
 
-impl Default for WriteUnsealedResponse {
-    fn default() -> WriteUnsealedResponse {
-        WriteUnsealedResponse {
+impl Default for WriteAndPreprocessResponse {
+    fn default() -> WriteAndPreprocessResponse {
+        WriteAndPreprocessResponse {
             status_code: SBResponseStatus::SBSuccess,
             error_msg: ptr::null(),
             num_bytes_written: 0,
@@ -114,7 +114,7 @@ impl Default for WriteUnsealedResponse {
     }
 }
 
-impl Drop for WriteUnsealedResponse {
+impl Drop for WriteAndPreprocessResponse {
     fn drop(&mut self) {
         unsafe {
             drop(util::str_from_c(self.error_msg));
@@ -123,7 +123,51 @@ impl Drop for WriteUnsealedResponse {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn destroy_write_unsealed_response(ptr: *mut WriteUnsealedResponse) {
+pub unsafe extern "C" fn destroy_write_and_preprocess_response(
+    ptr: *mut WriteAndPreprocessResponse,
+) {
+    let _ = Box::from_raw(ptr);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+/// ReadRawResponse
+///////////////////
+
+#[repr(C)]
+pub struct ReadRawResponse {
+    pub status_code: SBResponseStatus,
+    pub error_msg: *const libc::c_char,
+    pub data_len: libc::size_t,
+    pub data_ptr: *const u8,
+}
+
+impl Default for ReadRawResponse {
+    fn default() -> ReadRawResponse {
+        ReadRawResponse {
+            status_code: SBResponseStatus::SBSuccess,
+            error_msg: ptr::null(),
+            data_len: 0,
+            data_ptr: ptr::null(),
+        }
+    }
+}
+
+impl Drop for ReadRawResponse {
+    fn drop(&mut self) {
+        unsafe {
+            drop(Vec::from_raw_parts(
+                self.data_ptr as *mut u8,
+                self.data_len,
+                self.data_len,
+            ));
+
+            drop(util::str_from_c(self.error_msg));
+        };
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn destroy_read_raw_response(ptr: *mut ReadRawResponse) {
     let _ = Box::from_raw(ptr);
 }
 

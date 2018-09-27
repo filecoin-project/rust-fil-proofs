@@ -1,6 +1,7 @@
 use libc;
 use std::env;
 use std::fs::{create_dir_all, File, OpenOptions};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
 use api::util;
@@ -151,8 +152,8 @@ impl SectorManager for DiskManager {
         }
     }
 
-    // TODO: write_unsealed should refuse to write more data than will fit. In that case, return 0.
-    fn write_unsealed(&self, access: String, data: &[u8]) -> Result<u64, SectorManagerErr> {
+    // TODO: write_and_preprocess should refuse to write more data than will fit. In that case, return 0.
+    fn write_and_preprocess(&self, access: String, data: &[u8]) -> Result<u64, SectorManagerErr> {
         OpenOptions::new()
             .read(true)
             .write(true)
@@ -162,6 +163,29 @@ impl SectorManager for DiskManager {
                 write_padded(data, &mut file)
                     .map_err(|err| SectorManagerErr::ReceiverError(format!("{:?}", err)))
                     .map(|n| n as u64)
+            })
+    }
+
+    fn read_raw(
+        &self,
+        access: String,
+        start_offset: u64,
+        num_bytes: u64,
+    ) -> Result<Vec<u8>, SectorManagerErr> {
+        OpenOptions::new()
+            .read(true)
+            .open(access)
+            .map_err(|err| SectorManagerErr::CallerError(format!("{:?}", err)))
+            .and_then(|mut file| -> Result<Vec<u8>, SectorManagerErr> {
+                file.seek(SeekFrom::Start(start_offset))
+                    .map_err(|err| SectorManagerErr::CallerError(format!("{:?}", err)))?;
+
+                let mut buf = vec![0; num_bytes as usize];
+
+                file.read_exact(buf.as_mut_slice())
+                    .map_err(|err| SectorManagerErr::CallerError(format!("{:?}", err)))?;
+
+                Ok(buf)
             })
     }
 }
@@ -331,7 +355,9 @@ mod tests {
     use api::disk_backed_storage::init_new_proof_test_sector_store;
     use api::responses::SBResponseStatus;
     use api::util;
-    use api::{new_staging_sector_access, num_unsealed_bytes, truncate_unsealed, write_unsealed};
+    use api::{
+        new_staging_sector_access, num_unsealed_bytes, truncate_unsealed, write_and_preprocess,
+    };
     use storage_proofs::io::fr32::FR32_PADDING_MAP;
 
     fn create_storage() -> *mut Box<SectorStore> {
@@ -367,7 +393,7 @@ mod tests {
 
             let contents = &[2u8; 500];
 
-            let write_unsealed_response = write_unsealed(
+            let write_and_preprocess_response = write_and_preprocess(
                 storage,
                 (*new_staging_sector_access_response).sector_access,
                 &contents[0],
@@ -376,7 +402,7 @@ mod tests {
 
             assert_eq!(
                 SBResponseStatus::SBSuccess,
-                (*write_unsealed_response).status_code
+                (*write_and_preprocess_response).status_code
             );
 
             // buffer the file's bytes into memory after writing bytes
@@ -386,7 +412,7 @@ mod tests {
             // ensure that we reported the correct number of written bytes
             assert_eq!(
                 contents.len(),
-                (*write_unsealed_response).num_bytes_written as usize
+                (*write_and_preprocess_response).num_bytes_written as usize
             );
 
             // ensure the file we wrote to contains the expected bytes

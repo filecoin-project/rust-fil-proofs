@@ -322,10 +322,11 @@ mod tests {
     };
     use sector_base::api::responses::{
         destroy_new_sealed_sector_access_response, destroy_new_staging_sector_access_response,
-        destroy_write_unsealed_response,
+        destroy_read_raw_response, destroy_write_and_preprocess_response,
     };
     use sector_base::api::{
-        new_sealed_sector_access, new_staging_sector_access, write_unsealed, SectorStore,
+        new_sealed_sector_access, new_staging_sector_access, read_raw, write_and_preprocess,
+        SectorStore,
     };
 
     use sector_base::api::responses::SBResponseStatus;
@@ -415,8 +416,8 @@ mod tests {
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
-    fn write_unsealed_overwrites_unaligned_last_bytes() {
-        write_unsealed_overwrites_unaligned_last_bytes_aux(ConfiguredStore::ProofTest);
+    fn write_and_preprocess_overwrites_unaligned_last_bytes() {
+        write_and_preprocess_overwrites_unaligned_last_bytes_aux(ConfiguredStore::ProofTest);
     }
 
     #[test]
@@ -483,13 +484,13 @@ mod tests {
 
             let contents = make_data_for_storage(&**storage, byte_padding_amount);
 
-            let write_unsealed_response =
-                write_unsealed(storage, seal_input_path, &contents[0], contents.len());
+            let write_and_preprocess_response =
+                write_and_preprocess(storage, seal_input_path, &contents[0], contents.len());
 
             assert_eq!(
                 SBResponseStatus::SBSuccess,
-                (*write_unsealed_response).status_code,
-                "write_unsealed failed for {:?}",
+                (*write_and_preprocess_response).status_code,
+                "write_and_preprocess failed for {:?}",
                 cs
             );
 
@@ -541,11 +542,11 @@ mod tests {
             responses::destroy_verify_seal_response(verify_seal_res);
             destroy_new_staging_sector_access_response(new_staging_sector_access_response);
             destroy_new_sealed_sector_access_response(new_sealed_sector_access_response);
-            destroy_write_unsealed_response(write_unsealed_response);
+            destroy_write_and_preprocess_response(write_and_preprocess_response);
         }
     }
 
-    fn write_unsealed_overwrites_unaligned_last_bytes_aux(cs: ConfiguredStore) {
+    fn write_and_preprocess_overwrites_unaligned_last_bytes_aux(cs: ConfiguredStore) {
         unsafe {
             let storage = create_storage(&cs);
 
@@ -566,41 +567,41 @@ mod tests {
             // The bytes must sum to 127, since that is the required unsealed sector size.
             // With suitable bytes (.e.g all 255),the bug always occurs when the first chunk is >= 32.
             // It never occurs when the first chunk is < 32.
-            // The root problem was that write_unsealed was opening in append mode, so seeking backward
+            // The root problem was that write_and_preprocess was opening in append mode, so seeking backward
             // to overwrite the last, incomplete byte, was not happening.
             let contents_a = [255; 32];
             let contents_b = [255; 95];
 
-            let write_unsealed_response_a =
-                write_unsealed(storage, seal_input_path, &contents_a[0], contents_a.len());
+            let write_and_preprocess_response_a =
+                write_and_preprocess(storage, seal_input_path, &contents_a[0], contents_a.len());
 
             assert_eq!(
                 SBResponseStatus::SBSuccess,
-                (*write_unsealed_response_a).status_code,
-                "write_unsealed failed for {:?}",
+                (*write_and_preprocess_response_a).status_code,
+                "write_and_preprocess failed for {:?}",
                 cs
             );
 
             assert_eq!(
                 contents_a.len() as u64,
-                (*write_unsealed_response_a).num_bytes_written,
+                (*write_and_preprocess_response_a).num_bytes_written,
                 "unexpected number of bytes written {:?}",
                 cs
             );
 
-            let write_unsealed_response_b =
-                write_unsealed(storage, seal_input_path, &contents_b[0], contents_b.len());
+            let write_and_preprocess_response_b =
+                write_and_preprocess(storage, seal_input_path, &contents_b[0], contents_b.len());
 
             assert_eq!(
                 SBResponseStatus::SBSuccess,
-                (*write_unsealed_response_b).status_code,
-                "write_unsealed failed for {:?}",
+                (*write_and_preprocess_response_b).status_code,
+                "write_and_preprocess failed for {:?}",
                 cs
             );
 
             assert_eq!(
                 contents_b.len() as u64,
-                (*write_unsealed_response_b).num_bytes_written,
+                (*write_and_preprocess_response_b).num_bytes_written,
                 "unexpected number of bytes written {:?}",
                 cs
             );
@@ -674,8 +675,8 @@ mod tests {
             destroy_new_sealed_sector_access_response(new_sealed_sector_access_response);
             destroy_new_staging_sector_access_response(new_staging_sector_access_response_a);
             destroy_new_staging_sector_access_response(new_staging_sector_access_response_b);
-            destroy_write_unsealed_response(write_unsealed_response_a);
-            destroy_write_unsealed_response(write_unsealed_response_b);
+            destroy_write_and_preprocess_response(write_and_preprocess_response_a);
+            destroy_write_and_preprocess_response(write_and_preprocess_response_b);
         }
     }
 
@@ -688,8 +689,7 @@ mod tests {
             let new_sealed_sector_access_response = new_sealed_sector_access(storage);
 
             let seal_input_path = (*new_staging_sector_access_response_a).sector_access;
-            let get_unsealed_range_output_path =
-                (*new_staging_sector_access_response_b).sector_access;
+            let get_unsealed_output_path = (*new_staging_sector_access_response_b).sector_access;
             let seal_output_path = (*new_sealed_sector_access_response).sector_access;
 
             let prover_id = &[2; 31];
@@ -697,13 +697,13 @@ mod tests {
 
             let contents = make_data_for_storage(&**storage, byte_padding_amount);
 
-            let write_unsealed_response =
-                write_unsealed(storage, seal_input_path, &contents[0], contents.len());
+            let write_and_preprocess_response =
+                write_and_preprocess(storage, seal_input_path, &contents[0], contents.len());
 
             assert_eq!(
                 SBResponseStatus::SBSuccess,
-                (*write_unsealed_response).status_code,
-                "write_unsealed failed for {:?}",
+                (*write_and_preprocess_response).status_code,
+                "write_and_preprocess failed for {:?}",
                 cs
             );
 
@@ -725,7 +725,7 @@ mod tests {
             let get_unsealed_response = get_unsealed(
                 storage,
                 seal_output_path,
-                get_unsealed_range_output_path,
+                get_unsealed_output_path,
                 prover_id,
                 sector_id,
             );
@@ -737,9 +737,43 @@ mod tests {
                 cs
             );
 
-            let mut file = File::open(util::pbuf_from_c(get_unsealed_range_output_path)).unwrap();
+            let mut file = File::open(util::pbuf_from_c(get_unsealed_output_path)).unwrap();
             let mut buf = Vec::new();
             file.read_to_end(&mut buf).unwrap();
+
+            {
+                let read_unsealed_response =
+                    read_raw(storage, get_unsealed_output_path, 0, buf.len() as u64);
+
+                assert_eq!(
+                    (*read_unsealed_response).status_code,
+                    SBResponseStatus::SBSuccess
+                );
+
+                let read_unsealed_data = from_raw_parts(
+                    (*read_unsealed_response).data_ptr,
+                    (*read_unsealed_response).data_len,
+                );
+                assert_eq!(&buf, &read_unsealed_data);
+                destroy_read_raw_response(read_unsealed_response);
+            }
+
+            {
+                let read_unsealed_response =
+                    read_raw(storage, get_unsealed_output_path, 1, buf.len() as u64 - 2);
+
+                assert_eq!(
+                    (*read_unsealed_response).status_code,
+                    SBResponseStatus::SBSuccess
+                );
+
+                let read_unsealed_data = from_raw_parts(
+                    (*read_unsealed_response).data_ptr,
+                    (*read_unsealed_response).data_len,
+                );
+                assert_eq!(&buf[1..buf.len() - 1], &read_unsealed_data[..]);
+                destroy_read_raw_response(read_unsealed_response);
+            }
 
             assert_eq!(
                 contents.len(),
@@ -761,7 +795,7 @@ mod tests {
             destroy_new_sealed_sector_access_response(new_sealed_sector_access_response);
             destroy_new_staging_sector_access_response(new_staging_sector_access_response_a);
             destroy_new_staging_sector_access_response(new_staging_sector_access_response_b);
-            destroy_write_unsealed_response(write_unsealed_response);
+            destroy_write_and_preprocess_response(write_and_preprocess_response);
         }
     }
 
@@ -783,13 +817,13 @@ mod tests {
 
             let contents = make_data_for_storage(&**storage, byte_padding_amount);
 
-            let write_unsealed_response =
-                write_unsealed(storage, seal_input_path, &contents[0], contents.len());
+            let write_and_preprocess_response =
+                write_and_preprocess(storage, seal_input_path, &contents[0], contents.len());
 
             assert_eq!(
                 SBResponseStatus::SBSuccess,
-                (*write_unsealed_response).status_code,
-                "write_unsealed failed for {:?}",
+                (*write_and_preprocess_response).status_code,
+                "write_and_preprocess failed for {:?}",
                 cs
             );
 

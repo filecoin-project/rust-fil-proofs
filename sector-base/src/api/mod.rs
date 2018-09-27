@@ -59,8 +59,15 @@ pub trait SectorManager {
     /// sets the number of bytes in an unsealed sector identified by `access`
     fn truncate_unsealed(&self, access: String, size: u64) -> Result<(), SectorManagerErr>;
 
-    /// writes `data` to the unsealed sector identified by `access`
-    fn write_unsealed(&self, access: String, data: &[u8]) -> Result<u64, SectorManagerErr>;
+    /// writes `data` to the staging sector identified by `access`, incrementally preprocessing `access`
+    fn write_and_preprocess(&self, access: String, data: &[u8]) -> Result<u64, SectorManagerErr>;
+
+    fn read_raw(
+        &self,
+        access: String,
+        start_offset: u64,
+        numb_bytes: u64,
+    ) -> Result<Vec<u8>, SectorManagerErr>;
 }
 
 pub trait SectorStore {
@@ -150,19 +157,19 @@ pub unsafe extern "C" fn new_staging_sector_access(
 /// * `data_ptr`   - pointer to data_len-length array of bytes to write
 /// * `data_len`   - number of items in the data_ptr array
 #[no_mangle]
-pub unsafe extern "C" fn write_unsealed(
+pub unsafe extern "C" fn write_and_preprocess(
     ss_ptr: *mut Box<SectorStore>,
     access: *const libc::c_char,
     data_ptr: *const u8,
     data_len: libc::size_t,
-) -> *mut responses::WriteUnsealedResponse {
-    let mut response: responses::WriteUnsealedResponse = Default::default();
+) -> *mut responses::WriteAndPreprocessResponse {
+    let mut response: responses::WriteAndPreprocessResponse = Default::default();
 
     let data = from_raw_parts(data_ptr, data_len);
 
     let result = (*ss_ptr)
         .manager()
-        .write_unsealed(util::c_str_to_rust_str(access), data);
+        .write_and_preprocess(util::c_str_to_rust_str(access), data);
 
     response.status_code = result.to_response_status();
 
@@ -216,6 +223,38 @@ pub unsafe extern "C" fn truncate_unsealed(
 
     match result {
         Ok(_) => {}
+        Err(err) => {
+            let msg = CString::new(format!("{:?}", err)).unwrap();
+            response.error_msg = msg.as_ptr();
+            mem::forget(msg);
+        }
+    }
+
+    Box::into_raw(Box::new(response))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn read_raw(
+    ss_ptr: *mut Box<SectorStore>,
+    access: *const libc::c_char,
+    start_offset: u64,
+    num_bytes: u64,
+) -> *mut responses::ReadRawResponse {
+    let mut response: responses::ReadRawResponse = Default::default();
+
+    let result =
+        (*ss_ptr)
+            .manager()
+            .read_raw(util::c_str_to_rust_str(access), start_offset, num_bytes);
+
+    response.status_code = result.to_response_status();
+
+    match result {
+        Ok(data) => {
+            response.data_ptr = data.as_ptr();
+            response.data_len = data.len();
+            mem::forget(data);
+        }
         Err(err) => {
             let msg = CString::new(format!("{:?}", err)).unwrap();
             response.error_msg = msg.as_ptr();
