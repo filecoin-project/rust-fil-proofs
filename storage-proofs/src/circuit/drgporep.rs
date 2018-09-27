@@ -5,6 +5,7 @@ use sapling_crypto::circuit::boolean::{self, Boolean};
 use sapling_crypto::circuit::{multipack, num};
 use sapling_crypto::jubjub::JubjubEngine;
 
+use circuit::constraint;
 use circuit::kdf::kdf;
 use circuit::por::{PoRCircuit, PoRCompound};
 use circuit::sloth;
@@ -381,12 +382,11 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
 
             // ensure the encrypted data and data_node match
             {
-                // expected * 1 = decoded
-                cs.enforce(
+                constraint::equal(
+                    cs,
                     || "encrypted matches data_node constraint",
-                    |lc| lc + expected.get_variable(),
-                    |lc| lc + CS::one(),
-                    |lc| lc + decoded.get_variable(),
+                    &expected,
+                    &decoded,
                 );
             }
         }

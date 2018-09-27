@@ -1,4 +1,5 @@
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
+use circuit::constraint;
 use compound_proof::CompoundProof;
 use drgraph::graph_height;
 use merklepor::MerklePoR;
@@ -187,14 +188,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoRCircuit<'a, E> {
                     real_root_value.ok_or(SynthesisError::AssignmentMissing)
                 })?;
 
-                // cur  * 1 = rt
-                // enforce cur and rt are equal
-                cs.enforce(
-                    || "enforce root is correct",
-                    |lc| lc + cur.get_variable(),
-                    |lc| lc + CS::one(),
-                    |lc| lc + rt.get_variable(),
-                );
+                constraint::equal(cs, || "enforce root is correct", &cur, &rt);
 
                 // Expose the root
                 rt.inputize(cs.namespace(|| "root"))?;

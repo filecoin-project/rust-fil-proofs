@@ -1,3 +1,4 @@
+mod constraint;
 pub mod drgporep;
 pub mod kdf;
 pub mod pedersen;

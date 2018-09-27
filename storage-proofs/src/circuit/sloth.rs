@@ -2,6 +2,8 @@ use bellman::{ConstraintSystem, SynthesisError};
 use pairing::{Engine, Field};
 use sapling_crypto::circuit::num;
 
+use circuit::constraint;
+
 /// Circuit version of sloth decoding.
 pub fn decode<E, CS>(
     mut cs: CS,
@@ -48,15 +50,8 @@ fn sub<E: Engine, CS: ConstraintSystem<E>>(
         Ok(tmp)
     })?;
 
-    //    res = a-b
-    // => res + b = a
-    // => (res + b) * 1 = a
-    cs.enforce(
-        || "subtraction constraint",
-        |lc| lc + res.get_variable() + b.get_variable(),
-        |lc| lc + CS::one(),
-        |lc| lc + a.get_variable(),
-    );
+    // a - b = res
+    constraint::difference(&mut cs, || "subtraction constraint", &a, &b, &res);
 
     Ok(res)
 }

@@ -1,12 +1,16 @@
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
+use circuit::constraint;
 use circuit::private_drgporep::PrivateDrgPoRepCompound;
 use compound_proof::CompoundProof;
 use drgporep::{self, DrgPoRep};
 use drgraph::{graph_height, Graph};
+use hasher::pedersen::PedersenHash;
 use layered_drgporep::{self, Layerable};
 use pairing::bls12_381::{Bls12, Fr};
 use parameter_cache::{CacheableParameters, ParameterSetIdentifier};
+use porep;
 use proof::ProofScheme;
+use sapling_crypto::circuit::num;
 use sapling_crypto::jubjub::JubjubEngine;
 use zigzag_drgporep::ZigZagDrgPoRep;
 use zigzag_graph::ZigZagBucketGraph;
@@ -33,6 +37,7 @@ where
     params: &'a E::Params,
     public_params: <ZigZagDrgPoRep as ProofScheme<'a>>::PublicParams,
     layers: Layers<'a, G>,
+    tau: porep::Tau,
     phantom: PhantomData<E>,
 }
 
@@ -45,6 +50,7 @@ where
         params: &'a <Bls12 as JubjubEngine>::Params,
         public_params: <ZigZagDrgPoRep as ProofScheme<'a>>::PublicParams,
         layers: Layers<G>,
+        tau: porep::Tau,
     ) -> Result<(), SynthesisError>
     where
         CS: ConstraintSystem<Bls12>,
@@ -54,6 +60,7 @@ where
             params,
             public_params,
             layers,
+            tau,
             phantom: PhantomData,
         };
 
@@ -68,6 +75,9 @@ where
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let graph = self.public_params.drg_porep_public_params.graph.clone();
         for (l, (public_inputs, layer_proof)) in self.layers.iter().enumerate() {
+            let first_layer = l == 0;
+            let last_layer = l == self.layers.len() - 1;
+
             let height = graph_height(graph.size());
             let proof = match layer_proof {
                 Some(wrapped_proof) => {
@@ -87,7 +97,50 @@ where
                 &self.public_params.drg_porep_public_params,
                 self.params,
             );
-            circuit.synthesize(&mut cs.namespace(|| format!("zigzag layer {}", l)))?
+            circuit.synthesize(&mut cs.namespace(|| format!("zigzag layer {}", l)))?;
+
+            if first_layer {
+                // Constrain first layer's comm_d to be equal to overall tau.comm_d.
+
+                let fcd = proof.nodes[0].proof.root.0;
+                let first_comm_d =
+                    num::AllocatedNum::alloc(cs.namespace(|| "first comm_d"), || Ok(fcd))?;
+
+                let public_comm_d =
+                    num::AllocatedNum::alloc(cs.namespace(|| "public comm_d value"), || {
+                        Ok(self.tau.comm_d.0)
+                    })?;
+
+                constraint::equal(
+                    cs,
+                    || "enforce comm_d is correct",
+                    &first_comm_d,
+                    &public_comm_d,
+                );
+                public_comm_d.inputize(cs.namespace(|| "zigzag comm_d"));
+            }
+
+            if last_layer {
+                // Constrain last layer's comm_r to be equal to overall tau.comm_r.
+
+                let lcr = proof.replica_nodes[0].proof.root.0;
+                let last_comm_r =
+                    num::AllocatedNum::alloc(cs.namespace(|| "last comm_r"), || Ok(lcr))?;
+
+                let public_comm_r =
+                    num::AllocatedNum::alloc(cs.namespace(|| "public comm_r value"), || {
+                        Ok(self.tau.comm_r.0)
+                    })?;
+
+                constraint::equal(
+                    cs,
+                    || "enforce comm_r is correct",
+                    &last_comm_r,
+                    &public_comm_r,
+                );
+
+                public_comm_r.inputize(cs.namespace(|| "zigzag comm_r"));
+            }
         }
 
         // TODO: We need to add an aggregated commitment to the inputs, then compute a it as a
@@ -124,6 +177,9 @@ impl<'a> CompoundProof<'a, Bls12, ZigZagDrgPoRep, ZigZagCircuit<'a, Bls12, ZigZa
         };
 
         for i in 0..pub_params.layers {
+            let first_layer = i == 0;
+            let last_layer = i == pub_params.layers - 1;
+
             let drgporep_pub_inputs = drgporep::PublicInputs {
                 replica_id: pub_in.replica_id,
                 challenges: pub_in.challenges.clone(),
@@ -140,6 +196,16 @@ impl<'a> CompoundProof<'a, Bls12, ZigZagDrgPoRep, ZigZagCircuit<'a, Bls12, ZigZa
                 i,
                 pub_params.layers,
             );
+
+            if first_layer {
+                let comm_d = pub_in.tau.unwrap().comm_d.0;
+                inputs.push(comm_d);
+            };
+
+            if last_layer {
+                let comm_r = pub_in.tau.unwrap().comm_r.0;
+                inputs.push(comm_r);
+            };
         }
         inputs
     }
@@ -154,7 +220,6 @@ impl<'a> CompoundProof<'a, Bls12, ZigZagDrgPoRep, ZigZagCircuit<'a, Bls12, ZigZa
             .map(|l| {
                 let layer_public_inputs = drgporep::PublicInputs {
                     replica_id: public_inputs.replica_id,
-                    // FIXME: add multiple challenges to public inputs.
                     challenges: public_inputs.challenges.clone(),
                     tau: None,
                 };
@@ -167,6 +232,7 @@ impl<'a> CompoundProof<'a, Bls12, ZigZagDrgPoRep, ZigZagCircuit<'a, Bls12, ZigZa
         ZigZagCircuit {
             params: engine_params,
             public_params: pp,
+            tau: public_inputs.tau.unwrap(),
             layers,
             phantom: PhantomData,
         }
@@ -266,8 +332,8 @@ mod tests {
         }
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_inputs(), 13, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 56750, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 15, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 56754, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
@@ -323,10 +389,14 @@ mod tests {
             params,
             public_params,
             layers,
+            porep::Tau {
+                comm_r: PedersenHash(Fr::rand(rng)),
+                comm_d: PedersenHash(Fr::rand(rng)),
+            },
         ).expect("failed to synthesize circuit");
 
-        assert_eq!(cs.num_inputs(), 15, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 434058, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 17, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 434062, "wrong number of constraints");
     }
 
     #[test]

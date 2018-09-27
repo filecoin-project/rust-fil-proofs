@@ -2,6 +2,7 @@ use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use sapling_crypto::circuit::{boolean, multipack, num, pedersen_hash};
 use sapling_crypto::jubjub::JubjubEngine;
 
+use circuit::constraint;
 /// This is an instance of the `ParallelProofOfRetrievability` circuit.
 ///
 /// # Public Inputs
@@ -121,15 +122,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for ParallelProofOfRetrievability<'a, E> {
 
             {
                 // Validate that the root of the merkle tree that we calculated is the same as the input.
-
-                // cur  * 1 = rt
-                // enforce cur and rt are equal
-                cs.enforce(
-                    || "enforce root is correct",
-                    |lc| lc + cur.get_variable(),
-                    |lc| lc + CS::one(),
-                    |lc| lc + rt.get_variable(),
-                );
+                constraint::equal(&mut cs, || "enforce root is correct", &cur, &rt);
             }
         }
 
