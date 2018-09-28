@@ -1,4 +1,5 @@
 use std::cmp::min;
+use std::io::BufWriter;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::iter::FromIterator;
 
@@ -236,7 +237,19 @@ pub fn write_padded<W: ?Sized>(source: &[u8], target: &mut W) -> io::Result<usiz
 where
     W: Read + Write + Seek,
 {
-    write_padded_aux(&FR32_PADDING_MAP, source, target)
+    // In order to optimize alignment in the common case of writing from an aligned start,
+    // we should make the chunk a multiple of 128.
+    // n was hand-tuned to do reasonably well in the benchmarks.
+    let n = 1000;
+    let chunk_size = 128 * n;
+
+    let mut written = 0;
+
+    for chunk in source.chunks(chunk_size) {
+        written += write_padded_aux(&FR32_PADDING_MAP, chunk, target)?;
+    }
+
+    Ok(written)
 }
 
 fn write_padded_aux<W: ?Sized>(
@@ -395,7 +408,32 @@ pub fn write_unpadded<W: ?Sized>(
 where
     W: Write,
 {
-    write_unpadded_aux(&FR32_PADDING_MAP, source, target, offset, len)
+    // In order to optimize alignment in the common case of writing from an aligned start,
+    // we should make the chunk a multiple of 128.
+    // n was hand-tuned to do reasonably well in the benchmarks.
+    let n = 1000;
+    let chunk_size = 128 * n;
+
+    let mut written = 0;
+
+    let mut offset = offset;
+    let mut len = len;
+
+    for chunk in source.chunks(chunk_size) {
+        let this_len = min(len, chunk.len());
+
+        written += write_unpadded_aux(
+            &FR32_PADDING_MAP,
+            source,
+            target,
+            offset,
+            min(len, this_len),
+        )?;
+        offset += this_len;
+        len -= this_len;
+    }
+
+    Ok(written)
 }
 
 pub fn write_unpadded_aux<W: ?Sized>(

@@ -75,21 +75,11 @@ where
         public_inputs: &S::PublicInputs,
         proof: Proof<E>,
     ) -> Result<bool> {
-        println!("Preparing verifying key");
         let start = Instant::now();
         let pvk = groth16::prepare_verifying_key(&proof.groth_params.vk);
         let pvk_time = start.elapsed();
-        println!("Preparing verifying key took: {:?}", pvk_time);
-        println!("Generating public inputs");
         let inputs = Self::generate_public_inputs(public_inputs, public_params);
         let input_time = start.elapsed() - pvk_time;
-        println!("Generating public inputs took: {:?}", input_time);
-
-        println!("Generated input count: {}", inputs.len());
-        println!("Generated inputs: {:?}", inputs);
-        for (i, v) in inputs.iter().enumerate() {
-            println!("{}: {:?}", i, v);
-        }
 
         Ok(groth16::verify_proof(
             &pvk,
@@ -124,15 +114,11 @@ where
         // For now, this is most expedient, since we need the public/private inputs
         // in order to generate a circuit at all.
 
-        println!("Getting groth params.");
         let groth_params = Self::get_groth_params(make_circuit(), pub_params, rng)?;
         let param_time = start.elapsed();
-        println!("Finished getting groth params: {:?}", param_time);
 
-        println!("Creating proof");
         let groth_proof = groth16::create_random_proof(make_circuit(), &groth_params, rng)?;
         let proof_time = start.elapsed() - param_time;
-        println!("Finished creating proof: {:?}", proof_time);
 
         let mut proof_vec = vec![];
         groth_proof.write(&mut proof_vec)?;

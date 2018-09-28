@@ -53,5 +53,9 @@ harness = false
 name = "drgraph"
 harness = false
 
+[[bench]]
+name = "preprocessing"
+harness = false
+
 [profile.test]
 opt-level = 1

@@ -117,7 +117,7 @@ where
                     &first_comm_d,
                     &public_comm_d,
                 );
-                public_comm_d.inputize(cs.namespace(|| "zigzag comm_d"));
+                public_comm_d.inputize(cs.namespace(|| "zigzag comm_d"))?;
             }
 
             if last_layer {
@@ -139,7 +139,7 @@ where
                     &public_comm_r,
                 );
 
-                public_comm_r.inputize(cs.namespace(|| "zigzag comm_r"));
+                public_comm_r.inputize(cs.namespace(|| "zigzag comm_r"))?;
             }
         }
 
