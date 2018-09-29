@@ -1,5 +1,4 @@
 use std::cmp::min;
-use std::io::BufWriter;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::iter::FromIterator;
 
@@ -149,7 +148,7 @@ impl PaddingMap {
 
     // Calculate and return bits and bytes to which a given number of bytes expands.
     pub fn padded_bit_bytes_from_bytes(&self, bytes: usize) -> BitByte {
-        BitByte::from_bytes(self.expand_bytes(bytes))
+        self.padded_bit_bytes_from_bits(bytes * 8)
     }
 
     pub fn unpadded_bit_bytes_from_bits(&self, bits: usize) -> BitByte {
@@ -158,7 +157,7 @@ impl PaddingMap {
     }
 
     pub fn unpadded_bit_bytes_from_bytes(&self, bytes: usize) -> BitByte {
-        BitByte::from_bytes(self.contract_bytes(bytes))
+        self.unpadded_bit_bytes_from_bits(bytes * 8)
     }
 
     // Returns a BitByte representing the distance between current position and next Fr boundary.
@@ -422,13 +421,7 @@ where
     for chunk in source.chunks(chunk_size) {
         let this_len = min(len, chunk.len());
 
-        written += write_unpadded_aux(
-            &FR32_PADDING_MAP,
-            source,
-            target,
-            offset,
-            min(len, this_len),
-        )?;
+        written += write_unpadded_aux(&FR32_PADDING_MAP, source, target, offset, this_len)?;
         offset += this_len;
         len -= this_len;
     }
@@ -446,20 +439,13 @@ pub fn write_unpadded_aux<W: ?Sized>(
 where
     W: Write,
 {
-    let mut bits_remaining = padding_map.expand_bits(len * 8);
     let mut offset = padding_map.padded_bit_bytes_from_bytes(offset_bytes);
 
-    let total_bits_required = offset.total_bits() + bits_remaining;
-    let source_bits = source.len() * 8;
-    assert!(
-        total_bits_required <= source_bits,
-        "requested {} bits, but source only contains {}",
-        total_bits_required,
-        source_bits
-    );
+    let bits_to_write = len * 8;
 
     let mut bits_out = BitVec::<bitvec::LittleEndian, u8>::new();
-    while bits_remaining > 0 {
+
+    while bits_out.len() < bits_to_write {
         let start = offset.bytes;
         let bits_to_skip = offset.bits;
         let offset_total_bits = offset.total_bits();
@@ -470,18 +456,19 @@ where
         let bits_to_next_boundary = current_fr_bits_end - offset_total_bits;
 
         let raw_end = min(end, source.len());
+        if start > source.len() {
+            break;
+        }
         let raw_bits = BitVec::<bitvec::LittleEndian, u8>::from(&source[start..raw_end]);
         let skipped = raw_bits.into_iter().skip(bits_to_skip);
-
         let restricted = skipped.take(bits_to_next_boundary);
 
+        let bits_left_to_write = bits_to_write - bits_out.len();
         let bits_needed = ((end - start) * 8) - bits_to_skip;
-        let bits_to_take = min(bits_needed, bits_remaining);
-
+        let bits_to_take = min(bits_needed, bits_left_to_write);
         let taken = restricted.take(bits_to_take);
-        bits_out.extend(taken);
 
-        bits_remaining -= bits_to_take;
+        bits_out.extend(taken);
 
         offset = BitByte {
             bytes: end,
@@ -497,7 +484,7 @@ where
 
     target.write_all(&boxed_slice)?;
 
-    Ok(len)
+    Ok(boxed_slice.len())
 }
 
 #[cfg(test)]
@@ -680,13 +667,15 @@ mod tests {
             assert_eq!(expected.len(), unpadded.len());
             assert_eq!(expected, &unpadded[..]);
         }
-        {
+        for start in 0..1016 {
             let mut unpadded = Vec::new();
-            let start = 1;
-            let len = 35;
-            write_unpadded(&padded, &mut unpadded, start, len).unwrap();
-            let expected = &data[start..start + len];
 
+            let len = 35;
+            let unpadded_bytes = write_unpadded(&padded, &mut unpadded, start, len).unwrap();
+            let actual_len = min(data.len() - start, len);
+            assert_eq!(unpadded_bytes, actual_len);
+
+            let expected = &data[start..start + actual_len];
             assert_eq!(expected, &unpadded[..]);
         }
     }

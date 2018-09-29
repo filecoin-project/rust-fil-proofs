@@ -4,7 +4,6 @@ use parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use proof::ProofScheme;
 use rand::{SeedableRng, XorShiftRng};
 use sapling_crypto::jubjub::JubjubEngine;
-use std::time::Instant;
 
 pub struct SetupParams<'a, 'b: 'a, E: JubjubEngine, S: ProofScheme<'a>>
 where
@@ -75,11 +74,8 @@ where
         public_inputs: &S::PublicInputs,
         proof: Proof<E>,
     ) -> Result<bool> {
-        let start = Instant::now();
         let pvk = groth16::prepare_verifying_key(&proof.groth_params.vk);
-        let pvk_time = start.elapsed();
         let inputs = Self::generate_public_inputs(public_inputs, public_params);
-        let input_time = start.elapsed() - pvk_time;
 
         Ok(groth16::verify_proof(
             &pvk,
@@ -105,8 +101,6 @@ where
         // Fortunately, doing so is cheap.
         let make_circuit = || Self::circuit(&pub_in, &vanilla_proof, &pub_params, params);
 
-        let start = Instant::now();
-
         // TODO: Don't actually generate groth parameters here, certainly not random ones.
         // The parameters will need to have been generated in advance and will be constants
         // associated with a given top-level circuit.
@@ -115,10 +109,8 @@ where
         // in order to generate a circuit at all.
 
         let groth_params = Self::get_groth_params(make_circuit(), pub_params, rng)?;
-        let param_time = start.elapsed();
 
         let groth_proof = groth16::create_random_proof(make_circuit(), &groth_params, rng)?;
-        let proof_time = start.elapsed() - param_time;
 
         let mut proof_vec = vec![];
         groth_proof.write(&mut proof_vec)?;
