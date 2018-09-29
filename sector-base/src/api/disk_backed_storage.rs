@@ -325,6 +325,10 @@ impl SectorConfig for RealConfig {
     fn sector_bytes(&self) -> u64 {
         self.sector_bytes
     }
+
+    fn dummy_parameter_cache_name(&self) -> String {
+        String::from("REAL_DUMMY_API_PARAMETERS")
+    }
 }
 
 impl SectorConfig for FakeConfig {
@@ -339,8 +343,13 @@ impl SectorConfig for FakeConfig {
     fn max_unsealed_bytes_per_sector(&self) -> u64 {
         unpadded_bytes(self.sector_bytes)
     }
+
     fn sector_bytes(&self) -> u64 {
         self.sector_bytes
+    }
+
+    fn dummy_parameter_cache_name(&self) -> String {
+        String::from("FAKE_DUMMY_API_PARAMETERS_{}")
     }
 }
 

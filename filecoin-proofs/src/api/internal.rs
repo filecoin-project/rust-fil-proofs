@@ -39,15 +39,12 @@ type SnarkProof = [u8; SNARK_BYTES];
 /// How big should a fake sector be when faking proofs?
 const FAKE_SECTOR_BYTES: usize = 128;
 
-/// We need a distinguished place to cache 'the' parameters corresponding to the SetupParams
-/// currently being used. These are only easily generated at replication time but need to be
-/// accessed at verification time too.
-const DUMMY_PARAMETER_CACHE_FILE: &str = "API-dummy-parameters";
-/// If we try to read the cache while another process (like a test on CI…) is writing it,
-/// things will go badly.
-
-fn dummy_parameter_cache_path(sector_size: usize) -> PathBuf {
-    parameter_cache_path(&format!("{}[{}]", DUMMY_PARAMETER_CACHE_FILE, sector_size))
+fn dummy_parameter_cache_path(sector_store: &SectorStore, sector_size: usize) -> PathBuf {
+    parameter_cache_path(&format!(
+        "{}[{}]",
+        sector_store.config().dummy_parameter_cache_name(),
+        sector_size
+    ))
 }
 
 lazy_static! {
@@ -212,7 +209,7 @@ pub fn seal(
 
     write_params_to_cache(
         proof.groth_params.clone(),
-        &dummy_parameter_cache_path(proof_sector_bytes),
+        &dummy_parameter_cache_path(sector_store, proof_sector_bytes),
     )?;
 
     // Verification is cheap when parameters are cached,
@@ -351,7 +348,10 @@ pub fn verify_seal(
     };
 
     let proof = groth16::Proof::read(proof_vec)?;
-    let groth_params = read_cached_params(&dummy_parameter_cache_path(proof_sector_bytes))?;
+    let groth_params = read_cached_params(&dummy_parameter_cache_path(
+        sector_store,
+        proof_sector_bytes,
+    ))?;
 
     let proof = compound_proof::Proof {
         circuit_proof: proof,
