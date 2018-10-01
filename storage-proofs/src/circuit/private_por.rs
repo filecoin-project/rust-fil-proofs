@@ -75,8 +75,6 @@ impl<'a> CompoundProof<'a, Bls12, MerklePoR, PrivatePoRCircuit<'a, Bls12>> for P
         let mut inputs = Vec::new();
         inputs.extend(packed_auth_path);
 
-        println!("generated inputs ({}): {:?}", inputs.len(), inputs);
-
         inputs
     }
 }
