@@ -425,6 +425,28 @@ mod tests {
         generate_verify_post_roundtrip_aux(ConfiguredStore::ProofTest);
     }
 
+    #[test]
+    fn max_unsealed_bytes_per_sector_checks() {
+        assert_max_unsealed_bytes_per_sector(ConfiguredStore::Live, 1065353216);
+        assert_max_unsealed_bytes_per_sector(ConfiguredStore::Test, 1016);
+        assert_max_unsealed_bytes_per_sector(ConfiguredStore::ProofTest, 127);
+    }
+    fn assert_max_unsealed_bytes_per_sector(cs: ConfiguredStore, expected_bytes: u64) {
+        let storage = create_storage(&cs);
+
+        let bytes = unsafe {
+            (&**storage as &SectorStore)
+                .config()
+                .max_unsealed_bytes_per_sector()
+        };
+
+        assert_eq!(
+            bytes, expected_bytes,
+            "wrong number of unsealed bytes for {:?}; got {}, expected {}",
+            cs, bytes, expected_bytes
+        );
+    }
+
     fn generate_verify_post_roundtrip_aux(cs: ConfiguredStore) {
         unsafe {
             let storage = create_storage(&cs);

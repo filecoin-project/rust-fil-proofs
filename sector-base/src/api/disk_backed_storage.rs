@@ -23,7 +23,7 @@ pub const REAL_SECTOR_SIZE: u64 = 128; // Override with FILECOIN_PROOFS_REAL_SEC
 pub const FAST_SECTOR_SIZE: u64 = 1024; // Override with FILECOIN_PROOFS_FAST_SECTOR_SIZE env var.
 
 // Sector size, in bytes, during live operation -- which also fakes sealing with a subset of the data. (slow fake sector store)
-pub const SLOW_SECTOR_SIZE: u64 = 1 << 29; // Override with FILECOIN_PROOFS_SLOW_SECTOR_SIZE env var.
+pub const SLOW_SECTOR_SIZE: u64 = 1 << 30; // Override with FILECOIN_PROOFS_SLOW_SECTOR_SIZE env var.
 
 // The delay constants can be overridden by setting the corresponding environment variable (with FILECOIN_PROOFS_ prefix)
 // For example, since SLOW_DELAY_SECONDS is used for live sealing, outside of tests,
