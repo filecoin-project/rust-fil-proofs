@@ -75,8 +75,20 @@ where
                     info!(target: "params", "reading groth params from cache: {:?}", cache_path);
                     read_cached_params(&cache_path)?
                 } else {
+                    ensure_parent(&cache_path)?;
+
+                    let mut f = fs::OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .create(true)
+                        .open(&cache_path)?;
+                    f.lock_exclusive()?;
+
                     let p = generate()?;
-                    write_params_to_cache(p, &cache_path)?
+
+                    p.write(&mut f)?;
+                    info!(target: "params", "wrote parameters to cache {:?} ", f);
+                    p
                 };
 
                 Ok(groth_params)

@@ -315,6 +315,7 @@ pub extern "C" fn verify_post(
 mod tests {
     use super::*;
     use rand::{thread_rng, Rng};
+    use std::thread;
 
     use sector_base::api::disk_backed_storage::{
         init_new_proof_test_sector_store, init_new_sector_store, init_new_test_sector_store,
@@ -412,6 +413,21 @@ mod tests {
     fn seal_unsealed_range_roundtrip_proof_test() {
         seal_unsealed_range_roundtrip_aux(ConfiguredStore::ProofTest, 0);
         seal_unsealed_range_roundtrip_aux(ConfiguredStore::ProofTest, 5);
+    }
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn concurrent_seal_unsealed_range_roundtrip_proof_test() {
+        let threads = 5;
+
+        let spawned = (0..threads)
+            .map(|_| {
+                thread::spawn(|| seal_unsealed_range_roundtrip_aux(ConfiguredStore::ProofTest, 0))
+            }).collect::<Vec<_>>();
+
+        for thread in spawned {
+            thread.join().expect("test thread panicked");
+        }
     }
 
     #[test]
