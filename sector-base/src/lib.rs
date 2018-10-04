@@ -8,7 +8,11 @@
     warn(type_complexity, too_many_arguments)
 )]
 
+extern crate bitvec;
+extern crate failure;
+extern crate itertools;
 extern crate libc;
+extern crate pairing;
 extern crate rand;
 extern crate storage_proofs;
 
@@ -16,3 +20,5 @@ extern crate storage_proofs;
 extern crate tempfile;
 
 pub mod api;
+pub mod error;
+pub mod io;

@@ -8,6 +8,7 @@ use pairing::bls12_381::Bls12;
 use pairing::Engine;
 use sapling_crypto::jubjub::JubjubBls12;
 
+use sector_base::io::fr32::write_unpadded;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgporep::{self, DrgParams};
@@ -15,7 +16,6 @@ use storage_proofs::drgraph::new_seed;
 use storage_proofs::error::Result;
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
 use storage_proofs::hasher::pedersen::PedersenHash;
-use storage_proofs::io::fr32::write_unpadded;
 use storage_proofs::layered_drgporep::{self, simplify_tau};
 use storage_proofs::parameter_cache::{
     parameter_cache_path, read_cached_params, write_params_to_cache,

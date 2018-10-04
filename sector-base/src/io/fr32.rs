@@ -490,10 +490,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fr32::bytes_into_fr;
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use std::io::Cursor;
+    use storage_proofs::fr32::bytes_into_fr;
 
     #[test]
     fn test_position() {

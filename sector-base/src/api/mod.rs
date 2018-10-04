@@ -153,7 +153,8 @@ pub unsafe extern "C" fn new_staging_sector_access(
 }
 
 /// Appends some bytes to an unsealed sector identified by `access` and returns the number of bytes
-/// written to the unsealed sector access.
+/// written to the unsealed sector access. Bytes written in this way are guaranteed to leave the entire
+/// unsealed sector correctly preprocessed after each write.
 ///
 /// # Arguments
 ///
@@ -205,8 +206,6 @@ pub unsafe extern "C" fn write_and_preprocess(
 
 /// Changes the size of the unsealed sector identified by `access`.
 ///
-/// TODO: This function could disappear if we move metadata <--> file sync into Rust.
-///
 /// # Arguments
 ///
 /// * `ss_ptr` - pointer to a boxed SectorStore
@@ -238,6 +237,8 @@ pub unsafe extern "C" fn truncate_unsealed(
     Box::into_raw(Box::new(response))
 }
 
+/// Reads `num_bytes` bytes from `access`, starting from `start_offset`.
+/// * `access` must contain raw, unpreprocessed data – as written by `get_unsealed` or `get_unsealed_range`.
 #[no_mangle]
 pub unsafe extern "C" fn read_raw(
     ss_ptr: *mut Box<SectorStore>,

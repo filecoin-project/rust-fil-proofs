@@ -17,12 +17,13 @@ type SectorAccess = *const libc::c_char;
 pub const SNARK_BYTES: usize = 192;
 
 /// Seals a sector and returns its commitments and proof.
+/// Unsealed data is read from `unsealed`, sealed, then written to `sealed`.
 ///
 /// # Arguments
 ///
 /// * `ss_ptr`        - pointer to a boxed SectorStore
-/// * `unsealed`      - path of unsealed sector-file
-/// * `sealed`        - path of sealed sector-file
+/// * `unsealed`      - access to unsealed sector to be sealed
+/// * `sealed`        - access to which sealed sector should be written
 /// * `prover_id`     - uniquely identifies the prover
 /// * `sector_id`     - uniquely identifies a sector
 #[no_mangle]
@@ -108,12 +109,11 @@ pub unsafe extern "C" fn verify_seal(
     Box::into_raw(Box::new(response))
 }
 
-/// Gets bytes from a sealed sector-file and writes them, unsealed, to the output path. Returns a
-/// response which indicates the number of original (unsealed) bytes which were written to the
-/// output_path.
+/// Unseals a range of bytes from a sealed sector and writes the resulting raw (unpreprocessed) sector to `output path`.
+/// Returns a response indicating the number of original (unsealed) bytes which were written to `output_path`.
 ///
-/// It is possible that the get_unsealed_range operation writes a number of bytes to the output_path
-/// which is less than num_bytes.
+/// If the requested number of bytes exceeds that available in the raw data, `get_unsealed_range` will write fewer
+/// than `num_bytes` bytes to `output_path`.
 ///
 /// # Arguments
 ///
@@ -175,8 +175,8 @@ pub unsafe extern "C" fn get_unsealed_range(
     Box::into_raw(Box::new(response))
 }
 
-/// Gets an entire sealed sector-file and writes it, unsealed, to the output path and returns a
-/// status code indicating success or failure.
+/// Unseals an entire sealed sector and writes the resulting raw (unpreprocessed) sector to `output_path`.
+/// Returns a status code indicating success or failure.
 ///
 /// # Arguments
 ///

@@ -7,7 +7,7 @@ use std::path::Path;
 use api::util;
 use api::SectorManagerErr;
 use api::{SectorConfig, SectorManager, SectorStore};
-use storage_proofs::io::fr32::{
+use io::fr32::{
     almost_truncate_to_unpadded_bytes, target_unpadded_bytes, unpadded_bytes, write_padded,
 };
 
@@ -367,7 +367,7 @@ mod tests {
     use api::{
         new_staging_sector_access, num_unsealed_bytes, truncate_unsealed, write_and_preprocess,
     };
-    use storage_proofs::io::fr32::FR32_PADDING_MAP;
+    use io::fr32::FR32_PADDING_MAP;
 
     fn create_storage() -> *mut Box<SectorStore> {
         let staging_path = tempfile::tempdir().unwrap().path().to_owned();
