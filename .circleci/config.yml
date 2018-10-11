@@ -4,6 +4,7 @@ jobs:
   cargo_fetch:
     docker:
       - image: dignifiedquire/rust:latest
+    resource_class: small
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -56,7 +57,7 @@ jobs:
   test_release:
     docker:
       - image: dignifiedquire/rust:latest
-    resource_class: xlarge
+    resource_class: large
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -93,7 +94,6 @@ jobs:
   test_nightly:
     docker:
       - image: dignifiedquire/rust:latest
-    resource_class: xlarge
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -112,7 +112,7 @@ jobs:
   rustfmt:
     docker:
       - image: dignifiedquire/rust:latest
-    resource_class: xlarge
+    resource_class: small
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -128,7 +128,7 @@ jobs:
   clippy:
     docker:
       - image: dignifiedquire/rust:latest
-    resource_class: xlarge
+    resource_class: small
     working_directory: /mnt/crate
     steps:
       - checkout
