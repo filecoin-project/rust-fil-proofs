@@ -70,6 +70,7 @@ jobs:
   test_ignored_release:
     docker:
       - image: dignifiedquire/rust:latest
+    resource_class: medium+
     working_directory: /mnt/crate
     steps:
       - checkout
