@@ -4,7 +4,7 @@ jobs:
   cargo_fetch:
     docker:
       - image: dignifiedquire/rust:latest
-    resource_class: medium+
+    resource_class: large
     working_directory: /mnt/crate
     steps:
       - checkout
