@@ -26,7 +26,7 @@ where
 
     assert_eq!(ciphertexts.len(), 8 * 32 * (1 + m), "invalid input length");
 
-    pedersen_md_no_padding(cs.namespace(|| "pedersen"), params, ciphertexts.as_slice())
+    pedersen_md_no_padding(cs.namespace(|| "key"), params, ciphertexts.as_slice())
 }
 
 #[cfg(test)]

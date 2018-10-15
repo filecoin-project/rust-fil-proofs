@@ -15,7 +15,7 @@ where
     E: Engine,
     CS: ConstraintSystem<E>,
 {
-    let mut plaintext = num::AllocatedNum::alloc(cs.namespace(|| "plaintext"), || {
+    let mut plaintext = num::AllocatedNum::alloc(cs.namespace(|| "decoded"), || {
         Ok(ciphertext.ok_or_else(|| SynthesisError::AssignmentMissing)?)
     })?;
 
