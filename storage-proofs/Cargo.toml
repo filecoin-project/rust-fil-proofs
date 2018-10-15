@@ -24,7 +24,7 @@ env_logger = "0.5"
 colored = "1.6"
 aes = "0.1"
 block-modes = "0.1"
-sha2 = "0.7"
+sha2 = "0.8"
 pbr = "1.0"
 tempfile = "3"
 fs2 = "0.4"
@@ -44,9 +44,18 @@ u128-support = ["pairing/u128-support"]
 [dev-dependencies]
 proptest = "0.7"
 criterion = "0.2"
+sector-base = { path = "../sector-base" }
 
 [[bench]]
 name = "pedersen"
+harness = false
+
+[[bench]]
+name = "sha256"
+harness = false
+
+[[bench]]
+name = "blake2s"
 harness = false
 
 [[bench]]

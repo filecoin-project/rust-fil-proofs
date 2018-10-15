@@ -1,15 +1,16 @@
 #[macro_use]
 extern crate criterion;
 extern crate rand;
+extern crate sector_base;
 extern crate storage_proofs;
 extern crate tempfile;
 
 use criterion::{Criterion, ParameterizedBenchmark, Throughput};
 use rand::{thread_rng, Rng};
+use sector_base::io::fr32::{write_padded, write_unpadded};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::time::Duration;
-use storage_proofs::io::fr32::{write_padded, write_unpadded};
 
 fn random_data(size: usize) -> Vec<u8> {
     let mut rng = thread_rng();

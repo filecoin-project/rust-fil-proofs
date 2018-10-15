@@ -5,6 +5,7 @@ extern crate bitvec;
 extern crate pairing;
 extern crate rand;
 extern crate sapling_crypto;
+extern crate sha2;
 extern crate storage_proofs;
 
 use bellman::groth16::*;
@@ -12,19 +13,21 @@ use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use criterion::{black_box, Criterion, ParameterizedBenchmark};
 use pairing::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
+use sapling_crypto::circuit as scircuit;
 use sapling_crypto::circuit::boolean::{self, Boolean};
-use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
+use sapling_crypto::jubjub::JubjubEngine;
 use storage_proofs::circuit::bench::BenchCS;
 
-use storage_proofs::circuit;
-use storage_proofs::crypto::pedersen;
+use sha2::{Digest, Sha256};
 
-struct PedersenExample<'a, E: JubjubEngine> {
-    params: &'a E::Params,
+struct Sha256Example<'a> {
     data: &'a [Option<bool>],
 }
 
-impl<'a, E: JubjubEngine> Circuit<E> for PedersenExample<'a, E> {
+impl<'a, E> Circuit<E> for Sha256Example<'a>
+where
+    E: JubjubEngine,
+{
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let data: Vec<Boolean> = self
             .data
@@ -37,28 +40,19 @@ impl<'a, E: JubjubEngine> Circuit<E> for PedersenExample<'a, E> {
                 )?))
             }).collect::<Result<Vec<_>, SynthesisError>>()?;
 
-        let cs = cs.namespace(|| "pedersen");
-        let res = circuit::pedersen::pedersen_compression_num(cs, self.params, &data)?;
-        // please compiler don't optimize the result away
-        // only check if we actually have input data
-        if self.data[0].is_some() {
-            res.get_value().unwrap();
-        }
+        let cs = cs.namespace(|| "sha256");
 
+        let _res = scircuit::sha256::sha256(cs, &data)?;
         Ok(())
     }
 }
 
-fn pedersen_benchmark(c: &mut Criterion) {
-    // FIXME: We're duplicating these params because of compiler errors, presumably related to
-    // the move closures. There must be a better way.
-    let jubjub_params = JubjubBls12::new();
-    let jubjub_params2 = JubjubBls12::new();
+fn sha256_benchmark(c: &mut Criterion) {
     let mut rng1 = thread_rng();
     let rng2 = thread_rng();
+
     let groth_params = generate_random_parameters::<Bls12, _, _>(
-        PedersenExample {
-            params: &jubjub_params,
+        Sha256Example {
             data: &vec![None; 256],
         },
         &mut rng1,
@@ -67,14 +61,18 @@ fn pedersen_benchmark(c: &mut Criterion) {
     let params = vec![32];
 
     c.bench(
-        "pedersen",
+        "sha256",
         ParameterizedBenchmark::new(
             "non-circuit-32bytes",
             |b, bytes| {
                 let mut rng = thread_rng();
-                let mut data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
+                let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
 
-                b.iter(|| black_box(pedersen::pedersen_compression(&mut data)))
+                b.iter(|| {
+                    let mut hasher = Sha256::new();
+                    hasher.input(&data);
+                    black_box(hasher.result())
+                })
             },
             params,
         ).with_function("circuit-32bytes-create_proof", move |b, bytes| {
@@ -83,8 +81,7 @@ fn pedersen_benchmark(c: &mut Criterion) {
                 let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
 
                 let proof = create_random_proof(
-                    PedersenExample {
-                        params: &jubjub_params,
+                    Sha256Example {
                         data: data.as_slice(),
                     },
                     &groth_params,
@@ -100,8 +97,7 @@ fn pedersen_benchmark(c: &mut Criterion) {
                 let mut rng = rng2.clone();
                 let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
 
-                PedersenExample {
-                    params: &jubjub_params2,
+                Sha256Example {
                     data: data.as_slice(),
                 }.synthesize(&mut cs)
                 .unwrap();
@@ -112,5 +108,5 @@ fn pedersen_benchmark(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benches, pedersen_benchmark);
+criterion_group!(benches, sha256_benchmark);
 criterion_main!(benches);
