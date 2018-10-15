@@ -1,6 +1,7 @@
 use bellman::groth16::Parameters;
 use bellman::{groth16, Circuit};
 use error::Result;
+use failure::Error;
 use fs2::FileExt;
 use itertools::Itertools;
 use rand::XorShiftRng;
@@ -71,10 +72,8 @@ where
                 create_dir_all(cache_dir)?;
                 let cache_path = parameter_cache_path(&id);
                 info!(target: "params", "checking cache_path: {:?}", cache_path);
-                let groth_params: Parameters<E> = if cache_path.exists() {
-                    info!(target: "params", "reading groth params from cache: {:?}", cache_path);
-                    read_cached_params(&cache_path)?
-                } else {
+
+                read_cached_params(&cache_path).or_else(|_| {
                     ensure_parent(&cache_path)?;
 
                     let mut f = fs::OpenOptions::new()
@@ -88,10 +87,8 @@ where
 
                     p.write(&mut f)?;
                     info!(target: "params", "wrote parameters to cache {:?} ", f);
-                    p
-                };
-
-                Ok(groth_params)
+                    Ok(p)
+                })
             }
             None => Ok(generate()?),
         }
@@ -113,8 +110,9 @@ pub fn read_cached_params<E: JubjubEngine>(cache_path: &PathBuf) -> Result<groth
 
     let f = fs::OpenOptions::new().read(true).open(&cache_path)?;
     f.lock_exclusive()?;
+    info!(target: "params", "reading groth params from cache: {:?}", cache_path);
 
-    Ok(Parameters::read(&f, false).expect("failed to read cached params"))
+    Parameters::read(&f, false).map_err(Error::from)
 }
 
 pub fn write_params_to_cache<E: JubjubEngine>(
