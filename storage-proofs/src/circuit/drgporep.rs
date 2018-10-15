@@ -160,6 +160,7 @@ where
                     commitment: comm_d,
                     challenge: *challenge,
                 };
+
                 let por_inputs =
                     PoRCompound::generate_public_inputs(&por_pub_inputs, &por_pub_params);
                 input.extend(por_inputs);
@@ -324,6 +325,17 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
                     replica_root,
                 )?;
 
+                // validate each replica_parents merkle proof
+                for i in 0..replica_parents.len() {
+                    PoRCircuit::synthesize(
+                        cs.namespace(|| format!("parent_inclusion_{}", i)),
+                        &params,
+                        replica_parents[i],
+                        replica_parents_paths[i].clone(),
+                        replica_root,
+                    )?;
+                }
+
                 // validate data node commitment
                 PoRCircuit::synthesize(
                     cs.namespace(|| "data_inclusion"),
@@ -332,19 +344,6 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
                     data_node_path.clone(),
                     data_root,
                 )?;
-
-                // validate each replica_parents merkle proof
-                {
-                    for i in 0..replica_parents.len() {
-                        PoRCircuit::synthesize(
-                            cs.namespace(|| format!("parent_inclusion_{}", i)),
-                            &params,
-                            replica_parents[i],
-                            replica_parents_paths[i].clone(),
-                            replica_root,
-                        )?;
-                    }
-                }
             }
 
             // Encoding checks
