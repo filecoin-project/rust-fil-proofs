@@ -9,210 +9,14 @@ use proof::ProofScheme;
 use sapling_crypto::circuit::{boolean, multipack, num, pedersen_hash};
 use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 
-/// Proof of retrievability.
-///
-/// # Fields
-///
-/// * `params` - The params for the bls curve.
-/// * `value` - The value of the leaf.
-/// * `auth_path` - The authentication path of the leaf in the tree.
-/// * `root` - The merkle root of the tree.
-///
-
 /// PrivatePoRCircuit is just like PorCircuit, except its root is not expected
 /// as a public input.
-pub struct PrivatePoRCircuit<'a, E: JubjubEngine> {
-    params: &'a E::Params,
-    value: Option<E::Fr>,
-    auth_path: Vec<Option<(E::Fr, bool)>>,
-    root: Option<E::Fr>,
-}
-
-pub struct PrivatePoRCompound {}
-
-pub fn challenge_into_auth_path_bits(challenge: usize, leaves: usize) -> Vec<bool> {
-    let height = graph_height(leaves);
-    let mut bits = Vec::new();
-    let mut n = challenge;
-    for _ in 0..height {
-        bits.push(n & 1 == 1);
-        n >>= 1;
-    }
-    bits
-}
-
-impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParameters<E, C, P>
-    for PrivatePoRCompound
-{
-    fn cache_prefix() -> String {
-        String::from("private-proof-of-retrievability")
-    }
-}
-
-// can only implment for Bls12 because merklepor is not generic over the engine.
-impl<'a> CompoundProof<'a, Bls12, MerklePoR, PrivatePoRCircuit<'a, Bls12>> for PrivatePoRCompound {
-    fn circuit<'b>(
-        _public_inputs: &<MerklePoR as ProofScheme>::PublicInputs,
-        proof: &'b <MerklePoR as ProofScheme>::Proof,
-        _public_params: &'b <MerklePoR as ProofScheme>::PublicParams,
-        engine_params: &'a JubjubBls12,
-    ) -> PrivatePoRCircuit<'a, Bls12> {
-        PrivatePoRCircuit::<Bls12> {
-            params: engine_params,
-            value: Some(proof.data),
-            auth_path: proof.proof.as_options(),
-            root: proof.proof.root.0.into(),
-        }
-    }
-
-    fn generate_public_inputs(
-        pub_inputs: &<MerklePoR as ProofScheme>::PublicInputs,
-        pub_params: &<MerklePoR as ProofScheme>::PublicParams,
-    ) -> Vec<Fr> {
-        let auth_path_bits = challenge_into_auth_path_bits(pub_inputs.challenge, pub_params.leaves);
-        let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
-
-        let mut inputs = Vec::new();
-        inputs.extend(packed_auth_path);
-
-        inputs
-    }
-}
-
-impl<'a, E: JubjubEngine> Circuit<E> for PrivatePoRCircuit<'a, E> {
-    /// # Public Inputs
-    ///
-    /// This circuit expects the following public inputs.
-    ///
-    /// * [0] - packed version of the `is_right` components of the auth_path.
-    ///
-    /// This circuit derives the following private inputs from its fields:
-    /// * value_num - packed version of `value` as bits. (might be more than one Fr)
-    ///
-    /// Note: All public inputs must be provided as `E::Fr`.
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError>
-    where
-        E: JubjubEngine,
-    {
-        let params = &self.params;
-        let value = self.value;
-        let auth_path = self.auth_path;
-        let root = self.root;
-
-        {
-            let value_num = num::AllocatedNum::alloc(cs.namespace(|| "value"), || {
-                Ok(value.ok_or_else(|| SynthesisError::AssignmentMissing)?)
-            })?;
-            let mut value_bits = value_num.into_bits_le(cs.namespace(|| "value bits"))?;
-
-            // sad face, need to pad to make all algorithms the same
-            while value_bits.len() < 256 {
-                value_bits.push(boolean::Boolean::Constant(false));
-            }
-
-            // Compute the hash of the value
-            let cm = pedersen_hash::pedersen_hash(
-                cs.namespace(|| "value hash"),
-                pedersen_hash::Personalization::NoteCommitment,
-                &value_bits,
-                params,
-            )?;
-
-            // This is an injective encoding, as cur is a
-            // point in the prime order subgroup.
-            let mut cur = cm.get_x().clone();
-
-            let mut auth_path_bits = Vec::with_capacity(auth_path.len());
-
-            // Ascend the merkle tree authentication path
-            for (i, e) in auth_path.into_iter().enumerate() {
-                let cs = &mut cs.namespace(|| format!("merkle tree hash {}", i));
-
-                // Determines if the current subtree is the "right" leaf at this
-                // depth of the tree.
-                let cur_is_right = boolean::Boolean::from(boolean::AllocatedBit::alloc(
-                    cs.namespace(|| "position bit"),
-                    e.map(|e| e.1),
-                )?);
-
-                // Witness the authentication path element adjacent
-                // at this depth.
-                let path_element =
-                    num::AllocatedNum::alloc(cs.namespace(|| "path element"), || {
-                        Ok(e.ok_or(SynthesisError::AssignmentMissing)?.0)
-                    })?;
-
-                // Swap the two if the current subtree is on the right
-                let (xl, xr) = num::AllocatedNum::conditionally_reverse(
-                    cs.namespace(|| "conditional reversal of preimage"),
-                    &cur,
-                    &path_element,
-                    &cur_is_right,
-                )?;
-
-                // We don't need to be strict, because the function is
-                // collision-resistant. If the prover witnesses a congruency,
-                // they will be unable to find an authentication path in the
-                // tree with high probability.
-                let mut preimage = vec![];
-                preimage.extend(xl.into_bits_le(cs.namespace(|| "xl into bits"))?);
-                preimage.extend(xr.into_bits_le(cs.namespace(|| "xr into bits"))?);
-
-                // Compute the new subtree value
-                cur = pedersen_hash::pedersen_hash(
-                    cs.namespace(|| "computation of pedersen hash"),
-                    pedersen_hash::Personalization::MerkleTree(i),
-                    &preimage,
-                    params,
-                )?.get_x()
-                .clone(); // Injective encoding
-
-                auth_path_bits.push(cur_is_right);
-            }
-
-            // allocate input for is_right auth_path
-            multipack::pack_into_inputs(cs.namespace(|| "packed auth_path"), &auth_path_bits)?;
-
-            {
-                // Validate that the root of the merkle tree that we calculated is the same as the input.
-
-                let real_root_value = root;
-
-                // Allocate the "real" root that will be exposed.
-                let rt = num::AllocatedNum::alloc(cs.namespace(|| "root value"), || {
-                    real_root_value.ok_or(SynthesisError::AssignmentMissing)
-                })?;
-
-                constraint::equal(cs, || "enforce root is correct", &cur, &rt);
-            }
-
-            Ok(())
-        }
-    }
-}
-
-impl<'a, E: JubjubEngine> PrivatePoRCircuit<'a, E> {
-    pub fn synthesize<CS>(
-        mut cs: CS,
-        params: &E::Params,
-        value: Option<E::Fr>,
-        auth_path: Vec<Option<(E::Fr, bool)>>,
-        root: Option<E::Fr>,
-    ) -> Result<(), SynthesisError>
-    where
-        E: JubjubEngine,
-        CS: ConstraintSystem<E>,
-    {
-        let por = PrivatePoRCircuit::<E> {
-            params,
-            value,
-            auth_path,
-            root,
-        };
-
-        por.synthesize(&mut cs)
-    }
-}
+implement_por!(
+    PrivatePoRCircuit,
+    PrivatePoRCompound,
+    "private-proof-of-retrievability",
+    true
+);
 
 #[cfg(test)]
 mod tests {
@@ -359,7 +163,7 @@ mod tests {
             assert_eq!(cs.get_input(0, "ONE"), Fr::one(), "wrong input 0");
 
             assert_eq!(
-                cs.get_input(1, "packed auth_path/input 0"),
+                cs.get_input(1, "path/input 0"),
                 expected_inputs[0],
                 "wrong packed_auth_path"
             );

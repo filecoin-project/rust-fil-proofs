@@ -4,7 +4,6 @@ use circuit::private_drgporep::PrivateDrgPoRepCompound;
 use compound_proof::CompoundProof;
 use drgporep::{self, DrgPoRep};
 use drgraph::{graph_height, Graph};
-use hasher::pedersen::PedersenHash;
 use layered_drgporep::{self, Layerable};
 use pairing::bls12_381::{Bls12, Fr};
 use parameter_cache::{CacheableParameters, ParameterSetIdentifier};
@@ -247,6 +246,7 @@ mod tests {
     use drgporep;
     use drgraph::new_seed;
     use fr32::{bytes_into_fr, fr_into_bytes};
+    use hasher::pedersen::PedersenHash;
     use layered_drgporep::{self, simplify_tau};
     use pairing::Field;
     use porep::PoRep;
