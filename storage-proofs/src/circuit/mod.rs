@@ -1,6 +1,8 @@
 mod constraint;
 #[macro_use]
 mod por_macro;
+#[macro_use]
+mod drgporep_macro;
 
 pub mod por;
 
