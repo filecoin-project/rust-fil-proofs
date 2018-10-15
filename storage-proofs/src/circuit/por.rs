@@ -365,7 +365,7 @@ mod tests {
             assert_eq!(cs.get_input(0, "ONE"), Fr::one(), "wrong input 0");
 
             assert_eq!(
-                cs.get_input(1, "packed auth_path/input 0"),
+                cs.get_input(1, "path/input 0"),
                 expected_inputs[0],
                 "wrong packed_auth_path"
             );

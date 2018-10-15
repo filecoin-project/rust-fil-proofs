@@ -391,15 +391,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
                 })?;
 
                 // ensure the encrypted data and data_node match
-                {
-                    constraint::equal(
-                        cs,
-                        || "equality",
-                        |lc| lc + expected.get_variable(),
-                        |lc| lc + CS::one(),
-                        |lc| lc + decoded.get_variable(),
-                    );
-                }
+                constraint::equal(&mut cs, || "equality", &expected, &decoded);
             }
         }
         // profit!
@@ -542,10 +534,7 @@ mod tests {
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
-        assert_eq!(
-            cs.get_input(1, "drgporep/replica_id/input 0"),
-            replica_id_fr,
-        );
+        assert_eq!(cs.get_input(1, "drgporep/prover_id/input 0"), replica_id_fr,);
     }
 
     #[test]
