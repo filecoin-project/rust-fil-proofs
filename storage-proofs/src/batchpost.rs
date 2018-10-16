@@ -1,16 +1,18 @@
+use std::marker::PhantomData;
+
 use byteorder::{LittleEndian, WriteBytesExt};
-use crypto::blake2s::blake2s;
-use drgraph::{MerkleTree, TreeHash};
-use error::Result;
-use fr32::bytes_into_fr;
-use merklepor;
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
-use pairing::bls12_381::Bls12;
+
+use crypto::blake2s::blake2s;
+use error::Result;
+use hasher::{Domain, Hasher};
+use merkle::MerkleTree;
+use merklepor;
 use proof::ProofScheme;
 use util::data_at_node;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PublicParams {
     /// The public params passed for the individual merklepors.
     pub params: merklepor::PublicParams,
@@ -22,49 +24,57 @@ pub struct PublicParams {
 pub struct SetupParams {}
 
 #[derive(Debug, Clone)]
-pub struct Proof {
-    pub proofs: Vec<merklepor::Proof>,
+pub struct Proof<H: Hasher> {
+    pub proofs: Vec<merklepor::Proof<H>>,
     pub challenges: Vec<usize>,
 }
 
 #[derive(Debug)]
-pub struct PublicInputs<'a> {
+pub struct PublicInputs<'a, T: Domain> {
     /// The root hash of the underlying merkle tree.
-    pub commitment: TreeHash,
+    pub commitment: T,
     /// The inital challenge, which leaf to prove.
     pub challenge: usize,
     /// The prover id.
-    pub replica_id: &'a [u8],
+    pub replica_id: &'a T,
 }
 
 /// The inputs that are only available to the prover.
 #[derive(Debug)]
-pub struct PrivateInputs<'a> {
+pub struct PrivateInputs<'a, H: 'a + Hasher> {
     /// The underlying data.
     pub data: &'a [u8],
     /// The underlying merkle tree.
-    pub tree: &'a MerkleTree,
+    pub tree: &'a MerkleTree<H::Domain, H::Function>,
+}
+
+impl<'a, H: Hasher> PrivateInputs<'a, H> {
+    pub fn new(data: &'a [u8], tree: &'a MerkleTree<H::Domain, H::Function>) -> Self {
+        PrivateInputs { data, tree }
+    }
 }
 
 #[derive(Default, Debug)]
-pub struct BatchPoST {}
+pub struct BatchPoST<H: Hasher> {
+    _h: PhantomData<H>,
+}
 
-impl<'a> ProofScheme<'a> for BatchPoST {
+impl<'a, H: 'a + Hasher> ProofScheme<'a> for BatchPoST<H> {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
-    type PublicInputs = PublicInputs<'a>;
-    type PrivateInputs = PrivateInputs<'a>;
-    type Proof = Proof;
+    type PublicInputs = PublicInputs<'a, H::Domain>;
+    type PrivateInputs = PrivateInputs<'a, H>;
+    type Proof = Proof<H>;
 
     fn setup(_sp: &Self::SetupParams) -> Result<Self::PublicParams> {
         // merklepor does not have a setup currently
         unimplemented!("not used")
     }
 
-    fn prove(
-        pub_params: &Self::PublicParams,
-        pub_inputs: &Self::PublicInputs,
-        priv_inputs: &Self::PrivateInputs,
+    fn prove<'b>(
+        pub_params: &'b Self::PublicParams,
+        pub_inputs: &'b Self::PublicInputs,
+        priv_inputs: &'b Self::PrivateInputs,
     ) -> Result<Self::Proof> {
         // initalize challenge
         let mut challenge = pub_inputs.challenge;
@@ -84,14 +94,14 @@ impl<'a> ProofScheme<'a> for BatchPoST {
                     commitment: Some(pub_inputs.commitment),
                     challenge,
                 },
-                &merklepor::PrivateInputs {
-                    leaf: bytes_into_fr::<Bls12>(data_at_node(
+                &merklepor::PrivateInputs::new(
+                    H::Domain::try_from_bytes(data_at_node(
                         priv_inputs.data,
                         challenge,
                         pub_params.params.lambda,
                     )?)?,
-                    tree: priv_inputs.tree,
-                },
+                    priv_inputs.tree,
+                ),
             )?;
 
             challenge = derive_challenge(
@@ -169,14 +179,14 @@ fn write_usize(target: &mut Vec<u8>, value: usize) -> ::std::result::Result<(), 
 }
 
 /// Derives a new challenge, given the inputs, by concatenating the `replica_id`, the round `i`, the current `challenge` and the serialized `proof` and hashing them.
-fn derive_challenge(
-    replica_id: &[u8],
+fn derive_challenge<H: Hasher>(
+    replica_id: &H::Domain,
     i: usize,
     challenge: usize,
-    proof: &merklepor::Proof,
+    proof: &merklepor::Proof<H>,
     leaves: usize,
 ) -> Result<usize> {
-    let mut bytes = replica_id.to_vec();
+    let mut bytes = replica_id.into_bytes();
 
     write_usize(&mut bytes, i)?;
     write_usize(&mut bytes, challenge)?;
@@ -198,17 +208,20 @@ fn derive_challenge(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use pairing::bls12_381::{Bls12, Fr};
+    use rand::{Rng, SeedableRng, XorShiftRng};
+
     use drgraph::{new_seed, BucketGraph, Graph};
     use fr32::fr_into_bytes;
+    use hasher::pedersen::*;
     use merklepor;
-    use pairing::bls12_381::Bls12;
-    use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]
     fn test_batchpost() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let replica_id = fr_into_bytes::<Bls12>(&rng.gen());
+        let replica_id: Fr = rng.gen();
         let pub_params = PublicParams {
             params: merklepor::PublicParams {
                 lambda: 32,
@@ -220,24 +233,22 @@ mod tests {
         let data: Vec<u8> = (0..32)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
-        let graph = BucketGraph::new(32, 16, 0, new_seed());
+        let graph = BucketGraph::<PedersenHasher>::new(32, 16, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
 
-        let pub_inputs = PublicInputs {
+        let pub_inputs = PublicInputs::<PedersenDomain> {
             challenge: 3,
             commitment: tree.root(),
-            replica_id: replica_id.as_slice(),
+            replica_id: &replica_id.into(),
         };
 
-        let priv_inputs = PrivateInputs {
-            tree: &tree,
-            data: data.as_slice(),
-        };
+        let priv_inputs = PrivateInputs::<PedersenHasher>::new(data.as_slice(), &tree);
 
-        let proof = BatchPoST::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+        let proof =
+            BatchPoST::<PedersenHasher>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
 
         assert!(
-            BatchPoST::verify(&pub_params, &pub_inputs, &proof).unwrap(),
+            BatchPoST::<PedersenHasher>::verify(&pub_params, &pub_inputs, &proof).unwrap(),
             "failed to verify"
         );
 
@@ -246,7 +257,7 @@ mod tests {
             let mut proof = proof;
             proof.challenges[0] = proof.challenges[0] + 1;
             assert!(
-                !BatchPoST::verify(&pub_params, &pub_inputs, &proof).unwrap(),
+                !BatchPoST::<PedersenHasher>::verify(&pub_params, &pub_inputs, &proof).unwrap(),
                 "verified invalid proof"
             );
         }

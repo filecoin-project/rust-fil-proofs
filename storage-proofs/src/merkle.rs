@@ -1,0 +1,185 @@
+#![cfg_attr(feature = "cargo-clippy", allow(len_without_is_empty))]
+
+use std::marker::PhantomData;
+
+// Reexport here, so we don't depend on merkle_light directly in other places.
+use merkle_light::hash::{Algorithm, Hashable};
+pub use merkle_light::merkle::MerkleTree;
+use merkle_light::proof;
+use pairing::bls12_381::Fr;
+
+use hasher::{Domain, Hasher};
+
+/// Representation of a merkle proof.
+/// Each element in the `path` vector consists of a tuple `(hash, is_right)`, with `hash` being the the hash of the node at the current level and `is_right` a boolean indicating if the path is taking the right path.
+/// The first element is the hash of leaf itself, and the last is the root hash.
+#[derive(Default, Debug, Clone)]
+pub struct MerkleProof<H: Hasher> {
+    pub root: H::Domain,
+    path: Vec<(H::Domain, bool)>,
+    leaf: H::Domain,
+
+    _h: PhantomData<H>,
+}
+
+pub fn make_proof_for_test<H: Hasher>(
+    root: H::Domain,
+    leaf: H::Domain,
+    path: Vec<(H::Domain, bool)>,
+) -> MerkleProof<H> {
+    MerkleProof {
+        path,
+        root,
+        leaf,
+        _h: PhantomData,
+    }
+}
+
+impl<H: Hasher> MerkleProof<H> {
+    pub fn new(n: usize) -> MerkleProof<H> {
+        let mut m = MerkleProof::default();
+        m.path = vec![(Default::default(), false); n];
+
+        m
+    }
+
+    pub fn new_from_proof(p: &proof::Proof<H::Domain>) -> MerkleProof<H> {
+        MerkleProof {
+            path: p
+                .lemma()
+                .iter()
+                .skip(1)
+                .zip(p.path().iter())
+                .map(|(hash, is_left)| (*hash, !is_left))
+                .collect::<Vec<_>>(),
+            root: p.root(),
+            leaf: p.item(),
+            _h: PhantomData,
+        }
+    }
+
+    /// Convert the merkle path into the format expected by the circuits, which is a vector of options of the tuples.
+    /// This does __not__ include the root and the leaf.
+    pub fn as_options(&self) -> Vec<Option<(Fr, bool)>> {
+        self.path
+            .iter()
+            .map(|v| Some((v.0.into(), v.1)))
+            .collect::<Vec<_>>()
+    }
+
+    pub fn as_pairs(&self) -> Vec<(Fr, bool)> {
+        self.path
+            .iter()
+            .map(|v| (v.0.into(), v.1))
+            .collect::<Vec<_>>()
+    }
+
+    /// Validates the MerkleProof and that it corresponds to the supplied node.
+    pub fn validate(&self, node: usize) -> bool {
+        let mut a = H::Function::default();
+
+        if path_index(&self.path) != node {
+            return false;
+        }
+
+        self.root() == &(0..self.path.len()).fold(self.leaf, |h, i| {
+            a.reset();
+            let is_right = self.path[i].1;
+
+            let (left, right) = if is_right {
+                (self.path[i].0, h)
+            } else {
+                (h, self.path[i].0)
+            };
+
+            a.node(left, right, i)
+        })
+    }
+
+    /// Validates that the data hashes to the leaf of the merkle path.
+    pub fn validate_data(&self, data: &Hashable<H::Function>) -> bool {
+        let mut a = H::Function::default();
+        data.hash(&mut a);
+        let item_hash = a.hash();
+        let leaf_hash = a.leaf(item_hash);
+
+        &leaf_hash == self.leaf()
+    }
+
+    /// Returns the hash of leaf that this MerkleProof represents.
+    pub fn leaf(&self) -> &H::Domain {
+        &self.leaf
+    }
+
+    /// Returns the root hash
+    pub fn root(&self) -> &H::Domain {
+        &self.root
+    }
+
+    /// Returns the length of the proof. That is all path elements plus 1 for the
+    /// leaf and 1 for the root.
+    pub fn len(&self) -> usize {
+        self.path.len() + 2
+    }
+
+    /// Serialize into bytes.
+    /// TODO: probably improve
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+
+        for (hash, is_right) in &self.path {
+            out.extend(hash.serialize());
+            out.push(*is_right as u8);
+        }
+        out.extend(self.leaf().serialize());
+        out.extend(self.root().serialize());
+
+        out
+    }
+
+    pub fn path(&self) -> &Vec<(H::Domain, bool)> {
+        &self.path
+    }
+}
+
+fn path_index<T: Domain>(path: &[(T, bool)]) -> usize {
+    path.iter().rev().fold(0, |acc, (_, is_right)| {
+        (acc << 1) + if *is_right { 1 } else { 0 }
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use rand::Rng;
+
+    use drgraph::new_seed;
+    use drgraph::{BucketGraph, Graph};
+    use hasher::pedersen::*;
+
+    #[test]
+    fn merklepath() {
+        let g = BucketGraph::<PedersenHasher>::new(10, 5, 0, new_seed());
+        let mut rng = rand::thread_rng();
+        let data: Vec<u8> = (0..16 * 10).map(|_| rng.gen()).collect();
+
+        let tree = g.merkle_tree(data.as_slice(), 16).unwrap();
+        for i in 0..10 {
+            let proof = tree.gen_proof(i);
+
+            assert!(proof.validate::<PedersenFunction>());
+            let len = proof.lemma().len();
+            let mp = MerkleProof::<PedersenHasher>::new_from_proof(&proof);
+
+            assert_eq!(mp.len(), len);
+
+            assert!(mp.validate(i), "failed to validate valid merkle path");
+            let data_slice = &data[i * 16..(i + 1) * 16].to_vec();
+            assert!(
+                mp.validate_data(data_slice),
+                "failed to validate valid data"
+            );
+        }
+    }
+}

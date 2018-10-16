@@ -140,6 +140,7 @@ mod tests {
     use circuit::test::*;
     use drgraph::{new_seed, BucketGraph, Graph};
     use fr32::{bytes_into_fr, fr_into_bytes};
+    use hasher::pedersen::*;
     use merklepor;
     use pairing::bls12_381::*;
     use pairing::Field;
@@ -162,7 +163,7 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
                 .collect();
 
-            let graph = BucketGraph::new(leaves, 6, 0, new_seed());
+            let graph = BucketGraph::<PedersenHasher>::new(leaves, 6, 0, new_seed());
             let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
 
             let pub_inputs: Vec<_> = (0..leaves)
@@ -172,33 +173,49 @@ mod tests {
                 })
                 .collect();
             let priv_inputs: Vec<_> = (0..leaves)
-                .map(|i| merklepor::PrivateInputs {
-                    tree: &tree,
-                    leaf: bytes_into_fr::<Bls12>(
-                        data_at_node(data.as_slice(), pub_inputs[i].challenge, pub_params.lambda)
+                .map(|i| {
+                    merklepor::PrivateInputs::<PedersenHasher>::new(
+                        bytes_into_fr::<Bls12>(
+                            data_at_node(
+                                data.as_slice(),
+                                pub_inputs[i].challenge,
+                                pub_params.lambda,
+                            )
                             .unwrap(),
+                        )
+                        .unwrap()
+                        .into(),
+                        &tree,
                     )
-                    .unwrap(),
                 })
                 .collect();
 
             let proofs: Vec<_> = (0..leaves)
                 .map(|i| {
-                    merklepor::MerklePoR::prove(&pub_params, &pub_inputs[i], &priv_inputs[i])
-                        .unwrap()
+                    merklepor::MerklePoR::<PedersenHasher>::prove(
+                        &pub_params,
+                        &pub_inputs[i],
+                        &priv_inputs[i],
+                    )
+                    .unwrap()
                 })
                 .collect();
 
             for i in 0..leaves {
                 // make sure it verifies
                 assert!(
-                    merklepor::MerklePoR::verify(&pub_params, &pub_inputs[i], &proofs[i]).unwrap(),
+                    merklepor::MerklePoR::<PedersenHasher>::verify(
+                        &pub_params,
+                        &pub_inputs[i],
+                        &proofs[i]
+                    )
+                    .unwrap(),
                     "failed to verify merklepor proof"
                 );
             }
 
             let auth_paths: Vec<_> = proofs.iter().map(|p| p.proof.as_options()).collect();
-            let values: Vec<_> = proofs.iter().map(|p| Some(p.data)).collect();
+            let values: Vec<_> = proofs.iter().map(|p| Some(p.data.into())).collect();
 
             let mut cs = TestConstraintSystem::<Bls12>::new();
 

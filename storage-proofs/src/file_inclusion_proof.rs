@@ -1,9 +1,13 @@
-use drgraph::{MerkleTree, TreeAlgorithm, TreeHash};
-use error::Result;
+use std::marker::PhantomData;
+
 use merkle_light::hash::{Algorithm, Hashable};
 use merkle_light::proof::Proof;
 
-type InclusionProof = Proof<TreeHash>;
+use error::Result;
+use hasher::{Domain, Hasher};
+use merkle::MerkleTree;
+
+type InclusionProof<T> = Proof<T>;
 
 /// A FileInclusionProof contains a merkle inclusion proof for the first and last node
 /// of a piece. This ensures all 'edge' hashes necessary to generate a complete merkle
@@ -12,9 +16,10 @@ type InclusionProof = Proof<TreeHash>;
 /// Depending on the position of the nodes, not every hash provided will actually be needed.
 /// As a space optimization, and at the cost of greater complexity in the encoding, 'interior' nodes
 /// of either path may be omitted.
-pub struct FileInclusionProof {
-    first_node_proof: InclusionProof,
-    last_node_proof: InclusionProof,
+pub struct FileInclusionProof<H: Hasher> {
+    first_node_proof: InclusionProof<H::Domain>,
+    last_node_proof: InclusionProof<H::Domain>,
+    _h: PhantomData<H>,
 }
 
 /// file_inclusion_proofs takes a merkle tree and a slice of piece lengths, and returns
@@ -22,10 +27,10 @@ pub struct FileInclusionProof {
 /// piece begins at offset 0, and that each piece begins directly after the previous piece ends.
 /// For this method to work, the piece data used to validate pieces will need to be padded as necessary,
 /// and pieces will need to be aligned (to 128-byte chunks for Fr32 bit-padding) when written.
-pub fn file_inclusion_proofs(
-    tree: &MerkleTree,
+pub fn file_inclusion_proofs<H: Hasher>(
+    tree: &MerkleTree<H::Domain, H::Function>,
     piece_lengths: &[usize],
-) -> Vec<FileInclusionProof> {
+) -> Vec<FileInclusionProof<H>> {
     bounds(piece_lengths)
         .iter()
         .map(|(start, end)| file_inclusion_proof(tree, *start, end - 1))
@@ -47,32 +52,33 @@ fn bounds(lengths: &[usize]) -> Vec<(usize, usize)> {
 /// file_inclusion_proof takes a merkle tree and the index positions of the first and last nodes
 /// of the piece whose inclusion should be proved. It returns a corresponding file_inclusion_proof.
 /// For the resulting proof to be valid, first_node must be <= last_node.
-pub fn file_inclusion_proof(
-    tree: &MerkleTree,
+pub fn file_inclusion_proof<H: Hasher>(
+    tree: &MerkleTree<H::Domain, H::Function>,
     first_node: usize,
     last_node: usize,
-) -> FileInclusionProof {
+) -> FileInclusionProof<H> {
     FileInclusionProof {
         first_node_proof: tree.gen_proof(first_node),
         last_node_proof: tree.gen_proof(last_node),
+        _h: PhantomData,
     }
 }
 
-impl FileInclusionProof {
+impl<H: Hasher> FileInclusionProof<H> {
     /// verify takes a merkle root and (pre-processed) piece data.
     /// Iff it returns true, then FileInclusionProof indeed proves that piece's
     /// bytes were included in the merkle tree corresponding to root -- and at the
     /// position encoded in the proof.
-    fn verify(&self, root: &TreeHash, piece: &[u8]) -> bool {
+    fn verify(&self, root: &H::Domain, piece: &[u8]) -> bool {
         // These checks are superfluous but inexpensive and clarifying.
-        if !(self.first_node_proof.validate::<TreeAlgorithm>()
-            && self.last_node_proof.validate::<TreeAlgorithm>())
+        if !(self.first_node_proof.validate::<H::Function>()
+            && self.last_node_proof.validate::<H::Function>())
         {
             return false;
         }
         // If the computed root is equal to the provided root, then the piece was provably
         // present in the data from which the merkle tree was constructed.
-        match compute_root(&self.first_node_proof, &self.last_node_proof, piece) {
+        match compute_root::<H>(&self.first_node_proof, &self.last_node_proof, piece) {
             Ok(computed_root) => *root == computed_root,
             Err(_) => false,
         }
@@ -81,17 +87,17 @@ impl FileInclusionProof {
 
 /// Compute the root which results when hashing the supplied piece_data, supplemented by the hashes
 /// in the left (first) and right (last) inclusion proofs from the FileInclusionProof.
-fn compute_root(
-    left_proof: &InclusionProof,
-    right_proof: &InclusionProof,
+fn compute_root<H: Hasher>(
+    left_proof: &InclusionProof<H::Domain>,
+    right_proof: &InclusionProof<H::Domain>,
     piece_data: &[u8],
-) -> Result<TreeHash> {
+) -> Result<H::Domain> {
     // Zip the left and right proof_vecs into one.
     let proof_vecs = proof_vec(left_proof).zip(proof_vec(right_proof));
 
-    let mut hasher = TreeAlgorithm::default();
+    let mut hasher = H::Function::default();
 
-    let mut last_row: Vec<TreeHash> = piece_data
+    let mut last_row: Vec<_> = piece_data
         .chunks(32)
         .map(|chunk| {
             hasher.reset();
@@ -108,7 +114,7 @@ fn compute_root(
         if *r_is_left {
             row.push(*r_hash);
         }
-        last_row = hash_pairs(&mut hasher, row.as_slice(), height)?;
+        last_row = hash_pairs::<H>(&mut hasher, row.as_slice(), height)?;
     }
     assert_eq!(last_row.len(), 1);
     Ok(last_row[0])
@@ -117,11 +123,11 @@ fn compute_root(
 /// For each successive pair of input hashes in row, construct a new hash according to the method used by `hasher.node`,
 /// returning a vector of the constructed hashes, in order.
 /// The result will be an error (resulting in a failed proof) if row does not contain an even number of hashes.
-fn hash_pairs(
-    hasher: &mut TreeAlgorithm,
-    row: &[TreeHash],
+fn hash_pairs<H: Hasher>(
+    hasher: &mut H::Function,
+    row: &[H::Domain],
     height: usize,
-) -> Result<Vec<TreeHash>> {
+) -> Result<Vec<H::Domain>> {
     let hashed: Result<Vec<_>> = row
         .chunks(2)
         .map(|pair| {
@@ -141,15 +147,15 @@ fn hash_pairs(
 /// will be the left child of the next node hashed. In order to accomplish this, we skip
 /// the first hash provided (in proof.lemma()). This is an implementation detail of how a
 /// merkle_light::proof::Proof is structured.
-fn proof_vec<T: Eq + Clone + AsRef<[u8]>>(proof: &Proof<T>) -> impl Iterator<Item = (&T, &bool)> {
+fn proof_vec<T: Domain>(proof: &Proof<T>) -> impl Iterator<Item = (&T, &bool)> {
     proof.lemma().iter().skip(1).zip(proof.path().iter())
 }
 
 /// verify_file_inclusion_proofs returns true iff each provided piece is proved with respect to root
 /// by the corresponding (by index) proof.
-pub fn verify_file_inclusion_proofs(
-    root: &TreeHash,
-    proofs: &[FileInclusionProof],
+pub fn verify_file_inclusion_proofs<H: Hasher>(
+    root: &H::Domain,
+    proofs: &[FileInclusionProof<H>],
     pieces: &[&[u8]],
 ) -> bool {
     proofs
@@ -162,6 +168,7 @@ pub fn verify_file_inclusion_proofs(
 mod tests {
     use super::*;
     use drgraph::{new_seed, BucketGraph, Graph};
+    use hasher::pedersen::PedersenHasher;
 
     #[test]
     fn compute_bounds() {
@@ -186,7 +193,7 @@ mod tests {
     fn file_inclusion_proof_aux(nodes: usize, node_lengths: &[usize]) {
         let lambda = 32;
         let size = nodes * lambda;
-        let g = BucketGraph::new(nodes, 0, 0, new_seed());
+        let g = BucketGraph::<PedersenHasher>::new(nodes, 0, 0, new_seed());
         let mut data = Vec::<u8>::with_capacity(nodes);
 
         for i in 0..size {
@@ -196,7 +203,7 @@ mod tests {
         let tree = g.merkle_tree(&data, lambda).unwrap();
         let lengths: Vec<usize> = node_lengths.iter().map(|x| x * lambda).collect();
 
-        let proofs = file_inclusion_proofs(&tree, &node_lengths);
+        let proofs = file_inclusion_proofs::<PedersenHasher>(&tree, &node_lengths);
         let bounds = bounds(lengths.as_slice());
         let mut pieces = Vec::new();
         for (start, end) in &bounds {

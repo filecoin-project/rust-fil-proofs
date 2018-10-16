@@ -1,75 +1,92 @@
+use std::hash::Hasher as StdHasher;
+
 use bitvec::{self, BitVec};
-use merkle_light::hash::{Algorithm, Hashable};
-use merkle_light::merkle;
+use merkle_light::hash::{Algorithm as LightAlgorithm, Hashable};
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
 use pairing::{PrimeField, PrimeFieldRepr};
+use rand::{Rand, Rng};
 use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
-use std::hash::Hasher;
 
-use crypto::pedersen;
+use super::{Domain, HashFunction, Hasher};
+use crypto::{kdf, pedersen, sloth};
+use error::Result;
+use fr32::{bytes_into_fr, fr_into_bytes};
 
-#[derive(Copy, Clone, Debug)]
-pub struct PedersenAlgorithm(Fr);
+#[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
+pub struct PedersenHasher {}
 
-impl Default for PedersenAlgorithm {
-    fn default() -> PedersenAlgorithm {
-        PedersenAlgorithm::new()
+impl Hasher for PedersenHasher {
+    type Domain = PedersenDomain;
+    type Function = PedersenFunction;
+
+    fn kdf(data: &[u8], m: usize) -> Self::Domain {
+        kdf::kdf::<Bls12>(data, m).into()
+    }
+
+    fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain, rounds: usize) -> Self::Domain {
+        sloth::encode::<Bls12>(&key.0, &ciphertext.0, rounds).into()
+    }
+
+    fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain, rounds: usize) -> Self::Domain {
+        sloth::decode::<Bls12>(&key.0, &ciphertext.0, rounds).into()
     }
 }
 
-impl Hashable<PedersenAlgorithm> for Fr {
-    fn hash(&self, state: &mut PedersenAlgorithm) {
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct PedersenFunction(Fr);
+
+impl Default for PedersenFunction {
+    fn default() -> PedersenFunction {
+        PedersenFunction(Fr::from_repr(FrRepr::default()).expect("failed default"))
+    }
+}
+
+impl Hashable<PedersenFunction> for Fr {
+    fn hash(&self, state: &mut PedersenFunction) {
         let mut bytes = Vec::with_capacity(32);
         self.into_repr().write_le(&mut bytes).unwrap();
         state.write(&bytes);
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct PedersenHash(pub Fr);
-
-impl Default for PedersenHash {
-    fn default() -> PedersenHash {
-        PedersenHash::new()
-    }
-}
-
-impl PedersenHash {
-    fn new() -> PedersenHash {
-        PedersenHash(Fr::from_repr(FrRepr::from(0)).expect("failed 0"))
-    }
-
-    pub fn serialize(&self) -> Vec<u8> {
+impl Hashable<PedersenFunction> for PedersenDomain {
+    fn hash(&self, state: &mut PedersenFunction) {
         let mut bytes = Vec::with_capacity(32);
         self.0.into_repr().write_le(&mut bytes).unwrap();
-
-        bytes
+        state.write(&bytes);
     }
 }
 
-impl Ord for PedersenHash {
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct PedersenDomain(pub Fr);
+
+impl Default for PedersenDomain {
+    fn default() -> PedersenDomain {
+        PedersenDomain(Fr::from_repr(FrRepr::default()).expect("failed default"))
+    }
+}
+
+impl Rand for PedersenDomain {
+    fn rand<R: Rng>(rng: &mut R) -> Self {
+        PedersenDomain(rng.gen())
+    }
+}
+
+impl Ord for PedersenDomain {
     #[inline(always)]
-    fn cmp(&self, other: &PedersenHash) -> ::std::cmp::Ordering {
+    fn cmp(&self, other: &PedersenDomain) -> ::std::cmp::Ordering {
         (self.0).into_repr().cmp(&other.0.into_repr())
     }
 }
 
-impl PartialOrd for PedersenHash {
+impl PartialOrd for PedersenDomain {
     #[inline(always)]
-    fn partial_cmp(&self, other: &PedersenHash) -> Option<::std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &PedersenDomain) -> Option<::std::cmp::Ordering> {
         Some((self.0).into_repr().cmp(&other.0.into_repr()))
     }
 }
 
-pub type MerkleTree = merkle::MerkleTree<PedersenHash, PedersenAlgorithm>;
-
-impl PedersenAlgorithm {
-    pub fn new() -> PedersenAlgorithm {
-        PedersenAlgorithm(Fr::from_repr(FrRepr::default()).expect("failed default"))
-    }
-}
-
-impl AsRef<[u8]> for PedersenHash {
+impl AsRef<[u8]> for PedersenDomain {
     fn as_ref(&self) -> &[u8] {
         // TODO: remove the requirment from the merkle lib for this method.
         // It was implemented wrong before, and is nearly unfixable.
@@ -77,18 +94,33 @@ impl AsRef<[u8]> for PedersenHash {
     }
 }
 
-impl Hasher for PedersenAlgorithm {
+// Hash is not Hash from the stdlib
+#[cfg_attr(feature = "cargo-clippy", allow(derive_hash_xor_eq))]
+impl Domain for PedersenDomain {
+    fn serialize(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(32);
+        self.0.into_repr().write_le(&mut bytes).unwrap();
+        bytes
+    }
+
+    fn into_bytes(&self) -> Vec<u8> {
+        fr_into_bytes::<Bls12>(&self.0).to_vec()
+    }
+
+    fn try_from_bytes(raw: &[u8]) -> Result<Self> {
+        bytes_into_fr::<Bls12>(raw).map(|v| v.into())
+    }
+
+    fn write_bytes(&self, dest: &mut [u8]) -> Result<()> {
+        self.0.into_repr().write_le(dest)?;
+        Ok(())
+    }
+}
+
+impl StdHasher for PedersenFunction {
     #[inline]
     fn write(&mut self, msg: &[u8]) {
-        self.0 = pedersen_hash::<Bls12, _>(
-            Personalization::NoteCommitment,
-            BitVec::<bitvec::LittleEndian, u8>::from(msg)
-                .iter()
-                .take(msg.len() * 8),
-            &pedersen::JJ_PARAMS,
-        )
-        .into_xy()
-        .0;
+        self.0 = pedersen::pedersen(msg);
     }
 
     #[inline]
@@ -97,9 +129,15 @@ impl Hasher for PedersenAlgorithm {
     }
 }
 
-impl Algorithm<PedersenHash> for PedersenAlgorithm {
+impl HashFunction<PedersenDomain> for PedersenFunction {
+    fn hash(data: &[u8]) -> PedersenDomain {
+        pedersen::pedersen_md_no_padding(data).into()
+    }
+}
+
+impl LightAlgorithm<PedersenDomain> for PedersenFunction {
     #[inline]
-    fn hash(&mut self) -> PedersenHash {
+    fn hash(&mut self) -> PedersenDomain {
         self.0.into()
     }
 
@@ -108,11 +146,16 @@ impl Algorithm<PedersenHash> for PedersenAlgorithm {
         self.0 = Fr::from_repr(FrRepr::from(0)).expect("failed 0");
     }
 
-    fn leaf(&mut self, leaf: PedersenHash) -> PedersenHash {
+    fn leaf(&mut self, leaf: PedersenDomain) -> PedersenDomain {
         leaf
     }
 
-    fn node(&mut self, left: PedersenHash, right: PedersenHash, height: usize) -> PedersenHash {
+    fn node(
+        &mut self,
+        left: PedersenDomain,
+        right: PedersenDomain,
+        height: usize,
+    ) -> PedersenDomain {
         let lhs = BitVec::<bitvec::LittleEndian, u64>::from(&left.0.into_repr().0[..]);
         let rhs = BitVec::<bitvec::LittleEndian, u64>::from(&right.0.into_repr().0[..]);
 
@@ -132,16 +175,16 @@ impl Algorithm<PedersenHash> for PedersenAlgorithm {
     }
 }
 
-impl From<Fr> for PedersenHash {
+impl From<Fr> for PedersenDomain {
     #[inline(always)]
     fn from(val: Fr) -> Self {
-        PedersenHash(val)
+        PedersenDomain(val)
     }
 }
 
-impl From<PedersenHash> for Fr {
+impl From<PedersenDomain> for Fr {
     #[inline(always)]
-    fn from(val: PedersenHash) -> Self {
+    fn from(val: PedersenDomain) -> Self {
         val.0
     }
 }
@@ -149,29 +192,31 @@ impl From<PedersenHash> for Fr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fr32::fr_into_bytes;
+
     use merkle_light::hash::Hashable;
+
+    use merkle::MerkleTree;
 
     #[test]
     fn test_path() {
         let values = ["hello", "world", "you", "two"];
-        let t = MerkleTree::from_data(values.iter());
+        let t = MerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter());
 
         let p = t.gen_proof(0); // create a proof for the first value = "hello"
         assert_eq!(*p.path(), vec![true, true]);
-        assert_eq!(p.validate::<PedersenAlgorithm>(), true);
+        assert_eq!(p.validate::<PedersenFunction>(), true);
     }
 
     #[test]
     fn test_pedersen_hasher() {
         let values = ["hello", "world", "you", "two"];
 
-        let t = MerkleTree::from_data(values.iter());
+        let t = MerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter());
 
         assert_eq!(t.leafs(), 4);
 
-        let mut a = PedersenAlgorithm::new();
-        let leaves: Vec<PedersenHash> = values
+        let mut a = PedersenFunction::default();
+        let leaves: Vec<PedersenDomain> = values
             .iter()
             .map(|v| {
                 v.hash(&mut a);

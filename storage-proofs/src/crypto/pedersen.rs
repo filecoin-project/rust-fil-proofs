@@ -14,6 +14,18 @@ lazy_static! {
 pub const PEDERSEN_BLOCK_SIZE: usize = 256;
 pub const PEDERSEN_BLOCK_BYTES: usize = PEDERSEN_BLOCK_SIZE / 8;
 
+pub fn pedersen(data: &[u8]) -> Fr {
+    pedersen_hash::<Bls12, _>(
+        Personalization::NoteCommitment,
+        BitVec::<bitvec::LittleEndian, u8>::from(data)
+            .iter()
+            .take(data.len() * 8),
+        &JJ_PARAMS,
+    )
+    .into_xy()
+    .0
+}
+
 /// Pedersen hashing for inputs that have length mulitple of the block size `256`. Based on pedersen hashes and a Merkle-Damgard construction.
 pub fn pedersen_md_no_padding(data: &[u8]) -> Fr {
     assert!(

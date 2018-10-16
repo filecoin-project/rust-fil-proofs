@@ -34,7 +34,7 @@ pub fn parameter_cache_path(filename: &str) -> PathBuf {
     dir.join(format!("v{}-{}", VERSION, filename))
 }
 
-pub trait ParameterSetIdentifier {
+pub trait ParameterSetIdentifier: Clone {
     fn parameter_set_identifier(&self) -> String;
 }
 

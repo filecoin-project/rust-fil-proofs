@@ -1,29 +1,30 @@
-use byteorder::{LittleEndian, WriteBytesExt};
-use crypto::{kdf, sloth};
-use drgraph::{Graph, MerkleProof};
+use std::marker::PhantomData;
 
-use error::Result;
-use fr32::{bytes_into_fr, fr_into_bytes};
-use pairing::bls12_381::{Bls12, Fr};
+use byteorder::{LittleEndian, WriteBytesExt};
+use pairing::bls12_381::Fr;
 use pairing::{PrimeField, PrimeFieldRepr};
+
+use drgraph::Graph;
+use error::Result;
+use hasher::{Domain, Hasher};
+use merkle::MerkleProof;
 use parameter_cache::ParameterSetIdentifier;
 use porep::{self, PoRep};
 use proof::ProofScheme;
-use std::marker::PhantomData;
 use util::data_at_node;
 use vde::{self, decode_block};
 
 #[derive(Debug)]
-pub struct PublicInputs {
-    pub replica_id: Fr,
+pub struct PublicInputs<T: Domain> {
+    pub replica_id: T,
     pub challenges: Vec<usize>,
-    pub tau: Option<porep::Tau>,
+    pub tau: Option<porep::Tau<T>>,
 }
 
 #[derive(Debug)]
-pub struct PrivateInputs<'a> {
+pub struct PrivateInputs<'a, H: 'a + Hasher> {
     pub replica: &'a [u8],
-    pub aux: &'a porep::ProverAux,
+    pub aux: &'a porep::ProverAux<H>,
 }
 
 #[derive(Debug)]
@@ -48,18 +49,37 @@ pub struct DrgParams {
 }
 
 #[derive(Debug, Clone)]
-pub struct PublicParams<G: Graph>
+pub struct PublicParams<H, G>
 where
-    G: ParameterSetIdentifier,
+    H: Hasher,
+    G: Graph<H> + ParameterSetIdentifier,
 {
     pub lambda: usize,
     pub graph: G,
     pub sloth_iter: usize,
+
+    _h: PhantomData<H>,
 }
 
-impl<G: Graph> ParameterSetIdentifier for PublicParams<G>
+impl<H, G> PublicParams<H, G>
 where
-    G: ParameterSetIdentifier,
+    H: Hasher,
+    G: Graph<H> + ParameterSetIdentifier,
+{
+    pub fn new(lambda: usize, graph: G, sloth_iter: usize) -> Self {
+        PublicParams {
+            lambda,
+            graph,
+            sloth_iter,
+            _h: PhantomData,
+        }
+    }
+}
+
+impl<H, G> ParameterSetIdentifier for PublicParams<H, G>
+where
+    H: Hasher,
+    G: Graph<H> + ParameterSetIdentifier,
 {
     fn parameter_set_identifier(&self) -> String {
         format!(
@@ -72,21 +92,22 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub struct DataProof {
-    pub proof: MerkleProof,
-    pub data: Fr,
+pub struct DataProof<H: Hasher> {
+    pub proof: MerkleProof<H>,
+    pub data: H::Domain,
 }
 
-impl DataProof {
-    fn default(n: usize) -> DataProof {
+impl<H: Hasher> DataProof<H> {
+    fn new(n: usize) -> Self {
         DataProof {
-            proof: MerkleProof::default(n),
-            data: Fr::from_str("0").unwrap(),
+            proof: MerkleProof::new(n),
+            data: Default::default(),
         }
     }
     pub fn serialize(&self) -> Vec<u8> {
         let mut out = self.proof.serialize();
-        self.data.into_repr().write_le(&mut out).unwrap();
+        let r: Fr = self.data.into();
+        r.into_repr().write_le(&mut out).unwrap();
 
         out
     }
@@ -105,23 +126,23 @@ impl DataProof {
     }
 }
 
-pub type ReplicaParents = Vec<(usize, DataProof)>;
+pub type ReplicaParents<H> = Vec<(usize, DataProof<H>)>;
 
-#[derive(Debug, Clone)]
-pub struct Proof {
-    pub replica_nodes: Vec<DataProof>,
-    pub replica_parents: Vec<ReplicaParents>,
-    pub nodes: Vec<DataProof>,
+#[derive(Default, Debug, Clone)]
+pub struct Proof<H: Hasher> {
+    pub replica_nodes: Vec<DataProof<H>>,
+    pub replica_parents: Vec<ReplicaParents<H>>,
+    pub nodes: Vec<DataProof<H>>,
 }
 
-impl Proof {
+impl<H: Hasher> Proof<H> {
     // FIXME: should we also take a number of challenges here and construct
     // vectors of that length?
-    pub fn default(height: usize, degree: usize) -> Proof {
+    pub fn new_empty(height: usize, degree: usize) -> Proof<H> {
         Proof {
-            replica_nodes: vec![DataProof::default(height)],
-            replica_parents: vec![vec![(0, DataProof::default(height)); degree]],
-            nodes: vec![DataProof::default(height)],
+            replica_nodes: vec![DataProof::new(height)],
+            replica_parents: vec![vec![(0, DataProof::new(height)); degree]],
+            nodes: vec![DataProof::new(height)],
         }
     }
     pub fn serialize(&self) -> Vec<u8> {
@@ -149,10 +170,10 @@ impl Proof {
     }
 
     pub fn new(
-        replica_nodes: Vec<DataProof>,
-        replica_parents: Vec<ReplicaParents>,
-        nodes: Vec<DataProof>,
-    ) -> Proof {
+        replica_nodes: Vec<DataProof<H>>,
+        replica_parents: Vec<ReplicaParents<H>>,
+        nodes: Vec<DataProof<H>>,
+    ) -> Proof<H> {
         Proof {
             replica_nodes,
             replica_parents,
@@ -161,8 +182,8 @@ impl Proof {
     }
 }
 
-impl<'a> From<&'a Proof> for Proof {
-    fn from(p: &Proof) -> Proof {
+impl<'a, H: Hasher> From<&'a Proof<H>> for Proof<H> {
+    fn from(p: &Proof<H>) -> Proof<H> {
         Proof {
             replica_nodes: p.replica_nodes.clone(),
             replica_parents: p.replica_parents.clone(),
@@ -172,19 +193,25 @@ impl<'a> From<&'a Proof> for Proof {
 }
 
 #[derive(Default)]
-pub struct DrgPoRep<G: Graph> {
-    phantom: PhantomData<G>,
+pub struct DrgPoRep<'a, H, G>
+where
+    H: 'a + Hasher,
+    G: 'a + Graph<H>,
+{
+    _h: PhantomData<&'a H>,
+    _g: PhantomData<G>,
 }
 
-impl<'a, G: Graph> ProofScheme<'a> for DrgPoRep<G>
+impl<'a, H, G> ProofScheme<'a> for DrgPoRep<'a, H, G>
 where
-    G: ParameterSetIdentifier,
+    H: 'a + Hasher,
+    G: 'a + Graph<H> + ParameterSetIdentifier,
 {
-    type PublicParams = PublicParams<G>;
+    type PublicParams = PublicParams<H, G>;
     type SetupParams = SetupParams;
-    type PublicInputs = PublicInputs;
-    type PrivateInputs = PrivateInputs<'a>;
-    type Proof = Proof;
+    type PublicInputs = PublicInputs<H::Domain>;
+    type PrivateInputs = PrivateInputs<'a, H>;
+    type Proof = Proof<H>;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
         let graph = G::new(
@@ -194,23 +221,19 @@ where
             sp.drg.seed,
         );
 
-        Ok(PublicParams {
-            lambda: sp.lambda,
-            graph,
-            sloth_iter: sp.sloth_iter,
-        })
+        Ok(PublicParams::new(sp.lambda, graph, sp.sloth_iter))
     }
 
-    fn prove(
-        pub_params: &Self::PublicParams,
-        pub_inputs: &Self::PublicInputs,
-        priv_inputs: &Self::PrivateInputs,
+    fn prove<'b>(
+        pub_params: &'b Self::PublicParams,
+        pub_inputs: &'b Self::PublicInputs,
+        priv_inputs: &'b Self::PrivateInputs,
     ) -> Result<Self::Proof> {
         let len = pub_inputs.challenges.len();
 
         let mut replica_nodes = Vec::with_capacity(len);
         let mut replica_parents = Vec::with_capacity(len);
-        let mut data_nodes = Vec::with_capacity(len);
+        let mut data_nodes: Vec<DataProof<H>> = Vec::with_capacity(len);
 
         for i in 0..len {
             let challenge = pub_inputs.challenges[i] % pub_params.graph.size();
@@ -221,10 +244,10 @@ where
             let replica = priv_inputs.replica;
 
             let data =
-                bytes_into_fr::<Bls12>(data_at_node(replica, challenge, pub_params.lambda)?)?;
+                H::Domain::try_from_bytes(data_at_node(replica, challenge, pub_params.lambda)?)?;
 
             replica_nodes.push(DataProof {
-                proof: tree_r.gen_proof(challenge).into(),
+                proof: MerkleProof::new_from_proof(&tree_r.gen_proof(challenge)),
                 data,
             });
 
@@ -235,8 +258,12 @@ where
                 replica_parentsi.push((p, {
                     let proof = tree_r.gen_proof(p);
                     DataProof {
-                        proof: proof.into(),
-                        data: bytes_into_fr::<Bls12>(data_at_node(replica, p, pub_params.lambda)?)?,
+                        proof: MerkleProof::new_from_proof(&proof),
+                        data: H::Domain::try_from_bytes(data_at_node(
+                            replica,
+                            p,
+                            pub_params.lambda,
+                        )?)?,
                     }
                 }));
             }
@@ -245,17 +272,29 @@ where
 
             let node_proof = tree_d.gen_proof(challenge);
 
-            let extracted = Self::extract(
-                pub_params,
-                &fr_into_bytes::<Bls12>(&pub_inputs.replica_id),
-                &replica,
-                challenge,
-            )?;
+            {
+                // TODO: use this again, I can't make lifetimes work though atm and I do not know why
+                // let extracted = Self::extract(
+                //     pub_params,
+                //     &pub_inputs.replica_id.into_bytes(),
+                //     &replica,
+                //     challenge,
+                // )?;
 
-            data_nodes.push(DataProof {
-                data: bytes_into_fr::<Bls12>(&extracted)?,
-                proof: node_proof.into(),
-            });
+                let extracted = decode_block(
+                    &pub_params.graph,
+                    pub_params.lambda,
+                    pub_params.sloth_iter,
+                    &pub_inputs.replica_id,
+                    &replica,
+                    challenge,
+                )?
+                .into_bytes();
+                data_nodes.push(DataProof {
+                    data: H::Domain::try_from_bytes(&extracted)?,
+                    proof: MerkleProof::new_from_proof(&node_proof),
+                });
+            }
         }
 
         let proof = Proof::new(replica_nodes, replica_parents, data_nodes);
@@ -319,19 +358,19 @@ where
                 }
             }
 
-            let prover_bytes = fr_into_bytes::<Bls12>(&pub_inputs.replica_id);
+            let prover_bytes = &pub_inputs.replica_id.into_bytes();
 
             let key_input =
                 proof.replica_parents[i]
                     .iter()
-                    .fold(prover_bytes, |mut acc, (_, p)| {
-                        acc.extend(fr_into_bytes::<Bls12>(&p.data));
+                    .fold(prover_bytes.clone(), |mut acc, (_, p)| {
+                        acc.extend(&p.data.into_bytes());
                         acc
                     });
 
-            let key = kdf::kdf::<Bls12>(key_input.as_slice(), pub_params.graph.degree());
-            let unsealed: Fr =
-                sloth::decode::<Bls12>(&key, &proof.replica_nodes[i].data, pub_params.sloth_iter);
+            let key = H::kdf(key_input.as_slice(), pub_params.graph.degree());
+            let unsealed =
+                H::sloth_decode(&key, &proof.replica_nodes[i].data, pub_params.sloth_iter);
 
             if unsealed != proof.nodes[i].data {
                 return Ok(false);
@@ -347,18 +386,19 @@ where
     }
 }
 
-impl<'a, G: Graph> PoRep<'a> for DrgPoRep<G>
+impl<'a, H, G> PoRep<'a, H::Domain> for DrgPoRep<'a, H, G>
 where
-    G: ParameterSetIdentifier,
+    H: 'a + Hasher,
+    G: 'a + Graph<H> + ParameterSetIdentifier,
 {
-    type Tau = porep::Tau;
-    type ProverAux = porep::ProverAux;
+    type Tau = porep::Tau<H::Domain>;
+    type ProverAux = porep::ProverAux<H>;
 
     fn replicate(
         pp: &Self::PublicParams,
-        replica_id: &[u8],
+        replica_id: &H::Domain,
         data: &mut [u8],
-    ) -> Result<(porep::Tau, porep::ProverAux)> {
+    ) -> Result<(porep::Tau<H::Domain>, porep::ProverAux<H>)> {
         let tree_d = pp.graph.merkle_tree(data, pp.lambda)?;
         let comm_d = tree_d.root();
 
@@ -375,7 +415,7 @@ where
 
     fn extract_all<'b>(
         pp: &'b Self::PublicParams,
-        replica_id: &'b [u8],
+        replica_id: &'b H::Domain,
         data: &'b [u8],
     ) -> Result<Vec<u8>> {
         vde::decode(&pp.graph, pp.lambda, pp.sloth_iter, replica_id, data)
@@ -383,32 +423,29 @@ where
 
     fn extract(
         pp: &Self::PublicParams,
-        replica_id: &[u8],
+        replica_id: &H::Domain,
         data: &[u8],
         node: usize,
     ) -> Result<Vec<u8>> {
-        Ok(fr_into_bytes::<Bls12>(&decode_block(
-            &pp.graph,
-            pp.lambda,
-            pp.sloth_iter,
-            replica_id,
-            data,
-            node,
-        )?))
+        Ok(decode_block(&pp.graph, pp.lambda, pp.sloth_iter, replica_id, data, node)?.into_bytes())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use drgraph::{new_seed, BucketGraph};
-    use rand::{Rng, SeedableRng, XorShiftRng};
 
     use memmap::MmapMut;
     use memmap::MmapOptions;
+    use pairing::bls12_381::Bls12;
+    use rand::{Rng, SeedableRng, XorShiftRng};
     use std::fs::File;
     use std::io::Write;
     use tempfile;
+
+    use drgraph::{new_seed, BucketGraph};
+    use fr32::fr_into_bytes;
+    use hasher::pedersen::*;
 
     pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
         let mut tmpfile: File = tempfile::tempfile().unwrap();
@@ -419,9 +456,11 @@ mod tests {
 
     #[test]
     fn extract_all() {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
         let lambda = 32;
         let sloth_iter = 1;
-        let replica_id = vec![1u8; 32];
+        let replica_id: Fr = rng.gen();
         let data = vec![2u8; 32 * 3];
         // create a copy, so we can compare roundtrips
         let mut mmapped_data_copy = file_backed_mmap_from(&data);
@@ -437,25 +476,27 @@ mod tests {
             sloth_iter,
         };
 
-        let pp = DrgPoRep::<BucketGraph>::setup(&sp).unwrap();
+        let pp = DrgPoRep::<PedersenHasher, BucketGraph<_>>::setup(&sp).unwrap();
 
-        DrgPoRep::replicate(&pp, replica_id.as_slice(), &mut mmapped_data_copy).unwrap();
+        DrgPoRep::replicate(&pp, &replica_id.into(), &mut mmapped_data_copy).unwrap();
 
         let mut copied = vec![0; data.len()];
         copied.copy_from_slice(&mmapped_data_copy);
         assert_ne!(data, copied, "replication did not change data");
 
         let decoded_data =
-            DrgPoRep::extract_all(&pp, replica_id.as_slice(), &mut mmapped_data_copy).unwrap();
+            DrgPoRep::extract_all(&pp, &replica_id.into(), &mut mmapped_data_copy).unwrap();
 
         assert_eq!(data, decoded_data.as_slice(), "failed to extract data");
     }
 
     #[test]
     fn extract() {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
         let lambda = 32;
         let sloth_iter = 1;
-        let replica_id = vec![1u8; 32];
+        let replica_id: Fr = rng.gen();
         let nodes = 3;
         let data = vec![2u8; 32 * nodes];
 
@@ -473,9 +514,9 @@ mod tests {
             sloth_iter,
         };
 
-        let pp = DrgPoRep::<BucketGraph>::setup(&sp).unwrap();
+        let pp = DrgPoRep::<PedersenHasher, BucketGraph<_>>::setup(&sp).unwrap();
 
-        DrgPoRep::replicate(&pp, replica_id.as_slice(), &mut mmapped_data_copy).unwrap();
+        DrgPoRep::replicate(&pp, &replica_id.into(), &mut mmapped_data_copy).unwrap();
 
         let mut copied = vec![0; data.len()];
         copied.copy_from_slice(&mmapped_data_copy);
@@ -483,7 +524,7 @@ mod tests {
 
         for i in 0..nodes {
             let decoded_data =
-                DrgPoRep::extract(&pp, replica_id.as_slice(), &mmapped_data_copy, i).unwrap();
+                DrgPoRep::extract(&pp, &replica_id.into(), &mmapped_data_copy, i).unwrap();
 
             let original_data = data_at_node(&data, i, lambda).unwrap();
 
@@ -514,7 +555,7 @@ mod tests {
             let expansion_degree = 0;
             let seed = new_seed();
 
-            let replica_id = fr_into_bytes::<Bls12>(&rng.gen());
+            let replica_id: Fr = rng.gen();
             let data: Vec<u8> = (0..nodes)
                 .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
                 .collect();
@@ -535,28 +576,33 @@ mod tests {
                 sloth_iter,
             };
 
-            let pp = DrgPoRep::<BucketGraph>::setup(&sp).unwrap();
+            let pp = DrgPoRep::<PedersenHasher, BucketGraph<_>>::setup(&sp).unwrap();
 
-            let (tau, aux) =
-                DrgPoRep::replicate(&pp, replica_id.as_slice(), &mut mmapped_data_copy).unwrap();
+            let (tau, aux) = DrgPoRep::<PedersenHasher, _>::replicate(
+                &pp,
+                &replica_id.into(),
+                &mut mmapped_data_copy,
+            )
+            .unwrap();
 
             let mut copied = vec![0; data.len()];
             copied.copy_from_slice(&mmapped_data_copy);
 
             assert_ne!(data, copied, "replication did not change data");
 
-            let pub_inputs = PublicInputs {
-                replica_id: bytes_into_fr::<Bls12>(replica_id.as_slice()).unwrap(),
+            let pub_inputs = PublicInputs::<PedersenDomain> {
+                replica_id: replica_id.into(),
                 challenges: vec![challenge, challenge],
-                tau: Some(tau.clone()),
+                tau: Some(tau.clone().into()),
             };
 
-            let priv_inputs = PrivateInputs {
+            let priv_inputs = PrivateInputs::<PedersenHasher> {
                 replica: &mmapped_data_copy,
                 aux: &aux,
             };
 
-            let real_proof = DrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
+            let real_proof =
+                DrgPoRep::<PedersenHasher, _>::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
 
             if use_wrong_parents {
                 // Only one 'wrong' option will be tested at a time.
@@ -620,7 +666,7 @@ mod tests {
                 );
 
                 assert!(
-                    !DrgPoRep::verify(&pp, &pub_inputs, &proof2).unwrap(),
+                    !DrgPoRep::<PedersenHasher, _>::verify(&pp, &pub_inputs, &proof2).unwrap(),
                     "verified in error -- with wrong parent proofs"
                 );
 
@@ -630,21 +676,24 @@ mod tests {
             let proof = real_proof;
 
             if use_wrong_challenge {
-                let pub_inputs_with_wrong_challenge_for_proof = PublicInputs {
-                    replica_id: bytes_into_fr::<Bls12>(replica_id.as_slice()).unwrap(),
+                let pub_inputs_with_wrong_challenge_for_proof = PublicInputs::<PedersenDomain> {
+                    replica_id: replica_id.into(),
                     challenges: vec![if challenge == 1 { 2 } else { 1 }],
-                    tau: Some(tau),
+                    tau: Some(tau.into()),
                 };
-                let verified =
-                    DrgPoRep::verify(&pp, &pub_inputs_with_wrong_challenge_for_proof, &proof)
-                        .unwrap();
+                let verified = DrgPoRep::<PedersenHasher, _>::verify(
+                    &pp,
+                    &pub_inputs_with_wrong_challenge_for_proof,
+                    &proof,
+                )
+                .unwrap();
                 assert!(
                     !verified,
                     "wrongly verified proof which does not match challenge in public input"
                 );
             } else {
                 assert!(
-                    DrgPoRep::verify(&pp, &pub_inputs, &proof).unwrap(),
+                    DrgPoRep::<PedersenHasher, _>::verify(&pp, &pub_inputs, &proof).unwrap(),
                     "failed to verify"
                 );
             }

@@ -1,188 +1,32 @@
-#![cfg_attr(feature = "cargo-clippy", allow(len_without_is_empty))]
+use std::cmp;
+use std::marker::PhantomData;
+
+use merkle_light::hash::{Algorithm, Hashable};
+use rand::{ChaChaRng, OsRng, Rng, SeedableRng};
 
 use error::Result;
-use hasher::pedersen::{self, PedersenAlgorithm};
-use merkle_light::hash::{Algorithm, Hashable};
-use merkle_light::{merkle, proof};
-use pairing::bls12_381::Fr;
+use hasher::pedersen::PedersenHasher;
+use hasher::Hasher;
+use merkle::MerkleTree;
 use parameter_cache::ParameterSetIdentifier;
-use rand::{ChaChaRng, OsRng, Rng, SeedableRng};
-use std::cmp;
 use util::data_at_node;
 
-pub type TreeHash = pedersen::PedersenHash;
-pub type TreeAlgorithm = pedersen::PedersenAlgorithm;
-
-// NOTE: Swapping in SHA256 is so much faster that this is effectively necessary when
-// developing/debugging and running tests repeatedly.
-
-//use hasher;
-//pub type TreeHash = hasher::sha256::RingSHA256Hash;
-//pub type TreeAlgorithm = hasher::sha256::SHA256Algorithm;
-
-pub type MerkleTree = merkle::MerkleTree<TreeHash, TreeAlgorithm>;
-
-/// Representation of a merkle proof.
-/// Each element in the `path` vector consists of a tuple `(hash, is_right)`, with `hash` being the the hash of the node at the current level and `is_right` a boolean indicating if the path is taking the right path.
-/// The first element is the hash of leaf itself, and the last is the root hash.
-#[derive(Debug, Clone)]
-pub struct MerkleProof {
-    path: Vec<(TreeHash, bool)>,
-    pub root: TreeHash,
-    leaf: TreeHash,
-}
-
-fn path_index(path: &[(TreeHash, bool)]) -> usize {
-    path.iter().rev().fold(0, |acc, (_, is_right)| {
-        (acc << 1) + if *is_right { 1 } else { 0 }
-    })
-}
-
-pub fn hash_leaf(data: &Hashable<TreeAlgorithm>) -> TreeHash {
-    let mut a = TreeAlgorithm::default();
-    data.hash(&mut a);
-    let item_hash = a.hash();
-    a.leaf(item_hash)
-}
-
-pub fn hash_node(data: &Hashable<TreeAlgorithm>) -> TreeHash {
-    let mut a = TreeAlgorithm::default();
-    data.hash(&mut a);
-    a.hash()
-}
-
-pub fn make_proof_for_test(
-    root: TreeHash,
-    leaf: TreeHash,
-    path: Vec<(TreeHash, bool)>,
-) -> MerkleProof {
-    MerkleProof { path, root, leaf }
-}
-
-impl MerkleProof {
-    pub fn default(n: usize) -> MerkleProof {
-        MerkleProof {
-            path: vec![(Default::default(), false); n],
-            root: Default::default(),
-            leaf: Default::default(),
-        }
-    }
-
-    /// Convert the merkle path into the format expected by the circuits, which is a vector of options of the tuples.
-    /// This does __not__ include the root and the leaf.
-    pub fn as_options(&self) -> Vec<Option<(Fr, bool)>> {
-        self.path
-            .iter()
-            .map(|v| Some((v.0.into(), v.1)))
-            .collect::<Vec<_>>()
-    }
-
-    pub fn as_pairs(&self) -> Vec<(Fr, bool)> {
-        self.path
-            .iter()
-            .map(|v| (v.0.into(), v.1))
-            .collect::<Vec<_>>()
-    }
-
-    /// Validates the MerkleProof and that it corresponds to the supplied node.
-    pub fn validate(&self, node: usize) -> bool {
-        let mut a = TreeAlgorithm::default();
-
-        if path_index(&self.path) != node {
-            return false;
-        }
-
-        self.root()
-            == (0..self.path.len()).fold(self.leaf, |h, i| {
-                a.reset();
-                let is_right = self.path[i].1;
-
-                let (left, right) = if is_right {
-                    (self.path[i].0, h)
-                } else {
-                    (h, self.path[i].0)
-                };
-
-                a.node(left, right, i)
-            })
-    }
-
-    /// Validates that the data hashes to the leaf of the merkle path.
-    pub fn validate_data(&self, data: &Hashable<TreeAlgorithm>) -> bool {
-        let mut a = TreeAlgorithm::default();
-        data.hash(&mut a);
-        let item_hash = a.hash();
-        let leaf_hash = a.leaf(item_hash);
-
-        leaf_hash == self.leaf()
-    }
-
-    /// Returns the hash of leaf that this MerkleProof represents.
-    pub fn leaf(&self) -> TreeHash {
-        self.leaf
-    }
-
-    /// Returns the root hash
-    pub fn root(&self) -> TreeHash {
-        self.root
-    }
-
-    /// Returns the length of the proof. That is all path elements plus 1 for the
-    /// leaf and 1 for the root.
-    pub fn len(&self) -> usize {
-        self.path.len() + 2
-    }
-
-    /// Serialize into bytes.
-    /// TODO: probably improve
-    pub fn serialize(&self) -> Vec<u8> {
-        let mut out = Vec::new();
-
-        for (hash, is_right) in &self.path {
-            out.extend(hash.serialize());
-            out.push(*is_right as u8);
-        }
-        out.extend(self.leaf().serialize());
-        out.extend(self.root().serialize());
-
-        out
-    }
-
-    pub fn path(&self) -> &Vec<(TreeHash, bool)> {
-        &self.path
-    }
-}
-
-impl Into<MerkleProof> for proof::Proof<TreeHash> {
-    fn into(self) -> MerkleProof {
-        MerkleProof {
-            path: self
-                .lemma()
-                .iter()
-                .skip(1)
-                .zip(self.path().iter())
-                .map(|(hash, is_left)| (*hash, !is_left))
-                .collect::<Vec<_>>(),
-            root: self.root(),
-            leaf: self.item(),
-        }
-    }
-}
-
-pub fn proof_into_options(p: proof::Proof<TreeHash>) -> Vec<Option<(Fr, bool)>> {
-    let p: MerkleProof = p.into();
-    p.as_options()
-}
+/// The default hasher currently in use.
+pub type DefaultTreeHasher = PedersenHasher;
 
 /// A depth robust graph.
-pub trait Graph: ::std::fmt::Debug + Clone + PartialEq + Eq {
+pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
     /// Returns the expected size of all nodes in the graph.
     fn expected_size(&self, node_size: usize) -> usize {
         self.size() * node_size
     }
 
     /// Builds a merkle tree based on the given data.
-    fn merkle_tree<'a>(&self, data: &'a [u8], node_size: usize) -> Result<MerkleTree> {
+    fn merkle_tree<'a>(
+        &self,
+        data: &'a [u8],
+        node_size: usize,
+    ) -> Result<MerkleTree<H::Domain, H::Function>> {
         if data.len() != (node_size * self.size()) as usize {
             return Err(format_err!(
                 "mismatch of data, node_size and nodes {} != {} * {}",
@@ -199,7 +43,7 @@ pub trait Graph: ::std::fmt::Debug + Clone + PartialEq + Eq {
             ));
         }
 
-        let mut a = PedersenAlgorithm::new();
+        let mut a = H::Function::default();
         Ok(MerkleTree::new((0..self.size()).map(|i| {
             let d = data_at_node(&data, i, node_size).expect("data_at_node math failed");
             d.hash(&mut a);
@@ -238,13 +82,14 @@ pub fn graph_height(size: usize) -> usize {
 
 /// Bucket sampling algorithm.
 #[derive(Clone, Debug, PartialEq, Eq, Copy)]
-pub struct BucketGraph {
+pub struct BucketGraph<H: Hasher> {
     nodes: usize,
     base_degree: usize,
     seed: [u32; 7],
+    _h: PhantomData<H>,
 }
 
-impl ParameterSetIdentifier for BucketGraph {
+impl<H: Hasher> ParameterSetIdentifier for BucketGraph<H> {
     fn parameter_set_identifier(&self) -> String {
         // NOTE: Seed is not included because it does not influence parameter generation.
         format!(
@@ -254,7 +99,7 @@ impl ParameterSetIdentifier for BucketGraph {
     }
 }
 
-impl Graph for BucketGraph {
+impl<H: Hasher> Graph<H> for BucketGraph<H> {
     #[inline]
     fn parents(&self, node: usize) -> Vec<usize> {
         let m = self.base_degree;
@@ -320,6 +165,7 @@ impl Graph for BucketGraph {
             nodes,
             base_degree,
             seed,
+            _h: PhantomData,
         }
     }
 }
@@ -331,10 +177,12 @@ pub fn new_seed() -> [u32; 7] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use drgraph::new_seed;
+
     use memmap::MmapMut;
     use memmap::MmapOptions;
-    use rand::{self, Rng};
+
+    use drgraph::new_seed;
+    use hasher::pedersen::*;
 
     // Create and return an object of MmapMut backed by in-memory copy of data.
     pub fn mmap_from(data: &[u8]) -> MmapMut {
@@ -347,7 +195,7 @@ mod tests {
     fn graph_bucket() {
         for size in vec![3, 10, 200, 2000] {
             for degree in 2..12 {
-                let g = BucketGraph::new(size, degree, 0, new_seed());
+                let g = BucketGraph::<PedersenHasher>::new(size, degree, 0, new_seed());
 
                 assert_eq!(g.size(), size, "wrong nodes count");
 
@@ -379,38 +227,13 @@ mod tests {
 
     #[test]
     fn gen_proof() {
-        let g = BucketGraph::new(5, 3, 0, new_seed());
+        let g = BucketGraph::<PedersenHasher>::new(5, 3, 0, new_seed());
         let data = vec![2u8; 16 * 5];
 
         let mmapped = &mmap_from(&data);
         let tree = g.merkle_tree(mmapped, 16).unwrap();
         let proof = tree.gen_proof(2);
 
-        assert!(proof.validate::<TreeAlgorithm>());
-    }
-
-    #[test]
-    fn merklepath() {
-        let g = BucketGraph::new(10, 5, 0, new_seed());
-        let mut rng = rand::thread_rng();
-        let data: Vec<u8> = (0..16 * 10).map(|_| rng.gen()).collect();
-
-        let tree = g.merkle_tree(data.as_slice(), 16).unwrap();
-        for i in 0..10 {
-            let proof = tree.gen_proof(i);
-
-            assert!(proof.validate::<TreeAlgorithm>());
-            let len = proof.lemma().len();
-            let mp: MerkleProof = proof.into();
-
-            assert_eq!(mp.len(), len);
-
-            assert!(mp.validate(i), "failed to validate valid merkle path");
-            let data_slice = &data[i * 16..(i + 1) * 16].to_vec();
-            assert!(
-                mp.validate_data(&data_slice),
-                "failed to validate valid data"
-            );
-        }
+        assert!(proof.validate::<PedersenFunction>());
     }
 }

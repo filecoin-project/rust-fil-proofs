@@ -43,10 +43,10 @@ where
     }
 
     /// prove is equivalent to ProofScheme::prove.
-    fn prove(
-        pub_params: &PublicParams<'a, E, S>,
-        pub_in: &S::PublicInputs,
-        priv_in: &S::PrivateInputs,
+    fn prove<'b>(
+        pub_params: &'b PublicParams<'a, E, S>,
+        pub_in: &'b S::PublicInputs,
+        priv_in: &'b S::PrivateInputs,
     ) -> Result<Proof<E>> {
         let vanilla_proof = S::prove(&pub_params.vanilla_params, pub_in, priv_in)?;
 
@@ -142,7 +142,7 @@ where
         private_inputs: &S::PrivateInputs,
     ) -> (C, Vec<E::Fr>) {
         let vanilla_params = &public_parameters.vanilla_params;
-        let vanilla_proof = S::prove(&vanilla_params, public_inputs, private_inputs).unwrap();
+        let vanilla_proof = S::prove(vanilla_params, public_inputs, private_inputs).unwrap();
 
         let circuit = Self::circuit(
             &public_inputs,

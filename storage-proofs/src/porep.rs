@@ -1,8 +1,6 @@
-use crypto::pedersen::pedersen_md_no_padding;
-use drgraph::{MerkleTree, TreeHash};
 use error::Result;
-use fr32::fr_into_bytes;
-use pairing::bls12_381::Bls12;
+use hasher::{Domain, HashFunction, Hasher};
+use merkle::MerkleTree;
 use proof::ProofScheme;
 
 #[derive(Debug)]
@@ -12,21 +10,22 @@ pub struct PublicParams {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Tau {
-    pub comm_r: TreeHash,
-    pub comm_d: TreeHash,
+pub struct Tau<T: Domain> {
+    pub comm_r: T,
+    pub comm_d: T,
 }
-impl Tau {
-    pub fn new(comm_d: TreeHash, comm_r: TreeHash) -> Tau {
+
+impl<T: Domain> Tau<T> {
+    pub fn new(comm_d: T, comm_r: T) -> Self {
         Tau { comm_d, comm_r }
     }
 }
 
 #[derive(Debug)]
-pub struct PublicInputs<'a> {
+pub struct PublicInputs<'a, T: Domain> {
     pub id: &'a [u8],
     pub r: usize,
-    pub tau: Tau,
+    pub tau: Tau<T>,
 }
 
 #[derive(Debug)]
@@ -35,44 +34,46 @@ pub struct PrivateInputs<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub struct ProverAux {
-    pub tree_d: MerkleTree,
-    pub tree_r: MerkleTree,
+pub struct ProverAux<H: Hasher> {
+    pub tree_d: MerkleTree<H::Domain, H::Function>,
+    pub tree_r: MerkleTree<H::Domain, H::Function>,
 }
 
-impl ProverAux {
-    pub fn new(tree_d: MerkleTree, tree_r: MerkleTree) -> ProverAux {
+impl<H: Hasher> ProverAux<H> {
+    pub fn new(
+        tree_d: MerkleTree<H::Domain, H::Function>,
+        tree_r: MerkleTree<H::Domain, H::Function>,
+    ) -> Self {
         ProverAux { tree_d, tree_r }
     }
 }
 
-pub trait PoRep<'a>: ProofScheme<'a> {
+pub trait PoRep<'a, T: Domain>: ProofScheme<'a> {
     type Tau;
     type ProverAux;
 
     fn replicate(
         pub_params: &'a Self::PublicParams,
-        replica_id: &[u8],
+        replica_id: &T,
         data: &mut [u8],
     ) -> Result<(Self::Tau, Self::ProverAux)>; // Tau, ProverAux
     fn extract_all(
         pub_params: &'a Self::PublicParams,
-        replica_id: &[u8],
+        replica_id: &T,
         replica: &[u8],
     ) -> Result<Vec<u8>>;
     fn extract(
         pub_params: &'a Self::PublicParams,
-        replica_id: &[u8],
+        replica_id: &T,
         replica: &[u8],
         node: usize,
     ) -> Result<Vec<u8>>;
 }
 
-pub fn replica_id(prover_id: [u8; 32], sector_id: [u8; 32]) -> Vec<u8> {
+pub fn replica_id<H: Hasher>(prover_id: [u8; 32], sector_id: [u8; 32]) -> H::Domain {
     let mut to_hash = [0; 64];
     to_hash[..32].copy_from_slice(&prover_id);
     to_hash[32..].copy_from_slice(&sector_id);
-    let replica_fr = pedersen_md_no_padding(&to_hash);
 
-    fr_into_bytes::<Bls12>(&replica_fr)
+    H::Function::hash_leaf(&to_hash)
 }

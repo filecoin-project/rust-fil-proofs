@@ -3,6 +3,7 @@ macro_rules! implement_drgporep {
     ($name:ident, $compound_name:ident, $string_name:expr, $private:expr) => {
         use circuit::por::{PoRCircuit, PoRCompound};
         use circuit::private_por::{PrivatePoRCircuit, PrivatePoRCompound};
+        use hasher::{Domain, Hasher};
 
         pub struct $name<'a, E: JubjubEngine> {
             params: &'a E::Params,
@@ -59,26 +60,33 @@ macro_rules! implement_drgporep {
             }
         }
 
-        pub struct $compound_name<G: Graph> {
-            phantom: PhantomData<G>,
+        pub struct $compound_name<H, G>
+        where
+            H: Hasher,
+            G: Graph<H>,
+        {
+            // Sad phantom is sad
+            _h: PhantomData<H>,
+            _g: PhantomData<G>,
         }
 
-        impl<E: JubjubEngine, C: Circuit<E>, G: Graph, P: ParameterSetIdentifier>
-            CacheableParameters<E, C, P> for $compound_name<G>
+        impl<E: JubjubEngine, C: Circuit<E>, H: Hasher, G: Graph<H>, P: ParameterSetIdentifier>
+            CacheableParameters<E, C, P> for $compound_name<H, G>
         {
             fn cache_prefix() -> String {
                 String::from($string_name)
             }
         }
 
-        impl<'a, G: Graph> CompoundProof<'a, Bls12, DrgPoRep<G>, $name<'a, Bls12>>
-            for $compound_name<G>
+        impl<'a, H, G> CompoundProof<'a, Bls12, DrgPoRep<'a, H, G>, $name<'a, Bls12>>
+            for $compound_name<H, G>
         where
-            G: ParameterSetIdentifier,
+            H: 'a + Hasher,
+            G: 'a + Graph<H> + ParameterSetIdentifier,
         {
             fn generate_public_inputs(
-                pub_in: &<DrgPoRep<G> as ProofScheme>::PublicInputs,
-                pub_params: &<DrgPoRep<G> as ProofScheme>::PublicParams,
+                pub_in: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicInputs,
+                pub_params: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
             ) -> Vec<Fr> {
                 let replica_id = pub_in.replica_id;
                 let challenges = &pub_in.challenges;
@@ -95,7 +103,7 @@ macro_rules! implement_drgporep {
                 let lambda = pub_params.lambda;
                 let leaves = pub_params.graph.size();
 
-                let replica_id_bits = bytes_into_bits(&fr_into_bytes::<Bls12>(&replica_id));
+                let replica_id_bits = bytes_into_bits(&replica_id.into_bytes());
 
                 let packed_replica_id = multipack::compute_multipacking::<Bls12>(
                     &replica_id_bits[0..Fr::CAPACITY as usize],
@@ -119,12 +127,12 @@ macro_rules! implement_drgporep {
                                 challenge: node,
                             };
                             let por_inputs = if $private {
-                                PrivatePoRCompound::generate_public_inputs(
+                                PrivatePoRCompound::<H>::generate_public_inputs(
                                     &por_pub_inputs,
                                     &por_pub_params,
                                 )
                             } else {
-                                PoRCompound::generate_public_inputs(
+                                PoRCompound::<H>::generate_public_inputs(
                                     &por_pub_inputs,
                                     &por_pub_params,
                                 )
@@ -138,12 +146,15 @@ macro_rules! implement_drgporep {
                         };
 
                         let por_inputs = if $private {
-                            PrivatePoRCompound::generate_public_inputs(
+                            PrivatePoRCompound::<H>::generate_public_inputs(
                                 &por_pub_inputs,
                                 &por_pub_params,
                             )
                         } else {
-                            PoRCompound::generate_public_inputs(&por_pub_inputs, &por_pub_params)
+                            PoRCompound::<H>::generate_public_inputs(
+                                &por_pub_inputs,
+                                &por_pub_params,
+                            )
                         };
                         input.extend(por_inputs);
 
@@ -154,9 +165,9 @@ macro_rules! implement_drgporep {
             }
 
             fn circuit<'b>(
-                public_inputs: &'b <DrgPoRep<G> as ProofScheme>::PublicInputs,
-                proof: &'b <DrgPoRep<G> as ProofScheme>::Proof,
-                public_params: &'b <DrgPoRep<G> as ProofScheme>::PublicParams,
+                public_inputs: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicInputs,
+                proof: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::Proof,
+                public_params: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
                 engine_params: &'a <Bls12 as JubjubEngine>::Params,
             ) -> $name<'a, Bls12> {
                 let lambda = public_params.lambda;
@@ -165,7 +176,7 @@ macro_rules! implement_drgporep {
                 let replica_nodes = proof
                     .replica_nodes
                     .iter()
-                    .map(|node| Some(node.data))
+                    .map(|node| Some(node.data.into()))
                     .collect();
 
                 let replica_nodes_paths = proof
@@ -174,7 +185,7 @@ macro_rules! implement_drgporep {
                     .map(|node| node.proof.as_options())
                     .collect();
 
-                let replica_root = Some(proof.replica_nodes[0].proof.root().into());
+                let replica_root = Some((*proof.replica_nodes[0].proof.root()).into());
 
                 let replica_parents = proof
                     .replica_parents
@@ -182,7 +193,7 @@ macro_rules! implement_drgporep {
                     .map(|parents| {
                         parents
                             .iter()
-                            .map(|(_, parent)| Some(parent.data))
+                            .map(|(_, parent)| Some(parent.data.into()))
                             .collect()
                     })
                     .collect();
@@ -199,7 +210,11 @@ macro_rules! implement_drgporep {
                     })
                     .collect();
 
-                let data_nodes = proof.nodes.iter().map(|node| Some(node.data)).collect();
+                let data_nodes = proof
+                    .nodes
+                    .iter()
+                    .map(|node| Some(node.data.into()))
+                    .collect();
 
                 let data_nodes_paths = proof
                     .nodes
@@ -207,7 +222,7 @@ macro_rules! implement_drgporep {
                     .map(|node| node.proof.as_options())
                     .collect();
 
-                let data_root = Some(proof.nodes[0].proof.root().into());
+                let data_root = Some((*proof.nodes[0].proof.root()).into());
                 let replica_id = Some(public_inputs.replica_id);
 
                 $name {
@@ -222,7 +237,7 @@ macro_rules! implement_drgporep {
                     data_nodes,
                     data_nodes_paths,
                     data_root,
-                    replica_id,
+                    replica_id: replica_id.map(|f| f.into()),
                     degree: public_params.graph.degree(),
                 }
             }

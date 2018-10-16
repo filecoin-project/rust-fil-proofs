@@ -11,14 +11,15 @@ extern crate env_logger;
 extern crate storage_proofs;
 
 use clap::{App, Arg};
-use pairing::bls12_381::Bls12;
+use pairing::bls12_381::{Bls12, Fr};
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::time::{Duration, Instant};
 
 use storage_proofs::drgporep::*;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::{init_logger, prettyb};
-use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes};
+use storage_proofs::fr32::fr_into_bytes;
+use storage_proofs::hasher::pedersen::*;
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 
@@ -35,7 +36,7 @@ fn do_the_work(data_size: usize, m: usize, sloth_iter: usize, challenge_count: u
 
     let nodes = data_size / lambda;
 
-    let replica_id = fr_into_bytes::<Bls12>(&rng.gen());
+    let replica_id: Fr = rng.gen();
     let mut data: Vec<u8> = (0..nodes)
         .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
         .collect();
@@ -52,21 +53,23 @@ fn do_the_work(data_size: usize, m: usize, sloth_iter: usize, challenge_count: u
     };
 
     info!("running setup");
-    let pp = DrgPoRep::<BucketGraph>::setup(&sp).unwrap();
+    let pp = DrgPoRep::<PedersenHasher, BucketGraph<_>>::setup(&sp).unwrap();
 
     let start = Instant::now();
     let mut param_duration = Duration::new(0, 0);
 
     info!("running replicate");
-    let (tau, aux) = DrgPoRep::replicate(&pp, replica_id.as_slice(), data.as_mut_slice()).unwrap();
+    let (tau, aux) =
+        DrgPoRep::<PedersenHasher, _>::replicate(&pp, &replica_id.into(), data.as_mut_slice())
+            .unwrap();
 
     let pub_inputs = PublicInputs {
-        replica_id: bytes_into_fr::<Bls12>(replica_id.as_slice()).unwrap(),
+        replica_id: replica_id.into(),
         challenges,
         tau: Some(tau),
     };
 
-    let priv_inputs = PrivateInputs {
+    let priv_inputs = PrivateInputs::<PedersenHasher> {
         replica: data.as_slice(),
         aux: &aux,
     };
@@ -81,11 +84,12 @@ fn do_the_work(data_size: usize, m: usize, sloth_iter: usize, challenge_count: u
     info!("sampling proving & verifying (samples: {})", samples);
     for _ in 0..samples {
         let start = Instant::now();
-        let proof = DrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).expect("failed to prove");
+        let proof = DrgPoRep::<PedersenHasher, _>::prove(&pp, &pub_inputs, &priv_inputs)
+            .expect("failed to prove");
         total_proving += start.elapsed();
 
         let start = Instant::now();
-        DrgPoRep::verify(&pp, &pub_inputs, &proof).expect("failed to verify");
+        DrgPoRep::<PedersenHasher, _>::verify(&pp, &pub_inputs, &proof).expect("failed to verify");
         total_verifying += start.elapsed();
         proofs.push(proof);
     }

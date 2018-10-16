@@ -12,10 +12,10 @@ use sector_base::io::fr32::write_unpadded;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgporep::{self, DrgParams};
-use storage_proofs::drgraph::new_seed;
+use storage_proofs::drgraph::{new_seed, DefaultTreeHasher};
 use storage_proofs::error::Result;
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
-use storage_proofs::hasher::pedersen::PedersenHash;
+use storage_proofs::hasher::Hasher;
 use storage_proofs::layered_drgporep;
 use storage_proofs::parameter_cache::{
     parameter_cache_path, read_cached_params, write_params_to_cache,
@@ -80,8 +80,10 @@ fn setup_params(sector_bytes: usize) -> layered_drgporep::SetupParams {
     }
 }
 
-fn public_params(sector_bytes: usize) -> layered_drgporep::PublicParams<ZigZagBucketGraph> {
-    ZigZagDrgPoRep::setup(&setup_params(sector_bytes)).unwrap()
+fn public_params(
+    sector_bytes: usize,
+) -> layered_drgporep::PublicParams<DefaultTreeHasher, ZigZagBucketGraph<DefaultTreeHasher>> {
+    ZigZagDrgPoRep::<DefaultTreeHasher>::setup(&setup_params(sector_bytes)).unwrap()
 }
 
 fn commitment_from_fr<E: Engine>(fr: E::Fr) -> Commitment {
@@ -155,7 +157,7 @@ pub fn seal(
     let prover_id = pad_safe_fr(prover_id_in);
     // Zero-pad the sector_id to 32 bytes (and therefore Fr32).
     let sector_id = pad_safe_fr(sector_id_in);
-    let replica_id = replica_id(prover_id, sector_id);
+    let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
 
     let compound_setup_params = compound_proof::SetupParams {
         // The proof might use a different number of bytes than we read and copied, if we are faking.
@@ -174,8 +176,6 @@ pub fn seal(
         proof_sector_bytes,
     )?;
 
-    let replica_id_fr = bytes_into_fr::<Bls12>(&replica_id)?;
-
     let public_tau = tau.simplify();
     // This is the commitment to the original data.
     let comm_d = public_tau.comm_d;
@@ -187,13 +187,13 @@ pub fn seal(
         fr_into_bytes::<Bls12>(&comm_d.0).as_slice(),
     );
     let public_inputs = layered_drgporep::PublicInputs {
-        replica_id: replica_id_fr,
+        replica_id,
         challenges,
         tau: Some(public_tau),
         comm_r_star: tau.comm_r_star,
     };
 
-    let private_inputs = layered_drgporep::PrivateInputs {
+    let private_inputs = layered_drgporep::PrivateInputs::<DefaultTreeHasher> {
         replica: &data_copy[0..proof_sector_bytes],
         aux,
         tau: tau.layer_taus,
@@ -219,18 +219,17 @@ pub fn seal(
         sector_store,
         commitment_from_fr::<Bls12>(comm_r.0),
         commitment_from_fr::<Bls12>(comm_d.0),
-        commitment_from_fr::<Bls12>(tau.comm_r_star),
+        commitment_from_fr::<Bls12>(tau.comm_r_star.into()),
         prover_id_in,
         sector_id_in,
         &proof_bytes,
     )
     .expect("post-seal verification sanity check failed");
 
-    Ok((
-        commitment_from_fr::<Bls12>(public_tau.comm_r.0),
-        commitment_from_fr::<Bls12>(public_tau.comm_d.0),
-        proof_bytes,
-    ))
+    let comm_r = commitment_from_fr::<Bls12>(public_tau.comm_r.0);
+    let comm_d = commitment_from_fr::<Bls12>(public_tau.comm_d.0);
+
+    Ok((comm_r, comm_d, proof_bytes))
 }
 
 fn delay_seal(seconds: u32) {
@@ -245,12 +244,15 @@ fn delay_get_unsealed_range(base_seconds: u32) {
 
 fn perform_replication(
     out_path: &PathBuf,
-    public_params: &<ZigZagDrgPoRep as ProofScheme>::PublicParams,
-    replica_id: &[u8],
+    public_params: &<ZigZagDrgPoRep<DefaultTreeHasher> as ProofScheme>::PublicParams,
+    replica_id: &<DefaultTreeHasher as Hasher>::Domain,
     data: &mut [u8],
     fake: bool,
     proof_sector_bytes: usize,
-) -> Result<(layered_drgporep::Tau, Vec<ProverAux>)> {
+) -> Result<(
+    layered_drgporep::Tau<<DefaultTreeHasher as Hasher>::Domain>,
+    Vec<ProverAux<DefaultTreeHasher>>,
+)> {
     if fake {
         // When faking replication, we write the original data to disk, before replication.
         write_data(out_path, data)?;
@@ -300,7 +302,7 @@ pub fn get_unsealed_range(
 
     let prover_id = pad_safe_fr(prover_id_in);
     let sector_id = pad_safe_fr(sector_id_in);
-    let replica_id = replica_id(prover_id, sector_id);
+    let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
 
     let f_in = File::open(sealed_path)?;
     let mut data = Vec::new();
@@ -339,18 +341,20 @@ pub fn verify_seal(
     let challenges = derive_challenges(&comm_r, &comm_d);
     let prover_id = pad_safe_fr(prover_id_in);
     let sector_id = pad_safe_fr(sector_id_in);
-    let replica_id = replica_id(prover_id, sector_id);
-    let replica_id_fr = bytes_into_fr::<Bls12>(&replica_id)?;
+    let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
 
-    let comm_r = PedersenHash(bytes_into_fr::<Bls12>(&comm_r)?);
-    let comm_d = PedersenHash(bytes_into_fr::<Bls12>(&comm_d)?);
-    let comm_r_star = PedersenHash(bytes_into_fr::<Bls12>(&comm_r_star)?).0;
+    let comm_r = bytes_into_fr::<Bls12>(&comm_r)?;
+    let comm_d = bytes_into_fr::<Bls12>(&comm_d)?;
+    let comm_r_star = bytes_into_fr::<Bls12>(&comm_r_star)?;
 
-    let public_inputs = layered_drgporep::PublicInputs {
-        replica_id: replica_id_fr, // FIXME: Change prover_id field name to replica_id everywhere.
+    let public_inputs = layered_drgporep::PublicInputs::<<DefaultTreeHasher as Hasher>::Domain> {
+        replica_id, // FIXME: Change prover_id field name to replica_id everywhere.
         challenges,
-        tau: Some(Tau { comm_r, comm_d }),
-        comm_r_star,
+        tau: Some(Tau {
+            comm_r: comm_r.into(),
+            comm_d: comm_d.into(),
+        }),
+        comm_r_star: comm_r_star.into(),
     };
 
     let proof = groth16::Proof::read(proof_vec)?;

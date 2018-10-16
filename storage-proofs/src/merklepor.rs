@@ -1,12 +1,15 @@
+use std::marker::PhantomData;
+
 use drgporep::DataProof;
-use drgraph::{graph_height, MerkleTree, TreeHash};
+use drgraph::graph_height;
 use error::Result;
-use pairing::bls12_381::Fr;
+use hasher::{Domain, Hasher};
+use merkle::{MerkleProof, MerkleTree};
 use parameter_cache::ParameterSetIdentifier;
 use proof::ProofScheme;
 
 /// The parameters shared between the prover and verifier.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PublicParams {
     /// The size of a single leaf.
     pub lambda: usize,
@@ -25,24 +28,35 @@ impl ParameterSetIdentifier for PublicParams {
 
 /// The inputs that are necessary for the verifier to verify the proof.
 #[derive(Debug)]
-pub struct PublicInputs {
+pub struct PublicInputs<T: Domain> {
     /// The root hash of the underlying merkle tree.
-    pub commitment: Option<TreeHash>,
+    pub commitment: Option<T>,
     /// The challenge, which leaf to prove.
     pub challenge: usize,
 }
 
 /// The inputs that are only available to the prover.
 #[derive(Debug)]
-pub struct PrivateInputs<'a> {
+pub struct PrivateInputs<'a, H: 'a + Hasher> {
     /// The data of the leaf.
-    pub leaf: Fr,
+    pub leaf: H::Domain,
     /// The underlying merkle tree.
-    pub tree: &'a MerkleTree,
+    pub tree: &'a MerkleTree<H::Domain, H::Function>,
+    _h: PhantomData<H>,
+}
+
+impl<'a, H: Hasher> PrivateInputs<'a, H> {
+    pub fn new(leaf: H::Domain, tree: &'a MerkleTree<H::Domain, H::Function>) -> Self {
+        PrivateInputs {
+            leaf,
+            tree,
+            _h: PhantomData,
+        }
+    }
 }
 
 /// The proof that is returned from `prove`.
-pub type Proof = DataProof;
+pub type Proof<H> = DataProof<H>;
 
 #[derive(Debug)]
 pub struct SetupParams {
@@ -52,14 +66,16 @@ pub struct SetupParams {
 
 /// Merkle tree based proof of retrievability.
 #[derive(Debug, Default)]
-pub struct MerklePoR {}
+pub struct MerklePoR<H: Hasher> {
+    _h: PhantomData<H>,
+}
 
-impl<'a> ProofScheme<'a> for MerklePoR {
+impl<'a, H: 'a + Hasher> ProofScheme<'a> for MerklePoR<H> {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
-    type PublicInputs = PublicInputs;
-    type PrivateInputs = PrivateInputs<'a>;
-    type Proof = Proof;
+    type PublicInputs = PublicInputs<H::Domain>;
+    type PrivateInputs = PrivateInputs<'a, H>;
+    type Proof = Proof<H>;
 
     fn setup(sp: &SetupParams) -> Result<PublicParams> {
         Ok(PublicParams {
@@ -68,22 +84,22 @@ impl<'a> ProofScheme<'a> for MerklePoR {
         })
     }
 
-    fn prove(
-        pub_params: &Self::PublicParams,
-        pub_inputs: &Self::PublicInputs,
-        priv_inputs: &Self::PrivateInputs,
+    fn prove<'b>(
+        pub_params: &'b Self::PublicParams,
+        pub_inputs: &'b Self::PublicInputs,
+        priv_inputs: &'b Self::PrivateInputs,
     ) -> Result<Self::Proof> {
         let challenge = pub_inputs.challenge % pub_params.leaves;
         let tree = priv_inputs.tree;
 
-        if let Some(commitment) = pub_inputs.commitment {
-            if commitment != tree.root() {
+        if let Some(ref commitment) = pub_inputs.commitment {
+            if commitment != &tree.root() {
                 return Err(format_err!("tree root and commitment do not match"));
             }
         }
 
         Ok(Proof {
-            proof: tree.gen_proof(challenge).into(),
+            proof: MerkleProof::new_from_proof(&tree.gen_proof(challenge)),
             data: priv_inputs.leaf,
         })
     }
@@ -96,7 +112,7 @@ impl<'a> ProofScheme<'a> for MerklePoR {
         {
             // This was verify_proof_meta.
             let commitments_match = match pub_inputs.commitment {
-                Some(commitment) => commitment == proof.proof.root(),
+                Some(ref commitment) => commitment == proof.proof.root(),
                 None => true,
             };
 
@@ -121,10 +137,15 @@ impl<'a> ProofScheme<'a> for MerklePoR {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use drgraph::{hash_leaf, make_proof_for_test, new_seed, BucketGraph, Graph};
-    use fr32::{bytes_into_fr, fr_into_bytes};
+
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
+
+    use drgraph::{new_seed, BucketGraph, Graph};
+    use fr32::{bytes_into_fr, fr_into_bytes};
+    use hasher::pedersen::{PedersenFunction, PedersenHasher};
+    use hasher::HashFunction;
+    use merkle::make_proof_for_test;
     use util::data_at_node;
 
     #[test]
@@ -140,7 +161,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph = BucketGraph::new(32, 5, 0, new_seed());
+        let graph = BucketGraph::<PedersenHasher>::new(32, 5, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
 
         let pub_inputs = PublicInputs {
@@ -153,11 +174,12 @@ mod tests {
         )
         .unwrap();
 
-        let priv_inputs = PrivateInputs { tree: &tree, leaf };
+        let priv_inputs = PrivateInputs::<PedersenHasher>::new(leaf.into(), &tree);
 
-        let proof = MerklePoR::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+        let proof =
+            MerklePoR::<PedersenHasher>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
 
-        assert!(MerklePoR::verify(&pub_params, &pub_inputs, &proof).unwrap());
+        assert!(MerklePoR::<PedersenHasher>::verify(&pub_params, &pub_inputs, &proof).unwrap());
     }
 
     // Construct a proof that satisfies a cursory validation:
@@ -165,12 +187,15 @@ mod tests {
     // Proof root matches that requested in public inputs.
     // However, note that data has no relationship to anything,
     // and proof path does not actually prove that data was in the tree corresponding to expected root.
-    fn make_bogus_proof(pub_inputs: &PublicInputs, rng: &mut XorShiftRng) -> DataProof {
+    fn make_bogus_proof(
+        pub_inputs: &PublicInputs<<PedersenHasher as Hasher>::Domain>,
+        rng: &mut XorShiftRng,
+    ) -> DataProof<PedersenHasher> {
         let bogus_leaf = bytes_into_fr::<Bls12>(&fr_into_bytes::<Bls12>(&rng.gen())).unwrap();
-        let hashed_leaf = hash_leaf(&bogus_leaf);
+        let hashed_leaf = PedersenFunction::hash_leaf(&bogus_leaf);
 
         DataProof {
-            data: bogus_leaf,
+            data: bogus_leaf.into(),
             proof: make_proof_for_test(
                 pub_inputs.commitment.unwrap(),
                 hashed_leaf,
@@ -192,7 +217,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph = BucketGraph::new(32, 5, 0, new_seed());
+        let graph = BucketGraph::<PedersenHasher>::new(32, 5, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
 
         let pub_inputs = PublicInputs {
@@ -221,7 +246,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph = BucketGraph::new(32, 5, 0, new_seed());
+        let graph = BucketGraph::<PedersenHasher>::new(32, 5, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
 
         let pub_inputs = PublicInputs {
@@ -234,16 +259,19 @@ mod tests {
         )
         .unwrap();
 
-        let priv_inputs = PrivateInputs { tree: &tree, leaf };
+        let priv_inputs = PrivateInputs::<PedersenHasher>::new(leaf.into(), &tree);
 
-        let proof = MerklePoR::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+        let proof =
+            MerklePoR::<PedersenHasher>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
 
         let different_pub_inputs = PublicInputs {
             challenge: 999,
             commitment: Some(tree.root()),
         };
 
-        let verified = MerklePoR::verify(&pub_params, &different_pub_inputs, &proof).unwrap();
+        let verified =
+            MerklePoR::<PedersenHasher>::verify(&pub_params, &different_pub_inputs, &proof)
+                .unwrap();
 
         // A proof created with a the wrong challenge not be verified!
         assert!(!verified);
