@@ -27,7 +27,7 @@ tempfile = "3"
 
 [dev-dependencies]
 # cpuprofiler = "0.0.3"
-cpuprofiler = { git = "https://github.com/dignifiedquire/cpuprofiler", branch = "feat/heap" }
+cpuprofiler = { git = "https://github.com/dignifiedquire/rust-gperftools" }
 
 [dependencies.pairing]
 version = "0.14.2"
