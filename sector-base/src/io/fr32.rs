@@ -5,6 +5,8 @@ use std::iter::FromIterator;
 use bitvec::{self, BitVec};
 use itertools::Itertools;
 
+pub type Fr32BitVec = BitVec<bitvec::LittleEndian, u8>;
+
 #[derive(Debug)]
 // PaddingMap represents a mapping between data and its padded equivalent.
 // Padding is at the bit-level.
@@ -116,6 +118,12 @@ impl PaddingMap {
         PaddingMap {
             data_chunk_bits: data_bits,
             padded_chunk_bits: representation_bits,
+        }
+    }
+
+    pub fn pad(&self, bits_out: &mut Fr32BitVec) {
+        for _ in 0..self.padding_bits() {
+            bits_out.push(false)
         }
     }
 
@@ -299,7 +307,7 @@ where
         target.seek(SeekFrom::Start(padded_offset_bytes - 1))?;
 
         // Package up the prefix into a BitVec.
-        let mut prefix_bitvec = BitVec::<bitvec::LittleEndian, u8>::from(&prefix_bytes[..]);
+        let mut prefix_bitvec = Fr32BitVec::from(&prefix_bytes[..]);
 
         // But only take the number of bits that are actually part of the prefix!
         prefix_bitvec.truncate(prefix_bit_count);
@@ -323,7 +331,7 @@ fn write_padded_aligned<W: ?Sized>(
     source: &[u8],
     target: &mut W,
     next_boundary_bits: usize,
-    prefix_bits: Option<BitVec<bitvec::LittleEndian, u8>>,
+    prefix_bits: Option<Fr32BitVec>,
 ) -> io::Result<usize>
 where
     W: Write,
@@ -331,7 +339,7 @@ where
     // bits_out is a sink for bits, to be written at the end.
     // If we received prefix_bits, put them in the sink first.
     let mut bits_out = match prefix_bits {
-        None => BitVec::<bitvec::LittleEndian, u8>::new(),
+        None => Fr32BitVec::new(),
         Some(bv) => bv,
     };
 
@@ -353,35 +361,30 @@ where
 
     {
         // Write the first chunk, padding if necessary.
-        let first_unpadded_chunk = BitVec::<bitvec::LittleEndian, u8>::from(source)
-            .into_iter()
-            .take(first_bits);
+        let first_unpadded_chunk = Fr32BitVec::from(source).into_iter().take(first_bits);
 
         bits_out.extend(first_unpadded_chunk);
 
         // pad
         if pad_first_chunk {
-            for _ in 0..padding_map.padding_bits() {
-                bits_out.push(false)
-            }
+            padding_map.pad(&mut bits_out);
         }
     }
 
     {
         // Write all following chunks, padding if necessary.
-        let remaining_unpadded_chunks = BitVec::<bitvec::LittleEndian, u8>::from(source)
+        let remaining_unpadded_chunks = Fr32BitVec::from(source)
             .into_iter()
             .skip(first_bits)
             .chunks(padding_map.data_chunk_bits);
 
         for chunk in remaining_unpadded_chunks.into_iter() {
-            let mut bits = BitVec::<bitvec::LittleEndian, u8>::from_iter(chunk);
+            let mut bits = Fr32BitVec::from_iter(chunk);
 
-            // pad
-            while (bits.len() >= padding_map.data_chunk_bits)
+            if bits.len() >= padding_map.data_chunk_bits
                 && (bits.len() < padding_map.padded_chunk_bits)
             {
-                bits.push(false);
+                padding_map.pad(&mut bits);
             }
 
             bits_out.extend(bits);
@@ -443,7 +446,7 @@ where
 
     let bits_to_write = len * 8;
 
-    let mut bits_out = BitVec::<bitvec::LittleEndian, u8>::new();
+    let mut bits_out = Fr32BitVec::new();
 
     while bits_out.len() < bits_to_write {
         let start = offset.bytes;
@@ -459,7 +462,7 @@ where
         if start > source.len() {
             break;
         }
-        let raw_bits = BitVec::<bitvec::LittleEndian, u8>::from(&source[start..raw_end]);
+        let raw_bits = Fr32BitVec::from(&source[start..raw_end]);
         let skipped = raw_bits.into_iter().skip(bits_to_skip);
         let restricted = skipped.take(bits_to_next_boundary);
 
