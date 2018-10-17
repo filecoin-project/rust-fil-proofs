@@ -67,8 +67,10 @@ mod tests {
                         data.as_slice(),
                         public_inputs.challenge,
                         public_params.vanilla_params.lambda,
-                    ).unwrap(),
-                ).expect("failed to create Fr from node data"),
+                    )
+                    .unwrap(),
+                )
+                .expect("failed to create Fr from node data"),
             };
 
             let proof = PoRCompound::prove(&public_params, &public_inputs, &private_inputs)
@@ -120,7 +122,8 @@ mod tests {
                 tree: &tree,
                 leaf: bytes_into_fr::<Bls12>(
                     data_at_node(data.as_slice(), pub_inputs.challenge, pub_params.lambda).unwrap(),
-                ).unwrap(),
+                )
+                .unwrap(),
             };
 
             // create a non circuit proof

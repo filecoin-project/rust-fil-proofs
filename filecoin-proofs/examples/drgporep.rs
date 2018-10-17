@@ -136,7 +136,8 @@ impl Example<Bls12> for DrgPoRepApp {
                 m,
             },
             rng,
-        ).unwrap()
+        )
+        .unwrap()
     }
 
     fn samples() -> usize {

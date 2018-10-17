@@ -224,7 +224,8 @@ impl<'a> CompoundProof<'a, Bls12, ZigZagDrgPoRep, ZigZagCircuit<'a, Bls12, ZigZa
                 };
                 let layer_proof = vanilla_proof.encoding_proofs[l].clone();
                 (layer_public_inputs, Some(layer_proof))
-            }).collect();
+            })
+            .collect();
 
         let pp: <ZigZagDrgPoRep as ProofScheme>::PublicParams = public_params.into();
 
@@ -373,7 +374,8 @@ mod tests {
                 };
                 let proof = None;
                 (public_inputs, proof)
-            }).collect();
+            })
+            .collect();
 
         let public_params = layered_drgporep::PublicParams {
             drg_porep_public_params: drgporep::PublicParams {
@@ -393,7 +395,8 @@ mod tests {
                 comm_r: PedersenHash(Fr::rand(rng)),
                 comm_d: PedersenHash(Fr::rand(rng)),
             },
-        ).expect("failed to synthesize circuit");
+        )
+        .expect("failed to synthesize circuit");
 
         assert_eq!(cs.num_inputs(), 17, "wrong number of inputs");
         assert_eq!(cs.num_constraints(), 434062, "wrong number of constraints");
@@ -448,7 +451,8 @@ mod tests {
             &public_params.vanilla_params,
             replica_id.as_slice(),
             data_copy.as_mut_slice(),
-        ).unwrap();
+        )
+        .unwrap();
         assert_ne!(data, data_copy);
 
         let public_inputs = layered_drgporep::PublicInputs {

@@ -135,7 +135,8 @@ impl SectorManager for DiskManager {
             .map(|mut f| {
                 target_unpadded_bytes(&mut f)
                     .map_err(|err| SectorManagerErr::ReceiverError(format!("{:?}", err)))
-            }).and_then(|n| n)
+            })
+            .and_then(|n| n)
     }
 
     fn truncate_unsealed(&self, access: String, size: u64) -> Result<(), SectorManagerErr> {
@@ -200,7 +201,8 @@ impl DiskManager {
                 File::create(&pbuf)
                     .map(|_| 0)
                     .map_err(|err| SectorManagerErr::ReceiverError(format!("{:?}", err)))
-            }).and_then(|_| {
+            })
+            .and_then(|_| {
                 pbuf.to_str().map_or_else(
                     || {
                         Err(SectorManagerErr::ReceiverError(

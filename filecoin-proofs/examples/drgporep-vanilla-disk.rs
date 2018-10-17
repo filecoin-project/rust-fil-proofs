@@ -143,25 +143,29 @@ fn main() {
                 .long("size")
                 .help("The data size in KB")
                 .takes_value(true),
-        ).arg(
+        )
+        .arg(
             Arg::with_name("m")
                 .help("The size of m")
                 .long("m")
                 .default_value("6")
                 .takes_value(true),
-        ).arg(
+        )
+        .arg(
             Arg::with_name("sloth")
                 .help("The number of sloth iterations, defaults to 1")
                 .long("sloth")
                 .default_value("1")
                 .takes_value(true),
-        ).arg(
+        )
+        .arg(
             Arg::with_name("challenges")
                 .long("challenges")
                 .help("How many challenges to execute, defaults to 1")
                 .default_value("1")
                 .takes_value(true),
-        ).get_matches();
+        )
+        .get_matches();
 
     let data_size = value_t!(matches, "size", usize).unwrap() * 1024;
     let m = value_t!(matches, "m", usize).unwrap();

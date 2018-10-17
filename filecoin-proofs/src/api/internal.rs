@@ -221,7 +221,8 @@ pub fn seal(
         prover_id_in,
         sector_id_in,
         &proof_bytes,
-    ).expect("post-seal verification sanity check failed");
+    )
+    .expect("post-seal verification sanity check failed");
 
     Ok((
         commitment_from_fr::<Bls12>(public_tau.comm_r.0),

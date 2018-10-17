@@ -139,8 +139,10 @@ impl Proof {
                             acc
                         }),
                     self.nodes[i].serialize(),
-                ].concat()
-            }).collect::<Vec<Vec<u8>>>()
+                ]
+                .concat()
+            })
+            .collect::<Vec<Vec<u8>>>()
             .concat();
 
         res
@@ -607,7 +609,8 @@ mod tests {
                             let x = (i + 1) % real_parents[0].len();
                             let j = real_parents[0][x].0;
                             (*p, real_parents[0][j].1.clone())
-                        }).collect::<Vec<_>>(),
+                        })
+                        .collect::<Vec<_>>(),
                 ];
 
                 let proof2 = Proof::new(

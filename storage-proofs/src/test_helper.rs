@@ -64,7 +64,8 @@ pub fn fake_drgpoprep_proof<R: Rng>(
                     Ok(acc)
                 })
             },
-        ).unwrap();
+        )
+        .unwrap();
 
     let key = crypto::kdf::kdf::<Bls12>(ciphertexts.as_slice(), m);
     // run sloth(key, node)
@@ -93,7 +94,8 @@ pub fn fake_drgpoprep_proof<R: Rng>(
             let mut subtree_path = subtree_proof.as_options();
             subtree_path.extend(remaining_path.clone());
             subtree_path
-        }).collect();
+        })
+        .collect();
 
     let replica_node_path = {
         let subtree_proof: MerkleProof = subtree.gen_proof(challenge).into();
@@ -162,7 +164,8 @@ pub fn random_merkle_path_with_value<R: Rng>(
                 .take(Fr::NUM_BITS as usize)
                 .chain(rhs.into_iter().take(Fr::NUM_BITS as usize)),
             &crypto::pedersen::JJ_PARAMS,
-        ).into_xy()
+        )
+        .into_xy()
         .0;
     }
 

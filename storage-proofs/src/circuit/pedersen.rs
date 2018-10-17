@@ -57,7 +57,8 @@ pub fn pedersen_compression_num<E: JubjubEngine, CS: ConstraintSystem<E>>(
         pedersen_hash::Personalization::NoteCommitment,
         &bits,
         params,
-    )?.get_x()
+    )?
+    .get_x()
     .clone())
 }
 

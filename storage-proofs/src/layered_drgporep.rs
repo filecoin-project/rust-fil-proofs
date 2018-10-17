@@ -287,7 +287,8 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
                             data: p.1.data,
                         },
                     )
-                }).collect();
+                })
+                .collect();
 
             let res = DrgPoRep::verify(
                 &pp,

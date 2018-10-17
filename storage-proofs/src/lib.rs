@@ -62,6 +62,7 @@ pub mod crypto;
 pub mod drgporep;
 pub mod drgraph;
 pub mod error;
+pub mod file_inclusion_proof;
 pub mod fr32;
 pub mod hasher;
 pub mod layered_drgporep;

@@ -23,7 +23,8 @@ where
                 byte,
                 &key[i % key_len],
             )
-        }).collect::<Result<Vec<_>, SynthesisError>>()
+        })
+        .collect::<Result<Vec<_>, SynthesisError>>()
 }
 
 #[cfg(test)]

@@ -111,7 +111,8 @@ impl<'a, E: JubjubEngine> Circuit<E> for ParallelProofOfRetrievability<'a, E> {
                     pedersen_hash::Personalization::MerkleTree(i),
                     &preimage,
                     params,
-                )?.get_x()
+                )?
+                .get_x()
                 .clone(); // Injective encoding
 
                 auth_path_bits.push(cur_is_right);
@@ -168,21 +169,25 @@ mod tests {
                 .map(|i| merklepor::PublicInputs {
                     challenge: i,
                     commitment: Some(tree.root()),
-                }).collect();
+                })
+                .collect();
             let priv_inputs: Vec<_> = (0..leaves)
                 .map(|i| merklepor::PrivateInputs {
                     tree: &tree,
                     leaf: bytes_into_fr::<Bls12>(
                         data_at_node(data.as_slice(), pub_inputs[i].challenge, pub_params.lambda)
                             .unwrap(),
-                    ).unwrap(),
-                }).collect();
+                    )
+                    .unwrap(),
+                })
+                .collect();
 
             let proofs: Vec<_> = (0..leaves)
                 .map(|i| {
                     merklepor::MerklePoR::prove(&pub_params, &pub_inputs[i], &priv_inputs[i])
                         .unwrap()
-                }).collect();
+                })
+                .collect();
 
             for i in 0..leaves {
                 // make sure it verifies

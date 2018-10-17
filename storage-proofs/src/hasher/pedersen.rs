@@ -86,7 +86,8 @@ impl Hasher for PedersenAlgorithm {
                 .iter()
                 .take(msg.len() * 8),
             &pedersen::JJ_PARAMS,
-        ).into_xy()
+        )
+        .into_xy()
         .0;
     }
 
@@ -124,7 +125,8 @@ impl Algorithm<PedersenHash> for PedersenAlgorithm {
             Personalization::MerkleTree(height),
             bits,
             &pedersen::JJ_PARAMS,
-        ).into_xy()
+        )
+        .into_xy()
         .0
         .into()
     }
@@ -176,7 +178,8 @@ mod tests {
                 let h = a.hash();
                 a.reset();
                 h
-            }).collect();
+            })
+            .collect();
 
         assert_eq!(t[0], leaves[0]);
         assert_eq!(t[1], leaves[1]);
@@ -201,7 +204,8 @@ mod tests {
                 1363403528947283679,
                 5429691745410183571,
                 7730413689037971367
-            ])).unwrap()
+            ]))
+            .unwrap()
         );
 
         let expected = Fr::from_repr(FrRepr([
@@ -209,7 +213,8 @@ mod tests {
             2414807501862983188,
             16116531553419129213,
             6357427774790868134,
-        ])).unwrap();
+        ]))
+        .unwrap();
         let actual = t[6].0;
 
         println!("expected bytes: {:?}", fr_into_bytes::<Bls12>(&expected));

@@ -193,7 +193,10 @@ pub trait Graph: ::std::fmt::Debug + Clone + PartialEq + Eq {
         }
 
         if !(node_size == 16 || node_size == 32 || node_size == 64) {
-            return Err(format_err!("invalid node size, must be 16, 32 or 64"));
+            return Err(format_err!(
+                "invalid node size ({}), must be 16, 32 or 64",
+                node_size
+            ));
         }
 
         let mut a = PedersenAlgorithm::new();
@@ -287,7 +290,8 @@ impl Graph for BucketGraph {
                         assert!(out <= node);
 
                         out
-                    }).collect();
+                    })
+                    .collect();
 
                 parents.sort_unstable();
 

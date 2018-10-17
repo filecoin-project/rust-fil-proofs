@@ -91,7 +91,8 @@ mod tests {
             bytes_into_fr::<Bls12>(
                 data_at_node(&original_data, challenge, lambda)
                     .expect("failed to read original data"),
-            ).unwrap(),
+            )
+            .unwrap(),
         );
 
         let sp = drgporep::SetupParams {
@@ -171,7 +172,8 @@ mod tests {
             data_root,
             replica_id,
             degree,
-        ).expect("failed to synthesize circuit");
+        )
+        .expect("failed to synthesize circuit");
 
         if !cs.is_satisfied() {
             println!(
@@ -218,7 +220,8 @@ mod tests {
             Some(Fr::rand(rng)),
             Some(Fr::rand(rng)),
             m,
-        ).expect("failed to synthesize circuit");
+        )
+        .expect("failed to synthesize circuit");
 
         assert_eq!(cs.num_inputs(), 10, "wrong number of inputs");
         assert_eq!(cs.num_constraints(), 290285, "wrong number of constraints");
@@ -262,7 +265,8 @@ mod tests {
             &public_params.vanilla_params,
             replica_id.as_slice(),
             data.as_mut_slice(),
-        ).expect("failed to replicate");
+        )
+        .expect("failed to replicate");
 
         let replica_id_fr = bytes_into_fr::<Bls12>(replica_id.as_slice()).unwrap();
 

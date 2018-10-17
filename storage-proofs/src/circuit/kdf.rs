@@ -64,14 +64,16 @@ mod tests {
             .map(|(i, p)| {
                 let mut cs = cs.namespace(|| format!("parents {}", i));
                 bytes_into_boolean_vec(&mut cs, Some(p.as_slice()), p.len()).unwrap()
-            }).collect();
+            })
+            .collect();
         let out = kdf(
             cs.namespace(|| "kdf"),
             &params,
             id_bits.clone(),
             parents_bits.clone(),
             m,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
         assert_eq!(cs.num_constraints(), 27661);

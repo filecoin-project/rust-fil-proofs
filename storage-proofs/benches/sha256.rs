@@ -38,7 +38,8 @@ where
                     cs.namespace(|| format!("bit {}", i)),
                     *b,
                 )?))
-            }).collect::<Result<Vec<_>, SynthesisError>>()?;
+            })
+            .collect::<Result<Vec<_>, SynthesisError>>()?;
 
         let cs = cs.namespace(|| "sha256");
 
@@ -56,7 +57,8 @@ fn sha256_benchmark(c: &mut Criterion) {
             data: &vec![None; 256],
         },
         &mut rng1,
-    ).unwrap();
+    )
+    .unwrap();
 
     let params = vec![32];
 
@@ -75,7 +77,8 @@ fn sha256_benchmark(c: &mut Criterion) {
                 })
             },
             params,
-        ).with_function("circuit-32bytes-create_proof", move |b, bytes| {
+        )
+        .with_function("circuit-32bytes-create_proof", move |b, bytes| {
             b.iter(|| {
                 let mut rng = rng1.clone();
                 let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
@@ -86,11 +89,13 @@ fn sha256_benchmark(c: &mut Criterion) {
                     },
                     &groth_params,
                     &mut rng,
-                ).unwrap();
+                )
+                .unwrap();
 
                 black_box(proof)
             });
-        }).with_function("circuit-32bytes-synthesize_circuit", move |b, bytes| {
+        })
+        .with_function("circuit-32bytes-synthesize_circuit", move |b, bytes| {
             b.iter(|| {
                 let mut cs = BenchCS::<Bls12>::new();
 
@@ -99,12 +104,14 @@ fn sha256_benchmark(c: &mut Criterion) {
 
                 Sha256Example {
                     data: data.as_slice(),
-                }.synthesize(&mut cs)
+                }
+                .synthesize(&mut cs)
                 .unwrap();
 
                 black_box(cs)
             });
-        }).sample_size(20),
+        })
+        .sample_size(20),
     );
 }
 

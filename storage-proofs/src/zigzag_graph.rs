@@ -196,7 +196,8 @@ impl<'a, G: Graph> ZigZag for ZigZagGraph<G> {
                 } else {
                     None
                 }
-            }).collect()
+            })
+            .collect()
     }
 
     #[inline]

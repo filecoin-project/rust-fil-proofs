@@ -106,7 +106,8 @@ mod tests {
             &transformed_params,
             replica_id.as_slice(),
             data_copy.as_mut_slice(),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(data, decoded_data);
     }

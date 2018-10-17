@@ -49,7 +49,8 @@ pub fn pedersen_compression(bytes: &mut Vec<u8>) {
         Personalization::NoteCommitment,
         bits.iter().take(bytes.len() * 8),
         &JJ_PARAMS,
-    ).into_xy();
+    )
+    .into_xy();
     let x: FrRepr = x.into();
 
     bytes.truncate(0);

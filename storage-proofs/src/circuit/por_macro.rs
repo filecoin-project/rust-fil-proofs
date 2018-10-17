@@ -159,7 +159,8 @@ macro_rules! implement_por {
                             pedersen_hash::Personalization::MerkleTree(i),
                             &preimage,
                             params,
-                        )?.get_x()
+                        )?
+                        .get_x()
                         .clone(); // Injective encoding
 
                         auth_path_bits.push(cur_is_right);

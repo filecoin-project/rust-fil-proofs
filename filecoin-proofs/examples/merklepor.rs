@@ -94,7 +94,8 @@ impl Example<Bls12> for MerklePorApp {
                 root: None,
             },
             rng,
-        ).unwrap()
+        )
+        .unwrap()
     }
 
     fn samples() -> usize {
@@ -158,7 +159,8 @@ impl Example<Bls12> for MerklePorApp {
                 let mut input = vec![*values[j].unwrap()];
                 input.extend(packed_auth_path);
                 input
-            }).collect();
+            })
+            .collect();
 
         // add the root as the last one
         expected_inputs.push(self.root);

@@ -150,7 +150,8 @@ mod tests {
 
         let leaf = bytes_into_fr::<Bls12>(
             data_at_node(data.as_slice(), pub_inputs.challenge, pub_params.lambda).unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
 
         let priv_inputs = PrivateInputs { tree: &tree, leaf };
 
@@ -230,7 +231,8 @@ mod tests {
 
         let leaf = bytes_into_fr::<Bls12>(
             data_at_node(data.as_slice(), pub_inputs.challenge, pub_params.lambda).unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
 
         let priv_inputs = PrivateInputs { tree: &tree, leaf };
 

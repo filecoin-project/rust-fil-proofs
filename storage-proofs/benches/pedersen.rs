@@ -35,7 +35,8 @@ impl<'a, E: JubjubEngine> Circuit<E> for PedersenExample<'a, E> {
                     cs.namespace(|| format!("bit {}", i)),
                     *b,
                 )?))
-            }).collect::<Result<Vec<_>, SynthesisError>>()?;
+            })
+            .collect::<Result<Vec<_>, SynthesisError>>()?;
 
         let cs = cs.namespace(|| "pedersen");
         let res = circuit::pedersen::pedersen_compression_num(cs, self.params, &data)?;
@@ -62,7 +63,8 @@ fn pedersen_benchmark(c: &mut Criterion) {
             data: &vec![None; 256],
         },
         &mut rng1,
-    ).unwrap();
+    )
+    .unwrap();
 
     let params = vec![32];
 
@@ -77,7 +79,8 @@ fn pedersen_benchmark(c: &mut Criterion) {
                 b.iter(|| black_box(pedersen::pedersen_compression(&mut data)))
             },
             params,
-        ).with_function("circuit-32bytes-create_proof", move |b, bytes| {
+        )
+        .with_function("circuit-32bytes-create_proof", move |b, bytes| {
             b.iter(|| {
                 let mut rng = rng1.clone();
                 let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
@@ -89,11 +92,13 @@ fn pedersen_benchmark(c: &mut Criterion) {
                     },
                     &groth_params,
                     &mut rng,
-                ).unwrap();
+                )
+                .unwrap();
 
                 black_box(proof)
             });
-        }).with_function("circuit-32bytes-synthesize_circuit", move |b, bytes| {
+        })
+        .with_function("circuit-32bytes-synthesize_circuit", move |b, bytes| {
             b.iter(|| {
                 let mut cs = BenchCS::<Bls12>::new();
 
@@ -103,12 +108,14 @@ fn pedersen_benchmark(c: &mut Criterion) {
                 PedersenExample {
                     params: &jubjub_params2,
                     data: data.as_slice(),
-                }.synthesize(&mut cs)
+                }
+                .synthesize(&mut cs)
                 .unwrap();
 
                 black_box(cs)
             });
-        }).sample_size(20),
+        })
+        .sample_size(20),
     );
 }
 

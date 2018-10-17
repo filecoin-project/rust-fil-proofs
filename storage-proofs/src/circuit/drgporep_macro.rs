@@ -54,7 +54,8 @@ macro_rules! implement_drgporep {
                     data_root,
                     replica_id,
                     degree,
-                }.synthesize(&mut cs)
+                }
+                .synthesize(&mut cs)
             }
         }
 
@@ -147,7 +148,8 @@ macro_rules! implement_drgporep {
                         input.extend(por_inputs);
 
                         input
-                    }).collect::<Vec<Vec<_>>>()
+                    })
+                    .collect::<Vec<Vec<_>>>()
                     .concat()
             }
 
@@ -182,7 +184,8 @@ macro_rules! implement_drgporep {
                             .iter()
                             .map(|(_, parent)| Some(parent.data))
                             .collect()
-                    }).collect();
+                    })
+                    .collect();
 
                 let replica_parents_paths: Vec<Vec<_>> = proof
                     .replica_parents
@@ -193,7 +196,8 @@ macro_rules! implement_drgporep {
                             .map(|(_, parent)| parent.proof.as_options())
                             .collect();
                         p
-                    }).collect();
+                    })
+                    .collect();
 
                 let data_nodes = proof.nodes.iter().map(|node| Some(node.data)).collect();
 
@@ -377,7 +381,8 @@ macro_rules! implement_drgporep {
                                         v.push(boolean::Boolean::Constant(false));
                                     }
                                     Ok(v)
-                                }).collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?
+                                })
+                                .collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?
                         };
 
                         // generate the encryption key

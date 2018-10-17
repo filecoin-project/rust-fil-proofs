@@ -36,14 +36,16 @@ fn preprocessing_benchmark(c: &mut Criterion) {
                 })
             },
             vec![128, 256, 512, 256_000, 512_000, 1024_000, 2048_000],
-        ).with_function("write_padded + unpadded", |b, size| {
+        )
+        .with_function("write_padded + unpadded", |b, size| {
             let data = &random_data(*size);
             b.iter(|| {
                 let mut tmpfile: File = tempfile::tempfile().unwrap();
 
                 write_padded_unpadded_bench(&mut tmpfile, &data);
             })
-        }).sample_size(2)
+        })
+        .sample_size(2)
         .throughput(|s| Throughput::Bytes(*s as u32))
         .warm_up_time(Duration::from_secs(1)),
     );

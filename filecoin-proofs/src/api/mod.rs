@@ -157,7 +157,8 @@ pub unsafe extern "C" fn get_unsealed_range(
                 let msg = CString::new(format!(
                     "expected to unseal {}-bytes, but unsealed {}-bytes",
                     num_bytes, num_bytes_unsealed
-                )).unwrap();
+                ))
+                .unwrap();
                 response.error_msg = msg.as_ptr();
                 mem::forget(msg);
             }
@@ -224,7 +225,8 @@ pub unsafe extern "C" fn get_unsealed(
                 let msg = CString::new(format!(
                     "expected to unseal {}-bytes, but unsealed {}-bytes",
                     sector_bytes, num_bytes
-                )).unwrap();
+                ))
+                .unwrap();
                 response.error_msg = msg.as_ptr();
                 mem::forget(msg);
             }
@@ -423,7 +425,8 @@ mod tests {
         let spawned = (0..threads)
             .map(|_| {
                 thread::spawn(|| seal_unsealed_range_roundtrip_aux(ConfiguredStore::ProofTest, 0))
-            }).collect::<Vec<_>>();
+            })
+            .collect::<Vec<_>>();
 
         for thread in spawned {
             thread.join().expect("test thread panicked");

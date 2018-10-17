@@ -187,7 +187,8 @@ pub unsafe extern "C" fn write_and_preprocess(
                 let msg = CString::new(format!(
                     "expected to write {}-bytes, but wrote {}-bytes",
                     data_len as u64, num_data_bytes_written
-                )).unwrap();
+                ))
+                .unwrap();
                 response.error_msg = msg.as_ptr();
                 mem::forget(msg);
             }
