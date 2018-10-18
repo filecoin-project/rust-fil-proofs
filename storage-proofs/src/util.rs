@@ -13,11 +13,7 @@ pub fn data_at_node(data: &[u8], v: usize, node_size: usize) -> error::Result<&[
     let offset = data_at_node_offset(v, node_size);
 
     if offset + node_size > data.len() {
-        return Err(format_err!(
-            "access out of bounds: {} > {}",
-            offset + node_size,
-            data.len()
-        ));
+        return Err(error::Error::OutOfBounds(offset + node_size, data.len()));
     }
 
     Ok(&data[offset..offset + node_size])

@@ -1,9 +1,7 @@
-use crypto::pedersen::pedersen_md_no_padding;
 use drgporep::{self, DrgPoRep};
 use drgraph::Graph;
 use error::Result;
-use fr32::{bytes_into_fr, fr_into_bytes, frs_into_bytes};
-use pairing::bls12_381::{Bls12, Fr};
+use hasher::{Domain, HashFunction, Hasher};
 use parameter_cache::ParameterSetIdentifier;
 use porep::{self, PoRep};
 use proof::ProofScheme;
@@ -15,24 +13,23 @@ pub struct SetupParams {
 }
 
 #[derive(Debug, Clone)]
-pub struct PublicParams<G: Graph>
+pub struct PublicParams<H, G>
 where
-    G: ParameterSetIdentifier,
+    H: Hasher,
+    G: Graph<H> + ParameterSetIdentifier,
 {
-    pub drg_porep_public_params: drgporep::PublicParams<G>,
+    pub drg_porep_public_params: drgporep::PublicParams<H, G>,
     pub layers: usize,
 }
 
-pub type CommRStar = Fr;
-
-pub struct Tau {
-    pub layer_taus: Vec<porep::Tau>,
-    pub comm_r_star: CommRStar,
+pub struct Tau<T: Domain> {
+    pub layer_taus: Vec<porep::Tau<T>>,
+    pub comm_r_star: T,
 }
 
-impl Tau {
+impl<T: Domain> Tau<T> {
     /// Return a single porep::Tau with the initial data and final replica commitments of layer_taus.
-    pub fn simplify(&self) -> porep::Tau {
+    pub fn simplify(&self) -> porep::Tau<T> {
         porep::Tau {
             comm_r: self.layer_taus[self.layer_taus.len() - 1].comm_r,
             comm_d: self.layer_taus[0].comm_d,
@@ -40,9 +37,10 @@ impl Tau {
     }
 }
 
-impl<G> ParameterSetIdentifier for PublicParams<G>
+impl<H, G> ParameterSetIdentifier for PublicParams<H, G>
 where
-    G: Graph + ParameterSetIdentifier,
+    H: Hasher,
+    G: Graph<H> + ParameterSetIdentifier,
 {
     fn parameter_set_identifier(&self) -> String {
         format!(
@@ -53,11 +51,12 @@ where
     }
 }
 
-impl<'a, G: Graph> From<&'a PublicParams<G>> for PublicParams<G>
+impl<'a, H, G> From<&'a PublicParams<H, G>> for PublicParams<H, G>
 where
-    G: ParameterSetIdentifier,
+    H: Hasher,
+    G: Graph<H> + ParameterSetIdentifier,
 {
-    fn from(pp: &PublicParams<G>) -> PublicParams<G> {
+    fn from(pp: &PublicParams<H, G>) -> PublicParams<H, G> {
         PublicParams {
             drg_porep_public_params: pp.drg_porep_public_params.clone(),
             layers: pp.layers,
@@ -65,32 +64,35 @@ where
     }
 }
 
-pub type ReplicaParents = Vec<(usize, DataProof)>;
-pub type EncodingProof = drgporep::Proof;
-pub type DataProof = drgporep::DataProof;
+pub type ReplicaParents<H> = Vec<(usize, DataProof<H>)>;
+pub type EncodingProof<H> = drgporep::Proof<H>;
+pub type DataProof<H> = drgporep::DataProof<H>;
 
 #[derive(Debug)]
-pub struct PublicInputs {
-    pub replica_id: Fr,
+pub struct PublicInputs<T: Domain> {
+    pub replica_id: T,
     pub challenges: Vec<usize>,
-    pub tau: Option<porep::Tau>,
-    pub comm_r_star: Fr,
+    pub tau: Option<porep::Tau<T>>,
+    pub comm_r_star: T,
 }
 
-pub struct PrivateInputs<'a> {
+pub struct PrivateInputs<'a, H: Hasher> {
     pub replica: &'a [u8],
-    pub aux: Vec<porep::ProverAux>,
-    pub tau: Vec<porep::Tau>,
+    pub aux: Vec<porep::ProverAux<H>>,
+    pub tau: Vec<porep::Tau<H::Domain>>,
 }
 
 #[derive(Debug, Clone)]
-pub struct Proof {
-    pub encoding_proofs: Vec<EncodingProof>,
-    pub tau: Vec<porep::Tau>,
+pub struct Proof<H: Hasher> {
+    pub encoding_proofs: Vec<EncodingProof<H>>,
+    pub tau: Vec<porep::Tau<H::Domain>>,
 }
 
-impl Proof {
-    pub fn new(encoding_proofs: Vec<EncodingProof>, tau: Vec<porep::Tau>) -> Proof {
+impl<H: Hasher> Proof<H> {
+    pub fn new(
+        encoding_proofs: Vec<EncodingProof<H>>,
+        tau: Vec<porep::Tau<H::Domain>>,
+    ) -> Proof<H> {
         Proof {
             encoding_proofs,
             tau,
@@ -98,42 +100,46 @@ impl Proof {
     }
 }
 
-pub trait Layerable: Graph {}
+pub trait Layerable<H: Hasher>: Graph<H> {}
 
 /// Layers provides default implementations of methods required to handle proof and verification
 /// of layered proofs of replication. Implementations must provide transform and invert_transform methods.
 pub trait Layers {
-    type Graph: Layerable + ParameterSetIdentifier;
+    type Hasher: Hasher;
+    type Graph: Layerable<Self::Hasher> + ParameterSetIdentifier;
 
     /// transform a layer's public parameters, returning new public parameters corresponding to the next layer.
     fn transform(
-        pp: &drgporep::PublicParams<Self::Graph>,
+        pp: &drgporep::PublicParams<Self::Hasher, Self::Graph>,
         layer: usize,
         layers: usize,
-    ) -> drgporep::PublicParams<Self::Graph>;
+    ) -> drgporep::PublicParams<Self::Hasher, Self::Graph>;
 
     /// transform a layer's public parameters, returning new public parameters corresponding to the previous layer.
     fn invert_transform(
-        pp: &drgporep::PublicParams<Self::Graph>,
+        pp: &drgporep::PublicParams<Self::Hasher, Self::Graph>,
         layer: usize,
         layers: usize,
-    ) -> drgporep::PublicParams<Self::Graph>;
+    ) -> drgporep::PublicParams<Self::Hasher, Self::Graph>;
 
     fn prove_layers<'a>(
-        pp: &drgporep::PublicParams<Self::Graph>,
-        pub_inputs: &PublicInputs,
-        priv_inputs: &drgporep::PrivateInputs,
-        tau: Vec<porep::Tau>,
-        aux: Vec<porep::ProverAux>,
+        pp: &drgporep::PublicParams<Self::Hasher, Self::Graph>,
+        pub_inputs: &PublicInputs<<Self::Hasher as Hasher>::Domain>,
+        priv_inputs: &drgporep::PrivateInputs<Self::Hasher>,
+        tau: Vec<porep::Tau<<Self::Hasher as Hasher>::Domain>>,
+        aux: Vec<porep::ProverAux<Self::Hasher>>,
         layers: usize,
         total_layers: usize,
-        proofs: &'a mut Vec<EncodingProof>,
-    ) -> Result<&'a Vec<EncodingProof>> {
+        proofs: &'a mut Vec<EncodingProof<Self::Hasher>>,
+    ) -> Result<&'a Vec<EncodingProof<Self::Hasher>>> {
         assert!(layers > 0);
 
         let mut scratch = priv_inputs.replica.to_vec().clone();
-        let replica_id = fr_into_bytes::<Bls12>(&pub_inputs.replica_id);
-        <DrgPoRep<Self::Graph> as PoRep>::replicate(pp, &replica_id, scratch.as_mut_slice())?;
+        <DrgPoRep<Self::Hasher, Self::Graph> as PoRep<<Self::Hasher as Hasher>::Domain>>::replicate(
+            pp,
+            &pub_inputs.replica_id,
+            scratch.as_mut_slice(),
+        )?;
 
         let new_priv_inputs = drgporep::PrivateInputs {
             replica: scratch.as_slice(),
@@ -167,10 +173,10 @@ pub trait Layers {
     }
 
     fn extract_and_invert_transform_layers<'a>(
-        drgpp: &drgporep::PublicParams<Self::Graph>,
+        drgpp: &drgporep::PublicParams<Self::Hasher, Self::Graph>,
         layer: usize,
         layers: usize,
-        replica_id: &[u8],
+        replica_id: &<Self::Hasher as Hasher>::Domain,
         data: &'a mut [u8],
     ) -> Result<()> {
         assert!(layers > 0);
@@ -196,13 +202,13 @@ pub trait Layers {
     }
 
     fn transform_and_replicate_layers(
-        drgpp: &drgporep::PublicParams<Self::Graph>,
+        drgpp: &drgporep::PublicParams<Self::Hasher, Self::Graph>,
         layer: usize,
         layers: usize,
-        replica_id: &[u8],
+        replica_id: &<Self::Hasher as Hasher>::Domain,
         data: &mut [u8],
-        taus: &mut Vec<porep::Tau>,
-        auxs: &mut Vec<porep::ProverAux>,
+        taus: &mut Vec<porep::Tau<<Self::Hasher as Hasher>::Domain>>,
+        auxs: &mut Vec<porep::ProverAux<Self::Hasher>>,
     ) -> Result<()> {
         assert!(layers > 0);
         let (tau, aux) = DrgPoRep::replicate(drgpp, replica_id, data).unwrap();
@@ -227,11 +233,11 @@ pub trait Layers {
 }
 
 impl<'a, L: Layers> ProofScheme<'a> for L {
-    type PublicParams = PublicParams<L::Graph>;
+    type PublicParams = PublicParams<L::Hasher, L::Graph>;
     type SetupParams = SetupParams;
-    type PublicInputs = PublicInputs;
-    type PrivateInputs = PrivateInputs<'a>;
-    type Proof = Proof;
+    type PublicInputs = PublicInputs<<L::Hasher as Hasher>::Domain>;
+    type PrivateInputs = PrivateInputs<'a, L::Hasher>;
+    type Proof = Proof<L::Hasher>;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
         let dp_sp = DrgPoRep::setup(&sp.drg_porep_setup_params)?;
@@ -243,10 +249,10 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         Ok(pp)
     }
 
-    fn prove(
-        pub_params: &Self::PublicParams,
-        pub_inputs: &Self::PublicInputs,
-        priv_inputs: &Self::PrivateInputs,
+    fn prove<'b>(
+        pub_params: &'b Self::PublicParams,
+        pub_inputs: &'b Self::PublicInputs,
+        priv_inputs: &'b Self::PrivateInputs,
     ) -> Result<Self::Proof> {
         let drg_priv_inputs = drgporep::PrivateInputs {
             aux: &priv_inputs.aux[0].clone(),
@@ -289,7 +295,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         let mut comm_rs = Vec::new();
 
         for (layer, proof_layer) in proof.encoding_proofs.iter().enumerate() {
-            comm_rs.push(proof.tau[layer].comm_r.0);
+            comm_rs.push(proof.tau[layer].comm_r);
 
             let new_pub_inputs = drgporep::PublicInputs {
                 replica_id: pub_inputs.replica_id,
@@ -333,28 +339,32 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
                 return Ok(false);
             }
         }
-        let crs = comm_r_star(&pub_inputs.replica_id, &comm_rs);
+        let crs = comm_r_star::<L::Hasher>(&pub_inputs.replica_id, &comm_rs)?;
 
         Ok(crs == pub_inputs.comm_r_star)
     }
 }
 
-fn comm_r_star(replica_id: &Fr, comm_rs: &[Fr]) -> Fr {
+fn comm_r_star<H: Hasher>(replica_id: &H::Domain, comm_rs: &[H::Domain]) -> Result<H::Domain> {
     let l = (comm_rs.len() + 1) * 32;
     let mut bytes = vec![0; l];
-    bytes[0..32].copy_from_slice(&fr_into_bytes::<Bls12>(replica_id));
-    bytes[32..l].copy_from_slice(&frs_into_bytes::<Bls12>(comm_rs));
 
-    pedersen_md_no_padding(&bytes)
+    replica_id.write_bytes(&mut bytes[0..32])?;
+
+    for (i, comm_r) in comm_rs.iter().enumerate() {
+        comm_r.write_bytes(&mut bytes[(i + 1) * 32..(i + 2) * 32])?;
+    }
+
+    Ok(H::Function::hash(&bytes))
 }
 
-impl<'a, 'c, L: Layers> PoRep<'a> for L {
-    type Tau = Tau;
-    type ProverAux = Vec<porep::ProverAux>;
+impl<'a, 'c, L: Layers> PoRep<'a, <L::Hasher as Hasher>::Domain> for L {
+    type Tau = Tau<<L::Hasher as Hasher>::Domain>;
+    type ProverAux = Vec<porep::ProverAux<L::Hasher>>;
 
     fn replicate(
-        pp: &'a PublicParams<L::Graph>,
-        replica_id: &[u8],
+        pp: &'a PublicParams<L::Hasher, L::Graph>,
+        replica_id: &<L::Hasher as Hasher>::Domain,
         data: &mut [u8],
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let mut taus = Vec::with_capacity(pp.layers);
@@ -370,8 +380,8 @@ impl<'a, 'c, L: Layers> PoRep<'a> for L {
             &mut auxs,
         )?;
 
-        let comm_rs: Vec<Fr> = taus.iter().map(|tau| tau.comm_r.0).collect();
-        let crs = comm_r_star(&bytes_into_fr::<Bls12>(replica_id)?, &comm_rs);
+        let comm_rs: Vec<_> = taus.iter().map(|tau| tau.comm_r).collect();
+        let crs = comm_r_star::<L::Hasher>(replica_id, &comm_rs)?;
         let tau = Tau {
             layer_taus: taus,
             comm_r_star: crs,
@@ -380,8 +390,8 @@ impl<'a, 'c, L: Layers> PoRep<'a> for L {
     }
 
     fn extract_all<'b>(
-        pp: &'b PublicParams<L::Graph>,
-        replica_id: &'b [u8],
+        pp: &'b PublicParams<L::Hasher, L::Graph>,
+        replica_id: &'b <L::Hasher as Hasher>::Domain,
         data: &'b [u8],
     ) -> Result<Vec<u8>> {
         let mut data = data.to_vec();
@@ -398,8 +408,8 @@ impl<'a, 'c, L: Layers> PoRep<'a> for L {
     }
 
     fn extract(
-        _pp: &PublicParams<L::Graph>,
-        _replica_id: &[u8],
+        _pp: &PublicParams<L::Hasher, L::Graph>,
+        _replica_id: &<L::Hasher as Hasher>::Domain,
         _data: &[u8],
         _node: usize,
     ) -> Result<Vec<u8>> {

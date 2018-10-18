@@ -1,6 +1,9 @@
 #[macro_export]
 macro_rules! implement_por {
     ($name:ident, $compound_name:ident, $string_name:expr, $private:expr) => {
+        use hasher::Hasher;
+        use std::marker::PhantomData;
+
         pub struct $name<'a, E: JubjubEngine> {
             params: &'a E::Params,
             value: Option<E::Fr>,
@@ -8,7 +11,9 @@ macro_rules! implement_por {
             root: Option<E::Fr>,
         }
 
-        pub struct $compound_name {}
+        pub struct $compound_name<H: Hasher> {
+            _h: PhantomData<H>,
+        }
 
         pub fn challenge_into_auth_path_bits(challenge: usize, leaves: usize) -> Vec<bool> {
             let height = graph_height(leaves);
@@ -21,8 +26,8 @@ macro_rules! implement_por {
             bits
         }
 
-        impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParameters<E, C, P>
-            for $compound_name
+        impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier, H: Hasher>
+            CacheableParameters<E, C, P> for $compound_name<H>
         {
             fn cache_prefix() -> String {
                 String::from($string_name)
@@ -30,15 +35,18 @@ macro_rules! implement_por {
         }
 
         // can only implment for Bls12 because merklepor is not generic over the engine.
-        impl<'a> CompoundProof<'a, Bls12, MerklePoR, $name<'a, Bls12>> for $compound_name {
+        impl<'a, H> CompoundProof<'a, Bls12, MerklePoR<H>, $name<'a, Bls12>> for $compound_name<H>
+        where
+            H: 'a + Hasher,
+        {
             fn circuit<'b>(
-                public_inputs: &<MerklePoR as ProofScheme>::PublicInputs,
-                proof: &'b <MerklePoR as ProofScheme>::Proof,
-                _public_params: &'b <MerklePoR as ProofScheme>::PublicParams,
+                public_inputs: &<MerklePoR<H> as ProofScheme<'a>>::PublicInputs,
+                proof: &'b <MerklePoR<H> as ProofScheme<'a>>::Proof,
+                _public_params: &'b <MerklePoR<H> as ProofScheme<'a>>::PublicParams,
                 engine_params: &'a JubjubBls12,
             ) -> $name<'a, Bls12> {
                 let root = if $private {
-                    proof.proof.root.0.into()
+                    Some(proof.proof.root.clone().into())
                 } else {
                     Some(
                         public_inputs
@@ -49,15 +57,15 @@ macro_rules! implement_por {
                 };
                 $name::<Bls12> {
                     params: engine_params,
-                    value: Some(proof.data),
+                    value: Some(proof.data.clone().into()),
                     auth_path: proof.proof.as_options(),
                     root,
                 }
             }
 
             fn generate_public_inputs(
-                pub_inputs: &<MerklePoR as ProofScheme>::PublicInputs,
-                pub_params: &<MerklePoR as ProofScheme>::PublicParams,
+                pub_inputs: &<MerklePoR<H> as ProofScheme<'a>>::PublicInputs,
+                pub_params: &<MerklePoR<H> as ProofScheme<'a>>::PublicParams,
             ) -> Vec<Fr> {
                 let auth_path_bits =
                     challenge_into_auth_path_bits(pub_inputs.challenge, pub_params.leaves);

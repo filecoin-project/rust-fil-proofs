@@ -1,12 +1,14 @@
-use crypto;
-use drgraph::{MerkleProof, MerkleTree};
-use error;
-use fr32::{bytes_into_fr, fr_into_bytes};
 use pairing::bls12_381::{Bls12, Fr};
 use pairing::PrimeFieldRepr;
 use pairing::{BitIterator, PrimeField};
 use rand::Rng;
 use sapling_crypto::pedersen_hash;
+
+use crypto;
+use error;
+use fr32::{bytes_into_fr, fr_into_bytes};
+use hasher::pedersen::{PedersenDomain, PedersenFunction, PedersenHasher};
+use merkle::{MerkleProof, MerkleTree};
 
 #[macro_export]
 macro_rules! table_tests {
@@ -80,7 +82,7 @@ pub fn fake_drgpoprep_proof<R: Rng>(
     }
 
     // get commR
-    let subtree = MerkleTree::from_data(leaves);
+    let subtree = MerkleTree::<PedersenDomain, PedersenFunction>::from_data(leaves);
     let subtree_root: Fr = subtree.root().into();
     let subtree_depth = subtree.height() - 1; // .height() inludes the leaf
     let remaining_depth = tree_depth - subtree_depth;
@@ -90,7 +92,8 @@ pub fn fake_drgpoprep_proof<R: Rng>(
     // generate merkle path for challenged node and parents
     let replica_parents_paths: Vec<_> = (0..m)
         .map(|i| {
-            let subtree_proof: MerkleProof = subtree.gen_proof(i).into();
+            let subtree_proof =
+                MerkleProof::<PedersenHasher>::new_from_proof(&subtree.gen_proof(i));
             let mut subtree_path = subtree_proof.as_options();
             subtree_path.extend(remaining_path.clone());
             subtree_path
@@ -98,7 +101,8 @@ pub fn fake_drgpoprep_proof<R: Rng>(
         .collect();
 
     let replica_node_path = {
-        let subtree_proof: MerkleProof = subtree.gen_proof(challenge).into();
+        let subtree_proof =
+            MerkleProof::<PedersenHasher>::new_from_proof(&subtree.gen_proof(challenge));
         let mut subtree_path = subtree_proof.as_options();
         subtree_path.extend(&remaining_path);
         subtree_path

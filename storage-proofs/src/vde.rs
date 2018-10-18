@@ -1,19 +1,20 @@
-use crypto;
-use drgraph;
+use drgraph::Graph;
 use error::Result;
-use fr32::{bytes_into_fr, fr_into_bytes};
-use pairing::bls12_381::{Bls12, Fr};
-use pairing::{PrimeField, PrimeFieldRepr};
+use hasher::{Domain, Hasher};
 use util::{data_at_node, data_at_node_offset};
 
 /// encodes the data and overwrites the original data slice.
-pub fn encode<'a, G: drgraph::Graph>(
+pub fn encode<'a, H, G>(
     graph: &'a G,
     lambda: usize,
     sloth_iter: usize,
-    replica_id: &'a [u8],
+    replica_id: &'a H::Domain,
     data: &'a mut [u8],
-) -> Result<()> {
+) -> Result<()>
+where
+    H: Hasher,
+    G: Graph<H>,
+{
     let degree = graph.degree();
 
     // Because a node always follows all of its parents in the data,
@@ -35,66 +36,73 @@ pub fn encode<'a, G: drgraph::Graph>(
         let parents = graph.parents(node);
         assert_eq!(parents.len(), graph.degree(), "wrong number of parents");
 
-        let key = create_key(replica_id, node, &parents, data, lambda, degree)?;
+        let key = create_key::<H>(replica_id, node, &parents, data, lambda, degree)?;
         let start = data_at_node_offset(node, lambda);
         let end = start + lambda;
-        let fr = bytes_into_fr::<Bls12>(&data[start..end])?;
 
-        let encoded = &crypto::sloth::encode::<Bls12>(&key, &fr, sloth_iter);
-        encoded.into_repr().write_le(&mut data[start..end])?;
+        let node_data = H::Domain::try_from_bytes(&data[start..end])?;
+        let encoded = H::sloth_encode(&key, &node_data, sloth_iter);
+
+        encoded.write_bytes(&mut data[start..end])?;
     }
 
     Ok(())
 }
 
-pub fn decode<'a, G: drgraph::Graph>(
+pub fn decode<'a, H, G>(
     graph: &'a G,
     lambda: usize,
     sloth_iter: usize,
-    replica_id: &'a [u8],
+    replica_id: &'a H::Domain,
     data: &'a [u8],
-) -> Result<Vec<u8>> {
+) -> Result<Vec<u8>>
+where
+    H: Hasher,
+    G: Graph<H>,
+{
     // TODO: parallelize
     (0..graph.size()).fold(Ok(Vec::with_capacity(data.len())), |acc, i| {
         acc.and_then(|mut acc| {
-            acc.extend(fr_into_bytes::<Bls12>(&decode_block(
-                graph, lambda, sloth_iter, replica_id, data, i,
-            )?));
+            acc.extend(&decode_block(graph, lambda, sloth_iter, replica_id, data, i)?.into_bytes());
             Ok(acc)
         })
     })
 }
 
-pub fn decode_block<'a, G: drgraph::Graph>(
+pub fn decode_block<'a, H, G>(
     graph: &'a G,
     lambda: usize,
     sloth_iter: usize,
-    replica_id: &'a [u8],
+    replica_id: &'a H::Domain,
     data: &'a [u8],
     v: usize,
-) -> Result<Fr> {
+) -> Result<H::Domain>
+where
+    H: Hasher,
+    G: Graph<H>,
+{
     let parents = graph.parents(v);
 
-    let key = create_key(replica_id, v, &parents, data, lambda, graph.degree())?;
-    let fr = bytes_into_fr::<Bls12>(&data_at_node(data, v, lambda)?)?;
+    let key = create_key::<H>(replica_id, v, &parents, data, lambda, graph.degree())?;
+    let node_data = H::Domain::try_from_bytes(&data_at_node(data, v, lambda)?)?;
 
     // TODO: round constant
-    Ok(crypto::sloth::decode::<Bls12>(&key, &fr, sloth_iter))
+    Ok(H::sloth_decode(&key, &node_data, sloth_iter))
 }
 
-fn create_key(
-    id: &[u8],
+fn create_key<H: Hasher>(
+    id: &H::Domain,
     node: usize,
     parents: &[usize],
     data: &[u8],
     node_size: usize,
     m: usize,
-) -> Result<Fr> {
+) -> Result<H::Domain> {
     // ciphertexts will become a buffer of the layout
     // id | encodedParentNode1 | encodedParentNode1 | ...
 
     let mut ciphertexts = vec![0u8; 32 + node_size * parents.len()];
-    ciphertexts[0..32].copy_from_slice(id);
+    id.write_bytes(&mut ciphertexts[0..32])?;
 
     for (i, parent) in parents.iter().enumerate() {
         // special super shitty case
@@ -108,5 +116,5 @@ fn create_key(
         }
     }
 
-    Ok(crypto::kdf::kdf::<Bls12>(ciphertexts.as_slice(), m))
+    Ok(H::kdf(ciphertexts.as_slice(), m))
 }

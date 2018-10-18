@@ -4,11 +4,12 @@ extern crate storage_proofs;
 
 use criterion::{black_box, Criterion, ParameterizedBenchmark};
 use storage_proofs::drgraph::*;
+use storage_proofs::hasher::pedersen::*;
 
 fn drgraph(c: &mut Criterion) {
     let params: Vec<_> = vec![12, 24, 128, 1024]
         .iter()
-        .map(|n| (BucketGraph::new(*n, 6, 0, new_seed()), 2))
+        .map(|n| (BucketGraph::<PedersenHasher>::new(*n, 6, 0, new_seed()), 2))
         .collect();
     c.bench(
         "sample",

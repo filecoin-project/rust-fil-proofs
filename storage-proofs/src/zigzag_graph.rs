@@ -1,37 +1,53 @@
+use std::marker::PhantomData;
+
 use crypto::feistel;
 use drgraph::{BucketGraph, Graph};
+use hasher::Hasher;
 use layered_drgporep::Layerable;
 use parameter_cache::ParameterSetIdentifier;
 
 pub const DEFAULT_EXPANSION_DEGREE: usize = 8;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct ZigZagGraph<G: Graph>
+pub struct ZigZagGraph<H, G>
 where
-    G: 'static,
+    H: Hasher,
+    G: Graph<H> + 'static,
 {
     expansion_degree: usize,
     base_graph: G,
     pub reversed: bool,
+    _h: PhantomData<H>,
 }
 
-pub type ZigZagBucketGraph = ZigZagGraph<BucketGraph>;
+pub type ZigZagBucketGraph<H> = ZigZagGraph<H, BucketGraph<H>>;
 
-impl<'a, G: Graph> Layerable for ZigZagGraph<G> {}
+impl<'a, H, G> Layerable<H> for ZigZagGraph<H, G>
+where
+    H: Hasher,
+    G: Graph<H> + 'static,
+{
+}
 
-impl<G: Graph> ZigZagGraph<G> {
+impl<H, G> ZigZagGraph<H, G>
+where
+    H: Hasher,
+    G: Graph<H>,
+{
     pub fn new(nodes: usize, base_degree: usize, expansion_degree: usize, seed: [u32; 7]) -> Self {
         ZigZagGraph {
             base_graph: G::new(nodes, base_degree, 0, seed),
             expansion_degree,
             reversed: false,
+            _h: PhantomData,
         }
     }
 }
 
-impl<G> ParameterSetIdentifier for ZigZagGraph<G>
+impl<H, G> ParameterSetIdentifier for ZigZagGraph<H, G>
 where
-    G: Graph + ParameterSetIdentifier,
+    H: Hasher,
+    G: Graph<H> + ParameterSetIdentifier,
 {
     fn parameter_set_identifier(&self) -> String {
         format!(
@@ -43,7 +59,8 @@ where
 }
 
 pub trait ZigZag: ::std::fmt::Debug + Clone + PartialEq + Eq {
-    type BaseGraph: Graph;
+    type BaseHasher: Hasher;
+    type BaseGraph: Graph<Self::BaseHasher>;
 
     /// zigzag returns a new graph with expansion component inverted and a distinct
     /// base DRG graph -- with the direction of drg connections reversed. (i.e. from high-to-low nodes).
@@ -63,7 +80,7 @@ pub trait ZigZag: ::std::fmt::Debug + Clone + PartialEq + Eq {
     ) -> Self;
 }
 
-impl<Z: ZigZag> Graph for Z {
+impl<Z: ZigZag> Graph<Z::BaseHasher> for Z {
     fn size(&self) -> usize {
         self.base_graph().size()
     }
@@ -124,7 +141,11 @@ impl<Z: ZigZag> Graph for Z {
     }
 }
 
-impl<'a, G: Graph> ZigZagGraph<G> {
+impl<'a, H, G> ZigZagGraph<H, G>
+where
+    H: Hasher,
+    G: Graph<H>,
+{
     fn correspondent(&self, node: usize, i: usize) -> usize {
         let a = (node * self.expansion_degree) as u32 + i as u32;
         let feistel_keys = &[1, 2, 3, 4];
@@ -146,7 +167,12 @@ impl<'a, G: Graph> ZigZagGraph<G> {
     }
 }
 
-impl<'a, G: Graph> ZigZag for ZigZagGraph<G> {
+impl<'a, H, G> ZigZag for ZigZagGraph<H, G>
+where
+    H: Hasher,
+    G: Graph<H>,
+{
+    type BaseHasher = H;
     type BaseGraph = G;
 
     fn new_zigzag(
@@ -165,6 +191,7 @@ impl<'a, G: Graph> ZigZag for ZigZagGraph<G> {
             base_graph: self.base_graph.clone(),
             expansion_degree: self.expansion_degree,
             reversed: !self.reversed,
+            _h: PhantomData,
         }
     }
 
@@ -213,10 +240,13 @@ impl<'a, G: Graph> ZigZag for ZigZagGraph<G> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use drgraph::new_seed;
+
     use std::collections::HashMap;
 
-    fn assert_graph_ascending<G: Graph>(g: G) {
+    use drgraph::new_seed;
+    use hasher::PedersenHasher;
+
+    fn assert_graph_ascending<H: Hasher, G: Graph<H>>(g: G) {
         for i in 0..g.size() {
             for p in g.parents(i) {
                 if i == 0 {
@@ -228,7 +258,7 @@ mod tests {
         }
     }
 
-    fn assert_graph_descending<G: Graph>(g: G) {
+    fn assert_graph_descending<H: Hasher, G: Graph<H>>(g: G) {
         for i in 0..g.size() {
             let parents = g.parents(i);
             for p in parents {
@@ -243,7 +273,8 @@ mod tests {
 
     #[test]
     fn zigzag_graph_zigzags() {
-        let g = ZigZagBucketGraph::new(50, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
+        let g =
+            ZigZagBucketGraph::<PedersenHasher>::new(50, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
         let gz = g.zigzag();
 
         assert_graph_ascending(g);
@@ -253,7 +284,8 @@ mod tests {
     #[test]
     fn expansion() {
         // We need a graph.
-        let g = ZigZagBucketGraph::new(25, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
+        let g =
+            ZigZagBucketGraph::<PedersenHasher>::new(25, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
 
         // We're going to fully realize the expansion-graph component, in a HashMap.
         let mut gcache: HashMap<usize, Vec<usize>> = HashMap::new();

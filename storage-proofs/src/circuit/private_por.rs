@@ -1,13 +1,14 @@
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
+use pairing::bls12_381::{Bls12, Fr};
+use sapling_crypto::circuit::{boolean, multipack, num, pedersen_hash};
+use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
+
 use circuit::constraint;
 use compound_proof::CompoundProof;
 use drgraph::graph_height;
 use merklepor::MerklePoR;
-use pairing::bls12_381::{Bls12, Fr};
 use parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use proof::ProofScheme;
-use sapling_crypto::circuit::{boolean, multipack, num, pedersen_hash};
-use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 
 /// PrivatePoRCircuit is just like PorCircuit, except its root is not expected
 /// as a public input.
@@ -21,16 +22,19 @@ implement_por!(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use pairing::Field;
+    use rand::{Rng, SeedableRng, XorShiftRng};
+    use sapling_crypto::circuit::multipack;
+    use sapling_crypto::jubjub::JubjubBls12;
+
     use circuit::test::*;
     use compound_proof;
     use drgraph::{new_seed, BucketGraph, Graph};
     use fr32::{bytes_into_fr, fr_into_bytes};
+    use hasher::pedersen::*;
     use merklepor;
-    use pairing::Field;
     use proof::ProofScheme;
-    use rand::{Rng, SeedableRng, XorShiftRng};
-    use sapling_crypto::circuit::multipack;
-    use sapling_crypto::jubjub::JubjubBls12;
     use util::data_at_node;
 
     #[test]
@@ -42,7 +46,7 @@ mod tests {
         let data: Vec<u8> = (0..leaves)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
-        let graph = BucketGraph::new(leaves, 16, 0, new_seed());
+        let graph = BucketGraph::<PedersenHasher>::new(leaves, 16, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
 
         for i in 0..3 {
@@ -55,11 +59,11 @@ mod tests {
                 vanilla_params: &merklepor::SetupParams { lambda, leaves },
                 engine_params: &JubjubBls12::new(),
             };
-            let public_params = PrivatePoRCompound::setup(&setup_params).expect("setup failed");
+            let public_params =
+                PrivatePoRCompound::<PedersenHasher>::setup(&setup_params).expect("setup failed");
 
-            let private_inputs = merklepor::PrivateInputs {
-                tree: &tree,
-                leaf: bytes_into_fr::<Bls12>(
+            let private_inputs = merklepor::PrivateInputs::<PedersenHasher>::new(
+                bytes_into_fr::<Bls12>(
                     data_at_node(
                         data.as_slice(),
                         public_inputs.challenge,
@@ -67,18 +71,27 @@ mod tests {
                     )
                     .unwrap(),
                 )
-                .expect("failed to create Fr from node data"),
-            };
+                .expect("failed to create Fr from node data")
+                .into(),
+                &tree,
+            );
 
-            let proof = PrivatePoRCompound::prove(&public_params, &public_inputs, &private_inputs)
-                .expect("failed while proving");
+            let proof = PrivatePoRCompound::<PedersenHasher>::prove(
+                &public_params,
+                &public_inputs,
+                &private_inputs,
+            )
+            .expect("failed while proving");
 
-            let verified =
-                PrivatePoRCompound::verify(&public_params.vanilla_params, &public_inputs, proof)
-                    .expect("failed while verifying");
+            let verified = PrivatePoRCompound::<PedersenHasher>::verify(
+                &public_params.vanilla_params,
+                &public_inputs,
+                proof,
+            )
+            .expect("failed while verifying");
             assert!(verified);
 
-            let (circuit, inputs) = PrivatePoRCompound::circuit_for_test(
+            let (circuit, inputs) = PrivatePoRCompound::<PedersenHasher>::circuit_for_test(
                 &public_params,
                 &public_inputs,
                 &private_inputs,
@@ -107,7 +120,7 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
                 .collect();
 
-            let graph = BucketGraph::new(leaves, 16, 0, new_seed());
+            let graph = BucketGraph::<PedersenHasher>::new(leaves, 16, 0, new_seed());
             let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
 
             // -- MerklePoR
@@ -118,21 +131,27 @@ mod tests {
                 commitment: None,
             };
 
-            let priv_inputs = merklepor::PrivateInputs {
-                tree: &tree,
-                leaf: bytes_into_fr::<Bls12>(
+            let priv_inputs = merklepor::PrivateInputs::<PedersenHasher>::new(
+                bytes_into_fr::<Bls12>(
                     data_at_node(data.as_slice(), pub_inputs.challenge, pub_params.lambda).unwrap(),
                 )
-                .unwrap(),
-            };
+                .unwrap()
+                .into(),
+                &tree,
+            );
 
             // create a non circuit proof
-            let proof =
-                merklepor::MerklePoR::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+            let proof = merklepor::MerklePoR::<PedersenHasher>::prove(
+                &pub_params,
+                &pub_inputs,
+                &priv_inputs,
+            )
+            .unwrap();
 
             // make sure it verifies
             assert!(
-                merklepor::MerklePoR::verify(&pub_params, &pub_inputs, &proof).unwrap(),
+                merklepor::MerklePoR::<PedersenHasher>::verify(&pub_params, &pub_inputs, &proof)
+                    .unwrap(),
                 "failed to verify merklepor proof"
             );
 
@@ -142,7 +161,7 @@ mod tests {
 
             let por = PrivatePoRCircuit::<Bls12> {
                 params,
-                value: Some(proof.data),
+                value: Some(proof.data.into()),
                 auth_path: proof.proof.as_options(),
                 root: Some(tree.root().into()),
             };

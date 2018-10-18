@@ -1,30 +1,58 @@
-use merkle_light::hash::{Algorithm, Hashable};
-use sha2::{Digest, Sha256};
 use std::fmt;
-use std::hash::Hasher;
+use std::hash::Hasher as StdHasher;
+
+use merkle_light::hash::{Algorithm, Hashable};
+use pairing::bls12_381::Fr;
+use rand::{Rand, Rng};
+use sha2::{Digest, Sha256};
+
+use super::{Domain, HashFunction, Hasher};
+use error::*;
+
+#[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
+pub struct Sha256Hasher {}
+
+impl Hasher for Sha256Hasher {
+    type Domain = Sha256Domain;
+    type Function = Sha256Function;
+
+    fn kdf(_data: &[u8], _m: usize) -> Self::Domain {
+        unimplemented!()
+    }
+
+    fn sloth_encode(
+        _key: &Self::Domain,
+        _ciphertext: &Self::Domain,
+        _rounds: usize,
+    ) -> Self::Domain {
+        unimplemented!()
+    }
+
+    fn sloth_decode(
+        _key: &Self::Domain,
+        _ciphertext: &Self::Domain,
+        _rounds: usize,
+    ) -> Self::Domain {
+        unimplemented!()
+    }
+}
 
 #[derive(Clone)]
-pub struct SHA256Algorithm(Sha256);
+pub struct Sha256Function(Sha256);
 
-impl SHA256Algorithm {
-    pub fn new() -> SHA256Algorithm {
-        SHA256Algorithm(Sha256::new())
+impl Default for Sha256Function {
+    fn default() -> Sha256Function {
+        Sha256Function(Sha256::new())
     }
 }
 
-impl Default for SHA256Algorithm {
-    fn default() -> SHA256Algorithm {
-        SHA256Algorithm::new()
-    }
-}
-
-impl fmt::Debug for SHA256Algorithm {
+impl fmt::Debug for Sha256Function {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "SHA256Algorithm")
+        write!(f, "Sha256Function")
     }
 }
 
-impl Hasher for SHA256Algorithm {
+impl StdHasher for Sha256Function {
     #[inline]
     fn write(&mut self, msg: &[u8]) {
         self.0.input(msg)
@@ -32,18 +60,86 @@ impl Hasher for SHA256Algorithm {
 
     #[inline]
     fn finish(&self) -> u64 {
-        unreachable!("unused by Algorithm -- should never be called")
+        unreachable!("unused by Function -- should never be called")
     }
 }
 
-pub type SHA256Hash = [u8; 32];
+#[derive(Copy, Clone, PartialEq, Eq, Debug, PartialOrd, Ord, Default)]
+pub struct Sha256Domain(pub [u8; 32]);
 
-impl Algorithm<SHA256Hash> for SHA256Algorithm {
+impl Rand for Sha256Domain {
+    fn rand<R: Rng>(rng: &mut R) -> Self {
+        Sha256Domain(rng.gen())
+    }
+}
+
+impl AsRef<[u8]> for Sha256Domain {
+    fn as_ref(&self) -> &[u8] {
+        &self.0[..]
+    }
+}
+
+impl Hashable<Sha256Function> for Sha256Domain {
+    fn hash(&self, state: &mut Sha256Function) {
+        state.write(self.as_ref())
+    }
+}
+
+impl From<Fr> for Sha256Domain {
+    fn from(_val: Fr) -> Self {
+        unimplemented!()
+    }
+}
+impl From<Sha256Domain> for Fr {
+    fn from(_val: Sha256Domain) -> Self {
+        unimplemented!()
+    }
+}
+
+impl Domain for Sha256Domain {
+    fn serialize(&self) -> Vec<u8> {
+        self.0.to_vec()
+    }
+
+    fn into_bytes(&self) -> Vec<u8> {
+        self.0.to_vec()
+    }
+
+    fn try_from_bytes(raw: &[u8]) -> Result<Self> {
+        if raw.len() != 32 {
+            return Err(Error::InvalidInputSize);
+        }
+        let mut res = Sha256Domain::default();
+        res.0.copy_from_slice(&raw[0..32]);
+        Ok(res)
+    }
+
+    fn write_bytes(&self, dest: &mut [u8]) -> Result<()> {
+        if dest.len() < 32 {
+            return Err(Error::InvalidInputSize);
+        }
+        dest[0..32].copy_from_slice(&self.0[..]);
+        Ok(())
+    }
+}
+
+impl HashFunction<Sha256Domain> for Sha256Function {
+    fn hash(data: &[u8]) -> Sha256Domain {
+        let mut hasher = Sha256::new();
+        hasher.input(data);
+        let mut res = Sha256Domain::default();
+        res.0.copy_from_slice(&hasher.result()[..]);
+
+        res
+    }
+}
+
+impl Algorithm<Sha256Domain> for Sha256Function {
     #[inline]
-    fn hash(&mut self) -> SHA256Hash {
+    fn hash(&mut self) -> Sha256Domain {
         let mut h = [0u8; 32];
         h.copy_from_slice(self.0.clone().result().as_ref());
-        h
+        h.into()
     }
 
     #[inline]
@@ -51,15 +147,29 @@ impl Algorithm<SHA256Hash> for SHA256Algorithm {
         self.0 = Sha256::new();
     }
 
-    fn leaf(&mut self, leaf: SHA256Hash) -> SHA256Hash {
+    fn leaf(&mut self, leaf: Sha256Domain) -> Sha256Domain {
         leaf
     }
 
-    fn node(&mut self, left: SHA256Hash, right: SHA256Hash, _height: usize) -> SHA256Hash {
+    fn node(&mut self, left: Sha256Domain, right: Sha256Domain, _height: usize) -> Sha256Domain {
         // TODO: second preimage attack fix
         left.hash(self);
         right.hash(self);
         self.hash()
+    }
+}
+
+impl From<[u8; 32]> for Sha256Domain {
+    #[inline]
+    fn from(val: [u8; 32]) -> Self {
+        Sha256Domain(val)
+    }
+}
+
+impl From<Sha256Domain> for [u8; 32] {
+    #[inline]
+    fn from(val: Sha256Domain) -> Self {
+        val.0
     }
 }
 
@@ -94,7 +204,7 @@ mod tests {
 
     #[test]
     fn test_sha256_hash() {
-        let mut a = SHA256Algorithm::new();
+        let mut a = Sha256Function::default();
         "hello".hash(&mut a);
         let h1 = a.hash();
         assert_eq!(
@@ -112,21 +222,21 @@ mod tests {
         h2[0] = 0x11;
         h3[0] = 0x22;
 
-        let mut a = SHA256Algorithm::new();
+        let mut a = Sha256Function::default();
         let h11 = h1;
         let h12 = h2;
         let h13 = h3;
-        let h21 = a.node(h11, h12, 1);
+        let h21 = a.node(h11.into(), h12.into(), 1);
         a.reset();
-        let h22 = a.node(h13, h13, 1);
+        let h22 = a.node(h13.into(), h13.into(), 1);
         a.reset();
-        let _h31 = a.node(h21, h22, 1);
-        a.reset();
-
-        let l1 = a.leaf(h1);
+        let _h31 = a.node(h21.into(), h22.into(), 1);
         a.reset();
 
-        let l2 = a.leaf(h2);
+        let l1 = a.leaf(h1.into());
+        a.reset();
+
+        let l2 = a.leaf(h2.into());
         a.reset();
 
         // let mut s = vec![0x00];
@@ -154,12 +264,14 @@ mod tests {
         //     "e6a6b12f6147ce9ce87c9f2a7f41ddd9587f6ea59ccbfb33fba08e3740d96200"
         // );
 
-        let t: MerkleTree<SHA256Hash, SHA256Algorithm> = MerkleTree::from_iter(vec![h1, h2, h3]);
-        let t2: MerkleTree<SHA256Hash, SHA256Algorithm> = MerkleTree::from_iter(vec![h1, h2]);
+        let v: Vec<Sha256Domain> = vec![h1.into(), h2.into(), h3.into()];
+        let v2: Vec<Sha256Domain> = vec![h1.into(), h2.into()];
+        let t = MerkleTree::<Sha256Domain, Sha256Function>::from_iter(v);
+        let t2 = MerkleTree::<Sha256Domain, Sha256Function>::from_iter(v2);
 
-        assert_eq!(t2.as_slice()[0], l1.as_ref());
-        assert_eq!(t2.as_slice()[1], l2.as_ref());
-        assert_eq!(t2.as_slice()[2], h21.as_ref());
+        assert_eq!(t2.as_slice()[0].as_ref(), l1.as_ref());
+        assert_eq!(t2.as_slice()[1].as_ref(), l2.as_ref());
+        assert_eq!(t2.as_slice()[2].as_ref(), h21.as_ref());
 
         // TODO: Verify this is the right hash
         assert_eq!(

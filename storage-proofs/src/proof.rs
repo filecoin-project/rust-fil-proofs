@@ -2,7 +2,7 @@ use error::Result;
 
 /// The ProofScheme trait provides the methods that any proof scheme needs to implement.
 pub trait ProofScheme<'a> {
-    type PublicParams;
+    type PublicParams: Clone;
     type SetupParams;
     type PublicInputs;
     type PrivateInputs;
@@ -13,8 +13,11 @@ pub trait ProofScheme<'a> {
     fn setup(&Self::SetupParams) -> Result<Self::PublicParams>;
 
     /// prove generates and returns a proof from public parameters, public inputs, and private inputs.
-    fn prove(&Self::PublicParams, &Self::PublicInputs, &Self::PrivateInputs)
-        -> Result<Self::Proof>;
+    fn prove<'b>(
+        &'b Self::PublicParams,
+        &'b Self::PublicInputs,
+        &'b Self::PrivateInputs,
+    ) -> Result<Self::Proof>;
 
     /// verify returns true if the supplied proof is valid for the given public parameter and public inputs.
     /// Note that verify does not have access to private inputs.

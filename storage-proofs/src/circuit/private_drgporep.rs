@@ -59,11 +59,12 @@ mod tests {
     use drgporep;
     use drgraph::{graph_height, new_seed, BucketGraph};
     use fr32::{bytes_into_fr, fr_into_bytes};
+    use hasher::pedersen::*;
     use pairing::Field;
     use porep::PoRep;
     use proof::ProofScheme;
     use rand::Rand;
-    use rand::{SeedableRng, XorShiftRng};
+    use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
     use util::data_at_node;
 
@@ -78,8 +79,7 @@ mod tests {
         let challenge = 2;
         let sloth_iter = 1;
 
-        let replica_id_fr = Fr::rand(rng);
-        let replica_id: Vec<u8> = fr_into_bytes::<Bls12>(&replica_id_fr);
+        let replica_id: Fr = rng.gen();
 
         let mut data: Vec<u8> = (0..nodes)
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::rand(rng)))
@@ -106,37 +106,42 @@ mod tests {
             sloth_iter,
         };
 
-        let pp =
-            drgporep::DrgPoRep::<BucketGraph>::setup(&sp).expect("failed to create drgporep setup");
-        let (_tau, aux) =
-            drgporep::DrgPoRep::replicate(&pp, replica_id.as_slice(), data.as_mut_slice())
-                .expect("failed to replicate");
+        let pp = drgporep::DrgPoRep::<PedersenHasher, BucketGraph<_>>::setup(&sp)
+            .expect("failed to create drgporep setup");
+        let (_tau, aux) = drgporep::DrgPoRep::<PedersenHasher, _>::replicate(
+            &pp,
+            &replica_id.into(),
+            data.as_mut_slice(),
+        )
+        .expect("failed to replicate");
 
-        let pub_inputs = drgporep::PublicInputs {
-            replica_id: replica_id_fr,
+        let pub_inputs = drgporep::PublicInputs::<PedersenDomain> {
+            replica_id: replica_id.into(),
             challenges: vec![challenge],
             tau: None,
         };
-        let priv_inputs = drgporep::PrivateInputs {
+        let priv_inputs = drgporep::PrivateInputs::<PedersenHasher> {
             replica: data.as_slice(),
             aux: &aux,
         };
 
         let proof_nc =
-            drgporep::DrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).expect("failed to prove");
+            drgporep::DrgPoRep::<PedersenHasher, _>::prove(&pp, &pub_inputs, &priv_inputs)
+                .expect("failed to prove");
 
         assert!(
-            drgporep::DrgPoRep::verify(&pp, &pub_inputs, &proof_nc).expect("failed to verify"),
+            drgporep::DrgPoRep::<PedersenHasher, _>::verify(&pp, &pub_inputs, &proof_nc)
+                .expect("failed to verify"),
             "failed to verify (non circuit)"
         );
 
-        let replica_node = Some(proof_nc.replica_nodes[0].data);
+        let replica_node = Some(proof_nc.replica_nodes[0].data.into());
 
         let replica_node_path = proof_nc.replica_nodes[0].proof.as_options();
-        let replica_root = Some(proof_nc.replica_nodes[0].proof.root().into());
+        let replica_root = Some((*proof_nc.replica_nodes[0].proof.root()).into());
         let replica_parents = proof_nc.replica_parents[0]
             .iter()
-            .map(|(_, parent)| Some(parent.data))
+            .map(|(_, parent)| Some(parent.data.into()))
             .collect();
         let replica_parents_paths: Vec<_> = proof_nc.replica_parents[0]
             .iter()
@@ -144,8 +149,8 @@ mod tests {
             .collect();
 
         let data_node_path = proof_nc.nodes[0].proof.as_options();
-        let data_root = Some(proof_nc.nodes[0].proof.root().into());
-        let replica_id = Some(replica_id_fr);
+        let data_root = Some((*proof_nc.nodes[0].proof.root()).into());
+        let replica_id = Some(replica_id);
 
         assert!(
             proof_nc.nodes[0].proof.validate(challenge),
@@ -188,7 +193,10 @@ mod tests {
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
-        assert_eq!(cs.get_input(1, "drgporep/prover_id/input 0"), replica_id_fr,);
+        assert_eq!(
+            cs.get_input(1, "drgporep/prover_id/input 0"),
+            replica_id.unwrap()
+        );
     }
 
     #[test]
@@ -239,7 +247,7 @@ mod tests {
         let challenge = 1;
         let sloth_iter = 1;
 
-        let replica_id: Vec<u8> = fr_into_bytes::<Bls12>(&Fr::rand(rng));
+        let replica_id: Fr = rng.gen();
         let mut data: Vec<u8> = (0..nodes)
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::rand(rng)))
             .collect();
@@ -259,23 +267,22 @@ mod tests {
         };
 
         let public_params =
-            PrivateDrgPoRepCompound::<BucketGraph>::setup(&setup_params).expect("setup failed");
+            PrivateDrgPoRepCompound::<PedersenHasher, BucketGraph<_>>::setup(&setup_params)
+                .expect("setup failed");
 
         let (_tau, aux) = drgporep::DrgPoRep::replicate(
             &public_params.vanilla_params,
-            replica_id.as_slice(),
+            &replica_id.into(),
             data.as_mut_slice(),
         )
         .expect("failed to replicate");
 
-        let replica_id_fr = bytes_into_fr::<Bls12>(replica_id.as_slice()).unwrap();
-
-        let public_inputs = drgporep::PublicInputs {
-            replica_id: replica_id_fr,
+        let public_inputs = drgporep::PublicInputs::<PedersenDomain> {
+            replica_id: replica_id.into(),
             challenges: vec![challenge],
             tau: None,
         };
-        let private_inputs = drgporep::PrivateInputs {
+        let private_inputs = drgporep::PrivateInputs::<PedersenHasher> {
             replica: data.as_slice(),
             aux: &aux,
         };
@@ -297,18 +304,26 @@ mod tests {
         };
 
         let public_params =
-            PrivateDrgPoRepCompound::<BucketGraph>::setup(&setup_params).expect("setup failed");
+            PrivateDrgPoRepCompound::<PedersenHasher, BucketGraph<_>>::setup(&setup_params)
+                .expect("setup failed");
 
-        let proof = PrivateDrgPoRepCompound::prove(&public_params, &public_inputs, &private_inputs)
-            .expect("failed while proving");
+        let proof = PrivateDrgPoRepCompound::<PedersenHasher, _>::prove(
+            &public_params,
+            &public_inputs,
+            &private_inputs,
+        )
+        .expect("failed while proving");
 
-        let verified =
-            PrivateDrgPoRepCompound::verify(&public_params.vanilla_params, &public_inputs, proof)
-                .expect("failed while verifying");
+        let verified = PrivateDrgPoRepCompound::<PedersenHasher, _>::verify(
+            &public_params.vanilla_params,
+            &public_inputs,
+            proof,
+        )
+        .expect("failed while verifying");
 
         assert!(verified);
 
-        let (circuit, inputs) = PrivateDrgPoRepCompound::circuit_for_test(
+        let (circuit, inputs) = PrivateDrgPoRepCompound::<PedersenHasher, _>::circuit_for_test(
             &public_params,
             &public_inputs,
             &private_inputs,

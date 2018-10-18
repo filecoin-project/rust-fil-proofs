@@ -1,5 +1,8 @@
+use std::marker::PhantomData;
+
 use drgporep;
 use drgraph::Graph;
+use hasher::Hasher;
 use layered_drgporep::Layers;
 use parameter_cache::ParameterSetIdentifier;
 use zigzag_graph::{ZigZag, ZigZagBucketGraph};
@@ -16,57 +19,61 @@ use zigzag_graph::{ZigZag, ZigZagBucketGraph};
 /// However, it is fortunately not necessary that the base DRG components also have this property.
 
 #[derive(Debug)]
-pub struct ZigZagDrgPoRep {}
+pub struct ZigZagDrgPoRep<'a, H: 'a + Hasher> {
+    _a: PhantomData<&'a H>,
+}
 
-impl<'a> Layers for ZigZagDrgPoRep where {
-    type Graph = ZigZagBucketGraph;
+impl<'a, H: 'static + Hasher> Layers for ZigZagDrgPoRep<'a, H> where {
+    type Hasher = <ZigZagBucketGraph<H> as ZigZag>::BaseHasher;
+    type Graph = ZigZagBucketGraph<Self::Hasher>;
 
     fn transform(
-        pp: &drgporep::PublicParams<Self::Graph>,
+        pp: &drgporep::PublicParams<Self::Hasher, Self::Graph>,
         _layer: usize,
         _layers: usize,
-    ) -> drgporep::PublicParams<Self::Graph> {
-        zigzag::<Self::Graph>(pp)
+    ) -> drgporep::PublicParams<Self::Hasher, Self::Graph> {
+        zigzag::<Self::Hasher, Self::Graph>(pp)
     }
 
     fn invert_transform(
-        pp: &drgporep::PublicParams<Self::Graph>,
+        pp: &drgporep::PublicParams<Self::Hasher, Self::Graph>,
         _layer: usize,
         _layers: usize,
-    ) -> drgporep::PublicParams<Self::Graph> {
-        zigzag::<Self::Graph>(pp)
+    ) -> drgporep::PublicParams<Self::Hasher, Self::Graph> {
+        zigzag::<Self::Hasher, Self::Graph>(pp)
     }
 }
 
-fn zigzag<Z>(pp: &drgporep::PublicParams<Z>) -> drgporep::PublicParams<Z>
+fn zigzag<H, Z>(pp: &drgporep::PublicParams<H, Z>) -> drgporep::PublicParams<H, Z>
 where
-    Z: ZigZag + Graph + ParameterSetIdentifier,
+    H: Hasher,
+    Z: ZigZag + Graph<H> + ParameterSetIdentifier,
 {
-    drgporep::PublicParams {
-        graph: pp.graph.zigzag(),
-        lambda: pp.lambda,
-        sloth_iter: pp.sloth_iter,
-    }
+    drgporep::PublicParams::new(pp.lambda, pp.graph.zigzag(), pp.sloth_iter)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use pairing::bls12_381::{Bls12, Fr};
+    use rand::{Rng, SeedableRng, XorShiftRng};
+
     use drgraph::new_seed;
-    use fr32::{bytes_into_fr, fr_into_bytes};
+    use fr32::fr_into_bytes;
+    use hasher::pedersen::*;
     use layered_drgporep::{PrivateInputs, PublicInputs, PublicParams, SetupParams};
-    use pairing::bls12_381::Bls12;
     use porep::PoRep;
     use proof::ProofScheme;
-    use rand::{Rng, SeedableRng, XorShiftRng};
 
     const DEFAULT_ZIGZAG_LAYERS: usize = 6;
 
     #[test]
     fn extract_all() {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let lambda = 32;
         let sloth_iter = 1;
-        let replica_id = vec![1u8; 32];
+        let replica_id: Fr = rng.gen();
         let data = vec![2u8; 32 * 3];
 
         // create a copy, so we can compare roundtrips
@@ -86,14 +93,14 @@ mod tests {
             layers: DEFAULT_ZIGZAG_LAYERS,
         };
 
-        let mut pp = ZigZagDrgPoRep::setup(&sp).unwrap();
+        let mut pp = ZigZagDrgPoRep::<PedersenHasher>::setup(&sp).unwrap();
         // Get the public params for the last layer.
         // In reality, this is a no-op with an even number of layers.
         for _ in 0..pp.layers {
             pp.drg_porep_public_params = zigzag(&pp.drg_porep_public_params);
         }
 
-        ZigZagDrgPoRep::replicate(&pp, replica_id.as_slice(), data_copy.as_mut_slice()).unwrap();
+        ZigZagDrgPoRep::replicate(&pp, &replica_id.into(), data_copy.as_mut_slice()).unwrap();
 
         let transformed_params = PublicParams {
             drg_porep_public_params: pp.drg_porep_public_params,
@@ -104,7 +111,7 @@ mod tests {
 
         let decoded_data = ZigZagDrgPoRep::extract_all(
             &transformed_params,
-            replica_id.as_slice(),
+            &replica_id.into(),
             data_copy.as_mut_slice(),
         )
         .unwrap();
@@ -119,7 +126,7 @@ mod tests {
         let expansion_degree = i;
         let lambda = lambda;
         let sloth_iter = 1;
-        let replica_id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
+        let replica_id: Fr = rng.gen();
         let data: Vec<u8> = (0..n)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
@@ -140,17 +147,20 @@ mod tests {
             layers: DEFAULT_ZIGZAG_LAYERS,
         };
 
-        let pp = ZigZagDrgPoRep::setup(&sp).unwrap();
-        let (tau, aux) =
-            ZigZagDrgPoRep::replicate(&pp, replica_id.as_slice(), data_copy.as_mut_slice())
-                .unwrap();
+        let pp = ZigZagDrgPoRep::<PedersenHasher>::setup(&sp).unwrap();
+        let (tau, aux) = ZigZagDrgPoRep::<PedersenHasher>::replicate(
+            &pp,
+            &replica_id.into(),
+            data_copy.as_mut_slice(),
+        )
+        .unwrap();
         assert_ne!(data, data_copy);
 
-        let pub_inputs = PublicInputs {
-            replica_id: bytes_into_fr::<Bls12>(replica_id.as_slice()).unwrap(),
+        let pub_inputs = PublicInputs::<PedersenDomain> {
+            replica_id: replica_id.into(),
             challenges,
-            tau: Some(tau.simplify()),
-            comm_r_star: tau.comm_r_star,
+            tau: Some(tau.simplify().into()),
+            comm_r_star: tau.comm_r_star.into(),
         };
 
         let priv_inputs = PrivateInputs {
@@ -159,8 +169,9 @@ mod tests {
             tau: tau.layer_taus,
         };
 
-        let proof = ZigZagDrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
-        assert!(ZigZagDrgPoRep::verify(&pp, &pub_inputs, &proof).unwrap());
+        let proof =
+            ZigZagDrgPoRep::<PedersenHasher>::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
+        assert!(ZigZagDrgPoRep::<PedersenHasher>::verify(&pp, &pub_inputs, &proof).unwrap());
     }
 
     table_tests!{

@@ -1,7 +1,6 @@
 use bellman::groth16::Parameters;
 use bellman::{groth16, Circuit};
-use error::Result;
-use failure::Error;
+use error::*;
 use fs2::FileExt;
 use itertools::Itertools;
 use rand::XorShiftRng;
@@ -34,7 +33,7 @@ pub fn parameter_cache_path(filename: &str) -> PathBuf {
     dir.join(format!("v{}-{}", VERSION, filename))
 }
 
-pub trait ParameterSetIdentifier {
+pub trait ParameterSetIdentifier: Clone {
     fn parameter_set_identifier(&self) -> String;
 }
 
