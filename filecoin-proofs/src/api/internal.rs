@@ -132,7 +132,7 @@ pub fn seal(
     out_path: &PathBuf,
     prover_id_in: FrSafe,
     sector_id_in: FrSafe,
-) -> Result<(Commitment, Commitment, SnarkProof)> {
+) -> Result<(Commitment, Commitment, Commitment, SnarkProof)> {
     let (fake, delay_seconds, sector_bytes, proof_sector_bytes) = get_config(sector_store);
 
     if let Some(delay) = delay_seconds {
@@ -213,23 +213,24 @@ pub fn seal(
         &dummy_parameter_cache_path(sector_store, proof_sector_bytes),
     )?;
 
+    let comm_r = commitment_from_fr::<Bls12>(public_tau.comm_r.0);
+    let comm_d = commitment_from_fr::<Bls12>(public_tau.comm_d.0);
+    let comm_r_star = commitment_from_fr::<Bls12>(tau.comm_r_star.into());
+
     // Verification is cheap when parameters are cached,
     // and it is never correct to return a proof which does not verify.
     verify_seal(
         sector_store,
-        commitment_from_fr::<Bls12>(comm_r.0),
-        commitment_from_fr::<Bls12>(comm_d.0),
-        commitment_from_fr::<Bls12>(tau.comm_r_star.into()),
+        comm_r,
+        comm_d,
+        comm_r_star,
         prover_id_in,
         sector_id_in,
         &proof_bytes,
     )
     .expect("post-seal verification sanity check failed");
 
-    let comm_r = commitment_from_fr::<Bls12>(public_tau.comm_r.0);
-    let comm_d = commitment_from_fr::<Bls12>(public_tau.comm_d.0);
-
-    Ok((comm_r, comm_d, proof_bytes))
+    Ok((comm_r, comm_d, comm_r_star, proof_bytes))
 }
 
 fn delay_seal(seconds: u32) {

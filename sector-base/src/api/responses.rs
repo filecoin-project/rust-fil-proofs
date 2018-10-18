@@ -9,7 +9,7 @@ use std::ptr;
 #[repr(u8)]
 #[derive(PartialEq, Debug)]
 pub enum SBResponseStatus {
-    SBSuccess = 0,
+    SBNoError = 0,
     SBUnclassifiedError = 1,
     SBCallerError = 2,
     SBReceiverError = 3,
@@ -33,7 +33,7 @@ pub struct NewSealedSectorAccessResponse {
 impl Default for NewSealedSectorAccessResponse {
     fn default() -> NewSealedSectorAccessResponse {
         NewSealedSectorAccessResponse {
-            status_code: SBResponseStatus::SBSuccess,
+            status_code: SBResponseStatus::SBNoError,
             error_msg: ptr::null(),
             sector_access: ptr::null(),
         }
@@ -70,7 +70,7 @@ pub struct NewStagingSectorAccessResponse {
 impl Default for NewStagingSectorAccessResponse {
     fn default() -> NewStagingSectorAccessResponse {
         NewStagingSectorAccessResponse {
-            status_code: SBResponseStatus::SBSuccess,
+            status_code: SBResponseStatus::SBNoError,
             error_msg: ptr::null(),
             sector_access: ptr::null(),
         }
@@ -107,7 +107,7 @@ pub struct WriteAndPreprocessResponse {
 impl Default for WriteAndPreprocessResponse {
     fn default() -> WriteAndPreprocessResponse {
         WriteAndPreprocessResponse {
-            status_code: SBResponseStatus::SBSuccess,
+            status_code: SBResponseStatus::SBNoError,
             error_msg: ptr::null(),
             num_bytes_written: 0,
         }
@@ -144,7 +144,7 @@ pub struct ReadRawResponse {
 impl Default for ReadRawResponse {
     fn default() -> ReadRawResponse {
         ReadRawResponse {
-            status_code: SBResponseStatus::SBSuccess,
+            status_code: SBResponseStatus::SBNoError,
             error_msg: ptr::null(),
             data_len: 0,
             data_ptr: ptr::null(),
@@ -184,7 +184,7 @@ pub struct TruncateUnsealedResponse {
 impl Default for TruncateUnsealedResponse {
     fn default() -> TruncateUnsealedResponse {
         TruncateUnsealedResponse {
-            status_code: SBResponseStatus::SBSuccess,
+            status_code: SBResponseStatus::SBNoError,
             error_msg: ptr::null(),
         }
     }
@@ -217,7 +217,7 @@ pub struct NumUnsealedBytesResponse {
 impl Default for NumUnsealedBytesResponse {
     fn default() -> NumUnsealedBytesResponse {
         NumUnsealedBytesResponse {
-            status_code: SBResponseStatus::SBSuccess,
+            status_code: SBResponseStatus::SBNoError,
             error_msg: ptr::null(),
             num_bytes: 0,
         }
@@ -251,7 +251,7 @@ pub struct MaxUnsealedBytesPerSectorResponse {
 impl Default for MaxUnsealedBytesPerSectorResponse {
     fn default() -> MaxUnsealedBytesPerSectorResponse {
         MaxUnsealedBytesPerSectorResponse {
-            status_code: SBResponseStatus::SBSuccess,
+            status_code: SBResponseStatus::SBNoError,
             error_msg: ptr::null(),
             num_bytes: 0,
         }

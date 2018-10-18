@@ -48,11 +48,12 @@ pub unsafe extern "C" fn seal(
     let mut response: responses::SealResponse = Default::default();
 
     match result {
-        Ok((comm_r, comm_d, snark_proof)) => {
-            response.status_code = FCPResponseStatus::FCPSuccess;
+        Ok((comm_r, comm_d, comm_r_star, snark_proof)) => {
+            response.status_code = FCPResponseStatus::FCPNoError;
 
             response.comm_r[..32].clone_from_slice(&comm_r[..32]);
             response.comm_d[..32].clone_from_slice(&comm_d[..32]);
+            response.comm_r_star[..32].clone_from_slice(&comm_r_star[..32]);
             response.proof[..SNARK_BYTES].clone_from_slice(&snark_proof[..SNARK_BYTES]);
         }
         Err(err) => {
@@ -100,11 +101,11 @@ pub unsafe extern "C" fn verify_seal(
         proof,
     ) {
         Ok(true) => {
-            response.status_code = FCPResponseStatus::FCPSuccess;
+            response.status_code = FCPResponseStatus::FCPNoError;
             response.is_valid = true;
         }
         Ok(false) => {
-            response.status_code = FCPResponseStatus::FCPSuccess;
+            response.status_code = FCPResponseStatus::FCPNoError;
             response.is_valid = false;
         }
         Err(err) => {
@@ -160,7 +161,7 @@ pub unsafe extern "C" fn get_unsealed_range(
     ) {
         Ok(num_bytes_unsealed) => {
             if num_bytes_unsealed == num_bytes {
-                response.status_code = FCPResponseStatus::FCPSuccess;
+                response.status_code = FCPResponseStatus::FCPNoError;
             } else {
                 response.status_code = FCPResponseStatus::FCPReceiverError;
 
@@ -228,7 +229,7 @@ pub unsafe extern "C" fn get_unsealed(
     ) {
         Ok(num_bytes) => {
             if num_bytes == sector_bytes {
-                response.status_code = FCPResponseStatus::FCPSuccess;
+                response.status_code = FCPResponseStatus::FCPNoError;
             } else {
                 response.status_code = FCPResponseStatus::FCPReceiverError;
 
@@ -485,7 +486,7 @@ mod tests {
             let generate_post_res = generate_post(storage, &comm_rs[0], 32, &challenge_seed);
 
             assert_eq!(
-                FCPResponseStatus::FCPSuccess,
+                FCPResponseStatus::FCPNoError,
                 (*generate_post_res).status_code,
                 "generate_post failed"
             );
@@ -493,7 +494,7 @@ mod tests {
             let verify_post_res = verify_post(storage, &(*generate_post_res).proof);
 
             assert_eq!(
-                FCPResponseStatus::FCPSuccess,
+                FCPResponseStatus::FCPNoError,
                 (*verify_post_res).status_code,
                 "error verifying PoSt"
             );
@@ -539,7 +540,7 @@ mod tests {
                 write_and_preprocess(storage, seal_input_path, &contents[0], contents.len());
 
             assert_eq!(
-                SBResponseStatus::SBSuccess,
+                SBResponseStatus::SBNoError,
                 (*write_and_preprocess_response).status_code,
                 "write_and_preprocess failed for {:?}",
                 cs
@@ -554,7 +555,7 @@ mod tests {
             );
 
             assert_eq!(
-                FCPResponseStatus::FCPSuccess,
+                FCPResponseStatus::FCPNoError,
                 (*seal_res).status_code,
                 "seal failed for {:?}",
                 cs
@@ -571,25 +572,46 @@ mod tests {
             );
 
             assert_eq!(
-                FCPResponseStatus::FCPSuccess,
+                FCPResponseStatus::FCPNoError,
                 (*verify_seal_res).status_code,
-                "verification failed for {:?}",
+                "verification failed with error for {:?}",
                 cs
             );
 
-            // FIXME: This test will not pass until we actually make use of the commtiments in ZigZag
-            // that will be implemented in https://github.com/filecoin-project/rust-proofs/issues/145
-            //        let bad_verify = unsafe {
-            //            verify_seal(
-            //                &result[32],
-            //                &result[0],
-            //                &prover_id[0],
-            //                &challenge_seed[0],
-            //                &result[64],
-            //            )
-            //        };
-            // assert_eq!(20, bad_verify);
+            assert_eq!(
+                true,
+                (*verify_seal_res).is_valid,
+                "verification of valid proof failed for {:?}",
+                cs
+            );
 
+            /// Make sure trying to verify a bad proof fails verification (returns false).
+            {
+                // This should always fail, because we've rotated the commitments in the call.
+                let verify_seal_res = verify_seal(
+                    storage,
+                    &(*seal_res).comm_d,
+                    &(*seal_res).comm_r_star,
+                    &(*seal_res).comm_r,
+                    prover_id,
+                    sector_id,
+                    &(*seal_res).proof,
+                );
+
+                assert_eq!(
+                    FCPResponseStatus::FCPNoError,
+                    (*verify_seal_res).status_code,
+                    "verification failed with error for {:?}",
+                    cs
+                );
+
+                assert_eq!(
+                    false,
+                    (*verify_seal_res).is_valid,
+                    "verification of invalid proof succeeded for {:?}",
+                    cs
+                );
+            }
             responses::destroy_seal_response(seal_res);
             responses::destroy_verify_seal_response(verify_seal_res);
             destroy_new_staging_sector_access_response(new_staging_sector_access_response);
@@ -628,7 +650,7 @@ mod tests {
                 write_and_preprocess(storage, seal_input_path, &contents_a[0], contents_a.len());
 
             assert_eq!(
-                SBResponseStatus::SBSuccess,
+                SBResponseStatus::SBNoError,
                 (*write_and_preprocess_response_a).status_code,
                 "write_and_preprocess failed for {:?}",
                 cs
@@ -645,7 +667,7 @@ mod tests {
                 write_and_preprocess(storage, seal_input_path, &contents_b[0], contents_b.len());
 
             assert_eq!(
-                SBResponseStatus::SBSuccess,
+                SBResponseStatus::SBNoError,
                 (*write_and_preprocess_response_b).status_code,
                 "write_and_preprocess failed for {:?}",
                 cs
@@ -675,7 +697,7 @@ mod tests {
             );
 
             assert_eq!(
-                FCPResponseStatus::FCPSuccess,
+                FCPResponseStatus::FCPNoError,
                 (*seal_response).status_code,
                 "seal failed for {:?}",
                 cs
@@ -690,7 +712,7 @@ mod tests {
             );
 
             assert_eq!(
-                FCPResponseStatus::FCPSuccess,
+                FCPResponseStatus::FCPNoError,
                 (*get_unsealed_response).status_code,
                 "get_unsealed failed for {:?}",
                 cs
@@ -753,7 +775,7 @@ mod tests {
                 write_and_preprocess(storage, seal_input_path, &contents[0], contents.len());
 
             assert_eq!(
-                SBResponseStatus::SBSuccess,
+                SBResponseStatus::SBNoError,
                 (*write_and_preprocess_response).status_code,
                 "write_and_preprocess failed for {:?}",
                 cs
@@ -768,7 +790,7 @@ mod tests {
             );
 
             assert_eq!(
-                FCPResponseStatus::FCPSuccess,
+                FCPResponseStatus::FCPNoError,
                 (*seal_response).status_code,
                 "seal failed for {:?}",
                 cs
@@ -783,7 +805,7 @@ mod tests {
             );
 
             assert_eq!(
-                FCPResponseStatus::FCPSuccess,
+                FCPResponseStatus::FCPNoError,
                 (*get_unsealed_response).status_code,
                 "get_unsealed failed for {:?}",
                 cs
@@ -799,7 +821,7 @@ mod tests {
 
                 assert_eq!(
                     (*read_unsealed_response).status_code,
-                    SBResponseStatus::SBSuccess
+                    SBResponseStatus::SBNoError
                 );
 
                 let read_unsealed_data = from_raw_parts(
@@ -816,7 +838,7 @@ mod tests {
 
                 assert_eq!(
                     (*read_unsealed_response).status_code,
-                    SBResponseStatus::SBSuccess
+                    SBResponseStatus::SBNoError
                 );
 
                 let read_unsealed_data = from_raw_parts(
@@ -873,7 +895,7 @@ mod tests {
                 write_and_preprocess(storage, seal_input_path, &contents[0], contents.len());
 
             assert_eq!(
-                SBResponseStatus::SBSuccess,
+                SBResponseStatus::SBNoError,
                 (*write_and_preprocess_response).status_code,
                 "write_and_preprocess failed for {:?}",
                 cs
@@ -888,7 +910,7 @@ mod tests {
             );
 
             assert_eq!(
-                FCPResponseStatus::FCPSuccess,
+                FCPResponseStatus::FCPNoError,
                 (*seal_response).status_code,
                 "seal failed for {:?}",
                 cs
@@ -907,7 +929,7 @@ mod tests {
             );
 
             assert_eq!(
-                FCPResponseStatus::FCPSuccess,
+                FCPResponseStatus::FCPNoError,
                 (*get_unsealed_range_response).status_code,
                 "get_unsealed_range_response failed for {:?}",
                 cs

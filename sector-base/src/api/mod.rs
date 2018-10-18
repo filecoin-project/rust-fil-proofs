@@ -22,7 +22,7 @@ pub enum SectorManagerErr {
 impl<T> ToResponseStatus for Result<T, SectorManagerErr> {
     fn to_response_status(&self) -> SBResponseStatus {
         match self {
-            Ok(_) => SBResponseStatus::SBSuccess,
+            Ok(_) => SBResponseStatus::SBNoError,
             Err(s_m_err) => match s_m_err {
                 UnclassifiedError(_) => SBResponseStatus::SBUnclassifiedError,
                 CallerError(_) => SBResponseStatus::SBCallerError,

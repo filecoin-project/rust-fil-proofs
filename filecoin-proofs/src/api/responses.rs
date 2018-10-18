@@ -9,7 +9,8 @@ use std::ptr;
 #[repr(u8)]
 #[derive(PartialEq, Debug)]
 pub enum FCPResponseStatus {
-    FCPSuccess = 0,
+    // Don't use FCPSuccess, since that complicates description of 'successful' verification.
+    FCPNoError = 0,
     FCPUnclassifiedError = 1,
     FCPCallerError = 2,
     FCPReceiverError = 3,
@@ -32,7 +33,7 @@ pub struct SealResponse {
 impl Default for SealResponse {
     fn default() -> SealResponse {
         SealResponse {
-            status_code: FCPResponseStatus::FCPSuccess,
+            status_code: FCPResponseStatus::FCPNoError,
             error_msg: ptr::null(),
             comm_d: [0; 32],
             comm_r: [0; 32],
@@ -69,7 +70,7 @@ pub struct VerifySealResponse {
 impl Default for VerifySealResponse {
     fn default() -> VerifySealResponse {
         VerifySealResponse {
-            status_code: FCPResponseStatus::FCPSuccess,
+            status_code: FCPResponseStatus::FCPNoError,
             error_msg: ptr::null(),
             is_valid: false,
         }
@@ -103,7 +104,7 @@ pub struct GetUnsealedRangeResponse {
 impl Default for GetUnsealedRangeResponse {
     fn default() -> GetUnsealedRangeResponse {
         GetUnsealedRangeResponse {
-            status_code: FCPResponseStatus::FCPSuccess,
+            status_code: FCPResponseStatus::FCPNoError,
             error_msg: ptr::null(),
             num_bytes_written: 0,
         }
@@ -136,7 +137,7 @@ pub struct GetUnsealedResponse {
 impl Default for GetUnsealedResponse {
     fn default() -> GetUnsealedResponse {
         GetUnsealedResponse {
-            status_code: FCPResponseStatus::FCPSuccess,
+            status_code: FCPResponseStatus::FCPNoError,
             error_msg: ptr::null(),
         }
     }
@@ -171,7 +172,7 @@ pub struct GeneratePoSTResponse {
 impl Default for GeneratePoSTResponse {
     fn default() -> GeneratePoSTResponse {
         GeneratePoSTResponse {
-            status_code: FCPResponseStatus::FCPSuccess,
+            status_code: FCPResponseStatus::FCPNoError,
             error_msg: ptr::null(),
             faults_len: 0,
             faults_ptr: ptr::null(),
@@ -213,7 +214,7 @@ pub struct VerifyPoSTResponse {
 impl Default for VerifyPoSTResponse {
     fn default() -> VerifyPoSTResponse {
         VerifyPoSTResponse {
-            status_code: FCPResponseStatus::FCPSuccess,
+            status_code: FCPResponseStatus::FCPNoError,
             error_msg: ptr::null(),
             is_valid: false,
         }

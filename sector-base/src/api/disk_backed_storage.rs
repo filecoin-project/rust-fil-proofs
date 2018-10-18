@@ -412,7 +412,7 @@ mod tests {
             );
 
             assert_eq!(
-                SBResponseStatus::SBSuccess,
+                SBResponseStatus::SBNoError,
                 (*write_and_preprocess_response).status_code
             );
 
@@ -447,7 +447,7 @@ mod tests {
                 );
 
                 assert_eq!(
-                    SBResponseStatus::SBSuccess,
+                    SBResponseStatus::SBNoError,
                     (*num_unsealed_bytes_response).status_code
                 );
 
@@ -458,7 +458,7 @@ mod tests {
             {
                 // Truncate to 32 unpadded bytes
                 assert_eq!(
-                    SBResponseStatus::SBSuccess,
+                    SBResponseStatus::SBNoError,
                     (*truncate_unsealed(storage, access, 32)).status_code
                 );
 
@@ -477,7 +477,7 @@ mod tests {
                 let num_unsealed_bytes_response = num_unsealed_bytes(storage, access);
 
                 assert_eq!(
-                    SBResponseStatus::SBSuccess,
+                    SBResponseStatus::SBNoError,
                     (*num_unsealed_bytes_response).status_code
                 );
 
@@ -488,7 +488,7 @@ mod tests {
             {
                 // Truncate to 31 unpadded bytes
                 assert_eq!(
-                    SBResponseStatus::SBSuccess,
+                    SBResponseStatus::SBNoError,
                     (*truncate_unsealed(storage, access, 31)).status_code
                 );
 
@@ -502,7 +502,7 @@ mod tests {
                 let num_unsealed_bytes_response = num_unsealed_bytes(storage, access);
 
                 assert_eq!(
-                    SBResponseStatus::SBSuccess,
+                    SBResponseStatus::SBNoError,
                     (*num_unsealed_bytes_response).status_code
                 );
 
@@ -511,7 +511,7 @@ mod tests {
             }
 
             assert_eq!(
-                SBResponseStatus::SBSuccess,
+                SBResponseStatus::SBNoError,
                 (*truncate_unsealed(storage, access, 1)).status_code
             );
 
@@ -525,7 +525,7 @@ mod tests {
             let num_unsealed_bytes_response = num_unsealed_bytes(storage, access);
 
             assert_eq!(
-                SBResponseStatus::SBSuccess,
+                SBResponseStatus::SBNoError,
                 (*num_unsealed_bytes_response).status_code
             );
 
