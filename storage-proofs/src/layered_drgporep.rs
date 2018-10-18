@@ -1,8 +1,9 @@
+use crypto::pedersen::pedersen_md_no_padding;
 use drgporep::{self, DrgPoRep};
 use drgraph::Graph;
 use error::Result;
-use fr32::fr_into_bytes;
-use pairing::bls12_381::Bls12;
+use fr32::{bytes_into_fr, fr_into_bytes, frs_into_bytes};
+use pairing::bls12_381::{Bls12, Fr};
 use parameter_cache::ParameterSetIdentifier;
 use porep::{self, PoRep};
 use proof::ProofScheme;
@@ -20,6 +21,23 @@ where
 {
     pub drg_porep_public_params: drgporep::PublicParams<G>,
     pub layers: usize,
+}
+
+pub type CommRStar = Fr;
+
+pub struct Tau {
+    pub layer_taus: Vec<porep::Tau>,
+    pub comm_r_star: CommRStar,
+}
+
+impl Tau {
+    /// Return a single porep::Tau with the initial data and final replica commitments of layer_taus.
+    pub fn simplify(&self) -> porep::Tau {
+        porep::Tau {
+            comm_r: self.layer_taus[self.layer_taus.len() - 1].comm_r,
+            comm_d: self.layer_taus[0].comm_d,
+        }
+    }
 }
 
 impl<G> ParameterSetIdentifier for PublicParams<G>
@@ -51,7 +69,13 @@ pub type ReplicaParents = Vec<(usize, DataProof)>;
 pub type EncodingProof = drgporep::Proof;
 pub type DataProof = drgporep::DataProof;
 
-pub type PublicInputs = drgporep::PublicInputs;
+#[derive(Debug)]
+pub struct PublicInputs {
+    pub replica_id: Fr,
+    pub challenges: Vec<usize>,
+    pub tau: Option<porep::Tau>,
+    pub comm_r_star: Fr,
+}
 
 pub struct PrivateInputs<'a> {
     pub replica: &'a [u8],
@@ -71,14 +95,6 @@ impl Proof {
             encoding_proofs,
             tau,
         }
-    }
-}
-
-/// Take a vector of taus and return a single tau with the initial data and final replica commitments.
-pub fn simplify_tau(taus: &[porep::Tau]) -> porep::Tau {
-    porep::Tau {
-        comm_r: taus[taus.len() - 1].comm_r,
-        comm_d: taus[0].comm_d,
     }
 }
 
@@ -250,6 +266,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
             &mut proofs,
         )?;
 
+        // We need to calculate CommR* -- which is: H(replica_id|comm_r[0]|comm_r[1]|…comm_r[n])
         let proof = Proof::new(proofs, priv_inputs.tau.clone());
 
         Ok(proof)
@@ -268,7 +285,12 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         let mut pp = pub_params.drg_porep_public_params.clone();
         // TODO: verification is broken for the first node, figure out how to unbreak
         // with permutations
+
+        let mut comm_rs = Vec::new();
+
         for (layer, proof_layer) in proof.encoding_proofs.iter().enumerate() {
+            comm_rs.push(proof.tau[layer].comm_r.0);
+
             let new_pub_inputs = drgporep::PublicInputs {
                 replica_id: pub_inputs.replica_id,
                 challenges: pub_inputs.challenges.clone(),
@@ -311,12 +333,23 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
                 return Ok(false);
             }
         }
-        Ok(true)
+        let crs = comm_r_star(&pub_inputs.replica_id, &comm_rs);
+
+        Ok(crs == pub_inputs.comm_r_star)
     }
 }
 
+fn comm_r_star(replica_id: &Fr, comm_rs: &[Fr]) -> Fr {
+    let l = (comm_rs.len() + 1) * 32;
+    let mut bytes = vec![0; l];
+    bytes[0..32].copy_from_slice(&fr_into_bytes::<Bls12>(replica_id));
+    bytes[32..l].copy_from_slice(&frs_into_bytes::<Bls12>(comm_rs));
+
+    pedersen_md_no_padding(&bytes)
+}
+
 impl<'a, 'c, L: Layers> PoRep<'a> for L {
-    type Tau = Vec<porep::Tau>;
+    type Tau = Tau;
     type ProverAux = Vec<porep::ProverAux>;
 
     fn replicate(
@@ -337,7 +370,13 @@ impl<'a, 'c, L: Layers> PoRep<'a> for L {
             &mut auxs,
         )?;
 
-        Ok((taus, auxs))
+        let comm_rs: Vec<Fr> = taus.iter().map(|tau| tau.comm_r.0).collect();
+        let crs = comm_r_star(&bytes_into_fr::<Bls12>(replica_id)?, &comm_rs);
+        let tau = Tau {
+            layer_taus: taus,
+            comm_r_star: crs,
+        };
+        Ok((tau, auxs))
     }
 
     fn extract_all<'b>(

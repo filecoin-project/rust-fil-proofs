@@ -54,7 +54,7 @@ mod tests {
     use super::*;
     use drgraph::new_seed;
     use fr32::{bytes_into_fr, fr_into_bytes};
-    use layered_drgporep::{simplify_tau, PrivateInputs, PublicInputs, PublicParams, SetupParams};
+    use layered_drgporep::{PrivateInputs, PublicInputs, PublicParams, SetupParams};
     use pairing::bls12_381::Bls12;
     use porep::PoRep;
     use proof::ProofScheme;
@@ -149,13 +149,14 @@ mod tests {
         let pub_inputs = PublicInputs {
             replica_id: bytes_into_fr::<Bls12>(replica_id.as_slice()).unwrap(),
             challenges,
-            tau: Some(simplify_tau(&tau)),
+            tau: Some(tau.simplify()),
+            comm_r_star: tau.comm_r_star,
         };
 
         let priv_inputs = PrivateInputs {
             replica: data.as_slice(),
             aux,
-            tau,
+            tau: tau.layer_taus,
         };
 
         let proof = ZigZagDrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).unwrap();

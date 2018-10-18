@@ -5,7 +5,7 @@ use sapling_crypto::jubjub::JubjubEngine;
 
 use crypto::pedersen::PEDERSEN_BLOCK_SIZE;
 
-/// Pedersen hashing for inputs with lenght multiple of the block size. Based on a Merkle-Damgarad construction.
+/// Pedersen hashing for inputs with length multiple of the block size. Based on a Merkle-Damgard construction.
 pub fn pedersen_md_no_padding<E, CS>(
     mut cs: CS,
     params: &E::Params,

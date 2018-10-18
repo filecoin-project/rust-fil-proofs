@@ -16,7 +16,7 @@ use storage_proofs::drgraph::new_seed;
 use storage_proofs::error::Result;
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
 use storage_proofs::hasher::pedersen::PedersenHash;
-use storage_proofs::layered_drgporep::{self, simplify_tau};
+use storage_proofs::layered_drgporep;
 use storage_proofs::parameter_cache::{
     parameter_cache_path, read_cached_params, write_params_to_cache,
 };
@@ -176,7 +176,7 @@ pub fn seal(
 
     let replica_id_fr = bytes_into_fr::<Bls12>(&replica_id)?;
 
-    let public_tau = simplify_tau(&tau);
+    let public_tau = tau.simplify();
     // This is the commitment to the original data.
     let comm_d = public_tau.comm_d;
     // This is the commitment to the last layer's replica.
@@ -190,12 +190,13 @@ pub fn seal(
         replica_id: replica_id_fr,
         challenges,
         tau: Some(public_tau),
+        comm_r_star: tau.comm_r_star,
     };
 
     let private_inputs = layered_drgporep::PrivateInputs {
         replica: &data_copy[0..proof_sector_bytes],
         aux,
-        tau,
+        tau: tau.layer_taus,
     };
 
     let proof = ZigZagCompound::prove(&compound_public_params, &public_inputs, &private_inputs)?;
@@ -218,6 +219,7 @@ pub fn seal(
         sector_store,
         commitment_from_fr::<Bls12>(comm_r.0),
         commitment_from_fr::<Bls12>(comm_d.0),
+        commitment_from_fr::<Bls12>(tau.comm_r_star),
         prover_id_in,
         sector_id_in,
         &proof_bytes,
@@ -248,7 +250,7 @@ fn perform_replication(
     data: &mut [u8],
     fake: bool,
     proof_sector_bytes: usize,
-) -> Result<(Vec<Tau>, Vec<ProverAux>)> {
+) -> Result<(layered_drgporep::Tau, Vec<ProverAux>)> {
     if fake {
         // When faking replication, we write the original data to disk, before replication.
         write_data(out_path, data)?;
@@ -327,6 +329,7 @@ pub fn verify_seal(
     sector_store: &'static SectorStore,
     comm_r: Commitment,
     comm_d: Commitment,
+    comm_r_star: Commitment,
     prover_id_in: FrSafe,
     sector_id_in: FrSafe,
     proof_vec: &[u8],
@@ -341,11 +344,13 @@ pub fn verify_seal(
 
     let comm_r = PedersenHash(bytes_into_fr::<Bls12>(&comm_r)?);
     let comm_d = PedersenHash(bytes_into_fr::<Bls12>(&comm_d)?);
+    let comm_r_star = PedersenHash(bytes_into_fr::<Bls12>(&comm_r_star)?).0;
 
     let public_inputs = layered_drgporep::PublicInputs {
         replica_id: replica_id_fr, // FIXME: Change prover_id field name to replica_id everywhere.
         challenges,
         tau: Some(Tau { comm_r, comm_d }),
+        comm_r_star,
     };
 
     let proof = groth16::Proof::read(proof_vec)?;

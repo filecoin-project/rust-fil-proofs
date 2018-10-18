@@ -25,6 +25,7 @@ pub struct SealResponse {
     pub error_msg: *const libc::c_char,
     pub comm_d: [u8; 32],
     pub comm_r: [u8; 32],
+    pub comm_r_star: [u8; 32],
     pub proof: [u8; 192],
 }
 
@@ -35,6 +36,7 @@ impl Default for SealResponse {
             error_msg: ptr::null(),
             comm_d: [0; 32],
             comm_r: [0; 32],
+            comm_r_star: [0; 32],
             proof: [0; 192],
         }
     }

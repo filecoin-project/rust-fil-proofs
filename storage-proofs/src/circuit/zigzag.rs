@@ -1,9 +1,11 @@
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use circuit::constraint;
+use circuit::pedersen::pedersen_md_no_padding;
 use circuit::private_drgporep::PrivateDrgPoRepCompound;
 use compound_proof::CompoundProof;
 use drgporep::{self, DrgPoRep};
 use drgraph::{graph_height, Graph};
+use fr32::fr_into_bytes;
 use layered_drgporep::{self, Layerable};
 use pairing::bls12_381::{Bls12, Fr};
 use parameter_cache::{CacheableParameters, ParameterSetIdentifier};
@@ -11,6 +13,7 @@ use porep;
 use proof::ProofScheme;
 use sapling_crypto::circuit::num;
 use sapling_crypto::jubjub::JubjubEngine;
+use util::bytes_into_boolean_vec;
 use zigzag_drgporep::ZigZagDrgPoRep;
 use zigzag_graph::ZigZagBucketGraph;
 
@@ -37,6 +40,7 @@ where
     public_params: <ZigZagDrgPoRep as ProofScheme<'a>>::PublicParams,
     layers: Layers<'a, G>,
     tau: porep::Tau,
+    comm_r_star: Fr,
     phantom: PhantomData<E>,
 }
 
@@ -50,6 +54,7 @@ where
         public_params: <ZigZagDrgPoRep as ProofScheme<'a>>::PublicParams,
         layers: Layers<G>,
         tau: porep::Tau,
+        comm_r_star: Fr,
     ) -> Result<(), SynthesisError>
     where
         CS: ConstraintSystem<Bls12>,
@@ -60,6 +65,7 @@ where
             public_params,
             layers,
             tau,
+            comm_r_star,
             phantom: PhantomData,
         };
 
@@ -73,6 +79,10 @@ where
 {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let graph = self.public_params.drg_porep_public_params.graph.clone();
+        let mut crs_input = Vec::with_capacity(self.layers.len() + 1);
+
+        crs_input.extend(fr_into_bytes::<Bls12>(&self.layers[0].0.replica_id));
+
         for (l, (public_inputs, layer_proof)) in self.layers.iter().enumerate() {
             let first_layer = l == 0;
             let last_layer = l == self.layers.len() - 1;
@@ -86,6 +96,11 @@ where
                 // Synthesize a default drgporep if none is supplied – for use in tests, etc.
                 None => drgporep::Proof::default(height, graph.degree()),
             };
+
+            let comm_d = proof.nodes[0].proof.root.0;
+            let comm_r = proof.replica_nodes[0].proof.root.0;
+            crs_input.extend(fr_into_bytes::<Bls12>(&comm_r));
+
             // FIXME: Using a normal DrgPoRep circuit here performs a redundant test at each layer.
             // We don't need to verify merkle inclusion of the 'data' except in the first layer.
             // In subsequent layers, we already proved this and just need to assert (by constraint)
@@ -101,7 +116,7 @@ where
             if first_layer {
                 // Constrain first layer's comm_d to be equal to overall tau.comm_d.
 
-                let fcd = proof.nodes[0].proof.root.0;
+                let fcd = comm_d;
                 let first_comm_d =
                     num::AllocatedNum::alloc(cs.namespace(|| "first comm_d"), || Ok(fcd))?;
 
@@ -122,7 +137,7 @@ where
             if last_layer {
                 // Constrain last layer's comm_r to be equal to overall tau.comm_r.
 
-                let lcr = proof.replica_nodes[0].proof.root.0;
+                let lcr = comm_r;
                 let last_comm_r =
                     num::AllocatedNum::alloc(cs.namespace(|| "last comm_r"), || Ok(lcr))?;
 
@@ -142,9 +157,29 @@ where
             }
         }
 
-        // TODO: We need to add an aggregated commitment to the inputs, then compute a it as a
-        // witness to the circuit and constrain the input to be equal to that.
-        // This uber-root is: H(replica_id|comm_r[0]|comm_r[1]|…comm_r[n]).
+        let crs_boolean = bytes_into_boolean_vec(
+            cs.namespace(|| "comm_r_star boolean"),
+            Some(&crs_input),
+            8 * crs_input.len(),
+        )?;
+
+        let computed_comm_r_star =
+            pedersen_md_no_padding(cs.namespace(|| "comm_r_star"), self.params, &crs_boolean)?;
+
+        let public_comm_r_star =
+            num::AllocatedNum::alloc(cs.namespace(|| "public comm_r_star value"), || {
+                Ok(self.comm_r_star)
+            })?;
+
+        constraint::equal(
+            cs,
+            || "enforce comm_r_star is correct",
+            &computed_comm_r_star,
+            &public_comm_r_star,
+        );
+
+        public_comm_r_star.inputize(cs.namespace(|| "zigzag comm_r_star"))?;
+
         Ok(())
     }
 }
@@ -206,6 +241,7 @@ impl<'a> CompoundProof<'a, Bls12, ZigZagDrgPoRep, ZigZagCircuit<'a, Bls12, ZigZa
                 inputs.push(comm_r);
             };
         }
+        inputs.push(pub_in.comm_r_star);
         inputs
     }
 
@@ -233,6 +269,7 @@ impl<'a> CompoundProof<'a, Bls12, ZigZagDrgPoRep, ZigZagCircuit<'a, Bls12, ZigZa
             params: engine_params,
             public_params: pp,
             tau: public_inputs.tau.unwrap(),
+            comm_r_star: public_inputs.comm_r_star,
             layers,
             phantom: PhantomData,
         }
@@ -248,7 +285,7 @@ mod tests {
     use drgraph::new_seed;
     use fr32::{bytes_into_fr, fr_into_bytes};
     use hasher::pedersen::PedersenHash;
-    use layered_drgporep::{self, simplify_tau};
+    use layered_drgporep;
     use pairing::Field;
     use porep::PoRep;
     use proof::ProofScheme;
@@ -305,13 +342,14 @@ mod tests {
         let pub_inputs = layered_drgporep::PublicInputs {
             replica_id: replica_id_fr,
             challenges,
-            tau: Some(simplify_tau(&tau)),
+            tau: Some(tau.simplify()),
+            comm_r_star: tau.comm_r_star,
         };
 
         let priv_inputs = layered_drgporep::PrivateInputs {
             replica: data.as_slice(),
             aux,
-            tau,
+            tau: tau.layer_taus,
         };
 
         let proof = ZigZagDrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
@@ -333,8 +371,8 @@ mod tests {
         }
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_inputs(), 15, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 56754, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 16, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 59523, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
@@ -395,11 +433,12 @@ mod tests {
                 comm_r: PedersenHash(Fr::rand(rng)),
                 comm_d: PedersenHash(Fr::rand(rng)),
             },
+            Fr::rand(rng),
         )
         .expect("failed to synthesize circuit");
 
-        assert_eq!(cs.num_inputs(), 17, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 434062, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 436831, "wrong number of constraints");
     }
 
     #[test]
@@ -458,13 +497,14 @@ mod tests {
         let public_inputs = layered_drgporep::PublicInputs {
             replica_id: replica_id_fr,
             challenges,
-            tau: Some(simplify_tau(&tau)),
+            tau: Some(tau.simplify()),
+            comm_r_star: tau.comm_r_star,
         };
 
         let private_inputs = layered_drgporep::PrivateInputs {
             replica: data.as_slice(),
             aux,
-            tau,
+            tau: tau.layer_taus,
         };
 
         // TOOD: Move this to e.g. circuit::test::compound_helper and share between all compound proofs.
