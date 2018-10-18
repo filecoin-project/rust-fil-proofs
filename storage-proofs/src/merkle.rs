@@ -152,7 +152,7 @@ fn path_index<T: Domain>(path: &[(T, bool)]) -> usize {
 mod tests {
     use super::*;
 
-    use rand::Rng;
+    use rand::{self, Rng};
 
     use drgraph::new_seed;
     use drgraph::{BucketGraph, Graph};

@@ -30,7 +30,7 @@ pub struct Proof<H: Hasher> {
 }
 
 #[derive(Debug)]
-pub struct PublicInputs<'a, T: Domain> {
+pub struct PublicInputs<'a, T: 'a + Domain> {
     /// The root hash of the underlying merkle tree.
     pub commitment: T,
     /// The inital challenge, which leaf to prove.

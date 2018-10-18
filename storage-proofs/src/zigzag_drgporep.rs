@@ -19,7 +19,7 @@ use zigzag_graph::{ZigZag, ZigZagBucketGraph};
 /// However, it is fortunately not necessary that the base DRG components also have this property.
 
 #[derive(Debug)]
-pub struct ZigZagDrgPoRep<'a, H: Hasher> {
+pub struct ZigZagDrgPoRep<'a, H: 'a + Hasher> {
     _a: PhantomData<&'a H>,
 }
 
