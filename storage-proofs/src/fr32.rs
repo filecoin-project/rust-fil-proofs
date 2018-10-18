@@ -1,4 +1,4 @@
-use error::Result;
+use error::*;
 use pairing::{Engine, PrimeField, PrimeFieldRepr};
 
 // Contains 32 bytes whose little-endian value represents an Fr.
@@ -23,14 +23,12 @@ pub type Fr32Ary = [u8; 32];
 // Otherwise, returns a BadFrBytesError.
 pub fn bytes_into_fr<E: Engine>(bytes: &[u8]) -> Result<E::Fr> {
     if bytes.len() != 32 {
-        return Err(format_err!("Bytes could not be converted to Fr"));
+        return Err(Error::BadFrBytes);
     }
     let mut fr_repr = <<<E as Engine>::Fr as PrimeField>::Repr as Default>::default();
-    fr_repr
-        .read_le(bytes)
-        .map_err(|_| format_err!("Bytes could not be converted to Fr"))?;
+    fr_repr.read_le(bytes).map_err(|_| Error::BadFrBytes)?;
 
-    E::Fr::from_repr(fr_repr).map_err(|_| format_err!("Bytes could not be converted to Fr"))
+    E::Fr::from_repr(fr_repr).map_err(|_| Error::BadFrBytes)
 }
 
 // Takes an Fr and returns a vector of exactly 32 bytes guaranteed to contain a valid Fr.

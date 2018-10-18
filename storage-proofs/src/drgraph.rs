@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use merkle_light::hash::{Algorithm, Hashable};
 use rand::{ChaChaRng, OsRng, Rng, SeedableRng};
 
-use error::Result;
+use error::*;
 use hasher::pedersen::PedersenHasher;
 use hasher::Hasher;
 use merkle::MerkleTree;
@@ -28,19 +28,15 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
         node_size: usize,
     ) -> Result<MerkleTree<H::Domain, H::Function>> {
         if data.len() != (node_size * self.size()) as usize {
-            return Err(format_err!(
-                "mismatch of data, node_size and nodes {} != {} * {}",
+            return Err(Error::InvalidMerkleTreeArgs(
                 data.len(),
                 node_size,
-                self.size()
+                self.size(),
             ));
         }
 
         if !(node_size == 16 || node_size == 32 || node_size == 64) {
-            return Err(format_err!(
-                "invalid node size ({}), must be 16, 32 or 64",
-                node_size
-            ));
+            return Err(Error::InvalidNodeSize(node_size));
         }
 
         let mut a = H::Function::default();

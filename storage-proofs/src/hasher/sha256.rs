@@ -7,7 +7,7 @@ use rand::{Rand, Rng};
 use sha2::{Digest, Sha256};
 
 use super::{Domain, HashFunction, Hasher};
-use error::Result;
+use error::*;
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Sha256Hasher {}
@@ -107,7 +107,7 @@ impl Domain for Sha256Domain {
 
     fn try_from_bytes(raw: &[u8]) -> Result<Self> {
         if raw.len() != 32 {
-            return Err(format_err!("invalid byte length"));
+            return Err(Error::InvalidInputSize);
         }
         let mut res = Sha256Domain::default();
         res.0.copy_from_slice(&raw[0..32]);
@@ -116,7 +116,7 @@ impl Domain for Sha256Domain {
 
     fn write_bytes(&self, dest: &mut [u8]) -> Result<()> {
         if dest.len() < 32 {
-            return Err(format_err!("destination too short"));
+            return Err(Error::InvalidInputSize);
         }
         dest[0..32].copy_from_slice(&self.0[..]);
         Ok(())

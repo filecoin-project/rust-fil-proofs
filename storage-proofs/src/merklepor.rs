@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use drgporep::DataProof;
 use drgraph::graph_height;
-use error::Result;
+use error::*;
 use hasher::{Domain, Hasher};
 use merkle::{MerkleProof, MerkleTree};
 use parameter_cache::ParameterSetIdentifier;
@@ -94,7 +94,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for MerklePoR<H> {
 
         if let Some(ref commitment) = pub_inputs.commitment {
             if commitment != &tree.root() {
-                return Err(format_err!("tree root and commitment do not match"));
+                return Err(Error::InvalidCommitment);
             }
         }
 

@@ -1,7 +1,6 @@
 use bellman::groth16::Parameters;
 use bellman::{groth16, Circuit};
-use error::Result;
-use failure::Error;
+use error::*;
 use fs2::FileExt;
 use itertools::Itertools;
 use rand::XorShiftRng;

@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use merkle_light::hash::{Algorithm, Hashable};
 use merkle_light::proof::Proof;
 
-use error::Result;
+use error::*;
 use hasher::{Domain, Hasher};
 use merkle::MerkleTree;
 
@@ -133,7 +133,7 @@ fn hash_pairs<H: Hasher>(
         .map(|pair| {
             if pair.len() != 2 {
                 // If input is malformed, return an Err, which will fail the proof.
-                return Err(format_err!("malformed input"));
+                return Err(Error::MalformedInput);
             }
             hasher.reset();
             Ok(hasher.node(pair[0], pair[1], height))
