@@ -94,8 +94,6 @@ impl AsRef<[u8]> for PedersenDomain {
     }
 }
 
-// Hash is not Hash from the stdlib
-#[cfg_attr(feature = "cargo-clippy", allow(derive_hash_xor_eq))]
 impl Domain for PedersenDomain {
     fn serialize(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(32);
@@ -176,14 +174,14 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
 }
 
 impl From<Fr> for PedersenDomain {
-    #[inline(always)]
+    #[inline]
     fn from(val: Fr) -> Self {
         PedersenDomain(val)
     }
 }
 
 impl From<PedersenDomain> for Fr {
-    #[inline(always)]
+    #[inline]
     fn from(val: PedersenDomain) -> Self {
         val.0
     }

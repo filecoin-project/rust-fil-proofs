@@ -13,7 +13,7 @@ pub trait Domain:
     fn write_bytes(&self, &mut [u8]) -> Result<()>;
 }
 
-pub trait HashFunction<T: Domain>: Clone + ::std::fmt::Debug + Eq + LightAlgorithm<T> {
+pub trait HashFunction<T: Domain>: Clone + ::std::fmt::Debug + LightAlgorithm<T> {
     fn hash(data: &[u8]) -> T;
 
     fn hash_leaf(data: &LightHashable<Self>) -> T {
