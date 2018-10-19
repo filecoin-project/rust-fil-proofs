@@ -6,6 +6,7 @@ extern crate sapling_crypto;
 extern crate log;
 #[macro_use]
 extern crate clap;
+extern crate cpuprofiler;
 extern crate env_logger;
 
 extern crate storage_proofs;
@@ -15,6 +16,8 @@ use pairing::bls12_381::Bls12;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::time::{Duration, Instant};
 
+use cpuprofiler::heap_profiler::HEAP_PROFILER;
+use cpuprofiler::profiler::PROFILER;
 use storage_proofs::drgporep::*;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::{init_logger, prettyb};
@@ -22,6 +25,24 @@ use storage_proofs::fr32::fr_into_bytes;
 use storage_proofs::hasher::{Hasher, PedersenHasher, Sha256Hasher};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
+
+fn start_profile(stage: &str) {
+    PROFILER
+        .lock()
+        .unwrap()
+        .start(format!("./{}.profile", stage))
+        .unwrap();
+    HEAP_PROFILER
+        .lock()
+        .unwrap()
+        .start(format!("./{}.memprofile", stage))
+        .unwrap();
+}
+
+fn stop_profile() {
+    PROFILER.lock().unwrap().stop().unwrap();
+    HEAP_PROFILER.lock().unwrap().stop().unwrap();
+}
 
 fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challenge_count: usize) {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
@@ -53,14 +74,18 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     };
 
     info!("running setup");
+    start_profile("setup");
     let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).unwrap();
+    stop_profile();
 
     let start = Instant::now();
     let mut param_duration = Duration::new(0, 0);
 
     info!("running replicate");
-    let (tau, aux) = DrgPoRep::<H, _>::replicate(&pp, &replica_id, data.as_mut_slice()).unwrap();
 
+    start_profile("replicate");
+    let (tau, aux) = DrgPoRep::replicate::<H, _>(&pp, &replica_id, data.as_mut_slice()).unwrap();
+    stop_profile();
     let pub_inputs = PublicInputs {
         replica_id,
         challenges,
@@ -82,12 +107,16 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     info!("sampling proving & verifying (samples: {})", samples);
     for _ in 0..samples {
         let start = Instant::now();
+        start_profile("prove");
         let proof =
             DrgPoRep::<H, _>::prove(&pp, &pub_inputs, &priv_inputs).expect("failed to prove");
+        stop_profile();
         total_proving += start.elapsed();
 
         let start = Instant::now();
+        start_profile("verify");
         DrgPoRep::<H, _>::verify(&pp, &pub_inputs, &proof).expect("failed to verify");
+        stop_profile();
         total_verifying += start.elapsed();
         proofs.push(proof);
     }

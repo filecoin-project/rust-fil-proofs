@@ -25,6 +25,10 @@ colored = "1.6"
 pbr = "1.0"
 tempfile = "3"
 
+[dev-dependencies]
+# cpuprofiler = "0.0.3"
+cpuprofiler = { git = "https://github.com/dignifiedquire/rust-gperftools" }
+
 [dependencies.pairing]
 version = "0.14.2"
 features = ["expose-arith"]
