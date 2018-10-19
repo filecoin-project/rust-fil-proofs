@@ -49,6 +49,7 @@ extern crate pbr;
 #[macro_use]
 extern crate log;
 extern crate colored;
+extern crate rayon;
 
 #[macro_use]
 pub mod test_helper;

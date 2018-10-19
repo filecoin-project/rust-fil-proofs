@@ -11,11 +11,11 @@ pub trait Domain:
     + Default
     + ::std::fmt::Debug
     + Eq
+    + Send
+    + Sync
     + From<Fr>
     + Into<Fr>
     + Rand
-    + Send
-    + Sync
 {
     fn serialize(&self) -> Vec<u8>;
     fn into_bytes(&self) -> Vec<u8>;
@@ -24,7 +24,9 @@ pub trait Domain:
     fn write_bytes(&self, &mut [u8]) -> Result<()>;
 }
 
-pub trait HashFunction<T: Domain>: Clone + ::std::fmt::Debug + Eq + LightAlgorithm<T> {
+pub trait HashFunction<T: Domain>:
+    Clone + ::std::fmt::Debug + Eq + Send + Sync + LightAlgorithm<T>
+{
     fn hash(data: &[u8]) -> T;
 
     fn hash_leaf(data: &LightHashable<Self>) -> T {
@@ -41,7 +43,7 @@ pub trait HashFunction<T: Domain>: Clone + ::std::fmt::Debug + Eq + LightAlgorit
     }
 }
 
-pub trait Hasher: Clone + ::std::fmt::Debug + Eq + Default {
+pub trait Hasher: Clone + ::std::fmt::Debug + Eq + Default + Send + Sync {
     type Domain: Domain + LightHashable<Self::Function>;
     type Function: HashFunction<Self::Domain>;
 

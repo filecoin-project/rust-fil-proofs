@@ -9,7 +9,8 @@ bitvec = "0.5"
 sapling-crypto = { git = "https://github.com/zcash-hackworks/sapling-crypto", branch = "master" }
 rand = "0.4"
 libc = "0.2"
-merkle_light = { git = "https://github.com/dignifiedquire/merkle_light", branch = "master" }
+# merkle_light = { git = "https://github.com/dignifiedquire/merkle_light", branch = "master" }
+merkle_light = { path = "/Users/dignifiedquire/opensource/merkle_light/merkle" }
 failure = "0.1"
 bellman = "0.1"
 byteorder = "1"
@@ -29,6 +30,7 @@ blake2 = "0.8"
 pbr = "1.0"
 tempfile = "3"
 fs2 = "0.4"
+rayon = "1.0.0"
 
 [dependencies.pairing]
 version = "0.14.2"

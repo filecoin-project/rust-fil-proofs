@@ -1,12 +1,12 @@
 use std::cmp;
 use std::marker::PhantomData;
 
-use merkle_light::hash::{Algorithm, Hashable};
 use rand::{ChaChaRng, OsRng, Rng, SeedableRng};
+use rayon::prelude::*;
 
 use error::*;
 use hasher::pedersen::PedersenHasher;
-use hasher::Hasher;
+use hasher::{HashFunction, Hasher};
 use merkle::MerkleTree;
 use parameter_cache::ParameterSetIdentifier;
 use util::data_at_node;
@@ -39,14 +39,12 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
             return Err(Error::InvalidNodeSize(node_size));
         }
 
-        let mut a = H::Function::default();
-        Ok(MerkleTree::new((0..self.size()).map(|i| {
-            let d = data_at_node(&data, i, node_size).expect("data_at_node math failed");
-            d.hash(&mut a);
-            let h = a.hash();
-            a.reset();
-            h
-        })))
+        Ok(MerkleTree::from_par_iter(
+            (0..self.size()).into_par_iter().map(|i| {
+                let d = data_at_node(&data, i, node_size).expect("data_at_node math failed");
+                H::Function::hash_single_node(&d)
+            }),
+        ))
     }
 
     /// Returns the merkle tree depth.
