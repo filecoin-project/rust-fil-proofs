@@ -143,7 +143,7 @@ mod tests {
 
     use drgraph::{new_seed, BucketGraph, Graph};
     use fr32::fr_into_bytes;
-    use hasher::{HashFunction, PedersenHasher, Sha256Hasher};
+    use hasher::{Blake2sHasher, HashFunction, PedersenHasher, Sha256Hasher};
     use merkle::make_proof_for_test;
     use util::data_at_node;
 
@@ -187,6 +187,11 @@ mod tests {
     #[test]
     fn merklepor_sha256() {
         test_merklepor::<Sha256Hasher>();
+    }
+
+    #[test]
+    fn merklepor_blake2s() {
+        test_merklepor::<Blake2sHasher>();
     }
 
     // Construct a proof that satisfies a cursory validation:
@@ -245,6 +250,11 @@ mod tests {
     }
 
     #[test]
+    fn merklepor_actually_validates_blake2s() {
+        test_merklepor_validates::<Blake2sHasher>();
+    }
+
+    #[test]
     fn merklepor_actually_validates_pedersen() {
         test_merklepor_validates::<PedersenHasher>();
     }
@@ -292,6 +302,11 @@ mod tests {
     #[test]
     fn merklepor_actually_validates_challenge_identity_sha256() {
         test_merklepor_validates_challenge_identity::<Sha256Hasher>();
+    }
+
+    #[test]
+    fn merklepor_actually_validates_challenge_identity_blake2s() {
+        test_merklepor_validates_challenge_identity::<Blake2sHasher>();
     }
 
     #[test]

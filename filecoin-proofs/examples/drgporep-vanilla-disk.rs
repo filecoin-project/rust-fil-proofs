@@ -21,7 +21,11 @@ use storage_proofs::drgporep::*;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::{init_logger, prettyb};
 use storage_proofs::fr32::fr_into_bytes;
+<<<<<<< HEAD
 use storage_proofs::hasher::pedersen::*;
+=======
+use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
+>>>>>>> 2a019ce... feat: add blake2s hasher
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 
@@ -168,12 +172,32 @@ fn main() {
                 .default_value("1")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("hasher")
+                .long("hasher")
+                .help("Which hasher should be used.Available: \"pedersen\", \"sha256\", \"blake2s\" (default \"pedersen\")")
+                .default_value("pedersen")
+                .takes_value(true),
+        )
         .get_matches();
 
     let data_size = value_t!(matches, "size", usize).unwrap() * 1024;
     let m = value_t!(matches, "m", usize).unwrap();
     let sloth_iter = value_t!(matches, "sloth", usize).unwrap();
     let challenge_count = value_t!(matches, "challenges", usize).unwrap();
-
-    do_the_work(data_size, m, sloth_iter, challenge_count);
+    
+    let hasher = value_t!(matches, "hasher", String).unwrap();
+    info!(target: "config", "hasher: {}", hasher);
+    match hasher.as_ref() {
+        "pedersen" => {
+            do_the_work::<PedersenHasher>(data_size, m, sloth_iter, challenge_count);
+        }
+        "sha256" => {
+            do_the_work::<Sha256Hasher>(data_size, m, sloth_iter, challenge_count);
+        }
+        "blake2s" => {
+            do_the_work::<Blake2sHasher>(data_size, m, sloth_iter, challenge_count);
+        }
+        _ => panic!(format!("invalid hasher: {}", hasher)),
+    }
 }

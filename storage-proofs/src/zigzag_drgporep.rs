@@ -61,7 +61,7 @@ mod tests {
 
     use drgraph::new_seed;
     use fr32::fr_into_bytes;
-    use hasher::{PedersenHasher, Sha256Hasher};
+    use hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
     use layered_drgporep::{PrivateInputs, PublicInputs, PublicParams, SetupParams};
     use porep::PoRep;
     use proof::ProofScheme;
@@ -76,6 +76,11 @@ mod tests {
     #[test]
     fn extract_all_sha256() {
         test_extract_all::<Sha256Hasher>();
+    }
+
+    #[test]
+    fn extract_all_blake2s() {
+        test_extract_all::<Blake2sHasher>();
     }
 
     fn test_extract_all<H: 'static + Hasher>() {
@@ -134,6 +139,7 @@ mod tests {
     fn prove_verify(lambda: usize, n: usize, i: usize) {
         test_prove_verify::<PedersenHasher>(lambda, n, i);
         test_prove_verify::<Sha256Hasher>(lambda, n, i);
+        test_prove_verify::<Blake2sHasher>(lambda, n, i);
     }
 
     fn test_prove_verify<H: 'static + Hasher>(lambda: usize, n: usize, i: usize) {

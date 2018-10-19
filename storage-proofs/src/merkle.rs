@@ -156,7 +156,7 @@ mod tests {
 
     use drgraph::new_seed;
     use drgraph::{BucketGraph, Graph};
-    use hasher::{PedersenHasher, Sha256Hasher};
+    use hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
 
     fn merklepath<H: Hasher>() {
         let g = BucketGraph::<H>::new(10, 5, 0, new_seed());
@@ -190,5 +190,10 @@ mod tests {
     #[test]
     fn merklepath_sha256() {
         merklepath::<Sha256Hasher>();
+    }
+
+    #[test]
+    fn merklepath_blake2s() {
+        merklepath::<Blake2sHasher>();
     }
 }

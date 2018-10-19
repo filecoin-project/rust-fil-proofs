@@ -24,7 +24,7 @@ use storage_proofs::drgporep::*;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::{init_logger, prettyb};
 use storage_proofs::fr32::fr_into_bytes;
-use storage_proofs::hasher::{Hasher, PedersenHasher, Sha256Hasher};
+use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 
@@ -187,7 +187,7 @@ fn main() {
         .arg(
             Arg::with_name("hasher")
                 .long("hasher")
-                .help("Which hasher should be used.Available: \"pedersen\", \"sha256\", default \"pedersen\"")
+                .help("Which hasher should be used.Available: \"pedersen\", \"sha256\", \"blake2s\" (default \"pedersen\")")
                 .default_value("pedersen")
                 .takes_value(true),
         )
@@ -205,6 +205,9 @@ fn main() {
         }
         "sha256" => {
             do_the_work::<Sha256Hasher>(data_size, m, sloth_iter, challenge_count);
+        }
+        "blake2s" => {
+            do_the_work::<Blake2sHasher>(data_size, m, sloth_iter, challenge_count);
         }
         _ => panic!(format!("invalid hasher: {}", hasher)),
     }

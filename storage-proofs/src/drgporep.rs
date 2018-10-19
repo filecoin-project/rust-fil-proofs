@@ -445,7 +445,7 @@ mod tests {
 
     use drgraph::{new_seed, BucketGraph};
     use fr32::fr_into_bytes;
-    use hasher::{PedersenHasher, Sha256Hasher};
+    use hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
 
     pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
         let mut tmpfile: File = tempfile::tempfile().unwrap();
@@ -496,6 +496,11 @@ mod tests {
     #[test]
     fn extract_all_sha256() {
         test_extract_all::<Sha256Hasher>();
+    }
+
+    #[test]
+    fn extract_all_blake2s() {
+        test_extract_all::<Blake2sHasher>();
     }
 
     fn test_extract<H: Hasher>() {
@@ -550,6 +555,11 @@ mod tests {
     #[test]
     fn extract_sha256() {
         test_extract::<Sha256Hasher>();
+    }
+
+    #[test]
+    fn extract_blake2s() {
+        test_extract::<Blake2sHasher>();
     }
 
     fn prove_verify_aux<H: Hasher>(
@@ -716,16 +726,19 @@ mod tests {
     fn prove_verify(lambda: usize, n: usize, i: usize) {
         prove_verify_aux::<PedersenHasher>(lambda, n, i, false, false);
         prove_verify_aux::<Sha256Hasher>(lambda, n, i, false, false);
+        prove_verify_aux::<Blake2sHasher>(lambda, n, i, false, false);
     }
 
     fn prove_verify_wrong_challenge(lambda: usize, n: usize, i: usize) {
         prove_verify_aux::<PedersenHasher>(lambda, n, i, true, false);
         prove_verify_aux::<Sha256Hasher>(lambda, n, i, true, false);
+        prove_verify_aux::<Blake2sHasher>(lambda, n, i, true, false);
     }
 
     fn prove_verify_wrong_parents(lambda: usize, n: usize, i: usize) {
         prove_verify_aux::<PedersenHasher>(lambda, n, i, false, true);
         prove_verify_aux::<Sha256Hasher>(lambda, n, i, false, true);
+        prove_verify_aux::<Blake2sHasher>(lambda, n, i, false, true);
     }
 
     table_tests!{

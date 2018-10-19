@@ -168,7 +168,7 @@ pub fn verify_file_inclusion_proofs<H: Hasher>(
 mod tests {
     use super::*;
     use drgraph::{new_seed, BucketGraph, Graph};
-    use hasher::{PedersenHasher, Sha256Hasher};
+    use hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
 
     #[test]
     fn compute_bounds() {
@@ -183,6 +183,11 @@ mod tests {
     #[test]
     fn file_inclusion_proof_sha256() {
         test_file_inclusion_proof::<Sha256Hasher>();
+    }
+
+    #[test]
+    fn file_inclusion_proof_blake2s() {
+        test_file_inclusion_proof::<Blake2sHasher>();
     }
 
     fn test_file_inclusion_proof<H: Hasher>() {

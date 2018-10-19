@@ -41,3 +41,5 @@ opt-level = 1
 [features]
 default = []
 profile = []
+simd = ["storage-proofs/simd"]
+asm = ["storage-proofs/asm"]

@@ -244,7 +244,7 @@ mod tests {
     use std::collections::HashMap;
 
     use drgraph::new_seed;
-    use hasher::{PedersenHasher, Sha256Hasher};
+    use hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
 
     fn assert_graph_ascending<H: Hasher, G: Graph<H>>(g: G) {
         for i in 0..g.size() {
@@ -281,6 +281,11 @@ mod tests {
         test_zigzag_graph_zigzags::<Sha256Hasher>();
     }
 
+    #[test]
+    fn zigzag_graph_zigzags_blake2s() {
+        test_zigzag_graph_zigzags::<Blake2sHasher>();
+    }
+
     fn test_zigzag_graph_zigzags<H: 'static + Hasher>() {
         let g = ZigZagBucketGraph::<H>::new(50, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
         let gz = g.zigzag();
@@ -297,6 +302,11 @@ mod tests {
     #[test]
     fn expansion_sha256() {
         test_expansion::<Sha256Hasher>();
+    }
+
+    #[test]
+    fn expansion_blake2s() {
+        test_expansion::<Blake2sHasher>();
     }
 
     fn test_expansion<H: 'static + Hasher>() {

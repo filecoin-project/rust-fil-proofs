@@ -25,6 +25,7 @@ colored = "1.6"
 aes = "0.1"
 block-modes = "0.1"
 sha2 = "0.8"
+blake2 = "0.8"
 pbr = "1.0"
 tempfile = "3"
 fs2 = "0.4"
@@ -33,14 +34,11 @@ fs2 = "0.4"
 version = "0.14.2"
 features = ["expose-arith"]
 
-[dependencies.blake2-rfc]
-git = "https://github.com/gtank/blake2-rfc"
-rev = "c7c458429c429b81fea845421f5ab859710fa8af"
-
 [features]
 default = ["u128-support"]
 u128-support = ["pairing/u128-support"]
-asm = ["blake2-rfc/simd_asm", "sha2/sha2-asm"]
+simd = ["blake2/simd_opt"]
+asm = ["sha2/sha2-asm", "blake2/simd_asm"]
 
 [dev-dependencies]
 proptest = "0.7"

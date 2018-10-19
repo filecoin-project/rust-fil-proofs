@@ -214,7 +214,7 @@ mod tests {
 
     use drgraph::{new_seed, BucketGraph, Graph};
     use fr32::fr_into_bytes;
-    use hasher::{PedersenHasher, Sha256Hasher};
+    use hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
     use merklepor;
 
     fn test_batchpost<H: Hasher>() {
@@ -269,5 +269,10 @@ mod tests {
     #[test]
     fn batchpost_sha256() {
         test_batchpost::<Sha256Hasher>();
+    }
+
+    #[test]
+    fn batchpost_blake2s() {
+        test_batchpost::<Blake2sHasher>();
     }
 }

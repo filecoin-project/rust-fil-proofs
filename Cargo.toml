@@ -25,3 +25,5 @@ opt-level = 1
 [features]
 default = []
 profile = ["filecoin-proofs/profile"]
+simd = ["storage-proofs/simd", "filecoin-proofs/simd"]
+asm = ["storage-proofs/asm", "filecoin-proofs/asm"]

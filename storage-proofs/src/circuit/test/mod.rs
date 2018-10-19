@@ -9,7 +9,7 @@ use byteorder::{BigEndian, ByteOrder};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
-use blake2_rfc::blake2s::Blake2s;
+use blake2::{Blake2s, Digest};
 
 #[derive(Debug)]
 enum NamedObject {
@@ -89,7 +89,7 @@ fn hash_lc<E: Engine>(terms: &[(Variable, E::Fr)], h: &mut Blake2s) {
 
     let mut buf = [0u8; 9 + 32];
     BigEndian::write_u64(&mut buf[0..8], map.len() as u64);
-    h.update(&buf[0..8]);
+    h.input(&buf[0..8]);
 
     for (var, coeff) in map {
         match var.0.get_unchecked() {
@@ -105,7 +105,7 @@ fn hash_lc<E: Engine>(terms: &[(Variable, E::Fr)], h: &mut Blake2s) {
 
         coeff.into_repr().write_be(&mut buf[9..]).unwrap();
 
-        h.update(&buf);
+        h.input(&buf[..]);
     }
 }
 
@@ -230,14 +230,14 @@ impl<E: Engine> TestConstraintSystem<E> {
     }
 
     pub fn hash(&self) -> String {
-        let mut h = Blake2s::new(32);
+        let mut h = Blake2s::new();
         {
             let mut buf = [0u8; 24];
 
             BigEndian::write_u64(&mut buf[0..8], self.inputs.len() as u64);
             BigEndian::write_u64(&mut buf[8..16], self.aux.len() as u64);
             BigEndian::write_u64(&mut buf[16..24], self.constraints.len() as u64);
-            h.update(&buf);
+            h.input(&buf);
         }
 
         for constraint in &self.constraints {
@@ -247,7 +247,7 @@ impl<E: Engine> TestConstraintSystem<E> {
         }
 
         let mut s = String::new();
-        for b in h.finalize().as_ref() {
+        for b in h.result().as_ref() {
             s += &format!("{:02x}", b);
         }
 

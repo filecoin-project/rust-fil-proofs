@@ -176,7 +176,7 @@ mod tests {
     use memmap::MmapOptions;
 
     use drgraph::new_seed;
-    use hasher::{PedersenHasher, Sha256Hasher};
+    use hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
 
     // Create and return an object of MmapMut backed by in-memory copy of data.
     pub fn mmap_from(data: &[u8]) -> MmapMut {
@@ -224,6 +224,11 @@ mod tests {
     }
 
     #[test]
+    fn graph_bucket_blake2s() {
+        graph_bucket::<Blake2sHasher>();
+    }
+
+    #[test]
     fn graph_bucket_pedersen() {
         graph_bucket::<PedersenHasher>();
     }
@@ -247,5 +252,10 @@ mod tests {
     #[test]
     fn gen_proof_sha256() {
         gen_proof::<Sha256Hasher>()
+    }
+
+    #[test]
+    fn gen_proof_blake2s() {
+        gen_proof::<Blake2sHasher>()
     }
 }
