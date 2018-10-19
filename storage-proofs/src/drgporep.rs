@@ -1,8 +1,6 @@
 use std::marker::PhantomData;
 
 use byteorder::{LittleEndian, WriteBytesExt};
-use pairing::bls12_381::Fr;
-use pairing::{PrimeField, PrimeFieldRepr};
 
 use drgraph::Graph;
 use error::Result;
@@ -98,16 +96,18 @@ pub struct DataProof<H: Hasher> {
 }
 
 impl<H: Hasher> DataProof<H> {
-    fn new(n: usize) -> Self {
+    pub fn new(n: usize) -> Self {
         DataProof {
             proof: MerkleProof::new(n),
             data: Default::default(),
         }
     }
+
     pub fn serialize(&self) -> Vec<u8> {
         let mut out = self.proof.serialize();
-        let r: Fr = self.data.into();
-        r.into_repr().write_le(&mut out).unwrap();
+        let len = out.len();
+        out.resize(len + 32, 0u8);
+        self.data.write_bytes(&mut out[len..]).unwrap();
 
         out
     }
@@ -445,7 +445,7 @@ mod tests {
 
     use drgraph::{new_seed, BucketGraph};
     use fr32::fr_into_bytes;
-    use hasher::pedersen::*;
+    use hasher::{PedersenHasher, Sha256Hasher};
 
     pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
         let mut tmpfile: File = tempfile::tempfile().unwrap();
@@ -454,13 +454,12 @@ mod tests {
         unsafe { MmapOptions::new().map_mut(&tmpfile).unwrap() }
     }
 
-    #[test]
-    fn extract_all() {
+    fn test_extract_all<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let lambda = 32;
         let sloth_iter = 1;
-        let replica_id: Fr = rng.gen();
+        let replica_id: H::Domain = rng.gen();
         let data = vec![2u8; 32 * 3];
         // create a copy, so we can compare roundtrips
         let mut mmapped_data_copy = file_backed_mmap_from(&data);
@@ -476,27 +475,35 @@ mod tests {
             sloth_iter,
         };
 
-        let pp = DrgPoRep::<PedersenHasher, BucketGraph<_>>::setup(&sp).unwrap();
+        let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).unwrap();
 
-        DrgPoRep::replicate(&pp, &replica_id.into(), &mut mmapped_data_copy).unwrap();
+        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy).unwrap();
 
         let mut copied = vec![0; data.len()];
         copied.copy_from_slice(&mmapped_data_copy);
         assert_ne!(data, copied, "replication did not change data");
 
-        let decoded_data =
-            DrgPoRep::extract_all(&pp, &replica_id.into(), &mut mmapped_data_copy).unwrap();
+        let decoded_data = DrgPoRep::extract_all(&pp, &replica_id, &mut mmapped_data_copy).unwrap();
 
         assert_eq!(data, decoded_data.as_slice(), "failed to extract data");
     }
 
     #[test]
-    fn extract() {
+    fn extract_all_pedersen() {
+        test_extract_all::<PedersenHasher>();
+    }
+
+    #[test]
+    fn extract_all_sha256() {
+        test_extract_all::<Sha256Hasher>();
+    }
+
+    fn test_extract<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let lambda = 32;
         let sloth_iter = 1;
-        let replica_id: Fr = rng.gen();
+        let replica_id: H::Domain = rng.gen();
         let nodes = 3;
         let data = vec![2u8; 32 * nodes];
 
@@ -514,17 +521,16 @@ mod tests {
             sloth_iter,
         };
 
-        let pp = DrgPoRep::<PedersenHasher, BucketGraph<_>>::setup(&sp).unwrap();
+        let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).unwrap();
 
-        DrgPoRep::replicate(&pp, &replica_id.into(), &mut mmapped_data_copy).unwrap();
+        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy).unwrap();
 
         let mut copied = vec![0; data.len()];
         copied.copy_from_slice(&mmapped_data_copy);
         assert_ne!(data, copied, "replication did not change data");
 
         for i in 0..nodes {
-            let decoded_data =
-                DrgPoRep::extract(&pp, &replica_id.into(), &mmapped_data_copy, i).unwrap();
+            let decoded_data = DrgPoRep::extract(&pp, &replica_id, &mmapped_data_copy, i).unwrap();
 
             let original_data = data_at_node(&data, i, lambda).unwrap();
 
@@ -536,7 +542,17 @@ mod tests {
         }
     }
 
-    fn prove_verify_aux(
+    #[test]
+    fn extract_pedersen() {
+        test_extract::<PedersenHasher>();
+    }
+
+    #[test]
+    fn extract_sha256() {
+        test_extract::<Sha256Hasher>();
+    }
+
+    fn prove_verify_aux<H: Hasher>(
         lambda: usize,
         nodes: usize,
         i: usize,
@@ -553,7 +569,7 @@ mod tests {
             let expansion_degree = 0;
             let seed = new_seed();
 
-            let replica_id: Fr = rng.gen();
+            let replica_id: H::Domain = rng.gen();
             let data: Vec<u8> = (0..nodes)
                 .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
                 .collect();
@@ -574,33 +590,28 @@ mod tests {
                 sloth_iter,
             };
 
-            let pp = DrgPoRep::<PedersenHasher, BucketGraph<_>>::setup(&sp).unwrap();
+            let pp = DrgPoRep::<H, BucketGraph<_>>::setup(&sp).unwrap();
 
-            let (tau, aux) = DrgPoRep::<PedersenHasher, _>::replicate(
-                &pp,
-                &replica_id.into(),
-                &mut mmapped_data_copy,
-            )
-            .unwrap();
+            let (tau, aux) =
+                DrgPoRep::<H, _>::replicate(&pp, &replica_id, &mut mmapped_data_copy).unwrap();
 
             let mut copied = vec![0; data.len()];
             copied.copy_from_slice(&mmapped_data_copy);
 
             assert_ne!(data, copied, "replication did not change data");
 
-            let pub_inputs = PublicInputs::<PedersenDomain> {
-                replica_id: replica_id.into(),
+            let pub_inputs = PublicInputs::<H::Domain> {
+                replica_id,
                 challenges: vec![challenge, challenge],
                 tau: Some(tau.clone().into()),
             };
 
-            let priv_inputs = PrivateInputs::<PedersenHasher> {
+            let priv_inputs = PrivateInputs::<H> {
                 replica: &mmapped_data_copy,
                 aux: &aux,
             };
 
-            let real_proof =
-                DrgPoRep::<PedersenHasher, _>::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
+            let real_proof = DrgPoRep::<H, _>::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
 
             if use_wrong_parents {
                 // Only one 'wrong' option will be tested at a time.
@@ -665,7 +676,7 @@ mod tests {
                 );
 
                 assert!(
-                    !DrgPoRep::<PedersenHasher, _>::verify(&pp, &pub_inputs, &proof2).unwrap(),
+                    !DrgPoRep::<H, _>::verify(&pp, &pub_inputs, &proof2).unwrap(),
                     "verified in error -- with wrong parent proofs"
                 );
 
@@ -675,12 +686,12 @@ mod tests {
             let proof = real_proof;
 
             if use_wrong_challenge {
-                let pub_inputs_with_wrong_challenge_for_proof = PublicInputs::<PedersenDomain> {
-                    replica_id: replica_id.into(),
+                let pub_inputs_with_wrong_challenge_for_proof = PublicInputs::<H::Domain> {
+                    replica_id,
                     challenges: vec![if challenge == 1 { 2 } else { 1 }],
                     tau: Some(tau.into()),
                 };
-                let verified = DrgPoRep::<PedersenHasher, _>::verify(
+                let verified = DrgPoRep::<H, _>::verify(
                     &pp,
                     &pub_inputs_with_wrong_challenge_for_proof,
                     &proof,
@@ -692,7 +703,7 @@ mod tests {
                 );
             } else {
                 assert!(
-                    DrgPoRep::<PedersenHasher, _>::verify(&pp, &pub_inputs, &proof).unwrap(),
+                    DrgPoRep::<H, _>::verify(&pp, &pub_inputs, &proof).unwrap(),
                     "failed to verify"
                 );
             }
@@ -703,15 +714,18 @@ mod tests {
     }
 
     fn prove_verify(lambda: usize, n: usize, i: usize) {
-        prove_verify_aux(lambda, n, i, false, false)
+        prove_verify_aux::<PedersenHasher>(lambda, n, i, false, false);
+        prove_verify_aux::<Sha256Hasher>(lambda, n, i, false, false);
     }
 
     fn prove_verify_wrong_challenge(lambda: usize, n: usize, i: usize) {
-        prove_verify_aux(lambda, n, i, true, false)
+        prove_verify_aux::<PedersenHasher>(lambda, n, i, true, false);
+        prove_verify_aux::<Sha256Hasher>(lambda, n, i, true, false);
     }
 
     fn prove_verify_wrong_parents(lambda: usize, n: usize, i: usize) {
-        prove_verify_aux(lambda, n, i, false, true)
+        prove_verify_aux::<PedersenHasher>(lambda, n, i, false, true);
+        prove_verify_aux::<Sha256Hasher>(lambda, n, i, false, true);
     }
 
     table_tests!{
@@ -739,5 +753,4 @@ mod tests {
         // Challenge a node (3) that doesn't have all the same parents.
         prove_verify_wrong_parents(32, 7, 4);
     }
-
 }

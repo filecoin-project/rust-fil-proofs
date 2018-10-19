@@ -209,19 +209,18 @@ fn derive_challenge<H: Hasher>(
 mod tests {
     use super::*;
 
-    use pairing::bls12_381::{Bls12, Fr};
+    use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     use drgraph::{new_seed, BucketGraph, Graph};
     use fr32::fr_into_bytes;
-    use hasher::pedersen::*;
+    use hasher::{PedersenHasher, Sha256Hasher};
     use merklepor;
 
-    #[test]
-    fn test_batchpost() {
+    fn test_batchpost<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let replica_id: Fr = rng.gen();
+        let replica_id: H::Domain = rng.gen();
         let pub_params = PublicParams {
             params: merklepor::PublicParams {
                 lambda: 32,
@@ -233,22 +232,21 @@ mod tests {
         let data: Vec<u8> = (0..32)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
-        let graph = BucketGraph::<PedersenHasher>::new(32, 16, 0, new_seed());
+        let graph = BucketGraph::<H>::new(32, 16, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
 
-        let pub_inputs = PublicInputs::<PedersenDomain> {
+        let pub_inputs = PublicInputs::<H::Domain> {
             challenge: 3,
             commitment: tree.root(),
-            replica_id: &replica_id.into(),
+            replica_id: &replica_id,
         };
 
-        let priv_inputs = PrivateInputs::<PedersenHasher>::new(data.as_slice(), &tree);
+        let priv_inputs = PrivateInputs::<H>::new(data.as_slice(), &tree);
 
-        let proof =
-            BatchPoST::<PedersenHasher>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+        let proof = BatchPoST::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
 
         assert!(
-            BatchPoST::<PedersenHasher>::verify(&pub_params, &pub_inputs, &proof).unwrap(),
+            BatchPoST::<H>::verify(&pub_params, &pub_inputs, &proof).unwrap(),
             "failed to verify"
         );
 
@@ -257,9 +255,19 @@ mod tests {
             let mut proof = proof;
             proof.challenges[0] = proof.challenges[0] + 1;
             assert!(
-                !BatchPoST::<PedersenHasher>::verify(&pub_params, &pub_inputs, &proof).unwrap(),
+                !BatchPoST::<H>::verify(&pub_params, &pub_inputs, &proof).unwrap(),
                 "verified invalid proof"
             );
         }
+    }
+
+    #[test]
+    fn batchpost_pedersen() {
+        test_batchpost::<PedersenHasher>();
+    }
+
+    #[test]
+    fn batchpost_sha256() {
+        test_batchpost::<Sha256Hasher>();
     }
 }

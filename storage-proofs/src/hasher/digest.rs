@@ -3,11 +3,13 @@ use std::hash::Hasher as StdHasher;
 use std::marker::PhantomData;
 
 use merkle_light::hash::{Algorithm, Hashable};
-use pairing::bls12_381::Fr;
+use pairing::bls12_381::{Bls12, Fr, FrRepr};
+use pairing::{PrimeField, PrimeFieldRepr};
 use rand::{Rand, Rng};
 use sha2::Digest;
 
 use super::{Domain, HashFunction, Hasher};
+use crypto::sloth;
 use error::*;
 
 pub trait Digester: Digest + Clone + Default + ::std::fmt::Debug {}
@@ -29,24 +31,33 @@ impl<D: Digester> Hasher for DigestHasher<D> {
     type Domain = DigestDomain;
     type Function = DigestFunction<D>;
 
-    fn kdf(_data: &[u8], _m: usize) -> Self::Domain {
-        unimplemented!()
+    fn kdf(data: &[u8], m: usize) -> Self::Domain {
+        assert_eq!(
+            data.len(),
+            32 * (1 + m),
+            "invalid input length: data.len(): {} m: {}",
+            data.len(),
+            m
+        );
+
+        let mut res = <Self::Function as HashFunction<Self::Domain>>::hash(data);
+        // strip last two bits, to make them stay in Fr
+        res.0[31] &= 0b0011_1111;
+
+        res
     }
 
-    fn sloth_encode(
-        _key: &Self::Domain,
-        _ciphertext: &Self::Domain,
-        _rounds: usize,
-    ) -> Self::Domain {
-        unimplemented!()
+    fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain, rounds: usize) -> Self::Domain {
+        // TODO: validate this is how sloth should work in this case
+        let k = (*key).into();
+        let c = (*ciphertext).into();
+
+        sloth::encode::<Bls12>(&k, &c, rounds).into()
     }
 
-    fn sloth_decode(
-        _key: &Self::Domain,
-        _ciphertext: &Self::Domain,
-        _rounds: usize,
-    ) -> Self::Domain {
-        unimplemented!()
+    fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain, rounds: usize) -> Self::Domain {
+        // TODO: validate this is how sloth should work in this case
+        sloth::decode::<Bls12>(&(*key).into(), &(*ciphertext).into(), rounds).into()
     }
 }
 
@@ -84,7 +95,8 @@ pub struct DigestDomain(pub [u8; 32]);
 
 impl Rand for DigestDomain {
     fn rand<R: Rng>(rng: &mut R) -> Self {
-        DigestDomain(rng.gen())
+        // generating an Fr and converting it, to ensure we stay in the field
+        rng.gen::<Fr>().into()
     }
 }
 
@@ -101,13 +113,20 @@ impl<D: Digester> Hashable<DigestFunction<D>> for DigestDomain {
 }
 
 impl From<Fr> for DigestDomain {
-    fn from(_val: Fr) -> Self {
-        unimplemented!()
+    fn from(val: Fr) -> Self {
+        let mut res = Self::default();
+        val.into_repr().write_le(&mut res.0[0..32]).unwrap();
+
+        res
     }
 }
+
 impl From<DigestDomain> for Fr {
-    fn from(_val: DigestDomain) -> Self {
-        unimplemented!()
+    fn from(val: DigestDomain) -> Self {
+        let mut res = FrRepr::default();
+        res.read_le(&val.0[0..32]).unwrap();
+
+        Fr::from_repr(res).unwrap()
     }
 }
 
