@@ -112,27 +112,25 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
                 seed[7] = node as u32;
                 let mut rng = ChaChaRng::from_seed(&seed);
 
-                let mut parents: Vec<_> = (0..m)
-                    .map(|k| {
-                        // iterate over m meta nodes of the ith real node
-                        // simulate the edges that we would add from previous graph nodes
-                        // if any edge is added from a meta node of jth real node then add edge (j,i)
-                        let logi = ((node * m) as f32).log2().floor() as usize;
-                        let j = rng.gen::<usize>() % logi;
-                        let jj = cmp::min(node * m + k, 1 << (j + 1));
-                        let back_dist = rng.gen_range(cmp::max(jj >> 1, 2), jj + 1);
-                        let out = (node * m + k - back_dist) / m;
+                let mut parents = Vec::with_capacity(m);
+                for k in 0..m {
+                    // iterate over m meta nodes of the ith real node
+                    // simulate the edges that we would add from previous graph nodes
+                    // if any edge is added from a meta node of jth real node then add edge (j,i)
+                    let logi = ((node * m) as f32).log2().floor() as usize;
+                    let j = rng.gen::<usize>() % logi;
+                    let jj = cmp::min(node * m + k, 1 << (j + 1));
+                    let back_dist = rng.gen_range(cmp::max(jj >> 1, 2), jj + 1);
+                    let out = (node * m + k - back_dist) / m;
 
-                        // remove self references and replace with reference to previous node
-                        if out == node {
-                            return node - 1;
-                        }
-
+                    // remove self references and replace with reference to previous node
+                    if out == node {
+                        parents.push(node - 1);
+                    } else {
                         assert!(out <= node);
-
-                        out
-                    })
-                    .collect();
+                        parents.push(out);
+                    }
+                }
 
                 parents.sort_unstable();
 
