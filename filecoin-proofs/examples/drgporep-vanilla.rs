@@ -11,7 +11,7 @@ extern crate env_logger;
 extern crate storage_proofs;
 
 use clap::{App, Arg};
-use pairing::bls12_381::{Bls12, Fr};
+use pairing::bls12_381::Bls12;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::time::{Duration, Instant};
 
@@ -19,11 +19,11 @@ use storage_proofs::drgporep::*;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::{init_logger, prettyb};
 use storage_proofs::fr32::fr_into_bytes;
-use storage_proofs::hasher::pedersen::*;
+use storage_proofs::hasher::{Hasher, PedersenHasher, Sha256Hasher};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 
-fn do_the_work(data_size: usize, m: usize, sloth_iter: usize, challenge_count: usize) {
+fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challenge_count: usize) {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
     let challenges = vec![2; challenge_count];
     let lambda = 32;
@@ -36,7 +36,7 @@ fn do_the_work(data_size: usize, m: usize, sloth_iter: usize, challenge_count: u
 
     let nodes = data_size / lambda;
 
-    let replica_id: Fr = rng.gen();
+    let replica_id: H::Domain = rng.gen();
     let mut data: Vec<u8> = (0..nodes)
         .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
         .collect();
@@ -53,23 +53,21 @@ fn do_the_work(data_size: usize, m: usize, sloth_iter: usize, challenge_count: u
     };
 
     info!("running setup");
-    let pp = DrgPoRep::<PedersenHasher, BucketGraph<_>>::setup(&sp).unwrap();
+    let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).unwrap();
 
     let start = Instant::now();
     let mut param_duration = Duration::new(0, 0);
 
     info!("running replicate");
-    let (tau, aux) =
-        DrgPoRep::<PedersenHasher, _>::replicate(&pp, &replica_id.into(), data.as_mut_slice())
-            .unwrap();
+    let (tau, aux) = DrgPoRep::<H, _>::replicate(&pp, &replica_id, data.as_mut_slice()).unwrap();
 
     let pub_inputs = PublicInputs {
-        replica_id: replica_id.into(),
+        replica_id,
         challenges,
         tau: Some(tau),
     };
 
-    let priv_inputs = PrivateInputs::<PedersenHasher> {
+    let priv_inputs = PrivateInputs::<H> {
         replica: data.as_slice(),
         aux: &aux,
     };
@@ -84,12 +82,12 @@ fn do_the_work(data_size: usize, m: usize, sloth_iter: usize, challenge_count: u
     info!("sampling proving & verifying (samples: {})", samples);
     for _ in 0..samples {
         let start = Instant::now();
-        let proof = DrgPoRep::<PedersenHasher, _>::prove(&pp, &pub_inputs, &priv_inputs)
-            .expect("failed to prove");
+        let proof =
+            DrgPoRep::<H, _>::prove(&pp, &pub_inputs, &priv_inputs).expect("failed to prove");
         total_proving += start.elapsed();
 
         let start = Instant::now();
-        DrgPoRep::<PedersenHasher, _>::verify(&pp, &pub_inputs, &proof).expect("failed to verify");
+        DrgPoRep::<H, _>::verify(&pp, &pub_inputs, &proof).expect("failed to verify");
         total_verifying += start.elapsed();
         proofs.push(proof);
     }
@@ -149,12 +147,28 @@ fn main() {
                 .default_value("1")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("hasher")
+                .long("hasher")
+                .help("Which hasher should be used.Available: \"pedersen\", \"sha256\", default \"pedersen\"")
+                .default_value("pedersen")
+                .takes_value(true),
+        )
         .get_matches();
 
     let data_size = value_t!(matches, "size", usize).unwrap() * 1024;
     let m = value_t!(matches, "m", usize).unwrap();
     let sloth_iter = value_t!(matches, "sloth", usize).unwrap();
     let challenge_count = value_t!(matches, "challenges", usize).unwrap();
-
-    do_the_work(data_size, m, sloth_iter, challenge_count);
+    let hasher = value_t!(matches, "hasher", String).unwrap();
+    info!(target: "config", "hasher: {}", hasher);
+    match hasher.as_ref() {
+        "pedersen" => {
+            do_the_work::<PedersenHasher>(data_size, m, sloth_iter, challenge_count);
+        }
+        "sha256" => {
+            do_the_work::<Sha256Hasher>(data_size, m, sloth_iter, challenge_count);
+        }
+        _ => panic!(format!("invalid hasher: {}", hasher)),
+    }
 }
