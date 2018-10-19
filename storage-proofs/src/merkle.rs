@@ -156,11 +156,10 @@ mod tests {
 
     use drgraph::new_seed;
     use drgraph::{BucketGraph, Graph};
-    use hasher::pedersen::*;
+    use hasher::{PedersenHasher, Sha256Hasher};
 
-    #[test]
-    fn merklepath() {
-        let g = BucketGraph::<PedersenHasher>::new(10, 5, 0, new_seed());
+    fn merklepath<H: Hasher>() {
+        let g = BucketGraph::<H>::new(10, 5, 0, new_seed());
         let mut rng = rand::thread_rng();
         let data: Vec<u8> = (0..16 * 10).map(|_| rng.gen()).collect();
 
@@ -168,9 +167,9 @@ mod tests {
         for i in 0..10 {
             let proof = tree.gen_proof(i);
 
-            assert!(proof.validate::<PedersenFunction>());
+            assert!(proof.validate::<H::Function>());
             let len = proof.lemma().len();
-            let mp = MerkleProof::<PedersenHasher>::new_from_proof(&proof);
+            let mp = MerkleProof::<H>::new_from_proof(&proof);
 
             assert_eq!(mp.len(), len);
 
@@ -181,5 +180,15 @@ mod tests {
                 "failed to validate valid data"
             );
         }
+    }
+
+    #[test]
+    fn merklepath_pedersen() {
+        merklepath::<PedersenHasher>();
+    }
+
+    #[test]
+    fn merklepath_sha256() {
+        merklepath::<Sha256Hasher>();
     }
 }

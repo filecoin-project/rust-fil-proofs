@@ -178,7 +178,7 @@ mod tests {
     use memmap::MmapOptions;
 
     use drgraph::new_seed;
-    use hasher::pedersen::*;
+    use hasher::{PedersenHasher, Sha256Hasher};
 
     // Create and return an object of MmapMut backed by in-memory copy of data.
     pub fn mmap_from(data: &[u8]) -> MmapMut {
@@ -187,11 +187,10 @@ mod tests {
         mm
     }
 
-    #[test]
-    fn graph_bucket() {
+    fn graph_bucket<H: Hasher>() {
         for size in vec![3, 10, 200, 2000] {
             for degree in 2..12 {
-                let g = BucketGraph::<PedersenHasher>::new(size, degree, 0, new_seed());
+                let g = BucketGraph::<H>::new(size, degree, 0, new_seed());
 
                 assert_eq!(g.size(), size, "wrong nodes count");
 
@@ -222,14 +221,33 @@ mod tests {
     }
 
     #[test]
-    fn gen_proof() {
-        let g = BucketGraph::<PedersenHasher>::new(5, 3, 0, new_seed());
+    fn graph_bucket_sha256() {
+        graph_bucket::<Sha256Hasher>();
+    }
+
+    #[test]
+    fn graph_bucket_pedersen() {
+        graph_bucket::<PedersenHasher>();
+    }
+
+    fn gen_proof<H: Hasher>() {
+        let g = BucketGraph::<H>::new(5, 3, 0, new_seed());
         let data = vec![2u8; 16 * 5];
 
         let mmapped = &mmap_from(&data);
         let tree = g.merkle_tree(mmapped, 16).unwrap();
         let proof = tree.gen_proof(2);
 
-        assert!(proof.validate::<PedersenFunction>());
+        assert!(proof.validate::<H::Function>());
+    }
+
+    #[test]
+    fn gen_proof_pedersen() {
+        gen_proof::<PedersenHasher>()
+    }
+
+    #[test]
+    fn gen_proof_sha256() {
+        gen_proof::<Sha256Hasher>()
     }
 }
