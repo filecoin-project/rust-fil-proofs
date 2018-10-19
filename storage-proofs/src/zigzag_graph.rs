@@ -244,7 +244,7 @@ mod tests {
     use std::collections::HashMap;
 
     use drgraph::new_seed;
-    use hasher::PedersenHasher;
+    use hasher::{PedersenHasher, Sha256Hasher};
 
     fn assert_graph_ascending<H: Hasher, G: Graph<H>>(g: G) {
         for i in 0..g.size() {
@@ -272,9 +272,17 @@ mod tests {
     }
 
     #[test]
-    fn zigzag_graph_zigzags() {
-        let g =
-            ZigZagBucketGraph::<PedersenHasher>::new(50, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
+    fn zigzag_graph_zigzags_pedersen() {
+        test_zigzag_graph_zigzags::<PedersenHasher>();
+    }
+
+    #[test]
+    fn zigzag_graph_zigzags_sha256() {
+        test_zigzag_graph_zigzags::<Sha256Hasher>();
+    }
+
+    fn test_zigzag_graph_zigzags<H: 'static + Hasher>() {
+        let g = ZigZagBucketGraph::<H>::new(50, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
         let gz = g.zigzag();
 
         assert_graph_ascending(g);
@@ -282,10 +290,18 @@ mod tests {
     }
 
     #[test]
-    fn expansion() {
+    fn expansion_pedersen() {
+        test_expansion::<PedersenHasher>();
+    }
+
+    #[test]
+    fn expansion_sha256() {
+        test_expansion::<Sha256Hasher>();
+    }
+
+    fn test_expansion<H: 'static + Hasher>() {
         // We need a graph.
-        let g =
-            ZigZagBucketGraph::<PedersenHasher>::new(25, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
+        let g = ZigZagBucketGraph::<H>::new(25, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
 
         // We're going to fully realize the expansion-graph component, in a HashMap.
         let mut gcache: HashMap<usize, Vec<usize>> = HashMap::new();

@@ -168,7 +168,7 @@ pub fn verify_file_inclusion_proofs<H: Hasher>(
 mod tests {
     use super::*;
     use drgraph::{new_seed, BucketGraph, Graph};
-    use hasher::pedersen::PedersenHasher;
+    use hasher::{PedersenHasher, Sha256Hasher};
 
     #[test]
     fn compute_bounds() {
@@ -176,24 +176,33 @@ mod tests {
     }
 
     #[test]
-    fn file_inclusion_proof() {
+    fn file_inclusion_proof_pedersen() {
+        test_file_inclusion_proof::<PedersenHasher>();
+    }
+
+    #[test]
+    fn file_inclusion_proof_sha256() {
+        test_file_inclusion_proof::<Sha256Hasher>();
+    }
+
+    fn test_file_inclusion_proof<H: Hasher>() {
         let nodes = 5;
         for i in 1..nodes {
             for j in 1..(nodes - i) {
-                file_inclusion_proof_aux(nodes, &[i, j]);
+                file_inclusion_proof_aux::<H>(nodes, &[i, j]);
             }
         }
 
-        file_inclusion_proof_aux(32, &[32usize]);
-        file_inclusion_proof_aux(32, &[10usize, 15, 7]);
-        file_inclusion_proof_aux(32, &[3usize, 9, 20]);
-        file_inclusion_proof_aux(32, &[4usize, 6, 14]);
+        file_inclusion_proof_aux::<H>(32, &[32usize]);
+        file_inclusion_proof_aux::<H>(32, &[10usize, 15, 7]);
+        file_inclusion_proof_aux::<H>(32, &[3usize, 9, 20]);
+        file_inclusion_proof_aux::<H>(32, &[4usize, 6, 14]);
     }
 
-    fn file_inclusion_proof_aux(nodes: usize, node_lengths: &[usize]) {
+    fn file_inclusion_proof_aux<H: Hasher>(nodes: usize, node_lengths: &[usize]) {
         let lambda = 32;
         let size = nodes * lambda;
-        let g = BucketGraph::<PedersenHasher>::new(nodes, 0, 0, new_seed());
+        let g = BucketGraph::<H>::new(nodes, 0, 0, new_seed());
         let mut data = Vec::<u8>::with_capacity(nodes);
 
         for i in 0..size {
@@ -203,7 +212,7 @@ mod tests {
         let tree = g.merkle_tree(&data, lambda).unwrap();
         let lengths: Vec<usize> = node_lengths.iter().map(|x| x * lambda).collect();
 
-        let proofs = file_inclusion_proofs::<PedersenHasher>(&tree, &node_lengths);
+        let proofs = file_inclusion_proofs::<H>(&tree, &node_lengths);
         let bounds = bounds(lengths.as_slice());
         let mut pieces = Vec::new();
         for (start, end) in &bounds {

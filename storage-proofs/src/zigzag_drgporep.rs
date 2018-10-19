@@ -56,12 +56,12 @@ where
 mod tests {
     use super::*;
 
-    use pairing::bls12_381::{Bls12, Fr};
+    use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     use drgraph::new_seed;
     use fr32::fr_into_bytes;
-    use hasher::pedersen::*;
+    use hasher::{PedersenHasher, Sha256Hasher};
     use layered_drgporep::{PrivateInputs, PublicInputs, PublicParams, SetupParams};
     use porep::PoRep;
     use proof::ProofScheme;
@@ -69,11 +69,20 @@ mod tests {
     const DEFAULT_ZIGZAG_LAYERS: usize = 10;
 
     #[test]
-    fn extract_all() {
+    fn extract_all_pedersen() {
+        test_extract_all::<PedersenHasher>();
+    }
+
+    #[test]
+    fn extract_all_sha256() {
+        test_extract_all::<Sha256Hasher>();
+    }
+
+    fn test_extract_all<H: 'static + Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let lambda = 32;
         let sloth_iter = 1;
-        let replica_id: Fr = rng.gen();
+        let replica_id: H::Domain = rng.gen();
         let data = vec![2u8; 32 * 3];
         let challenge_count = 5;
 
@@ -95,14 +104,14 @@ mod tests {
             challenge_count,
         };
 
-        let mut pp = ZigZagDrgPoRep::<PedersenHasher>::setup(&sp).unwrap();
+        let mut pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
         // Get the public params for the last layer.
         // In reality, this is a no-op with an even number of layers.
         for _ in 0..pp.layers {
             pp.drg_porep_public_params = zigzag(&pp.drg_porep_public_params);
         }
 
-        ZigZagDrgPoRep::replicate(&pp, &replica_id.into(), data_copy.as_mut_slice()).unwrap();
+        ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice()).unwrap();
 
         let transformed_params = PublicParams {
             drg_porep_public_params: pp.drg_porep_public_params,
@@ -112,9 +121,9 @@ mod tests {
 
         assert_ne!(data, data_copy);
 
-        let decoded_data = ZigZagDrgPoRep::extract_all(
+        let decoded_data = ZigZagDrgPoRep::<H>::extract_all(
             &transformed_params,
-            &replica_id.into(),
+            &replica_id,
             data_copy.as_mut_slice(),
         )
         .unwrap();
@@ -123,13 +132,18 @@ mod tests {
     }
 
     fn prove_verify(lambda: usize, n: usize, i: usize) {
+        test_prove_verify::<PedersenHasher>(lambda, n, i);
+        test_prove_verify::<Sha256Hasher>(lambda, n, i);
+    }
+
+    fn test_prove_verify<H: 'static + Hasher>(lambda: usize, n: usize, i: usize) {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let degree = 1 + i;
         let expansion_degree = i;
         let lambda = lambda;
         let sloth_iter = 1;
-        let replica_id: Fr = rng.gen();
+        let replica_id: H::Domain = rng.gen();
         let data: Vec<u8> = (0..n)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
@@ -151,20 +165,16 @@ mod tests {
             challenge_count,
         };
 
-        let pp = ZigZagDrgPoRep::<PedersenHasher>::setup(&sp).unwrap();
-        let (tau, aux) = ZigZagDrgPoRep::<PedersenHasher>::replicate(
-            &pp,
-            &replica_id.into(),
-            data_copy.as_mut_slice(),
-        )
-        .unwrap();
+        let pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
+        let (tau, aux) =
+            ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice()).unwrap();
         assert_ne!(data, data_copy);
 
-        let pub_inputs = PublicInputs::<PedersenDomain> {
-            replica_id: replica_id.into(),
+        let pub_inputs = PublicInputs::<H::Domain> {
+            replica_id,
             challenge_count,
             tau: Some(tau.simplify().into()),
-            comm_r_star: tau.comm_r_star.into(),
+            comm_r_star: tau.comm_r_star,
         };
 
         let priv_inputs = PrivateInputs {
@@ -173,9 +183,8 @@ mod tests {
             tau: tau.layer_taus,
         };
 
-        let proof =
-            ZigZagDrgPoRep::<PedersenHasher>::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
-        assert!(ZigZagDrgPoRep::<PedersenHasher>::verify(&pp, &pub_inputs, &proof).unwrap());
+        let proof = ZigZagDrgPoRep::<H>::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
+        assert!(ZigZagDrgPoRep::<H>::verify(&pp, &pub_inputs, &proof).unwrap());
     }
 
     table_tests!{
