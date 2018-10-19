@@ -70,11 +70,7 @@ fn sha256_benchmark(c: &mut Criterion) {
                 let mut rng = thread_rng();
                 let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
 
-                b.iter(|| {
-                    let mut hasher = Sha256::new();
-                    hasher.input(&data);
-                    black_box(hasher.result())
-                })
+                b.iter(|| black_box(Sha256::digest(&data)))
             },
             params,
         )
