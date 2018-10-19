@@ -17,8 +17,6 @@ use pairing::bls12_381::Bls12;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::time::{Duration, Instant};
 
-// #[cfg(feature = "profile")]
-// use gperftools::heap_profiler::HEAP_PROFILER;
 #[cfg(feature = "profile")]
 use gperftools::profiler::PROFILER;
 
@@ -38,12 +36,8 @@ fn start_profile(stage: &str) {
         .unwrap()
         .start(format!("./{}.profile", stage))
         .unwrap();
-    HEAP_PROFILER
-        .lock()
-        .unwrap()
-        .start(format!("./{}.memprofile", stage))
-        .unwrap();
 }
+
 #[cfg(not(feature = "profile"))]
 #[inline(always)]
 fn start_profile(_stage: &str) {}
@@ -52,7 +46,6 @@ fn start_profile(_stage: &str) {}
 #[inline(always)]
 fn stop_profile() {
     PROFILER.lock().unwrap().stop().unwrap();
-    HEAP_PROFILER.lock().unwrap().stop().unwrap();
 }
 
 #[cfg(not(feature = "profile"))]
