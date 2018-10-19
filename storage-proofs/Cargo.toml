@@ -9,8 +9,7 @@ bitvec = "0.5"
 sapling-crypto = { git = "https://github.com/zcash-hackworks/sapling-crypto", branch = "master" }
 rand = "0.4"
 libc = "0.2"
-# merkle_light = { git = "https://github.com/dignifiedquire/merkle_light", branch = "master" }
-merkle_light = { path = "/Users/dignifiedquire/opensource/merkle_light/merkle" }
+merkle_light = { git = "https://github.com/dignifiedquire/merkle_light", branch = "master" }
 failure = "0.1"
 bellman = "0.1"
 byteorder = "1"
