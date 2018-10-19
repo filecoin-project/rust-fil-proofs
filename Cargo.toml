@@ -20,3 +20,8 @@ members = [
 
 [profile.test]
 opt-level = 1
+
+
+[features]
+default = []
+profile = ["filecoin-proofs/profile"]

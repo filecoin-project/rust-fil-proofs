@@ -6,8 +6,9 @@ extern crate sapling_crypto;
 extern crate log;
 #[macro_use]
 extern crate clap;
-extern crate cpuprofiler;
 extern crate env_logger;
+#[cfg(feature = "profile")]
+extern crate gperftools;
 
 extern crate storage_proofs;
 
@@ -16,8 +17,11 @@ use pairing::bls12_381::Bls12;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::time::{Duration, Instant};
 
-use cpuprofiler::heap_profiler::HEAP_PROFILER;
-use cpuprofiler::profiler::PROFILER;
+// #[cfg(feature = "profile")]
+// use gperftools::heap_profiler::HEAP_PROFILER;
+#[cfg(feature = "profile")]
+use gperftools::profiler::PROFILER;
+
 use storage_proofs::drgporep::*;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::{init_logger, prettyb};
@@ -26,6 +30,8 @@ use storage_proofs::hasher::{Hasher, PedersenHasher, Sha256Hasher};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 
+#[cfg(feature = "profile")]
+#[inline(always)]
 fn start_profile(stage: &str) {
     PROFILER
         .lock()
@@ -38,11 +44,20 @@ fn start_profile(stage: &str) {
         .start(format!("./{}.memprofile", stage))
         .unwrap();
 }
+#[cfg(not(feature = "profile"))]
+#[inline(always)]
+fn start_profile(_stage: &str) {}
 
+#[cfg(feature = "profile")]
+#[inline(always)]
 fn stop_profile() {
     PROFILER.lock().unwrap().stop().unwrap();
     HEAP_PROFILER.lock().unwrap().stop().unwrap();
 }
+
+#[cfg(not(feature = "profile"))]
+#[inline(always)]
+fn stop_profile() {}
 
 fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challenge_count: usize) {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
