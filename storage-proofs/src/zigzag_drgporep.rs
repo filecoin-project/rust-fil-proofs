@@ -66,7 +66,7 @@ mod tests {
     use porep::PoRep;
     use proof::ProofScheme;
 
-    const DEFAULT_ZIGZAG_LAYERS: usize = 6;
+    const DEFAULT_ZIGZAG_LAYERS: usize = 10;
 
     #[test]
     fn extract_all() {
@@ -75,6 +75,7 @@ mod tests {
         let sloth_iter = 1;
         let replica_id: Fr = rng.gen();
         let data = vec![2u8; 32 * 3];
+        let challenge_count = 5;
 
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
@@ -91,6 +92,7 @@ mod tests {
                 sloth_iter,
             },
             layers: DEFAULT_ZIGZAG_LAYERS,
+            challenge_count,
         };
 
         let mut pp = ZigZagDrgPoRep::<PedersenHasher>::setup(&sp).unwrap();
@@ -105,6 +107,7 @@ mod tests {
         let transformed_params = PublicParams {
             drg_porep_public_params: pp.drg_porep_public_params,
             layers: pp.layers,
+            challenge_count,
         };
 
         assert_ne!(data, data_copy);
@@ -132,7 +135,7 @@ mod tests {
             .collect();
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
-        let challenges = vec![i];
+        let challenge_count = 5;
         let sp = SetupParams {
             drg_porep_setup_params: drgporep::SetupParams {
                 lambda,
@@ -145,6 +148,7 @@ mod tests {
                 sloth_iter,
             },
             layers: DEFAULT_ZIGZAG_LAYERS,
+            challenge_count,
         };
 
         let pp = ZigZagDrgPoRep::<PedersenHasher>::setup(&sp).unwrap();
@@ -158,7 +162,7 @@ mod tests {
 
         let pub_inputs = PublicInputs::<PedersenDomain> {
             replica_id: replica_id.into(),
-            challenges,
+            challenge_count,
             tau: Some(tau.simplify().into()),
             comm_r_star: tau.comm_r_star.into(),
         };

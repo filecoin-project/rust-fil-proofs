@@ -95,6 +95,8 @@ impl AsRef<[u8]> for PedersenDomain {
 }
 
 impl Domain for PedersenDomain {
+    // QUESTION: When, if ever, should serialize and into_bytes return different results?
+    // The definitions here at least are equivalent.
     fn serialize(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(32);
         self.0.into_repr().write_le(&mut bytes).unwrap();

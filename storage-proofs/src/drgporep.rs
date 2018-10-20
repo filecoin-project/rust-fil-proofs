@@ -237,7 +237,7 @@ where
 
         for i in 0..len {
             let challenge = pub_inputs.challenges[i] % pub_params.graph.size();
-            assert_ne!(challenge, 0, "can not prove the first node");
+            assert_ne!(challenge, 0, "cannot prove the first node");
 
             let tree_d = &priv_inputs.aux.tree_d;
             let tree_r = &priv_inputs.aux.tree_r;
@@ -344,7 +344,7 @@ where
             }
 
             let challenge = pub_inputs.challenges[i] % pub_params.graph.size();
-            assert_ne!(challenge, 0, "can not prove the first node");
+            assert_ne!(challenge, 0, "cannot prove the first node");
 
             if !proof.replica_nodes[i].proof.validate(challenge) {
                 println!("invalid replica node");
@@ -545,10 +545,8 @@ mod tests {
     ) {
         assert!(i < nodes);
 
-        let mut repeat = true;
-        while repeat {
-            repeat = false;
-
+        // The loop is here in case we need to retry because of an edge case in the test design.
+        loop {
             let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
             let sloth_iter = 1;
             let degree = 10;
@@ -640,7 +638,8 @@ mod tests {
                 if all_same {
                     println!("invalid test data can't scramble proofs with all same parents.");
 
-                    repeat = true;
+                    // If for some reason, we hit this condition because of the data passeed in,
+                    // try again.
                     continue;
                 }
 
@@ -697,6 +696,9 @@ mod tests {
                     "failed to verify"
                 );
             }
+
+            // Normally, just run once.
+            break;
         }
     }
 

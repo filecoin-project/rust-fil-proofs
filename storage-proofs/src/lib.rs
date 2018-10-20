@@ -56,6 +56,7 @@ pub mod test_helper;
 pub mod example_helper;
 
 pub mod batchpost;
+pub mod challenge_derivation;
 pub mod circuit;
 pub mod compound_proof;
 pub mod crypto;

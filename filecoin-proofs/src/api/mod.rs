@@ -585,7 +585,7 @@ mod tests {
                 cs
             );
 
-            /// Make sure trying to verify a bad proof fails verification (returns false).
+            // Make sure trying to verify a bad proof fails verification (returns false).
             {
                 // This should always fail, because we've rotated the commitments in the call.
                 let verify_seal_res = verify_seal(

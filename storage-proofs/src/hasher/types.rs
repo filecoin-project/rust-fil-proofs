@@ -4,7 +4,18 @@ use pairing::bls12_381::Fr;
 use rand::Rand;
 
 pub trait Domain:
-    Ord + Copy + Clone + AsRef<[u8]> + Default + ::std::fmt::Debug + Eq + From<Fr> + Into<Fr> + Rand
+    Ord
+    + Copy
+    + Clone
+    + AsRef<[u8]>
+    + Default
+    + ::std::fmt::Debug
+    + Eq
+    + From<Fr>
+    + Into<Fr>
+    + Rand
+    + Send
+    + Sync
 {
     fn serialize(&self) -> Vec<u8>;
     fn into_bytes(&self) -> Vec<u8>;

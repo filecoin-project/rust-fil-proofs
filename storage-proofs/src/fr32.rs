@@ -33,7 +33,7 @@ pub fn bytes_into_fr<E: Engine>(bytes: &[u8]) -> Result<E::Fr> {
 
 // Takes an Fr and returns a vector of exactly 32 bytes guaranteed to contain a valid Fr.
 pub fn fr_into_bytes<E: Engine>(fr: &E::Fr) -> Fr32Vec {
-    let mut out = Vec::new();
+    let mut out = Vec::with_capacity(32);
     fr.into_repr().write_le(&mut out).unwrap();
     out
 }

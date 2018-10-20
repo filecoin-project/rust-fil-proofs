@@ -56,6 +56,7 @@ const DEGREE: usize = 1; // TODO: 10;
 const EXPANSION_DEGREE: usize = 2; // TODO: 10
 const SLOTH_ITER: usize = 1;
 const LAYERS: usize = 2; // TODO: 6;
+const CHALLENGE_COUNT: usize = 1;
 
 fn setup_params(sector_bytes: usize) -> layered_drgporep::SetupParams {
     assert!(
@@ -77,6 +78,7 @@ fn setup_params(sector_bytes: usize) -> layered_drgporep::SetupParams {
             sloth_iter: SLOTH_ITER,
         },
         layers: LAYERS,
+        challenge_count: CHALLENGE_COUNT,
     }
 }
 
@@ -135,6 +137,8 @@ pub fn seal(
 ) -> Result<(Commitment, Commitment, Commitment, SnarkProof)> {
     let (fake, delay_seconds, sector_bytes, proof_sector_bytes) = get_config(sector_store);
 
+    let public_params = public_params(proof_sector_bytes);
+    let challenge_count = public_params.challenge_count;
     if let Some(delay) = delay_seconds {
         delay_seal(delay);
     };
@@ -177,18 +181,10 @@ pub fn seal(
     )?;
 
     let public_tau = tau.simplify();
-    // This is the commitment to the original data.
-    let comm_d = public_tau.comm_d;
-    // This is the commitment to the last layer's replica.
-    let comm_r = public_tau.comm_r;
 
-    let challenges = derive_challenges(
-        fr_into_bytes::<Bls12>(&comm_r.0).as_slice(),
-        fr_into_bytes::<Bls12>(&comm_d.0).as_slice(),
-    );
     let public_inputs = layered_drgporep::PublicInputs {
         replica_id,
-        challenges,
+        challenge_count,
         tau: Some(public_tau),
         comm_r_star: tau.comm_r_star,
     };
@@ -339,7 +335,7 @@ pub fn verify_seal(
 ) -> Result<bool> {
     let (_fake, _delay_seconds, _sector_bytes, proof_sector_bytes) = get_config(sector_store);
 
-    let challenges = derive_challenges(&comm_r, &comm_d);
+    let challenge_count = CHALLENGE_COUNT;
     let prover_id = pad_safe_fr(prover_id_in);
     let sector_id = pad_safe_fr(sector_id_in);
     let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
@@ -349,8 +345,8 @@ pub fn verify_seal(
     let comm_r_star = bytes_into_fr::<Bls12>(&comm_r_star)?;
 
     let public_inputs = layered_drgporep::PublicInputs::<<DefaultTreeHasher as Hasher>::Domain> {
-        replica_id, // FIXME: Change prover_id field name to replica_id everywhere.
-        challenges,
+        replica_id,
+        challenge_count,
         tau: Some(Tau {
             comm_r: comm_r.into(),
             comm_d: comm_d.into(),
@@ -370,9 +366,4 @@ pub fn verify_seal(
     };
 
     ZigZagCompound::verify(&public_params(proof_sector_bytes), &public_inputs, proof)
-}
-
-fn derive_challenges(_comm_r: &[u8], _comm_d: &[u8]) -> Vec<usize> {
-    // TODO: actually derive challenge(s).
-    vec![1]
 }

@@ -223,7 +223,8 @@ impl<'a, H: 'static + Hasher>
 
             let drgporep_pub_inputs = drgporep::PublicInputs {
                 replica_id: pub_in.replica_id,
-                challenges: pub_in.challenges.clone(),
+                challenges: pub_in
+                    .challenges(pub_params.drg_porep_public_params.graph.size(), i as u8),
                 tau: None,
             };
             let drgporep_inputs = PrivateDrgPoRepCompound::generate_public_inputs(
@@ -262,7 +263,8 @@ impl<'a, H: 'static + Hasher>
             .map(|l| {
                 let layer_public_inputs = drgporep::PublicInputs {
                     replica_id: public_inputs.replica_id,
-                    challenges: public_inputs.challenges.clone(),
+                    challenges: public_inputs
+                        .challenges(public_params.drg_porep_public_params.graph.size(), l as u8),
                     tau: None,
                 };
                 let layer_proof = vanilla_proof.encoding_proofs[l].clone();
@@ -307,7 +309,7 @@ mod tests {
         let nodes = 5;
         let degree = 1;
         let expansion_degree = 2;
-        let challenges = vec![2];
+        let challenge_count = 1;
         let num_layers = 2;
         let sloth_iter = 1;
 
@@ -336,6 +338,7 @@ mod tests {
                 sloth_iter,
             },
             layers: num_layers,
+            challenge_count,
         };
 
         let pp = ZigZagDrgPoRep::setup(&sp).unwrap();
@@ -345,7 +348,7 @@ mod tests {
 
         let pub_inputs = layered_drgporep::PublicInputs::<PedersenDomain> {
             replica_id: replica_id.into(),
-            challenges,
+            challenge_count,
             tau: Some(tau.simplify().into()),
             comm_r_star: tau.comm_r_star.into(),
         };
@@ -402,6 +405,7 @@ mod tests {
         let base_degree = 2;
         let expansion_degree = 2;
         let replica_id: Fr = rng.gen();
+        let challenge_count = 1;
         let challenge = 1;
         let sloth_iter = 2;
 
@@ -426,6 +430,7 @@ mod tests {
                 sloth_iter,
             ),
             layers: num_layers,
+            challenge_count,
         };
 
         ZigZagCircuit::<Bls12, PedersenHasher>::synthesize(
@@ -453,7 +458,7 @@ mod tests {
         let nodes = 5;
         let degree = 2;
         let expansion_degree = 2;
-        let challenges = vec![1];
+        let challenge_count = 1;
         let num_layers = 2;
         let sloth_iter = 1;
 
@@ -485,6 +490,7 @@ mod tests {
                     sloth_iter,
                 },
                 layers: num_layers,
+                challenge_count,
             },
         };
 
@@ -499,7 +505,7 @@ mod tests {
 
         let public_inputs = layered_drgporep::PublicInputs::<PedersenDomain> {
             replica_id: replica_id.into(),
-            challenges,
+            challenge_count,
             tau: Some(tau.simplify()),
             comm_r_star: tau.comm_r_star,
         };

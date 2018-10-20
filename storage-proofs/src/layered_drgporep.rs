@@ -1,3 +1,4 @@
+use challenge_derivation::derive_challenges;
 use drgporep::{self, DrgPoRep};
 use drgraph::Graph;
 use error::Result;
@@ -10,6 +11,7 @@ use proof::ProofScheme;
 pub struct SetupParams {
     pub drg_porep_setup_params: drgporep::SetupParams,
     pub layers: usize,
+    pub challenge_count: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -20,6 +22,7 @@ where
 {
     pub drg_porep_public_params: drgporep::PublicParams<H, G>,
     pub layers: usize,
+    pub challenge_count: usize,
 }
 
 pub struct Tau<T: Domain> {
@@ -60,6 +63,7 @@ where
         PublicParams {
             drg_porep_public_params: pp.drg_porep_public_params.clone(),
             layers: pp.layers,
+            challenge_count: pp.challenge_count,
         }
     }
 }
@@ -71,9 +75,22 @@ pub type DataProof<H> = drgporep::DataProof<H>;
 #[derive(Debug)]
 pub struct PublicInputs<T: Domain> {
     pub replica_id: T,
-    pub challenges: Vec<usize>,
+    pub challenge_count: usize,
     pub tau: Option<porep::Tau<T>>,
     pub comm_r_star: T,
+}
+
+impl<T: Domain> PublicInputs<T> {
+    pub fn challenges(&self, leaves: usize, layer: u8) -> Vec<usize> {
+        derive_challenges::<T>(
+            self.challenge_count,
+            layer,
+            leaves,
+            &self.replica_id,
+            &self.comm_r_star,
+            0,
+        )
+    }
 }
 
 pub struct PrivateInputs<'a, H: Hasher> {
@@ -148,7 +165,7 @@ pub trait Layers {
         };
         let drgporep_pub_inputs = drgporep::PublicInputs {
             replica_id: pub_inputs.replica_id,
-            challenges: pub_inputs.challenges.clone(),
+            challenges: pub_inputs.challenges(pp.graph.size(), (total_layers - layers) as u8),
             tau: Some(tau[tau.len() - layers]),
         };
         let drg_proof = DrgPoRep::prove(&pp, &drgporep_pub_inputs, &new_priv_inputs)?;
@@ -164,7 +181,7 @@ pub trait Layers {
                 tau,
                 aux,
                 layers - 1,
-                layers,
+                total_layers,
                 proofs,
             )?;
         }
@@ -244,6 +261,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         let pp = PublicParams {
             drg_porep_public_params: dp_sp,
             layers: sp.layers,
+            challenge_count: sp.challenge_count,
         };
 
         Ok(pp)
@@ -299,37 +317,20 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
 
             let new_pub_inputs = drgporep::PublicInputs {
                 replica_id: pub_inputs.replica_id,
-                challenges: pub_inputs.challenges.clone(),
+                challenges: pub_inputs
+                    .challenges(pub_params.drg_porep_public_params.graph.size(), layer as u8),
                 tau: Some(proof.tau[layer]),
             };
 
             let ep = &proof_layer;
-            let parents: Vec<_> = ep.replica_parents[0]
-                .iter()
-                .map(|p| {
-                    (
-                        p.0,
-                        drgporep::DataProof {
-                            // TODO: investigate if clone can be avoided by using a reference in drgporep::DataProof
-                            proof: p.1.proof.clone(),
-                            data: p.1.data,
-                        },
-                    )
-                })
-                .collect();
-
             let res = DrgPoRep::verify(
                 &pp,
                 &new_pub_inputs,
                 &drgporep::Proof {
-                    replica_nodes: vec![drgporep::DataProof {
-                        // TODO: investigate if clone can be avoided by using a reference in drgporep::DataProof
-                        proof: ep.replica_nodes[0].proof.clone(),
-                        data: ep.replica_nodes[0].data,
-                    }],
-                    replica_parents: vec![parents],
+                    replica_nodes: ep.replica_nodes.clone(),
+                    replica_parents: ep.replica_parents.clone(),
                     // TODO: investigate if clone can be avoided by using a reference in drgporep::DataProof
-                    nodes: vec![ep.nodes[0].clone()],
+                    nodes: ep.nodes.clone(),
                 },
             )?;
 
