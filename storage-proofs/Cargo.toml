@@ -66,5 +66,9 @@ harness = false
 name = "preprocessing"
 harness = false
 
+[[bench]]
+name = "kdf"
+harness = false
+
 [profile.test]
 opt-level = 1
