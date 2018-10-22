@@ -96,45 +96,7 @@ impl<H: Hasher> ParameterSetIdentifier for BucketGraph<H> {
 impl<H: Hasher> Graph<H> for BucketGraph<H> {
     #[inline]
     fn parents(&self, node: usize) -> Vec<usize> {
-        let m = self.base_degree;
-
-        match node {
-            // Special case for the first node, it self references.
-            0 => vec![0; m as usize],
-            // Special case for the second node, it references only the first one.
-            1 => vec![0; m as usize],
-            _ => {
-                // seed = self.seed | node
-                let mut seed = [0u32; 8];
-                seed[0..7].copy_from_slice(&self.seed);
-                seed[7] = node as u32;
-                let mut rng = ChaChaRng::from_seed(&seed);
-
-                let mut parents = Vec::with_capacity(m);
-                for k in 0..m {
-                    // iterate over m meta nodes of the ith real node
-                    // simulate the edges that we would add from previous graph nodes
-                    // if any edge is added from a meta node of jth real node then add edge (j,i)
-                    let logi = ((node * m) as f32).log2().floor() as usize;
-                    let j = rng.gen::<usize>() % logi;
-                    let jj = cmp::min(node * m + k, 1 << (j + 1));
-                    let back_dist = rng.gen_range(cmp::max(jj >> 1, 2), jj + 1);
-                    let out = (node * m + k - back_dist) / m;
-
-                    // remove self references and replace with reference to previous node
-                    if out == node {
-                        parents.push(node - 1);
-                    } else {
-                        assert!(out <= node);
-                        parents.push(out);
-                    }
-                }
-
-                parents.sort_unstable();
-
-                parents
-            }
-        }
+        bucket_parents(&self.seed, self.base_degree, node)
     }
 
     #[inline]
@@ -158,6 +120,46 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
             base_degree,
             seed,
             _h: PhantomData,
+        }
+    }
+}
+
+pub fn bucket_parents(seed: &[u32; 7], m: usize, node: usize) -> Vec<usize> {
+    match node {
+        // Special case for the first node, it self references.
+        0 => vec![0; m as usize],
+        // Special case for the second node, it references only the first one.
+        1 => vec![0; m as usize],
+        _ => {
+            // seed = self.seed | node
+            let mut see = [0u32; 8];
+            see[0..7].copy_from_slice(&seed[..]);
+            see[7] = node as u32;
+            let mut rng = ChaChaRng::from_seed(&see);
+
+            let mut parents = Vec::with_capacity(m);
+            for k in 0..m {
+                // iterate over m meta nodes of the ith real node
+                // simulate the edges that we would add from previous graph nodes
+                // if any edge is added from a meta node of jth real node then add edge (j,i)
+                let logi = ((node * m) as f32).log2().floor() as usize;
+                let j = rng.gen::<usize>() % logi;
+                let jj = cmp::min(node * m + k, 1 << (j + 1));
+                let back_dist = rng.gen_range(cmp::max(jj >> 1, 2), jj + 1);
+                let out = (node * m + k - back_dist) / m;
+
+                // remove self references and replace with reference to previous node
+                if out == node {
+                    parents.push(node - 1);
+                } else {
+                    assert!(out <= node);
+                    parents.push(out);
+                }
+            }
+
+            parents.sort_unstable();
+
+            parents
         }
     }
 }

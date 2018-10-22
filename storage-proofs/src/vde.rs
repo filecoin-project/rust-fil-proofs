@@ -1,7 +1,9 @@
-use drgraph::Graph;
+use drgraph::{bucket_parents, Graph};
 use error::Result;
 use hasher::{Domain, Hasher};
-use util::{data_at_node, data_at_node_offset};
+use itertools::*;
+use rayon::prelude::*;
+use util::data_at_node;
 
 /// encodes the data and overwrites the original data slice.
 pub fn encode<'a, H, G>(
@@ -15,8 +17,6 @@ where
     H: Hasher,
     G: Graph<H>,
 {
-    let degree = graph.degree();
-
     // Because a node always follows all of its parents in the data,
     // the nodes are by definition already topologically sorted.
     // Therefore, if we simply traverse the data in order, encoding each node in place,
@@ -25,25 +25,72 @@ where
     // The only subtlety is that a ZigZag graph may be reversed, so the direction
     // of the traversal must also be.
 
-    for n in 0..graph.size() {
-        let node = if graph.forward() {
-            n
-        } else {
-            // If the graph is reversed, traverse in reverse order.
-            (graph.size() - n) - 1
-        };
+    // Trading memory for speed here
+    let graph_size = graph.size();
+    let degree = graph.degree();
+    let seed = graph.seed();
 
-        let parents = graph.parents(node);
-        assert_eq!(parents.len(), graph.degree(), "wrong number of parents");
+    // TODO: handle reverse graph
 
-        let key = create_key::<H>(replica_id, node, &parents, data, lambda, degree)?;
-        let start = data_at_node_offset(node, lambda);
-        let end = start + lambda;
+    // this code relies heavily on the fact that parents are sorted!
 
-        let node_data = H::Domain::try_from_bytes(&data[start..end])?;
-        let encoded = H::sloth_encode(&key, &node_data, sloth_iter);
+    let parents = (0..graph_size).into_iter().map(|n| {
+        // TODO: make graph thread safe
+        bucket_parents(&seed, degree, n)
+    });
 
-        encoded.write_bytes(&mut data[start..end])?;
+    let buckets_iter = parents
+        .into_iter()
+        .group_by(|p| (p.iter().max().unwrap()).clone());
+    let mut buckets = buckets_iter
+        .into_iter()
+        .map(|(k, v)| (k, v.collect::<Vec<_>>()))
+        .collect::<Vec<_>>();
+
+    buckets.sort_by_key(|(k, _)| *k);
+
+    for (done, cur_parents) in &buckets {
+        // println!("bucket {} {:?}", done, cur_parents);
+        let split_point = if done == &0 { 0 } else { (done + 1) * 32 };
+
+        let (read_data, write_data) = data.split_at_mut(split_point);
+
+        cur_parents
+            .par_iter()
+            .enumerate()
+            .zip(write_data.par_chunks_mut(32)) // verify this does the right thing
+            .try_for_each(|((n, p), raw_node)| -> Result<()> {
+                // WARNING: inlined from create_key, due to borrowing issues
+
+                // ciphertexts will become a buffer of the layout
+                // id | encodedParentNode1 | encodedParentNode1 | ...
+
+                let mut ciphertexts = vec![0u8; 32 + lambda * p.len()];
+                replica_id.write_bytes(&mut ciphertexts[0..32])?;
+
+                for (i, parent) in p.iter().enumerate() {
+                    // special super shitty case
+                    // TODO: unsuck
+                    // println!("{} {}", n, p[0]);
+                    if n == 1 || n == 0 {
+                        // skip, as we would only write 0s, but the vector is prefilled with 0.
+                    } else {
+                        let start = 32 + i * lambda;
+                        let end = 32 + (i + 1) * lambda;
+                        ciphertexts[start..end]
+                            .copy_from_slice(data_at_node(read_data, *parent, lambda)?);
+                    }
+                }
+
+                let key = H::kdf(ciphertexts.as_slice(), degree);
+
+                let node_data = H::Domain::try_from_bytes(raw_node)?;
+                let encoded = H::sloth_encode(&key, &node_data, sloth_iter);
+
+                encoded.write_bytes(raw_node)?;
+
+                Ok(())
+            })?;
     }
 
     Ok(())
