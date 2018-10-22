@@ -28,31 +28,7 @@ pub fn pedersen(data: &[u8]) -> Fr {
 
 /// Pedersen hashing for inputs that have length mulitple of the block size `256`. Based on pedersen hashes and a Merkle-Damgard construction.
 pub fn pedersen_md_no_padding(data: &[u8]) -> Fr {
-    assert!(
-        data.len() >= 2 * PEDERSEN_BLOCK_BYTES,
-        "must be at least 2 block sizes long, got {}bits",
-        data.len()
-    );
-    assert_eq!(
-        data.len() % PEDERSEN_BLOCK_BYTES,
-        0,
-        "input must be a multiple of the blocksize"
-    );
-    let mut chunks = data.chunks(PEDERSEN_BLOCK_BYTES);
-    let mut cur = Vec::with_capacity(2 * PEDERSEN_BLOCK_BYTES);
-    cur.resize(PEDERSEN_BLOCK_BYTES, 0);
-    cur[0..PEDERSEN_BLOCK_BYTES].copy_from_slice(chunks.nth(0).unwrap());
-
-    for block in chunks {
-        cur.resize(2 * PEDERSEN_BLOCK_BYTES, 0);
-        cur[PEDERSEN_BLOCK_BYTES..].copy_from_slice(block);
-        pedersen_compression(&mut cur);
-    }
-
-    let frs = bytes_into_frs::<Bls12>(&cur[0..PEDERSEN_BLOCK_BYTES])
-        .expect("pedersen must generate valid fr elements");
-    assert_eq!(frs.len(), 1);
-    frs[0]
+    pedersen(data)
 }
 
 pub fn pedersen_compression(bytes: &mut Vec<u8>) {
