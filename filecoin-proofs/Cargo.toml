@@ -11,7 +11,8 @@ crate-type = ["rlib", "cdylib"]
 sector-base = { path = "../sector-base" }
 storage-proofs = { path = "../storage-proofs" }
 bitvec = "0.5"
-sapling-crypto = { git = "https://github.com/zcash-hackworks/sapling-crypto", branch = "master" }
+# sapling-crypto = { git = "https://github.com/zcash-hackworks/sapling-crypto", branch = "master" }
+sapling-crypto = {path = "/Users/dignifiedquire/opensource/sapling-crypto"}
 rand = "0.4"
 libc = "0.2"
 failure = "0.1"
