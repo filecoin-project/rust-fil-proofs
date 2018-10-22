@@ -12,7 +12,7 @@ use super::{Domain, HashFunction, Hasher};
 use crypto::sloth;
 use error::*;
 
-pub trait Digester: Digest + Clone + Default + ::std::fmt::Debug {}
+pub trait Digester: Digest + Clone + Default + ::std::fmt::Debug + Send + Sync {}
 
 #[derive(Default, Copy, Clone, Debug)]
 pub struct DigestHasher<D: Digester> {

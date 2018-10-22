@@ -29,6 +29,7 @@ blake2 = "0.8"
 pbr = "1.0"
 tempfile = "3"
 fs2 = "0.4"
+rayon = "1.0.0"
 
 [dependencies.pairing]
 version = "0.14.2"
