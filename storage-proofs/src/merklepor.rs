@@ -27,7 +27,7 @@ impl ParameterSetIdentifier for PublicParams {
 }
 
 /// The inputs that are necessary for the verifier to verify the proof.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PublicInputs<T: Domain> {
     /// The root hash of the underlying merkle tree.
     pub commitment: Option<T>,
@@ -117,11 +117,6 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for MerklePoR<H> {
             };
 
             let path_length_match = graph_height(pub_params.leaves) == proof.proof.path().len();
-
-            println!(
-                "commitments_match: {}; path_length_match: {}",
-                commitments_match, path_length_match
-            );
 
             if !(commitments_match && path_length_match) {
                 return Ok(false);

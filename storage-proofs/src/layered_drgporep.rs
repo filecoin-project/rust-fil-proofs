@@ -72,23 +72,24 @@ pub type ReplicaParents<H> = Vec<(usize, DataProof<H>)>;
 pub type EncodingProof<H> = drgporep::Proof<H>;
 pub type DataProof<H> = drgporep::DataProof<H>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PublicInputs<T: Domain> {
     pub replica_id: T,
     pub challenge_count: usize,
     pub tau: Option<porep::Tau<T>>,
     pub comm_r_star: T,
+    pub k: Option<usize>,
 }
 
 impl<T: Domain> PublicInputs<T> {
-    pub fn challenges(&self, leaves: usize, layer: u8) -> Vec<usize> {
+    pub fn challenges(&self, leaves: usize, layer: u8, partition_k: Option<usize>) -> Vec<usize> {
         derive_challenges::<T>(
             self.challenge_count,
             layer,
             leaves,
             &self.replica_id,
             &self.comm_r_star,
-            0,
+            partition_k.unwrap_or(0) as u8,
         )
     }
 }
@@ -148,6 +149,7 @@ pub trait Layers {
         layers: usize,
         total_layers: usize,
         proofs: &'a mut Vec<EncodingProof<Self::Hasher>>,
+        k: Option<usize>,
     ) -> Result<&'a Vec<EncodingProof<Self::Hasher>>> {
         assert!(layers > 0);
 
@@ -165,7 +167,7 @@ pub trait Layers {
         };
         let drgporep_pub_inputs = drgporep::PublicInputs {
             replica_id: pub_inputs.replica_id,
-            challenges: pub_inputs.challenges(pp.graph.size(), (total_layers - layers) as u8),
+            challenges: pub_inputs.challenges(pp.graph.size(), (total_layers - layers) as u8, k),
             tau: Some(tau[tau.len() - layers]),
         };
         let drg_proof = DrgPoRep::prove(&pp, &drgporep_pub_inputs, &new_priv_inputs)?;
@@ -183,6 +185,7 @@ pub trait Layers {
                 layers - 1,
                 total_layers,
                 proofs,
+                k,
             )?;
         }
 
@@ -288,9 +291,9 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
             pub_params.layers,
             pub_params.layers,
             &mut proofs,
+            pub_inputs.k,
         )?;
 
-        // We need to calculate CommR* -- which is: H(replica_id|comm_r[0]|comm_r[1]|…comm_r[n])
         let proof = Proof::new(proofs, priv_inputs.tau.clone());
 
         Ok(proof)
@@ -317,8 +320,11 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
 
             let new_pub_inputs = drgporep::PublicInputs {
                 replica_id: pub_inputs.replica_id,
-                challenges: pub_inputs
-                    .challenges(pub_params.drg_porep_public_params.graph.size(), layer as u8),
+                challenges: pub_inputs.challenges(
+                    pub_params.drg_porep_public_params.graph.size(),
+                    layer as u8,
+                    pub_inputs.k,
+                ),
                 tau: Some(proof.tau[layer]),
             };
 
@@ -344,8 +350,19 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
 
         Ok(crs == pub_inputs.comm_r_star)
     }
+
+    fn with_partition(pub_in: Self::PublicInputs, k: Option<usize>) -> Self::PublicInputs {
+        self::PublicInputs {
+            replica_id: pub_in.replica_id,
+            challenge_count: pub_in.challenge_count,
+            tau: pub_in.tau,
+            comm_r_star: pub_in.comm_r_star,
+            k,
+        }
+    }
 }
 
+// We need to calculate CommR* -- which is: H(replica_id|comm_r[0]|comm_r[1]|…comm_r[n])
 fn comm_r_star<H: Hasher>(replica_id: &H::Domain, comm_rs: &[H::Domain]) -> Result<H::Domain> {
     let l = (comm_rs.len() + 1) * 32;
     let mut bytes = vec![0; l];

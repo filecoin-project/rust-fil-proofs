@@ -14,7 +14,8 @@ type SectorAccess = *const libc::c_char;
 
 /// This is also defined in api::internal, but we make it explicit here for API consumers.
 /// How big, in bytes, is a SNARK proof?
-pub const SNARK_BYTES: usize = 192;
+pub const POREP_PROOF_BYTES: usize = internal::POREP_PROOF_BYTES;
+pub const POST_PROOF_BYTES: usize = internal::POST_PROOF_BYTES;
 
 /// Seals a sector and returns its commitments and proof.
 /// Unsealed data is read from `unsealed`, sealed, then written to `sealed`.
@@ -54,7 +55,7 @@ pub unsafe extern "C" fn seal(
             response.comm_r[..32].clone_from_slice(&comm_r[..32]);
             response.comm_d[..32].clone_from_slice(&comm_d[..32]);
             response.comm_r_star[..32].clone_from_slice(&comm_r_star[..32]);
-            response.proof[..SNARK_BYTES].clone_from_slice(&snark_proof[..SNARK_BYTES]);
+            response.proof[..POREP_PROOF_BYTES].clone_from_slice(&snark_proof[..POREP_PROOF_BYTES]);
         }
         Err(err) => {
             response.status_code = FCPResponseStatus::FCPUnclassifiedError;
@@ -87,7 +88,7 @@ pub unsafe extern "C" fn verify_seal(
     comm_r_star: &[u8; 32],
     prover_id: &[u8; 31],
     sector_id: &[u8; 31],
-    proof: &[u8; SNARK_BYTES],
+    proof: &[u8; POREP_PROOF_BYTES],
 ) -> *mut responses::VerifySealResponse {
     let mut response: responses::VerifySealResponse = Default::default();
 
@@ -297,7 +298,7 @@ pub unsafe extern "C" fn generate_post(
     mem::forget(fault_idxs);
 
     // write some fake proof
-    result.proof = [42; 192];
+    result.proof = [42; POST_PROOF_BYTES];
 
     Box::into_raw(Box::new(result))
 }
@@ -309,7 +310,9 @@ pub unsafe extern "C" fn generate_post(
 /// * `_ss_ptr` - pointer to a boxed SectorStore
 /// * `proof`   - a proof-of-spacetime
 #[no_mangle]
-pub extern "C" fn verify_post(proof: &[u8; 192]) -> *mut responses::VerifyPoSTResponse {
+pub extern "C" fn verify_post(
+    proof: &[u8; POST_PROOF_BYTES],
+) -> *mut responses::VerifyPoSTResponse {
     let mut res: responses::VerifyPoSTResponse = Default::default();
 
     if proof[0] == 42 {
@@ -681,8 +684,6 @@ mod tests {
                 let mut file = File::open(util::pbuf_from_c(seal_input_path)).unwrap();
                 let mut buf = Vec::new();
                 file.read_to_end(&mut buf).unwrap();
-
-                println!("wrote ({}): {:?}", buf.len(), buf);
             }
 
             let seal_response = seal(

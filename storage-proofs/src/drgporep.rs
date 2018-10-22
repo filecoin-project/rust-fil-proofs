@@ -12,7 +12,7 @@ use proof::ProofScheme;
 use util::data_at_node;
 use vde::{self, decode_block};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PublicInputs<T: Domain> {
     pub replica_id: T,
     pub challenges: Vec<usize>,

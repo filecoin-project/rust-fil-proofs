@@ -28,4 +28,9 @@ pub trait ProofScheme<'a> {
         pub_inputs: &Self::PublicInputs,
         proof: &Self::Proof,
     ) -> Result<bool>;
+
+    // This method must be implemented/specialized for concrete ProofScheme using partitions.
+    fn with_partition(pub_in: Self::PublicInputs, _k: Option<usize>) -> Self::PublicInputs {
+        pub_in
+    }
 }

@@ -87,6 +87,7 @@ macro_rules! implement_drgporep {
             fn generate_public_inputs(
                 pub_in: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicInputs,
                 pub_params: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
+                _k: Option<usize>,
             ) -> Vec<Fr> {
                 let replica_id = pub_in.replica_id;
                 let challenges = &pub_in.challenges;
@@ -130,11 +131,13 @@ macro_rules! implement_drgporep {
                                 PrivatePoRCompound::<H>::generate_public_inputs(
                                     &por_pub_inputs,
                                     &por_pub_params,
+                                    None,
                                 )
                             } else {
                                 PoRCompound::<H>::generate_public_inputs(
                                     &por_pub_inputs,
                                     &por_pub_params,
+                                    None,
                                 )
                             };
                             input.extend(por_inputs);
@@ -149,11 +152,13 @@ macro_rules! implement_drgporep {
                             PrivatePoRCompound::<H>::generate_public_inputs(
                                 &por_pub_inputs,
                                 &por_pub_params,
+                                None,
                             )
                         } else {
                             PoRCompound::<H>::generate_public_inputs(
                                 &por_pub_inputs,
                                 &por_pub_params,
+                                None,
                             )
                         };
                         input.extend(por_inputs);
@@ -169,6 +174,7 @@ macro_rules! implement_drgporep {
                 proof: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::Proof,
                 public_params: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
                 engine_params: &'a <Bls12 as JubjubEngine>::Params,
+                _k: Option<usize>,
             ) -> $name<'a, Bls12> {
                 let lambda = public_params.lambda;
                 let _arity = public_inputs.challenges.len();
