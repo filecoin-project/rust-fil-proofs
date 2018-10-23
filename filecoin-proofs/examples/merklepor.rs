@@ -7,7 +7,6 @@ extern crate sapling_crypto;
 extern crate storage_proofs;
 
 use bellman::groth16::*;
-use bellman::Circuit;
 use pairing::bls12_381::{Bls12, Fr};
 use pairing::Field;
 use rand::Rng;
@@ -15,7 +14,6 @@ use sapling_crypto::circuit::multipack;
 use sapling_crypto::jubjub::JubjubBls12;
 
 use storage_proofs::circuit;
-use storage_proofs::circuit::bench::BenchCS;
 use storage_proofs::example_helper::Example;
 use storage_proofs::test_helper::random_merkle_path;
 
@@ -35,18 +33,22 @@ impl Default for MerklePorApp {
     }
 }
 
-impl MerklePorApp {
-    fn create_bench_circuit<R: Rng>(
+impl<'a> Example<'a, circuit::ppor::ParallelProofOfRetrievability<'a, Bls12>> for MerklePorApp {
+    fn name() -> String {
+        "Multi-Challenge MerklePor".to_string()
+    }
+
+    fn create_circuit<R: Rng>(
         &mut self,
         rng: &mut R,
-        engine_params: &JubjubBls12,
+        engine_params: &'a JubjubBls12,
         tree_depth: usize,
         challenge_count: usize,
         _leaves: usize,
         _lambda: usize,
         _m: usize,
         _sloth_iter: usize,
-    ) -> BenchCS<Bls12> {
+    ) -> circuit::ppor::ParallelProofOfRetrievability<'a, Bls12> {
         let (auth_path, leaf, root) = random_merkle_path(rng, tree_depth);
         self.root = root;
         self.leaf = leaf;
@@ -54,26 +56,12 @@ impl MerklePorApp {
         let values = (0..challenge_count).map(|_| Some(self.leaf)).collect();
 
         // create an instance of our circut (with the witness)
-        let c = circuit::ppor::ParallelProofOfRetrievability {
+        circuit::ppor::ParallelProofOfRetrievability {
             params: engine_params,
             values,
             auth_paths: self.auth_paths.clone(),
             root: Some(self.root),
-        };
-
-        let mut cs = BenchCS::<Bls12>::new();
-        c.synthesize(&mut cs).expect("failed to synthesize circuit");
-        cs
-    }
-}
-
-impl Example<Bls12> for MerklePorApp {
-    fn name() -> String {
-        "Multi-Challenge MerklePor".to_string()
-    }
-
-    fn generate_engine_params() -> JubjubBls12 {
-        JubjubBls12::new()
+        }
     }
 
     fn generate_groth_params<R: Rng>(
@@ -105,7 +93,7 @@ impl Example<Bls12> for MerklePorApp {
     fn create_proof<R: Rng>(
         &mut self,
         rng: &mut R,
-        engine_params: &JubjubBls12,
+        engine_params: &'a JubjubBls12,
         groth_params: &Parameters<Bls12>,
         tree_depth: usize,
         challenge_count: usize,
@@ -167,53 +155,6 @@ impl Example<Bls12> for MerklePorApp {
 
         // -- verify proof with public inputs
         Some(verify_proof(pvk, proof, &expected_inputs).expect("failed to verify proof"))
-    }
-
-    fn create_bench<R: Rng>(
-        &mut self,
-        rng: &mut R,
-        engine_params: &JubjubBls12,
-        tree_depth: usize,
-        challenge_count: usize,
-        leaves: usize,
-        lambda: usize,
-        m: usize,
-        sloth_iter: usize,
-    ) {
-        self.create_bench_circuit(
-            rng,
-            engine_params,
-            tree_depth,
-            challenge_count,
-            leaves,
-            lambda,
-            m,
-            sloth_iter,
-        );
-    }
-
-    fn get_num_constraints<R: Rng>(
-        &mut self,
-        rng: &mut R,
-        engine_params: &JubjubBls12,
-        tree_depth: usize,
-        challenge_count: usize,
-        leaves: usize,
-        lambda: usize,
-        m: usize,
-        sloth_iter: usize,
-    ) -> usize {
-        let cs = self.create_bench_circuit(
-            rng,
-            engine_params,
-            tree_depth,
-            challenge_count,
-            leaves,
-            lambda,
-            m,
-            sloth_iter,
-        );
-        cs.num_constraints()
     }
 }
 
