@@ -309,10 +309,7 @@ pub unsafe extern "C" fn generate_post(
 /// * `_ss_ptr` - pointer to a boxed SectorStore
 /// * `proof`   - a proof-of-spacetime
 #[no_mangle]
-pub extern "C" fn verify_post(
-    _ss_ptr: *mut Box<SectorStore>,
-    proof: &[u8; 192],
-) -> *mut responses::VerifyPoSTResponse {
+pub extern "C" fn verify_post(proof: &[u8; 192]) -> *mut responses::VerifyPoSTResponse {
     let mut res: responses::VerifyPoSTResponse = Default::default();
 
     if proof[0] == 42 {
@@ -491,7 +488,7 @@ mod tests {
                 "generate_post failed"
             );
 
-            let verify_post_res = verify_post(storage, &(*generate_post_res).proof);
+            let verify_post_res = verify_post(&(*generate_post_res).proof);
 
             assert_eq!(
                 FCPResponseStatus::FCPNoError,
