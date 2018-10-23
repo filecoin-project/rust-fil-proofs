@@ -65,7 +65,7 @@ fn proc_lc<E: Engine>(terms: &[(Variable, E::Fr)]) -> BTreeMap<OrderedVariable, 
     let mut map = BTreeMap::new();
     for &(var, coeff) in terms {
         map.entry(OrderedVariable(var))
-            .or_insert(E::Fr::zero())
+            .or_insert_with(E::Fr::zero)
             .add_assign(&coeff);
     }
 
@@ -145,8 +145,8 @@ fn eval_lc<E: Engine>(
     acc
 }
 
-impl<E: Engine> TestConstraintSystem<E> {
-    pub fn new() -> TestConstraintSystem<E> {
+impl<E: Engine> Default for TestConstraintSystem<E> {
+    fn default() -> Self {
         let mut map = HashMap::new();
         map.insert(
             "ONE".into(),
@@ -161,9 +161,24 @@ impl<E: Engine> TestConstraintSystem<E> {
             aux: vec![],
         }
     }
+}
+
+impl<E: Engine> TestConstraintSystem<E> {
+    pub fn new() -> Self {
+        Default::default()
+    }
 
     pub fn pretty_print(&self) -> String {
         let mut s = String::new();
+
+        for input in &self.inputs {
+            writeln!(s, "{}", input.1).unwrap();
+        }
+        write!(s, "\n\n").unwrap();
+        for aux in &self.aux {
+            writeln!(s, "{}", aux.1).unwrap();
+        }
+        write!(s, "\n\n").unwrap();
 
         let negone = {
             let mut tmp = E::Fr::one();
@@ -172,7 +187,7 @@ impl<E: Engine> TestConstraintSystem<E> {
         };
 
         let powers_of_two = (0..E::Fr::NUM_BITS)
-            .map(|i| E::Fr::from_str("2").unwrap().pow(&[i as u64]))
+            .map(|i| E::Fr::from_str("2").unwrap().pow(&[u64::from(i)]))
             .collect::<Vec<_>>();
 
         let pp = |s: &mut String, lc: &LinearCombination<E>| {
@@ -214,7 +229,7 @@ impl<E: Engine> TestConstraintSystem<E> {
         };
 
         for &(ref a, ref b, ref c, ref name) in &self.constraints {
-            write!(&mut s, "\n").unwrap();
+            writeln!(&mut s).unwrap();
 
             write!(&mut s, "{}: ", name).unwrap();
             pp(&mut s, a);
@@ -224,7 +239,7 @@ impl<E: Engine> TestConstraintSystem<E> {
             pp(&mut s, c);
         }
 
-        write!(&mut s, "\n").unwrap();
+        writeln!(&mut s).unwrap();
 
         s
     }
@@ -301,7 +316,7 @@ impl<E: Engine> TestConstraintSystem<E> {
             }
         }
 
-        return true;
+        true
     }
 
     pub fn num_inputs(&self) -> usize {
@@ -340,7 +355,7 @@ impl<E: Engine> TestConstraintSystem<E> {
     }
 }
 
-fn compute_path(ns: &[String], this: String) -> String {
+fn compute_path(ns: &[String], this: &str) -> String {
     if this.chars().any(|a| a == '/') {
         panic!("'/' is not allowed in names");
     }
@@ -348,7 +363,7 @@ fn compute_path(ns: &[String], this: String) -> String {
     let mut name = String::new();
 
     let mut needs_separation = false;
-    for ns in ns.iter().chain(Some(&this).into_iter()) {
+    for ns in ns.iter().chain(Some(this.to_string()).iter()) {
         if needs_separation {
             name += "/";
         }
@@ -370,7 +385,7 @@ impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
         AR: Into<String>,
     {
         let index = self.aux.len();
-        let path = compute_path(&self.current_namespace, annotation().into());
+        let path = compute_path(&self.current_namespace, &annotation().into());
         self.aux.push((f()?, path.clone()));
         let var = Variable::new_unchecked(Index::Aux(index));
         self.set_named_obj(path, NamedObject::Var(var));
@@ -385,7 +400,7 @@ impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
         AR: Into<String>,
     {
         let index = self.inputs.len();
-        let path = compute_path(&self.current_namespace, annotation().into());
+        let path = compute_path(&self.current_namespace, &annotation().into());
         self.inputs.push((f()?, path.clone()));
         let var = Variable::new_unchecked(Index::Input(index));
         self.set_named_obj(path, NamedObject::Var(var));
@@ -401,7 +416,7 @@ impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
         LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
         LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
     {
-        let path = compute_path(&self.current_namespace, annotation().into());
+        let path = compute_path(&self.current_namespace, &annotation().into());
         let index = self.constraints.len();
         self.set_named_obj(path.clone(), NamedObject::Constraint(index));
 
@@ -418,7 +433,7 @@ impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
         N: FnOnce() -> NR,
     {
         let name = name_fn().into();
-        let path = compute_path(&self.current_namespace, name.clone());
+        let path = compute_path(&self.current_namespace, &name);
         self.set_named_obj(path.clone(), NamedObject::Namespace);
         self.current_namespace.push(name);
     }

@@ -19,5 +19,4 @@ pub mod zigzag;
 // FIXME: Can we make a config like for test?
 pub mod bench;
 
-#[cfg(test)]
 pub mod test;

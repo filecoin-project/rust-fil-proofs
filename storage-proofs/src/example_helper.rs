@@ -1,16 +1,22 @@
-use bellman::groth16::*;
-use clap::{self, App, Arg, SubCommand};
-use colored::*;
-use env_logger;
-use log::{Level, LevelFilter};
-use pbr::ProgressBar;
-use rand::{Rng, SeedableRng, XorShiftRng};
-use sapling_crypto::jubjub::JubjubEngine;
 use std::fs::File;
 use std::io::stderr;
 use std::io::Write;
 use std::path::Path;
 use std::time::{Duration, Instant};
+
+use bellman::groth16::*;
+use bellman::Circuit;
+use clap::{self, App, Arg, SubCommand};
+use colored::*;
+use env_logger;
+use log::{Level, LevelFilter};
+use pairing::bls12_381::Bls12;
+use pbr::ProgressBar;
+use rand::{Rng, SeedableRng, XorShiftRng};
+use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
+
+use circuit::bench::BenchCS;
+use circuit::test::TestConstraintSystem;
 
 pub fn prettyb(num: usize) -> String {
     let num = num as f64;
@@ -82,10 +88,15 @@ fn get_cache_path(
 pub enum CSType {
     Groth,
     Bench,
+    Circuit,
+}
+
+lazy_static! {
+    static ref JUBJUB_BLS_PARAMS: JubjubBls12 = JubjubBls12::new();
 }
 
 /// A trait that makes it easy to implement "Examples". These are really tunable benchmarking CLI tools.
-pub trait Example<E: JubjubEngine>: Default {
+pub trait Example<'a, C: Circuit<Bls12>>: Default {
     /// The actual work.
     fn work_groth(
         &mut self,
@@ -95,7 +106,6 @@ pub trait Example<E: JubjubEngine>: Default {
         m: usize,
         sloth_iter: usize,
     ) {
-        let engine_params = Self::generate_engine_params();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let lambda = 32;
@@ -117,7 +127,7 @@ pub trait Example<E: JubjubEngine>: Default {
         // caching
         let p = get_cache_path(&name, data_size, challenge_count, m, sloth_iter);
         let cache_path = Path::new(&p);
-        let groth_params: Parameters<E> = if cache_path.exists() {
+        let groth_params: Parameters<Bls12> = if cache_path.exists() {
             info!(target: "params", "reading groth params from cache: {:?}", cache_path);
             let mut f = File::open(&cache_path).expect("failed to read cache");
             Parameters::read(&f, false).expect("failed to read cached params")
@@ -125,7 +135,7 @@ pub trait Example<E: JubjubEngine>: Default {
             info!(target: "params", "generating new groth params");
             let p = self.generate_groth_params(
                 rng,
-                &engine_params,
+                &JUBJUB_BLS_PARAMS,
                 tree_depth,
                 challenge_count,
                 lambda,
@@ -161,7 +171,7 @@ pub trait Example<E: JubjubEngine>: Default {
             let start = Instant::now();
             let proof = self.create_proof(
                 rng,
-                &engine_params,
+                &JUBJUB_BLS_PARAMS,
                 &groth_params,
                 tree_depth,
                 challenge_count,
@@ -214,7 +224,6 @@ pub trait Example<E: JubjubEngine>: Default {
         m: usize,
         sloth_iter: usize,
     ) {
-        let engine_params = Self::generate_engine_params();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let lambda = 32;
@@ -240,7 +249,7 @@ pub trait Example<E: JubjubEngine>: Default {
             "constraints: {}",
             self.get_num_constraints(
                 rng,
-                &engine_params,
+                &JUBJUB_BLS_PARAMS,
                 tree_depth,
                 challenge_count,
                 leaves,
@@ -254,9 +263,9 @@ pub trait Example<E: JubjubEngine>: Default {
             // -- create proof
 
             let start = Instant::now();
-            self.create_bench(
+            let c = self.create_circuit(
                 rng,
-                &engine_params,
+                &JUBJUB_BLS_PARAMS,
                 tree_depth,
                 challenge_count,
                 leaves,
@@ -264,6 +273,9 @@ pub trait Example<E: JubjubEngine>: Default {
                 m,
                 sloth_iter,
             );
+            let mut cs = BenchCS::<Bls12>::new();
+            c.synthesize(&mut cs).expect("failed to synthesize circuit");
+
             total_synth += start.elapsed();
             pb.inc();
         }
@@ -278,6 +290,43 @@ pub trait Example<E: JubjubEngine>: Default {
 
         // need this, as the last item doesn't get flushed to the console sometimes
         info!(".")
+    }
+
+    fn work_circuit(
+        &mut self,
+        typ: CSType,
+        data_size: usize,
+        challenge_count: usize,
+        m: usize,
+        sloth_iter: usize,
+    ) {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let lambda = 32;
+        let leaves = data_size / 32;
+        let tree_depth = (leaves as f64).log2().ceil() as usize;
+
+        info!(target: "config", "constraint system: {:?}", typ);
+        info!(target: "config", "data_size:  {}", prettyb(data_size));
+        info!(target: "config", "challenge_count: {}", challenge_count);
+        info!(target: "config", "m: {}", m);
+        info!(target: "config", "sloth: {}", sloth_iter);
+        info!(target: "config", "tree_depth: {}", tree_depth);
+
+        let c = self.create_circuit(
+            rng,
+            &JUBJUB_BLS_PARAMS,
+            tree_depth,
+            challenge_count,
+            leaves,
+            lambda,
+            m,
+            sloth_iter,
+        );
+        let mut cs = TestConstraintSystem::<Bls12>::new();
+        c.synthesize(&mut cs).expect("failed to synthesize circuit");
+
+        println!("{}", cs.pretty_print());
     }
 
     fn clap(&self) -> clap::ArgMatches {
@@ -319,6 +368,7 @@ pub trait Example<E: JubjubEngine>: Default {
                 SubCommand::with_name("bench")
                     .about("execute circuits using a minimal benchmarking constraint"),
             )
+            .subcommand(SubCommand::with_name("circuit").about("print the constraint system"))
             .get_matches()
     }
 
@@ -339,6 +389,7 @@ pub trait Example<E: JubjubEngine>: Default {
             let typ = match matches.subcommand_name() {
                 Some("groth") => CSType::Groth,
                 Some("bench") => CSType::Bench,
+                Some("circuit") => CSType::Circuit,
                 _ => panic!("please select a valid subcommand"),
             };
 
@@ -348,70 +399,96 @@ pub trait Example<E: JubjubEngine>: Default {
         match typ {
             CSType::Groth => instance.work_groth(typ, data_size, challenge_count, m, sloth_iter),
             CSType::Bench => instance.work_bench(typ, data_size, challenge_count, m, sloth_iter),
+            CSType::Circuit => {
+                instance.work_circuit(typ, data_size, challenge_count, m, sloth_iter)
+            }
         }
     }
 
     /// The name of the application. Used for identifying caches.
     fn name() -> String;
 
-    /// Generate engine params
-    fn generate_engine_params() -> E::Params;
-
     /// Generate groth parameters
     fn generate_groth_params<R: Rng>(
         &mut self,
         &mut R,
-        &E::Params,
+        &'a <Bls12 as JubjubEngine>::Params,
         usize,
         usize,
         usize,
         usize,
         usize,
-    ) -> Parameters<E>;
+    ) -> Parameters<Bls12>;
 
     /// How many samples should be taken when proofing and verifying
     fn samples() -> usize;
 
     /// Create a new random proof
+    fn create_circuit<R: Rng>(
+        &mut self,
+        &mut R,
+        &'a <Bls12 as JubjubEngine>::Params,
+        usize,
+        usize,
+        usize,
+        usize,
+        usize,
+        usize,
+    ) -> C;
+
     fn create_proof<R: Rng>(
         &mut self,
-        &mut R,
-        &E::Params,
-        &Parameters<E>,
-        usize,
-        usize,
-        usize,
-        usize,
-        usize,
-        usize,
-    ) -> Proof<E>;
+        rng: &mut R,
+        engine_params: &'a <Bls12 as JubjubEngine>::Params,
+        groth_params: &Parameters<Bls12>,
+        tree_depth: usize,
+        challenge_count: usize,
+        leaves: usize,
+        lambda: usize,
+        m: usize,
+        sloth_iter: usize,
+    ) -> Proof<Bls12> {
+        let c = self.create_circuit(
+            rng,
+            engine_params,
+            tree_depth,
+            challenge_count,
+            leaves,
+            lambda,
+            m,
+            sloth_iter,
+        );
+        create_random_proof(c, groth_params, rng).expect("failed to create proof")
+    }
 
     /// Verify the given proof, return `None` if not implemented.
-    fn verify_proof(&mut self, &Proof<E>, &PreparedVerifyingKey<E>) -> Option<bool>;
+    fn verify_proof(&mut self, &Proof<Bls12>, &PreparedVerifyingKey<Bls12>) -> Option<bool>;
 
-    /// Create a new bench
-    fn create_bench<R: Rng>(
-        &mut self,
-        &mut R,
-        &E::Params,
-        usize,
-        usize,
-        usize,
-        usize,
-        usize,
-        usize,
-    );
-
-    /// Get the number of constraitns of the circuit
+    /// Get the number of constraints of the circuit
     fn get_num_constraints<R: Rng>(
         &mut self,
-        &mut R,
-        &E::Params,
-        usize,
-        usize,
-        usize,
-        usize,
-        usize,
-        usize,
-    ) -> usize;
+        rng: &mut R,
+        engine_params: &'a JubjubBls12,
+        tree_depth: usize,
+        challenge_count: usize,
+        leaves: usize,
+        lambda: usize,
+        m: usize,
+        sloth_iter: usize,
+    ) -> usize {
+        let c = self.create_circuit(
+            rng,
+            engine_params,
+            tree_depth,
+            challenge_count,
+            leaves,
+            lambda,
+            m,
+            sloth_iter,
+        );
+
+        let mut cs = BenchCS::<Bls12>::new();
+        c.synthesize(&mut cs).expect("failed to synthesize circuit");
+        cs.num_constraints()
+    }
 }
