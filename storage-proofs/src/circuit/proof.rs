@@ -41,7 +41,7 @@ impl<E: Engine> MultiProof<E> {
     }
 
     pub fn write<W: Write>(&self, mut writer: W) -> Result<()> {
-        for proof in self.circuit_proofs.iter() {
+        for proof in &self.circuit_proofs {
             proof.write(&mut writer)?
         }
         Ok(())
