@@ -1,12 +1,8 @@
 use bellman::groth16;
+
 use error::Result;
 use pairing::Engine;
 use std::io::{self, Read, Write};
-
-pub struct Proof<E: Engine> {
-    pub circuit_proof: groth16::Proof<E>,
-    pub groth_params: groth16::Parameters<E>,
-}
 
 pub struct MultiProof<E: Engine> {
     pub circuit_proofs: Vec<groth16::Proof<E>>,
