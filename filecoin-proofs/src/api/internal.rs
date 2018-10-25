@@ -3,7 +3,6 @@ use std::io::{BufWriter, Read, Write};
 use std::path::PathBuf;
 use std::{thread, time};
 
-use bellman::groth16;
 use pairing::bls12_381::Bls12;
 use pairing::Engine;
 use sapling_crypto::jubjub::JubjubBls12;
@@ -34,7 +33,11 @@ type FrSafe = [u8; 31];
 
 /// How big, in bytes, is the SNARK proof exposed by the API?
 pub const SNARK_BYTES: usize = 192;
-type SnarkProof = [u8; SNARK_BYTES];
+pub const POREP_PARTITIONS: usize = 2;
+pub const POREP_PROOF_BYTES: usize = SNARK_BYTES * POREP_PARTITIONS;
+pub const POST_PROOF_BYTES: usize = SNARK_BYTES;
+
+type SnarkProof = [u8; POREP_PROOF_BYTES];
 
 /// How big should a fake sector be when faking proofs?
 const FAKE_SECTOR_BYTES: usize = 128;
@@ -167,6 +170,7 @@ pub fn seal(
         // The proof might use a different number of bytes than we read and copied, if we are faking.
         vanilla_params: &setup_params(proof_sector_bytes),
         engine_params: &(*ENGINE_PARAMS),
+        partitions: Some(POREP_PARTITIONS),
     };
 
     let compound_public_params = ZigZagCompound::setup(&compound_setup_params)?;
@@ -187,6 +191,7 @@ pub fn seal(
         challenge_count,
         tau: Some(public_tau),
         comm_r_star: tau.comm_r_star,
+        k: None,
     };
 
     let private_inputs = layered_drgporep::PrivateInputs::<DefaultTreeHasher> {
@@ -197,11 +202,11 @@ pub fn seal(
 
     let proof = ZigZagCompound::prove(&compound_public_params, &public_inputs, &private_inputs)?;
 
-    let mut buf = Vec::with_capacity(SNARK_BYTES);
+    let mut buf = Vec::with_capacity(POREP_PROOF_BYTES);
 
-    proof.circuit_proof.write(&mut buf)?;
+    proof.write(&mut buf)?;
 
-    let mut proof_bytes = [0; SNARK_BYTES];
+    let mut proof_bytes = [0; POREP_PROOF_BYTES];
     proof_bytes.copy_from_slice(&buf);
 
     write_params_to_cache(
@@ -352,18 +357,19 @@ pub fn verify_seal(
             comm_d: comm_d.into(),
         }),
         comm_r_star: comm_r_star.into(),
+        k: None,
     };
 
-    let proof = groth16::Proof::read(proof_vec)?;
     let groth_params = read_cached_params(&dummy_parameter_cache_path(
         sector_store,
         proof_sector_bytes,
     ))?;
 
-    let proof = compound_proof::Proof {
-        circuit_proof: proof,
+    let proof = compound_proof::MultiProof::new_from_reader(
+        Some(POREP_PARTITIONS),
+        proof_vec,
         groth_params,
-    };
+    )?;
 
     ZigZagCompound::verify(&public_params(proof_sector_bytes), &public_inputs, proof)
 }

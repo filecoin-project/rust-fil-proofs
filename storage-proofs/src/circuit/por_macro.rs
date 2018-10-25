@@ -44,6 +44,7 @@ macro_rules! implement_por {
                 proof: &'b <MerklePoR<H> as ProofScheme<'a>>::Proof,
                 _public_params: &'b <MerklePoR<H> as ProofScheme<'a>>::PublicParams,
                 engine_params: &'a JubjubBls12,
+                _k: Option<usize>,
             ) -> $name<'a, Bls12> {
                 let root = if $private {
                     Some(proof.proof.root.clone().into())
@@ -66,6 +67,7 @@ macro_rules! implement_por {
             fn generate_public_inputs(
                 pub_inputs: &<MerklePoR<H> as ProofScheme<'a>>::PublicInputs,
                 pub_params: &<MerklePoR<H> as ProofScheme<'a>>::PublicParams,
+                _k: Option<usize>,
             ) -> Vec<Fr> {
                 let auth_path_bits =
                     challenge_into_auth_path_bits(pub_inputs.challenge, pub_params.leaves);

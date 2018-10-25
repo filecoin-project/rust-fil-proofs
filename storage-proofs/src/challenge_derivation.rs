@@ -44,15 +44,15 @@ mod test {
         let mut rng = thread_rng();
         let replica_id: PedersenDomain = rng.gen();
         let commitment: PedersenDomain = rng.gen();
-        let shards = 5;
-        let total_challenges = shards * n;
+        let partitions = 5;
+        let total_challenges = partitions * n;
         let layers = 100;
 
         let mut layers_with_duplicates = 0;
 
         for layer in 0..layers {
             let mut histogram = HashMap::new();
-            for k in 0..shards {
+            for k in 0..partitions {
                 let challenges =
                     derive_challenges(n, layer, leaves, &replica_id, &commitment, k as u8);
 

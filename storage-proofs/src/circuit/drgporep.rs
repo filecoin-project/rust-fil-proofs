@@ -263,6 +263,7 @@ mod tests {
                 sloth_iter,
             },
             engine_params: params,
+            partitions: None,
         };
 
         let public_params =
@@ -300,6 +301,7 @@ mod tests {
                 sloth_iter,
             },
             engine_params: params,
+            partitions: None,
         };
 
         let public_params =

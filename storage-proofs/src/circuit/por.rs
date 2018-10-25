@@ -61,6 +61,7 @@ mod tests {
             let setup_params = compound_proof::SetupParams {
                 vanilla_params: &merklepor::SetupParams { lambda, leaves },
                 engine_params: &JubjubBls12::new(),
+                partitions: None,
             };
             let public_params =
                 PoRCompound::<PedersenHasher>::setup(&setup_params).expect("setup failed");
