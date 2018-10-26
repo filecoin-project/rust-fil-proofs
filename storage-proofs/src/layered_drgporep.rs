@@ -322,17 +322,16 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         )?;
 
         assert!(partition_count > 0);
-        // FIXME: Better name -- but this is confusing, an opaque name may be best.
-        let mut xxx = vec![Vec::new(); partition_count];
+        let mut proof_columns = vec![Vec::new(); partition_count];
 
         // TODO: Avoid all the cloning
         for partition_proofs in &proofs {
             for (j, proof) in partition_proofs.iter().enumerate() {
-                xxx[j].push(proof.clone());
+                proof_columns[j].push(proof.clone());
             }
         }
 
-        let proofs = xxx
+        let proofs = proof_columns
             .into_iter()
             .map(|p| Proof::new(p, priv_inputs.tau.clone()))
             .collect();
