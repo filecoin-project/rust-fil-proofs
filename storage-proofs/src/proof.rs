@@ -46,14 +46,20 @@ pub trait ProofScheme<'a> {
     }
 
     fn verify_all_partitions(
-        _pub_params: &Self::PublicParams,
-        _pub_inputs: &Self::PublicInputs,
-        _proof: &[Self::Proof],
+        pub_params: &Self::PublicParams,
+        pub_in: &Self::PublicInputs,
+        proofs: &[Self::Proof],
     ) -> Result<bool> {
-        unimplemented!();
+        for (k, proof) in proofs.iter().enumerate() {
+            let partition_pub_in = Self::with_partition((*pub_in).clone(), Some(k));
+            if !Self::verify(pub_params, &partition_pub_in, proof)? {
+                return Ok(false);
+            }
+        }
+        return Ok(true);
     }
 
-    // This method must be implemented/specialized for concrete ProofScheme using partitions.
+    // This method must be specialized by concrete ProofScheme implementations which use partitions.
     fn with_partition(pub_in: Self::PublicInputs, _k: Option<usize>) -> Self::PublicInputs {
         pub_in
     }
