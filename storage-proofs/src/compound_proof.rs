@@ -1,12 +1,11 @@
 use bellman::{groth16, Circuit};
+use circuit::multi_proof::MultiProof;
 use error::Result;
-use pairing::Engine;
 use parameter_cache::{CacheableParameters, ParameterSetIdentifier};
+use partitions;
 use proof::ProofScheme;
 use rand::{SeedableRng, XorShiftRng};
 use sapling_crypto::jubjub::JubjubEngine;
-use std::io;
-use std::io::{Read, Write};
 
 pub struct SetupParams<'a, 'b: 'a, E: JubjubEngine, S: ProofScheme<'a>>
 where
@@ -22,51 +21,6 @@ pub struct PublicParams<'a, E: JubjubEngine, S: ProofScheme<'a>> {
     pub vanilla_params: S::PublicParams,
     pub engine_params: &'a E::Params,
     pub partitions: Option<usize>,
-}
-
-pub struct Proof<E: Engine> {
-    pub circuit_proof: groth16::Proof<E>,
-    pub groth_params: groth16::Parameters<E>,
-}
-
-pub struct MultiProof<E: Engine> {
-    pub circuit_proofs: Vec<groth16::Proof<E>>,
-    pub groth_params: groth16::Parameters<E>,
-}
-
-impl<E: Engine> MultiProof<E> {
-    pub fn new(
-        groth_proofs: Vec<groth16::Proof<E>>,
-        groth_params: groth16::Parameters<E>,
-    ) -> MultiProof<E> {
-        MultiProof {
-            circuit_proofs: groth_proofs,
-            groth_params,
-        }
-    }
-
-    pub fn new_from_reader<R: Read>(
-        partitions: Option<usize>,
-        mut reader: R,
-        groth_params: groth16::Parameters<E>,
-    ) -> Result<MultiProof<E>> {
-        let num_proofs = match partitions {
-            Some(n) => n,
-            None => 1,
-        };
-        let proofs = (0..num_proofs)
-            .map(|_| groth16::Proof::read(&mut reader))
-            .collect::<io::Result<Vec<_>>>()?;
-
-        Ok(Self::new(proofs, groth_params))
-    }
-
-    pub fn write<W: Write>(&self, mut writer: W) -> Result<()> {
-        for proof in self.circuit_proofs.iter() {
-            proof.write(&mut writer)?
-        }
-        Ok(())
-    }
 }
 
 /// The CompoundProof trait bundles a proof::ProofScheme and a bellman::Circuit together.
@@ -109,15 +63,13 @@ where
 
         let partition_count = Self::partition_count(pub_params);
 
+        let vanilla_proofs =
+            S::prove_all_partitions(&pub_params.vanilla_params, &pub_in, priv_in, partitions)?;
+
         assert!(partition_count > 0);
         // This will always run at least once, since there cannot be zero partitions.
-        for k in 0..Self::partition_count(pub_params) {
-            // We need to pass k into the vanilla_proof.
-            let partition_pub_in = S::with_partition((*pub_in).clone(), Some(k));
 
-            // TODO: Generating the vanilla proof might be expensive, so we need to split it into a common part
-            // and a partition-specific part. In the case of PoRep, the common part is essentially `replicate`.
-            let vanilla_proof = S::prove(&pub_params.vanilla_params, &partition_pub_in, priv_in)?;
+        for (k, vanilla_proof) in vanilla_proofs.iter().enumerate() {
             let (groth_proof, groth_params) = Self::circuit_proof(
                 pub_in,
                 &vanilla_proof,
@@ -216,24 +168,28 @@ where
         private_inputs: &S::PrivateInputs,
     ) -> (C, Vec<E::Fr>) {
         let vanilla_params = &public_parameters.vanilla_params;
-        let vanilla_proof = S::prove(vanilla_params, public_inputs, private_inputs).unwrap();
-
+        let partition_count = partitions::partition_count(public_parameters.partitions);
+        let vanilla_proofs = S::prove_all_partitions(
+            vanilla_params,
+            public_inputs,
+            private_inputs,
+            partition_count,
+        )
+        .unwrap();
+        assert_eq!(vanilla_proofs.len(), partition_count);
         let circuit = Self::circuit(
             &public_inputs,
-            &vanilla_proof,
+            &vanilla_proofs[0],
             vanilla_params,
             &public_parameters.engine_params,
             public_parameters.partitions,
         );
 
-        let inputs = Self::generate_public_inputs(
-            &public_inputs,
-            vanilla_params,
-            public_parameters.partitions,
-        );
+        let partition_pub_in = S::with_partition(public_inputs.clone(), Some(0));
+        let inputs = Self::generate_public_inputs(&partition_pub_in, vanilla_params, Some(0));
 
         assert!(
-            S::verify(vanilla_params, &public_inputs, &vanilla_proof).unwrap(),
+            S::verify_all_partitions(vanilla_params, &public_inputs, &vanilla_proofs).unwrap(),
             "vanilla proof didn't verify"
         );
 

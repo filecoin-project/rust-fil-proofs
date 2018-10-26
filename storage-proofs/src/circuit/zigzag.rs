@@ -372,14 +372,15 @@ mod tests {
             tau: tau.layer_taus.into(),
         };
 
-        let proof = ZigZagDrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
-        assert!(ZigZagDrgPoRep::verify(&pp, &pub_inputs, &proof).unwrap());
+        let proofs =
+            ZigZagDrgPoRep::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, 1).unwrap();
+        assert!(ZigZagDrgPoRep::verify_all_partitions(&pp, &pub_inputs, &proofs).unwrap());
 
         // End copied section.
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        ZigZagCompound::circuit(&pub_inputs, &proof, &pp, params, None)
+        ZigZagCompound::circuit(&pub_inputs, &proofs[0], &pp, params, None)
             .synthesize(&mut cs.namespace(|| "zigzag drgporep"))
             .expect("failed to synthesize circuit");
 
@@ -505,7 +506,7 @@ mod tests {
                 layers: num_layers,
                 challenge_count,
             },
-            partitions: None,
+            partitions: Some(2),
         };
 
         let public_params = ZigZagCompound::setup(&setup_params).unwrap();
@@ -542,7 +543,7 @@ mod tests {
             assert!(cs.is_satisfied(), "TestContraintSystem was not satisfied");
             assert!(
                 cs.verify(&inputs),
-                "failed while verifying with TestContraintSystem and generated inputs"
+                "verification failed with TestContraintSystem and generated inputs"
             );
         }
 

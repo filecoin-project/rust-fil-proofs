@@ -8,6 +8,7 @@ pub mod por;
 
 pub mod drgporep;
 pub mod kdf;
+pub mod multi_proof;
 pub mod pedersen;
 pub mod ppor;
 pub mod private_drgporep;

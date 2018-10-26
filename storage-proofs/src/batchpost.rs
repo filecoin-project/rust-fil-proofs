@@ -29,7 +29,7 @@ pub struct Proof<H: Hasher> {
     pub challenges: Vec<usize>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PublicInputs<'a, T: 'a + Domain> {
     /// The root hash of the underlying merkle tree.
     pub commitment: T,

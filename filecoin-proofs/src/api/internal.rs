@@ -8,6 +8,7 @@ use pairing::Engine;
 use sapling_crypto::jubjub::JubjubBls12;
 
 use sector_base::io::fr32::write_unpadded;
+use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgporep::{self, DrgParams};
@@ -365,11 +366,7 @@ pub fn verify_seal(
         proof_sector_bytes,
     ))?;
 
-    let proof = compound_proof::MultiProof::new_from_reader(
-        Some(POREP_PARTITIONS),
-        proof_vec,
-        groth_params,
-    )?;
+    let proof = MultiProof::new_from_reader(Some(POREP_PARTITIONS), proof_vec, groth_params)?;
 
     ZigZagCompound::verify(&public_params(proof_sector_bytes), &public_inputs, proof)
 }

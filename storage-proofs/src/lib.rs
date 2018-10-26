@@ -71,6 +71,7 @@ pub mod layered_drgporep;
 pub mod merkle;
 pub mod merklepor;
 pub mod parameter_cache;
+pub mod partitions;
 pub mod porep;
 pub mod proof;
 pub mod util;
