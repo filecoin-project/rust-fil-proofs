@@ -506,7 +506,7 @@ mod tests {
                 layers: num_layers,
                 challenge_count,
             },
-            partitions: None,
+            partitions: Some(2),
         };
 
         let public_params = ZigZagCompound::setup(&setup_params).unwrap();

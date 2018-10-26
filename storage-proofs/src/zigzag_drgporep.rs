@@ -156,6 +156,8 @@ mod tests {
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
         let challenge_count = 5;
+        let partitions = 2;
+
         let sp = SetupParams {
             drg_porep_setup_params: drgporep::SetupParams {
                 lambda,
@@ -191,7 +193,8 @@ mod tests {
         };
 
         let all_partition_proofs =
-            &ZigZagDrgPoRep::<H>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, 1).unwrap();
+            &ZigZagDrgPoRep::<H>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, partitions)
+                .unwrap();
 
         assert!(
             ZigZagDrgPoRep::<H>::verify_all_partitions(&pp, &pub_inputs, all_partition_proofs)
