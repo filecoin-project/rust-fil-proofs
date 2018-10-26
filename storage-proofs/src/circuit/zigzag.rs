@@ -532,21 +532,20 @@ mod tests {
         };
 
         // TOOD: Move this to e.g. circuit::test::compound_helper and share between all compound proo fs.
-        // FIXME: Uncomment and make this work again.
-        //        {
-        //            let (circuit, inputs) =
-        //                ZigZagCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);
-        //
-        //            let mut cs = TestConstraintSystem::new();
-        //
-        //            let _ = circuit.synthesize(&mut cs);
-        //
-        //            assert!(cs.is_satisfied(), "TestContraintSystem was not satisfied");
-        //            assert!(
-        //                cs.verify(&inputs),
-        //                "failed while verifying with TestContraintSystem and generated inputs"
-        //            );
-        //        }
+        {
+            let (circuit, inputs) =
+                ZigZagCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);
+
+            let mut cs = TestConstraintSystem::new();
+
+            let _ = circuit.synthesize(&mut cs);
+
+            assert!(cs.is_satisfied(), "TestContraintSystem was not satisfied");
+            assert!(
+                cs.verify(&inputs),
+                "verification failed with TestContraintSystem and generated inputs"
+            );
+        }
 
         let proof = ZigZagCompound::prove(&public_params, &public_inputs, &private_inputs)
             .expect("failed while proving");

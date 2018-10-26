@@ -2,6 +2,7 @@ use bellman::{groth16, Circuit};
 use circuit::proof::MultiProof;
 use error::Result;
 use parameter_cache::{CacheableParameters, ParameterSetIdentifier};
+use partitions;
 use proof::ProofScheme;
 use rand::{SeedableRng, XorShiftRng};
 use sapling_crypto::jubjub::JubjubEngine;
@@ -167,24 +168,28 @@ where
         private_inputs: &S::PrivateInputs,
     ) -> (C, Vec<E::Fr>) {
         let vanilla_params = &public_parameters.vanilla_params;
-        let vanilla_proof = S::prove(vanilla_params, public_inputs, private_inputs).unwrap();
-
+        let partition_count = partitions::partition_count(public_parameters.partitions);
+        let vanilla_proofs = S::prove_all_partitions(
+            vanilla_params,
+            public_inputs,
+            private_inputs,
+            partition_count,
+        )
+        .unwrap();
+        assert_eq!(vanilla_proofs.len(), partition_count);
         let circuit = Self::circuit(
             &public_inputs,
-            &vanilla_proof,
+            &vanilla_proofs[0],
             vanilla_params,
             &public_parameters.engine_params,
             public_parameters.partitions,
         );
 
-        let inputs = Self::generate_public_inputs(
-            &public_inputs,
-            vanilla_params,
-            public_parameters.partitions,
-        );
+        let partition_pub_in = S::with_partition(public_inputs.clone(), Some(0));
+        let inputs = Self::generate_public_inputs(&partition_pub_in, vanilla_params, Some(0));
 
         assert!(
-            S::verify(vanilla_params, &public_inputs, &vanilla_proof).unwrap(),
+            S::verify_all_partitions(vanilla_params, &public_inputs, &vanilla_proofs).unwrap(),
             "vanilla proof didn't verify"
         );
 
