@@ -89,13 +89,18 @@ where
 
     // verify is equivalent to ProofScheme::verify.
     fn verify(
-        public_params: &S::PublicParams,
+        public_params: &PublicParams<'a, E, S>,
         public_inputs: &S::PublicInputs,
         multi_proof: MultiProof<E>,
     ) -> Result<bool> {
+        let vanilla_public_params = &public_params.vanilla_params;
         let pvk = groth16::prepare_verifying_key(&multi_proof.groth_params.vk);
+        if multi_proof.circuit_proofs.len() != Self::partition_count(public_params) {
+            return Ok(false);
+        }
         for (k, circuit_proof) in multi_proof.circuit_proofs.iter().enumerate() {
-            let inputs = Self::generate_public_inputs(public_inputs, public_params, Some(k));
+            let inputs =
+                Self::generate_public_inputs(public_inputs, vanilla_public_params, Some(k));
 
             if !groth16::verify_proof(&pvk, &circuit_proof, inputs.as_slice())? {
                 return Ok(false);

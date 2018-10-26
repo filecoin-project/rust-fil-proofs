@@ -327,12 +327,9 @@ mod tests {
         assert!(cs.is_satisfied());
         assert!(cs.verify(&inputs));
 
-        let verified = DrgPoRepCompound::<PedersenHasher, _>::verify(
-            &public_params.vanilla_params,
-            &public_inputs,
-            proof,
-        )
-        .expect("failed while verifying");
+        let verified =
+            DrgPoRepCompound::<PedersenHasher, _>::verify(&public_params, &public_inputs, proof)
+                .expect("failed while verifying");
 
         assert!(verified);
     }

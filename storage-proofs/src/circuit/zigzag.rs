@@ -550,7 +550,7 @@ mod tests {
         let proof = ZigZagCompound::prove(&public_params, &public_inputs, &private_inputs)
             .expect("failed while proving");
 
-        let verified = ZigZagCompound::verify(&public_params.vanilla_params, &public_inputs, proof)
+        let verified = ZigZagCompound::verify(&public_params, &public_inputs, proof)
             .expect("failed while verifying");
 
         assert!(verified);

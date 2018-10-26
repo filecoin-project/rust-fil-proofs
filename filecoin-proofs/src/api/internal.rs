@@ -350,6 +350,19 @@ pub fn verify_seal(
     let comm_d = bytes_into_fr::<Bls12>(&comm_d)?;
     let comm_r_star = bytes_into_fr::<Bls12>(&comm_r_star)?;
 
+    let compound_setup_params = compound_proof::SetupParams {
+        // The proof might use a different number of bytes than we read and copied, if we are faking.
+        vanilla_params: &setup_params(proof_sector_bytes),
+        engine_params: &(*ENGINE_PARAMS),
+        partitions: Some(POREP_PARTITIONS),
+    };
+
+    let compound_public_params: compound_proof::PublicParams<
+        '_,
+        Bls12,
+        ZigZagDrgPoRep<'_, DefaultTreeHasher>,
+    > = ZigZagCompound::setup(&compound_setup_params)?;
+
     let public_inputs = layered_drgporep::PublicInputs::<<DefaultTreeHasher as Hasher>::Domain> {
         replica_id,
         challenge_count,
@@ -368,5 +381,5 @@ pub fn verify_seal(
 
     let proof = MultiProof::new_from_reader(Some(POREP_PARTITIONS), proof_vec, groth_params)?;
 
-    ZigZagCompound::verify(&public_params(proof_sector_bytes), &public_inputs, proof)
+    ZigZagCompound::verify(&compound_public_params, &public_inputs, proof)
 }
