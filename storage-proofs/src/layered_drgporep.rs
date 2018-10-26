@@ -288,7 +288,12 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         priv_inputs: &'b Self::PrivateInputs,
     ) -> Result<Self::Proof> {
         let proofs = Self::prove_all_partitions(pub_params, pub_inputs, priv_inputs, 1)?;
-        Ok(proofs[0].to_owned())
+        let k = match pub_inputs.k {
+            None => 0,
+            Some(k) => k,
+        };
+
+        Ok(proofs[k].to_owned())
     }
 
     fn prove_all_partitions<'b>(
@@ -341,7 +346,6 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         partition_proofs: &[Self::Proof],
     ) -> Result<bool> {
         for (k, proof) in partition_proofs.iter().enumerate() {
-            println!("verify");
             if proof.encoding_proofs.len() != pub_params.layers {
                 return Ok(false);
             }
@@ -361,7 +365,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
                     challenges: pub_inputs.challenges(
                         pub_params.drg_porep_public_params.graph.size(),
                         layer as u8,
-                        Some(k), // FIXME
+                        Some(k),
                     ),
                     tau: Some(proof.tau[layer]),
                 };
