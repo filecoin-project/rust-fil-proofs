@@ -62,15 +62,18 @@ where
 
         let partition_count = Self::partition_count(pub_params);
 
+        let vanilla_proofs =
+            S::prove_all_partitions(&pub_params.vanilla_params, &pub_in, priv_in, partitions)?;
+
         assert!(partition_count > 0);
         // This will always run at least once, since there cannot be zero partitions.
-        for k in 0..Self::partition_count(pub_params) {
+
+        for (k, vanilla_proof) in vanilla_proofs.iter().enumerate() {
             // We need to pass k into the vanilla_proof.
             let partition_pub_in = S::with_partition((*pub_in).clone(), Some(k));
 
             // TODO: Generating the vanilla proof might be expensive, so we need to split it into a common part
             // and a partition-specific part. In the case of PoRep, the common part is essentially `replicate`.
-            let vanilla_proof = S::prove(&pub_params.vanilla_params, &partition_pub_in, priv_in)?;
             let (groth_proof, groth_params) = Self::circuit_proof(
                 pub_in,
                 &vanilla_proof,

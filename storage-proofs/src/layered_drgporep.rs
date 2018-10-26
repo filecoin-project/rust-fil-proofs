@@ -68,9 +68,7 @@ where
     }
 }
 
-pub type ReplicaParents<H> = Vec<(usize, DataProof<H>)>;
 pub type EncodingProof<H> = drgporep::Proof<H>;
-pub type DataProof<H> = drgporep::DataProof<H>;
 
 #[derive(Debug, Clone)]
 pub struct PublicInputs<T: Domain> {
@@ -105,6 +103,8 @@ pub struct Proof<H: Hasher> {
     pub encoding_proofs: Vec<EncodingProof<H>>,
     pub tau: Vec<porep::Tau<H::Domain>>,
 }
+
+pub type PartitionProofs<H> = Vec<Proof<H>>;
 
 impl<H: Hasher> Proof<H> {
     pub fn new(
@@ -148,9 +148,9 @@ pub trait Layers {
         aux: Vec<porep::ProverAux<Self::Hasher>>,
         layers: usize,
         total_layers: usize,
-        proofs: &'a mut Vec<EncodingProof<Self::Hasher>>,
-        k: Option<usize>,
-    ) -> Result<&'a Vec<EncodingProof<Self::Hasher>>> {
+        proofs: &'a mut Vec<Vec<EncodingProof<Self::Hasher>>>,
+        partition_count: usize,
+    ) -> Result<&'a Vec<Vec<EncodingProof<Self::Hasher>>>> {
         assert!(layers > 0);
 
         let mut scratch = priv_inputs.replica.to_vec().clone();
@@ -165,13 +165,25 @@ pub trait Layers {
             // TODO: Make sure this is a shallow clone, not the whole MerkleTree.
             aux: &aux[aux.len() - layers].clone(),
         };
-        let drgporep_pub_inputs = drgporep::PublicInputs {
-            replica_id: pub_inputs.replica_id,
-            challenges: pub_inputs.challenges(pp.graph.size(), (total_layers - layers) as u8, k),
-            tau: Some(tau[tau.len() - layers]),
-        };
-        let drg_proof = DrgPoRep::prove(&pp, &drgporep_pub_inputs, &new_priv_inputs)?;
-        proofs.push(drg_proof);
+
+        let mut partition_proofs = Vec::with_capacity(partition_count);
+
+        for k in 0..partition_count {
+            let drgporep_pub_inputs = drgporep::PublicInputs {
+                replica_id: pub_inputs.replica_id,
+                challenges: pub_inputs.challenges(
+                    pp.graph.size(),
+                    (total_layers - layers) as u8,
+                    Some(k),
+                ),
+                tau: Some(tau[tau.len() - layers]),
+            };
+            let drg_proof = DrgPoRep::prove(&pp, &drgporep_pub_inputs, &new_priv_inputs)?;
+
+            partition_proofs.push(drg_proof);
+        }
+
+        proofs.push(partition_proofs);
 
         let pp = &Self::transform(pp, total_layers - layers, total_layers);
 
@@ -185,7 +197,7 @@ pub trait Layers {
                 layers - 1,
                 total_layers,
                 proofs,
-                k,
+                partition_count,
             )?;
         }
 
@@ -271,10 +283,19 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
     }
 
     fn prove<'b>(
+        _pub_params: &'b Self::PublicParams,
+        _pub_inputs: &'b Self::PublicInputs,
+        _priv_inputs: &'b Self::PrivateInputs,
+    ) -> Result<Self::Proof> {
+        unimplemented!();
+    }
+
+    fn prove_all_partitions<'b>(
         pub_params: &'b Self::PublicParams,
         pub_inputs: &'b Self::PublicInputs,
         priv_inputs: &'b Self::PrivateInputs,
-    ) -> Result<Self::Proof> {
+        partition_count: usize,
+    ) -> Result<Vec<Self::Proof>> {
         let drg_priv_inputs = drgporep::PrivateInputs {
             aux: &priv_inputs.aux[0].clone(),
             replica: priv_inputs.replica,
@@ -291,64 +312,84 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
             pub_params.layers,
             pub_params.layers,
             &mut proofs,
-            pub_inputs.k,
+            partition_count,
         )?;
 
-        let proof = Proof::new(proofs, priv_inputs.tau.clone());
+        assert!(partition_count > 0);
+        // FIXME: Better name -- but this is confusing, an opaque name may be best.
+        let mut xxx = vec![Vec::new(); partition_count];
 
-        Ok(proof)
-    }
-
-    fn verify(
-        pub_params: &Self::PublicParams,
-        pub_inputs: &Self::PublicInputs,
-        proof: &Self::Proof,
-    ) -> Result<bool> {
-        if proof.encoding_proofs.len() != pub_params.layers {
-            return Ok(false);
+        // TODO: Avoid all the cloning
+        for partition_proofs in &proofs {
+            for (j, proof) in partition_proofs.iter().enumerate() {
+                xxx[j].push(proof.clone());
+            }
         }
 
-        let total_layers = pub_params.layers;
-        let mut pp = pub_params.drg_porep_public_params.clone();
-        // TODO: verification is broken for the first node, figure out how to unbreak
-        // with permutations
+        let proofs = xxx
+            .into_iter()
+            .map(|p| Proof::new(p, priv_inputs.tau.clone()))
+            .collect();
 
-        let mut comm_rs = Vec::new();
+        Ok(proofs)
+    }
 
-        for (layer, proof_layer) in proof.encoding_proofs.iter().enumerate() {
-            comm_rs.push(proof.tau[layer].comm_r);
+    fn verify_all_partitions(
+        pub_params: &Self::PublicParams,
+        pub_inputs: &Self::PublicInputs,
+        partition_proofs: &Vec<Self::Proof>,
+    ) -> Result<bool> {
+        for (k, proof) in partition_proofs.iter().enumerate() {
+            println!("verify");
+            if proof.encoding_proofs.len() != pub_params.layers {
+                return Ok(false);
+            }
 
-            let new_pub_inputs = drgporep::PublicInputs {
-                replica_id: pub_inputs.replica_id,
-                challenges: pub_inputs.challenges(
-                    pub_params.drg_porep_public_params.graph.size(),
-                    layer as u8,
-                    pub_inputs.k,
-                ),
-                tau: Some(proof.tau[layer]),
-            };
+            let total_layers = pub_params.layers;
+            let mut pp = pub_params.drg_porep_public_params.clone();
+            // TODO: verification is broken for the first node, figure out how to unbreak
+            // with permutations
 
-            let ep = &proof_layer;
-            let res = DrgPoRep::verify(
-                &pp,
-                &new_pub_inputs,
-                &drgporep::Proof {
-                    replica_nodes: ep.replica_nodes.clone(),
-                    replica_parents: ep.replica_parents.clone(),
-                    // TODO: investigate if clone can be avoided by using a reference in drgporep::DataProof
-                    nodes: ep.nodes.clone(),
-                },
-            )?;
+            let mut comm_rs = Vec::new();
 
-            pp = Self::transform(&pp, layer, total_layers);
+            for (layer, proof_layer) in proof.encoding_proofs.iter().enumerate() {
+                comm_rs.push(proof.tau[layer].comm_r);
 
-            if !res {
+                let new_pub_inputs = drgporep::PublicInputs {
+                    replica_id: pub_inputs.replica_id,
+                    challenges: pub_inputs.challenges(
+                        pub_params.drg_porep_public_params.graph.size(),
+                        layer as u8,
+                        Some(k), // FIXME
+                    ),
+                    tau: Some(proof.tau[layer]),
+                };
+
+                let ep = &proof_layer;
+                let res = DrgPoRep::verify(
+                    &pp,
+                    &new_pub_inputs,
+                    &drgporep::Proof {
+                        replica_nodes: ep.replica_nodes.clone(),
+                        replica_parents: ep.replica_parents.clone(),
+                        // TODO: investigate if clone can be avoided by using a reference in drgporep::DataProof
+                        nodes: ep.nodes.clone(),
+                    },
+                )?;
+
+                pp = Self::transform(&pp, layer, total_layers);
+
+                if !res {
+                    return Ok(false);
+                }
+            }
+            let crs = comm_r_star::<L::Hasher>(&pub_inputs.replica_id, &comm_rs)?;
+
+            if !(crs == pub_inputs.comm_r_star) {
                 return Ok(false);
             }
         }
-        let crs = comm_r_star::<L::Hasher>(&pub_inputs.replica_id, &comm_rs)?;
-
-        Ok(crs == pub_inputs.comm_r_star)
+        Ok(true)
     }
 
     fn with_partition(pub_in: Self::PublicInputs, k: Option<usize>) -> Self::PublicInputs {
@@ -357,7 +398,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
             challenge_count: pub_in.challenge_count,
             tau: pub_in.tau,
             comm_r_star: pub_in.comm_r_star,
-            k,
+            k: pub_in.k,
         }
     }
 }
