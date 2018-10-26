@@ -56,7 +56,7 @@ pub trait ProofScheme<'a> {
                 return Ok(false);
             }
         }
-        return Ok(true);
+        Ok(true)
     }
 
     // This method must be specialized by concrete ProofScheme implementations which use partitions.
