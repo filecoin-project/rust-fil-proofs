@@ -38,17 +38,17 @@ pub trait ProofScheme<'a> {
     /// Remember that proof is untrusted, and any data it provides MUST be validated as corresponding
     /// to the supplied public parameters and inputs.
     fn verify(
-        pub_params: &Self::PublicParams,
-        pub_inputs: &Self::PublicInputs,
-        proof: &Self::Proof,
+        _pub_params: &Self::PublicParams,
+        _pub_inputs: &Self::PublicInputs,
+        _proof: &Self::Proof,
     ) -> Result<bool> {
         unimplemented!();
     }
 
     fn verify_all_partitions(
-        pub_params: &Self::PublicParams,
-        pub_inputs: &Self::PublicInputs,
-        proof: &[Self::Proof],
+        _pub_params: &Self::PublicParams,
+        _pub_inputs: &Self::PublicInputs,
+        _proof: &[Self::Proof],
     ) -> Result<bool> {
         unimplemented!();
     }

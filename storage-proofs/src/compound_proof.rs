@@ -69,11 +69,6 @@ where
         // This will always run at least once, since there cannot be zero partitions.
 
         for (k, vanilla_proof) in vanilla_proofs.iter().enumerate() {
-            // We need to pass k into the vanilla_proof.
-            let partition_pub_in = S::with_partition((*pub_in).clone(), Some(k));
-
-            // TODO: Generating the vanilla proof might be expensive, so we need to split it into a common part
-            // and a partition-specific part. In the case of PoRep, the common part is essentially `replicate`.
             let (groth_proof, groth_params) = Self::circuit_proof(
                 pub_in,
                 &vanilla_proof,

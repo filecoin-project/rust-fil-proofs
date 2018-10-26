@@ -192,7 +192,6 @@ mod tests {
 
         let all_partition_proofs =
             &ZigZagDrgPoRep::<H>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, 1).unwrap();
-        let proof = &all_partition_proofs[0];
 
         assert!(
             ZigZagDrgPoRep::<H>::verify_all_partitions(&pp, &pub_inputs, all_partition_proofs)

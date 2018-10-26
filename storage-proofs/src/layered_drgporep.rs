@@ -283,11 +283,12 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
     }
 
     fn prove<'b>(
-        _pub_params: &'b Self::PublicParams,
-        _pub_inputs: &'b Self::PublicInputs,
-        _priv_inputs: &'b Self::PrivateInputs,
+        pub_params: &'b Self::PublicParams,
+        pub_inputs: &'b Self::PublicInputs,
+        priv_inputs: &'b Self::PrivateInputs,
     ) -> Result<Self::Proof> {
-        unimplemented!();
+        let proofs = Self::prove_all_partitions(pub_params, pub_inputs, priv_inputs, 1)?;
+        Ok(proofs[0].to_owned())
     }
 
     fn prove_all_partitions<'b>(
@@ -398,7 +399,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
             challenge_count: pub_in.challenge_count,
             tau: pub_in.tau,
             comm_r_star: pub_in.comm_r_star,
-            k: pub_in.k,
+            k,
         }
     }
 }

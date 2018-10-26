@@ -324,7 +324,6 @@ mod tests {
         let challenge_count = 1;
         let num_layers = 2;
         let sloth_iter = 1;
-        let partitions = Some(1);
 
         let n = nodes; // FIXME: Consolidate variable names.
 
@@ -476,7 +475,6 @@ mod tests {
         let challenge_count = 1;
         let num_layers = 2;
         let sloth_iter = 1;
-        let partitions = Some(1);
 
         let n = nodes; // FIXME: Consolidate variable names.
 
