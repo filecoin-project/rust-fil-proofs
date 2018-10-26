@@ -48,7 +48,7 @@ pub trait ProofScheme<'a> {
     fn verify_all_partitions(
         pub_params: &Self::PublicParams,
         pub_inputs: &Self::PublicInputs,
-        proof: &Vec<Self::Proof>,
+        proof: &[Self::Proof],
     ) -> Result<bool> {
         unimplemented!();
     }

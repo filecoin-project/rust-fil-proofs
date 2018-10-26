@@ -337,7 +337,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
     fn verify_all_partitions(
         pub_params: &Self::PublicParams,
         pub_inputs: &Self::PublicInputs,
-        partition_proofs: &Vec<Self::Proof>,
+        partition_proofs: &[Self::Proof],
     ) -> Result<bool> {
         for (k, proof) in partition_proofs.iter().enumerate() {
             println!("verify");
@@ -385,7 +385,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
             }
             let crs = comm_r_star::<L::Hasher>(&pub_inputs.replica_id, &comm_rs)?;
 
-            if !(crs == pub_inputs.comm_r_star) {
+            if crs != pub_inputs.comm_r_star {
                 return Ok(false);
             }
         }
