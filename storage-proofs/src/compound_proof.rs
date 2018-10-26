@@ -1,5 +1,5 @@
 use bellman::{groth16, Circuit};
-use circuit::proof::MultiProof;
+use circuit::multi_proof::MultiProof;
 use error::Result;
 use parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use partitions;

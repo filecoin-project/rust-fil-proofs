@@ -8,7 +8,7 @@ use pairing::Engine;
 use sapling_crypto::jubjub::JubjubBls12;
 
 use sector_base::io::fr32::write_unpadded;
-use storage_proofs::circuit::proof::MultiProof;
+use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgporep::{self, DrgParams};
