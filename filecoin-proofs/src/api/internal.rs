@@ -33,10 +33,14 @@ type Commitment = [u8; 32];
 type FrSafe = [u8; 31];
 
 /// How big, in bytes, is the SNARK proof exposed by the API?
-pub const SNARK_BYTES: usize = 192;
-pub const POREP_PARTITIONS: usize = 2;
-pub const POREP_PROOF_BYTES: usize = SNARK_BYTES * POREP_PARTITIONS;
-pub const POST_PROOF_BYTES: usize = SNARK_BYTES;
+///
+/// Note: These values need to be kept in sync with what's in api/mod.rs.
+/// Due to limitations of cbindgen, we can't define a constant whose value is
+/// a non-primitive (e.g. an expression like 192 * 2 or internal::STUFF) and
+/// see the constant in the generated C-header file.
+const SNARK_BYTES: usize = 192;
+const POREP_PARTITIONS: usize = 2;
+const POREP_PROOF_BYTES: usize = SNARK_BYTES * POREP_PARTITIONS;
 
 type SnarkProof = [u8; POREP_PROOF_BYTES];
 

@@ -1,7 +1,6 @@
 use api::responses::FCPResponseStatus;
 use libc;
 use sector_base::api::SectorStore;
-use std::cmp;
 use std::ffi::CString;
 use std::mem;
 use std::slice::from_raw_parts;
@@ -12,10 +11,12 @@ pub mod util;
 
 type SectorAccess = *const libc::c_char;
 
-/// This is also defined in api::internal, but we make it explicit here for API consumers.
-/// How big, in bytes, is a SNARK proof?
-pub const POREP_PROOF_BYTES: usize = internal::POREP_PROOF_BYTES;
-pub const POST_PROOF_BYTES: usize = internal::POST_PROOF_BYTES;
+/// Note: These values need to be kept in sync with what's in api/internal.rs.
+/// Due to limitations of cbindgen, we can't define a constant whose value is
+/// a non-primitive (e.g. an expression like 192 * 2 or internal::STUFF) and
+/// see the constant in the generated C-header file.
+pub const API_POREP_PROOF_BYTES: usize = 384;
+pub const API_POST_PROOF_BYTES: usize = 192;
 
 /// Seals a sector and returns its commitments and proof.
 /// Unsealed data is read from `unsealed`, sealed, then written to `sealed`.
@@ -55,7 +56,8 @@ pub unsafe extern "C" fn seal(
             response.comm_r[..32].clone_from_slice(&comm_r[..32]);
             response.comm_d[..32].clone_from_slice(&comm_d[..32]);
             response.comm_r_star[..32].clone_from_slice(&comm_r_star[..32]);
-            response.proof[..POREP_PROOF_BYTES].clone_from_slice(&snark_proof[..POREP_PROOF_BYTES]);
+            response.proof[..API_POREP_PROOF_BYTES]
+                .clone_from_slice(&snark_proof[..API_POREP_PROOF_BYTES]);
         }
         Err(err) => {
             response.status_code = FCPResponseStatus::FCPUnclassifiedError;
@@ -88,7 +90,7 @@ pub unsafe extern "C" fn verify_seal(
     comm_r_star: &[u8; 32],
     prover_id: &[u8; 31],
     sector_id: &[u8; 31],
-    proof: &[u8; POREP_PROOF_BYTES],
+    proof: &[u8; API_POREP_PROOF_BYTES],
 ) -> *mut responses::VerifySealResponse {
     let mut response: responses::VerifySealResponse = Default::default();
 
@@ -284,9 +286,9 @@ pub unsafe extern "C" fn generate_post(
         });
 
     // if more than one comm_r was provided, pretend like the first was faulty
-    let fault_idxs: Vec<u8> = vec![0]
+    let fault_idxs: Vec<u64> = vec![0]
         .into_iter()
-        .take(cmp::min(1, comm_rs.len() - 1))
+        .take(if comm_rs.len() > 1 { 1 } else { 0 })
         .collect();
 
     let mut result: responses::GeneratePoSTResponse = Default::default();
@@ -298,7 +300,7 @@ pub unsafe extern "C" fn generate_post(
     mem::forget(fault_idxs);
 
     // write some fake proof
-    result.proof = [42; POST_PROOF_BYTES];
+    result.proof = [42; API_POST_PROOF_BYTES];
 
     Box::into_raw(Box::new(result))
 }
@@ -311,7 +313,7 @@ pub unsafe extern "C" fn generate_post(
 /// * `proof`   - a proof-of-spacetime
 #[no_mangle]
 pub extern "C" fn verify_post(
-    proof: &[u8; POST_PROOF_BYTES],
+    proof: &[u8; API_POST_PROOF_BYTES],
 ) -> *mut responses::VerifyPoSTResponse {
     let mut res: responses::VerifyPoSTResponse = Default::default();
 

@@ -1,5 +1,5 @@
-use api::internal;
 use api::util;
+use api::{API_POREP_PROOF_BYTES, API_POST_PROOF_BYTES};
 use libc;
 use std::ptr;
 
@@ -28,7 +28,7 @@ pub struct SealResponse {
     pub comm_d: [u8; 32],
     pub comm_r: [u8; 32],
     pub comm_r_star: [u8; 32],
-    pub proof: [u8; internal::POREP_PROOF_BYTES],
+    pub proof: [u8; API_POREP_PROOF_BYTES],
 }
 
 impl Default for SealResponse {
@@ -39,7 +39,7 @@ impl Default for SealResponse {
             comm_d: [0; 32],
             comm_r: [0; 32],
             comm_r_star: [0; 32],
-            proof: [0; internal::POREP_PROOF_BYTES],
+            proof: [0; API_POREP_PROOF_BYTES],
         }
     }
 }
@@ -166,8 +166,8 @@ pub struct GeneratePoSTResponse {
     pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
     pub faults_len: libc::size_t,
-    pub faults_ptr: *const u8,
-    pub proof: [u8; internal::POST_PROOF_BYTES],
+    pub faults_ptr: *const u64,
+    pub proof: [u8; API_POST_PROOF_BYTES],
 }
 
 impl Default for GeneratePoSTResponse {
@@ -177,7 +177,7 @@ impl Default for GeneratePoSTResponse {
             error_msg: ptr::null(),
             faults_len: 0,
             faults_ptr: ptr::null(),
-            proof: [0; internal::POST_PROOF_BYTES],
+            proof: [0; API_POST_PROOF_BYTES],
         }
     }
 }
