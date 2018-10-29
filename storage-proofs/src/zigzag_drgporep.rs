@@ -183,7 +183,7 @@ mod tests {
             challenge_count,
             tau: Some(tau.simplify().into()),
             comm_r_star: tau.comm_r_star,
-            k: Some(0),
+            k: None,
         };
 
         let priv_inputs = PrivateInputs {

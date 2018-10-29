@@ -104,6 +104,12 @@ pub struct Proof<H: Hasher> {
     pub tau: Vec<porep::Tau<H::Domain>>,
 }
 
+impl<H: Hasher> Proof<H> {
+    pub fn serialize(&self) -> Vec<u8> {
+        unimplemented!();
+    }
+}
+
 pub type PartitionProofs<H> = Vec<Proof<H>>;
 
 impl<H: Hasher> Proof<H> {
