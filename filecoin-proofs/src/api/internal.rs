@@ -61,9 +61,9 @@ lazy_static! {
 
 pub const LAMBDA: usize = 32;
 const DEGREE: usize = 1; // TODO: 10;
-const EXPANSION_DEGREE: usize = 2; // TODO: 10
+const EXPANSION_DEGREE: usize = 2; // TODO: 6
 const SLOTH_ITER: usize = 1;
-const LAYERS: usize = 2; // TODO: 6;
+const LAYERS: usize = 2; // TODO: 10;
 const CHALLENGE_COUNT: usize = 1;
 
 fn setup_params(sector_bytes: usize) -> layered_drgporep::SetupParams {

@@ -157,7 +157,9 @@ mod tests {
             "failed to verify data commitment"
         );
         assert!(
-            proof_nc.nodes[0].proof.validate_data(&data_node.unwrap()),
+            proof_nc.nodes[0]
+                .proof
+                .validate_data(&fr_into_bytes::<Bls12>(&data_node.unwrap())),
             "failed to verify data commitment with data"
         );
 

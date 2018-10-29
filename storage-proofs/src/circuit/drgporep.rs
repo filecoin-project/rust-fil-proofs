@@ -57,7 +57,7 @@ mod tests {
     use compound_proof;
     use drgporep;
     use drgraph::{graph_height, new_seed, BucketGraph};
-    use fr32::bytes_into_fr;
+    use fr32::{bytes_into_fr, fr_into_bytes};
     use hasher::pedersen::*;
     use pairing::Field;
     use porep::PoRep;
@@ -156,7 +156,9 @@ mod tests {
             "failed to verify data commitment"
         );
         assert!(
-            proof_nc.nodes[0].proof.validate_data(&data_node.unwrap()),
+            proof_nc.nodes[0]
+                .proof
+                .validate_data(&fr_into_bytes::<Bls12>(&data_node.unwrap())),
             "failed to verify data commitment with data"
         );
 

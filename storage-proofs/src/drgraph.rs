@@ -6,13 +6,15 @@ use rayon::prelude::*;
 
 use error::*;
 use hasher::pedersen::PedersenHasher;
-use hasher::{HashFunction, Hasher};
+use hasher::{Domain, HashFunction, Hasher};
 use merkle::MerkleTree;
 use parameter_cache::ParameterSetIdentifier;
 use util::data_at_node;
 
 /// The default hasher currently in use.
 pub type DefaultTreeHasher = PedersenHasher;
+
+pub const PARALLELL_MERKLE: bool = false;
 
 /// A depth robust graph.
 pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
@@ -35,16 +37,26 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
             ));
         }
 
-        if !(node_size == 16 || node_size == 32 || node_size == 64) {
+        // To avoid hashing the first node, the node size has to be the hash size.else
+        // We make this assumption pervasively anyway.
+        if node_size != 32 {
             return Err(Error::InvalidNodeSize(node_size));
         }
 
-        Ok(MerkleTree::from_par_iter(
-            (0..self.size()).into_par_iter().map(|i| {
+        if PARALLELL_MERKLE {
+            Ok(MerkleTree::from_par_iter(
+                (0..self.size()).into_par_iter().map(|i| {
+                    let d = data_at_node(&data, i, node_size).expect("data_at_node math failed");
+                    H::Function::hash_single_node(&d)
+                }),
+            ))
+        } else {
+            Ok(MerkleTree::new((0..self.size()).map(|i| {
                 let d = data_at_node(&data, i, node_size).expect("data_at_node math failed");
-                H::Function::hash_single_node(&d)
-            }),
-        ))
+                let res = H::Domain::try_from_bytes(d.clone()).unwrap(); // FIXME: don't unwrap.
+                res
+            })))
+        }
     }
 
     /// Returns the merkle tree depth.
@@ -233,10 +245,11 @@ mod tests {
 
     fn gen_proof<H: Hasher>() {
         let g = BucketGraph::<H>::new(5, 3, 0, new_seed());
-        let data = vec![2u8; 16 * 5];
+        let node_size = 32;
+        let data = vec![2u8; node_size * 5];
 
         let mmapped = &mmap_from(&data);
-        let tree = g.merkle_tree(mmapped, 16).unwrap();
+        let tree = g.merkle_tree(mmapped, node_size).unwrap();
         let proof = tree.gen_proof(2);
 
         assert!(proof.validate::<H::Function>());

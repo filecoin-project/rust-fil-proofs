@@ -3,7 +3,7 @@
 use std::marker::PhantomData;
 
 // Reexport here, so we don't depend on merkle_light directly in other places.
-use merkle_light::hash::{Algorithm, Hashable};
+use merkle_light::hash::Algorithm;
 pub use merkle_light::merkle::MerkleTree;
 use merkle_light::proof;
 use pairing::bls12_381::Fr;
@@ -97,13 +97,15 @@ impl<H: Hasher> MerkleProof<H> {
     }
 
     /// Validates that the data hashes to the leaf of the merkle path.
-    pub fn validate_data(&self, data: &Hashable<H::Function>) -> bool {
-        let mut a = H::Function::default();
-        data.hash(&mut a);
-        let item_hash = a.hash();
-        let leaf_hash = a.leaf(item_hash);
-
-        &leaf_hash == self.leaf()
+    pub fn validate_data(&self, data: &[u8]) -> bool {
+        //        unimplemented!();
+        //        let mut a = H::Function::default();
+        //        data.hash(&mut a);
+        //        let item_hash = a.hash();
+        //        let leaf_hash = a.leaf(item_hash);
+        //
+        //        &leaf_hash == self.leaf()
+        self.leaf().into_bytes() == data
     }
 
     /// Returns the hash of leaf that this MerkleProof represents.
@@ -153,6 +155,7 @@ mod tests {
     use super::*;
 
     use rand::{self, Rng};
+    use std::io::Write;
 
     use drgraph::new_seed;
     use drgraph::{BucketGraph, Graph};
@@ -161,9 +164,16 @@ mod tests {
     fn merklepath<H: Hasher>() {
         let g = BucketGraph::<H>::new(10, 5, 0, new_seed());
         let mut rng = rand::thread_rng();
-        let data: Vec<u8> = (0..16 * 10).map(|_| rng.gen()).collect();
+        let node_size = 32;
+        //let data: Vec<u8> = (0..node_size * 10).map(|_| rng.gen()).collect();
+        let mut data = Vec::new();
+        for _ in 0..10 {
+            let elt: H::Domain = rng.gen();
+            let bytes = H::Domain::into_bytes(&elt);
+            data.write(&bytes).unwrap();
+        }
 
-        let tree = g.merkle_tree(data.as_slice(), 16).unwrap();
+        let tree = g.merkle_tree(data.as_slice(), node_size).unwrap();
         for i in 0..10 {
             let proof = tree.gen_proof(i);
 
@@ -174,7 +184,7 @@ mod tests {
             assert_eq!(mp.len(), len);
 
             assert!(mp.validate(i), "failed to validate valid merkle path");
-            let data_slice = &data[i * 16..(i + 1) * 16].to_vec();
+            let data_slice = &data[i * node_size..(i + 1) * node_size].to_vec();
             assert!(
                 mp.validate_data(data_slice),
                 "failed to validate valid data"

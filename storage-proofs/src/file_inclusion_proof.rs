@@ -211,7 +211,7 @@ mod tests {
         let mut data = Vec::<u8>::with_capacity(nodes);
 
         for i in 0..size {
-            data.push(((i / lambda) + i) as u8)
+            data.push((((i / lambda) + i) & 63) as u8)
         }
 
         let tree = g.merkle_tree(&data, lambda).unwrap();
