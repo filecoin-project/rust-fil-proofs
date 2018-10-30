@@ -97,10 +97,11 @@ fn compute_root<H: Hasher>(
 
     let mut hasher = H::Function::default();
 
-    let mut last_row: Vec<_> = piece_data
-        .chunks(32)
-        .map(|chunk| H::Domain::try_from_bytes(chunk).unwrap()) // FIXME: don't unwrap.
-        .collect();
+    let mut last_row = Vec::new();
+
+    for chunk in piece_data.chunks(32) {
+        last_row.push(H::Domain::try_from_bytes(chunk)?);
+    }
 
     for (height, ((l_hash, l_is_left), (r_hash, r_is_left))) in proof_vecs.enumerate() {
         let mut row = Vec::new();
