@@ -19,12 +19,6 @@ ENV PATH "$PATH:/root/.cargo/bin"
 ENV RUSTFLAGS "-C link-dead-code"
 ENV CFG_RELEASE_CHANNEL "nightly"
 
-RUN rustup update && \
-    rustup install nightly && \
-    rustup default nightly && \
-    rustup component add rustfmt-preview && \
-    rustup component add clippy-preview
-
 RUN bash -l -c 'echo $(rustc --print sysroot)/lib >> /etc/ld.so.conf'
 RUN bash -l -c 'echo /usr/local/lib >> /etc/ld.so.conf'
 RUN ldconfig
