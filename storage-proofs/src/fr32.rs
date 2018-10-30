@@ -27,6 +27,7 @@ pub fn bytes_into_fr<E: Engine>(bytes: &[u8]) -> Result<E::Fr> {
     }
     let mut fr_repr = <<<E as Engine>::Fr as PrimeField>::Repr as Default>::default();
     fr_repr.read_le(bytes).map_err(|_| Error::BadFrBytes)?;
+
     E::Fr::from_repr(fr_repr).map_err(|_| Error::BadFrBytes)
 }
 

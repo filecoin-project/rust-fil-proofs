@@ -98,13 +98,6 @@ impl<H: Hasher> MerkleProof<H> {
 
     /// Validates that the data hashes to the leaf of the merkle path.
     pub fn validate_data(&self, data: &[u8]) -> bool {
-        //        unimplemented!();
-        //        let mut a = H::Function::default();
-        //        data.hash(&mut a);
-        //        let item_hash = a.hash();
-        //        let leaf_hash = a.leaf(item_hash);
-        //
-        //        &leaf_hash == self.leaf()
         self.leaf().into_bytes() == data
     }
 
@@ -165,7 +158,6 @@ mod tests {
         let g = BucketGraph::<H>::new(10, 5, 0, new_seed());
         let mut rng = rand::thread_rng();
         let node_size = 32;
-        //let data: Vec<u8> = (0..node_size * 10).map(|_| rng.gen()).collect();
         let mut data = Vec::new();
         for _ in 0..10 {
             let elt: H::Domain = rng.gen();

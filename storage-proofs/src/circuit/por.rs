@@ -170,7 +170,7 @@ mod tests {
             por.synthesize(&mut cs).unwrap();
 
             assert_eq!(cs.num_inputs(), 3, "wrong number of inputs");
-            assert_eq!(cs.num_constraints(), 4846, "wrong number of constraints");
+            assert_eq!(cs.num_constraints(), 4149, "wrong number of constraints");
 
             let auth_path_bits: Vec<bool> = proof
                 .proof

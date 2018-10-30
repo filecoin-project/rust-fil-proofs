@@ -14,7 +14,7 @@ use util::data_at_node;
 /// The default hasher currently in use.
 pub type DefaultTreeHasher = PedersenHasher;
 
-pub const PARALLELL_MERKLE: bool = false;
+pub const PARALLELL_MERKLE: bool = true;
 
 /// A depth robust graph.
 pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {

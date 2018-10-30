@@ -50,24 +50,9 @@ impl<'a, E: JubjubEngine> Circuit<E> for ParallelProofOfRetrievability<'a, E> {
 
             value_num.inputize(cs.namespace(|| "value num"))?;
 
-            let mut value_bits = value_num.into_bits_le(cs.namespace(|| "value bits"))?;
-
-            // sad face, need to pad to make all algorithms the same
-            while value_bits.len() < 256 {
-                value_bits.push(boolean::Boolean::Constant(false));
-            }
-
-            // Compute the hash of the value
-            let cm = pedersen_hash::pedersen_hash(
-                cs.namespace(|| "value hash"),
-                pedersen_hash::Personalization::NoteCommitment,
-                &value_bits,
-                params,
-            )?;
-
             // This is an injective encoding, as cur is a
             // point in the prime order subgroup.
-            let mut cur = cm.get_x().clone();
+            let mut cur = value_num;
 
             let mut auth_path_bits = Vec::with_capacity(auth_path.len());
 
@@ -233,7 +218,7 @@ mod tests {
             assert!(cs.is_satisfied(), "constraints not satisfied");
 
             assert_eq!(cs.num_inputs(), 34, "wrong number of inputs");
-            assert_eq!(cs.num_constraints(), 99649, "wrong number of constraints");
+            assert_eq!(cs.num_constraints(), 88497, "wrong number of constraints");
             assert_eq!(cs.get_input(0, "ONE"), Fr::one());
         }
     }
