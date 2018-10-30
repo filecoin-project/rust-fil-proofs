@@ -157,7 +157,9 @@ mod tests {
             "failed to verify data commitment"
         );
         assert!(
-            proof_nc.nodes[0].proof.validate_data(&data_node.unwrap()),
+            proof_nc.nodes[0]
+                .proof
+                .validate_data(&fr_into_bytes::<Bls12>(&data_node.unwrap())),
             "failed to verify data commitment with data"
         );
 
@@ -189,7 +191,7 @@ mod tests {
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
         assert_eq!(cs.num_inputs(), 10, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 58109, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 52533, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
@@ -232,7 +234,7 @@ mod tests {
         .expect("failed to synthesize circuit");
 
         assert_eq!(cs.num_inputs(), 10, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 290285, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 284709, "wrong number of constraints");
     }
 
     #[test]

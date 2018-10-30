@@ -376,7 +376,7 @@ where
                 return Ok(false);
             }
 
-            if !proof.nodes[i].proof.validate_data(&unsealed) {
+            if !proof.nodes[i].proof.validate_data(&unsealed.into_bytes()) {
                 println!("invalid data for merkle path {:?}", unsealed);
                 return Ok(false);
             }

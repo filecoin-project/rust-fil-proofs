@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use merkle_light::hash::{Algorithm, Hashable};
+use merkle_light::hash::Algorithm;
 use merkle_light::proof::Proof;
 
 use error::*;
@@ -97,14 +97,12 @@ fn compute_root<H: Hasher>(
 
     let mut hasher = H::Function::default();
 
-    let mut last_row: Vec<_> = piece_data
-        .chunks(32)
-        .map(|chunk| {
-            hasher.reset();
-            chunk.hash(&mut hasher);
-            hasher.hash()
-        })
-        .collect();
+    let mut last_row = Vec::new();
+
+    for chunk in piece_data.chunks(32) {
+        last_row.push(H::Domain::try_from_bytes(chunk)?);
+    }
+
     for (height, ((l_hash, l_is_left), (r_hash, r_is_left))) in proof_vecs.enumerate() {
         let mut row = Vec::new();
         if !*l_is_left {
@@ -211,7 +209,11 @@ mod tests {
         let mut data = Vec::<u8>::with_capacity(nodes);
 
         for i in 0..size {
-            data.push(((i / lambda) + i) as u8)
+            data.push(
+                (((i / lambda) + i)
+                // Mask out two most significant bits so we will always be Fr32,
+                & 63) as u8,
+            )
         }
 
         let tree = g.merkle_tree(&data, lambda).unwrap();
@@ -233,7 +235,11 @@ mod tests {
         let mut wrong_pieces = Vec::new();
 
         for i in 0..size {
-            wrong_data.push(((i / lambda) + (2 * i)) as u8)
+            wrong_data.push(
+                ((i / lambda) + (2 * i)
+                // Mask out two most significant bits so we will always be Fr32,
+                & 63) as u8,
+            )
         }
 
         for (start, end) in &bounds {

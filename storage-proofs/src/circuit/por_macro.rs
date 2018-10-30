@@ -108,24 +108,8 @@ macro_rules! implement_por {
                     let value_num = num::AllocatedNum::alloc(cs.namespace(|| "value"), || {
                         Ok(value.ok_or_else(|| SynthesisError::AssignmentMissing)?)
                     })?;
-                    let mut value_bits = value_num.into_bits_le(cs.namespace(|| "value bits"))?;
 
-                    // sad face, need to pad to make all algorithms the same
-                    while value_bits.len() < 256 {
-                        value_bits.push(boolean::Boolean::Constant(false));
-                    }
-
-                    // Compute the hash of the value
-                    let cm = pedersen_hash::pedersen_hash(
-                        cs.namespace(|| "value hash"),
-                        pedersen_hash::Personalization::NoteCommitment,
-                        &value_bits,
-                        params,
-                    )?;
-
-                    // This is an injective encoding, as cur is a
-                    // point in the prime order subgroup.
-                    let mut cur = cm.get_x().clone();
+                    let mut cur = value_num;
 
                     let mut auth_path_bits = Vec::with_capacity(auth_path.len());
 
