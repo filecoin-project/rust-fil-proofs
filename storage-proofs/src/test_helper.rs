@@ -141,7 +141,6 @@ pub fn random_merkle_path_with_value<R: Rng>(
 
     let mut cur = if offset == 0 {
         let mut bytes = fr_into_bytes::<Bls12>(&value);
-        crypto::pedersen::pedersen_compression(&mut bytes);
         bytes_into_fr::<Bls12>(&bytes).unwrap()
     } else {
         *value
