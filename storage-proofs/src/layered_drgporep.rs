@@ -47,9 +47,10 @@ where
 {
     fn parameter_set_identifier(&self) -> String {
         format!(
-            "layered_drgporep::PublicParams{{ drg_porep_identifier: {}, layers: {} }}",
+            "layered_drgporep::PublicParams{{ drg_porep_identifier: {}, layers: {}, challenge_count: {} }}",
             self.drg_porep_public_params.parameter_set_identifier(),
-            self.layers
+            self.layers,
+            self.challenge_count,
         )
     }
 }
