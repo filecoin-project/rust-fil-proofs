@@ -116,7 +116,6 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
                 &proof,
                 &self.public_params.drg_porep_public_params,
                 self.params,
-                None,
             );
             circuit.synthesize(&mut cs.namespace(|| format!("zigzag layer {}", l)))?;
 
@@ -267,17 +266,13 @@ impl<'a, H: 'static + Hasher>
         vanilla_proof: &'b <ZigZagDrgPoRep<H> as ProofScheme>::Proof,
         public_params: &'b <ZigZagDrgPoRep<H> as ProofScheme>::PublicParams,
         engine_params: &'a <Bls12 as JubjubEngine>::Params,
-        k: Option<usize>,
     ) -> ZigZagCircuit<'a, Bls12, H> {
         let layers = (0..(vanilla_proof.encoding_proofs.len()))
             .map(|l| {
                 let layer_public_inputs = drgporep::PublicInputs {
                     replica_id: public_inputs.replica_id,
-                    challenges: public_inputs.challenges(
-                        public_params.drg_porep_public_params.graph.size(),
-                        l as u8,
-                        k,
-                    ),
+                    // Challenges are not used in circuit synthesis. Don't bother generating.
+                    challenges: vec![],
                     tau: None,
                 };
                 let layer_proof = vanilla_proof.encoding_proofs[l].clone();
@@ -381,7 +376,7 @@ mod tests {
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        ZigZagCompound::circuit(&pub_inputs, &proofs[0], &pp, params, None)
+        ZigZagCompound::circuit(&pub_inputs, &proofs[0], &pp, params)
             .synthesize(&mut cs.namespace(|| "zigzag drgporep"))
             .expect("failed to synthesize circuit");
 

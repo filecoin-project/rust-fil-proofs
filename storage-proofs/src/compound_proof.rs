@@ -69,13 +69,12 @@ where
         assert!(partition_count > 0);
         // This will always run at least once, since there cannot be zero partitions.
 
-        for (k, vanilla_proof) in vanilla_proofs.iter().enumerate() {
+        for vanilla_proof in vanilla_proofs.iter() {
             let (groth_proof, groth_params) = Self::circuit_proof(
                 pub_in,
                 &vanilla_proof,
                 &pub_params.vanilla_params,
                 pub_params.engine_params,
-                Some(k),
             )?;
             shared_groth_params.push(groth_params);
             groth_proofs.push(groth_proof);
@@ -118,15 +117,13 @@ where
         vanilla_proof: &S::Proof,
         pub_params: &'b S::PublicParams,
         params: &'a E::Params,
-        partition: Option<usize>,
     ) -> Result<(groth16::Proof<E>, groth16::Parameters<E>)> {
         // TODO: better random numbers
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         // We need to make the circuit repeatedly because we can't clone it.
         // Fortunately, doing so is cheap.
-        let make_circuit =
-            || Self::circuit(&pub_in, &vanilla_proof, &pub_params, params, partition);
+        let make_circuit = || Self::circuit(&pub_in, &vanilla_proof, &pub_params, params);
 
         // TODO: Don't actually generate groth parameters here, certainly not random ones.
         // The parameters will need to have been generated in advance and will be constants
@@ -164,7 +161,6 @@ where
         vanilla_proof: &S::Proof,
         public_param: &S::PublicParams,
         engine_params: &'a E::Params,
-        partition_k: Option<usize>,
     ) -> C;
 
     fn circuit_for_test(
@@ -187,7 +183,6 @@ where
             &vanilla_proofs[0],
             vanilla_params,
             &public_parameters.engine_params,
-            public_parameters.partitions,
         );
 
         let partition_pub_in = S::with_partition(public_inputs.clone(), Some(0));

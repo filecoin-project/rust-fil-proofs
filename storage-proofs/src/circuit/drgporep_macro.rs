@@ -87,6 +87,8 @@ macro_rules! implement_drgporep {
             fn generate_public_inputs(
                 pub_in: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicInputs,
                 pub_params: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
+                // We can ignore k because challenges are genereated by caller and included
+                // in PublicInputs.
                 _k: Option<usize>,
             ) -> Vec<Fr> {
                 let replica_id = pub_in.replica_id;
@@ -174,10 +176,8 @@ macro_rules! implement_drgporep {
                 proof: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::Proof,
                 public_params: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
                 engine_params: &'a <Bls12 as JubjubEngine>::Params,
-                _k: Option<usize>,
             ) -> $name<'a, Bls12> {
                 let lambda = public_params.lambda;
-                let _arity = public_inputs.challenges.len();
 
                 let replica_nodes = proof
                     .replica_nodes

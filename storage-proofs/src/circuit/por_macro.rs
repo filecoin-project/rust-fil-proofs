@@ -44,7 +44,6 @@ macro_rules! implement_por {
                 proof: &'b <MerklePoR<H> as ProofScheme<'a>>::Proof,
                 _public_params: &'b <MerklePoR<H> as ProofScheme<'a>>::PublicParams,
                 engine_params: &'a JubjubBls12,
-                _k: Option<usize>,
             ) -> $name<'a, Bls12> {
                 let root = if $private {
                     Some(proof.proof.root.clone().into())
