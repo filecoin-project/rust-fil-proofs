@@ -16,11 +16,11 @@ members = [
   "storage-proofs",
   "sector-base",
   "storage-backend",
+  "ffi-toolkit"
 ]
 
 [profile.test]
 opt-level = 1
-
 
 [features]
 default = []

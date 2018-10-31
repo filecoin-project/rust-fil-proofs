@@ -3,14 +3,61 @@ use api::responses::ToResponseStatus;
 use api::SectorManagerErr::CallerError;
 use api::SectorManagerErr::ReceiverError;
 use api::SectorManagerErr::UnclassifiedError;
+use ffi_toolkit::{c_str_to_rust_str, raw_ptr, rust_str_to_c_str};
 use libc;
 use std::ffi::CString;
 use std::mem;
 use std::slice::from_raw_parts;
+use std::sync::Mutex;
 
 pub mod disk_backed_storage;
 pub mod responses;
 pub mod util;
+
+#[derive(Debug)]
+pub struct SectorBuilder {
+    prover_id: [u8; 31],
+    sector_id_nonce: Mutex<u64>,
+    metadata_dir: String,
+    staged_sector_dir: String,
+    sealed_sector_dir: String,
+}
+
+/// Serialize SectorBuilder state to a string for debugging.
+///
+#[no_mangle]
+pub unsafe extern "C" fn debug_state(ptr: *mut SectorBuilder) -> *const libc::c_char {
+    let sb = Box::from_raw(ptr);
+    let state = rust_str_to_c_str(&format!("{:?}", sb));
+    raw_ptr(sb);
+    state
+}
+
+/// Initializes and returns a SectorBuilder.
+///
+#[no_mangle]
+pub unsafe extern "C" fn init_sector_builder(
+    last_used_sector_id: u64,
+    metadata_dir: *const libc::c_char,
+    prover_id: &[u8; 31],
+    sealed_sector_dir: *const libc::c_char,
+    staged_sector_dir: *const libc::c_char,
+) -> *mut SectorBuilder {
+    raw_ptr(SectorBuilder {
+        metadata_dir: c_str_to_rust_str(metadata_dir).to_string(),
+        prover_id: *prover_id,
+        sealed_sector_dir: c_str_to_rust_str(sealed_sector_dir).to_string(),
+        sector_id_nonce: Mutex::new(last_used_sector_id),
+        staged_sector_dir: c_str_to_rust_str(staged_sector_dir).to_string(),
+    })
+}
+
+/// Destroys a SectorBuilder.
+///
+#[no_mangle]
+pub unsafe extern "C" fn destroy_sector_builder(ptr: *mut SectorBuilder) {
+    let _ = Box::from_raw(ptr);
+}
 
 #[derive(Debug)]
 pub enum SectorManagerErr {
@@ -79,6 +126,7 @@ pub trait SectorStore {
     fn config(&self) -> &SectorConfig;
     fn manager(&self) -> &SectorManager;
 }
+
 /// Destroys a boxed SectorStore by freeing its memory.
 ///
 /// # Arguments
@@ -175,7 +223,7 @@ pub unsafe extern "C" fn write_and_preprocess(
 
     let result = (*ss_ptr)
         .manager()
-        .write_and_preprocess(util::c_str_to_rust_str(access), data);
+        .write_and_preprocess(c_str_to_rust_str(access).to_string(), data);
 
     response.status_code = result.to_response_status();
 
@@ -222,7 +270,7 @@ pub unsafe extern "C" fn truncate_unsealed(
 
     let result = (*ss_ptr)
         .manager()
-        .truncate_unsealed(util::c_str_to_rust_str(access), size);
+        .truncate_unsealed(c_str_to_rust_str(access).to_string(), size);
 
     response.status_code = result.to_response_status();
 
@@ -249,10 +297,11 @@ pub unsafe extern "C" fn read_raw(
 ) -> *mut responses::ReadRawResponse {
     let mut response: responses::ReadRawResponse = Default::default();
 
-    let result =
-        (*ss_ptr)
-            .manager()
-            .read_raw(util::c_str_to_rust_str(access), start_offset, num_bytes);
+    let result = (*ss_ptr).manager().read_raw(
+        c_str_to_rust_str(access).to_string(),
+        start_offset,
+        num_bytes,
+    );
 
     response.status_code = result.to_response_status();
 
@@ -289,7 +338,7 @@ pub unsafe extern "C" fn num_unsealed_bytes(
 
     let result = (*ss_ptr)
         .manager()
-        .num_unsealed_bytes(util::c_str_to_rust_str(access));
+        .num_unsealed_bytes(c_str_to_rust_str(access).to_string());
 
     response.status_code = result.to_response_status();
 

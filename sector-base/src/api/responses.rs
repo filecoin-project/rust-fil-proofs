@@ -1,4 +1,4 @@
-use api::util;
+use ffi_toolkit::c_str_to_rust_str;
 use libc;
 use std::ptr;
 
@@ -43,8 +43,8 @@ impl Default for NewSealedSectorAccessResponse {
 impl Drop for NewSealedSectorAccessResponse {
     fn drop(&mut self) {
         unsafe {
-            drop(util::str_from_c(self.error_msg));
-            drop(util::str_from_c(self.sector_access));
+            drop(c_str_to_rust_str(self.error_msg));
+            drop(c_str_to_rust_str(self.sector_access));
         };
     }
 }
@@ -80,8 +80,8 @@ impl Default for NewStagingSectorAccessResponse {
 impl Drop for NewStagingSectorAccessResponse {
     fn drop(&mut self) {
         unsafe {
-            drop(util::str_from_c(self.error_msg));
-            drop(util::str_from_c(self.sector_access));
+            drop(c_str_to_rust_str(self.error_msg));
+            drop(c_str_to_rust_str(self.sector_access));
         };
     }
 }
@@ -117,7 +117,7 @@ impl Default for WriteAndPreprocessResponse {
 impl Drop for WriteAndPreprocessResponse {
     fn drop(&mut self) {
         unsafe {
-            drop(util::str_from_c(self.error_msg));
+            drop(c_str_to_rust_str(self.error_msg));
         };
     }
 }
@@ -161,7 +161,7 @@ impl Drop for ReadRawResponse {
                 self.data_len,
             ));
 
-            drop(util::str_from_c(self.error_msg));
+            drop(c_str_to_rust_str(self.error_msg));
         };
     }
 }
@@ -193,7 +193,7 @@ impl Default for TruncateUnsealedResponse {
 impl Drop for TruncateUnsealedResponse {
     fn drop(&mut self) {
         unsafe {
-            drop(util::str_from_c(self.error_msg));
+            drop(c_str_to_rust_str(self.error_msg));
         };
     }
 }
@@ -227,7 +227,7 @@ impl Default for NumUnsealedBytesResponse {
 impl Drop for NumUnsealedBytesResponse {
     fn drop(&mut self) {
         unsafe {
-            drop(util::str_from_c(self.error_msg));
+            drop(c_str_to_rust_str(self.error_msg));
         };
     }
 }
@@ -261,7 +261,7 @@ impl Default for MaxUnsealedBytesPerSectorResponse {
 impl Drop for MaxUnsealedBytesPerSectorResponse {
     fn drop(&mut self) {
         unsafe {
-            drop(util::str_from_c(self.error_msg));
+            drop(c_str_to_rust_str(self.error_msg));
         };
     }
 }

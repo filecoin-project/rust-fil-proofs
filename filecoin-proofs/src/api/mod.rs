@@ -1,4 +1,5 @@
 use api::responses::FCPResponseStatus;
+use ffi_toolkit::c_str_to_pbuf;
 use libc;
 use sector_base::api::SectorStore;
 use std::ffi::CString;
@@ -7,7 +8,6 @@ use std::slice::from_raw_parts;
 
 mod internal;
 pub mod responses;
-pub mod util;
 
 type SectorAccess = *const libc::c_char;
 
@@ -36,8 +36,8 @@ pub unsafe extern "C" fn seal(
     prover_id: &[u8; 31],
     sector_id: &[u8; 31],
 ) -> *mut responses::SealResponse {
-    let unsealed_path_buf = util::pbuf_from_c(unsealed_path);
-    let sealed_path_buf = util::pbuf_from_c(sealed_path);
+    let unsealed_path_buf = c_str_to_pbuf(unsealed_path);
+    let sealed_path_buf = c_str_to_pbuf(sealed_path);
 
     let result = internal::seal(
         &**ss_ptr,
@@ -150,8 +150,8 @@ pub unsafe extern "C" fn get_unsealed_range(
 ) -> *mut responses::GetUnsealedRangeResponse {
     let mut response: responses::GetUnsealedRangeResponse = Default::default();
 
-    let sealed_path_buf = util::pbuf_from_c(sealed_path);
-    let output_path_buf = util::pbuf_from_c(output_path);
+    let sealed_path_buf = c_str_to_pbuf(sealed_path);
+    let output_path_buf = c_str_to_pbuf(output_path);
 
     match internal::get_unsealed_range(
         &**ss_ptr,
@@ -217,8 +217,8 @@ pub unsafe extern "C" fn get_unsealed(
     // &**ss_ptr is a reference to the SectorStore.
     let sector_store = &**ss_ptr;
 
-    let sealed_path_buf = util::pbuf_from_c(sealed_path);
-    let output_path_buf = util::pbuf_from_c(output_path);
+    let sealed_path_buf = c_str_to_pbuf(sealed_path);
+    let output_path_buf = c_str_to_pbuf(output_path);
     let sector_bytes = sector_store.config().max_unsealed_bytes_per_sector();
 
     match internal::get_unsealed_range(
@@ -683,7 +683,7 @@ mod tests {
             );
 
             {
-                let mut file = File::open(util::pbuf_from_c(seal_input_path)).unwrap();
+                let mut file = File::open(c_str_to_pbuf(seal_input_path)).unwrap();
                 let mut buf = Vec::new();
                 file.read_to_end(&mut buf).unwrap();
             }
@@ -718,7 +718,7 @@ mod tests {
                 cs
             );
 
-            let mut file = File::open(util::pbuf_from_c(get_unsealed_range_output_path)).unwrap();
+            let mut file = File::open(c_str_to_pbuf(get_unsealed_range_output_path)).unwrap();
             let mut buf = Vec::new();
             file.read_to_end(&mut buf).unwrap();
 
@@ -811,7 +811,7 @@ mod tests {
                 cs
             );
 
-            let mut file = File::open(util::pbuf_from_c(get_unsealed_output_path)).unwrap();
+            let mut file = File::open(c_str_to_pbuf(get_unsealed_output_path)).unwrap();
             let mut buf = Vec::new();
             file.read_to_end(&mut buf).unwrap();
 
@@ -943,7 +943,7 @@ mod tests {
                 cs
             );
 
-            let mut file = File::open(util::pbuf_from_c(get_unsealed_range_output_path)).unwrap();
+            let mut file = File::open(c_str_to_pbuf(get_unsealed_range_output_path)).unwrap();
             let mut buf = Vec::new();
             file.read_to_end(&mut buf).unwrap();
 

@@ -8,6 +8,7 @@
     warn(type_complexity, too_many_arguments)
 )]
 
+extern crate ffi_toolkit;
 extern crate sector_base;
 extern crate storage_proofs;
 

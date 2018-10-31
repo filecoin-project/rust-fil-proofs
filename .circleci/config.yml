@@ -43,6 +43,9 @@ jobs:
           keys:
             - parameter-cache-{{ .Revision }}
       - run:
+          name: run regression tests (examples) against FFI-exposed sector-base API
+          command: cargo run --package sector-base --example ffi
+      - run:
           name: Test (stable)
           command: cargo +stable test --verbose --frozen --all
           no_output_timeout: 15m

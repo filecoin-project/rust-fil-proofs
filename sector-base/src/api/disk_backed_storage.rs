@@ -7,6 +7,7 @@ use std::path::Path;
 use api::util;
 use api::SectorManagerErr;
 use api::{SectorConfig, SectorManager, SectorStore};
+use ffi_toolkit::{c_str_to_rust_str, raw_ptr};
 use io::fr32::{
     almost_truncate_to_unpadded_bytes, target_unpadded_bytes, unpadded_bytes, write_padded,
 };
@@ -64,10 +65,10 @@ pub unsafe extern "C" fn init_new_proof_test_sector_store(
 ) -> *mut Box<SectorStore> {
     let boxed = Box::new(new_sector_store(
         &ConfiguredStore::ProofTest,
-        util::c_str_to_rust_str(sealed_dir_path),
-        util::c_str_to_rust_str(staging_dir_path),
+        c_str_to_rust_str(sealed_dir_path).to_string(),
+        c_str_to_rust_str(staging_dir_path).to_string(),
     ));
-    util::raw_ptr(boxed)
+    raw_ptr(boxed)
 }
 
 /// Initializes and returns a boxed SectorStore instance which is very similar to the Alpha-release
@@ -85,10 +86,10 @@ pub unsafe extern "C" fn init_new_test_sector_store(
 ) -> *mut Box<SectorStore> {
     let boxed = Box::new(new_sector_store(
         &ConfiguredStore::Test,
-        util::c_str_to_rust_str(sealed_dir_path),
-        util::c_str_to_rust_str(staging_dir_path),
+        c_str_to_rust_str(sealed_dir_path).to_string(),
+        c_str_to_rust_str(staging_dir_path).to_string(),
     ));
-    util::raw_ptr(boxed)
+    raw_ptr(boxed)
 }
 
 /// Initializes and returns a boxed SectorStore instance which Alpha Filecoin node-users will rely
@@ -106,11 +107,11 @@ pub unsafe extern "C" fn init_new_sector_store(
 ) -> *mut Box<SectorStore> {
     let boxed = Box::new(new_sector_store(
         &ConfiguredStore::Live,
-        util::c_str_to_rust_str(sealed_dir_path),
-        util::c_str_to_rust_str(staging_dir_path),
+        c_str_to_rust_str(sealed_dir_path).to_string(),
+        c_str_to_rust_str(staging_dir_path).to_string(),
     ));
 
-    util::raw_ptr(boxed)
+    raw_ptr(boxed)
 }
 
 pub struct DiskManager {
@@ -365,10 +366,10 @@ mod tests {
 
     use api::disk_backed_storage::init_new_proof_test_sector_store;
     use api::responses::SBResponseStatus;
-    use api::util;
     use api::{
         new_staging_sector_access, num_unsealed_bytes, truncate_unsealed, write_and_preprocess,
     };
+    use ffi_toolkit::{c_str_to_pbuf, rust_str_to_c_str};
     use io::fr32::FR32_PADDING_MAP;
 
     fn create_storage() -> *mut Box<SectorStore> {
@@ -378,14 +379,14 @@ mod tests {
         create_dir_all(&staging_path).expect("failed to create staging dir");
         create_dir_all(&sealed_path).expect("failed to create sealed dir");
 
-        let s1 = util::rust_str_to_c_str(&staging_path.to_str().unwrap().to_owned());
-        let s2 = util::rust_str_to_c_str(&sealed_path.to_str().unwrap().to_owned());
+        let s1 = rust_str_to_c_str(&staging_path.to_str().unwrap().to_owned());
+        let s2 = rust_str_to_c_str(&sealed_path.to_str().unwrap().to_owned());
 
         unsafe { init_new_proof_test_sector_store(s1, s2) }
     }
 
     fn read_all_bytes(access: *const libc::c_char) -> Vec<u8> {
-        let pbuf = unsafe { util::pbuf_from_c(access) };
+        let pbuf = unsafe { c_str_to_pbuf(access) };
         let mut file = File::open(pbuf).unwrap();
         let mut buf = Vec::new();
         file.read_to_end(&mut buf).unwrap();

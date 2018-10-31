@@ -1,5 +1,5 @@
-use api::util;
 use api::{API_POREP_PROOF_BYTES, API_POST_PROOF_BYTES};
+use ffi_toolkit::c_str_to_rust_str;
 use libc;
 use std::ptr;
 
@@ -47,7 +47,7 @@ impl Default for SealResponse {
 impl Drop for SealResponse {
     fn drop(&mut self) {
         unsafe {
-            drop(util::str_from_c(self.error_msg));
+            drop(c_str_to_rust_str(self.error_msg));
         };
     }
 }
@@ -81,7 +81,7 @@ impl Default for VerifySealResponse {
 impl Drop for VerifySealResponse {
     fn drop(&mut self) {
         unsafe {
-            drop(util::str_from_c(self.error_msg));
+            drop(c_str_to_rust_str(self.error_msg));
         };
     }
 }
@@ -115,7 +115,7 @@ impl Default for GetUnsealedRangeResponse {
 impl Drop for GetUnsealedRangeResponse {
     fn drop(&mut self) {
         unsafe {
-            drop(util::str_from_c(self.error_msg));
+            drop(c_str_to_rust_str(self.error_msg));
         };
     }
 }
@@ -147,7 +147,7 @@ impl Default for GetUnsealedResponse {
 impl Drop for GetUnsealedResponse {
     fn drop(&mut self) {
         unsafe {
-            drop(util::str_from_c(self.error_msg));
+            drop(c_str_to_rust_str(self.error_msg));
         };
     }
 }
@@ -191,7 +191,7 @@ impl Drop for GeneratePoSTResponse {
                 self.faults_len,
             ));
 
-            drop(util::str_from_c(self.error_msg));
+            drop(c_str_to_rust_str(self.error_msg));
         };
     }
 }
@@ -225,7 +225,7 @@ impl Default for VerifyPoSTResponse {
 impl Drop for VerifyPoSTResponse {
     fn drop(&mut self) {
         unsafe {
-            drop(util::str_from_c(self.error_msg));
+            drop(c_str_to_rust_str(self.error_msg));
         };
     }
 }
