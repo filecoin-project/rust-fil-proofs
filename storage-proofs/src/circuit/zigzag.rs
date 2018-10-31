@@ -258,6 +258,7 @@ impl<'a, H: 'static + Hasher>
             };
         }
         inputs.push(pub_in.comm_r_star.into());
+        info!(target: "stats", "num_generated_inputs: {}", inputs.len());
         inputs
     }
 
@@ -550,7 +551,7 @@ mod tests {
         let proof = ZigZagCompound::prove(&public_params, &public_inputs, &private_inputs)
             .expect("failed while proving");
 
-        let verified = ZigZagCompound::verify(&public_params, &public_inputs, proof)
+        let verified = ZigZagCompound::verify(&public_params, &public_inputs, &proof)
             .expect("failed while verifying");
 
         assert!(verified);

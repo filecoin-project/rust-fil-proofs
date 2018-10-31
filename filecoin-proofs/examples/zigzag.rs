@@ -9,19 +9,25 @@ extern crate clap;
 extern crate env_logger;
 #[cfg(feature = "profile")]
 extern crate gperftools;
+extern crate memmap;
+extern crate tempfile;
 
 extern crate storage_proofs;
 
 use clap::{App, Arg};
-use pairing::bls12_381::Bls12;
-use rand::{Rng, SeedableRng, XorShiftRng};
-use std::time::{Duration, Instant};
-
 #[cfg(feature = "profile")]
 use gperftools::profiler::PROFILER;
+use memmap::MmapMut;
+use memmap::MmapOptions;
+use pairing::bls12_381::Bls12;
+use rand::{Rng, SeedableRng, XorShiftRng};
+use std::fs::File;
+use std::time::{Duration, Instant};
 
+use bellman::Circuit;
 use sapling_crypto::jubjub::JubjubBls12;
 
+use storage_proofs::circuit::test::*;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgporep;
@@ -33,7 +39,6 @@ use storage_proofs::layered_drgporep;
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::zigzag_drgporep::*;
-
 #[cfg(feature = "profile")]
 #[inline(always)]
 fn start_profile(stage: &str) {
@@ -58,6 +63,20 @@ fn stop_profile() {
 #[inline(always)]
 fn stop_profile() {}
 
+//fn file_backed_mmap_from_random_bytes(n: usize) -> MmapMut {
+//    let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+//    let mut tmpfile: File = tempfile::tempfile().unwrap();
+//
+//    // FIXME: Don't materialize the data first: just write it to disk.
+//    for _ in 0..n {
+//        tmpfile
+//            .write_all(&fr_into_bytes::<Bls12>(&rng.gen()))
+//            .unwrap();
+//    }
+//
+//    unsafe { MmapOptions::new().map_mut(&tmpfile).unwrap() }
+//}
+
 fn do_the_work<H: 'static>(
     data_size: usize,
     m: usize,
@@ -66,7 +85,8 @@ fn do_the_work<H: 'static>(
     challenge_count: usize,
     layers: usize,
     partitions: usize,
-    circuit: Option<&str>,
+    circuit: bool,
+    groth: bool,
 ) where
     H: Hasher,
 {
@@ -81,10 +101,13 @@ fn do_the_work<H: 'static>(
     info!(target: "config", "layers: {}", layers);
     info!(target: "config", "partitions: {}", partitions);
     info!(target: "config", "circuit: {:?}", circuit);
+    info!(target: "config", "groth: {:?}", circuit);
 
     info!("generating fake data");
 
     let nodes = data_size / lambda;
+
+    //    let mut data = file_backed_mmap_from_random_bytes(nodes);
 
     let replica_id: H::Domain = rng.gen();
     let data: Vec<u8> = (0..nodes)
@@ -170,7 +193,7 @@ fn do_the_work<H: 'static>(
     let samples: u32 = 30;
     info!("sampling verifying (samples: {})", samples);
     let mut total_verifying = Duration::new(0, 0);
-    let mut total_proving = Duration::new(0, 0);
+
     start_profile("verify");
     for _ in 0..samples {
         let start = Instant::now();
@@ -189,54 +212,65 @@ fn do_the_work<H: 'static>(
         + (verifying_avg.as_secs() as f64);
     info!(target: "stats", "average_vanilla_verifying_time: {:?} seconds", verifying_avg);
 
-    if circuit.is_some() {
+    if circuit || groth {
+        let engine_params = JubjubBls12::new();
         let compound_public_params = compound_proof::PublicParams {
-            vanilla_params: pp,
-            engine_params: &JubjubBls12::new(),
+            vanilla_params: pp.clone(),
+            engine_params: &engine_params,
             partitions: Some(partitions),
         };
+        if circuit {
+            info!("Performing circuit bench.");
+            let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        match circuit {
-            Some("groth") => {
-                info!("Performing circuit groth.");
-                let multi_proof = {
-                    // TODO: Make this a macro.
-                    let start = Instant::now();
-                    start_profile("groth-prove");
-                    let result =
-                        ZigZagCompound::prove(&compound_public_params, &pub_inputs, &priv_inputs)
-                            .unwrap();
-                    stop_profile();
-                    let groth_proving = start.elapsed();
-                    info!(target: "stats", "groth_proving_time: {:?} seconds", groth_proving);
-                    total_proving += groth_proving;
-                    info!(target: "stats", "combined_proving_time: {:?} seconds", total_proving);
-                    result
-                };
-                info!("sampling groth verifying (samples: {})", samples);
-                let verified = {
-                    let mut total_groth_verifying = Duration::new(0, 0);
-                    let mut result = false;
-                    start_profile("groth-verify");
-                    for _ in 0..samples {
-                        let start = Instant::now();
-                        result = ZigZagCompound::verify(
-                            &compound_public_params,
-                            &pub_inputs,
-                            &multi_proof,
-                        )
+            ZigZagCompound::circuit(
+                &pub_inputs,
+                &all_partition_proofs[0],
+                &pp,
+                &engine_params,
+                None,
+            )
+            .synthesize(&mut cs)
+            .expect("failed to synthesize circuit");
+
+            info!(target: "stats", "circuit_num_inputs: {}", cs.num_inputs());
+            info!(target: "stats", "circuit_num_constraints: {}", cs.num_constraints());
+        }
+
+        if groth {
+            info!("Performing circuit groth.");
+            let multi_proof = {
+                // TODO: Make this a macro.
+                let start = Instant::now();
+                start_profile("groth-prove");
+                let result =
+                    ZigZagCompound::prove(&compound_public_params, &pub_inputs, &priv_inputs)
                         .unwrap();
-                        total_groth_verifying += start.elapsed();
-                    }
-                    stop_profile();
-                    let avg_groth_verifying = total_groth_verifying / samples;
-                    info!(target: "stats", "average_groth_verifying_time: {:?} seconds", avg_groth_verifying);
-                    result
-                };
-                assert!(verified);
-            }
-            Some("bench") => info!("Performing circuit bench."),
-            Some(_) | None => (),
+                stop_profile();
+                let groth_proving = start.elapsed();
+                info!(target: "stats", "groth_proving_time: {:?} seconds", groth_proving);
+                total_proving += groth_proving;
+                info!(target: "stats", "combined_proving_time: {:?} seconds", total_proving);
+                result
+            };
+            info!("sampling groth verifying (samples: {})", samples);
+            let verified = {
+                let mut total_groth_verifying = Duration::new(0, 0);
+                let mut result = false;
+                start_profile("groth-verify");
+                for _ in 0..samples {
+                    let start = Instant::now();
+                    result =
+                        ZigZagCompound::verify(&compound_public_params, &pub_inputs, &multi_proof)
+                            .unwrap();
+                    total_groth_verifying += start.elapsed();
+                }
+                stop_profile();
+                let avg_groth_verifying = total_groth_verifying / samples;
+                info!(target: "stats", "average_groth_verifying_time: {:?} seconds", avg_groth_verifying);
+                result
+            };
+            assert!(verified);
         }
     }
 }
@@ -303,11 +337,14 @@ fn main() {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("groth")
+                .long("groth")
+                .help("Generate and verify a groth circuit proof?")
+        )
+        .arg(
             Arg::with_name("circuit")
                 .long("circuit")
-                .help("Create and analyze a circuit?")
-                .takes_value(true)
-                .possible_values(&["groth", "bench"])
+                .help("Synthesize and report inputs/constraints for a circuit?")
         )
 
         .get_matches();
@@ -320,8 +357,8 @@ fn main() {
     let hasher = value_t!(matches, "hasher", String).unwrap();
     let layers = value_t!(matches, "layers", usize).unwrap();
     let partitions = value_t!(matches, "partitions", usize).unwrap();
-    //    let circuit = value_t!(matches, "circuit", bool).unwrap();
-    let circuit = matches.value_of("circuit");
+    let circuit = matches.is_present("circuit");
+    let groth = matches.is_present("groth");
 
     println!("circuit: {:?}", circuit);
 
@@ -337,6 +374,7 @@ fn main() {
                 layers,
                 partitions,
                 circuit,
+                groth,
             );
         }
         "sha256" => {
@@ -349,6 +387,7 @@ fn main() {
                 layers,
                 partitions,
                 circuit,
+                groth,
             );
         }
         "blake2s" => {
@@ -361,6 +400,7 @@ fn main() {
                 layers,
                 partitions,
                 circuit,
+                groth,
             );
         }
         _ => panic!(format!("invalid hasher: {}", hasher)),

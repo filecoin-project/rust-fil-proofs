@@ -11,7 +11,7 @@ use std::env;
 use std::fs::{self, create_dir_all};
 use std::io::{Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Bump this when circuits change to invalidate the cache.
 pub const VERSION: usize = 3;

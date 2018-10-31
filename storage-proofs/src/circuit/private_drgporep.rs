@@ -321,7 +321,7 @@ mod tests {
         let verified = PrivateDrgPoRepCompound::<PedersenHasher, _>::verify(
             &public_params,
             &public_inputs,
-            proof,
+            &proof,
         )
         .expect("failed while verifying");
 
