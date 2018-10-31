@@ -20,6 +20,10 @@ use std::time::{Duration, Instant};
 #[cfg(feature = "profile")]
 use gperftools::profiler::PROFILER;
 
+use sapling_crypto::jubjub::JubjubBls12;
+
+use storage_proofs::circuit::zigzag::ZigZagCompound;
+use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgporep;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::{init_logger, prettyb};
@@ -62,6 +66,7 @@ fn do_the_work<H: 'static>(
     challenge_count: usize,
     layers: usize,
     partitions: usize,
+    circuit: Option<&str>,
 ) where
     H: Hasher,
 {
@@ -74,7 +79,8 @@ fn do_the_work<H: 'static>(
     info!(target: "config", "sloth: {}", sloth_iter);
     info!(target: "config", "challenge_count: {}", challenge_count);
     info!(target: "config", "layers: {}", layers);
-    info!(target: "partitions", "partitions: {}", partitions);
+    info!(target: "config", "partitions: {}", partitions);
+    info!(target: "config", "circuit: {:?}", circuit);
 
     info!("generating fake data");
 
@@ -130,36 +136,24 @@ fn do_the_work<H: 'static>(
     };
 
     param_duration += start.elapsed();
-    let samples: u32 = 1;
 
-    info!(target: "stats", "Replication time: {:?}", param_duration);
+    info!(target: "stats", "replication_time: {:?}", param_duration);
 
     let mut total_proving = Duration::new(0, 0);
-    let mut total_verifying = Duration::new(0, 0);
+    info!("generating one proof");
 
-    let mut proofs = Vec::with_capacity(samples as usize);
-    info!("sampling proving & verifying (samples: {})", samples);
-    for _ in 0..samples {
-        let start = Instant::now();
-        start_profile("prove");
-        let all_partition_proofs =
-            ZigZagDrgPoRep::<H>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, partitions)
-                .expect("failed to prove");
-        stop_profile();
-        total_proving += start.elapsed();
+    let start = Instant::now();
+    start_profile("prove");
+    let all_partition_proofs =
+        ZigZagDrgPoRep::<H>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, partitions)
+            .expect("failed to prove");
+    stop_profile();
+    let vanilla_proving = start.elapsed();
+    total_proving += vanilla_proving;
 
-        let start = Instant::now();
-        start_profile("verify");
-        let verified =
-            ZigZagDrgPoRep::<H>::verify_all_partitions(&pp, &pub_inputs, &all_partition_proofs)
-                .expect("failed during verification");
-        if !verified {
-            info!(target: "results", "Verification failed.");
-        };
-        stop_profile();
-        total_verifying += start.elapsed();
-        proofs.push(all_partition_proofs);
-    }
+    let proving_avg = total_proving;
+    let proving_avg =
+        f64::from(proving_avg.subsec_nanos()) / 1_000_000_000f64 + (proving_avg.as_secs() as f64);
 
     // -- print statistics
 
@@ -169,17 +163,82 @@ fn do_the_work<H: 'static>(
     //    });
     //    let avg_proof_size = serialized_proofs.len() / samples as usize;
     //
-    let proving_avg = total_proving / samples;
-    let proving_avg =
-        f64::from(proving_avg.subsec_nanos()) / 1_000_000_000f64 + (proving_avg.as_secs() as f64);
+    //info!(target: "stats", "Average proof size {}", prettyb(avg_proof_size));
+
+    info!(target: "stats", "vanilla_proving_time: {:?} seconds", proving_avg);
+
+    let samples: u32 = 30;
+    info!("sampling verifying (samples: {})", samples);
+    let mut total_verifying = Duration::new(0, 0);
+    let mut total_proving = Duration::new(0, 0);
+    start_profile("verify");
+    for _ in 0..samples {
+        let start = Instant::now();
+        let verified =
+            ZigZagDrgPoRep::<H>::verify_all_partitions(&pp, &pub_inputs, &all_partition_proofs)
+                .expect("failed during verification");
+        if !verified {
+            info!(target: "results", "Verification failed.");
+        };
+        total_verifying += start.elapsed();
+    }
+    stop_profile();
 
     let verifying_avg = total_verifying / samples;
     let verifying_avg = f64::from(verifying_avg.subsec_nanos()) / 1_000_000_000f64
         + (verifying_avg.as_secs() as f64);
+    info!(target: "stats", "average_vanilla_verifying_time: {:?} seconds", verifying_avg);
 
-    info!(target: "stats", "Average proving time: {:?} seconds", proving_avg);
-    //info!(target: "stats", "Average proof size {}", prettyb(avg_proof_size));
-    info!(target: "stats", "Average verifying time: {:?} seconds", verifying_avg);
+    if circuit.is_some() {
+        let compound_public_params = compound_proof::PublicParams {
+            vanilla_params: pp,
+            engine_params: &JubjubBls12::new(),
+            partitions: Some(partitions),
+        };
+
+        match circuit {
+            Some("groth") => {
+                info!("Performing circuit groth.");
+                let multi_proof = {
+                    // TODO: Make this a macro.
+                    let start = Instant::now();
+                    start_profile("groth-prove");
+                    let result =
+                        ZigZagCompound::prove(&compound_public_params, &pub_inputs, &priv_inputs)
+                            .unwrap();
+                    stop_profile();
+                    let groth_proving = start.elapsed();
+                    info!(target: "stats", "groth_proving_time: {:?} seconds", groth_proving);
+                    total_proving += groth_proving;
+                    info!(target: "stats", "combined_proving_time: {:?} seconds", total_proving);
+                    result
+                };
+                info!("sampling groth verifying (samples: {})", samples);
+                let verified = {
+                    let mut total_groth_verifying = Duration::new(0, 0);
+                    let mut result = false;
+                    start_profile("groth-verify");
+                    for _ in 0..samples {
+                        let start = Instant::now();
+                        result = ZigZagCompound::verify(
+                            &compound_public_params,
+                            &pub_inputs,
+                            &multi_proof,
+                        )
+                        .unwrap();
+                        total_groth_verifying += start.elapsed();
+                    }
+                    stop_profile();
+                    let avg_groth_verifying = total_groth_verifying / samples;
+                    info!(target: "stats", "average_groth_verifying_time: {:?} seconds", avg_groth_verifying);
+                    result
+                };
+                assert!(verified);
+            }
+            Some("bench") => info!("Performing circuit bench."),
+            Some(_) | None => (),
+        }
+    }
 }
 
 fn main() {
@@ -198,14 +257,14 @@ fn main() {
             Arg::with_name("m")
                 .help("The size of m")
                 .long("m")
-                .default_value("6")
+                .default_value("10")
                 .takes_value(true),
         )
         .arg(
             Arg::with_name("exp")
                 .help("Expansion degree")
                 .long("expansion")
-                .default_value("8")
+                .default_value("6")
                 .takes_value(true),
         )
         .arg(
@@ -233,7 +292,7 @@ fn main() {
             Arg::with_name("layers")
                 .long("layers")
                 .help("How many layers to use, defaults to 1")
-                .default_value("6")
+                .default_value("10")
                 .takes_value(true),
         )
        .arg(
@@ -242,6 +301,13 @@ fn main() {
                 .help("How many circuit partitions to use, defaults to 1")
                 .default_value("1")
                 .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("circuit")
+                .long("circuit")
+                .help("Create and analyze a circuit?")
+                .takes_value(true)
+                .possible_values(&["groth", "bench"])
         )
 
         .get_matches();
@@ -254,6 +320,11 @@ fn main() {
     let hasher = value_t!(matches, "hasher", String).unwrap();
     let layers = value_t!(matches, "layers", usize).unwrap();
     let partitions = value_t!(matches, "partitions", usize).unwrap();
+    //    let circuit = value_t!(matches, "circuit", bool).unwrap();
+    let circuit = matches.value_of("circuit");
+
+    println!("circuit: {:?}", circuit);
+
     info!(target: "config", "hasher: {}", hasher);
     match hasher.as_ref() {
         "pedersen" => {
@@ -265,6 +336,7 @@ fn main() {
                 challenge_count,
                 layers,
                 partitions,
+                circuit,
             );
         }
         "sha256" => {
@@ -276,6 +348,7 @@ fn main() {
                 challenge_count,
                 layers,
                 partitions,
+                circuit,
             );
         }
         "blake2s" => {
@@ -287,6 +360,7 @@ fn main() {
                 challenge_count,
                 layers,
                 partitions,
+                circuit,
             );
         }
         _ => panic!(format!("invalid hasher: {}", hasher)),

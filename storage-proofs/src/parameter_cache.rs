@@ -9,7 +9,9 @@ use sha2::{Digest, Sha256};
 
 use std::env;
 use std::fs::{self, create_dir_all};
+use std::io::{Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 /// Bump this when circuits change to invalidate the cache.
 pub const VERSION: usize = 3;
@@ -62,7 +64,11 @@ where
     ) -> Result<groth16::Parameters<E>> {
         let generate = || {
             info!(target: "params", "Actually generating groth params.");
-            groth16::generate_random_parameters::<E, _, _>(circuit, rng)
+            let start = Instant::now();
+            let parameters = groth16::generate_random_parameters::<E, _, _>(circuit, rng);
+            let generation_time = start.elapsed();
+            info!(target: "stats:", "groth_parameter_generation_time: {:?}", generation_time);
+            parameters
         };
 
         match Self::cache_identifier(pub_params) {
@@ -85,7 +91,11 @@ where
                     let p = generate()?;
 
                     p.write(&mut f)?;
+
+                    let bytes = f.seek(SeekFrom::End(0))?;
+
                     info!(target: "params", "wrote parameters to cache {:?} ", f);
+                    info!(target: "stats", "groth_parameter_bytes: {}", bytes);
                     Ok(p)
                 })
             }
@@ -107,11 +117,16 @@ fn ensure_parent(path: &PathBuf) -> Result<()> {
 pub fn read_cached_params<E: JubjubEngine>(cache_path: &PathBuf) -> Result<groth16::Parameters<E>> {
     ensure_parent(cache_path)?;
 
-    let f = fs::OpenOptions::new().read(true).open(&cache_path)?;
+    let mut f = fs::OpenOptions::new().read(true).open(&cache_path)?;
     f.lock_exclusive()?;
     info!(target: "params", "reading groth params from cache: {:?}", cache_path);
 
-    Parameters::read(&f, false).map_err(Error::from)
+    let params = Parameters::read(&f, false).map_err(Error::from);
+
+    let bytes = f.seek(SeekFrom::End(0))?;
+    info!(target: "stats", "groth_parameter_bytes: {}", bytes);
+
+    params
 }
 
 pub fn write_params_to_cache<E: JubjubEngine>(

@@ -385,5 +385,5 @@ pub fn verify_seal(
 
     let proof = MultiProof::new_from_reader(Some(POREP_PARTITIONS), proof_vec, groth_params)?;
 
-    ZigZagCompound::verify(&compound_public_params, &public_inputs, proof)
+    ZigZagCompound::verify(&compound_public_params, &public_inputs, &proof)
 }

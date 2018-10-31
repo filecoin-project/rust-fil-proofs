@@ -91,7 +91,7 @@ where
     fn verify(
         public_params: &PublicParams<'a, E, S>,
         public_inputs: &S::PublicInputs,
-        multi_proof: MultiProof<E>,
+        multi_proof: &MultiProof<E>,
     ) -> Result<bool> {
         let vanilla_public_params = &public_params.vanilla_params;
         let pvk = groth16::prepare_verifying_key(&multi_proof.groth_params.vk);
