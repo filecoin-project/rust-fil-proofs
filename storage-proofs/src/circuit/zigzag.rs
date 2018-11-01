@@ -467,10 +467,11 @@ mod tests {
         let lambda = 32;
         let nodes = 5;
         let degree = 2;
-        let expansion_degree = 2;
-        let challenge_count = 1;
+        let expansion_degree = 1;
+        let challenge_count = 2;
         let num_layers = 2;
         let sloth_iter = 1;
+        let partition_count = 2;
 
         let n = nodes; // FIXME: Consolidate variable names.
 
@@ -502,7 +503,7 @@ mod tests {
                 layers: num_layers,
                 challenge_count,
             },
-            partitions: Some(2),
+            partitions: Some(partition_count),
         };
 
         let public_params = ZigZagCompound::setup(&setup_params).unwrap();

@@ -114,42 +114,19 @@ macro_rules! implement_drgporep {
 
                 let por_pub_params = merklepor::PublicParams { lambda, leaves };
 
-                challenges
-                    .iter()
-                    .map(|challenge| {
-                        let mut input = Vec::new();
-                        input.extend(packed_replica_id.clone());
+                let mut input = Vec::new();
+                input.extend(packed_replica_id.clone());
 
-                        let mut por_nodes = vec![*challenge];
-                        let parents = pub_params.graph.parents(*challenge);
-                        por_nodes.extend(parents);
+                for challenge in challenges {
+                    let mut por_nodes = vec![*challenge];
+                    let parents = pub_params.graph.parents(*challenge);
+                    por_nodes.extend(parents);
 
-                        for node in por_nodes {
-                            let por_pub_inputs = merklepor::PublicInputs {
-                                commitment: comm_r,
-                                challenge: node,
-                            };
-                            let por_inputs = if $private {
-                                PrivatePoRCompound::<H>::generate_public_inputs(
-                                    &por_pub_inputs,
-                                    &por_pub_params,
-                                    None,
-                                )
-                            } else {
-                                PoRCompound::<H>::generate_public_inputs(
-                                    &por_pub_inputs,
-                                    &por_pub_params,
-                                    None,
-                                )
-                            };
-                            input.extend(por_inputs);
-                        }
-
+                    for node in por_nodes {
                         let por_pub_inputs = merklepor::PublicInputs {
-                            commitment: comm_d,
-                            challenge: *challenge,
+                            commitment: comm_r,
+                            challenge: node,
                         };
-
                         let por_inputs = if $private {
                             PrivatePoRCompound::<H>::generate_public_inputs(
                                 &por_pub_inputs,
@@ -164,11 +141,29 @@ macro_rules! implement_drgporep {
                             )
                         };
                         input.extend(por_inputs);
+                    }
 
-                        input
-                    })
-                    .collect::<Vec<Vec<_>>>()
-                    .concat()
+                    let por_pub_inputs = merklepor::PublicInputs {
+                        commitment: comm_d,
+                        challenge: *challenge,
+                    };
+
+                    let por_inputs = if $private {
+                        PrivatePoRCompound::<H>::generate_public_inputs(
+                            &por_pub_inputs,
+                            &por_pub_params,
+                            None,
+                        )
+                    } else {
+                        PoRCompound::<H>::generate_public_inputs(
+                            &por_pub_inputs,
+                            &por_pub_params,
+                            None,
+                        )
+                    };
+                    input.extend(por_inputs);
+                }
+                input
             }
 
             fn circuit<'b>(
