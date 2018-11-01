@@ -68,7 +68,6 @@ fn file_backed_mmap_from_random_bytes(n: usize) -> MmapMut {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
     let mut tmpfile: File = tempfile::tempfile().unwrap();
 
-    // FIXME: Don't materialize the data first: just write it to disk.
     for _ in 0..n {
         tmpfile
             .write_all(&fr_into_bytes::<Bls12>(&rng.gen()))
