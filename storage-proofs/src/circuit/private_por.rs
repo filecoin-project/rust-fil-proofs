@@ -84,9 +84,12 @@ mod tests {
             )
             .expect("failed while proving");
 
-            let verified =
-                PrivatePoRCompound::<PedersenHasher>::verify(&public_params, &public_inputs, proof)
-                    .expect("failed while verifying");
+            let verified = PrivatePoRCompound::<PedersenHasher>::verify(
+                &public_params,
+                &public_inputs,
+                &proof,
+            )
+            .expect("failed while verifying");
             assert!(verified);
 
             let (circuit, inputs) = PrivatePoRCompound::<PedersenHasher>::circuit_for_test(
