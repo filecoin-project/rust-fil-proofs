@@ -96,6 +96,7 @@ fn do_the_work<H: 'static>(
     circuit: bool,
     groth: bool,
     bench: bool,
+    extract: bool,
 ) where
     H: Hasher,
 {
@@ -279,6 +280,18 @@ fn do_the_work<H: 'static>(
             assert!(verified);
         }
     }
+
+    if extract {
+        let start = Instant::now();
+        info!("Extracting.");
+        start_profile("extract");
+        let decoded_data = ZigZagDrgPoRep::<H>::extract_all(&pp, &replica_id, &data_copy).unwrap();
+        stop_profile();
+        let extracting = start.elapsed();
+        info!(target: "stats", "extracting_time: {:?}", extracting);
+
+        assert_eq!(&(*data), decoded_data.as_slice());
+    }
 }
 
 fn main() {
@@ -309,7 +322,7 @@ fn main() {
         )
         .arg(
             Arg::with_name("sloth")
-                .help("The number of sloth iterations, defaults to 1")
+                .help("The number of sloth iterations")
                 .long("sloth")
                 .default_value("1")
                 .takes_value(true),
@@ -317,7 +330,7 @@ fn main() {
         .arg(
             Arg::with_name("challenges")
                 .long("challenges")
-                .help("How many challenges to execute, defaults to 1")
+                .help("How many challenges to execute")
                 .default_value("1")
                 .takes_value(true),
         )
@@ -331,14 +344,14 @@ fn main() {
        .arg(
             Arg::with_name("layers")
                 .long("layers")
-                .help("How many layers to use, defaults to 1")
+                .help("How many layers to use")
                 .default_value("10")
                 .takes_value(true),
         )
        .arg(
             Arg::with_name("partitions")
                 .long("partitions")
-                .help("How many circuit partitions to use, defaults to 1")
+                .help("How many circuit partitions to use")
                 .default_value("1")
                 .takes_value(true),
         )
@@ -357,6 +370,11 @@ fn main() {
                 .long("circuit")
                 .help("Print the constraint system.")
         )
+        .arg(
+            Arg::with_name("extract")
+                .long("extract")
+                .help("Extract data after proving and verifying.")
+        )
 
         .get_matches();
 
@@ -371,6 +389,7 @@ fn main() {
     let groth = matches.is_present("groth");
     let bench = matches.is_present("bench");
     let circuit = matches.is_present("circuit");
+    let extract = matches.is_present("extract");
 
     println!("circuit: {:?}", circuit);
 
@@ -388,6 +407,7 @@ fn main() {
                 circuit,
                 groth,
                 bench,
+                extract,
             );
         }
         "sha256" => {
@@ -402,6 +422,7 @@ fn main() {
                 circuit,
                 groth,
                 bench,
+                extract,
             );
         }
         "blake2s" => {
@@ -416,6 +437,7 @@ fn main() {
                 circuit,
                 groth,
                 bench,
+                extract,
             );
         }
         _ => panic!(format!("invalid hasher: {}", hasher)),
