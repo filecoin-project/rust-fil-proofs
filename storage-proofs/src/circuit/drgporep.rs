@@ -243,9 +243,9 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let lambda = 32;
-        let nodes = 5;
+        let nodes = 2;
         let degree = 2;
-        let challenge = 3;
+        let challenge = 1;
         let sloth_iter = 1;
 
         let replica_id: Fr = rng.gen();
