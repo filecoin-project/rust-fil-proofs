@@ -22,6 +22,7 @@ use memmap::MmapOptions;
 use pairing::bls12_381::Bls12;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::fs::File;
+use std::io::Write;
 use std::time::{Duration, Instant};
 
 use bellman::Circuit;
@@ -63,19 +64,26 @@ fn stop_profile() {
 #[inline(always)]
 fn stop_profile() {}
 
-//fn file_backed_mmap_from_random_bytes(n: usize) -> MmapMut {
-//    let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-//    let mut tmpfile: File = tempfile::tempfile().unwrap();
-//
-//    // FIXME: Don't materialize the data first: just write it to disk.
-//    for _ in 0..n {
-//        tmpfile
-//            .write_all(&fr_into_bytes::<Bls12>(&rng.gen()))
-//            .unwrap();
-//    }
-//
-//    unsafe { MmapOptions::new().map_mut(&tmpfile).unwrap() }
-//}
+fn file_backed_mmap_from_random_bytes(n: usize) -> MmapMut {
+    let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    let mut tmpfile: File = tempfile::tempfile().unwrap();
+
+    // FIXME: Don't materialize the data first: just write it to disk.
+    for _ in 0..n {
+        tmpfile
+            .write_all(&fr_into_bytes::<Bls12>(&rng.gen()))
+            .unwrap();
+    }
+
+    unsafe { MmapOptions::new().map_mut(&tmpfile).unwrap() }
+}
+
+pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
+    let mut tmpfile: File = tempfile::tempfile().unwrap();
+    tmpfile.write_all(data).unwrap();
+
+    unsafe { MmapOptions::new().map_mut(&tmpfile).unwrap() }
+}
 
 fn do_the_work<H: 'static>(
     data_size: usize,
@@ -87,6 +95,7 @@ fn do_the_work<H: 'static>(
     partitions: usize,
     circuit: bool,
     groth: bool,
+    bench: bool,
 ) where
     H: Hasher,
 {
@@ -107,14 +116,14 @@ fn do_the_work<H: 'static>(
 
     let nodes = data_size / lambda;
 
-    //    let mut data = file_backed_mmap_from_random_bytes(nodes);
+    let data = file_backed_mmap_from_random_bytes(nodes);
 
     let replica_id: H::Domain = rng.gen();
-    let data: Vec<u8> = (0..nodes)
-        .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
-        .collect();
-    let mut data_copy = data.clone();
-
+    //    let data: Vec<u8> = (0..nodes)
+    //        .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+    //        .collect();
+    //let mut data_copy = data.clone();
+    let mut data_copy = file_backed_mmap_from(&data);
     let sp = layered_drgporep::SetupParams {
         drg_porep_setup_params: drgporep::SetupParams {
             lambda,
@@ -141,8 +150,7 @@ fn do_the_work<H: 'static>(
     info!("running replicate");
 
     start_profile("replicate");
-    let (tau, aux) =
-        ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice()).unwrap();
+    let (tau, aux) = ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, &mut data_copy).unwrap();
     stop_profile();
     let pub_inputs = layered_drgporep::PublicInputs::<H::Domain> {
         replica_id,
@@ -153,7 +161,7 @@ fn do_the_work<H: 'static>(
     };
 
     let priv_inputs = layered_drgporep::PrivateInputs {
-        replica: data.as_slice(),
+        replica: &data,
         aux,
         tau: tau.layer_taus,
     };
@@ -219,22 +227,20 @@ fn do_the_work<H: 'static>(
             engine_params: &engine_params,
             partitions: Some(partitions),
         };
-        if circuit {
+        if circuit || bench {
             info!("Performing circuit bench.");
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            ZigZagCompound::circuit(
-                &pub_inputs,
-                &all_partition_proofs[0],
-                &pp,
-                &engine_params,
-                None,
-            )
-            .synthesize(&mut cs)
-            .expect("failed to synthesize circuit");
+            ZigZagCompound::circuit(&pub_inputs, &all_partition_proofs[0], &pp, &engine_params)
+                .synthesize(&mut cs)
+                .expect("failed to synthesize circuit");
 
             info!(target: "stats", "circuit_num_inputs: {}", cs.num_inputs());
             info!(target: "stats", "circuit_num_constraints: {}", cs.num_constraints());
+
+            if circuit {
+                println!("{}", cs.pretty_print());
+            }
         }
 
         if groth {
@@ -339,12 +345,17 @@ fn main() {
         .arg(
             Arg::with_name("groth")
                 .long("groth")
-                .help("Generate and verify a groth circuit proof?")
+                .help("Generate and verify a groth circuit proof.")
+        )
+        .arg(
+            Arg::with_name("bench")
+                .long("bench")
+                .help("Synthesize and report inputs/constraints for a circuit.")
         )
         .arg(
             Arg::with_name("circuit")
                 .long("circuit")
-                .help("Synthesize and report inputs/constraints for a circuit?")
+                .help("Print the constraint system.")
         )
 
         .get_matches();
@@ -357,8 +368,9 @@ fn main() {
     let hasher = value_t!(matches, "hasher", String).unwrap();
     let layers = value_t!(matches, "layers", usize).unwrap();
     let partitions = value_t!(matches, "partitions", usize).unwrap();
-    let circuit = matches.is_present("circuit");
     let groth = matches.is_present("groth");
+    let bench = matches.is_present("bench");
+    let circuit = matches.is_present("circuit");
 
     println!("circuit: {:?}", circuit);
 
@@ -375,6 +387,7 @@ fn main() {
                 partitions,
                 circuit,
                 groth,
+                bench,
             );
         }
         "sha256" => {
@@ -388,6 +401,7 @@ fn main() {
                 partitions,
                 circuit,
                 groth,
+                bench,
             );
         }
         "blake2s" => {
@@ -401,6 +415,7 @@ fn main() {
                 partitions,
                 circuit,
                 groth,
+                bench,
             );
         }
         _ => panic!(format!("invalid hasher: {}", hasher)),
