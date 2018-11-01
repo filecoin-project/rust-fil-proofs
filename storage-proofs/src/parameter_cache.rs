@@ -12,7 +12,7 @@ use std::fs::{self, create_dir_all};
 use std::path::{Path, PathBuf};
 
 /// Bump this when circuits change to invalidate the cache.
-pub const VERSION: usize = 3;
+pub const VERSION: usize = 4;
 
 pub const PARAMETER_CACHE_DIR: &str = "/tmp/filecoin-proof-parameters/";
 
