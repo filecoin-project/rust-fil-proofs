@@ -111,7 +111,8 @@ fn do_the_work<H: 'static>(
     info!(target: "config", "layers: {}", layers);
     info!(target: "config", "partitions: {}", partitions);
     info!(target: "config", "circuit: {:?}", circuit);
-    info!(target: "config", "groth: {:?}", circuit);
+    info!(target: "config", "groth: {:?}", groth);
+    info!(target: "config", "bench: {:?}", bench);
 
     info!("generating fake data");
 
@@ -221,7 +222,7 @@ fn do_the_work<H: 'static>(
         + (verifying_avg.as_secs() as f64);
     info!(target: "stats", "average_vanilla_verifying_time: {:?} seconds", verifying_avg);
 
-    if circuit || groth {
+    if circuit || groth || bench {
         let engine_params = JubjubBls12::new();
         let compound_public_params = compound_proof::PublicParams {
             vanilla_params: pp.clone(),
@@ -361,8 +362,8 @@ fn main() {
                 .help("Generate and verify a groth circuit proof.")
         )
         .arg(
-            Arg::with_name("bench")
-                .long("bench")
+            Arg::with_name("no-bench")
+                .long("no-bench")
                 .help("Synthesize and report inputs/constraints for a circuit.")
         )
         .arg(
@@ -387,7 +388,7 @@ fn main() {
     let layers = value_t!(matches, "layers", usize).unwrap();
     let partitions = value_t!(matches, "partitions", usize).unwrap();
     let groth = matches.is_present("groth");
-    let bench = matches.is_present("bench");
+    let bench = !matches.is_present("no-bench");
     let circuit = matches.is_present("circuit");
     let extract = matches.is_present("extract");
 
