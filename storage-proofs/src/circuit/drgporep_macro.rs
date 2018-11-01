@@ -297,16 +297,16 @@ macro_rules! implement_drgporep {
                     None => None,
                 };
 
-                // get the prover_id in bits
-                let prover_id_bits = bytes_into_boolean_vec(
-                    cs.namespace(|| "prover_id_bits"),
+                // get the replica_id in bits
+                let replica_id_bits = bytes_into_boolean_vec(
+                    cs.namespace(|| "replica_id_bits"),
                     replica_id_bytes,
                     lambda,
                 )?;
 
                 multipack::pack_into_inputs(
-                    cs.namespace(|| "prover_id"),
-                    &prover_id_bits[0..Fr::CAPACITY as usize],
+                    cs.namespace(|| "replica_id"),
+                    &replica_id_bits[0..Fr::CAPACITY as usize],
                 )?;
 
                 for i in 0..self.data_nodes.len() {
@@ -410,7 +410,7 @@ macro_rules! implement_drgporep {
                         let key = kdf(
                             cs.namespace(|| "kdf"),
                             &params,
-                            prover_id_bits.clone(),
+                            replica_id_bits.clone(),
                             parents_bits,
                             degree,
                         )?;

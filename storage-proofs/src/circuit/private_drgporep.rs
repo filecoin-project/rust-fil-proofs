@@ -196,7 +196,7 @@ mod tests {
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
         assert_eq!(
-            cs.get_input(1, "drgporep/prover_id/input 0"),
+            cs.get_input(1, "drgporep/replica_id/input 0"),
             replica_id.unwrap()
         );
     }
