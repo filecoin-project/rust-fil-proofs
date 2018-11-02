@@ -19,7 +19,6 @@ use proof::ProofScheme;
 /// * `auth_path` - The authentication path of the leaf in the tree.
 /// * `root` - The merkle root of the tree.
 ///
-//implement_por!(PoRCircuit, PoRCompound, "proof-of-retrievability", false);
 use hasher::Hasher;
 use std::marker::PhantomData;
 
