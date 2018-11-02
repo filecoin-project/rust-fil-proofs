@@ -211,9 +211,6 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
         info!(target: "stats", "avg_proving_time: {:?} seconds", proving_avg);
         info!(target: "stats", "avg_verifying_time: {:?} seconds", verifying_avg);
         info!(target: "stats", "params_generation_time: {:?}", param_duration);
-
-        // need this, as the last item doesn't get flushed to the console sometimes
-        info!(".")
     }
 
     fn work_bench(
@@ -287,9 +284,6 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
             f64::from(synth_avg.subsec_nanos()) / 1_000_000_000f64 + (synth_avg.as_secs() as f64);
 
         info!(target: "stats", "avg_synthesize_time: {:?} seconds", synth_avg);
-
-        // need this, as the last item doesn't get flushed to the console sometimes
-        info!(".")
     }
 
     fn work_circuit(
