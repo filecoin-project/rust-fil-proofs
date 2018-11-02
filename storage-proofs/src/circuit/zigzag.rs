@@ -6,8 +6,8 @@ use sapling_crypto::circuit::num;
 use sapling_crypto::jubjub::JubjubEngine;
 
 use circuit::constraint;
+use circuit::drgporep::DrgPoRepCompound;
 use circuit::pedersen::pedersen_md_no_padding;
-use circuit::private_drgporep::PrivateDrgPoRepCompound;
 use compound_proof::CompoundProof;
 use drgporep::{self, DrgPoRep};
 use drgraph::{graph_height, Graph};
@@ -111,7 +111,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
             // We don't need to verify merkle inclusion of the 'data' except in the first layer.
             // In subsequent layers, we already proved this and just need to assert (by constraint)
             // that the decoded data has the value which was previously proved.
-            let circuit = PrivateDrgPoRepCompound::circuit(
+            let circuit = DrgPoRepCompound::circuit(
                 public_inputs,
                 &proof,
                 &self.public_params.drg_porep_public_params,
@@ -233,7 +233,7 @@ impl<'a, H: 'static + Hasher>
                 ),
                 tau: None,
             };
-            let drgporep_inputs = PrivateDrgPoRepCompound::generate_public_inputs(
+            let drgporep_inputs = DrgPoRepCompound::generate_public_inputs(
                 &drgporep_pub_inputs,
                 &drgporep_pub_params,
                 None,
