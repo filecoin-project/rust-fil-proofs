@@ -49,6 +49,7 @@ impl<'a> Circuit<Bls12> for DrgPoRepExample<'a, Bls12> {
             self.data_root,
             self.replica_id,
             self.m,
+            false,
         )
     }
 }
