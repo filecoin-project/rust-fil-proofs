@@ -2,7 +2,6 @@
 macro_rules! implement_drgporep {
     ($name:ident, $compound_name:ident, $string_name:expr, $private:expr) => {
         use circuit::por::{PoRCircuit, PoRCompound};
-        use circuit::private_por::{PrivatePoRCircuit, PrivatePoRCompound};
         use hasher::{Domain, Hasher};
 
         pub struct $name<'a, E: JubjubEngine> {
@@ -128,7 +127,7 @@ macro_rules! implement_drgporep {
                             challenge: node,
                         };
                         let por_inputs = if $private {
-                            PrivatePoRCompound::<H>::generate_public_inputs(
+                            PoRCompound::<H>::generate_public_inputs(
                                 &por_pub_inputs,
                                 &por_pub_params,
                                 None,
@@ -149,7 +148,7 @@ macro_rules! implement_drgporep {
                     };
 
                     let por_inputs = if $private {
-                        PrivatePoRCompound::<H>::generate_public_inputs(
+                        PoRCompound::<H>::generate_public_inputs(
                             &por_pub_inputs,
                             &por_pub_params,
                             None,
@@ -322,12 +321,13 @@ macro_rules! implement_drgporep {
                         let mut cs = cs.namespace(|| "inclusion_checks");
 
                         if $private {
-                            PrivatePoRCircuit::synthesize(
+                            PoRCircuit::synthesize(
                                 cs.namespace(|| "replica_inclusion"),
                                 &params,
                                 *replica_node,
                                 replica_node_path.clone(),
                                 replica_root,
+                                true,
                             )?;
                         } else {
                             PoRCircuit::synthesize(
@@ -336,17 +336,19 @@ macro_rules! implement_drgporep {
                                 *replica_node,
                                 replica_node_path.clone(),
                                 replica_root,
+                                false,
                             )?;
                         }
                         // validate each replica_parents merkle proof
                         for i in 0..replica_parents.len() {
                             if $private {
-                                PrivatePoRCircuit::synthesize(
+                                PoRCircuit::synthesize(
                                     cs.namespace(|| format!("parent_inclusion_{}", i)),
                                     &params,
                                     replica_parents[i],
                                     replica_parents_paths[i].clone(),
                                     replica_root,
+                                    true,
                                 )?;
                             } else {
                                 PoRCircuit::synthesize(
@@ -355,18 +357,20 @@ macro_rules! implement_drgporep {
                                     replica_parents[i],
                                     replica_parents_paths[i].clone(),
                                     replica_root,
+                                    false,
                                 )?;
                             }
                         }
 
                         // validate data node commitment
                         if $private {
-                            PrivatePoRCircuit::synthesize(
+                            PoRCircuit::synthesize(
                                 cs.namespace(|| "data_inclusion"),
                                 &params,
                                 *data_node,
                                 data_node_path.clone(),
                                 data_root,
+                                true,
                             )?;
                         } else {
                             PoRCircuit::synthesize(
@@ -375,6 +379,7 @@ macro_rules! implement_drgporep {
                                 *data_node,
                                 data_node_path.clone(),
                                 data_root,
+                                false,
                             )?;
                         }
                     }
