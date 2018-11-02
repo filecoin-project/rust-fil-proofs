@@ -225,6 +225,7 @@ mod tests {
             params: merklepor::PublicParams {
                 lambda: 32,
                 leaves: 32,
+                private: false,
             },
             batch_count: 10,
         };

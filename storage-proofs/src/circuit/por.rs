@@ -61,13 +61,16 @@ where
     fn circuit<'b>(
         public_inputs: &<MerklePoR<H> as ProofScheme<'a>>::PublicInputs,
         proof: &'b <MerklePoR<H> as ProofScheme<'a>>::Proof,
-        _public_params: &'b <MerklePoR<H> as ProofScheme<'a>>::PublicParams,
+        public_params: &'b <MerklePoR<H> as ProofScheme<'a>>::PublicParams,
         engine_params: &'a JubjubBls12,
     ) -> PoRCircuit<'a, Bls12> {
         let (root, private) = match (*public_inputs).commitment {
             None => (Some(proof.proof.root.into()), true),
             Some(commitment) => (Some(commitment.into()), false),
         };
+
+        // Ensure inputs are consistent with public params.
+        assert_eq!(private, public_params.private);
 
         PoRCircuit::<Bls12> {
             params: engine_params,
@@ -90,7 +93,10 @@ where
         inputs.extend(packed_auth_path);
 
         if let Some(commitment) = pub_inputs.commitment {
+            assert!(!pub_params.private);
             inputs.push(commitment.into());
+        } else {
+            assert!(pub_params.private);
         }
 
         inputs
@@ -262,7 +268,11 @@ mod tests {
             };
 
             let setup_params = compound_proof::SetupParams {
-                vanilla_params: &merklepor::SetupParams { lambda, leaves },
+                vanilla_params: &merklepor::SetupParams {
+                    lambda,
+                    leaves,
+                    private: false,
+                },
                 engine_params: &JubjubBls12::new(),
                 partitions: None,
             };
@@ -329,7 +339,11 @@ mod tests {
 
             // -- MerklePoR
 
-            let pub_params = merklepor::PublicParams { lambda, leaves };
+            let pub_params = merklepor::PublicParams {
+                lambda,
+                leaves,
+                private: true,
+            };
             let pub_inputs = merklepor::PublicInputs {
                 challenge: i,
                 commitment: Some(tree.root().into()),
@@ -408,6 +422,7 @@ mod tests {
     }
 
     #[ignore] // Slow test – run only when compiled for release.
+    #[test]
     fn private_por_test_compound() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let leaves = 6;
@@ -425,7 +440,11 @@ mod tests {
             };
 
             let setup_params = compound_proof::SetupParams {
-                vanilla_params: &merklepor::SetupParams { lambda, leaves },
+                vanilla_params: &merklepor::SetupParams {
+                    lambda,
+                    leaves,
+                    private: true,
+                },
                 engine_params: &JubjubBls12::new(),
                 partitions: None,
             };
@@ -453,22 +472,25 @@ mod tests {
             )
             .expect("failed while proving");
 
+            {
+                let (circuit, inputs) = PoRCompound::<PedersenHasher>::circuit_for_test(
+                    &public_params,
+                    &public_inputs,
+                    &private_inputs,
+                );
+
+                let mut cs = TestConstraintSystem::new();
+
+                let _ = circuit.synthesize(&mut cs);
+
+                assert!(cs.is_satisfied());
+                assert!(cs.verify(&inputs));
+            }
+
             let verified =
                 PoRCompound::<PedersenHasher>::verify(&public_params, &public_inputs, &proof)
                     .expect("failed while verifying");
             assert!(verified);
-
-            let (circuit, inputs) = PoRCompound::<PedersenHasher>::circuit_for_test(
-                &public_params,
-                &public_inputs,
-                &private_inputs,
-            );
-
-            let mut cs = TestConstraintSystem::new();
-
-            let _ = circuit.synthesize(&mut cs);
-            assert!(cs.is_satisfied());
-            assert!(cs.verify(&inputs));
         }
     }
 
@@ -492,7 +514,11 @@ mod tests {
 
             // -- MerklePoR
 
-            let pub_params = merklepor::PublicParams { lambda, leaves };
+            let pub_params = merklepor::PublicParams {
+                lambda,
+                leaves,
+                private: true,
+            };
             let pub_inputs = merklepor::PublicInputs {
                 challenge: i,
                 commitment: None,
