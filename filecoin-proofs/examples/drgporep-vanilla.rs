@@ -57,7 +57,8 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     let challenges = vec![2; challenge_count];
     let lambda = 32;
 
-    info!(target: "config", "data size: {}", prettyb(data_size));
+    info!(target: "config", "data_size:  {}", prettyb(data_size));
+    info!(target: "config", "challenge_count: {}", challenge_count);
     info!(target: "config", "m: {}", m);
     info!(target: "config", "sloth: {}", sloth_iter);
 
@@ -145,10 +146,11 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     let verifying_avg = f64::from(verifying_avg.subsec_nanos()) / 1_000_000_000f64
         + (verifying_avg.as_secs() as f64);
 
-    info!(target: "stats", "Average proving time: {:?} seconds", proving_avg);
-    info!(target: "stats", "Average verifying time: {:?} seconds", verifying_avg);
-    info!(target: "stats", "Replication time: {:?}", param_duration);
-    info!(target: "stats", "Average proof size {}", prettyb(avg_proof_size));
+    info!(target: "stats", "avg_proving_time: {:?} seconds", proving_avg);
+    info!(target: "stats", "avg_verifying_time: {:?} seconds", verifying_avg);
+    info!(target: "stats", "replication_time: {:?}", param_duration);
+
+    info!(target: "stats", "avg_proof_size: {}", prettyb(avg_proof_size));
 }
 
 fn main() {

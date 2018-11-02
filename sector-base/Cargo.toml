@@ -26,6 +26,3 @@ tempfile = "*"
 
 [build-dependencies]
 cbindgen = "0.6.3"
-
-[profile.test]
-opt-level = 1

@@ -4,3 +4,4 @@ Cargo.lock
 .criterion
 **/*.h
 heaptrack*
+.bencher

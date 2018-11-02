@@ -69,6 +69,3 @@ harness = false
 [[bench]]
 name = "sloth"
 harness = false
-
-[profile.test]
-opt-level = 1
