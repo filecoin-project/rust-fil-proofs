@@ -92,14 +92,9 @@ macro_rules! implement_drgporep {
             ) -> Vec<Fr> {
                 let replica_id = pub_in.replica_id;
                 let challenges = &pub_in.challenges;
-                let (comm_r, comm_d) = if $private {
-                    assert!(pub_in.tau.is_none());
-                    (None, None)
-                } else {
-                    match pub_in.tau {
-                        Some(tau) => (Some(tau.comm_r), Some(tau.comm_d)),
-                        None => (None, None),
-                    }
+                let (comm_r, comm_d) = match pub_in.tau {
+                    None => (None, None),
+                    Some(tau) => (Some(tau.comm_r), Some(tau.comm_d)),
                 };
 
                 let lambda = pub_params.lambda;
@@ -126,19 +121,12 @@ macro_rules! implement_drgporep {
                             commitment: comm_r,
                             challenge: node,
                         };
-                        let por_inputs = if $private {
-                            PoRCompound::<H>::generate_public_inputs(
-                                &por_pub_inputs,
-                                &por_pub_params,
-                                None,
-                            )
-                        } else {
-                            PoRCompound::<H>::generate_public_inputs(
-                                &por_pub_inputs,
-                                &por_pub_params,
-                                None,
-                            )
-                        };
+                        let por_inputs = PoRCompound::<H>::generate_public_inputs(
+                            &por_pub_inputs,
+                            &por_pub_params,
+                            None,
+                        );
+
                         input.extend(por_inputs);
                     }
 
@@ -147,19 +135,11 @@ macro_rules! implement_drgporep {
                         challenge: *challenge,
                     };
 
-                    let por_inputs = if $private {
-                        PoRCompound::<H>::generate_public_inputs(
-                            &por_pub_inputs,
-                            &por_pub_params,
-                            None,
-                        )
-                    } else {
-                        PoRCompound::<H>::generate_public_inputs(
-                            &por_pub_inputs,
-                            &por_pub_params,
-                            None,
-                        )
-                    };
+                    let por_inputs = PoRCompound::<H>::generate_public_inputs(
+                        &por_pub_inputs,
+                        &por_pub_params,
+                        None,
+                    );
                     input.extend(por_inputs);
                 }
                 input
@@ -320,68 +300,36 @@ macro_rules! implement_drgporep {
                     {
                         let mut cs = cs.namespace(|| "inclusion_checks");
 
-                        if $private {
-                            PoRCircuit::synthesize(
-                                cs.namespace(|| "replica_inclusion"),
-                                &params,
-                                *replica_node,
-                                replica_node_path.clone(),
-                                replica_root,
-                                true,
-                            )?;
-                        } else {
-                            PoRCircuit::synthesize(
-                                cs.namespace(|| "replica_inclusion"),
-                                &params,
-                                *replica_node,
-                                replica_node_path.clone(),
-                                replica_root,
-                                false,
-                            )?;
-                        }
+                        PoRCircuit::synthesize(
+                            cs.namespace(|| "replica_inclusion"),
+                            &params,
+                            *replica_node,
+                            replica_node_path.clone(),
+                            replica_root,
+                            $private,
+                        )?;
+
                         // validate each replica_parents merkle proof
                         for i in 0..replica_parents.len() {
-                            if $private {
-                                PoRCircuit::synthesize(
-                                    cs.namespace(|| format!("parent_inclusion_{}", i)),
-                                    &params,
-                                    replica_parents[i],
-                                    replica_parents_paths[i].clone(),
-                                    replica_root,
-                                    true,
-                                )?;
-                            } else {
-                                PoRCircuit::synthesize(
-                                    cs.namespace(|| format!("parent_inclusion_{}", i)),
-                                    &params,
-                                    replica_parents[i],
-                                    replica_parents_paths[i].clone(),
-                                    replica_root,
-                                    false,
-                                )?;
-                            }
+                            PoRCircuit::synthesize(
+                                cs.namespace(|| format!("parent_inclusion_{}", i)),
+                                &params,
+                                replica_parents[i],
+                                replica_parents_paths[i].clone(),
+                                replica_root,
+                                $private,
+                            )?;
                         }
 
                         // validate data node commitment
-                        if $private {
-                            PoRCircuit::synthesize(
-                                cs.namespace(|| "data_inclusion"),
-                                &params,
-                                *data_node,
-                                data_node_path.clone(),
-                                data_root,
-                                true,
-                            )?;
-                        } else {
-                            PoRCircuit::synthesize(
-                                cs.namespace(|| "data_inclusion"),
-                                &params,
-                                *data_node,
-                                data_node_path.clone(),
-                                data_root,
-                                false,
-                            )?;
-                        }
+                        PoRCircuit::synthesize(
+                            cs.namespace(|| "data_inclusion"),
+                            &params,
+                            *data_node,
+                            data_node_path.clone(),
+                            data_root,
+                            $private,
+                        )?;
                     }
 
                     // Encoding checks
