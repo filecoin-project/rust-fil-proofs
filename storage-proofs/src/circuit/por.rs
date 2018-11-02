@@ -65,13 +65,13 @@ where
         engine_params: &'a JubjubBls12,
     ) -> PoRCircuit<'a, Bls12> {
         let (root, private) = match (*public_inputs).commitment {
-            None => (Some(proof.proof.root.clone().into()), true),
+            None => (Some(proof.proof.root.into()), true),
             Some(commitment) => (Some(commitment.into()), false),
         };
 
         PoRCircuit::<Bls12> {
             params: engine_params,
-            value: Some(proof.data.clone().into()),
+            value: Some(proof.data.into()),
             auth_path: proof.proof.as_options(),
             root,
             private,
