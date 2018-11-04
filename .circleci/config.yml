@@ -133,7 +133,7 @@ jobs:
             - parameter-cache-{{ .Revision }}
       - run:
           name: Benchmarks (nightly)
-          command: cargo +nightly bench --verbose --frozen --all
+          command: cargo +nightly build --benches --verbose --frozen --all
           no_output_timeout: 15m
 
   rustfmt:
