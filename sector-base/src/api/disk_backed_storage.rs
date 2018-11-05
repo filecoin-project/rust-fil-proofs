@@ -4,9 +4,12 @@ use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
+use api::errors::SectorManagerErr;
+use api::errors::SectorManagerErr::*;
+use api::sector_store::SectorConfig;
+use api::sector_store::SectorManager;
+use api::sector_store::SectorStore;
 use api::util;
-use api::SectorManagerErr;
-use api::{SectorConfig, SectorManager, SectorStore};
 use ffi_toolkit::{c_str_to_rust_str, raw_ptr};
 use io::fr32::{
     almost_truncate_to_unpadded_bytes, target_unpadded_bytes, unpadded_bytes, write_padded,
@@ -112,6 +115,17 @@ pub unsafe extern "C" fn init_new_sector_store(
     ));
 
     raw_ptr(boxed)
+}
+
+/// Destroys a boxed SectorStore by freeing its memory.
+///
+/// # Arguments
+///
+/// * `ss_ptr` - pointer to a boxed SectorStore
+///
+#[no_mangle]
+pub unsafe extern "C" fn destroy_storage(ss_ptr: *mut Box<SectorStore>) {
+    let _ = Box::from_raw(ss_ptr);
 }
 
 pub struct DiskManager {
@@ -226,10 +240,11 @@ pub struct FakeConfig {
 }
 
 #[derive(Debug)]
+#[repr(u8)]
 pub enum ConfiguredStore {
-    Live,
-    Test,
-    ProofTest,
+    Live = 0,
+    Test = 1,
+    ProofTest = 2,
 }
 
 pub struct ConcreteSectorStore {

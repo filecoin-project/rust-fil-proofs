@@ -7,6 +7,7 @@ use pairing::bls12_381::Bls12;
 use pairing::Engine;
 use sapling_crypto::jubjub::JubjubBls12;
 
+use sector_base::api::sector_store::SectorStore;
 use sector_base::io::fr32::write_unpadded;
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
@@ -24,8 +25,6 @@ use storage_proofs::porep::{replica_id, PoRep, ProverAux, Tau};
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
 use storage_proofs::zigzag_graph::ZigZagBucketGraph;
-
-use sector_base::api::SectorStore;
 
 type Commitment = [u8; 32];
 

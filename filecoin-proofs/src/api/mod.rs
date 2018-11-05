@@ -1,7 +1,7 @@
 use api::responses::FCPResponseStatus;
 use ffi_toolkit::c_str_to_pbuf;
 use libc;
-use sector_base::api::SectorStore;
+use sector_base::api::sector_store::SectorStore;
 use std::ffi::CString;
 use std::mem;
 use std::slice::from_raw_parts;
@@ -342,7 +342,6 @@ mod tests {
     };
     use sector_base::api::{
         new_sealed_sector_access, new_staging_sector_access, read_raw, write_and_preprocess,
-        SectorStore,
     };
 
     use sector_base::api::responses::SBResponseStatus;
