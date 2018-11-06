@@ -1,3 +1,6 @@
+use api::errors::SectorManagerErr;
+use api::errors::SectorManagerErr::*;
+use api::sector_builder::SectorBuilder;
 use ffi_toolkit::c_str_to_rust_str;
 use libc;
 use std::ptr;
@@ -17,6 +20,123 @@ pub enum SBResponseStatus {
 
 pub trait ToResponseStatus {
     fn to_response_status(&self) -> SBResponseStatus;
+}
+
+impl<T> ToResponseStatus for Result<T, SectorManagerErr> {
+    fn to_response_status(&self) -> SBResponseStatus {
+        match self {
+            Ok(_) => SBResponseStatus::SBNoError,
+            Err(s_m_err) => match s_m_err {
+                UnclassifiedError(_) => SBResponseStatus::SBUnclassifiedError,
+                CallerError(_) => SBResponseStatus::SBCallerError,
+                ReceiverError(_) => SBResponseStatus::SBReceiverError,
+            },
+        }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+/// InitSectorBuilderResponse
+/////////////////////////////
+
+#[repr(C)]
+pub struct InitSectorBuilderResponse {
+    pub status_code: SBResponseStatus,
+    pub error_msg: *const libc::c_char,
+    pub sector_builder: *mut SectorBuilder,
+}
+
+impl Default for InitSectorBuilderResponse {
+    fn default() -> InitSectorBuilderResponse {
+        InitSectorBuilderResponse {
+            status_code: SBResponseStatus::SBNoError,
+            error_msg: ptr::null(),
+            sector_builder: ptr::null_mut(),
+        }
+    }
+}
+
+impl Drop for InitSectorBuilderResponse {
+    fn drop(&mut self) {
+        unsafe {
+            drop(c_str_to_rust_str(self.error_msg));
+        };
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn destroy_init_sector_builder_response(ptr: *mut InitSectorBuilderResponse) {
+    let _ = Box::from_raw(ptr);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+/// AddPieceResponse
+////////////////////
+
+#[repr(C)]
+pub struct AddPieceResponse {
+    pub status_code: SBResponseStatus,
+    pub error_msg: *const libc::c_char,
+    pub sector_id: u64,
+}
+
+impl Default for AddPieceResponse {
+    fn default() -> AddPieceResponse {
+        AddPieceResponse {
+            status_code: SBResponseStatus::SBNoError,
+            error_msg: ptr::null(),
+            sector_id: 0,
+        }
+    }
+}
+
+impl Drop for AddPieceResponse {
+    fn drop(&mut self) {
+        unsafe {
+            drop(c_str_to_rust_str(self.error_msg));
+        };
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn destroy_add_piece_response(ptr: *mut AddPieceResponse) {
+    let _ = Box::from_raw(ptr);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+/// GetMaxStagedBytesPerSector
+//////////////////////////////
+
+#[repr(C)]
+pub struct GetMaxStagedBytesPerSector {
+    pub status_code: SBResponseStatus,
+    pub error_msg: *const libc::c_char,
+    pub max_staged_bytes_per_sector: u64,
+}
+
+impl Default for GetMaxStagedBytesPerSector {
+    fn default() -> GetMaxStagedBytesPerSector {
+        GetMaxStagedBytesPerSector {
+            status_code: SBResponseStatus::SBNoError,
+            error_msg: ptr::null(),
+            max_staged_bytes_per_sector: 0,
+        }
+    }
+}
+
+impl Drop for GetMaxStagedBytesPerSector {
+    fn drop(&mut self) {
+        unsafe {
+            drop(c_str_to_rust_str(self.error_msg));
+        };
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn destroy_get_max_user_bytes_per_staged_sector_response(
+    ptr: *mut GetMaxStagedBytesPerSector,
+) {
+    let _ = Box::from_raw(ptr);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -234,6 +354,42 @@ impl Drop for NumUnsealedBytesResponse {
 
 #[no_mangle]
 pub unsafe extern "C" fn destroy_num_unsealed_bytes_response(ptr: *mut NumUnsealedBytesResponse) {
+    let _ = Box::from_raw(ptr);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+/// GetMaxUserBytesPerStagedSectorResponse
+//////////////////////////////////////////
+
+#[repr(C)]
+pub struct GetMaxUserBytesPerStagedSectorResponse {
+    pub status_code: SBResponseStatus,
+    pub error_msg: *const libc::c_char,
+    pub num_bytes: u64,
+}
+
+impl Default for GetMaxUserBytesPerStagedSectorResponse {
+    fn default() -> GetMaxUserBytesPerStagedSectorResponse {
+        GetMaxUserBytesPerStagedSectorResponse {
+            status_code: SBResponseStatus::SBNoError,
+            error_msg: ptr::null(),
+            num_bytes: 0,
+        }
+    }
+}
+
+impl Drop for GetMaxUserBytesPerStagedSectorResponse {
+    fn drop(&mut self) {
+        unsafe {
+            drop(c_str_to_rust_str(self.error_msg));
+        };
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn destroy_get_max_user_bytes_per_staged_sector(
+    ptr: *mut GetMaxUserBytesPerStagedSectorResponse,
+) {
     let _ = Box::from_raw(ptr);
 }
 

@@ -1,55 +1,66 @@
-use api::responses::SBResponseStatus;
-use api::responses::ToResponseStatus;
-use api::SectorManagerErr::CallerError;
-use api::SectorManagerErr::ReceiverError;
-use api::SectorManagerErr::UnclassifiedError;
-use ffi_toolkit::{c_str_to_rust_str, raw_ptr, rust_str_to_c_str};
+use api::disk_backed_storage::ConfiguredStore;
+use api::errors::SectorManagerErr;
+use api::responses::*;
+use api::sector_builder::SectorBuilder;
+use api::sector_store::{SectorManager, SectorStore};
+use ffi_toolkit::{c_str_to_rust_str, raw_ptr};
 use libc;
+use std::error::Error;
 use std::ffi::CString;
+use std::fmt;
 use std::mem;
 use std::slice::from_raw_parts;
-use std::sync::Mutex;
 
 pub mod disk_backed_storage;
+pub mod errors;
 pub mod responses;
+pub mod sector_builder;
+pub mod sector_store;
 pub mod util;
-
-#[derive(Debug)]
-pub struct SectorBuilder {
-    prover_id: [u8; 31],
-    sector_id_nonce: Mutex<u64>,
-    metadata_dir: String,
-    staged_sector_dir: String,
-    sealed_sector_dir: String,
-}
-
-/// Serialize SectorBuilder state to a string for debugging.
-///
-#[no_mangle]
-pub unsafe extern "C" fn debug_state(ptr: *mut SectorBuilder) -> *const libc::c_char {
-    let sb = Box::from_raw(ptr);
-    let state = rust_str_to_c_str(&format!("{:?}", sb));
-    raw_ptr(sb);
-    state
-}
 
 /// Initializes and returns a SectorBuilder.
 ///
 #[no_mangle]
 pub unsafe extern "C" fn init_sector_builder(
+    sector_store_config_ptr: *const ConfiguredStore,
     last_used_sector_id: u64,
     metadata_dir: *const libc::c_char,
     prover_id: &[u8; 31],
     sealed_sector_dir: *const libc::c_char,
     staged_sector_dir: *const libc::c_char,
-) -> *mut SectorBuilder {
-    raw_ptr(SectorBuilder {
-        metadata_dir: c_str_to_rust_str(metadata_dir).to_string(),
-        prover_id: *prover_id,
-        sealed_sector_dir: c_str_to_rust_str(sealed_sector_dir).to_string(),
-        sector_id_nonce: Mutex::new(last_used_sector_id),
-        staged_sector_dir: c_str_to_rust_str(staged_sector_dir).to_string(),
-    })
+) -> *mut responses::InitSectorBuilderResponse {
+    let mut response: responses::InitSectorBuilderResponse = Default::default();
+
+    if let Some(cfg) = sector_store_config_ptr.as_ref() {
+        match SectorBuilder::init_from_metadata(
+            cfg,
+            last_used_sector_id,
+            c_str_to_rust_str(metadata_dir).to_string(),
+            *prover_id,
+            c_str_to_rust_str(sealed_sector_dir).to_string(),
+            c_str_to_rust_str(staged_sector_dir).to_string(),
+        ) {
+            Ok(sb) => {
+                response.status_code = responses::SBResponseStatus::SBNoError;
+                response.sector_builder = raw_ptr(sb);
+            }
+            Err(err) => {
+                response.status_code = SBResponseStatus::SBUnclassifiedError;
+
+                let msg = CString::new(format!("{:?}", err)).unwrap();
+                response.error_msg = msg.as_ptr();
+                mem::forget(msg);
+            }
+        }
+    } else {
+        response.status_code = SBResponseStatus::SBCallerError;
+
+        let msg = CString::new("caller did not provide ConfiguredStore").unwrap();
+        response.error_msg = msg.as_ptr();
+        mem::forget(msg);
+    }
+
+    raw_ptr(response)
 }
 
 /// Destroys a SectorBuilder.
@@ -59,83 +70,50 @@ pub unsafe extern "C" fn destroy_sector_builder(ptr: *mut SectorBuilder) {
     let _ = Box::from_raw(ptr);
 }
 
-#[derive(Debug)]
-pub enum SectorManagerErr {
-    UnclassifiedError(String),
-    CallerError(String),
-    ReceiverError(String),
-}
-
-impl<T> ToResponseStatus for Result<T, SectorManagerErr> {
-    fn to_response_status(&self) -> SBResponseStatus {
-        match self {
-            Ok(_) => SBResponseStatus::SBNoError,
-            Err(s_m_err) => match s_m_err {
-                UnclassifiedError(_) => SBResponseStatus::SBUnclassifiedError,
-                CallerError(_) => SBResponseStatus::SBCallerError,
-                ReceiverError(_) => SBResponseStatus::SBReceiverError,
-            },
-        }
-    }
-}
-
-pub trait SectorConfig {
-    /// if true, uses something other exact bits, correct parameters, or full proofs
-    fn is_fake(&self) -> bool;
-
-    /// if provided, an artificial delay to seal
-    fn simulate_delay_seconds(&self) -> Option<u32>;
-
-    /// returns the number of bytes that will fit into a sector managed by this store
-    fn max_unsealed_bytes_per_sector(&self) -> u64;
-
-    /// returns the number of bytes in a sealed sector managed by this store
-    fn sector_bytes(&self) -> u64;
-
-    /// We need a distinguished place to cache 'the' parameters corresponding to the SetupParams
-    /// currently being used. These are only easily generated at replication time but need to be
-    /// accessed at verification time too.
-    fn dummy_parameter_cache_name(&self) -> String;
-}
-
-pub trait SectorManager {
-    /// provisions a new sealed sector and reports the corresponding access
-    fn new_sealed_sector_access(&self) -> Result<String, SectorManagerErr>;
-
-    /// provisions a new staging sector and reports the corresponding access
-    fn new_staging_sector_access(&self) -> Result<String, SectorManagerErr>;
-
-    /// reports the number of bytes written to an unsealed sector
-    fn num_unsealed_bytes(&self, access: String) -> Result<u64, SectorManagerErr>;
-
-    /// sets the number of bytes in an unsealed sector identified by `access`
-    fn truncate_unsealed(&self, access: String, size: u64) -> Result<(), SectorManagerErr>;
-
-    /// writes `data` to the staging sector identified by `access`, incrementally preprocessing `access`
-    fn write_and_preprocess(&self, access: String, data: &[u8]) -> Result<u64, SectorManagerErr>;
-
-    fn read_raw(
-        &self,
-        access: String,
-        start_offset: u64,
-        numb_bytes: u64,
-    ) -> Result<Vec<u8>, SectorManagerErr>;
-}
-
-pub trait SectorStore {
-    fn config(&self) -> &SectorConfig;
-    fn manager(&self) -> &SectorManager;
-}
-
-/// Destroys a boxed SectorStore by freeing its memory.
-///
-/// # Arguments
-///
-/// * `ss_ptr` - pointer to a boxed SectorStore
+/// Writes user piece-bytes to a staged sector and returns the id of the sector
+/// to which the bytes were written.
 ///
 #[no_mangle]
-pub unsafe extern "C" fn destroy_storage(ss_ptr: *mut Box<SectorStore>) {
-    let _ = Box::from_raw(ss_ptr);
+pub unsafe extern "C" fn add_piece(
+    ptr: *mut SectorBuilder,
+    piece_key: *const libc::c_char,
+    piece_ptr: *const u8,
+    piece_len: libc::size_t,
+) -> *mut responses::AddPieceResponse {
+    let piece_key = c_str_to_rust_str(piece_key);
+    let piece_bytes = from_raw_parts(piece_ptr, piece_len);
+
+    let mut response: responses::AddPieceResponse = Default::default();
+
+    match (*ptr).add_piece(piece_key, piece_bytes) {
+        Ok(sector_id) => {
+            response.status_code = SBResponseStatus::SBNoError;
+            response.sector_id = sector_id;
+        }
+        Err(err) => {
+            response.status_code = SBResponseStatus::SBUnclassifiedError;
+
+            let msg = CString::new(format!("{:?}", err)).unwrap();
+            response.error_msg = msg.as_ptr();
+            mem::forget(msg);
+        }
+    }
+
+    Box::into_raw(Box::new(response))
+}
+
+/// Returns the number of user bytes that will fit into a staged sector.
+///
+#[no_mangle]
+pub unsafe extern "C" fn get_max_user_bytes_per_staged_sector(
+    ptr: *mut SectorBuilder,
+) -> *mut responses::GetMaxStagedBytesPerSector {
+    let mut response: responses::GetMaxStagedBytesPerSector = Default::default();
+
+    response.status_code = SBResponseStatus::SBNoError;
+    response.max_staged_bytes_per_sector = (*ptr).get_max_user_bytes_per_staged_sector();;
+
+    Box::into_raw(Box::new(response))
 }
 
 /// Returns a sector access in the sealed area.
