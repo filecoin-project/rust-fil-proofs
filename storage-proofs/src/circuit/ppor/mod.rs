@@ -141,7 +141,11 @@ mod tests {
 
         let leaves = 16;
         let lambda = 32;
-        let pub_params = merklepor::PublicParams { lambda, leaves };
+        let pub_params = merklepor::PublicParams {
+            lambda,
+            leaves,
+            private: false,
+        };
 
         for _ in 0..5 {
             let data: Vec<u8> = (0..leaves)

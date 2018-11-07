@@ -15,13 +15,14 @@ pub struct PublicParams {
     pub lambda: usize,
     /// How many leaves the underlying merkle tree has.
     pub leaves: usize,
+    pub private: bool,
 }
 
 impl ParameterSetIdentifier for PublicParams {
     fn parameter_set_identifier(&self) -> String {
         format!(
-            "merklepor::PublicParams{{lambda: {}; leaves: {}}}",
-            self.lambda, self.leaves
+            "merklepor::PublicParams{{lambda: {}; leaves: {}; private: {}}}",
+            self.lambda, self.leaves, self.private
         )
     }
 }
@@ -62,6 +63,7 @@ pub type Proof<H> = DataProof<H>;
 pub struct SetupParams {
     pub lambda: usize,
     pub leaves: usize,
+    pub private: bool,
 }
 
 /// Merkle tree based proof of retrievability.
@@ -81,6 +83,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for MerklePoR<H> {
         Ok(PublicParams {
             lambda: sp.lambda,
             leaves: sp.leaves,
+            private: sp.private,
         })
     }
 
@@ -148,6 +151,7 @@ mod tests {
         let pub_params = PublicParams {
             lambda: 32,
             leaves: 32,
+            private: false,
         };
 
         let data: Vec<u8> = (0..32)
@@ -217,6 +221,7 @@ mod tests {
         let pub_params = PublicParams {
             lambda: 32,
             leaves: 32,
+            private: false,
         };
 
         let data: Vec<u8> = (0..32)
@@ -260,6 +265,7 @@ mod tests {
         let pub_params = PublicParams {
             lambda: 32,
             leaves: 32,
+            private: false,
         };
 
         let data: Vec<u8> = (0..32)

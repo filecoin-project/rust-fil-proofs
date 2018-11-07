@@ -155,7 +155,11 @@ where
         let packed_replica_id =
             multipack::compute_multipacking::<Bls12>(&replica_id_bits[0..Fr::CAPACITY as usize]);
 
-        let por_pub_params = merklepor::PublicParams { lambda, leaves };
+        let por_pub_params = merklepor::PublicParams {
+            lambda,
+            leaves,
+            private: comm_d.is_none(),
+        };
 
         let mut input = Vec::new();
         input.extend(packed_replica_id.clone());
