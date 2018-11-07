@@ -360,7 +360,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
                 // validate each replica_parents merkle proof
                 for i in 0..replica_parents.len() {
                     PoRCircuit::synthesize(
-                        cs.namespace(|| format!("parent_inclusion_{}", i)),
+                        cs.namespace(|| format!("parents_inclusion_{}", i)),
                         &params,
                         replica_parents[i],
                         replica_parents_paths[i].clone(),
