@@ -172,11 +172,11 @@ impl<E: Engine> TestConstraintSystem<E> {
         let mut s = String::new();
 
         for input in &self.inputs {
-            writeln!(s, "{}", input.1).unwrap();
+            writeln!(s, "INPUT {}", input.1).unwrap();
         }
         write!(s, "\n\n").unwrap();
         for aux in &self.aux {
-            writeln!(s, "{}", aux.1).unwrap();
+            writeln!(s, "AUX {}", aux.1).unwrap();
         }
         write!(s, "\n\n").unwrap();
 
@@ -231,12 +231,13 @@ impl<E: Engine> TestConstraintSystem<E> {
         for &(ref a, ref b, ref c, ref name) in &self.constraints {
             writeln!(&mut s).unwrap();
 
-            write!(&mut s, "{}: ", name).unwrap();
-            pp(&mut s, a);
-            write!(&mut s, " * ").unwrap();
-            pp(&mut s, b);
-            write!(&mut s, " = ").unwrap();
-            pp(&mut s, c);
+            write!(&mut s, "{}", name).unwrap();
+            // TODO: we are removing this for now
+            // pp(&mut s, a);
+            // write!(&mut s, " * ").unwrap();
+            // pp(&mut s, b);
+            // write!(&mut s, " = ").unwrap();
+            // pp(&mut s, c);
         }
 
         writeln!(&mut s).unwrap();
