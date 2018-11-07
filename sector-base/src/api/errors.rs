@@ -1,60 +1,40 @@
 use api::errors::SectorManagerErr::*;
-use std::error::Error;
-use std::fmt;
+use failure::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Fail)]
 pub enum SectorManagerErr {
+    #[fail(display = "unclassified error: {}", _0)]
     UnclassifiedError(String),
+
+    #[fail(display = "caller error: {}", _0)]
     CallerError(String),
+
+    #[fail(display = "receiver error: {}", _0)]
     ReceiverError(String),
 }
 
-impl fmt::Display for SectorManagerErr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            UnclassifiedError(msg) => write!(f, "UnclassifiedError({})", msg),
-            CallerError(msg) => write!(f, "CallerError({})", msg),
-            ReceiverError(msg) => write!(f, "ReceiverError({})", msg),
-        }
-    }
-}
+#[derive(Debug, Fail)]
+pub enum SectorBuilderErr {
+    #[fail(
+        display = "number of bytes in piece ({}) exceeds maximum ({})",
+        num_bytes_in_piece,
+        max_bytes_per_sector
+    )]
+    OverflowError {
+        num_bytes_in_piece: u64,
+        max_bytes_per_sector: u64,
+    },
 
-impl Error for SectorManagerErr {
-    fn description(&self) -> &str {
-        "an error from the SectorManager"
-    }
-}
+    #[fail(
+        display = "number of bytes written ({}) does not match bytes in piece ({})",
+        num_bytes_written,
+        num_bytes_in_piece
+    )]
+    IncompleteWriteError {
+        num_bytes_written: u64,
+        num_bytes_in_piece: u64,
+    },
 
-#[derive(Debug)]
-pub struct SBInvalidInput {
-    pub error_msg: String,
-}
-
-impl Error for SBInvalidInput {
-    fn description(&self) -> &str {
-        "bad input"
-    }
-}
-
-impl fmt::Display for SBInvalidInput {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-#[derive(Debug)]
-pub struct SBInternalError {
-    pub error_msg: String,
-}
-
-impl Error for SBInternalError {
-    fn description(&self) -> &str {
-        "unexpected, internal error"
-    }
-}
-
-impl fmt::Display for SBInternalError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
+    #[fail(display = "invalid internal state error: {}", _0)]
+    InvalidInternalStateError(String),
 }

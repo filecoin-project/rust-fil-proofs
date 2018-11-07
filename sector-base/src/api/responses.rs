@@ -1,8 +1,12 @@
+use api::errors::SectorBuilderErr;
 use api::errors::SectorManagerErr;
 use api::errors::SectorManagerErr::*;
 use api::sector_builder::SectorBuilder;
+use failure::Error;
 use ffi_toolkit::c_str_to_rust_str;
 use libc;
+use std::ffi::CString;
+use std::mem;
 use std::ptr;
 
 // TODO: libfilecoin_proofs.h and libsector_base.h will likely be consumed by
@@ -18,21 +22,31 @@ pub enum SBResponseStatus {
     SBReceiverError = 3,
 }
 
-pub trait ToResponseStatus {
-    fn to_response_status(&self) -> SBResponseStatus;
-}
+// err_code_and_msg accepts an Error struct and produces a tuple of response
+// status code and a pointer to a C string, both of which can be used to set
+// fields in a response struct to be returned from an FFI call.
+pub fn err_code_and_msg(err: &Error) -> (SBResponseStatus, *const libc::c_char) {
+    use api::responses::SBResponseStatus::*;
 
-impl<T> ToResponseStatus for Result<T, SectorManagerErr> {
-    fn to_response_status(&self) -> SBResponseStatus {
-        match self {
-            Ok(_) => SBResponseStatus::SBNoError,
-            Err(s_m_err) => match s_m_err {
-                UnclassifiedError(_) => SBResponseStatus::SBUnclassifiedError,
-                CallerError(_) => SBResponseStatus::SBCallerError,
-                ReceiverError(_) => SBResponseStatus::SBReceiverError,
-            },
-        }
+    let msg = CString::new(format!("{}", err)).unwrap();
+    let ptr = msg.as_ptr();
+    mem::forget(msg);
+
+    match err.downcast_ref() {
+        Some(SectorBuilderErr::OverflowError { .. }) => return (SBCallerError, ptr),
+        Some(SectorBuilderErr::IncompleteWriteError { .. }) => return (SBReceiverError, ptr),
+        Some(SectorBuilderErr::InvalidInternalStateError(_)) => return (SBReceiverError, ptr),
+        None => (),
     }
+
+    match err.downcast_ref() {
+        Some(SectorManagerErr::UnclassifiedError(_)) => return (SBUnclassifiedError, ptr),
+        Some(SectorManagerErr::CallerError(_)) => return (SBCallerError, ptr),
+        Some(SectorManagerErr::ReceiverError(_)) => return (SBReceiverError, ptr),
+        None => (),
+    }
+
+    (SBResponseStatus::SBUnclassifiedError, ptr)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -427,4 +441,60 @@ pub unsafe extern "C" fn destroy_max_unsealed_bytes_per_sector_response(
     ptr: *mut MaxUnsealedBytesPerSectorResponse,
 ) {
     let _ = Box::from_raw(ptr);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use api::errors::SectorBuilderErr::IncompleteWriteError;
+    use api::responses::SBResponseStatus::*;
+
+    #[test]
+    fn test_error_marshaling() {
+        let case_a = (
+            IncompleteWriteError {
+                num_bytes_written: 0,
+                num_bytes_in_piece: 0,
+            }
+            .into(),
+            SBReceiverError,
+        );
+
+        let case_b = (
+            SectorBuilderErr::OverflowError {
+                num_bytes_in_piece: 0,
+                max_bytes_per_sector: 0,
+            }
+            .into(),
+            SBCallerError,
+        );
+
+        let case_c = (
+            SectorBuilderErr::InvalidInternalStateError("foo".to_string()).into(),
+            SBReceiverError,
+        );
+
+        let case_d = (
+            SectorManagerErr::CallerError("bar".to_string()).into(),
+            SBCallerError,
+        );
+
+        let case_e = (
+            SectorManagerErr::ReceiverError("baz".to_string()).into(),
+            SBReceiverError,
+        );
+
+        let case_f = (
+            SectorManagerErr::UnclassifiedError("quux".to_string()).into(),
+            SBUnclassifiedError,
+        );
+
+        let tests: Vec<(Error, SBResponseStatus)> =
+            vec![case_a, case_b, case_c, case_d, case_e, case_f];
+
+        for (error, expected) in tests.into_iter() {
+            let (code, msg) = err_code_and_msg(&error);
+            assert_eq!(expected, code, "{:?}", error);
+        }
+    }
 }

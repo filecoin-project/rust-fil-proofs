@@ -1,9 +1,11 @@
 use api::disk_backed_storage::ConfiguredStore;
+use api::errors::SectorBuilderErr;
+use api::errors::SectorBuilderErr::*;
 use api::errors::SectorManagerErr;
 use api::responses::*;
 use api::sector_builder::SectorBuilder;
 use api::sector_store::{SectorManager, SectorStore};
-use ffi_toolkit::{c_str_to_rust_str, raw_ptr};
+use ffi_toolkit::{c_str_to_rust_str, raw_ptr, rust_str_to_c_str};
 use libc;
 use std::error::Error;
 use std::ffi::CString;
@@ -45,11 +47,9 @@ pub unsafe extern "C" fn init_sector_builder(
                 response.sector_builder = raw_ptr(sb);
             }
             Err(err) => {
-                response.status_code = SBResponseStatus::SBUnclassifiedError;
-
-                let msg = CString::new(format!("{:?}", err)).unwrap();
-                response.error_msg = msg.as_ptr();
-                mem::forget(msg);
+                let (code, ptr) = err_code_and_msg(&err);
+                response.status_code = code;
+                response.error_msg = ptr;
             }
         }
     } else {
@@ -91,11 +91,9 @@ pub unsafe extern "C" fn add_piece(
             response.sector_id = sector_id;
         }
         Err(err) => {
-            response.status_code = SBResponseStatus::SBUnclassifiedError;
-
-            let msg = CString::new(format!("{:?}", err)).unwrap();
-            response.error_msg = msg.as_ptr();
-            mem::forget(msg);
+            let (code, ptr) = err_code_and_msg(&err);
+            response.status_code = code;
+            response.error_msg = ptr;
         }
     }
 
@@ -129,18 +127,15 @@ pub unsafe extern "C" fn new_sealed_sector_access(
 
     let result = (*ss_ptr).manager().new_sealed_sector_access();
 
-    response.status_code = result.to_response_status();
-
     match result {
         Ok(access) => {
-            let msg = CString::new(access).unwrap();
-            response.sector_access = msg.as_ptr();
-            mem::forget(msg);
+            response.status_code = responses::SBResponseStatus::SBNoError;
+            response.sector_access = rust_str_to_c_str(&access);
         }
         Err(err) => {
-            let msg = CString::new(format!("{:?}", err)).unwrap();
-            response.error_msg = msg.as_ptr();
-            mem::forget(msg);
+            let (code, ptr) = err_code_and_msg(&err.into());
+            response.status_code = code;
+            response.error_msg = ptr;
         }
     }
 
@@ -160,18 +155,15 @@ pub unsafe extern "C" fn new_staging_sector_access(
 
     let result = (*ss_ptr).manager().new_staging_sector_access();
 
-    response.status_code = result.to_response_status();
-
     match result {
         Ok(access) => {
-            let msg = CString::new(access).unwrap();
-            response.sector_access = msg.as_ptr();
-            mem::forget(msg);
+            response.status_code = responses::SBResponseStatus::SBNoError;
+            response.sector_access = rust_str_to_c_str(&access);
         }
         Err(err) => {
-            let msg = CString::new(format!("{:?}", err)).unwrap();
-            response.error_msg = msg.as_ptr();
-            mem::forget(msg);
+            let (code, ptr) = err_code_and_msg(&err.into());
+            response.status_code = code;
+            response.error_msg = ptr;
         }
     }
 
@@ -203,28 +195,23 @@ pub unsafe extern "C" fn write_and_preprocess(
         .manager()
         .write_and_preprocess(c_str_to_rust_str(access).to_string(), data);
 
-    response.status_code = result.to_response_status();
-
     match result {
         Ok(num_data_bytes_written) => {
             if num_data_bytes_written != data_len as u64 {
-                response.status_code = SBResponseStatus::SBReceiverError;
-
-                let msg = CString::new(format!(
+                response.status_code = responses::SBResponseStatus::SBReceiverError;
+                response.error_msg = rust_str_to_c_str(&format!(
                     "expected to write {}-bytes, but wrote {}-bytes",
                     data_len as u64, num_data_bytes_written
-                ))
-                .unwrap();
-                response.error_msg = msg.as_ptr();
-                mem::forget(msg);
+                ));
+            } else {
+                response.status_code = responses::SBResponseStatus::SBNoError;
+                response.num_bytes_written = num_data_bytes_written;
             }
-
-            response.num_bytes_written = num_data_bytes_written;
         }
         Err(err) => {
-            let msg = CString::new(format!("{:?}", err)).unwrap();
-            response.error_msg = msg.as_ptr();
-            mem::forget(msg);
+            let (code, ptr) = err_code_and_msg(&err.into());
+            response.status_code = code;
+            response.error_msg = ptr;
         }
     }
 
@@ -250,14 +237,14 @@ pub unsafe extern "C" fn truncate_unsealed(
         .manager()
         .truncate_unsealed(c_str_to_rust_str(access).to_string(), size);
 
-    response.status_code = result.to_response_status();
-
     match result {
-        Ok(_) => {}
+        Ok(_) => {
+            response.status_code = SBResponseStatus::SBNoError;
+        }
         Err(err) => {
-            let msg = CString::new(format!("{:?}", err)).unwrap();
-            response.error_msg = msg.as_ptr();
-            mem::forget(msg);
+            let (code, ptr) = err_code_and_msg(&err.into());
+            response.status_code = code;
+            response.error_msg = ptr;
         }
     }
 
@@ -281,18 +268,17 @@ pub unsafe extern "C" fn read_raw(
         num_bytes,
     );
 
-    response.status_code = result.to_response_status();
-
     match result {
         Ok(data) => {
+            response.status_code = SBResponseStatus::SBNoError;
             response.data_ptr = data.as_ptr();
             response.data_len = data.len();
             mem::forget(data);
         }
         Err(err) => {
-            let msg = CString::new(format!("{:?}", err)).unwrap();
-            response.error_msg = msg.as_ptr();
-            mem::forget(msg);
+            let (code, ptr) = err_code_and_msg(&err.into());
+            response.status_code = code;
+            response.error_msg = ptr;
         }
     }
 
@@ -318,16 +304,15 @@ pub unsafe extern "C" fn num_unsealed_bytes(
         .manager()
         .num_unsealed_bytes(c_str_to_rust_str(access).to_string());
 
-    response.status_code = result.to_response_status();
-
     match result {
         Ok(n) => {
+            response.status_code = SBResponseStatus::SBNoError;
             response.num_bytes = n;
         }
         Err(err) => {
-            let msg = CString::new(format!("{:?}", err)).unwrap();
-            response.error_msg = msg.as_ptr();
-            mem::forget(msg);
+            let (code, ptr) = err_code_and_msg(&err.into());
+            response.status_code = code;
+            response.error_msg = ptr;
         }
     }
 
@@ -346,6 +331,7 @@ pub unsafe extern "C" fn max_unsealed_bytes_per_sector(
 ) -> *mut responses::MaxUnsealedBytesPerSectorResponse {
     let mut response: responses::MaxUnsealedBytesPerSectorResponse = Default::default();
 
+    response.status_code = SBResponseStatus::SBNoError;
     response.num_bytes = (*ss_ptr).config().max_unsealed_bytes_per_sector();
 
     Box::into_raw(Box::new(response))

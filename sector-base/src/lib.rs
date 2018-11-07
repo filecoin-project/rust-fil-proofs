@@ -9,6 +9,7 @@
 )]
 
 extern crate bitvec;
+#[macro_use]
 extern crate failure;
 extern crate ffi_toolkit;
 extern crate itertools;

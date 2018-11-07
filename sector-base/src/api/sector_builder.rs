@@ -1,9 +1,10 @@
 use api::disk_backed_storage::{new_sector_store, ConfiguredStore};
 use api::errors::*;
 use api::sector_store::SectorStore;
+use error::Result;
+use failure::Error;
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
-use std::error::Error;
 use std::fmt;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -51,7 +52,7 @@ impl SectorBuilder {
         prover_id: [u8; 31],
         sealed_sector_dir: S,
         staged_sector_dir: S,
-    ) -> Result<SectorBuilder, Box<Error>> {
+    ) -> Result<SectorBuilder> {
         let sector_store = Box::new(new_sector_store(
             sector_store_config,
             sealed_sector_dir.into(),
@@ -86,14 +87,13 @@ impl SectorBuilder {
         candidate_sectors: &[StagedSectorMetadata],
         max_bytes_per_sector: u64,
         num_bytes_in_piece: u64,
-    ) -> Result<Option<u64>, Box<Error>> {
+    ) -> Result<Option<u64>> {
         if num_bytes_in_piece > max_bytes_per_sector {
-            Err(Box::new(SBInvalidInput {
-                error_msg: format!(
-                    "number of bytes in piece ({}) exeeds maximum ({})",
-                    num_bytes_in_piece, max_bytes_per_sector
-                ),
-            }))
+            Err(SectorBuilderErr::OverflowError {
+                num_bytes_in_piece,
+                max_bytes_per_sector,
+            }
+            .into())
         } else {
             Ok(candidate_sectors
                 .iter()
@@ -112,7 +112,7 @@ impl SectorBuilder {
     fn provision_new_staged_sector<'a>(
         &self,
         locked_state: &mut MutexGuard<'a, StagedState>,
-    ) -> Result<u64, Box<Error>> {
+    ) -> Result<u64> {
         let mgr = self.sector_store.manager();
         let sector_id = self.get_next_sector_id();
 
@@ -132,11 +132,7 @@ impl SectorBuilder {
         Ok(sector_id)
     }
 
-    pub fn add_piece<S: Into<String>>(
-        &self,
-        piece_key: S,
-        piece_bytes: &[u8],
-    ) -> Result<u64, Box<Error>> {
+    pub fn add_piece<S: Into<String>>(&self, piece_key: S, piece_bytes: &[u8]) -> Result<u64> {
         let mutex = self.staged_state.clone();
         let mut staged_state = mutex.lock().unwrap();
 
@@ -161,13 +157,14 @@ impl SectorBuilder {
             self.sector_store
                 .manager()
                 .write_and_preprocess(s.sector_access.clone(), &piece_bytes)
-                .map_err(|err| Box::new(err) as Box<Error>)
+                .map_err(|err| err.into())
                 .and_then(|num_bytes_written| {
                     if num_bytes_written != piece_bytes.len() as u64 {
-                        Err(Box::new(SBInternalError {
-                            error_msg: "number of bytes written != number of bytes in piece"
-                                .to_string(),
-                        }))
+                        Err(SectorBuilderErr::IncompleteWriteError {
+                            num_bytes_written,
+                            num_bytes_in_piece: piece_bytes.len() as u64,
+                        }
+                        .into())
                     } else {
                         Ok(s.sector_id)
                     }
@@ -181,9 +178,10 @@ impl SectorBuilder {
                     sector_id
                 })
         } else {
-            Err(Box::new(SBInternalError {
-                error_msg: "unable to retrieve sector from state-map".to_string(),
-            }))
+            Err(SectorBuilderErr::InvalidInternalStateError(
+                "unable to retrieve sector from state-map".to_string(),
+            )
+            .into())
         }
     }
 }
