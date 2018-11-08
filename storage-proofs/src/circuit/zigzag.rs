@@ -107,10 +107,8 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
                 .write_bytes(&mut crs_input[(l + 1) * 32..(l + 2) * 32])
                 .expect("failed to write vec");
 
-            // FIXME: Using a normal DrgPoRep circuit here performs a redundant test at each layer.
-            // We don't need to verify merkle inclusion of the 'data' except in the first layer.
-            // In subsequent layers, we already proved this and just need to assert (by constraint)
-            // that the decoded data has the value which was previously proved.
+            // TODO: As an optimization, we may be able to skip proving the original data
+            // on some (50%?) of challenges.
             let circuit = DrgPoRepCompound::circuit(
                 public_inputs,
                 &proof,
