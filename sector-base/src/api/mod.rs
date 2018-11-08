@@ -1,6 +1,5 @@
 use api::responses::*;
 use api::sector_store::SectorStore;
-use ffi_toolkit::FFIResponseStatus;
 use ffi_toolkit::{c_str_to_rust_str, rust_str_to_c_str};
 use libc;
 use std::mem;
@@ -27,7 +26,7 @@ pub unsafe extern "C" fn new_sealed_sector_access(
 
     match result {
         Ok(access) => {
-            response.status_code = FFIResponseStatus::NoError;
+            response.status_code = SBResponseStatus::SBNoError;
             response.sector_access = rust_str_to_c_str(&access);
         }
         Err(err) => {
@@ -55,7 +54,7 @@ pub unsafe extern "C" fn new_staging_sector_access(
 
     match result {
         Ok(access) => {
-            response.status_code = FFIResponseStatus::NoError;
+            response.status_code = SBResponseStatus::SBNoError;
             response.sector_access = rust_str_to_c_str(&access);
         }
         Err(err) => {
@@ -96,13 +95,13 @@ pub unsafe extern "C" fn write_and_preprocess(
     match result {
         Ok(num_data_bytes_written) => {
             if num_data_bytes_written != data_len as u64 {
-                response.status_code = FFIResponseStatus::ReceiverError;
+                response.status_code = SBResponseStatus::SBReceiverError;
                 response.error_msg = rust_str_to_c_str(&format!(
                     "expected to write {}-bytes, but wrote {}-bytes",
                     data_len as u64, num_data_bytes_written
                 ));
             } else {
-                response.status_code = FFIResponseStatus::NoError;
+                response.status_code = SBResponseStatus::SBNoError;
                 response.num_bytes_written = num_data_bytes_written;
             }
         }
@@ -137,7 +136,7 @@ pub unsafe extern "C" fn truncate_unsealed(
 
     match result {
         Ok(_) => {
-            response.status_code = FFIResponseStatus::NoError;
+            response.status_code = SBResponseStatus::SBNoError;
         }
         Err(err) => {
             let (code, ptr) = err_code_and_msg(&err.into());
@@ -168,7 +167,7 @@ pub unsafe extern "C" fn read_raw(
 
     match result {
         Ok(data) => {
-            response.status_code = FFIResponseStatus::NoError;
+            response.status_code = SBResponseStatus::SBNoError;
             response.data_ptr = data.as_ptr();
             response.data_len = data.len();
             mem::forget(data);
@@ -204,7 +203,7 @@ pub unsafe extern "C" fn num_unsealed_bytes(
 
     match result {
         Ok(n) => {
-            response.status_code = FFIResponseStatus::NoError;
+            response.status_code = SBResponseStatus::SBNoError;
             response.num_bytes = n;
         }
         Err(err) => {
@@ -229,7 +228,7 @@ pub unsafe extern "C" fn max_unsealed_bytes_per_sector(
 ) -> *mut responses::MaxUnsealedBytesPerSectorResponse {
     let mut response: responses::MaxUnsealedBytesPerSectorResponse = Default::default();
 
-    response.status_code = FFIResponseStatus::NoError;
+    response.status_code = SBResponseStatus::SBNoError;
     response.num_bytes = (*ss_ptr).config().max_unsealed_bytes_per_sector();
 
     Box::into_raw(Box::new(response))

@@ -9,7 +9,7 @@ extern crate sector_base;
 use ffi_toolkit::c_str_to_rust_str;
 use ffi_toolkit::rust_str_to_c_str;
 use rand::{thread_rng, Rng};
-use sector_base::api::disk_backed_storage::ConfiguredStore;
+use sector_base::api::disk_backed_storage::SBConfiguredStore;
 use std::error::Error;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -47,7 +47,7 @@ pub struct CGetMaxUserBytesPerStagedSector {
 #[link(name = "filecoin_proofs")]
 extern "C" {
     fn init_sector_builder(
-        sector_store_config: *const ConfiguredStore,
+        sector_store_config: *const SBConfiguredStore,
         last_used_sector_id: u64,
         metadata_dir: *const libc::c_char,
         prover_id: &[u8; 31],
@@ -110,7 +110,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
         let staging_dir = tempfile::tempdir().unwrap();
         let sealed_dir = tempfile::tempdir().unwrap();
         let prover_id: [u8; 31] = [0; 31];
-        let sector_store_config: ConfiguredStore = ConfiguredStore::ProofTest;
+        let sector_store_config: SBConfiguredStore = SBConfiguredStore::ProofTest;
 
         let resp = init_sector_builder(
             &sector_store_config,

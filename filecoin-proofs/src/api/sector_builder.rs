@@ -1,7 +1,7 @@
 use api::errors::SectorBuilderErr;
 use error::Result;
 use sector_base::api::disk_backed_storage::new_sector_store;
-use sector_base::api::disk_backed_storage::ConfiguredStore;
+use sector_base::api::disk_backed_storage::SBConfiguredStore;
 use sector_base::api::sector_store::SectorStore;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -36,6 +36,24 @@ pub struct SectorBuilder {
     staged_state: Arc<Mutex<StagedState>>,
 }
 
+#[derive(Debug)]
+#[repr(C)]
+pub enum ConfiguredStore {
+    Live = 0,
+    Test = 1,
+    ProofTest = 2,
+}
+
+impl<'a> Into<SBConfiguredStore> for &'a ConfiguredStore {
+    fn into(self) -> SBConfiguredStore {
+        match self {
+            ConfiguredStore::Live => SBConfiguredStore::Live,
+            ConfiguredStore::Test => SBConfiguredStore::Test,
+            ConfiguredStore::ProofTest => SBConfiguredStore::ProofTest,
+        }
+    }
+}
+
 impl SectorBuilder {
     // Initialize and return a SectorBuilder from metadata persisted to disk if
     // it exists. Otherwise, initialize and return a fresh SectorBuilder. The
@@ -51,8 +69,10 @@ impl SectorBuilder {
         sealed_sector_dir: S,
         staged_sector_dir: S,
     ) -> Result<SectorBuilder> {
+        let cfg = sector_store_config.into();
+
         let sector_store = Box::new(new_sector_store(
-            sector_store_config,
+            &cfg,
             sealed_sector_dir.into(),
             staged_sector_dir.into(),
         ));

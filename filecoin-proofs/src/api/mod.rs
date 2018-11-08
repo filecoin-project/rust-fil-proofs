@@ -1,11 +1,11 @@
 use api::responses::err_code_and_msg;
+use api::responses::FCPResponseStatus;
+use api::sector_builder::ConfiguredStore;
 use api::sector_builder::SectorBuilder;
 use ffi_toolkit::c_str_to_pbuf;
 use ffi_toolkit::c_str_to_rust_str;
 use ffi_toolkit::raw_ptr;
-use ffi_toolkit::FFIResponseStatus;
 use libc;
-use sector_base::api::disk_backed_storage::ConfiguredStore;
 use sector_base::api::sector_store::SectorStore;
 use std::ffi::CString;
 use std::mem;
@@ -58,7 +58,7 @@ pub unsafe extern "C" fn seal(
 
     match result {
         Ok((comm_r, comm_d, comm_r_star, snark_proof)) => {
-            response.status_code = FFIResponseStatus::NoError;
+            response.status_code = FCPResponseStatus::FCPNoError;
 
             response.comm_r[..32].clone_from_slice(&comm_r[..32]);
             response.comm_d[..32].clone_from_slice(&comm_d[..32]);
@@ -109,11 +109,11 @@ pub unsafe extern "C" fn verify_seal(
         proof,
     ) {
         Ok(true) => {
-            response.status_code = FFIResponseStatus::NoError;
+            response.status_code = FCPResponseStatus::FCPNoError;
             response.is_valid = true;
         }
         Ok(false) => {
-            response.status_code = FFIResponseStatus::NoError;
+            response.status_code = FCPResponseStatus::FCPNoError;
             response.is_valid = false;
         }
         Err(err) => {
@@ -167,9 +167,9 @@ pub unsafe extern "C" fn get_unsealed_range(
     ) {
         Ok(num_bytes_unsealed) => {
             if num_bytes_unsealed == num_bytes {
-                response.status_code = FFIResponseStatus::NoError;
+                response.status_code = FCPResponseStatus::FCPNoError;
             } else {
-                response.status_code = FFIResponseStatus::ReceiverError;
+                response.status_code = FCPResponseStatus::FCPReceiverError;
 
                 let msg = CString::new(format!(
                     "expected to unseal {}-bytes, but unsealed {}-bytes",
@@ -233,9 +233,9 @@ pub unsafe extern "C" fn get_unsealed(
     ) {
         Ok(num_bytes) => {
             if num_bytes == sector_bytes {
-                response.status_code = FFIResponseStatus::NoError;
+                response.status_code = FCPResponseStatus::FCPNoError;
             } else {
-                response.status_code = FFIResponseStatus::ReceiverError;
+                response.status_code = FCPResponseStatus::FCPReceiverError;
 
                 let msg = CString::new(format!(
                     "expected to unseal {}-bytes, but unsealed {}-bytes",
@@ -348,7 +348,7 @@ pub unsafe extern "C" fn init_sector_builder(
             c_str_to_rust_str(staged_sector_dir).to_string(),
         ) {
             Ok(sb) => {
-                response.status_code = FFIResponseStatus::NoError;
+                response.status_code = FCPResponseStatus::FCPNoError;
                 response.sector_builder = raw_ptr(sb);
             }
             Err(err) => {
@@ -358,7 +358,7 @@ pub unsafe extern "C" fn init_sector_builder(
             }
         }
     } else {
-        response.status_code = FFIResponseStatus::CallerError;
+        response.status_code = FCPResponseStatus::FCPCallerError;
 
         let msg = CString::new("caller did not provide ConfiguredStore").unwrap();
         response.error_msg = msg.as_ptr();
@@ -392,7 +392,7 @@ pub unsafe extern "C" fn add_piece(
 
     match (*ptr).add_piece(piece_key, piece_bytes) {
         Ok(sector_id) => {
-            response.status_code = FFIResponseStatus::NoError;
+            response.status_code = FCPResponseStatus::FCPNoError;
             response.sector_id = sector_id;
         }
         Err(err) => {
@@ -413,7 +413,7 @@ pub unsafe extern "C" fn get_max_user_bytes_per_staged_sector(
 ) -> *mut responses::GetMaxStagedBytesPerSector {
     let mut response: responses::GetMaxStagedBytesPerSector = Default::default();
 
-    response.status_code = FFIResponseStatus::NoError;
+    response.status_code = FCPResponseStatus::FCPNoError;
     response.max_staged_bytes_per_sector = (*ptr).get_max_user_bytes_per_staged_sector();;
 
     Box::into_raw(Box::new(response))
@@ -423,12 +423,11 @@ pub unsafe extern "C" fn get_max_user_bytes_per_staged_sector(
 mod tests {
     use super::*;
     use rand::{thread_rng, Rng};
-    use std::thread;
-
     use sector_base::api::disk_backed_storage::{
         init_new_proof_test_sector_store, init_new_sector_store, init_new_test_sector_store,
-        ConfiguredStore,
+        SBConfiguredStore,
     };
+    use sector_base::api::responses::SBResponseStatus;
     use sector_base::api::responses::{
         destroy_new_sealed_sector_access_response, destroy_new_staging_sector_access_response,
         destroy_read_raw_response, destroy_write_and_preprocess_response,
@@ -436,18 +435,17 @@ mod tests {
     use sector_base::api::{
         new_sealed_sector_access, new_staging_sector_access, read_raw, write_and_preprocess,
     };
-
-    use ffi_toolkit::FFIResponseStatus;
     use std::ffi::CString;
     use std::fs::{create_dir_all, File};
     use std::io::Read;
+    use std::thread;
     use tempfile;
 
     fn rust_str_to_c_str(s: &str) -> *const libc::c_char {
         CString::new(s).unwrap().into_raw()
     }
 
-    fn create_storage(cs: &ConfiguredStore) -> *mut Box<SectorStore> {
+    fn create_storage(cs: &SBConfiguredStore) -> *mut Box<SectorStore> {
         let staging_path = tempfile::tempdir().unwrap().path().to_owned();
         let sealed_path = tempfile::tempdir().unwrap().path().to_owned();
 
@@ -458,9 +456,9 @@ mod tests {
         let s2 = rust_str_to_c_str(&sealed_path.to_str().unwrap().to_owned());
 
         match cs {
-            ConfiguredStore::Live => unsafe { init_new_sector_store(s1, s2) },
-            ConfiguredStore::Test => unsafe { init_new_test_sector_store(s1, s2) },
-            ConfiguredStore::ProofTest => unsafe { init_new_proof_test_sector_store(s1, s2) },
+            SBConfiguredStore::Live => unsafe { init_new_sector_store(s1, s2) },
+            SBConfiguredStore::Test => unsafe { init_new_test_sector_store(s1, s2) },
+            SBConfiguredStore::ProofTest => unsafe { init_new_proof_test_sector_store(s1, s2) },
         }
     }
 
@@ -483,43 +481,43 @@ mod tests {
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn seal_verify_test() {
-        seal_verify_aux(ConfiguredStore::Test, 0);
-        seal_verify_aux(ConfiguredStore::Test, 5);
+        seal_verify_aux(SBConfiguredStore::Test, 0);
+        seal_verify_aux(SBConfiguredStore::Test, 5);
     }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn seal_verify_proof_test() {
-        seal_verify_aux(ConfiguredStore::ProofTest, 0);
-        seal_verify_aux(ConfiguredStore::ProofTest, 5);
+        seal_verify_aux(SBConfiguredStore::ProofTest, 0);
+        seal_verify_aux(SBConfiguredStore::ProofTest, 5);
     }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn seal_unsealed_roundtrip_test() {
-        seal_unsealed_roundtrip_aux(ConfiguredStore::Test, 0);
-        seal_unsealed_roundtrip_aux(ConfiguredStore::Test, 5);
+        seal_unsealed_roundtrip_aux(SBConfiguredStore::Test, 0);
+        seal_unsealed_roundtrip_aux(SBConfiguredStore::Test, 5);
     }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn seal_unsealed_roundtrip_proof_test() {
-        seal_unsealed_roundtrip_aux(ConfiguredStore::ProofTest, 0);
-        seal_unsealed_roundtrip_aux(ConfiguredStore::ProofTest, 5);
+        seal_unsealed_roundtrip_aux(SBConfiguredStore::ProofTest, 0);
+        seal_unsealed_roundtrip_aux(SBConfiguredStore::ProofTest, 5);
     }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn seal_unsealed_range_roundtrip_test() {
-        seal_unsealed_range_roundtrip_aux(ConfiguredStore::Test, 0);
-        seal_unsealed_range_roundtrip_aux(ConfiguredStore::Test, 5);
+        seal_unsealed_range_roundtrip_aux(SBConfiguredStore::Test, 0);
+        seal_unsealed_range_roundtrip_aux(SBConfiguredStore::Test, 5);
     }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn seal_unsealed_range_roundtrip_proof_test() {
-        seal_unsealed_range_roundtrip_aux(ConfiguredStore::ProofTest, 0);
-        seal_unsealed_range_roundtrip_aux(ConfiguredStore::ProofTest, 5);
+        seal_unsealed_range_roundtrip_aux(SBConfiguredStore::ProofTest, 0);
+        seal_unsealed_range_roundtrip_aux(SBConfiguredStore::ProofTest, 5);
     }
 
     #[test]
@@ -529,7 +527,7 @@ mod tests {
 
         let spawned = (0..threads)
             .map(|_| {
-                thread::spawn(|| seal_unsealed_range_roundtrip_aux(ConfiguredStore::ProofTest, 0))
+                thread::spawn(|| seal_unsealed_range_roundtrip_aux(SBConfiguredStore::ProofTest, 0))
             })
             .collect::<Vec<_>>();
 
@@ -541,21 +539,21 @@ mod tests {
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn write_and_preprocess_overwrites_unaligned_last_bytes() {
-        write_and_preprocess_overwrites_unaligned_last_bytes_aux(ConfiguredStore::ProofTest);
+        write_and_preprocess_overwrites_unaligned_last_bytes_aux(SBConfiguredStore::ProofTest);
     }
 
     #[test]
     fn generate_verify_post_roundtrip_test() {
-        generate_verify_post_roundtrip_aux(ConfiguredStore::ProofTest);
+        generate_verify_post_roundtrip_aux(SBConfiguredStore::ProofTest);
     }
 
     #[test]
     fn max_unsealed_bytes_per_sector_checks() {
-        assert_max_unsealed_bytes_per_sector(ConfiguredStore::Live, 1065353216);
-        assert_max_unsealed_bytes_per_sector(ConfiguredStore::Test, 1016);
-        assert_max_unsealed_bytes_per_sector(ConfiguredStore::ProofTest, 127);
+        assert_max_unsealed_bytes_per_sector(SBConfiguredStore::Live, 1065353216);
+        assert_max_unsealed_bytes_per_sector(SBConfiguredStore::Test, 1016);
+        assert_max_unsealed_bytes_per_sector(SBConfiguredStore::ProofTest, 127);
     }
-    fn assert_max_unsealed_bytes_per_sector(cs: ConfiguredStore, expected_bytes: u64) {
+    fn assert_max_unsealed_bytes_per_sector(cs: SBConfiguredStore, expected_bytes: u64) {
         let storage = create_storage(&cs);
 
         let bytes = unsafe {
@@ -571,7 +569,7 @@ mod tests {
         );
     }
 
-    fn generate_verify_post_roundtrip_aux(cs: ConfiguredStore) {
+    fn generate_verify_post_roundtrip_aux(cs: SBConfiguredStore) {
         unsafe {
             let storage = create_storage(&cs);
 
@@ -580,7 +578,7 @@ mod tests {
             let generate_post_res = generate_post(storage, &comm_rs[0], 32, &challenge_seed);
 
             assert_eq!(
-                FFIResponseStatus::NoError,
+                FCPResponseStatus::FCPNoError,
                 (*generate_post_res).status_code,
                 "generate_post failed"
             );
@@ -588,7 +586,7 @@ mod tests {
             let verify_post_res = verify_post(&(*generate_post_res).proof);
 
             assert_eq!(
-                FFIResponseStatus::NoError,
+                FCPResponseStatus::FCPNoError,
                 (*verify_post_res).status_code,
                 "error verifying PoSt"
             );
@@ -615,7 +613,7 @@ mod tests {
         (0..num_bytes_to_make).map(|_| rng.gen()).collect()
     }
 
-    fn seal_verify_aux(cs: ConfiguredStore, byte_padding_amount: usize) {
+    fn seal_verify_aux(cs: SBConfiguredStore, byte_padding_amount: usize) {
         unsafe {
             let storage = create_storage(&cs);
 
@@ -634,7 +632,7 @@ mod tests {
                 write_and_preprocess(storage, seal_input_path, &contents[0], contents.len());
 
             assert_eq!(
-                FFIResponseStatus::NoError,
+                SBResponseStatus::SBNoError,
                 (*write_and_preprocess_response).status_code,
                 "write_and_preprocess failed for {:?}",
                 cs
@@ -649,7 +647,7 @@ mod tests {
             );
 
             assert_eq!(
-                FFIResponseStatus::NoError,
+                FCPResponseStatus::FCPNoError,
                 (*seal_res).status_code,
                 "seal failed for {:?}",
                 cs
@@ -666,7 +664,7 @@ mod tests {
             );
 
             assert_eq!(
-                FFIResponseStatus::NoError,
+                FCPResponseStatus::FCPNoError,
                 (*verify_seal_res).status_code,
                 "verification failed with error for {:?}",
                 cs
@@ -693,7 +691,7 @@ mod tests {
                 );
 
                 assert_eq!(
-                    FFIResponseStatus::NoError,
+                    FCPResponseStatus::FCPNoError,
                     (*verify_seal_res).status_code,
                     "verification failed with error for {:?}",
                     cs
@@ -714,7 +712,7 @@ mod tests {
         }
     }
 
-    fn write_and_preprocess_overwrites_unaligned_last_bytes_aux(cs: ConfiguredStore) {
+    fn write_and_preprocess_overwrites_unaligned_last_bytes_aux(cs: SBConfiguredStore) {
         unsafe {
             let storage = create_storage(&cs);
 
@@ -744,7 +742,7 @@ mod tests {
                 write_and_preprocess(storage, seal_input_path, &contents_a[0], contents_a.len());
 
             assert_eq!(
-                FFIResponseStatus::NoError,
+                SBResponseStatus::SBNoError,
                 (*write_and_preprocess_response_a).status_code,
                 "write_and_preprocess failed for {:?}",
                 cs
@@ -761,7 +759,7 @@ mod tests {
                 write_and_preprocess(storage, seal_input_path, &contents_b[0], contents_b.len());
 
             assert_eq!(
-                FFIResponseStatus::NoError,
+                SBResponseStatus::SBNoError,
                 (*write_and_preprocess_response_b).status_code,
                 "write_and_preprocess failed for {:?}",
                 cs
@@ -789,7 +787,7 @@ mod tests {
             );
 
             assert_eq!(
-                FFIResponseStatus::NoError,
+                FCPResponseStatus::FCPNoError,
                 (*seal_response).status_code,
                 "seal failed for {:?}",
                 cs
@@ -804,7 +802,7 @@ mod tests {
             );
 
             assert_eq!(
-                FFIResponseStatus::NoError,
+                FCPResponseStatus::FCPNoError,
                 (*get_unsealed_response).status_code,
                 "get_unsealed failed for {:?}",
                 cs
@@ -846,7 +844,7 @@ mod tests {
         }
     }
 
-    fn seal_unsealed_roundtrip_aux(cs: ConfiguredStore, byte_padding_amount: usize) {
+    fn seal_unsealed_roundtrip_aux(cs: SBConfiguredStore, byte_padding_amount: usize) {
         unsafe {
             let storage = create_storage(&cs);
 
@@ -867,7 +865,7 @@ mod tests {
                 write_and_preprocess(storage, seal_input_path, &contents[0], contents.len());
 
             assert_eq!(
-                FFIResponseStatus::NoError,
+                SBResponseStatus::SBNoError,
                 (*write_and_preprocess_response).status_code,
                 "write_and_preprocess failed for {:?}",
                 cs
@@ -882,7 +880,7 @@ mod tests {
             );
 
             assert_eq!(
-                FFIResponseStatus::NoError,
+                FCPResponseStatus::FCPNoError,
                 (*seal_response).status_code,
                 "seal failed for {:?}",
                 cs
@@ -897,7 +895,7 @@ mod tests {
             );
 
             assert_eq!(
-                FFIResponseStatus::NoError,
+                FCPResponseStatus::FCPNoError,
                 (*get_unsealed_response).status_code,
                 "get_unsealed failed for {:?}",
                 cs
@@ -913,7 +911,7 @@ mod tests {
 
                 assert_eq!(
                     (*read_unsealed_response).status_code,
-                    FFIResponseStatus::NoError
+                    SBResponseStatus::SBNoError
                 );
 
                 let read_unsealed_data = from_raw_parts(
@@ -930,7 +928,7 @@ mod tests {
 
                 assert_eq!(
                     (*read_unsealed_response).status_code,
-                    FFIResponseStatus::NoError
+                    SBResponseStatus::SBNoError
                 );
 
                 let read_unsealed_data = from_raw_parts(
@@ -965,7 +963,7 @@ mod tests {
         }
     }
 
-    fn seal_unsealed_range_roundtrip_aux(cs: ConfiguredStore, byte_padding_amount: usize) {
+    fn seal_unsealed_range_roundtrip_aux(cs: SBConfiguredStore, byte_padding_amount: usize) {
         unsafe {
             let storage = create_storage(&cs);
 
@@ -987,7 +985,7 @@ mod tests {
                 write_and_preprocess(storage, seal_input_path, &contents[0], contents.len());
 
             assert_eq!(
-                FFIResponseStatus::NoError,
+                SBResponseStatus::SBNoError,
                 (*write_and_preprocess_response).status_code,
                 "write_and_preprocess failed for {:?}",
                 cs
@@ -1002,7 +1000,7 @@ mod tests {
             );
 
             assert_eq!(
-                FFIResponseStatus::NoError,
+                FCPResponseStatus::FCPNoError,
                 (*seal_response).status_code,
                 "seal failed for {:?}",
                 cs
@@ -1021,7 +1019,7 @@ mod tests {
             );
 
             assert_eq!(
-                FFIResponseStatus::NoError,
+                FCPResponseStatus::FCPNoError,
                 (*get_unsealed_range_response).status_code,
                 "get_unsealed_range_response failed for {:?}",
                 cs

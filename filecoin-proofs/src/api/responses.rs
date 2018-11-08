@@ -3,12 +3,25 @@ use api::sector_builder::SectorBuilder;
 use api::{API_POREP_PROOF_BYTES, API_POST_PROOF_BYTES};
 use failure::Error;
 use ffi_toolkit::c_str_to_rust_str;
-use ffi_toolkit::FFIResponseStatus;
 use libc;
 use sector_base::api::errors::SectorManagerErr;
 use std::ffi::CString;
 use std::mem;
 use std::ptr;
+
+// TODO: libfilecoin_proofs.h and libsector_base.h will likely be consumed by
+// the same program, so these names need to be unique. Alternatively, figure
+// out a way to share this enum across crates in a way that won't cause
+// cbindgen to fail.
+#[repr(u8)]
+#[derive(PartialEq, Debug)]
+pub enum FCPResponseStatus {
+    // Don't use FCPSuccess, since that complicates description of 'successful' verification.
+    FCPNoError = 0,
+    FCPUnclassifiedError = 1,
+    FCPCallerError = 2,
+    FCPReceiverError = 3,
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 /// SealResponse
@@ -16,7 +29,7 @@ use std::ptr;
 
 #[repr(C)]
 pub struct SealResponse {
-    pub status_code: FFIResponseStatus,
+    pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
     pub comm_d: [u8; 32],
     pub comm_r: [u8; 32],
@@ -27,7 +40,7 @@ pub struct SealResponse {
 impl Default for SealResponse {
     fn default() -> SealResponse {
         SealResponse {
-            status_code: FFIResponseStatus::NoError,
+            status_code: FCPResponseStatus::FCPNoError,
             error_msg: ptr::null(),
             comm_d: [0; 32],
             comm_r: [0; 32],
@@ -56,7 +69,7 @@ pub unsafe extern "C" fn destroy_seal_response(ptr: *mut SealResponse) {
 
 #[repr(C)]
 pub struct VerifySealResponse {
-    pub status_code: FFIResponseStatus,
+    pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
     pub is_valid: bool,
 }
@@ -64,7 +77,7 @@ pub struct VerifySealResponse {
 impl Default for VerifySealResponse {
     fn default() -> VerifySealResponse {
         VerifySealResponse {
-            status_code: FFIResponseStatus::NoError,
+            status_code: FCPResponseStatus::FCPNoError,
             error_msg: ptr::null(),
             is_valid: false,
         }
@@ -90,7 +103,7 @@ pub unsafe extern "C" fn destroy_verify_seal_response(ptr: *mut VerifySealRespon
 
 #[repr(C)]
 pub struct GetUnsealedRangeResponse {
-    pub status_code: FFIResponseStatus,
+    pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
     pub num_bytes_written: u64,
 }
@@ -98,7 +111,7 @@ pub struct GetUnsealedRangeResponse {
 impl Default for GetUnsealedRangeResponse {
     fn default() -> GetUnsealedRangeResponse {
         GetUnsealedRangeResponse {
-            status_code: FFIResponseStatus::NoError,
+            status_code: FCPResponseStatus::FCPNoError,
             error_msg: ptr::null(),
             num_bytes_written: 0,
         }
@@ -124,14 +137,14 @@ pub unsafe extern "C" fn destroy_get_unsealed_range_response(ptr: *mut GetUnseal
 
 #[repr(C)]
 pub struct GetUnsealedResponse {
-    pub status_code: FFIResponseStatus,
+    pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
 }
 
 impl Default for GetUnsealedResponse {
     fn default() -> GetUnsealedResponse {
         GetUnsealedResponse {
-            status_code: FFIResponseStatus::NoError,
+            status_code: FCPResponseStatus::FCPNoError,
             error_msg: ptr::null(),
         }
     }
@@ -156,7 +169,7 @@ pub unsafe extern "C" fn destroy_get_unsealed_response(ptr: *mut GetUnsealedResp
 
 #[repr(C)]
 pub struct GeneratePoSTResponse {
-    pub status_code: FFIResponseStatus,
+    pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
     pub faults_len: libc::size_t,
     pub faults_ptr: *const u64,
@@ -166,7 +179,7 @@ pub struct GeneratePoSTResponse {
 impl Default for GeneratePoSTResponse {
     fn default() -> GeneratePoSTResponse {
         GeneratePoSTResponse {
-            status_code: FFIResponseStatus::NoError,
+            status_code: FCPResponseStatus::FCPNoError,
             error_msg: ptr::null(),
             faults_len: 0,
             faults_ptr: ptr::null(),
@@ -200,7 +213,7 @@ pub unsafe extern "C" fn destroy_generate_post_response(ptr: *mut GeneratePoSTRe
 
 #[repr(C)]
 pub struct VerifyPoSTResponse {
-    pub status_code: FFIResponseStatus,
+    pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
     pub is_valid: bool,
 }
@@ -208,7 +221,7 @@ pub struct VerifyPoSTResponse {
 impl Default for VerifyPoSTResponse {
     fn default() -> VerifyPoSTResponse {
         VerifyPoSTResponse {
-            status_code: FFIResponseStatus::NoError,
+            status_code: FCPResponseStatus::FCPNoError,
             error_msg: ptr::null(),
             is_valid: false,
         }
@@ -231,28 +244,28 @@ pub unsafe extern "C" fn destroy_verify_post_response(ptr: *mut VerifyPoSTRespon
 // err_code_and_msg accepts an Error struct and produces a tuple of response
 // status code and a pointer to a C string, both of which can be used to set
 // fields in a response struct to be returned from an FFI call.
-pub fn err_code_and_msg(err: &Error) -> (FFIResponseStatus, *const libc::c_char) {
-    use ffi_toolkit::FFIResponseStatus::*;
+pub fn err_code_and_msg(err: &Error) -> (FCPResponseStatus, *const libc::c_char) {
+    use api::responses::FCPResponseStatus::*;
 
     let msg = CString::new(format!("{}", err)).unwrap();
     let ptr = msg.as_ptr();
     mem::forget(msg);
 
     match err.downcast_ref() {
-        Some(SectorBuilderErr::OverflowError { .. }) => return (CallerError, ptr),
-        Some(SectorBuilderErr::IncompleteWriteError { .. }) => return (ReceiverError, ptr),
-        Some(SectorBuilderErr::InvalidInternalStateError(_)) => return (ReceiverError, ptr),
+        Some(SectorBuilderErr::OverflowError { .. }) => return (FCPCallerError, ptr),
+        Some(SectorBuilderErr::IncompleteWriteError { .. }) => return (FCPReceiverError, ptr),
+        Some(SectorBuilderErr::InvalidInternalStateError(_)) => return (FCPReceiverError, ptr),
         None => (),
     }
 
     match err.downcast_ref() {
-        Some(SectorManagerErr::UnclassifiedError(_)) => return (UnclassifiedError, ptr),
-        Some(SectorManagerErr::CallerError(_)) => return (CallerError, ptr),
-        Some(SectorManagerErr::ReceiverError(_)) => return (ReceiverError, ptr),
+        Some(SectorManagerErr::UnclassifiedError(_)) => return (FCPUnclassifiedError, ptr),
+        Some(SectorManagerErr::CallerError(_)) => return (FCPCallerError, ptr),
+        Some(SectorManagerErr::ReceiverError(_)) => return (FCPReceiverError, ptr),
         None => (),
     }
 
-    (UnclassifiedError, ptr)
+    (FCPUnclassifiedError, ptr)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -261,7 +274,7 @@ pub fn err_code_and_msg(err: &Error) -> (FFIResponseStatus, *const libc::c_char)
 
 #[repr(C)]
 pub struct InitSectorBuilderResponse {
-    pub status_code: FFIResponseStatus,
+    pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
     pub sector_builder: *mut SectorBuilder,
 }
@@ -269,7 +282,7 @@ pub struct InitSectorBuilderResponse {
 impl Default for InitSectorBuilderResponse {
     fn default() -> InitSectorBuilderResponse {
         InitSectorBuilderResponse {
-            status_code: FFIResponseStatus::NoError,
+            status_code: FCPResponseStatus::FCPNoError,
             error_msg: ptr::null(),
             sector_builder: ptr::null_mut(),
         }
@@ -295,7 +308,7 @@ pub unsafe extern "C" fn destroy_init_sector_builder_response(ptr: *mut InitSect
 
 #[repr(C)]
 pub struct AddPieceResponse {
-    pub status_code: FFIResponseStatus,
+    pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
     pub sector_id: u64,
 }
@@ -303,7 +316,7 @@ pub struct AddPieceResponse {
 impl Default for AddPieceResponse {
     fn default() -> AddPieceResponse {
         AddPieceResponse {
-            status_code: FFIResponseStatus::NoError,
+            status_code: FCPResponseStatus::FCPNoError,
             error_msg: ptr::null(),
             sector_id: 0,
         }
@@ -329,7 +342,7 @@ pub unsafe extern "C" fn destroy_add_piece_response(ptr: *mut AddPieceResponse) 
 
 #[repr(C)]
 pub struct GetMaxStagedBytesPerSector {
-    pub status_code: FFIResponseStatus,
+    pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
     pub max_staged_bytes_per_sector: u64,
 }
@@ -337,7 +350,7 @@ pub struct GetMaxStagedBytesPerSector {
 impl Default for GetMaxStagedBytesPerSector {
     fn default() -> GetMaxStagedBytesPerSector {
         GetMaxStagedBytesPerSector {
-            status_code: FFIResponseStatus::NoError,
+            status_code: FCPResponseStatus::FCPNoError,
             error_msg: ptr::null(),
             max_staged_bytes_per_sector: 0,
         }

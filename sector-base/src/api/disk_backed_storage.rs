@@ -66,7 +66,7 @@ pub unsafe extern "C" fn init_new_proof_test_sector_store(
     sealed_dir_path: *const libc::c_char,
 ) -> *mut Box<SectorStore> {
     let boxed = Box::new(new_sector_store(
-        &ConfiguredStore::ProofTest,
+        &SBConfiguredStore::ProofTest,
         c_str_to_rust_str(sealed_dir_path).to_string(),
         c_str_to_rust_str(staging_dir_path).to_string(),
     ));
@@ -87,7 +87,7 @@ pub unsafe extern "C" fn init_new_test_sector_store(
     sealed_dir_path: *const libc::c_char,
 ) -> *mut Box<SectorStore> {
     let boxed = Box::new(new_sector_store(
-        &ConfiguredStore::Test,
+        &SBConfiguredStore::Test,
         c_str_to_rust_str(sealed_dir_path).to_string(),
         c_str_to_rust_str(staging_dir_path).to_string(),
     ));
@@ -108,7 +108,7 @@ pub unsafe extern "C" fn init_new_sector_store(
     sealed_dir_path: *const libc::c_char,
 ) -> *mut Box<SectorStore> {
     let boxed = Box::new(new_sector_store(
-        &ConfiguredStore::Live,
+        &SBConfiguredStore::Live,
         c_str_to_rust_str(sealed_dir_path).to_string(),
         c_str_to_rust_str(staging_dir_path).to_string(),
     ));
@@ -239,8 +239,8 @@ pub struct FakeConfig {
 }
 
 #[derive(Debug)]
-#[repr(u8)]
-pub enum ConfiguredStore {
+#[repr(C)]
+pub enum SBConfiguredStore {
     Live = 0,
     Test = 1,
     ProofTest = 2,
@@ -273,14 +273,14 @@ pub fn new_real_sector_store(sealed_path: String, staging_path: String) -> Concr
 }
 
 pub fn new_sector_store(
-    cs: &ConfiguredStore,
+    cs: &SBConfiguredStore,
     sealed_path: String,
     staging_path: String,
 ) -> ConcreteSectorStore {
     match *cs {
-        ConfiguredStore::Live => new_slow_fake_sector_store(sealed_path, staging_path),
-        ConfiguredStore::Test => new_fast_fake_sector_store(sealed_path, staging_path),
-        ConfiguredStore::ProofTest => new_real_sector_store(sealed_path, staging_path),
+        SBConfiguredStore::Live => new_slow_fake_sector_store(sealed_path, staging_path),
+        SBConfiguredStore::Test => new_fast_fake_sector_store(sealed_path, staging_path),
+        SBConfiguredStore::ProofTest => new_real_sector_store(sealed_path, staging_path),
     }
 }
 
@@ -379,10 +379,10 @@ mod tests {
     use super::*;
 
     use api::disk_backed_storage::init_new_proof_test_sector_store;
+    use api::responses::SBResponseStatus;
     use api::{
         new_staging_sector_access, num_unsealed_bytes, truncate_unsealed, write_and_preprocess,
     };
-    use ffi_toolkit::FFIResponseStatus;
     use ffi_toolkit::{c_str_to_pbuf, rust_str_to_c_str};
     use io::fr32::FR32_PADDING_MAP;
 
@@ -427,7 +427,7 @@ mod tests {
             );
 
             assert_eq!(
-                FFIResponseStatus::NoError,
+                SBResponseStatus::SBNoError,
                 (*write_and_preprocess_response).status_code
             );
 
@@ -462,7 +462,7 @@ mod tests {
                 );
 
                 assert_eq!(
-                    FFIResponseStatus::NoError,
+                    SBResponseStatus::SBNoError,
                     (*num_unsealed_bytes_response).status_code
                 );
 
@@ -473,7 +473,7 @@ mod tests {
             {
                 // Truncate to 32 unpadded bytes
                 assert_eq!(
-                    FFIResponseStatus::NoError,
+                    SBResponseStatus::SBNoError,
                     (*truncate_unsealed(storage, access, 32)).status_code
                 );
 
@@ -492,7 +492,7 @@ mod tests {
                 let num_unsealed_bytes_response = num_unsealed_bytes(storage, access);
 
                 assert_eq!(
-                    FFIResponseStatus::NoError,
+                    SBResponseStatus::SBNoError,
                     (*num_unsealed_bytes_response).status_code
                 );
 
@@ -503,7 +503,7 @@ mod tests {
             {
                 // Truncate to 31 unpadded bytes
                 assert_eq!(
-                    FFIResponseStatus::NoError,
+                    SBResponseStatus::SBNoError,
                     (*truncate_unsealed(storage, access, 31)).status_code
                 );
 
@@ -517,7 +517,7 @@ mod tests {
                 let num_unsealed_bytes_response = num_unsealed_bytes(storage, access);
 
                 assert_eq!(
-                    FFIResponseStatus::NoError,
+                    SBResponseStatus::SBNoError,
                     (*num_unsealed_bytes_response).status_code
                 );
 
@@ -526,7 +526,7 @@ mod tests {
             }
 
             assert_eq!(
-                FFIResponseStatus::NoError,
+                SBResponseStatus::SBNoError,
                 (*truncate_unsealed(storage, access, 1)).status_code
             );
 
@@ -540,7 +540,7 @@ mod tests {
             let num_unsealed_bytes_response = num_unsealed_bytes(storage, access);
 
             assert_eq!(
-                FFIResponseStatus::NoError,
+                SBResponseStatus::SBNoError,
                 (*num_unsealed_bytes_response).status_code
             );
 
