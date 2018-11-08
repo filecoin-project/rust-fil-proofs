@@ -41,10 +41,10 @@ pub struct CGetMaxUserBytesPerStagedSector {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Rust bindings for C functions defined in libsector_base.h
-////////////////////////////////////////////////////////////
+// Rust bindings for C functions defined in libfilecoin_proofs.h
+////////////////////////////////////////////////////////////////
 
-#[link(name = "sector_base")]
+#[link(name = "filecoin_proofs")]
 extern "C" {
     fn init_sector_builder(
         sector_store_config: *const ConfiguredStore,

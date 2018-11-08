@@ -5,7 +5,6 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
 use api::errors::SectorManagerErr;
-use api::errors::SectorManagerErr::*;
 use api::sector_store::SectorConfig;
 use api::sector_store::SectorManager;
 use api::sector_store::SectorStore;
@@ -380,10 +379,10 @@ mod tests {
     use super::*;
 
     use api::disk_backed_storage::init_new_proof_test_sector_store;
-    use api::responses::SBResponseStatus;
     use api::{
         new_staging_sector_access, num_unsealed_bytes, truncate_unsealed, write_and_preprocess,
     };
+    use ffi_toolkit::FFIResponseStatus;
     use ffi_toolkit::{c_str_to_pbuf, rust_str_to_c_str};
     use io::fr32::FR32_PADDING_MAP;
 
@@ -428,7 +427,7 @@ mod tests {
             );
 
             assert_eq!(
-                SBResponseStatus::SBNoError,
+                FFIResponseStatus::NoError,
                 (*write_and_preprocess_response).status_code
             );
 
@@ -463,7 +462,7 @@ mod tests {
                 );
 
                 assert_eq!(
-                    SBResponseStatus::SBNoError,
+                    FFIResponseStatus::NoError,
                     (*num_unsealed_bytes_response).status_code
                 );
 
@@ -474,7 +473,7 @@ mod tests {
             {
                 // Truncate to 32 unpadded bytes
                 assert_eq!(
-                    SBResponseStatus::SBNoError,
+                    FFIResponseStatus::NoError,
                     (*truncate_unsealed(storage, access, 32)).status_code
                 );
 
@@ -493,7 +492,7 @@ mod tests {
                 let num_unsealed_bytes_response = num_unsealed_bytes(storage, access);
 
                 assert_eq!(
-                    SBResponseStatus::SBNoError,
+                    FFIResponseStatus::NoError,
                     (*num_unsealed_bytes_response).status_code
                 );
 
@@ -504,7 +503,7 @@ mod tests {
             {
                 // Truncate to 31 unpadded bytes
                 assert_eq!(
-                    SBResponseStatus::SBNoError,
+                    FFIResponseStatus::NoError,
                     (*truncate_unsealed(storage, access, 31)).status_code
                 );
 
@@ -518,7 +517,7 @@ mod tests {
                 let num_unsealed_bytes_response = num_unsealed_bytes(storage, access);
 
                 assert_eq!(
-                    SBResponseStatus::SBNoError,
+                    FFIResponseStatus::NoError,
                     (*num_unsealed_bytes_response).status_code
                 );
 
@@ -527,7 +526,7 @@ mod tests {
             }
 
             assert_eq!(
-                SBResponseStatus::SBNoError,
+                FFIResponseStatus::NoError,
                 (*truncate_unsealed(storage, access, 1)).status_code
             );
 
@@ -541,7 +540,7 @@ mod tests {
             let num_unsealed_bytes_response = num_unsealed_bytes(storage, access);
 
             assert_eq!(
-                SBResponseStatus::SBNoError,
+                FFIResponseStatus::NoError,
                 (*num_unsealed_bytes_response).status_code
             );
 

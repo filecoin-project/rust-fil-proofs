@@ -20,5 +20,8 @@ extern crate pairing;
 extern crate rand;
 extern crate sapling_crypto;
 extern crate tempfile;
+#[macro_use]
+extern crate failure;
 
 pub mod api;
+pub mod error;

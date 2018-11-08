@@ -28,6 +28,7 @@ tempfile = "3"
 
 [dev-dependencies]
 gperftools = { git = "https://github.com/dignifiedquire/rust-gperftools" }
+scopeguard = "0.3.3"
 
 [dependencies.pairing]
 version = "0.14.2"

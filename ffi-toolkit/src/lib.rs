@@ -4,6 +4,15 @@ use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 use std::path::PathBuf;
 
+#[repr(C)]
+#[derive(PartialEq, Debug)]
+pub enum FFIResponseStatus {
+    NoError = 0,
+    UnclassifiedError = 1,
+    CallerError = 2,
+    ReceiverError = 3,
+}
+
 // produce a C string from a Rust string
 pub fn rust_str_to_c_str(s: &str) -> *const libc::c_char {
     CString::new(s).unwrap().into_raw()

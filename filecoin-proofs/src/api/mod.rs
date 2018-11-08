@@ -1,13 +1,20 @@
-use api::responses::FCPResponseStatus;
+use api::responses::err_code_and_msg;
+use api::sector_builder::SectorBuilder;
 use ffi_toolkit::c_str_to_pbuf;
+use ffi_toolkit::c_str_to_rust_str;
+use ffi_toolkit::raw_ptr;
+use ffi_toolkit::FFIResponseStatus;
 use libc;
+use sector_base::api::disk_backed_storage::ConfiguredStore;
 use sector_base::api::sector_store::SectorStore;
 use std::ffi::CString;
 use std::mem;
 use std::slice::from_raw_parts;
 
+pub mod errors;
 mod internal;
 pub mod responses;
+pub mod sector_builder;
 
 type SectorAccess = *const libc::c_char;
 
@@ -51,7 +58,7 @@ pub unsafe extern "C" fn seal(
 
     match result {
         Ok((comm_r, comm_d, comm_r_star, snark_proof)) => {
-            response.status_code = FCPResponseStatus::FCPNoError;
+            response.status_code = FFIResponseStatus::NoError;
 
             response.comm_r[..32].clone_from_slice(&comm_r[..32]);
             response.comm_d[..32].clone_from_slice(&comm_d[..32]);
@@ -60,11 +67,9 @@ pub unsafe extern "C" fn seal(
                 .clone_from_slice(&snark_proof[..API_POREP_PROOF_BYTES]);
         }
         Err(err) => {
-            response.status_code = FCPResponseStatus::FCPUnclassifiedError;
-
-            let msg = CString::new(format!("{:?}", err)).unwrap();
-            response.error_msg = msg.as_ptr();
-            mem::forget(msg);
+            let (code, ptr) = err_code_and_msg(&err.into());
+            response.status_code = code;
+            response.error_msg = ptr;
         }
     }
 
@@ -104,19 +109,17 @@ pub unsafe extern "C" fn verify_seal(
         proof,
     ) {
         Ok(true) => {
-            response.status_code = FCPResponseStatus::FCPNoError;
+            response.status_code = FFIResponseStatus::NoError;
             response.is_valid = true;
         }
         Ok(false) => {
-            response.status_code = FCPResponseStatus::FCPNoError;
+            response.status_code = FFIResponseStatus::NoError;
             response.is_valid = false;
         }
         Err(err) => {
-            response.status_code = FCPResponseStatus::FCPUnclassifiedError;
-
-            let msg = CString::new(format!("{:?}", err)).unwrap();
-            response.error_msg = msg.as_ptr();
-            mem::forget(msg);
+            let (code, ptr) = err_code_and_msg(&err.into());
+            response.status_code = code;
+            response.error_msg = ptr;
         }
     }
 
@@ -164,9 +167,9 @@ pub unsafe extern "C" fn get_unsealed_range(
     ) {
         Ok(num_bytes_unsealed) => {
             if num_bytes_unsealed == num_bytes {
-                response.status_code = FCPResponseStatus::FCPNoError;
+                response.status_code = FFIResponseStatus::NoError;
             } else {
-                response.status_code = FCPResponseStatus::FCPReceiverError;
+                response.status_code = FFIResponseStatus::ReceiverError;
 
                 let msg = CString::new(format!(
                     "expected to unseal {}-bytes, but unsealed {}-bytes",
@@ -179,11 +182,9 @@ pub unsafe extern "C" fn get_unsealed_range(
             response.num_bytes_written = num_bytes_unsealed;
         }
         Err(err) => {
-            response.status_code = FCPResponseStatus::FCPUnclassifiedError;
-
-            let msg = CString::new(format!("{:?}", err)).unwrap();
-            response.error_msg = msg.as_ptr();
-            mem::forget(msg);
+            let (code, ptr) = err_code_and_msg(&err.into());
+            response.status_code = code;
+            response.error_msg = ptr;
         }
     }
 
@@ -232,9 +233,9 @@ pub unsafe extern "C" fn get_unsealed(
     ) {
         Ok(num_bytes) => {
             if num_bytes == sector_bytes {
-                response.status_code = FCPResponseStatus::FCPNoError;
+                response.status_code = FFIResponseStatus::NoError;
             } else {
-                response.status_code = FCPResponseStatus::FCPReceiverError;
+                response.status_code = FFIResponseStatus::ReceiverError;
 
                 let msg = CString::new(format!(
                     "expected to unseal {}-bytes, but unsealed {}-bytes",
@@ -246,11 +247,9 @@ pub unsafe extern "C" fn get_unsealed(
             }
         }
         Err(err) => {
-            response.status_code = FCPResponseStatus::FCPUnclassifiedError;
-
-            let msg = CString::new(format!("{:?}", err)).unwrap();
-            response.error_msg = msg.as_ptr();
-            mem::forget(msg);
+            let (code, ptr) = err_code_and_msg(&err.into());
+            response.status_code = code;
+            response.error_msg = ptr;
         }
     }
 
@@ -326,6 +325,100 @@ pub extern "C" fn verify_post(
     Box::into_raw(Box::new(res))
 }
 
+/// Initializes and returns a SectorBuilder.
+///
+#[no_mangle]
+pub unsafe extern "C" fn init_sector_builder(
+    sector_store_config_ptr: *const ConfiguredStore,
+    last_used_sector_id: u64,
+    metadata_dir: *const libc::c_char,
+    prover_id: &[u8; 31],
+    sealed_sector_dir: *const libc::c_char,
+    staged_sector_dir: *const libc::c_char,
+) -> *mut responses::InitSectorBuilderResponse {
+    let mut response: responses::InitSectorBuilderResponse = Default::default();
+
+    if let Some(cfg) = sector_store_config_ptr.as_ref() {
+        match SectorBuilder::init_from_metadata(
+            cfg,
+            last_used_sector_id,
+            c_str_to_rust_str(metadata_dir).to_string(),
+            *prover_id,
+            c_str_to_rust_str(sealed_sector_dir).to_string(),
+            c_str_to_rust_str(staged_sector_dir).to_string(),
+        ) {
+            Ok(sb) => {
+                response.status_code = FFIResponseStatus::NoError;
+                response.sector_builder = raw_ptr(sb);
+            }
+            Err(err) => {
+                let (code, ptr) = err_code_and_msg(&err);
+                response.status_code = code;
+                response.error_msg = ptr;
+            }
+        }
+    } else {
+        response.status_code = FFIResponseStatus::CallerError;
+
+        let msg = CString::new("caller did not provide ConfiguredStore").unwrap();
+        response.error_msg = msg.as_ptr();
+        mem::forget(msg);
+    }
+
+    raw_ptr(response)
+}
+
+/// Destroys a SectorBuilder.
+///
+#[no_mangle]
+pub unsafe extern "C" fn destroy_sector_builder(ptr: *mut SectorBuilder) {
+    let _ = Box::from_raw(ptr);
+}
+
+/// Writes user piece-bytes to a staged sector and returns the id of the sector
+/// to which the bytes were written.
+///
+#[no_mangle]
+pub unsafe extern "C" fn add_piece(
+    ptr: *mut SectorBuilder,
+    piece_key: *const libc::c_char,
+    piece_ptr: *const u8,
+    piece_len: libc::size_t,
+) -> *mut responses::AddPieceResponse {
+    let piece_key = c_str_to_rust_str(piece_key);
+    let piece_bytes = from_raw_parts(piece_ptr, piece_len);
+
+    let mut response: responses::AddPieceResponse = Default::default();
+
+    match (*ptr).add_piece(piece_key, piece_bytes) {
+        Ok(sector_id) => {
+            response.status_code = FFIResponseStatus::NoError;
+            response.sector_id = sector_id;
+        }
+        Err(err) => {
+            let (code, ptr) = err_code_and_msg(&err);
+            response.status_code = code;
+            response.error_msg = ptr;
+        }
+    }
+
+    Box::into_raw(Box::new(response))
+}
+
+/// Returns the number of user bytes that will fit into a staged sector.
+///
+#[no_mangle]
+pub unsafe extern "C" fn get_max_user_bytes_per_staged_sector(
+    ptr: *mut SectorBuilder,
+) -> *mut responses::GetMaxStagedBytesPerSector {
+    let mut response: responses::GetMaxStagedBytesPerSector = Default::default();
+
+    response.status_code = FFIResponseStatus::NoError;
+    response.max_staged_bytes_per_sector = (*ptr).get_max_user_bytes_per_staged_sector();;
+
+    Box::into_raw(Box::new(response))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -344,7 +437,7 @@ mod tests {
         new_sealed_sector_access, new_staging_sector_access, read_raw, write_and_preprocess,
     };
 
-    use sector_base::api::responses::SBResponseStatus;
+    use ffi_toolkit::FFIResponseStatus;
     use std::ffi::CString;
     use std::fs::{create_dir_all, File};
     use std::io::Read;
@@ -487,7 +580,7 @@ mod tests {
             let generate_post_res = generate_post(storage, &comm_rs[0], 32, &challenge_seed);
 
             assert_eq!(
-                FCPResponseStatus::FCPNoError,
+                FFIResponseStatus::NoError,
                 (*generate_post_res).status_code,
                 "generate_post failed"
             );
@@ -495,7 +588,7 @@ mod tests {
             let verify_post_res = verify_post(&(*generate_post_res).proof);
 
             assert_eq!(
-                FCPResponseStatus::FCPNoError,
+                FFIResponseStatus::NoError,
                 (*verify_post_res).status_code,
                 "error verifying PoSt"
             );
@@ -541,7 +634,7 @@ mod tests {
                 write_and_preprocess(storage, seal_input_path, &contents[0], contents.len());
 
             assert_eq!(
-                SBResponseStatus::SBNoError,
+                FFIResponseStatus::NoError,
                 (*write_and_preprocess_response).status_code,
                 "write_and_preprocess failed for {:?}",
                 cs
@@ -556,7 +649,7 @@ mod tests {
             );
 
             assert_eq!(
-                FCPResponseStatus::FCPNoError,
+                FFIResponseStatus::NoError,
                 (*seal_res).status_code,
                 "seal failed for {:?}",
                 cs
@@ -573,7 +666,7 @@ mod tests {
             );
 
             assert_eq!(
-                FCPResponseStatus::FCPNoError,
+                FFIResponseStatus::NoError,
                 (*verify_seal_res).status_code,
                 "verification failed with error for {:?}",
                 cs
@@ -600,7 +693,7 @@ mod tests {
                 );
 
                 assert_eq!(
-                    FCPResponseStatus::FCPNoError,
+                    FFIResponseStatus::NoError,
                     (*verify_seal_res).status_code,
                     "verification failed with error for {:?}",
                     cs
@@ -651,7 +744,7 @@ mod tests {
                 write_and_preprocess(storage, seal_input_path, &contents_a[0], contents_a.len());
 
             assert_eq!(
-                SBResponseStatus::SBNoError,
+                FFIResponseStatus::NoError,
                 (*write_and_preprocess_response_a).status_code,
                 "write_and_preprocess failed for {:?}",
                 cs
@@ -668,7 +761,7 @@ mod tests {
                 write_and_preprocess(storage, seal_input_path, &contents_b[0], contents_b.len());
 
             assert_eq!(
-                SBResponseStatus::SBNoError,
+                FFIResponseStatus::NoError,
                 (*write_and_preprocess_response_b).status_code,
                 "write_and_preprocess failed for {:?}",
                 cs
@@ -696,7 +789,7 @@ mod tests {
             );
 
             assert_eq!(
-                FCPResponseStatus::FCPNoError,
+                FFIResponseStatus::NoError,
                 (*seal_response).status_code,
                 "seal failed for {:?}",
                 cs
@@ -711,7 +804,7 @@ mod tests {
             );
 
             assert_eq!(
-                FCPResponseStatus::FCPNoError,
+                FFIResponseStatus::NoError,
                 (*get_unsealed_response).status_code,
                 "get_unsealed failed for {:?}",
                 cs
@@ -774,7 +867,7 @@ mod tests {
                 write_and_preprocess(storage, seal_input_path, &contents[0], contents.len());
 
             assert_eq!(
-                SBResponseStatus::SBNoError,
+                FFIResponseStatus::NoError,
                 (*write_and_preprocess_response).status_code,
                 "write_and_preprocess failed for {:?}",
                 cs
@@ -789,7 +882,7 @@ mod tests {
             );
 
             assert_eq!(
-                FCPResponseStatus::FCPNoError,
+                FFIResponseStatus::NoError,
                 (*seal_response).status_code,
                 "seal failed for {:?}",
                 cs
@@ -804,7 +897,7 @@ mod tests {
             );
 
             assert_eq!(
-                FCPResponseStatus::FCPNoError,
+                FFIResponseStatus::NoError,
                 (*get_unsealed_response).status_code,
                 "get_unsealed failed for {:?}",
                 cs
@@ -820,7 +913,7 @@ mod tests {
 
                 assert_eq!(
                     (*read_unsealed_response).status_code,
-                    SBResponseStatus::SBNoError
+                    FFIResponseStatus::NoError
                 );
 
                 let read_unsealed_data = from_raw_parts(
@@ -837,7 +930,7 @@ mod tests {
 
                 assert_eq!(
                     (*read_unsealed_response).status_code,
-                    SBResponseStatus::SBNoError
+                    FFIResponseStatus::NoError
                 );
 
                 let read_unsealed_data = from_raw_parts(
@@ -894,7 +987,7 @@ mod tests {
                 write_and_preprocess(storage, seal_input_path, &contents[0], contents.len());
 
             assert_eq!(
-                SBResponseStatus::SBNoError,
+                FFIResponseStatus::NoError,
                 (*write_and_preprocess_response).status_code,
                 "write_and_preprocess failed for {:?}",
                 cs
@@ -909,7 +1002,7 @@ mod tests {
             );
 
             assert_eq!(
-                FCPResponseStatus::FCPNoError,
+                FFIResponseStatus::NoError,
                 (*seal_response).status_code,
                 "seal failed for {:?}",
                 cs
@@ -928,7 +1021,7 @@ mod tests {
             );
 
             assert_eq!(
-                FCPResponseStatus::FCPNoError,
+                FFIResponseStatus::NoError,
                 (*get_unsealed_range_response).status_code,
                 "get_unsealed_range_response failed for {:?}",
                 cs

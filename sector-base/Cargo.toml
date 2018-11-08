@@ -20,10 +20,8 @@ ffi-toolkit = { path = "../ffi-toolkit" }
 version = "0.14.2"
 features = ["expose-arith"]
 
-
 [dev-dependencies]
 tempfile = "*"
-scopeguard = "0.3.3"
 
 [build-dependencies]
 cbindgen = "0.6.3"

@@ -1,11 +1,9 @@
-use api::disk_backed_storage::{new_sector_store, ConfiguredStore};
-use api::errors::*;
-use api::sector_store::SectorStore;
+use api::errors::SectorBuilderErr;
 use error::Result;
-use failure::Error;
-use std::cmp::Reverse;
+use sector_base::api::disk_backed_storage::new_sector_store;
+use sector_base::api::disk_backed_storage::ConfiguredStore;
+use sector_base::api::sector_store::SectorStore;
 use std::collections::{HashMap, HashSet};
-use std::fmt;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 type SectorId = u64;
@@ -30,8 +28,8 @@ pub struct StagedState {
 }
 
 pub struct SectorBuilder {
-    metadata_dir: String,
-    prover_id: [u8; 31],
+    _metadata_dir: String,
+    _prover_id: [u8; 31],
     sector_id_nonce: Mutex<u64>,
     sector_store: Box<SectorStore>,
 
@@ -60,8 +58,8 @@ impl SectorBuilder {
         ));
 
         Ok(SectorBuilder {
-            metadata_dir: metadata_dir.into(),
-            prover_id,
+            _metadata_dir: metadata_dir.into(),
+            _prover_id: prover_id,
             sector_id_nonce: Mutex::new(last_used_sector_id),
             sector_store,
             staged_state: Default::default(),

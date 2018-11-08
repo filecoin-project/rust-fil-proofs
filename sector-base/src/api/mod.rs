@@ -1,118 +1,16 @@
-use api::disk_backed_storage::ConfiguredStore;
-use api::errors::SectorBuilderErr;
-use api::errors::SectorBuilderErr::*;
-use api::errors::SectorManagerErr;
 use api::responses::*;
-use api::sector_builder::SectorBuilder;
-use api::sector_store::{SectorManager, SectorStore};
-use ffi_toolkit::{c_str_to_rust_str, raw_ptr, rust_str_to_c_str};
+use api::sector_store::SectorStore;
+use ffi_toolkit::FFIResponseStatus;
+use ffi_toolkit::{c_str_to_rust_str, rust_str_to_c_str};
 use libc;
-use std::error::Error;
-use std::ffi::CString;
-use std::fmt;
 use std::mem;
 use std::slice::from_raw_parts;
 
 pub mod disk_backed_storage;
 pub mod errors;
 pub mod responses;
-pub mod sector_builder;
 pub mod sector_store;
 pub mod util;
-
-/// Initializes and returns a SectorBuilder.
-///
-#[no_mangle]
-pub unsafe extern "C" fn init_sector_builder(
-    sector_store_config_ptr: *const ConfiguredStore,
-    last_used_sector_id: u64,
-    metadata_dir: *const libc::c_char,
-    prover_id: &[u8; 31],
-    sealed_sector_dir: *const libc::c_char,
-    staged_sector_dir: *const libc::c_char,
-) -> *mut responses::InitSectorBuilderResponse {
-    let mut response: responses::InitSectorBuilderResponse = Default::default();
-
-    if let Some(cfg) = sector_store_config_ptr.as_ref() {
-        match SectorBuilder::init_from_metadata(
-            cfg,
-            last_used_sector_id,
-            c_str_to_rust_str(metadata_dir).to_string(),
-            *prover_id,
-            c_str_to_rust_str(sealed_sector_dir).to_string(),
-            c_str_to_rust_str(staged_sector_dir).to_string(),
-        ) {
-            Ok(sb) => {
-                response.status_code = responses::SBResponseStatus::SBNoError;
-                response.sector_builder = raw_ptr(sb);
-            }
-            Err(err) => {
-                let (code, ptr) = err_code_and_msg(&err);
-                response.status_code = code;
-                response.error_msg = ptr;
-            }
-        }
-    } else {
-        response.status_code = SBResponseStatus::SBCallerError;
-
-        let msg = CString::new("caller did not provide ConfiguredStore").unwrap();
-        response.error_msg = msg.as_ptr();
-        mem::forget(msg);
-    }
-
-    raw_ptr(response)
-}
-
-/// Destroys a SectorBuilder.
-///
-#[no_mangle]
-pub unsafe extern "C" fn destroy_sector_builder(ptr: *mut SectorBuilder) {
-    let _ = Box::from_raw(ptr);
-}
-
-/// Writes user piece-bytes to a staged sector and returns the id of the sector
-/// to which the bytes were written.
-///
-#[no_mangle]
-pub unsafe extern "C" fn add_piece(
-    ptr: *mut SectorBuilder,
-    piece_key: *const libc::c_char,
-    piece_ptr: *const u8,
-    piece_len: libc::size_t,
-) -> *mut responses::AddPieceResponse {
-    let piece_key = c_str_to_rust_str(piece_key);
-    let piece_bytes = from_raw_parts(piece_ptr, piece_len);
-
-    let mut response: responses::AddPieceResponse = Default::default();
-
-    match (*ptr).add_piece(piece_key, piece_bytes) {
-        Ok(sector_id) => {
-            response.status_code = SBResponseStatus::SBNoError;
-            response.sector_id = sector_id;
-        }
-        Err(err) => {
-            let (code, ptr) = err_code_and_msg(&err);
-            response.status_code = code;
-            response.error_msg = ptr;
-        }
-    }
-
-    Box::into_raw(Box::new(response))
-}
-
-/// Returns the number of user bytes that will fit into a staged sector.
-///
-#[no_mangle]
-pub unsafe extern "C" fn get_max_user_bytes_per_staged_sector(
-    ptr: *mut SectorBuilder,
-) -> *mut responses::GetMaxStagedBytesPerSector {
-    let mut response: responses::GetMaxStagedBytesPerSector = Default::default();
-
-    response.status_code = SBResponseStatus::SBNoError;
-    response.max_staged_bytes_per_sector = (*ptr).get_max_user_bytes_per_staged_sector();;
-
-    Box::into_raw(Box::new(response))
-}
 
 /// Returns a sector access in the sealed area.
 ///
@@ -129,7 +27,7 @@ pub unsafe extern "C" fn new_sealed_sector_access(
 
     match result {
         Ok(access) => {
-            response.status_code = responses::SBResponseStatus::SBNoError;
+            response.status_code = FFIResponseStatus::NoError;
             response.sector_access = rust_str_to_c_str(&access);
         }
         Err(err) => {
@@ -157,7 +55,7 @@ pub unsafe extern "C" fn new_staging_sector_access(
 
     match result {
         Ok(access) => {
-            response.status_code = responses::SBResponseStatus::SBNoError;
+            response.status_code = FFIResponseStatus::NoError;
             response.sector_access = rust_str_to_c_str(&access);
         }
         Err(err) => {
@@ -198,13 +96,13 @@ pub unsafe extern "C" fn write_and_preprocess(
     match result {
         Ok(num_data_bytes_written) => {
             if num_data_bytes_written != data_len as u64 {
-                response.status_code = responses::SBResponseStatus::SBReceiverError;
+                response.status_code = FFIResponseStatus::ReceiverError;
                 response.error_msg = rust_str_to_c_str(&format!(
                     "expected to write {}-bytes, but wrote {}-bytes",
                     data_len as u64, num_data_bytes_written
                 ));
             } else {
-                response.status_code = responses::SBResponseStatus::SBNoError;
+                response.status_code = FFIResponseStatus::NoError;
                 response.num_bytes_written = num_data_bytes_written;
             }
         }
@@ -239,7 +137,7 @@ pub unsafe extern "C" fn truncate_unsealed(
 
     match result {
         Ok(_) => {
-            response.status_code = SBResponseStatus::SBNoError;
+            response.status_code = FFIResponseStatus::NoError;
         }
         Err(err) => {
             let (code, ptr) = err_code_and_msg(&err.into());
@@ -270,7 +168,7 @@ pub unsafe extern "C" fn read_raw(
 
     match result {
         Ok(data) => {
-            response.status_code = SBResponseStatus::SBNoError;
+            response.status_code = FFIResponseStatus::NoError;
             response.data_ptr = data.as_ptr();
             response.data_len = data.len();
             mem::forget(data);
@@ -306,7 +204,7 @@ pub unsafe extern "C" fn num_unsealed_bytes(
 
     match result {
         Ok(n) => {
-            response.status_code = SBResponseStatus::SBNoError;
+            response.status_code = FFIResponseStatus::NoError;
             response.num_bytes = n;
         }
         Err(err) => {
@@ -331,7 +229,7 @@ pub unsafe extern "C" fn max_unsealed_bytes_per_sector(
 ) -> *mut responses::MaxUnsealedBytesPerSectorResponse {
     let mut response: responses::MaxUnsealedBytesPerSectorResponse = Default::default();
 
-    response.status_code = SBResponseStatus::SBNoError;
+    response.status_code = FFIResponseStatus::NoError;
     response.num_bytes = (*ss_ptr).config().max_unsealed_bytes_per_sector();
 
     Box::into_raw(Box::new(response))

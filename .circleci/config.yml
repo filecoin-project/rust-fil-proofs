@@ -43,8 +43,8 @@ jobs:
           keys:
             - parameter-cache-{{ .Revision }}
       - run:
-          name: run regression tests (examples) against FFI-exposed sector-base API
-          command: cargo run --package sector-base --example ffi
+          name: run regression tests (examples) against FFI-exposed filecoin-proofs API
+          command: cargo run --package filecoin-proofs --example ffi
       - run:
           name: Test (stable)
           command: cargo +stable test --verbose --frozen --all
