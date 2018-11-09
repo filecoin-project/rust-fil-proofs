@@ -1,3 +1,4 @@
+extern crate bindgen;
 extern crate cbindgen;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -19,6 +20,25 @@ fn main() {
     match c {
         Ok(res) => {
             res.write_to_file("libfilecoin_proofs.h");
+        }
+        Err(err) => {
+            eprintln!("unable to generate bindings: {:?}", err);
+            std::process::exit(1);
+        }
+    }
+
+    let b = bindgen::builder()
+        .header("libfilecoin_proofs.h")
+        // Here, we tell Rust to link libfilecoin_proofs so that auto-generated
+        // symbols are linked to symbols in the compiled dylib. For reasons
+        // unbeknown to me, the link attribute needs to precede an extern block.
+        .raw_line("#[link(name = \"filecoin_proofs\")]\nextern \"C\" {}")
+        .generate();
+
+    match b {
+        Ok(res) => {
+            res.write_to_file("examples/ffi/libfilecoin_proofs.rs")
+                .expect("could not write file");
         }
         Err(err) => {
             eprintln!("unable to generate bindings: {:?}", err);

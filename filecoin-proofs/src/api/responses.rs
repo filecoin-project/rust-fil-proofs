@@ -13,7 +13,7 @@ use std::ptr;
 // the same program, so these names need to be unique. Alternatively, figure
 // out a way to share this enum across crates in a way that won't cause
 // cbindgen to fail.
-#[repr(u8)]
+#[repr(C)]
 #[derive(PartialEq, Debug)]
 pub enum FCPResponseStatus {
     // Don't use FCPSuccess, since that complicates description of 'successful' verification.

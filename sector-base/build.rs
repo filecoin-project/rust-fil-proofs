@@ -21,7 +21,7 @@ fn main() {
             res.write_to_file("libsector_base.h");
         }
         Err(err) => {
-            eprintln!("unable to generate bindings: {:?}", err);
+            eprintln!("unable to generate C-header: {:?}", err);
             std::process::exit(1);
         }
     }
