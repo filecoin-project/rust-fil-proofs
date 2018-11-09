@@ -3,7 +3,7 @@ version: 2
 jobs:
   cargo_fetch:
     docker:
-      - image: dignifiedquire/rust:latest
+      - image: sidke/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -30,7 +30,7 @@ jobs:
             - /root/.rustup
   test:
     docker:
-      - image: dignifiedquire/rust:latest
+      - image: sidke/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -62,7 +62,7 @@ jobs:
 
   test_release:
     docker:
-      - image: dignifiedquire/rust:latest
+      - image: sidke/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -80,7 +80,7 @@ jobs:
 
   test_ignored_release:
     docker:
-      - image: dignifiedquire/rust:latest
+      - image: sidke/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -100,7 +100,7 @@ jobs:
 
   test_nightly:
     docker:
-      - image: dignifiedquire/rust:latest
+      - image: sidke/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -114,12 +114,12 @@ jobs:
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (nightly)
-          command: cargo +nightly test --verbose --frozen --all
+          command: cargo +$(cat rust-toolchain) test --verbose --frozen --all
           no_output_timeout: 15m
 
   bench_nightly:
     docker:
-      - image: dignifiedquire/rust:latest
+      - image: sidke/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -133,12 +133,12 @@ jobs:
             - parameter-cache-{{ .Revision }}
       - run:
           name: Benchmarks (nightly)
-          command: cargo +nightly build --benches --verbose --frozen --all
+          command: cargo +$(cat rust-toolchain) build --benches --verbose --frozen --all
           no_output_timeout: 15m
 
   rustfmt:
     docker:
-      - image: dignifiedquire/rust:latest
+      - image: sidke/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -148,12 +148,15 @@ jobs:
           keys:
             - cargo-v5-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
+          name: Create empty bindings (cargo fmt will fail if this file does not exist)
+          command: touch filecoin-proofs/examples/ffi/libfilecoin_proofs.rs
+      - run:
           name: Run cargo fmt
           command: cargo fmt --all -- --check
 
   clippy:
     docker:
-      - image: dignifiedquire/rust:latest
+      - image: sidke/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout

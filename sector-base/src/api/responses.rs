@@ -10,8 +10,8 @@ use std::ptr;
 // the same program, so these names need to be unique. Alternatively, figure
 // out a way to share this enum across crates in a way that won't cause
 // cbindgen to fail.
-#[repr(u8)]
 #[derive(PartialEq, Debug)]
+#[repr(C)]
 pub enum SBResponseStatus {
     SBNoError = 0,
     SBUnclassifiedError = 1,
