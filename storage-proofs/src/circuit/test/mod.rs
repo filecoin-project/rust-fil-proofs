@@ -190,7 +190,7 @@ impl<E: Engine> TestConstraintSystem<E> {
             .map(|i| E::Fr::from_str("2").unwrap().pow(&[u64::from(i)]))
             .collect::<Vec<_>>();
 
-        let pp = |s: &mut String, lc: &LinearCombination<E>| {
+        let _pp = |s: &mut String, lc: &LinearCombination<E>| {
             write!(s, "(").unwrap();
             let mut is_first = true;
             for (var, coeff) in proc_lc::<E>(lc.as_ref()) {
@@ -228,7 +228,7 @@ impl<E: Engine> TestConstraintSystem<E> {
             write!(s, ")").unwrap();
         };
 
-        for &(ref a, ref b, ref c, ref name) in &self.constraints {
+        for &(ref _a, ref _b, ref _c, ref name) in &self.constraints {
             writeln!(&mut s).unwrap();
 
             write!(&mut s, "{}", name).unwrap();
