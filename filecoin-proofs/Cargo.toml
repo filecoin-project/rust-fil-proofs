@@ -25,6 +25,7 @@ env_logger = "0.5"
 colored = "1.6"
 pbr = "1.0"
 tempfile = "3"
+byteorder = "1"
 
 [dev-dependencies]
 gperftools = { git = "https://github.com/dignifiedquire/rust-gperftools" }

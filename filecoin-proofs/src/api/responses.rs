@@ -1,4 +1,4 @@
-use api::errors::SectorBuilderErr;
+use api::sector_builder::errors::SectorBuilderErr;
 use api::sector_builder::SectorBuilder;
 use api::{API_POREP_PROOF_BYTES, API_POST_PROOF_BYTES};
 use failure::Error;
@@ -254,7 +254,7 @@ pub fn err_code_and_msg(err: &Error) -> (FCPResponseStatus, *const libc::c_char)
     match err.downcast_ref() {
         Some(SectorBuilderErr::OverflowError { .. }) => return (FCPCallerError, ptr),
         Some(SectorBuilderErr::IncompleteWriteError { .. }) => return (FCPReceiverError, ptr),
-        Some(SectorBuilderErr::InvalidInternalStateError(_)) => return (FCPReceiverError, ptr),
+        Some(SectorBuilderErr::Unrecoverable(_)) => return (FCPReceiverError, ptr),
         None => (),
     }
 
@@ -368,6 +368,60 @@ impl Drop for GetMaxStagedBytesPerSector {
 #[no_mangle]
 pub unsafe extern "C" fn destroy_get_max_user_bytes_per_staged_sector_response(
     ptr: *mut GetMaxStagedBytesPerSector,
+) {
+    let _ = Box::from_raw(ptr);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+/// GetSealedSectorMetadataResponse
+///////////////////////////////////
+
+#[repr(C)]
+pub struct FindSealedSectorMetadataResponse {
+    pub status_code: FCPResponseStatus,
+    pub error_msg: *const libc::c_char,
+
+    pub metadata_exists: bool,
+
+    pub comm_d: [u8; 32],
+    pub comm_r: [u8; 32],
+    pub comm_r_star: [u8; 32],
+    pub sector_access: *const libc::c_char,
+    pub sector_id: u64,
+    pub snark_proof: [u8; API_POREP_PROOF_BYTES],
+    // TODO: Are pieces needed? Will the proofs-related stuff suffice?
+}
+
+impl Default for FindSealedSectorMetadataResponse {
+    fn default() -> FindSealedSectorMetadataResponse {
+        FindSealedSectorMetadataResponse {
+            status_code: FCPResponseStatus::FCPNoError,
+            error_msg: ptr::null(),
+
+            metadata_exists: false,
+
+            comm_d: Default::default(),
+            comm_r: Default::default(),
+            comm_r_star: Default::default(),
+            sector_access: ptr::null(),
+            sector_id: 0,
+            snark_proof: [0; 384],
+        }
+    }
+}
+
+impl Drop for FindSealedSectorMetadataResponse {
+    fn drop(&mut self) {
+        unsafe {
+            drop(c_str_to_rust_str(self.error_msg));
+            drop(c_str_to_rust_str(self.sector_access));
+        };
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn destroy_find_sealed_sector_metadata_response(
+    ptr: *mut FindSealedSectorMetadataResponse,
 ) {
     let _ = Box::from_raw(ptr);
 }

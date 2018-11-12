@@ -1,3 +1,7 @@
+#![allow(non_upper_case_globals)]
+#![allow(non_camel_case_types)]
+#![allow(non_snake_case)]
+
 extern crate ffi_toolkit;
 extern crate libc;
 extern crate rand;
@@ -6,13 +10,16 @@ extern crate tempfile;
 extern crate scopeguard;
 extern crate sector_base;
 
-mod libfilecoin_proofs;
+include!(concat!(env!("OUT_DIR"), "/libfilecoin_proofs.rs"));
 
 use ffi_toolkit::c_str_to_rust_str;
 use ffi_toolkit::rust_str_to_c_str;
-use libfilecoin_proofs::*;
 use rand::{thread_rng, Rng};
 use std::error::Error;
+use std::sync::atomic::AtomicPtr;
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 ///////////////////////////////////////////////////////////////////////////////
 // SectorBuilder lifecycle test
@@ -132,6 +139,45 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
         // sector id changed again (piece wouldn't fit)
         assert_eq!(126, (*resp).sector_id);
+    }
+
+    // poll for sealed sector metadata through the FFI
+    {
+        let (result_tx, result_rx) = mpsc::channel();
+        let (kill_tx, kill_rx) = mpsc::channel();
+
+        let atomic_ptr = AtomicPtr::new(sector_builder);
+
+        let _join_handle = thread::spawn(move || {
+            let sector_builder = atomic_ptr.into_inner();
+
+            loop {
+                match kill_rx.try_recv() {
+                    Ok(_) => return,
+                    _ => (),
+                };
+
+                let resp = find_sealed_sector_metadata(sector_builder, 124);
+                if (*resp).status_code != 0 {
+                    return;
+                }
+
+                if (*resp).metadata_exists {
+                    let _ = result_tx.send((*resp).sector_id).unwrap();
+                }
+
+                thread::sleep(Duration::from_millis(1000));
+            }
+        });
+
+        defer!({
+            let _ = kill_tx.send(true).unwrap();
+        });
+
+        // wait up to 5 minutes for sealing to complete
+        let now_sealed_sector_id = result_rx.recv_timeout(Duration::from_secs(300)).unwrap();
+
+        assert_eq!(now_sealed_sector_id, 124);
     }
 
     Ok(())

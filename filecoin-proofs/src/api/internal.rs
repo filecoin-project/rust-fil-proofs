@@ -116,7 +116,7 @@ fn pad_safe_fr(unpadded: FrSafe) -> Fr32Ary {
 /// * - `delay_seconds` is None if no delay.
 /// * - `sector_bytes` is the size (in bytes) of sector which should be stored on disk.
 /// * - `proof_sector_bytes` is the size of the sector which will be proved when faking.
-pub fn get_config(sector_store: &'static SectorStore) -> (bool, Option<u32>, usize, usize) {
+pub fn get_config(sector_store: &SectorStore) -> (bool, Option<u32>, usize, usize) {
     let fake = sector_store.config().is_fake();
     let delay_seconds = sector_store.config().simulate_delay_seconds();
     let delayed = delay_seconds.is_some();
@@ -136,7 +136,7 @@ pub fn get_config(sector_store: &'static SectorStore) -> (bool, Option<u32>, usi
 }
 
 pub fn seal(
-    sector_store: &'static SectorStore,
+    sector_store: &SectorStore,
     in_path: &PathBuf,
     out_path: &PathBuf,
     prover_id_in: FrSafe,
@@ -293,7 +293,7 @@ fn write_data(out_path: &PathBuf, data: &[u8]) -> Result<()> {
 }
 
 pub fn get_unsealed_range(
-    sector_store: &'static SectorStore,
+    sector_store: &SectorStore,
     sealed_path: &PathBuf,
     output_path: &PathBuf,
     prover_id_in: FrSafe,
@@ -334,7 +334,7 @@ pub fn get_unsealed_range(
 }
 
 pub fn verify_seal(
-    sector_store: &'static SectorStore,
+    sector_store: &SectorStore,
     comm_r: Commitment,
     comm_d: Commitment,
     comm_r_star: Commitment,

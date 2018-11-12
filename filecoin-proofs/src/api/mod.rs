@@ -1,20 +1,18 @@
 use api::responses::err_code_and_msg;
 use api::responses::FCPResponseStatus;
-use api::sector_builder::ConfiguredStore;
 use api::sector_builder::SectorBuilder;
-use ffi_toolkit::c_str_to_pbuf;
-use ffi_toolkit::c_str_to_rust_str;
-use ffi_toolkit::raw_ptr;
+use ffi_toolkit::rust_str_to_c_str;
+use ffi_toolkit::{c_str_to_pbuf, c_str_to_rust_str, raw_ptr};
 use libc;
+use sector_base::api::disk_backed_storage::SBConfiguredStore;
 use sector_base::api::sector_store::SectorStore;
 use std::ffi::CString;
 use std::mem;
 use std::slice::from_raw_parts;
 
-pub mod errors;
 mod internal;
 pub mod responses;
-pub mod sector_builder;
+mod sector_builder;
 
 type SectorAccess = *const libc::c_char;
 
@@ -24,6 +22,13 @@ type SectorAccess = *const libc::c_char;
 /// see the constant in the generated C-header file.
 pub const API_POREP_PROOF_BYTES: usize = 384;
 pub const API_POST_PROOF_BYTES: usize = 192;
+
+#[repr(C)]
+pub enum ConfiguredStore {
+    Live = 0,
+    Test = 1,
+    ProofTest = 2,
+}
 
 /// Seals a sector and returns its commitments and proof.
 /// Unsealed data is read from `unsealed`, sealed, then written to `sealed`.
@@ -73,7 +78,7 @@ pub unsafe extern "C" fn seal(
         }
     }
 
-    Box::into_raw(Box::new(response))
+    raw_ptr(response)
 }
 
 /// Verifies the output of seal.
@@ -123,7 +128,7 @@ pub unsafe extern "C" fn verify_seal(
         }
     }
 
-    Box::into_raw(Box::new(response))
+    raw_ptr(response)
 }
 
 /// Unseals a range of bytes from a sealed sector and writes the resulting raw (unpreprocessed) sector to `output path`.
@@ -188,7 +193,7 @@ pub unsafe extern "C" fn get_unsealed_range(
         }
     }
 
-    Box::into_raw(Box::new(response))
+    raw_ptr(response)
 }
 
 /// Unseals an entire sealed sector and writes the resulting raw (unpreprocessed) sector to `output_path`.
@@ -253,7 +258,7 @@ pub unsafe extern "C" fn get_unsealed(
         }
     }
 
-    Box::into_raw(Box::new(response))
+    raw_ptr(response)
 }
 
 /// Generates a proof-of-spacetime for the given replica commitments.
@@ -340,7 +345,7 @@ pub unsafe extern "C" fn init_sector_builder(
 
     if let Some(cfg) = sector_store_config_ptr.as_ref() {
         match SectorBuilder::init_from_metadata(
-            cfg,
+            &cfg.into(),
             last_used_sector_id,
             c_str_to_rust_str(metadata_dir).to_string(),
             *prover_id,
@@ -402,7 +407,7 @@ pub unsafe extern "C" fn add_piece(
         }
     }
 
-    Box::into_raw(Box::new(response))
+    raw_ptr(response)
 }
 
 /// Returns the number of user bytes that will fit into a staged sector.
@@ -416,7 +421,55 @@ pub unsafe extern "C" fn get_max_user_bytes_per_staged_sector(
     response.status_code = FCPResponseStatus::FCPNoError;
     response.max_staged_bytes_per_sector = (*ptr).get_max_user_bytes_per_staged_sector();;
 
-    Box::into_raw(Box::new(response))
+    raw_ptr(response)
+}
+
+/// Returns sealed sector metadata for the provided sector id, if it exists.
+///
+#[no_mangle]
+pub unsafe extern "C" fn find_sealed_sector_metadata(
+    ptr: *mut SectorBuilder,
+    sector_id: u64,
+) -> *mut responses::FindSealedSectorMetadataResponse {
+    let mut response: responses::FindSealedSectorMetadataResponse = Default::default();
+
+    match (*ptr).find_sealed_sector_metadata(sector_id) {
+        Ok(opt_meta) => {
+            response.status_code = FCPResponseStatus::FCPNoError;
+
+            match opt_meta {
+                Some(meta) => {
+                    response.metadata_exists = true;
+                    response.comm_d = meta.comm_d;
+                    response.comm_r = meta.comm_r;
+                    response.comm_r_star = meta.comm_r_star;
+                    response.snark_proof = meta.snark_proof;
+                    response.sector_id = meta.sector_id;
+                    response.sector_access = rust_str_to_c_str(&meta.sector_access);
+                }
+                None => {
+                    response.metadata_exists = false;
+                }
+            }
+        }
+        Err(err) => {
+            let (code, ptr) = err_code_and_msg(&err);
+            response.status_code = code;
+            response.error_msg = ptr;
+        }
+    }
+
+    raw_ptr(response)
+}
+
+impl<'a> Into<SBConfiguredStore> for &'a ConfiguredStore {
+    fn into(self) -> SBConfiguredStore {
+        match self {
+            ConfiguredStore::Live => SBConfiguredStore::Live,
+            ConfiguredStore::Test => SBConfiguredStore::Test,
+            ConfiguredStore::ProofTest => SBConfiguredStore::ProofTest,
+        }
+    }
 }
 
 #[cfg(test)]

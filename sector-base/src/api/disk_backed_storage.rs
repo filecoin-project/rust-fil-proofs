@@ -1,18 +1,15 @@
-use libc;
-use std::env;
-use std::fs::{create_dir_all, File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom};
-use std::path::Path;
-
 use api::errors::SectorManagerErr;
-use api::sector_store::SectorConfig;
-use api::sector_store::SectorManager;
-use api::sector_store::SectorStore;
+use api::sector_store::{SectorConfig, SectorManager, SectorStore};
 use api::util;
 use ffi_toolkit::{c_str_to_rust_str, raw_ptr};
 use io::fr32::{
     almost_truncate_to_unpadded_bytes, target_unpadded_bytes, unpadded_bytes, write_padded,
 };
+use libc;
+use std::env;
+use std::fs::{create_dir_all, File, OpenOptions};
+use std::io::{Read, Seek, SeekFrom};
+use std::path::Path;
 
 // These sizes are for SEALED sectors. They are used to calculate the values of setup parameters.
 // They can be overridden by setting the corresponding environment variable (with FILECOIN_PROOFS_ prefix),
@@ -251,6 +248,9 @@ pub struct ConcreteSectorStore {
     manager: Box<SectorManager>,
 }
 
+unsafe impl Sync for ConcreteSectorStore {}
+unsafe impl Send for ConcreteSectorStore {}
+
 impl SectorStore for ConcreteSectorStore {
     fn config(&self) -> &SectorConfig {
         self.config.as_ref()
@@ -379,10 +379,11 @@ mod tests {
     use super::*;
 
     use api::disk_backed_storage::init_new_proof_test_sector_store;
-    use api::responses::SBResponseStatus;
     use api::{
         new_staging_sector_access, num_unsealed_bytes, truncate_unsealed, write_and_preprocess,
     };
+
+    use api::responses::SBResponseStatus;
     use ffi_toolkit::{c_str_to_pbuf, rust_str_to_c_str};
     use io::fr32::FR32_PADDING_MAP;
 

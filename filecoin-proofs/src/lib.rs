@@ -22,6 +22,7 @@ extern crate sapling_crypto;
 extern crate tempfile;
 #[macro_use]
 extern crate failure;
+extern crate byteorder;
 
 pub mod api;
 pub mod error;

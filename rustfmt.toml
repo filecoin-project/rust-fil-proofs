@@ -1,3 +1,0 @@
-ignore = [
-  "filecoin-proofs/examples/ffi/libfilecoin_proofs.rs"
-]

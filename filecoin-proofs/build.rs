@@ -1,6 +1,9 @@
 extern crate bindgen;
 extern crate cbindgen;
 
+use std::env;
+use std::path::PathBuf;
+
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 fn main() {
@@ -37,7 +40,9 @@ fn main() {
 
     match b {
         Ok(res) => {
-            res.write_to_file("examples/ffi/libfilecoin_proofs.rs")
+            let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+
+            res.write_to_file(out_path.join("libfilecoin_proofs.rs"))
                 .expect("could not write file");
         }
         Err(err) => {
