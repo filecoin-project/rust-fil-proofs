@@ -42,7 +42,7 @@ unsafe fn create_and_add_piece(
 
     add_piece(
         sector_builder,
-        rust_str_to_c_str(&piece_key),
+        rust_str_to_c_str(piece_key),
         &piece_bytes[0],
         piece_bytes.len(),
     )
@@ -63,6 +63,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
             &mut prover_id,
             rust_str_to_c_str(sealed_dir.path().to_str().unwrap()),
             rust_str_to_c_str(staging_dir.path().to_str().unwrap()),
+            2,
         );
         defer!(destroy_init_sector_builder_response(resp));
 
@@ -128,7 +129,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
         assert_eq!(125, (*resp).sector_id);
     }
 
-    // add fourth piece, where size(piece) == max
+    // add fourth piece, where size(piece) == max (will trigger sealing)
     {
         let resp = create_and_add_piece(sector_builder, 127);
         defer!(destroy_add_piece_response(resp));
@@ -157,14 +158,15 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
                     _ => (),
                 };
 
-                let resp = find_sealed_sector_metadata(sector_builder, 124);
+                let resp = get_seal_status(sector_builder, 126);
                 if (*resp).status_code != 0 {
                     return;
                 }
 
-                if (*resp).metadata_exists {
+                if (*resp).seal_status_code == FFISealStatus_Sealed {
                     let _ = result_tx.send((*resp).sector_id).unwrap();
                 }
+                defer!(destroy_get_seal_status_response(resp));
 
                 thread::sleep(Duration::from_millis(1000));
             }
@@ -177,7 +179,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
         // wait up to 5 minutes for sealing to complete
         let now_sealed_sector_id = result_rx.recv_timeout(Duration::from_secs(300)).unwrap();
 
-        assert_eq!(now_sealed_sector_id, 124);
+        assert_eq!(now_sealed_sector_id, 126);
     }
 
     Ok(())

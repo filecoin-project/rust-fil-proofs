@@ -26,6 +26,7 @@ colored = "1.6"
 pbr = "1.0"
 tempfile = "3"
 byteorder = "1"
+itertools = "0.7.3"
 
 [dev-dependencies]
 gperftools = { git = "https://github.com/dignifiedquire/rust-gperftools" }

@@ -27,7 +27,7 @@ pub unsafe extern "C" fn new_sealed_sector_access(
     match result {
         Ok(access) => {
             response.status_code = SBResponseStatus::SBNoError;
-            response.sector_access = rust_str_to_c_str(&access);
+            response.sector_access = rust_str_to_c_str(access);
         }
         Err(err) => {
             let (code, ptr) = err_code_and_msg(&err.into());
@@ -55,7 +55,7 @@ pub unsafe extern "C" fn new_staging_sector_access(
     match result {
         Ok(access) => {
             response.status_code = SBResponseStatus::SBNoError;
-            response.sector_access = rust_str_to_c_str(&access);
+            response.sector_access = rust_str_to_c_str(access);
         }
         Err(err) => {
             let (code, ptr) = err_code_and_msg(&err.into());
@@ -96,7 +96,7 @@ pub unsafe extern "C" fn write_and_preprocess(
         Ok(num_data_bytes_written) => {
             if num_data_bytes_written != data_len as u64 {
                 response.status_code = SBResponseStatus::SBReceiverError;
-                response.error_msg = rust_str_to_c_str(&format!(
+                response.error_msg = rust_str_to_c_str(format!(
                     "expected to write {}-bytes, but wrote {}-bytes",
                     data_len as u64, num_data_bytes_written
                 ));

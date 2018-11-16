@@ -16,6 +16,30 @@ pub fn seal(
     state: &Arc<SectorBuilderState>,
     sector_id: SectorId,
 ) -> error::Result<SealedSectorMetadata> {
+    let sealing_result = seal_aux(sector_store, state, sector_id);
+
+    // Update staged sector metadata, adding the error encountered while
+    // sealing.
+    if let Err(ref err) = sealing_result {
+        let _ = state
+            .staged
+            .lock()
+            .unwrap()
+            .sectors
+            .get_mut(&sector_id)
+            .map(|staged_sector| {
+                staged_sector.sealing_error = Some(format!("{}", err_unrecov(err)));
+            });
+    }
+
+    sealing_result
+}
+
+fn seal_aux(
+    sector_store: &Arc<ConcreteSectorStore>,
+    state: &Arc<SectorBuilderState>,
+    sector_id: SectorId,
+) -> error::Result<SealedSectorMetadata> {
     // Get the sector to be sealed from our state-map, acquiring and releasing
     // the lock within the block.
     let to_be_sealed = {

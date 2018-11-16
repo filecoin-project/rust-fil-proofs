@@ -3,7 +3,7 @@ use api::sector_builder::SectorId;
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct StagedState {
     pub sector_id_nonce: SectorId,
     pub sectors: HashMap<SectorId, StagedSectorMetadata>,

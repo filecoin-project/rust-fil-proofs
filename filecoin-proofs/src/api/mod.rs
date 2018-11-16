@@ -1,5 +1,8 @@
 use api::responses::err_code_and_msg;
 use api::responses::FCPResponseStatus;
+use api::responses::FFISealStatus;
+use api::responses::PieceMetadata;
+use api::sector_builder::metadata::SealStatus;
 use api::sector_builder::SectorBuilder;
 use ffi_toolkit::rust_str_to_c_str;
 use ffi_toolkit::{c_str_to_pbuf, c_str_to_rust_str, raw_ptr};
@@ -340,6 +343,7 @@ pub unsafe extern "C" fn init_sector_builder(
     prover_id: &[u8; 31],
     sealed_sector_dir: *const libc::c_char,
     staged_sector_dir: *const libc::c_char,
+    max_num_staged_sectors: u8,
 ) -> *mut responses::InitSectorBuilderResponse {
     let mut response: responses::InitSectorBuilderResponse = Default::default();
 
@@ -351,6 +355,7 @@ pub unsafe extern "C" fn init_sector_builder(
             *prover_id,
             c_str_to_rust_str(sealed_sector_dir).to_string(),
             c_str_to_rust_str(staged_sector_dir).to_string(),
+            max_num_staged_sectors,
         ) {
             Ok(sb) => {
                 response.status_code = FCPResponseStatus::FCPNoError;
@@ -410,6 +415,28 @@ pub unsafe extern "C" fn add_piece(
     raw_ptr(response)
 }
 
+/// For demo purposes. Seals all staged sectors.
+///
+#[no_mangle]
+pub unsafe extern "C" fn seal_all_staged_sectors(
+    ptr: *mut SectorBuilder,
+) -> *mut responses::SealAllStagedSectorsResponse {
+    let mut response: responses::SealAllStagedSectorsResponse = Default::default();
+
+    match (*ptr).seal_all_staged_sectors() {
+        Ok(_) => {
+            response.status_code = FCPResponseStatus::FCPNoError;
+        }
+        Err(err) => {
+            let (code, ptr) = err_code_and_msg(&err);
+            response.status_code = code;
+            response.error_msg = ptr;
+        }
+    }
+
+    raw_ptr(response)
+}
+
 /// Returns the number of user bytes that will fit into a staged sector.
 ///
 #[no_mangle]
@@ -424,31 +451,55 @@ pub unsafe extern "C" fn get_max_user_bytes_per_staged_sector(
     raw_ptr(response)
 }
 
-/// Returns sealed sector metadata for the provided sector id, if it exists.
+/// Returns sector sealing status for the provided sector id if it exists. If
+/// we don't know about the provided sector id, produce an error.
 ///
 #[no_mangle]
-pub unsafe extern "C" fn find_sealed_sector_metadata(
+pub unsafe extern "C" fn get_seal_status(
     ptr: *mut SectorBuilder,
     sector_id: u64,
-) -> *mut responses::FindSealedSectorMetadataResponse {
-    let mut response: responses::FindSealedSectorMetadataResponse = Default::default();
+) -> *mut responses::GetSealStatusResponse {
+    let mut response: responses::GetSealStatusResponse = Default::default();
 
-    match (*ptr).find_sealed_sector_metadata(sector_id) {
-        Ok(opt_meta) => {
+    match (*ptr).get_seal_status(sector_id) {
+        Ok(seal_status) => {
             response.status_code = FCPResponseStatus::FCPNoError;
 
-            match opt_meta {
-                Some(meta) => {
-                    response.metadata_exists = true;
+            match seal_status {
+                SealStatus::Sealed(meta) => {
+                    let meta = *meta;
+
+                    response.seal_status_code = FFISealStatus::Sealed;
                     response.comm_d = meta.comm_d;
                     response.comm_r = meta.comm_r;
                     response.comm_r_star = meta.comm_r_star;
                     response.snark_proof = meta.snark_proof;
                     response.sector_id = meta.sector_id;
-                    response.sector_access = rust_str_to_c_str(&meta.sector_access);
+                    response.sector_access = rust_str_to_c_str(meta.sector_access);
+
+                    let pieces = meta
+                        .pieces
+                        .iter()
+                        .map(|p| PieceMetadata {
+                            piece_key: rust_str_to_c_str(p.piece_key.to_string()),
+                            num_bytes: p.num_bytes,
+                        })
+                        .collect::<Vec<PieceMetadata>>();
+
+                    response.pieces_ptr = pieces.as_ptr();
+                    response.pieces_len = pieces.len();
+
+                    mem::forget(pieces);
                 }
-                None => {
-                    response.metadata_exists = false;
+                SealStatus::Sealing => {
+                    response.seal_status_code = FFISealStatus::Sealing;
+                }
+                SealStatus::Pending => {
+                    response.seal_status_code = FFISealStatus::Pending;
+                }
+                SealStatus::Failed(err) => {
+                    response.seal_status_code = FFISealStatus::Failed;
+                    response.seal_error_msg = rust_str_to_c_str(err);
                 }
             }
         }

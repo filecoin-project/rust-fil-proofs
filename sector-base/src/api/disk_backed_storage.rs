@@ -394,8 +394,8 @@ mod tests {
         create_dir_all(&staging_path).expect("failed to create staging dir");
         create_dir_all(&sealed_path).expect("failed to create sealed dir");
 
-        let s1 = rust_str_to_c_str(&staging_path.to_str().unwrap().to_owned());
-        let s2 = rust_str_to_c_str(&sealed_path.to_str().unwrap().to_owned());
+        let s1 = rust_str_to_c_str(staging_path.to_str().unwrap().to_owned());
+        let s2 = rust_str_to_c_str(sealed_path.to_str().unwrap().to_owned());
 
         unsafe { init_new_proof_test_sector_store(s1, s2) }
     }

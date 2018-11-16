@@ -23,6 +23,15 @@ pub enum FCPResponseStatus {
     FCPReceiverError = 3,
 }
 
+#[repr(C)]
+#[derive(PartialEq, Debug)]
+pub enum FFISealStatus {
+    Sealed = 0,
+    Pending = 1,
+    Failed = 2,
+    Sealing = 3,
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 /// SealResponse
 ////////////////
@@ -337,6 +346,40 @@ pub unsafe extern "C" fn destroy_add_piece_response(ptr: *mut AddPieceResponse) 
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+/// SealAllStagedSectorsResponse
+////////////////////////////////
+
+#[repr(C)]
+pub struct SealAllStagedSectorsResponse {
+    pub status_code: FCPResponseStatus,
+    pub error_msg: *const libc::c_char,
+}
+
+impl Default for SealAllStagedSectorsResponse {
+    fn default() -> SealAllStagedSectorsResponse {
+        SealAllStagedSectorsResponse {
+            status_code: FCPResponseStatus::FCPNoError,
+            error_msg: ptr::null(),
+        }
+    }
+}
+
+impl Drop for SealAllStagedSectorsResponse {
+    fn drop(&mut self) {
+        unsafe {
+            drop(c_str_to_rust_str(self.error_msg));
+        };
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn destroy_seal_all_staged_sectors_response(
+    ptr: *mut SealAllStagedSectorsResponse,
+) {
+    let _ = Box::from_raw(ptr);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 /// GetMaxStagedBytesPerSector
 //////////////////////////////
 
@@ -373,36 +416,51 @@ pub unsafe extern "C" fn destroy_get_max_user_bytes_per_staged_sector_response(
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-/// GetSealedSectorMetadataResponse
-///////////////////////////////////
+/// GetSealStatusResponse
+/////////////////////////
 
 #[repr(C)]
-pub struct FindSealedSectorMetadataResponse {
+pub struct GetSealStatusResponse {
     pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
 
-    pub metadata_exists: bool,
+    pub seal_status_code: FFISealStatus,
 
+    // sealing failed - here's the error
+    pub seal_error_msg: *const libc::c_char,
+
+    // sealed sector metadata
     pub comm_d: [u8; 32],
     pub comm_r: [u8; 32],
     pub comm_r_star: [u8; 32],
     pub sector_access: *const libc::c_char,
     pub sector_id: u64,
     pub snark_proof: [u8; API_POREP_PROOF_BYTES],
-    // TODO: Are pieces needed? Will the proofs-related stuff suffice?
+    pub pieces_len: libc::size_t,
+    pub pieces_ptr: *const PieceMetadata,
 }
 
-impl Default for FindSealedSectorMetadataResponse {
-    fn default() -> FindSealedSectorMetadataResponse {
-        FindSealedSectorMetadataResponse {
+#[repr(C)]
+pub struct PieceMetadata {
+    pub piece_key: *const libc::c_char,
+    pub num_bytes: u64,
+}
+
+impl Default for GetSealStatusResponse {
+    fn default() -> GetSealStatusResponse {
+        GetSealStatusResponse {
             status_code: FCPResponseStatus::FCPNoError,
             error_msg: ptr::null(),
 
-            metadata_exists: false,
+            seal_status_code: FFISealStatus::Failed,
+
+            seal_error_msg: ptr::null(),
 
             comm_d: Default::default(),
             comm_r: Default::default(),
             comm_r_star: Default::default(),
+            pieces_len: 0,
+            pieces_ptr: ptr::null(),
             sector_access: ptr::null(),
             sector_id: 0,
             snark_proof: [0; 384],
@@ -410,18 +468,22 @@ impl Default for FindSealedSectorMetadataResponse {
     }
 }
 
-impl Drop for FindSealedSectorMetadataResponse {
+impl Drop for GetSealStatusResponse {
     fn drop(&mut self) {
         unsafe {
             drop(c_str_to_rust_str(self.error_msg));
+            drop(c_str_to_rust_str(self.seal_error_msg));
             drop(c_str_to_rust_str(self.sector_access));
+            drop(Vec::from_raw_parts(
+                self.pieces_ptr as *mut PieceMetadata,
+                self.pieces_len,
+                self.pieces_len,
+            ));
         };
     }
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn destroy_find_sealed_sector_metadata_response(
-    ptr: *mut FindSealedSectorMetadataResponse,
-) {
+pub unsafe extern "C" fn destroy_get_seal_status_response(ptr: *mut GetSealStatusResponse) {
     let _ = Box::from_raw(ptr);
 }

@@ -1,5 +1,5 @@
 use api::sector_builder::helpers::add_piece::*;
-use api::sector_builder::helpers::find_sealed_sector_metadata::*;
+use api::sector_builder::helpers::get_seal_status::*;
 use api::sector_builder::helpers::get_sectors_ready_for_sealing::*;
 use api::sector_builder::metadata::*;
 use api::sector_builder::state::*;
@@ -13,11 +13,10 @@ use std::sync::{mpsc, Arc, Mutex};
 
 pub mod errors;
 mod helpers;
-mod metadata;
+pub mod metadata;
 mod state;
 mod worker;
 
-const MAX_NUM_STAGED_SECTORS: usize = 2;
 const NUM_SEAL_WORKERS: usize = 2;
 
 pub type SectorId = u64;
@@ -44,6 +43,14 @@ pub struct SectorBuilder {
 
     // For additional seal concurrency, add more workers here.
     seal_workers: Vec<Worker>,
+
+    // Configures the maximum number of staged sectors which can be open and
+    // accepting data at any point in time.
+    max_num_staged_sectors: u8,
+
+    // Configures the maximum number of user piece-bytes which will fit into a
+    // freshly-provisioned staged sector.
+    max_user_bytes_per_staged_sector: u64,
 }
 
 impl SectorBuilder {
@@ -60,6 +67,7 @@ impl SectorBuilder {
         prover_id: [u8; 31],
         sealed_sector_dir: S,
         staged_sector_dir: S,
+        max_num_staged_sectors: u8,
     ) -> Result<SectorBuilder> {
         // Build the SectorBuilder's initial state. If available, we
         // reconstitute this stage from persistence. If not, we create it from
@@ -103,21 +111,25 @@ impl SectorBuilder {
             (tx, workers)
         };
 
+        let max_user_bytes_per_staged_sector = sector_store
+            .clone()
+            .config()
+            .max_unsealed_bytes_per_sector();
+
         Ok(SectorBuilder {
             seal_tx,
             seal_workers,
             sector_store,
             state,
+            max_num_staged_sectors,
+            max_user_bytes_per_staged_sector,
         })
     }
 
     // Returns the number of user-provided bytes that will fit into a staged
     // sector.
     pub fn get_max_user_bytes_per_staged_sector(&self) -> u64 {
-        self.sector_store
-            .clone()
-            .config()
-            .max_unsealed_bytes_per_sector()
+        self.max_user_bytes_per_staged_sector
     }
 
     // Stages user piece-bytes for sealing. Note that add_piece calls are
@@ -134,7 +146,12 @@ impl SectorBuilder {
             piece_bytes,
         )?;
 
-        let to_be_sealed = get_sectors_ready_for_sealing(&locked_staged_state, false)?;
+        let to_be_sealed = get_sectors_ready_for_sealing(
+            &locked_staged_state,
+            self.max_user_bytes_per_staged_sector,
+            self.max_num_staged_sectors,
+            false,
+        );
 
         // Mark the to-be-sealed sectors as no longer accepting data.
         for sector in to_be_sealed.iter() {
@@ -157,20 +174,22 @@ impl SectorBuilder {
         Ok(destination_sector_id)
     }
 
-    // If the provided sector id corresponds to SealedSectorMetadata, this
-    // method will produce a clone of that metadata.
-    pub fn find_sealed_sector_metadata(
-        &self,
-        sector_id: SectorId,
-    ) -> Result<Option<SealedSectorMetadata>> {
-        find_sealed_sector_metadata(&self.state, sector_id)
+    // Returns sealing status for the sector with specified id. If no sealed or
+    // staged sector exists with the provided id, produce an error.
+    pub fn get_seal_status(&self, sector_id: SectorId) -> Result<SealStatus> {
+        get_seal_status(&self.state, sector_id)
     }
 
     // For demo purposes. Schedules sealing of all staged sectors.
-    fn seal_all_staged_sectors(&self) -> Result<()> {
+    pub fn seal_all_staged_sectors(&self) -> Result<()> {
         let mut locked_staged_state = self.state.staged.lock().unwrap();
 
-        let to_be_sealed = get_sectors_ready_for_sealing(&locked_staged_state, true)?;
+        let to_be_sealed = get_sectors_ready_for_sealing(
+            &locked_staged_state,
+            self.max_user_bytes_per_staged_sector,
+            self.max_num_staged_sectors,
+            true,
+        );
 
         // Mark the to-be-sealed sectors as no longer accepting data.
         for sector in to_be_sealed.iter() {

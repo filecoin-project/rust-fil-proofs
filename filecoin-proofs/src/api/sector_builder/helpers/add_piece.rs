@@ -1,4 +1,7 @@
 use api::sector_builder::errors::*;
+use api::sector_builder::metadata::sum_piece_bytes;
+use api::sector_builder::metadata::StagedSectorMetadata;
+use api::sector_builder::state::StagedState;
 use api::sector_builder::*;
 use error;
 use sector_base::api::disk_backed_storage::ConcreteSectorStore;
@@ -47,8 +50,8 @@ pub fn add_piece<S: Into<String>>(
                 }
             })
             .map(|sector_id| {
-                s.pieces.push(PieceMetadata {
-                    key: piece_key.into(),
+                s.pieces.push(metadata::Piece {
+                    piece_key: piece_key.into(),
                     num_bytes: piece_bytes_len,
                 });
 
@@ -72,10 +75,7 @@ fn compute_destination_sector_id(
         Ok(candidate_sectors
             .iter()
             .find(move |staged_sector| {
-                let num_bytes_in_sector: u64 =
-                    staged_sector.pieces.iter().map(|x| x.num_bytes).sum();
-
-                (max_bytes_per_sector - num_bytes_in_sector) > num_bytes_in_piece
+                (max_bytes_per_sector - sum_piece_bytes(staged_sector)) > num_bytes_in_piece
             })
             .map(|x| x.sector_id))
     }
@@ -97,9 +97,10 @@ fn provision_new_staged_sector(
     let access = sector_manager.new_staging_sector_access()?;
 
     let meta = StagedSectorMetadata {
-        sector_id,
-        sector_access: access.clone(),
         pieces: Default::default(),
+        sealing_error: None,
+        sector_access: access.clone(),
+        sector_id,
     };
 
     locked_state.sectors_accepting_data.insert(meta.sector_id);

@@ -23,6 +23,7 @@ extern crate tempfile;
 #[macro_use]
 extern crate failure;
 extern crate byteorder;
+extern crate itertools;
 
 pub mod api;
 pub mod error;
