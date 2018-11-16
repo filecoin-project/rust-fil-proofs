@@ -386,7 +386,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
                 // get the parents into bits
                 let parents_bits: Vec<Vec<Boolean>> = {
                     replica_parents
-                        .into_iter()
+                        .iter()
                         .enumerate()
                         .map(|(i, val)| -> Result<Vec<Boolean>, SynthesisError> {
                             let mut v = boolean::field_into_boolean_vec_le(
@@ -699,6 +699,7 @@ mod tests {
             &public_params,
             &public_inputs,
             &private_inputs,
+            None,
         )
         .expect("failed while proving");
 

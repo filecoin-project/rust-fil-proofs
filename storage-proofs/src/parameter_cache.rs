@@ -25,7 +25,7 @@ fn parameter_cache_dir_name() -> String {
     }
 }
 
-fn parameter_cache_dir() -> PathBuf {
+pub fn parameter_cache_dir() -> PathBuf {
     Path::new(&parameter_cache_dir_name()).to_path_buf()
 }
 

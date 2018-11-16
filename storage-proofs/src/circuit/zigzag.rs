@@ -289,6 +289,41 @@ impl<'a, H: 'static + Hasher>
             _e: PhantomData,
         }
     }
+
+    fn blank_circuit(
+        public_params: &<ZigZagDrgPoRep<H> as ProofScheme>::PublicParams,
+        engine_params: &'a <Bls12 as JubjubEngine>::Params,
+    ) -> ZigZagCircuit<'a, Bls12, H> {
+        use rand::{Rng, SeedableRng, XorShiftRng};
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let replica_id = rng.gen();
+
+        let layers = (0..public_params.layers)
+            .map(|_| {
+                let layer_public_inputs = drgporep::PublicInputs {
+                    replica_id,
+                    // Challenges are not used in circuit synthesis. Don't bother generating.
+                    challenges: vec![],
+                    tau: None,
+                };
+                (layer_public_inputs, None)
+            })
+            .collect();
+
+        let pp: <ZigZagDrgPoRep<H> as ProofScheme>::PublicParams = public_params.into();
+
+        ZigZagCircuit {
+            params: engine_params,
+            public_params: pp,
+            tau: porep::Tau {
+                comm_r: rng.gen(),
+                comm_d: rng.gen(),
+            },
+            comm_r_star: rng.gen(),
+            layers,
+            _e: PhantomData,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -542,7 +577,7 @@ mod tests {
             );
         }
 
-        let proof = ZigZagCompound::prove(&public_params, &public_inputs, &private_inputs)
+        let proof = ZigZagCompound::prove(&public_params, &public_inputs, &private_inputs, None)
             .expect("failed while proving");
 
         let verified = ZigZagCompound::verify(&public_params, &public_inputs, &proof)
