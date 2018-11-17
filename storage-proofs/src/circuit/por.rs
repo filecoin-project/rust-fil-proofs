@@ -297,6 +297,7 @@ mod tests {
                 &public_params,
                 &public_inputs,
                 &private_inputs,
+                None,
             )
             .expect("failed while proving");
 
@@ -469,6 +470,7 @@ mod tests {
                 &public_params,
                 &public_inputs,
                 &private_inputs,
+                None,
             )
             .expect("failed while proving");
 

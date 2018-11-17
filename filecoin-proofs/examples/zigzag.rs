@@ -251,7 +251,7 @@ fn do_the_work<H: 'static>(
                 let start = Instant::now();
                 start_profile("groth-prove");
                 let result =
-                    ZigZagCompound::prove(&compound_public_params, &pub_inputs, &priv_inputs)
+                    ZigZagCompound::prove(&compound_public_params, &pub_inputs, &priv_inputs, None)
                         .unwrap();
                 stop_profile();
                 let groth_proving = start.elapsed();

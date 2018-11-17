@@ -14,7 +14,7 @@ use std::ffi::CString;
 use std::mem;
 use std::slice::from_raw_parts;
 
-mod internal;
+pub mod internal;
 pub mod responses;
 mod sector_builder;
 

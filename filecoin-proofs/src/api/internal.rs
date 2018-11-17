@@ -3,10 +3,12 @@ use std::io::{BufWriter, Read, Write};
 use std::path::PathBuf;
 use std::{thread, time};
 
+use bellman::groth16;
 use pairing::bls12_381::Bls12;
 use pairing::Engine;
 use sapling_crypto::jubjub::JubjubBls12;
 
+use sector_base::api::disk_backed_storage::REAL_SECTOR_SIZE;
 use sector_base::api::sector_store::SectorConfig;
 use sector_base::api::sector_store::SectorStore;
 use sector_base::io::fr32::write_unpadded;
@@ -20,7 +22,7 @@ use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
 use storage_proofs::hasher::Hasher;
 use storage_proofs::layered_drgporep;
 use storage_proofs::parameter_cache::{
-    parameter_cache_path, read_cached_params, write_params_to_cache,
+    parameter_cache_dir, parameter_cache_path, read_cached_params, write_params_to_cache,
 };
 use storage_proofs::porep::{replica_id, PoRep, ProverAux, Tau};
 use storage_proofs::proof::ProofScheme;
@@ -55,8 +57,23 @@ fn dummy_parameter_cache_path(sector_config: &SectorConfig, sector_size: usize) 
     ))
 }
 
+pub const OFFICIAL_ZIGZAG_PARAM_FILENAME: &str = "params.out";
+
 lazy_static! {
     pub static ref ENGINE_PARAMS: JubjubBls12 = JubjubBls12::new();
+}
+
+lazy_static! {
+    static ref ZIGZAG_PARAMS: Option<groth16::Parameters<Bls12>> =
+        read_cached_params(&official_params_path()).ok();
+}
+
+fn official_params_path() -> PathBuf {
+    parameter_cache_dir().join(OFFICIAL_ZIGZAG_PARAM_FILENAME)
+}
+
+fn get_zigzag_params() -> Option<groth16::Parameters<Bls12>> {
+    (*ZIGZAG_PARAMS).clone()
 }
 
 pub const LAMBDA: usize = 32;
@@ -90,7 +107,7 @@ fn setup_params(sector_bytes: usize) -> layered_drgporep::SetupParams {
     }
 }
 
-fn public_params(
+pub fn public_params(
     sector_bytes: usize,
 ) -> layered_drgporep::PublicParams<DefaultTreeHasher, ZigZagBucketGraph<DefaultTreeHasher>> {
     ZigZagDrgPoRep::<DefaultTreeHasher>::setup(&setup_params(sector_bytes)).unwrap()
@@ -117,7 +134,7 @@ fn pad_safe_fr(unpadded: FrSafe) -> Fr32Ary {
 /// * - `delay_seconds` is None if no delay.
 /// * - `sector_bytes` is the size (in bytes) of sector which should be stored on disk.
 /// * - `proof_sector_bytes` is the size of the sector which will be proved when faking.
-pub fn get_config(sector_config: &SectorConfig) -> (bool, Option<u32>, usize, usize) {
+pub fn get_config(sector_config: &SectorConfig) -> (bool, Option<u32>, usize, usize, bool) {
     let fake = sector_config.is_fake();
     let delay_seconds = sector_config.simulate_delay_seconds();
     let delayed = delay_seconds.is_some();
@@ -128,12 +145,21 @@ pub fn get_config(sector_config: &SectorConfig) -> (bool, Option<u32>, usize, us
         sector_bytes
     };
 
+    // If configuration is 'completely real', then we can use the parameters pre-generated for the real circuit.
+    let uses_official_circuit = !fake && (sector_bytes as u64 == REAL_SECTOR_SIZE);
+
     // It doesn't make sense to set a delay when not faking. The current implementations of SectorStore
     // never do, but if that were to change, it would be a mistake.
     let valid = if fake { true } else { !delayed };
     assert!(valid, "delay is only valid when faking");
 
-    (fake, delay_seconds, sector_bytes, proof_sector_bytes)
+    (
+        fake,
+        delay_seconds,
+        sector_bytes,
+        proof_sector_bytes,
+        uses_official_circuit,
+    )
 }
 
 pub fn seal(
@@ -143,7 +169,8 @@ pub fn seal(
     prover_id_in: FrSafe,
     sector_id_in: FrSafe,
 ) -> Result<(Commitment, Commitment, Commitment, SnarkProof)> {
-    let (fake, delay_seconds, sector_bytes, proof_sector_bytes) = get_config(sector_store.config());
+    let (fake, delay_seconds, sector_bytes, proof_sector_bytes, uses_official_circuit) =
+        get_config(sector_store.config());
 
     let public_params = public_params(proof_sector_bytes);
     let challenge_count = public_params.challenge_count;
@@ -205,7 +232,25 @@ pub fn seal(
         tau: tau.layer_taus,
     };
 
-    let proof = ZigZagCompound::prove(&compound_public_params, &public_inputs, &private_inputs)?;
+    let groth_params = if uses_official_circuit {
+        get_zigzag_params()
+    } else {
+        None
+    };
+
+    let must_cache_params = if groth_params.is_some() {
+        println!("Using official parameters.");
+        false
+    } else {
+        true
+    };
+
+    let proof = ZigZagCompound::prove(
+        &compound_public_params,
+        &public_inputs,
+        &private_inputs,
+        groth_params,
+    )?;
 
     let mut buf = Vec::with_capacity(POREP_PROOF_BYTES);
 
@@ -214,10 +259,12 @@ pub fn seal(
     let mut proof_bytes = [0; POREP_PROOF_BYTES];
     proof_bytes.copy_from_slice(&buf);
 
-    write_params_to_cache(
-        proof.groth_params.clone(),
-        &dummy_parameter_cache_path(sector_store.config(), proof_sector_bytes),
-    )?;
+    if must_cache_params {
+        write_params_to_cache(
+            proof.groth_params.clone(),
+            &dummy_parameter_cache_path(sector_store.config(), proof_sector_bytes),
+        )?;
+    }
 
     let comm_r = commitment_from_fr::<Bls12>(public_tau.comm_r.0);
     let comm_d = commitment_from_fr::<Bls12>(public_tau.comm_d.0);
@@ -302,7 +349,8 @@ pub fn get_unsealed_range(
     offset: u64,
     num_bytes: u64,
 ) -> Result<(u64)> {
-    let (fake, delay_seconds, sector_bytes, proof_sector_bytes) = get_config(sector_store.config());
+    let (fake, delay_seconds, sector_bytes, proof_sector_bytes, _uses_official_circuit) =
+        get_config(sector_store.config());
     if let Some(delay) = delay_seconds {
         delay_get_unsealed_range(delay);
     }
@@ -343,7 +391,8 @@ pub fn verify_seal(
     sector_id_in: FrSafe,
     proof_vec: &[u8],
 ) -> Result<bool> {
-    let (_fake, _delay_seconds, _sector_bytes, proof_sector_bytes) = get_config(sector_store);
+    let (_fake, _delay_seconds, _sector_bytes, proof_sector_bytes, uses_official_circuit) =
+        get_config(sector_store);
 
     let challenge_count = CHALLENGE_COUNT;
     let prover_id = pad_safe_fr(prover_id_in);
@@ -378,10 +427,20 @@ pub fn verify_seal(
         k: None,
     };
 
-    let groth_params = read_cached_params(&dummy_parameter_cache_path(
-        sector_store,
-        proof_sector_bytes,
-    ))?;
+    let groth_params = if uses_official_circuit {
+        match get_zigzag_params() {
+            Some(p) => p,
+            None => read_cached_params(&dummy_parameter_cache_path(
+                sector_store,
+                proof_sector_bytes,
+            ))?,
+        }
+    } else {
+        read_cached_params(&dummy_parameter_cache_path(
+            sector_store,
+            proof_sector_bytes,
+        ))?
+    };
 
     let proof = MultiProof::new_from_reader(Some(POREP_PARTITIONS), proof_vec, groth_params)?;
 

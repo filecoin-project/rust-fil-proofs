@@ -56,9 +56,10 @@ where
         pub_params: &'b PublicParams<'a, E, S>,
         pub_in: &'b S::PublicInputs,
         priv_in: &'b S::PrivateInputs,
+        groth_params: Option<groth16::Parameters<E>>,
     ) -> Result<MultiProof<E>> {
         let partitions = Self::partition_count(pub_params);
-        let mut shared_groth_params = Vec::with_capacity(partitions);
+        let mut shared_groth_params = groth_params;
         let mut groth_proofs = Vec::with_capacity(partitions);
 
         let partition_count = Self::partition_count(pub_params);
@@ -75,14 +76,17 @@ where
                 &vanilla_proof,
                 &pub_params.vanilla_params,
                 pub_params.engine_params,
+                &shared_groth_params,
             )?;
-            shared_groth_params.push(groth_params);
+            if groth_params.is_some() {
+                shared_groth_params = groth_params;
+            }
             groth_proofs.push(groth_proof);
         }
 
         Ok(MultiProof::new(
             groth_proofs,
-            shared_groth_params[0].clone(),
+            shared_groth_params.unwrap().clone(),
         ))
     }
 
@@ -112,12 +116,16 @@ where
     /// groth proof from it. It returns a tuple of the groth proof and params.
     /// circuit_proof is used internally and should neither be called nor implemented outside of
     /// default trait methods.
+    ///
+    /// If groth_params are not supplied, they will be generated and returned.
+    /// If groth_params *are* supplied, they will not be generated, and None will be returned.
     fn circuit_proof<'b>(
         pub_in: &S::PublicInputs,
         vanilla_proof: &S::Proof,
         pub_params: &'b S::PublicParams,
         params: &'a E::Params,
-    ) -> Result<(groth16::Proof<E>, groth16::Parameters<E>)> {
+        groth_params: &Option<groth16::Parameters<E>>,
+    ) -> Result<(groth16::Proof<E>, Option<groth16::Parameters<E>>)> {
         // TODO: better random numbers
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
@@ -132,15 +140,25 @@ where
         // For now, this is most expedient, since we need the public/private inputs
         // in order to generate a circuit at all.
 
-        let groth_params = Self::get_groth_params(make_circuit(), pub_params, rng)?;
-
-        let groth_proof = groth16::create_random_proof(make_circuit(), &groth_params, rng)?;
+        let (groth_proof, groth_params_to_return) = match groth_params {
+            Some(gp) => (groth16::create_random_proof(make_circuit(), gp, rng)?, None),
+            None => {
+                let gp = Self::get_groth_params(make_circuit(), pub_params, rng)?;
+                (
+                    groth16::create_random_proof(make_circuit(), &gp, rng)?,
+                    Some(gp),
+                )
+            }
+        };
 
         let mut proof_vec = vec![];
         groth_proof.write(&mut proof_vec)?;
         let gp = groth16::Proof::<E>::read(&proof_vec[..])?;
 
-        Ok((gp, groth_params))
+        // Exactly one of the input and returned groth_params should be None.
+        assert!(groth_params.is_none() ^ groth_params_to_return.is_none());
+
+        Ok((gp, groth_params_to_return))
     }
 
     /// generate_public_inputs generates public inputs suitable for use as input during verification
@@ -162,6 +180,10 @@ where
         public_param: &S::PublicParams,
         engine_params: &'a E::Params,
     ) -> C;
+
+    fn blank_circuit(_public_param: &S::PublicParams, _engine_params: &'a E::Params) -> C {
+        unimplemented!();
+    }
 
     fn circuit_for_test(
         public_parameters: &PublicParams<'a, E, S>,
