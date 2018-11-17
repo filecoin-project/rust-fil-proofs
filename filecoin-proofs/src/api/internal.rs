@@ -7,6 +7,7 @@ use pairing::bls12_381::Bls12;
 use pairing::Engine;
 use sapling_crypto::jubjub::JubjubBls12;
 
+use sector_base::api::sector_store::SectorConfig;
 use sector_base::api::sector_store::SectorStore;
 use sector_base::io::fr32::write_unpadded;
 use storage_proofs::circuit::multi_proof::MultiProof;
@@ -46,10 +47,10 @@ type SnarkProof = [u8; POREP_PROOF_BYTES];
 /// How big should a fake sector be when faking proofs?
 const FAKE_SECTOR_BYTES: usize = 128;
 
-fn dummy_parameter_cache_path(sector_store: &SectorStore, sector_size: usize) -> PathBuf {
+fn dummy_parameter_cache_path(sector_config: &SectorConfig, sector_size: usize) -> PathBuf {
     parameter_cache_path(&format!(
         "{}[{}]",
-        sector_store.config().dummy_parameter_cache_name(),
+        sector_config.dummy_parameter_cache_name(),
         sector_size
     ))
 }
@@ -109,18 +110,18 @@ fn pad_safe_fr(unpadded: FrSafe) -> Fr32Ary {
     res
 }
 
-/// Validate sector_store configuration and calculates derived configuration.
+/// Validate sector_config configuration and calculates derived configuration.
 ///
 /// # Return Values
 /// * - `fake` is true when faking.
 /// * - `delay_seconds` is None if no delay.
 /// * - `sector_bytes` is the size (in bytes) of sector which should be stored on disk.
 /// * - `proof_sector_bytes` is the size of the sector which will be proved when faking.
-pub fn get_config(sector_store: &SectorStore) -> (bool, Option<u32>, usize, usize) {
-    let fake = sector_store.config().is_fake();
-    let delay_seconds = sector_store.config().simulate_delay_seconds();
+pub fn get_config(sector_config: &SectorConfig) -> (bool, Option<u32>, usize, usize) {
+    let fake = sector_config.is_fake();
+    let delay_seconds = sector_config.simulate_delay_seconds();
     let delayed = delay_seconds.is_some();
-    let sector_bytes = sector_store.config().sector_bytes() as usize;
+    let sector_bytes = sector_config.sector_bytes() as usize;
     let proof_sector_bytes = if fake {
         FAKE_SECTOR_BYTES
     } else {
@@ -142,7 +143,7 @@ pub fn seal(
     prover_id_in: FrSafe,
     sector_id_in: FrSafe,
 ) -> Result<(Commitment, Commitment, Commitment, SnarkProof)> {
-    let (fake, delay_seconds, sector_bytes, proof_sector_bytes) = get_config(sector_store);
+    let (fake, delay_seconds, sector_bytes, proof_sector_bytes) = get_config(sector_store.config());
 
     let public_params = public_params(proof_sector_bytes);
     let challenge_count = public_params.challenge_count;
@@ -215,7 +216,7 @@ pub fn seal(
 
     write_params_to_cache(
         proof.groth_params.clone(),
-        &dummy_parameter_cache_path(sector_store, proof_sector_bytes),
+        &dummy_parameter_cache_path(sector_store.config(), proof_sector_bytes),
     )?;
 
     let comm_r = commitment_from_fr::<Bls12>(public_tau.comm_r.0);
@@ -225,7 +226,7 @@ pub fn seal(
     // Verification is cheap when parameters are cached,
     // and it is never correct to return a proof which does not verify.
     verify_seal(
-        sector_store,
+        sector_store.config(),
         comm_r,
         comm_d,
         comm_r_star,
@@ -301,7 +302,7 @@ pub fn get_unsealed_range(
     offset: u64,
     num_bytes: u64,
 ) -> Result<(u64)> {
-    let (fake, delay_seconds, sector_bytes, proof_sector_bytes) = get_config(sector_store);
+    let (fake, delay_seconds, sector_bytes, proof_sector_bytes) = get_config(sector_store.config());
     if let Some(delay) = delay_seconds {
         delay_get_unsealed_range(delay);
     }
@@ -334,7 +335,7 @@ pub fn get_unsealed_range(
 }
 
 pub fn verify_seal(
-    sector_store: &SectorStore,
+    sector_store: &SectorConfig,
     comm_r: Commitment,
     comm_d: Commitment,
     comm_r_star: Commitment,

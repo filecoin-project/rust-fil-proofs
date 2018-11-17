@@ -260,68 +260,33 @@ impl SectorStore for ConcreteSectorStore {
     }
 }
 
-pub fn new_real_sector_store(sealed_path: String, staging_path: String) -> ConcreteSectorStore {
-    ConcreteSectorStore {
-        config: Box::new(RealConfig {
-            sector_bytes: sector_size("FILECOIN_PROOFS_SECTOR_SIZE", REAL_SECTOR_SIZE),
-        }),
-        manager: Box::new(DiskManager {
-            sealed_path,
-            staging_path,
-        }),
-    }
-}
-
 pub fn new_sector_store(
     cs: &SBConfiguredStore,
     sealed_path: String,
     staging_path: String,
 ) -> ConcreteSectorStore {
+    let manager = Box::new(DiskManager {
+        staging_path,
+        sealed_path,
+    });
+
+    let config = new_sector_config(cs);
+
+    ConcreteSectorStore { config, manager }
+}
+
+pub fn new_sector_config(cs: &SBConfiguredStore) -> Box<SectorConfig> {
     match *cs {
-        SBConfiguredStore::Live => new_slow_fake_sector_store(sealed_path, staging_path),
-        SBConfiguredStore::Test => new_fast_fake_sector_store(sealed_path, staging_path),
-        SBConfiguredStore::ProofTest => new_real_sector_store(sealed_path, staging_path),
-    }
-}
-
-pub fn new_slow_fake_sector_store(
-    sealed_path: String,
-    staging_path: String,
-) -> ConcreteSectorStore {
-    new_fake_sector_store(
-        sealed_path,
-        staging_path,
-        sector_size("FILECOIN_PROOFS_SLOW_SECTOR_SIZE", SLOW_SECTOR_SIZE),
-        delay_seconds("FILECOIN_PROOFS_SLOW_DELAY_SECONDS", SLOW_DELAY_SECONDS),
-    )
-}
-
-pub fn new_fast_fake_sector_store(
-    sealed_path: String,
-    staging_path: String,
-) -> ConcreteSectorStore {
-    new_fake_sector_store(
-        sealed_path,
-        staging_path,
-        sector_size("FILECOIN_PROOFS_FAST_SECTOR_SIZE", FAST_SECTOR_SIZE),
-        delay_seconds("FILECOIN_PROOFS_FAST_DELAY_SECONDS", FAST_DELAY_SECONDS),
-    )
-}
-
-fn new_fake_sector_store(
-    sealed_path: String,
-    staging_path: String,
-    sector_bytes: u64,
-    delay_seconds: u32,
-) -> ConcreteSectorStore {
-    ConcreteSectorStore {
-        config: Box::new(FakeConfig {
-            sector_bytes,
-            delay_seconds,
+        SBConfiguredStore::Live => Box::new(FakeConfig {
+            sector_bytes: sector_size("FILECOIN_PROOFS_SLOW_SECTOR_SIZE", SLOW_SECTOR_SIZE),
+            delay_seconds: delay_seconds("FILECOIN_PROOFS_SLOW_DELAY_SECONDS", SLOW_DELAY_SECONDS),
         }),
-        manager: Box::new(DiskManager {
-            sealed_path,
-            staging_path,
+        SBConfiguredStore::Test => Box::new(FakeConfig {
+            sector_bytes: sector_size("FILECOIN_PROOFS_FAST_SECTOR_SIZE", FAST_SECTOR_SIZE),
+            delay_seconds: delay_seconds("FILECOIN_PROOFS_FAST_DELAY_SECONDS", FAST_DELAY_SECONDS),
+        }),
+        SBConfiguredStore::ProofTest => Box::new(RealConfig {
+            sector_bytes: sector_size("FILECOIN_PROOFS_SECTOR_SIZE", REAL_SECTOR_SIZE),
         }),
     }
 }
