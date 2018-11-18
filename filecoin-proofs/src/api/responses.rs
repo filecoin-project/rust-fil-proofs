@@ -264,6 +264,7 @@ pub fn err_code_and_msg(err: &Error) -> (FCPResponseStatus, *const libc::c_char)
         Some(SectorBuilderErr::OverflowError { .. }) => return (FCPCallerError, ptr),
         Some(SectorBuilderErr::IncompleteWriteError { .. }) => return (FCPReceiverError, ptr),
         Some(SectorBuilderErr::Unrecoverable(_)) => return (FCPReceiverError, ptr),
+        Some(SectorBuilderErr::PieceNotFound(_)) => return (FCPCallerError, ptr),
         None => (),
     }
 
@@ -342,6 +343,50 @@ impl Drop for AddPieceResponse {
 
 #[no_mangle]
 pub unsafe extern "C" fn destroy_add_piece_response(ptr: *mut AddPieceResponse) {
+    let _ = Box::from_raw(ptr);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// ReadPieceFromSealedSectorResponse
+/////////////////////////////////////
+
+#[repr(C)]
+pub struct ReadPieceFromSealedSectorResponse {
+    pub status_code: FCPResponseStatus,
+    pub error_msg: *const libc::c_char,
+    pub data_len: libc::size_t,
+    pub data_ptr: *const u8,
+}
+
+impl Default for ReadPieceFromSealedSectorResponse {
+    fn default() -> ReadPieceFromSealedSectorResponse {
+        ReadPieceFromSealedSectorResponse {
+            status_code: FCPResponseStatus::FCPNoError,
+            error_msg: ptr::null(),
+            data_len: 0,
+            data_ptr: ptr::null(),
+        }
+    }
+}
+
+impl Drop for ReadPieceFromSealedSectorResponse {
+    fn drop(&mut self) {
+        unsafe {
+            drop(c_str_to_rust_str(self.error_msg));
+
+            drop(Vec::from_raw_parts(
+                self.data_ptr as *mut u8,
+                self.data_len,
+                self.data_len,
+            ));
+        };
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn destroy_read_piece_from_sealed_sector_response(
+    ptr: *mut ReadPieceFromSealedSectorResponse,
+) {
     let _ = Box::from_raw(ptr);
 }
 
@@ -437,11 +482,11 @@ pub struct GetSealStatusResponse {
     pub sector_id: u64,
     pub snark_proof: [u8; API_POREP_PROOF_BYTES],
     pub pieces_len: libc::size_t,
-    pub pieces_ptr: *const PieceMetadata,
+    pub pieces_ptr: *const FFIPieceMetadata,
 }
 
 #[repr(C)]
-pub struct PieceMetadata {
+pub struct FFIPieceMetadata {
     pub piece_key: *const libc::c_char,
     pub num_bytes: u64,
 }
@@ -475,7 +520,7 @@ impl Drop for GetSealStatusResponse {
             drop(c_str_to_rust_str(self.seal_error_msg));
             drop(c_str_to_rust_str(self.sector_access));
             drop(Vec::from_raw_parts(
-                self.pieces_ptr as *mut PieceMetadata,
+                self.pieces_ptr as *mut FFIPieceMetadata,
                 self.pieces_len,
                 self.pieces_len,
             ));

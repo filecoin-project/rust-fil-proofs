@@ -50,7 +50,7 @@ pub fn add_piece<S: Into<String>>(
                 }
             })
             .map(|sector_id| {
-                s.pieces.push(metadata::Piece {
+                s.pieces.push(metadata::PieceMetadata {
                     piece_key: piece_key.into(),
                     num_bytes: piece_bytes_len,
                 });

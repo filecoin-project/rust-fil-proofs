@@ -1,7 +1,7 @@
 use api::responses::err_code_and_msg;
 use api::responses::FCPResponseStatus;
+use api::responses::FFIPieceMetadata;
 use api::responses::FFISealStatus;
-use api::responses::PieceMetadata;
 use api::sector_builder::metadata::SealStatus;
 use api::sector_builder::SectorBuilder;
 use ffi_toolkit::rust_str_to_c_str;
@@ -424,6 +424,34 @@ pub unsafe extern "C" fn add_piece(
     raw_ptr(response)
 }
 
+/// Unseals and returns the bytes associated with the provided piece key.
+///
+#[no_mangle]
+pub unsafe extern "C" fn read_piece_from_sealed_sector(
+    ptr: *mut SectorBuilder,
+    piece_key: *const libc::c_char,
+) -> *mut responses::ReadPieceFromSealedSectorResponse {
+    let mut response: responses::ReadPieceFromSealedSectorResponse = Default::default();
+
+    let piece_key = c_str_to_rust_str(piece_key);
+
+    match (*ptr).read_piece_from_sealed_sector(piece_key) {
+        Ok(piece_bytes) => {
+            response.status_code = FCPResponseStatus::FCPNoError;
+            response.data_ptr = piece_bytes.as_ptr();
+            response.data_len = piece_bytes.len();
+            mem::forget(piece_bytes);
+        }
+        Err(err) => {
+            let (code, ptr) = err_code_and_msg(&err);
+            response.status_code = code;
+            response.error_msg = ptr;
+        }
+    }
+
+    raw_ptr(response)
+}
+
 /// For demo purposes. Seals all staged sectors.
 ///
 #[no_mangle]
@@ -489,11 +517,11 @@ pub unsafe extern "C" fn get_seal_status(
                     let pieces = meta
                         .pieces
                         .iter()
-                        .map(|p| PieceMetadata {
+                        .map(|p| FFIPieceMetadata {
                             piece_key: rust_str_to_c_str(p.piece_key.to_string()),
                             num_bytes: p.num_bytes,
                         })
-                        .collect::<Vec<PieceMetadata>>();
+                        .collect::<Vec<FFIPieceMetadata>>();
 
                     response.pieces_ptr = pieces.as_ptr();
                     response.pieces_len = pieces.len();

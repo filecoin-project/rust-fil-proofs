@@ -1,17 +1,16 @@
 use api::sector_builder::errors::SectorBuilderErr;
 use api::sector_builder::metadata::SealStatus;
-use api::sector_builder::state::SectorBuilderState;
+use api::sector_builder::state::SealedState;
+use api::sector_builder::state::StagedState;
 use api::sector_builder::SectorId;
 use error;
-use std::sync::Arc;
+use std::sync::MutexGuard;
 
 pub fn get_seal_status(
-    state: &Arc<SectorBuilderState>,
+    staged_state: &MutexGuard<StagedState>,
+    sealed_state: &MutexGuard<SealedState>,
     sector_id: SectorId,
 ) -> error::Result<SealStatus> {
-    let sealed_state = state.sealed.lock().unwrap();
-    let staged_state = state.staged.lock().unwrap();
-
     sealed_state
         .sectors
         .get(&sector_id)
@@ -45,8 +44,10 @@ mod tests {
     use super::*;
     use api::sector_builder::metadata::{SealedSectorMetadata, StagedSectorMetadata};
     use api::sector_builder::state::SealedState;
+    use api::sector_builder::state::SectorBuilderState;
     use api::sector_builder::state::StagedState;
     use std::collections::{HashMap, HashSet};
+    use std::sync::Arc;
     use std::sync::Mutex;
 
     fn setup() -> Arc<SectorBuilderState> {
@@ -90,22 +91,25 @@ mod tests {
     fn test_alpha() {
         let state = setup();
 
-        let result = get_seal_status(&state, 1);
+        let sealed_state = state.sealed.lock().unwrap();
+        let staged_state = state.staged.lock().unwrap();
+
+        let result = get_seal_status(&staged_state, &sealed_state, 1);
         assert!(result.is_err());
 
-        let result = get_seal_status(&state, 2).unwrap();
+        let result = get_seal_status(&staged_state, &sealed_state, 2).unwrap();
         match result {
             SealStatus::Sealing => (),
             _ => panic!("should have been SealStatus::Sealing"),
         }
 
-        let result = get_seal_status(&state, 3).unwrap();
+        let result = get_seal_status(&staged_state, &sealed_state, 3).unwrap();
         match result {
             SealStatus::Pending => (),
             _ => panic!("should have been SealStatus::Pending"),
         }
 
-        let result = get_seal_status(&state, 4).unwrap();
+        let result = get_seal_status(&staged_state, &sealed_state, 4).unwrap();
         match result {
             SealStatus::Sealed(_) => (),
             _ => panic!("should have been SealStatus::Sealed"),

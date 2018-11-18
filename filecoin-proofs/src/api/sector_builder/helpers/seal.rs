@@ -1,10 +1,9 @@
 use api::internal::seal as seal_internal;
 use api::sector_builder::errors::err_unrecov;
+use api::sector_builder::metadata::sector_id_as_bytes;
 use api::sector_builder::metadata::SealedSectorMetadata;
 use api::sector_builder::state::SectorBuilderState;
 use api::sector_builder::SectorId;
-use byteorder::LittleEndian;
-use byteorder::WriteBytesExt;
 use error;
 use sector_base::api::disk_backed_storage::ConcreteSectorStore;
 use sector_base::api::sector_store::SectorStore;
@@ -61,13 +60,6 @@ fn seal_aux(
         .new_sealed_sector_access()
         .map_err(failure::Error::from)?;
 
-    // Transmute a u64 sector id to a zero-padded byte array.
-    // TODO: Is LittleEndian what we want here?
-    let mut sector_id_as_bytes = [0u8; 31];
-    sector_id_as_bytes
-        .as_mut()
-        .write_u64::<LittleEndian>(sector_id)?;
-
     // Run the FPS seal operation. This call will block for a long time, so make
     // sure you're not holding any locks.
     let (comm_r, comm_d, comm_r_star, snark_proof) = seal_internal(
@@ -75,7 +67,7 @@ fn seal_aux(
         &PathBuf::from(to_be_sealed.sector_access.clone()),
         &PathBuf::from(sealed_sector_access.clone()),
         state.prover_id,
-        sector_id_as_bytes,
+        sector_id_as_bytes(sector_id)?,
     )?;
 
     let newly_sealed_sector = SealedSectorMetadata {

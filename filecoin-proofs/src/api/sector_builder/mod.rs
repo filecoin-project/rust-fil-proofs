@@ -1,6 +1,7 @@
 use api::sector_builder::helpers::add_piece::*;
 use api::sector_builder::helpers::get_seal_status::*;
 use api::sector_builder::helpers::get_sectors_ready_for_sealing::*;
+use api::sector_builder::helpers::read_piece_from_sealed_sector::read_piece_from_sealed_sector;
 use api::sector_builder::metadata::*;
 use api::sector_builder::state::*;
 use api::sector_builder::worker::*;
@@ -177,7 +178,21 @@ impl SectorBuilder {
     // Returns sealing status for the sector with specified id. If no sealed or
     // staged sector exists with the provided id, produce an error.
     pub fn get_seal_status(&self, sector_id: SectorId) -> Result<SealStatus> {
-        get_seal_status(&self.state, sector_id)
+        let sealed_state = self.state.sealed.lock().unwrap();
+        let staged_state = self.state.staged.lock().unwrap();
+
+        get_seal_status(&staged_state, &sealed_state, sector_id)
+    }
+
+    pub fn read_piece_from_sealed_sector<S: Into<String>>(&self, piece_key: S) -> Result<Vec<u8>> {
+        let sealed_state = self.state.sealed.lock().unwrap();
+
+        read_piece_from_sealed_sector(
+            &self.sector_store,
+            &sealed_state,
+            self.state.prover_id,
+            piece_key,
+        )
     }
 
     // For demo purposes. Schedules sealing of all staged sectors.

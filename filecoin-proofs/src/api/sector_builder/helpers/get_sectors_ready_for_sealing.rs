@@ -34,7 +34,7 @@ pub fn get_sectors_ready_for_sealing(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use api::sector_builder::metadata::Piece;
+    use api::sector_builder::metadata::PieceMetadata;
     use api::sector_builder::metadata::StagedSectorMetadata;
     use api::sector_builder::state::StagedState;
     use std::collections::{HashMap, HashSet};
@@ -45,7 +45,7 @@ mod tests {
             sector_id,
             StagedSectorMetadata {
                 sector_id,
-                pieces: vec![Piece {
+                pieces: vec![PieceMetadata {
                     piece_key: format!("{}", sector_id),
                     num_bytes,
                 }],

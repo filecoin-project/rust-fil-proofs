@@ -16,6 +16,7 @@ use ffi_toolkit::c_str_to_rust_str;
 use ffi_toolkit::rust_str_to_c_str;
 use rand::{thread_rng, Rng};
 use std::error::Error;
+use std::ptr;
 use std::sync::atomic::AtomicPtr;
 use std::sync::mpsc;
 use std::thread;
@@ -37,14 +38,18 @@ fn make_piece(num_bytes_in_piece: usize) -> (String, Vec<u8>) {
 unsafe fn create_and_add_piece(
     sector_builder: *mut SectorBuilder,
     num_bytes_in_piece: usize,
-) -> *mut AddPieceResponse {
+) -> (Vec<u8>, String, *mut AddPieceResponse) {
     let (piece_key, piece_bytes) = make_piece(num_bytes_in_piece);
 
-    add_piece(
-        sector_builder,
-        rust_str_to_c_str(piece_key),
-        &piece_bytes[0],
-        piece_bytes.len(),
+    (
+        piece_bytes.clone(),
+        piece_key.clone(),
+        add_piece(
+            sector_builder,
+            rust_str_to_c_str(piece_key.clone()),
+            &piece_bytes[0],
+            piece_bytes.len(),
+        ),
     )
 }
 
@@ -94,7 +99,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
     // add first piece, which lazily provisions a new staged sector
     {
-        let resp = create_and_add_piece(sector_builder, 10);
+        let (_, _, resp) = create_and_add_piece(sector_builder, 10);
         defer!(destroy_add_piece_response(resp));
 
         if (*resp).status_code != 0 {
@@ -106,7 +111,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
     // add second piece, which fits into existing staged sector
     {
-        let resp = create_and_add_piece(sector_builder, 50);
+        let (_, _, resp) = create_and_add_piece(sector_builder, 50);
         defer!(destroy_add_piece_response(resp));
 
         if (*resp).status_code != 0 {
@@ -118,7 +123,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
     // add third piece, which won't fit into existing staging sector
     {
-        let resp = create_and_add_piece(sector_builder, 100);
+        let (_, _, resp) = create_and_add_piece(sector_builder, 100);
         defer!(destroy_add_piece_response(resp));
 
         if (*resp).status_code != 0 {
@@ -130,8 +135,8 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
     }
 
     // add fourth piece, where size(piece) == max (will trigger sealing)
-    {
-        let resp = create_and_add_piece(sector_builder, 127);
+    let (bytes_in, piece_key) = {
+        let (piece_bytes, piece_key, resp) = create_and_add_piece(sector_builder, 127);
         defer!(destroy_add_piece_response(resp));
 
         if (*resp).status_code != 0 {
@@ -140,7 +145,9 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
         // sector id changed again (piece wouldn't fit)
         assert_eq!(126, (*resp).sector_id);
-    }
+
+        (piece_bytes, piece_key)
+    };
 
     // poll for sealed sector metadata through the FFI
     {
@@ -180,6 +187,26 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
         let now_sealed_sector_id = result_rx.recv_timeout(Duration::from_secs(300)).unwrap();
 
         assert_eq!(now_sealed_sector_id, 126);
+    }
+
+    // after sealing, read the bytes (causes unseal) and compare with what we
+    // added to the sector
+    {
+        let resp = read_piece_from_sealed_sector(sector_builder, rust_str_to_c_str(piece_key));
+        defer!(destroy_read_piece_from_sealed_sector_response(resp));
+
+        if (*resp).status_code != 0 {
+            panic!("{}", c_str_to_rust_str((*resp).error_msg))
+        }
+
+        // copy the bytes from C to Rust
+        let data_ptr = (*resp).data_ptr as *mut u8;
+        let data_len = (*resp).data_len;
+        let mut bytes_out = Vec::with_capacity(data_len);
+        bytes_out.set_len(data_len);
+        ptr::copy(data_ptr, bytes_out.as_mut_ptr(), data_len);
+
+        assert_eq!(format!("{:x?}", bytes_in), format!("{:x?}", bytes_out))
     }
 
     Ok(())

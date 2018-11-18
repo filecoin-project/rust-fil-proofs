@@ -20,8 +20,15 @@ pub enum SectorBuilderErr {
         num_bytes_in_piece: u64,
     },
 
+    #[fail(display = "no piece with key {} found", _0)]
+    PieceNotFound(String),
+
     #[fail(display = "unrecoverable error: {}", _0)]
     Unrecoverable(String),
+}
+
+pub fn err_piecenotfound(piece_key: String) -> SectorBuilderErr {
+    SectorBuilderErr::PieceNotFound(piece_key)
 }
 
 pub fn err_unrecov<S: Display>(msg: S) -> SectorBuilderErr {
