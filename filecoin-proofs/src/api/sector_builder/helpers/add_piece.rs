@@ -75,7 +75,7 @@ fn compute_destination_sector_id(
         Ok(candidate_sectors
             .iter()
             .find(move |staged_sector| {
-                (max_bytes_per_sector - sum_piece_bytes(staged_sector)) > num_bytes_in_piece
+                (max_bytes_per_sector - sum_piece_bytes(staged_sector)) >= num_bytes_in_piece
             })
             .map(|x| x.sector_id))
     }
@@ -107,4 +107,62 @@ fn provision_new_staged_sector(
     locked_state.sectors.insert(meta.sector_id, meta.clone());
 
     Ok(sector_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use api::sector_builder::metadata::PieceMetadata;
+
+    #[test]
+    fn test_alpha() {
+        let mut sealed_sector_a: StagedSectorMetadata = Default::default();
+
+        sealed_sector_a.pieces.push(PieceMetadata {
+            piece_key: String::from("x"),
+            num_bytes: 5,
+        });
+
+        sealed_sector_a.pieces.push(PieceMetadata {
+            piece_key: String::from("x"),
+            num_bytes: 10,
+        });
+
+        let mut sealed_sector_b: StagedSectorMetadata = Default::default();
+
+        sealed_sector_b.pieces.push(PieceMetadata {
+            piece_key: String::from("x"),
+            num_bytes: 5,
+        });
+
+        let staged_sectors = vec![sealed_sector_a.clone(), sealed_sector_b.clone()];
+
+        // piece takes up all remaining space in first sector
+        match compute_destination_sector_id(&staged_sectors, 100, 85) {
+            Ok(Some(destination_sector_id)) => {
+                assert_eq!(destination_sector_id, sealed_sector_a.sector_id)
+            }
+            _ => panic!(),
+        }
+
+        // piece doesn't fit into the first, but does the second
+        match compute_destination_sector_id(&staged_sectors, 100, 90) {
+            Ok(Some(destination_sector_id)) => {
+                assert_eq!(destination_sector_id, sealed_sector_b.sector_id)
+            }
+            _ => panic!(),
+        }
+
+        // piece doesn't fit into any in the list
+        match compute_destination_sector_id(&staged_sectors, 100, 100) {
+            Ok(None) => (),
+            _ => panic!(),
+        }
+
+        // piece is over max
+        match compute_destination_sector_id(&staged_sectors, 100, 101) {
+            Err(_) => (),
+            _ => panic!(),
+        }
+    }
 }
