@@ -225,6 +225,18 @@ impl SectorBuilder {
 
         Ok(())
     }
+
+    pub fn get_sealed_sectors(&self) -> Result<Vec<SealedSectorMetadata>> {
+        Ok(self
+            .state
+            .sealed
+            .lock()
+            .unwrap()
+            .sectors
+            .values()
+            .cloned()
+            .collect())
+    }
 }
 
 impl Drop for SectorBuilder {

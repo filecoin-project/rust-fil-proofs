@@ -550,6 +550,60 @@ pub unsafe extern "C" fn get_seal_status(
     raw_ptr(response)
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn get_sealed_sectors(
+    ptr: *mut SectorBuilder,
+) -> *mut responses::GetSealedSectorsResponse {
+    let mut response: responses::GetSealedSectorsResponse = Default::default();
+
+    match (*ptr).get_sealed_sectors() {
+        Ok(sealed_sectors) => {
+            response.status_code = FCPResponseStatus::FCPNoError;
+
+            let sectors = sealed_sectors
+                .iter()
+                .map(|meta| {
+                    let pieces = meta
+                        .pieces
+                        .iter()
+                        .map(|p| FFIPieceMetadata {
+                            piece_key: rust_str_to_c_str(p.piece_key.to_string()),
+                            num_bytes: p.num_bytes,
+                        })
+                        .collect::<Vec<FFIPieceMetadata>>();
+
+                    let sector = responses::FFISealedSectorMetadata {
+                        comm_d: meta.comm_d,
+                        comm_r: meta.comm_r,
+                        comm_r_star: meta.comm_r_star,
+                        sector_access: rust_str_to_c_str(meta.sector_access.clone()),
+                        sector_id: meta.sector_id,
+                        snark_proof: meta.snark_proof,
+                        pieces_len: pieces.len(),
+                        pieces_ptr: pieces.as_ptr(),
+                    };
+
+                    mem::forget(pieces);
+
+                    sector
+                })
+                .collect::<Vec<responses::FFISealedSectorMetadata>>();
+
+            response.sectors_len = sectors.len();
+            response.sectors_ptr = sectors.as_ptr();
+
+            mem::forget(sectors);
+        }
+        Err(err) => {
+            let (code, ptr) = err_code_and_msg(&err);
+            response.status_code = code;
+            response.error_msg = ptr;
+        }
+    }
+
+    raw_ptr(response)
+}
+
 impl<'a> Into<SBConfiguredStore> for &'a ConfiguredStore {
     fn into(self) -> SBConfiguredStore {
         match self {

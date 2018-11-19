@@ -532,3 +532,61 @@ impl Drop for GetSealStatusResponse {
 pub unsafe extern "C" fn destroy_get_seal_status_response(ptr: *mut GetSealStatusResponse) {
     let _ = Box::from_raw(ptr);
 }
+
+///////////////////////////////////////////////////////////////////////////////
+/// FFISealedSectorMetadata
+////////////////////////
+
+#[repr(C)]
+pub struct FFISealedSectorMetadata {
+    pub comm_d: [u8; 32],
+    pub comm_r: [u8; 32],
+    pub comm_r_star: [u8; 32],
+    pub sector_access: *const libc::c_char,
+    pub sector_id: u64,
+    pub snark_proof: [u8; API_POREP_PROOF_BYTES],
+    pub pieces_len: libc::size_t,
+    pub pieces_ptr: *const FFIPieceMetadata,
+}
+
+///////////////////////////////////////////////////////////////////////////////
+/// GetSealedSectorsResponse
+////////////////////////////
+
+#[repr(C)]
+pub struct GetSealedSectorsResponse {
+    pub status_code: FCPResponseStatus,
+    pub error_msg: *const libc::c_char,
+
+    pub sectors_len: libc::size_t,
+    pub sectors_ptr: *const FFISealedSectorMetadata,
+}
+
+impl Default for GetSealedSectorsResponse {
+    fn default() -> GetSealedSectorsResponse {
+        GetSealedSectorsResponse {
+            status_code: FCPResponseStatus::FCPNoError,
+            error_msg: ptr::null(),
+            sectors_len: 0,
+            sectors_ptr: ptr::null(),
+        }
+    }
+}
+
+impl Drop for GetSealedSectorsResponse {
+    fn drop(&mut self) {
+        unsafe {
+            drop(c_str_to_rust_str(self.error_msg));
+            drop(Vec::from_raw_parts(
+                self.sectors_ptr as *mut FFISealedSectorMetadata,
+                self.sectors_len,
+                self.sectors_len,
+            ));
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn destroy_get_sealed_sectors_response(ptr: *mut GetSealedSectorsResponse) {
+    let _ = Box::from_raw(ptr);
+}
