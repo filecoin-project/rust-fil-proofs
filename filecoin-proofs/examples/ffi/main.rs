@@ -21,6 +21,7 @@ use std::sync::atomic::AtomicPtr;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
+use tempfile::TempDir;
 
 ///////////////////////////////////////////////////////////////////////////////
 // SectorBuilder lifecycle test
@@ -53,40 +54,49 @@ unsafe fn create_and_add_piece(
     )
 }
 
+unsafe fn create_sector_builder(
+    metadata_dir: &TempDir,
+    staging_dir: &TempDir,
+    sealed_dir: &TempDir,
+    prover_id: [u8; 31],
+    last_committed_sector_id: u64,
+) -> (*mut SectorBuilder, u64) {
+    let mut prover_id: [u8; 31] = prover_id;
+    let sector_store_config: ConfiguredStore = ConfiguredStore_ProofTest;
+
+    let resp = init_sector_builder(
+        &sector_store_config,
+        last_committed_sector_id,
+        rust_str_to_c_str(metadata_dir.path().to_str().unwrap()),
+        &mut prover_id,
+        rust_str_to_c_str(sealed_dir.path().to_str().unwrap()),
+        rust_str_to_c_str(staging_dir.path().to_str().unwrap()),
+        2,
+    );
+    defer!(destroy_init_sector_builder_response(resp));
+
+    if (*resp).status_code != 0 {
+        panic!("{}", c_str_to_rust_str((*resp).error_msg))
+    }
+
+    let resp_2 = get_max_user_bytes_per_staged_sector((*resp).sector_builder);
+    defer!(destroy_get_max_user_bytes_per_staged_sector_response(
+        resp_2
+    ));
+
+    (
+        (*resp).sector_builder,
+        (*resp_2).max_staged_bytes_per_sector,
+    )
+}
+
 unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
-    let (sector_builder, max_bytes) = {
-        let metadata_dir = tempfile::tempdir().unwrap();
-        let staging_dir = tempfile::tempdir().unwrap();
-        let sealed_dir = tempfile::tempdir().unwrap();
-        let mut prover_id: [u8; 31] = [0; 31];
-        let sector_store_config: ConfiguredStore = ConfiguredStore_ProofTest;
+    let metadata_dir = tempfile::tempdir().unwrap();
+    let staging_dir = tempfile::tempdir().unwrap();
+    let sealed_dir = tempfile::tempdir().unwrap();
 
-        let resp = init_sector_builder(
-            &sector_store_config,
-            123,
-            rust_str_to_c_str(metadata_dir.path().to_str().unwrap()),
-            &mut prover_id,
-            rust_str_to_c_str(sealed_dir.path().to_str().unwrap()),
-            rust_str_to_c_str(staging_dir.path().to_str().unwrap()),
-            2,
-        );
-        defer!(destroy_init_sector_builder_response(resp));
-
-        if (*resp).status_code != 0 {
-            panic!("{}", c_str_to_rust_str((*resp).error_msg))
-        }
-
-        let resp_2 = get_max_user_bytes_per_staged_sector((*resp).sector_builder);
-        defer!(destroy_get_max_user_bytes_per_staged_sector_response(
-            resp_2
-        ));
-
-        (
-            (*resp).sector_builder,
-            (*resp_2).max_staged_bytes_per_sector,
-        )
-    };
-    defer!(destroy_sector_builder(sector_builder));
+    let (sector_builder_a, max_bytes) =
+        create_sector_builder(&metadata_dir, &staging_dir, &sealed_dir, [0; 31], 123);
 
     // TODO: Replace the hard-coded byte amounts with values computed
     // from whatever was retrieved from the SectorBuilder.
@@ -99,7 +109,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
     // add first piece, which lazily provisions a new staged sector
     {
-        let (_, _, resp) = create_and_add_piece(sector_builder, 10);
+        let (_, _, resp) = create_and_add_piece(sector_builder_a, 10);
         defer!(destroy_add_piece_response(resp));
 
         if (*resp).status_code != 0 {
@@ -111,7 +121,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
     // add second piece, which fits into existing staged sector
     {
-        let (_, _, resp) = create_and_add_piece(sector_builder, 50);
+        let (_, _, resp) = create_and_add_piece(sector_builder_a, 50);
         defer!(destroy_add_piece_response(resp));
 
         if (*resp).status_code != 0 {
@@ -123,7 +133,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
     // add third piece, which won't fit into existing staging sector
     {
-        let (_, _, resp) = create_and_add_piece(sector_builder, 100);
+        let (_, _, resp) = create_and_add_piece(sector_builder_a, 100);
         defer!(destroy_add_piece_response(resp));
 
         if (*resp).status_code != 0 {
@@ -134,9 +144,18 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
         assert_eq!(125, (*resp).sector_id);
     }
 
+    // drop the first sector builder, relinquishing any locks on persistence
+    destroy_sector_builder(sector_builder_a);
+
+    // create a new sector builder using same prover id, which should
+    // initialize with metadata persisted by previous sector builder
+    let (sector_builder_b, _) =
+        create_sector_builder(&metadata_dir, &staging_dir, &sealed_dir, [0; 31], 123);
+    defer!(destroy_sector_builder(sector_builder_b));
+
     // add fourth piece, where size(piece) == max (will trigger sealing)
     let (bytes_in, piece_key) = {
-        let (piece_bytes, piece_key, resp) = create_and_add_piece(sector_builder, 127);
+        let (piece_bytes, piece_key, resp) = create_and_add_piece(sector_builder_b, 127);
         defer!(destroy_add_piece_response(resp));
 
         if (*resp).status_code != 0 {
@@ -154,7 +173,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
         let (result_tx, result_rx) = mpsc::channel();
         let (kill_tx, kill_rx) = mpsc::channel();
 
-        let atomic_ptr = AtomicPtr::new(sector_builder);
+        let atomic_ptr = AtomicPtr::new(sector_builder_b);
 
         let _join_handle = thread::spawn(move || {
             let sector_builder = atomic_ptr.into_inner();
@@ -192,7 +211,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
     // after sealing, read the bytes (causes unseal) and compare with what we
     // added to the sector
     {
-        let resp = read_piece_from_sealed_sector(sector_builder, rust_str_to_c_str(piece_key));
+        let resp = read_piece_from_sealed_sector(sector_builder_b, rust_str_to_c_str(piece_key));
         defer!(destroy_read_piece_from_sealed_sector_response(resp));
 
         if (*resp).status_code != 0 {

@@ -248,9 +248,6 @@ pub struct ConcreteSectorStore {
     manager: Box<SectorManager>,
 }
 
-unsafe impl Sync for ConcreteSectorStore {}
-unsafe impl Send for ConcreteSectorStore {}
-
 impl SectorStore for ConcreteSectorStore {
     fn config(&self) -> &SectorConfig {
         self.config.as_ref()

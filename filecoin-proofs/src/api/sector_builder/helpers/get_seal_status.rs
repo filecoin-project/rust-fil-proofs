@@ -74,7 +74,6 @@ mod tests {
         );
 
         Arc::new(SectorBuilderState {
-            _metadata_dir: String::new(),
             prover_id: Default::default(),
             staged: Mutex::new(StagedState {
                 sector_id_nonce: 0,

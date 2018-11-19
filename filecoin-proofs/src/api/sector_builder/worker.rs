@@ -2,8 +2,9 @@ use api::sector_builder::helpers::seal::seal;
 use api::sector_builder::metadata::SealedSectorMetadata;
 use api::sector_builder::state::SectorBuilderState;
 use api::sector_builder::SectorId;
+use api::sector_builder::WrappedKeyValueStore;
+use api::sector_builder::WrappedSectorStore;
 use error::Result;
-use sector_base::api::disk_backed_storage::ConcreteSectorStore;
 use std::sync::mpsc;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
@@ -23,7 +24,8 @@ impl Worker {
     pub fn new(
         id: usize,
         task_rx: Arc<Mutex<mpsc::Receiver<Task>>>,
-        sector_store: Arc<ConcreteSectorStore>,
+        kv_store: Arc<WrappedKeyValueStore>,
+        sector_store: Arc<WrappedSectorStore>,
         sector_builder_state: Arc<SectorBuilderState>,
     ) -> Worker {
         let thread = thread::spawn(move || loop {
@@ -36,14 +38,15 @@ impl Worker {
 
             // Increment the reference counts, shadowing constructor parameters
             // for convenience.
-            let store = sector_store.clone();
+            let kv_store = kv_store.clone();
+            let sector_store = sector_store.clone();
             let state = sector_builder_state.clone();
 
             // Dispatch to the appropriate task-handler.
             match task {
                 Task::Seal(sector_id, done_tx) => {
                     let done_tx = done_tx.lock().unwrap();
-                    let _ = done_tx.send(seal(&store, &state, sector_id));
+                    let _ = done_tx.send(seal(&kv_store, &sector_store, &state, sector_id));
                 }
                 Task::Shutdown => break,
             }

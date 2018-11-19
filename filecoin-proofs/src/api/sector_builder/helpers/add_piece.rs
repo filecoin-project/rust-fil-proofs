@@ -4,21 +4,19 @@ use api::sector_builder::metadata::StagedSectorMetadata;
 use api::sector_builder::state::StagedState;
 use api::sector_builder::*;
 use error;
-use sector_base::api::disk_backed_storage::ConcreteSectorStore;
 use sector_base::api::sector_store::SectorManager;
-use sector_base::api::sector_store::SectorStore;
 use std::sync::Arc;
 use std::sync::MutexGuard;
 
 pub fn add_piece<S: Into<String>>(
-    sector_store: &Arc<ConcreteSectorStore>,
+    sector_store: &Arc<WrappedSectorStore>,
     mut staged_state: &mut MutexGuard<StagedState>,
     piece_key: S,
     piece_bytes: &[u8],
 ) -> error::Result<SectorId> {
     let sector_store = sector_store.clone();
-    let sector_mgr = sector_store.manager();
-    let sector_max = sector_store.config().max_unsealed_bytes_per_sector();
+    let sector_mgr = sector_store.inner.manager();
+    let sector_max = sector_store.inner.config().max_unsealed_bytes_per_sector();
 
     let piece_bytes_len = piece_bytes.len() as u64;
 
@@ -39,6 +37,7 @@ pub fn add_piece<S: Into<String>>(
 
     if let Some(s) = staged_state.sectors.get_mut(&dest_sector_id) {
         sector_store
+            .inner
             .manager()
             .write_and_preprocess(s.sector_access.clone(), &piece_bytes)
             .map_err(|err| err.into())

@@ -4,9 +4,8 @@ use api::sector_builder::errors::err_unrecov;
 use api::sector_builder::metadata::sector_id_as_bytes;
 use api::sector_builder::metadata::SealedSectorMetadata;
 use api::sector_builder::state::SealedState;
+use api::sector_builder::WrappedSectorStore;
 use error;
-use sector_base::api::disk_backed_storage::ConcreteSectorStore;
-use sector_base::api::sector_store::SectorStore;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::MutexGuard;
@@ -14,12 +13,13 @@ use std::sync::MutexGuard;
 // Unseals and returns the piece-bytes for the first sector found containing
 // a piece with matching key.
 pub fn read_piece_from_sealed_sector<S: Into<String>>(
-    sector_store: &Arc<ConcreteSectorStore>,
+    sector_store: &Arc<WrappedSectorStore>,
     sealed_state: &MutexGuard<SealedState>,
     prover_id: [u8; 31],
     piece_key: S,
 ) -> error::Result<Vec<u8>> {
     let staging_sector_access = sector_store
+        .inner
         .manager()
         .new_staging_sector_access()
         .map_err(failure::Error::from)?;
@@ -35,6 +35,7 @@ pub fn read_piece_from_sealed_sector<S: Into<String>>(
     // TODO: SectorStore needs an operation to delete a sector access.
     if let Ok((num_bytes_unsealed, _)) = result {
         sector_store
+            .inner
             .manager()
             .truncate_unsealed(staging_sector_access, num_bytes_unsealed)?;
     }
@@ -45,7 +46,7 @@ pub fn read_piece_from_sealed_sector<S: Into<String>>(
 }
 
 fn read_piece_from_sealed_sector_aux<'a>(
-    sector_store: &Arc<ConcreteSectorStore>,
+    sector_store: &Arc<WrappedSectorStore>,
     sealed_state: &MutexGuard<SealedState>,
     prover_id: [u8; 31],
     piece_key: &'a str,
@@ -73,7 +74,7 @@ fn read_piece_from_sealed_sector_aux<'a>(
     })?;
 
     let num_bytes_unsealed = internal::get_unsealed_range(
-        &(**sector_store),
+        &(*sector_store.inner),
         &PathBuf::from(sealed_sector.sector_access.clone()),
         &PathBuf::from(staging_sector_access),
         prover_id,
@@ -91,7 +92,7 @@ fn read_piece_from_sealed_sector_aux<'a>(
         return Err(err_unrecov(s).into());
     }
 
-    let piece_bytes = sector_store.manager().read_raw(
+    let piece_bytes = sector_store.inner.manager().read_raw(
         staging_sector_access.to_string(),
         0,
         num_bytes_unsealed,

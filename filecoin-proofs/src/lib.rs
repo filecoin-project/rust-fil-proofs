@@ -1,6 +1,12 @@
-#![cfg_attr(feature = "cargo-clippy", deny(all, clippy_perf, clippy_correctness))]
+#![cfg_attr(
+    feature = "cargo-clippy",
+    deny(all, clippy_perf, clippy_correctness)
+)]
 #![cfg_attr(feature = "cargo-clippy", allow(unreadable_literal))]
-#![cfg_attr(feature = "cargo-clippy", warn(type_complexity, too_many_arguments))]
+#![cfg_attr(
+    feature = "cargo-clippy",
+    warn(type_complexity, too_many_arguments)
+)]
 
 extern crate ffi_toolkit;
 extern crate sector_base;
@@ -18,6 +24,12 @@ extern crate tempfile;
 extern crate failure;
 extern crate byteorder;
 extern crate itertools;
+extern crate serde;
+extern crate serde_cbor;
+#[macro_use]
+extern crate serde_derive;
+extern crate percent_encoding;
 
 pub mod api;
 pub mod error;
+pub mod serde_big_array;

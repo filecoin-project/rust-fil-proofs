@@ -629,12 +629,14 @@ mod tests {
                 let real_parents = real_proof.replica_parents;
 
                 // Parent vector claiming the wrong parents.
-                let fake_parents = vec![real_parents[0]
-                    .iter()
-                    // Incrementing each parent node will give us a different parent set.
-                    // It's fine to be out of range, since this only needs to fail.
-                    .map(|(i, data_proof)| (i + 1, data_proof.clone()))
-                    .collect::<Vec<_>>()];
+                let fake_parents = vec![
+                    real_parents[0]
+                        .iter()
+                        // Incrementing each parent node will give us a different parent set.
+                        // It's fine to be out of range, since this only needs to fail.
+                        .map(|(i, data_proof)| (i + 1, data_proof.clone()))
+                        .collect::<Vec<_>>(),
+                ];
 
                 let proof = Proof::new(
                     real_proof.replica_nodes.clone(),
@@ -664,16 +666,18 @@ mod tests {
 
                 // Parent vector claiming the right parents but providing valid proofs for different
                 // parents.
-                let fake_proof_parents = vec![real_parents[0]
-                    .iter()
-                    .enumerate()
-                    .map(|(i, (p, _))| {
-                        // Rotate the real parent proofs.
-                        let x = (i + 1) % real_parents[0].len();
-                        let j = real_parents[0][x].0;
-                        (*p, real_parents[0][j].1.clone())
-                    })
-                    .collect::<Vec<_>>()];
+                let fake_proof_parents = vec![
+                    real_parents[0]
+                        .iter()
+                        .enumerate()
+                        .map(|(i, (p, _))| {
+                            // Rotate the real parent proofs.
+                            let x = (i + 1) % real_parents[0].len();
+                            let j = real_parents[0][x].0;
+                            (*p, real_parents[0][j].1.clone())
+                        })
+                        .collect::<Vec<_>>(),
+                ];
 
                 let proof2 = Proof::new(
                     real_proof.replica_nodes,

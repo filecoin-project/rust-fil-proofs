@@ -2,18 +2,21 @@ use api::sector_builder::helpers::add_piece::*;
 use api::sector_builder::helpers::get_seal_status::*;
 use api::sector_builder::helpers::get_sectors_ready_for_sealing::*;
 use api::sector_builder::helpers::read_piece_from_sealed_sector::read_piece_from_sealed_sector;
+use api::sector_builder::helpers::snapshots::{load_snapshot, make_snapshot, persist_snapshot};
+use api::sector_builder::kv_store::fs::FileSystemKvs;
+use api::sector_builder::kv_store::KeyValueStore;
 use api::sector_builder::metadata::*;
 use api::sector_builder::state::*;
 use api::sector_builder::worker::*;
 use error::Result;
 use sector_base::api::disk_backed_storage::new_sector_store;
-use sector_base::api::disk_backed_storage::ConcreteSectorStore;
 use sector_base::api::disk_backed_storage::SBConfiguredStore;
 use sector_base::api::sector_store::SectorStore;
 use std::sync::{mpsc, Arc, Mutex};
 
 pub mod errors;
 mod helpers;
+mod kv_store;
 pub mod metadata;
 mod state;
 mod worker;
@@ -23,7 +26,12 @@ const NUM_SEAL_WORKERS: usize = 2;
 pub type SectorId = u64;
 
 pub struct SectorBuilder {
-    // Provides thread-safe access to a SectorStore.
+    // Provides thread-safe access to a KeyValueStore, used to save/load
+    // SectorBuilder metadata.
+    kv_store: Arc<WrappedKeyValueStore>,
+
+    // Provides thread-safe access to a SectorStore, used to interact with
+    // sector storage.
     //
     // TODO: Non-boxed trait objects, have a size which is unknown at compile
     // time. A reference, e.g. &SectorStore does have a known size, but is not
@@ -32,7 +40,7 @@ pub struct SectorBuilder {
     // value for the internal::seal function. In the future (soon), we need to
     // figure out if the internal::seal API needs to change or if there's some
     // other way to allow thread-safe access to a shared SectorStore.
-    sector_store: Arc<ConcreteSectorStore>,
+    sector_store: Arc<WrappedSectorStore>,
 
     // A reference-counted struct which holds all SectorBuilder state. Mutable
     // fields are Mutex-guarded.
@@ -54,6 +62,20 @@ pub struct SectorBuilder {
     max_user_bytes_per_staged_sector: u64,
 }
 
+pub struct WrappedSectorStore {
+    inner: Box<SectorStore>,
+}
+
+unsafe impl Sync for WrappedSectorStore {}
+unsafe impl Send for WrappedSectorStore {}
+
+pub struct WrappedKeyValueStore {
+    inner: Box<KeyValueStore>,
+}
+
+unsafe impl Sync for WrappedKeyValueStore {}
+unsafe impl Send for WrappedKeyValueStore {}
+
 impl SectorBuilder {
     // Initialize and return a SectorBuilder from metadata persisted to disk if
     // it exists. Otherwise, initialize and return a fresh SectorBuilder. The
@@ -63,35 +85,45 @@ impl SectorBuilder {
     // real metadata store is forthcoming.
     pub fn init_from_metadata<S: Into<String>>(
         sector_store_config: &SBConfiguredStore,
-        last_used_sector_id: u64,
+        last_committed_sector_id: u64,
         metadata_dir: S,
         prover_id: [u8; 31],
         sealed_sector_dir: S,
         staged_sector_dir: S,
         max_num_staged_sectors: u8,
     ) -> Result<SectorBuilder> {
-        // Build the SectorBuilder's initial state. If available, we
-        // reconstitute this stage from persistence. If not, we create it from
-        // scratch.
-        let state = Arc::new(SectorBuilderState {
-            _metadata_dir: metadata_dir.into(),
-            prover_id,
-            staged: Mutex::new(StagedState {
-                sector_id_nonce: last_used_sector_id,
-                sectors: Default::default(),
-                sectors_accepting_data: Default::default(),
-            }),
-            sealed: Default::default(),
+        let kv_store = Arc::new(WrappedKeyValueStore {
+            inner: Box::new(FileSystemKvs::initialize(metadata_dir.into())?),
         });
+
+        // Build the SectorBuilder's initial state. If available, we
+        // reconstitute this stage from persisted metadata. If not, we create it
+        // from scratch.
+        let state = {
+            let loaded = load_snapshot(&kv_store, &prover_id)?;
+            let loaded = loaded.map(|x| x.into());
+
+            Arc::new(loaded.unwrap_or_else(|| SectorBuilderState {
+                prover_id,
+                staged: Mutex::new(StagedState {
+                    sector_id_nonce: last_committed_sector_id,
+                    sectors: Default::default(),
+                    sectors_accepting_data: Default::default(),
+                }),
+                sealed: Default::default(),
+            }))
+        };
 
         // Initialize a SectorStore and wrap it in an Arc so we can access it
         // from multiple threads. Our implementation assumes that the
         // SectorStore is safe for concurrent access.
-        let sector_store: Arc<ConcreteSectorStore> = Arc::new(new_sector_store(
-            sector_store_config,
-            sealed_sector_dir.into(),
-            staged_sector_dir.into(),
-        ));
+        let sector_store = Arc::new(WrappedSectorStore {
+            inner: Box::new(new_sector_store(
+                sector_store_config,
+                sealed_sector_dir.into(),
+                staged_sector_dir.into(),
+            )),
+        });
 
         // Configure seal queue workers and channels.
         let (seal_tx, seal_workers) = {
@@ -103,6 +135,7 @@ impl SectorBuilder {
                     Worker::new(
                         n,
                         Arc::clone(&rx),
+                        Arc::clone(&kv_store),
                         Arc::clone(&sector_store),
                         Arc::clone(&state),
                     )
@@ -114,10 +147,12 @@ impl SectorBuilder {
 
         let max_user_bytes_per_staged_sector = sector_store
             .clone()
+            .inner
             .config()
             .max_unsealed_bytes_per_sector();
 
         Ok(SectorBuilder {
+            kv_store,
             seal_tx,
             seal_workers,
             sector_store,
@@ -136,19 +171,19 @@ impl SectorBuilder {
     // Stages user piece-bytes for sealing. Note that add_piece calls are
     // processed sequentially to make bin packing easier.
     pub fn add_piece<S: Into<String>>(&self, piece_key: S, piece_bytes: &[u8]) -> Result<SectorId> {
-        let mut locked_staged_state = self.state.staged.lock().unwrap();
+        let mut staged_state = self.state.staged.lock().unwrap();
 
         // Write the piece to storage, obtaining the sector id with which the
         // piece-bytes are now associated.
         let destination_sector_id = add_piece(
             &self.sector_store,
-            &mut locked_staged_state,
+            &mut staged_state,
             piece_key,
             piece_bytes,
         )?;
 
         let to_be_sealed = get_sectors_ready_for_sealing(
-            &locked_staged_state,
+            &staged_state,
             self.max_user_bytes_per_staged_sector,
             self.max_num_staged_sectors,
             false,
@@ -156,7 +191,7 @@ impl SectorBuilder {
 
         // Mark the to-be-sealed sectors as no longer accepting data.
         for sector in to_be_sealed.iter() {
-            let _ = locked_staged_state
+            let _ = staged_state
                 .sectors_accepting_data
                 .remove(&sector.sector_id);
         }
@@ -171,6 +206,12 @@ impl SectorBuilder {
                 .send(Task::Seal(sector.sector_id, tx.clone()))
                 .unwrap();
         }
+
+        // Snapshot the SectorBuilder's state. As the state includes both sealed
+        // and staged state-maps, making a snapshot requires both locks.
+        let sealed_state = self.state.sealed.lock().unwrap();
+        let snapshot = make_snapshot(&self.state.prover_id, &staged_state, &sealed_state);
+        persist_snapshot(&self.kv_store, &snapshot)?;
 
         Ok(destination_sector_id)
     }

@@ -43,7 +43,7 @@ pub trait SectorManager {
     ) -> Result<Vec<u8>, SectorManagerErr>;
 }
 
-pub trait SectorStore: Send + Sync {
+pub trait SectorStore {
     fn config(&self) -> &SectorConfig;
     fn manager(&self) -> &SectorManager;
 }

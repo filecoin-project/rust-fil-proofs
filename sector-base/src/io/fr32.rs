@@ -104,12 +104,11 @@ impl BitByte {
 
     // How many distinct bytes are needed to represent data of this size?
     pub fn bytes_needed(&self) -> usize {
-        self.bytes
-            + if self.bits == 0 {
-                0
-            } else {
-                (self.bits + 8) / 8
-            }
+        self.bytes + if self.bits == 0 {
+            0
+        } else {
+            (self.bits + 8) / 8
+        }
     }
 }
 

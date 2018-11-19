@@ -2,8 +2,11 @@ use api::sector_builder::SectorId;
 use byteorder::LittleEndian;
 use byteorder::WriteBytesExt;
 use error;
+use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
+use std::fmt;
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub struct StagedSectorMetadata {
     pub sector_id: SectorId,
     pub sector_access: String,
@@ -11,7 +14,7 @@ pub struct StagedSectorMetadata {
     pub sealing_error: Option<String>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct SealedSectorMetadata {
     pub sector_id: SectorId,
     pub sector_access: String,
@@ -19,7 +22,40 @@ pub struct SealedSectorMetadata {
     pub comm_r_star: [u8; 32],
     pub comm_r: [u8; 32],
     pub comm_d: [u8; 32],
+
+    #[serde(with = "BigArray")]
     pub snark_proof: [u8; 384],
+}
+
+impl PartialEq for SealedSectorMetadata {
+    fn eq(&self, other: &SealedSectorMetadata) -> bool {
+        self.sector_id == other.sector_id
+            && self.sector_access == other.sector_access
+            && self.pieces == other.pieces
+            && self.comm_r_star == other.comm_r_star
+            && self.comm_r == other.comm_r
+            && self.comm_d == other.comm_d
+            && self.snark_proof.iter().eq(other.snark_proof.iter())
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+pub struct PieceMetadata {
+    pub piece_key: String,
+    pub num_bytes: u64,
+}
+
+pub enum SealStatus {
+    Failed(String),
+    Pending,
+    Sealed(Box<SealedSectorMetadata>),
+    Sealing,
+}
+
+impl fmt::Debug for SealedSectorMetadata {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "SealedSectorMetadata {{ sector_id: {}, sector_access: {}, pieces: {:?}, comm_r_star: {:?}, comm_r: {:?}, comm_d: {:?} }}", self.sector_id, self.sector_access, self.pieces, self.comm_r_star, self.comm_r, self.comm_d)
+    }
 }
 
 impl Default for SealedSectorMetadata {
@@ -34,19 +70,6 @@ impl Default for SealedSectorMetadata {
             snark_proof: [0; 384],
         }
     }
-}
-
-#[derive(Clone)]
-pub struct PieceMetadata {
-    pub piece_key: String,
-    pub num_bytes: u64,
-}
-
-pub enum SealStatus {
-    Failed(String),
-    Pending,
-    Sealed(Box<SealedSectorMetadata>),
-    Sealing,
 }
 
 pub fn sum_piece_bytes(s: &StagedSectorMetadata) -> u64 {

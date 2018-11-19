@@ -82,19 +82,18 @@ impl<H: Hasher> MerkleProof<H> {
             return false;
         }
 
-        self.root()
-            == &(0..self.path.len()).fold(self.leaf, |h, i| {
-                a.reset();
-                let is_right = self.path[i].1;
+        self.root() == &(0..self.path.len()).fold(self.leaf, |h, i| {
+            a.reset();
+            let is_right = self.path[i].1;
 
-                let (left, right) = if is_right {
-                    (self.path[i].0, h)
-                } else {
-                    (h, self.path[i].0)
-                };
+            let (left, right) = if is_right {
+                (self.path[i].0, h)
+            } else {
+                (h, self.path[i].0)
+            };
 
-                a.node(left, right, i)
-            })
+            a.node(left, right, i)
+        })
     }
 
     /// Validates that the data hashes to the leaf of the merkle path.
