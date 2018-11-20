@@ -6,9 +6,9 @@ use sapling_crypto::circuit::num;
 use sapling_crypto::jubjub::JubjubEngine;
 
 use circuit::constraint;
-use circuit::drgporep::DrgPoRepCompound;
+use circuit::drgporep::{DrgPoRepCircuit, DrgPoRepCompound};
 use circuit::pedersen::pedersen_md_no_padding;
-use compound_proof::CompoundProof;
+use compound_proof::{CircuitComponent, CompoundProof};
 use drgporep::{self, DrgPoRep};
 use drgraph::{graph_height, Graph};
 use hasher::{Domain, Hasher};
@@ -43,6 +43,10 @@ pub struct ZigZagCircuit<'a, E: JubjubEngine, H: 'static + Hasher> {
     tau: porep::Tau<<<ZigZagDrgPoRep<'a, H> as LayersTrait>::Hasher as Hasher>::Domain>,
     comm_r_star: H::Domain,
     _e: PhantomData<E>,
+}
+
+impl<'a, E: JubjubEngine, H: Hasher> CircuitComponent for ZigZagCircuit<'a, E, H> {
+    type PrivateInputs = ();
 }
 
 impl<'a, H: Hasher> ZigZagCircuit<'a, Bls12, H> {
@@ -111,6 +115,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
             // on some (50%?) of challenges.
             let circuit = DrgPoRepCompound::circuit(
                 public_inputs,
+                (),
                 &proof,
                 &self.public_params.drg_porep_public_params,
                 self.params,
@@ -261,6 +266,7 @@ impl<'a, H: 'static + Hasher>
 
     fn circuit<'b>(
         public_inputs: &'b <ZigZagDrgPoRep<H> as ProofScheme>::PublicInputs,
+        _component_private_inputs: <ZigZagCircuit<'a, Bls12, H> as CircuitComponent>::PrivateInputs,
         vanilla_proof: &'b <ZigZagDrgPoRep<H> as ProofScheme>::Proof,
         public_params: &'b <ZigZagDrgPoRep<H> as ProofScheme>::PublicParams,
         engine_params: &'a <Bls12 as JubjubEngine>::Params,
@@ -409,9 +415,15 @@ mod tests {
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        ZigZagCompound::circuit(&pub_inputs, &proofs[0], &pp, params)
-            .synthesize(&mut cs.namespace(|| "zigzag drgporep"))
-            .expect("failed to synthesize circuit");
+        ZigZagCompound::circuit(
+            &pub_inputs,
+            <ZigZagCircuit<Bls12, PedersenHasher> as CircuitComponent>::PrivateInputs::default(),
+            &proofs[0],
+            &pp,
+            params,
+        )
+        .synthesize(&mut cs.namespace(|| "zigzag drgporep"))
+        .expect("failed to synthesize circuit");
 
         if !cs.is_satisfied() {
             println!(
@@ -494,7 +506,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Slow test – run only when compiled for release.
+    // #[ignore] // Slow test – run only when compiled for release.
     fn zigzag_test_compound() {
         let params = &JubjubBls12::new();
         let lambda = 32;
@@ -504,7 +516,7 @@ mod tests {
         let challenge_count = 2;
         let num_layers = 2;
         let sloth_iter = 1;
-        let partition_count = 2;
+        let partition_count = 1;
 
         let n = nodes; // FIXME: Consolidate variable names.
 
@@ -561,7 +573,7 @@ mod tests {
             tau: tau.layer_taus,
         };
 
-        // TOOD: Move this to e.g. circuit::test::compound_helper and share between all compound proo fs.
+        // TOOD: Move this to e.g. circuit::test::compound_helper and share between all compound proofs.
         {
             let (circuit, inputs) =
                 ZigZagCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);
@@ -569,6 +581,8 @@ mod tests {
             let mut cs = TestConstraintSystem::new();
 
             let _ = circuit.synthesize(&mut cs);
+
+            println!("-----> {}", cs.num_inputs());
 
             assert!(cs.is_satisfied(), "TestContraintSystem was not satisfied");
             assert!(

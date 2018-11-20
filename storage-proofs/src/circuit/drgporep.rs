@@ -2,13 +2,15 @@ use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use pairing::bls12_381::{Bls12, Fr};
 use pairing::PrimeField;
 use sapling_crypto::circuit::boolean::{self, Boolean};
+use sapling_crypto::circuit::num::AllocatedNum;
 use sapling_crypto::circuit::{multipack, num};
 use sapling_crypto::jubjub::JubjubEngine;
 
 use circuit::constraint;
 use circuit::kdf::kdf;
 use circuit::sloth;
-use compound_proof::CompoundProof;
+use circuit::variables::Root;
+use compound_proof::{CircuitComponent, CompoundProof};
 use drgporep::DrgPoRep;
 use drgraph::Graph;
 use fr32::fr_into_bytes;
@@ -67,6 +69,7 @@ pub struct DrgPoRepCircuit<'a, E: JubjubEngine> {
     degree: usize,
     private: bool,
 }
+
 impl<'a, E: JubjubEngine> DrgPoRepCircuit<'a, E> {
     pub fn synthesize<CS>(
         mut cs: CS,
@@ -107,6 +110,10 @@ impl<'a, E: JubjubEngine> DrgPoRepCircuit<'a, E> {
         }
         .synthesize(&mut cs)
     }
+}
+
+impl<'a, E: JubjubEngine> CircuitComponent for DrgPoRepCircuit<'a, E> {
+    type PrivateInputs = ();
 }
 
 pub struct DrgPoRepCompound<H, G>
@@ -197,6 +204,7 @@ where
 
     fn circuit<'b>(
         public_inputs: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicInputs,
+        _component_private_inputs: <DrgPoRepCircuit<'a, Bls12> as CircuitComponent>::PrivateInputs,
         proof: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::Proof,
         public_params: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
         engine_params: &'a <Bls12 as JubjubEngine>::Params,
@@ -344,6 +352,16 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
 
             assert_eq!(data_node_path.len(), replica_node_path.len());
 
+            let replica_root_num = AllocatedNum::alloc(cs.namespace(|| "replica_root"), || {
+                replica_root.ok_or_else(|| SynthesisError::AssignmentMissing)
+            })?;
+            let replica_root_var = Root::Var(replica_root_num);
+
+            let data_root_num = AllocatedNum::alloc(cs.namespace(|| "data_root"), || {
+                data_root.ok_or_else(|| SynthesisError::AssignmentMissing)
+            })?;
+            let data_root_var = Root::Var(data_root_num);
+
             // Inclusion checks
             {
                 let mut cs = cs.namespace(|| "inclusion_checks");
@@ -353,7 +371,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
                     &params,
                     *replica_node,
                     replica_node_path.clone(),
-                    replica_root,
+                    replica_root_var.clone(),
                     self.private,
                 )?;
 
@@ -364,7 +382,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
                         &params,
                         replica_parents[i],
                         replica_parents_paths[i].clone(),
-                        replica_root,
+                        replica_root_var.clone(),
                         self.private,
                     )?;
                 }
@@ -375,7 +393,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
                     &params,
                     *data_node,
                     data_node_path.clone(),
-                    data_root,
+                    data_root_var.clone(),
                     self.private,
                 )?;
             }
