@@ -57,7 +57,7 @@ pub trait PoST<'a> {
         t_i: usize,
     ) -> Result<(
         Vec<Vec<Vec<u8>>>,
-        Vec<<<Self as PoST<'a>>::Vdf as Vdf>::Proof>,
+        Vec<(Vec<u8>, <<Self as PoST<'a>>::Vdf as Vdf>::Proof)>,
         Vec<<<Self as PoST<'a>>::ProofScheme as ProofScheme<'a>>::Proof>,
     )> {
         let (pp_ps, pp_vdf, l, m, n) = pp;
@@ -157,7 +157,8 @@ pub trait PoST<'a> {
 
         // k = 1
         for j in 0..l {
-            if Self::hash([&b_i, &[j][..]].concat()) != c_i[1][j] {
+            // TODO: proper j -> u8
+            if Self::hash(&[&b_i, &[j as u8][..]].concat()) != c_i[1][j] {
                 return Ok(false);
             }
         }
@@ -166,7 +167,8 @@ pub trait PoST<'a> {
         for k in 2..n {
             let (v_k_i, _) = proofs_vdf[k - 1];
             for j in 0..l {
-                if Self::hash([&v_k_i, &[j][..]].concat()) != c_i[k][j] {
+                // TODO: proper j -> u8
+                if Self::hash(&[&v_k_i, &[j as u8][..]].concat()) != c_i[k][j] {
                     return Ok(false);
                 }
             }
@@ -175,10 +177,12 @@ pub trait PoST<'a> {
         // -- PoRep Verification
 
         for proof in &proofs {
-            if !Self::ProofScheme::verify(pp_ps, pub_inputs_ps, proof)? {
+            if !Self::ProofScheme::verify(&pp_ps, &pub_inputs_ps, &proof)? {
                 return Ok(false);
             }
         }
+
+        Ok(true)
     }
 
     /// Beacon function
