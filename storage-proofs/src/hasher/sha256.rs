@@ -112,10 +112,10 @@ mod tests {
         assert_eq!(t2.as_slice()[1].as_ref(), l2.as_ref());
         assert_eq!(t2.as_slice()[2].as_ref(), h21.as_ref());
 
-        // TODO: Verify this is the right hash
+        // TODO: Verify this is the right hash — bearing in mind that the two most significant bits must be cleared after each hash.
         assert_eq!(
             format!("{}", HexSlice::new(t.root().as_ref())),
-            "505c0133259e8cbd42b15ca5952b33cf10cdf383329958a43432ecdf41bf2277"
+            "1c1afe57ff6efa4204cf4e17e20bf4d7f6ebf3a4c27391f93993291560107f88"
         );
     }
 }

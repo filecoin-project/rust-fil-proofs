@@ -40,11 +40,7 @@ impl<D: Digester> Hasher for DigestHasher<D> {
             m
         );
 
-        let mut res = <Self::Function as HashFunction<Self::Domain>>::hash(data);
-        // strip last two bits, to make them stay in Fr
-        res.0[31] &= 0b0011_1111;
-
-        res
+        <Self::Function as HashFunction<Self::Domain>>::hash(data)
     }
 
     fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain, rounds: usize) -> Self::Domain {
@@ -92,6 +88,13 @@ impl<D: Digester> StdHasher for DigestFunction<D> {
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, PartialOrd, Ord, Default)]
 pub struct DigestDomain(pub [u8; 32]);
+
+impl DigestDomain {
+    fn trim_to_fr32(&mut self) {
+        // strip last two bits, to ensure result is in Fr.
+        self.0[31] &= 0b0011_1111;
+    }
+}
 
 impl Rand for DigestDomain {
     fn rand<R: Rng>(rng: &mut R) -> Self {
@@ -162,7 +165,7 @@ impl<D: Digester> HashFunction<DigestDomain> for DigestFunction<D> {
         let hashed = D::digest(data);
         let mut res = DigestDomain::default();
         res.0.copy_from_slice(&hashed[..]);
-
+        res.trim_to_fr32();
         res
     }
 }
@@ -172,7 +175,9 @@ impl<D: Digester> Algorithm<DigestDomain> for DigestFunction<D> {
     fn hash(&mut self) -> DigestDomain {
         let mut h = [0u8; 32];
         h.copy_from_slice(self.0.clone().result().as_ref());
-        h.into()
+        let mut dd = DigestDomain::from(h);
+        dd.trim_to_fr32();
+        dd
     }
 
     #[inline]
