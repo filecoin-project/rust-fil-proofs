@@ -222,7 +222,7 @@ where
             .map(|node| node.proof.as_options())
             .collect();
 
-        let (private_replica_root, private_data_root) = component_private_inputs;
+        let (private_data_root, private_replica_root) = component_private_inputs;
         let replica_root = private_replica_root.unwrap_or(Root::Val((proof.replica_root).into()));
         let data_root = private_data_root.unwrap_or(Root::Val((proof.data_root).into()));
         let replica_id = Some(public_inputs.replica_id);
