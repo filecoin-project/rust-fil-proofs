@@ -222,7 +222,7 @@ where
             .map(|node| node.proof.as_options())
             .collect();
 
-        let replica_root = Root::Val((*proof.replica_nodes[0].proof.root()).into());
+        let replica_root = Root::Val((proof.replica_root).into());
 
         let replica_parents = proof
             .replica_parents
@@ -259,7 +259,7 @@ where
             .map(|node| node.proof.as_options())
             .collect();
 
-        let data_root = Root::Val((*proof.nodes[0].proof.root()).into());
+        let data_root = Root::Val((proof.data_root).into());
         let replica_id = Some(public_inputs.replica_id);
 
         DrgPoRepCircuit {
@@ -533,7 +533,7 @@ mod tests {
         let replica_node: Option<Fr> = Some(proof_nc.replica_nodes[0].data.into());
 
         let replica_node_path = proof_nc.replica_nodes[0].proof.as_options();
-        let replica_root = Root::Val((*proof_nc.replica_nodes[0].proof.root()).into());
+        let replica_root = Root::Val((proof_nc.replica_root).into());
         let replica_parents = proof_nc.replica_parents[0]
             .iter()
             .map(|(_, parent)| Some(parent.data.into()))
@@ -544,7 +544,7 @@ mod tests {
             .collect();
 
         let data_node_path = proof_nc.nodes[0].proof.as_options();
-        let data_root = Root::Val((*proof_nc.nodes[0].proof.root()).into());
+        let data_root = Root::Val((proof_nc.data_root).into());
         let replica_id = Some(replica_id);
 
         assert!(
