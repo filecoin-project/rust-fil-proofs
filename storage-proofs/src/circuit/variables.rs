@@ -19,4 +19,8 @@ impl<E: Engine> Root<E> {
             Root::Val(fr) => AllocatedNum::alloc(cs, || Ok(*fr)),
         }
     }
+
+    pub fn var<CS: ConstraintSystem<E>>(cs: CS, fr: E::Fr) -> Self {
+        Root::Var(AllocatedNum::alloc(cs, || Ok(fr)).unwrap())
+    }
 }

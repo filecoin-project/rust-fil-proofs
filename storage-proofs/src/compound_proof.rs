@@ -109,12 +109,10 @@ where
             return Ok(false);
         }
         for (k, circuit_proof) in multi_proof.circuit_proofs.iter().enumerate() {
-            println!("????????????????");
             let inputs =
                 Self::generate_public_inputs(public_inputs, vanilla_public_params, Some(k));
 
             if !groth16::verify_proof(&pvk, &circuit_proof, inputs.as_slice())? {
-                println!("!!!!!!!!!!!!!!!!!!!!!");
                 return Ok(false);
             }
         }

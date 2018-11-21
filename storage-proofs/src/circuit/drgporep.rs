@@ -223,8 +223,9 @@ where
             .collect();
 
         let (private_data_root, private_replica_root) = component_private_inputs;
-        let replica_root = private_replica_root.unwrap_or(Root::Val((proof.replica_root).into()));
-        let data_root = private_data_root.unwrap_or(Root::Val((proof.data_root).into()));
+        let replica_root =
+            private_replica_root.unwrap_or_else(|| Root::Val((proof.replica_root).into()));
+        let data_root = private_data_root.unwrap_or_else(|| Root::Val((proof.data_root).into()));
         let replica_id = Some(public_inputs.replica_id);
 
         let replica_parents = proof
@@ -361,11 +362,6 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
             {
                 let mut cs = cs.namespace(|| "inclusion_checks");
 
-                //                let circuit = PoRCompound::circuit(public_inputs: merklepor::PublicInputs {
-                //                commitment: None,
-                //            });
-
-                // FIXME: Need to call PoRCompound::circuit().synthesize().
                 PoRCircuit::synthesize(
                     cs.namespace(|| "replica_inclusion"),
                     &params,
