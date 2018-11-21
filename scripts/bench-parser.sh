@@ -18,10 +18,12 @@ index=0
 
 while IFS= read line; do
   if [[ $line =~ ^Benchmarking ]]; then
-    name=`echo "$line" | cut -d':' -f1 | cut -d' ' -f2`
+    if [[ -z $name ]]; then
+      name=`echo "$line" | cut -d' ' -f2-`
+    fi
   fi
-  if [[ "$line" =~ Collecting ]]; then
-    samples=$(echo "$line" | cut -d' ' -f4)
+  if [[ "$line" =~ Found ]]; then
+    samples=$(echo "$line" | cut -d' ' -f5)
   fi
   if [[ "$line" =~ time: ]]; then
     time=$(echo "$line" | cut -d'[' -f2 | cut -d']' -f1 | awk '{ print $1$2, $3$4, $5$6 }')
@@ -48,6 +50,7 @@ while IFS= read line; do
     \"median\": $(as_list $median),
     \"med. abs. dev.\": $(as_list $medabsdev)
   }"
+    name=""
     index=$((index+1))
   fi
 done
