@@ -105,8 +105,9 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
                 None => drgporep::Proof::new_empty(height, graph.degree()),
             };
 
-            let comm_d = proof.nodes[0].proof.root;
-            let comm_r = proof.replica_nodes[0].proof.root;
+            //let comm_d = proof.nodes[0].proof.root;
+            let comm_d = proof.data_root;
+            let comm_r = proof.replica_root;
             comm_r
                 .write_bytes(&mut crs_input[(l + 1) * 32..(l + 2) * 32])
                 .expect("failed to write vec");
@@ -125,6 +126,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
             if first_layer {
                 // Constrain first layer's comm_d to be equal to overall tau.comm_d.
 
+                // BOOKMARK/FIXME
                 let fcd = comm_d.into();
                 let first_comm_d =
                     num::AllocatedNum::alloc(cs.namespace(|| "first comm_d"), || Ok(fcd))?;

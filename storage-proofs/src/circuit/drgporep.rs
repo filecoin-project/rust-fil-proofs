@@ -338,6 +338,12 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
             &replica_id_bits[0..Fr::CAPACITY as usize],
         )?;
 
+        let replica_root_num = replica_root.allocated(cs.namespace(|| "replica_root"))?;
+        let replica_root_var = Root::Var(replica_root_num);
+
+        let data_root_num = data_root.allocated(cs.namespace(|| "data_root"))?;
+        let data_root_var = Root::Var(data_root_num);
+
         for i in 0..self.data_nodes.len() {
             let mut cs = cs.namespace(|| format!("challenge_{}", i));
             // ensure that all inputs are well formed
@@ -351,16 +357,15 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
 
             assert_eq!(data_node_path.len(), replica_node_path.len());
 
-            let replica_root_num = replica_root.allocated(cs.namespace(|| "replica_root"))?;
-            let replica_root_var = Root::Var(replica_root_num);
-
-            let data_root_num = data_root.allocated(cs.namespace(|| "data_root"))?;
-            let data_root_var = Root::Var(data_root_num);
-
             // Inclusion checks
             {
                 let mut cs = cs.namespace(|| "inclusion_checks");
 
+                //                let circuit = PoRCompound::circuit(public_inputs: merklepor::PublicInputs {
+                //                commitment: None,
+                //            });
+
+                // FIXME: Need to call PoRCompound::circuit().synthesize().
                 PoRCircuit::synthesize(
                     cs.namespace(|| "replica_inclusion"),
                     &params,

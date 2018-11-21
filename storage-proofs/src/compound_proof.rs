@@ -23,8 +23,10 @@ pub struct PublicParams<'a, E: JubjubEngine, S: ProofScheme<'a>> {
     pub partitions: Option<usize>,
 }
 
+// FIXME: We can probably get rid of this, since in the common case we only ever pass a default value.
+// Components with private inputs should use a helper (Compononet::Synthesize) to pass any private inputs needed.
 pub trait CircuitComponent {
-    type PrivateInputs: Default;
+    type PrivateInputs: Default + Clone;
 }
 
 /// The CompoundProof trait bundles a proof::ProofScheme and a bellman::Circuit together.
@@ -77,7 +79,7 @@ where
         for vanilla_proof in vanilla_proofs.iter() {
             let (groth_proof, groth_params) = Self::circuit_proof(
                 pub_in,
-                &C::PrivateInputs::default(),
+                C::PrivateInputs::default(),
                 &vanilla_proof,
                 &pub_params.vanilla_params,
                 pub_params.engine_params,
@@ -128,7 +130,7 @@ where
     /// If groth_params *are* supplied, they will not be generated, and None will be returned.
     fn circuit_proof<'b>(
         pub_in: &S::PublicInputs,
-        _component_priv_in: &C::PrivateInputs,
+        component_priv_in: C::PrivateInputs,
         vanilla_proof: &S::Proof,
         pub_params: &'b S::PublicParams,
         params: &'a E::Params,
@@ -142,7 +144,8 @@ where
         let make_circuit = || {
             Self::circuit(
                 &pub_in,
-                C::PrivateInputs::default(),
+                component_priv_in.clone(),
+                //C::PrivateInputs::default(),
                 &vanilla_proof,
                 &pub_params,
                 params,

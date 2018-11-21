@@ -71,8 +71,11 @@ where
         engine_params: &'a JubjubBls12,
     ) -> PoRCircuit<'a, Bls12> {
         let (root, private) = match (*public_inputs).commitment {
-            //None => (Some(proof.proof.root.into()), true),
-            None => (component_private_inputs.unwrap(), true),
+            None => panic!(
+                "circuit cannot be created at top-level with unsupplied component private inputs"
+            ), //
+            // (component_private_inputs.unwrap(), true),
+            //            None => (Root::Val(proof.proof.root.into()), true),
             Some(commitment) => (Root::Val(commitment.into()), false),
         };
 
