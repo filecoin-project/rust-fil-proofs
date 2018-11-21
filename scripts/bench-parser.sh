@@ -22,8 +22,8 @@ while IFS= read line; do
       name=`echo "$line" | cut -d' ' -f2-`
     fi
   fi
-  if [[ "$line" =~ Found ]]; then
-    samples=$(echo "$line" | cut -d' ' -f5)
+  if [[ "$line" =~ Collecting ]]; then
+    samples=$(echo "$line" | cut -d'C' -f2 | cut -d' ' -f2)
   fi
   if [[ "$line" =~ time: ]]; then
     time=$(echo "$line" | cut -d'[' -f2 | cut -d']' -f1 | awk '{ print $1$2, $3$4, $5$6 }')
@@ -57,13 +57,15 @@ done
 
 count=$((index-1))
 
-echo "["
-for n in ${!results[@]}; do
-  printf "${results[$n]}"
-  if [ "$n" -ne "$count" ]; then
-    echo ", "
-  else
-    echo
-  fi
-done
-echo "]"
+if [ "$count" -ge "1" ]; then
+  echo "["
+  for n in ${!results[@]}; do
+    printf "${results[$n]}"
+    if [ "$n" -ne "$count" ]; then
+      echo ", "
+    else
+      echo
+    fi
+  done
+  echo "]"
+fi
