@@ -234,7 +234,7 @@ fn do_the_work<H: 'static>(
 
             ZigZagCompound::circuit(
                 &pub_inputs,
-                <ZigZagCircuit<Bls12, H> as CircuitComponent>::PrivateInputs::default(),
+                <ZigZagCircuit<Bls12, H> as CircuitComponent>::ComponentPrivateInputs::default(),
                 &all_partition_proofs[0],
                 &pp,
                 &engine_params,

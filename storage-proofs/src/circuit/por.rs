@@ -32,7 +32,7 @@ pub struct PoRCircuit<'a, E: JubjubEngine> {
 }
 
 impl<'a, E: JubjubEngine> CircuitComponent for PoRCircuit<'a, E> {
-    type PrivateInputs = Option<Root<E>>;
+    type ComponentPrivateInputs = Option<Root<E>>;
 }
 
 pub struct PoRCompound<H: Hasher> {
@@ -65,17 +65,13 @@ where
 {
     fn circuit<'b>(
         public_inputs: &<MerklePoR<H> as ProofScheme<'a>>::PublicInputs,
-        component_private_inputs: <PoRCircuit<'a, Bls12> as CircuitComponent>::PrivateInputs,
+        _component_private_inputs: <PoRCircuit<'a, Bls12> as CircuitComponent>::ComponentPrivateInputs,
         proof: &'b <MerklePoR<H> as ProofScheme<'a>>::Proof,
         public_params: &'b <MerklePoR<H> as ProofScheme<'a>>::PublicParams,
         engine_params: &'a JubjubBls12,
     ) -> PoRCircuit<'a, Bls12> {
         let (root, private) = match (*public_inputs).commitment {
-            None => panic!(
-                "circuit cannot be created at top-level with unsupplied component private inputs"
-            ), //
-            // (component_private_inputs.unwrap(), true),
-            //            None => (Root::Val(proof.proof.root.into()), true),
+            None => (Root::Val(proof.proof.root.into()), true),
             Some(commitment) => (Root::Val(commitment.into()), false),
         };
 

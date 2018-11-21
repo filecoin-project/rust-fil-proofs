@@ -46,7 +46,7 @@ pub struct ZigZagCircuit<'a, E: JubjubEngine, H: 'static + Hasher> {
 }
 
 impl<'a, E: JubjubEngine, H: Hasher> CircuitComponent for ZigZagCircuit<'a, E, H> {
-    type PrivateInputs = ();
+    type ComponentPrivateInputs = ();
 }
 
 impl<'a, H: Hasher> ZigZagCircuit<'a, Bls12, H> {
@@ -116,7 +116,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
             // on some (50%?) of challenges.
             let circuit = DrgPoRepCompound::circuit(
                 public_inputs,
-                (),
+                (None, None),
                 &proof,
                 &self.public_params.drg_porep_public_params,
                 self.params,
@@ -268,7 +268,7 @@ impl<'a, H: 'static + Hasher>
 
     fn circuit<'b>(
         public_inputs: &'b <ZigZagDrgPoRep<H> as ProofScheme>::PublicInputs,
-        _component_private_inputs: <ZigZagCircuit<'a, Bls12, H> as CircuitComponent>::PrivateInputs,
+        _component_private_inputs: <ZigZagCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &'b <ZigZagDrgPoRep<H> as ProofScheme>::Proof,
         public_params: &'b <ZigZagDrgPoRep<H> as ProofScheme>::PublicParams,
         engine_params: &'a <Bls12 as JubjubEngine>::Params,
@@ -419,7 +419,7 @@ mod tests {
 
         ZigZagCompound::circuit(
             &pub_inputs,
-            <ZigZagCircuit<Bls12, PedersenHasher> as CircuitComponent>::PrivateInputs::default(),
+            <ZigZagCircuit<Bls12, PedersenHasher> as CircuitComponent>::ComponentPrivateInputs::default(),
             &proofs[0],
             &pp,
             params,

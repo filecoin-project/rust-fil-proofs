@@ -112,7 +112,7 @@ impl<'a, E: JubjubEngine> DrgPoRepCircuit<'a, E> {
 }
 
 impl<'a, E: JubjubEngine> CircuitComponent for DrgPoRepCircuit<'a, E> {
-    type PrivateInputs = ();
+    type ComponentPrivateInputs = (Option<Root<E>>, Option<Root<E>>);
 }
 
 pub struct DrgPoRepCompound<H, G>
@@ -203,7 +203,7 @@ where
 
     fn circuit<'b>(
         public_inputs: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicInputs,
-        _component_private_inputs: <DrgPoRepCircuit<'a, Bls12> as CircuitComponent>::PrivateInputs,
+        component_private_inputs: <DrgPoRepCircuit<'a, Bls12> as CircuitComponent>::ComponentPrivateInputs,
         proof: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::Proof,
         public_params: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
         engine_params: &'a <Bls12 as JubjubEngine>::Params,
@@ -222,7 +222,10 @@ where
             .map(|node| node.proof.as_options())
             .collect();
 
-        let replica_root = Root::Val((proof.replica_root).into());
+        let (private_replica_root, private_data_root) = component_private_inputs;
+        let replica_root = private_replica_root.unwrap_or(Root::Val((proof.replica_root).into()));
+        let data_root = private_data_root.unwrap_or(Root::Val((proof.data_root).into()));
+        let replica_id = Some(public_inputs.replica_id);
 
         let replica_parents = proof
             .replica_parents
@@ -258,9 +261,6 @@ where
             .iter()
             .map(|node| node.proof.as_options())
             .collect();
-
-        let data_root = Root::Val((proof.data_root).into());
-        let replica_id = Some(public_inputs.replica_id);
 
         DrgPoRepCircuit {
             params: engine_params,
