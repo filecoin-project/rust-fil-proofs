@@ -2,7 +2,6 @@ use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use pairing::bls12_381::{Bls12, Fr};
 use pairing::PrimeField;
 use sapling_crypto::circuit::boolean::{self, Boolean};
-use sapling_crypto::circuit::num::AllocatedNum;
 use sapling_crypto::circuit::{multipack, num};
 use sapling_crypto::jubjub::JubjubEngine;
 
@@ -59,12 +58,12 @@ pub struct DrgPoRepCircuit<'a, E: JubjubEngine> {
     sloth_iter: usize,
     replica_nodes: Vec<Option<E::Fr>>,
     replica_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
-    replica_root: Option<E::Fr>,
+    replica_root: Root<E>,
     replica_parents: Vec<Vec<Option<E::Fr>>>,
     replica_parents_paths: Vec<Vec<Vec<Option<(E::Fr, bool)>>>>,
     data_nodes: Vec<Option<E::Fr>>,
     data_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
-    data_root: Option<E::Fr>,
+    data_root: Root<E>,
     replica_id: Option<E::Fr>,
     degree: usize,
     private: bool,
@@ -78,12 +77,12 @@ impl<'a, E: JubjubEngine> DrgPoRepCircuit<'a, E> {
         sloth_iter: usize,
         replica_nodes: Vec<Option<E::Fr>>,
         replica_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
-        replica_root: Option<E::Fr>,
+        replica_root: Root<E>,
         replica_parents: Vec<Vec<Option<E::Fr>>>,
         replica_parents_paths: Vec<Vec<Vec<Option<(E::Fr, bool)>>>>,
         data_nodes: Vec<Option<E::Fr>>,
         data_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
-        data_root: Option<E::Fr>,
+        data_root: Root<E>,
         replica_id: Option<E::Fr>,
         degree: usize,
         private: bool,
@@ -223,7 +222,7 @@ where
             .map(|node| node.proof.as_options())
             .collect();
 
-        let replica_root = Some((*proof.replica_nodes[0].proof.root()).into());
+        let replica_root = Root::Val((*proof.replica_nodes[0].proof.root()).into());
 
         let replica_parents = proof
             .replica_parents
@@ -260,7 +259,7 @@ where
             .map(|node| node.proof.as_options())
             .collect();
 
-        let data_root = Some((*proof.nodes[0].proof.root()).into());
+        let data_root = Root::Val((*proof.nodes[0].proof.root()).into());
         let replica_id = Some(public_inputs.replica_id);
 
         DrgPoRepCircuit {
@@ -352,14 +351,10 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
 
             assert_eq!(data_node_path.len(), replica_node_path.len());
 
-            let replica_root_num = AllocatedNum::alloc(cs.namespace(|| "replica_root"), || {
-                replica_root.ok_or_else(|| SynthesisError::AssignmentMissing)
-            })?;
+            let replica_root_num = replica_root.allocated(cs.namespace(|| "replica_root"))?;
             let replica_root_var = Root::Var(replica_root_num);
 
-            let data_root_num = AllocatedNum::alloc(cs.namespace(|| "data_root"), || {
-                data_root.ok_or_else(|| SynthesisError::AssignmentMissing)
-            })?;
+            let data_root_num = data_root.allocated(cs.namespace(|| "data_root"))?;
             let data_root_var = Root::Var(data_root_num);
 
             // Inclusion checks
@@ -538,7 +533,7 @@ mod tests {
         let replica_node: Option<Fr> = Some(proof_nc.replica_nodes[0].data.into());
 
         let replica_node_path = proof_nc.replica_nodes[0].proof.as_options();
-        let replica_root: Option<Fr> = Some((*proof_nc.replica_nodes[0].proof.root()).into());
+        let replica_root = Root::Val((*proof_nc.replica_nodes[0].proof.root()).into());
         let replica_parents = proof_nc.replica_parents[0]
             .iter()
             .map(|(_, parent)| Some(parent.data.into()))
@@ -549,7 +544,7 @@ mod tests {
             .collect();
 
         let data_node_path = proof_nc.nodes[0].proof.as_options();
-        let data_root = Some((*proof_nc.nodes[0].proof.root()).into());
+        let data_root = Root::Val((*proof_nc.nodes[0].proof.root()).into());
         let replica_id = Some(replica_id);
 
         assert!(
@@ -623,12 +618,12 @@ mod tests {
             sloth_iter,
             vec![Some(Fr::rand(rng)); 1],
             vec![vec![Some((Fr::rand(rng), false)); tree_depth]; 1],
-            Some(Fr::rand(rng)),
+            Root::Val(Fr::rand(rng)),
             vec![vec![Some(Fr::rand(rng)); m]; 1],
             vec![vec![vec![Some((Fr::rand(rng), false)); tree_depth]; m]; 1],
             vec![Some(Fr::rand(rng)); 1],
             vec![vec![Some((Fr::rand(rng), false)); tree_depth]; 1],
-            Some(Fr::rand(rng)),
+            Root::Val(Fr::rand(rng)),
             Some(Fr::rand(rng)),
             m,
             false,

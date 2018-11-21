@@ -6,7 +6,7 @@ use sapling_crypto::circuit::num;
 use sapling_crypto::jubjub::JubjubEngine;
 
 use circuit::constraint;
-use circuit::drgporep::{DrgPoRepCircuit, DrgPoRepCompound};
+use circuit::drgporep::DrgPoRepCompound;
 use circuit::pedersen::pedersen_md_no_padding;
 use compound_proof::{CircuitComponent, CompoundProof};
 use drgporep::{self, DrgPoRep};
