@@ -23,8 +23,10 @@ pub struct PublicParams<'a, E: JubjubEngine, S: ProofScheme<'a>> {
     pub partitions: Option<usize>,
 }
 
-// FIXME: We can probably get rid of this, since in the common case we only ever pass a default value.
-// Components with private inputs should use a helper (Compononet::Synthesize) to pass any private inputs needed.
+/// CircuitComponent exists so parent components can pass private inputs to their subcomponents
+/// when calling CompoundProof::circuit directly. In general, there are no internal private inputs,
+/// and a default value will be passed. CompoundProof::circuit implementations should exhibit
+/// default behavior when passed a default ComponentPrivateinputs.
 pub trait CircuitComponent {
     type ComponentPrivateInputs: Default + Clone;
 }

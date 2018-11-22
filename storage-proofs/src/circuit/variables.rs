@@ -3,6 +3,9 @@ use bellman::{ConstraintSystem, SynthesisError};
 use pairing::Engine;
 use sapling_crypto::circuit::num::AllocatedNum;
 
+/// Root represents a root commitment which may be either a raw value or an already-allocated number.
+/// This allows subcomponents to depend on roots which may optionally be shared with their parent
+/// or sibling components.
 #[derive(Clone)]
 pub enum Root<E: Engine> {
     Var(AllocatedNum<E>),
