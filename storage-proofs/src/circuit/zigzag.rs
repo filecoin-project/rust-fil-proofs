@@ -580,8 +580,6 @@ mod tests {
 
             let _ = circuit.synthesize(&mut cs);
 
-            println!("-----> {}", cs.num_inputs());
-
             assert!(cs.is_satisfied(), "TestContraintSystem was not satisfied");
             assert!(
                 cs.verify(&inputs),
