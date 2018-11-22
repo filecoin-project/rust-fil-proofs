@@ -6,7 +6,7 @@ use sapling_crypto::circuit::num;
 use sapling_crypto::jubjub::JubjubEngine;
 
 use circuit::constraint;
-use circuit::drgporep::DrgPoRepCompound;
+use circuit::drgporep::{DrgPoRepCompound, PrivateRoots};
 use circuit::pedersen::pedersen_md_no_padding;
 use circuit::variables::Root;
 use compound_proof::{CircuitComponent, CompoundProof};
@@ -151,7 +151,10 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
             // on some (50%?) of challenges.
             let circuit = DrgPoRepCompound::circuit(
                 public_inputs,
-                (Some(comm_d_var), Some(comm_r_var)),
+                PrivateRoots {
+                    comm_d: Some(comm_d_var),
+                    comm_r: Some(comm_r_var),
+                },
                 &proof,
                 &self.public_params.drg_porep_public_params,
                 self.params,

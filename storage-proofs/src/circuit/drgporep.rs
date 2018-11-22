@@ -111,8 +111,23 @@ impl<'a, E: JubjubEngine> DrgPoRepCircuit<'a, E> {
     }
 }
 
+#[derive(Clone)]
+pub struct PrivateRoots<E: JubjubEngine> {
+    pub comm_r: Option<Root<E>>,
+    pub comm_d: Option<Root<E>>,
+}
+
+impl<E: JubjubEngine> Default for PrivateRoots<E> {
+    fn default() -> PrivateRoots<E> {
+        PrivateRoots {
+            comm_r: None,
+            comm_d: None,
+        }
+    }
+}
+
 impl<'a, E: JubjubEngine> CircuitComponent for DrgPoRepCircuit<'a, E> {
-    type ComponentPrivateInputs = (Option<Root<E>>, Option<Root<E>>);
+    type ComponentPrivateInputs = PrivateRoots<E>;
 }
 
 pub struct DrgPoRepCompound<H, G>
@@ -222,7 +237,8 @@ where
             .map(|node| node.proof.as_options())
             .collect();
 
-        let (private_data_root, private_replica_root) = component_private_inputs;
+        let private_data_root = component_private_inputs.comm_d;
+        let private_replica_root = component_private_inputs.comm_r;
         let replica_root =
             private_replica_root.unwrap_or_else(|| Root::Val((proof.replica_root).into()));
         let data_root = private_data_root.unwrap_or_else(|| Root::Val((proof.data_root).into()));
