@@ -90,9 +90,11 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
             .write_bytes(&mut crs_input[0..32])
             .expect("failed to write vec");
 
+        let public_comm_d_raw = self.tau.comm_d;
+
         let public_comm_d =
             num::AllocatedNum::alloc(cs.namespace(|| "public comm_d value"), || {
-                Ok(self.tau.comm_d.into())
+                Ok(public_comm_d_raw.into())
             })?;
 
         public_comm_d.inputize(cs.namespace(|| "zigzag comm_d"))?;
@@ -103,6 +105,9 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
             })?;
 
         public_comm_r.inputize(cs.namespace(|| "zigzag comm_r"))?;
+
+        // Yuck. This will never be used, but we need an initial value to satisfy the compiler.
+        let mut previous_comm_r_var = Root::Val(public_comm_d_raw.into());
 
         for (l, (public_inputs, layer_proof)) in self.layers.iter().enumerate() {
             let first_layer = l == 0;
@@ -120,16 +125,12 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
                 None => drgporep::Proof::new_empty(height, graph.degree()),
             };
 
-            let comm_d = proof.data_root;
             let comm_r = proof.replica_root;
 
             let comm_d_var = if first_layer {
                 Root::Var(public_comm_d.clone())
             } else {
-                Root::var(
-                    &mut cs.namespace(|| format!("layer {} comm_d", l)),
-                    comm_d.into(),
-                )
+                previous_comm_r_var
             };
 
             let comm_r_var = if last_layer {
@@ -140,6 +141,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
                     comm_r.into(),
                 )
             };
+            previous_comm_r_var = comm_r_var.clone();
 
             comm_r
                 .write_bytes(&mut crs_input[(l + 1) * 32..(l + 2) * 32])
