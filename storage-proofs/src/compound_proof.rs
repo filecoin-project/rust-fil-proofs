@@ -145,7 +145,6 @@ where
             Self::circuit(
                 &pub_in,
                 component_priv_in.clone(),
-                //C::PrivateInputs::default(),
                 &vanilla_proof,
                 &pub_params,
                 params,

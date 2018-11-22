@@ -12,7 +12,7 @@ pub trait ProofScheme<'a> {
     /// a ProofScheme to the specific parameters required by a consumer.
     fn setup(&Self::SetupParams) -> Result<Self::PublicParams>;
 
-    /// prove generates and returns a proof from public paramxeters, public inputs, and private inputs.
+    /// prove generates and returns a proof from public parameters, public inputs, and private inputs.
     fn prove<'b>(
         &'b Self::PublicParams,
         &'b Self::PublicInputs,
