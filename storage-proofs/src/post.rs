@@ -270,7 +270,7 @@ pub struct OnlinePoRepPrivateInputs<'a> {
 pub struct OnlinePoRepProof {}
 
 impl OnlinePoRepProof {
-    pub fn leafs<'a>(&'a self) -> &'a [&'a [u8]] {
+    pub fn leafs(&self) -> &[&[u8]] {
         unimplemented!();
     }
 }

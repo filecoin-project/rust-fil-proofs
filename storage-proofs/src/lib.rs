@@ -73,10 +73,10 @@ pub mod merklepor;
 pub mod parameter_cache;
 pub mod partitions;
 pub mod porep;
+pub mod post;
 pub mod proof;
 pub mod util;
 pub mod zigzag_drgporep;
 pub mod zigzag_graph;
-pub mod post;
 
 mod vde;
