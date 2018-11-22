@@ -1,193 +1,309 @@
+use std::marker::PhantomData;
+
+use byteorder::{ByteOrder, LittleEndian};
+
 use error::Result;
+use hasher::{Domain, HashFunction, Hasher};
 use proof::ProofScheme;
 
-pub trait Vdf {
-    type SetupParams;
-    type PublicParams;
-    type Proof;
-
-    fn setup(&Self::SetupParams, t: usize) -> Result<Self::PublicParams>;
-    fn eval(&Self::PublicParams, x: &[u8]) -> Result<(Vec<u8>, Self::Proof)>;
-    fn verify(&Self::PublicParams, x: &[u8], y: &[u8], proof: Self::Proof) -> Result<bool>;
+#[derive(Clone, Debug)]
+pub struct HvhPostSetupParams<T: Domain, V: Vdf<T>> {
+    /// The number of challenges to be asked at each iteration.
+    pub challenge_count: usize,
+    /// Size of a sealed sector in bytes.
+    pub sector_size: usize,
+    /// Number of times we repeat an online Proof-of-Replication in one single PoSt.
+    pub post_iterations: usize,
+    pub setup_params_vdf: V::SetupParams,
 }
 
-pub trait PoST<'a> {
-    type Vdf: Vdf;
-    type ProofScheme: ProofScheme<'a>;
+#[derive(Clone, Debug)]
+pub struct HvhPostPublicParams<T: Domain, V: Vdf<T>> {
+    /// The number of challenges to be asked at each iteration.
+    pub challenge_count: usize,
+    /// Size of a sealed sector in bytes.
+    pub sector_size: usize,
+    /// Number of times we repeat an online Proof-of-Replication in one single PoSt.
+    pub post_iterations: usize,
+    pub pub_params_vdf: V::PublicParams,
+}
 
-    /// PoST.Setup(1^{\lambda}, M) -> pp
-    fn setup(
-        sp_vdf: &<<Self as PoST<'a>>::Vdf as Vdf>::SetupParams,
-        sp_ps: &<<Self as PoST<'a>>::ProofScheme as ProofScheme<'a>>::SetupParams,
-        t: usize,
-        m: usize,
-        n: usize,
-        l: usize,
-    ) -> Result<(
-        <<Self as PoST<'a>>::Vdf as Vdf>::PublicParams,
-        <<Self as PoST<'a>>::ProofScheme as ProofScheme<'a>>::PublicParams,
-        usize,
-        usize,
-        usize,
-    )> {
-        // TODO: where doe these come from?
+#[derive(Clone, Debug)]
+pub struct HvhPostPublicInputs<T: Domain> {
+    /// The root hash of the merkle tree of the sealed sector.
+    pub comm_r: T,
+    /// The initial set of challengs. Must be of length `challenge_count`.
+    pub challenges: Vec<T>,
+}
 
-        // PoRep.Setup(1^{\lambda}, T)
-        let pp_ps = Self::ProofScheme::setup(sp_ps)?;
+#[derive(Clone, Debug)]
+pub struct HvhPostPrivateInputs<'a> {
+    pub replica: &'a [u8],
+}
 
-        // VDF.Setup(1^{\lambda}, \frac{T}{(n-1) * m})
-        let pp_vdf = Self::Vdf::setup(sp_vdf, t / ((n - 1) * m))?;
+/// HVH-PoSt
+/// This is one construction of a Proof-of-Spacetime.
+/// It currently only supports proving over a single sector.
+#[derive(Clone, Debug)]
+pub struct HvhPostProof<'a, T: Domain + 'a, V: Vdf<T>> {
+    /// `post_iteration` online Proof-of-Replication proofs.
+    pub proofs_porep: Vec<<OnlinePoRep<T> as ProofScheme<'a>>::Proof>,
+    /// `post_iterations - 1` VDF proofs
+    pub proofs_vdf: Vec<V::Proof>,
+    pub xs: Vec<T>,
+    pub ys: Vec<T>,
+}
 
-        // pp
-        Ok((pp_vdf, pp_ps, l, m, n))
+/// Generic trait to represent any Verfiable Delay Function (VDF).
+pub trait Vdf<T: Domain>: Clone {
+    type SetupParams: Clone;
+    type PublicParams: Clone;
+    type Proof: Clone;
+
+    fn setup(&Self::SetupParams) -> Result<Self::PublicParams>;
+    fn eval(&Self::PublicParams, x: &T) -> Result<(T, Self::Proof)>;
+    fn verify(&Self::PublicParams, x: &T, y: &T, proof: &Self::Proof) -> Result<bool>;
+}
+
+#[derive(Clone, Debug)]
+pub struct HvhPost<H: Hasher, V: Vdf<H::Domain>> {
+    _t: PhantomData<H>,
+    _v: PhantomData<V>,
+}
+
+impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
+    type PublicParams = HvhPostPublicParams<H::Domain, V>;
+    type SetupParams = HvhPostSetupParams<H::Domain, V>;
+    type PublicInputs = HvhPostPublicInputs<H::Domain>;
+    type PrivateInputs = HvhPostPrivateInputs<'a>;
+    type Proof = HvhPostProof<'a, H::Domain, V>;
+
+    fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
+        Ok(HvhPostPublicParams {
+            challenge_count: sp.challenge_count,
+            sector_size: sp.sector_size,
+            post_iterations: sp.post_iterations,
+            pub_params_vdf: V::setup(&sp.setup_params_vdf)?,
+        })
     }
 
-    /// PoST.Prove(D, t_i, B_i) -> \pi^i
-    fn prove(
-        pp: (
-            <<Self as PoST<'a>>::ProofScheme as ProofScheme<'a>>::PublicParams,
-            <<Self as PoST<'a>>::Vdf as Vdf>::PublicParams,
-            usize,
-            usize,
-            usize,
-        ),
-        pub_inputs_ps: <<Self as PoST<'a>>::ProofScheme as ProofScheme<'a>>::PublicInputs,
-        priv_inputs_ps: <<Self as PoST<'a>>::ProofScheme as ProofScheme<'a>>::PrivateInputs,
-        // TODO: what is t_i? I think it is the time step i
-        t_i: usize,
-    ) -> Result<(
-        Vec<Vec<Vec<u8>>>,
-        Vec<(Vec<u8>, <<Self as PoST<'a>>::Vdf as Vdf>::Proof)>,
-        Vec<<<Self as PoST<'a>>::ProofScheme as ProofScheme<'a>>::Proof>,
-    )> {
-        let (pp_ps, pp_vdf, l, m, n) = pp;
+    fn prove<'b>(
+        pub_params: &'b Self::PublicParams,
+        pub_inputs: &'b Self::PublicInputs,
+        priv_inputs: &'b Self::PrivateInputs,
+    ) -> Result<Self::Proof> {
+        let challenge_count = pub_params.challenge_count;
+        let post_iterations = pub_params.post_iterations;
 
-        // Step 1
+        let mut proofs_porep = Vec::with_capacity(post_iterations);
 
-        // B_i <- Beacon(t_i)
-        let b_i = Self::beacon(t_i);
+        let pub_params_porep = OnlinePoRepPublicParams {
+            // TODO
+        };
 
-        let mut c_i: Vec<Vec<Vec<u8>>> = Vec::with_capacity(n);
-        // derive a challenge vector c_1^i
-        c_i.push(
-            (0..l)
-                .map(|j| {
-                    // c_{1, j}^i := H(B_i || j)
-                    // TODO: properly convert j to a byte slice
-                    Self::hash(&[&b_i[..], &[j as u8][..]].concat())
-                })
-                .collect(),
-        );
+        // Step 1: Generate first proof
+        {
+            let pub_inputs_porep = OnlinePoRepPublicInputs {
+                challenges: &pub_inputs.challenges,
+                commitment: pub_inputs.comm_r,
+            };
 
-        let mut proofs = Vec::with_capacity(n);
-
-        // \pi_1^i <- PoRep.Prove(R, aux, id, c_1^i)
-        // TODO: integrate the challenge c_k^i into the pub_inputs_ps
-        // e.g. for merklepor this would be pub_inputs_ps.challenge = c_i[1]
-        proofs.push(Self::ProofScheme::prove(
-            &pp_ps,
-            &pub_inputs_ps,
-            &priv_inputs_ps,
-        )?);
-
-        // Step 2
-        let mut proofs_vdf = Vec::with_capacity(n - 1);
-
-        for k in 2..n {
-            // x_k <- H(\pi_{k-1}^i)
-            let x_k = Self::hash(&proofs[k - 1].serialize());
-
-            // evaluate (v_k^i, \pi_k^{VDF}) <- VDF.eval(pp, x_k)
-            let (v_k_i, proof_k_vdf) = Self::Vdf::eval(&pp_vdf, &x_k)?;
-            proofs_vdf.push((v_k_i, proof_k_vdf));
-
-            // generate a challenge vector
-            c_i.push(
-                (0..l)
-                    .map(|j| {
-                        // c_{k, j}^i := H(v_k^i || j)
-                        // TODO: properly convert j to slice
-                        Self::hash(&[&v_k_i[..], &[j as u8][..]].concat())
-                    })
-                    .collect(),
-            );
-
-            // \pi_k^i <- PoRep.Prove(R, aux, id, c_k^i)
-            // TODO: integrate the challenge c_k^i into the pub_inputs_ps
-            // e.g. for merklepor this would be pub_inputs_ps.challenge = c_i[k]
-            proofs.push(Self::ProofScheme::prove(
-                &pp_ps,
-                &pub_inputs_ps,
-                &priv_inputs_ps,
+            let priv_inputs_porep = OnlinePoRepPrivateInputs {
+                replica: priv_inputs.replica,
+                // TODO: pass tree + leaf
+            };
+            proofs_porep.push(OnlinePoRep::prove(
+                &pub_params_porep,
+                &pub_inputs_porep,
+                &priv_inputs_porep,
             )?);
         }
 
-        Ok((c_i, proofs_vdf, proofs))
+        // Step 2: Generate `post_iterations - 1` remaining proofs
+
+        let mut proofs_vdf = Vec::with_capacity(post_iterations - 1);
+        let mut xs = Vec::with_capacity(post_iterations - 1);
+        let mut ys = Vec::with_capacity(post_iterations - 1);
+
+        for k in 1..post_iterations {
+            // Run VDF
+            let x = extract_vdf_input::<H>(&proofs_porep[k - 1]);
+            let (y, proof_vdf) = V::eval(&pub_params.pub_params_vdf, &x)?;
+
+            proofs_vdf.push(proof_vdf);
+            xs.push(x);
+            ys.push(y);
+
+            let r = H::Function::hash(y.as_ref());
+
+            // Generate challenges
+            let challenges: Vec<H::Domain> = (0..challenge_count)
+                .map(|i| {
+                    let mut i_bytes = [0u8; 4];
+                    LittleEndian::write_u32(&mut i_bytes[..], i as u32);
+
+                    H::Function::hash(&[r.as_ref(), &i_bytes].concat())
+                })
+                .collect();
+
+            // Generate proof
+            let pub_inputs_porep = OnlinePoRepPublicInputs {
+                challenges: &pub_inputs.challenges,
+                commitment: pub_inputs.comm_r,
+            };
+
+            let priv_inputs_porep = OnlinePoRepPrivateInputs {
+                replica: priv_inputs.replica,
+                // TODO: pass tree + leaf
+            };
+            proofs_porep.push(OnlinePoRep::prove(
+                &pub_params_porep,
+                &pub_inputs_porep,
+                &priv_inputs_porep,
+            )?);
+        }
+
+        Ok(HvhPostProof {
+            proofs_porep,
+            proofs_vdf,
+            xs,
+            ys,
+        })
     }
 
-    // PoST.Verify(c^i, t_i, \pi^i, (v^i, \pi^{VDF}))
     fn verify(
-        pp: (
-            <<Self as PoST<'a>>::ProofScheme as ProofScheme<'a>>::PublicParams,
-            <<Self as PoST<'a>>::Vdf as Vdf>::PublicParams,
-            usize,
-            usize,
-            usize,
-        ),
-        pub_inputs_ps: <<Self as PoST<'a>>::ProofScheme as ProofScheme<'a>>::PublicInputs,
-        c_i: Vec<Vec<Vec<u8>>>,
-        t_i: usize,
-        proofs_vdf: Vec<(Vec<u8>, <<Self as PoST<'a>>::Vdf as Vdf>::Proof)>,
-        proofs: Vec<<<Self as PoST<'a>>::ProofScheme as ProofScheme<'a>>::Proof>,
+        pub_params: &Self::PublicParams,
+        pub_inputs: &Self::PublicInputs,
+        proof: &Self::Proof,
     ) -> Result<bool> {
-        let (pp_ps, pp_vdf, l, m, n) = pp;
+        let challenge_count = pub_params.challenge_count;
+        let post_iterations = pub_params.post_iterations;
 
-        // -- VDF Output Verification
-        for k in 2..n {
-            let (v_k_i, proof_vdf_k) = proofs_vdf[k - 1];
-            let x_k = Self::hash(&proofs[k - 1].serialize());
-
-            if !Self::Vdf::verify(&pp_vdf, &x_k, &v_k_i, proof_vdf_k)? {
+        // VDF Output Verification
+        for i in 0..post_iterations - 1 {
+            if !V::verify(
+                &pub_params.pub_params_vdf,
+                &proof.xs[i],
+                &proof.ys[i],
+                &proof.proofs_vdf[i],
+            )? {
                 return Ok(false);
             }
         }
 
-        // -- Challenge Verification
-        let b_i = Self::beacon(t_i);
+        // Sequentiality Verification
 
-        // k = 1
-        for j in 0..l {
-            // TODO: proper j -> u8
-            if Self::hash(&[&b_i, &[j as u8][..]].concat()) != c_i[1][j] {
+        for i in 0..post_iterations - 1 {
+            if extract_vdf_input::<H>(&proof.proofs_porep[i]) != proof.xs[i] {
                 return Ok(false);
             }
         }
 
-        // k in 2..n
-        for k in 2..n {
-            let (v_k_i, _) = proofs_vdf[k - 1];
-            for j in 0..l {
-                // TODO: proper j -> u8
-                if Self::hash(&[&v_k_i, &[j as u8][..]].concat()) != c_i[k][j] {
-                    return Ok(false);
-                }
+        // Online PoRep Verification
+
+        // First
+        let pub_params_porep = OnlinePoRepPublicParams {
+            // TODO
+        };
+
+        {
+            let pub_inputs_porep = OnlinePoRepPublicInputs {
+                challenges: &pub_inputs.challenges,
+                commitment: pub_inputs.comm_r,
+            };
+
+            if !OnlinePoRep::verify(&pub_params_porep, &pub_inputs_porep, &proof.proofs_porep[0])? {
             }
         }
 
-        // -- PoRep Verification
+        // The rest
+        for i in 1..post_iterations {
+            // Generate challenges
+            let r = H::Function::hash(proof.ys[i - 1].as_ref());
+            let challenges: Vec<H::Domain> = (0..challenge_count)
+                .map(|j| {
+                    let mut j_bytes = [0u8; 4];
+                    LittleEndian::write_u32(&mut j_bytes[..], j as u32);
 
-        for proof in &proofs {
-            if !Self::ProofScheme::verify(&pp_ps, &pub_inputs_ps, &proof)? {
+                    H::Function::hash(&[r.as_ref(), &j_bytes].concat())
+                })
+                .collect();
+
+            let pub_inputs_porep = OnlinePoRepPublicInputs {
+                challenges: &challenges,
+                commitment: pub_inputs.comm_r,
+            };
+
+            if !OnlinePoRep::verify(&pub_params_porep, &pub_inputs_porep, &proof.proofs_porep[i])? {
                 return Ok(false);
             }
         }
 
         Ok(true)
     }
+}
 
-    /// Beacon function
-    fn beacon(t_i: usize) -> Vec<u8>;
+pub fn extract_vdf_input<H: Hasher>(proof: &OnlinePoRepProof) -> H::Domain {
+    let leafs: Vec<u8> = proof.leafs().concat();
 
-    /// Hash function
-    fn hash(&[u8]) -> Vec<u8>;
+    H::Function::hash(&leafs)
+}
+
+#[derive(Debug, Clone)]
+pub struct OnlinePoRepSetupParams {}
+
+#[derive(Debug, Clone)]
+pub struct OnlinePoRepPublicParams {}
+
+#[derive(Debug, Clone)]
+pub struct OnlinePoRepPublicInputs<'a, T: Domain> {
+    pub challenges: &'a [T],
+    pub commitment: T,
+}
+
+#[derive(Debug, Clone)]
+pub struct OnlinePoRepPrivateInputs<'a> {
+    pub replica: &'a [u8],
+}
+
+#[derive(Debug, Clone)]
+pub struct OnlinePoRepProof {}
+
+impl OnlinePoRepProof {
+    pub fn leafs<'a>(&'a self) -> &'a [&'a [u8]] {
+        unimplemented!();
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct OnlinePoRep<T: Domain> {
+    _t: PhantomData<T>,
+}
+
+impl<'a, T: 'a + Domain> ProofScheme<'a> for OnlinePoRep<T> {
+    type PublicParams = OnlinePoRepPublicParams;
+    type SetupParams = OnlinePoRepSetupParams;
+    type PublicInputs = OnlinePoRepPublicInputs<'a, T>;
+    type PrivateInputs = OnlinePoRepPrivateInputs<'a>;
+    type Proof = OnlinePoRepProof;
+
+    fn setup(_sp: &Self::SetupParams) -> Result<Self::PublicParams> {
+        unimplemented!();
+    }
+
+    fn prove<'b>(
+        _pub_params: &'b Self::PublicParams,
+        _pub_inputs: &'b Self::PublicInputs,
+        _priv_inputs: &'b Self::PrivateInputs,
+    ) -> Result<Self::Proof> {
+        unimplemented!();
+    }
+
+    fn verify(
+        _pub_params: &Self::PublicParams,
+        _pub_inputs: &Self::PublicInputs,
+        _proof: &Self::Proof,
+    ) -> Result<bool> {
+        unimplemented!();
+    }
 }
