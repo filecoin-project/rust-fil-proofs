@@ -112,14 +112,14 @@ impl<'a, E: JubjubEngine> DrgPoRepCircuit<'a, E> {
 }
 
 #[derive(Clone)]
-pub struct PrivateRoots<E: JubjubEngine> {
+pub struct ComponentPrivateInputs<E: JubjubEngine> {
     pub comm_r: Option<Root<E>>,
     pub comm_d: Option<Root<E>>,
 }
 
-impl<E: JubjubEngine> Default for PrivateRoots<E> {
-    fn default() -> PrivateRoots<E> {
-        PrivateRoots {
+impl<E: JubjubEngine> Default for ComponentPrivateInputs<E> {
+    fn default() -> ComponentPrivateInputs<E> {
+        ComponentPrivateInputs {
             comm_r: None,
             comm_d: None,
         }
@@ -127,7 +127,7 @@ impl<E: JubjubEngine> Default for PrivateRoots<E> {
 }
 
 impl<'a, E: JubjubEngine> CircuitComponent for DrgPoRepCircuit<'a, E> {
-    type ComponentPrivateInputs = PrivateRoots<E>;
+    type ComponentPrivateInputs = ComponentPrivateInputs<E>;
 }
 
 pub struct DrgPoRepCompound<H, G>
