@@ -9,8 +9,7 @@ use merkle::MerkleProof;
 use parameter_cache::ParameterSetIdentifier;
 use porep::{self, PoRep};
 use proof::ProofScheme;
-use util::data_at_node;
-use vde::{self, decode_block};
+use vde::{self, decode_block, decode_domain_block};
 
 #[derive(Debug, Clone)]
 pub struct PublicInputs<T: Domain> {
@@ -21,7 +20,6 @@ pub struct PublicInputs<T: Domain> {
 
 #[derive(Debug)]
 pub struct PrivateInputs<'a, H: 'a + Hasher> {
-    pub replica: &'a [u8],
     pub aux: &'a porep::ProverAux<H>,
 }
 
@@ -241,10 +239,9 @@ where
 
             let tree_d = &priv_inputs.aux.tree_d;
             let tree_r = &priv_inputs.aux.tree_r;
-            let replica = priv_inputs.replica;
+            let domain_replica = tree_r.as_slice();
 
-            let data =
-                H::Domain::try_from_bytes(data_at_node(replica, challenge, pub_params.lambda)?)?;
+            let data = domain_replica[challenge];
 
             replica_nodes.push(DataProof {
                 proof: MerkleProof::new_from_proof(&tree_r.gen_proof(challenge)),
@@ -259,11 +256,7 @@ where
                     let proof = tree_r.gen_proof(p);
                     DataProof {
                         proof: MerkleProof::new_from_proof(&proof),
-                        data: H::Domain::try_from_bytes(data_at_node(
-                            replica,
-                            p,
-                            pub_params.lambda,
-                        )?)?,
+                        data: domain_replica[p],
                     }
                 }));
             }
@@ -281,12 +274,12 @@ where
                 //     challenge,
                 // )?;
 
-                let extracted = decode_block(
+                let extracted = decode_domain_block(
                     &pub_params.graph,
                     pub_params.lambda,
                     pub_params.sloth_iter,
                     &pub_inputs.replica_id,
-                    &replica,
+                    domain_replica,
                     challenge,
                 )?
                 .into_bytes();
@@ -446,6 +439,7 @@ mod tests {
     use drgraph::{new_seed, BucketGraph};
     use fr32::fr_into_bytes;
     use hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use util::data_at_node;
 
     pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
         let mut tmpfile: File = tempfile::tempfile().unwrap();
@@ -616,10 +610,7 @@ mod tests {
                 tau: Some(tau.clone().into()),
             };
 
-            let priv_inputs = PrivateInputs::<H> {
-                replica: &mmapped_data_copy,
-                aux: &aux,
-            };
+            let priv_inputs = PrivateInputs::<H> { aux: &aux };
 
             let real_proof = DrgPoRep::<H, _>::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
 
@@ -629,14 +620,12 @@ mod tests {
                 let real_parents = real_proof.replica_parents;
 
                 // Parent vector claiming the wrong parents.
-                let fake_parents = vec![
-                    real_parents[0]
-                        .iter()
-                        // Incrementing each parent node will give us a different parent set.
-                        // It's fine to be out of range, since this only needs to fail.
-                        .map(|(i, data_proof)| (i + 1, data_proof.clone()))
-                        .collect::<Vec<_>>(),
-                ];
+                let fake_parents = vec![real_parents[0]
+                    .iter()
+                    // Incrementing each parent node will give us a different parent set.
+                    // It's fine to be out of range, since this only needs to fail.
+                    .map(|(i, data_proof)| (i + 1, data_proof.clone()))
+                    .collect::<Vec<_>>()];
 
                 let proof = Proof::new(
                     real_proof.replica_nodes.clone(),
@@ -666,18 +655,16 @@ mod tests {
 
                 // Parent vector claiming the right parents but providing valid proofs for different
                 // parents.
-                let fake_proof_parents = vec![
-                    real_parents[0]
-                        .iter()
-                        .enumerate()
-                        .map(|(i, (p, _))| {
-                            // Rotate the real parent proofs.
-                            let x = (i + 1) % real_parents[0].len();
-                            let j = real_parents[0][x].0;
-                            (*p, real_parents[0][j].1.clone())
-                        })
-                        .collect::<Vec<_>>(),
-                ];
+                let fake_proof_parents = vec![real_parents[0]
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (p, _))| {
+                        // Rotate the real parent proofs.
+                        let x = (i + 1) % real_parents[0].len();
+                        let j = real_parents[0][x].0;
+                        (*p, real_parents[0][j].1.clone())
+                    })
+                    .collect::<Vec<_>>()];
 
                 let proof2 = Proof::new(
                     real_proof.replica_nodes,

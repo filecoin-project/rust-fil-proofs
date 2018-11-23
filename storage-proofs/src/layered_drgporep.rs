@@ -150,9 +150,8 @@ pub trait Layers {
     fn prove_layers<'a>(
         pp: &drgporep::PublicParams<Self::Hasher, Self::Graph>,
         pub_inputs: &PublicInputs<<Self::Hasher as Hasher>::Domain>,
-        priv_inputs: &drgporep::PrivateInputs<Self::Hasher>,
-        tau: Vec<porep::Tau<<Self::Hasher as Hasher>::Domain>>,
-        aux: Vec<porep::ProverAux<Self::Hasher>>,
+        tau: &[porep::Tau<<Self::Hasher as Hasher>::Domain>],
+        aux: &[porep::ProverAux<Self::Hasher>],
         layers: usize,
         total_layers: usize,
         proofs: &'a mut Vec<Vec<EncodingProof<Self::Hasher>>>,
@@ -160,18 +159,7 @@ pub trait Layers {
     ) -> Result<&'a Vec<Vec<EncodingProof<Self::Hasher>>>> {
         assert!(layers > 0);
 
-        let mut scratch = priv_inputs.replica.to_vec().clone();
-        <DrgPoRep<Self::Hasher, Self::Graph> as PoRep<<Self::Hasher as Hasher>::Domain>>::replicate(
-            pp,
-            &pub_inputs.replica_id,
-            scratch.as_mut_slice(),
-        )?;
-
-        let new_priv_inputs = drgporep::PrivateInputs {
-            replica: scratch.as_slice(),
-            // TODO: Make sure this is a shallow clone, not the whole MerkleTree.
-            aux: &aux[aux.len() - layers].clone(),
-        };
+        let new_priv_inputs = drgporep::PrivateInputs { aux: &aux[0] };
 
         let mut partition_proofs = Vec::with_capacity(partition_count);
 
@@ -183,7 +171,7 @@ pub trait Layers {
                     (total_layers - layers) as u8,
                     Some(k),
                 ),
-                tau: Some(tau[tau.len() - layers]),
+                tau: Some(tau[0]),
             };
             let drg_proof = DrgPoRep::prove(&pp, &drgporep_pub_inputs, &new_priv_inputs)?;
 
@@ -198,9 +186,8 @@ pub trait Layers {
             Self::prove_layers(
                 pp,
                 pub_inputs,
-                &new_priv_inputs,
-                tau,
-                aux,
+                &tau[1..],
+                &aux[1..],
                 layers - 1,
                 total_layers,
                 proofs,
@@ -309,19 +296,13 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         priv_inputs: &'b Self::PrivateInputs,
         partition_count: usize,
     ) -> Result<Vec<Self::Proof>> {
-        let drg_priv_inputs = drgporep::PrivateInputs {
-            aux: &priv_inputs.aux[0].clone(),
-            replica: priv_inputs.replica,
-        };
-
         let mut proofs = Vec::with_capacity(pub_params.layers);
 
         Self::prove_layers(
             &pub_params.drg_porep_public_params,
             pub_inputs,
-            &drg_priv_inputs,
-            priv_inputs.tau.clone(),
-            priv_inputs.aux.clone(),
+            &priv_inputs.tau,
+            &priv_inputs.aux,
             pub_params.layers,
             pub_params.layers,
             &mut proofs,
