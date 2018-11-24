@@ -219,8 +219,13 @@ impl SectorBuilder {
     // Returns sealing status for the sector with specified id. If no sealed or
     // staged sector exists with the provided id, produce an error.
     pub fn get_seal_status(&self, sector_id: SectorId) -> Result<SealStatus> {
-        let sealed_state = self.state.sealed.lock().unwrap();
+        // It is very important that the staged lock is acquired before the
+        // sealed lock. Both sealing and piece-adding acquire the staged lock
+        // before the sealed lock. If this thread holds the sealing lock but not
+        // the staged lock while some other thread holds the staged lock but not
+        // the sealing lock, we deadlock.
         let staged_state = self.state.staged.lock().unwrap();
+        let sealed_state = self.state.sealed.lock().unwrap();
 
         get_seal_status(&staged_state, &sealed_state, sector_id)
     }
