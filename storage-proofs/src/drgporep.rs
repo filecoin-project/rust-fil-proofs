@@ -5,7 +5,7 @@ use byteorder::{LittleEndian, WriteBytesExt};
 use drgraph::Graph;
 use error::Result;
 use hasher::{Domain, Hasher};
-use merkle::MerkleProof;
+use merkle::{MerkleProof, MerkleTree};
 use parameter_cache::ParameterSetIdentifier;
 use porep::{self, PoRep};
 use proof::ProofScheme;
@@ -379,7 +379,7 @@ where
     }
 }
 
-impl<'a, H, G> PoRep<'a, H::Domain> for DrgPoRep<'a, H, G>
+impl<'a, H, G> PoRep<'a, H> for DrgPoRep<'a, H, G>
 where
     H: 'a + Hasher,
     G: 'a + Graph<H> + ParameterSetIdentifier,
@@ -391,8 +391,13 @@ where
         pp: &Self::PublicParams,
         replica_id: &H::Domain,
         data: &mut [u8],
+        data_tree: Option<MerkleTree<H::Domain, H::Function>>,
     ) -> Result<(porep::Tau<H::Domain>, porep::ProverAux<H>)> {
-        let tree_d = pp.graph.merkle_tree(data, pp.lambda)?;
+        let tree_d = match data_tree {
+            Some(tree) => tree,
+            None => pp.graph.merkle_tree(data, pp.lambda)?,
+        };
+
         let comm_d = tree_d.root();
 
         vde::encode(&pp.graph, pp.lambda, pp.sloth_iter, replica_id, data)?;
@@ -471,7 +476,7 @@ mod tests {
 
         let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).unwrap();
 
-        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy).unwrap();
+        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None).unwrap();
 
         let mut copied = vec![0; data.len()];
         copied.copy_from_slice(&mmapped_data_copy);
@@ -522,7 +527,7 @@ mod tests {
 
         let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).unwrap();
 
-        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy).unwrap();
+        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None).unwrap();
 
         let mut copied = vec![0; data.len()];
         copied.copy_from_slice(&mmapped_data_copy);
@@ -597,7 +602,8 @@ mod tests {
             let pp = DrgPoRep::<H, BucketGraph<_>>::setup(&sp).unwrap();
 
             let (tau, aux) =
-                DrgPoRep::<H, _>::replicate(&pp, &replica_id, &mut mmapped_data_copy).unwrap();
+                DrgPoRep::<H, _>::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
+                    .unwrap();
 
             let mut copied = vec![0; data.len()];
             copied.copy_from_slice(&mmapped_data_copy);

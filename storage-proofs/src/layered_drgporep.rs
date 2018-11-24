@@ -1,3 +1,5 @@
+use merkle::MerkleTree;
+
 use challenge_derivation::derive_challenges;
 use drgporep::{self, DrgPoRep};
 use drgraph::Graph;
@@ -237,7 +239,14 @@ pub trait Layers {
         auxs: &mut Vec<porep::ProverAux<Self::Hasher>>,
     ) -> Result<()> {
         assert!(layers > 0);
-        let (tau, aux) = DrgPoRep::replicate(drgpp, replica_id, data).unwrap();
+        let previous_replica_tree = if auxs.len() > 0 {
+            Some(auxs[auxs.len() - 1].tree_r.clone())
+        } else {
+            None
+        };
+
+        let (tau, aux) =
+            DrgPoRep::replicate(drgpp, replica_id, data, previous_replica_tree).unwrap();
 
         taus.push(tau);
         auxs.push(aux);
@@ -409,7 +418,7 @@ fn comm_r_star<H: Hasher>(replica_id: &H::Domain, comm_rs: &[H::Domain]) -> Resu
     Ok(H::Function::hash(&bytes))
 }
 
-impl<'a, 'c, L: Layers> PoRep<'a, <L::Hasher as Hasher>::Domain> for L {
+impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
     type Tau = Tau<<L::Hasher as Hasher>::Domain>;
     type ProverAux = Vec<porep::ProverAux<L::Hasher>>;
 
@@ -417,6 +426,9 @@ impl<'a, 'c, L: Layers> PoRep<'a, <L::Hasher as Hasher>::Domain> for L {
         pp: &'a PublicParams<L::Hasher, L::Graph>,
         replica_id: &<L::Hasher as Hasher>::Domain,
         data: &mut [u8],
+        _data_tree: Option<
+            MerkleTree<<L::Hasher as Hasher>::Domain, <L::Hasher as Hasher>::Function>,
+        >,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let mut taus = Vec::with_capacity(pp.layers);
         let mut auxs = Vec::with_capacity(pp.layers);

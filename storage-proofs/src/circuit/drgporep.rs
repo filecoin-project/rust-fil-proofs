@@ -494,6 +494,7 @@ mod tests {
             &pp,
             &replica_id.into(),
             data.as_mut_slice(),
+            None,
         )
         .expect("failed to replicate");
 
@@ -658,6 +659,7 @@ mod tests {
             &public_params.vanilla_params,
             &replica_id.into(),
             data.as_mut_slice(),
+            None,
         )
         .expect("failed to replicate");
 
