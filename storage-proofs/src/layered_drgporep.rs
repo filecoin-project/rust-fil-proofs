@@ -239,7 +239,7 @@ pub trait Layers {
         auxs: &mut Vec<porep::ProverAux<Self::Hasher>>,
     ) -> Result<()> {
         assert!(layers > 0);
-        let previous_replica_tree = if auxs.len() > 0 {
+        let previous_replica_tree = if !auxs.is_empty() {
             Some(auxs[auxs.len() - 1].tree_r.clone())
         } else {
             None
