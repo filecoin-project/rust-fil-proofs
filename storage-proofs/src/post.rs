@@ -20,8 +20,6 @@ pub struct SetupParams<T: Domain, V: Vdf<T>> {
     pub setup_params_vdf: V::SetupParams,
     /// The size of a single leaf.
     pub lambda: usize,
-    /// How many leaves the underlying merkle tree has.
-    pub leaves: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -87,7 +85,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
             post_iterations: sp.post_iterations,
             pub_params_vdf: V::setup(&sp.setup_params_vdf)?,
             lambda: sp.lambda,
-            leaves: sp.leaves,
+            leaves: sp.sector_size / sp.lambda,
         })
     }
 
@@ -139,13 +137,15 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
             xs.push(x);
             ys.push(y);
 
-            let r = H::Function::hash(y.as_ref());
+            // TODO: this padding is not great, but needed for pedersen_md currently
+            let r = H::Function::hash(&[y.as_ref(), &[0u8; 32]].concat());
 
             // Generate challenges
             let challenges: Vec<H::Domain> = (0..challenge_count)
                 .map(|i| {
-                    let mut i_bytes = [0u8; 4];
-                    LittleEndian::write_u32(&mut i_bytes[..], i as u32);
+                    // TODO: this padding is not great, but needed for pedersen_md currently
+                    let mut i_bytes = [0u8; 32];
+                    LittleEndian::write_u32(&mut i_bytes[0..4], i as u32);
 
                     H::Function::hash(&[r.as_ref(), &i_bytes].concat())
                 })
@@ -225,11 +225,13 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
         // The rest
         for i in 1..post_iterations {
             // Generate challenges
-            let r = H::Function::hash(proof.ys[i - 1].as_ref());
+            // TODO: this padding is not great, but needed for pedersen_md currently
+            let r = H::Function::hash(&[proof.ys[i - 1].as_ref(), &[0u8; 32]].concat());
             let challenges: Vec<H::Domain> = (0..challenge_count)
                 .map(|j| {
-                    let mut j_bytes = [0u8; 4];
-                    LittleEndian::write_u32(&mut j_bytes[..], j as u32);
+                    // TODO: this padding is not great, but needed for pedersen_md currently
+                    let mut j_bytes = [0u8; 32];
+                    LittleEndian::write_u32(&mut j_bytes[0..4], j as u32);
 
                     H::Function::hash(&[r.as_ref(), &j_bytes].concat())
                 })
@@ -256,4 +258,66 @@ pub fn extract_vdf_input<H: Hasher>(proof: &online_porep::Proof<H>) -> H::Domain
     });
 
     H::Function::hash(&leafs)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use pairing::bls12_381::Bls12;
+    use rand::{Rng, SeedableRng, XorShiftRng};
+
+    use drgraph::{new_seed, BucketGraph, Graph};
+    use fr32::fr_into_bytes;
+    use hasher::pedersen::{PedersenDomain, PedersenHasher};
+    use vdf_sloth;
+
+    #[test]
+    fn test_hvh_post_basics() {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let lambda = 32;
+        let sp = SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
+            challenge_count: 10,
+            sector_size: 1024 * lambda,
+            post_iterations: 3,
+            setup_params_vdf: vdf_sloth::SetupParams {
+                key: rng.gen(),
+                rounds: 1,
+            },
+            lambda,
+        };
+
+        let pub_params = HvhPost::<PedersenHasher, vdf_sloth::Sloth>::setup(&sp).unwrap();
+
+        let data: Vec<u8> = (0..1024)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
+
+        let graph = BucketGraph::<PedersenHasher>::new(1024, 5, 0, new_seed());
+        let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
+
+        let pub_inputs = PublicInputs {
+            challenges: vec![rng.gen(), rng.gen()],
+            comm_r: tree.root(),
+        };
+
+        let priv_inputs = PrivateInputs {
+            tree: &tree,
+            replica: &data,
+            _h: PhantomData,
+        };
+
+        let proof = HvhPost::<PedersenHasher, vdf_sloth::Sloth>::prove(
+            &pub_params,
+            &pub_inputs,
+            &priv_inputs,
+        )
+        .unwrap();
+
+        assert!(
+            HvhPost::<PedersenHasher, vdf_sloth::Sloth>::verify(&pub_params, &pub_inputs, &proof)
+                .unwrap()
+        );
+    }
 }
