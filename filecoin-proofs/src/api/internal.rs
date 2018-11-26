@@ -266,8 +266,8 @@ pub fn seal(
         )?;
     }
 
-    let comm_r = commitment_from_fr::<Bls12>(public_tau.comm_r.0);
-    let comm_d = commitment_from_fr::<Bls12>(public_tau.comm_d.0);
+    let comm_r = commitment_from_fr::<Bls12>(public_tau.comm_r.into());
+    let comm_d = commitment_from_fr::<Bls12>(public_tau.comm_d.into());
     let comm_r_star = commitment_from_fr::<Bls12>(tau.comm_r_star.into());
 
     // Verification is cheap when parameters are cached,
