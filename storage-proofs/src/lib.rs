@@ -70,6 +70,7 @@ pub mod hasher;
 pub mod layered_drgporep;
 pub mod merkle;
 pub mod merklepor;
+pub mod online_porep;
 pub mod parameter_cache;
 pub mod partitions;
 pub mod porep;
