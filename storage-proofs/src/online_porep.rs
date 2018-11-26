@@ -36,7 +36,7 @@ impl ParameterSetIdentifier for PublicParams {
 }
 
 #[derive(Debug, Clone)]
-pub struct PublicInputs<'a, T: Domain> {
+pub struct PublicInputs<'a, T: 'a + Domain> {
     /// The challenge, which leafs to prove.
     pub challenges: &'a [T],
     /// The root hash of the underlying merkle tree.
@@ -137,4 +137,195 @@ fn get_leaf(challenge: impl AsRef<[u8]>, count: usize) -> usize {
     (big_challenge % count)
         .to_usize()
         .expect("failed modulus operation")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pairing::bls12_381::Bls12;
+    use rand::{Rng, SeedableRng, XorShiftRng};
+
+    use drgraph::{new_seed, BucketGraph, Graph};
+    use fr32::fr_into_bytes;
+    use hasher::{Blake2sHasher, HashFunction, PedersenHasher, Sha256Hasher};
+    use merkle::make_proof_for_test;
+
+    fn test_online_porep<H: Hasher>() {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let pub_params = PublicParams {
+            lambda: 32,
+            leaves: 32,
+        };
+
+        let data: Vec<u8> = (0..32)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
+
+        let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
+        let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
+
+        let pub_inputs = PublicInputs {
+            challenges: &vec![rng.gen(), rng.gen()],
+            commitment: tree.root(),
+        };
+
+        let priv_inputs = PrivateInputs::<H> {
+            tree: &tree,
+            replica: &data,
+        };
+
+        let proof = OnlinePoRep::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+
+        assert!(OnlinePoRep::<H>::verify(&pub_params, &pub_inputs, &proof).unwrap());
+    }
+
+    #[test]
+    fn online_porep_pedersen() {
+        test_online_porep::<PedersenHasher>();
+    }
+
+    #[test]
+    fn online_porep_sha256() {
+        test_online_porep::<Sha256Hasher>();
+    }
+
+    #[test]
+    fn online_porep_blake2s() {
+        test_online_porep::<Blake2sHasher>();
+    }
+
+    // Construct a proof that satisfies a cursory validation:
+    // Data and proof are minimally consistent.
+    // Proof root matches that requested in public inputs.
+    // However, note that data has no relationship to anything,
+    // and proof path does not actually prove that data was in the tree corresponding to expected root.
+    fn make_bogus_proof<H: Hasher>(
+        pub_inputs: &PublicInputs<H::Domain>,
+        rng: &mut XorShiftRng,
+    ) -> MerkleProof<H> {
+        let bogus_leaf: H::Domain = rng.gen();
+        let hashed_leaf = H::Function::hash_leaf(&bogus_leaf);
+
+        make_proof_for_test(
+            pub_inputs.commitment,
+            hashed_leaf,
+            vec![(hashed_leaf, true)],
+        )
+    }
+
+    fn test_online_porep_validates<H: Hasher>() {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let pub_params = PublicParams {
+            lambda: 32,
+            leaves: 32,
+        };
+
+        let data: Vec<u8> = (0..32)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
+
+        let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
+        let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
+
+        let pub_inputs = PublicInputs::<H::Domain> {
+            challenges: &vec![rng.gen(), rng.gen()],
+            commitment: tree.root(),
+        };
+
+        let bad_proof = Proof(vec![
+            make_bogus_proof::<H>(&pub_inputs, rng),
+            make_bogus_proof::<H>(&pub_inputs, rng),
+        ]);
+
+        let verified = OnlinePoRep::verify(&pub_params, &pub_inputs, &bad_proof).unwrap();
+
+        // A bad proof should not be verified!
+        assert!(!verified);
+    }
+
+    #[test]
+    fn online_porep_actually_validates_sha256() {
+        test_online_porep_validates::<Sha256Hasher>();
+    }
+
+    #[test]
+    fn online_porep_actually_validates_blake2s() {
+        test_online_porep_validates::<Blake2sHasher>();
+    }
+
+    #[test]
+    fn online_porep_actually_validates_pedersen() {
+        test_online_porep_validates::<PedersenHasher>();
+    }
+
+    fn test_online_porep_validates_challenge_identity<H: Hasher>() {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let pub_params = PublicParams {
+            lambda: 32,
+            leaves: 32,
+        };
+
+        let data: Vec<u8> = (0..32)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
+
+        let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
+        let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
+
+        let pub_inputs = PublicInputs {
+            challenges: &vec![rng.gen(), rng.gen()],
+            commitment: tree.root(),
+        };
+
+        let priv_inputs = PrivateInputs::<H> {
+            tree: &tree,
+            replica: &data,
+        };
+
+        let proof = OnlinePoRep::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+
+        let different_pub_inputs = PublicInputs {
+            challenges: &vec![rng.gen(), rng.gen()],
+            commitment: tree.root(),
+        };
+
+        let verified =
+            OnlinePoRep::<H>::verify(&pub_params, &different_pub_inputs, &proof).unwrap();
+
+        // A proof created with a the wrong challenge not be verified!
+        assert!(!verified);
+    }
+
+    #[test]
+    fn online_porep_actually_validates_challenge_identity_sha256() {
+        test_online_porep_validates_challenge_identity::<Sha256Hasher>();
+    }
+
+    #[test]
+    fn online_porep_actually_validates_challenge_identity_blake2s() {
+        test_online_porep_validates_challenge_identity::<Blake2sHasher>();
+    }
+
+    #[test]
+    fn online_porep_actually_validates_challenge_identity_pedersen() {
+        test_online_porep_validates_challenge_identity::<PedersenHasher>();
+    }
+
+    #[test]
+    fn test_get_leaf() {
+        let cases: [(Vec<u8>, usize, usize); 5] = [
+            (vec![0], 10, 0),
+            (vec![1], 10, 1),
+            (vec![9], 10, 9),
+            (vec![10], 10, 0),
+            (vec![100, 0, 0, 1], 10, 1),
+        ];
+
+        for (challenge, count, expected) in &cases {
+            assert_eq!(get_leaf(challenge, *count), *expected);
+        }
+    }
 }
