@@ -7,6 +7,7 @@ use hasher::{Domain, HashFunction, Hasher};
 use merkle::MerkleTree;
 use online_porep::{self, OnlinePoRep};
 use proof::ProofScheme;
+use vdf::Vdf;
 
 #[derive(Clone, Debug)]
 pub struct SetupParams<T: Domain, V: Vdf<T>> {
@@ -64,17 +65,6 @@ pub struct Proof<'a, H: Hasher + 'a, V: Vdf<H::Domain>> {
     pub proofs_vdf: Vec<V::Proof>,
     pub xs: Vec<H::Domain>,
     pub ys: Vec<H::Domain>,
-}
-
-/// Generic trait to represent any Verfiable Delay Function (VDF).
-pub trait Vdf<T: Domain>: Clone {
-    type SetupParams: Clone;
-    type PublicParams: Clone;
-    type Proof: Clone;
-
-    fn setup(&Self::SetupParams) -> Result<Self::PublicParams>;
-    fn eval(&Self::PublicParams, x: &T) -> Result<(T, Self::Proof)>;
-    fn verify(&Self::PublicParams, x: &T, y: &T, proof: &Self::Proof) -> Result<bool>;
 }
 
 #[derive(Clone, Debug)]
