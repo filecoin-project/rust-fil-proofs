@@ -4,6 +4,7 @@ use byteorder::{ByteOrder, LittleEndian};
 
 use error::Result;
 use hasher::{Domain, HashFunction, Hasher};
+use merkle::MerkleTree;
 use online_porep::{self, OnlinePoRep};
 use proof::ProofScheme;
 
@@ -16,6 +17,10 @@ pub struct SetupParams<T: Domain, V: Vdf<T>> {
     /// Number of times we repeat an online Proof-of-Replication in one single PoSt.
     pub post_iterations: usize,
     pub setup_params_vdf: V::SetupParams,
+    /// The size of a single leaf.
+    pub lambda: usize,
+    /// How many leaves the underlying merkle tree has.
+    pub leaves: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -27,6 +32,10 @@ pub struct PublicParams<T: Domain, V: Vdf<T>> {
     /// Number of times we repeat an online Proof-of-Replication in one single PoSt.
     pub post_iterations: usize,
     pub pub_params_vdf: V::PublicParams,
+    /// The size of a single leaf.
+    pub lambda: usize,
+    /// How many leaves the underlying merkle tree has.
+    pub leaves: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -38,21 +47,23 @@ pub struct PublicInputs<T: Domain> {
 }
 
 #[derive(Clone, Debug)]
-pub struct PrivateInputs<'a> {
+pub struct PrivateInputs<'a, H: 'a + Hasher> {
     pub replica: &'a [u8],
+    pub tree: &'a MerkleTree<H::Domain, H::Function>,
+    _h: PhantomData<H>,
 }
 
 /// HVH-PoSt
 /// This is one construction of a Proof-of-Spacetime.
 /// It currently only supports proving over a single sector.
 #[derive(Clone, Debug)]
-pub struct Proof<'a, T: Domain + 'a, V: Vdf<T>> {
+pub struct Proof<'a, H: Hasher + 'a, V: Vdf<H::Domain>> {
     /// `post_iteration` online Proof-of-Replication proofs.
-    pub proofs_porep: Vec<<OnlinePoRep<T> as ProofScheme<'a>>::Proof>,
+    pub proofs_porep: Vec<<OnlinePoRep<H> as ProofScheme<'a>>::Proof>,
     /// `post_iterations - 1` VDF proofs
     pub proofs_vdf: Vec<V::Proof>,
-    pub xs: Vec<T>,
-    pub ys: Vec<T>,
+    pub xs: Vec<H::Domain>,
+    pub ys: Vec<H::Domain>,
 }
 
 /// Generic trait to represent any Verfiable Delay Function (VDF).
@@ -76,8 +87,8 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
     type PublicParams = PublicParams<H::Domain, V>;
     type SetupParams = SetupParams<H::Domain, V>;
     type PublicInputs = PublicInputs<H::Domain>;
-    type PrivateInputs = PrivateInputs<'a>;
-    type Proof = Proof<'a, H::Domain, V>;
+    type PrivateInputs = PrivateInputs<'a, H>;
+    type Proof = Proof<'a, H, V>;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
         Ok(PublicParams {
@@ -85,6 +96,8 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
             sector_size: sp.sector_size,
             post_iterations: sp.post_iterations,
             pub_params_vdf: V::setup(&sp.setup_params_vdf)?,
+            lambda: sp.lambda,
+            leaves: sp.leaves,
         })
     }
 
@@ -99,7 +112,8 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
         let mut proofs_porep = Vec::with_capacity(post_iterations);
 
         let pub_params_porep = online_porep::PublicParams {
-            // TODO
+            lambda: pub_params.lambda,
+            leaves: pub_params.leaves,
         };
 
         // Step 1: Generate first proof
@@ -111,7 +125,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
 
             let priv_inputs_porep = online_porep::PrivateInputs {
                 replica: priv_inputs.replica,
-                // TODO: pass tree + leaf
+                tree: priv_inputs.tree,
             };
             proofs_porep.push(OnlinePoRep::prove(
                 &pub_params_porep,
@@ -155,7 +169,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
 
             let priv_inputs_porep = online_porep::PrivateInputs {
                 replica: priv_inputs.replica,
-                // TODO: pass tree + leaf
+                tree: priv_inputs.tree,
             };
             proofs_porep.push(OnlinePoRep::prove(
                 &pub_params_porep,
@@ -204,7 +218,8 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
 
         // First
         let pub_params_porep = online_porep::PublicParams {
-            // TODO
+            lambda: pub_params.lambda,
+            leaves: pub_params.leaves,
         };
 
         {
@@ -244,8 +259,11 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
     }
 }
 
-pub fn extract_vdf_input<H: Hasher>(proof: &online_porep::Proof) -> H::Domain {
-    let leafs: Vec<u8> = proof.leafs().concat();
+pub fn extract_vdf_input<H: Hasher>(proof: &online_porep::Proof<H>) -> H::Domain {
+    let leafs: Vec<u8> = proof.leafs().iter().fold(Vec::new(), |mut acc, leaf| {
+        acc.extend(leaf.as_ref());
+        acc
+    });
 
     H::Function::hash(&leafs)
 }
