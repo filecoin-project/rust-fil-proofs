@@ -23,12 +23,20 @@ pub struct PublicParams<'a, E: JubjubEngine, S: ProofScheme<'a>> {
     pub partitions: Option<usize>,
 }
 
+/// CircuitComponent exists so parent components can pass private inputs to their subcomponents
+/// when calling CompoundProof::circuit directly. In general, there are no internal private inputs,
+/// and a default value will be passed. CompoundProof::circuit implementations should exhibit
+/// default behavior when passed a default ComponentPrivateinputs.
+pub trait CircuitComponent {
+    type ComponentPrivateInputs: Default + Clone;
+}
+
 /// The CompoundProof trait bundles a proof::ProofScheme and a bellman::Circuit together.
 /// It provides methods equivalent to those provided by proof::ProofScheme (setup, prove, verify).
 /// See documentation at proof::ProofScheme for details.
 /// Implementations should generally only need to supply circuit and generate_public_inputs.
 /// The remaining trait methods are used internally and implement the necessary plumbing.
-pub trait CompoundProof<'a, E: JubjubEngine, S: ProofScheme<'a>, C: Circuit<E>>
+pub trait CompoundProof<'a, E: JubjubEngine, S: ProofScheme<'a>, C: Circuit<E> + CircuitComponent>
 where
     S::PublicParams: ParameterSetIdentifier,
     S::PublicInputs: Clone,
@@ -73,6 +81,7 @@ where
         for vanilla_proof in vanilla_proofs.iter() {
             let (groth_proof, groth_params) = Self::circuit_proof(
                 pub_in,
+                C::ComponentPrivateInputs::default(),
                 &vanilla_proof,
                 &pub_params.vanilla_params,
                 pub_params.engine_params,
@@ -121,6 +130,7 @@ where
     /// If groth_params *are* supplied, they will not be generated, and None will be returned.
     fn circuit_proof<'b>(
         pub_in: &S::PublicInputs,
+        component_priv_in: C::ComponentPrivateInputs,
         vanilla_proof: &S::Proof,
         pub_params: &'b S::PublicParams,
         params: &'a E::Params,
@@ -131,7 +141,15 @@ where
 
         // We need to make the circuit repeatedly because we can't clone it.
         // Fortunately, doing so is cheap.
-        let make_circuit = || Self::circuit(&pub_in, &vanilla_proof, &pub_params, params);
+        let make_circuit = || {
+            Self::circuit(
+                &pub_in,
+                component_priv_in.clone(),
+                &vanilla_proof,
+                &pub_params,
+                params,
+            )
+        };
 
         // TODO: Don't actually generate groth parameters here, certainly not random ones.
         // The parameters will need to have been generated in advance and will be constants
@@ -176,6 +194,7 @@ where
     /// inputs during circuit synthesis.
     fn circuit(
         public_inputs: &S::PublicInputs,
+        component_private_inputs: C::ComponentPrivateInputs,
         vanilla_proof: &S::Proof,
         public_param: &S::PublicParams,
         engine_params: &'a E::Params,
@@ -200,19 +219,24 @@ where
         )
         .unwrap();
         assert_eq!(vanilla_proofs.len(), partition_count);
-        let circuit = Self::circuit(
-            &public_inputs,
-            &vanilla_proofs[0],
-            vanilla_params,
-            &public_parameters.engine_params,
-        );
-
-        let partition_pub_in = S::with_partition(public_inputs.clone(), Some(0));
-        let inputs = Self::generate_public_inputs(&partition_pub_in, vanilla_params, Some(0));
 
         assert!(
             S::verify_all_partitions(vanilla_params, &public_inputs, &vanilla_proofs).unwrap(),
             "vanilla proof didn't verify"
+        );
+
+        // Some(0) because we only return a circuit and inputs for the first partition.
+        // It would be more thorough to return all, though just checking one is probably
+        // fine for verifying circuit construction.
+        let partition_pub_in = S::with_partition(public_inputs.clone(), Some(0));
+        let inputs = Self::generate_public_inputs(&partition_pub_in, vanilla_params, Some(0));
+
+        let circuit = Self::circuit(
+            &partition_pub_in,
+            C::ComponentPrivateInputs::default(),
+            &vanilla_proofs[0],
+            vanilla_params,
+            &public_parameters.engine_params,
         );
 
         (circuit, inputs)

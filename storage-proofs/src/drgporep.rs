@@ -128,6 +128,8 @@ pub type ReplicaParents<H> = Vec<(usize, DataProof<H>)>;
 
 #[derive(Default, Debug, Clone)]
 pub struct Proof<H: Hasher> {
+    pub data_root: H::Domain,
+    pub replica_root: H::Domain,
     pub replica_nodes: Vec<DataProof<H>>,
     pub replica_parents: Vec<ReplicaParents<H>>,
     pub nodes: Vec<DataProof<H>>,
@@ -138,6 +140,8 @@ impl<H: Hasher> Proof<H> {
     // vectors of that length?
     pub fn new_empty(height: usize, degree: usize) -> Proof<H> {
         Proof {
+            data_root: Default::default(),
+            replica_root: Default::default(),
             replica_nodes: vec![DataProof::new(height)],
             replica_parents: vec![vec![(0, DataProof::new(height)); degree]],
             nodes: vec![DataProof::new(height)],
@@ -173,6 +177,8 @@ impl<H: Hasher> Proof<H> {
         nodes: Vec<DataProof<H>>,
     ) -> Proof<H> {
         Proof {
+            data_root: *nodes[0].proof.root(),
+            replica_root: *replica_nodes[0].proof.root(),
             replica_nodes,
             replica_parents,
             nodes,
@@ -183,6 +189,8 @@ impl<H: Hasher> Proof<H> {
 impl<'a, H: Hasher> From<&'a Proof<H>> for Proof<H> {
     fn from(p: &Proof<H>) -> Proof<H> {
         Proof {
+            data_root: *p.nodes[0].proof.root(),
+            replica_root: *p.replica_nodes[0].proof.root(),
             replica_nodes: p.replica_nodes.clone(),
             replica_parents: p.replica_parents.clone(),
             nodes: p.nodes.clone(),

@@ -29,8 +29,8 @@ use bellman::Circuit;
 use sapling_crypto::jubjub::JubjubBls12;
 
 use storage_proofs::circuit::test::*;
-use storage_proofs::circuit::zigzag::ZigZagCompound;
-use storage_proofs::compound_proof::{self, CompoundProof};
+use storage_proofs::circuit::zigzag::{ZigZagCircuit, ZigZagCompound};
+use storage_proofs::compound_proof::{self, CircuitComponent, CompoundProof};
 use storage_proofs::drgporep;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::{init_logger, prettyb};
@@ -233,9 +233,15 @@ fn do_the_work<H: 'static>(
             info!("Performing circuit bench.");
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            ZigZagCompound::circuit(&pub_inputs, &all_partition_proofs[0], &pp, &engine_params)
-                .synthesize(&mut cs)
-                .expect("failed to synthesize circuit");
+            ZigZagCompound::circuit(
+                &pub_inputs,
+                <ZigZagCircuit<Bls12, H> as CircuitComponent>::ComponentPrivateInputs::default(),
+                &all_partition_proofs[0],
+                &pp,
+                &engine_params,
+            )
+            .synthesize(&mut cs)
+            .expect("failed to synthesize circuit");
 
             info!(target: "stats", "circuit_num_inputs: {}", cs.num_inputs());
             info!(target: "stats", "circuit_num_constraints: {}", cs.num_constraints());

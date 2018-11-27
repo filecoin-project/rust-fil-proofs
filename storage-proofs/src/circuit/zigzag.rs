@@ -6,9 +6,10 @@ use sapling_crypto::circuit::num;
 use sapling_crypto::jubjub::JubjubEngine;
 
 use circuit::constraint;
-use circuit::drgporep::DrgPoRepCompound;
+use circuit::drgporep::{ComponentPrivateInputs, DrgPoRepCompound};
 use circuit::pedersen::pedersen_md_no_padding;
-use compound_proof::CompoundProof;
+use circuit::variables::Root;
+use compound_proof::{CircuitComponent, CompoundProof};
 use drgporep::{self, DrgPoRep};
 use drgraph::{graph_height, Graph};
 use hasher::{Domain, Hasher};
@@ -43,6 +44,10 @@ pub struct ZigZagCircuit<'a, E: JubjubEngine, H: 'static + Hasher> {
     tau: porep::Tau<<<ZigZagDrgPoRep<'a, H> as LayersTrait>::Hasher as Hasher>::Domain>,
     comm_r_star: H::Domain,
     _e: PhantomData<E>,
+}
+
+impl<'a, E: JubjubEngine, H: Hasher> CircuitComponent for ZigZagCircuit<'a, E, H> {
+    type ComponentPrivateInputs = ();
 }
 
 impl<'a, H: Hasher> ZigZagCircuit<'a, Bls12, H> {
@@ -85,6 +90,25 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
             .write_bytes(&mut crs_input[0..32])
             .expect("failed to write vec");
 
+        let public_comm_d_raw = self.tau.comm_d;
+
+        let public_comm_d =
+            num::AllocatedNum::alloc(cs.namespace(|| "public comm_d value"), || {
+                Ok(public_comm_d_raw.into())
+            })?;
+
+        public_comm_d.inputize(cs.namespace(|| "zigzag comm_d"))?;
+
+        let public_comm_r =
+            num::AllocatedNum::alloc(cs.namespace(|| "public comm_r value"), || {
+                Ok(self.tau.comm_r.into())
+            })?;
+
+        public_comm_r.inputize(cs.namespace(|| "zigzag comm_r"))?;
+
+        // Yuck. This will never be used, but we need an initial value to satisfy the compiler.
+        let mut previous_comm_r_var = Root::Val(Some(public_comm_d_raw.into()));
+
         for (l, (public_inputs, layer_proof)) in self.layers.iter().enumerate() {
             let first_layer = l == 0;
             let last_layer = l == self.layers.len() - 1;
@@ -101,8 +125,24 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
                 None => drgporep::Proof::new_empty(height, graph.degree()),
             };
 
-            let comm_d = proof.nodes[0].proof.root;
-            let comm_r = proof.replica_nodes[0].proof.root;
+            let comm_r = proof.replica_root;
+
+            let comm_d_var = if first_layer {
+                Root::Var(public_comm_d.clone())
+            } else {
+                previous_comm_r_var
+            };
+
+            let comm_r_var = if last_layer {
+                Root::Var(public_comm_r.clone())
+            } else {
+                Root::var(
+                    &mut cs.namespace(|| format!("layer {} comm_r", l)),
+                    comm_r.into(),
+                )
+            };
+            previous_comm_r_var = comm_r_var.clone();
+
             comm_r
                 .write_bytes(&mut crs_input[(l + 1) * 32..(l + 2) * 32])
                 .expect("failed to write vec");
@@ -111,54 +151,15 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
             // on some (50%?) of challenges.
             let circuit = DrgPoRepCompound::circuit(
                 public_inputs,
+                ComponentPrivateInputs {
+                    comm_d: Some(comm_d_var),
+                    comm_r: Some(comm_r_var),
+                },
                 &proof,
                 &self.public_params.drg_porep_public_params,
                 self.params,
             );
             circuit.synthesize(&mut cs.namespace(|| format!("zigzag layer {}", l)))?;
-
-            if first_layer {
-                // Constrain first layer's comm_d to be equal to overall tau.comm_d.
-
-                let fcd = comm_d.into();
-                let first_comm_d =
-                    num::AllocatedNum::alloc(cs.namespace(|| "first comm_d"), || Ok(fcd))?;
-
-                let public_comm_d =
-                    num::AllocatedNum::alloc(cs.namespace(|| "public comm_d value"), || {
-                        Ok(self.tau.comm_d.into())
-                    })?;
-
-                constraint::equal(
-                    cs,
-                    || "enforce comm_d is correct",
-                    &first_comm_d,
-                    &public_comm_d,
-                );
-                public_comm_d.inputize(cs.namespace(|| "zigzag comm_d"))?;
-            }
-
-            if last_layer {
-                // Constrain last layer's comm_r to be equal to overall tau.comm_r.
-
-                let lcr = comm_r.into();
-                let last_comm_r =
-                    num::AllocatedNum::alloc(cs.namespace(|| "last comm_r"), || Ok(lcr))?;
-
-                let public_comm_r =
-                    num::AllocatedNum::alloc(cs.namespace(|| "public comm_r value"), || {
-                        Ok(self.tau.comm_r.into())
-                    })?;
-
-                constraint::equal(
-                    cs,
-                    || "enforce comm_r is correct",
-                    &last_comm_r,
-                    &public_comm_r,
-                );
-
-                public_comm_r.inputize(cs.namespace(|| "zigzag comm_r"))?;
-            }
         }
 
         let crs_boolean = bytes_into_boolean_vec(
@@ -218,10 +219,13 @@ impl<'a, H: 'static + Hasher>
             pub_params.drg_porep_public_params.sloth_iter,
         );
 
-        for i in 0..pub_params.layers {
-            let first_layer = i == 0;
-            let last_layer = i == pub_params.layers - 1;
+        let comm_d = pub_in.tau.unwrap().comm_d.into();
+        inputs.push(comm_d);
 
+        let comm_r = pub_in.tau.unwrap().comm_r.into();
+        inputs.push(comm_r);
+
+        for i in 0..pub_params.layers {
             let drgporep_pub_inputs = drgporep::PublicInputs {
                 replica_id: pub_in.replica_id,
                 challenges: pub_in.challenges(
@@ -243,16 +247,6 @@ impl<'a, H: 'static + Hasher>
                 i,
                 pub_params.layers,
             );
-
-            if first_layer {
-                let comm_d = pub_in.tau.unwrap().comm_d.into();
-                inputs.push(comm_d);
-            };
-
-            if last_layer {
-                let comm_r = pub_in.tau.unwrap().comm_r.into();
-                inputs.push(comm_r);
-            };
         }
         inputs.push(pub_in.comm_r_star.into());
         info!(target: "stats", "num_generated_inputs: {}", inputs.len());
@@ -261,6 +255,7 @@ impl<'a, H: 'static + Hasher>
 
     fn circuit<'b>(
         public_inputs: &'b <ZigZagDrgPoRep<H> as ProofScheme>::PublicInputs,
+        _component_private_inputs: <ZigZagCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &'b <ZigZagDrgPoRep<H> as ProofScheme>::Proof,
         public_params: &'b <ZigZagDrgPoRep<H> as ProofScheme>::PublicParams,
         engine_params: &'a <Bls12 as JubjubEngine>::Params,
@@ -388,6 +383,8 @@ mod tests {
                 .unwrap();
         assert_ne!(data, data_copy);
 
+        let simplified_tau = tau.clone().simplify();
+
         let pub_inputs = layered_drgporep::PublicInputs::<PedersenDomain> {
             replica_id: replica_id.into(),
             challenge_count,
@@ -410,9 +407,15 @@ mod tests {
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        ZigZagCompound::circuit(&pub_inputs, &proofs[0], &pp, params)
-            .synthesize(&mut cs.namespace(|| "zigzag drgporep"))
-            .expect("failed to synthesize circuit");
+        ZigZagCompound::circuit(
+            &pub_inputs,
+            <ZigZagCircuit<Bls12, PedersenHasher> as CircuitComponent>::ComponentPrivateInputs::default(),
+            &proofs[0],
+            &pp,
+            params,
+        )
+        .synthesize(&mut cs.namespace(|| "zigzag drgporep"))
+        .expect("failed to synthesize circuit");
 
         if !cs.is_satisfied() {
             println!(
@@ -423,12 +426,22 @@ mod tests {
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
         assert_eq!(cs.num_inputs(), 16, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 52553, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 52551, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
         assert_eq!(
-            cs.get_input(1, "zigzag drgporep/zigzag layer 0/replica_id/input 0"),
+            cs.get_input(1, "zigzag drgporep/zigzag comm_d/input variable"),
+            simplified_tau.comm_d.into(),
+        );
+
+        assert_eq!(
+            cs.get_input(2, "zigzag drgporep/zigzag comm_r/input variable"),
+            simplified_tau.comm_r.into(),
+        );
+
+        assert_eq!(
+            cs.get_input(3, "zigzag drgporep/zigzag layer 0/replica_id/input 0"),
             replica_id.into(),
         );
 
@@ -491,7 +504,7 @@ mod tests {
         .expect("failed to synthesize circuit");
 
         assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 428467, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 428465, "wrong number of constraints");
     }
 
     #[test]
@@ -505,7 +518,7 @@ mod tests {
         let challenge_count = 2;
         let num_layers = 2;
         let sloth_iter = 1;
-        let partition_count = 2;
+        let partition_count = 1;
 
         let n = nodes; // FIXME: Consolidate variable names.
 
@@ -563,7 +576,7 @@ mod tests {
             tau: tau.layer_taus,
         };
 
-        // TOOD: Move this to e.g. circuit::test::compound_helper and share between all compound proo fs.
+        // TOOD: Move this to e.g. circuit::test::compound_helper and share between all compound proofs.
         {
             let (circuit, inputs) =
                 ZigZagCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);

@@ -13,6 +13,8 @@ use rand::Rng;
 use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 
 use storage_proofs::circuit;
+use storage_proofs::circuit::variables::Root;
+
 use storage_proofs::example_helper::Example;
 use storage_proofs::test_helper::fake_drgpoprep_proof;
 
@@ -22,12 +24,12 @@ struct DrgPoRepExample<'a, E: JubjubEngine> {
     sloth_iter: usize,
     replica_nodes: Vec<Option<E::Fr>>,
     replica_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
-    replica_root: Option<E::Fr>,
+    replica_root: Root<E>,
     replica_parents: Vec<Vec<Option<E::Fr>>>,
     replica_parents_paths: Vec<Vec<Vec<Option<(E::Fr, bool)>>>>,
     data_nodes: Vec<Option<E::Fr>>,
     data_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
-    data_root: Option<E::Fr>,
+    data_root: Root<E>,
     replica_id: Option<E::Fr>,
     m: usize,
 }
@@ -81,12 +83,12 @@ impl<'a> Example<'a, DrgPoRepExample<'a, Bls12>> for DrgPoRepApp {
                 sloth_iter,
                 replica_nodes: vec![None; challenge_count],
                 replica_nodes_paths: vec![vec![None; tree_depth]; challenge_count],
-                replica_root: None,
+                replica_root: Root::Val(None),
                 replica_parents: vec![vec![None; m]; challenge_count],
                 replica_parents_paths: vec![vec![vec![None; tree_depth]; m]; challenge_count],
                 data_nodes: vec![None; challenge_count],
                 data_nodes_paths: vec![vec![None; tree_depth]; challenge_count],
-                data_root: None,
+                data_root: Root::Val(None),
                 replica_id: None,
                 m,
             },
@@ -119,7 +121,7 @@ impl<'a> Example<'a, DrgPoRepExample<'a, Bls12>> for DrgPoRepApp {
             sloth_iter,
             replica_nodes: f.replica_nodes.into_iter().map(|r| Some(r)).collect(),
             replica_nodes_paths: f.replica_nodes_paths,
-            replica_root: Some(f.replica_root),
+            replica_root: Root::Val(Some(f.replica_root)),
             replica_parents: f
                 .replica_parents
                 .iter()
@@ -128,7 +130,7 @@ impl<'a> Example<'a, DrgPoRepExample<'a, Bls12>> for DrgPoRepApp {
             replica_parents_paths: f.replica_parents_paths,
             data_nodes: f.data_nodes.into_iter().map(|d| Some(d)).collect(),
             data_nodes_paths: f.data_nodes_paths,
-            data_root: Some(f.data_root),
+            data_root: Root::Val(Some(f.data_root)),
             replica_id: Some(f.replica_id),
             m,
         }

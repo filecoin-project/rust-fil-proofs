@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 /// Bump this when circuits change to invalidate the cache.
-pub const VERSION: usize = 4;
+pub const VERSION: usize = 5;
 
 pub const PARAMETER_CACHE_DIR: &str = "/tmp/filecoin-proof-parameters/";
 

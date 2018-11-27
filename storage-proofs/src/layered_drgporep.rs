@@ -27,6 +27,7 @@ where
     pub challenge_count: usize,
 }
 
+#[derive(Clone)]
 pub struct Tau<T: Domain> {
     pub layer_taus: Vec<porep::Tau<T>>,
     pub comm_r_star: T,
@@ -371,6 +372,8 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
                     &pp,
                     &new_pub_inputs,
                     &drgporep::Proof {
+                        data_root: ep.data_root,
+                        replica_root: ep.replica_root,
                         replica_nodes: ep.replica_nodes.clone(),
                         replica_parents: ep.replica_parents.clone(),
                         // TODO: investigate if clone can be avoided by using a reference in drgporep::DataProof

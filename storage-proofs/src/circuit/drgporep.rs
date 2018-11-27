@@ -8,7 +8,8 @@ use sapling_crypto::jubjub::JubjubEngine;
 use circuit::constraint;
 use circuit::kdf::kdf;
 use circuit::sloth;
-use compound_proof::CompoundProof;
+use circuit::variables::Root;
+use compound_proof::{CircuitComponent, CompoundProof};
 use drgporep::DrgPoRep;
 use drgraph::Graph;
 use fr32::fr_into_bytes;
@@ -57,16 +58,17 @@ pub struct DrgPoRepCircuit<'a, E: JubjubEngine> {
     sloth_iter: usize,
     replica_nodes: Vec<Option<E::Fr>>,
     replica_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
-    replica_root: Option<E::Fr>,
+    replica_root: Root<E>,
     replica_parents: Vec<Vec<Option<E::Fr>>>,
     replica_parents_paths: Vec<Vec<Vec<Option<(E::Fr, bool)>>>>,
     data_nodes: Vec<Option<E::Fr>>,
     data_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
-    data_root: Option<E::Fr>,
+    data_root: Root<E>,
     replica_id: Option<E::Fr>,
     degree: usize,
     private: bool,
 }
+
 impl<'a, E: JubjubEngine> DrgPoRepCircuit<'a, E> {
     pub fn synthesize<CS>(
         mut cs: CS,
@@ -75,12 +77,12 @@ impl<'a, E: JubjubEngine> DrgPoRepCircuit<'a, E> {
         sloth_iter: usize,
         replica_nodes: Vec<Option<E::Fr>>,
         replica_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
-        replica_root: Option<E::Fr>,
+        replica_root: Root<E>,
         replica_parents: Vec<Vec<Option<E::Fr>>>,
         replica_parents_paths: Vec<Vec<Vec<Option<(E::Fr, bool)>>>>,
         data_nodes: Vec<Option<E::Fr>>,
         data_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
-        data_root: Option<E::Fr>,
+        data_root: Root<E>,
         replica_id: Option<E::Fr>,
         degree: usize,
         private: bool,
@@ -107,6 +109,25 @@ impl<'a, E: JubjubEngine> DrgPoRepCircuit<'a, E> {
         }
         .synthesize(&mut cs)
     }
+}
+
+#[derive(Clone)]
+pub struct ComponentPrivateInputs<E: JubjubEngine> {
+    pub comm_r: Option<Root<E>>,
+    pub comm_d: Option<Root<E>>,
+}
+
+impl<E: JubjubEngine> Default for ComponentPrivateInputs<E> {
+    fn default() -> ComponentPrivateInputs<E> {
+        ComponentPrivateInputs {
+            comm_r: None,
+            comm_d: None,
+        }
+    }
+}
+
+impl<'a, E: JubjubEngine> CircuitComponent for DrgPoRepCircuit<'a, E> {
+    type ComponentPrivateInputs = ComponentPrivateInputs<E>;
 }
 
 pub struct DrgPoRepCompound<H, G>
@@ -197,6 +218,7 @@ where
 
     fn circuit<'b>(
         public_inputs: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicInputs,
+        component_private_inputs: <DrgPoRepCircuit<'a, Bls12> as CircuitComponent>::ComponentPrivateInputs,
         proof: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::Proof,
         public_params: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
         engine_params: &'a <Bls12 as JubjubEngine>::Params,
@@ -215,7 +237,13 @@ where
             .map(|node| node.proof.as_options())
             .collect();
 
-        let replica_root = Some((*proof.replica_nodes[0].proof.root()).into());
+        let private_data_root = component_private_inputs.comm_d;
+        let private_replica_root = component_private_inputs.comm_r;
+        let replica_root =
+            private_replica_root.unwrap_or_else(|| Root::Val(Some(proof.replica_root.into())));
+        let data_root =
+            private_data_root.unwrap_or_else(|| Root::Val(Some((proof.data_root).into())));
+        let replica_id = Some(public_inputs.replica_id);
 
         let replica_parents = proof
             .replica_parents
@@ -251,9 +279,6 @@ where
             .iter()
             .map(|node| node.proof.as_options())
             .collect();
-
-        let data_root = Some((*proof.nodes[0].proof.root()).into());
-        let replica_id = Some(public_inputs.replica_id);
 
         DrgPoRepCircuit {
             params: engine_params,
@@ -331,6 +356,12 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
             &replica_id_bits[0..Fr::CAPACITY as usize],
         )?;
 
+        let replica_root_num = replica_root.allocated(cs.namespace(|| "replica_root"))?;
+        let replica_root_var = Root::Var(replica_root_num);
+
+        let data_root_num = data_root.allocated(cs.namespace(|| "data_root"))?;
+        let data_root_var = Root::Var(data_root_num);
+
         for i in 0..self.data_nodes.len() {
             let mut cs = cs.namespace(|| format!("challenge_{}", i));
             // ensure that all inputs are well formed
@@ -353,7 +384,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
                     &params,
                     *replica_node,
                     replica_node_path.clone(),
-                    replica_root,
+                    replica_root_var.clone(),
                     self.private,
                 )?;
 
@@ -364,7 +395,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
                         &params,
                         replica_parents[i],
                         replica_parents_paths[i].clone(),
-                        replica_root,
+                        replica_root_var.clone(),
                         self.private,
                     )?;
                 }
@@ -375,7 +406,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
                     &params,
                     *data_node,
                     data_node_path.clone(),
-                    data_root,
+                    data_root_var.clone(),
                     self.private,
                 )?;
             }
@@ -518,7 +549,7 @@ mod tests {
         let replica_node: Option<Fr> = Some(proof_nc.replica_nodes[0].data.into());
 
         let replica_node_path = proof_nc.replica_nodes[0].proof.as_options();
-        let replica_root: Option<Fr> = Some((*proof_nc.replica_nodes[0].proof.root()).into());
+        let replica_root = Root::Val(Some((proof_nc.replica_root).into()));
         let replica_parents = proof_nc.replica_parents[0]
             .iter()
             .map(|(_, parent)| Some(parent.data.into()))
@@ -529,7 +560,7 @@ mod tests {
             .collect();
 
         let data_node_path = proof_nc.nodes[0].proof.as_options();
-        let data_root = Some((*proof_nc.nodes[0].proof.root()).into());
+        let data_root = Root::Val(Some((proof_nc.data_root).into()));
         let replica_id = Some(replica_id);
 
         assert!(
@@ -603,12 +634,12 @@ mod tests {
             sloth_iter,
             vec![Some(Fr::rand(rng)); 1],
             vec![vec![Some((Fr::rand(rng), false)); tree_depth]; 1],
-            Some(Fr::rand(rng)),
+            Root::Val(Some(Fr::rand(rng))),
             vec![vec![Some(Fr::rand(rng)); m]; 1],
             vec![vec![vec![Some((Fr::rand(rng), false)); tree_depth]; m]; 1],
             vec![Some(Fr::rand(rng)); 1],
             vec![vec![Some((Fr::rand(rng), false)); tree_depth]; 1],
-            Some(Fr::rand(rng)),
+            Root::Val(Some(Fr::rand(rng))),
             Some(Fr::rand(rng)),
             m,
             false,
