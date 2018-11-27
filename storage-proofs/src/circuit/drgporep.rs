@@ -494,6 +494,7 @@ mod tests {
             &pp,
             &replica_id.into(),
             data.as_mut_slice(),
+            None,
         )
         .expect("failed to replicate");
 
@@ -502,10 +503,7 @@ mod tests {
             challenges: vec![challenge],
             tau: Some(tau.into()),
         };
-        let priv_inputs = drgporep::PrivateInputs::<PedersenHasher> {
-            replica: data.as_slice(),
-            aux: &aux,
-        };
+        let priv_inputs = drgporep::PrivateInputs::<PedersenHasher> { aux: &aux };
 
         let proof_nc =
             drgporep::DrgPoRep::<PedersenHasher, _>::prove(&pp, &pub_inputs, &priv_inputs)
@@ -661,6 +659,7 @@ mod tests {
             &public_params.vanilla_params,
             &replica_id.into(),
             data.as_mut_slice(),
+            None,
         )
         .expect("failed to replicate");
 
@@ -669,10 +668,7 @@ mod tests {
             challenges: vec![challenge],
             tau: Some(tau),
         };
-        let private_inputs = drgporep::PrivateInputs {
-            replica: data.as_slice(),
-            aux: &aux,
-        };
+        let private_inputs = drgporep::PrivateInputs { aux: &aux };
 
         // This duplication is necessary so public_params don't outlive public_inputs and private_inputs.
         // TODO: Abstract it.

@@ -384,7 +384,8 @@ mod tests {
 
         let pp = ZigZagDrgPoRep::setup(&sp).unwrap();
         let (tau, aux) =
-            ZigZagDrgPoRep::replicate(&pp, &replica_id.into(), data_copy.as_mut_slice()).unwrap();
+            ZigZagDrgPoRep::replicate(&pp, &replica_id.into(), data_copy.as_mut_slice(), None)
+                .unwrap();
         assert_ne!(data, data_copy);
 
         let pub_inputs = layered_drgporep::PublicInputs::<PedersenDomain> {
@@ -544,6 +545,7 @@ mod tests {
             &public_params.vanilla_params,
             &replica_id.into(),
             data_copy.as_mut_slice(),
+            None,
         )
         .unwrap();
         assert_ne!(data, data_copy);
