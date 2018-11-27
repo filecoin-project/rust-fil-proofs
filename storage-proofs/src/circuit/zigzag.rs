@@ -107,7 +107,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
         public_comm_r.inputize(cs.namespace(|| "zigzag comm_r"))?;
 
         // Yuck. This will never be used, but we need an initial value to satisfy the compiler.
-        let mut previous_comm_r_var = Root::Val(public_comm_d_raw.into());
+        let mut previous_comm_r_var = Root::Val(Some(public_comm_d_raw.into()));
 
         for (l, (public_inputs, layer_proof)) in self.layers.iter().enumerate() {
             let first_layer = l == 0;

@@ -240,8 +240,9 @@ where
         let private_data_root = component_private_inputs.comm_d;
         let private_replica_root = component_private_inputs.comm_r;
         let replica_root =
-            private_replica_root.unwrap_or_else(|| Root::Val((proof.replica_root).into()));
-        let data_root = private_data_root.unwrap_or_else(|| Root::Val((proof.data_root).into()));
+            private_replica_root.unwrap_or_else(|| Root::Val(Some(proof.replica_root.into())));
+        let data_root =
+            private_data_root.unwrap_or_else(|| Root::Val(Some((proof.data_root).into())));
         let replica_id = Some(public_inputs.replica_id);
 
         let replica_parents = proof
@@ -550,7 +551,7 @@ mod tests {
         let replica_node: Option<Fr> = Some(proof_nc.replica_nodes[0].data.into());
 
         let replica_node_path = proof_nc.replica_nodes[0].proof.as_options();
-        let replica_root = Root::Val((proof_nc.replica_root).into());
+        let replica_root = Root::Val(Some((proof_nc.replica_root).into()));
         let replica_parents = proof_nc.replica_parents[0]
             .iter()
             .map(|(_, parent)| Some(parent.data.into()))
@@ -561,7 +562,7 @@ mod tests {
             .collect();
 
         let data_node_path = proof_nc.nodes[0].proof.as_options();
-        let data_root = Root::Val((proof_nc.data_root).into());
+        let data_root = Root::Val(Some((proof_nc.data_root).into()));
         let replica_id = Some(replica_id);
 
         assert!(
@@ -635,12 +636,12 @@ mod tests {
             sloth_iter,
             vec![Some(Fr::rand(rng)); 1],
             vec![vec![Some((Fr::rand(rng), false)); tree_depth]; 1],
-            Root::Val(Fr::rand(rng)),
+            Root::Val(Some(Fr::rand(rng))),
             vec![vec![Some(Fr::rand(rng)); m]; 1],
             vec![vec![vec![Some((Fr::rand(rng), false)); tree_depth]; m]; 1],
             vec![Some(Fr::rand(rng)); 1],
             vec![vec![Some((Fr::rand(rng), false)); tree_depth]; 1],
-            Root::Val(Fr::rand(rng)),
+            Root::Val(Some(Fr::rand(rng))),
             Some(Fr::rand(rng)),
             m,
             false,

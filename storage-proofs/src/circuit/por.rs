@@ -71,8 +71,8 @@ where
         engine_params: &'a JubjubBls12,
     ) -> PoRCircuit<'a, Bls12> {
         let (root, private) = match (*public_inputs).commitment {
-            None => (Root::Val(proof.proof.root.into()), true),
-            Some(commitment) => (Root::Val(commitment.into()), false),
+            None => (Root::Val(Some(proof.proof.root.into())), true),
+            Some(commitment) => (Root::Val(Some(commitment.into())), false),
         };
 
         // Ensure inputs are consistent with public params.
@@ -382,7 +382,7 @@ mod tests {
                 params,
                 value: Some(proof.data.into()),
                 auth_path: proof.proof.as_options(),
-                root: Root::Val(pub_inputs.commitment.unwrap().into()),
+                root: Root::Val(Some(pub_inputs.commitment.unwrap().into())),
                 private: false,
             };
 
@@ -424,8 +424,6 @@ mod tests {
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
-    // This test panics because a 'private' PoR requires PrivateInputs which can only be provided
-    // by a containing component. When generated at toplevel, it will have default PrivateInputs: None.
     fn private_por_test_compound() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let leaves = 6;
@@ -560,7 +558,7 @@ mod tests {
                 params,
                 value: Some(proof.data.into()),
                 auth_path: proof.proof.as_options(),
-                root: Root::Val(tree.root().into()),
+                root: Root::Val(Some(tree.root().into())),
                 private: true,
             };
 

@@ -83,12 +83,12 @@ impl<'a> Example<'a, DrgPoRepExample<'a, Bls12>> for DrgPoRepApp {
                 sloth_iter,
                 replica_nodes: vec![None; challenge_count],
                 replica_nodes_paths: vec![vec![None; tree_depth]; challenge_count],
-                replica_root: Root::Val(rng.gen()),
+                replica_root: Root::Val(None),
                 replica_parents: vec![vec![None; m]; challenge_count],
                 replica_parents_paths: vec![vec![vec![None; tree_depth]; m]; challenge_count],
                 data_nodes: vec![None; challenge_count],
                 data_nodes_paths: vec![vec![None; tree_depth]; challenge_count],
-                data_root: Root::Val(rng.gen()),
+                data_root: Root::Val(None),
                 replica_id: None,
                 m,
             },
@@ -121,7 +121,7 @@ impl<'a> Example<'a, DrgPoRepExample<'a, Bls12>> for DrgPoRepApp {
             sloth_iter,
             replica_nodes: f.replica_nodes.into_iter().map(|r| Some(r)).collect(),
             replica_nodes_paths: f.replica_nodes_paths,
-            replica_root: Root::Val(f.replica_root),
+            replica_root: Root::Val(Some(f.replica_root)),
             replica_parents: f
                 .replica_parents
                 .iter()
@@ -130,7 +130,7 @@ impl<'a> Example<'a, DrgPoRepExample<'a, Bls12>> for DrgPoRepApp {
             replica_parents_paths: f.replica_parents_paths,
             data_nodes: f.data_nodes.into_iter().map(|d| Some(d)).collect(),
             data_nodes_paths: f.data_nodes_paths,
-            data_root: Root::Val(f.data_root),
+            data_root: Root::Val(Some(f.data_root)),
             replica_id: Some(f.replica_id),
             m,
         }

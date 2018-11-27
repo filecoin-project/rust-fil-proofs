@@ -9,7 +9,7 @@ use sapling_crypto::circuit::num::AllocatedNum;
 #[derive(Clone)]
 pub enum Root<E: Engine> {
     Var(AllocatedNum<E>),
-    Val(E::Fr),
+    Val(Option<E::Fr>),
 }
 
 impl<E: Engine> Root<E> {
@@ -19,7 +19,8 @@ impl<E: Engine> Root<E> {
     ) -> Result<AllocatedNum<E>, SynthesisError> {
         match self {
             Root::Var(allocated) => Ok(allocated.clone()),
-            Root::Val(fr) => AllocatedNum::alloc(cs, || Ok(*fr)),
+            Root::Val(Some(fr)) => AllocatedNum::alloc(cs, || Ok(*fr)),
+            Root::Val(None) => Err(SynthesisError::AssignmentMissing),
         }
     }
 
