@@ -61,7 +61,6 @@ pub struct Proof<'a, H: Hasher + 'a, V: Vdf<H::Domain>> {
     pub proofs_porep: Vec<<OnlinePoRep<H> as ProofScheme<'a>>::Proof>,
     /// `post_iterations - 1` VDF proofs
     pub proofs_vdf: Vec<V::Proof>,
-    pub xs: Vec<H::Domain>,
     pub ys: Vec<H::Domain>,
 }
 
@@ -125,7 +124,6 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
         // Step 2: Generate `post_iterations - 1` remaining proofs
 
         let mut proofs_vdf = Vec::with_capacity(post_iterations - 1);
-        let mut xs = Vec::with_capacity(post_iterations - 1);
         let mut ys = Vec::with_capacity(post_iterations - 1);
 
         for k in 1..post_iterations {
@@ -134,16 +132,13 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
             let (y, proof_vdf) = V::eval(&pub_params.pub_params_vdf, &x)?;
 
             proofs_vdf.push(proof_vdf);
-            xs.push(x);
             ys.push(y);
 
-            // TODO: this padding is not great, but needed for pedersen_md currently
-            let r = H::Function::hash(&[y.as_ref(), &[0u8; 32]].concat());
+            let r = H::Function::hash_single_node(&y);
 
             // Generate challenges
             let challenges: Vec<H::Domain> = (0..challenge_count)
                 .map(|i| {
-                    // TODO: this padding is not great, but needed for pedersen_md currently
                     let mut i_bytes = [0u8; 32];
                     LittleEndian::write_u32(&mut i_bytes[0..4], i as u32);
 
@@ -171,7 +166,6 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
         Ok(Proof {
             proofs_porep,
             proofs_vdf,
-            xs,
             ys,
         })
     }
@@ -188,18 +182,10 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
         for i in 0..post_iterations - 1 {
             if !V::verify(
                 &pub_params.pub_params_vdf,
-                &proof.xs[i],
+                &extract_vdf_input::<H>(&proof.proofs_porep[i]),
                 &proof.ys[i],
                 &proof.proofs_vdf[i],
             )? {
-                return Ok(false);
-            }
-        }
-
-        // Sequentiality Verification
-
-        for i in 0..post_iterations - 1 {
-            if extract_vdf_input::<H>(&proof.proofs_porep[i]) != proof.xs[i] {
                 return Ok(false);
             }
         }
@@ -225,11 +211,10 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
         // The rest
         for i in 1..post_iterations {
             // Generate challenges
-            // TODO: this padding is not great, but needed for pedersen_md currently
-            let r = H::Function::hash(&[proof.ys[i - 1].as_ref(), &[0u8; 32]].concat());
+
+            let r = H::Function::hash_single_node(&proof.ys[i - 1]);
             let challenges: Vec<H::Domain> = (0..challenge_count)
                 .map(|j| {
-                    // TODO: this padding is not great, but needed for pedersen_md currently
                     let mut j_bytes = [0u8; 32];
                     LittleEndian::write_u32(&mut j_bytes[0..4], j as u32);
 
