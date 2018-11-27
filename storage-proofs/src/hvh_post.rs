@@ -205,6 +205,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
             };
 
             if !OnlinePoRep::verify(&pub_params_porep, &pub_inputs_porep, &proof.proofs_porep[0])? {
+                return Ok(false);
             }
         }
 
