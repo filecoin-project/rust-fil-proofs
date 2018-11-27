@@ -7,7 +7,7 @@ use io::fr32::{
 };
 use libc;
 use std::env;
-use std::fs::{create_dir_all, File, OpenOptions};
+use std::fs::{create_dir_all, remove_file, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
@@ -178,6 +178,10 @@ impl SectorManager for DiskManager {
             })
     }
 
+    fn delete_staging_sector_access(&self, access: String) -> Result<(), SectorManagerErr> {
+        remove_file(access).map_err(|err| SectorManagerErr::CallerError(format!("{:?}", err)))
+    }
+
     fn read_raw(
         &self,
         access: String,
@@ -342,7 +346,8 @@ mod tests {
 
     use api::disk_backed_storage::init_new_proof_test_sector_store;
     use api::{
-        new_staging_sector_access, num_unsealed_bytes, truncate_unsealed, write_and_preprocess,
+        delete_staging_sector_access, new_staging_sector_access, num_unsealed_bytes,
+        truncate_unsealed, write_and_preprocess,
     };
 
     use api::responses::SBResponseStatus;
@@ -509,6 +514,17 @@ mod tests {
 
             // ensure that our byte-counting function works
             assert_eq!(buf.len(), (*num_unsealed_bytes_response).num_bytes as usize);
+
+            let path = c_str_to_rust_str(access).to_string();
+
+            assert!(Path::new(&path).exists());
+
+            assert_eq!(
+                SBResponseStatus::SBNoError,
+                (*delete_staging_sector_access(storage, access)).status_code,
+            );
+
+            assert!(!Path::new(&path).exists());
         }
     }
 }

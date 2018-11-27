@@ -29,12 +29,11 @@ pub fn retrieve_piece<'a>(
         &staging_sector_access,
     );
 
-    // TODO: SectorStore needs an operation to delete a sector access.
-    if let Ok((num_bytes_unsealed, _)) = result {
+    if result.is_ok() {
         sector_store
             .inner
             .manager()
-            .truncate_unsealed(staging_sector_access, num_bytes_unsealed)?;
+            .delete_staging_sector_access(staging_sector_access)?;
     }
 
     let (_, bytes) = result?;
