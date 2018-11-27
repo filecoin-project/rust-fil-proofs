@@ -151,7 +151,8 @@ fn do_the_work<H: 'static>(
     info!("running replicate");
 
     start_profile("replicate");
-    let (tau, aux) = ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, &mut data_copy).unwrap();
+    let (tau, aux) =
+        ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, &mut data_copy, None).unwrap();
     stop_profile();
     let pub_inputs = layered_drgporep::PublicInputs::<H::Domain> {
         replica_id,

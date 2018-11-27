@@ -10,11 +10,10 @@ use hasher::{Domain, Hasher};
 use merkle::MerkleTree;
 use parameter_cache::ParameterSetIdentifier;
 use util::data_at_node;
-
 /// The default hasher currently in use.
 pub type DefaultTreeHasher = PedersenHasher;
 
-pub const PARALLEL_MERKLE: bool = true;
+pub const PARALLEL_MERKLE: bool = false;
 
 /// A depth robust graph.
 pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {

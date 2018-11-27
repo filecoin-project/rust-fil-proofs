@@ -79,7 +79,8 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     let mut param_duration = Duration::new(0, 0);
 
     info!("running replicate");
-    let (tau, aux) = DrgPoRep::<H, _>::replicate(&pp, &replica_id.into(), &mut mmapped).unwrap();
+    let (tau, aux) =
+        DrgPoRep::<H, _>::replicate(&pp, &replica_id.into(), &mut mmapped, None).unwrap();
 
     let pub_inputs = PublicInputs::<H::Domain> {
         replica_id: replica_id.into(),
@@ -87,10 +88,7 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
         tau: Some(tau),
     };
 
-    let priv_inputs = PrivateInputs::<H> {
-        replica: &mmapped,
-        aux: &aux,
-    };
+    let priv_inputs = PrivateInputs::<H> { aux: &aux };
 
     param_duration += start.elapsed();
     let samples: u32 = 30;

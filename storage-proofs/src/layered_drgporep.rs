@@ -1,3 +1,5 @@
+use merkle::MerkleTree;
+
 use challenge_derivation::derive_challenges;
 use drgporep::{self, DrgPoRep};
 use drgraph::Graph;
@@ -151,9 +153,8 @@ pub trait Layers {
     fn prove_layers<'a>(
         pp: &drgporep::PublicParams<Self::Hasher, Self::Graph>,
         pub_inputs: &PublicInputs<<Self::Hasher as Hasher>::Domain>,
-        priv_inputs: &drgporep::PrivateInputs<Self::Hasher>,
-        tau: Vec<porep::Tau<<Self::Hasher as Hasher>::Domain>>,
-        aux: Vec<porep::ProverAux<Self::Hasher>>,
+        tau: &[porep::Tau<<Self::Hasher as Hasher>::Domain>],
+        aux: &[porep::ProverAux<Self::Hasher>],
         layers: usize,
         total_layers: usize,
         proofs: &'a mut Vec<Vec<EncodingProof<Self::Hasher>>>,
@@ -161,18 +162,7 @@ pub trait Layers {
     ) -> Result<&'a Vec<Vec<EncodingProof<Self::Hasher>>>> {
         assert!(layers > 0);
 
-        let mut scratch = priv_inputs.replica.to_vec().clone();
-        <DrgPoRep<Self::Hasher, Self::Graph> as PoRep<<Self::Hasher as Hasher>::Domain>>::replicate(
-            pp,
-            &pub_inputs.replica_id,
-            scratch.as_mut_slice(),
-        )?;
-
-        let new_priv_inputs = drgporep::PrivateInputs {
-            replica: scratch.as_slice(),
-            // TODO: Make sure this is a shallow clone, not the whole MerkleTree.
-            aux: &aux[aux.len() - layers].clone(),
-        };
+        let new_priv_inputs = drgporep::PrivateInputs { aux: &aux[0] };
 
         let mut partition_proofs = Vec::with_capacity(partition_count);
 
@@ -184,7 +174,7 @@ pub trait Layers {
                     (total_layers - layers) as u8,
                     Some(k),
                 ),
-                tau: Some(tau[tau.len() - layers]),
+                tau: Some(tau[0]),
             };
             let drg_proof = DrgPoRep::prove(&pp, &drgporep_pub_inputs, &new_priv_inputs)?;
 
@@ -199,9 +189,8 @@ pub trait Layers {
             Self::prove_layers(
                 pp,
                 pub_inputs,
-                &new_priv_inputs,
-                tau,
-                aux,
+                &tau[1..],
+                &aux[1..],
                 layers - 1,
                 total_layers,
                 proofs,
@@ -251,7 +240,14 @@ pub trait Layers {
         auxs: &mut Vec<porep::ProverAux<Self::Hasher>>,
     ) -> Result<()> {
         assert!(layers > 0);
-        let (tau, aux) = DrgPoRep::replicate(drgpp, replica_id, data).unwrap();
+        let previous_replica_tree = if !auxs.is_empty() {
+            Some(auxs[auxs.len() - 1].tree_r.clone())
+        } else {
+            None
+        };
+
+        let (tau, aux) =
+            DrgPoRep::replicate(drgpp, replica_id, data, previous_replica_tree).unwrap();
 
         taus.push(tau);
         auxs.push(aux);
@@ -310,19 +306,13 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         priv_inputs: &'b Self::PrivateInputs,
         partition_count: usize,
     ) -> Result<Vec<Self::Proof>> {
-        let drg_priv_inputs = drgporep::PrivateInputs {
-            aux: &priv_inputs.aux[0].clone(),
-            replica: priv_inputs.replica,
-        };
-
         let mut proofs = Vec::with_capacity(pub_params.layers);
 
         Self::prove_layers(
             &pub_params.drg_porep_public_params,
             pub_inputs,
-            &drg_priv_inputs,
-            priv_inputs.tau.clone(),
-            priv_inputs.aux.clone(),
+            &priv_inputs.tau,
+            &priv_inputs.aux,
             pub_params.layers,
             pub_params.layers,
             &mut proofs,
@@ -431,7 +421,7 @@ fn comm_r_star<H: Hasher>(replica_id: &H::Domain, comm_rs: &[H::Domain]) -> Resu
     Ok(H::Function::hash(&bytes))
 }
 
-impl<'a, 'c, L: Layers> PoRep<'a, <L::Hasher as Hasher>::Domain> for L {
+impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
     type Tau = Tau<<L::Hasher as Hasher>::Domain>;
     type ProverAux = Vec<porep::ProverAux<L::Hasher>>;
 
@@ -439,6 +429,9 @@ impl<'a, 'c, L: Layers> PoRep<'a, <L::Hasher as Hasher>::Domain> for L {
         pp: &'a PublicParams<L::Hasher, L::Graph>,
         replica_id: &<L::Hasher as Hasher>::Domain,
         data: &mut [u8],
+        _data_tree: Option<
+            MerkleTree<<L::Hasher as Hasher>::Domain, <L::Hasher as Hasher>::Function>,
+        >,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let mut taus = Vec::with_capacity(pp.layers);
         let mut auxs = Vec::with_capacity(pp.layers);

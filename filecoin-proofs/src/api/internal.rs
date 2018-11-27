@@ -266,8 +266,8 @@ pub fn seal(
         )?;
     }
 
-    let comm_r = commitment_from_fr::<Bls12>(public_tau.comm_r.0);
-    let comm_d = commitment_from_fr::<Bls12>(public_tau.comm_d.0);
+    let comm_r = commitment_from_fr::<Bls12>(public_tau.comm_r.into());
+    let comm_d = commitment_from_fr::<Bls12>(public_tau.comm_d.into());
     let comm_r_star = commitment_from_fr::<Bls12>(tau.comm_r_star.into());
 
     // Verification is cheap when parameters are cached,
@@ -321,11 +321,12 @@ fn perform_replication(
             public_params,
             &replica_id,
             &mut data[0..proof_sector_bytes],
+            None,
         )?;
         Ok((tau, aux))
     } else {
         // When not faking replication, we write the replicated data to disk, after replication.
-        let (tau, aux) = ZigZagDrgPoRep::replicate(public_params, &replica_id, data)?;
+        let (tau, aux) = ZigZagDrgPoRep::replicate(public_params, &replica_id, data, None)?;
 
         write_data(out_path, data)?;
         Ok((tau, aux))
