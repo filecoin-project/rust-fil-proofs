@@ -67,14 +67,18 @@ pub mod error;
 pub mod file_inclusion_proof;
 pub mod fr32;
 pub mod hasher;
+pub mod hvh_post;
 pub mod layered_drgporep;
 pub mod merkle;
 pub mod merklepor;
+pub mod online_porep;
 pub mod parameter_cache;
 pub mod partitions;
 pub mod porep;
 pub mod proof;
 pub mod util;
+pub mod vdf;
+pub mod vdf_sloth;
 pub mod zigzag_drgporep;
 pub mod zigzag_graph;
 
