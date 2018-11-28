@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use byteorder::{ByteOrder, LittleEndian};
 
-use error::Result;
+use error::{Error, Result};
 use hasher::{Domain, HashFunction, Hasher};
 use merkle::MerkleTree;
 use online_porep::{self, OnlinePoRep};
@@ -20,6 +20,8 @@ pub struct SetupParams<T: Domain, V: Vdf<T>> {
     pub setup_params_vdf: V::SetupParams,
     /// The size of a single leaf.
     pub lambda: usize,
+    /// The number of sectors that are proven over.
+    pub sectors_count: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -35,20 +37,22 @@ pub struct PublicParams<T: Domain, V: Vdf<T>> {
     pub lambda: usize,
     /// How many leaves the underlying merkle tree has.
     pub leaves: usize,
+    /// The number of sectors that are proven over.
+    pub sectors_count: usize,
 }
 
 #[derive(Clone, Debug)]
 pub struct PublicInputs<T: Domain> {
     /// The root hash of the merkle tree of the sealed sector.
-    pub comm_r: T,
+    pub comm_rs: Vec<T>,
     /// The initial set of challengs. Must be of length `challenge_count`.
     pub challenges: Vec<T>,
 }
 
 #[derive(Clone, Debug)]
 pub struct PrivateInputs<'a, H: 'a + Hasher> {
-    pub replica: &'a [u8],
-    pub tree: &'a MerkleTree<H::Domain, H::Function>,
+    pub replicas: &'a [&'a [u8]],
+    pub trees: &'a [&'a MerkleTree<H::Domain, H::Function>],
     _h: PhantomData<H>,
 }
 
@@ -85,6 +89,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
             pub_params_vdf: V::setup(&sp.setup_params_vdf)?,
             lambda: sp.lambda,
             leaves: sp.sector_size / sp.lambda,
+            sectors_count: sp.sectors_count,
         })
     }
 
@@ -93,6 +98,14 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
         pub_inputs: &'b Self::PublicInputs,
         priv_inputs: &'b Self::PrivateInputs,
     ) -> Result<Self::Proof> {
+        if priv_inputs.replicas.len() != pub_params.sectors_count {
+            return Err(Error::MalformedInput);
+        }
+
+        if priv_inputs.trees.len() != pub_params.sectors_count {
+            return Err(Error::MalformedInput);
+        }
+
         let challenge_count = pub_params.challenge_count;
         let post_iterations = pub_params.post_iterations;
 
@@ -101,18 +114,19 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
         let pub_params_porep = online_porep::PublicParams {
             lambda: pub_params.lambda,
             leaves: pub_params.leaves,
+            sectors_count: pub_params.sectors_count,
         };
 
         // Step 1: Generate first proof
         {
             let pub_inputs_porep = online_porep::PublicInputs {
                 challenges: &pub_inputs.challenges,
-                commitment: pub_inputs.comm_r,
+                commitments: &pub_inputs.comm_rs,
             };
 
             let priv_inputs_porep = online_porep::PrivateInputs {
-                replica: priv_inputs.replica,
-                tree: priv_inputs.tree,
+                replicas: priv_inputs.replicas,
+                trees: priv_inputs.trees,
             };
             proofs_porep.push(OnlinePoRep::prove(
                 &pub_params_porep,
@@ -149,12 +163,12 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
             // Generate proof
             let pub_inputs_porep = online_porep::PublicInputs {
                 challenges: &challenges,
-                commitment: pub_inputs.comm_r,
+                commitments: &pub_inputs.comm_rs,
             };
 
             let priv_inputs_porep = online_porep::PrivateInputs {
-                replica: priv_inputs.replica,
-                tree: priv_inputs.tree,
+                replicas: priv_inputs.replicas,
+                trees: priv_inputs.trees,
             };
             proofs_porep.push(OnlinePoRep::prove(
                 &pub_params_porep,
@@ -192,16 +206,17 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
 
         // Online PoRep Verification
 
-        // First
         let pub_params_porep = online_porep::PublicParams {
             lambda: pub_params.lambda,
             leaves: pub_params.leaves,
+            sectors_count: pub_params.sectors_count,
         };
 
+        // First
         {
             let pub_inputs_porep = online_porep::PublicInputs {
                 challenges: &pub_inputs.challenges,
-                commitment: pub_inputs.comm_r,
+                commitments: &pub_inputs.comm_rs,
             };
 
             if !OnlinePoRep::verify(&pub_params_porep, &pub_inputs_porep, &proof.proofs_porep[0])? {
@@ -225,7 +240,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
 
             let pub_inputs_porep = online_porep::PublicInputs {
                 challenges: &challenges,
-                commitment: pub_inputs.comm_r,
+                commitments: &pub_inputs.comm_rs,
             };
 
             if !OnlinePoRep::verify(&pub_params_porep, &pub_inputs_porep, &proof.proofs_porep[i])? {
@@ -272,25 +287,31 @@ mod tests {
                 rounds: 1,
             },
             lambda,
+            sectors_count: 2,
         };
 
         let pub_params = HvhPost::<PedersenHasher, vdf_sloth::Sloth>::setup(&sp).unwrap();
 
-        let data: Vec<u8> = (0..1024)
+        let data0: Vec<u8> = (0..1024)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
+        let data1: Vec<u8> = (0..1024)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph = BucketGraph::<PedersenHasher>::new(1024, 5, 0, new_seed());
-        let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
+        let graph0 = BucketGraph::<PedersenHasher>::new(1024, 5, 0, new_seed());
+        let tree0 = graph0.merkle_tree(data0.as_slice(), lambda).unwrap();
+        let graph1 = BucketGraph::<PedersenHasher>::new(1024, 5, 0, new_seed());
+        let tree1 = graph1.merkle_tree(data1.as_slice(), lambda).unwrap();
 
         let pub_inputs = PublicInputs {
             challenges: vec![rng.gen(), rng.gen()],
-            comm_r: tree.root(),
+            comm_rs: vec![tree0.root(), tree1.root()],
         };
 
         let priv_inputs = PrivateInputs {
-            tree: &tree,
-            replica: &data,
+            trees: &[&tree0, &tree1],
+            replicas: &[&data0, &data1],
             _h: PhantomData,
         };
 
