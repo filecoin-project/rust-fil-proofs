@@ -12,6 +12,7 @@ pub struct StagedSectorMetadata {
     pub sector_access: String,
     pub pieces: Vec<PieceMetadata>,
     pub sealing_error: Option<String>,
+    pub accepting_data: bool,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

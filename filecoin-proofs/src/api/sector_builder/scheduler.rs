@@ -68,7 +68,6 @@ impl Scheduler {
                     staged: StagedState {
                         sector_id_nonce: last_committed_sector_id,
                         sectors: Default::default(),
-                        sectors_accepting_data: Default::default(),
                     },
                     sealed: Default::default(),
                 })
@@ -240,7 +239,7 @@ impl SectorMetadataManager {
     fn check_and_schedule(&mut self, seal_all_staged_sectors: bool) -> Result<()> {
         let staged_state = &mut self.state.staged;
 
-        let to_be_sealed = get_sectors_ready_for_sealing(
+        let mut to_be_sealed = get_sectors_ready_for_sealing(
             staged_state,
             self.max_user_bytes_per_staged_sector,
             self.max_num_staged_sectors,
@@ -248,10 +247,8 @@ impl SectorMetadataManager {
         );
 
         // Mark the to-be-sealed sectors as no longer accepting data.
-        for sector in to_be_sealed.iter() {
-            let _ = staged_state
-                .sectors_accepting_data
-                .remove(&sector.sector_id);
+        for sector in to_be_sealed.iter_mut() {
+            sector.accepting_data = false;
         }
 
         // Fire-and-forget seal-scheduling.
