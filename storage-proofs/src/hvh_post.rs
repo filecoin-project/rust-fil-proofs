@@ -56,6 +56,19 @@ pub struct PrivateInputs<'a, H: 'a + Hasher> {
     _h: PhantomData<H>,
 }
 
+impl<'a, H: 'a + Hasher> PrivateInputs<'a, H> {
+    pub fn new(
+        replicas: &'a [&'a [u8]],
+        trees: &'a [&'a MerkleTree<H::Domain, H::Function>],
+    ) -> Self {
+        PrivateInputs {
+            replicas,
+            trees,
+            _h: PhantomData,
+        }
+    }
+}
+
 /// HVH-PoSt
 /// This is one construction of a Proof-of-Spacetime.
 /// It currently only supports proving over a single sector.
