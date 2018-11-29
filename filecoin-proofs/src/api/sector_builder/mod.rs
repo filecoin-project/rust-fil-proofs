@@ -142,10 +142,7 @@ impl SectorBuilder {
     }
 
     // Run a task, blocking on the return channel.
-    fn run_blocking<T, F: FnOnce(mpsc::SyncSender<T>) -> Request>(
-        &self,
-        with_sender: F,
-    ) -> T {
+    fn run_blocking<T, F: FnOnce(mpsc::SyncSender<T>) -> Request>(&self, with_sender: F) -> T {
         let (tx, rx) = mpsc::sync_channel(0);
 
         self.scheduler_tx
