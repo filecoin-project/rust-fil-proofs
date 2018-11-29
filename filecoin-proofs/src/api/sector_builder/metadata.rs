@@ -76,7 +76,7 @@ pub fn sum_piece_bytes(s: &StagedSectorMetadata) -> u64 {
     s.pieces.iter().map(|x| x.num_bytes).sum()
 }
 
-pub fn sector_id_as_bytes(sector_id: u64) -> error::Result<[u8; 31]> {
+pub fn sector_id_as_bytes(sector_id: SectorId) -> error::Result<[u8; 31]> {
     // Transmute a u64 sector id to a zero-padded byte array.
     let mut sector_id_as_bytes = [0u8; 31];
     sector_id_as_bytes

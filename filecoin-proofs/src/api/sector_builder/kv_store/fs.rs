@@ -1,15 +1,14 @@
 use api::sector_builder::kv_store::KeyValueStore;
+use blake2::{Blake2b, Digest};
 use error::Result;
-use percent_encoding::{percent_encode, DEFAULT_ENCODE_SET};
-use std::collections::hash_map::DefaultHasher;
 use std::fs::{self, File, OpenOptions};
-use std::hash::Hasher;
 use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 
-// a file system-backed key/value store, mostly lifted from sile/ekvsb
+const FATAL_NOCREATE: &str = "[KeyValueStore#put] could not create path";
 
-#[derive(Debug)]
+// FileSystemKvs is a file system-backed key/value store, mostly lifted from
+// sile/ekvsb
 pub struct FileSystemKvs {
     root_dir: PathBuf,
 }
@@ -24,12 +23,11 @@ impl FileSystemKvs {
     }
 
     fn key_to_path(&self, key: &[u8]) -> PathBuf {
-        let name = percent_encode(key, DEFAULT_ENCODE_SET).to_string();
+        let mut hasher = Blake2b::new();
+        hasher.input(key);
 
-        let mut hasher = DefaultHasher::new();
-        hasher.write(name.as_bytes());
-
-        let file = format!("{:04x}/{}", hasher.finish() as u16, name);
+        let result = hasher.result();
+        let file = format!("{:.32x}", &result);
 
         self.root_dir.join(file)
     }
@@ -39,7 +37,7 @@ impl KeyValueStore for FileSystemKvs {
     fn put(&self, key: &[u8], value: &[u8]) -> Result<()> {
         let path = self.key_to_path(key);
 
-        fs::create_dir_all(path.parent().unwrap())?;
+        fs::create_dir_all(path.parent().expect(FATAL_NOCREATE))?;
 
         let mut file = OpenOptions::new()
             .create(true)
