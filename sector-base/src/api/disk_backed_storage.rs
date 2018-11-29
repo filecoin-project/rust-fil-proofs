@@ -337,6 +337,41 @@ impl SectorConfig for FakeConfig {
 }
 
 #[cfg(test)]
+mod non_ffi_tests {
+    use std::fs::{create_dir_all, File};
+    use std::io::Read;
+    use tempfile;
+
+    use super::*;
+
+    fn create_storage() -> ConcreteSectorStore {
+        let staging_path = tempfile::tempdir().unwrap().path().to_owned();
+        let sealed_path = tempfile::tempdir().unwrap().path().to_owned();
+
+        new_sector_store(
+            &SBConfiguredStore::ProofTest,
+            String::from(sealed_path.to_str().unwrap()),
+            String::from(staging_path.to_str().unwrap()),
+        )
+    }
+
+    #[test]
+    fn deletes_staging_access() {
+        let store = create_storage();
+        let access = store.manager().new_staging_sector_access().unwrap();
+
+        assert!(store.manager().read_raw(access.clone(), 0, 0).is_ok());
+        assert!(
+            store
+                .manager()
+                .delete_staging_sector_access(access.clone())
+                .is_ok()
+        );
+        assert!(store.manager().read_raw(access.clone(), 0, 0).is_err());
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use std::fs::{create_dir_all, File};
     use std::io::Read;
@@ -346,8 +381,7 @@ mod tests {
 
     use api::disk_backed_storage::init_new_proof_test_sector_store;
     use api::{
-        delete_staging_sector_access, new_staging_sector_access, num_unsealed_bytes,
-        truncate_unsealed, write_and_preprocess,
+        new_staging_sector_access, num_unsealed_bytes, truncate_unsealed, write_and_preprocess,
     };
 
     use api::responses::SBResponseStatus;
@@ -514,17 +548,6 @@ mod tests {
 
             // ensure that our byte-counting function works
             assert_eq!(buf.len(), (*num_unsealed_bytes_response).num_bytes as usize);
-
-            let path = c_str_to_rust_str(access).to_string();
-
-            assert!(Path::new(&path).exists());
-
-            assert_eq!(
-                SBResponseStatus::SBNoError,
-                (*delete_staging_sector_access(storage, access)).status_code,
-            );
-
-            assert!(!Path::new(&path).exists());
         }
     }
 }

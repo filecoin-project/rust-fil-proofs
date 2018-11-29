@@ -148,37 +148,6 @@ pub unsafe extern "C" fn truncate_unsealed(
     Box::into_raw(Box::new(response))
 }
 
-/// Delete the sector file stored on disk
-///
-/// # Arguments
-///
-/// * `ss_ptr` - pointer to a boxed SectorStore
-/// * `access` - an unsealed sector access
-#[no_mangle]
-pub unsafe extern "C" fn delete_staging_sector_access(
-    ss_ptr: *mut Box<SectorStore>,
-    access: *const libc::c_char,
-) -> *mut responses::TruncateUnsealedResponse {
-    let mut response: responses::TruncateUnsealedResponse = Default::default();
-
-    let result = (*ss_ptr)
-        .manager()
-        .delete_staging_sector_access(c_str_to_rust_str(access).to_string());
-
-    match result {
-        Ok(_) => {
-            response.status_code = SBResponseStatus::SBNoError;
-        }
-        Err(err) => {
-            let (code, ptr) = err_code_and_msg(&err.into());
-            response.status_code = code;
-            response.error_msg = ptr;
-        }
-    }
-
-    Box::into_raw(Box::new(response))
-}
-
 /// Reads `num_bytes` bytes from `access`, starting from `start_offset`.
 /// * `access` must contain raw, unpreprocessed data – as written by `get_unsealed` or `get_unsealed_range`.
 #[no_mangle]
