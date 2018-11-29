@@ -1,7 +1,7 @@
 use api::sector_builder::state::*;
 use api::sector_builder::WrappedKeyValueStore;
 use error::Result;
-use std::sync::{Arc, MutexGuard};
+use std::sync::Arc;
 
 pub fn load_snapshot(
     kv_store: &Arc<WrappedKeyValueStore>,
@@ -29,8 +29,8 @@ pub fn persist_snapshot(
 
 pub fn make_snapshot(
     prover_id: &[u8; 31],
-    staged_state: &MutexGuard<StagedState>,
-    sealed_state: &MutexGuard<SealedState>,
+    staged_state: &StagedState,
+    sealed_state: &SealedState,
 ) -> StateSnapshot {
     StateSnapshot {
         prover_id: *prover_id,
@@ -52,6 +52,7 @@ mod tests {
     use api::sector_builder::metadata::StagedSectorMetadata;
     use api::sector_builder::state::SealedState;
     use api::sector_builder::state::StagedState;
+    use api::sector_builder::SectorId;
     use api::sector_builder::WrappedKeyValueStore;
     use std::collections::HashMap;
     use std::collections::HashSet;
@@ -69,11 +70,11 @@ mod tests {
         let prover_id = [0; 31];
 
         let (staged_state, sealed_state) = {
-            let mut m: HashMap<u64, StagedSectorMetadata> = HashMap::new();
+            let mut m: HashMap<SectorId, StagedSectorMetadata> = HashMap::new();
 
             m.insert(123, Default::default());
 
-            let q = m.keys().cloned().collect::<HashSet<u64>>();
+            let q = m.keys().cloned().collect::<HashSet<SectorId>>();
 
             let staged_state = Mutex::new(StagedState {
                 sector_id_nonce: 100,

@@ -4,11 +4,10 @@ use api::sector_builder::state::SealedState;
 use api::sector_builder::state::StagedState;
 use api::sector_builder::SectorId;
 use error;
-use std::sync::MutexGuard;
 
 pub fn get_seal_status(
-    staged_state: &MutexGuard<StagedState>,
-    sealed_state: &MutexGuard<SealedState>,
+    staged_state: &StagedState,
+    sealed_state: &SealedState,
     sector_id: SectorId,
 ) -> error::Result<SealStatus> {
     sealed_state
@@ -47,13 +46,11 @@ mod tests {
     use api::sector_builder::state::SectorBuilderState;
     use api::sector_builder::state::StagedState;
     use std::collections::{HashMap, HashSet};
-    use std::sync::Arc;
-    use std::sync::Mutex;
 
-    fn setup() -> Arc<SectorBuilderState> {
-        let mut staged_sectors: HashMap<u64, StagedSectorMetadata> = Default::default();
-        let mut sealed_sectors: HashMap<u64, SealedSectorMetadata> = Default::default();
-        let mut sectors_accepting_data: HashSet<u64> = Default::default();
+    fn setup() -> SectorBuilderState {
+        let mut staged_sectors: HashMap<SectorId, StagedSectorMetadata> = Default::default();
+        let mut sealed_sectors: HashMap<SectorId, SealedSectorMetadata> = Default::default();
+        let mut sectors_accepting_data: HashSet<SectorId> = Default::default();
 
         staged_sectors.insert(
             2,
@@ -73,25 +70,25 @@ mod tests {
             },
         );
 
-        Arc::new(SectorBuilderState {
+        SectorBuilderState {
             prover_id: Default::default(),
-            staged: Mutex::new(StagedState {
+            staged: StagedState {
                 sector_id_nonce: 0,
                 sectors: staged_sectors,
                 sectors_accepting_data,
-            }),
-            sealed: Mutex::new(SealedState {
+            },
+            sealed: SealedState {
                 sectors: sealed_sectors,
-            }),
-        })
+            },
+        }
     }
 
     #[test]
     fn test_alpha() {
         let state = setup();
 
-        let sealed_state = state.sealed.lock().unwrap();
-        let staged_state = state.staged.lock().unwrap();
+        let sealed_state = state.sealed;
+        let staged_state = state.staged;
 
         let result = get_seal_status(&staged_state, &sealed_state, 1);
         assert!(result.is_err());
