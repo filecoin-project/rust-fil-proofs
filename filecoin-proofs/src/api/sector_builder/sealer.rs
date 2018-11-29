@@ -2,7 +2,7 @@ use api::sector_builder::helpers::retrieve_piece::retrieve_piece;
 use api::sector_builder::helpers::seal::seal;
 use api::sector_builder::metadata::SealedSectorMetadata;
 use api::sector_builder::metadata::StagedSectorMetadata;
-use api::sector_builder::scheduler::SchedulerInput;
+use api::sector_builder::scheduler::Request;
 use api::sector_builder::WrappedSectorStore;
 use error::Result;
 use std::sync::mpsc;
@@ -15,7 +15,7 @@ pub struct SealerWorker {
 }
 
 pub enum SealerInput {
-    Seal(StagedSectorMetadata, mpsc::SyncSender<SchedulerInput>),
+    Seal(StagedSectorMetadata, mpsc::SyncSender<Request>),
     Unseal(
         String,
         Box<SealedSectorMetadata>,
@@ -25,7 +25,7 @@ pub enum SealerInput {
 }
 
 impl SealerWorker {
-    pub fn new(
+    pub fn start(
         id: usize,
         seal_task_rx: Arc<Mutex<mpsc::Receiver<SealerInput>>>,
         sector_store: Arc<WrappedSectorStore>,
@@ -45,7 +45,7 @@ impl SealerWorker {
                 SealerInput::Seal(staged_sector, return_channel) => {
                     let sector_id = staged_sector.sector_id;
                     let result = seal(&sector_store.clone(), &prover_id, staged_sector);
-                    let task = SchedulerInput::HandleSealResult(sector_id, Box::new(result));
+                    let task = Request::HandleSealResult(sector_id, Box::new(result));
 
                     return_channel.send(task).unwrap();
                 }

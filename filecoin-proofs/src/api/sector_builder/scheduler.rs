@@ -27,12 +27,12 @@ const FATAL_SNPSHT: &str = "[SectorBuilderStateMgr#handle_seal_result] could not
 const FATAL_SLRSND: &str = "[SectorBuilderStateMgr#check_and_schedule] could not send to sealer";
 const FATAL_HUNGUP: &str = "[SectorBuilderStateMgr#retrieve_piece] could not send to ret channel";
 
-pub struct SchedulerWorker {
+pub struct Scheduler {
     pub thread: Option<thread::JoinHandle<()>>,
 }
 
 #[derive(Debug)]
-pub enum SchedulerInput {
+pub enum Request {
     AddPiece(String, Vec<u8>, mpsc::SyncSender<Result<SectorId>>),
     GetSealedSectors(mpsc::SyncSender<Result<Vec<SealedSectorMetadata>>>),
     GetSealStatus(SectorId, mpsc::SyncSender<Result<SealStatus>>),
@@ -43,17 +43,17 @@ pub enum SchedulerInput {
     Shutdown,
 }
 
-impl SchedulerWorker {
-    pub fn init_from_metadata(
-        scheduler_input_rx: mpsc::Receiver<SchedulerInput>,
-        scheduler_input_tx: mpsc::SyncSender<SchedulerInput>,
+impl Scheduler {
+    pub fn start_with_metadata(
+        scheduler_input_rx: mpsc::Receiver<Request>,
+        scheduler_input_tx: mpsc::SyncSender<Request>,
         sealer_input_tx: mpsc::Sender<SealerInput>,
         kv_store: Arc<WrappedKeyValueStore>,
         sector_store: Arc<WrappedSectorStore>,
         last_committed_sector_id: SectorId,
         max_num_staged_sectors: u8,
         prover_id: [u8; 31],
-    ) -> SchedulerWorker {
+    ) -> Scheduler {
         let thread = thread::spawn(move || {
             // Build the scheduler's initial state. If available, we
             // reconstitute this state from persisted metadata. If not, we
@@ -77,7 +77,7 @@ impl SchedulerWorker {
             let max_user_bytes_per_staged_sector =
                 sector_store.inner.config().max_unsealed_bytes_per_sector();
 
-            let mut m = SectorBuilderStateManager {
+            let mut m = SectorMetadataManager {
                 kv_store,
                 sector_store,
                 state,
@@ -92,31 +92,31 @@ impl SchedulerWorker {
 
                 // Dispatch to the appropriate task-handler.
                 match task {
-                    SchedulerInput::AddPiece(key, bytes, tx) => {
+                    Request::AddPiece(key, bytes, tx) => {
                         tx.send(m.add_piece(key, &bytes)).expect(FATAL_NOSEND);
                     }
-                    SchedulerInput::GetSealStatus(sector_id, tx) => {
+                    Request::GetSealStatus(sector_id, tx) => {
                         tx.send(m.get_seal_status(sector_id)).expect(FATAL_NOSEND);
                     }
-                    SchedulerInput::RetrievePiece(piece_key, tx) => m.retrieve_piece(piece_key, tx),
-                    SchedulerInput::GetSealedSectors(tx) => {
+                    Request::RetrievePiece(piece_key, tx) => m.retrieve_piece(piece_key, tx),
+                    Request::GetSealedSectors(tx) => {
                         tx.send(m.get_sealed_sectors()).expect(FATAL_NOSEND);
                     }
-                    SchedulerInput::GetMaxUserBytesPerStagedSector(tx) => {
+                    Request::GetMaxUserBytesPerStagedSector(tx) => {
                         tx.send(m.max_user_bytes()).expect(FATAL_NOSEND);
                     }
-                    SchedulerInput::SealAllStagedSectors(tx) => {
+                    Request::SealAllStagedSectors(tx) => {
                         tx.send(m.seal_all_staged_sectors()).expect(FATAL_NOSEND);
                     }
-                    SchedulerInput::HandleSealResult(sector_id, result) => {
+                    Request::HandleSealResult(sector_id, result) => {
                         m.handle_seal_result(sector_id, *result);
                     }
-                    SchedulerInput::Shutdown => break,
+                    Request::Shutdown => break,
                 }
             }
         });
 
-        SchedulerWorker {
+        Scheduler {
             thread: Some(thread),
         }
     }
@@ -126,17 +126,17 @@ impl SchedulerWorker {
 // It dispatches expensive operations (e.g. unseal and seal) to the sealer
 // worker-threads. Other, inexpensive work (or work which needs to be performed
 // serially) is handled by the SectorBuilderStateManager itself.
-pub struct SectorBuilderStateManager {
+pub struct SectorMetadataManager {
     kv_store: Arc<WrappedKeyValueStore>,
     sector_store: Arc<WrappedSectorStore>,
     state: SectorBuilderState,
     sealer_input_tx: mpsc::Sender<SealerInput>,
-    scheduler_input_tx: mpsc::SyncSender<SchedulerInput>,
+    scheduler_input_tx: mpsc::SyncSender<Request>,
     max_num_staged_sectors: u8,
     max_user_bytes_per_staged_sector: u64,
 }
 
-impl SectorBuilderStateManager {
+impl SectorMetadataManager {
     // Unseals the sector containing the referenced piece and returns its
     // bytes. Produces an error if this sector builder does not have a sealed
     // sector containing the referenced piece.

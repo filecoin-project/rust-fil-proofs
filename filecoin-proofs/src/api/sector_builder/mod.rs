@@ -1,8 +1,8 @@
 use api::sector_builder::kv_store::fs::FileSystemKvs;
 use api::sector_builder::kv_store::KeyValueStore;
 use api::sector_builder::metadata::*;
-use api::sector_builder::scheduler::SchedulerInput;
-use api::sector_builder::scheduler::SchedulerWorker;
+use api::sector_builder::scheduler::Request;
+use api::sector_builder::scheduler::Scheduler;
 use api::sector_builder::sealer::*;
 use error::Result;
 use sector_base::api::disk_backed_storage::new_sector_store;
@@ -37,10 +37,10 @@ pub struct SectorBuilder {
     sealers: Vec<SealerWorker>,
 
     // The main worker's queue.
-    scheduler_tx: mpsc::SyncSender<SchedulerInput>,
+    scheduler_tx: mpsc::SyncSender<Request>,
 
     // The main worker. Owns all mutable state for the SectorBuilder.
-    scheduler: SchedulerWorker,
+    scheduler: Scheduler,
 }
 
 impl SectorBuilder {
@@ -80,14 +80,14 @@ impl SectorBuilder {
             let rx = Arc::new(Mutex::new(rx));
 
             let workers = (0..NUM_SEAL_WORKERS)
-                .map(|n| SealerWorker::new(n, rx.clone(), sector_store.clone(), prover_id))
+                .map(|n| SealerWorker::start(n, rx.clone(), sector_store.clone(), prover_id))
                 .collect();
 
             (tx, workers)
         };
 
         // Configure main worker.
-        let main_worker = SchedulerWorker::init_from_metadata(
+        let main_worker = Scheduler::start_with_metadata(
             main_rx,
             main_tx.clone(),
             seal_tx.clone(),
@@ -109,40 +109,40 @@ impl SectorBuilder {
     // Returns the number of user-provided bytes that will fit into a staged
     // sector.
     pub fn get_max_user_bytes_per_staged_sector(&self) -> u64 {
-        self.run_blocking(SchedulerInput::GetMaxUserBytesPerStagedSector)
+        self.run_blocking(Request::GetMaxUserBytesPerStagedSector)
     }
 
     // Stages user piece-bytes for sealing. Note that add_piece calls are
     // processed sequentially to make bin packing easier.
     pub fn add_piece(&self, piece_key: String, piece_bytes: &[u8]) -> Result<SectorId> {
-        self.run_blocking(|tx| SchedulerInput::AddPiece(piece_key, piece_bytes.to_vec(), tx))
+        self.run_blocking(|tx| Request::AddPiece(piece_key, piece_bytes.to_vec(), tx))
     }
 
     // Returns sealing status for the sector with specified id. If no sealed or
     // staged sector exists with the provided id, produce an error.
     pub fn get_seal_status(&self, sector_id: SectorId) -> Result<SealStatus> {
-        self.run_blocking(|tx| SchedulerInput::GetSealStatus(sector_id, tx))
+        self.run_blocking(|tx| Request::GetSealStatus(sector_id, tx))
     }
 
     // Unseals the sector containing the referenced piece and returns its
     // bytes. Produces an error if this sector builder does not have a sealed
     // sector containing the referenced piece.
     pub fn read_piece_from_sealed_sector(&self, piece_key: String) -> Result<Vec<u8>> {
-        self.run_blocking(|tx| SchedulerInput::RetrievePiece(piece_key, tx))
+        self.run_blocking(|tx| Request::RetrievePiece(piece_key, tx))
     }
 
     // For demo purposes. Schedules sealing of all staged sectors.
     pub fn seal_all_staged_sectors(&self) -> Result<()> {
-        self.run_blocking(SchedulerInput::SealAllStagedSectors)
+        self.run_blocking(Request::SealAllStagedSectors)
     }
 
     // Produce a slice of all sealed sector metadata.
     pub fn get_sealed_sectors(&self) -> Result<Vec<SealedSectorMetadata>> {
-        self.run_blocking(SchedulerInput::GetSealedSectors)
+        self.run_blocking(Request::GetSealedSectors)
     }
 
     // Run a task, blocking on the return channel.
-    fn run_blocking<T, F: FnOnce(mpsc::SyncSender<T>) -> SchedulerInput>(
+    fn run_blocking<T, F: FnOnce(mpsc::SyncSender<T>) -> Request>(
         &self,
         with_sender: F,
     ) -> T {
@@ -161,7 +161,7 @@ impl Drop for SectorBuilder {
     fn drop(&mut self) {
         // Shut down main worker and sealers, too.
         self.scheduler_tx
-            .send(SchedulerInput::Shutdown)
+            .send(Request::Shutdown)
             .expect(FATAL_KILL_SCHDLR);
 
         for _ in &mut self.sealers {
