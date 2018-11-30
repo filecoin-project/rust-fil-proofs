@@ -37,7 +37,6 @@ pub fn make_snapshot(
         staged: StagedState {
             sector_id_nonce: staged_state.sector_id_nonce,
             sectors: staged_state.sectors.clone(),
-            sectors_accepting_data: staged_state.sectors_accepting_data.clone(),
         },
         sealed: SealedState {
             sectors: sealed_state.sectors.clone(),
@@ -55,7 +54,6 @@ mod tests {
     use api::sector_builder::SectorId;
     use api::sector_builder::WrappedKeyValueStore;
     use std::collections::HashMap;
-    use std::collections::HashSet;
     use std::sync::Arc;
     use std::sync::Mutex;
 
@@ -74,12 +72,9 @@ mod tests {
 
             m.insert(123, Default::default());
 
-            let q = m.keys().cloned().collect::<HashSet<SectorId>>();
-
             let staged_state = Mutex::new(StagedState {
                 sector_id_nonce: 100,
                 sectors: m,
-                sectors_accepting_data: q,
             });
 
             let sealed_state: Mutex<SealedState> = Default::default();

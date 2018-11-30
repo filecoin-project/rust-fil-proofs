@@ -16,20 +16,18 @@ pub fn get_seal_status(
         .map(|sealed_sector| SealStatus::Sealed(Box::new(sealed_sector.clone())))
         .or_else(|| {
             staged_state
-                .sectors_accepting_data
-                .get(&sector_id)
-                .map(|_| SealStatus::Pending)
-        })
-        .or_else(|| {
-            staged_state
                 .sectors
                 .get(&sector_id)
                 .and_then(|staged_sector| {
-                    staged_sector
-                        .sealing_error
-                        .clone()
-                        .map(SealStatus::Failed)
-                        .or(Some(SealStatus::Sealing))
+                    if staged_sector.accepting_data {
+                        Some(SealStatus::Pending)
+                    } else {
+                        staged_sector
+                            .sealing_error
+                            .clone()
+                            .map(SealStatus::Failed)
+                            .or(Some(SealStatus::Sealing))
+                    }
                 })
         })
         .ok_or_else(|| {
@@ -45,12 +43,11 @@ mod tests {
     use api::sector_builder::state::SealedState;
     use api::sector_builder::state::SectorBuilderState;
     use api::sector_builder::state::StagedState;
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashMap;
 
     fn setup() -> SectorBuilderState {
         let mut staged_sectors: HashMap<SectorId, StagedSectorMetadata> = Default::default();
         let mut sealed_sectors: HashMap<SectorId, SealedSectorMetadata> = Default::default();
-        let mut sectors_accepting_data: HashSet<SectorId> = Default::default();
 
         staged_sectors.insert(
             2,
@@ -60,7 +57,14 @@ mod tests {
             },
         );
 
-        sectors_accepting_data.insert(3);
+        staged_sectors.insert(
+            3,
+            StagedSectorMetadata {
+                sector_id: 3,
+                accepting_data: true,
+                ..Default::default()
+            },
+        );
 
         sealed_sectors.insert(
             4,
@@ -75,7 +79,6 @@ mod tests {
             staged: StagedState {
                 sector_id_nonce: 0,
                 sectors: staged_sectors,
-                sectors_accepting_data,
             },
             sealed: SealedState {
                 sectors: sealed_sectors,

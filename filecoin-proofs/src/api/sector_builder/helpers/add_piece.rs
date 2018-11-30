@@ -22,7 +22,7 @@ pub fn add_piece(
         let candidates: Vec<StagedSectorMetadata> = staged_state
             .sectors
             .iter()
-            .filter(|(k, _)| staged_state.sectors_accepting_data.contains(k))
+            .filter(|(_, v)| v.accepting_data)
             .map(|(_, v)| (*v).clone())
             .collect();
 
@@ -98,9 +98,9 @@ fn provision_new_staged_sector(
         sealing_error: None,
         sector_access: access.clone(),
         sector_id,
+        accepting_data: true,
     };
 
-    staged_state.sectors_accepting_data.insert(meta.sector_id);
     staged_state.sectors.insert(meta.sector_id, meta.clone());
 
     Ok(sector_id)
