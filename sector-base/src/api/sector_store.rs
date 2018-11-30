@@ -35,6 +35,8 @@ pub trait SectorManager {
     /// writes `data` to the staging sector identified by `access`, incrementally preprocessing `access`
     fn write_and_preprocess(&self, access: String, data: &[u8]) -> Result<u64, SectorManagerErr>;
 
+    fn delete_staging_sector_access(&self, access: String) -> Result<(), SectorManagerErr>;
+
     fn read_raw(
         &self,
         access: String,
