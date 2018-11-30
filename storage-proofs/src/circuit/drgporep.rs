@@ -152,7 +152,7 @@ impl<'a, H, G> CompoundProof<'a, Bls12, DrgPoRep<'a, H, G>, DrgPoRepCircuit<'a, 
     for DrgPoRepCompound<H, G>
 where
     H: 'a + Hasher,
-    G: 'a + Graph<H> + ParameterSetIdentifier,
+    G: 'a + Graph<H> + ParameterSetIdentifier + Sync + Send,
 {
     fn generate_public_inputs(
         pub_in: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicInputs,

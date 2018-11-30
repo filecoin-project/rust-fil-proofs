@@ -13,6 +13,7 @@ merkle_light = { git = "https://github.com/filecoin-project/merkle_light", branc
 failure = "0.1"
 bellman = "0.1"
 byteorder = "1"
+crossbeam-utils = "0.6"
 itertools = "0.7.3"
 lazy_static = "1.0"
 memmap = "0.6"

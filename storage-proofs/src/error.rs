@@ -7,6 +7,8 @@ pub type Result<T> = ::std::result::Result<T, Error>;
 pub enum Error {
     #[fail(display = "Bytes could not be converted to Fr")]
     BadFrBytes,
+    #[fail(display = "circuit proof generation error")]
+    CircuitProofGenerationError,
     #[fail(display = "Out of bounds access {} > {}", _0, _1)]
     OutOfBounds(usize, usize),
     #[fail(
