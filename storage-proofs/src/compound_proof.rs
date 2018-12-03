@@ -1,10 +1,8 @@
-use std::sync::Arc;
-
-use crossbeam_utils::thread as crossbeam_thread;
+use rayon::prelude::*;
 
 use bellman::{groth16, Circuit};
 use circuit::multi_proof::MultiProof;
-use error::{self, Result};
+use error::Result;
 use parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use partitions;
 use proof::ProofScheme;
@@ -79,8 +77,6 @@ where
         E::Params: Sync,
     {
         let partitions = Self::partition_count(pub_params);
-        let mut groth_proofs = Vec::with_capacity(partitions);
-
         let partition_count = Self::partition_count(pub_params);
 
         let vanilla_proofs =
@@ -109,35 +105,20 @@ where
             Some(gp) => gp,
         };
 
-        let shared_groth_params = Arc::new(actual_groth_params);
-        let shared_jj_params = Arc::new(pub_params.engine_params);
+        let groth_proofs: Result<Vec<_>> = vanilla_proofs
+            .par_iter()
+            .map(|vanilla_proof| {
+                Self::circuit_proof(
+                    pub_in,
+                    &vanilla_proof,
+                    &pub_params.vanilla_params,
+                    &pub_params.engine_params,
+                    &actual_groth_params,
+                )
+            })
+            .collect();
 
-        let outcome = crossbeam_thread::scope(|scope| {
-            let mut threads = Vec::new();
-            for vanilla_proof in vanilla_proofs {
-                let gp = shared_groth_params.clone();
-                let jj_params = shared_jj_params.clone();
-                threads.push(scope.spawn(move |_| {
-                    Self::circuit_proof(
-                        pub_in,
-                        &vanilla_proof,
-                        &pub_params.vanilla_params,
-                        &jj_params,
-                        &gp,
-                    )
-                    .expect("could not generate circuit proof")
-                }));
-            }
-
-            for thread in threads {
-                let groth_proof = thread.join().expect("failed to create groth proof");
-                groth_proofs.push(groth_proof);
-            }
-        });
-
-        outcome
-            .map(|_| MultiProof::new(groth_proofs, (*shared_groth_params).clone()))
-            .map_err(|_| error::Error::CircuitProofGenerationError)
+        Ok(MultiProof::new(groth_proofs?, actual_groth_params.clone()))
     }
 
     // verify is equivalent to ProofScheme::verify.
