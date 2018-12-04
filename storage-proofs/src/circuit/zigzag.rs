@@ -249,7 +249,6 @@ impl<'a, H: 'static + Hasher>
             );
         }
         inputs.push(pub_in.comm_r_star.into());
-        info!(target: "stats", "num_generated_inputs: {}", inputs.len());
         inputs
     }
 
