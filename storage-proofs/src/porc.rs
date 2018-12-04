@@ -33,7 +33,7 @@ pub struct PublicParams {
 impl ParameterSetIdentifier for PublicParams {
     fn parameter_set_identifier(&self) -> String {
         format!(
-            "online_drgporep::PublicParams{{lambda: {}; leaves: {} sectors_count: {}}}",
+            "porc::PublicParams{{lambda: {}; leaves: {} sectors_count: {}}}",
             self.lambda, self.leaves, self.sectors_count,
         )
     }
@@ -63,11 +63,11 @@ impl<H: Hasher> Proof<H> {
 }
 
 #[derive(Debug, Clone)]
-pub struct OnlinePoRep<H: Hasher> {
+pub struct PoRC<H: Hasher> {
     _h: PhantomData<H>,
 }
 
-impl<'a, H: 'a + Hasher> ProofScheme<'a> for OnlinePoRep<H> {
+impl<'a, H: 'a + Hasher> ProofScheme<'a> for PoRC<H> {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<'a, H::Domain>;
@@ -166,7 +166,7 @@ mod tests {
     use hasher::{Blake2sHasher, HashFunction, PedersenHasher, Sha256Hasher};
     use merkle::make_proof_for_test;
 
-    fn test_online_porep<H: Hasher>() {
+    fn test_porc<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let pub_params = PublicParams {
@@ -192,24 +192,24 @@ mod tests {
             replicas: &[&data],
         };
 
-        let proof = OnlinePoRep::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+        let proof = PoRC::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
 
-        assert!(OnlinePoRep::<H>::verify(&pub_params, &pub_inputs, &proof).unwrap());
+        assert!(PoRC::<H>::verify(&pub_params, &pub_inputs, &proof).unwrap());
     }
 
     #[test]
-    fn online_porep_pedersen() {
-        test_online_porep::<PedersenHasher>();
+    fn porc_pedersen() {
+        test_porc::<PedersenHasher>();
     }
 
     #[test]
-    fn online_porep_sha256() {
-        test_online_porep::<Sha256Hasher>();
+    fn porc_sha256() {
+        test_porc::<Sha256Hasher>();
     }
 
     #[test]
-    fn online_porep_blake2s() {
-        test_online_porep::<Blake2sHasher>();
+    fn porc_blake2s() {
+        test_porc::<Blake2sHasher>();
     }
 
     // Construct a proof that satisfies a cursory validation:
@@ -231,7 +231,7 @@ mod tests {
         )
     }
 
-    fn test_online_porep_validates<H: Hasher>() {
+    fn test_porc_validates<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let pub_params = PublicParams {
@@ -257,28 +257,28 @@ mod tests {
             make_bogus_proof::<H>(&pub_inputs, rng),
         ]);
 
-        let verified = OnlinePoRep::verify(&pub_params, &pub_inputs, &bad_proof).unwrap();
+        let verified = PoRC::verify(&pub_params, &pub_inputs, &bad_proof).unwrap();
 
         // A bad proof should not be verified!
         assert!(!verified);
     }
 
     #[test]
-    fn online_porep_actually_validates_sha256() {
-        test_online_porep_validates::<Sha256Hasher>();
+    fn porc_actually_validates_sha256() {
+        test_porc_validates::<Sha256Hasher>();
     }
 
     #[test]
-    fn online_porep_actually_validates_blake2s() {
-        test_online_porep_validates::<Blake2sHasher>();
+    fn porc_actually_validates_blake2s() {
+        test_porc_validates::<Blake2sHasher>();
     }
 
     #[test]
-    fn online_porep_actually_validates_pedersen() {
-        test_online_porep_validates::<PedersenHasher>();
+    fn porc_actually_validates_pedersen() {
+        test_porc_validates::<PedersenHasher>();
     }
 
-    fn test_online_porep_validates_challenge_identity<H: Hasher>() {
+    fn test_porc_validates_challenge_identity<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let pub_params = PublicParams {
@@ -304,33 +304,32 @@ mod tests {
             replicas: &[&data],
         };
 
-        let proof = OnlinePoRep::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+        let proof = PoRC::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
 
         let different_pub_inputs = PublicInputs {
             challenges: &vec![rng.gen(), rng.gen()],
             commitments: &[tree.root()],
         };
 
-        let verified =
-            OnlinePoRep::<H>::verify(&pub_params, &different_pub_inputs, &proof).unwrap();
+        let verified = PoRC::<H>::verify(&pub_params, &different_pub_inputs, &proof).unwrap();
 
         // A proof created with a the wrong challenge not be verified!
         assert!(!verified);
     }
 
     #[test]
-    fn online_porep_actually_validates_challenge_identity_sha256() {
-        test_online_porep_validates_challenge_identity::<Sha256Hasher>();
+    fn porc_actually_validates_challenge_identity_sha256() {
+        test_porc_validates_challenge_identity::<Sha256Hasher>();
     }
 
     #[test]
-    fn online_porep_actually_validates_challenge_identity_blake2s() {
-        test_online_porep_validates_challenge_identity::<Blake2sHasher>();
+    fn porc_actually_validates_challenge_identity_blake2s() {
+        test_porc_validates_challenge_identity::<Blake2sHasher>();
     }
 
     #[test]
-    fn online_porep_actually_validates_challenge_identity_pedersen() {
-        test_online_porep_validates_challenge_identity::<PedersenHasher>();
+    fn porc_actually_validates_challenge_identity_pedersen() {
+        test_porc_validates_challenge_identity::<PedersenHasher>();
     }
 
     #[test]

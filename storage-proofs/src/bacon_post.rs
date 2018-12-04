@@ -25,7 +25,7 @@ pub struct PublicParams<T: Domain, V: Vdf<T>> {
 #[derive(Clone, Debug)]
 pub struct PublicInputs<T: Domain> {
     /// The root hashes of the merkle trees of the sealed sectors.
-    pub comm_rs: Vec<T>,
+    pub commitments: Vec<T>,
 }
 
 #[derive(Clone, Debug)]
@@ -112,19 +112,11 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> BaconPost<H, V> {
             let r = self.beacon.get::<H::Domain>(0);
 
             // Generate challenges
-            let challenges: Vec<H::Domain> = (0..challenge_count)
-                .map(|i| {
-                    let mut i_bytes = [0u8; 32];
-                    LittleEndian::write_u32(&mut i_bytes[0..4], 0u32);
-                    LittleEndian::write_u32(&mut i_bytes[4..8], i as u32);
-
-                    H::Function::hash(&[r.as_ref(), &i_bytes].concat())
-                })
-                .collect();
+            let challenges = derive_challenges::<H>(challenge_count, 0, &[], r.as_ref());
 
             // TODO: avoid cloining
             let pub_inputs_hvh_post = hvh_post::PublicInputs {
-                comm_rs: pub_inputs.comm_rs.clone(),
+                commitments: pub_inputs.commitments.clone(),
                 challenges,
             };
 
@@ -145,21 +137,13 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> BaconPost<H, V> {
             let x = extract_post_input::<H, V>(&proofs_hvh_post[t - 1]);
 
             // Generate challenges
-            let challenges: Vec<H::Domain> = (0..challenge_count)
-                .map(|i| {
-                    let mut i_bytes = [0u8; 32];
-                    LittleEndian::write_u32(&mut i_bytes[0..4], t as u32);
-                    LittleEndian::write_u32(&mut i_bytes[4..8], i as u32);
-
-                    H::Function::hash(&[x.as_ref(), r.as_ref(), &i_bytes].concat())
-                })
-                .collect();
+            let challenges = derive_challenges::<H>(challenge_count, t, x.as_ref(), r.as_ref());
 
             // Generate proof
             // TODO: avoid cloining
             let pub_inputs_hvh_post = hvh_post::PublicInputs {
                 challenges: challenges,
-                comm_rs: pub_inputs.comm_rs.clone(),
+                commitments: pub_inputs.commitments.clone(),
             };
 
             let priv_inputs_hvh_post =
@@ -190,20 +174,12 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> BaconPost<H, V> {
         {
             let r = self.beacon.get::<H::Domain>(0);
             // Generate challenges
-            let challenges: Vec<H::Domain> = (0..challenge_count)
-                .map(|i| {
-                    let mut i_bytes = [0u8; 32];
-                    LittleEndian::write_u32(&mut i_bytes[0..4], 0u32);
-                    LittleEndian::write_u32(&mut i_bytes[4..8], i as u32);
-
-                    H::Function::hash(&[r.as_ref(), &i_bytes].concat())
-                })
-                .collect();
+            let challenges = derive_challenges::<H>(challenge_count, 0, &[], r.as_ref());
 
             // TODO: avoid cloining
             let pub_inputs_hvh_post = hvh_post::PublicInputs {
                 challenges,
-                comm_rs: pub_inputs.comm_rs.clone(),
+                commitments: pub_inputs.commitments.clone(),
             };
 
             if !hvh_post::HvhPost::verify(
@@ -221,20 +197,12 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> BaconPost<H, V> {
             let r = self.beacon.get::<H::Domain>(t);
             let x = extract_post_input::<H, V>(&proof.0[t - 1]);
 
-            let challenges: Vec<H::Domain> = (0..challenge_count)
-                .map(|i| {
-                    let mut i_bytes = [0u8; 32];
-                    LittleEndian::write_u32(&mut i_bytes[0..4], t as u32);
-                    LittleEndian::write_u32(&mut i_bytes[4..8], i as u32);
-
-                    H::Function::hash(&[x.as_ref(), r.as_ref(), &i_bytes].concat())
-                })
-                .collect();
+            let challenges = derive_challenges::<H>(challenge_count, t, x.as_ref(), r.as_ref());
 
             // TODO: avoid cloining
             let pub_inputs_hvh_post = hvh_post::PublicInputs {
                 challenges: challenges,
-                comm_rs: pub_inputs.comm_rs.clone(),
+                commitments: pub_inputs.commitments.clone(),
             };
 
             if !hvh_post::HvhPost::verify(
@@ -265,6 +233,18 @@ fn extract_post_input<H: Hasher, V: Vdf<H::Domain>>(proof: &hvh_post::Proof<H, V
     H::Function::hash(&leafs)
 }
 
+fn derive_challenges<H: Hasher>(count: usize, t: usize, x: &[u8], r: &[u8]) -> Vec<H::Domain> {
+    (0..count)
+        .map(|i| {
+            let mut i_bytes = [0u8; 32];
+            LittleEndian::write_u32(&mut i_bytes[0..4], t as u32);
+            LittleEndian::write_u32(&mut i_bytes[4..8], i as u32);
+
+            H::Function::hash(&[x, r, &i_bytes].concat())
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -286,7 +266,7 @@ mod tests {
             setup_params_hvh_post: hvh_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
                 challenge_count: 10,
                 sector_size: 1024 * lambda,
-                post_iterations: 3,
+                post_epochs: 3,
                 setup_params_vdf: vdf_sloth::SetupParams {
                     key: rng.gen(),
                     rounds: 1,
@@ -314,7 +294,7 @@ mod tests {
         let tree1 = graph1.merkle_tree(data1.as_slice(), lambda).unwrap();
 
         let pub_inputs = PublicInputs {
-            comm_rs: vec![tree0.root(), tree1.root()],
+            commitments: vec![tree0.root(), tree1.root()],
         };
 
         let priv_inputs = PrivateInputs {
