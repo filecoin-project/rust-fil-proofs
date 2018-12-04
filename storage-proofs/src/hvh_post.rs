@@ -266,7 +266,7 @@ fn derive_challenges<H: Hasher>(count: usize, r: &[u8]) -> Vec<H::Domain> {
             let mut j_bytes = [0u8; 32];
             LittleEndian::write_u32(&mut j_bytes[0..4], j as u32);
 
-            H::Function::hash(&[r.as_ref(), &j_bytes].concat())
+            H::Function::hash(&[r, &j_bytes].concat())
         })
         .collect()
 }

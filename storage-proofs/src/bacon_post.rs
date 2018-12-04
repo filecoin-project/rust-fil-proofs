@@ -142,7 +142,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> BaconPost<H, V> {
             // Generate proof
             // TODO: avoid cloining
             let pub_inputs_hvh_post = hvh_post::PublicInputs {
-                challenges: challenges,
+                challenges,
                 commitments: pub_inputs.commitments.clone(),
             };
 
@@ -201,7 +201,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> BaconPost<H, V> {
 
             // TODO: avoid cloining
             let pub_inputs_hvh_post = hvh_post::PublicInputs {
-                challenges: challenges,
+                challenges,
                 commitments: pub_inputs.commitments.clone(),
             };
 
