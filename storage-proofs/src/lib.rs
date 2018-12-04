@@ -56,6 +56,7 @@ pub mod test_helper;
 
 pub mod example_helper;
 
+pub mod bacon_post;
 pub mod batchpost;
 pub mod challenge_derivation;
 pub mod circuit;
@@ -67,14 +68,18 @@ pub mod error;
 pub mod file_inclusion_proof;
 pub mod fr32;
 pub mod hasher;
+pub mod hvh_post;
 pub mod layered_drgporep;
 pub mod merkle;
 pub mod merklepor;
 pub mod parameter_cache;
 pub mod partitions;
+pub mod porc;
 pub mod porep;
 pub mod proof;
 pub mod util;
+pub mod vdf;
+pub mod vdf_sloth;
 pub mod zigzag_drgporep;
 pub mod zigzag_graph;
 

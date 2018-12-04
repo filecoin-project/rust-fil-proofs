@@ -1,22 +1,19 @@
 use api::internal;
-use api::sector_builder::errors::err_piecenotfound;
 use api::sector_builder::errors::err_unrecov;
 use api::sector_builder::metadata::sector_id_as_bytes;
 use api::sector_builder::metadata::SealedSectorMetadata;
-use api::sector_builder::state::SealedState;
 use api::sector_builder::WrappedSectorStore;
 use error;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::MutexGuard;
 
 // Unseals and returns the piece-bytes for the first sector found containing
 // a piece with matching key.
-pub fn read_piece_from_sealed_sector<S: Into<String>>(
+pub fn retrieve_piece<'a>(
     sector_store: &Arc<WrappedSectorStore>,
-    sealed_state: &MutexGuard<SealedState>,
-    prover_id: [u8; 31],
-    piece_key: S,
+    sealed_sector: &SealedSectorMetadata,
+    prover_id: &[u8; 31],
+    piece_key: &'a str,
 ) -> error::Result<Vec<u8>> {
     let staging_sector_access = sector_store
         .inner
@@ -24,20 +21,19 @@ pub fn read_piece_from_sealed_sector<S: Into<String>>(
         .new_staging_sector_access()
         .map_err(failure::Error::from)?;
 
-    let result = read_piece_from_sealed_sector_aux(
+    let result = retrieve_piece_aux(
         sector_store,
-        sealed_state,
+        sealed_sector,
         prover_id,
-        &piece_key.into(),
+        piece_key,
         &staging_sector_access,
     );
 
-    // TODO: SectorStore needs an operation to delete a sector access.
-    if let Ok((num_bytes_unsealed, _)) = result {
+    if result.is_ok() {
         sector_store
             .inner
             .manager()
-            .truncate_unsealed(staging_sector_access, num_bytes_unsealed)?;
+            .delete_staging_sector_access(staging_sector_access)?;
     }
 
     let (_, bytes) = result?;
@@ -45,27 +41,14 @@ pub fn read_piece_from_sealed_sector<S: Into<String>>(
     Ok(bytes)
 }
 
-fn read_piece_from_sealed_sector_aux<'a>(
+fn retrieve_piece_aux<'a>(
     sector_store: &Arc<WrappedSectorStore>,
-    sealed_state: &MutexGuard<SealedState>,
-    prover_id: [u8; 31],
+    sealed_sector: &SealedSectorMetadata,
+    prover_id: &[u8; 31],
     piece_key: &'a str,
     staging_sector_access: &'a str,
 ) -> error::Result<(u64, Vec<u8>)> {
-    let opt_sealed_sector = sealed_state.sectors.values().find(|sector| {
-        sector
-            .pieces
-            .iter()
-            .any(|piece| piece.piece_key == piece_key)
-    });
-
-    if opt_sealed_sector.is_none() {
-        return Err(err_piecenotfound(piece_key.to_string()).into());
-    }
-
-    let sealed_sector = opt_sealed_sector.unwrap();
-
-    let (start_offset, num_bytes) = piece_pos(sealed_sector, piece_key).ok_or_else(|| {
+    let (start_offset, num_bytes) = piece_pos(&sealed_sector, piece_key).ok_or_else(|| {
         let msg = format!(
             "piece {} not found in sector {}",
             piece_key, &sealed_sector.sector_id
@@ -77,7 +60,7 @@ fn read_piece_from_sealed_sector_aux<'a>(
         &(*sector_store.inner),
         &PathBuf::from(sealed_sector.sector_access.clone()),
         &PathBuf::from(staging_sector_access),
-        prover_id,
+        *prover_id,
         sector_id_as_bytes(sealed_sector.sector_id)?,
         start_offset,
         num_bytes,

@@ -6,15 +6,13 @@ use api::sector_builder::*;
 use error;
 use sector_base::api::sector_store::SectorManager;
 use std::sync::Arc;
-use std::sync::MutexGuard;
 
-pub fn add_piece<S: Into<String>>(
+pub fn add_piece(
     sector_store: &Arc<WrappedSectorStore>,
-    mut staged_state: &mut MutexGuard<StagedState>,
-    piece_key: S,
+    mut staged_state: &mut StagedState,
+    piece_key: String,
     piece_bytes: &[u8],
 ) -> error::Result<SectorId> {
-    let sector_store = sector_store.clone();
     let sector_mgr = sector_store.inner.manager();
     let sector_max = sector_store.inner.config().max_unsealed_bytes_per_sector();
 
@@ -24,7 +22,7 @@ pub fn add_piece<S: Into<String>>(
         let candidates: Vec<StagedSectorMetadata> = staged_state
             .sectors
             .iter()
-            .filter(|(k, _)| staged_state.sectors_accepting_data.contains(k))
+            .filter(|(_, v)| v.accepting_data)
             .map(|(_, v)| (*v).clone())
             .collect();
 
@@ -50,7 +48,7 @@ pub fn add_piece<S: Into<String>>(
             })
             .map(|sector_id| {
                 s.pieces.push(metadata::PieceMetadata {
-                    piece_key: piece_key.into(),
+                    piece_key,
                     num_bytes: piece_bytes_len,
                 });
 
@@ -67,7 +65,7 @@ fn compute_destination_sector_id(
     candidate_sectors: &[StagedSectorMetadata],
     max_bytes_per_sector: u64,
     num_bytes_in_piece: u64,
-) -> error::Result<Option<u64>> {
+) -> error::Result<Option<SectorId>> {
     if num_bytes_in_piece > max_bytes_per_sector {
         Err(err_overflow(num_bytes_in_piece, max_bytes_per_sector).into())
     } else {
@@ -85,10 +83,10 @@ fn compute_destination_sector_id(
 // nonce, and mutates the StagedState.
 fn provision_new_staged_sector(
     sector_manager: &SectorManager,
-    locked_state: &mut MutexGuard<StagedState>,
+    staged_state: &mut StagedState,
 ) -> error::Result<SectorId> {
     let sector_id = {
-        let mut n = &mut locked_state.sector_id_nonce;
+        let mut n = &mut staged_state.sector_id_nonce;
         *n += 1;
         *n
     };
@@ -100,10 +98,10 @@ fn provision_new_staged_sector(
         sealing_error: None,
         sector_access: access.clone(),
         sector_id,
+        accepting_data: true,
     };
 
-    locked_state.sectors_accepting_data.insert(meta.sector_id);
-    locked_state.sectors.insert(meta.sector_id, meta.clone());
+    staged_state.sectors.insert(meta.sector_id, meta.clone());
 
     Ok(sector_id)
 }

@@ -4,7 +4,8 @@ use sapling_crypto::circuit::{boolean, multipack, num, pedersen_hash};
 use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 
 use circuit::constraint;
-use compound_proof::CompoundProof;
+use circuit::variables::Root;
+use compound_proof::{CircuitComponent, CompoundProof};
 use drgraph::graph_height;
 use merklepor::MerklePoR;
 use parameter_cache::{CacheableParameters, ParameterSetIdentifier};
@@ -26,8 +27,12 @@ pub struct PoRCircuit<'a, E: JubjubEngine> {
     params: &'a E::Params,
     value: Option<E::Fr>,
     auth_path: Vec<Option<(E::Fr, bool)>>,
-    root: Option<E::Fr>,
+    root: Root<E>,
     private: bool,
+}
+
+impl<'a, E: JubjubEngine> CircuitComponent for PoRCircuit<'a, E> {
+    type ComponentPrivateInputs = Option<Root<E>>;
 }
 
 pub struct PoRCompound<H: Hasher> {
@@ -60,13 +65,14 @@ where
 {
     fn circuit<'b>(
         public_inputs: &<MerklePoR<H> as ProofScheme<'a>>::PublicInputs,
+        _component_private_inputs: <PoRCircuit<'a, Bls12> as CircuitComponent>::ComponentPrivateInputs,
         proof: &'b <MerklePoR<H> as ProofScheme<'a>>::Proof,
         public_params: &'b <MerklePoR<H> as ProofScheme<'a>>::PublicParams,
         engine_params: &'a JubjubBls12,
     ) -> PoRCircuit<'a, Bls12> {
         let (root, private) = match (*public_inputs).commitment {
-            None => (Some(proof.proof.root.into()), true),
-            Some(commitment) => (Some(commitment.into()), false),
+            None => (Root::Val(Some(proof.proof.root.into())), true),
+            Some(commitment) => (Root::Val(Some(commitment.into())), false),
         };
 
         // Ensure inputs are consistent with public params.
@@ -186,13 +192,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoRCircuit<'a, E> {
             {
                 // Validate that the root of the merkle tree that we calculated is the same as the input.
 
-                let real_root_value = root;
-
-                // Allocate the "real" root that will be exposed.
-                let rt = num::AllocatedNum::alloc(cs.namespace(|| "root value"), || {
-                    real_root_value.ok_or(SynthesisError::AssignmentMissing)
-                })?;
-
+                let rt = Root::allocated(&root, cs.namespace(|| "root value"))?;
                 constraint::equal(cs, || "enforce root is correct", &cur, &rt);
 
                 if !self.private {
@@ -212,7 +212,7 @@ impl<'a, E: JubjubEngine> PoRCircuit<'a, E> {
         params: &E::Params,
         value: Option<E::Fr>,
         auth_path: Vec<Option<(E::Fr, bool)>>,
-        root: Option<E::Fr>,
+        root: Root<E>,
         private: bool,
     ) -> Result<(), SynthesisError>
     where
@@ -382,7 +382,7 @@ mod tests {
                 params,
                 value: Some(proof.data.into()),
                 auth_path: proof.proof.as_options(),
-                root: Some(pub_inputs.commitment.unwrap().into()),
+                root: Root::Val(Some(pub_inputs.commitment.unwrap().into())),
                 private: false,
             };
 
@@ -558,7 +558,7 @@ mod tests {
                 params,
                 value: Some(proof.data.into()),
                 auth_path: proof.proof.as_options(),
-                root: Some(tree.root().into()),
+                root: Root::Val(Some(tree.root().into())),
                 private: true,
             };
 

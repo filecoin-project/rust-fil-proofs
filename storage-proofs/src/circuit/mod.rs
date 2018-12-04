@@ -8,6 +8,7 @@ pub mod multi_proof;
 pub mod pedersen;
 pub mod ppor;
 pub mod sloth;
+pub mod variables;
 pub mod xor;
 pub mod zigzag;
 

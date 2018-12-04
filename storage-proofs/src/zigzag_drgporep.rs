@@ -116,7 +116,7 @@ mod tests {
             pp.drg_porep_public_params = zigzag(&pp.drg_porep_public_params);
         }
 
-        ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice()).unwrap();
+        ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None).unwrap();
 
         let transformed_params = PublicParams {
             drg_porep_public_params: pp.drg_porep_public_params,
@@ -175,7 +175,8 @@ mod tests {
 
         let pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
         let (tau, aux) =
-            ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice()).unwrap();
+            ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None)
+                .unwrap();
         assert_ne!(data, data_copy);
 
         let pub_inputs = PublicInputs::<H::Domain> {

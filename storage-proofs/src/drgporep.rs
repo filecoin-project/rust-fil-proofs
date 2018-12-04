@@ -5,12 +5,11 @@ use byteorder::{LittleEndian, WriteBytesExt};
 use drgraph::Graph;
 use error::Result;
 use hasher::{Domain, Hasher};
-use merkle::MerkleProof;
+use merkle::{MerkleProof, MerkleTree};
 use parameter_cache::ParameterSetIdentifier;
 use porep::{self, PoRep};
 use proof::ProofScheme;
-use util::data_at_node;
-use vde::{self, decode_block};
+use vde::{self, decode_block, decode_domain_block};
 
 #[derive(Debug, Clone)]
 pub struct PublicInputs<T: Domain> {
@@ -21,7 +20,6 @@ pub struct PublicInputs<T: Domain> {
 
 #[derive(Debug)]
 pub struct PrivateInputs<'a, H: 'a + Hasher> {
-    pub replica: &'a [u8],
     pub aux: &'a porep::ProverAux<H>,
 }
 
@@ -130,6 +128,8 @@ pub type ReplicaParents<H> = Vec<(usize, DataProof<H>)>;
 
 #[derive(Default, Debug, Clone)]
 pub struct Proof<H: Hasher> {
+    pub data_root: H::Domain,
+    pub replica_root: H::Domain,
     pub replica_nodes: Vec<DataProof<H>>,
     pub replica_parents: Vec<ReplicaParents<H>>,
     pub nodes: Vec<DataProof<H>>,
@@ -140,6 +140,8 @@ impl<H: Hasher> Proof<H> {
     // vectors of that length?
     pub fn new_empty(height: usize, degree: usize) -> Proof<H> {
         Proof {
+            data_root: Default::default(),
+            replica_root: Default::default(),
             replica_nodes: vec![DataProof::new(height)],
             replica_parents: vec![vec![(0, DataProof::new(height)); degree]],
             nodes: vec![DataProof::new(height)],
@@ -175,6 +177,8 @@ impl<H: Hasher> Proof<H> {
         nodes: Vec<DataProof<H>>,
     ) -> Proof<H> {
         Proof {
+            data_root: *nodes[0].proof.root(),
+            replica_root: *replica_nodes[0].proof.root(),
             replica_nodes,
             replica_parents,
             nodes,
@@ -185,6 +189,8 @@ impl<H: Hasher> Proof<H> {
 impl<'a, H: Hasher> From<&'a Proof<H>> for Proof<H> {
     fn from(p: &Proof<H>) -> Proof<H> {
         Proof {
+            data_root: *p.nodes[0].proof.root(),
+            replica_root: *p.replica_nodes[0].proof.root(),
             replica_nodes: p.replica_nodes.clone(),
             replica_parents: p.replica_parents.clone(),
             nodes: p.nodes.clone(),
@@ -241,10 +247,9 @@ where
 
             let tree_d = &priv_inputs.aux.tree_d;
             let tree_r = &priv_inputs.aux.tree_r;
-            let replica = priv_inputs.replica;
+            let domain_replica = tree_r.as_slice();
 
-            let data =
-                H::Domain::try_from_bytes(data_at_node(replica, challenge, pub_params.lambda)?)?;
+            let data = domain_replica[challenge];
 
             replica_nodes.push(DataProof {
                 proof: MerkleProof::new_from_proof(&tree_r.gen_proof(challenge)),
@@ -259,11 +264,7 @@ where
                     let proof = tree_r.gen_proof(p);
                     DataProof {
                         proof: MerkleProof::new_from_proof(&proof),
-                        data: H::Domain::try_from_bytes(data_at_node(
-                            replica,
-                            p,
-                            pub_params.lambda,
-                        )?)?,
+                        data: domain_replica[p],
                     }
                 }));
             }
@@ -281,12 +282,12 @@ where
                 //     challenge,
                 // )?;
 
-                let extracted = decode_block(
+                let extracted = decode_domain_block(
                     &pub_params.graph,
                     pub_params.lambda,
                     pub_params.sloth_iter,
                     &pub_inputs.replica_id,
-                    &replica,
+                    domain_replica,
                     challenge,
                 )?
                 .into_bytes();
@@ -386,7 +387,7 @@ where
     }
 }
 
-impl<'a, H, G> PoRep<'a, H::Domain> for DrgPoRep<'a, H, G>
+impl<'a, H, G> PoRep<'a, H> for DrgPoRep<'a, H, G>
 where
     H: 'a + Hasher,
     G: 'a + Graph<H> + ParameterSetIdentifier,
@@ -398,8 +399,13 @@ where
         pp: &Self::PublicParams,
         replica_id: &H::Domain,
         data: &mut [u8],
+        data_tree: Option<MerkleTree<H::Domain, H::Function>>,
     ) -> Result<(porep::Tau<H::Domain>, porep::ProverAux<H>)> {
-        let tree_d = pp.graph.merkle_tree(data, pp.lambda)?;
+        let tree_d = match data_tree {
+            Some(tree) => tree,
+            None => pp.graph.merkle_tree(data, pp.lambda)?,
+        };
+
         let comm_d = tree_d.root();
 
         vde::encode(&pp.graph, pp.lambda, pp.sloth_iter, replica_id, data)?;
@@ -446,6 +452,7 @@ mod tests {
     use drgraph::{new_seed, BucketGraph};
     use fr32::fr_into_bytes;
     use hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use util::data_at_node;
 
     pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
         let mut tmpfile: File = tempfile::tempfile().unwrap();
@@ -477,7 +484,7 @@ mod tests {
 
         let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).unwrap();
 
-        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy).unwrap();
+        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None).unwrap();
 
         let mut copied = vec![0; data.len()];
         copied.copy_from_slice(&mmapped_data_copy);
@@ -528,7 +535,7 @@ mod tests {
 
         let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).unwrap();
 
-        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy).unwrap();
+        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None).unwrap();
 
         let mut copied = vec![0; data.len()];
         copied.copy_from_slice(&mmapped_data_copy);
@@ -603,7 +610,8 @@ mod tests {
             let pp = DrgPoRep::<H, BucketGraph<_>>::setup(&sp).unwrap();
 
             let (tau, aux) =
-                DrgPoRep::<H, _>::replicate(&pp, &replica_id, &mut mmapped_data_copy).unwrap();
+                DrgPoRep::<H, _>::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
+                    .unwrap();
 
             let mut copied = vec![0; data.len()];
             copied.copy_from_slice(&mmapped_data_copy);
@@ -616,10 +624,7 @@ mod tests {
                 tau: Some(tau.clone().into()),
             };
 
-            let priv_inputs = PrivateInputs::<H> {
-                replica: &mmapped_data_copy,
-                aux: &aux,
-            };
+            let priv_inputs = PrivateInputs::<H> { aux: &aux };
 
             let real_proof = DrgPoRep::<H, _>::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
 

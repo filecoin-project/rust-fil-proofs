@@ -409,7 +409,7 @@ pub unsafe extern "C" fn add_piece(
 
     let mut response: responses::AddPieceResponse = Default::default();
 
-    match (*ptr).add_piece(piece_key, piece_bytes) {
+    match (*ptr).add_piece(String::from(piece_key), piece_bytes) {
         Ok(sector_id) => {
             response.status_code = FCPResponseStatus::FCPNoError;
             response.sector_id = sector_id;
@@ -435,7 +435,7 @@ pub unsafe extern "C" fn read_piece_from_sealed_sector(
 
     let piece_key = c_str_to_rust_str(piece_key);
 
-    match (*ptr).read_piece_from_sealed_sector(piece_key) {
+    match (*ptr).read_piece_from_sealed_sector(String::from(piece_key)) {
         Ok(piece_bytes) => {
             response.status_code = FCPResponseStatus::FCPNoError;
             response.data_ptr = piece_bytes.as_ptr();

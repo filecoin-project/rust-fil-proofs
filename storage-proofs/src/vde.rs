@@ -63,7 +63,7 @@ where
     // TODO: parallelize
     (0..graph.size()).fold(Ok(Vec::with_capacity(data.len())), |acc, i| {
         acc.and_then(|mut acc| {
-            acc.extend(&decode_block(graph, lambda, sloth_iter, replica_id, data, i)?.into_bytes());
+            acc.extend(decode_block(graph, lambda, sloth_iter, replica_id, data, i)?.into_bytes());
             Ok(acc)
         })
     })
@@ -82,9 +82,34 @@ where
     G: Graph<H>,
 {
     let parents = graph.parents(v);
-
-    let key = create_key::<H>(replica_id, v, &parents, data, lambda, graph.degree())?;
+    let key = create_key::<H>(replica_id, v, &parents, &data, lambda, graph.degree())?;
     let node_data = H::Domain::try_from_bytes(&data_at_node(data, v, lambda)?)?;
+
+    // TODO: round constant
+    Ok(H::sloth_decode(&key, &node_data, sloth_iter))
+}
+
+pub fn decode_domain_block<'a, H, G>(
+    graph: &'a G,
+    lambda: usize,
+    sloth_iter: usize,
+    replica_id: &'a H::Domain,
+    data: &'a [H::Domain],
+    v: usize,
+) -> Result<H::Domain>
+where
+    H: Hasher,
+    G: Graph<H>,
+{
+    let parents = graph.parents(v);
+
+    let byte_data = data
+        .iter()
+        .flat_map(H::Domain::into_bytes)
+        .collect::<Vec<u8>>();
+
+    let key = create_key::<H>(replica_id, v, &parents, &byte_data, lambda, graph.degree())?;
+    let node_data = data[v];
 
     // TODO: round constant
     Ok(H::sloth_decode(&key, &node_data, sloth_iter))

@@ -7,7 +7,7 @@ use io::fr32::{
 };
 use libc;
 use std::env;
-use std::fs::{create_dir_all, File, OpenOptions};
+use std::fs::{create_dir_all, remove_file, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
@@ -178,6 +178,10 @@ impl SectorManager for DiskManager {
             })
     }
 
+    fn delete_staging_sector_access(&self, access: String) -> Result<(), SectorManagerErr> {
+        remove_file(access).map_err(|err| SectorManagerErr::CallerError(format!("{:?}", err)))
+    }
+
     fn read_raw(
         &self,
         access: String,
@@ -329,6 +333,41 @@ impl SectorConfig for FakeConfig {
 
     fn dummy_parameter_cache_name(&self) -> String {
         String::from("FAKE_DUMMY_API_PARAMETERS_{}")
+    }
+}
+
+#[cfg(test)]
+mod non_ffi_tests {
+    use std::fs::{create_dir_all, File};
+    use std::io::Read;
+    use tempfile;
+
+    use super::*;
+
+    fn create_storage() -> ConcreteSectorStore {
+        let staging_path = tempfile::tempdir().unwrap().path().to_owned();
+        let sealed_path = tempfile::tempdir().unwrap().path().to_owned();
+
+        new_sector_store(
+            &SBConfiguredStore::ProofTest,
+            String::from(sealed_path.to_str().unwrap()),
+            String::from(staging_path.to_str().unwrap()),
+        )
+    }
+
+    #[test]
+    fn deletes_staging_access() {
+        let store = create_storage();
+        let access = store.manager().new_staging_sector_access().unwrap();
+
+        assert!(store.manager().read_raw(access.clone(), 0, 0).is_ok());
+        assert!(
+            store
+                .manager()
+                .delete_staging_sector_access(access.clone())
+                .is_ok()
+        );
+        assert!(store.manager().read_raw(access.clone(), 0, 0).is_err());
     }
 }
 
