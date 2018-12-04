@@ -4,7 +4,7 @@ use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 
 use drgraph::graph_height;
-use error::*;
+use error::{Error, Result};
 use hasher::{Domain, Hasher};
 use merkle::{MerkleProof, MerkleTree};
 use parameter_cache::ParameterSetIdentifier;
@@ -16,6 +16,8 @@ pub struct SetupParams {
     pub lambda: usize,
     /// How many leaves the underlying merkle tree has.
     pub leaves: usize,
+    /// The number of sectors that are proven over.
+    pub sectors_count: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -24,13 +26,15 @@ pub struct PublicParams {
     pub lambda: usize,
     /// How many leaves the underlying merkle tree has.
     pub leaves: usize,
+    /// The number of sectors that are proven over.
+    pub sectors_count: usize,
 }
 
 impl ParameterSetIdentifier for PublicParams {
     fn parameter_set_identifier(&self) -> String {
         format!(
-            "online_drgporep::PublicParams{{lambda: {}; leaves: {}}}",
-            self.lambda, self.leaves,
+            "porc::PublicParams{{lambda: {}; leaves: {} sectors_count: {}}}",
+            self.lambda, self.leaves, self.sectors_count,
         )
     }
 }
@@ -40,13 +44,13 @@ pub struct PublicInputs<'a, T: 'a + Domain> {
     /// The challenge, which leafs to prove.
     pub challenges: &'a [T],
     /// The root hash of the underlying merkle tree.
-    pub commitment: T,
+    pub commitments: &'a [T],
 }
 
 #[derive(Debug, Clone)]
 pub struct PrivateInputs<'a, H: 'a + Hasher> {
-    pub replica: &'a [u8],
-    pub tree: &'a MerkleTree<H::Domain, H::Function>,
+    pub replicas: &'a [&'a [u8]],
+    pub trees: &'a [&'a MerkleTree<H::Domain, H::Function>],
 }
 
 #[derive(Debug, Clone)]
@@ -59,11 +63,11 @@ impl<H: Hasher> Proof<H> {
 }
 
 #[derive(Debug, Clone)]
-pub struct OnlinePoRep<H: Hasher> {
+pub struct PoRC<H: Hasher> {
     _h: PhantomData<H>,
 }
 
-impl<'a, H: 'a + Hasher> ProofScheme<'a> for OnlinePoRep<H> {
+impl<'a, H: 'a + Hasher> ProofScheme<'a> for PoRC<H> {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<'a, H::Domain>;
@@ -74,6 +78,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for OnlinePoRep<H> {
         Ok(PublicParams {
             lambda: sp.lambda,
             leaves: sp.leaves,
+            sectors_count: sp.sectors_count,
         })
     }
 
@@ -82,15 +87,24 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for OnlinePoRep<H> {
         pub_inputs: &'b Self::PublicInputs,
         priv_inputs: &'b Self::PrivateInputs,
     ) -> Result<Self::Proof> {
+        if priv_inputs.replicas.len() != pub_params.sectors_count {
+            return Err(Error::MalformedInput);
+        }
+
+        if priv_inputs.trees.len() != pub_params.sectors_count {
+            return Err(Error::MalformedInput);
+        }
+
         let proofs = pub_inputs
             .challenges
             .iter()
             .map(|challenge| {
                 // challenge derivation
-                let challenged_leaf = get_leaf(challenge, pub_params.leaves);
-                let tree = priv_inputs.tree;
+                let challenged_sector = slice_mod(challenge, pub_params.sectors_count);
+                let challenged_leaf = slice_mod(challenge, pub_params.leaves);
+                let tree = priv_inputs.trees[challenged_sector];
 
-                if pub_inputs.commitment != tree.root() {
+                if pub_inputs.commitments[challenged_sector] != tree.root() {
                     return Err(Error::InvalidCommitment);
                 }
 
@@ -110,8 +124,10 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for OnlinePoRep<H> {
     ) -> Result<bool> {
         // validate each proof
         for (merkle_proof, challenge) in proof.0.iter().zip(pub_inputs.challenges.iter()) {
+            let challenged_sector = slice_mod(challenge, pub_params.sectors_count);
+
             // validate the commitment
-            if merkle_proof.root() != &pub_inputs.commitment {
+            if merkle_proof.root() != &pub_inputs.commitments[challenged_sector] {
                 return Ok(false);
             }
 
@@ -120,7 +136,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for OnlinePoRep<H> {
                 return Ok(false);
             }
 
-            let challenged_leaf = get_leaf(challenge, pub_params.leaves);
+            let challenged_leaf = slice_mod(challenge, pub_params.leaves);
             if !merkle_proof.validate(challenged_leaf) {
                 return Ok(false);
             }
@@ -130,7 +146,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for OnlinePoRep<H> {
     }
 }
 
-fn get_leaf(challenge: impl AsRef<[u8]>, count: usize) -> usize {
+fn slice_mod(challenge: impl AsRef<[u8]>, count: usize) -> usize {
     // TODO: verify this is the correct way to derive the challenge
     let big_challenge = BigUint::from_bytes_be(challenge.as_ref());
 
@@ -150,12 +166,13 @@ mod tests {
     use hasher::{Blake2sHasher, HashFunction, PedersenHasher, Sha256Hasher};
     use merkle::make_proof_for_test;
 
-    fn test_online_porep<H: Hasher>() {
+    fn test_porc<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let pub_params = PublicParams {
             lambda: 32,
             leaves: 32,
+            sectors_count: 1,
         };
 
         let data: Vec<u8> = (0..32)
@@ -167,32 +184,32 @@ mod tests {
 
         let pub_inputs = PublicInputs {
             challenges: &vec![rng.gen(), rng.gen()],
-            commitment: tree.root(),
+            commitments: &[tree.root()],
         };
 
         let priv_inputs = PrivateInputs::<H> {
-            tree: &tree,
-            replica: &data,
+            trees: &[&tree],
+            replicas: &[&data],
         };
 
-        let proof = OnlinePoRep::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+        let proof = PoRC::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
 
-        assert!(OnlinePoRep::<H>::verify(&pub_params, &pub_inputs, &proof).unwrap());
+        assert!(PoRC::<H>::verify(&pub_params, &pub_inputs, &proof).unwrap());
     }
 
     #[test]
-    fn online_porep_pedersen() {
-        test_online_porep::<PedersenHasher>();
+    fn porc_pedersen() {
+        test_porc::<PedersenHasher>();
     }
 
     #[test]
-    fn online_porep_sha256() {
-        test_online_porep::<Sha256Hasher>();
+    fn porc_sha256() {
+        test_porc::<Sha256Hasher>();
     }
 
     #[test]
-    fn online_porep_blake2s() {
-        test_online_porep::<Blake2sHasher>();
+    fn porc_blake2s() {
+        test_porc::<Blake2sHasher>();
     }
 
     // Construct a proof that satisfies a cursory validation:
@@ -208,18 +225,19 @@ mod tests {
         let hashed_leaf = H::Function::hash_leaf(&bogus_leaf);
 
         make_proof_for_test(
-            pub_inputs.commitment,
+            pub_inputs.commitments[0],
             hashed_leaf,
             vec![(hashed_leaf, true)],
         )
     }
 
-    fn test_online_porep_validates<H: Hasher>() {
+    fn test_porc_validates<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let pub_params = PublicParams {
             lambda: 32,
             leaves: 32,
+            sectors_count: 1,
         };
 
         let data: Vec<u8> = (0..32)
@@ -231,7 +249,7 @@ mod tests {
 
         let pub_inputs = PublicInputs::<H::Domain> {
             challenges: &vec![rng.gen(), rng.gen()],
-            commitment: tree.root(),
+            commitments: &[tree.root()],
         };
 
         let bad_proof = Proof(vec![
@@ -239,33 +257,34 @@ mod tests {
             make_bogus_proof::<H>(&pub_inputs, rng),
         ]);
 
-        let verified = OnlinePoRep::verify(&pub_params, &pub_inputs, &bad_proof).unwrap();
+        let verified = PoRC::verify(&pub_params, &pub_inputs, &bad_proof).unwrap();
 
         // A bad proof should not be verified!
         assert!(!verified);
     }
 
     #[test]
-    fn online_porep_actually_validates_sha256() {
-        test_online_porep_validates::<Sha256Hasher>();
+    fn porc_actually_validates_sha256() {
+        test_porc_validates::<Sha256Hasher>();
     }
 
     #[test]
-    fn online_porep_actually_validates_blake2s() {
-        test_online_porep_validates::<Blake2sHasher>();
+    fn porc_actually_validates_blake2s() {
+        test_porc_validates::<Blake2sHasher>();
     }
 
     #[test]
-    fn online_porep_actually_validates_pedersen() {
-        test_online_porep_validates::<PedersenHasher>();
+    fn porc_actually_validates_pedersen() {
+        test_porc_validates::<PedersenHasher>();
     }
 
-    fn test_online_porep_validates_challenge_identity<H: Hasher>() {
+    fn test_porc_validates_challenge_identity<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let pub_params = PublicParams {
             lambda: 32,
             leaves: 32,
+            sectors_count: 1,
         };
 
         let data: Vec<u8> = (0..32)
@@ -277,45 +296,44 @@ mod tests {
 
         let pub_inputs = PublicInputs {
             challenges: &vec![rng.gen(), rng.gen()],
-            commitment: tree.root(),
+            commitments: &[tree.root()],
         };
 
         let priv_inputs = PrivateInputs::<H> {
-            tree: &tree,
-            replica: &data,
+            trees: &[&tree],
+            replicas: &[&data],
         };
 
-        let proof = OnlinePoRep::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+        let proof = PoRC::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
 
         let different_pub_inputs = PublicInputs {
             challenges: &vec![rng.gen(), rng.gen()],
-            commitment: tree.root(),
+            commitments: &[tree.root()],
         };
 
-        let verified =
-            OnlinePoRep::<H>::verify(&pub_params, &different_pub_inputs, &proof).unwrap();
+        let verified = PoRC::<H>::verify(&pub_params, &different_pub_inputs, &proof).unwrap();
 
         // A proof created with a the wrong challenge not be verified!
         assert!(!verified);
     }
 
     #[test]
-    fn online_porep_actually_validates_challenge_identity_sha256() {
-        test_online_porep_validates_challenge_identity::<Sha256Hasher>();
+    fn porc_actually_validates_challenge_identity_sha256() {
+        test_porc_validates_challenge_identity::<Sha256Hasher>();
     }
 
     #[test]
-    fn online_porep_actually_validates_challenge_identity_blake2s() {
-        test_online_porep_validates_challenge_identity::<Blake2sHasher>();
+    fn porc_actually_validates_challenge_identity_blake2s() {
+        test_porc_validates_challenge_identity::<Blake2sHasher>();
     }
 
     #[test]
-    fn online_porep_actually_validates_challenge_identity_pedersen() {
-        test_online_porep_validates_challenge_identity::<PedersenHasher>();
+    fn porc_actually_validates_challenge_identity_pedersen() {
+        test_porc_validates_challenge_identity::<PedersenHasher>();
     }
 
     #[test]
-    fn test_get_leaf() {
+    fn test_slice_mod() {
         let cases: [(Vec<u8>, usize, usize); 5] = [
             (vec![0], 10, 0),
             (vec![1], 10, 1),
@@ -325,7 +343,7 @@ mod tests {
         ];
 
         for (challenge, count, expected) in &cases {
-            assert_eq!(get_leaf(challenge, *count), *expected);
+            assert_eq!(slice_mod(challenge, *count), *expected);
         }
     }
 }
