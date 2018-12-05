@@ -69,6 +69,18 @@ pub fn pedersen_compression(bytes: &mut Vec<u8>) {
     x.write_le(bytes).expect("failed to write result hash");
 }
 
+pub fn pedersen_compression_simple(bytes: &[u8]) -> Fr {
+    let bits = BitVec::<bitvec::LittleEndian, u8>::from(&bytes[..]);
+    let (x, _) = pedersen_hash::<Bls12, _>(
+        Personalization::NoteCommitment,
+        bits.iter().take(bytes.len() * 8),
+        &JJ_PARAMS,
+    )
+    .into_xy();
+
+    x
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

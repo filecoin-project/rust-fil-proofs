@@ -1,4 +1,4 @@
-use crypto::pedersen::pedersen_md_no_padding;
+use crypto::pedersen::pedersen_compression_simple;
 use pairing::bls12_381::Fr;
 use pairing::Engine;
 
@@ -12,7 +12,7 @@ pub fn kdf<E: Engine>(data: &[u8], m: usize) -> Fr {
         m
     );
 
-    pedersen_md_no_padding(data)
+    pedersen_compression_simple(data)
 }
 
 #[cfg(test)]
@@ -29,8 +29,8 @@ mod tests {
         let data = vec![1u8; size];
         let expected = bytes_into_fr::<Bls12>(
             &mut vec![
-                122, 242, 246, 175, 171, 132, 8, 235, 194, 175, 245, 82, 88, 212, 189, 229, 223,
-                31, 184, 94, 171, 13, 127, 7, 246, 17, 141, 159, 131, 46, 6, 94,
+                254, 137, 34, 17, 163, 239, 240, 72, 109, 88, 46, 29, 35, 197, 15, 118, 73, 156,
+                153, 235, 25, 3, 221, 211, 182, 205, 113, 12, 175, 17, 65, 9,
             ]
             .as_slice(),
         )

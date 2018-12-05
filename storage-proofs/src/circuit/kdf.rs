@@ -3,7 +3,7 @@ use sapling_crypto::circuit::boolean::Boolean;
 use sapling_crypto::circuit::num;
 use sapling_crypto::jubjub::JubjubEngine;
 
-use circuit::pedersen::pedersen_md_no_padding;
+use circuit::pedersen::pedersen_compression_num;
 
 /// Key derivation function, using pedersen hashes as the underlying primitive.
 pub fn kdf<E, CS>(
@@ -26,7 +26,7 @@ where
 
     assert_eq!(ciphertexts.len(), 8 * 32 * (1 + m), "invalid input length");
 
-    pedersen_md_no_padding(cs.namespace(|| "key"), params, ciphertexts.as_slice())
+    pedersen_compression_num(cs.namespace(|| "key"), params, ciphertexts.as_slice())
 }
 
 #[cfg(test)]
@@ -48,7 +48,9 @@ mod tests {
         let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let params = &JubjubBls12::new();
 
-        let m = 20;
+        // We need this for base_degree (10) + expansion_degree(6).
+        // Don't use higher since we don't want to overprovision pedersen circuit generators.
+        let m = 16;
 
         let id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
         let parents: Vec<Vec<u8>> = (0..m).map(|_| fr_into_bytes::<Bls12>(&rng.gen())).collect();
@@ -76,7 +78,7 @@ mod tests {
         .unwrap();
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_constraints(), 27661);
+        assert_eq!(cs.num_constraints(), 11634);
 
         let input_bytes = parents.iter().fold(id, |mut acc, parent| {
             acc.extend(parent);

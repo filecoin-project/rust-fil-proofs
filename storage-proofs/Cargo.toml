@@ -6,8 +6,8 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 bitvec = "0.5"
-sapling-crypto = { git = "https://github.com/zcash-hackworks/sapling-crypto", branch = "master" }
 rand = "0.4"
+sapling-crypto = { git = "https://github.com/filecoin-project/sapling-crypto", branch = "master" }
 libc = "0.2"
 merkle_light = { git = "https://github.com/filecoin-project/merkle_light", branch = "master" }
 failure = "0.1"

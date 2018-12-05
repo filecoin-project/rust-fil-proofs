@@ -13,8 +13,8 @@ storage-proofs = { path = "../storage-proofs" }
 ffi-toolkit = { path = "../ffi-toolkit" }
 bitvec = "0.5"
 phase2 = "0.2.2"
-sapling-crypto = { git = "https://github.com/zcash-hackworks/sapling-crypto", branch = "master" }
 rand = "0.4"
+sapling-crypto = { git = "https://github.com/filecoin-project/sapling-crypto", branch = "master" }
 libc = "0.2"
 failure = "0.1"
 bellman = "0.1"
