@@ -22,10 +22,6 @@ const NUM_SEAL_WORKERS: usize = 2;
 
 const FATAL_NOSEND_TASK: &str = "[run_blocking] could not send";
 const FATAL_NORECV_TASK: &str = "[run_blocking] could not recv";
-const FATAL_KILL_SCHDLR: &str = "[SectorBuilder#drop] could not send Shutdown";
-const FATAL_KILL_SEALER: &str = "[SectorBuilder#drop] could not send Shutdown to sealer";
-const FATAL_JOIN_SCHDLR: &str = "[SectorBuilder#drop] could not join scheduler thread";
-const FATAL_JOIN_SEALER: &str = "[SectorBuilder#drop] could not join sealer thread";
 
 pub type SectorId = u64;
 
@@ -157,26 +153,32 @@ impl SectorBuilder {
 impl Drop for SectorBuilder {
     fn drop(&mut self) {
         // Shut down main worker and sealers, too.
-        self.scheduler_tx
+        let _ = self
+            .scheduler_tx
             .send(Request::Shutdown)
-            .expect(FATAL_KILL_SCHDLR);
+            .map_err(|err| println!("err sending Shutdown to scheduler: {:?}", err));
 
         for _ in &mut self.sealers {
-            self.sealers_tx
+            let _ = self
+                .sealers_tx
                 .send(SealerInput::Shutdown)
-                .expect(FATAL_KILL_SEALER);
+                .map_err(|err| println!("err sending Shutdown to sealer: {:?}", err));
         }
 
         // Wait for worker threads to return.
         let scheduler_thread = &mut self.scheduler.thread;
 
         if let Some(thread) = scheduler_thread.take() {
-            thread.join().expect(FATAL_JOIN_SCHDLR)
+            let _ = thread
+                .join()
+                .map_err(|err| println!("err joining scheduler thread: {:?}", err));
         }
 
         for worker in &mut self.sealers {
             if let Some(thread) = worker.thread.take() {
-                thread.join().expect(FATAL_JOIN_SEALER)
+                let _ = thread
+                    .join()
+                    .map_err(|err| println!("err joining sealer thread: {:?}", err));
             }
         }
     }
