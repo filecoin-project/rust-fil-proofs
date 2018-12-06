@@ -534,8 +534,26 @@ pub unsafe extern "C" fn destroy_get_seal_status_response(ptr: *mut GetSealStatu
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+/// FFIStagedSectorMetadata
+///////////////////////////
+
+#[repr(C)]
+pub struct FFIStagedSectorMetadata {
+    pub sector_access: *const libc::c_char,
+    pub sector_id: u64,
+    pub pieces_len: libc::size_t,
+    pub pieces_ptr: *const FFIPieceMetadata,
+
+    // must be one of: Pending, Failed, Sealing
+    pub seal_status_code: FFISealStatus,
+
+    // if sealing failed - here's the error
+    pub seal_error_msg: *const libc::c_char,
+}
+
+///////////////////////////////////////////////////////////////////////////////
 /// FFISealedSectorMetadata
-////////////////////////
+///////////////////////////
 
 #[repr(C)]
 pub struct FFISealedSectorMetadata {
@@ -588,5 +606,47 @@ impl Drop for GetSealedSectorsResponse {
 
 #[no_mangle]
 pub unsafe extern "C" fn destroy_get_sealed_sectors_response(ptr: *mut GetSealedSectorsResponse) {
+    let _ = Box::from_raw(ptr);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+/// GetStagedSectorsResponse
+////////////////////////////
+
+#[repr(C)]
+pub struct GetStagedSectorsResponse {
+    pub status_code: FCPResponseStatus,
+    pub error_msg: *const libc::c_char,
+
+    pub sectors_len: libc::size_t,
+    pub sectors_ptr: *const FFIStagedSectorMetadata,
+}
+
+impl Default for GetStagedSectorsResponse {
+    fn default() -> GetStagedSectorsResponse {
+        GetStagedSectorsResponse {
+            status_code: FCPResponseStatus::FCPNoError,
+            error_msg: ptr::null(),
+            sectors_len: 0,
+            sectors_ptr: ptr::null(),
+        }
+    }
+}
+
+impl Drop for GetStagedSectorsResponse {
+    fn drop(&mut self) {
+        unsafe {
+            drop(c_str_to_rust_str(self.error_msg));
+            drop(Vec::from_raw_parts(
+                self.sectors_ptr as *mut FFIStagedSectorMetadata,
+                self.sectors_len,
+                self.sectors_len,
+            ));
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn destroy_get_staged_sectors_response(ptr: *mut GetStagedSectorsResponse) {
     let _ = Box::from_raw(ptr);
 }

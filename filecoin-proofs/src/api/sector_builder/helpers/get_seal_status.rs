@@ -18,17 +18,7 @@ pub fn get_seal_status(
             staged_state
                 .sectors
                 .get(&sector_id)
-                .and_then(|staged_sector| {
-                    if staged_sector.accepting_data {
-                        Some(SealStatus::Pending)
-                    } else {
-                        staged_sector
-                            .sealing_error
-                            .clone()
-                            .map(SealStatus::Failed)
-                            .or(Some(SealStatus::Sealing))
-                    }
-                })
+                .and_then(|staged_sector| Some(staged_sector.seal_status.clone()))
         })
         .ok_or_else(|| err_unrecov(format!("no sector with id {} found", sector_id)).into())
 }
@@ -50,6 +40,7 @@ mod tests {
             2,
             StagedSectorMetadata {
                 sector_id: 2,
+                seal_status: SealStatus::Sealing,
                 ..Default::default()
             },
         );
@@ -58,7 +49,7 @@ mod tests {
             3,
             StagedSectorMetadata {
                 sector_id: 3,
-                accepting_data: true,
+                seal_status: SealStatus::Pending,
                 ..Default::default()
             },
         );

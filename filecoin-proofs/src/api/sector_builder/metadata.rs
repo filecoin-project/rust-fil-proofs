@@ -6,13 +6,12 @@ use byteorder::WriteBytesExt;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-#[derive(Default, Clone, Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub struct StagedSectorMetadata {
     pub sector_id: SectorId,
     pub sector_access: String,
     pub pieces: Vec<PieceMetadata>,
-    pub sealing_error: Option<String>,
-    pub accepting_data: bool,
+    pub seal_status: SealStatus,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -28,6 +27,20 @@ pub struct SealedSectorMetadata {
     pub snark_proof: [u8; 384],
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+pub struct PieceMetadata {
+    pub piece_key: String,
+    pub num_bytes: u64,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+pub enum SealStatus {
+    Failed(String),
+    Pending,
+    Sealed(Box<SealedSectorMetadata>),
+    Sealing,
+}
+
 impl PartialEq for SealedSectorMetadata {
     fn eq(&self, other: &SealedSectorMetadata) -> bool {
         self.sector_id == other.sector_id
@@ -40,17 +53,15 @@ impl PartialEq for SealedSectorMetadata {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
-pub struct PieceMetadata {
-    pub piece_key: String,
-    pub num_bytes: u64,
-}
-
-pub enum SealStatus {
-    Failed(String),
-    Pending,
-    Sealed(Box<SealedSectorMetadata>),
-    Sealing,
+impl Default for StagedSectorMetadata {
+    fn default() -> StagedSectorMetadata {
+        StagedSectorMetadata {
+            sector_id: Default::default(),
+            sector_access: Default::default(),
+            pieces: Default::default(),
+            seal_status: SealStatus::Pending,
+        }
+    }
 }
 
 impl fmt::Debug for SealedSectorMetadata {

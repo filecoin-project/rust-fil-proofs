@@ -22,7 +22,7 @@ pub fn add_piece(
         let candidates: Vec<StagedSectorMetadata> = staged_state
             .sectors
             .iter()
-            .filter(|(_, v)| v.accepting_data)
+            .filter(|(_, v)| v.seal_status == SealStatus::Pending)
             .map(|(_, v)| (*v).clone())
             .collect();
 
@@ -95,10 +95,9 @@ fn provision_new_staged_sector(
 
     let meta = StagedSectorMetadata {
         pieces: Default::default(),
-        sealing_error: None,
         sector_access: access.clone(),
         sector_id,
-        accepting_data: true,
+        seal_status: SealStatus::Pending,
     };
 
     staged_state.sectors.insert(meta.sector_id, meta.clone());
