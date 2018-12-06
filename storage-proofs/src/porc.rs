@@ -37,7 +37,7 @@ impl ParameterSetIdentifier for PublicParams {
 
 #[derive(Debug, Clone)]
 pub struct PublicInputs<'a, T: 'a + Domain> {
-    /// The challenge, which leafs to prove.
+    /// The challenges, which leafs to prove.
     pub challenges: &'a [T],
     /// The root hash of the underlying merkle tree.
     pub commitments: &'a [T],
@@ -55,6 +55,14 @@ pub struct Proof<H: Hasher>(Vec<MerkleProof<H>>);
 impl<H: Hasher> Proof<H> {
     pub fn leafs(&self) -> Vec<&H::Domain> {
         self.0.iter().map(|p| p.leaf()).collect()
+    }
+
+    pub fn commitments(&self) -> Vec<&H::Domain> {
+        self.0.iter().map(|p| p.root()).collect()
+    }
+
+    pub fn paths(&self) -> Vec<&Vec<(H::Domain, bool)>> {
+        self.0.iter().map(|p| p.path()).collect()
     }
 }
 

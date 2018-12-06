@@ -6,6 +6,7 @@ pub mod drgporep;
 pub mod kdf;
 pub mod multi_proof;
 pub mod pedersen;
+pub mod porc;
 pub mod ppor;
 pub mod sloth;
 pub mod variables;
