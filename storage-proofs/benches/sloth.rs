@@ -50,9 +50,9 @@ fn sloth_benchmark(c: &mut Criterion) {
     let params = vec![1, 4, 8];
 
     c.bench(
-        "sloth-decode",
+        "sloth",
         ParameterizedBenchmark::new(
-            "non-circuit",
+            "decode-non-circuit",
             |b, rounds| {
                 let mut rng = thread_rng();
                 let key: Fr = rng.gen();
@@ -63,7 +63,7 @@ fn sloth_benchmark(c: &mut Criterion) {
             },
             params,
         )
-        .with_function("circuit-create_proof", move |b, rounds| {
+        .with_function("decode-circuit-create_proof", move |b, rounds| {
             let mut rng = thread_rng();
             let groth_params = generate_random_parameters::<Bls12, _, _>(
                 SlothExample {
@@ -94,7 +94,7 @@ fn sloth_benchmark(c: &mut Criterion) {
                 black_box(proof)
             });
         })
-        .with_function("circuit-synthesize_circuit", move |b, rounds| {
+        .with_function("decode-circuit-synthesize_circuit", move |b, rounds| {
             let mut rng = thread_rng();
             let key: Fr = rng.gen();
             let plaintext: Fr = rng.gen();
@@ -113,6 +113,13 @@ fn sloth_benchmark(c: &mut Criterion) {
 
                 black_box(cs)
             });
+        })
+        .with_function("encode-non-circuit", move |b, rounds| {
+            let mut rng = thread_rng();
+            let key: Fr = rng.gen();
+            let plaintext: Fr = rng.gen();
+
+            b.iter(|| black_box(sloth::encode::<Bls12>(&key, &plaintext, *rounds)))
         })
         .sample_size(20),
     );
