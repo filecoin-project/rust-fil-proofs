@@ -1,6 +1,7 @@
 use api::sector_builder::metadata::sum_piece_bytes;
 use api::sector_builder::metadata::StagedSectorMetadata;
 use api::sector_builder::state::StagedState;
+use api::sector_builder::SectorId;
 use itertools::chain;
 use std::cmp::Reverse;
 
@@ -9,7 +10,7 @@ pub fn get_sectors_ready_for_sealing(
     max_user_bytes_per_staged_sector: u64,
     max_num_staged_sectors: u8,
     seal_all_staged_sectors: bool,
-) -> Vec<StagedSectorMetadata> {
+) -> Vec<SectorId> {
     let (full, mut not_full): (Vec<&StagedSectorMetadata>, Vec<&StagedSectorMetadata>) =
         staged_state
             .sectors
@@ -26,8 +27,8 @@ pub fn get_sectors_ready_for_sealing(
     };
 
     chain(full.into_iter(), not_full.into_iter().skip(num_to_skip))
-        .cloned()
-        .collect::<Vec<StagedSectorMetadata>>()
+        .map(|x| x.sector_id)
+        .collect::<Vec<SectorId>>()
 }
 
 #[cfg(test)]
@@ -73,7 +74,6 @@ mod tests {
 
         let to_seal: Vec<SectorId> = get_sectors_ready_for_sealing(&state, 127, 10, true)
             .into_iter()
-            .map(|x| x.sector_id)
             .collect();
 
         assert_eq!(vec![201 as SectorId, 200 as SectorId], to_seal);
@@ -93,7 +93,6 @@ mod tests {
 
         let to_seal: Vec<SectorId> = get_sectors_ready_for_sealing(&state, 127, 10, false)
             .into_iter()
-            .map(|x| x.sector_id)
             .collect();
 
         assert_eq!(vec![200 as SectorId], to_seal);
@@ -115,7 +114,6 @@ mod tests {
 
         let to_seal: Vec<SectorId> = get_sectors_ready_for_sealing(&state, 127, 2, false)
             .into_iter()
-            .map(|x| x.sector_id)
             .collect();
 
         assert_eq!(vec![201 as SectorId, 200 as SectorId], to_seal);
@@ -137,7 +135,6 @@ mod tests {
 
         let to_seal: Vec<SectorId> = get_sectors_ready_for_sealing(&state, 127, 4, false)
             .into_iter()
-            .map(|x| x.sector_id)
             .collect();
 
         assert_eq!(vec![0; 0], to_seal);
@@ -159,7 +156,6 @@ mod tests {
 
         let to_seal: Vec<SectorId> = get_sectors_ready_for_sealing(&state, 127, 4, false)
             .into_iter()
-            .map(|x| x.sector_id)
             .collect();
 
         assert_eq!(vec![0; 0], to_seal);
