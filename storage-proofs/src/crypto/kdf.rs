@@ -1,6 +1,8 @@
-use crypto::pedersen::pedersen_md_no_padding;
 use pairing::bls12_381::Fr;
 use pairing::Engine;
+use crypto::blake2s;
+use fr32::bytes_into_fr;
+use pairing::bls12_381::Bls12;
 
 /// Key derivation function, based on pedersen hashing.
 pub fn kdf<E: Engine>(data: &[u8], m: usize) -> Fr {
@@ -12,7 +14,9 @@ pub fn kdf<E: Engine>(data: &[u8], m: usize) -> Fr {
         m
     );
 
-    pedersen_md_no_padding(data)
+    let mut hash = blake2s::blake2s(&data);
+    hash[31] = 0;
+    bytes_into_fr::<Bls12>(&hash).unwrap()
 }
 
 #[cfg(test)]
