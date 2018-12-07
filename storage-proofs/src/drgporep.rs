@@ -390,7 +390,7 @@ where
 impl<'a, H, G> PoRep<'a, H> for DrgPoRep<'a, H, G>
 where
     H: 'a + Hasher,
-    G: 'a + Graph<H> + ParameterSetIdentifier,
+    G: 'a + Graph<H> + ParameterSetIdentifier + Sync + Send,
 {
     type Tau = porep::Tau<H::Domain>;
     type ProverAux = porep::ProverAux<H>;
@@ -406,10 +406,9 @@ where
             None => pp.graph.merkle_tree(data, pp.lambda)?,
         };
 
-        let comm_d = tree_d.root();
-
         vde::encode(&pp.graph, pp.lambda, pp.sloth_iter, replica_id, data)?;
 
+        let comm_d = tree_d.root();
         let tree_r = pp.graph.merkle_tree(data, pp.lambda)?;
         let comm_r = tree_r.root();
 

@@ -58,6 +58,7 @@ pub trait PoRep<'a, H: Hasher>: ProofScheme<'a> {
         data: &mut [u8],
         data_tree: Option<MerkleTree<H::Domain, H::Function>>,
     ) -> Result<(Self::Tau, Self::ProverAux)>;
+
     fn extract_all(
         pub_params: &'a Self::PublicParams,
         replica_id: &H::Domain,

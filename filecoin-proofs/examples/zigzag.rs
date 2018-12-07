@@ -203,7 +203,7 @@ fn do_the_work<H: 'static>(
 
     info!(FCP_LOG, "vanilla_proving_time={:?} seconds", proving_avg; "target" => "stats");
 
-    let samples: u32 = 30;
+    let samples: u32 = 5;
     info!(FCP_LOG, "sampling verifying (samples={})", samples);
     let mut total_verifying = Duration::new(0, 0);
 
@@ -218,6 +218,7 @@ fn do_the_work<H: 'static>(
         };
         total_verifying += start.elapsed();
     }
+    info!("Verification complete");
     stop_profile();
 
     let verifying_avg = total_verifying / samples;
