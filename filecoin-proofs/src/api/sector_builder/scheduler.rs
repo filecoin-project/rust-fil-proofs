@@ -239,20 +239,19 @@ impl SectorMetadataManager {
     fn check_and_schedule(&mut self, seal_all_staged_sectors: bool) -> Result<()> {
         let staged_state = &mut self.state.staged;
 
-        let mut to_be_sealed = get_sectors_ready_for_sealing(
+        let to_be_sealed = get_sectors_ready_for_sealing(
             staged_state,
             self.max_user_bytes_per_staged_sector,
             self.max_num_staged_sectors,
             seal_all_staged_sectors,
         );
 
-        // Mark the to-be-sealed sectors as no longer accepting data.
-        for sector in to_be_sealed.iter_mut() {
+        // Mark the to-be-sealed sectors as no longer accepting data and then
+        // schedule sealing.
+        for sector_id in to_be_sealed {
+            let mut sector = staged_state.sectors.get_mut(&sector_id).unwrap();
             sector.accepting_data = false;
-        }
 
-        // Fire-and-forget seal-scheduling.
-        for sector in to_be_sealed {
             self.sealer_input_tx
                 .clone()
                 .send(SealerInput::Seal(
