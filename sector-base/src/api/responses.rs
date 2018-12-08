@@ -1,4 +1,4 @@
-use api::errors::SectorManagerErr;
+use crate::api::errors::SectorManagerErr;
 use failure::Error;
 use ffi_toolkit::c_str_to_rust_str;
 use libc;
@@ -23,7 +23,7 @@ pub enum SBResponseStatus {
 // status code and a pointer to a C string, both of which can be used to set
 // fields in a response struct to be returned from an FFI call.
 pub fn err_code_and_msg(err: &Error) -> (SBResponseStatus, *const libc::c_char) {
-    use api::responses::SBResponseStatus::*;
+    use crate::api::responses::SBResponseStatus::*;
 
     let msg = CString::new(format!("{}", err)).unwrap();
     let ptr = msg.as_ptr();

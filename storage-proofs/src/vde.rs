@@ -1,7 +1,7 @@
-use drgraph::Graph;
-use error::Result;
-use hasher::{Domain, Hasher};
-use util::{data_at_node, data_at_node_offset};
+use crate::drgraph::Graph;
+use crate::error::Result;
+use crate::hasher::{Domain, Hasher};
+use crate::util::{data_at_node, data_at_node_offset};
 
 /// encodes the data and overwrites the original data slice.
 pub fn encode<'a, H, G>(

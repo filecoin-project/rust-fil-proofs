@@ -1,9 +1,9 @@
 use pairing::bls12_381::{Bls12, Fr};
 
-use crypto::sloth;
-use error::Result;
-use hasher::pedersen::PedersenDomain;
-use vdf::Vdf;
+use crate::crypto::sloth;
+use crate::error::Result;
+use crate::hasher::pedersen::PedersenDomain;
+use crate::vdf::Vdf;
 
 /// VDF construction using sloth.
 #[derive(Debug, Clone)]

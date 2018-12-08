@@ -1,8 +1,8 @@
-use api::errors::SectorManagerErr;
-use api::sector_store::{SectorConfig, SectorManager, SectorStore};
-use api::util;
+use crate::api::errors::SectorManagerErr;
+use crate::api::sector_store::{SectorConfig, SectorManager, SectorStore};
+use crate::api::util;
 use ffi_toolkit::{c_str_to_rust_str, raw_ptr};
-use io::fr32::{
+use crate::io::fr32::{
     almost_truncate_to_unpadded_bytes, target_unpadded_bytes, unpadded_bytes, write_padded,
 };
 use libc;
@@ -379,14 +379,14 @@ mod tests {
 
     use super::*;
 
-    use api::disk_backed_storage::init_new_proof_test_sector_store;
-    use api::{
+    use crate::api::disk_backed_storage::init_new_proof_test_sector_store;
+    use crate::api::{
         new_staging_sector_access, num_unsealed_bytes, truncate_unsealed, write_and_preprocess,
     };
 
-    use api::responses::SBResponseStatus;
+    use crate::api::responses::SBResponseStatus;
     use ffi_toolkit::{c_str_to_pbuf, rust_str_to_c_str};
-    use io::fr32::FR32_PADDING_MAP;
+    use crate::io::fr32::FR32_PADDING_MAP;
 
     fn create_storage() -> *mut Box<SectorStore> {
         let staging_path = tempfile::tempdir().unwrap().path().to_owned();

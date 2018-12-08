@@ -3,9 +3,9 @@ use std::marker::PhantomData;
 use merkle_light::hash::Algorithm;
 use merkle_light::proof::Proof;
 
-use error::*;
-use hasher::{Domain, Hasher};
-use merkle::MerkleTree;
+use crate::error::*;
+use crate::hasher::{Domain, Hasher};
+use crate::merkle::MerkleTree;
 
 type InclusionProof<T> = Proof<T>;
 
@@ -165,8 +165,8 @@ pub fn verify_file_inclusion_proofs<H: Hasher>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use drgraph::{new_seed, BucketGraph, Graph};
-    use hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::drgraph::{new_seed, BucketGraph, Graph};
+    use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
 
     #[test]
     fn compute_bounds() {

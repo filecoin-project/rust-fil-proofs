@@ -4,12 +4,12 @@ use std::marker::PhantomData;
 use rand::{ChaChaRng, OsRng, Rng, SeedableRng};
 use rayon::prelude::*;
 
-use error::*;
-use hasher::pedersen::PedersenHasher;
-use hasher::{Domain, Hasher};
-use merkle::MerkleTree;
-use parameter_cache::ParameterSetIdentifier;
-use util::data_at_node;
+use crate::error::*;
+use crate::hasher::pedersen::PedersenHasher;
+use crate::hasher::{Domain, Hasher};
+use crate::merkle::MerkleTree;
+use crate::parameter_cache::ParameterSetIdentifier;
+use crate::util::data_at_node;
 /// The default hasher currently in use.
 pub type DefaultTreeHasher = PedersenHasher;
 
@@ -197,8 +197,8 @@ mod tests {
     use memmap::MmapMut;
     use memmap::MmapOptions;
 
-    use drgraph::new_seed;
-    use hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::drgraph::new_seed;
+    use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
 
     // Create and return an object of MmapMut backed by in-memory copy of data.
     pub fn mmap_from(data: &[u8]) -> MmapMut {

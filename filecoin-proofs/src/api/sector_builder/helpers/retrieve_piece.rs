@@ -1,9 +1,9 @@
-use api::internal;
-use api::sector_builder::errors::err_unrecov;
-use api::sector_builder::metadata::sector_id_as_bytes;
-use api::sector_builder::metadata::SealedSectorMetadata;
-use api::sector_builder::WrappedSectorStore;
-use error;
+use crate::api::internal;
+use crate::api::sector_builder::errors::err_unrecov;
+use crate::api::sector_builder::metadata::sector_id_as_bytes;
+use crate::api::sector_builder::metadata::SealedSectorMetadata;
+use crate::api::sector_builder::WrappedSectorStore;
+use crate::error;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -110,7 +110,7 @@ fn piece_pos(sealed_sector: &SealedSectorMetadata, piece_key: &str) -> Option<(u
 #[cfg(test)]
 mod tests {
     use super::*;
-    use api::sector_builder::metadata::PieceMetadata;
+    use crate::api::sector_builder::metadata::PieceMetadata;
 
     #[test]
     fn test_alpha() {

@@ -3,7 +3,7 @@ use pairing::PrimeFieldRepr;
 use sapling_crypto::jubjub::JubjubBls12;
 use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 
-use fr32::bytes_into_frs;
+use crate::fr32::bytes_into_frs;
 
 use bitvec::{self, BitVec};
 
@@ -75,7 +75,7 @@ mod tests {
     use pairing::bls12_381::Fr;
     use pairing::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
-    use util::bytes_into_bits;
+    use crate::util::bytes_into_bits;
     #[test]
     fn test_bit_vec_le() {
         let bytes = b"ABC";

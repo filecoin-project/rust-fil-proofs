@@ -1,4 +1,4 @@
-use error::Result;
+use crate::error::Result;
 
 /// The ProofScheme trait provides the methods that any proof scheme needs to implement.
 pub trait ProofScheme<'a> {
@@ -10,13 +10,13 @@ pub trait ProofScheme<'a> {
 
     /// setup is used to generate public parameters from setup parameters in order to specialize
     /// a ProofScheme to the specific parameters required by a consumer.
-    fn setup(&Self::SetupParams) -> Result<Self::PublicParams>;
+    fn setup(_: &Self::SetupParams) -> Result<Self::PublicParams>;
 
     /// prove generates and returns a proof from public parameters, public inputs, and private inputs.
     fn prove<'b>(
-        &'b Self::PublicParams,
-        &'b Self::PublicInputs,
-        &'b Self::PrivateInputs,
+        _: &'b Self::PublicParams,
+        _: &'b Self::PublicInputs,
+        _: &'b Self::PrivateInputs,
     ) -> Result<Self::Proof>;
 
     fn prove_all_partitions<'b>(

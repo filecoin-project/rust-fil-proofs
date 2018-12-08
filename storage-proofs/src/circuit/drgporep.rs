@@ -5,19 +5,19 @@ use sapling_crypto::circuit::boolean::{self, Boolean};
 use sapling_crypto::circuit::{multipack, num};
 use sapling_crypto::jubjub::JubjubEngine;
 
-use circuit::constraint;
-use circuit::kdf::kdf;
-use circuit::sloth;
-use circuit::variables::Root;
-use compound_proof::{CircuitComponent, CompoundProof};
-use drgporep::DrgPoRep;
-use drgraph::Graph;
-use fr32::fr_into_bytes;
-use merklepor;
-use parameter_cache::{CacheableParameters, ParameterSetIdentifier};
-use proof::ProofScheme;
+use crate::circuit::constraint;
+use crate::circuit::kdf::kdf;
+use crate::circuit::sloth;
+use crate::circuit::variables::Root;
+use crate::compound_proof::{CircuitComponent, CompoundProof};
+use crate::drgporep::DrgPoRep;
+use crate::drgraph::Graph;
+use crate::fr32::fr_into_bytes;
+use crate::merklepor;
+use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
+use crate::proof::ProofScheme;
 use std::marker::PhantomData;
-use util::{bytes_into_bits, bytes_into_boolean_vec};
+use crate::util::{bytes_into_bits, bytes_into_boolean_vec};
 
 /// DRG based Proof of Replication.
 ///
@@ -49,8 +49,8 @@ use util::{bytes_into_bits, bytes_into_boolean_vec};
 //    "drg-proof-of-replication",
 //    false
 //);
-use circuit::por::{PoRCircuit, PoRCompound};
-use hasher::{Domain, Hasher};
+use crate::circuit::por::{PoRCircuit, PoRCompound};
+use crate::hasher::{Domain, Hasher};
 
 pub struct DrgPoRepCircuit<'a, E: JubjubEngine> {
     params: &'a E::Params,
@@ -466,19 +466,19 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use circuit::test::*;
-    use compound_proof;
-    use drgporep;
-    use drgraph::{graph_height, new_seed, BucketGraph};
-    use fr32::{bytes_into_fr, fr_into_bytes};
-    use hasher::pedersen::*;
+    use crate::circuit::test::*;
+    use crate::compound_proof;
+    use crate::drgporep;
+    use crate::drgraph::{graph_height, new_seed, BucketGraph};
+    use crate::fr32::{bytes_into_fr, fr_into_bytes};
+    use crate::hasher::pedersen::*;
     use pairing::Field;
-    use porep::PoRep;
-    use proof::ProofScheme;
+    use crate::porep::PoRep;
+    use crate::proof::ProofScheme;
     use rand::Rand;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
-    use util::data_at_node;
+    use crate::util::data_at_node;
 
     #[test]
     fn drgporep_input_circuit_with_bls12_381() {

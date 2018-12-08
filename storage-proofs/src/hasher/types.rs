@@ -1,4 +1,4 @@
-use error::Result;
+use crate::error::Result;
 use merkle_light::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
 use pairing::bls12_381::Fr;
 use rand::Rand;
@@ -21,7 +21,7 @@ pub trait Domain:
     fn into_bytes(&self) -> Vec<u8>;
     fn try_from_bytes(raw: &[u8]) -> Result<Self>;
     /// Write itself into the given slice, LittleEndian bytes.
-    fn write_bytes(&self, &mut [u8]) -> Result<()>;
+    fn write_bytes(&self, _: &mut [u8]) -> Result<()>;
 }
 
 pub trait HashFunction<T: Domain>:

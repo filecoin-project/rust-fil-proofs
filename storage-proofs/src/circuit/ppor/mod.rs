@@ -2,7 +2,7 @@ use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use sapling_crypto::circuit::{boolean, multipack, num, pedersen_hash};
 use sapling_crypto::jubjub::JubjubEngine;
 
-use circuit::constraint;
+use crate::circuit::constraint;
 /// This is an instance of the `ParallelProofOfRetrievability` circuit.
 ///
 /// # Public Inputs
@@ -122,17 +122,17 @@ impl<'a, E: JubjubEngine> Circuit<E> for ParallelProofOfRetrievability<'a, E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use circuit::test::*;
-    use drgraph::{new_seed, BucketGraph, Graph};
-    use fr32::{bytes_into_fr, fr_into_bytes};
-    use hasher::pedersen::*;
-    use merklepor;
+    use crate::circuit::test::*;
+    use crate::drgraph::{new_seed, BucketGraph, Graph};
+    use crate::fr32::{bytes_into_fr, fr_into_bytes};
+    use crate::hasher::pedersen::*;
+    use crate::merklepor;
     use pairing::bls12_381::*;
     use pairing::Field;
-    use proof::ProofScheme;
+    use crate::proof::ProofScheme;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
-    use util::data_at_node;
+    use crate::util::data_at_node;
 
     #[test]
     fn test_parallel_por_input_circuit_with_bls12_381() {

@@ -9,8 +9,8 @@ use rand::{Rand, Rng};
 use sha2::Digest;
 
 use super::{Domain, HashFunction, Hasher};
-use crypto::sloth;
-use error::*;
+use crate::crypto::sloth;
+use crate::error::*;
 
 pub trait Digester: Digest + Clone + Default + ::std::fmt::Debug + Send + Sync {}
 

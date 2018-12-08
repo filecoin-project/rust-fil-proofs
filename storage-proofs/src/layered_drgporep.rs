@@ -1,13 +1,13 @@
-use merkle::MerkleTree;
+use crate::merkle::MerkleTree;
 
-use challenge_derivation::derive_challenges;
-use drgporep::{self, DrgPoRep};
-use drgraph::Graph;
-use error::Result;
-use hasher::{Domain, HashFunction, Hasher};
-use parameter_cache::ParameterSetIdentifier;
-use porep::{self, PoRep};
-use proof::ProofScheme;
+use crate::challenge_derivation::derive_challenges;
+use crate::drgporep::{self, DrgPoRep};
+use crate::drgraph::Graph;
+use crate::error::Result;
+use crate::hasher::{Domain, HashFunction, Hasher};
+use crate::parameter_cache::ParameterSetIdentifier;
+use crate::porep::{self, PoRep};
+use crate::proof::ProofScheme;
 
 #[derive(Debug)]
 pub struct SetupParams {

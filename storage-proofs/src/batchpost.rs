@@ -4,13 +4,13 @@ use byteorder::{LittleEndian, WriteBytesExt};
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
 
-use crypto::blake2s::blake2s;
-use error::Result;
-use hasher::{Domain, Hasher};
-use merkle::MerkleTree;
-use merklepor;
-use proof::ProofScheme;
-use util::data_at_node;
+use crate::crypto::blake2s::blake2s;
+use crate::error::Result;
+use crate::hasher::{Domain, Hasher};
+use crate::merkle::MerkleTree;
+use crate::merklepor;
+use crate::proof::ProofScheme;
+use crate::util::data_at_node;
 
 #[derive(Clone, Debug)]
 pub struct PublicParams {
@@ -212,10 +212,10 @@ mod tests {
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
-    use drgraph::{new_seed, BucketGraph, Graph};
-    use fr32::fr_into_bytes;
-    use hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
-    use merklepor;
+    use crate::drgraph::{new_seed, BucketGraph, Graph};
+    use crate::fr32::fr_into_bytes;
+    use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::merklepor;
 
     fn test_batchpost<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);

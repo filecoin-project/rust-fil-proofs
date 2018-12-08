@@ -3,13 +3,13 @@ use pairing::bls12_381::{Bls12, Fr};
 use sapling_crypto::circuit::{boolean, multipack, num, pedersen_hash};
 use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 
-use circuit::constraint;
-use circuit::variables::Root;
-use compound_proof::{CircuitComponent, CompoundProof};
-use drgraph::graph_height;
-use merklepor::MerklePoR;
-use parameter_cache::{CacheableParameters, ParameterSetIdentifier};
-use proof::ProofScheme;
+use crate::circuit::constraint;
+use crate::circuit::variables::Root;
+use crate::compound_proof::{CircuitComponent, CompoundProof};
+use crate::drgraph::graph_height;
+use crate::merklepor::MerklePoR;
+use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
+use crate::proof::ProofScheme;
 
 /// Proof of retrievability.
 ///
@@ -20,7 +20,7 @@ use proof::ProofScheme;
 /// * `auth_path` - The authentication path of the leaf in the tree.
 /// * `root` - The merkle root of the tree.
 ///
-use hasher::Hasher;
+use crate::hasher::Hasher;
 use std::marker::PhantomData;
 
 pub struct PoRCircuit<'a, E: JubjubEngine> {
@@ -240,14 +240,14 @@ mod tests {
     use sapling_crypto::circuit::multipack;
     use sapling_crypto::jubjub::JubjubBls12;
 
-    use circuit::test::*;
-    use compound_proof;
-    use drgraph::{new_seed, BucketGraph, Graph};
-    use fr32::{bytes_into_fr, fr_into_bytes};
-    use hasher::pedersen::*;
-    use merklepor;
-    use proof::ProofScheme;
-    use util::data_at_node;
+    use crate::circuit::test::*;
+    use crate::compound_proof;
+    use crate::drgraph::{new_seed, BucketGraph, Graph};
+    use crate::fr32::{bytes_into_fr, fr_into_bytes};
+    use crate::hasher::pedersen::*;
+    use crate::merklepor;
+    use crate::proof::ProofScheme;
+    use crate::util::data_at_node;
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.

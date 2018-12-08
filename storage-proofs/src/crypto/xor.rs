@@ -1,4 +1,4 @@
-use error::Result;
+use crate::error::Result;
 
 /// Encodes plaintext by elementwise xoring with the passed in key.
 pub fn encode(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>> {

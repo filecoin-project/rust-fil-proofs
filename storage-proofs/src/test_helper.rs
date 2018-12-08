@@ -4,11 +4,11 @@ use pairing::{BitIterator, PrimeField};
 use rand::Rng;
 use sapling_crypto::pedersen_hash;
 
-use crypto;
-use error;
-use fr32::{bytes_into_fr, fr_into_bytes};
-use hasher::pedersen::{PedersenDomain, PedersenFunction, PedersenHasher};
-use merkle::{MerkleProof, MerkleTree};
+use crate::crypto;
+use crate::error;
+use crate::fr32::{bytes_into_fr, fr_into_bytes};
+use crate::hasher::pedersen::{PedersenDomain, PedersenFunction, PedersenHasher};
+use crate::merkle::{MerkleProof, MerkleTree};
 
 #[macro_export]
 macro_rules! table_tests {

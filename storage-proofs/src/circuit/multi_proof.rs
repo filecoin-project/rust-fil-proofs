@@ -1,6 +1,6 @@
 use bellman::groth16;
 
-use error::Result;
+use crate::error::Result;
 use pairing::Engine;
 use std::io::{self, Read, Write};
 

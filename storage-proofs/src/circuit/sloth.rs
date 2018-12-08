@@ -2,7 +2,7 @@ use bellman::{ConstraintSystem, SynthesisError};
 use pairing::{Engine, Field};
 use sapling_crypto::circuit::num;
 
-use circuit::constraint;
+use crate::circuit::constraint;
 
 /// Circuit version of sloth decoding.
 pub fn decode<E, CS>(
@@ -63,8 +63,8 @@ fn sub<E: Engine, CS: ConstraintSystem<E>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use circuit::test::TestConstraintSystem;
-    use crypto::sloth;
+    use crate::circuit::test::TestConstraintSystem;
+    use crate::crypto::sloth;
     use pairing::bls12_381::{Bls12, Fr};
     use rand::{Rng, SeedableRng, XorShiftRng};
 

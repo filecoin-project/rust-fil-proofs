@@ -8,8 +8,8 @@ use rand::{Rand, Rng};
 use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 
 use super::{Domain, HashFunction, Hasher};
-use crypto::{kdf, pedersen, sloth};
-use error::{Error, Result};
+use crate::crypto::{kdf, pedersen, sloth};
+use crate::error::{Error, Result};
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PedersenHasher {}
@@ -223,7 +223,7 @@ mod tests {
 
     use merkle_light::hash::Hashable;
 
-    use merkle::MerkleTree;
+    use crate::merkle::MerkleTree;
 
     #[test]
     fn test_path() {

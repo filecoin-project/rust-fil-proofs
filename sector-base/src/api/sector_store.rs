@@ -1,4 +1,4 @@
-use api::errors::SectorManagerErr;
+use crate::api::errors::SectorManagerErr;
 
 pub trait SectorConfig {
     /// if true, uses something other exact bits, correct parameters, or full proofs
