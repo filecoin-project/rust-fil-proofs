@@ -13,6 +13,7 @@ extern crate sector_base;
 include!(concat!(env!("OUT_DIR"), "/libfilecoin_proofs.rs"));
 
 use ffi_toolkit::c_str_to_rust_str;
+use ffi_toolkit::free_c_str;
 use ffi_toolkit::rust_str_to_c_str;
 use rand::{thread_rng, Rng};
 use std::error::Error;
@@ -42,12 +43,15 @@ unsafe fn create_and_add_piece(
 ) -> (Vec<u8>, String, *mut AddPieceResponse) {
     let (piece_key, piece_bytes) = make_piece(num_bytes_in_piece);
 
+    let c_piece_key = rust_str_to_c_str(piece_key.clone());
+    defer!(free_c_str(c_piece_key));
+
     (
         piece_bytes.clone(),
         piece_key.clone(),
         add_piece(
             sector_builder,
-            rust_str_to_c_str(piece_key.clone()),
+            c_piece_key,
             &piece_bytes[0],
             piece_bytes.len(),
         ),
@@ -64,13 +68,23 @@ unsafe fn create_sector_builder(
     let mut prover_id: [u8; 31] = prover_id;
     let sector_store_config: ConfiguredStore = ConfiguredStore_ProofTest;
 
+    let mut c_metadata_dir = rust_str_to_c_str(metadata_dir.path().to_str().unwrap());
+    let mut c_sealed_dir = rust_str_to_c_str(sealed_dir.path().to_str().unwrap());
+    let mut c_staging_dir = rust_str_to_c_str(staging_dir.path().to_str().unwrap());
+
+    defer!({
+        free_c_str(c_metadata_dir);
+        free_c_str(c_sealed_dir);
+        free_c_str(c_staging_dir);
+    });
+
     let resp = init_sector_builder(
         &sector_store_config,
         last_committed_sector_id,
-        rust_str_to_c_str(metadata_dir.path().to_str().unwrap()),
+        c_metadata_dir,
         &mut prover_id,
-        rust_str_to_c_str(sealed_dir.path().to_str().unwrap()),
-        rust_str_to_c_str(staging_dir.path().to_str().unwrap()),
+        c_sealed_dir,
+        c_staging_dir,
         2,
     );
     defer!(destroy_init_sector_builder_response(resp));
@@ -211,7 +225,10 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
     // after sealing, read the bytes (causes unseal) and compare with what we
     // added to the sector
     {
-        let resp = read_piece_from_sealed_sector(sector_builder_b, rust_str_to_c_str(piece_key));
+        let c_piece_key = rust_str_to_c_str(piece_key);
+        defer!(free_c_str(c_piece_key));
+
+        let resp = read_piece_from_sealed_sector(sector_builder_b, c_piece_key);
         defer!(destroy_read_piece_from_sealed_sector_response(resp));
 
         if (*resp).status_code != 0 {
