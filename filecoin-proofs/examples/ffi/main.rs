@@ -68,9 +68,9 @@ unsafe fn create_sector_builder(
     let mut prover_id: [u8; 31] = prover_id;
     let sector_store_config: ConfiguredStore = ConfiguredStore_ProofTest;
 
-    let mut c_metadata_dir = rust_str_to_c_str(metadata_dir.path().to_str().unwrap());
-    let mut c_sealed_dir = rust_str_to_c_str(sealed_dir.path().to_str().unwrap());
-    let mut c_staging_dir = rust_str_to_c_str(staging_dir.path().to_str().unwrap());
+    let c_metadata_dir = rust_str_to_c_str(metadata_dir.path().to_str().unwrap());
+    let c_sealed_dir = rust_str_to_c_str(sealed_dir.path().to_str().unwrap());
+    let c_staging_dir = rust_str_to_c_str(staging_dir.path().to_str().unwrap());
 
     defer!({
         free_c_str(c_metadata_dir);
