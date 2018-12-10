@@ -1,18 +1,11 @@
-use crypto::pedersen::pedersen_md_no_padding;
 use pairing::bls12_381::Fr;
 use pairing::Engine;
 
+use hasher::{Blake2sHasher, Hasher};
+
 /// Key derivation function, based on pedersen hashing.
 pub fn kdf<E: Engine>(data: &[u8], m: usize) -> Fr {
-    assert_eq!(
-        data.len(),
-        32 * (1 + m),
-        "invalid input length: data.len(): {} m: {}",
-        data.len(),
-        m
-    );
-
-    pedersen_md_no_padding(data)
+    Blake2sHasher::kdf(&data, m).into()
 }
 
 #[cfg(test)]
@@ -29,8 +22,8 @@ mod tests {
         let data = vec![1u8; size];
         let expected = bytes_into_fr::<Bls12>(
             &mut vec![
-                122, 242, 246, 175, 171, 132, 8, 235, 194, 175, 245, 82, 88, 212, 189, 229, 223,
-                31, 184, 94, 171, 13, 127, 7, 246, 17, 141, 159, 131, 46, 6, 94,
+                220, 60, 76, 126, 119, 247, 67, 162, 98, 94, 119, 28, 247, 18, 71, 208, 167, 72,
+                33, 85, 59, 56, 96, 13, 9, 67, 49, 109, 95, 246, 152, 63,
             ]
             .as_slice(),
         )

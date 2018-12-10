@@ -1,14 +1,12 @@
 use bellman::{ConstraintSystem, SynthesisError};
+use sapling_crypto::circuit::blake2s::blake2s as blake2s_circuit;
 use sapling_crypto::circuit::boolean::Boolean;
-use sapling_crypto::circuit::num;
+use sapling_crypto::circuit::{multipack, num};
 use sapling_crypto::jubjub::JubjubEngine;
-
-use circuit::pedersen::pedersen_md_no_padding;
 
 /// Key derivation function, using pedersen hashes as the underlying primitive.
 pub fn kdf<E, CS>(
     mut cs: CS,
-    params: &E::Params,
     id: Vec<Boolean>,
     parents: Vec<Vec<Boolean>>,
     m: usize,
@@ -26,7 +24,22 @@ where
 
     assert_eq!(ciphertexts.len(), 8 * 32 * (1 + m), "invalid input length");
 
-    pedersen_md_no_padding(cs.namespace(|| "key"), params, ciphertexts.as_slice())
+    let personalization = vec![0u8; 8];
+    let alloc_bits = blake2s_circuit(cs.namespace(|| "hash"), &ciphertexts[..], &personalization)?;
+    let fr = match alloc_bits[0].get_value() {
+        Some(_) => {
+            let bits = alloc_bits
+                .iter()
+                .map(|v| v.get_value().unwrap())
+                .collect::<Vec<bool>>();
+            // TODO: figure out if we can avoid this
+            let frs = multipack::compute_multipacking::<E>(&bits);
+            Ok(frs[0])
+        }
+        None => Err(SynthesisError::AssignmentMissing),
+    };
+
+    num::AllocatedNum::<E>::alloc(cs.namespace(|| "num"), || fr)
 }
 
 #[cfg(test)]
@@ -39,14 +52,12 @@ mod tests {
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::circuit::boolean::Boolean;
-    use sapling_crypto::jubjub::JubjubBls12;
     use util::bytes_into_boolean_vec;
 
     #[test]
     fn kdf_circuit() {
         let mut cs = TestConstraintSystem::<Bls12>::new();
         let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-        let params = &JubjubBls12::new();
 
         let m = 20;
 
@@ -68,7 +79,6 @@ mod tests {
             .collect();
         let out = kdf(
             cs.namespace(|| "kdf"),
-            &params,
             id_bits.clone(),
             parents_bits.clone(),
             m,
@@ -76,7 +86,7 @@ mod tests {
         .unwrap();
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_constraints(), 27661);
+        assert_eq!(cs.num_constraints(), 240282);
 
         let input_bytes = parents.iter().fold(id, |mut acc, parent| {
             acc.extend(parent);
