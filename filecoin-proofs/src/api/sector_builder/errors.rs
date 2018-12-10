@@ -4,7 +4,8 @@ use std::fmt::Display;
 pub enum SectorBuilderErr {
     #[fail(
         display = "number of bytes in piece ({}) exceeds maximum ({})",
-        num_bytes_in_piece, max_bytes_per_sector
+        num_bytes_in_piece,
+        max_bytes_per_sector
     )]
     OverflowError {
         num_bytes_in_piece: u64,
@@ -13,7 +14,8 @@ pub enum SectorBuilderErr {
 
     #[fail(
         display = "number of bytes written ({}) does not match bytes in piece ({})",
-        num_bytes_written, num_bytes_in_piece
+        num_bytes_written,
+        num_bytes_in_piece
     )]
     IncompleteWriteError {
         num_bytes_written: u64,
