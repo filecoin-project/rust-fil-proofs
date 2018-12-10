@@ -45,14 +45,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::kdf;
-    use bellman::ConstraintSystem;
     use crate::circuit::test::TestConstraintSystem;
     use crate::crypto;
     use crate::fr32::fr_into_bytes;
+    use crate::util::bytes_into_boolean_vec;
+    use bellman::ConstraintSystem;
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::circuit::boolean::Boolean;
-    use crate::util::bytes_into_boolean_vec;
 
     #[test]
     fn kdf_circuit() {

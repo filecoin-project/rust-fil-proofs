@@ -1,5 +1,5 @@
-use bellman::{ConstraintSystem, SynthesisError};
 use crate::error;
+use bellman::{ConstraintSystem, SynthesisError};
 use pairing::Engine;
 use sapling_crypto::circuit::boolean::{self, AllocatedBit, Boolean};
 

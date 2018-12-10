@@ -1,9 +1,9 @@
 use crate::api::sector_builder::SectorId;
+use crate::error;
+use crate::serde_big_array::BigArray;
 use byteorder::LittleEndian;
 use byteorder::WriteBytesExt;
-use crate::error;
 use serde::{Deserialize, Serialize};
-use crate::serde_big_array::BigArray;
 use std::fmt;
 
 #[derive(Default, Clone, Serialize, Deserialize, Debug, PartialEq)]

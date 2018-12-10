@@ -1,12 +1,6 @@
-#![cfg_attr(
-    feature = "cargo-clippy",
-    deny(clippy::all, clippy::perf, clippy::correctness)
-)]
-#![cfg_attr(feature = "cargo-clippy", allow(clippy::unreadable_literal))]
-#![cfg_attr(
-    feature = "cargo-clippy",
-    warn(clippy::type_complexity, clippy::too_many_arguments)
-)]
+#![deny(clippy::all, clippy::perf, clippy::correctness)]
+#![allow(clippy::unreadable_literal)]
+#![warn(clippy::type_complexity, clippy::too_many_arguments)]
 
 extern crate ffi_toolkit;
 extern crate sector_base;

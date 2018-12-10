@@ -72,10 +72,10 @@ pub fn pedersen_compression(bytes: &mut Vec<u8>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::bytes_into_bits;
     use pairing::bls12_381::Fr;
     use pairing::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
-    use crate::util::bytes_into_bits;
     #[test]
     fn test_bit_vec_le() {
         let bytes = b"ABC";

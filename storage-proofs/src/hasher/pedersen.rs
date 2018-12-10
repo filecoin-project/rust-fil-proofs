@@ -102,7 +102,7 @@ impl AsRef<[u8]> for PedersenDomain {
 // https://internals.rust-lang.org/t/safe-trasnsmute-for-slices-e-g-u64-u32-particularly-simd-types/2871
 // https://github.com/briansmith/ring/blob/abb3fdfc08562f3f02e95fb551604a871fd4195e/src/polyfill.rs#L93-L110
 #[inline(always)]
-#[cfg_attr(feature = "cargo-clippy", allow(needless_lifetimes))]
+#[allow(clippy::needless_lifetimes)]
 fn as_ref<'a>(src: &'a [u64; 4]) -> &'a [u8] {
     unsafe {
         std::slice::from_raw_parts(

@@ -16,8 +16,8 @@ use crate::fr32::fr_into_bytes;
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use crate::proof::ProofScheme;
-use std::marker::PhantomData;
 use crate::util::{bytes_into_bits, bytes_into_boolean_vec};
+use std::marker::PhantomData;
 
 /// DRG based Proof of Replication.
 ///
@@ -472,13 +472,13 @@ mod tests {
     use crate::drgraph::{graph_height, new_seed, BucketGraph};
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
     use crate::hasher::pedersen::*;
-    use pairing::Field;
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
+    use crate::util::data_at_node;
+    use pairing::Field;
     use rand::Rand;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
-    use crate::util::data_at_node;
 
     #[test]
     fn drgporep_input_circuit_with_bls12_381() {

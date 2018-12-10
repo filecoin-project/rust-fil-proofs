@@ -1,6 +1,6 @@
 use crate::api::sector_builder::kv_store::KeyValueStore;
-use blake2::{Blake2b, Digest};
 use crate::error::Result;
+use blake2::{Blake2b, Digest};
 use std::fs::{self, File, OpenOptions};
 use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};

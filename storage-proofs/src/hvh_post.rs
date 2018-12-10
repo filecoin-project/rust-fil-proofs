@@ -332,9 +332,11 @@ mod tests {
         )
         .unwrap();
 
-        assert!(
-            HvhPost::<PedersenHasher, vdf_sloth::Sloth>::verify(&pub_params, &pub_inputs, &proof)
-                .unwrap()
-        );
+        assert!(HvhPost::<PedersenHasher, vdf_sloth::Sloth>::verify(
+            &pub_params,
+            &pub_inputs,
+            &proof
+        )
+        .unwrap());
     }
 }

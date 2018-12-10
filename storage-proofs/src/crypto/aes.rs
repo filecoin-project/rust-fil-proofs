@@ -1,8 +1,8 @@
+use crate::error::Result;
 use aes::block_cipher_trait::generic_array::GenericArray;
 use aes::Aes256;
 use block_modes::block_padding::ZeroPadding;
 use block_modes::{BlockMode, BlockModeIv, Cbc};
-use crate::error::Result;
 
 pub fn encode(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>> {
     assert_eq!(key.len(), 32, "invalid key length");

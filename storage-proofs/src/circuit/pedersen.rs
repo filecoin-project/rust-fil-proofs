@@ -81,14 +81,14 @@ pub fn pedersen_compression<E: JubjubEngine, CS: ConstraintSystem<E>>(
 #[cfg(test)]
 mod tests {
     use super::pedersen_md_no_padding;
-    use bellman::ConstraintSystem;
     use crate::circuit::test::TestConstraintSystem;
     use crate::crypto;
+    use crate::util::bytes_into_boolean_vec;
+    use bellman::ConstraintSystem;
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::circuit::boolean::Boolean;
     use sapling_crypto::jubjub::JubjubBls12;
-    use crate::util::bytes_into_boolean_vec;
 
     #[test]
     fn test_pedersen_input_circut() {

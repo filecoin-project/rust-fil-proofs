@@ -203,7 +203,7 @@ mod tests {
         );
     }
 
-    table_tests!{
+    table_tests! {
         prove_verify{
             // TODO: figure out why this was failing
             // prove_verify_32_2_1(32, 2, 1);

@@ -116,9 +116,8 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
             let height = graph_height(graph.size());
             let proof = match layer_proof {
                 Some(wrapped_proof) => {
-                    let typed_proof: drgporep::Proof<
-                        <ZigZagDrgPoRep<H> as LayersTrait>::Hasher,
-                    > = wrapped_proof.into();
+                    let typed_proof: drgporep::Proof<<ZigZagDrgPoRep<H> as LayersTrait>::Hasher> =
+                        wrapped_proof.into();
                     typed_proof
                 }
                 // Synthesize a default drgporep if none is supplied – for use in tests, etc.
@@ -330,12 +329,12 @@ mod tests {
     use crate::fr32::fr_into_bytes;
     use crate::hasher::pedersen::*;
     use crate::layered_drgporep;
-    use pairing::Field;
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
+    use crate::zigzag_graph::ZigZagGraph;
+    use pairing::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
-    use crate::zigzag_graph::ZigZagGraph;
 
     #[test]
     fn zigzag_drgporep_input_circuit_with_bls12_381() {

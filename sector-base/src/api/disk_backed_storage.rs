@@ -1,10 +1,10 @@
 use crate::api::errors::SectorManagerErr;
 use crate::api::sector_store::{SectorConfig, SectorManager, SectorStore};
 use crate::api::util;
-use ffi_toolkit::{c_str_to_rust_str, raw_ptr};
 use crate::io::fr32::{
     almost_truncate_to_unpadded_bytes, target_unpadded_bytes, unpadded_bytes, write_padded,
 };
+use ffi_toolkit::{c_str_to_rust_str, raw_ptr};
 use libc;
 use std::env;
 use std::fs::{create_dir_all, remove_file, File, OpenOptions};
@@ -361,12 +361,10 @@ mod non_ffi_tests {
         let access = store.manager().new_staging_sector_access().unwrap();
 
         assert!(store.manager().read_raw(access.clone(), 0, 0).is_ok());
-        assert!(
-            store
-                .manager()
-                .delete_staging_sector_access(access.clone())
-                .is_ok()
-        );
+        assert!(store
+            .manager()
+            .delete_staging_sector_access(access.clone())
+            .is_ok());
         assert!(store.manager().read_raw(access.clone(), 0, 0).is_err());
     }
 }
@@ -385,8 +383,8 @@ mod tests {
     };
 
     use crate::api::responses::SBResponseStatus;
-    use ffi_toolkit::{c_str_to_pbuf, rust_str_to_c_str};
     use crate::io::fr32::FR32_PADDING_MAP;
+    use ffi_toolkit::{c_str_to_pbuf, rust_str_to_c_str};
 
     fn create_storage() -> *mut Box<SectorStore> {
         let staging_path = tempfile::tempdir().unwrap().path().to_owned();

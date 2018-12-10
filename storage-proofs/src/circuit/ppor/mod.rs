@@ -127,12 +127,12 @@ mod tests {
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
     use crate::hasher::pedersen::*;
     use crate::merklepor;
+    use crate::proof::ProofScheme;
+    use crate::util::data_at_node;
     use pairing::bls12_381::*;
     use pairing::Field;
-    use crate::proof::ProofScheme;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
-    use crate::util::data_at_node;
 
     #[test]
     fn test_parallel_por_input_circuit_with_bls12_381() {

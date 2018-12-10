@@ -1,6 +1,6 @@
-use byteorder::{LittleEndian, WriteBytesExt};
 use crate::crypto::blake2s::blake2s;
 use crate::hasher::Domain;
+use byteorder::{LittleEndian, WriteBytesExt};
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
 
