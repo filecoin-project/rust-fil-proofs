@@ -1,9 +1,9 @@
-use api::sector_builder::errors::*;
-use api::sector_builder::metadata::sum_piece_bytes;
-use api::sector_builder::metadata::StagedSectorMetadata;
-use api::sector_builder::state::StagedState;
-use api::sector_builder::*;
-use error;
+use crate::api::sector_builder::errors::*;
+use crate::api::sector_builder::metadata::sum_piece_bytes;
+use crate::api::sector_builder::metadata::StagedSectorMetadata;
+use crate::api::sector_builder::state::StagedState;
+use crate::api::sector_builder::*;
+use crate::error;
 use sector_base::api::sector_store::SectorManager;
 use std::sync::Arc;
 
@@ -109,7 +109,7 @@ fn provision_new_staged_sector(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use api::sector_builder::metadata::PieceMetadata;
+    use crate::api::sector_builder::metadata::PieceMetadata;
 
     #[test]
     fn test_alpha() {

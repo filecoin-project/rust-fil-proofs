@@ -11,9 +11,7 @@ pub enum Error {
     OutOfBounds(usize, usize),
     #[fail(
         display = "mismatch of data, node_size and nodes {} != {} * {}",
-        _0,
-        _1,
-        _2
+        _0, _1, _2
     )]
     InvalidMerkleTreeArgs(usize, usize, usize),
     #[fail(display = "invalid node size ({}), must be 16, 32 or 64", _0)]

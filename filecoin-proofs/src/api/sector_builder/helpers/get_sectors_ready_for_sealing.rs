@@ -1,7 +1,7 @@
-use api::sector_builder::metadata::sum_piece_bytes;
-use api::sector_builder::metadata::StagedSectorMetadata;
-use api::sector_builder::state::StagedState;
-use api::sector_builder::SectorId;
+use crate::api::sector_builder::metadata::sum_piece_bytes;
+use crate::api::sector_builder::metadata::StagedSectorMetadata;
+use crate::api::sector_builder::state::StagedState;
+use crate::api::sector_builder::SectorId;
 use itertools::chain;
 use std::cmp::Reverse;
 
@@ -34,10 +34,10 @@ pub fn get_sectors_ready_for_sealing(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use api::sector_builder::metadata::PieceMetadata;
-    use api::sector_builder::metadata::StagedSectorMetadata;
-    use api::sector_builder::state::StagedState;
-    use api::sector_builder::SectorId;
+    use crate::api::sector_builder::metadata::PieceMetadata;
+    use crate::api::sector_builder::metadata::StagedSectorMetadata;
+    use crate::api::sector_builder::state::StagedState;
+    use crate::api::sector_builder::SectorId;
     use std::collections::HashMap;
 
     fn make_meta(

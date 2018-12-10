@@ -1,4 +1,4 @@
-#![cfg_attr(feature = "cargo-clippy", allow(len_without_is_empty))]
+#![allow(clippy::len_without_is_empty)]
 
 use std::marker::PhantomData;
 
@@ -8,7 +8,7 @@ pub use merkle_light::merkle::MerkleTree;
 use merkle_light::proof;
 use pairing::bls12_381::Fr;
 
-use hasher::{Domain, Hasher};
+use crate::hasher::{Domain, Hasher};
 
 /// Representation of a merkle proof.
 /// Each element in the `path` vector consists of a tuple `(hash, is_right)`, with `hash` being the the hash of the node at the current level and `is_right` a boolean indicating if the path is taking the right path.
@@ -82,18 +82,19 @@ impl<H: Hasher> MerkleProof<H> {
             return false;
         }
 
-        self.root() == &(0..self.path.len()).fold(self.leaf, |h, i| {
-            a.reset();
-            let is_right = self.path[i].1;
+        self.root()
+            == &(0..self.path.len()).fold(self.leaf, |h, i| {
+                a.reset();
+                let is_right = self.path[i].1;
 
-            let (left, right) = if is_right {
-                (self.path[i].0, h)
-            } else {
-                (h, self.path[i].0)
-            };
+                let (left, right) = if is_right {
+                    (self.path[i].0, h)
+                } else {
+                    (h, self.path[i].0)
+                };
 
-            a.node(left, right, i)
-        })
+                a.node(left, right, i)
+            })
     }
 
     /// Validates that the data hashes to the leaf of the merkle path.
@@ -150,9 +151,9 @@ mod tests {
     use rand::{self, Rng};
     use std::io::Write;
 
-    use drgraph::new_seed;
-    use drgraph::{BucketGraph, Graph};
-    use hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::drgraph::new_seed;
+    use crate::drgraph::{BucketGraph, Graph};
+    use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
 
     fn merklepath<H: Hasher>() {
         let g = BucketGraph::<H>::new(10, 5, 0, new_seed());

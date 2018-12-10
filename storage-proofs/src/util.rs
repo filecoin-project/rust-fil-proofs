@@ -1,5 +1,5 @@
+use crate::error;
 use bellman::{ConstraintSystem, SynthesisError};
-use error;
 use pairing::Engine;
 use sapling_crypto::circuit::boolean::{self, AllocatedBit, Boolean};
 
@@ -82,7 +82,7 @@ pub fn bits_to_bytes(bits: &[bool]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use circuit::test::*;
+    use crate::circuit::test::*;
     use pairing::bls12_381::*;
     use rand::{Rng, SeedableRng, XorShiftRng};
 

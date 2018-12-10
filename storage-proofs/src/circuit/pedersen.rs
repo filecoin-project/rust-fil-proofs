@@ -3,7 +3,7 @@ use sapling_crypto::circuit::boolean::Boolean;
 use sapling_crypto::circuit::{num, pedersen_hash};
 use sapling_crypto::jubjub::JubjubEngine;
 
-use crypto::pedersen::PEDERSEN_BLOCK_SIZE;
+use crate::crypto::pedersen::PEDERSEN_BLOCK_SIZE;
 
 /// Pedersen hashing for inputs with length multiple of the block size. Based on a Merkle-Damgard construction.
 pub fn pedersen_md_no_padding<E, CS>(
@@ -81,14 +81,14 @@ pub fn pedersen_compression<E: JubjubEngine, CS: ConstraintSystem<E>>(
 #[cfg(test)]
 mod tests {
     use super::pedersen_md_no_padding;
+    use crate::circuit::test::TestConstraintSystem;
+    use crate::crypto;
+    use crate::util::bytes_into_boolean_vec;
     use bellman::ConstraintSystem;
-    use circuit::test::TestConstraintSystem;
-    use crypto;
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::circuit::boolean::Boolean;
     use sapling_crypto::jubjub::JubjubBls12;
-    use util::bytes_into_boolean_vec;
 
     #[test]
     fn test_pedersen_input_circut() {

@@ -1,7 +1,7 @@
-use error::Result;
-use hasher::{Domain, HashFunction, Hasher};
-use merkle::MerkleTree;
-use proof::ProofScheme;
+use crate::error::Result;
+use crate::hasher::{Domain, HashFunction, Hasher};
+use crate::merkle::MerkleTree;
+use crate::proof::ProofScheme;
 
 #[derive(Debug)]
 pub struct PublicParams {

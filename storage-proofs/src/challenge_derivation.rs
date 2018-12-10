@@ -1,6 +1,6 @@
+use crate::crypto::blake2s::blake2s;
+use crate::hasher::Domain;
 use byteorder::{LittleEndian, WriteBytesExt};
-use crypto::blake2s::blake2s;
-use hasher::Domain;
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
 
@@ -33,7 +33,7 @@ pub fn derive_challenges<D: Domain>(
 #[cfg(test)]
 mod test {
     use super::*;
-    use hasher::pedersen::PedersenDomain;
+    use crate::hasher::pedersen::PedersenDomain;
     use rand::{thread_rng, Rng};
     use std::collections::HashMap;
 

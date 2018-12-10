@@ -15,8 +15,8 @@ use pbr::ProgressBar;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 
-use circuit::bench::BenchCS;
-use circuit::test::TestConstraintSystem;
+use crate::circuit::bench::BenchCS;
+use crate::circuit::test::TestConstraintSystem;
 
 pub fn prettyb(num: usize) -> String {
     let num = num as f64;
@@ -405,13 +405,13 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
     /// Generate groth parameters
     fn generate_groth_params<R: Rng>(
         &mut self,
-        &mut R,
-        &'a <Bls12 as JubjubEngine>::Params,
-        usize,
-        usize,
-        usize,
-        usize,
-        usize,
+        _: &mut R,
+        _: &'a <Bls12 as JubjubEngine>::Params,
+        _: usize,
+        _: usize,
+        _: usize,
+        _: usize,
+        _: usize,
     ) -> Parameters<Bls12>;
 
     /// How many samples should be taken when proofing and verifying
@@ -420,14 +420,14 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
     /// Create a new random proof
     fn create_circuit<R: Rng>(
         &mut self,
-        &mut R,
-        &'a <Bls12 as JubjubEngine>::Params,
-        usize,
-        usize,
-        usize,
-        usize,
-        usize,
-        usize,
+        _: &mut R,
+        _: &'a <Bls12 as JubjubEngine>::Params,
+        _: usize,
+        _: usize,
+        _: usize,
+        _: usize,
+        _: usize,
+        _: usize,
     ) -> C;
 
     fn create_proof<R: Rng>(
@@ -456,7 +456,7 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
     }
 
     /// Verify the given proof, return `None` if not implemented.
-    fn verify_proof(&mut self, &Proof<Bls12>, &PreparedVerifyingKey<Bls12>) -> Option<bool>;
+    fn verify_proof(&mut self, _: &Proof<Bls12>, _: &PreparedVerifyingKey<Bls12>) -> Option<bool>;
 
     /// Get the number of constraints of the circuit
     fn get_num_constraints<R: Rng>(

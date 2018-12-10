@@ -8,8 +8,8 @@ use rand::{Rand, Rng};
 use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 
 use super::{Domain, HashFunction, Hasher};
-use crypto::{kdf, pedersen, sloth};
-use error::{Error, Result};
+use crate::crypto::{kdf, pedersen, sloth};
+use crate::error::{Error, Result};
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PedersenHasher {}
@@ -102,7 +102,7 @@ impl AsRef<[u8]> for PedersenDomain {
 // https://internals.rust-lang.org/t/safe-trasnsmute-for-slices-e-g-u64-u32-particularly-simd-types/2871
 // https://github.com/briansmith/ring/blob/abb3fdfc08562f3f02e95fb551604a871fd4195e/src/polyfill.rs#L93-L110
 #[inline(always)]
-#[cfg_attr(feature = "cargo-clippy", allow(needless_lifetimes))]
+#[allow(clippy::needless_lifetimes)]
 fn as_ref<'a>(src: &'a [u64; 4]) -> &'a [u8] {
     unsafe {
         std::slice::from_raw_parts(
@@ -223,7 +223,7 @@ mod tests {
 
     use merkle_light::hash::Hashable;
 
-    use merkle::MerkleTree;
+    use crate::merkle::MerkleTree;
 
     #[test]
     fn test_path() {

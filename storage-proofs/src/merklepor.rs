@@ -1,12 +1,12 @@
 use std::marker::PhantomData;
 
-use drgporep::DataProof;
-use drgraph::graph_height;
-use error::*;
-use hasher::{Domain, Hasher};
-use merkle::{MerkleProof, MerkleTree};
-use parameter_cache::ParameterSetIdentifier;
-use proof::ProofScheme;
+use crate::drgporep::DataProof;
+use crate::drgraph::graph_height;
+use crate::error::*;
+use crate::hasher::{Domain, Hasher};
+use crate::merkle::{MerkleProof, MerkleTree};
+use crate::parameter_cache::ParameterSetIdentifier;
+use crate::proof::ProofScheme;
 
 /// The parameters shared between the prover and verifier.
 #[derive(Clone, Debug)]
@@ -139,11 +139,11 @@ mod tests {
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
-    use drgraph::{new_seed, BucketGraph, Graph};
-    use fr32::fr_into_bytes;
-    use hasher::{Blake2sHasher, HashFunction, PedersenHasher, Sha256Hasher};
-    use merkle::make_proof_for_test;
-    use util::data_at_node;
+    use crate::drgraph::{new_seed, BucketGraph, Graph};
+    use crate::fr32::fr_into_bytes;
+    use crate::hasher::{Blake2sHasher, HashFunction, PedersenHasher, Sha256Hasher};
+    use crate::merkle::make_proof_for_test;
+    use crate::util::data_at_node;
 
     fn test_merklepor<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);

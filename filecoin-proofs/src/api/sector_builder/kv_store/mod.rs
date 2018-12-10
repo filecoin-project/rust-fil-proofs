@@ -1,4 +1,4 @@
-use error::Result;
+use crate::error::Result;
 
 pub mod fs;
 
@@ -9,8 +9,8 @@ pub trait KeyValueStore {
 
 #[cfg(test)]
 mod tests {
-    use api::sector_builder::kv_store::fs::FileSystemKvs;
-    use api::sector_builder::kv_store::KeyValueStore;
+    use crate::api::sector_builder::kv_store::fs::FileSystemKvs;
+    use crate::api::sector_builder::kv_store::KeyValueStore;
 
     #[test]
     fn test_alpha() {

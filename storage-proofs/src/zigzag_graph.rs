@@ -1,10 +1,10 @@
 use std::marker::PhantomData;
 
-use crypto::feistel;
-use drgraph::{BucketGraph, Graph};
-use hasher::Hasher;
-use layered_drgporep::Layerable;
-use parameter_cache::ParameterSetIdentifier;
+use crate::crypto::feistel;
+use crate::drgraph::{BucketGraph, Graph};
+use crate::hasher::Hasher;
+use crate::layered_drgporep::Layerable;
+use crate::parameter_cache::ParameterSetIdentifier;
 
 pub const DEFAULT_EXPANSION_DEGREE: usize = 8;
 
@@ -243,8 +243,8 @@ mod tests {
 
     use std::collections::HashMap;
 
-    use drgraph::new_seed;
-    use hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::drgraph::new_seed;
+    use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
 
     fn assert_graph_ascending<H: Hasher, G: Graph<H>>(g: G) {
         for i in 0..g.size() {

@@ -1,11 +1,11 @@
 use std::marker::PhantomData;
 
-use drgporep;
-use drgraph::Graph;
-use hasher::Hasher;
-use layered_drgporep::Layers;
-use parameter_cache::ParameterSetIdentifier;
-use zigzag_graph::{ZigZag, ZigZagBucketGraph};
+use crate::drgporep;
+use crate::drgraph::Graph;
+use crate::hasher::Hasher;
+use crate::layered_drgporep::Layers;
+use crate::parameter_cache::ParameterSetIdentifier;
+use crate::zigzag_graph::{ZigZag, ZigZagBucketGraph};
 
 /// ZigZagDrgPorep is a layered PoRep which replicates layer by layer.
 /// Between layers, the graph is 'reversed' in such a way that the dependencies expand with each iteration.
@@ -59,12 +59,12 @@ mod tests {
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
-    use drgraph::new_seed;
-    use fr32::fr_into_bytes;
-    use hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
-    use layered_drgporep::{PrivateInputs, PublicInputs, PublicParams, SetupParams};
-    use porep::PoRep;
-    use proof::ProofScheme;
+    use crate::drgraph::new_seed;
+    use crate::fr32::fr_into_bytes;
+    use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::layered_drgporep::{PrivateInputs, PublicInputs, PublicParams, SetupParams};
+    use crate::porep::PoRep;
+    use crate::proof::ProofScheme;
 
     const DEFAULT_ZIGZAG_LAYERS: usize = 10;
 
@@ -203,7 +203,7 @@ mod tests {
         );
     }
 
-    table_tests!{
+    table_tests! {
         prove_verify{
             // TODO: figure out why this was failing
             // prove_verify_32_2_1(32, 2, 1);

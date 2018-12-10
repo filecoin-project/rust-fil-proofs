@@ -5,20 +5,20 @@ use pairing::bls12_381::{Bls12, Fr};
 use sapling_crypto::circuit::num;
 use sapling_crypto::jubjub::JubjubEngine;
 
-use circuit::constraint;
-use circuit::drgporep::{ComponentPrivateInputs, DrgPoRepCompound};
-use circuit::pedersen::pedersen_md_no_padding;
-use circuit::variables::Root;
-use compound_proof::{CircuitComponent, CompoundProof};
-use drgporep::{self, DrgPoRep};
-use drgraph::{graph_height, Graph};
-use hasher::{Domain, Hasher};
-use layered_drgporep::{self, Layers as LayersTrait};
-use parameter_cache::{CacheableParameters, ParameterSetIdentifier};
-use porep;
-use proof::ProofScheme;
-use util::bytes_into_boolean_vec;
-use zigzag_drgporep::ZigZagDrgPoRep;
+use crate::circuit::constraint;
+use crate::circuit::drgporep::{ComponentPrivateInputs, DrgPoRepCompound};
+use crate::circuit::pedersen::pedersen_md_no_padding;
+use crate::circuit::variables::Root;
+use crate::compound_proof::{CircuitComponent, CompoundProof};
+use crate::drgporep::{self, DrgPoRep};
+use crate::drgraph::{graph_height, Graph};
+use crate::hasher::{Domain, Hasher};
+use crate::layered_drgporep::{self, Layers as LayersTrait};
+use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
+use crate::porep;
+use crate::proof::ProofScheme;
+use crate::util::bytes_into_boolean_vec;
+use crate::zigzag_drgporep::ZigZagDrgPoRep;
 
 type Layers<'a, H, G> = Vec<(
     <DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicInputs,
@@ -116,9 +116,8 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
             let height = graph_height(graph.size());
             let proof = match layer_proof {
                 Some(wrapped_proof) => {
-                    let typed_proof: drgporep::Proof<
-                        <ZigZagDrgPoRep<H> as LayersTrait>::Hasher,
-                    > = wrapped_proof.into();
+                    let typed_proof: drgporep::Proof<<ZigZagDrgPoRep<H> as LayersTrait>::Hasher> =
+                        wrapped_proof.into();
                     typed_proof
                 }
                 // Synthesize a default drgporep if none is supplied – for use in tests, etc.
@@ -323,19 +322,19 @@ impl<'a, H: 'static + Hasher>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use circuit::test::*;
-    use compound_proof;
-    use drgporep;
-    use drgraph::new_seed;
-    use fr32::fr_into_bytes;
-    use hasher::pedersen::*;
-    use layered_drgporep;
+    use crate::circuit::test::*;
+    use crate::compound_proof;
+    use crate::drgporep;
+    use crate::drgraph::new_seed;
+    use crate::fr32::fr_into_bytes;
+    use crate::hasher::pedersen::*;
+    use crate::layered_drgporep;
+    use crate::porep::PoRep;
+    use crate::proof::ProofScheme;
+    use crate::zigzag_graph::ZigZagGraph;
     use pairing::Field;
-    use porep::PoRep;
-    use proof::ProofScheme;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
-    use zigzag_graph::ZigZagGraph;
 
     #[test]
     fn zigzag_drgporep_input_circuit_with_bls12_381() {

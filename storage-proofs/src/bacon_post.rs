@@ -3,12 +3,12 @@ use std::{thread, time};
 
 use byteorder::{ByteOrder, LittleEndian};
 
-use error::{Error, Result};
-use hasher::{Domain, HashFunction, Hasher};
-use hvh_post;
-use merkle::MerkleTree;
-use proof::ProofScheme;
-use vdf::Vdf;
+use crate::error::{Error, Result};
+use crate::hasher::{Domain, HashFunction, Hasher};
+use crate::hvh_post;
+use crate::merkle::MerkleTree;
+use crate::proof::ProofScheme;
+use crate::vdf::Vdf;
 
 #[derive(Clone, Debug)]
 pub struct SetupParams<T: Domain, V: Vdf<T>> {
@@ -252,10 +252,10 @@ mod tests {
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
-    use drgraph::{new_seed, BucketGraph, Graph};
-    use fr32::fr_into_bytes;
-    use hasher::pedersen::{PedersenDomain, PedersenHasher};
-    use vdf_sloth;
+    use crate::drgraph::{new_seed, BucketGraph, Graph};
+    use crate::fr32::fr_into_bytes;
+    use crate::hasher::pedersen::{PedersenDomain, PedersenHasher};
+    use crate::vdf_sloth;
 
     #[test]
     fn test_bacon_post_basics() {

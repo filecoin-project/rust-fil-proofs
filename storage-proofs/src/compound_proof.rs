@@ -1,11 +1,11 @@
 use rayon::prelude::*;
 
+use crate::circuit::multi_proof::MultiProof;
+use crate::error::Result;
+use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
+use crate::partitions;
+use crate::proof::ProofScheme;
 use bellman::{groth16, Circuit};
-use circuit::multi_proof::MultiProof;
-use error::Result;
-use parameter_cache::{CacheableParameters, ParameterSetIdentifier};
-use partitions;
-use proof::ProofScheme;
 use rand::{SeedableRng, XorShiftRng};
 use sapling_crypto::jubjub::JubjubEngine;
 

@@ -2,12 +2,12 @@ use std::marker::PhantomData;
 
 use byteorder::{ByteOrder, LittleEndian};
 
-use error::{Error, Result};
-use hasher::{Domain, HashFunction, Hasher};
-use merkle::MerkleTree;
-use porc::{self, PoRC};
-use proof::ProofScheme;
-use vdf::Vdf;
+use crate::error::{Error, Result};
+use crate::hasher::{Domain, HashFunction, Hasher};
+use crate::merkle::MerkleTree;
+use crate::porc::{self, PoRC};
+use crate::proof::ProofScheme;
+use crate::vdf::Vdf;
 
 #[derive(Clone, Debug)]
 pub struct SetupParams<T: Domain, V: Vdf<T>> {
@@ -278,10 +278,10 @@ mod tests {
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
-    use drgraph::{new_seed, BucketGraph, Graph};
-    use fr32::fr_into_bytes;
-    use hasher::pedersen::{PedersenDomain, PedersenHasher};
-    use vdf_sloth;
+    use crate::drgraph::{new_seed, BucketGraph, Graph};
+    use crate::fr32::fr_into_bytes;
+    use crate::hasher::pedersen::{PedersenDomain, PedersenHasher};
+    use crate::vdf_sloth;
 
     #[test]
     fn test_hvh_post_basics() {
@@ -332,9 +332,11 @@ mod tests {
         )
         .unwrap();
 
-        assert!(
-            HvhPost::<PedersenHasher, vdf_sloth::Sloth>::verify(&pub_params, &pub_inputs, &proof)
-                .unwrap()
-        );
+        assert!(HvhPost::<PedersenHasher, vdf_sloth::Sloth>::verify(
+            &pub_params,
+            &pub_inputs,
+            &proof
+        )
+        .unwrap());
     }
 }

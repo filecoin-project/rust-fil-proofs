@@ -1,10 +1,10 @@
-use api::sector_builder::kv_store::fs::FileSystemKvs;
-use api::sector_builder::kv_store::KeyValueStore;
-use api::sector_builder::metadata::*;
-use api::sector_builder::scheduler::Request;
-use api::sector_builder::scheduler::Scheduler;
-use api::sector_builder::sealer::*;
-use error::Result;
+use crate::api::sector_builder::kv_store::fs::FileSystemKvs;
+use crate::api::sector_builder::kv_store::KeyValueStore;
+use crate::api::sector_builder::metadata::*;
+use crate::api::sector_builder::scheduler::Request;
+use crate::api::sector_builder::scheduler::Scheduler;
+use crate::api::sector_builder::sealer::*;
+use crate::error::Result;
 use sector_base::api::disk_backed_storage::new_sector_store;
 use sector_base::api::disk_backed_storage::SBConfiguredStore;
 use sector_base::api::sector_store::SectorStore;

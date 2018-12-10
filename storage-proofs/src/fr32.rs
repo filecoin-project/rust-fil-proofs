@@ -1,4 +1,4 @@
-use error::*;
+use crate::error::*;
 use pairing::{Engine, PrimeField, PrimeFieldRepr};
 
 // Contains 32 bytes whose little-endian value represents an Fr.

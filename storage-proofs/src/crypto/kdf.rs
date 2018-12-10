@@ -1,7 +1,7 @@
 use pairing::bls12_381::Fr;
 use pairing::Engine;
 
-use hasher::{Blake2sHasher, Hasher};
+use crate::hasher::{Blake2sHasher, Hasher};
 
 /// Key derivation function, based on pedersen hashing.
 pub fn kdf<E: Engine>(data: &[u8], m: usize) -> Fr {
@@ -11,7 +11,7 @@ pub fn kdf<E: Engine>(data: &[u8], m: usize) -> Fr {
 #[cfg(test)]
 mod tests {
     use super::kdf;
-    use fr32::bytes_into_fr;
+    use crate::fr32::bytes_into_fr;
     use pairing::bls12_381::Bls12;
 
     #[test]

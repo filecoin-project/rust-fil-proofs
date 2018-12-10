@@ -2,14 +2,14 @@ use std::marker::PhantomData;
 
 use byteorder::{LittleEndian, WriteBytesExt};
 
-use drgraph::Graph;
-use error::Result;
-use hasher::{Domain, Hasher};
-use merkle::{MerkleProof, MerkleTree};
-use parameter_cache::ParameterSetIdentifier;
-use porep::{self, PoRep};
-use proof::ProofScheme;
-use vde::{self, decode_block, decode_domain_block};
+use crate::drgraph::Graph;
+use crate::error::Result;
+use crate::hasher::{Domain, Hasher};
+use crate::merkle::{MerkleProof, MerkleTree};
+use crate::parameter_cache::ParameterSetIdentifier;
+use crate::porep::{self, PoRep};
+use crate::proof::ProofScheme;
+use crate::vde::{self, decode_block, decode_domain_block};
 
 #[derive(Debug, Clone)]
 pub struct PublicInputs<T: Domain> {
@@ -449,10 +449,10 @@ mod tests {
     use std::io::Write;
     use tempfile;
 
-    use drgraph::{new_seed, BucketGraph};
-    use fr32::fr_into_bytes;
-    use hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
-    use util::data_at_node;
+    use crate::drgraph::{new_seed, BucketGraph};
+    use crate::fr32::fr_into_bytes;
+    use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::util::data_at_node;
 
     pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
         let mut tmpfile: File = tempfile::tempfile().unwrap();
@@ -634,14 +634,12 @@ mod tests {
                 let real_parents = real_proof.replica_parents;
 
                 // Parent vector claiming the wrong parents.
-                let fake_parents = vec![
-                    real_parents[0]
-                        .iter()
-                        // Incrementing each parent node will give us a different parent set.
-                        // It's fine to be out of range, since this only needs to fail.
-                        .map(|(i, data_proof)| (i + 1, data_proof.clone()))
-                        .collect::<Vec<_>>(),
-                ];
+                let fake_parents = vec![real_parents[0]
+                    .iter()
+                    // Incrementing each parent node will give us a different parent set.
+                    // It's fine to be out of range, since this only needs to fail.
+                    .map(|(i, data_proof)| (i + 1, data_proof.clone()))
+                    .collect::<Vec<_>>()];
 
                 let proof = Proof::new(
                     real_proof.replica_nodes.clone(),
@@ -671,18 +669,16 @@ mod tests {
 
                 // Parent vector claiming the right parents but providing valid proofs for different
                 // parents.
-                let fake_proof_parents = vec![
-                    real_parents[0]
-                        .iter()
-                        .enumerate()
-                        .map(|(i, (p, _))| {
-                            // Rotate the real parent proofs.
-                            let x = (i + 1) % real_parents[0].len();
-                            let j = real_parents[0][x].0;
-                            (*p, real_parents[0][j].1.clone())
-                        })
-                        .collect::<Vec<_>>(),
-                ];
+                let fake_proof_parents = vec![real_parents[0]
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (p, _))| {
+                        // Rotate the real parent proofs.
+                        let x = (i + 1) % real_parents[0].len();
+                        let j = real_parents[0][x].0;
+                        (*p, real_parents[0][j].1.clone())
+                    })
+                    .collect::<Vec<_>>()];
 
                 let proof2 = Proof::new(
                     real_proof.replica_nodes,
@@ -746,7 +742,7 @@ mod tests {
         prove_verify_aux::<Blake2sHasher>(lambda, n, i, false, true);
     }
 
-    table_tests!{
+    table_tests! {
         prove_verify {
             prove_verify_32_2_1(32, 2, 1);
 

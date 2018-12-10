@@ -126,7 +126,7 @@ mod tests {
             Fr::from_repr(FrRepr([a, b, c, d])).unwrap()
         }
     }
-    proptest!{
+    proptest! {
         #[test]
         fn sloth_bls_roundtrip(key in arb_fr(), plaintext in arb_fr()) {
             let ciphertext = encode::<Bls12>(&key, &plaintext, 10);

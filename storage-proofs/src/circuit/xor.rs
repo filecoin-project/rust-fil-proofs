@@ -30,13 +30,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::xor;
+    use crate::circuit::test::TestConstraintSystem;
+    use crate::crypto;
+    use crate::util::{bits_to_bytes, bytes_into_boolean_vec};
     use bellman::ConstraintSystem;
-    use circuit::test::TestConstraintSystem;
-    use crypto;
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::circuit::boolean::Boolean;
-    use util::{bits_to_bytes, bytes_into_boolean_vec};
 
     #[test]
     fn test_xor_input_circut() {

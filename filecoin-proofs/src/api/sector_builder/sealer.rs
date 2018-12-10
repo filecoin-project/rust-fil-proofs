@@ -1,10 +1,10 @@
-use api::sector_builder::helpers::retrieve_piece::retrieve_piece;
-use api::sector_builder::helpers::seal::seal;
-use api::sector_builder::metadata::SealedSectorMetadata;
-use api::sector_builder::metadata::StagedSectorMetadata;
-use api::sector_builder::scheduler::Request;
-use api::sector_builder::WrappedSectorStore;
-use error::Result;
+use crate::api::sector_builder::helpers::retrieve_piece::retrieve_piece;
+use crate::api::sector_builder::helpers::seal::seal;
+use crate::api::sector_builder::metadata::SealedSectorMetadata;
+use crate::api::sector_builder::metadata::StagedSectorMetadata;
+use crate::api::sector_builder::scheduler::Request;
+use crate::api::sector_builder::WrappedSectorStore;
+use crate::error::Result;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;

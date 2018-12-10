@@ -3,12 +3,12 @@ use std::marker::PhantomData;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 
-use drgraph::graph_height;
-use error::{Error, Result};
-use hasher::{Domain, Hasher};
-use merkle::{MerkleProof, MerkleTree};
-use parameter_cache::ParameterSetIdentifier;
-use proof::ProofScheme;
+use crate::drgraph::graph_height;
+use crate::error::{Error, Result};
+use crate::hasher::{Domain, Hasher};
+use crate::merkle::{MerkleProof, MerkleTree};
+use crate::parameter_cache::ParameterSetIdentifier;
+use crate::proof::ProofScheme;
 
 #[derive(Debug, Clone)]
 pub struct SetupParams {
@@ -161,10 +161,10 @@ mod tests {
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
-    use drgraph::{new_seed, BucketGraph, Graph};
-    use fr32::fr_into_bytes;
-    use hasher::{Blake2sHasher, HashFunction, PedersenHasher, Sha256Hasher};
-    use merkle::make_proof_for_test;
+    use crate::drgraph::{new_seed, BucketGraph, Graph};
+    use crate::fr32::fr_into_bytes;
+    use crate::hasher::{Blake2sHasher, HashFunction, PedersenHasher, Sha256Hasher};
+    use crate::merkle::make_proof_for_test;
 
     fn test_porc<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);

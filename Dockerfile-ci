@@ -1,6 +1,6 @@
 # Dockerfile for CircleCI
 # build with
-# `docker build -t dignfiedquire/rust:latest -f ./Dockerfile-ci .`
+# `docker build -t filecoin/rust:latest -f ./Dockerfile-ci .`
 
 FROM debian:stretch
 
