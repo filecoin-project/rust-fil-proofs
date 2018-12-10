@@ -331,7 +331,7 @@ fn main() {
             Arg::with_name("sloth")
                 .help("The number of sloth iterations")
                 .long("sloth")
-                .default_value("1")
+                .default_value("0")
                 .takes_value(true),
         )
         .arg(
