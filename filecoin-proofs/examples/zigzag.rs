@@ -270,13 +270,15 @@ fn do_the_work<H: 'static>(
             info!("sampling groth verifying (samples: {})", samples);
             let verified = {
                 let mut total_groth_verifying = Duration::new(0, 0);
-                let mut result = false;
+                let mut result = true;
                 start_profile("groth-verify");
                 for _ in 0..samples {
                     let start = Instant::now();
-                    result =
-                        ZigZagCompound::verify(&compound_public_params, &pub_inputs, &multi_proof)
-                            .unwrap();
+                    let cur_result = result;
+                    ZigZagCompound::verify(&compound_public_params, &pub_inputs, &multi_proof)
+                        .unwrap();
+                    // If one verification fails, result becomes permanently false.
+                    result = result && cur_result;
                     total_groth_verifying += start.elapsed();
                 }
                 stop_profile();
@@ -317,7 +319,7 @@ fn main() {
             Arg::with_name("m")
                 .help("The size of m")
                 .long("m")
-                .default_value("10")
+                .default_value("5")
                 .takes_value(true),
         )
         .arg(
