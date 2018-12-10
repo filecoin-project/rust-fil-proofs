@@ -92,8 +92,7 @@ jobs:
             - parameter-cache-{{ .Revision }}
       - run:
           name: run regression tests (examples) against FFI-exposed filecoin-proofs API
-          command: cargo run --package filecoin-proofs --release --example ffi
-
+          command: RUSTFLAGS="-Z sanitizer=leak" cargo run --release --package filecoin-proofs --example ffi --target x86_64-unknown-linux-gnu
 
   test_ignored_release:
     docker:
