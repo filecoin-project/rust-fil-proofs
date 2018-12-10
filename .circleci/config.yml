@@ -3,7 +3,7 @@ version: 2
 jobs:
   cargo_fetch:
     docker:
-      - image: sidke/rust:latest
+      - image: filecoin/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -31,7 +31,7 @@ jobs:
             - /root/.rustup
   test:
     docker:
-      - image: sidke/rust:latest
+      - image: filecoin/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -60,7 +60,7 @@ jobs:
 
   test_release:
     docker:
-      - image: sidke/rust:latest
+      - image: filecoin/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -78,7 +78,7 @@ jobs:
 
   ffi_regression:
     docker:
-      - image: sidke/rust:latest
+      - image: filecoin/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -97,7 +97,7 @@ jobs:
 
   test_ignored_release:
     docker:
-      - image: sidke/rust:latest
+      - image: filecoin/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -117,7 +117,7 @@ jobs:
 
   test_nightly:
     docker:
-      - image: sidke/rust:latest
+      - image: filecoin/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -136,7 +136,7 @@ jobs:
 
   bench_nightly:
     docker:
-      - image: sidke/rust:latest
+      - image: filecoin/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -155,7 +155,7 @@ jobs:
 
   rustfmt:
     docker:
-      - image: sidke/rust:latest
+      - image: filecoin/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -170,7 +170,7 @@ jobs:
 
   clippy:
     docker:
-      - image: sidke/rust:latest
+      - image: filecoin/rust:latest
     working_directory: /mnt/crate
     steps:
       - checkout
