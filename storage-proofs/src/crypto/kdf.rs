@@ -1,7 +1,7 @@
 use pairing::bls12_381::Fr;
 use pairing::Engine;
 
-use hasher::{Blake2sHasher, Hasher};
+use crate::hasher::{Blake2sHasher, Hasher};
 
 /// Key derivation function, based on pedersen hashing.
 pub fn kdf<E: Engine>(data: &[u8], m: usize) -> Fr {
