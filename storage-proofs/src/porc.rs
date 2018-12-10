@@ -39,7 +39,7 @@ impl ParameterSetIdentifier for PublicParams {
 pub struct PublicInputs<'a, T: 'a + Domain> {
     /// The challenges, which leafs to prove.
     pub challenges: &'a [T],
-    /// The root hash of the underlying merkle tree.
+    /// The root hashes of the underlying merkle trees.
     pub commitments: &'a [T],
 }
 
@@ -149,7 +149,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for PoRC<H> {
     }
 }
 
-fn slice_mod(challenge: impl AsRef<[u8]>, count: usize) -> usize {
+pub fn slice_mod(challenge: impl AsRef<[u8]>, count: usize) -> usize {
     // TODO: verify this is the correct way to derive the challenge
     let big_challenge = BigUint::from_bytes_be(challenge.as_ref());
 

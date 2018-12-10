@@ -2,7 +2,7 @@ use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use sapling_crypto::circuit::{boolean, multipack, num, pedersen_hash};
 use sapling_crypto::jubjub::JubjubEngine;
 
-use circuit::constraint;
+use crate::circuit::constraint;
 
 /// This is an instance of the `ProofOfRetrievableCommitments` circuit.
 pub struct ProofOfRetrievableCommitments<'a, E: JubjubEngine> {
@@ -16,93 +16,107 @@ pub struct ProofOfRetrievableCommitments<'a, E: JubjubEngine> {
 
 impl<'a, E: JubjubEngine> Circuit<E> for ProofOfRetrievableCommitments<'a, E> {
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        assert_eq!(self.challenged_leafs.len(), self.paths.len());
-        assert_eq!(self.paths.len(), self.commitments.len());
+        porc::<E, CS>(
+            cs,
+            self.params,
+            &self.challenged_leafs,
+            &self.commitments,
+            &self.paths,
+        )
+    }
+}
 
-        for (i, (challenged_leaf, (path, commitment))) in self
-            .challenged_leafs
-            .iter()
-            .zip(self.paths.iter().zip(self.commitments))
-            .enumerate()
-        {
-            let mut cs = cs.namespace(|| format!("challenge_{}", i));
+pub fn porc<'a, E: JubjubEngine, CS: ConstraintSystem<E>>(
+    cs: &mut CS,
+    params: &'a E::Params,
+    challenged_leafs: &[Option<E::Fr>],
+    commitments: &[Option<E::Fr>],
+    paths: &[Vec<Option<(E::Fr, bool)>>],
+) -> Result<(), SynthesisError> {
+    assert_eq!(challenged_leafs.len(), paths.len());
+    assert_eq!(paths.len(), commitments.len());
 
-            // Allocate the commitment
-            let rt = num::AllocatedNum::alloc(cs.namespace(|| "commitment_num"), || {
-                commitment.ok_or(SynthesisError::AssignmentMissing)
+    for (i, (challenged_leaf, (path, commitment))) in challenged_leafs
+        .iter()
+        .zip(paths.iter().zip(commitments))
+        .enumerate()
+    {
+        let mut cs = cs.namespace(|| format!("challenge_{}", i));
+
+        // Allocate the commitment
+        let rt = num::AllocatedNum::alloc(cs.namespace(|| "commitment_num"), || {
+            commitment.ok_or(SynthesisError::AssignmentMissing)
+        })?;
+
+        let params = params;
+
+        let leaf_num = num::AllocatedNum::alloc(cs.namespace(|| "leaf_num"), || {
+            challenged_leaf.ok_or_else(|| SynthesisError::AssignmentMissing)
+        })?;
+
+        leaf_num.inputize(cs.namespace(|| "leaf_input"))?;
+
+        // This is an injective encoding, as cur is a
+        // point in the prime order subgroup.
+        let mut cur = leaf_num;
+
+        let mut path_bits = Vec::with_capacity(path.len());
+
+        // Ascend the merkle tree authentication path
+        for (i, e) in path.iter().enumerate() {
+            let cs = &mut cs.namespace(|| format!("merkle tree hash {}", i));
+
+            // Determines if the current subtree is the "right" leaf at this
+            // depth of the tree.
+            let cur_is_right = boolean::Boolean::from(boolean::AllocatedBit::alloc(
+                cs.namespace(|| "position bit"),
+                e.map(|e| e.1),
+            )?);
+
+            // Witness the authentication path element adjacent
+            // at this depth.
+            let path_element = num::AllocatedNum::alloc(cs.namespace(|| "path element"), || {
+                Ok(e.ok_or(SynthesisError::AssignmentMissing)?.0)
             })?;
 
-            let params = self.params;
+            // Swap the two if the current subtree is on the right
+            let (xl, xr) = num::AllocatedNum::conditionally_reverse(
+                cs.namespace(|| "conditional reversal of preimage"),
+                &cur,
+                &path_element,
+                &cur_is_right,
+            )?;
 
-            let leaf_num = num::AllocatedNum::alloc(cs.namespace(|| "leaf_num"), || {
-                challenged_leaf.ok_or_else(|| SynthesisError::AssignmentMissing)
-            })?;
+            let mut preimage = vec![];
+            preimage.extend(xl.into_bits_le(cs.namespace(|| "xl into bits"))?);
+            preimage.extend(xr.into_bits_le(cs.namespace(|| "xr into bits"))?);
 
-            leaf_num.inputize(cs.namespace(|| "leaf_input"))?;
+            // Compute the new subtree value
+            cur = pedersen_hash::pedersen_hash(
+                cs.namespace(|| "computation of pedersen hash"),
+                pedersen_hash::Personalization::MerkleTree(i),
+                &preimage,
+                params,
+            )?
+            .get_x()
+            .clone(); // Injective encoding
 
-            // This is an injective encoding, as cur is a
-            // point in the prime order subgroup.
-            let mut cur = leaf_num;
-
-            let mut path_bits = Vec::with_capacity(path.len());
-
-            // Ascend the merkle tree authentication path
-            for (i, e) in path.into_iter().enumerate() {
-                let cs = &mut cs.namespace(|| format!("merkle tree hash {}", i));
-
-                // Determines if the current subtree is the "right" leaf at this
-                // depth of the tree.
-                let cur_is_right = boolean::Boolean::from(boolean::AllocatedBit::alloc(
-                    cs.namespace(|| "position bit"),
-                    e.map(|e| e.1),
-                )?);
-
-                // Witness the authentication path element adjacent
-                // at this depth.
-                let path_element =
-                    num::AllocatedNum::alloc(cs.namespace(|| "path element"), || {
-                        Ok(e.ok_or(SynthesisError::AssignmentMissing)?.0)
-                    })?;
-
-                // Swap the two if the current subtree is on the right
-                let (xl, xr) = num::AllocatedNum::conditionally_reverse(
-                    cs.namespace(|| "conditional reversal of preimage"),
-                    &cur,
-                    &path_element,
-                    &cur_is_right,
-                )?;
-
-                let mut preimage = vec![];
-                preimage.extend(xl.into_bits_le(cs.namespace(|| "xl into bits"))?);
-                preimage.extend(xr.into_bits_le(cs.namespace(|| "xr into bits"))?);
-
-                // Compute the new subtree value
-                cur = pedersen_hash::pedersen_hash(
-                    cs.namespace(|| "computation of pedersen hash"),
-                    pedersen_hash::Personalization::MerkleTree(i),
-                    &preimage,
-                    params,
-                )?
-                .get_x()
-                .clone(); // Injective encoding
-
-                path_bits.push(cur_is_right);
-            }
-
-            // allocate input for is_right path
-            multipack::pack_into_inputs(cs.namespace(|| "packed path"), &path_bits)?;
-
-            {
-                // Validate that the root of the merkle tree that we calculated is the same as the input.
-                constraint::equal(&mut cs, || "enforce commitment correct", &cur, &rt);
-            }
-
-            // Expose the root
-            rt.inputize(cs.namespace(|| "commitment"))?;
+            path_bits.push(cur_is_right);
         }
 
-        Ok(())
+        // allocate input for is_right path
+        multipack::pack_into_inputs(cs.namespace(|| "packed path"), &path_bits)?;
+
+        {
+            // Validate that the root of the merkle tree that we calculated is the same as the input.
+            constraint::equal(&mut cs, || "enforce commitment correct", &cur, &rt);
+        }
+
+        // Expose the root
+        rt.inputize(cs.namespace(|| "commitment"))?;
     }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -114,12 +128,12 @@ mod tests {
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
 
-    use circuit::test::*;
-    use drgraph::{new_seed, BucketGraph, Graph};
-    use fr32::fr_into_bytes;
-    use hasher::pedersen::*;
-    use porc::{self, PoRC};
-    use proof::ProofScheme;
+    use crate::circuit::test::*;
+    use crate::drgraph::{new_seed, BucketGraph, Graph};
+    use crate::fr32::fr_into_bytes;
+    use crate::hasher::pedersen::*;
+    use crate::porc::{self, PoRC};
+    use crate::proof::ProofScheme;
 
     #[test]
     fn test_porc_circuit_with_bls12_381() {

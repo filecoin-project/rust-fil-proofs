@@ -3,6 +3,7 @@ mod constraint;
 pub mod por;
 
 pub mod drgporep;
+pub mod hvh_post;
 pub mod kdf;
 pub mod multi_proof;
 pub mod pedersen;
