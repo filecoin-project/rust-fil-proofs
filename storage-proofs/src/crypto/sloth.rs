@@ -24,9 +24,13 @@ const FIVE: [u64; 1] = [5];
 pub fn encode<E: Engine>(key: &E::Fr, plaintext: &E::Fr, rounds: usize) -> E::Fr {
     let mut ciphertext = *plaintext;
 
+    if rounds == 0 {
+        ciphertext.add_assign(key); // c + k
+    };
+
     for _ in 0..rounds {
         ciphertext.add_assign(key); // c + k
-        ciphertext = ciphertext.pow(&SLOTH_V) // (c + k)^v
+        ciphertext = ciphertext.pow(&SLOTH_V); // (c + k)^v
     }
 
     ciphertext
@@ -38,6 +42,10 @@ pub fn decode<E: Engine>(key: &E::Fr, ciphertext: &E::Fr, rounds: usize) -> E::F
 
     for _ in 0..rounds {
         plaintext = plaintext.pow(&FIVE); // c^5
+        plaintext.sub_assign(key); // c^5 - k
+    }
+
+    if rounds == 0 {
         plaintext.sub_assign(key); // c^5 - k
     }
 
@@ -85,16 +93,26 @@ mod tests {
 
     #[test]
     fn sloth_bls_12() {
+        sloth_bls_12_aux(0);
+        sloth_bls_12_aux(10);
+    }
+
+    fn sloth_bls_12_aux(rounds: usize) {
         let key = Fr::from_str("11111111").unwrap();
         let plaintext = Fr::from_str("123456789").unwrap();
-        let ciphertext = encode::<Bls12>(&key, &plaintext, 10);
-        let decrypted = decode::<Bls12>(&key, &ciphertext, 10);
+        let ciphertext = encode::<Bls12>(&key, &plaintext, rounds);
+        let decrypted = decode::<Bls12>(&key, &ciphertext, rounds);
         assert_eq!(plaintext, decrypted);
         assert_ne!(plaintext, ciphertext);
     }
 
     #[test]
     fn sloth_bls_12_fake() {
+        sloth_bls_12_fake_aux(0);
+        sloth_bls_12_fake_aux(10);
+    }
+
+    fn sloth_bls_12_fake_aux(rounds: usize) {
         let key = Fr::from_str("11111111").unwrap();
         let key_fake = Fr::from_str("11111112").unwrap();
         let plaintext = Fr::from_str("123456789").unwrap();

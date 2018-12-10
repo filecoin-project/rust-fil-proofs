@@ -77,9 +77,9 @@ fn get_zigzag_params() -> Option<groth16::Parameters<Bls12>> {
 }
 
 pub const LAMBDA: usize = 32;
-const DEGREE: usize = 1; // TODO: 10;
-const EXPANSION_DEGREE: usize = 2; // TODO: 6
-const SLOTH_ITER: usize = 1;
+const DEGREE: usize = 1; // TODO: 5; FIXME: increasing degree introduces a test failure. Figure out why.
+const EXPANSION_DEGREE: usize = 6;
+const SLOTH_ITER: usize = 0;
 const LAYERS: usize = 2; // TODO: 10;
 const CHALLENGE_COUNT: usize = 1;
 

@@ -30,6 +30,10 @@ where
         plaintext = sub(cs.namespace(|| "c^5 - k"), &c5, key)?;
     }
 
+    if rounds == 0 {
+        plaintext = sub(cs.namespace(|| "plaintext - k"), &plaintext, key)?;
+    }
+
     Ok(plaintext)
 }
 

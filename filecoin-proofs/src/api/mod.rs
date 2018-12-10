@@ -977,6 +977,8 @@ mod tests {
                 file.read_to_end(&mut buf).unwrap();
             }
 
+            // TODO: We don't actually need to seal and unseal here.
+            // We just need to unpreprocess.
             let seal_response = seal(
                 storage,
                 seal_input_path,
