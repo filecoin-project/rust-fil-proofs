@@ -97,6 +97,38 @@ The results are written into the `.bencher` directory, as JSON files. The benchm
 
 Note: on macOS you need `gtime`, as the built in `time` command is not enough.
 
+## Logging
+
+Developers can control `rust-proofs` logging through environment variables:
+
+-
+  `RUST_PROOFS_LOG_JSON`
+
+    Default: `false`
+
+    Options: `true`, `false`
+
+    This is used to enable or disable logging as JSON. If it is `true`, log entries will be sent to stdout as JSON. Otherwise, log entries will be sent to stdout as plain text.
+
+-
+  `RUST_PROOFS_MIN_LOG_LEVEL`
+
+    Default: `4`
+
+    Options: `1`, `2`, `3`, `4`, `5`, `6`
+
+    This is used to filter log entries. All log entries at the specified level or below will be sent to stdout.
+
+    | Logging Macro 	| Level Code 	| Description                                                                                                                                                                                     |
+    |---------------	|------------	|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+    | crit!         	| 1          	| An error that should force shutdown of the application to prevent data loss (or further data loss). Reserved for situations in which there is guaranteed to have been data corruption or loss.  |
+    | error!        	| 2          	| An error occurred, generally something you would consider asserting in a debug build.                                                                                                           |
+    | warning!      	| 3          	| A warning often indicates an unexpected (but not fatal) state.                                                                                                                                  |
+    | info!         	| 4          	| An informational message, often indicates the current program state.                                                                                                                            |
+    | debug!        	| 5          	| A debug message, useful for debugging but too verbose to be turned on normally.                                                                                                                 |
+    | trace!        	| 6          	| A message that will be printed a lot, useful for debugging program flow and will probably impact performance.                                                                                   |
+
+
 ## Generate Documentation
 
 First, navigate to the `rust-proofs` directory.
