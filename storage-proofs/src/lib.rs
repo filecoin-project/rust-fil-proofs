@@ -2,18 +2,17 @@
 #![allow(clippy::unreadable_literal)]
 #![warn(clippy::type_complexity, clippy::too_many_arguments)]
 
+extern crate logging_toolkit;
+
 #[macro_use]
 extern crate failure;
-
 #[macro_use]
 extern crate lazy_static;
 extern crate aes;
 extern crate bellman;
-
 #[cfg(test)]
 #[macro_use]
 extern crate bitvec;
-
 #[cfg(not(test))]
 extern crate bitvec;
 extern crate blake2;
@@ -31,19 +30,16 @@ extern crate rand;
 extern crate sapling_crypto;
 extern crate sha2;
 extern crate tempfile;
-
 #[cfg(test)]
 #[macro_use]
 extern crate proptest;
-
 #[macro_use]
 extern crate clap;
-extern crate env_logger;
-extern crate pbr;
-#[macro_use]
-extern crate log;
 extern crate colored;
+extern crate pbr;
 extern crate rayon;
+#[macro_use]
+extern crate slog;
 
 #[macro_use]
 pub mod test_helper;
@@ -78,3 +74,14 @@ pub mod zigzag_drgporep;
 pub mod zigzag_graph;
 
 mod vde;
+
+use logging_toolkit::make_logger;
+use slog::Logger;
+
+lazy_static! {
+    pub static ref SP_LOG: Logger = make_logger(
+        "storage-proofs",
+        "RUST_PROOFS_LOG_JSON",
+        "RUST_PROOFS_MIN_LOG_LEVEL"
+    );
+}

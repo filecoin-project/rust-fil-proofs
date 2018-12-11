@@ -140,7 +140,7 @@ pub fn random_merkle_path_with_value<R: Rng>(
     let auth_path: Vec<Option<(Fr, bool)>> = vec![Some((rng.gen(), rng.gen())); tree_depth];
 
     let mut cur = if offset == 0 {
-        let mut bytes = fr_into_bytes::<Bls12>(&value);
+        let bytes = fr_into_bytes::<Bls12>(&value);
         bytes_into_fr::<Bls12>(&bytes).unwrap()
     } else {
         *value

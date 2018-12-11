@@ -1,0 +1,13 @@
+[package]
+name = "logging-toolkit"
+version = "0.1.0"
+authors = ["laser <l@s3r.com>"]
+license = "MIT OR Apache-2.0"
+
+edition = "2018"
+
+[dependencies]
+slog = "2.4.1"
+slog-term = "2.4.0"
+slog-json = "2.3.0"
+slog-async = "2.3.0"

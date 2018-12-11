@@ -1,3 +1,4 @@
+use failure::Backtrace;
 use std::fmt::Display;
 
 #[derive(Debug, Fail)]
@@ -24,7 +25,7 @@ pub enum SectorBuilderErr {
     PieceNotFound(String),
 
     #[fail(display = "unrecoverable error: {}", _0)]
-    Unrecoverable(String),
+    Unrecoverable(String, Backtrace),
 }
 
 pub fn err_piecenotfound(piece_key: String) -> SectorBuilderErr {
@@ -32,7 +33,8 @@ pub fn err_piecenotfound(piece_key: String) -> SectorBuilderErr {
 }
 
 pub fn err_unrecov<S: Display>(msg: S) -> SectorBuilderErr {
-    SectorBuilderErr::Unrecoverable(format!("{}", msg))
+    let backtrace = failure::Backtrace::new();
+    SectorBuilderErr::Unrecoverable(format!("{}", msg), backtrace)
 }
 
 pub fn err_overflow(num_bytes_in_piece: u64, max_bytes_per_sector: u64) -> SectorBuilderErr {

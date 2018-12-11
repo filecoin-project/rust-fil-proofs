@@ -1,3 +1,4 @@
+use crate::api::sector_builder::errors::SectorBuilderErr;
 use crate::api::sector_builder::kv_store::fs::FileSystemKvs;
 use crate::api::sector_builder::kv_store::KeyValueStore;
 use crate::api::sector_builder::metadata::*;
@@ -5,9 +6,11 @@ use crate::api::sector_builder::scheduler::Request;
 use crate::api::sector_builder::scheduler::Scheduler;
 use crate::api::sector_builder::sealer::*;
 use crate::error::Result;
+use crate::FCP_LOG;
 use sector_base::api::disk_backed_storage::new_sector_store;
 use sector_base::api::disk_backed_storage::SBConfiguredStore;
 use sector_base::api::sector_store::SectorStore;
+use slog::*;
 use std::sync::{mpsc, Arc, Mutex};
 
 pub mod errors;
@@ -111,30 +114,30 @@ impl SectorBuilder {
     // Stages user piece-bytes for sealing. Note that add_piece calls are
     // processed sequentially to make bin packing easier.
     pub fn add_piece(&self, piece_key: String, piece_bytes: &[u8]) -> Result<SectorId> {
-        self.run_blocking(|tx| Request::AddPiece(piece_key, piece_bytes.to_vec(), tx))
+        log_unrecov(self.run_blocking(|tx| Request::AddPiece(piece_key, piece_bytes.to_vec(), tx)))
     }
 
     // Returns sealing status for the sector with specified id. If no sealed or
     // staged sector exists with the provided id, produce an error.
     pub fn get_seal_status(&self, sector_id: SectorId) -> Result<SealStatus> {
-        self.run_blocking(|tx| Request::GetSealStatus(sector_id, tx))
+        log_unrecov(self.run_blocking(|tx| Request::GetSealStatus(sector_id, tx)))
     }
 
     // Unseals the sector containing the referenced piece and returns its
     // bytes. Produces an error if this sector builder does not have a sealed
     // sector containing the referenced piece.
     pub fn read_piece_from_sealed_sector(&self, piece_key: String) -> Result<Vec<u8>> {
-        self.run_blocking(|tx| Request::RetrievePiece(piece_key, tx))
+        log_unrecov(self.run_blocking(|tx| Request::RetrievePiece(piece_key, tx)))
     }
 
     // For demo purposes. Schedules sealing of all staged sectors.
     pub fn seal_all_staged_sectors(&self) -> Result<()> {
-        self.run_blocking(Request::SealAllStagedSectors)
+        log_unrecov(self.run_blocking(Request::SealAllStagedSectors))
     }
 
     // Produce a slice of all sealed sector metadata.
     pub fn get_sealed_sectors(&self) -> Result<Vec<SealedSectorMetadata>> {
-        self.run_blocking(Request::GetSealedSectors)
+        log_unrecov(self.run_blocking(Request::GetSealedSectors))
     }
 
     // Run a task, blocking on the return channel.
@@ -197,3 +200,14 @@ pub struct WrappedKeyValueStore {
 
 unsafe impl Sync for WrappedKeyValueStore {}
 unsafe impl Send for WrappedKeyValueStore {}
+
+fn log_unrecov<T>(result: Result<T>) -> Result<T> {
+    if let Err(err) = &result {
+        if let Some(SectorBuilderErr::Unrecoverable(err, backtrace)) = err.downcast_ref() {
+            let backtrace_string = format!("{:?}", backtrace);
+            error!(FCP_LOG, "unrecoverable error"; "backtrace" => backtrace_string, "error" => err);
+        }
+    }
+
+    result
+}

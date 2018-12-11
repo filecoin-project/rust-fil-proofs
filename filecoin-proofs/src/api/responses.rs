@@ -263,7 +263,7 @@ pub fn err_code_and_msg(err: &Error) -> (FCPResponseStatus, *const libc::c_char)
     match err.downcast_ref() {
         Some(SectorBuilderErr::OverflowError { .. }) => return (FCPCallerError, ptr),
         Some(SectorBuilderErr::IncompleteWriteError { .. }) => return (FCPReceiverError, ptr),
-        Some(SectorBuilderErr::Unrecoverable(_)) => return (FCPReceiverError, ptr),
+        Some(SectorBuilderErr::Unrecoverable(_, _)) => return (FCPReceiverError, ptr),
         Some(SectorBuilderErr::PieceNotFound(_)) => return (FCPCallerError, ptr),
         None => (),
     }

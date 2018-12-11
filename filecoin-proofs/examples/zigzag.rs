@@ -3,15 +3,15 @@ extern crate pairing;
 extern crate rand;
 extern crate sapling_crypto;
 #[macro_use]
-extern crate log;
-#[macro_use]
 extern crate clap;
-extern crate env_logger;
 #[cfg(feature = "profile")]
 extern crate gperftools;
 extern crate memmap;
 extern crate tempfile;
+#[macro_use]
+extern crate slog;
 
+extern crate filecoin_proofs;
 extern crate storage_proofs;
 
 use clap::{App, Arg};
@@ -33,13 +33,16 @@ use storage_proofs::circuit::zigzag::{ZigZagCircuit, ZigZagCompound};
 use storage_proofs::compound_proof::{self, CircuitComponent, CompoundProof};
 use storage_proofs::drgporep;
 use storage_proofs::drgraph::*;
-use storage_proofs::example_helper::{init_logger, prettyb};
+use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
 use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
 use storage_proofs::layered_drgporep;
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::zigzag_drgporep::*;
+
+use filecoin_proofs::FCP_LOG;
+
 #[cfg(feature = "profile")]
 #[inline(always)]
 fn start_profile(stage: &str) {
@@ -102,18 +105,18 @@ fn do_the_work<H: 'static>(
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
     let lambda = 32;
 
-    info!(target: "config", "data size: {}", prettyb(data_size));
-    info!(target: "config", "m: {}", m);
-    info!(target: "config", "expansion_degree: {}", expansion_degree);
-    info!(target: "config", "sloth: {}", sloth_iter);
-    info!(target: "config", "challenge_count: {}", challenge_count);
-    info!(target: "config", "layers: {}", layers);
-    info!(target: "config", "partitions: {}", partitions);
-    info!(target: "config", "circuit: {:?}", circuit);
-    info!(target: "config", "groth: {:?}", groth);
-    info!(target: "config", "bench: {:?}", bench);
+    info!(FCP_LOG, "data size={}", prettyb(data_size); "target" => "config");
+    info!(FCP_LOG, "m={}", m; "target" => "config");
+    info!(FCP_LOG, "expansion_degree={}", expansion_degree; "target" => "config");
+    info!(FCP_LOG, "sloth={}", sloth_iter; "target" => "config");
+    info!(FCP_LOG, "challenge_count={}", challenge_count; "target" => "config");
+    info!(FCP_LOG, "layers={}", layers; "target" => "config");
+    info!(FCP_LOG, "partitions={}", partitions; "target" => "config");
+    info!(FCP_LOG, "circuit={:?}", circuit; "target" => "config");
+    info!(FCP_LOG, "groth={:?}", groth; "target" => "config");
+    info!(FCP_LOG, "bench={:?}", bench; "target" => "config");
 
-    info!("generating fake data");
+    info!(FCP_LOG, "generating fake data");
 
     let nodes = data_size / lambda;
 
@@ -140,7 +143,7 @@ fn do_the_work<H: 'static>(
         challenge_count,
     };
 
-    info!("running setup");
+    info!(FCP_LOG, "running setup");
     start_profile("setup");
     let pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
     stop_profile();
@@ -148,7 +151,7 @@ fn do_the_work<H: 'static>(
     let start = Instant::now();
     let mut param_duration = Duration::new(0, 0);
 
-    info!("running replicate");
+    info!(FCP_LOG, "running replicate");
 
     start_profile("replicate");
     let (tau, aux) =
@@ -170,10 +173,10 @@ fn do_the_work<H: 'static>(
 
     param_duration += start.elapsed();
 
-    info!(target: "stats", "replication_time: {:?}", param_duration);
+    info!(FCP_LOG, "replication_time={:?}", param_duration; "target" => "stats");
 
     let mut total_proving = Duration::new(0, 0);
-    info!("generating one proof");
+    info!(FCP_LOG, "generating one proof");
 
     let start = Instant::now();
     start_profile("prove");
@@ -198,10 +201,10 @@ fn do_the_work<H: 'static>(
     //
     //info!(target: "stats", "Average proof size {}", prettyb(avg_proof_size));
 
-    info!(target: "stats", "vanilla_proving_time: {:?} seconds", proving_avg);
+    info!(FCP_LOG, "vanilla_proving_time={:?} seconds", proving_avg; "target" => "stats");
 
     let samples: u32 = 30;
-    info!("sampling verifying (samples: {})", samples);
+    info!(FCP_LOG, "sampling verifying (samples={})", samples);
     let mut total_verifying = Duration::new(0, 0);
 
     start_profile("verify");
@@ -211,7 +214,7 @@ fn do_the_work<H: 'static>(
             ZigZagDrgPoRep::<H>::verify_all_partitions(&pp, &pub_inputs, &all_partition_proofs)
                 .expect("failed during verification");
         if !verified {
-            info!(target: "results", "Verification failed.");
+            info!(FCP_LOG, "Verification failed."; "target" => "results");
         };
         total_verifying += start.elapsed();
     }
@@ -220,7 +223,7 @@ fn do_the_work<H: 'static>(
     let verifying_avg = total_verifying / samples;
     let verifying_avg = f64::from(verifying_avg.subsec_nanos()) / 1_000_000_000f64
         + (verifying_avg.as_secs() as f64);
-    info!(target: "stats", "average_vanilla_verifying_time: {:?} seconds", verifying_avg);
+    info!(FCP_LOG, "average_vanilla_verifying_time={:?} seconds", verifying_avg; "target" => "stats");
 
     if circuit || groth || bench {
         let engine_params = JubjubBls12::new();
@@ -230,7 +233,7 @@ fn do_the_work<H: 'static>(
             partitions: Some(partitions),
         };
         if circuit || bench {
-            info!("Performing circuit bench.");
+            info!(FCP_LOG, "Performing circuit bench.");
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
             ZigZagCompound::circuit(
@@ -243,8 +246,8 @@ fn do_the_work<H: 'static>(
             .synthesize(&mut cs)
             .expect("failed to synthesize circuit");
 
-            info!(target: "stats", "circuit_num_inputs: {}", cs.num_inputs());
-            info!(target: "stats", "circuit_num_constraints: {}", cs.num_constraints());
+            info!(FCP_LOG, "circuit_num_inputs={}", cs.num_inputs(); "target" => "stats");
+            info!(FCP_LOG, "circuit_num_constraints={}", cs.num_constraints(); "target" => "stats");
 
             if circuit {
                 println!("{}", cs.pretty_print());
@@ -252,7 +255,7 @@ fn do_the_work<H: 'static>(
         }
 
         if groth {
-            info!("Performing circuit groth.");
+            info!(FCP_LOG, "Performing circuit groth.");
             let multi_proof = {
                 // TODO: Make this a macro.
                 let start = Instant::now();
@@ -262,12 +265,12 @@ fn do_the_work<H: 'static>(
                         .unwrap();
                 stop_profile();
                 let groth_proving = start.elapsed();
-                info!(target: "stats", "groth_proving_time: {:?} seconds", groth_proving);
+                info!(FCP_LOG, "groth_proving_time={:?} seconds", groth_proving; "target" => "stats");
                 total_proving += groth_proving;
-                info!(target: "stats", "combined_proving_time: {:?} seconds", total_proving);
+                info!(FCP_LOG, "combined_proving_time={:?} seconds", total_proving; "target" => "stats");
                 result
             };
-            info!("sampling groth verifying (samples: {})", samples);
+            info!(FCP_LOG, "sampling groth verifying (samples={})", samples);
             let verified = {
                 let mut total_groth_verifying = Duration::new(0, 0);
                 let mut result = true;
@@ -283,7 +286,7 @@ fn do_the_work<H: 'static>(
                 }
                 stop_profile();
                 let avg_groth_verifying = total_groth_verifying / samples;
-                info!(target: "stats", "average_groth_verifying_time: {:?} seconds", avg_groth_verifying);
+                info!(FCP_LOG, "average_groth_verifying_time={:?} seconds", avg_groth_verifying; "target" => "stats");
                 result
             };
             assert!(verified);
@@ -292,20 +295,18 @@ fn do_the_work<H: 'static>(
 
     if extract {
         let start = Instant::now();
-        info!("Extracting.");
+        info!(FCP_LOG, "Extracting.");
         start_profile("extract");
         let decoded_data = ZigZagDrgPoRep::<H>::extract_all(&pp, &replica_id, &data_copy).unwrap();
         stop_profile();
         let extracting = start.elapsed();
-        info!(target: "stats", "extracting_time: {:?}", extracting);
+        info!(FCP_LOG, "extracting_time: {:?}", extracting; "target" => "stats");
 
         assert_eq!(&(*data), decoded_data.as_slice());
     }
 }
 
 fn main() {
-    init_logger();
-
     let matches = App::new(stringify!("DrgPoRep Vanilla Bench"))
         .version("1.0")
         .arg(
@@ -400,9 +401,9 @@ fn main() {
     let circuit = matches.is_present("circuit");
     let extract = matches.is_present("extract");
 
-    println!("circuit: {:?}", circuit);
+    info!(FCP_LOG, "circuit={}", circuit);
+    info!(FCP_LOG, "hasher={}", hasher; "target" => "config");
 
-    info!(target: "config", "hasher: {}", hasher);
     match hasher.as_ref() {
         "pedersen" => {
             do_the_work::<PedersenHasher>(

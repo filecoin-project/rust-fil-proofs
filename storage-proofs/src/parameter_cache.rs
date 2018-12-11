@@ -13,6 +13,8 @@ use std::io::{Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use crate::SP_LOG;
+
 /// Bump this when circuits change to invalidate the cache.
 pub const VERSION: usize = 7;
 
@@ -46,7 +48,7 @@ where
     fn cache_prefix() -> String;
     fn cache_identifier(pub_params: &PP) -> Option<String> {
         let param_identifier = pub_params.parameter_set_identifier();
-        info!(target: "params", "parameter set identifier for cache: {}", param_identifier);
+        info!(SP_LOG, "parameter set identifier for cache: {}", param_identifier; "target" => "params");
         let mut hasher = Sha256::default();
         hasher.input(&param_identifier.into_bytes());
         let circuit_hash = hasher.result();
@@ -63,11 +65,11 @@ where
         rng: &mut XorShiftRng,
     ) -> Result<groth16::Parameters<E>> {
         let generate = || {
-            info!(target: "params", "Actually generating groth params.");
+            info!(SP_LOG, "Actually generating groth params."; "target" => "params");
             let start = Instant::now();
             let parameters = groth16::generate_random_parameters::<E, _, _>(circuit, rng);
             let generation_time = start.elapsed();
-            info!(target: "stats:", "groth_parameter_generation_time: {:?}", generation_time);
+            info!(SP_LOG, "groth_parameter_generation_time: {:?}", generation_time; "target" => "stats");
             parameters
         };
 
@@ -76,7 +78,7 @@ where
                 let cache_dir = parameter_cache_dir();
                 create_dir_all(cache_dir)?;
                 let cache_path = parameter_cache_path(&id);
-                info!(target: "params", "checking cache_path: {:?}", cache_path);
+                info!(SP_LOG, "checking cache_path: {:?}", cache_path; "target" => "params");
 
                 read_cached_params(&cache_path).or_else(|_| {
                     ensure_parent(&cache_path)?;
@@ -94,8 +96,8 @@ where
 
                     let bytes = f.seek(SeekFrom::End(0))?;
 
-                    info!(target: "params", "wrote parameters to cache {:?} ", f);
-                    info!(target: "stats", "groth_parameter_bytes: {}", bytes);
+                    info!(SP_LOG, "wrote parameters to cache {:?} ", f; "target" => "params");
+                    info!(SP_LOG, "groth_parameter_bytes: {}", bytes; "target" => "stats");
                     Ok(p)
                 })
             }
@@ -119,12 +121,12 @@ pub fn read_cached_params<E: JubjubEngine>(cache_path: &PathBuf) -> Result<groth
 
     let mut f = fs::OpenOptions::new().read(true).open(&cache_path)?;
     f.lock_exclusive()?;
-    info!(target: "params", "reading groth params from cache: {:?}", cache_path);
+    info!(SP_LOG, "reading groth params from cache: {:?}", cache_path; "target" => "params");
 
     let params = Parameters::read(&f, false).map_err(Error::from);
 
     let bytes = f.seek(SeekFrom::End(0))?;
-    info!(target: "stats", "groth_parameter_bytes: {}", bytes);
+    info!(SP_LOG, "groth_parameter_bytes: {}", bytes; "target" => "stats");
 
     params
 }
@@ -143,6 +145,6 @@ pub fn write_params_to_cache<E: JubjubEngine>(
     f.lock_exclusive()?;
 
     p.write(&mut f)?;
-    info!(target: "params", "wrote parameters to cache {:?} ", f);
+    info!(SP_LOG, "wrote parameters to cache {:?} ", f; "target" => "params");
     Ok(p)
 }
