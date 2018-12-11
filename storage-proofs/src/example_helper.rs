@@ -14,7 +14,7 @@ use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 use crate::circuit::bench::BenchCS;
 use crate::circuit::test::TestConstraintSystem;
 
-use SP_LOG;
+use crate::SP_LOG;
 
 pub fn prettyb(num: usize) -> String {
     let num = num as f64;
@@ -101,7 +101,7 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
         let cache_path = Path::new(&p);
         let groth_params: Parameters<Bls12> = if cache_path.exists() {
             info!(SP_LOG, "reading groth params from cache: {:?}", cache_path; "target" => "params");
-            let mut f = File::open(&cache_path).expect("failed to read cache");
+            let f = File::open(&cache_path).expect("failed to read cache");
             Parameters::read(&f, false).expect("failed to read cached params")
         } else {
             info!(SP_LOG, "generating new groth params"; "target" => "params");

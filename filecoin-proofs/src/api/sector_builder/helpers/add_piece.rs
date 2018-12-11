@@ -86,7 +86,7 @@ fn provision_new_staged_sector(
     staged_state: &mut StagedState,
 ) -> error::Result<SectorId> {
     let sector_id = {
-        let mut n = &mut staged_state.sector_id_nonce;
+        let n = &mut staged_state.sector_id_nonce;
         *n += 1;
         *n
     };

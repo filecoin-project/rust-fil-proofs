@@ -13,7 +13,7 @@ use std::io::{Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use SP_LOG;
+use crate::SP_LOG;
 
 /// Bump this when circuits change to invalidate the cache.
 pub const VERSION: usize = 7;
