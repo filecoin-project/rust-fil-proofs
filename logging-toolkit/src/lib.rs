@@ -49,11 +49,11 @@ pub fn make_logger(
     Logger::root(
         with_filter,
         o!("root" => root_name, "place" => FnValue(move |info| {
-               format!("{}:{} {}",
-                       info.file(),
-                       info.line(),
-                       info.module(),
-                       )
-           })),
+            format!("{}:{} {}",
+                    info.file(),
+                    info.line(),
+                    info.module(),
+                    )
+        })),
     )
 }
