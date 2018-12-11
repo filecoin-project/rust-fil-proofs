@@ -1,15 +1,11 @@
 use std::fs::File;
 use std::io::stderr;
-use std::io::Write;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
 use bellman::groth16::*;
 use bellman::Circuit;
 use clap::{self, App, Arg, SubCommand};
-use colored::*;
-use env_logger;
-use log::{Level, LevelFilter};
 use pairing::bls12_381::Bls12;
 use pbr::ProgressBar;
 use rand::{Rng, SeedableRng, XorShiftRng};
@@ -17,6 +13,8 @@ use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 
 use crate::circuit::bench::BenchCS;
 use crate::circuit::test::TestConstraintSystem;
+
+use SP_LOG;
 
 pub fn prettyb(num: usize) -> String {
     let num = num as f64;
@@ -37,32 +35,6 @@ pub fn prettyb(num: usize) -> String {
         * 1_f64;
     let unit = units[exponent as usize];
     format!("{}{} {}", negative, pretty_bytes, unit)
-}
-
-pub fn init_logger() {
-    let mut builder = env_logger::Builder::new();
-    builder
-        .target(env_logger::Target::Stdout)
-        .filter_level(LevelFilter::Info)
-        .format(|buf, record| {
-            let ts = buf.timestamp();
-            let level = match record.level() {
-                Level::Trace => "TRACE".purple(),
-                Level::Debug => "DEBUG".blue(),
-                Level::Info => "INFO ".green(),
-                Level::Warn => "WARN ".yellow(),
-                Level::Error => "ERROR".red(),
-            };
-            writeln!(
-                buf,
-                "{} {} {} > {}",
-                ts,
-                level,
-                record.target(),
-                record.args()
-            )
-        })
-        .init();
 }
 
 /// Generate a unique cache path, based on the inputs.
@@ -112,12 +84,12 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
         let leaves = data_size / 32;
         let tree_depth = (leaves as f64).log2().ceil() as usize;
 
-        info!(target: "config", "constraint system: {:?}", typ);
-        info!(target: "config", "data_size:  {}", prettyb(data_size));
-        info!(target: "config", "challenge_count: {}", challenge_count);
-        info!(target: "config", "m: {}", m);
-        info!(target: "config", "sloth: {}", sloth_iter);
-        info!(target: "config", "tree_depth: {}", tree_depth);
+        info!(SP_LOG, "constraint system: {:?}", typ; "target" => "config");
+        info!(SP_LOG, "data_size:  {}", prettyb(data_size); "target" => "config");
+        info!(SP_LOG, "challenge_count: {}", challenge_count; "target" => "config");
+        info!(SP_LOG, "m: {}", m; "target" => "config");
+        info!(SP_LOG, "sloth: {}", sloth_iter; "target" => "config");
+        info!(SP_LOG, "tree_depth: {}", tree_depth; "target" => "config");
 
         let start = Instant::now();
         let mut param_duration = Duration::new(0, 0);
@@ -128,11 +100,11 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
         let p = get_cache_path(&name, data_size, challenge_count, m, sloth_iter);
         let cache_path = Path::new(&p);
         let groth_params: Parameters<Bls12> = if cache_path.exists() {
-            info!(target: "params", "reading groth params from cache: {:?}", cache_path);
+            info!(SP_LOG, "reading groth params from cache: {:?}", cache_path; "target" => "params");
             let mut f = File::open(&cache_path).expect("failed to read cache");
             Parameters::read(&f, false).expect("failed to read cached params")
         } else {
-            info!(target: "params", "generating new groth params");
+            info!(SP_LOG, "generating new groth params"; "target" => "params");
             let p = self.generate_groth_params(
                 rng,
                 &JUBJUB_BLS_PARAMS,
@@ -142,7 +114,7 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
                 m,
                 sloth_iter,
             );
-            info!(target: "params", "writing params to cache: {:?}", cache_path);
+            info!(SP_LOG, "writing params to cache: {:?}", cache_path; "target" => "params");
 
             let mut f = File::create(&cache_path).expect("faild to open cache file");
             p.write(&mut f).expect("failed to write params to cache");
@@ -150,7 +122,7 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
             p
         };
 
-        info!(target: "params", "generating verification key");
+        info!(SP_LOG, "generating verification key"; "target" => "params");
         let pvk = prepare_verifying_key(&groth_params.vk);
 
         param_duration += start.elapsed();
@@ -208,9 +180,9 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
         let verifying_avg = f64::from(verifying_avg.subsec_nanos()) / 1_000_000_000f64
             + (verifying_avg.as_secs() as f64);
 
-        info!(target: "stats", "avg_proving_time: {:?} seconds", proving_avg);
-        info!(target: "stats", "avg_verifying_time: {:?} seconds", verifying_avg);
-        info!(target: "stats", "params_generation_time: {:?}", param_duration);
+        info!(SP_LOG, "avg_proving_time: {:?} seconds", proving_avg; "target" => "stats");
+        info!(SP_LOG, "avg_verifying_time: {:?} seconds", verifying_avg; "target" => "stats");
+        info!(SP_LOG, "params_generation_time: {:?}", param_duration; "target" => "stats");
     }
 
     fn work_bench(
@@ -227,12 +199,12 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
         let leaves = data_size / 32;
         let tree_depth = (leaves as f64).log2().ceil() as usize;
 
-        info!(target: "config", "constraint system: {:?}", typ);
-        info!(target: "config", "data_size:  {}", prettyb(data_size));
-        info!(target: "config", "challenge_count: {}", challenge_count);
-        info!(target: "config", "m: {}", m);
-        info!(target: "config", "sloth: {}", sloth_iter);
-        info!(target: "config", "tree_depth: {}", tree_depth);
+        info!(SP_LOG, "constraint system: {:?}", typ; "target" => "config");
+        info!(SP_LOG, "data_size:  {}", prettyb(data_size); "target" => "config");
+        info!(SP_LOG, "challenge_count: {}", challenge_count; "target" => "config");
+        info!(SP_LOG, "m: {}", m; "target" => "config");
+        info!(SP_LOG, "sloth: {}", sloth_iter; "target" => "config");
+        info!(SP_LOG, "tree_depth: {}", tree_depth; "target" => "config");
 
         // need more samples as this is a faster operation
         let samples = (Self::samples() * 10) as u32;
@@ -242,7 +214,7 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
         let mut pb = ProgressBar::on(stderr(), u64::from(samples));
 
         info!(
-            target: "stats",
+            SP_LOG,
             "constraints: {}",
             self.get_num_constraints(
                 rng,
@@ -283,7 +255,7 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
         let synth_avg =
             f64::from(synth_avg.subsec_nanos()) / 1_000_000_000f64 + (synth_avg.as_secs() as f64);
 
-        info!(target: "stats", "avg_synthesize_time: {:?} seconds", synth_avg);
+        info!(SP_LOG, "avg_synthesize_time: {:?} seconds", synth_avg; "target" => "stats");
     }
 
     fn work_circuit(
@@ -300,12 +272,12 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
         let leaves = data_size / 32;
         let tree_depth = (leaves as f64).log2().ceil() as usize;
 
-        info!(target: "config", "constraint system: {:?}", typ);
-        info!(target: "config", "data_size:  {}", prettyb(data_size));
-        info!(target: "config", "challenge_count: {}", challenge_count);
-        info!(target: "config", "m: {}", m);
-        info!(target: "config", "sloth: {}", sloth_iter);
-        info!(target: "config", "tree_depth: {}", tree_depth);
+        info!(SP_LOG, "constraint system: {:?}", typ; "target" => "config");
+        info!(SP_LOG, "data_size:  {}", prettyb(data_size); "target" => "config");
+        info!(SP_LOG, "challenge_count: {}", challenge_count; "target" => "config");
+        info!(SP_LOG, "m: {}", m; "target" => "config");
+        info!(SP_LOG, "sloth: {}", sloth_iter; "target" => "config");
+        info!(SP_LOG, "tree_depth: {}", tree_depth; "target" => "config");
 
         let c = self.create_circuit(
             rng,
@@ -368,9 +340,6 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
 
     fn main() {
         let mut instance = Self::default();
-        // set default logging level to info
-
-        init_logger();
 
         let (data_size, challenge_count, m, sloth_iter, typ) = {
             let matches = instance.clap();

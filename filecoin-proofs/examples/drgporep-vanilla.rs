@@ -3,13 +3,13 @@ extern crate pairing;
 extern crate rand;
 extern crate sapling_crypto;
 #[macro_use]
-extern crate log;
-#[macro_use]
 extern crate clap;
-extern crate env_logger;
 #[cfg(feature = "profile")]
 extern crate gperftools;
+#[macro_use]
+extern crate slog;
 
+extern crate filecoin_proofs;
 extern crate storage_proofs;
 
 use clap::{App, Arg};
@@ -22,11 +22,13 @@ use gperftools::profiler::PROFILER;
 
 use storage_proofs::drgporep::*;
 use storage_proofs::drgraph::*;
-use storage_proofs::example_helper::{init_logger, prettyb};
+use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
 use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
+
+use filecoin_proofs::FCP_LOG;
 
 #[cfg(feature = "profile")]
 #[inline(always)]
@@ -57,12 +59,12 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     let challenges = vec![2; challenge_count];
     let lambda = 32;
 
-    info!(target: "config", "data_size:  {}", prettyb(data_size));
-    info!(target: "config", "challenge_count: {}", challenge_count);
-    info!(target: "config", "m: {}", m);
-    info!(target: "config", "sloth: {}", sloth_iter);
-
-    info!("generating fake data");
+    let pretty_data_size = prettyb(data_size);
+    info!(FCP_LOG, "data_size={}", pretty_data_size; "target" => "stats");
+    info!(FCP_LOG, "challenge_count={}", challenge_count; "target" => "stats");
+    info!(FCP_LOG, "m={}", m; "target" => "stats");
+    info!(FCP_LOG, "sloth_iter={}", sloth_iter; "target" => "stats");
+    info!(FCP_LOG, "generating fake data");
 
     let nodes = data_size / lambda;
 
@@ -82,7 +84,7 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
         sloth_iter,
     };
 
-    info!("running setup");
+    info!(FCP_LOG, "running setup");
     start_profile("setup");
     let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).unwrap();
     stop_profile();
@@ -90,7 +92,7 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     let start = Instant::now();
     let mut param_duration = Duration::new(0, 0);
 
-    info!("running replicate");
+    info!(FCP_LOG, "running replicate");
 
     start_profile("replicate");
     let (tau, aux) =
@@ -111,7 +113,7 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     let mut total_verifying = Duration::new(0, 0);
 
     let mut proofs = Vec::with_capacity(samples as usize);
-    info!("sampling proving & verifying (samples: {})", samples);
+    info!(FCP_LOG, "sampling proving & verifying"; "samples" => samples);
     for _ in 0..samples {
         let start = Instant::now();
         start_profile("prove");
@@ -144,16 +146,13 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     let verifying_avg = f64::from(verifying_avg.subsec_nanos()) / 1_000_000_000f64
         + (verifying_avg.as_secs() as f64);
 
-    info!(target: "stats", "avg_proving_time: {:?} seconds", proving_avg);
-    info!(target: "stats", "avg_verifying_time: {:?} seconds", verifying_avg);
-    info!(target: "stats", "replication_time: {:?}", param_duration);
-
-    info!(target: "stats", "avg_proof_size: {}", prettyb(avg_proof_size));
+    info!(FCP_LOG, "avg_proving_time={:?} seconds", proving_avg; "target" => "stats");
+    info!(FCP_LOG, "avg_verifying_time={:?} seconds", verifying_avg; "target" => "stats");
+    info!(FCP_LOG, "replication_time={:?}", param_duration; "target" => "stats");
+    info!(FCP_LOG, "avg_proof_size={}", prettyb(avg_proof_size); "target" => "stats");
 }
 
 fn main() {
-    init_logger();
-
     let matches = App::new(stringify!("DrgPoRep Vanilla Bench"))
         .version("1.0")
         .arg(
@@ -198,7 +197,7 @@ fn main() {
     let sloth_iter = value_t!(matches, "sloth", usize).unwrap();
     let challenge_count = value_t!(matches, "challenges", usize).unwrap();
     let hasher = value_t!(matches, "hasher", String).unwrap();
-    info!(target: "config", "hasher: {}", hasher);
+    info!(FCP_LOG, "hasher: {}", hasher; "target" => "config");
     match hasher.as_ref() {
         "pedersen" => {
             do_the_work::<PedersenHasher>(data_size, m, sloth_iter, challenge_count);

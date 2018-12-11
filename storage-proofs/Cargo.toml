@@ -7,6 +7,7 @@ license = "MIT OR Apache-2.0"
 edition = "2018"
 
 [dependencies]
+logging-toolkit = { path = "../logging-toolkit" }
 bitvec = "0.5"
 sapling-crypto = { git = "https://github.com/zcash-hackworks/sapling-crypto", branch = "master" }
 rand = "0.4"
@@ -21,8 +22,6 @@ memmap = "0.6"
 num-bigint = "0.2"
 num-traits = "0.2"
 clap = "2"
-log = "0.4"
-env_logger = "0.5"
 colored = "1.6"
 aes = "0.1"
 block-modes = "0.1"
@@ -32,6 +31,7 @@ pbr = "1.0"
 tempfile = "3"
 fs2 = "0.4"
 rayon = "1.0.0"
+slog = { version = "2.4.1", features = ["max_level_trace", "release_max_level_trace"] }
 
 [dependencies.pairing]
 version = "0.14.2"
