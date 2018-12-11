@@ -236,87 +236,121 @@ pub trait Layers {
         auxs: &mut Vec<porep::ProverAux<Self::Hasher>>,
     ) -> Result<()> {
         assert!(layers > 0);
-        let outer_rx = {
-            let (tx, rx) = channel();
 
-            let _ = thread::scope(|scope| -> Result<()> {
-                let mut threads = Vec::new();
-                let initial_pp = (*drgpp).clone();
-                (0..layers + 1).fold(initial_pp, |current_drgpp, layer| {
-                    let mut data_copy = vec![0; data.len()];
-                    data_copy[0..data.len()].clone_from_slice(data);
-
-                    let rc = tx.clone();
-                    let current_copy = current_drgpp.clone();
-                    let shared_pp = Arc::new(current_copy);
-
-                    let thread = scope.spawn(move |_| {
-                        let tree_d = shared_pp
-                            .graph
-                            .merkle_tree(&data_copy, shared_pp.lambda)
-                            .unwrap(); // If we panic here, thread.join() below will receive an error.
-                        info!("returning tree for layer {}", layer);
-                        rc.send((layer, tree_d)).unwrap();
-                    });
-
-                    threads.push(thread);
-
-                    if layer < layers {
-                        info!("encoding layer {}", layer);
-                        vde::encode(
-                            &current_drgpp.graph,
-                            current_drgpp.lambda,
-                            current_drgpp.sloth_iter,
-                            replica_id,
-                            data,
-                        )
-                        .expect("encoding failed in thread");
-                    }
-                    Self::transform(&current_drgpp, layer, layers)
-                });
-
-                for thread in threads {
-                    let _ = thread
-                        .join()
-                        .map_err(|_| Error::MerkleTreeGenerationError)?;
-                }
-                Ok(())
-            })
-            .map_err(|_| Error::MerkleTreeGenerationError)?;
-
-            rx
-        };
-
-        let sorted_trees = {
-            let mut labeled_trees = outer_rx.iter().collect::<Vec<_>>();
-            labeled_trees.sort_by_key(|x| x.0);
-            labeled_trees
-        };
-
-        sorted_trees.iter().fold(
-            None,
-            |previous_tree: Option<&MerkleTree<_, _>>, (i, replica_tree)| {
-                // Each iteration's replica_tree becomes the next iteration's previous_tree (data_tree).
-                // The first iteration has no previous_tree.
-                if let Some(data_tree) = previous_tree {
-                    let tau = porep::Tau {
-                        comm_r: replica_tree.root(),
-                        comm_d: data_tree.root(),
-                    };
-
-                    let aux = porep::ProverAux {
-                        tree_r: replica_tree.clone(),
-                        tree_d: (*data_tree).clone(),
-                    };
-                    info!("setting tau/aux for layer {}", i - 1,);
-                    taus.push(tau);
-                    auxs.push(aux);
+        let generate_merkle_trees_in_parallel = true;
+        if !generate_merkle_trees_in_parallel {
+            // This branch serializes encoding and merkle tree generation.
+            // However, it makes clear the underlying algorithm we reproduce
+            // in the parallel case. We should keep this code for documentation and to help
+            // alert us if drgporep's implementation changes (and breaks type-checking).
+            // It would not be a bad idea to add tests ensuring the parallel and serial cases
+            // generate the same results.
+            (0..layers).fold((*drgpp).clone(), |current_drgpp, layer| {
+                let previous_replica_tree = if !auxs.is_empty() {
+                    Some(auxs[auxs.len() - 1].tree_r.clone())
+                } else {
+                    None
                 };
 
-                Some(replica_tree)
-            },
-        );
+                let (tau, aux) =
+                    DrgPoRep::replicate(&current_drgpp, replica_id, data, previous_replica_tree)
+                        .unwrap();
 
+                taus.push(tau);
+                auxs.push(aux);
+
+                Self::transform(&current_drgpp, layer, layers)
+            });
+        } else {
+            // The parallel case is more complicated but should produce the same results as the
+            // serial case. Note that to make lifetimes work out, we have to inline and tease apart
+            // the definition of DrgPoRep::replicate. This is because as implemented, it entangles
+            // encoding and merkle tree generation too tightly to be used as a subcomponent.
+            // Instead, we need to create a scope which encloses all the work, spawning threads
+            // for merkle tree generation and sending the results back to a channel.
+            // The received results need to be sorted by layer because ordering of the completed results
+            // is not guaranteed. Misordered results will be seen in practice when trees are small.
+            let outer_rx = {
+                let (tx, rx) = channel();
+
+                let _ = thread::scope(|scope| -> Result<()> {
+                    let mut threads = Vec::new();
+                    let initial_pp = (*drgpp).clone();
+                    (0..layers + 1).fold(initial_pp, |current_drgpp, layer| {
+                        let mut data_copy = vec![0; data.len()];
+                        data_copy[0..data.len()].clone_from_slice(data);
+
+                        let rc = tx.clone();
+                        let current_copy = current_drgpp.clone();
+                        let shared_pp = Arc::new(current_copy);
+
+                        let thread = scope.spawn(move |_| {
+                            let tree_d = shared_pp
+                                .graph
+                                .merkle_tree(&data_copy, shared_pp.lambda)
+                                .unwrap(); // If we panic here, thread.join() below will receive an error.
+                            info!("returning tree for layer {}", layer);
+                            rc.send((layer, tree_d)).unwrap();
+                        });
+
+                        threads.push(thread);
+
+                        if layer < layers {
+                            info!("encoding layer {}", layer);
+                            vde::encode(
+                                &current_drgpp.graph,
+                                current_drgpp.lambda,
+                                current_drgpp.sloth_iter,
+                                replica_id,
+                                data,
+                            )
+                            .expect("encoding failed in thread");
+                        }
+                        Self::transform(&current_drgpp, layer, layers)
+                    });
+
+                    for thread in threads {
+                        let _ = thread
+                            .join()
+                            .map_err(|_| Error::MerkleTreeGenerationError)?;
+                    }
+                    Ok(())
+                })
+                .map_err(|_| Error::MerkleTreeGenerationError)?;
+
+                rx
+            };
+
+            let sorted_trees = {
+                let mut labeled_trees = outer_rx.iter().collect::<Vec<_>>();
+                labeled_trees.sort_by_key(|x| x.0);
+                labeled_trees
+            };
+
+            sorted_trees.iter().fold(
+                None,
+                |previous_tree: Option<&MerkleTree<_, _>>, (i, replica_tree)| {
+                    // Each iteration's replica_tree becomes the next iteration's previous_tree (data_tree).
+                    // The first iteration has no previous_tree.
+                    if let Some(data_tree) = previous_tree {
+                        let tau = porep::Tau {
+                            comm_r: replica_tree.root(),
+                            comm_d: data_tree.root(),
+                        };
+
+                        let aux = porep::ProverAux {
+                            tree_r: replica_tree.clone(),
+                            tree_d: (*data_tree).clone(),
+                        };
+                        info!("setting tau/aux for layer {}", i - 1,);
+                        taus.push(tau);
+                        auxs.push(aux);
+                    };
+
+                    Some(replica_tree)
+                },
+            );
+        };
         Ok(())
     }
 }
