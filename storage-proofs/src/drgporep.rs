@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use byteorder::{LittleEndian, WriteBytesExt};
 
+use crate::crypto::kdf;
 use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::hasher::{Domain, Hasher};
@@ -369,7 +370,7 @@ where
                         acc
                     });
 
-            let key = H::kdf(key_input.as_slice(), pub_params.graph.degree());
+            let key = kdf::kdf(key_input.as_slice(), pub_params.graph.degree()).into();
             let unsealed =
                 H::sloth_decode(&key, &proof.replica_nodes[i].data, pub_params.sloth_iter);
 
@@ -433,7 +434,20 @@ where
         data: &[u8],
         node: usize,
     ) -> Result<Vec<u8>> {
-        Ok(decode_block(&pp.graph, pp.lambda, pp.sloth_iter, replica_id, data, node)?.into_bytes())
+        let mut ciphertexts = vec![0u8; 32 + pp.lambda * pp.graph.degree()];
+        replica_id
+            .write_bytes(&mut ciphertexts[0..32])
+            .expect("preallocated dest");
+
+        Ok(decode_block(
+            &pp.graph,
+            pp.lambda,
+            pp.sloth_iter,
+            data,
+            node,
+            &mut ciphertexts,
+        )?
+        .into_bytes())
     }
 }
 

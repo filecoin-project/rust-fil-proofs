@@ -93,7 +93,7 @@ mod tests {
             acc
         });
 
-        let expected = crypto::kdf::kdf::<Bls12>(input_bytes.as_slice(), m);
+        let expected = crypto::kdf::kdf(input_bytes.as_slice(), m);
 
         assert_eq!(
             expected,

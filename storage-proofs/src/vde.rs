@@ -1,3 +1,4 @@
+use crate::crypto::kdf;
 use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::hasher::{Domain, Hasher};
@@ -25,6 +26,11 @@ where
     // The only subtlety is that a ZigZag graph may be reversed, so the direction
     // of the traversal must also be.
 
+    let mut ciphertexts = vec![0u8; 32 + lambda * graph.degree()];
+    replica_id
+        .write_bytes(&mut ciphertexts[0..32])
+        .expect("preallocated dest");
+
     for n in 0..graph.size() {
         let node = if graph.forward() {
             n
@@ -36,7 +42,7 @@ where
         let parents = graph.parents(node);
         assert_eq!(parents.len(), graph.degree(), "wrong number of parents");
 
-        let key = create_key::<H>(replica_id, node, &parents, data, lambda, degree)?;
+        let key = create_key::<H>(&mut ciphertexts, node, &parents, data, lambda, degree);
         let start = data_at_node_offset(node, lambda);
         let end = start + lambda;
 
@@ -61,9 +67,16 @@ where
     G: Graph<H>,
 {
     // TODO: parallelize
+    let mut ciphertexts = vec![0u8; 32 + lambda * graph.degree()];
+    replica_id
+        .write_bytes(&mut ciphertexts[0..32])
+        .expect("preallocated dest");
+
     (0..graph.size()).fold(Ok(Vec::with_capacity(data.len())), |acc, i| {
         acc.and_then(|mut acc| {
-            acc.extend(decode_block(graph, lambda, sloth_iter, replica_id, data, i)?.into_bytes());
+            acc.extend(
+                decode_block(graph, lambda, sloth_iter, data, i, &mut ciphertexts)?.into_bytes(),
+            );
             Ok(acc)
         })
     })
@@ -73,16 +86,16 @@ pub fn decode_block<'a, H, G>(
     graph: &'a G,
     lambda: usize,
     sloth_iter: usize,
-    replica_id: &'a H::Domain,
     data: &'a [u8],
     v: usize,
+    ciphertexts: &mut [u8],
 ) -> Result<H::Domain>
 where
     H: Hasher,
     G: Graph<H>,
 {
     let parents = graph.parents(v);
-    let key = create_key::<H>(replica_id, v, &parents, &data, lambda, graph.degree())?;
+    let key = create_key::<H>(ciphertexts, v, &parents, &data, lambda, graph.degree());
     let node_data = H::Domain::try_from_bytes(&data_at_node(data, v, lambda)?)?;
 
     // TODO: round constant
@@ -108,26 +121,35 @@ where
         .flat_map(H::Domain::into_bytes)
         .collect::<Vec<u8>>();
 
-    let key = create_key::<H>(replica_id, v, &parents, &byte_data, lambda, graph.degree())?;
+    let mut ciphertexts = vec![0u8; 32 + lambda * graph.degree()];
+    replica_id
+        .write_bytes(&mut ciphertexts[0..32])
+        .expect("preallocated dest");
+
+    let key = create_key::<H>(
+        &mut ciphertexts,
+        v,
+        &parents,
+        &byte_data,
+        lambda,
+        graph.degree(),
+    );
     let node_data = data[v];
 
     // TODO: round constant
     Ok(H::sloth_decode(&key, &node_data, sloth_iter))
 }
 
-fn create_key<H: Hasher>(
-    id: &H::Domain,
+pub fn create_key<H: Hasher>(
+    ciphertexts: &mut [u8],
     node: usize,
     parents: &[usize],
     data: &[u8],
     node_size: usize,
     m: usize,
-) -> Result<H::Domain> {
+) -> H::Domain {
     // ciphertexts will become a buffer of the layout
     // id | encodedParentNode1 | encodedParentNode1 | ...
-
-    let mut ciphertexts = vec![0u8; 32 + node_size * parents.len()];
-    id.write_bytes(&mut ciphertexts[0..32])?;
 
     for (i, parent) in parents.iter().enumerate() {
         // special super shitty case
@@ -137,9 +159,11 @@ fn create_key<H: Hasher>(
         } else {
             let start = 32 + i * node_size;
             let end = 32 + (i + 1) * node_size;
-            ciphertexts[start..end].copy_from_slice(data_at_node(data, *parent, node_size)?);
+            ciphertexts[start..end].copy_from_slice(
+                data_at_node(data, *parent, node_size).expect("failed to calc offsets"),
+            );
         }
     }
 
-    Ok(H::kdf(ciphertexts.as_slice(), m))
+    kdf::kdf(ciphertexts, m).into()
 }

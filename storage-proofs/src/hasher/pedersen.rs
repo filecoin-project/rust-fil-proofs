@@ -8,7 +8,7 @@ use rand::{Rand, Rng};
 use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 
 use super::{Domain, HashFunction, Hasher};
-use crate::crypto::{kdf, pedersen, sloth};
+use crate::crypto::{pedersen, sloth};
 use crate::error::{Error, Result};
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
@@ -18,16 +18,14 @@ impl Hasher for PedersenHasher {
     type Domain = PedersenDomain;
     type Function = PedersenFunction;
 
-    fn kdf(data: &[u8], m: usize) -> Self::Domain {
-        kdf::kdf::<Bls12>(data, m).into()
-    }
-
+    #[inline]
     fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain, rounds: usize) -> Self::Domain {
         let key = Fr::from_repr(key.0).unwrap();
         let ciphertext = Fr::from_repr(ciphertext.0).unwrap();
         sloth::encode::<Bls12>(&key, &ciphertext, rounds).into()
     }
 
+    #[inline]
     fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain, rounds: usize) -> Self::Domain {
         let key = Fr::from_repr(key.0).unwrap();
         let ciphertext = Fr::from_repr(ciphertext.0).unwrap();

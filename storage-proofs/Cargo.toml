@@ -7,6 +7,7 @@ license = "MIT OR Apache-2.0"
 edition = "2018"
 
 [dependencies]
+blake2b_simd = "*"
 bitvec = "0.5"
 sapling-crypto = { git = "https://github.com/zcash-hackworks/sapling-crypto", branch = "master" }
 rand = "0.4"
@@ -70,4 +71,8 @@ harness = false
 
 [[bench]]
 name = "sloth"
+harness = false
+
+[[bench]]
+name = "kdf"
 harness = false

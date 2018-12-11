@@ -72,9 +72,8 @@ pub mod porc;
 pub mod porep;
 pub mod proof;
 pub mod util;
+pub mod vde;
 pub mod vdf;
 pub mod vdf_sloth;
 pub mod zigzag_drgporep;
 pub mod zigzag_graph;
-
-mod vde;

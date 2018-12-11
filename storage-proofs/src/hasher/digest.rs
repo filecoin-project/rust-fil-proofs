@@ -31,18 +31,6 @@ impl<D: Digester> Hasher for DigestHasher<D> {
     type Domain = DigestDomain;
     type Function = DigestFunction<D>;
 
-    fn kdf(data: &[u8], m: usize) -> Self::Domain {
-        assert_eq!(
-            data.len(),
-            32 * (1 + m),
-            "invalid input length: data.len(): {} m: {}",
-            data.len(),
-            m
-        );
-
-        <Self::Function as HashFunction<Self::Domain>>::hash(data)
-    }
-
     fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain, rounds: usize) -> Self::Domain {
         // TODO: validate this is how sloth should work in this case
         let k = (*key).into();
@@ -90,7 +78,7 @@ impl<D: Digester> StdHasher for DigestFunction<D> {
 pub struct DigestDomain(pub [u8; 32]);
 
 impl DigestDomain {
-    fn trim_to_fr32(&mut self) {
+    pub fn trim_to_fr32(&mut self) {
         // strip last two bits, to ensure result is in Fr.
         self.0[31] &= 0b0011_1111;
     }
@@ -147,7 +135,7 @@ impl Domain for DigestDomain {
             return Err(Error::InvalidInputSize);
         }
         let mut res = DigestDomain::default();
-        res.0.copy_from_slice(&raw[0..32]);
+        res.0.copy_from_slice(&raw[..32]);
         Ok(res)
     }
 
@@ -155,7 +143,7 @@ impl Domain for DigestDomain {
         if dest.len() < 32 {
             return Err(Error::InvalidInputSize);
         }
-        dest[0..32].copy_from_slice(&self.0[..]);
+        dest[0..32].copy_from_slice(&self.0[..32]);
         Ok(())
     }
 }
@@ -164,7 +152,7 @@ impl<D: Digester> HashFunction<DigestDomain> for DigestFunction<D> {
     fn hash(data: &[u8]) -> DigestDomain {
         let hashed = D::digest(data);
         let mut res = DigestDomain::default();
-        res.0.copy_from_slice(&hashed[..]);
+        res.0.copy_from_slice(&hashed[..32]);
         res.trim_to_fr32();
         res
     }
@@ -174,7 +162,7 @@ impl<D: Digester> Algorithm<DigestDomain> for DigestFunction<D> {
     #[inline]
     fn hash(&mut self) -> DigestDomain {
         let mut h = [0u8; 32];
-        h.copy_from_slice(self.0.clone().result().as_ref());
+        h.copy_from_slice(&self.0.clone().result()[..32]);
         let mut dd = DigestDomain::from(h);
         dd.trim_to_fr32();
         dd
