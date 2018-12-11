@@ -8,8 +8,8 @@ extern crate storage_proofs;
 use std::hash::Hasher as StdHasher;
 
 use blake2::digest::{Input, VariableOutput};
-use blake2::{Digest, VarBlake2b};
-use blake2b_simd::{blake2b, Params, State};
+use blake2::VarBlake2b;
+use blake2b_simd::{Params, State};
 use criterion::{black_box, Criterion, ParameterizedBenchmark, Throughput};
 use rand::{thread_rng, Rng};
 use storage_proofs::hasher::*;
@@ -72,7 +72,6 @@ fn kdf(c: &mut Criterion) {
         .with_function("blake2b-simd-64", move |b, m| {
             let mut rng = thread_rng();
             let id: <Blake2bHasher as Hasher>::Domain = rng.gen();
-            let node = 2;
             let parents: Vec<usize> = (0..*m).map(|_| rng.gen_range(0, *m)).collect();
             let data: Vec<u8> = (0..m * 32).map(|_| rng.gen()).collect();
             let node_size = 32;
@@ -92,7 +91,6 @@ fn kdf(c: &mut Criterion) {
         .with_function("blake2b-simd-32", move |b, m| {
             let mut rng = thread_rng();
             let id: <Blake2bHasher as Hasher>::Domain = rng.gen();
-            let node = 2;
             let parents: Vec<usize> = (0..*m).map(|_| rng.gen_range(0, *m)).collect();
             let data: Vec<u8> = (0..m * 32).map(|_| rng.gen()).collect();
             let node_size = 32;
@@ -112,7 +110,6 @@ fn kdf(c: &mut Criterion) {
         .with_function("blake2b-simd-32-together", move |b, m| {
             let mut rng = thread_rng();
             let id: <Blake2bHasher as Hasher>::Domain = rng.gen();
-            let node = 2;
             let parents: Vec<usize> = (0..*m).map(|_| rng.gen_range(0, *m)).collect();
             let data: Vec<u8> = (0..m * 32).map(|_| rng.gen()).collect();
             let node_size = 32;
@@ -135,7 +132,6 @@ fn kdf(c: &mut Criterion) {
         .with_function("blake2b-simd-32-outside", move |b, m| {
             let mut rng = thread_rng();
             let id: <Blake2bHasher as Hasher>::Domain = rng.gen();
-            let node = 2;
             let parents: Vec<usize> = (0..*m).map(|_| rng.gen_range(0, *m)).collect();
             let data: Vec<u8> = (0..m * 32).map(|_| rng.gen()).collect();
             let node_size = 32;
@@ -162,7 +158,6 @@ fn kdf(c: &mut Criterion) {
         .with_function("blake2b-32", move |b, m| {
             let mut rng = thread_rng();
             let id: <Blake2bHasher as Hasher>::Domain = rng.gen();
-            let node = 2;
             let parents: Vec<usize> = (0..*m).map(|_| rng.gen_range(0, *m)).collect();
             let data: Vec<u8> = (0..m * 32).map(|_| rng.gen()).collect();
             let node_size = 32;

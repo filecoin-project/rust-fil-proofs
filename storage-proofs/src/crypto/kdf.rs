@@ -1,4 +1,3 @@
-use blake2::{Blake2s, Digest};
 use blake2b_simd::Params;
 use pairing::bls12_381::Fr;
 

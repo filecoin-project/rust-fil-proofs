@@ -151,12 +151,11 @@ pub fn create_key<H: Hasher>(
     // ciphertexts will become a buffer of the layout
     // id | encodedParentNode1 | encodedParentNode1 | ...
 
-    for (i, parent) in parents.iter().enumerate() {
-        // special super shitty case
-        // TODO: unsuck
-        if node == parents[0] {
-            // skip, as we would only write 0s, but the vector is prefilled with 0.
-        } else {
+    // special super shitty case
+    // TODO: unsuck
+    // skip, as we would only write 0s, but the vector is prefilled with 0.
+    if node != parents[0] {
+        for (i, parent) in parents.iter().enumerate() {
             let start = 32 + i * node_size;
             let end = 32 + (i + 1) * node_size;
             ciphertexts[start..end].copy_from_slice(
