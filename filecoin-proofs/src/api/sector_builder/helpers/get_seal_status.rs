@@ -1,4 +1,4 @@
-use crate::api::sector_builder::errors::SectorBuilderErr;
+use crate::api::sector_builder::errors::err_unrecov;
 use crate::api::sector_builder::metadata::SealStatus;
 use crate::api::sector_builder::state::SealedState;
 use crate::api::sector_builder::state::StagedState;
@@ -30,10 +30,7 @@ pub fn get_seal_status(
                     }
                 })
         })
-        .ok_or_else(|| {
-            let err = format!("no sector with id {} found", sector_id);
-            SectorBuilderErr::Unrecoverable(err).into()
-        })
+        .ok_or_else(|| err_unrecov(format!("no sector with id {} found", sector_id)).into())
 }
 
 #[cfg(test)]
