@@ -25,50 +25,72 @@ pub struct HvhPost<'a, E: JubjubEngine> {
 
 impl<'a, E: JubjubEngine> Circuit<E> for HvhPost<'a, E> {
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        // VDF Output Verification
-        assert_eq!(self.vdf_xs.len(), self.vdf_ys.len());
+        hvh_post(
+            cs,
+            self.params,
+            self.vdf_key,
+            &self.vdf_ys,
+            &self.vdf_xs,
+            self.vdf_sloth_rounds,
+            &self.challenged_leafs_vec,
+            &self.commitments_vec,
+            &self.paths_vec,
+        )
+    }
+}
 
-        let vdf_key = num::AllocatedNum::alloc(cs.namespace(|| "vdf_key"), || {
-            self.vdf_key
-                .ok_or_else(|| SynthesisError::AssignmentMissing)
+pub fn hvh_post<E: JubjubEngine, CS: ConstraintSystem<E>>(
+    cs: &mut CS,
+    params: &E::Params,
+    vdf_key: Option<E::Fr>,
+    vdf_ys: &[Option<E::Fr>],
+    vdf_xs: &[Option<E::Fr>],
+    vdf_sloth_rounds: usize,
+    challenged_leafs_vec: &[Vec<Option<E::Fr>>],
+    commitments_vec: &[Vec<Option<E::Fr>>],
+    paths_vec: &[Vec<Vec<Option<(E::Fr, bool)>>>],
+) -> Result<(), SynthesisError> {
+    // VDF Output Verification
+    assert_eq!(vdf_xs.len(), vdf_ys.len());
+
+    let vdf_key = num::AllocatedNum::alloc(cs.namespace(|| "vdf_key"), || {
+        vdf_key.ok_or_else(|| SynthesisError::AssignmentMissing)
+    })?;
+
+    for (i, (y, x)) in vdf_ys.iter().zip(vdf_xs.iter()).enumerate() {
+        let mut cs = cs.namespace(|| format!("vdf_verification_round_{}", i));
+
+        let decoded = sloth::decode(
+            cs.namespace(|| "sloth_decode"),
+            &vdf_key,
+            *y,
+            vdf_sloth_rounds,
+        )?;
+
+        let x_alloc = num::AllocatedNum::alloc(cs.namespace(|| "x"), || {
+            x.ok_or_else(|| SynthesisError::AssignmentMissing)
         })?;
 
-        for (i, (y, x)) in self.vdf_ys.iter().zip(self.vdf_xs.iter()).enumerate() {
-            let mut cs = cs.namespace(|| format!("vdf_verification_round_{}", i));
+        constraint::equal(&mut cs, || "equality", &x_alloc, &decoded);
 
-            let decoded = sloth::decode(
-                cs.namespace(|| "sloth_decode"),
-                &vdf_key,
-                *y,
-                self.vdf_sloth_rounds,
-            )?;
-
-            let x_alloc = num::AllocatedNum::alloc(cs.namespace(|| "x"), || {
-                x.ok_or_else(|| SynthesisError::AssignmentMissing)
-            })?;
-
-            constraint::equal(&mut cs, || "equality", &x_alloc, &decoded);
-
-            // TODO: is this the right thing to inputize?
-            decoded.inputize(cs.namespace(|| "vdf_result"))?;
-        }
-
-        // PoRC Verification
-        assert_eq!(self.challenged_leafs_vec.len(), self.commitments_vec.len());
-        assert_eq!(self.paths_vec.len(), self.commitments_vec.len());
-
-        for (i, (challenged_leafs, (commitments, paths))) in self
-            .challenged_leafs_vec
-            .iter()
-            .zip(self.commitments_vec.iter().zip(self.paths_vec.iter()))
-            .enumerate()
-        {
-            let mut cs = cs.namespace(|| format!("porc_verification_round_{}", i));
-            porc::porc(&mut cs, self.params, challenged_leafs, commitments, paths)?;
-        }
-
-        Ok(())
+        // TODO: is this the right thing to inputize?
+        decoded.inputize(cs.namespace(|| "vdf_result"))?;
     }
+
+    // PoRC Verification
+    assert_eq!(challenged_leafs_vec.len(), commitments_vec.len());
+    assert_eq!(paths_vec.len(), commitments_vec.len());
+
+    for (i, (challenged_leafs, (commitments, paths))) in challenged_leafs_vec
+        .iter()
+        .zip(commitments_vec.iter().zip(paths_vec.iter()))
+        .enumerate()
+    {
+        let mut cs = cs.namespace(|| format!("porc_verification_round_{}", i));
+        porc::porc(&mut cs, params, challenged_leafs, commitments, paths)?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
