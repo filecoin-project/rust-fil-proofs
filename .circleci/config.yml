@@ -5,6 +5,7 @@ jobs:
     docker:
       - image: filecoin/rust:latest
     working_directory: /mnt/crate
+    resource_class: xlarge
     steps:
       - checkout
       - run:
@@ -34,6 +35,7 @@ jobs:
     docker:
       - image: filecoin/rust:latest
     working_directory: /mnt/crate
+    resource_class: xlarge
     steps:
       - checkout
       - attach_workspace:
@@ -63,6 +65,7 @@ jobs:
     docker:
       - image: filecoin/rust:latest
     working_directory: /mnt/crate
+    resource_class: xlarge
     steps:
       - checkout
       - attach_workspace:
@@ -81,6 +84,7 @@ jobs:
     docker:
       - image: filecoin/rust:latest
     working_directory: /mnt/crate
+    resource_class: xlarge
     steps:
       - checkout
       - attach_workspace:
@@ -100,6 +104,7 @@ jobs:
     docker:
       - image: filecoin/rust:latest
     working_directory: /mnt/crate
+    resource_class: xlarge
     steps:
       - checkout
       - attach_workspace:
@@ -120,6 +125,7 @@ jobs:
     docker:
       - image: filecoin/rust:latest
     working_directory: /mnt/crate
+    resource_class: xlarge
     steps:
       - checkout
       - attach_workspace:
@@ -139,6 +145,7 @@ jobs:
     docker:
       - image: filecoin/rust:latest
     working_directory: /mnt/crate
+    resource_class: xlarge
     steps:
       - checkout
       - attach_workspace:
@@ -158,6 +165,7 @@ jobs:
     docker:
       - image: filecoin/rust:latest
     working_directory: /mnt/crate
+    resource_class: xlarge
     steps:
       - checkout
       - attach_workspace:
@@ -173,6 +181,7 @@ jobs:
     docker:
       - image: filecoin/rust:latest
     working_directory: /mnt/crate
+    resource_class: xlarge
     steps:
       - checkout
       - attach_workspace:
