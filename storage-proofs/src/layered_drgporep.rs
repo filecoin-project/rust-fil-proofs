@@ -1,5 +1,4 @@
 use std::sync::mpsc::channel;
-use std::sync::Arc;
 
 use crate::merkle::MerkleTree;
 use crossbeam_utils::thread;
@@ -271,6 +270,9 @@ pub trait Layers {
             // for merkle tree generation and sending the results back to a channel.
             // The received results need to be sorted by layer because ordering of the completed results
             // is not guaranteed. Misordered results will be seen in practice when trees are small.
+
+            // The outer scope ensure that `tx` is dropped and closed before we read from `outer_rx`.
+            // Otherwise, the read loop will block forever waiting for more input.
             let outer_rx = {
                 let (tx, rx) = channel();
 
@@ -281,17 +283,20 @@ pub trait Layers {
                         let mut data_copy = vec![0; data.len()];
                         data_copy[0..data.len()].clone_from_slice(data);
 
-                        let rc = tx.clone();
-                        let current_copy = current_drgpp.clone();
-                        let shared_pp = Arc::new(current_copy);
+                        let return_channel = tx.clone();
+                        let (transfer_tx, transfer_rx) =
+                            channel::<drgporep::PublicParams<Self::Hasher, Self::Graph>>();
+
+                        transfer_tx.send(current_drgpp.clone()).unwrap();
 
                         let thread = scope.spawn(move |_| {
-                            let tree_d = shared_pp
-                                .graph
-                                .merkle_tree(&data_copy, shared_pp.lambda)
-                                .unwrap(); // If we panic here, thread.join() below will receive an error.
+                            // If we panic anywhere in this closure, thread.join() below will receive an error —
+                            // so it is safe to unwrap.
+                            let drgpp = transfer_rx.recv().unwrap();
+                            let tree_d = drgpp.graph.merkle_tree(&data_copy, drgpp.lambda).unwrap();
+
                             info!(SP_LOG, "returning tree for layer {}", layer);
-                            rc.send((layer, tree_d)).unwrap();
+                            return_channel.send((layer, tree_d)).unwrap();
                         });
 
                         threads.push(thread);
