@@ -135,11 +135,14 @@ pub unsafe extern "C" fn generate_post(
 ///
 /// # Arguments
 ///
-/// * `_ss_ptr` - pointer to a boxed SectorStore
-/// * `proof`   - a proof-of-spacetime
+/// * `proof`          - a proof-of-spacetime
+/// * `_challenge_ptr` - pointer to the first cell in an array containing challenge bytes
+/// * `_challenge_len` - number of bytes in the _challenge_ptr array
 #[no_mangle]
 pub extern "C" fn verify_post(
     proof: &[u8; API_POST_PROOF_BYTES],
+    _challenge_ptr: *const u8,
+    _challenge_len: libc::size_t,
 ) -> *mut responses::VerifyPoSTResponse {
     let mut res: responses::VerifyPoSTResponse = Default::default();
 
@@ -500,7 +503,7 @@ mod tests {
                 "generate_post failed"
             );
 
-            let verify_post_res = verify_post(&(*generate_post_res).proof);
+            let verify_post_res = verify_post(&(*generate_post_res).proof, std::ptr::null(), 0);
 
             assert_eq!(
                 FCPResponseStatus::FCPNoError,
