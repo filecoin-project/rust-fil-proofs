@@ -11,6 +11,7 @@ filecoin-proofs = { path = "./filecoin-proofs" }
 storage-proofs = { path = "./storage-proofs" }
 sector-base = { path = "./sector-base" }
 storage-backend = { path = "./storage-backend" }
+accumulators = { path = "./accumulators" }
 
 clap = "2"
 serde = "1"
@@ -30,7 +31,8 @@ members = [
   "storage-proofs",
   "sector-base",
   "storage-backend",
-  "ffi-toolkit"
+  "ffi-toolkit",
+  "accumulators",
 ]
 
 [profile.test]
