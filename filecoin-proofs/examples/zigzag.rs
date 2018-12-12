@@ -218,7 +218,7 @@ fn do_the_work<H: 'static>(
         };
         total_verifying += start.elapsed();
     }
-    info!("Verification complete");
+    info!(FCP_LOG, "Verification complete");
     stop_profile();
 
     let verifying_avg = total_verifying / samples;

@@ -13,6 +13,7 @@ use crate::parameter_cache::ParameterSetIdentifier;
 use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
 use crate::vde;
+use crate::SP_LOG;
 
 #[derive(Debug)]
 pub struct SetupParams {
@@ -276,7 +277,7 @@ pub trait Layers {
                 let _ = thread::scope(|scope| -> Result<()> {
                     let mut threads = Vec::new();
                     let initial_pp = (*drgpp).clone();
-                    (0..layers + 1).fold(initial_pp, |current_drgpp, layer| {
+                    (0..=layers).fold(initial_pp, |current_drgpp, layer| {
                         let mut data_copy = vec![0; data.len()];
                         data_copy[0..data.len()].clone_from_slice(data);
 
@@ -289,14 +290,14 @@ pub trait Layers {
                                 .graph
                                 .merkle_tree(&data_copy, shared_pp.lambda)
                                 .unwrap(); // If we panic here, thread.join() below will receive an error.
-                            info!("returning tree for layer {}", layer);
+                            info!(SP_LOG, "returning tree for layer {}", layer);
                             rc.send((layer, tree_d)).unwrap();
                         });
 
                         threads.push(thread);
 
                         if layer < layers {
-                            info!("encoding layer {}", layer);
+                            info!(SP_LOG, "encoding layer {}", layer);
                             vde::encode(
                                 &current_drgpp.graph,
                                 current_drgpp.lambda,
@@ -310,7 +311,7 @@ pub trait Layers {
                     });
 
                     for thread in threads {
-                        let _ = thread
+                        thread
                             .join()
                             .map_err(|_| Error::MerkleTreeGenerationError)?;
                     }
@@ -342,7 +343,7 @@ pub trait Layers {
                             tree_r: replica_tree.clone(),
                             tree_d: (*data_tree).clone(),
                         };
-                        info!("setting tau/aux for layer {}", i - 1,);
+                        info!(SP_LOG, "setting tau/aux for layer {}", i - 1,);
                         taus.push(tau);
                         auxs.push(aux);
                     };
