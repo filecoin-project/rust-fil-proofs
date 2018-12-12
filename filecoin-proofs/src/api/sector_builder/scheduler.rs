@@ -21,13 +21,14 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
 
-const FATAL_NOLOAD: &str = "[SchedulerWorker#init_from_metadata] could not load snapshot";
-const FATAL_NORECV: &str = "[SchedulerWorker#init_from_metadata] could not receive task";
-const FATAL_NOSEND: &str = "[SchedulerWorker#init_from_metadata] could not send";
-const FATAL_SECMAP: &str = "[SectorBuilderStateMgrgr#handle_seal_result] insert failed";
-const FATAL_SNPSHT: &str = "[SectorBuilderStateMgr#handle_seal_result] could not snapshot";
-const FATAL_SLRSND: &str = "[SectorBuilderStateMgr#check_and_schedule] could not send to sealer";
-const FATAL_HUNGUP: &str = "[SectorBuilderStateMgr#retrieve_piece] could not send to ret channel";
+const FATAL_NOLOAD: &str = "could not load snapshot";
+const FATAL_NORECV: &str = "could not receive task";
+const FATAL_NOSEND: &str = "could not send";
+const FATAL_SECMAP: &str = "insert failed";
+const FATAL_SNPSHT: &str = "could not snapshot";
+const FATAL_SLRSND: &str = "could not send to sealer";
+const FATAL_HUNGUP: &str = "could not send to ret channel";
+const FATAL_NOSECT: &str = "could not find sector";
 
 pub struct Scheduler {
     pub thread: Option<thread::JoinHandle<()>>,
@@ -272,7 +273,7 @@ impl SectorMetadataManager {
             let mut sector = staged_state
                 .sectors
                 .get_mut(&sector_id)
-                .expect_with_logging("sector not in staged_sectors");
+                .expect_with_logging(FATAL_NOSECT);
             sector.seal_status = SealStatus::Sealing;
 
             self.sealer_input_tx

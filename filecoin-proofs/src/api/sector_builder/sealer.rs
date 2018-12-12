@@ -10,6 +10,11 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+const FATAL_NOLOCK: &str = "error acquiring task lock";
+const FATAL_RCVTSK: &str = "error receiving seal task";
+const FATAL_SNDTSK: &str = "error sending task";
+const FATAL_SNDRLT: &str = "error sending result";
+
 pub struct SealerWorker {
     pub id: usize,
     pub thread: Option<thread::JoinHandle<()>>,
@@ -37,10 +42,8 @@ impl SealerWorker {
             // relinquish the lock and return the task. The receiver is mutexed
             // for coordinating reads across multiple worker-threads.
             let task = {
-                let rx = seal_task_rx
-                    .lock()
-                    .expect_with_logging("error acquiring task lock");
-                rx.recv().expect_with_logging("error receiving seal task")
+                let rx = seal_task_rx.lock().expect_with_logging(FATAL_NOLOCK);
+                rx.recv().expect_with_logging(FATAL_RCVTSK)
             };
 
             // Dispatch to the appropriate task-handler.
@@ -50,9 +53,7 @@ impl SealerWorker {
                     let result = seal(&sector_store.clone(), &prover_id, staged_sector);
                     let task = Request::HandleSealResult(sector_id, Box::new(result));
 
-                    return_channel
-                        .send(task)
-                        .expect_with_logging("error sending task");
+                    return_channel.send(task).expect_with_logging(FATAL_SNDTSK);
                 }
                 SealerInput::Unseal(piece_key, sealed_sector, return_channel) => {
                     let result = retrieve_piece(
@@ -64,7 +65,7 @@ impl SealerWorker {
 
                     return_channel
                         .send(result)
-                        .expect_with_logging("error sending result");
+                        .expect_with_logging(FATAL_SNDRLT);
                 }
                 SealerInput::Shutdown => break,
             }
