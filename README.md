@@ -128,6 +128,31 @@ Developers can control `rust-proofs` logging through environment variables:
     | debug!        	| 5          	| A debug message, useful for debugging but too verbose to be turned on normally.                                                                                                                 |
     | trace!        	| 6          	| A message that will be printed a lot, useful for debugging program flow and will probably impact performance.                                                                                   |
 
+## Memory Leak Detection
+
+To run the leak detector against the FFI-exposed portion of libfilecoin_proofs,
+simply run the FFI example with leak detection enabled. On a Linux machine, you
+can run the following command:
+
+```shell
+RUSTFLAGS="-Z sanitizer=leak" cargo run --release --package filecoin-proofs --example ffi --target x86_64-unknown-linux-gnu
+```
+
+If using OSX, you'll have to run the leak detection from within a Docker
+container. After installing Docker, run the following commands to build and run
+the proper Docker image and then the leak detector itself:
+
+```shell
+docker build -t foo -f ./Dockerfile-ci . && \
+  docker run \
+    -it \
+    -e RUSTFLAGS="-Z sanitizer=leak" \
+    --privileged \
+    -w /mnt/crate \
+    -v `pwd`:/mnt/crate -v $(TMP=$(mktemp -d) && mv ${TMP} /tmp/ && echo /tmp${TMP}):/mnt/crate/target \
+    foo:latest \
+    cargo run --release --package filecoin-proofs --example ffi --target x86_64-unknown-linux-gnu
+```
 
 ## Generate Documentation
 
