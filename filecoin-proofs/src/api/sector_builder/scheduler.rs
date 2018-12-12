@@ -15,6 +15,7 @@ use crate::api::sector_builder::state::StagedState;
 use crate::api::sector_builder::SectorId;
 use crate::api::sector_builder::WrappedKeyValueStore;
 use crate::api::sector_builder::WrappedSectorStore;
+use crate::error::ErrorLogResult;
 use crate::error::Result;
 use std::sync::mpsc;
 use std::sync::Arc;
@@ -62,7 +63,7 @@ impl Scheduler {
             // create it from scratch.
             let state = {
                 let loaded = load_snapshot(&kv_store, &prover_id)
-                    .expect(FATAL_NOLOAD)
+                    .expect_with_logging(FATAL_NOLOAD)
                     .map(|x| x.into());
 
                 loaded.unwrap_or_else(|| SectorBuilderState {
@@ -89,28 +90,33 @@ impl Scheduler {
             };
 
             loop {
-                let task = scheduler_input_rx.recv().expect(FATAL_NORECV);
+                let task = scheduler_input_rx.recv().expect_with_logging(FATAL_NORECV);
 
                 // Dispatch to the appropriate task-handler.
                 match task {
                     Request::AddPiece(key, bytes, tx) => {
-                        tx.send(m.add_piece(key, &bytes)).expect(FATAL_NOSEND);
+                        tx.send(m.add_piece(key, &bytes))
+                            .expect_with_logging(FATAL_NOSEND);
                     }
                     Request::GetSealStatus(sector_id, tx) => {
-                        tx.send(m.get_seal_status(sector_id)).expect(FATAL_NOSEND);
+                        tx.send(m.get_seal_status(sector_id))
+                            .expect_with_logging(FATAL_NOSEND);
                     }
                     Request::RetrievePiece(piece_key, tx) => m.retrieve_piece(piece_key, tx),
                     Request::GetSealedSectors(tx) => {
-                        tx.send(m.get_sealed_sectors()).expect(FATAL_NOSEND);
+                        tx.send(m.get_sealed_sectors())
+                            .expect_with_logging(FATAL_NOSEND);
                     }
                     Request::GetStagedSectors(tx) => {
                         tx.send(m.get_staged_sectors()).expect(FATAL_NOSEND);
                     }
                     Request::GetMaxUserBytesPerStagedSector(tx) => {
-                        tx.send(m.max_user_bytes()).expect(FATAL_NOSEND);
+                        tx.send(m.max_user_bytes())
+                            .expect_with_logging(FATAL_NOSEND);
                     }
                     Request::SealAllStagedSectors(tx) => {
-                        tx.send(m.seal_all_staged_sectors()).expect(FATAL_NOSEND);
+                        tx.send(m.seal_all_staged_sectors())
+                            .expect_with_logging(FATAL_NOSEND);
                     }
                     Request::HandleSealResult(sector_id, result) => {
                         m.handle_seal_result(sector_id, *result);
@@ -160,11 +166,14 @@ impl SectorMetadataManager {
             let sealed_sector = Box::new(sealed_sector.clone());
             let task = SealerInput::Unseal(piece_key, sealed_sector, return_channel);
 
-            self.sealer_input_tx.clone().send(task).expect(FATAL_SLRSND);
+            self.sealer_input_tx
+                .clone()
+                .send(task)
+                .expect_with_logging(FATAL_SLRSND);
         } else {
             return_channel
                 .send(Err(err_piecenotfound(piece_key.to_string()).into()))
-                .expect(FATAL_HUNGUP);
+                .expect_with_logging(FATAL_HUNGUP);
         }
     }
 
@@ -236,13 +245,13 @@ impl SectorMetadataManager {
                 let _ = staged_state.sectors.remove(&sector_id);
 
                 // Insert the newly-sealed sector into the other state map.
-                let sealed_sector = result.expect(FATAL_SECMAP);
+                let sealed_sector = result.expect_with_logging(FATAL_SECMAP);
 
                 sealed_state.sectors.insert(sector_id, sealed_sector);
             }
         }
 
-        self.checkpoint().expect(FATAL_SNPSHT);
+        self.checkpoint().expect_with_logging(FATAL_SNPSHT);
     }
 
     // Check for sectors which should no longer receive new user piece-bytes and
@@ -260,7 +269,10 @@ impl SectorMetadataManager {
         // Mark the to-be-sealed sectors as no longer accepting data and then
         // schedule sealing.
         for sector_id in to_be_sealed {
-            let mut sector = staged_state.sectors.get_mut(&sector_id).unwrap();
+            let mut sector = staged_state
+                .sectors
+                .get_mut(&sector_id)
+                .expect_with_logging("sector not in staged_sectors");
             sector.seal_status = SealStatus::Sealing;
 
             self.sealer_input_tx
@@ -269,7 +281,7 @@ impl SectorMetadataManager {
                     sector.clone(),
                     self.scheduler_input_tx.clone(),
                 ))
-                .expect(FATAL_SLRSND);
+                .expect_with_logging(FATAL_SLRSND);
         }
 
         Ok(())
