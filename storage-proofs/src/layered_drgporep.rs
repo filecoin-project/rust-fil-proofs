@@ -2,6 +2,7 @@ use std::sync::mpsc::channel;
 
 use crate::merkle::MerkleTree;
 use crossbeam_utils::thread;
+use slog::*;
 
 use crate::challenge_derivation::derive_challenges;
 use crate::drgporep::{self, DrgPoRep};
@@ -295,14 +296,14 @@ pub trait Layers {
                             let drgpp = transfer_rx.recv().unwrap();
                             let tree_d = drgpp.graph.merkle_tree(&data_copy, drgpp.lambda).unwrap();
 
-                            info!(SP_LOG, "returning tree for layer {}", layer);
+                            info!(SP_LOG, "returning tree"; "layer" => format!("{}", layer));
                             return_channel.send((layer, tree_d)).unwrap();
                         });
 
                         threads.push(thread);
 
                         if layer < layers {
-                            info!(SP_LOG, "encoding layer {}", layer);
+                            info!(SP_LOG, "encoding"; "layer {}" => format!("{}", layer));
                             vde::encode(
                                 &current_drgpp.graph,
                                 current_drgpp.lambda,
