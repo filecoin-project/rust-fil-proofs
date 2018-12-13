@@ -24,7 +24,6 @@ use std::marker::PhantomData;
 /// # Fields
 ///
 /// * `params` - parameters for the curve
-/// * `lambda` - The size of the individual data leaves in bits.
 /// * `sloth_iter` - How many rounds sloth should run for.
 ///
 /// ----> Private `replica_node` - The replica node being proven.
@@ -54,7 +53,6 @@ use crate::hasher::{Domain, Hasher};
 
 pub struct DrgPoRepCircuit<'a, E: JubjubEngine> {
     params: &'a E::Params,
-    lambda: usize,
     sloth_iter: usize,
     replica_nodes: Vec<Option<E::Fr>>,
     replica_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
@@ -73,7 +71,6 @@ impl<'a, E: JubjubEngine> DrgPoRepCircuit<'a, E> {
     pub fn synthesize<CS>(
         mut cs: CS,
         params: &E::Params,
-        lambda: usize,
         sloth_iter: usize,
         replica_nodes: Vec<Option<E::Fr>>,
         replica_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
@@ -93,7 +90,6 @@ impl<'a, E: JubjubEngine> DrgPoRepCircuit<'a, E> {
     {
         DrgPoRepCircuit {
             params,
-            lambda,
             sloth_iter,
             replica_nodes,
             replica_nodes_paths,
@@ -168,7 +164,6 @@ where
             Some(tau) => (Some(tau.comm_r), Some(tau.comm_d)),
         };
 
-        let lambda = pub_params.lambda;
         let leaves = pub_params.graph.size();
 
         let replica_id_bits = bytes_into_bits(&replica_id.into_bytes());
@@ -177,7 +172,6 @@ where
             multipack::compute_multipacking::<Bls12>(&replica_id_bits[0..Fr::CAPACITY as usize]);
 
         let por_pub_params = merklepor::PublicParams {
-            lambda,
             leaves,
             private: comm_d.is_none(),
         };
@@ -223,8 +217,6 @@ where
         public_params: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
         engine_params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> DrgPoRepCircuit<'a, Bls12> {
-        let lambda = public_params.lambda;
-
         let replica_nodes = proof
             .replica_nodes
             .iter()
@@ -282,7 +274,6 @@ where
 
         DrgPoRepCircuit {
             params: engine_params,
-            lambda,
             sloth_iter: public_params.sloth_iter,
             replica_nodes,
             replica_nodes_paths,
@@ -328,7 +319,6 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
         E: JubjubEngine,
     {
         let params = self.params;
-        let lambda = self.lambda;
 
         let replica_id = self.replica_id;
         let replica_root = self.replica_root;
@@ -349,7 +339,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
 
         // get the replica_id in bits
         let replica_id_bits =
-            bytes_into_boolean_vec(cs.namespace(|| "replica_id_bits"), replica_id_bytes, lambda)?;
+            bytes_into_boolean_vec(cs.namespace(|| "replica_id_bits"), replica_id_bytes, 32)?;
 
         multipack::pack_into_inputs(
             cs.namespace(|| "replica_id"),
@@ -485,7 +475,6 @@ mod tests {
         let params = &JubjubBls12::new();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let lambda = 32;
         let nodes = 12;
         let degree = 6;
         let challenge = 2;
@@ -501,14 +490,12 @@ mod tests {
         let original_data = data.clone();
         let data_node: Option<Fr> = Some(
             bytes_into_fr::<Bls12>(
-                data_at_node(&original_data, challenge, lambda)
-                    .expect("failed to read original data"),
+                data_at_node(&original_data, challenge).expect("failed to read original data"),
             )
             .unwrap(),
         );
 
         let sp = drgporep::SetupParams {
-            lambda,
             drg: drgporep::DrgParams {
                 nodes,
                 degree,
@@ -577,7 +564,6 @@ mod tests {
         DrgPoRepCircuit::synthesize(
             cs.namespace(|| "drgporep"),
             params,
-            lambda,
             sloth_iter,
             vec![replica_node],
             vec![replica_node_path],
@@ -617,8 +603,6 @@ mod tests {
         let params = &JubjubBls12::new();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        // 32 bytes per node
-        let lambda = 32;
         // 1 GB
         let n = (1 << 30) / 32;
         let m = 6;
@@ -629,7 +613,6 @@ mod tests {
         DrgPoRepCircuit::synthesize(
             cs.namespace(|| "drgporep"),
             params,
-            lambda * 8,
             sloth_iter,
             vec![Some(Fr::rand(rng)); 1],
             vec![vec![Some((Fr::rand(rng), false)); tree_depth]; 1],
@@ -655,7 +638,6 @@ mod tests {
         let params = &JubjubBls12::new();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let lambda = 32;
         let nodes = 2;
         let degree = 2;
         let challenge = 1;
@@ -668,7 +650,6 @@ mod tests {
 
         let setup_params = compound_proof::SetupParams {
             vanilla_params: &drgporep::SetupParams {
-                lambda,
                 drg: drgporep::DrgParams {
                     nodes,
                     degree,
@@ -704,7 +685,6 @@ mod tests {
         // TODO: Abstract it.
         let setup_params = compound_proof::SetupParams {
             vanilla_params: &drgporep::SetupParams {
-                lambda,
                 drg: drgporep::DrgParams {
                     nodes,
                     degree,

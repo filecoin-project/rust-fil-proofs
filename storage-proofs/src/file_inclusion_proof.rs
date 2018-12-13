@@ -216,7 +216,7 @@ mod tests {
             )
         }
 
-        let tree = g.merkle_tree(&data, lambda).unwrap();
+        let tree = g.merkle_tree(&data).unwrap();
         let lengths: Vec<usize> = node_lengths.iter().map(|x| x * lambda).collect();
 
         let proofs = file_inclusion_proofs::<H>(&tree, &node_lengths);

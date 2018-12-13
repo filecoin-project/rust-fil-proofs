@@ -25,7 +25,6 @@ pub struct PrivateInputs<'a, H: 'a + Hasher> {
 
 #[derive(Debug)]
 pub struct SetupParams {
-    pub lambda: usize,
     pub drg: DrgParams,
     pub sloth_iter: usize,
 }
@@ -50,7 +49,6 @@ where
     H: Hasher,
     G: Graph<H> + ParameterSetIdentifier,
 {
-    pub lambda: usize,
     pub graph: G,
     pub sloth_iter: usize,
 
@@ -62,9 +60,8 @@ where
     H: Hasher,
     G: Graph<H> + ParameterSetIdentifier,
 {
-    pub fn new(lambda: usize, graph: G, sloth_iter: usize) -> Self {
+    pub fn new(graph: G, sloth_iter: usize) -> Self {
         PublicParams {
-            lambda,
             graph,
             sloth_iter,
             _h: PhantomData,
@@ -79,8 +76,7 @@ where
 {
     fn parameter_set_identifier(&self) -> String {
         format!(
-            "drgporep::PublicParams{{lambda: {}, graph: {}; sloth_iter: {}}}",
-            self.lambda,
+            "drgporep::PublicParams{{graph: {}; sloth_iter: {}}}",
             self.graph.parameter_set_identifier(),
             self.sloth_iter
         )
@@ -227,7 +223,7 @@ where
             sp.drg.seed,
         );
 
-        Ok(PublicParams::new(sp.lambda, graph, sp.sloth_iter))
+        Ok(PublicParams::new(graph, sp.sloth_iter))
     }
 
     fn prove<'b>(
@@ -284,7 +280,6 @@ where
 
                 let extracted = decode_domain_block(
                     &pub_params.graph,
-                    pub_params.lambda,
                     pub_params.sloth_iter,
                     &pub_inputs.replica_id,
                     domain_replica,
@@ -403,13 +398,13 @@ where
     ) -> Result<(porep::Tau<H::Domain>, porep::ProverAux<H>)> {
         let tree_d = match data_tree {
             Some(tree) => tree,
-            None => pp.graph.merkle_tree(data, pp.lambda)?,
+            None => pp.graph.merkle_tree(data)?,
         };
 
-        vde::encode(&pp.graph, pp.lambda, pp.sloth_iter, replica_id, data)?;
+        vde::encode(&pp.graph, pp.sloth_iter, replica_id, data)?;
 
         let comm_d = tree_d.root();
-        let tree_r = pp.graph.merkle_tree(data, pp.lambda)?;
+        let tree_r = pp.graph.merkle_tree(data)?;
         let comm_r = tree_r.root();
 
         Ok((
@@ -423,7 +418,7 @@ where
         replica_id: &'b H::Domain,
         data: &'b [u8],
     ) -> Result<Vec<u8>> {
-        vde::decode(&pp.graph, pp.lambda, pp.sloth_iter, replica_id, data)
+        vde::decode(&pp.graph, pp.sloth_iter, replica_id, data)
     }
 
     fn extract(
@@ -432,7 +427,7 @@ where
         data: &[u8],
         node: usize,
     ) -> Result<Vec<u8>> {
-        Ok(decode_block(&pp.graph, pp.lambda, pp.sloth_iter, replica_id, data, node)?.into_bytes())
+        Ok(decode_block(&pp.graph, pp.sloth_iter, replica_id, data, node)?.into_bytes())
     }
 }
 
@@ -471,7 +466,6 @@ mod tests {
         let mut mmapped_data_copy = file_backed_mmap_from(&data);
 
         let sp = SetupParams {
-            lambda,
             drg: DrgParams {
                 nodes: data.len() / lambda,
                 degree: 5,
@@ -522,7 +516,6 @@ mod tests {
         let mut mmapped_data_copy = file_backed_mmap_from(&data);
 
         let sp = SetupParams {
-            lambda,
             drg: DrgParams {
                 nodes: data.len() / lambda,
                 degree: 5,
@@ -543,7 +536,7 @@ mod tests {
         for i in 0..nodes {
             let decoded_data = DrgPoRep::extract(&pp, &replica_id, &mmapped_data_copy, i).unwrap();
 
-            let original_data = data_at_node(&data, i, lambda).unwrap();
+            let original_data = data_at_node(&data, i).unwrap();
 
             assert_eq!(
                 original_data,
@@ -569,7 +562,6 @@ mod tests {
     }
 
     fn prove_verify_aux<H: Hasher>(
-        lambda: usize,
         nodes: usize,
         i: usize,
         use_wrong_challenge: bool,
@@ -596,7 +588,6 @@ mod tests {
             let challenge = i;
 
             let sp = SetupParams {
-                lambda,
                 drg: DrgParams {
                     nodes,
                     degree,
@@ -723,47 +714,47 @@ mod tests {
         }
     }
 
-    fn prove_verify(lambda: usize, n: usize, i: usize) {
-        prove_verify_aux::<PedersenHasher>(lambda, n, i, false, false);
-        prove_verify_aux::<Sha256Hasher>(lambda, n, i, false, false);
-        prove_verify_aux::<Blake2sHasher>(lambda, n, i, false, false);
+    fn prove_verify(n: usize, i: usize) {
+        prove_verify_aux::<PedersenHasher>(n, i, false, false);
+        prove_verify_aux::<Sha256Hasher>(n, i, false, false);
+        prove_verify_aux::<Blake2sHasher>(n, i, false, false);
     }
 
-    fn prove_verify_wrong_challenge(lambda: usize, n: usize, i: usize) {
-        prove_verify_aux::<PedersenHasher>(lambda, n, i, true, false);
-        prove_verify_aux::<Sha256Hasher>(lambda, n, i, true, false);
-        prove_verify_aux::<Blake2sHasher>(lambda, n, i, true, false);
+    fn prove_verify_wrong_challenge(n: usize, i: usize) {
+        prove_verify_aux::<PedersenHasher>(n, i, true, false);
+        prove_verify_aux::<Sha256Hasher>(n, i, true, false);
+        prove_verify_aux::<Blake2sHasher>(n, i, true, false);
     }
 
-    fn prove_verify_wrong_parents(lambda: usize, n: usize, i: usize) {
-        prove_verify_aux::<PedersenHasher>(lambda, n, i, false, true);
-        prove_verify_aux::<Sha256Hasher>(lambda, n, i, false, true);
-        prove_verify_aux::<Blake2sHasher>(lambda, n, i, false, true);
+    fn prove_verify_wrong_parents(n: usize, i: usize) {
+        prove_verify_aux::<PedersenHasher>(n, i, false, true);
+        prove_verify_aux::<Sha256Hasher>(n, i, false, true);
+        prove_verify_aux::<Blake2sHasher>(n, i, false, true);
     }
 
     table_tests! {
         prove_verify {
-            prove_verify_32_2_1(32, 2, 1);
+            prove_verify_32_2_1(2, 1);
 
-            prove_verify_32_3_1(32, 3, 1);
-            prove_verify_32_3_2(32, 3, 2);
+            prove_verify_32_3_1(3, 1);
+            prove_verify_32_3_2(3, 2);
 
-            prove_verify_32_10_1(32, 10, 1);
-            prove_verify_32_10_2(32, 10, 2);
-            prove_verify_32_10_3(32, 10, 3);
-            prove_verify_32_10_4(32, 10, 4);
-            prove_verify_32_10_5(32, 10, 5);
+            prove_verify_32_10_1(10, 1);
+            prove_verify_32_10_2(10, 2);
+            prove_verify_32_10_3(10, 3);
+            prove_verify_32_10_4(10, 4);
+            prove_verify_32_10_5(10, 5);
         }
     }
 
     #[test]
     fn test_drgporep_verifies_using_challenge() {
-        prove_verify_wrong_challenge(32, 5, 1);
+        prove_verify_wrong_challenge(5, 1);
     }
 
     #[test]
     fn test_drgporep_verifies_parents() {
         // Challenge a node (3) that doesn't have all the same parents.
-        prove_verify_wrong_parents(32, 7, 4);
+        prove_verify_wrong_parents(7, 4);
     }
 }

@@ -80,7 +80,6 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
     ) {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let lambda = 32;
         let leaves = data_size / 32;
         let tree_depth = (leaves as f64).log2().ceil() as usize;
 
@@ -110,7 +109,6 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
                 &JUBJUB_BLS_PARAMS,
                 tree_depth,
                 challenge_count,
-                lambda,
                 m,
                 sloth_iter,
             );
@@ -148,7 +146,6 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
                 tree_depth,
                 challenge_count,
                 leaves,
-                lambda,
                 m,
                 sloth_iter,
             );
@@ -195,7 +192,6 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
     ) {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let lambda = 32;
         let leaves = data_size / 32;
         let tree_depth = (leaves as f64).log2().ceil() as usize;
 
@@ -222,7 +218,6 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
                 tree_depth,
                 challenge_count,
                 leaves,
-                lambda,
                 m,
                 sloth_iter,
             )
@@ -238,7 +233,6 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
                 tree_depth,
                 challenge_count,
                 leaves,
-                lambda,
                 m,
                 sloth_iter,
             );
@@ -268,7 +262,6 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
     ) {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let lambda = 32;
         let leaves = data_size / 32;
         let tree_depth = (leaves as f64).log2().ceil() as usize;
 
@@ -285,7 +278,6 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
             tree_depth,
             challenge_count,
             leaves,
-            lambda,
             m,
             sloth_iter,
         );
@@ -380,7 +372,6 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
         _: usize,
         _: usize,
         _: usize,
-        _: usize,
     ) -> Parameters<Bls12>;
 
     /// How many samples should be taken when proofing and verifying
@@ -396,7 +387,6 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
         _: usize,
         _: usize,
         _: usize,
-        _: usize,
     ) -> C;
 
     fn create_proof<R: Rng>(
@@ -407,7 +397,6 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
         tree_depth: usize,
         challenge_count: usize,
         leaves: usize,
-        lambda: usize,
         m: usize,
         sloth_iter: usize,
     ) -> Proof<Bls12> {
@@ -417,7 +406,6 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
             tree_depth,
             challenge_count,
             leaves,
-            lambda,
             m,
             sloth_iter,
         );
@@ -435,7 +423,6 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
         tree_depth: usize,
         challenge_count: usize,
         leaves: usize,
-        lambda: usize,
         m: usize,
         sloth_iter: usize,
     ) -> usize {
@@ -445,7 +432,6 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
             tree_depth,
             challenge_count,
             leaves,
-            lambda,
             m,
             sloth_iter,
         );

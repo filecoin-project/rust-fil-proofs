@@ -254,12 +254,11 @@ mod tests {
     fn por_test_compound() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let leaves = 6;
-        let lambda = 32;
         let data: Vec<u8> = (0..leaves)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
         let graph = BucketGraph::<PedersenHasher>::new(leaves, 16, 0, new_seed());
-        let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
+        let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
         for i in 0..3 {
             let public_inputs = merklepor::PublicInputs {
@@ -269,7 +268,6 @@ mod tests {
 
             let setup_params = compound_proof::SetupParams {
                 vanilla_params: &merklepor::SetupParams {
-                    lambda,
                     leaves,
                     private: false,
                 },
@@ -281,12 +279,7 @@ mod tests {
 
             let private_inputs = merklepor::PrivateInputs::<PedersenHasher>::new(
                 bytes_into_fr::<Bls12>(
-                    data_at_node(
-                        data.as_slice(),
-                        public_inputs.challenge,
-                        public_params.vanilla_params.lambda,
-                    )
-                    .unwrap(),
+                    data_at_node(data.as_slice(), public_inputs.challenge).unwrap(),
                 )
                 .expect("failed to create Fr from node data")
                 .into(),
@@ -326,7 +319,6 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 6;
-        let lambda = 32;
 
         for i in 0..6 {
             // -- Basic Setup
@@ -336,12 +328,11 @@ mod tests {
                 .collect();
 
             let graph = BucketGraph::<PedersenHasher>::new(leaves, 16, 0, new_seed());
-            let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
+            let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
             // -- MerklePoR
 
             let pub_params = merklepor::PublicParams {
-                lambda,
                 leaves,
                 private: true,
             };
@@ -352,7 +343,7 @@ mod tests {
 
             let priv_inputs = merklepor::PrivateInputs::<PedersenHasher>::new(
                 bytes_into_fr::<Bls12>(
-                    data_at_node(data.as_slice(), pub_inputs.challenge, pub_params.lambda).unwrap(),
+                    data_at_node(data.as_slice(), pub_inputs.challenge).unwrap(),
                 )
                 .unwrap()
                 .into(),
@@ -427,12 +418,11 @@ mod tests {
     fn private_por_test_compound() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let leaves = 6;
-        let lambda = 32;
         let data: Vec<u8> = (0..leaves)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
         let graph = BucketGraph::<PedersenHasher>::new(leaves, 16, 0, new_seed());
-        let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
+        let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
         for i in 0..3 {
             let public_inputs = merklepor::PublicInputs {
@@ -442,7 +432,6 @@ mod tests {
 
             let setup_params = compound_proof::SetupParams {
                 vanilla_params: &merklepor::SetupParams {
-                    lambda,
                     leaves,
                     private: true,
                 },
@@ -454,12 +443,7 @@ mod tests {
 
             let private_inputs = merklepor::PrivateInputs::<PedersenHasher>::new(
                 bytes_into_fr::<Bls12>(
-                    data_at_node(
-                        data.as_slice(),
-                        public_inputs.challenge,
-                        public_params.vanilla_params.lambda,
-                    )
-                    .unwrap(),
+                    data_at_node(data.as_slice(), public_inputs.challenge).unwrap(),
                 )
                 .expect("failed to create Fr from node data")
                 .into(),
@@ -502,7 +486,6 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 6;
-        let lambda = 32;
 
         for i in 0..6 {
             // -- Basic Setup
@@ -512,12 +495,11 @@ mod tests {
                 .collect();
 
             let graph = BucketGraph::<PedersenHasher>::new(leaves, 16, 0, new_seed());
-            let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
+            let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
             // -- MerklePoR
 
             let pub_params = merklepor::PublicParams {
-                lambda,
                 leaves,
                 private: true,
             };
@@ -528,7 +510,7 @@ mod tests {
 
             let priv_inputs = merklepor::PrivateInputs::<PedersenHasher>::new(
                 bytes_into_fr::<Bls12>(
-                    data_at_node(data.as_slice(), pub_inputs.challenge, pub_params.lambda).unwrap(),
+                    data_at_node(data.as_slice(), pub_inputs.challenge).unwrap(),
                 )
                 .unwrap()
                 .into(),

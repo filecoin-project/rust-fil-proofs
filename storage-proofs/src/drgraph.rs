@@ -23,12 +23,8 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
     }
 
     /// Builds a merkle tree based on the given data.
-    fn merkle_tree<'a>(
-        &self,
-        data: &'a [u8],
-        node_size: usize,
-    ) -> Result<MerkleTree<H::Domain, H::Function>> {
-        self.merkle_tree_aux(data, node_size, PARALLEL_MERKLE)
+    fn merkle_tree<'a>(&self, data: &'a [u8]) -> Result<MerkleTree<H::Domain, H::Function>> {
+        self.merkle_tree_aux(data, 32, PARALLEL_MERKLE)
     }
 
     /// Builds a merkle tree based on the given data.
@@ -53,7 +49,7 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
         }
 
         let f = |i| {
-            let d = data_at_node(&data, i, node_size).expect("data_at_node math failed");
+            let d = data_at_node(&data, i).expect("data_at_node math failed");
             // TODO/FIXME: This can panic. FOR NOW, let's leave this since we're experimenting with
             // optimization paths. However, we need to ensure that bad input will not lead to a panic
             // that isn't caught by the FPS API.

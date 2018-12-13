@@ -338,8 +338,6 @@ impl SectorConfig for FakeConfig {
 
 #[cfg(test)]
 mod non_ffi_tests {
-    use std::fs::{create_dir_all, File};
-    use std::io::Read;
     use tempfile;
 
     use super::*;

@@ -300,7 +300,7 @@ pub trait Layers {
                             // If we panic anywhere in this closure, thread.join() below will receive an error —
                             // so it is safe to unwrap.
                             let drgpp = transfer_rx.recv().unwrap();
-                            let tree_d = drgpp.graph.merkle_tree(&data_copy, drgpp.lambda).unwrap();
+                            let tree_d = drgpp.graph.merkle_tree(&data_copy).unwrap();
 
                             info!(SP_LOG, "returning tree"; "layer" => format!("{}", layer));
                             return_channel.send((layer, tree_d)).unwrap();
@@ -312,7 +312,6 @@ pub trait Layers {
                             info!(SP_LOG, "encoding"; "layer {}" => format!("{}", layer));
                             vde::encode(
                                 &current_drgpp.graph,
-                                current_drgpp.lambda,
                                 current_drgpp.sloth_iter,
                                 replica_id,
                                 data,

@@ -130,7 +130,6 @@ fn do_the_work<H: 'static>(
     let mut data_copy = file_backed_mmap_from(&data);
     let sp = layered_drgporep::SetupParams {
         drg_porep_setup_params: drgporep::SetupParams {
-            lambda,
             drg: drgporep::DrgParams {
                 nodes,
                 degree: m,

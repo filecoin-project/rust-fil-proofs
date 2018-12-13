@@ -95,11 +95,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for BatchPoST<H> {
                     challenge,
                 },
                 &merklepor::PrivateInputs::new(
-                    H::Domain::try_from_bytes(data_at_node(
-                        priv_inputs.data,
-                        challenge,
-                        pub_params.params.lambda,
-                    )?)?,
+                    H::Domain::try_from_bytes(data_at_node(priv_inputs.data, challenge)?)?,
                     priv_inputs.tree,
                 ),
             )?;
@@ -223,7 +219,6 @@ mod tests {
         let replica_id: H::Domain = rng.gen();
         let pub_params = PublicParams {
             params: merklepor::PublicParams {
-                lambda: 32,
                 leaves: 32,
                 private: false,
             },
@@ -234,7 +229,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
         let graph = BucketGraph::<H>::new(32, 16, 0, new_seed());
-        let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
+        let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs::<H::Domain> {
             challenge: 3,

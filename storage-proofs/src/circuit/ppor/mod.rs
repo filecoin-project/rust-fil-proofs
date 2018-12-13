@@ -140,9 +140,7 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 16;
-        let lambda = 32;
         let pub_params = merklepor::PublicParams {
-            lambda,
             leaves,
             private: false,
         };
@@ -153,7 +151,7 @@ mod tests {
                 .collect();
 
             let graph = BucketGraph::<PedersenHasher>::new(leaves, 6, 0, new_seed());
-            let tree = graph.merkle_tree(data.as_slice(), lambda).unwrap();
+            let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
             let pub_inputs: Vec<_> = (0..leaves)
                 .map(|i| merklepor::PublicInputs {
@@ -165,12 +163,7 @@ mod tests {
                 .map(|i| {
                     merklepor::PrivateInputs::<PedersenHasher>::new(
                         bytes_into_fr::<Bls12>(
-                            data_at_node(
-                                data.as_slice(),
-                                pub_inputs[i].challenge,
-                                pub_params.lambda,
-                            )
-                            .unwrap(),
+                            data_at_node(data.as_slice(), pub_inputs[i].challenge).unwrap(),
                         )
                         .unwrap()
                         .into(),

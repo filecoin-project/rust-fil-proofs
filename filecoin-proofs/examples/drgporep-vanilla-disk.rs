@@ -49,7 +49,6 @@ fn file_backed_mmap_from_random_bytes(n: usize) -> MmapMut {
 fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challenge_count: usize) {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
     let challenges = vec![2; challenge_count];
-    let lambda = 32;
 
     info!(FCP_LOG, "data_size={}", prettyb(data_size); "target" => "config");
     info!(FCP_LOG, "challenge_count={}", challenge_count; "target" => "config");
@@ -58,14 +57,13 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
 
     info!(FCP_LOG, "generating fake data");
 
-    let nodes = data_size / lambda;
+    let nodes = data_size / 32;
 
     let replica_id: Fr = rng.gen();
 
     let mut mmapped = file_backed_mmap_from_random_bytes(nodes);
 
     let sp = SetupParams {
-        lambda,
         drg: DrgParams {
             nodes,
             degree: m,
