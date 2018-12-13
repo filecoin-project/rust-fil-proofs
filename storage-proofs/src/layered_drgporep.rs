@@ -284,7 +284,7 @@ pub trait Layers {
                 };
 
                 let _ = thread::scope(|scope| -> Result<()> {
-                    let mut threads = Vec::new();
+                    let mut threads = Vec::with_capacity(layers + 1);
                     let initial_pp = (*drgpp).clone();
                     (0..=layers).fold(initial_pp, |current_drgpp, layer| {
                         let mut data_copy = vec![0; data.len()];
