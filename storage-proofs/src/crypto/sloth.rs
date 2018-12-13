@@ -116,8 +116,8 @@ mod tests {
         let key = Fr::from_str("11111111").unwrap();
         let key_fake = Fr::from_str("11111112").unwrap();
         let plaintext = Fr::from_str("123456789").unwrap();
-        let ciphertext = encode::<Bls12>(&key, &plaintext, 10);
-        let decrypted = decode::<Bls12>(&key_fake, &ciphertext, 10);
+        let ciphertext = encode::<Bls12>(&key, &plaintext, rounds);
+        let decrypted = decode::<Bls12>(&key_fake, &ciphertext, rounds);
         assert_ne!(plaintext, decrypted);
     }
 

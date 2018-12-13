@@ -116,7 +116,7 @@ fn do_the_work<H: 'static>(
     info!(FCP_LOG, "groth={:?}", groth; "target" => "config");
     info!(FCP_LOG, "bench={:?}", bench; "target" => "config");
 
-    info!(FCP_LOG, "generating fake data");
+    info!(FCP_LOG, "generating fake data"; "target" => "status");
 
     let nodes = data_size / lambda;
 
@@ -143,7 +143,7 @@ fn do_the_work<H: 'static>(
         challenge_count,
     };
 
-    info!(FCP_LOG, "running setup");
+    info!(FCP_LOG, "running setup"; "target" => "status");
     start_profile("setup");
     let pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
     stop_profile();
@@ -151,7 +151,7 @@ fn do_the_work<H: 'static>(
     let start = Instant::now();
     let mut param_duration = Duration::new(0, 0);
 
-    info!(FCP_LOG, "running replicate");
+    info!(FCP_LOG, "running replicate"; "target" => "status");
 
     start_profile("replicate");
     let (tau, aux) =
@@ -203,7 +203,7 @@ fn do_the_work<H: 'static>(
 
     info!(FCP_LOG, "vanilla_proving_time={:?} seconds", proving_avg; "target" => "stats");
 
-    let samples: u32 = 30;
+    let samples: u32 = 5;
     info!(FCP_LOG, "sampling verifying (samples={})", samples);
     let mut total_verifying = Duration::new(0, 0);
 
@@ -218,6 +218,7 @@ fn do_the_work<H: 'static>(
         };
         total_verifying += start.elapsed();
     }
+    info!(FCP_LOG, "Verification complete"; "target" => "status");
     stop_profile();
 
     let verifying_avg = total_verifying / samples;
@@ -233,7 +234,7 @@ fn do_the_work<H: 'static>(
             partitions: Some(partitions),
         };
         if circuit || bench {
-            info!(FCP_LOG, "Performing circuit bench.");
+            info!(FCP_LOG, "Performing circuit bench."; "target" => "status");
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
             ZigZagCompound::circuit(
@@ -255,7 +256,7 @@ fn do_the_work<H: 'static>(
         }
 
         if groth {
-            info!(FCP_LOG, "Performing circuit groth.");
+            info!(FCP_LOG, "Performing circuit groth."; "target" => "status");
             let multi_proof = {
                 // TODO: Make this a macro.
                 let start = Instant::now();

@@ -26,6 +26,8 @@ pub enum Error {
     MalformedInput,
     #[fail(display = "invalid input size")]
     InvalidInputSize,
+    #[fail(display = "merkle tree generation error: {}", _0)]
+    MerkleTreeGenerationError(String),
 }
 
 impl From<SynthesisError> for Error {

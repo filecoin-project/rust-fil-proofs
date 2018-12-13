@@ -18,6 +18,7 @@ extern crate bitvec;
 extern crate blake2;
 extern crate block_modes;
 extern crate byteorder;
+extern crate crossbeam_utils;
 extern crate fs2;
 extern crate itertools;
 extern crate libc;
