@@ -8,6 +8,7 @@ use crate::api::sector_builder::helpers::snapshots::make_snapshot;
 use crate::api::sector_builder::helpers::snapshots::persist_snapshot;
 use crate::api::sector_builder::metadata::SealStatus;
 use crate::api::sector_builder::metadata::SealedSectorMetadata;
+use crate::api::sector_builder::metadata::StagedSectorMetadata;
 use crate::api::sector_builder::sealer::SealerInput;
 use crate::api::sector_builder::state::SectorBuilderState;
 use crate::api::sector_builder::state::StagedState;
@@ -35,6 +36,7 @@ pub struct Scheduler {
 pub enum Request {
     AddPiece(String, Vec<u8>, mpsc::SyncSender<Result<SectorId>>),
     GetSealedSectors(mpsc::SyncSender<Result<Vec<SealedSectorMetadata>>>),
+    GetStagedSectors(mpsc::SyncSender<Result<Vec<StagedSectorMetadata>>>),
     GetSealStatus(SectorId, mpsc::SyncSender<Result<SealStatus>>),
     RetrievePiece(String, mpsc::SyncSender<Result<Vec<u8>>>),
     SealAllStagedSectors(mpsc::SyncSender<Result<()>>),
@@ -100,6 +102,9 @@ impl Scheduler {
                     Request::RetrievePiece(piece_key, tx) => m.retrieve_piece(piece_key, tx),
                     Request::GetSealedSectors(tx) => {
                         tx.send(m.get_sealed_sectors()).expect(FATAL_NOSEND);
+                    }
+                    Request::GetStagedSectors(tx) => {
+                        tx.send(m.get_staged_sectors()).expect(FATAL_NOSEND);
                     }
                     Request::GetMaxUserBytesPerStagedSector(tx) => {
                         tx.send(m.max_user_bytes()).expect(FATAL_NOSEND);
@@ -197,6 +202,12 @@ impl SectorMetadataManager {
         Ok(self.state.sealed.sectors.values().cloned().collect())
     }
 
+    // Produces a vector containing metadata for all staged sectors that this
+    // SectorBuilder knows about.
+    pub fn get_staged_sectors(&self) -> Result<Vec<StagedSectorMetadata>> {
+        Ok(self.state.staged.sectors.values().cloned().collect())
+    }
+
     // Returns the number of user-provided bytes that will fit into a staged
     // sector.
     pub fn max_user_bytes(&self) -> u64 {
@@ -217,8 +228,8 @@ impl SectorMetadataManager {
 
             if result.is_err() {
                 if let Some(staged_sector) = staged_state.sectors.get_mut(&sector_id) {
-                    staged_sector.sealing_error =
-                        Some(format!("{}", err_unrecov(result.unwrap_err())));
+                    staged_sector.seal_status =
+                        SealStatus::Failed(format!("{}", err_unrecov(result.unwrap_err())));
                 };
             } else {
                 // Remove the staged sector from the state map.
@@ -250,7 +261,7 @@ impl SectorMetadataManager {
         // schedule sealing.
         for sector_id in to_be_sealed {
             let mut sector = staged_state.sectors.get_mut(&sector_id).unwrap();
-            sector.accepting_data = false;
+            sector.seal_status = SealStatus::Sealing;
 
             self.sealer_input_tx
                 .clone()

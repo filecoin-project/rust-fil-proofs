@@ -11,7 +11,9 @@ pub fn rust_str_to_c_str<T: Into<String>>(s: T) -> *mut libc::c_char {
 
 // consume a C string-pointer and free its memory
 pub unsafe fn free_c_str(ptr: *mut libc::c_char) {
-    let _ = CString::from_raw(ptr);
+    if !ptr.is_null() {
+        let _ = CString::from_raw(ptr);
+    }
 }
 
 // return a forgotten raw pointer to something of type T

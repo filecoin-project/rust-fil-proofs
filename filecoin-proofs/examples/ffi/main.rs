@@ -121,6 +121,27 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
         );
     }
 
+    // verify that we have neither sealed nor staged sectors yet
+    {
+        let resp = get_sealed_sectors(sector_builder_a);
+        defer!(destroy_get_sealed_sectors_response(resp));
+
+        if (*resp).status_code != 0 {
+            panic!("{}", c_str_to_rust_str((*resp).error_msg))
+        }
+
+        assert_eq!(0, (*resp).sectors_len);
+
+        let resp = get_staged_sectors(sector_builder_a);
+        defer!(destroy_get_staged_sectors_response(resp));
+
+        if (*resp).status_code != 0 {
+            panic!("{}", c_str_to_rust_str((*resp).error_msg))
+        }
+
+        assert_eq!(0, (*resp).sectors_len);
+    }
+
     // add first piece, which lazily provisions a new staged sector
     {
         let (_, _, resp) = create_and_add_piece(sector_builder_a, 10);
@@ -156,6 +177,19 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
         // note that the sector id changed here
         assert_eq!(125, (*resp).sector_id);
+    }
+
+    // get staged sector metadata and verify that we've now got two staged
+    // sectors
+    {
+        let resp = get_staged_sectors(sector_builder_a);
+        defer!(destroy_get_staged_sectors_response(resp));
+
+        if (*resp).status_code != 0 {
+            panic!("{}", c_str_to_rust_str((*resp).error_msg))
+        }
+
+        assert_eq!(2, (*resp).sectors_len);
     }
 
     // drop the first sector builder, relinquishing any locks on persistence
@@ -220,6 +254,18 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
         let now_sealed_sector_id = result_rx.recv_timeout(Duration::from_secs(300)).unwrap();
 
         assert_eq!(now_sealed_sector_id, 126);
+    }
+
+    // get sealed sectors - we should have just one
+    {
+        let resp = get_sealed_sectors(sector_builder_b);
+        defer!(destroy_get_sealed_sectors_response(resp));
+
+        if (*resp).status_code != 0 {
+            panic!("{}", c_str_to_rust_str((*resp).error_msg))
+        }
+
+        assert_eq!(1, (*resp).sectors_len);
     }
 
     // after sealing, read the bytes (causes unseal) and compare with what we

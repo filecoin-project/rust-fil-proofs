@@ -2,7 +2,7 @@ use crate::api::sector_builder::errors::SectorBuilderErr;
 use crate::api::sector_builder::SectorBuilder;
 use crate::api::{API_POREP_PROOF_BYTES, API_POST_PROOF_BYTES};
 use failure::Error;
-use ffi_toolkit::c_str_to_rust_str;
+use ffi_toolkit::free_c_str;
 use libc;
 use sector_base::api::errors::SectorManagerErr;
 use std::ffi::CString;
@@ -62,7 +62,7 @@ impl Default for SealResponse {
 impl Drop for SealResponse {
     fn drop(&mut self) {
         unsafe {
-            drop(c_str_to_rust_str(self.error_msg));
+            free_c_str(self.error_msg as *mut libc::c_char);
         };
     }
 }
@@ -96,7 +96,7 @@ impl Default for VerifySealResponse {
 impl Drop for VerifySealResponse {
     fn drop(&mut self) {
         unsafe {
-            drop(c_str_to_rust_str(self.error_msg));
+            free_c_str(self.error_msg as *mut libc::c_char);
         };
     }
 }
@@ -130,7 +130,7 @@ impl Default for GetUnsealedRangeResponse {
 impl Drop for GetUnsealedRangeResponse {
     fn drop(&mut self) {
         unsafe {
-            drop(c_str_to_rust_str(self.error_msg));
+            free_c_str(self.error_msg as *mut libc::c_char);
         };
     }
 }
@@ -162,7 +162,7 @@ impl Default for GetUnsealedResponse {
 impl Drop for GetUnsealedResponse {
     fn drop(&mut self) {
         unsafe {
-            drop(c_str_to_rust_str(self.error_msg));
+            free_c_str(self.error_msg as *mut libc::c_char);
         };
     }
 }
@@ -206,7 +206,7 @@ impl Drop for GeneratePoSTResponse {
                 self.faults_len,
             ));
 
-            drop(c_str_to_rust_str(self.error_msg));
+            free_c_str(self.error_msg as *mut libc::c_char);
         };
     }
 }
@@ -240,7 +240,7 @@ impl Default for VerifyPoSTResponse {
 impl Drop for VerifyPoSTResponse {
     fn drop(&mut self) {
         unsafe {
-            drop(c_str_to_rust_str(self.error_msg));
+            free_c_str(self.error_msg as *mut libc::c_char);
         };
     }
 }
@@ -302,7 +302,7 @@ impl Default for InitSectorBuilderResponse {
 impl Drop for InitSectorBuilderResponse {
     fn drop(&mut self) {
         unsafe {
-            drop(c_str_to_rust_str(self.error_msg));
+            free_c_str(self.error_msg as *mut libc::c_char);
         };
     }
 }
@@ -336,7 +336,7 @@ impl Default for AddPieceResponse {
 impl Drop for AddPieceResponse {
     fn drop(&mut self) {
         unsafe {
-            drop(c_str_to_rust_str(self.error_msg));
+            free_c_str(self.error_msg as *mut libc::c_char);
         };
     }
 }
@@ -372,7 +372,7 @@ impl Default for ReadPieceFromSealedSectorResponse {
 impl Drop for ReadPieceFromSealedSectorResponse {
     fn drop(&mut self) {
         unsafe {
-            drop(c_str_to_rust_str(self.error_msg));
+            free_c_str(self.error_msg as *mut libc::c_char);
 
             drop(Vec::from_raw_parts(
                 self.data_ptr as *mut u8,
@@ -412,7 +412,7 @@ impl Default for SealAllStagedSectorsResponse {
 impl Drop for SealAllStagedSectorsResponse {
     fn drop(&mut self) {
         unsafe {
-            drop(c_str_to_rust_str(self.error_msg));
+            free_c_str(self.error_msg as *mut libc::c_char);
         };
     }
 }
@@ -448,7 +448,7 @@ impl Default for GetMaxStagedBytesPerSector {
 impl Drop for GetMaxStagedBytesPerSector {
     fn drop(&mut self) {
         unsafe {
-            drop(c_str_to_rust_str(self.error_msg));
+            free_c_str(self.error_msg as *mut libc::c_char);
         };
     }
 }
@@ -491,6 +491,14 @@ pub struct FFIPieceMetadata {
     pub num_bytes: u64,
 }
 
+impl Drop for FFIPieceMetadata {
+    fn drop(&mut self) {
+        unsafe {
+            free_c_str(self.piece_key as *mut libc::c_char);
+        }
+    }
+}
+
 impl Default for GetSealStatusResponse {
     fn default() -> GetSealStatusResponse {
         GetSealStatusResponse {
@@ -516,9 +524,9 @@ impl Default for GetSealStatusResponse {
 impl Drop for GetSealStatusResponse {
     fn drop(&mut self) {
         unsafe {
-            drop(c_str_to_rust_str(self.error_msg));
-            drop(c_str_to_rust_str(self.seal_error_msg));
-            drop(c_str_to_rust_str(self.sector_access));
+            free_c_str(self.error_msg as *mut libc::c_char);
+            free_c_str(self.seal_error_msg as *mut libc::c_char);
+            free_c_str(self.sector_access as *mut libc::c_char);
             drop(Vec::from_raw_parts(
                 self.pieces_ptr as *mut FFIPieceMetadata,
                 self.pieces_len,
@@ -534,8 +542,40 @@ pub unsafe extern "C" fn destroy_get_seal_status_response(ptr: *mut GetSealStatu
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+/// FFIStagedSectorMetadata
+///////////////////////////
+
+#[repr(C)]
+pub struct FFIStagedSectorMetadata {
+    pub sector_access: *const libc::c_char,
+    pub sector_id: u64,
+    pub pieces_len: libc::size_t,
+    pub pieces_ptr: *const FFIPieceMetadata,
+
+    // must be one of: Pending, Failed, Sealing
+    pub seal_status_code: FFISealStatus,
+
+    // if sealing failed - here's the error
+    pub seal_error_msg: *const libc::c_char,
+}
+
+impl Drop for FFIStagedSectorMetadata {
+    fn drop(&mut self) {
+        unsafe {
+            free_c_str(self.sector_access as *mut libc::c_char);
+            free_c_str(self.seal_error_msg as *mut libc::c_char);
+            drop(Vec::from_raw_parts(
+                self.pieces_ptr as *mut FFIPieceMetadata,
+                self.pieces_len,
+                self.pieces_len,
+            ));
+        }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
 /// FFISealedSectorMetadata
-////////////////////////
+///////////////////////////
 
 #[repr(C)]
 pub struct FFISealedSectorMetadata {
@@ -547,6 +587,19 @@ pub struct FFISealedSectorMetadata {
     pub snark_proof: [u8; API_POREP_PROOF_BYTES],
     pub pieces_len: libc::size_t,
     pub pieces_ptr: *const FFIPieceMetadata,
+}
+
+impl Drop for FFISealedSectorMetadata {
+    fn drop(&mut self) {
+        unsafe {
+            free_c_str(self.sector_access as *mut libc::c_char);
+            drop(Vec::from_raw_parts(
+                self.pieces_ptr as *mut FFIPieceMetadata,
+                self.pieces_len,
+                self.pieces_len,
+            ));
+        }
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -576,7 +629,7 @@ impl Default for GetSealedSectorsResponse {
 impl Drop for GetSealedSectorsResponse {
     fn drop(&mut self) {
         unsafe {
-            drop(c_str_to_rust_str(self.error_msg));
+            free_c_str(self.error_msg as *mut libc::c_char);
             drop(Vec::from_raw_parts(
                 self.sectors_ptr as *mut FFISealedSectorMetadata,
                 self.sectors_len,
@@ -588,5 +641,47 @@ impl Drop for GetSealedSectorsResponse {
 
 #[no_mangle]
 pub unsafe extern "C" fn destroy_get_sealed_sectors_response(ptr: *mut GetSealedSectorsResponse) {
+    let _ = Box::from_raw(ptr);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+/// GetStagedSectorsResponse
+////////////////////////////
+
+#[repr(C)]
+pub struct GetStagedSectorsResponse {
+    pub status_code: FCPResponseStatus,
+    pub error_msg: *const libc::c_char,
+
+    pub sectors_len: libc::size_t,
+    pub sectors_ptr: *const FFIStagedSectorMetadata,
+}
+
+impl Default for GetStagedSectorsResponse {
+    fn default() -> GetStagedSectorsResponse {
+        GetStagedSectorsResponse {
+            status_code: FCPResponseStatus::FCPNoError,
+            error_msg: ptr::null(),
+            sectors_len: 0,
+            sectors_ptr: ptr::null(),
+        }
+    }
+}
+
+impl Drop for GetStagedSectorsResponse {
+    fn drop(&mut self) {
+        unsafe {
+            free_c_str(self.error_msg as *mut libc::c_char);
+            drop(Vec::from_raw_parts(
+                self.sectors_ptr as *mut FFIStagedSectorMetadata,
+                self.sectors_len,
+                self.sectors_len,
+            ));
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn destroy_get_staged_sectors_response(ptr: *mut GetStagedSectorsResponse) {
     let _ = Box::from_raw(ptr);
 }

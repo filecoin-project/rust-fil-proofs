@@ -135,9 +135,14 @@ impl SectorBuilder {
         log_unrecov(self.run_blocking(Request::SealAllStagedSectors))
     }
 
-    // Produce a slice of all sealed sector metadata.
+    // Returns all sealed sector metadata.
     pub fn get_sealed_sectors(&self) -> Result<Vec<SealedSectorMetadata>> {
         log_unrecov(self.run_blocking(Request::GetSealedSectors))
+    }
+
+    // Returns all staged sector metadata.
+    pub fn get_staged_sectors(&self) -> Result<Vec<StagedSectorMetadata>> {
+        self.run_blocking(Request::GetStagedSectors)
     }
 
     // Run a task, blocking on the return channel.

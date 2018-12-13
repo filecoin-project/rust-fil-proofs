@@ -12,6 +12,7 @@ use sector_base::api::disk_backed_storage::SBConfiguredStore;
 use sector_base::api::sector_store::SectorStore;
 use std::ffi::CString;
 use std::mem;
+use std::ptr;
 use std::slice::from_raw_parts;
 
 pub mod internal;
@@ -588,6 +589,74 @@ pub unsafe extern "C" fn get_sealed_sectors(
                     sector
                 })
                 .collect::<Vec<responses::FFISealedSectorMetadata>>();
+
+            response.sectors_len = sectors.len();
+            response.sectors_ptr = sectors.as_ptr();
+
+            mem::forget(sectors);
+        }
+        Err(err) => {
+            let (code, ptr) = err_code_and_msg(&err);
+            response.status_code = code;
+            response.error_msg = ptr;
+        }
+    }
+
+    raw_ptr(response)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn get_staged_sectors(
+    ptr: *mut SectorBuilder,
+) -> *mut responses::GetStagedSectorsResponse {
+    let mut response: responses::GetStagedSectorsResponse = Default::default();
+
+    match (*ptr).get_staged_sectors() {
+        Ok(staged_sectors) => {
+            response.status_code = FCPResponseStatus::FCPNoError;
+
+            let sectors = staged_sectors
+                .iter()
+                .map(|meta| {
+                    let pieces = meta
+                        .pieces
+                        .iter()
+                        .map(|p| FFIPieceMetadata {
+                            piece_key: rust_str_to_c_str(p.piece_key.to_string()),
+                            num_bytes: p.num_bytes,
+                        })
+                        .collect::<Vec<FFIPieceMetadata>>();
+
+                    let mut sector = responses::FFIStagedSectorMetadata {
+                        sector_access: rust_str_to_c_str(meta.sector_access.clone()),
+                        sector_id: meta.sector_id,
+                        pieces_len: pieces.len(),
+                        pieces_ptr: pieces.as_ptr(),
+                        seal_status_code: FFISealStatus::Pending,
+                        seal_error_msg: ptr::null(),
+                    };
+
+                    match meta.seal_status {
+                        SealStatus::Failed(ref s) => {
+                            sector.seal_status_code = FFISealStatus::Failed;
+                            sector.seal_error_msg = rust_str_to_c_str(s.clone());
+                        }
+                        SealStatus::Sealing => {
+                            sector.seal_status_code = FFISealStatus::Sealing;
+                        }
+                        SealStatus::Pending => {
+                            sector.seal_status_code = FFISealStatus::Pending;
+                        }
+                        SealStatus::Sealed(_) => {
+                            sector.seal_status_code = FFISealStatus::Sealed;
+                        }
+                    };
+
+                    mem::forget(pieces);
+
+                    sector
+                })
+                .collect::<Vec<responses::FFIStagedSectorMetadata>>();
 
             response.sectors_len = sectors.len();
             response.sectors_ptr = sectors.as_ptr();
