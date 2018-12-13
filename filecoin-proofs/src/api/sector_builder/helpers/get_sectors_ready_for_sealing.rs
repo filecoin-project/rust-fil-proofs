@@ -1,6 +1,6 @@
 use crate::api::sector_builder::metadata::sum_piece_bytes;
-use crate::api::sector_builder::metadata::StagedSectorMetadata;
 use crate::api::sector_builder::metadata::SealStatus;
+use crate::api::sector_builder::metadata::StagedSectorMetadata;
 use crate::api::sector_builder::state::StagedState;
 use crate::api::sector_builder::SectorId;
 use itertools::chain;
