@@ -277,6 +277,12 @@ pub trait Layers {
             let outer_rx = {
                 let (tx, rx) = channel();
 
+                let errf = |e| {
+                    let err_string = format!("{:?}", e);
+                    error!(SP_LOG, "MerkleTreeGenerationError"; "err" => &err_string, "backtrace" => format!("{:?}", failure::Backtrace::new()));
+                    Error::MerkleTreeGenerationError(err_string)
+                };
+
                 let _ = thread::scope(|scope| -> Result<()> {
                     let mut threads = Vec::new();
                     let initial_pp = (*drgpp).clone();
@@ -317,13 +323,12 @@ pub trait Layers {
                     });
 
                     for thread in threads {
-                        thread
-                            .join()
-                            .map_err(|_| Error::MerkleTreeGenerationError)?;
+                        thread.join().map_err(errf)?;
                     }
+
                     Ok(())
                 })
-                .map_err(|_| Error::MerkleTreeGenerationError)?;
+                .map_err(errf)?;
 
                 rx
             };
@@ -349,7 +354,7 @@ pub trait Layers {
                             tree_r: replica_tree.clone(),
                             tree_d: (*data_tree).clone(),
                         };
-                        info!(SP_LOG, "setting tau/aux for layer {}", i - 1,);
+                        info!(SP_LOG, "setting tau/aux"; "layer" => format!("{}", i - 1));
                         taus.push(tau);
                         auxs.push(aux);
                     };
