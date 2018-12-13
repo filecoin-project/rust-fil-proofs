@@ -53,7 +53,6 @@ mod tests {
     use super::*;
 
     use num_bigint::RandBigInt;
-    use num_traits::FromPrimitive;
     use rand::thread_rng;
     use rsa::RandPrime;
 

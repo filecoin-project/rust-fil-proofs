@@ -18,7 +18,7 @@ pub trait StaticAccumulator {
 
 pub trait DynamicAccumulator: StaticAccumulator {
     /// Delete a value from the accumulator.
-    fn del(&mut self, x: &BigUint);
+    fn del(&mut self, x: &BigUint) -> Option<()>;
 }
 
 pub trait UniversalAccumulator: DynamicAccumulator {
@@ -35,18 +35,30 @@ pub trait BatchedAccumulator: StaticAccumulator {
     /// Given a list of new elements, adds them.
     fn batch_add(&mut self, xs: &[BigUint]) -> BigUint;
 
+    /// Batch delete.
+    /// Given a list of witnesses and members, deletes all of them.
+    fn batch_del(&mut self, pairs: &[(BigUint, BigUint)]) -> Option<BigUint>;
+
+    /// Delete with member witness.
+    /// Deletes a single element, given the element and a wittness for it.
+    /// Returns `None` if the element was not actual a member.
+    fn del_w_mem(&mut self, w: &BigUint, x: &BigUint) -> Option<()>;
+
+    /// Create membership witnesses for all elements in `s`.
+    /// Needs to be passed in, as we don't hold onto the whole set in the accumulator currently.
+    fn create_all_mem_wit(&self, s: &[BigUint]) -> Vec<BigUint>;
+
     /// Verify Batch Add.
-    /// Given the proof `w` from [batch_add] and the list of new members `xs`,
-    /// and the previous state of the accumulator `a_t` this verifies if the add was done correctly.
+    /// Given the proof `w` from [batch_add] and the list of members `xs`,
+    /// and the previous state of the accumulator `a_t` this verifies if the `add` was done correctly.
     ///
     /// Note: This is not explicitly defined in the paper, but here for convenience.
     fn ver_batch_add(&self, w: &BigUint, a_t: &BigUint, xs: &[BigUint]) -> bool;
 
-    /// Batch delete.
-    /// Given a list of witnesses and members, deletes all of them.
-    fn batch_del(&mut self, pairs: &[(BigUint, BigUint)]);
-
-    /// Delete with member witness.
-    /// Deletes a single element, given the element and a wittness for it.
-    fn del_w_mem(&mut self, w: &BigUint, x: &BigUint);
+    /// Verify Batch Del
+    /// Given the proof `w` from [batch_del] and the list of members `xs`,
+    /// and the previous state of the accumulator `a_t` this verifies if the `del` was done correctly.
+    ///
+    /// Note: This is not explicitly defined in the paper, but here for convenience.
+    fn ver_batch_del(&self, w: &BigUint, a_t: &BigUint, xs: &[BigUint]) -> bool;
 }

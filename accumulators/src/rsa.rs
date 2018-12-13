@@ -4,7 +4,7 @@ use num_traits::One;
 use rand::OsRng;
 use rsa::math::extended_gcd;
 
-use crate::math::modpow_uint_int;
+use crate::math::{modpow_uint_int, root_factor, shamir_trick};
 use crate::primes::generate_primes;
 use crate::proofs;
 use crate::traits::*;
@@ -75,11 +75,18 @@ impl StaticAccumulator for RsaAccumulator {
 }
 
 impl DynamicAccumulator for RsaAccumulator {
-    fn del(&mut self, x: &BigUint) {
+    fn del(&mut self, x: &BigUint) -> Option<()> {
         println!("del({})", x);
 
+        let old_s = self.s.clone();
         self.s /= x;
+
+        if self.s == old_s {
+            return None;
+        }
+
         self.update();
+        Some(())
     }
 }
 
@@ -135,17 +142,55 @@ impl BatchedAccumulator for RsaAccumulator {
         proofs::ni_poe_verify(&x_star, a_t, &self.a_t, &w, &self.n)
     }
 
-    fn batch_del(&mut self, pairs: &[(BigUint, BigUint)]) {
-        unimplemented!()
+    fn batch_del(&mut self, pairs: &[(BigUint, BigUint)]) -> Option<BigUint> {
+        println!("batch_del({:?})", pairs);
+        if pairs.is_empty() {
+            return None;
+        }
+        let mut pairs = pairs.iter();
+        let a_t = self.a_t.clone();
+
+        let (x0, w0) = pairs.next().unwrap();
+        let mut x_star = x0.clone();
+        let mut new_a_t = w0.clone();
+
+        for (xi, wi) in pairs {
+            println!("removing {}", xi);
+            new_a_t = shamir_trick(&new_a_t, wi, &x_star, xi, &self.n).unwrap();
+            x_star *= xi;
+            // for now this is not great, depends on this impl, not on the general design
+            self.s /= xi;
+        }
+
+        self.a_t = new_a_t;
+
+        Some(proofs::ni_poe_prove(&x_star, &self.a_t, &a_t, &self.n))
     }
 
-    fn del_w_mem(&mut self, w: &BigUint, x: &BigUint) {
-        // TODO: signal failure
-        if self.ver_mem(w, x) {
-            self.s /= x;
-            // w is a_t without x, so need to recompute
-            self.a_t = w.clone();
+    fn ver_batch_del(&self, w: &BigUint, a_t: &BigUint, xs: &[BigUint]) -> bool {
+        println!("ver_batch_del({} - {} - {:?})", w, a_t, xs);
+        let mut x_star = BigUint::one();
+        for x in xs {
+            x_star *= x
         }
+
+        proofs::ni_poe_verify(&x_star, &self.a_t, a_t, &w, &self.n)
+    }
+
+    fn del_w_mem(&mut self, w: &BigUint, x: &BigUint) -> Option<()> {
+        if !self.ver_mem(w, x) {
+            return None;
+        }
+
+        self.s /= x;
+        // w is a_t without x, so need to recompute
+        self.a_t = w.clone();
+
+        Some(())
+    }
+
+    fn create_all_mem_wit(&self, s: &[BigUint]) -> Vec<BigUint> {
+        root_factor(&self.g, &s, &self.n)
     }
 }
 
@@ -205,7 +250,7 @@ mod tests {
 
             for (x, w) in xs.iter().zip(ws.iter()) {
                 // remove x
-                acc.del(x);
+                acc.del(x).unwrap();
                 // make sure test now fails
                 assert!(!acc.ver_mem(w, x));
             }
@@ -319,17 +364,32 @@ mod tests {
             let w = acc.mem_wit_create(x);
             assert!(acc.ver_mem(&w, x), "failed to verify valid witness");
 
-            acc.del_w_mem(&w, x);
+            acc.del_w_mem(&w, x).unwrap();
             assert!(
                 !acc.ver_mem(&w, x),
                 "witness verified, even though it was deleted"
             );
 
-            // batch delete
-            // TODO:
-
             // create all members witness
-            // TODO:
+            // current state contains xs\x + x0
+            let s = vec![x0.clone(), xs[0].clone(), xs[1].clone(), xs[3].clone()];
+            let ws = acc.create_all_mem_wit(&s);
+
+            for (w, x) in ws.iter().zip(s.iter()) {
+                assert!(acc.ver_mem(w, x));
+            }
+
+            // batch delete
+            let a_t = acc.state().clone();
+            let pairs = s
+                .iter()
+                .cloned()
+                .zip(ws.iter().cloned())
+                .take(3)
+                .collect::<Vec<_>>();
+            let w = acc.batch_del(&pairs[..]).unwrap();
+
+            assert!(acc.ver_batch_del(&w, &a_t, &s[..3]), "ver_batch_del failed");
         }
     }
 }
