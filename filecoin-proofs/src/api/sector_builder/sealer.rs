@@ -53,7 +53,9 @@ impl SealerWorker {
                     let result = seal(&sector_store.clone(), &prover_id, staged_sector);
                     let task = Request::HandleSealResult(sector_id, Box::new(result));
 
-                    return_channel.send(task).expect_with_backtrace(FATAL_SNDTSK);
+                    return_channel
+                        .send(task)
+                        .expect_with_backtrace(FATAL_SNDTSK);
                 }
                 SealerInput::Unseal(piece_key, sealed_sector, return_channel) => {
                     let result = retrieve_piece(

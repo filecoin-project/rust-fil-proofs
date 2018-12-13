@@ -91,7 +91,9 @@ impl Scheduler {
             };
 
             loop {
-                let task = scheduler_input_rx.recv().expect_with_backtrace(FATAL_NORECV);
+                let task = scheduler_input_rx
+                    .recv()
+                    .expect_with_backtrace(FATAL_NORECV);
 
                 // Dispatch to the appropriate task-handler.
                 match task {
