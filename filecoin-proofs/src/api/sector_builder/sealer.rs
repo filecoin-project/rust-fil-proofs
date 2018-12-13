@@ -42,8 +42,8 @@ impl SealerWorker {
             // relinquish the lock and return the task. The receiver is mutexed
             // for coordinating reads across multiple worker-threads.
             let task = {
-                let rx = seal_task_rx.lock().expect_with_backtrace(FATAL_NOLOCK);
-                rx.recv().expect_with_backtrace(FATAL_RCVTSK)
+                let rx = seal_task_rx.lock().expects(FATAL_NOLOCK);
+                rx.recv().expects(FATAL_RCVTSK)
             };
 
             // Dispatch to the appropriate task-handler.
@@ -53,9 +53,7 @@ impl SealerWorker {
                     let result = seal(&sector_store.clone(), &prover_id, staged_sector);
                     let task = Request::HandleSealResult(sector_id, Box::new(result));
 
-                    return_channel
-                        .send(task)
-                        .expect_with_backtrace(FATAL_SNDTSK);
+                    return_channel.send(task).expects(FATAL_SNDTSK);
                 }
                 SealerInput::Unseal(piece_key, sealed_sector, return_channel) => {
                     let result = retrieve_piece(
@@ -65,9 +63,7 @@ impl SealerWorker {
                         &piece_key,
                     );
 
-                    return_channel
-                        .send(result)
-                        .expect_with_backtrace(FATAL_SNDRLT);
+                    return_channel.send(result).expects(FATAL_SNDRLT);
                 }
                 SealerInput::Shutdown => break,
             }

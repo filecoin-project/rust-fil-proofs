@@ -153,9 +153,9 @@ impl SectorBuilder {
         self.scheduler_tx
             .clone()
             .send(with_sender(tx))
-            .expect_with_backtrace(FATAL_NOSEND_TASK);
+            .expects(FATAL_NOSEND_TASK);
 
-        rx.recv().expect_with_backtrace(FATAL_NORECV_TASK)
+        rx.recv().expects(FATAL_NORECV_TASK)
     }
 }
 

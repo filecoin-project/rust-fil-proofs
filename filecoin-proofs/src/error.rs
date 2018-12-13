@@ -5,11 +5,11 @@ use slog::*;
 pub type Result<T> = ::std::result::Result<T, Error>;
 
 pub trait ExpectWithBacktrace<T> {
-    fn expect_with_backtrace(self, msg: &str) -> T;
+    fn expects(self, msg: &str) -> T;
 }
 
 impl<T, E: std::fmt::Debug> ExpectWithBacktrace<T> for ::std::result::Result<T, E> {
-    fn expect_with_backtrace(self, msg: &str) -> T {
+    fn expects(self, msg: &str) -> T {
         if let Err(ref err) = self {
             let err = format!("{:?}", err);
             let backtrace = format!("{:?}", Backtrace::new());
@@ -20,7 +20,7 @@ impl<T, E: std::fmt::Debug> ExpectWithBacktrace<T> for ::std::result::Result<T, 
 }
 
 impl<T> ExpectWithBacktrace<T> for Option<T> {
-    fn expect_with_backtrace(self, msg: &str) -> T {
+    fn expects(self, msg: &str) -> T {
         if self.is_none() {
             let backtrace = format!("{:?}", Backtrace::new());
             error!(FCP_LOG, "expected Option to be Some"; "backtrace" => backtrace);
