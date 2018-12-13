@@ -4,7 +4,7 @@ use crate::api::sector_builder::metadata::SealedSectorMetadata;
 use crate::api::sector_builder::metadata::StagedSectorMetadata;
 use crate::api::sector_builder::scheduler::Request;
 use crate::api::sector_builder::WrappedSectorStore;
-use crate::error::ErrorLogResult;
+use crate::error::ExpectWithBacktrace;
 use crate::error::Result;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -42,8 +42,8 @@ impl SealerWorker {
             // relinquish the lock and return the task. The receiver is mutexed
             // for coordinating reads across multiple worker-threads.
             let task = {
-                let rx = seal_task_rx.lock().expect_with_logging(FATAL_NOLOCK);
-                rx.recv().expect_with_logging(FATAL_RCVTSK)
+                let rx = seal_task_rx.lock().expect_with_backtrace(FATAL_NOLOCK);
+                rx.recv().expect_with_backtrace(FATAL_RCVTSK)
             };
 
             // Dispatch to the appropriate task-handler.
@@ -53,7 +53,7 @@ impl SealerWorker {
                     let result = seal(&sector_store.clone(), &prover_id, staged_sector);
                     let task = Request::HandleSealResult(sector_id, Box::new(result));
 
-                    return_channel.send(task).expect_with_logging(FATAL_SNDTSK);
+                    return_channel.send(task).expect_with_backtrace(FATAL_SNDTSK);
                 }
                 SealerInput::Unseal(piece_key, sealed_sector, return_channel) => {
                     let result = retrieve_piece(
@@ -65,7 +65,7 @@ impl SealerWorker {
 
                     return_channel
                         .send(result)
-                        .expect_with_logging(FATAL_SNDRLT);
+                        .expect_with_backtrace(FATAL_SNDRLT);
                 }
                 SealerInput::Shutdown => break,
             }
