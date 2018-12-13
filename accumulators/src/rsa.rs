@@ -6,36 +6,8 @@ use rsa::math::extended_gcd;
 
 use crate::math::modpow_uint_int;
 use crate::primes::generate_primes;
-
-pub trait StaticAccumulator {
-    /// Setup generates a group of unknown order and initializes the group
-    /// with a generator of that group.
-    fn setup(lambda: usize) -> Self;
-
-    /// Update the accumulator.
-    fn add(&mut self, x: &BigUint);
-
-    /// Create a membership proof.
-    /// Returns `None`, iff `x` is not a member.
-    fn mem_wit_create(&self, x: &BigUint) -> BigUint;
-
-    /// Verify a membership proof.
-    fn ver_mem(&self, w: &BigUint, x: &BigUint) -> bool;
-}
-
-pub trait DynamicAccumulator: StaticAccumulator {
-    /// Delete a value from the accumulator.
-    fn del(&mut self, x: &BigUint);
-}
-
-pub trait UniversalAccumulator: DynamicAccumulator {
-    /// Create a non-membership proof.
-    /// Returns `None`, iff `x` is a member.
-    fn non_mem_wit_create(&self, x: &BigUint) -> (BigUint, BigInt);
-
-    /// Verify a non-membership proof.
-    fn ver_non_mem(&self, w: &(BigUint, BigInt), x: &BigUint) -> bool;
-}
+use crate::proofs;
+use crate::traits::*;
 
 pub struct RsaAccumulator {
     lambda: usize,
@@ -55,6 +27,11 @@ impl RsaAccumulator {
     /// Internal method to recalculate `a_t`, based on the current of `s`.
     fn update(&mut self) {
         self.a_t = self.g.clone().modpow(&self.s, &self.n);
+    }
+
+    /// Returns the current public state.
+    pub fn state(&self) -> &BigUint {
+        &self.a_t
     }
 }
 
@@ -131,6 +108,44 @@ impl UniversalAccumulator for RsaAccumulator {
 
         // d^x A^b == g
         (d_x * &a_b).mod_floor(&self.n) == self.g
+    }
+}
+
+impl BatchedAccumulator for RsaAccumulator {
+    fn batch_add(&mut self, xs: &[BigUint]) -> BigUint {
+        println!("batch_add({:?})", xs);
+        let mut x_star = BigUint::one();
+        for x in xs {
+            x_star *= x
+        }
+
+        let a_t = self.a_t.clone();
+        self.add(&x_star);
+
+        proofs::ni_poe_prove(&x_star, &a_t, &self.a_t, &self.n)
+    }
+
+    fn ver_batch_add(&self, w: &BigUint, a_t: &BigUint, xs: &[BigUint]) -> bool {
+        println!("ver_batch_add({} - {} - {:?})", w, a_t, xs);
+        let mut x_star = BigUint::one();
+        for x in xs {
+            x_star *= x
+        }
+
+        proofs::ni_poe_verify(&x_star, a_t, &self.a_t, &w, &self.n)
+    }
+
+    fn batch_del(&mut self, pairs: &[(BigUint, BigUint)]) {
+        unimplemented!()
+    }
+
+    fn del_w_mem(&mut self, w: &BigUint, x: &BigUint) {
+        // TODO: signal failure
+        if self.ver_mem(w, x) {
+            self.s /= x;
+            // w is a_t without x, so need to recompute
+            self.a_t = w.clone();
+        }
     }
 }
 
@@ -277,5 +292,44 @@ mod tests {
         let lhs = (&d_x * &a_b).mod_floor(&n);
         println!("> {} = {} * {} mod {}", &lhs, &d_x, &a_b, &n);
         assert_eq!(lhs, g);
+    }
+
+    #[test]
+    fn test_batch() {
+        let mut rng = thread_rng();
+
+        for _ in 0..10 {
+            let lambda = 256; // insecure, but faster tests
+            let mut acc = RsaAccumulator::setup(lambda);
+
+            // regular add
+            let x0 = rng.gen_prime(lambda);
+            acc.add(&x0);
+
+            // batch add
+            let a_t = acc.state().clone();
+            let xs = (0..4).map(|_| rng.gen_prime(lambda)).collect::<Vec<_>>();
+            let w = acc.batch_add(&xs);
+
+            // verify batch add
+            assert!(acc.ver_batch_add(&w, &a_t, &xs), "ver_batch_add failed");
+
+            // delete with member
+            let x = &xs[2];
+            let w = acc.mem_wit_create(x);
+            assert!(acc.ver_mem(&w, x), "failed to verify valid witness");
+
+            acc.del_w_mem(&w, x);
+            assert!(
+                !acc.ver_mem(&w, x),
+                "witness verified, even though it was deleted"
+            );
+
+            // batch delete
+            // TODO:
+
+            // create all members witness
+            // TODO:
+        }
     }
 }

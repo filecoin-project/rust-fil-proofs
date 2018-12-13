@@ -1,7 +1,7 @@
 use num_bigint::{BigInt, BigUint, Sign};
 use num_integer::Integer;
 use num_traits::{One, Signed, Zero};
-use rsa::math::ModInverse;
+use rsa::math::{extended_gcd, ModInverse};
 
 /// Calculates a = a.pow(b).
 // TODO: this can be speed up using various techniques, like precomputations.
@@ -44,11 +44,84 @@ pub fn modpow_uint_int(a: &BigUint, e: &BigInt, n: &BigUint) -> Option<BigUint> 
     }
 }
 
+/// Calculates the `(xy)`-th root of `g`, given the `x`-th root and `y`-th root of `g.`
+/// Operations are `mod n`.
+pub fn shamir_trick(
+    root_x: &BigUint,
+    root_y: &BigUint,
+    x: &BigUint,
+    y: &BigUint,
+    n: &BigUint,
+) -> Option<BigUint> {
+    // Check that the roots match to the same element
+    let g1 = root_x.modpow(x, n);
+    let g2 = root_y.modpow(y, n);
+
+    if g1 != g2 {
+        return None;
+    }
+
+    // a, b <- Bezout(x, y)
+    let (_, a, b) = extended_gcd(x, y);
+
+    let l = modpow_uint_int(&root_x, &b, n);
+    let r = modpow_uint_int(&root_y, &a, n);
+
+    if let Some(l) = l {
+        if let Some(r) = r {
+            return Some((l * r).mod_floor(n));
+        }
+    }
+
+    None
+}
+
+/// Given `y = g^x` and `x = \prod x_i`, calculates the `x_i`-th roots, for all `i`.
+/// All operations are `mod n`.
+pub fn root_factor(g: &BigUint, x: &[BigUint], n: &BigUint) -> Vec<BigUint> {
+    let m = x.len();
+    if m == 1 {
+        return vec![g.clone()];
+    }
+
+    let m_prime = m.div_floor(&2);
+
+    let (x_l, x_r) = x.split_at(m_prime);
+
+    let g_l = {
+        let mut p = BigUint::one();
+        // the paper uses the upper part for g_L
+        for x in x_r {
+            p *= x;
+        }
+
+        g.modpow(&p, n)
+    };
+
+    let g_r = {
+        let mut p = BigUint::one();
+        // the paper uses the lower part for g_R
+        for x in x_l {
+            p *= x;
+        }
+
+        g.modpow(&p, n)
+    };
+
+    let mut res = root_factor(&g_l, x_l, n);
+    res.extend(root_factor(&g_r, x_r, n));
+
+    res
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    use num_bigint::RandBigInt;
     use num_traits::{FromPrimitive, Pow};
+    use rand::{thread_rng, Rng};
+    use rsa::RandPrime;
 
     #[test]
     fn test_pow_assign_basics() {
@@ -91,6 +164,70 @@ mod tests {
             let actual = modpow_uint_int(&a, &e, &n).unwrap();
 
             assert_eq!(expected, actual);
+        }
+    }
+
+    #[test]
+    fn test_root_factor() {
+        let mut rng = thread_rng();
+
+        for _ in 0..10 {
+            let n = rng.gen_biguint(64);
+            let g = rng.gen_biguint(64);
+            let m: usize = rng.gen_range(1, 128);
+
+            let x = (0..m).map(|_| rng.gen_biguint(64)).collect::<Vec<_>>();
+
+            let r = root_factor(&g, &x, &n);
+
+            let mut xs = BigUint::one();
+            for e in &x {
+                xs *= e;
+            }
+            let y = g.modpow(&xs, &n);
+
+            for (root, x_i) in r.iter().zip(x.iter()) {
+                // root is the x_i-th root of y
+                // so we check that root^x_i = y
+                assert_eq!(&root.clone().modpow(x_i, &n), &y);
+            }
+        }
+    }
+
+    #[test]
+    fn test_shamir_trick() {
+        let mut rng = thread_rng();
+
+        for _ in 0..30 {
+            let n = rng.gen_biguint(64);
+            let g = rng.gen_prime(64);
+
+            let x = rng.gen_prime(64);
+            let y = rng.gen_prime(64);
+            let z = rng.gen_prime(64);
+
+            // the element we calc the root against
+            let a = g.modpow(&(x.clone() * &y * &z), &n);
+            let root_x = g.modpow(&(y.clone() * &z), &n);
+            let root_y = g.modpow(&(x.clone() * &z), &n);
+
+            // make sure they are actual roots
+            assert_eq!(
+                &root_x.modpow(&x, &n),
+                &a,
+                "root_x is not the x-th root of a"
+            );
+            assert_eq!(
+                &root_y.modpow(&y, &n),
+                &a,
+                "root_y is not the y-th root of a"
+            );
+
+            let root = shamir_trick(&root_x, &root_y, &x, &y, &n).unwrap();
+
+            // root is the xy-th root of a
+            // so we check that root^xy = a
+            assert_eq!(&root.clone().modpow(&(x.clone() * &y), &n), &a);
         }
     }
 }
