@@ -58,11 +58,11 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
     let challenges = vec![2; challenge_count];
 
-    let pretty_data_size = prettyb(data_size);
-    info!(FCP_LOG, "data_size={}", pretty_data_size; "target" => "stats");
-    info!(FCP_LOG, "challenge_count={}", challenge_count; "target" => "stats");
-    info!(FCP_LOG, "m={}", m; "target" => "stats");
-    info!(FCP_LOG, "sloth_iter={}", sloth_iter; "target" => "stats");
+    info!(FCP_LOG, "data_size:  {}", prettyb(data_size); "target" => "stats");
+    info!(FCP_LOG, "challenge_count: {}", challenge_count; "target" => "stats");
+    info!(FCP_LOG, "m: {}", m; "target" => "stats");
+    info!(FCP_LOG, "sloth: {}", sloth_iter; "target" => "stats");
+
     info!(FCP_LOG, "generating fake data");
 
     let nodes = data_size / 32;
@@ -111,7 +111,10 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     let mut total_verifying = Duration::new(0, 0);
 
     let mut proofs = Vec::with_capacity(samples as usize);
-    info!(FCP_LOG, "sampling proving & verifying"; "samples" => samples);
+    info!(
+        FCP_LOG,
+        "sampling proving & verifying (samples: {})", samples
+    );
     for _ in 0..samples {
         let start = Instant::now();
         start_profile("prove");
@@ -144,10 +147,10 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     let verifying_avg = f64::from(verifying_avg.subsec_nanos()) / 1_000_000_000f64
         + (verifying_avg.as_secs() as f64);
 
-    info!(FCP_LOG, "avg_proving_time={:?} seconds", proving_avg; "target" => "stats");
-    info!(FCP_LOG, "avg_verifying_time={:?} seconds", verifying_avg; "target" => "stats");
-    info!(FCP_LOG, "replication_time={:?}", param_duration; "target" => "stats");
-    info!(FCP_LOG, "avg_proof_size={}", prettyb(avg_proof_size); "target" => "stats");
+    info!(FCP_LOG, "avg_proving_time: {:?} seconds", proving_avg; "target" => "stats");
+    info!(FCP_LOG, "avg_verifying_time: {:?} seconds", verifying_avg; "target" => "stats");
+    info!(FCP_LOG, "replication_time: {:?}", param_duration; "target" => "stats");
+    info!(FCP_LOG, "avg_proof_size: {}", prettyb(avg_proof_size); "target" => "stats");
 }
 
 fn main() {
