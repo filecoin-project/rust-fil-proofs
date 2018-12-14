@@ -21,10 +21,11 @@ use storage_proofs::error::Result;
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
 use storage_proofs::hasher::Hasher;
 use storage_proofs::layered_drgporep;
+use storage_proofs::merkle::MerkleTree;
 use storage_proofs::parameter_cache::{
     parameter_cache_dir, parameter_cache_path, read_cached_params, write_params_to_cache,
 };
-use storage_proofs::porep::{replica_id, PoRep, ProverAux, Tau};
+use storage_proofs::porep::{replica_id, PoRep, Tau};
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
 use storage_proofs::zigzag_graph::ZigZagBucketGraph;
@@ -302,7 +303,7 @@ fn perform_replication(
     proof_sector_bytes: usize,
 ) -> Result<(
     layered_drgporep::Tau<<DefaultTreeHasher as Hasher>::Domain>,
-    Vec<ProverAux<DefaultTreeHasher>>,
+    Vec<MerkleTree<<DefaultTreeHasher as Hasher>::Domain, <DefaultTreeHasher as Hasher>::Function>>,
 )> {
     if fake {
         // When faking replication, we write the original data to disk, before replication.
