@@ -4,10 +4,16 @@ use crate::api::sector_builder::metadata::SealedSectorMetadata;
 use crate::api::sector_builder::metadata::StagedSectorMetadata;
 use crate::api::sector_builder::scheduler::Request;
 use crate::api::sector_builder::WrappedSectorStore;
+use crate::error::ExpectWithBacktrace;
 use crate::error::Result;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
+
+const FATAL_NOLOCK: &str = "error acquiring task lock";
+const FATAL_RCVTSK: &str = "error receiving seal task";
+const FATAL_SNDTSK: &str = "error sending task";
+const FATAL_SNDRLT: &str = "error sending result";
 
 pub struct SealerWorker {
     pub id: usize,
@@ -36,8 +42,8 @@ impl SealerWorker {
             // relinquish the lock and return the task. The receiver is mutexed
             // for coordinating reads across multiple worker-threads.
             let task = {
-                let rx = seal_task_rx.lock().unwrap();
-                rx.recv().unwrap()
+                let rx = seal_task_rx.lock().expects(FATAL_NOLOCK);
+                rx.recv().expects(FATAL_RCVTSK)
             };
 
             // Dispatch to the appropriate task-handler.
@@ -47,7 +53,7 @@ impl SealerWorker {
                     let result = seal(&sector_store.clone(), &prover_id, staged_sector);
                     let task = Request::HandleSealResult(sector_id, Box::new(result));
 
-                    return_channel.send(task).unwrap();
+                    return_channel.send(task).expects(FATAL_SNDTSK);
                 }
                 SealerInput::Unseal(piece_key, sealed_sector, return_channel) => {
                     let result = retrieve_piece(
@@ -57,7 +63,7 @@ impl SealerWorker {
                         &piece_key,
                     );
 
-                    return_channel.send(result).unwrap();
+                    return_channel.send(result).expects(FATAL_SNDRLT);
                 }
                 SealerInput::Shutdown => break,
             }
