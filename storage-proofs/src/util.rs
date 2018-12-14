@@ -3,20 +3,22 @@ use bellman::{ConstraintSystem, SynthesisError};
 use pairing::Engine;
 use sapling_crypto::circuit::boolean::{self, AllocatedBit, Boolean};
 
+pub const NODE_SIZE: usize = 32;
+
 /// Returnst the start position of the data, 0-indexed.
-pub fn data_at_node_offset(v: usize, node_size: usize) -> usize {
-    v * node_size
+pub fn data_at_node_offset(v: usize) -> usize {
+    v * NODE_SIZE
 }
 
-/// Returns the byte slice representing one node (of uniform size, node_size) at position v in data.
-pub fn data_at_node(data: &[u8], v: usize, node_size: usize) -> error::Result<&[u8]> {
-    let offset = data_at_node_offset(v, node_size);
+/// Returns the byte slice representing one node (of uniform size, NODE_SIZE) at position v in data.
+pub fn data_at_node(data: &[u8], v: usize) -> error::Result<&[u8]> {
+    let offset = data_at_node_offset(v);
 
-    if offset + node_size > data.len() {
-        return Err(error::Error::OutOfBounds(offset + node_size, data.len()));
+    if offset + NODE_SIZE > data.len() {
+        return Err(error::Error::OutOfBounds(offset + NODE_SIZE, data.len()));
     }
 
-    Ok(&data[offset..offset + node_size])
+    Ok(&data[offset..offset + NODE_SIZE])
 }
 
 /// Converts bytes into their bit representation, in little endian format.

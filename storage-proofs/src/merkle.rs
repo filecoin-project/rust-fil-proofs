@@ -166,7 +166,7 @@ mod tests {
             data.write(&bytes).unwrap();
         }
 
-        let tree = g.merkle_tree(data.as_slice(), node_size).unwrap();
+        let tree = g.merkle_tree(data.as_slice()).unwrap();
         for i in 0..10 {
             let proof = tree.gen_proof(i);
 

@@ -213,7 +213,6 @@ impl<'a, H: 'static + Hasher>
         let mut inputs = Vec::new();
 
         let mut drgporep_pub_params = drgporep::PublicParams::new(
-            pub_params.drg_porep_public_params.lambda,
             pub_params.drg_porep_public_params.graph.clone(),
             pub_params.drg_porep_public_params.sloth_iter,
         );
@@ -339,7 +338,6 @@ mod tests {
     #[test]
     fn zigzag_drgporep_input_circuit_with_bls12_381() {
         let params = &JubjubBls12::new();
-        let lambda = 32;
         let nodes = 5;
         let degree = 1;
         let expansion_degree = 2;
@@ -362,7 +360,6 @@ mod tests {
         let mut data_copy = data.clone();
         let sp = layered_drgporep::SetupParams {
             drg_porep_setup_params: drgporep::SetupParams {
-                lambda,
                 drg: drgporep::DrgParams {
                     nodes: n,
                     degree,
@@ -452,8 +449,6 @@ mod tests {
         let params = &JubjubBls12::new();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        // 32 bytes per node
-        let lambda = 32;
         // 1 GB
         let n = (1 << 30) / 32;
         let num_layers = 2;
@@ -480,7 +475,6 @@ mod tests {
 
         let public_params = layered_drgporep::PublicParams {
             drg_porep_public_params: drgporep::PublicParams::new(
-                lambda,
                 ZigZagGraph::new(n, base_degree, expansion_degree, new_seed()),
                 sloth_iter,
             ),
@@ -509,7 +503,6 @@ mod tests {
     #[ignore] // Slow test – run only when compiled for release.
     fn zigzag_test_compound() {
         let params = &JubjubBls12::new();
-        let lambda = 32;
         let nodes = 5;
         let degree = 2;
         let expansion_degree = 1;
@@ -536,7 +529,6 @@ mod tests {
             engine_params: params,
             vanilla_params: &layered_drgporep::SetupParams {
                 drg_porep_setup_params: drgporep::SetupParams {
-                    lambda,
                     drg: drgporep::DrgParams {
                         nodes: n,
                         degree,

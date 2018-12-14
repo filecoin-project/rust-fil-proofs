@@ -18,8 +18,6 @@ pub struct SetupParams<T: Domain, V: Vdf<T>> {
     /// Number of times we repeat an online Proof-of-Replication in one single PoSt.
     pub post_epochs: usize,
     pub setup_params_vdf: V::SetupParams,
-    /// The size of a single leaf.
-    pub lambda: usize,
     /// The number of sectors that are proven over.
     pub sectors_count: usize,
 }
@@ -34,8 +32,6 @@ pub struct PublicParams<T: Domain, V: Vdf<T>> {
     pub post_epochs: usize,
     pub pub_params_vdf: V::PublicParams,
     /// The size of a single leaf.
-    pub lambda: usize,
-    /// How many leaves the underlying merkle tree has.
     pub leaves: usize,
     /// The number of sectors that are proven over.
     pub sectors_count: usize,
@@ -100,8 +96,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
             sector_size: sp.sector_size,
             post_epochs: sp.post_epochs,
             pub_params_vdf: V::setup(&sp.setup_params_vdf)?,
-            lambda: sp.lambda,
-            leaves: sp.sector_size / sp.lambda,
+            leaves: sp.sector_size / 32,
             sectors_count: sp.sectors_count,
         })
     }
@@ -125,7 +120,6 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
         let mut proofs_porep = Vec::with_capacity(post_epochs);
 
         let pub_params_porep = porc::PublicParams {
-            lambda: pub_params.lambda,
             leaves: pub_params.leaves,
             sectors_count: pub_params.sectors_count,
         };
@@ -213,7 +207,6 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
         // Online PoRep Verification
 
         let pub_params_porep = porc::PublicParams {
-            lambda: pub_params.lambda,
             leaves: pub_params.leaves,
             sectors_count: pub_params.sectors_count,
         };
@@ -296,7 +289,6 @@ mod tests {
                 key: rng.gen(),
                 rounds: 1,
             },
-            lambda,
             sectors_count: 2,
         };
 
@@ -310,9 +302,9 @@ mod tests {
             .collect();
 
         let graph0 = BucketGraph::<PedersenHasher>::new(1024, 5, 0, new_seed());
-        let tree0 = graph0.merkle_tree(data0.as_slice(), lambda).unwrap();
+        let tree0 = graph0.merkle_tree(data0.as_slice()).unwrap();
         let graph1 = BucketGraph::<PedersenHasher>::new(1024, 5, 0, new_seed());
-        let tree1 = graph1.merkle_tree(data1.as_slice(), lambda).unwrap();
+        let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {
             challenges: vec![rng.gen(), rng.gen()],

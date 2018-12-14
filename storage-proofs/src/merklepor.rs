@@ -11,8 +11,6 @@ use crate::proof::ProofScheme;
 /// The parameters shared between the prover and verifier.
 #[derive(Clone, Debug)]
 pub struct PublicParams {
-    /// The size of a single leaf.
-    pub lambda: usize,
     /// How many leaves the underlying merkle tree has.
     pub leaves: usize,
     pub private: bool,
@@ -21,8 +19,8 @@ pub struct PublicParams {
 impl ParameterSetIdentifier for PublicParams {
     fn parameter_set_identifier(&self) -> String {
         format!(
-            "merklepor::PublicParams{{lambda: {}; leaves: {}; private: {}}}",
-            self.lambda, self.leaves, self.private
+            "merklepor::PublicParams{{leaves: {}; private: {}}}",
+            self.leaves, self.private
         )
     }
 }
@@ -61,7 +59,6 @@ pub type Proof<H> = DataProof<H>;
 
 #[derive(Debug)]
 pub struct SetupParams {
-    pub lambda: usize,
     pub leaves: usize,
     pub private: bool,
 }
@@ -81,7 +78,6 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for MerklePoR<H> {
 
     fn setup(sp: &SetupParams) -> Result<PublicParams> {
         Ok(PublicParams {
-            lambda: sp.lambda,
             leaves: sp.leaves,
             private: sp.private,
         })
@@ -149,7 +145,6 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let pub_params = PublicParams {
-            lambda: 32,
             leaves: 32,
             private: false,
         };
@@ -159,17 +154,16 @@ mod tests {
             .collect();
 
         let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
-        let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
+        let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {
             challenge: 3,
             commitment: Some(tree.root()),
         };
 
-        let leaf = H::Domain::try_from_bytes(
-            data_at_node(data.as_slice(), pub_inputs.challenge, pub_params.lambda).unwrap(),
-        )
-        .unwrap();
+        let leaf =
+            H::Domain::try_from_bytes(data_at_node(data.as_slice(), pub_inputs.challenge).unwrap())
+                .unwrap();
 
         let priv_inputs = PrivateInputs::<H>::new(leaf, &tree);
 
@@ -219,7 +213,6 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let pub_params = PublicParams {
-            lambda: 32,
             leaves: 32,
             private: false,
         };
@@ -229,7 +222,7 @@ mod tests {
             .collect();
 
         let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
-        let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
+        let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {
             challenge: 3,
@@ -263,7 +256,6 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let pub_params = PublicParams {
-            lambda: 32,
             leaves: 32,
             private: false,
         };
@@ -273,17 +265,16 @@ mod tests {
             .collect();
 
         let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
-        let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
+        let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {
             challenge: 3,
             commitment: Some(tree.root()),
         };
 
-        let leaf = H::Domain::try_from_bytes(
-            data_at_node(data.as_slice(), pub_inputs.challenge, pub_params.lambda).unwrap(),
-        )
-        .unwrap();
+        let leaf =
+            H::Domain::try_from_bytes(data_at_node(data.as_slice(), pub_inputs.challenge).unwrap())
+                .unwrap();
 
         let priv_inputs = PrivateInputs::<H>::new(leaf, &tree);
 

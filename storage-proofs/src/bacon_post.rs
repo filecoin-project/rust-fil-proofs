@@ -261,17 +261,15 @@ mod tests {
     fn test_bacon_post_basics() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let lambda = 32;
         let sp = SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
             setup_params_hvh_post: hvh_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
                 challenge_count: 10,
-                sector_size: 1024 * lambda,
+                sector_size: 1024 * 32,
                 post_epochs: 3,
                 setup_params_vdf: vdf_sloth::SetupParams {
                     key: rng.gen(),
                     rounds: 1,
                 },
-                lambda,
                 sectors_count: 2,
             },
             post_periods_count: 3,
@@ -289,9 +287,9 @@ mod tests {
             .collect();
 
         let graph0 = BucketGraph::<PedersenHasher>::new(1024, 5, 0, new_seed());
-        let tree0 = graph0.merkle_tree(data0.as_slice(), lambda).unwrap();
+        let tree0 = graph0.merkle_tree(data0.as_slice()).unwrap();
         let graph1 = BucketGraph::<PedersenHasher>::new(1024, 5, 0, new_seed());
-        let tree1 = graph1.merkle_tree(data1.as_slice(), lambda).unwrap();
+        let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {
             commitments: vec![tree0.root(), tree1.root()],

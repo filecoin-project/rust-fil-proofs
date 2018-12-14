@@ -85,15 +85,13 @@ const CHALLENGE_COUNT: usize = 1;
 
 fn setup_params(sector_bytes: usize) -> layered_drgporep::SetupParams {
     assert!(
-        sector_bytes % LAMBDA == 0,
-        "sector_bytes ({}) must be a multiple of lambda {}",
+        sector_bytes % 32 == 0,
+        "sector_bytes ({}) must be a multiple of 32",
         sector_bytes,
-        LAMBDA
     );
     let nodes = sector_bytes / LAMBDA;
     layered_drgporep::SetupParams {
         drg_porep_setup_params: drgporep::SetupParams {
-            lambda: LAMBDA,
             drg: DrgParams {
                 nodes,
                 degree: DEGREE,

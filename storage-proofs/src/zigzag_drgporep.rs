@@ -49,7 +49,7 @@ where
     H: Hasher,
     Z: ZigZag + Graph<H> + ParameterSetIdentifier,
 {
-    drgporep::PublicParams::new(pp.lambda, pp.graph.zigzag(), pp.sloth_iter)
+    drgporep::PublicParams::new(pp.graph.zigzag(), pp.sloth_iter)
 }
 
 #[cfg(test)]
@@ -96,7 +96,6 @@ mod tests {
 
         let sp = SetupParams {
             drg_porep_setup_params: drgporep::SetupParams {
-                lambda,
                 drg: drgporep::DrgParams {
                     nodes: data.len() / lambda,
                     degree: 5,
@@ -136,18 +135,17 @@ mod tests {
         assert_eq!(data, decoded_data);
     }
 
-    fn prove_verify(lambda: usize, n: usize, i: usize) {
-        test_prove_verify::<PedersenHasher>(lambda, n, i);
-        test_prove_verify::<Sha256Hasher>(lambda, n, i);
-        test_prove_verify::<Blake2sHasher>(lambda, n, i);
+    fn prove_verify(n: usize, i: usize) {
+        test_prove_verify::<PedersenHasher>(n, i);
+        test_prove_verify::<Sha256Hasher>(n, i);
+        test_prove_verify::<Blake2sHasher>(n, i);
     }
 
-    fn test_prove_verify<H: 'static + Hasher>(lambda: usize, n: usize, i: usize) {
+    fn test_prove_verify<H: 'static + Hasher>(n: usize, i: usize) {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let degree = 1 + i;
         let expansion_degree = i;
-        let lambda = lambda;
         let sloth_iter = 1;
         let replica_id: H::Domain = rng.gen();
         let data: Vec<u8> = (0..n)
@@ -160,7 +158,6 @@ mod tests {
 
         let sp = SetupParams {
             drg_porep_setup_params: drgporep::SetupParams {
-                lambda,
                 drg: drgporep::DrgParams {
                     nodes: n,
                     degree,
@@ -213,8 +210,8 @@ mod tests {
             // prove_verify_32_3_1(32, 3, 1);
             // prove_verify_32_3_2(32, 3, 2);
 
-           prove_verify_32_5_1(32, 5, 1);
-           prove_verify_32_5_2(32, 5, 2);
-           prove_verify_32_5_3(32, 5, 3);
+           prove_verify_32_5_1(5, 1);
+           prove_verify_32_5_2( 5, 2);
+           prove_verify_32_5_3( 5, 3);
     }}
 }

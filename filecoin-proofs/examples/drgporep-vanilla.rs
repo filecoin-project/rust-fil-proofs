@@ -74,7 +74,6 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
         .collect();
 
     let sp = SetupParams {
-        lambda,
         drg: DrgParams {
             nodes,
             degree: m,

@@ -45,7 +45,6 @@ impl<'a> Example<'a, circuit::ppor::ParallelProofOfRetrievability<'a, Bls12>> fo
         tree_depth: usize,
         challenge_count: usize,
         _leaves: usize,
-        _lambda: usize,
         _m: usize,
         _sloth_iter: usize,
     ) -> circuit::ppor::ParallelProofOfRetrievability<'a, Bls12> {
@@ -70,7 +69,6 @@ impl<'a> Example<'a, circuit::ppor::ParallelProofOfRetrievability<'a, Bls12>> fo
         jubjub_params: &JubjubBls12,
         tree_depth: usize,
         challenge_count: usize,
-        _lambda: usize,
         _m: usize,
         _sloth_iter: usize,
     ) -> Parameters<Bls12> {
@@ -98,7 +96,6 @@ impl<'a> Example<'a, circuit::ppor::ParallelProofOfRetrievability<'a, Bls12>> fo
         tree_depth: usize,
         challenge_count: usize,
         _leaves: usize,
-        _lambda: usize,
         _m: usize,
         _sloth_iter: usize,
     ) -> Proof<Bls12> {

@@ -12,8 +12,6 @@ use crate::proof::ProofScheme;
 
 #[derive(Debug, Clone)]
 pub struct SetupParams {
-    /// The size of a single leaf.
-    pub lambda: usize,
     /// How many leaves the underlying merkle tree has.
     pub leaves: usize,
     /// The number of sectors that are proven over.
@@ -22,8 +20,6 @@ pub struct SetupParams {
 
 #[derive(Debug, Clone)]
 pub struct PublicParams {
-    /// The size of a single leaf.
-    pub lambda: usize,
     /// How many leaves the underlying merkle tree has.
     pub leaves: usize,
     /// The number of sectors that are proven over.
@@ -33,8 +29,8 @@ pub struct PublicParams {
 impl ParameterSetIdentifier for PublicParams {
     fn parameter_set_identifier(&self) -> String {
         format!(
-            "porc::PublicParams{{lambda: {}; leaves: {} sectors_count: {}}}",
-            self.lambda, self.leaves, self.sectors_count,
+            "porc::PublicParams{{leaves: {} sectors_count: {}}}",
+            self.leaves, self.sectors_count,
         )
     }
 }
@@ -76,7 +72,6 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for PoRC<H> {
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
         Ok(PublicParams {
-            lambda: sp.lambda,
             leaves: sp.leaves,
             sectors_count: sp.sectors_count,
         })
@@ -170,7 +165,6 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let pub_params = PublicParams {
-            lambda: 32,
             leaves: 32,
             sectors_count: 1,
         };
@@ -180,7 +174,7 @@ mod tests {
             .collect();
 
         let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
-        let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
+        let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {
             challenges: &vec![rng.gen(), rng.gen()],
@@ -235,7 +229,6 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let pub_params = PublicParams {
-            lambda: 32,
             leaves: 32,
             sectors_count: 1,
         };
@@ -245,7 +238,7 @@ mod tests {
             .collect();
 
         let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
-        let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
+        let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs::<H::Domain> {
             challenges: &vec![rng.gen(), rng.gen()],
@@ -282,7 +275,6 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let pub_params = PublicParams {
-            lambda: 32,
             leaves: 32,
             sectors_count: 1,
         };
@@ -292,7 +284,7 @@ mod tests {
             .collect();
 
         let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
-        let tree = graph.merkle_tree(data.as_slice(), 32).unwrap();
+        let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {
             challenges: &vec![rng.gen(), rng.gen()],
