@@ -5,7 +5,6 @@ use crate::proof::ProofScheme;
 
 #[derive(Debug)]
 pub struct PublicParams {
-    pub lambda: usize,
     pub time: usize,
 }
 

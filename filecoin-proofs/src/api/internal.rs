@@ -76,7 +76,6 @@ fn get_zigzag_params() -> Option<groth16::Parameters<Bls12>> {
     (*ZIGZAG_PARAMS).clone()
 }
 
-pub const LAMBDA: usize = 32;
 const DEGREE: usize = 1; // TODO: 5; FIXME: increasing degree introduces a test failure. Figure out why.
 const EXPANSION_DEGREE: usize = 6;
 const SLOTH_ITER: usize = 0;
@@ -89,7 +88,7 @@ fn setup_params(sector_bytes: usize) -> layered_drgporep::SetupParams {
         "sector_bytes ({}) must be a multiple of 32",
         sector_bytes,
     );
-    let nodes = sector_bytes / LAMBDA;
+    let nodes = sector_bytes / 32;
     layered_drgporep::SetupParams {
         drg_porep_setup_params: drgporep::SetupParams {
             drg: DrgParams {
