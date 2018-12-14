@@ -458,7 +458,6 @@ mod tests {
     fn test_extract_all<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let lambda = 32;
         let sloth_iter = 1;
         let replica_id: H::Domain = rng.gen();
         let data = vec![2u8; 32 * 3];
@@ -467,7 +466,7 @@ mod tests {
 
         let sp = SetupParams {
             drg: DrgParams {
-                nodes: data.len() / lambda,
+                nodes: data.len() / 32,
                 degree: 5,
                 expansion_degree: 0,
                 seed: new_seed(),
@@ -506,7 +505,6 @@ mod tests {
     fn test_extract<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let lambda = 32;
         let sloth_iter = 1;
         let replica_id: H::Domain = rng.gen();
         let nodes = 3;
@@ -517,7 +515,7 @@ mod tests {
 
         let sp = SetupParams {
             drg: DrgParams {
-                nodes: data.len() / lambda,
+                nodes: data.len() / 32,
                 degree: 5,
                 expansion_degree: 0,
                 seed: new_seed(),

@@ -168,6 +168,8 @@ mod tests {
     use crate::drgraph::{new_seed, BucketGraph, Graph};
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
 
+    const NODE_BYTES: usize = 32;
+
     #[test]
     fn compute_bounds() {
         assert_eq!(bounds(&[3, 5, 7, 9]), [(0, 3), (3, 8), (8, 15), (15, 24)]);
@@ -203,21 +205,20 @@ mod tests {
     }
 
     fn file_inclusion_proof_aux<H: Hasher>(nodes: usize, node_lengths: &[usize]) {
-        let lambda = 32;
-        let size = nodes * lambda;
+        let size = nodes * NODE_BYTES;
         let g = BucketGraph::<H>::new(nodes, 0, 0, new_seed());
         let mut data = Vec::<u8>::with_capacity(nodes);
 
         for i in 0..size {
             data.push(
-                (((i / lambda) + i)
+                (((i / NODE_BYTES) + i)
                 // Mask out two most significant bits so we will always be Fr32,
                 & 63) as u8,
             )
         }
 
         let tree = g.merkle_tree(&data).unwrap();
-        let lengths: Vec<usize> = node_lengths.iter().map(|x| x * lambda).collect();
+        let lengths: Vec<usize> = node_lengths.iter().map(|x| x * 32).collect();
 
         let proofs = file_inclusion_proofs::<H>(&tree, &node_lengths);
         let bounds = bounds(lengths.as_slice());
@@ -236,7 +237,7 @@ mod tests {
 
         for i in 0..size {
             wrong_data.push(
-                ((i / lambda) + (2 * i)
+                ((i / NODE_BYTES) + (2 * i)
                 // Mask out two most significant bits so we will always be Fr32,
                 & 63) as u8,
             )

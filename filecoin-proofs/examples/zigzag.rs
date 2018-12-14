@@ -103,7 +103,6 @@ fn do_the_work<H: 'static>(
     H: Hasher,
 {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-    let lambda = 32;
 
     info!(FCP_LOG, "data size={}", prettyb(data_size); "target" => "config");
     info!(FCP_LOG, "m={}", m; "target" => "config");
@@ -118,7 +117,7 @@ fn do_the_work<H: 'static>(
 
     info!(FCP_LOG, "generating fake data"; "target" => "status");
 
-    let nodes = data_size / lambda;
+    let nodes = data_size / 32;
 
     let data = file_backed_mmap_from_random_bytes(nodes);
 
