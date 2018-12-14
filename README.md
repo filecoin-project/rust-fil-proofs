@@ -99,6 +99,8 @@ Note: on macOS you need `gtime`, as the built in `time` command is not enough.
 
 ## Logging
 
+For better logging with backtraces on errors, developers should use `expects` rather than `expect` on `Result<T, E>` and `Option<T>`.
+
 Developers can control `rust-proofs` logging through environment variables:
 
 -

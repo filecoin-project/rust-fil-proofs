@@ -5,6 +5,7 @@ use crate::api::sector_builder::metadata::*;
 use crate::api::sector_builder::scheduler::Request;
 use crate::api::sector_builder::scheduler::Scheduler;
 use crate::api::sector_builder::sealer::*;
+use crate::error::ExpectWithBacktrace;
 use crate::error::Result;
 use crate::FCP_LOG;
 use sector_base::api::disk_backed_storage::new_sector_store;
@@ -152,9 +153,9 @@ impl SectorBuilder {
         self.scheduler_tx
             .clone()
             .send(with_sender(tx))
-            .expect(FATAL_NOSEND_TASK);
+            .expects(FATAL_NOSEND_TASK);
 
-        rx.recv().expect(FATAL_NORECV_TASK)
+        rx.recv().expects(FATAL_NORECV_TASK)
     }
 }
 
