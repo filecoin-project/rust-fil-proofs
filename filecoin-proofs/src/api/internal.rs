@@ -167,8 +167,18 @@ pub fn seal(
     prover_id_in: FrSafe,
     sector_id_in: FrSafe,
 ) -> Result<(Commitment, Commitment, Commitment, SnarkProof)> {
+    seal_2(sector_store.config(), in_path, out_path, prover_id_in, sector_id_in)
+}
+
+pub fn seal_2(
+    sector_config: &SectorConfig,
+    in_path: &PathBuf,
+    out_path: &PathBuf,
+    prover_id_in: FrSafe,
+    sector_id_in: FrSafe,
+) -> Result<(Commitment, Commitment, Commitment, SnarkProof)> {
     let (fake, delay_seconds, sector_bytes, proof_sector_bytes, uses_official_circuit) =
-        get_config(sector_store.config());
+        get_config(sector_config);
 
     let public_params = public_params(proof_sector_bytes);
     let challenge_count = public_params.challenge_count;
@@ -260,7 +270,7 @@ pub fn seal(
     if must_cache_params {
         write_params_to_cache(
             proof.groth_params.clone(),
-            &dummy_parameter_cache_path(sector_store.config(), proof_sector_bytes),
+            &dummy_parameter_cache_path(sector_config, proof_sector_bytes),
         )?;
     }
 
@@ -271,7 +281,7 @@ pub fn seal(
     // Verification is cheap when parameters are cached,
     // and it is never correct to return a proof which does not verify.
     verify_seal(
-        sector_store.config(),
+        sector_config,
         comm_r,
         comm_d,
         comm_r_star,
