@@ -647,32 +647,6 @@ fn test_time_result_from_str() {
 }
 
 #[test]
-fn test_log_result_from_str() {
-    let res = LogResult::from_str("
-2018-10-31T15:35:50Z \u{1b}[32mINFO \u{1b}[0m config > constraint system: Groth
-2018-10-31T15:35:50Z \u{1b}[32mINFO \u{1b}[0m config > data_size:  1 kB
-2018-10-31T15:35:50Z \u{1b}[32mINFO \u{1b}[0m config > challenge_count: 1
-2018-10-31T15:35:50Z \u{1b}[32mINFO \u{1b}[0m config > m: 6
-2018-10-31T15:35:50Z \u{1b}[32mINFO \u{1b}[0m config > sloth: 0
-2018-10-31T15:35:50Z \u{1b}[32mINFO \u{1b}[0m config > tree_depth: 5
-2018-10-31T15:35:50Z \u{1b}[32mINFO \u{1b}[0m params > generating new groth params
-2018-10-31T15:35:58Z \u{1b}[32mINFO \u{1b}[0m params > writing params to cache: \"/tmp/filecoin-proofs-cache-drgporep-1024-1-6-0\"
-2018-10-31T15:35:58Z \u{1b}[32mINFO \u{1b}[0m params > generating verification key
-2018-10-31T15:36:03Z \u{1b}[32mINFO \u{1b}[0m stats > avg_proving_time: 0.837172388 seconds
-2018-10-31T15:36:03Z \u{1b}[32mINFO \u{1b}[0m stats > avg_verifying_time: 0.000000025 seconds
-2018-10-31T15:36:03Z \u{1b}[32mINFO \u{1b}[0m stats > params_generation_time: 8.670260628s
-
-").unwrap();
-
-    assert_eq!(res.config.get("constraint system").unwrap(), "Groth");
-    assert_eq!(res.config.get("data_size").unwrap(), "1 kB",);
-    assert_eq!(
-        res.stats.get("avg_proving_time").unwrap(),
-        "0.837172388 seconds"
-    );
-}
-
-#[test]
 fn test_log_results_str_json() {
     let res = LogResult::from_str("
 {\"msg\":\"constraint system: Groth\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:19.315918-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:86 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"config\"}
