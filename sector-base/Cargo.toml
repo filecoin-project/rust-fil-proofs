@@ -7,7 +7,7 @@ license = "MIT OR Apache-2.0"
 edition = "2018"
 
 [lib]
-crate-type = ["rlib", "cdylib"]
+crate-type = ["rlib"]
 
 [dependencies]
 bitvec = "0.5"
@@ -17,6 +17,7 @@ libc = "0.2"
 rand = "0.4"
 storage-proofs = { path = "../storage-proofs" }
 ffi-toolkit = { path = "../ffi-toolkit" }
+proofs-config = { path = "../proofs-config" }
 
 [dependencies.pairing]
 version = "0.14.2"

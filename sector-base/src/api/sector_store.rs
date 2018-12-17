@@ -1,24 +1,5 @@
 use crate::api::errors::SectorManagerErr;
 
-pub trait SectorConfig {
-    /// if true, uses something other exact bits, correct parameters, or full proofs
-    fn is_fake(&self) -> bool;
-
-    /// if provided, an artificial delay to seal
-    fn simulate_delay_seconds(&self) -> Option<u32>;
-
-    /// returns the number of bytes that will fit into a sector managed by this store
-    fn max_unsealed_bytes_per_sector(&self) -> u64;
-
-    /// returns the number of bytes in a sealed sector managed by this store
-    fn sector_bytes(&self) -> u64;
-
-    /// We need a distinguished place to cache 'the' parameters corresponding to the SetupParams
-    /// currently being used. These are only easily generated at replication time but need to be
-    /// accessed at verification time too.
-    fn dummy_parameter_cache_name(&self) -> String;
-}
-
 pub trait SectorManager {
     /// provisions a new sealed sector and reports the corresponding access
     fn new_sealed_sector_access(&self) -> Result<String, SectorManagerErr>;
@@ -46,6 +27,7 @@ pub trait SectorManager {
 }
 
 pub trait SectorStore {
-    fn config(&self) -> &SectorConfig;
+    fn opts(&self) -> &proofs_config::ConfigOpts;
+
     fn manager(&self) -> &SectorManager;
 }
