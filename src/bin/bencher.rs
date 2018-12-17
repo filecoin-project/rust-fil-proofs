@@ -655,7 +655,7 @@ fn test_log_results_str_json() {
 {\"msg\":\"m: 6\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:19.316970-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:89 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"config\"}
 {\"msg\":\"sloth: 0\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:19.316978-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:90 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"config\"}
 {\"msg\":\"tree_depth: 5\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:19.317011-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:91 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"config\"}
-{\"msg\":\"reading groth params from cache: \"/tmp/filecoin-proofs-cache-multi-challenge merklepor-1024-1-6-0\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:19.317046-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:102 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"params\"}
+{\"msg\":\"reading groth params from cache: \\\"/tmp/filecoin-proofs-cache-multi-challenge merklepor-1024-1-6-0\\\"\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:19.317046-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:102 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"params\"}
 {\"msg\":\"generating verification key\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:19.388725-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:123 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"params\"}
 {\"msg\":\"avg_proving_time: 0.213533235 seconds\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:20.480250-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:180 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"stats\"}
 {\"msg\":\"avg_verifying_time: 0.003935171 seconds\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:20.480273-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:181 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"stats\"}
@@ -667,6 +667,6 @@ fn test_log_results_str_json() {
     assert_eq!(res.config.get("data_size").unwrap(), "1 kB",);
     assert_eq!(
         res.stats.get("avg_proving_time").unwrap(),
-        "0.837172388 seconds"
+        "0.213533235 seconds"
     );
 }
