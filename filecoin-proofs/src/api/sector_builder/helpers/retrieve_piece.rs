@@ -33,7 +33,7 @@ pub fn retrieve_piece<'a>(
         sector_store
             .inner
             .manager()
-            .delete_staging_sector_access(staging_sector_access)?;
+            .delete_staging_sector_access(&staging_sector_access)?;
     }
 
     let (_, bytes) = result?;
@@ -76,7 +76,7 @@ fn retrieve_piece_aux<'a>(
     }
 
     let piece_bytes = sector_store.inner.manager().read_raw(
-        staging_sector_access.to_string(),
+        &staging_sector_access.to_string(),
         0,
         num_bytes_unsealed,
     )?;
