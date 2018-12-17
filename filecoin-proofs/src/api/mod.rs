@@ -5,11 +5,10 @@ use crate::api::responses::FFISealStatus;
 use crate::api::sector_builder::metadata::SealStatus;
 use crate::api::sector_builder::SectorBuilder;
 use ffi_toolkit::rust_str_to_c_str;
-use ffi_toolkit::{c_str_to_pbuf, c_str_to_rust_str, raw_ptr};
+use ffi_toolkit::{c_str_to_rust_str, raw_ptr};
 use libc;
 use sector_base::api::disk_backed_storage::new_sector_config;
 use sector_base::api::disk_backed_storage::ConfiguredStore;
-use sector_base::api::sector_store::SectorStore;
 use std::ffi::CString;
 use std::mem;
 use std::ptr;
@@ -19,65 +18,12 @@ pub mod internal;
 pub mod responses;
 mod sector_builder;
 
-type SectorAccess = *const libc::c_char;
-
 /// Note: These values need to be kept in sync with what's in api/internal.rs.
 /// Due to limitations of cbindgen, we can't define a constant whose value is
 /// a non-primitive (e.g. an expression like 192 * 2 or internal::STUFF) and
 /// see the constant in the generated C-header file.
 pub const API_POREP_PROOF_BYTES: usize = 384;
 pub const API_POST_PROOF_BYTES: usize = 192;
-
-/// Seals a sector and returns its commitments and proof.
-/// Unsealed data is read from `unsealed`, sealed, then written to `sealed`.
-///
-/// # Arguments
-///
-/// * `ss_ptr`        - pointer to a boxed SectorStore
-/// * `unsealed`      - access to unsealed sector to be sealed
-/// * `sealed`        - access to which sealed sector should be written
-/// * `prover_id`     - uniquely identifies the prover
-/// * `sector_id`     - uniquely identifies a sector
-#[no_mangle]
-pub unsafe extern "C" fn seal(
-    ss_ptr: *mut Box<SectorStore>,
-    unsealed_path: SectorAccess,
-    sealed_path: SectorAccess,
-    prover_id: &[u8; 31],
-    sector_id: &[u8; 31],
-) -> *mut responses::SealResponse {
-    let unsealed_path_buf = c_str_to_pbuf(unsealed_path);
-    let sealed_path_buf = c_str_to_pbuf(sealed_path);
-
-    let result = internal::seal(
-        &**ss_ptr,
-        &unsealed_path_buf,
-        &sealed_path_buf,
-        *prover_id,
-        *sector_id,
-    );
-
-    let mut response: responses::SealResponse = Default::default();
-
-    match result {
-        Ok((comm_r, comm_d, comm_r_star, snark_proof)) => {
-            response.status_code = FCPResponseStatus::FCPNoError;
-
-            response.comm_r[..32].clone_from_slice(&comm_r[..32]);
-            response.comm_d[..32].clone_from_slice(&comm_d[..32]);
-            response.comm_r_star[..32].clone_from_slice(&comm_r_star[..32]);
-            response.proof[..API_POREP_PROOF_BYTES]
-                .clone_from_slice(&snark_proof[..API_POREP_PROOF_BYTES]);
-        }
-        Err(err) => {
-            let (code, ptr) = err_code_and_msg(&err.into());
-            response.status_code = code;
-            response.error_msg = ptr;
-        }
-    }
-
-    raw_ptr(response)
-}
 
 /// Verifies the output of seal.
 ///
@@ -134,136 +80,6 @@ pub unsafe extern "C" fn verify_seal(
         let msg = CString::new("caller did not provide ConfiguredStore").unwrap();
         response.error_msg = msg.as_ptr();
         mem::forget(msg);
-    }
-
-    raw_ptr(response)
-}
-
-/// Unseals a range of bytes from a sealed sector and writes the resulting raw (unpreprocessed) sector to `output path`.
-/// Returns a response indicating the number of original (unsealed) bytes which were written to `output_path`.
-///
-/// If the requested number of bytes exceeds that available in the raw data, `get_unsealed_range` will write fewer
-/// than `num_bytes` bytes to `output_path`.
-///
-/// # Arguments
-///
-/// * `ss_ptr`       - pointer to a boxed SectorStore
-/// * `sealed_path`  - path of sealed sector-file
-/// * `output_path`  - path where sector file's unsealed bytes should be written
-/// * `start_offset` - zero-based byte offset in original, unsealed sector-file
-/// * `num_bytes`    - number of bytes to unseal and get (corresponds to contents of unsealed sector-file)
-/// * `prover_id`    - uniquely identifies the prover
-/// * `sector_id`    - uniquely identifies the sector
-#[no_mangle]
-pub unsafe extern "C" fn get_unsealed_range(
-    ss_ptr: *mut Box<SectorStore>,
-    sealed_path: SectorAccess,
-    output_path: SectorAccess,
-    start_offset: u64,
-    num_bytes: u64,
-    prover_id: &[u8; 31],
-    sector_id: &[u8; 31],
-) -> *mut responses::GetUnsealedRangeResponse {
-    let mut response: responses::GetUnsealedRangeResponse = Default::default();
-
-    let sealed_path_buf = c_str_to_pbuf(sealed_path);
-    let output_path_buf = c_str_to_pbuf(output_path);
-
-    match internal::get_unsealed_range(
-        &**ss_ptr,
-        &sealed_path_buf,
-        &output_path_buf,
-        *prover_id,
-        *sector_id,
-        start_offset,
-        num_bytes,
-    ) {
-        Ok(num_bytes_unsealed) => {
-            if num_bytes_unsealed == num_bytes {
-                response.status_code = FCPResponseStatus::FCPNoError;
-            } else {
-                response.status_code = FCPResponseStatus::FCPReceiverError;
-
-                let msg = CString::new(format!(
-                    "expected to unseal {}-bytes, but unsealed {}-bytes",
-                    num_bytes, num_bytes_unsealed
-                ))
-                .unwrap();
-                response.error_msg = msg.as_ptr();
-                mem::forget(msg);
-            }
-            response.num_bytes_written = num_bytes_unsealed;
-        }
-        Err(err) => {
-            let (code, ptr) = err_code_and_msg(&err.into());
-            response.status_code = code;
-            response.error_msg = ptr;
-        }
-    }
-
-    raw_ptr(response)
-}
-
-/// Unseals an entire sealed sector and writes the resulting raw (unpreprocessed) sector to `output_path`.
-/// Returns a status code indicating success or failure.
-///
-/// # Arguments
-///
-/// * `ss_ptr`      - pointer to a boxed SectorStore
-/// * `sealed_path` - path of sealed sector-file
-/// * `output_path` - path where sector file's unsealed bytes should be written
-/// * `prover_id`   - uniquely identifies the prover
-/// * `sector_id`   - uniquely identifies the sector
-#[no_mangle]
-pub unsafe extern "C" fn get_unsealed(
-    ss_ptr: *mut Box<SectorStore>,
-    sealed_path: SectorAccess,
-    output_path: SectorAccess,
-    prover_id: &[u8; 31],
-    sector_id: &[u8; 31],
-) -> *mut responses::GetUnsealedResponse {
-    let mut response: responses::GetUnsealedResponse = Default::default();
-
-    // How to read: &**ss_ptr throughout:
-    // ss_ptr is a pointer to a Box
-    // *ss_ptr is the Box.
-    // **ss_ptr is the Box's content: a SectorStore.
-    // &**ss_ptr is a reference to the SectorStore.
-    let sector_store = &**ss_ptr;
-
-    let sealed_path_buf = c_str_to_pbuf(sealed_path);
-    let output_path_buf = c_str_to_pbuf(output_path);
-    let sector_bytes = sector_store.config().max_unsealed_bytes_per_sector();
-
-    match internal::get_unsealed_range(
-        sector_store,
-        &sealed_path_buf,
-        &output_path_buf,
-        *prover_id,
-        *sector_id,
-        0,
-        sector_bytes,
-    ) {
-        Ok(num_bytes) => {
-            if num_bytes == sector_bytes {
-                response.status_code = FCPResponseStatus::FCPNoError;
-            } else {
-                response.status_code = FCPResponseStatus::FCPReceiverError;
-
-                let msg = CString::new(format!(
-                    "expected to unseal {}-bytes, but unsealed {}-bytes",
-                    sector_bytes, num_bytes
-                ))
-                .unwrap();
-                response.error_msg = msg.as_ptr();
-                mem::forget(msg);
-            }
-        }
-        Err(err) => {
-            let (code, ptr) = err_code_and_msg(&err.into());
-            response.status_code = code;
-            response.error_msg = ptr;
-        }
     }
 
     raw_ptr(response)
