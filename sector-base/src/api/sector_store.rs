@@ -41,7 +41,7 @@ pub trait SectorManager {
         &self,
         access: &str,
         start_offset: u64,
-        numb_bytes: u64,
+        num_bytes: u64,
     ) -> Result<Vec<u8>, SectorManagerErr>;
 }
 
