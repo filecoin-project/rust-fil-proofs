@@ -104,16 +104,16 @@ fn do_the_work<H: 'static>(
 {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-    info!(FCP_LOG, "data size={}", prettyb(data_size); "target" => "config");
-    info!(FCP_LOG, "m={}", m; "target" => "config");
-    info!(FCP_LOG, "expansion_degree={}", expansion_degree; "target" => "config");
-    info!(FCP_LOG, "sloth={}", sloth_iter; "target" => "config");
-    info!(FCP_LOG, "challenge_count={}", challenge_count; "target" => "config");
-    info!(FCP_LOG, "layers={}", layers; "target" => "config");
-    info!(FCP_LOG, "partitions={}", partitions; "target" => "config");
-    info!(FCP_LOG, "circuit={:?}", circuit; "target" => "config");
-    info!(FCP_LOG, "groth={:?}", groth; "target" => "config");
-    info!(FCP_LOG, "bench={:?}", bench; "target" => "config");
+    info!(FCP_LOG, "data size: {}", prettyb(data_size); "target" => "config");
+    info!(FCP_LOG, "m: {}", m; "target" => "config");
+    info!(FCP_LOG, "expansion_degree: {}", expansion_degree; "target" => "config");
+    info!(FCP_LOG, "sloth: {}", sloth_iter; "target" => "config");
+    info!(FCP_LOG, "challenge_count: {}", challenge_count; "target" => "config");
+    info!(FCP_LOG, "layers: {}", layers; "target" => "config");
+    info!(FCP_LOG, "partitions: {}", partitions; "target" => "config");
+    info!(FCP_LOG, "circuit: {:?}", circuit; "target" => "config");
+    info!(FCP_LOG, "groth: {:?}", groth; "target" => "config");
+    info!(FCP_LOG, "bench: {:?}", bench; "target" => "config");
 
     info!(FCP_LOG, "generating fake data"; "target" => "status");
 
@@ -141,7 +141,7 @@ fn do_the_work<H: 'static>(
         challenge_count,
     };
 
-    info!(FCP_LOG, "running setup"; "target" => "status");
+    info!(FCP_LOG, "running setup");
     start_profile("setup");
     let pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
     stop_profile();
@@ -149,7 +149,7 @@ fn do_the_work<H: 'static>(
     let start = Instant::now();
     let mut param_duration = Duration::new(0, 0);
 
-    info!(FCP_LOG, "running replicate"; "target" => "status");
+    info!(FCP_LOG, "running replicate");
 
     start_profile("replicate");
     let (tau, aux) =
@@ -171,7 +171,7 @@ fn do_the_work<H: 'static>(
 
     param_duration += start.elapsed();
 
-    info!(FCP_LOG, "replication_time={:?}", param_duration; "target" => "stats");
+    info!(FCP_LOG, "replication_time: {:?}", param_duration; "target" => "stats");
 
     let mut total_proving = Duration::new(0, 0);
     info!(FCP_LOG, "generating one proof");
@@ -199,10 +199,10 @@ fn do_the_work<H: 'static>(
     //
     //info!(target: "stats", "Average proof size {}", prettyb(avg_proof_size));
 
-    info!(FCP_LOG, "vanilla_proving_time={:?} seconds", proving_avg; "target" => "stats");
+    info!(FCP_LOG, "vanilla_proving_time: {:?} seconds", proving_avg; "target" => "stats");
 
     let samples: u32 = 5;
-    info!(FCP_LOG, "sampling verifying (samples={})", samples);
+    info!(FCP_LOG, "sampling verifying (samples: {})", samples);
     let mut total_verifying = Duration::new(0, 0);
 
     start_profile("verify");
@@ -222,7 +222,7 @@ fn do_the_work<H: 'static>(
     let verifying_avg = total_verifying / samples;
     let verifying_avg = f64::from(verifying_avg.subsec_nanos()) / 1_000_000_000f64
         + (verifying_avg.as_secs() as f64);
-    info!(FCP_LOG, "average_vanilla_verifying_time={:?} seconds", verifying_avg; "target" => "stats");
+    info!(FCP_LOG, "average_vanilla_verifying_time: {:?} seconds", verifying_avg; "target" => "stats");
 
     if circuit || groth || bench {
         let engine_params = JubjubBls12::new();
@@ -245,8 +245,8 @@ fn do_the_work<H: 'static>(
             .synthesize(&mut cs)
             .expect("failed to synthesize circuit");
 
-            info!(FCP_LOG, "circuit_num_inputs={}", cs.num_inputs(); "target" => "stats");
-            info!(FCP_LOG, "circuit_num_constraints={}", cs.num_constraints(); "target" => "stats");
+            info!(FCP_LOG, "circuit_num_inputs: {}", cs.num_inputs(); "target" => "stats");
+            info!(FCP_LOG, "circuit_num_constraints: {}", cs.num_constraints(); "target" => "stats");
 
             if circuit {
                 println!("{}", cs.pretty_print());
@@ -264,12 +264,12 @@ fn do_the_work<H: 'static>(
                         .unwrap();
                 stop_profile();
                 let groth_proving = start.elapsed();
-                info!(FCP_LOG, "groth_proving_time={:?} seconds", groth_proving; "target" => "stats");
+                info!(FCP_LOG, "groth_proving_time: {:?} seconds", groth_proving; "target" => "stats");
                 total_proving += groth_proving;
-                info!(FCP_LOG, "combined_proving_time={:?} seconds", total_proving; "target" => "stats");
+                info!(FCP_LOG, "combined_proving_time: {:?} seconds", total_proving; "target" => "stats");
                 result
             };
-            info!(FCP_LOG, "sampling groth verifying (samples={})", samples);
+            info!(FCP_LOG, "sampling groth verifying (samples: {})", samples);
             let verified = {
                 let mut total_groth_verifying = Duration::new(0, 0);
                 let mut result = true;
@@ -285,7 +285,7 @@ fn do_the_work<H: 'static>(
                 }
                 stop_profile();
                 let avg_groth_verifying = total_groth_verifying / samples;
-                info!(FCP_LOG, "average_groth_verifying_time={:?} seconds", avg_groth_verifying; "target" => "stats");
+                info!(FCP_LOG, "average_groth_verifying_time: {:?} seconds", avg_groth_verifying; "target" => "stats");
                 result
             };
             assert!(verified);
@@ -400,9 +400,9 @@ fn main() {
     let circuit = matches.is_present("circuit");
     let extract = matches.is_present("extract");
 
-    info!(FCP_LOG, "circuit={}", circuit);
-    info!(FCP_LOG, "hasher={}", hasher; "target" => "config");
+    println!("circuit: {:?}", circuit);
 
+    info!(FCP_LOG, "hasher: {}", hasher; "target" => "config");
     match hasher.as_ref() {
         "pedersen" => {
             do_the_work::<PedersenHasher>(

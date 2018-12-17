@@ -50,10 +50,10 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
     let challenges = vec![2; challenge_count];
 
-    info!(FCP_LOG, "data_size={}", prettyb(data_size); "target" => "config");
-    info!(FCP_LOG, "challenge_count={}", challenge_count; "target" => "config");
-    info!(FCP_LOG, "m={}", m; "target" => "config");
-    info!(FCP_LOG, "sloth={}", sloth_iter; "target" => "config");
+    info!(FCP_LOG, "data_size:  {}", prettyb(data_size); "target" => "config");
+    info!(FCP_LOG, "challenge_count: {}", challenge_count; "target" => "config");
+    info!(FCP_LOG, "m: {}", m; "target" => "config");
+    info!(FCP_LOG, "sloth: {}", sloth_iter; "target" => "config");
 
     info!(FCP_LOG, "generating fake data");
 
@@ -98,7 +98,10 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     let mut total_verifying = Duration::new(0, 0);
 
     let mut proofs = Vec::with_capacity(samples as usize);
-    info!(FCP_LOG, "sampling proving & verifying"; "samples" => samples, "target" => "stats");
+    info!(
+        FCP_LOG,
+        "sampling proving & verifying (samples: {})", samples
+    );
     for _ in 0..samples {
         let start = Instant::now();
         let proof =
@@ -127,10 +130,10 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     let verifying_avg = f64::from(verifying_avg.subsec_nanos()) / 1_000_000_000f64
         + (verifying_avg.as_secs() as f64);
 
-    info!(FCP_LOG, "avg_proving_time={:?} seconds", proving_avg; "target" => "stats");
-    info!(FCP_LOG, "avg_verifying_time={:?} seconds", verifying_avg; "target" => "stats");
+    info!(FCP_LOG, "avg_proving_time: {:?} seconds", proving_avg; "target" => "stats");
+    info!(FCP_LOG, "avg_verifying_time: {:?} seconds", verifying_avg; "target" => "stats");
     info!(FCP_LOG, "replication_time={:?}", param_duration; "target" => "stats");
-    info!(FCP_LOG, "avg_proof_size={}", prettyb(avg_proof_size); "target" => "stats");
+    info!(FCP_LOG, "avg_proof_size: {}", prettyb(avg_proof_size); "target" => "stats");
 }
 
 fn main() {
@@ -179,7 +182,7 @@ fn main() {
     let challenge_count = value_t!(matches, "challenges", usize).unwrap();
 
     let hasher = value_t!(matches, "hasher", String).unwrap();
-    info!(FCP_LOG, "hasher={}", hasher; "target" => "config");
+    info!(FCP_LOG, "hasher: {}", hasher; "target" => "config");
     match hasher.as_ref() {
         "pedersen" => {
             do_the_work::<PedersenHasher>(data_size, m, sloth_iter, challenge_count);

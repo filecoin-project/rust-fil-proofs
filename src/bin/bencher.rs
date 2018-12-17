@@ -24,6 +24,7 @@ use std::time::{Duration, SystemTime};
 
 use clap::{App, Arg};
 use failure::Error;
+use filecoin_proofs::error::ExpectWithBacktrace;
 use glob::glob;
 use human_size::{Byte, Kibibyte, SpecificSize};
 use permutate::Permutator;
@@ -459,21 +460,26 @@ struct LogResult {
 impl LogResult {
     fn from_str(raw: &str) -> Result<Self> {
         let lines = raw.trim().split('\n').map(|l| {
-            let raw = l.trim().split("[0m").collect::<Vec<&str>>()[1];
-            let parts = raw.trim().split(" > ").collect::<Vec<&str>>();
-            let system = parts[0].trim();
-            let kv = parts[1].trim().split(": ").collect::<Vec<&str>>();
+            let parsed: serde_json::Result<HashMap<String, String>> = serde_json::from_str(l);
+            let parsed = parsed.expects("The bencher requires JSON log-output.");
+
+            let raw = parsed.get("msg").unwrap();
+            let system = parsed
+                .get("target")
+                .map(|x| x.clone())
+                .unwrap_or(String::from(""));
+            let kv = raw.trim().split(": ").collect::<Vec<&str>>();
             let key = kv[0].trim();
             let value = if kv.len() > 1 { kv[1].trim() } else { "" };
 
-            (system, key, value)
+            (String::from(system), String::from(key), String::from(value))
         });
 
         let mut config = HashMap::new();
         let mut stats = HashMap::new();
 
         for (system, key, value) in lines {
-            match system {
+            match system.as_ref() {
                 "config" => {
                     config.insert(key.to_owned(), value.to_owned());
                 }
@@ -551,6 +557,10 @@ fn run_benchmark(name: &str, config: &Case) -> Result<Vec<BenchmarkResult>> {
 }
 
 fn main() {
+    // the bencher output-parsing code requires JSON, and an environment
+    // variable is the mechanism for enabling JSON-log support
+    std::env::set_var("RUST_PROOFS_LOG_JSON", "true");
+
     let matches = App::new("Rust Proofs Bencher")
         .version("1.0")
         .about("Benchmark all the things")
@@ -637,20 +647,19 @@ fn test_time_result_from_str() {
 }
 
 #[test]
-fn test_log_result_from_str() {
+fn test_log_results_str_json() {
     let res = LogResult::from_str("
-2018-10-31T15:35:50Z \u{1b}[32mINFO \u{1b}[0m config > constraint system: Groth
-2018-10-31T15:35:50Z \u{1b}[32mINFO \u{1b}[0m config > data_size:  1 kB
-2018-10-31T15:35:50Z \u{1b}[32mINFO \u{1b}[0m config > challenge_count: 1
-2018-10-31T15:35:50Z \u{1b}[32mINFO \u{1b}[0m config > m: 6
-2018-10-31T15:35:50Z \u{1b}[32mINFO \u{1b}[0m config > sloth: 0
-2018-10-31T15:35:50Z \u{1b}[32mINFO \u{1b}[0m config > tree_depth: 5
-2018-10-31T15:35:50Z \u{1b}[32mINFO \u{1b}[0m params > generating new groth params
-2018-10-31T15:35:58Z \u{1b}[32mINFO \u{1b}[0m params > writing params to cache: \"/tmp/filecoin-proofs-cache-drgporep-1024-1-6-0\"
-2018-10-31T15:35:58Z \u{1b}[32mINFO \u{1b}[0m params > generating verification key
-2018-10-31T15:36:03Z \u{1b}[32mINFO \u{1b}[0m stats > avg_proving_time: 0.837172388 seconds
-2018-10-31T15:36:03Z \u{1b}[32mINFO \u{1b}[0m stats > avg_verifying_time: 0.000000025 seconds
-2018-10-31T15:36:03Z \u{1b}[32mINFO \u{1b}[0m stats > params_generation_time: 8.670260628s
+{\"msg\":\"constraint system: Groth\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:19.315918-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:86 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"config\"}
+{\"msg\":\"data_size:  1 kB\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:19.316948-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:87 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"config\"}
+{\"msg\":\"challenge_count: 1\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:19.316961-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:88 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"config\"}
+{\"msg\":\"m: 6\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:19.316970-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:89 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"config\"}
+{\"msg\":\"sloth: 0\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:19.316978-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:90 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"config\"}
+{\"msg\":\"tree_depth: 5\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:19.317011-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:91 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"config\"}
+{\"msg\":\"reading groth params from cache: \\\"/tmp/filecoin-proofs-cache-multi-challenge merklepor-1024-1-6-0\\\"\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:19.317046-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:102 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"params\"}
+{\"msg\":\"generating verification key\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:19.388725-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:123 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"params\"}
+{\"msg\":\"avg_proving_time: 0.213533235 seconds\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:20.480250-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:180 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"stats\"}
+{\"msg\":\"avg_verifying_time: 0.003935171 seconds\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:20.480273-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:181 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"stats\"}
+{\"msg\":\"params_generation_time: 76.536768ms\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:20.480283-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:182 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"stats\"}
 
 ").unwrap();
 
@@ -658,6 +667,6 @@ fn test_log_result_from_str() {
     assert_eq!(res.config.get("data_size").unwrap(), "1 kB",);
     assert_eq!(
         res.stats.get("avg_proving_time").unwrap(),
-        "0.837172388 seconds"
+        "0.213533235 seconds"
     );
 }
