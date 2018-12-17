@@ -7,4 +7,4 @@ exclude = ["MerkleTree"]
 # bindings
 parse_deps = true
 # A white list of crate names that are allowed to be parsed
-include = ["sector-base", "sector_base"]
+include = ["sector_base"]
