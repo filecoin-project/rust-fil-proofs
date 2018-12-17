@@ -138,7 +138,7 @@ impl SectorManager for DiskManager {
         self.new_sector_access(Path::new(&self.staging_path))
     }
 
-    fn num_unsealed_bytes(&self, access: &String) -> Result<u64, SectorManagerErr> {
+    fn num_unsealed_bytes(&self, access: &str) -> Result<u64, SectorManagerErr> {
         OpenOptions::new()
             .read(true)
             .open(access)
@@ -150,7 +150,7 @@ impl SectorManager for DiskManager {
             .and_then(|n| n)
     }
 
-    fn truncate_unsealed(&self, access: &String, size: u64) -> Result<(), SectorManagerErr> {
+    fn truncate_unsealed(&self, access: &str, size: u64) -> Result<(), SectorManagerErr> {
         // I couldn't wrap my head around all ths result mapping, so here it is all laid out.
         match OpenOptions::new().write(true).open(&access) {
             Ok(mut file) => match almost_truncate_to_unpadded_bytes(&mut file, size) {
@@ -165,7 +165,7 @@ impl SectorManager for DiskManager {
     }
 
     // TODO: write_and_preprocess should refuse to write more data than will fit. In that case, return 0.
-    fn write_and_preprocess(&self, access: &String, data: &[u8]) -> Result<u64, SectorManagerErr> {
+    fn write_and_preprocess(&self, access: &str, data: &[u8]) -> Result<u64, SectorManagerErr> {
         OpenOptions::new()
             .read(true)
             .write(true)
@@ -178,13 +178,13 @@ impl SectorManager for DiskManager {
             })
     }
 
-    fn delete_staging_sector_access(&self, access: &String) -> Result<(), SectorManagerErr> {
+    fn delete_staging_sector_access(&self, access: &str) -> Result<(), SectorManagerErr> {
         remove_file(access).map_err(|err| SectorManagerErr::CallerError(format!("{:?}", err)))
     }
 
     fn read_raw(
         &self,
-        access: &String,
+        access: &str,
         start_offset: u64,
         num_bytes: u64,
     ) -> Result<Vec<u8>, SectorManagerErr> {
@@ -394,7 +394,7 @@ mod tests {
         ))
     }
 
-    fn read_all_bytes(access: &String) -> Vec<u8> {
+    fn read_all_bytes(access: &str) -> Vec<u8> {
         let mut file = File::open(access).unwrap();
         let mut buf = Vec::new();
         file.read_to_end(&mut buf).unwrap();
