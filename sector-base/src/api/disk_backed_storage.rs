@@ -338,49 +338,16 @@ impl SectorConfig for FakeConfig {
 }
 
 #[cfg(test)]
-mod non_ffi_tests {
-    use tempfile;
-
+pub mod tests {
     use super::*;
 
-    fn create_storage() -> ConcreteSectorStore {
-        let staging_path = tempfile::tempdir().unwrap().path().to_owned();
-        let sealed_path = tempfile::tempdir().unwrap().path().to_owned();
-
-        new_sector_store(
-            &ConfiguredStore::ProofTest,
-            String::from(sealed_path.to_str().unwrap()),
-            String::from(staging_path.to_str().unwrap()),
-        )
-    }
-
-    #[test]
-    fn deletes_staging_access() {
-        let store = create_storage();
-        let access = store.manager().new_staging_sector_access().unwrap();
-
-        assert!(store.manager().read_raw(&access, 0, 0).is_ok());
-
-        assert!(store
-            .manager()
-            .delete_staging_sector_access(&access)
-            .is_ok());
-
-        assert!(store.manager().read_raw(&access, 0, 0).is_err());
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use std::fs::{create_dir_all, File};
+    use crate::io::fr32::FR32_PADDING_MAP;
+    use std::fs::create_dir_all;
+    use std::fs::File;
     use std::io::Read;
     use tempfile;
 
-    use crate::io::fr32::FR32_PADDING_MAP;
-
-    fn create_storage() -> Box<SectorStore> {
+    fn create_sector_store(cs: &ConfiguredStore) -> Box<SectorStore> {
         let staging_path = tempfile::tempdir().unwrap().path().to_owned();
         let sealed_path = tempfile::tempdir().unwrap().path().to_owned();
 
@@ -388,7 +355,7 @@ mod tests {
         create_dir_all(&sealed_path).expect("failed to create sealed dir");
 
         Box::new(new_sector_store(
-            &ConfiguredStore::ProofTest,
+            &cs,
             sealed_path.to_str().unwrap().to_owned(),
             staging_path.to_str().unwrap().to_owned(),
         ))
@@ -403,8 +370,24 @@ mod tests {
     }
 
     #[test]
+    fn max_unsealed_bytes_per_sector_checks() {
+        let xs = vec![
+            (ConfiguredStore::Live, 1065353216),
+            (ConfiguredStore::Test, 1016),
+            (ConfiguredStore::ProofTest, 127),
+        ];
+
+        for (configured_store, num_bytes) in xs {
+            let storage: Box<SectorStore> = create_sector_store(&configured_store);
+            let cfg = storage.config();
+            assert_eq!(cfg.max_unsealed_bytes_per_sector(), num_bytes);
+        }
+    }
+
+    #[test]
     fn unsealed_sector_write_and_truncate() {
-        let storage: Box<SectorStore> = create_storage();
+        let configured_store = ConfiguredStore::ProofTest;
+        let storage: Box<SectorStore> = create_sector_store(&configured_store);
         let mgr = storage.manager();
 
         let access = mgr
@@ -480,5 +463,22 @@ mod tests {
                 assert_eq!(num_bytes, num_bytes_written as usize);
             }
         }
+    }
+
+    #[test]
+    fn deletes_staging_access() {
+        let configured_store = ConfiguredStore::ProofTest;
+
+        let store = create_sector_store(&configured_store);
+        let access = store.manager().new_staging_sector_access().unwrap();
+
+        assert!(store.manager().read_raw(&access, 0, 0).is_ok());
+
+        assert!(store
+            .manager()
+            .delete_staging_sector_access(&access)
+            .is_ok());
+
+        assert!(store.manager().read_raw(&access, 0, 0).is_err());
     }
 }
