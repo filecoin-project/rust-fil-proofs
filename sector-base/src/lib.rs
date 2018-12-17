@@ -11,7 +11,6 @@ extern crate libc;
 extern crate pairing;
 extern crate rand;
 extern crate storage_proofs;
-extern crate proofs_config;
 
 #[cfg(test)]
 extern crate tempfile;
