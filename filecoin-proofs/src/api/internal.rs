@@ -167,7 +167,13 @@ pub fn seal(
     prover_id_in: FrSafe,
     sector_id_in: FrSafe,
 ) -> Result<(Commitment, Commitment, Commitment, SnarkProof)> {
-    seal_2(sector_store.config(), in_path, out_path, prover_id_in, sector_id_in)
+    seal_2(
+        sector_store.config(),
+        in_path,
+        out_path,
+        prover_id_in,
+        sector_id_in,
+    )
 }
 
 pub fn seal_2(
