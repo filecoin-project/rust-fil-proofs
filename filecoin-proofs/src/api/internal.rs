@@ -345,7 +345,7 @@ fn perform_replication<T: AsRef<Path>>(
 
 fn write_data<T: AsRef<Path>>(out_path: T, data: &[u8]) -> Result<()> {
     // Write replicated data to out_path.
-    let f_out = File::create(out_path.as_ref())?;
+    let f_out = File::create(out_path)?;
     let mut buf_writer = BufWriter::new(f_out);
     buf_writer.write_all(&data)?;
     Ok(())
