@@ -11,6 +11,7 @@ use sapling_crypto::jubjub::JubjubBls12;
 use sector_base::api::disk_backed_storage::REAL_SECTOR_SIZE;
 use sector_base::api::sector_store::SectorConfig;
 use sector_base::io::fr32::write_unpadded;
+use std::path::Path;
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
@@ -166,10 +167,10 @@ pub struct SealOutput {
     pub snark_proof: SnarkProof,
 }
 
-pub fn seal(
+pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     sector_config: &SectorConfig,
-    in_path: &PathBuf,
-    out_path: &PathBuf,
+    in_path: T,
+    out_path: T,
     prover_id_in: &FrSafe,
     sector_id_in: &FrSafe,
 ) -> Result<SealOutput> {
@@ -212,7 +213,7 @@ pub fn seal(
     let compound_public_params = ZigZagCompound::setup(&compound_setup_params)?;
 
     let (tau, aux) = perform_replication(
-        &out_path,
+        out_path,
         &compound_public_params.vanilla_params,
         &replica_id,
         &mut data,
@@ -305,8 +306,8 @@ fn delay_get_unsealed_range(base_seconds: u32) {
     thread::sleep(delay);
 }
 
-fn perform_replication(
-    out_path: &PathBuf,
+fn perform_replication<T: AsRef<Path>>(
+    out_path: T,
     public_params: &<ZigZagDrgPoRep<DefaultTreeHasher> as ProofScheme>::PublicParams,
     replica_id: &<DefaultTreeHasher as Hasher>::Domain,
     data: &mut [u8],
@@ -342,18 +343,18 @@ fn perform_replication(
     }
 }
 
-fn write_data(out_path: &PathBuf, data: &[u8]) -> Result<()> {
+fn write_data<T: AsRef<Path>>(out_path: T, data: &[u8]) -> Result<()> {
     // Write replicated data to out_path.
-    let f_out = File::create(out_path)?;
+    let f_out = File::create(out_path.as_ref())?;
     let mut buf_writer = BufWriter::new(f_out);
     buf_writer.write_all(&data)?;
     Ok(())
 }
 
-pub fn get_unsealed_range(
+pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     sector_config: &SectorConfig,
-    sealed_path: &PathBuf,
-    output_path: &PathBuf,
+    sealed_path: T,
+    output_path: T,
     prover_id_in: &FrSafe,
     sector_id_in: &FrSafe,
     offset: u64,
@@ -527,14 +528,8 @@ mod tests {
             written_contents.push(contents);
         }
 
-        let seal_output = seal(
-            cfg,
-            &PathBuf::from(&staged_access),
-            &PathBuf::from(&sealed_access),
-            &prover_id,
-            &sector_id,
-        )
-        .expect("failed to seal");
+        let seal_output = seal(cfg, &staged_access, &sealed_access, &prover_id, &sector_id)
+            .expect("failed to seal");
 
         let SealOutput {
             comm_r,
@@ -568,8 +563,8 @@ mod tests {
             cfg.max_unsealed_bytes_per_sector(),
             get_unsealed_range(
                 cfg,
-                &PathBuf::from(&sealed_access),
-                &PathBuf::from(&unseal_access),
+                &sealed_access,
+                &unseal_access,
                 &prover_id,
                 &sector_id,
                 0,
@@ -755,8 +750,8 @@ mod tests {
 
         let _ = get_unsealed_range(
             h.store.config(),
-            &PathBuf::from(&h.sealed_access),
-            &PathBuf::from(&unseal_access),
+            &h.sealed_access,
+            &unseal_access,
             &h.prover_id,
             &h.sector_id,
             0,
