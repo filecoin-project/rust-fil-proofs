@@ -488,169 +488,405 @@ mod tests {
         (0..num_bytes_to_make).map(|_| rng.gen()).collect()
     }
 
-    #[test]
-    #[ignore] // Slow test – run only when compiled for release.
-    fn seal_verify_unseal_read_test() {
-        let test_cases = vec![
-            (ConfiguredStore::Test, 0, 0),
-            (ConfiguredStore::Test, 5, 0),
-            (ConfiguredStore::Test, 0, 5),
-            (ConfiguredStore::Test, 5, 5),
-            (ConfiguredStore::ProofTest, 0, 0),
-            (ConfiguredStore::ProofTest, 5, 0),
-            (ConfiguredStore::ProofTest, 0, 5),
-            (ConfiguredStore::ProofTest, 5, 5),
-        ];
+    fn make_data_for_storage(cfg: &SectorConfig, space_for_padding: usize) -> Vec<u8> {
+        make_random_bytes(cfg.max_unsealed_bytes_per_sector() - (space_for_padding as u64))
+    }
 
-        for (cs, byte_padding_amount, offset) in test_cases {
-            let store = create_sector_store(&cs);
-            let mgr = store.manager();
-            let cfg = store.config();
+    fn seal_verify_aux(cs: ConfiguredStore, byte_padding_amount: usize) {
+        let store = create_sector_store(&cs);
 
-            let staged_access = mgr
-                .new_staging_sector_access()
-                .expect("could not create staging access");
+        let mgr = store.manager();
+        let cfg = store.config();
 
-            let sealed_access = mgr
-                .new_sealed_sector_access()
-                .expect("could not create sealed access");
+        let staged_access = mgr
+            .new_staging_sector_access()
+            .expect("could not create staging access");
 
-            let unseal_access = mgr
-                .new_staging_sector_access()
-                .expect("could not create unseal access");
+        let sealed_access = mgr
+            .new_sealed_sector_access()
+            .expect("could not create sealed access");
 
-            let prover_id = &[2; 31];
-            let sector_id = &[0; 31];
+        let prover_id = &[2; 31];
+        let sector_id = &[0; 31];
 
-            let contents =
-                make_random_bytes(cfg.max_unsealed_bytes_per_sector() - byte_padding_amount);
+        let contents = make_data_for_storage(cfg, byte_padding_amount);
 
-            let range_length = contents.len() as u64 - offset;
-
+        assert_eq!(
+            contents.len() as u64,
             mgr.write_and_preprocess(&staged_access, &contents)
-                .expect("failed to write and preprocess");
+                .expect("failed to write and preprocess")
+        );
 
-            let SealOutput {
+        let SealOutput {
+            comm_r,
+            comm_d,
+            comm_r_star,
+            snark_proof,
+        } = seal(
+            cfg,
+            &PathBuf::from(&staged_access),
+            &PathBuf::from(&sealed_access),
+            prover_id,
+            sector_id,
+        )
+        .expect("failed to seal");
+
+        // valid commitments
+        {
+            let is_valid = verify_seal(
+                cfg,
                 comm_r,
                 comm_d,
                 comm_r_star,
-                snark_proof,
-            } = seal(
-                cfg,
-                &PathBuf::from(&staged_access),
-                &PathBuf::from(&sealed_access),
                 prover_id,
                 sector_id,
+                &snark_proof,
             )
-            .expect("failed to seal");
+            .expect("failed to run verify_seal");
 
-            // valid commitments
-            {
-                let is_valid = verify_seal(
-                    cfg,
-                    comm_r,
-                    comm_d,
-                    comm_r_star,
-                    prover_id,
-                    sector_id,
-                    &snark_proof,
-                )
-                .expect("failed to run verify_seal");
+            assert!(
+                is_valid,
+                "verification of valid proof failed for cs={:?}, byte_padding_amount={:?}",
+                cs, byte_padding_amount
+            );
+        }
 
-                assert!(is_valid, "verification of valid proof failed for cs={:?}, byte_padding_amount={:?}, offset={:?}",
-                        cs,
-                        byte_padding_amount,
-                        offset);
-            }
+        // invalid commitments
+        {
+            let is_valid = verify_seal(
+                cfg,
+                comm_d,
+                comm_r_star,
+                comm_r,
+                prover_id,
+                sector_id,
+                &snark_proof,
+            )
+            .expect("failed to run verify_seal");
 
-            // invalid commitments
-            {
-                let is_valid = verify_seal(
-                    cfg,
-                    comm_d,
-                    comm_r_star,
-                    comm_r,
-                    prover_id,
-                    sector_id,
-                    &snark_proof,
-                )
-                .expect("failed to run verify_seal");
-
-                // This should always fail, because we've rotated the commitments in
-                // the call. Note that comm_d is passed for comm_r and comm_r_star
-                // for comm_d.
-                assert!(
-                    !is_valid,
-                    "verification of invalid proof succeeded for cs={:?}, byte_padding_amount={:?}, offset={:?}",
-                    cs,
-                    byte_padding_amount,
-                    offset
-                );
-            }
-
-            // unseal and verify
-            {
-                let _ = get_unsealed_range(
-                    cfg,
-                    &PathBuf::from(&sealed_access),
-                    &PathBuf::from(&unseal_access),
-                    prover_id,
-                    sector_id,
-                    0,
-                    contents.len() as u64,
-                )
-                .expect("failed to unseal");
-
-                let mut file = File::open(&unseal_access).unwrap();
-                let mut buf_from_file = Vec::new();
-                file.read_to_end(&mut buf_from_file).unwrap();
-
-                let buf_from_read_raw = mgr
-                    .read_raw(&unseal_access, offset, buf_from_file.len() as u64)
-                    .expect("failed to read_raw a");
-                assert_eq!(
-                    &buf_from_file, &buf_from_read_raw,
-                    "contents differed for cs={:?}, byte_padding_amount={:?}, offset={:?}",
-                    cs, byte_padding_amount, offset
-                );
-
-                if offset == 0 {
-                    // TODO: What does this second test prove?
-                    let buf_from_read_raw_b = mgr
-                        .read_raw(&unseal_access, 1, buf_from_file.len() as u64 - 2)
-                        .expect("failed to read_raw b");
-
-                    assert_eq!(
-                        &buf_from_read_raw[1..buf_from_read_raw.len() - 1],
-                        &buf_from_read_raw_b[..],
-                        "buffers differed for in second read case cs={:?}, byte_padding_amount={:?}, offset={:?}",
-                        cs,
-                        byte_padding_amount,
-                        offset
-                    );
-                }
-
-                assert_eq!(
-                    contents.len(),
-                    buf_from_read_raw.len(),
-                    "length of original and unsealed contents differed for cs={:?}, byte_padding_amount={:?}, offset={:?}",
-                    cs,
-                    byte_padding_amount,
-                    offset
-                );
-
-                assert_eq!(
-                    contents[(offset as usize)..],
-                    buf_from_read_raw[0..(range_length as usize)],
-                    "original and unsealed contents differed for cs={:?}, byte_padding_amount={:?}, offset={:?}",
-                    cs,
-                    byte_padding_amount,
-                    offset
-                );
-            }
+            // This should always fail, because we've rotated the commitments in
+            // the call. Note that comm_d is passed for comm_r and comm_r_star
+            // for comm_d.
+            assert!(
+                !is_valid,
+                "verification of invalid proof succeeded for cs={:?}, byte_padding_amount={:?}",
+                cs, byte_padding_amount
+            );
         }
     }
 
+    fn seal_unsealed_roundtrip_aux(cs: ConfiguredStore, byte_padding_amount: usize) {
+        let store = create_sector_store(&cs);
+
+        let mgr = store.manager();
+        let cfg = store.config();
+
+        let unseal_access = mgr
+            .new_staging_sector_access()
+            .expect("could not create unseal access");
+
+        let staged_access = mgr
+            .new_staging_sector_access()
+            .expect("could not create staging access");
+
+        let sealed_access = mgr
+            .new_sealed_sector_access()
+            .expect("could not create sealed access");
+
+        let prover_id = &[2; 31];
+        let sector_id = &[0; 31];
+
+        let contents = make_data_for_storage(cfg, byte_padding_amount);
+
+        assert_eq!(
+            contents.len() as u64,
+            mgr.write_and_preprocess(&staged_access, &contents)
+                .expect("failed to write and preprocess")
+        );
+
+        let _ = seal(
+            cfg,
+            &PathBuf::from(&staged_access),
+            &PathBuf::from(&sealed_access),
+            prover_id,
+            sector_id,
+        )
+        .expect("failed to seal");
+
+        assert_eq!(
+            cfg.max_unsealed_bytes_per_sector(),
+            get_unsealed_range(
+                cfg,
+                &PathBuf::from(&sealed_access),
+                &PathBuf::from(&unseal_access),
+                prover_id,
+                sector_id,
+                0,
+                cfg.max_unsealed_bytes_per_sector(),
+            )
+            .expect("failed to unseal")
+        );
+
+        let mut file = File::open(&unseal_access).unwrap();
+        let mut buf = Vec::new();
+        file.read_to_end(&mut buf).unwrap();
+
+        // test A
+        {
+            let read_unsealed_buf = mgr
+                .read_raw(&unseal_access, 0, buf.len() as u64)
+                .expect("failed to read_raw a");
+
+            assert_eq!(
+                &buf, &read_unsealed_buf,
+                "test A contents differed for cs={:?}, byte_padding_amount={:?}",
+                cs, byte_padding_amount
+            );
+        }
+
+        // test B
+        {
+            let read_unsealed_buf = mgr
+                .read_raw(&unseal_access, 1, buf.len() as u64 - 2)
+                .expect("failed to read_raw a");
+
+            assert_eq!(
+                &buf[1..buf.len() - 1],
+                &read_unsealed_buf[..],
+                "test B contents differed for cs={:?}, byte_padding_amount={:?}",
+                cs,
+                byte_padding_amount
+            );
+        }
+
+        assert_eq!(
+            contents.len(),
+            buf.len() - byte_padding_amount,
+            "length of original and unsealed contents differed for cs={:?}, byte_padding_amount={:?}",
+            cs, byte_padding_amount
+        );
+
+        assert_eq!(
+            contents[..],
+            buf[0..contents.len()],
+            "original and unsealed contents differed for cs={:?}, byte_padding_amount={:?}",
+            cs,
+            byte_padding_amount
+        );
+    }
+
+    /*
+
+    TODO: create a way to run these super-slow-by-design tests manually.
+
+    fn seal_verify_live() {
+        seal_verify_aux(ConfiguredStore::Live, 0);
+        seal_verify_aux(ConfiguredStore::Live, 5);
+    }
+
+    fn seal_unsealed_roundtrip_live() {
+        seal_unsealed_roundtrip_aux(ConfiguredStore::Live, 0);
+        seal_unsealed_roundtrip_aux(ConfiguredStore::Live, 5);
+    }
+
+    fn seal_unsealed_range_roundtrip_live() {
+        seal_unsealed_range_roundtrip_aux(ConfiguredStore::Live, 0);
+        seal_unsealed_range_roundtrip_aux(ConfiguredStore::Live, 5);
+    }
+
+    */
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn seal_verify_test() {
+        seal_verify_aux(ConfiguredStore::Test, 0);
+        seal_verify_aux(ConfiguredStore::Test, 5);
+    }
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn seal_verify_proof_test() {
+        seal_verify_aux(ConfiguredStore::ProofTest, 0);
+        seal_verify_aux(ConfiguredStore::ProofTest, 5);
+    }
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn seal_unsealed_roundtrip_test() {
+        seal_unsealed_roundtrip_aux(ConfiguredStore::Test, 0);
+        seal_unsealed_roundtrip_aux(ConfiguredStore::Test, 5);
+    }
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn seal_unsealed_roundtrip_proof_test() {
+        seal_unsealed_roundtrip_aux(ConfiguredStore::ProofTest, 0);
+        seal_unsealed_roundtrip_aux(ConfiguredStore::ProofTest, 5);
+    }
+
+    //    #[test]
+    //    #[ignore] // Slow test – run only when compiled for release.
+    //    fn seal_verify_unseal_read_test() {
+    //        let test_cases = vec![
+    //            (ConfiguredStore::Test, 0, 0),
+    //            (ConfiguredStore::Test, 5, 0),
+    //            (ConfiguredStore::Test, 0, 5),
+    //            (ConfiguredStore::Test, 5, 5),
+    //            (ConfiguredStore::ProofTest, 0, 0),
+    //            (ConfiguredStore::ProofTest, 5, 0),
+    //            (ConfiguredStore::ProofTest, 0, 5),
+    //            (ConfiguredStore::ProofTest, 5, 5),
+    //        ];
+    //
+    //        for (cs, byte_padding_amount, offset) in test_cases {
+    //            let store = create_sector_store(&cs);
+    //            let mgr = store.manager();
+    //            let cfg = store.config();
+    //
+    //            let staged_access = mgr
+    //                .new_staging_sector_access()
+    //                .expect("could not create staging access");
+    //
+    //            let sealed_access = mgr
+    //                .new_sealed_sector_access()
+    //                .expect("could not create sealed access");
+    //
+    //            let unseal_access = mgr
+    //                .new_staging_sector_access()
+    //                .expect("could not create unseal access");
+    //
+    //            let prover_id = &[2; 31];
+    //            let sector_id = &[0; 31];
+    //
+    //            let contents =
+    //                make_random_bytes(cfg.max_unsealed_bytes_per_sector() - byte_padding_amount);
+    //
+    //            let range_length = contents.len() as u64 - offset;
+    //
+    //            mgr.write_and_preprocess(&staged_access, &contents)
+    //                .expect("failed to write and preprocess");
+    //
+    //            let SealOutput {
+    //                comm_r,
+    //                comm_d,
+    //                comm_r_star,
+    //                snark_proof,
+    //            } = seal(
+    //                cfg,
+    //                &PathBuf::from(&staged_access),
+    //                &PathBuf::from(&sealed_access),
+    //                prover_id,
+    //                sector_id,
+    //            )
+    //            .expect("failed to seal");
+    //
+    //            // valid commitments
+    //            {
+    //                let is_valid = verify_seal(
+    //                    cfg,
+    //                    comm_r,
+    //                    comm_d,
+    //                    comm_r_star,
+    //                    prover_id,
+    //                    sector_id,
+    //                    &snark_proof,
+    //                )
+    //                .expect("failed to run verify_seal");
+    //
+    //                assert!(is_valid, "verification of valid proof failed for cs={:?}, byte_padding_amount={:?}, offset={:?}",
+    //                        cs,
+    //                        byte_padding_amount,
+    //                        offset);
+    //            }
+    //
+    //            // invalid commitments
+    //            {
+    //                let is_valid = verify_seal(
+    //                    cfg,
+    //                    comm_d,
+    //                    comm_r_star,
+    //                    comm_r,
+    //                    prover_id,
+    //                    sector_id,
+    //                    &snark_proof,
+    //                )
+    //                .expect("failed to run verify_seal");
+    //
+    //                // This should always fail, because we've rotated the commitments in
+    //                // the call. Note that comm_d is passed for comm_r and comm_r_star
+    //                // for comm_d.
+    //                assert!(
+    //                    !is_valid,
+    //                    "verification of invalid proof succeeded for cs={:?}, byte_padding_amount={:?}, offset={:?}",
+    //                    cs,
+    //                    byte_padding_amount,
+    //                    offset
+    //                );
+    //            }
+    //
+    //            // unseal and verify
+    //            {
+    //                let _ = get_unsealed_range(
+    //                    cfg,
+    //                    &PathBuf::from(&sealed_access),
+    //                    &PathBuf::from(&unseal_access),
+    //                    prover_id,
+    //                    sector_id,
+    //                    0,
+    //                    contents.len() as u64,
+    //                )
+    //                .expect("failed to unseal");
+    //
+    //                let mut file = File::open(&unseal_access).unwrap();
+    //                let mut buf_from_file = Vec::new();
+    //                file.read_to_end(&mut buf_from_file).unwrap();
+    //
+    //                let buf_from_read_raw = mgr
+    //                    .read_raw(&unseal_access, offset, buf_from_file.len() as u64)
+    //                    .expect("failed to read_raw a");
+    //                assert_eq!(
+    //                    &buf_from_file, &buf_from_read_raw,
+    //                    "contents differed for cs={:?}, byte_padding_amount={:?}, offset={:?}",
+    //                    cs, byte_padding_amount, offset
+    //                );
+    //
+    //                if offset == 0 {
+    //                    // TODO: What does this second test prove?
+    //                    let buf_from_read_raw_b = mgr
+    //                        .read_raw(&unseal_access, 1, buf_from_file.len() as u64 - 2)
+    //                        .expect("failed to read_raw b");
+    //
+    //                    assert_eq!(
+    //                        &buf_from_read_raw[1..buf_from_read_raw.len() - 1],
+    //                        &buf_from_read_raw_b[..],
+    //                        "buffers differed for in second read case cs={:?}, byte_padding_amount={:?}, offset={:?}",
+    //                        cs,
+    //                        byte_padding_amount,
+    //                        offset
+    //                    );
+    //                }
+    //
+    //                assert_eq!(
+    //                    contents.len(),
+    //                    buf_from_read_raw.len(),
+    //                    "length of original and unsealed contents differed for cs={:?}, byte_padding_amount={:?}, offset={:?}",
+    //                    cs,
+    //                    byte_padding_amount,
+    //                    offset
+    //                );
+    //
+    //                assert_eq!(
+    //                    contents[(offset as usize)..],
+    //                    buf_from_read_raw[0..(range_length as usize)],
+    //                    "original and unsealed contents differed for cs={:?}, byte_padding_amount={:?}, offset={:?}",
+    //                    cs,
+    //                    byte_padding_amount,
+    //                    offset
+    //                );
+    //            }
+    //        }
+    //    }
+    //
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn write_and_preprocess_overwrites_unaligned_last_bytes() {
