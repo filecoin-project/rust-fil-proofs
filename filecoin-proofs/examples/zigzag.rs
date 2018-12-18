@@ -122,10 +122,6 @@ fn do_the_work<H: 'static>(
     let data = file_backed_mmap_from_random_bytes(nodes);
 
     let replica_id: H::Domain = rng.gen();
-    //    let data: Vec<u8> = (0..nodes)
-    //        .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
-    //        .collect();
-    //let mut data_copy = data.clone();
     let mut data_copy = file_backed_mmap_from(&data);
     let sp = layered_drgporep::SetupParams {
         drg_porep_setup_params: drgporep::SetupParams {
