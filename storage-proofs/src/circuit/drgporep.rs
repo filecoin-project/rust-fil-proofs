@@ -638,9 +638,9 @@ mod tests {
         let params = &JubjubBls12::new();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let nodes = 2;
+        let nodes = 5;
         let degree = 2;
-        let challenge = 1;
+        let challenges = vec![1, 3];
         let sloth_iter = 1;
 
         let replica_id: Fr = rng.gen();
@@ -648,13 +648,16 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::rand(rng)))
             .collect();
 
+        // Only generate seed once. It would be bad if we used different seeds in the same test.
+        let seed = new_seed();
+
         let setup_params = compound_proof::SetupParams {
             vanilla_params: &drgporep::SetupParams {
                 drg: drgporep::DrgParams {
                     nodes,
                     degree,
                     expansion_degree: 0,
-                    seed: new_seed(),
+                    seed,
                 },
                 sloth_iter,
             },
@@ -676,20 +679,19 @@ mod tests {
 
         let public_inputs = drgporep::PublicInputs::<PedersenDomain> {
             replica_id: replica_id.into(),
-            challenges: vec![challenge],
+            challenges,
             tau: Some(tau),
         };
         let private_inputs = drgporep::PrivateInputs { aux: &aux };
 
         // This duplication is necessary so public_params don't outlive public_inputs and private_inputs.
-        // TODO: Abstract it.
         let setup_params = compound_proof::SetupParams {
             vanilla_params: &drgporep::SetupParams {
                 drg: drgporep::DrgParams {
                     nodes,
                     degree,
                     expansion_degree: 0,
-                    seed: new_seed(),
+                    seed,
                 },
                 sloth_iter,
             },
