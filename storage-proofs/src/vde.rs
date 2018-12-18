@@ -33,7 +33,6 @@ where
         };
 
         let parents = graph.parents(node);
-        assert_eq!(parents.len(), graph.degree(), "wrong number of parents");
 
         let key = create_key::<H>(replica_id, node, &parents, data, degree)?;
         let start = data_at_node_offset(node);

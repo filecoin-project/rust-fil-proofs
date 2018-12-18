@@ -31,15 +31,7 @@ impl<D: Digester> Hasher for DigestHasher<D> {
     type Domain = DigestDomain;
     type Function = DigestFunction<D>;
 
-    fn kdf(data: &[u8], m: usize) -> Self::Domain {
-        assert_eq!(
-            data.len(),
-            32 * (1 + m),
-            "invalid input length: data.len(): {} m: {}",
-            data.len(),
-            m
-        );
-
+    fn kdf(data: &[u8], _m: usize) -> Self::Domain {
         <Self::Function as HashFunction<Self::Domain>>::hash(data)
     }
 

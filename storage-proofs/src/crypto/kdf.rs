@@ -32,12 +32,4 @@ mod tests {
         let res = kdf::<Bls12>(&data, m);
         assert_eq!(res, expected);
     }
-
-    #[test]
-    #[should_panic]
-    fn kdf_invalid_block_len() {
-        let data = vec![2u8; 1234];
-
-        kdf::<Bls12>(&data, 44);
-    }
 }

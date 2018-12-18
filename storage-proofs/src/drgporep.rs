@@ -239,7 +239,6 @@ where
 
         for i in 0..len {
             let challenge = pub_inputs.challenges[i] % pub_params.graph.size();
-            assert_ne!(challenge, 0, "cannot prove the first node");
 
             let tree_d = &priv_inputs.aux.tree_d;
             let tree_r = &priv_inputs.aux.tree_r;
@@ -340,7 +339,6 @@ where
             }
 
             let challenge = pub_inputs.challenges[i] % pub_params.graph.size();
-            assert_ne!(challenge, 0, "cannot prove the first node");
 
             if !proof.replica_nodes[i].proof.validate(challenge) {
                 println!("invalid replica node");
@@ -732,16 +730,20 @@ mod tests {
 
     table_tests! {
         prove_verify {
+            prove_verify_32_2_0(2, 0);
             prove_verify_32_2_1(2, 1);
 
+            prove_verify_32_3_0(3, 0);
             prove_verify_32_3_1(3, 1);
             prove_verify_32_3_2(3, 2);
 
+            prove_verify_32_10_0(10, 0);
             prove_verify_32_10_1(10, 1);
             prove_verify_32_10_2(10, 2);
             prove_verify_32_10_3(10, 3);
             prove_verify_32_10_4(10, 4);
             prove_verify_32_10_5(10, 5);
+            prove_verify_32_10_9(10, 9);
         }
     }
 

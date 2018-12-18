@@ -23,9 +23,8 @@ pub fn derive_challenges<D: Domain>(
             let hash = blake2s(bytes.as_slice());
             let big_challenge = BigUint::from_bytes_le(hash.as_slice());
 
-            // For now, we cannot try to prove the first or last node, so make sure the challenge can never be 0 or leaves - 1.
-            let big_mod_challenge = big_challenge % (leaves - 2);
-            big_mod_challenge.to_usize().unwrap() + 1
+            let big_mod_challenge = big_challenge % leaves;
+            big_mod_challenge.to_usize().unwrap()
         })
         .collect()
 }

@@ -120,7 +120,9 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
 
         match node {
             // Special case for the first node, it self references.
-            0 => vec![0; m as usize],
+            // First node has no parents. NOTE: this means the returned array has fewer elements
+            // than that for other nodes.
+            0 => Vec::new(),
             // Special case for the second node, it references only the first one.
             1 => vec![0; m as usize],
             _ => {
@@ -210,7 +212,7 @@ mod tests {
 
                 assert_eq!(g.size(), size, "wrong nodes count");
 
-                assert_eq!(g.parents(0), vec![0; degree as usize]);
+                assert!(g.parents(0).is_empty());
                 assert_eq!(g.parents(1), vec![0; degree as usize]);
 
                 for i in 2..size {
