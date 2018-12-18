@@ -315,14 +315,14 @@ pub trait Layers {
                             let drgpp = transfer_rx.recv().unwrap();
                             let tree_d = drgpp.graph.merkle_tree(&data_copy).unwrap();
 
-                            info!(SP_LOG, "returning tree"; "layer" => format!("{}", layer));
+                            debug!(SP_LOG, "returning tree"; "layer" => format!("{}", layer));
                             return_channel.send((layer, tree_d)).unwrap();
                         });
 
                         threads.push(thread);
 
                         if layer < layers {
-                            info!(SP_LOG, "encoding"; "layer {}" => format!("{}", layer));
+                            debug!(SP_LOG, "encoding"; "layer {}" => format!("{}", layer));
                             vde::encode(
                                 &current_drgpp.graph,
                                 current_drgpp.sloth_iter,
@@ -361,7 +361,7 @@ pub trait Layers {
                             comm_r: replica_tree.root(),
                             comm_d: data_tree.root(),
                         };
-                        info!(SP_LOG, "setting tau/aux"; "layer" => format!("{}", i - 1));
+                        debug!(SP_LOG, "setting tau/aux"; "layer" => format!("{}", i - 1));
                         taus.push(tau);
                     };
                     auxs.push(replica_tree.clone());
