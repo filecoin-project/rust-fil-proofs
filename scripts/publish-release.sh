@@ -17,7 +17,7 @@ fi
 
 echo "packing build"
 
-BUILD_NAME="$PROJECT_NAME-$(uname)"
+BUILD_NAME="$CIRCLE_PROJECT_NAME-$(uname)"
 BUILD_DIR="$CIRCLE_ARTIFACTS/$BUILD_NAME"
 BUILD_TAR="$BUILD_DIR.tar.gz"
 
