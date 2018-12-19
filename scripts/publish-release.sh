@@ -26,6 +26,8 @@ cp target/release/*.a $BUILD_DIR
 cp filecoin-proofs/*.h $BUILD_DIR
 tar -czf $BUILD_TAR $BUILD_DIR/*
 
+echo "created tar: $BUILD_TAR"
+
 echo "creating release"
 
 RELEASE_URL="https://api.github.com/repos/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/releases"
