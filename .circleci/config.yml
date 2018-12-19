@@ -209,6 +209,9 @@ jobs:
           name: Build (release)
           command: cargo +$(cat rust-toolchain) build --release --verbose --frozen --all
       - run:
+          name: Install jq
+          command: apt-get install jq -yqq
+      - run:
           name: Run publish-release.sh
           command: bash ./scripts/publish-release.sh
 
@@ -221,7 +224,8 @@ jobs:
       - run:
           name: Configure environment variables
           command: |
-            echo 'export PATH="${HOME}/.cargo/bin:${PATH}"' >> $BASH_ENV
+            echo 'export PATH="${HOME}/.cargo/bin:${HOME}/.bin:${PATH}"' >> $BASH_ENV
+            echo 'export CIRCLE_ARTIFACTS="/tmp"' >> $BASH_ENV
       - checkout
       - run:
           name: Install Rust
@@ -234,6 +238,9 @@ jobs:
       - run:
           name: Build (release)
           command: cargo +$(cat rust-toolchain) build --release --verbose --frozen --all
+      - run:
+          name: Install jq
+          command: mkdir $HOME/.bin && curl https://github.com/stedolan/jq/releases/download/jq-1.6/jq-osx-amd64 --output $HOME/.bin/jq
       - run:
           name: Run publish-release.sh
           command: bash ./scripts/publish-release.sh
