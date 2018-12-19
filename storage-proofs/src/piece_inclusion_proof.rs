@@ -16,7 +16,7 @@ type InclusionProof<T> = Proof<T>;
 /// Depending on the position of the nodes, not every hash provided will actually be needed.
 /// As a space optimization, and at the cost of greater complexity in the encoding, 'interior' nodes
 /// of either path may be omitted.
-pub struct FileInclusionProof<H: Hasher> {
+pub struct PieceInclusionProof<H: Hasher> {
     first_node_proof: InclusionProof<H::Domain>,
     last_node_proof: InclusionProof<H::Domain>,
     _h: PhantomData<H>,
@@ -30,7 +30,7 @@ pub struct FileInclusionProof<H: Hasher> {
 pub fn file_inclusion_proofs<H: Hasher>(
     tree: &MerkleTree<H::Domain, H::Function>,
     piece_lengths: &[usize],
-) -> Vec<FileInclusionProof<H>> {
+) -> Vec<PieceInclusionProof<H>> {
     bounds(piece_lengths)
         .iter()
         .map(|(start, end)| file_inclusion_proof(tree, *start, end - 1))
@@ -56,15 +56,15 @@ pub fn file_inclusion_proof<H: Hasher>(
     tree: &MerkleTree<H::Domain, H::Function>,
     first_node: usize,
     last_node: usize,
-) -> FileInclusionProof<H> {
-    FileInclusionProof {
+) -> PieceInclusionProof<H> {
+    PieceInclusionProof {
         first_node_proof: tree.gen_proof(first_node),
         last_node_proof: tree.gen_proof(last_node),
         _h: PhantomData,
     }
 }
 
-impl<H: Hasher> FileInclusionProof<H> {
+impl<H: Hasher> PieceInclusionProof<H> {
     /// verify takes a merkle root and (pre-processed) piece data.
     /// Iff it returns true, then FileInclusionProof indeed proves that piece's
     /// bytes were included in the merkle tree corresponding to root -- and at the
@@ -153,7 +153,7 @@ fn proof_vec<T: Domain>(proof: &Proof<T>) -> impl Iterator<Item = (&T, &bool)> {
 /// by the corresponding (by index) proof.
 pub fn verify_file_inclusion_proofs<H: Hasher>(
     root: &H::Domain,
-    proofs: &[FileInclusionProof<H>],
+    proofs: &[PieceInclusionProof<H>],
     pieces: &[&[u8]],
 ) -> bool {
     proofs
