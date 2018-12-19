@@ -240,7 +240,10 @@ jobs:
           command: cargo +$(cat rust-toolchain) build --release --verbose --frozen --all
       - run:
           name: Install jq
-          command: mkdir $HOME/.bin && curl https://github.com/stedolan/jq/releases/download/jq-1.6/jq-osx-amd64 --output $HOME/.bin/jq
+          command: |
+            mkdir $HOME/.bin
+            curl https://github.com/stedolan/jq/releases/download/jq-1.6/jq-osx-amd64 --output $HOME/.bin/jq
+            chmod +x $HOME/.bin/jq
       - run:
           name: Run publish-release.sh
           command: bash ./scripts/publish-release.sh
