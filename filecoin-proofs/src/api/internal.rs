@@ -853,4 +853,22 @@ mod tests {
     fn write_and_preprocess_overwrites_unaligned_last_bytes() {
         write_and_preprocess_overwrites_unaligned_last_bytes_aux(ConfiguredStore::ProofTest);
     }
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn concurrent_seal_unsealed_range_roundtrip_proof_test() {
+        let threads = 5;
+
+        let spawned = (0..threads)
+            .map(|_| {
+                thread::spawn(|| {
+                    seal_unsealed_range_roundtrip_aux(ConfiguredStore::ProofTest, BytesAmount::Max)
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for thread in spawned {
+            thread.join().expect("test thread panicked");
+        }
+    }
 }
