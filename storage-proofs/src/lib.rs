@@ -74,7 +74,7 @@ pub mod vdf_sloth;
 pub mod zigzag_drgporep;
 pub mod zigzag_graph;
 
-mod vde;
+pub mod vde;
 
 use logging_toolkit::make_logger;
 use slog::Logger;
