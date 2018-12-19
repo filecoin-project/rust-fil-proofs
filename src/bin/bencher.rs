@@ -539,7 +539,8 @@ fn run_benchmark(name: &str, config: &Case) -> Result<Vec<BenchmarkResult>> {
             &String::from_utf8_lossy(&output.stderr),
         )?;
 
-        let data = serde_json::to_string(&res)?;
+        let mut data = serde_json::to_string(&res)?;
+        data.push('\n');
         results.push(res);
 
         // store result on disk

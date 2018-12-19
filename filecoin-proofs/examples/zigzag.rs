@@ -396,8 +396,6 @@ fn main() {
     let circuit = matches.is_present("circuit");
     let extract = matches.is_present("extract");
 
-    println!("circuit: {:?}", circuit);
-
     info!(FCP_LOG, "hasher: {}", hasher; "target" => "config");
     match hasher.as_ref() {
         "pedersen" => {

@@ -19,3 +19,12 @@ size = [ "1 KiB" ] #, "64 MiB", "128 MiB", "256 MiB", "512 MiB", "1024 MiB"]
 hasher = [ "pedersen", "blake2s", "sha256"]
 sloth = [ 0 ]
 m = [ 6 ]
+
+[zigzag]
+challenges = [ 1 ]
+size = ["1 KiB"]
+hasher = ["pedersen"]
+command = "--groth"
+sloth  = [ 0 ]
+m = [ 5 ]
+expansion = [ 6 ]
