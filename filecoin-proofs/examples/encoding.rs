@@ -39,6 +39,7 @@ use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher
 use storage_proofs::layered_drgporep;
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
+use storage_proofs::vde;
 use storage_proofs::zigzag_drgporep::*;
 
 use filecoin_proofs::FCP_LOG;
@@ -92,7 +93,7 @@ where
     H: Hasher,
 {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-    let layers = 1;
+
     info!(FCP_LOG, "data size: {}", prettyb(data_size); "target" => "config");
     info!(FCP_LOG, "m: {}", m; "target" => "config");
     info!(FCP_LOG, "expansion_degree: {}", expansion_degree; "target" => "config");
@@ -101,7 +102,7 @@ where
 
     let nodes = data_size / 32;
 
-    let data = file_backed_mmap_from_random_bytes(nodes);
+    let mut data = file_backed_mmap_from_random_bytes(nodes);
 
     let replica_id: H::Domain = rng.gen();
     let mut data_copy = file_backed_mmap_from(&data);
@@ -116,8 +117,8 @@ where
             },
             sloth_iter,
         },
-        layers,
-        challenge_count,
+        layers: 1,
+        challenge_count: 1,
     };
 
     info!(FCP_LOG, "running setup");
@@ -127,13 +128,16 @@ where
     stop_profile();
 
     let start = Instant::now();
-    let mut param_duration = Duration::new(0, 0);
+    let mut encode_duration = Duration::new(0, 0);
 
-    info!(FCP_LOG, "running replicate");
+    info!(FCP_LOG, "encoding");
 
-    start_profile("encod");
-    vde::encode(&drgpp.graph, drgpp.sloth_iter, replica_id, data);
+    start_profile("encode");
+    vde::encode(&drgpp.graph, drgpp.sloth_iter, &replica_id, &mut data);
     stop_profile();
+
+    let encoding_time = start.elapsed();
+    info!(FCP_LOG, "encoding_time: {:?}", encoding_time; "target" => "stats");
 }
 
 fn main() {
@@ -168,54 +172,12 @@ fn main() {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("challenges")
-                .long("challenges")
-                .help("How many challenges to execute")
-                .default_value("1")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("hasher")
-                .long("hasher")
-                .help("Which hasher should be used.Available: \"pedersen\", \"sha256\", \"blake2s\" (default \"pedersen\")")
-                .default_value("pedersen")
-                .takes_value(true),
-        )
-       .arg(
             Arg::with_name("layers")
                 .long("layers")
                 .help("How many layers to use")
                 .default_value("10")
                 .takes_value(true),
         )
-       .arg(
-            Arg::with_name("partitions")
-                .long("partitions")
-                .help("How many circuit partitions to use")
-                .default_value("1")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("groth")
-                .long("groth")
-                .help("Generate and verify a groth circuit proof.")
-        )
-        .arg(
-            Arg::with_name("no-bench")
-                .long("no-bench")
-                .help("Synthesize and report inputs/constraints for a circuit.")
-        )
-        .arg(
-            Arg::with_name("circuit")
-                .long("circuit")
-                .help("Print the constraint system.")
-        )
-        .arg(
-            Arg::with_name("extract")
-                .long("extract")
-                .help("Extract data after proving and verifying.")
-        )
-
         .get_matches();
 
     let data_size = value_t!(matches, "size", usize).unwrap() * 1024;
@@ -223,6 +185,5 @@ fn main() {
     let expansion_degree = value_t!(matches, "exp", usize).unwrap();
     let sloth_iter = value_t!(matches, "sloth", usize).unwrap();
 
-    info!(FCP_LOG, "hasher: {}", hasher; "target" => "config");
     do_the_work::<PedersenHasher>(data_size, m, expansion_degree, sloth_iter);
 }
