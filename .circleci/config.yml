@@ -218,6 +218,10 @@ jobs:
     working_directory: ~/crate
     resource_class: xlarge
     steps:
+      - run:
+          name: Configure environment variables
+          command: |
+            echo 'export PATH="${HOME}/.cargo/bin:${PATH}"' >> $BASH_ENV
       - checkout
       - run:
           name: Install Rust
