@@ -212,6 +212,28 @@ jobs:
           name: Run publish-release.sh
           command: bash ./scripts/publish-release.sh
 
+  build_darwin_release:
+    macos:
+      xcode: "10.0.0"
+    working_directory: ~/crate
+    resource_class: xlarge
+    steps:
+      - checkout
+      - run:
+          name: Install Rust
+          command: |
+            curl https://sh.rustup.rs -sSf | sh -s -- -y
+      - run: rustup install $(cat rust-toolchain)
+      - run: rustup default $(cat rust-toolchain)
+      - run: cargo update
+      - run: cargo fetch
+      - run:
+          name: Build (release)
+          command: cargo +$(cat rust-toolchain) build --release --verbose --frozen --all
+      - run:
+          name: Run publish-release.sh
+          command: bash ./scripts/publish-release.sh
+
 workflows:
   version: 2
   test_all:
@@ -242,5 +264,8 @@ workflows:
           requires:
             - cargo_fetch
       - build_linux_release:
+          requires:
+            - cargo_fetch
+      - build_darwin_release:
           requires:
             - cargo_fetch
