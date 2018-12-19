@@ -1,63 +1,77 @@
 #!/usr/bin/env bash
 
-BRANCH="spikes/release-publishing"
+RELEASE_BRANCH="spikes/release-publishing"
+RELEASE_NAME="$CIRCLE_PROJECT_REPONAME-$(uname)"
+RELEASE_PATH="$CIRCLE_ARTIFACTS/$RELEASE_NAME"
+RELEASE_FILE="$RELEASE_PATH.tar.gz"
+RELEASE_TAG="${CIRCLE_SHA1:0:16}"
 
-if [ "$CIRCLE_BRANCH" != "$BRANCH" ]; then
+# make sure we're on the sanctioned branch
+if [ "$CIRCLE_BRANCH" != "$RELEASE_BRANCH" ]; then
   echo "not on branch \"$BRANCH\", skipping publish"
   exit 0
 fi
 
+# make sure we have a token set, api requests won't work otherwise
 if [ -z $GITHUB_TOKEN ]; then
   echo "\$GITHUB_TOKEN not set, publish failed"
   exit 1
 fi
 
-echo "packing build"
+echo "preparing release file"
 
-BUILD_NAME="$CIRCLE_PROJECT_REPONAME-$(uname)"
-BUILD_DIR="$CIRCLE_ARTIFACTS/$BUILD_NAME"
-BUILD_TAR="$BUILD_DIR.tar.gz"
+# pack up compiled lib and header
+mkdir $RELEASE_PATH
+cp target/release/*.a $RELEASE_PATH
+cp filecoin-proofs/*.h $RELEASE_PATH
+tar -czf $RELEASE_FILE $RELEASE_PATH/*
 
-mkdir $BUILD_DIR
-cp target/release/*.a $BUILD_DIR
-cp filecoin-proofs/*.h $BUILD_DIR
-tar -czf $BUILD_TAR $BUILD_DIR/*
+echo "release file created: $RELEASE_FILE"
 
-echo "created tar: $BUILD_TAR"
-
-echo "creating release"
-
-RELEASE_URL="https://api.github.com/repos/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/releases"
-
-RELEASE_NAME="${CIRCLE_SHA1:0:16}"
-RELEASE_DATA="{
-  \"tag_name\": \"$RELEASE_NAME\",
-  \"target_commitish\": \"$CIRCLE_SHA1\",
-  \"name\": \"$RELEASE_NAME\",
-  \"body\": \"\"
-}"
-
-CREATE_RELEASE_RESPONSE=`
+# see if the release already exists by tag
+RELEASE_RESPONSE=`
   curl \
-    --request POST \
+    --verbose \
     --header "Authorization: token $GITHUB_TOKEN" \
-    --header "Content-Type: application/json" \
-    --data "$RELEASE_DATA" \
-    "$RELEASE_URL"
+    "https://api.github.com/repos/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/releases/tags/$RELEASE_TAG"
 `
 
-RELEASE_ID=`echo $CREATE_RELEASE_RESPONSE | jq -r '.id'`
-UPLOAD_URL=`echo $CREATE_RELEASE_RESPONSE | jq -r '.upload_url' | cut -d'{' -f1`
+RELEASE_ID=`echo $RELEASE_RESPONSE | jq '.id'`
 
-echo "release created: $RELEASE_ID"
+if [ "$RELEASE_ID" = "null" ]; then
+  echo "creating release"
 
-UPLOAD_RELEASE_RESPONSE=`
-  curl \
-    --request POST \
-    --header "Authorization: token $GITHUB_TOKEN" \
-    --header "Content-Type: application/octet-stream" \
-    --data-binary @$BUILD_TAR \
-    "$UPLOAD_URL?name=$BUILD_NAME.tar.gz"
-`
+  RELEASE_DATA="{
+    \"tag_name\": \"$RELEASE_TAG\",
+    \"target_commitish\": \"$CIRCLE_SHA1\",
+    \"name\": \"$RELEASE_TAG\",
+    \"body\": \"\"
+  }"
 
-echo "release build published"
+  # create it if it doesn't exist yet
+  RELEASE_RESPONSE=`
+    curl \
+      --verbose \
+      --request POST \
+      --header "Authorization: token $GITHUB_TOKEN" \
+      --header "Content-Type: application/json" \
+      --data "$RELEASE_DATA" \
+      "https://api.github.com/repos/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/releases"
+  `
+else
+  echo "release already exists"
+fi
+
+echo "RELEASE_RESPONSE:"
+echo $RELEASE_RESPONSE
+
+RELEASE_UPLOAD_URL=`echo $RELEASE_RESPONSE | jq -r '.upload_url' | cut -d'{' -f1`
+
+curl \
+  --request POST \
+  --header "Authorization: token $GITHUB_TOKEN" \
+  --header "Content-Type: application/octet-stream" \
+  --data-binary "@$RELEASE_FILE" \
+  "$RELEASE_UPLOAD_URL?name=$(basename $RELEASE_FILE)"
+
+echo "release file uploaded"
