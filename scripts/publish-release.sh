@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# hacky for now:
+apt-get install -yqq jq
+
 BRANCH="spikes/release-publishing"
 
 if [ "$CIRCLE_BRANCH" != "$BRANCH" ]; then
