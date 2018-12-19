@@ -9,7 +9,7 @@ use crate::error::ExpectWithBacktrace;
 use crate::error::Result;
 use crate::FCP_LOG;
 use sector_base::api::disk_backed_storage::new_sector_store;
-use sector_base::api::disk_backed_storage::SBConfiguredStore;
+use sector_base::api::disk_backed_storage::ConfiguredStore;
 use sector_base::api::sector_store::SectorStore;
 use slog::*;
 use std::sync::{mpsc, Arc, Mutex};
@@ -48,7 +48,7 @@ impl SectorBuilder {
     // it exists. Otherwise, initialize and return a fresh SectorBuilder. The
     // metadata key is equal to the prover_id.
     pub fn init_from_metadata<S: Into<String>>(
-        sector_store_config: &SBConfiguredStore,
+        sector_store_config: &ConfiguredStore,
         last_committed_sector_id: SectorId,
         metadata_dir: S,
         prover_id: [u8; 31],

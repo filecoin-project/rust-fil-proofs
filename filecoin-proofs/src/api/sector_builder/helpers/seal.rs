@@ -1,4 +1,5 @@
 use crate::api::internal::seal as seal_internal;
+use crate::api::internal::SealOutput;
 use crate::api::sector_builder::metadata::sector_id_as_bytes;
 use crate::api::sector_builder::metadata::SealedSectorMetadata;
 use crate::api::sector_builder::metadata::StagedSectorMetadata;
@@ -21,12 +22,18 @@ pub fn seal(
 
     // Run the FPS seal operation. This call will block for a long time, so make
     // sure you're not holding any locks.
-    let (comm_r, comm_d, comm_r_star, snark_proof) = seal_internal(
-        &(*sector_store.inner),
+
+    let SealOutput {
+        comm_r,
+        comm_d,
+        comm_r_star,
+        snark_proof,
+    } = seal_internal(
+        (*sector_store.inner).config(),
         &PathBuf::from(staged_sector.sector_access.clone()),
         &PathBuf::from(sealed_sector_access.clone()),
-        *prover_id,
-        sector_id_as_bytes(staged_sector.sector_id)?,
+        prover_id,
+        &sector_id_as_bytes(staged_sector.sector_id)?,
     )?;
 
     let newly_sealed_sector = SealedSectorMetadata {

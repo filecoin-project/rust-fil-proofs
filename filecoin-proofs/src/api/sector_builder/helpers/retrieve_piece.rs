@@ -33,7 +33,7 @@ pub fn retrieve_piece<'a>(
         sector_store
             .inner
             .manager()
-            .delete_staging_sector_access(staging_sector_access)?;
+            .delete_staging_sector_access(&staging_sector_access)?;
     }
 
     let (_, bytes) = result?;
@@ -57,11 +57,11 @@ fn retrieve_piece_aux<'a>(
     })?;
 
     let num_bytes_unsealed = internal::get_unsealed_range(
-        &(*sector_store.inner),
+        (*sector_store.inner).config(),
         &PathBuf::from(sealed_sector.sector_access.clone()),
         &PathBuf::from(staging_sector_access),
-        *prover_id,
-        sector_id_as_bytes(sealed_sector.sector_id)?,
+        prover_id,
+        &sector_id_as_bytes(sealed_sector.sector_id)?,
         start_offset,
         num_bytes,
     )?;
@@ -76,7 +76,7 @@ fn retrieve_piece_aux<'a>(
     }
 
     let piece_bytes = sector_store.inner.manager().read_raw(
-        staging_sector_access.to_string(),
+        &staging_sector_access.to_string(),
         0,
         num_bytes_unsealed,
     )?;

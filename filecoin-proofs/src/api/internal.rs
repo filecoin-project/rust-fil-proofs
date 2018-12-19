@@ -10,8 +10,8 @@ use sapling_crypto::jubjub::JubjubBls12;
 
 use sector_base::api::disk_backed_storage::REAL_SECTOR_SIZE;
 use sector_base::api::sector_store::SectorConfig;
-use sector_base::api::sector_store::SectorStore;
 use sector_base::io::fr32::write_unpadded;
+use std::path::Path;
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
@@ -119,9 +119,9 @@ fn commitment_from_fr<E: Engine>(fr: E::Fr) -> Commitment {
     commitment
 }
 
-fn pad_safe_fr(unpadded: FrSafe) -> Fr32Ary {
+fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
     let mut res = [0; 32];
-    res[0..31].copy_from_slice(&unpadded);
+    res[0..31].copy_from_slice(unpadded);
     res
 }
 
@@ -160,15 +160,22 @@ pub fn get_config(sector_config: &SectorConfig) -> (bool, Option<u32>, usize, us
     )
 }
 
-pub fn seal(
-    sector_store: &SectorStore,
-    in_path: &PathBuf,
-    out_path: &PathBuf,
-    prover_id_in: FrSafe,
-    sector_id_in: FrSafe,
-) -> Result<(Commitment, Commitment, Commitment, SnarkProof)> {
+pub struct SealOutput {
+    pub comm_r: Commitment,
+    pub comm_r_star: Commitment,
+    pub comm_d: Commitment,
+    pub snark_proof: SnarkProof,
+}
+
+pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
+    sector_config: &SectorConfig,
+    in_path: T,
+    out_path: T,
+    prover_id_in: &FrSafe,
+    sector_id_in: &FrSafe,
+) -> Result<SealOutput> {
     let (fake, delay_seconds, sector_bytes, proof_sector_bytes, uses_official_circuit) =
-        get_config(sector_store.config());
+        get_config(sector_config);
 
     let public_params = public_params(proof_sector_bytes);
     let challenge_count = public_params.challenge_count;
@@ -206,7 +213,7 @@ pub fn seal(
     let compound_public_params = ZigZagCompound::setup(&compound_setup_params)?;
 
     let (tau, aux) = perform_replication(
-        &out_path,
+        out_path,
         &compound_public_params.vanilla_params,
         &replica_id,
         &mut data,
@@ -260,7 +267,7 @@ pub fn seal(
     if must_cache_params {
         write_params_to_cache(
             proof.groth_params.clone(),
-            &dummy_parameter_cache_path(sector_store.config(), proof_sector_bytes),
+            &dummy_parameter_cache_path(sector_config, proof_sector_bytes),
         )?;
     }
 
@@ -271,7 +278,7 @@ pub fn seal(
     // Verification is cheap when parameters are cached,
     // and it is never correct to return a proof which does not verify.
     verify_seal(
-        sector_store.config(),
+        sector_config,
         comm_r,
         comm_d,
         comm_r_star,
@@ -281,7 +288,12 @@ pub fn seal(
     )
     .expect("post-seal verification sanity check failed");
 
-    Ok((comm_r, comm_d, comm_r_star, proof_bytes))
+    Ok(SealOutput {
+        comm_r,
+        comm_r_star,
+        comm_d,
+        snark_proof: proof_bytes,
+    })
 }
 
 fn delay_seal(seconds: u32) {
@@ -294,8 +306,8 @@ fn delay_get_unsealed_range(base_seconds: u32) {
     thread::sleep(delay);
 }
 
-fn perform_replication(
-    out_path: &PathBuf,
+fn perform_replication<T: AsRef<Path>>(
+    out_path: T,
     public_params: &<ZigZagDrgPoRep<DefaultTreeHasher> as ProofScheme>::PublicParams,
     replica_id: &<DefaultTreeHasher as Hasher>::Domain,
     data: &mut [u8],
@@ -331,7 +343,7 @@ fn perform_replication(
     }
 }
 
-fn write_data(out_path: &PathBuf, data: &[u8]) -> Result<()> {
+fn write_data<T: AsRef<Path>>(out_path: T, data: &[u8]) -> Result<()> {
     // Write replicated data to out_path.
     let f_out = File::create(out_path)?;
     let mut buf_writer = BufWriter::new(f_out);
@@ -339,17 +351,17 @@ fn write_data(out_path: &PathBuf, data: &[u8]) -> Result<()> {
     Ok(())
 }
 
-pub fn get_unsealed_range(
-    sector_store: &SectorStore,
-    sealed_path: &PathBuf,
-    output_path: &PathBuf,
-    prover_id_in: FrSafe,
-    sector_id_in: FrSafe,
+pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
+    sector_config: &SectorConfig,
+    sealed_path: T,
+    output_path: T,
+    prover_id_in: &FrSafe,
+    sector_id_in: &FrSafe,
     offset: u64,
     num_bytes: u64,
 ) -> Result<(u64)> {
     let (fake, delay_seconds, sector_bytes, proof_sector_bytes, _uses_official_circuit) =
-        get_config(sector_store.config());
+        get_config(sector_config);
     if let Some(delay) = delay_seconds {
         delay_get_unsealed_range(delay);
     }
@@ -382,16 +394,16 @@ pub fn get_unsealed_range(
 }
 
 pub fn verify_seal(
-    sector_store: &SectorConfig,
+    sector_config: &SectorConfig,
     comm_r: Commitment,
     comm_d: Commitment,
     comm_r_star: Commitment,
-    prover_id_in: FrSafe,
-    sector_id_in: FrSafe,
+    prover_id_in: &FrSafe,
+    sector_id_in: &FrSafe,
     proof_vec: &[u8],
 ) -> Result<bool> {
     let (_fake, _delay_seconds, _sector_bytes, proof_sector_bytes, uses_official_circuit) =
-        get_config(sector_store);
+        get_config(sector_config);
 
     let challenge_count = CHALLENGE_COUNT;
     let prover_id = pad_safe_fr(prover_id_in);
@@ -430,13 +442,13 @@ pub fn verify_seal(
         match get_zigzag_params() {
             Some(p) => p,
             None => read_cached_params(&dummy_parameter_cache_path(
-                sector_store,
+                sector_config,
                 proof_sector_bytes,
             ))?,
         }
     } else {
         read_cached_params(&dummy_parameter_cache_path(
-            sector_store,
+            sector_config,
             proof_sector_bytes,
         ))?
     };
@@ -444,4 +456,419 @@ pub fn verify_seal(
     let proof = MultiProof::new_from_reader(Some(POREP_PARTITIONS), proof_vec, groth_params)?;
 
     ZigZagCompound::verify(&compound_public_params, &public_inputs, &proof)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use rand::{thread_rng, Rng};
+    use sector_base::api::disk_backed_storage::new_sector_store;
+    use sector_base::api::disk_backed_storage::ConfiguredStore;
+    use sector_base::api::sector_store::SectorStore;
+    use std::fs::create_dir_all;
+    use std::fs::File;
+    use std::io::Read;
+
+    struct Harness {
+        prover_id: FrSafe,
+        seal_output: SealOutput,
+        sealed_access: String,
+        sector_id: FrSafe,
+        store: Box<SectorStore>,
+        unseal_access: String,
+        written_contents: Vec<Vec<u8>>,
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    enum BytesAmount<'a> {
+        Max,
+        Offset(u64),
+        Exact(&'a [u8]),
+    }
+
+    fn create_harness(cs: &ConfiguredStore, bytes_amts: &[BytesAmount]) -> Harness {
+        let store = create_sector_store(cs);
+        let mgr = store.manager();
+        let cfg = store.config();
+
+        let staged_access = mgr
+            .new_staging_sector_access()
+            .expect("could not create staging access");
+
+        let sealed_access = mgr
+            .new_sealed_sector_access()
+            .expect("could not create sealed access");
+
+        let unseal_access = mgr
+            .new_sealed_sector_access()
+            .expect("could not create unseal access");
+
+        let prover_id = [2; 31];
+        let sector_id = [0; 31];
+
+        let mut written_contents: Vec<Vec<u8>> = Default::default();
+        for bytes_amt in bytes_amts {
+            let contents = match bytes_amt {
+                BytesAmount::Exact(bs) => bs.to_vec(),
+                BytesAmount::Max => {
+                    make_random_bytes(store.config().max_unsealed_bytes_per_sector())
+                }
+                BytesAmount::Offset(m) => {
+                    make_random_bytes(store.config().max_unsealed_bytes_per_sector() - m)
+                }
+            };
+
+            assert_eq!(
+                contents.len() as u64,
+                mgr.write_and_preprocess(&staged_access, &contents)
+                    .expect("failed to write and preprocess")
+            );
+
+            written_contents.push(contents);
+        }
+
+        let seal_output = seal(cfg, &staged_access, &sealed_access, &prover_id, &sector_id)
+            .expect("failed to seal");
+
+        let SealOutput {
+            comm_r,
+            comm_d,
+            comm_r_star,
+            snark_proof,
+        } = seal_output;
+
+        // valid commitments
+        {
+            let is_valid = verify_seal(
+                cfg,
+                comm_r,
+                comm_d,
+                comm_r_star,
+                &prover_id,
+                &sector_id,
+                &snark_proof,
+            )
+            .expect("failed to run verify_seal");
+
+            assert!(
+                is_valid,
+                "verification of valid proof failed for cs={:?}, bytes_amts={:?}",
+                cs, bytes_amts
+            );
+        }
+
+        // unseal the whole thing
+        assert_eq!(
+            cfg.max_unsealed_bytes_per_sector(),
+            get_unsealed_range(
+                cfg,
+                &sealed_access,
+                &unseal_access,
+                &prover_id,
+                &sector_id,
+                0,
+                cfg.max_unsealed_bytes_per_sector(),
+            )
+            .expect("failed to unseal")
+        );
+
+        Harness {
+            prover_id,
+            seal_output,
+            sealed_access,
+            sector_id,
+            store,
+            unseal_access,
+            written_contents,
+        }
+    }
+
+    fn create_sector_store(cs: &ConfiguredStore) -> Box<SectorStore> {
+        let staging_path = tempfile::tempdir().unwrap().path().to_owned();
+        let sealed_path = tempfile::tempdir().unwrap().path().to_owned();
+
+        create_dir_all(&staging_path).expect("failed to create staging dir");
+        create_dir_all(&sealed_path).expect("failed to create sealed dir");
+
+        Box::new(new_sector_store(
+            cs,
+            sealed_path.to_str().unwrap().to_owned(),
+            staging_path.to_str().unwrap().to_owned(),
+        ))
+    }
+
+    fn make_random_bytes(num_bytes_to_make: u64) -> Vec<u8> {
+        let mut rng = thread_rng();
+        (0..num_bytes_to_make).map(|_| rng.gen()).collect()
+    }
+
+    fn seal_verify_aux(cs: ConfiguredStore, bytes_amt: BytesAmount) {
+        let h = create_harness(&cs, &vec![bytes_amt]);
+
+        // invalid commitments
+        {
+            let is_valid = verify_seal(
+                h.store.config(),
+                h.seal_output.comm_d,
+                h.seal_output.comm_r_star,
+                h.seal_output.comm_r,
+                &h.prover_id,
+                &h.sector_id,
+                &h.seal_output.snark_proof,
+            )
+            .expect("failed to run verify_seal");
+
+            // This should always fail, because we've rotated the commitments in
+            // the call. Note that comm_d is passed for comm_r and comm_r_star
+            // for comm_d.
+            assert!(!is_valid, "proof should not be valid");
+        }
+    }
+
+    fn seal_unsealed_roundtrip_aux(cs: ConfiguredStore, bytes_amt: BytesAmount) {
+        let h = create_harness(&cs, &vec![bytes_amt]);
+
+        let mut file = File::open(&h.unseal_access).unwrap();
+        let mut buf = Vec::new();
+        file.read_to_end(&mut buf).unwrap();
+
+        // test A
+        {
+            let read_unsealed_buf = h
+                .store
+                .manager()
+                .read_raw(&h.unseal_access, 0, buf.len() as u64)
+                .expect("failed to read_raw a");
+
+            assert_eq!(
+                &buf, &read_unsealed_buf,
+                "test A contents differed for cs={:?}, bytes_amt={:?}",
+                cs, bytes_amt
+            );
+        }
+
+        // test B
+        {
+            let read_unsealed_buf = h
+                .store
+                .manager()
+                .read_raw(&h.unseal_access, 1, buf.len() as u64 - 2)
+                .expect("failed to read_raw a");
+
+            assert_eq!(
+                &buf[1..buf.len() - 1],
+                &read_unsealed_buf[..],
+                "test B contents differed for cs={:?}, bytes_amt={:?}",
+                cs,
+                bytes_amt
+            );
+        }
+
+        let byte_padding_amount = match bytes_amt {
+            BytesAmount::Exact(bs) => {
+                h.store.config().max_unsealed_bytes_per_sector() - (bs.len() as u64)
+            }
+            BytesAmount::Max => 0,
+            BytesAmount::Offset(m) => m,
+        };
+
+        assert_eq!(
+            h.written_contents[0].len(),
+            buf.len() - (byte_padding_amount as usize),
+            "length of original and unsealed contents differed for cs={:?}, bytes_amt={:?}",
+            cs,
+            bytes_amt
+        );
+
+        assert_eq!(
+            h.written_contents[0][..],
+            buf[0..h.written_contents[0].len()],
+            "original and unsealed contents differed for cs={:?}, bytes_amt={:?}",
+            cs,
+            bytes_amt
+        );
+    }
+
+    fn seal_unsealed_range_roundtrip_aux(cs: ConfiguredStore, bytes_amt: BytesAmount) {
+        let h = create_harness(&cs, &vec![bytes_amt]);
+
+        let offset = 5;
+        let range_length = h.written_contents[0].len() as u64 - offset;
+
+        assert_eq!(
+            range_length,
+            get_unsealed_range(
+                h.store.config(),
+                &PathBuf::from(&h.sealed_access),
+                &PathBuf::from(&h.unseal_access),
+                &h.prover_id,
+                &h.sector_id,
+                offset,
+                range_length,
+            )
+            .expect("failed to unseal")
+        );
+
+        let mut file = File::open(&h.unseal_access).unwrap();
+        let mut buf = Vec::new();
+        file.read_to_end(&mut buf).unwrap();
+
+        assert_eq!(
+            h.written_contents[0][(offset as usize)..],
+            buf[0..(range_length as usize)],
+            "original and unsealed range contents differed for cs={:?}, bytes_amt={:?}",
+            cs,
+            bytes_amt
+        );
+    }
+
+    fn write_and_preprocess_overwrites_unaligned_last_bytes_aux(cs: ConfiguredStore) {
+        // The minimal reproduction for the bug this regression test checks is to write
+        // 32 bytes, then 95 bytes.
+        // The bytes must sum to 127, since that is the required unsealed sector size.
+        // With suitable bytes (.e.g all 255), the bug always occurs when the first chunk is >= 32.
+        // It never occurs when the first chunk is < 32.
+        // The root problem was that write_and_preprocess was opening in append mode, so seeking backward
+        // to overwrite the last, incomplete byte, was not happening.
+        let contents_a = [255; 32];
+        let contents_b = [255; 95];
+
+        let h = create_harness(
+            &cs,
+            &vec![
+                BytesAmount::Exact(&contents_a),
+                BytesAmount::Exact(&contents_b),
+            ],
+        );
+
+        let unseal_access = h
+            .store
+            .manager()
+            .new_sealed_sector_access()
+            .expect("could not create unseal access");
+
+        let _ = get_unsealed_range(
+            h.store.config(),
+            &h.sealed_access,
+            &unseal_access,
+            &h.prover_id,
+            &h.sector_id,
+            0,
+            (contents_a.len() + contents_b.len()) as u64,
+        )
+        .expect("failed to unseal");
+
+        let mut file = File::open(&unseal_access).unwrap();
+        let mut buf_from_file = Vec::new();
+        file.read_to_end(&mut buf_from_file).unwrap();
+
+        assert_eq!(
+            contents_a.len() + contents_b.len(),
+            buf_from_file.len(),
+            "length of original and unsealed contents differed for {:?}",
+            cs
+        );
+
+        assert_eq!(
+            contents_a[..],
+            buf_from_file[0..contents_a.len()],
+            "original and unsealed contents differed for {:?}",
+            cs
+        );
+
+        assert_eq!(
+            contents_b[..],
+            buf_from_file[contents_a.len()..contents_a.len() + contents_b.len()],
+            "original and unsealed contents differed for {:?}",
+            cs
+        );
+    }
+
+    /*
+
+    TODO: create a way to run these super-slow-by-design tests manually.
+
+    fn seal_verify_live() {
+        seal_verify_aux(ConfiguredStore::Live, 0);
+        seal_verify_aux(ConfiguredStore::Live, 5);
+    }
+
+    fn seal_unsealed_roundtrip_live() {
+        seal_unsealed_roundtrip_aux(ConfiguredStore::Live, 0);
+        seal_unsealed_roundtrip_aux(ConfiguredStore::Live, 5);
+    }
+
+    fn seal_unsealed_range_roundtrip_live() {
+        seal_unsealed_range_roundtrip_aux(ConfiguredStore::Live, 0);
+        seal_unsealed_range_roundtrip_aux(ConfiguredStore::Live, 5);
+    }
+
+    */
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn seal_verify_test() {
+        seal_verify_aux(ConfiguredStore::Test, BytesAmount::Max);
+        seal_verify_aux(ConfiguredStore::Test, BytesAmount::Offset(5));
+    }
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn seal_verify_proof_test() {
+        seal_verify_aux(ConfiguredStore::ProofTest, BytesAmount::Max);
+        seal_verify_aux(ConfiguredStore::ProofTest, BytesAmount::Offset(5));
+    }
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn seal_unsealed_roundtrip_test() {
+        seal_unsealed_roundtrip_aux(ConfiguredStore::Test, BytesAmount::Max);
+        seal_unsealed_roundtrip_aux(ConfiguredStore::Test, BytesAmount::Offset(5));
+    }
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn seal_unsealed_roundtrip_proof_test() {
+        seal_unsealed_roundtrip_aux(ConfiguredStore::ProofTest, BytesAmount::Max);
+        seal_unsealed_roundtrip_aux(ConfiguredStore::ProofTest, BytesAmount::Offset(5));
+    }
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn seal_unsealed_range_roundtrip_test() {
+        seal_unsealed_range_roundtrip_aux(ConfiguredStore::Test, BytesAmount::Max);
+        seal_unsealed_range_roundtrip_aux(ConfiguredStore::Test, BytesAmount::Offset(5));
+    }
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn seal_unsealed_range_roundtrip_proof_test() {
+        seal_unsealed_range_roundtrip_aux(ConfiguredStore::ProofTest, BytesAmount::Max);
+        seal_unsealed_range_roundtrip_aux(ConfiguredStore::ProofTest, BytesAmount::Offset(5));
+    }
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn write_and_preprocess_overwrites_unaligned_last_bytes() {
+        write_and_preprocess_overwrites_unaligned_last_bytes_aux(ConfiguredStore::ProofTest);
+    }
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn concurrent_seal_unsealed_range_roundtrip_proof_test() {
+        let threads = 5;
+
+        let spawned = (0..threads)
+            .map(|_| {
+                thread::spawn(|| {
+                    seal_unsealed_range_roundtrip_aux(ConfiguredStore::ProofTest, BytesAmount::Max)
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for thread in spawned {
+            thread.join().expect("test thread panicked");
+        }
+    }
 }

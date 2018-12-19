@@ -37,7 +37,7 @@ pub fn add_piece(
         sector_store
             .inner
             .manager()
-            .write_and_preprocess(s.sector_access.clone(), &piece_bytes)
+            .write_and_preprocess(&s.sector_access, &piece_bytes)
             .map_err(|err| err.into())
             .and_then(|num_bytes_written| {
                 if num_bytes_written != piece_bytes_len {
