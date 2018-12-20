@@ -31,6 +31,7 @@ echo "release file created: $RELEASE_FILE"
 # see if the release already exists by tag
 RELEASE_RESPONSE=`
   curl \
+    --verbose \
     --location \
     --header "Authorization: token $GITHUB_TOKEN" \
     "https://api.github.com/repos/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/releases/tags/$RELEASE_TAG"
@@ -51,6 +52,7 @@ if [ "$RELEASE_ID" = "null" ]; then
   # create it if it doesn't exist yet
   RELEASE_RESPONSE=`
     curl \
+      --verbose \
       --location \
       --request POST \
       --header "Authorization: token $GITHUB_TOKEN" \
@@ -68,6 +70,7 @@ echo $RELEASE_RESPONSE
 RELEASE_UPLOAD_URL=`echo $RELEASE_RESPONSE | jq -r '.upload_url' | cut -d'{' -f1`
 
 curl \
+  --verbose \
   --location \
   --request POST \
   --header "Authorization: token $GITHUB_TOKEN" \
