@@ -231,6 +231,8 @@ jobs:
           name: Install Rust
           command: |
             curl https://sh.rustup.rs -sSf | sh -s -- -y
+      - run: curl --version
+      - run: curl --help
       - run: rustup install $(cat rust-toolchain)
       - run: rustup default $(cat rust-toolchain)
       - run: cargo update
