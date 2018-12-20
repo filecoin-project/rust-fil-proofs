@@ -1,25 +1,6 @@
 use sha2::{Digest, Sha256};
 
-pub fn permute(num_elements: u32, index: u32, keys: &[u32]) -> u32 {
-    let mut u = encode(num_elements, index, keys);
-
-    while u >= num_elements {
-        u = encode(num_elements, u, keys)
-    }
-    u
-}
-
-pub fn invert_permute(num_elements: u32, index: u32, keys: &[u32]) -> u32 {
-    let mut u = decode(num_elements, index, keys);
-
-    while u >= num_elements {
-        u = decode(num_elements, u, keys);
-    }
-    u
-}
-
-/// common_setup performs common calculations on inputs shared by encode and decode.
-fn common_setup(num_elements: u32, index: u32) -> (u32, u32, u32, u32) {
+pub fn precompute(num_elements: u32) -> u32 {
     let mut next_pow4 = 4;
     let mut log4 = 1;
 
@@ -27,7 +8,29 @@ fn common_setup(num_elements: u32, index: u32) -> (u32, u32, u32, u32) {
         next_pow4 *= 4;
         log4 += 1;
     }
+    log4
+}
 
+pub fn permute(num_elements: u32, index: u32, keys: &[u32], log4: u32) -> u32 {
+    let mut u = encode(index, keys, log4);
+
+    while u >= num_elements {
+        u = encode(u, keys, log4)
+    }
+    u
+}
+
+pub fn invert_permute(num_elements: u32, index: u32, keys: &[u32], log4: u32) -> u32 {
+    let mut u = decode(index, keys, log4);
+
+    while u >= num_elements {
+        u = decode(u, keys, log4);
+    }
+    u
+}
+
+/// common_setup performs common calculations on inputs shared by encode and decode.
+fn common_setup(index: u32, log4: u32) -> (u32, u32, u32, u32) {
     let left_mask = ((1 << log4) - 1) << log4;
     let right_mask = (1 << log4) - 1;
     let half_bits = log4;
@@ -38,8 +41,8 @@ fn common_setup(num_elements: u32, index: u32) -> (u32, u32, u32, u32) {
     (left, right, right_mask, half_bits)
 }
 
-fn encode(num_elements: u32, index: u32, keys: &[u32]) -> u32 {
-    let (mut left, mut right, right_mask, half_bits) = common_setup(num_elements, index);
+fn encode(index: u32, keys: &[u32], log4: u32) -> u32 {
+    let (mut left, mut right, right_mask, half_bits) = common_setup(index, log4);
 
     for key in keys.iter().take(4) {
         let (l, r) = (right, left ^ feistel(right, *key, right_mask));
@@ -50,8 +53,8 @@ fn encode(num_elements: u32, index: u32, keys: &[u32]) -> u32 {
     (left << half_bits) | right
 }
 
-fn decode(num_elements: u32, index: u32, keys: &[u32]) -> u32 {
-    let (mut left, mut right, right_mask, half_bits) = common_setup(num_elements, index);
+fn decode(index: u32, keys: &[u32], log4: u32) -> u32 {
+    let (mut left, mut right, right_mask, half_bits) = common_setup(index, log4);
 
     for i in (0..4).rev() {
         let (l, r) = ((right ^ feistel(left, keys[i], right_mask)), left);
@@ -94,9 +97,10 @@ mod tests {
 
     fn encode_decode(n: u32, expect_success: bool) {
         let mut failed = false;
+        let log4 = precompute(n);
         for i in 0..n {
-            let p = encode(n, i, &[1, 2, 3, 4]);
-            let v = decode(n, p, &[1, 2, 3, 4]);
+            let p = encode(i, &[1, 2, 3, 4], log4);
+            let v = decode(p, &[1, 2, 3, 4], log4);
             let equal = i == v;
             let in_range = p <= n;
             if expect_success {
@@ -135,9 +139,10 @@ mod tests {
     #[test]
     fn test_feistel_on_arbitrary_set() {
         for n in BAD_NS.iter() {
+            let log4 = precompute(*n as u32);
             for i in 0..*n {
-                let p = permute(*n, i, &[1, 2, 3, 4]);
-                let v = invert_permute(*n, p, &[1, 2, 3, 4]);
+                let p = permute(*n, i, &[1, 2, 3, 4], log4);
+                let v = invert_permute(*n, p, &[1, 2, 3, 4], log4);
                 // Since every element in the set is reversibly mapped to another element also in the set,
                 // this is indeed a permutation.
                 assert_eq!(i, v, "failed to permute");
