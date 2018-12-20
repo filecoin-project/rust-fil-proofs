@@ -133,7 +133,7 @@ where
     info!(FCP_LOG, "encoding");
 
     start_profile("encode");
-    vde::encode(&drgpp.graph, drgpp.sloth_iter, &replica_id, &mut data);
+    vde::encode(&drgpp.graph, drgpp.sloth_iter, &replica_id, &mut data).unwrap();
     stop_profile();
 
     let encoding_time = start.elapsed();

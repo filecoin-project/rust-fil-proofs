@@ -330,7 +330,7 @@ mod tests {
     use crate::layered_drgporep;
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
-    use crate::zigzag_graph::ZigZagGraph;
+    use crate::zigzag_graph::{ZigZag, ZigZagGraph};
     use pairing::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
@@ -475,7 +475,7 @@ mod tests {
 
         let public_params = layered_drgporep::PublicParams {
             drg_porep_public_params: drgporep::PublicParams::new(
-                ZigZagGraph::new(n, base_degree, expansion_degree, new_seed()),
+                ZigZagGraph::new_zigzag(n, base_degree, expansion_degree, new_seed()),
                 sloth_iter,
             ),
             layers: num_layers,
