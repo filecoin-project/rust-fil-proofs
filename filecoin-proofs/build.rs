@@ -52,4 +52,5 @@ fn main() {
     }
 
     println!(r"cargo:rustc-link-search=/mnt/crate/target/release");
+    println!(r"cargo:rustc-link-search=/mnt/crate/target/debug");
 }

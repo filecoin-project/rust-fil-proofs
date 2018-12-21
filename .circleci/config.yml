@@ -257,33 +257,33 @@ workflows:
   test_all:
     jobs:
       - cargo_fetch
-        # - rustfmt:
-        #     requires:
-        #       - cargo_fetch
-        # - clippy:
-        #     requires:
-        #       - cargo_fetch
-        # - test_release:
-        #     requires:
-        #       - cargo_fetch
-        # - ffi_regression:
-        #     requires:
-        #       - cargo_fetch
-        # - test_ignored_release:
-        #     requires:
-        #       - cargo_fetch
+      - rustfmt:
+          requires:
+            - cargo_fetch
+      - clippy:
+          requires:
+            - cargo_fetch
+      - test_release:
+          requires:
+            - cargo_fetch
+      - ffi_regression:
+          requires:
+            - cargo_fetch
+      - test_ignored_release:
+          requires:
+            - cargo_fetch
       - test:
           requires:
             - cargo_fetch
-        # - test_nightly:
-        #     requires:
-        #       - cargo_fetch
-        # - bench_nightly:
-        #     requires:
-        #       - cargo_fetch
-        # - build_linux_release:
-        #     requires:
-        #       - cargo_fetch
-        # - build_darwin_release:
-        #     requires:
-        #       - cargo_fetch
+      - test_nightly:
+          requires:
+            - cargo_fetch
+      - bench_nightly:
+          requires:
+            - cargo_fetch
+      - build_linux_release:
+          requires:
+            - cargo_fetch
+      - build_darwin_release:
+          requires:
+            - cargo_fetch
