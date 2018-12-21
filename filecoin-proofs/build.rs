@@ -13,7 +13,7 @@ fn main() {
 
     let c = cbindgen::Builder::new()
         .with_config(cfg)
-        .with_crate(crate_dir)
+        .with_crate(&crate_dir)
         .with_header(format!("/* libproofs Header Version {} */", VERSION))
         .with_language(cbindgen::Language::C)
         .generate();
@@ -51,6 +51,6 @@ fn main() {
         }
     }
 
-    println!(r"cargo:rustc-link-search=/mnt/crate/target/release");
-    println!(r"cargo:rustc-link-search=/mnt/crate/target/debug");
+    println!(r"cargo:rustc-link-search={}/../target/release", &crate_dir);
+    println!(r"cargo:rustc-link-search={}/../target/debug", &crate_dir);
 }
