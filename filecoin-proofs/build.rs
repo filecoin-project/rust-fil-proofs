@@ -50,7 +50,4 @@ fn main() {
             std::process::exit(1);
         }
     }
-
-    println!(r"cargo:rustc-link-search={}/../target/release", &crate_dir);
-    println!(r"cargo:rustc-link-search={}/../target/debug", &crate_dir);
 }

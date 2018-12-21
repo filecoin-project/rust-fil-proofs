@@ -13,6 +13,8 @@ RUN apt-get update && \
     libelf-dev libdw-dev binutils-dev zlib1g-dev libiberty-dev wget \
     xz-utils pkg-config python clang
 
+RUN echo "asdfasdf"
+
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
 
 ENV PATH "$PATH:/root/.cargo/bin"
