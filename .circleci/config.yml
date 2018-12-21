@@ -81,7 +81,7 @@ jobs:
       - run:
           name: Build (stable) in release profile
           command: |
-            cargo +stable build --examples --release --frozen --all
+            cargo +stable build --release --frozen --all
       - run:
           name: Test (stable) in release profile
           command: |
@@ -105,7 +105,7 @@ jobs:
             - parameter-cache-{{ .Revision }}
       - run:
           name: Build
-          command: cargo build --release --package filecoin-proofs --target x86_64-unknown-linux-gnu
+          command: cargo build --release --all --target x86_64-unknown-linux-gnu
       - run:
           name: Run regression tests (examples) against FFI-exposed filecoin-proofs API
           command: RUSTFLAGS="-Z sanitizer=leak" cargo run --release --package filecoin-proofs --example ffi --target x86_64-unknown-linux-gnu
@@ -125,7 +125,7 @@ jobs:
             - parameter-cache-{{ .Revision }}
       - run:
           name: Build (stable) in release profile
-          command: cargo +stable build --verbose --release --frozen --all -- --ignored
+          command: cargo +stable build --verbose --release --frozen --all
       - run:
           name: Test (stable) in release profile
           command: cargo +stable test --verbose --release --frozen --all -- --ignored
