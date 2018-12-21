@@ -37,10 +37,6 @@ jobs:
     working_directory: /mnt/crate
     resource_class: xlarge
     steps:
-      - run:
-          name: Configure environment variables
-          command: |
-            echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/mnt/crate/target/release' >> $BASH_ENV
       - checkout
       - attach_workspace:
           at: "."
@@ -50,6 +46,10 @@ jobs:
       - restore_cache:
           keys:
             - parameter-cache-{{ .Revision }}
+      - run:
+          name: Build (stable)
+          command: cargo +stable build --release --verbose --frozen --all
+          no_output_timeout: 15m
       - run:
           name: Test (stable)
           command: cargo +stable test --verbose --frozen --all

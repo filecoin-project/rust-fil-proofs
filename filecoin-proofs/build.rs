@@ -50,4 +50,6 @@ fn main() {
             std::process::exit(1);
         }
     }
+
+    println!(r"cargo:rustc-link-search=/mnt/crate/target/release");
 }
