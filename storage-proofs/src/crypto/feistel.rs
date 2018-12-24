@@ -1,4 +1,4 @@
-use sha2::{Digest, Sha256};
+use blake2::{Blake2s, Digest};
 
 pub fn precompute(num_elements: u32) -> u32 {
     let mut next_pow4 = 4;
@@ -77,7 +77,7 @@ fn feistel(right: u32, key: u32, right_mask: u32) -> u32 {
     data[6] = (key >> 8) as u8;
     data[7] = key as u8;
 
-    let hash = Sha256::digest(&data);
+    let hash = Blake2s::digest(&data);
 
     let r = u32::from(hash[0]) << 24
         | u32::from(hash[1]) << 16
