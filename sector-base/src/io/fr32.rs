@@ -10,6 +10,28 @@ pub type Fr32BitVec = BitVec<bitvec::LittleEndian, u8>;
 #[derive(Debug)]
 // PaddingMap represents a mapping between data and its padded equivalent.
 // Padding is at the bit-level.
+// TODO: Evaluate representing this information as data bits and padding bit
+// which together would form  what is now called `padded_chunk_bits` (which
+// may give the wrong impression this is just the *extra* bits and not the
+// total). This woulc make it easier to enforce the invariant `data_chunk_bits`
+// < `padded_chunk_bits`.
+// TODO: Insert the "element" term (or "Fr") to clearly indicate of what size
+// are we talking about (not becasue we care about the element but to know we
+// are always talking about the *same* thing).
+// TODO: Document here the boundary invariant mentioned in `next_fr_end`, if
+// that holds up we shouldn't need to much logic to deduce how many bits are
+// data and how many are padding bits.
+// TODO: Add a simple padding diagram to visualize this quantities, e.g.,
+//
+// || data_size pad_size || data_size pad_size || truncated..
+//                       ^^
+//             padded element boundary
+//
+// TODO: We should keep a simple state while padding, maybe not here but in
+// a new `Padder` structure which would know if we are in the data or pad
+// areas (bit position), and how much bits until we reach a boundary.
+// TODO: Add "full" unit/element terminology to clearly mean a padded element
+// with the exact size of `padded_chunk_bits`.
 pub struct PaddingMap {
     // The number of bits in the unpadded data.
     data_chunk_bits: usize,
@@ -71,8 +93,14 @@ pub fn padded_bytes(unpadded_bytes: usize) -> usize {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// Invariant: it is an error for bit_part to be > 7.
+// BitByte represents a size expressed in bytes extended
+// with bit precision, that is, not rounded.
+// Invariant: it is an error for bits to be > 7.
+// TODO: If performance is a concern here evaluate dropping the internal
+// distinction and manipulate everything a bits, converting to bytes
+// when necessary (which would seems to be a minority of the time, mainly
+// when interacting with the external client which normally uses bytes,
+// internally thinking in bit terms seems more clear).
 #[derive(Debug)]
 pub struct BitByte {
     bytes: usize,
@@ -103,17 +131,22 @@ impl BitByte {
     }
 
     // How many distinct bytes are needed to represent data of this size?
+    // TODO: Maybe closer to a `ceil` method?
     pub fn bytes_needed(&self) -> usize {
         self.bytes
             + if self.bits == 0 {
                 0
             } else {
                 (self.bits + 8) / 8
+            // TODO: Since `bits` > 0 and < 7 (invariant) why not just
+            // explicitly make this 1?
             }
     }
 }
 
 impl PaddingMap {
+    // TODO: Rename `representation_bits` to `padded_bits` to be
+    // consistent with the structure naming.
     pub fn new(data_bits: usize, representation_bits: usize) -> PaddingMap {
         assert!(data_bits <= representation_bits);
         PaddingMap {
@@ -126,12 +159,18 @@ impl PaddingMap {
         for _ in 0..self.padding_bits() {
             bits_out.push(false)
         }
+        // TODO: Can we push an entire stream of zero pad bits?
     }
 
     pub fn padding_bits(&self) -> usize {
         self.padded_chunk_bits - self.data_chunk_bits
     }
 
+    // TODO: Document the whole group of converting functions.
+    // TODO: Could we just store the conversion ratio instead of passing
+    // data/padded bits all the time?
+    // TODO: Drop the expand/contract terminology in favor of pad/unpad to be
+    // more consistent.
     pub fn expand_bits(&self, size: usize) -> usize {
         transform_bit_pos(size, self.data_chunk_bits, self.padded_chunk_bits)
     }
@@ -141,6 +180,7 @@ impl PaddingMap {
     }
 
     // Calculate padded byte size from unpadded byte size, rounding up.
+    // TODO: The `expand` family of methods are not used/tested here.
     pub fn expand_bytes(&self, bytes: usize) -> usize {
         transform_byte_pos(bytes, self.data_chunk_bits, self.padded_chunk_bits)
     }
@@ -150,6 +190,9 @@ impl PaddingMap {
         transform_byte_pos(bytes, self.padded_chunk_bits, self.data_chunk_bits)
     }
 
+    // TODO: This is the place where we figure out if we are byte-aligned or not,
+    // review and document it. It receives a multiple of 8 number of bits from
+    // `calculate_offsets`.
     pub fn padded_bit_bytes_from_bits(&self, bits: usize) -> BitByte {
         let expanded = self.expand_bits(bits);
         BitByte::from_bits(expanded)
@@ -169,17 +212,23 @@ impl PaddingMap {
         self.unpadded_bit_bytes_from_bits(bytes * 8)
     }
 
+    // TODO: Is Fr the basic element of which we are passing the size?
     // Returns a BitByte representing the distance between current position and next Fr boundary.
     // Padding is directly before the boundary.
     pub fn next_fr_end(&self, current: &BitByte) -> BitByte {
         let current_bits = current.total_bits();
 
         let (previous, remainder) = div_rem(current_bits, self.padded_chunk_bits);
+        // TODO: Do we need to access `div_rem` directly? Yes, because we need the remainder.
 
         let next_bit_boundary = if remainder == 0 {
             current_bits + self.padded_chunk_bits
         } else {
             (previous * self.padded_chunk_bits) + self.padded_chunk_bits
+            // TODO: `(previous + 1) * self.padded_chunk_bits` seems more clear, we basically
+            // start at the "ceil" boundary (previous * self.padded_chunk_bits) and need to
+            // decide wether we add another `padded_chunk_bits` or not.
+            // TODO: Document that `padded_chunk_bits` is the length of the FR element.
         };
 
         BitByte::from_bits(next_bit_boundary)
@@ -189,6 +238,8 @@ impl PaddingMap {
     // - the actual padded size in bytes
     // - the unpadded size in bytes which generated the padded size
     // - a BitByte representing the number of bits and bytes of actual data contained
+    // TODO: What is the difference with `calculate_offsets`?
+    // Just `padded_bytes`? Why are these two function split?
     pub fn target_offsets<W: ?Sized>(&self, target: &mut W) -> io::Result<(u64, u64, BitByte)>
     where
         W: Seek,
@@ -204,12 +255,17 @@ impl PaddingMap {
     // For a given number of padded_bytes, calculate and return
     // - the unpadded size in bytes which generates the padded size
     // - a BitByte representing the number of bits and bytes of actual data contained when so generated
+    // TODO: What is the `_offsets` referring to?
     pub fn calculate_offsets(&self, padded_bytes: u64) -> io::Result<(u64, BitByte)> {
         // Convert to unpadded equivalent, rounding down.
         let unpadded_bytes = self.contract_bytes(padded_bytes as usize);
 
         // Convert back to padded BUT NOW WITH BIT-LEVEL PRECISION.
         // The result contains information about how many partial bits (if any) were in the last padded byte.
+        // TODO: "result contains information ..." why? how? Are we assuming that a "partial"
+        // byte will happen only at the padding boundary and we won't have a partial byte
+        // only with data because we are always writing bytes?
+        // TODO: Why is the information not lost if we're dropping the bit precision?
         let padded_bit_bytes = self.padded_bit_bytes_from_bits(unpadded_bytes * 8);
 
         Ok((unpadded_bytes as u64, padded_bit_bytes))
@@ -223,21 +279,45 @@ fn div_rem(a: usize, b: usize) -> (usize, usize) {
     (div, rem)
 }
 
+// Transform a position between a padded and an unpadded layout.
+// TODO: Move inside `PaddingMap` since it works under its semantics,
+// this is not a general function. Also remove the `from_size`
+// and `to_size` arguments, we always call it with the pad/unpad
+// sizes, just use a bool for direction.
+// TODO: Review this.
+// TODO: `size` of what?
+// TODO: Is `p` a position or a size itself?
+// TODO: The use of `rem` seems to imply `from_size` smaller than `to_size`?
+// TODO: Could we return `rem` separately?
 fn transform_bit_pos(p: usize, from_size: usize, to_size: usize) -> usize {
+    // For both the padding and unpadding direction the operation is the same.
+    // The quotient is the conversion of full elements, the remainder is the
+    // amount of unpadded data which is directly added to the result since
+    // it carries no padding bits.
     let (div, rem) = div_rem(p, from_size);
 
     (div * to_size) + rem
+    // TODO: `rem` is added because it's supposed to be bits without padding?
+    // (in the case of contracting: padded -> data.)
 }
 
+// Similar `to transform_bit_pos` this function converts sizes expressed
+// in bytes, al
 fn transform_byte_pos(p: usize, from_bit_size: usize, to_bit_size: usize) -> usize {
     let bit_pos = p * 8;
     let transformed_bit_pos = transform_bit_pos(bit_pos, from_bit_size, to_bit_size);
     let transformed_byte_pos1 = transformed_bit_pos as f64 / 8.;
+    // TODO: Drop the `1` suffix.
 
+    // TODO: Similar to `transform_bit_pos`, remove the from/to argument and make
+    // this `if` evalute the padding/unpadding direction.
     (if from_bit_size < to_bit_size {
         transformed_byte_pos1.ceil()
     } else {
         transformed_byte_pos1.floor()
+        // We are using this in the case when we want to estimate how much input
+        // bytes do we need to generate the padded layout.
+        // TODO: But this should be documented way up in the call stack.
     }) as usize
 }
 
@@ -271,6 +351,7 @@ where
     let (padded_offset_bytes, _, offset) = padding_map.target_offsets(target)?;
 
     // The next boundary marks the start of the following Fr.
+    // TODO: But the function is talking about `_fr_end` not start.
     let next_boundary = padding_map.next_fr_end(&offset);
 
     // How many whole bytes lie between the current position and the new Fr?
@@ -279,6 +360,7 @@ where
     if offset.is_byte_aligned() {
         // If current offset is byte-aligned, then write_padded_aligned's invariant is satisfied,
         // and we can call it directly.
+        // TODO: Review this invariant.
         write_padded_aligned(
             padding_map,
             source,
@@ -325,7 +407,7 @@ where
     }
 }
 
-// Invariant: the input so far MUST be byte-aligned.
+// Invariant: the input so far MUST be byte-aligned (not pad-aligned).
 // Any prefix_bits passed will be inserted before the bits pulled from source.
 fn write_padded_aligned<W: ?Sized>(
     padding_map: &PaddingMap,
@@ -373,15 +455,22 @@ where
     }
 
     {
+        // TODO: If `pad_first_chunk` is false is this executed, it would seem
+        // we already have writen the entire `source`.
+
         // Write all following chunks, padding if necessary.
         let remaining_unpadded_chunks = Fr32BitVec::from(source)
             .into_iter()
             .skip(first_bits)
             .chunks(padding_map.data_chunk_bits);
 
+        // TODO: This seems like the core of the algorithm, we should clearly differentiate
+        // it from the initial padding and alignment check.
+
         for chunk in remaining_unpadded_chunks.into_iter() {
             let mut bits = Fr32BitVec::from_iter(chunk);
 
+            // TODO: What is this check enforcing? We're already chunking at `data_chunk_bits` size.
             if bits.len() >= padding_map.data_chunk_bits
                 && (bits.len() < padding_map.padded_chunk_bits)
             {
@@ -399,6 +488,8 @@ where
     Ok(source.len())
 }
 
+// TODO: What does this function do? Is this the inverse of `write_padded`? is this *un*padding?
+// or is this writing wihtouth the pad?
 // offset and num_bytes are based on the unpadded data, so
 // if [0, 1, ..., 255] was the original unpadded data, offset 3 and len 4 would return
 // [3, 4, 5, 6].
@@ -457,6 +548,9 @@ where
         let end = next_boundary.bytes;
 
         let current_fr_bits_end = next_boundary.total_bits() - padding_map.padding_bits();
+        // TODO: This is where it gets confusing, since we already have the next boundary,
+        // isn't that where the `current_fr_bits_end`? In the boundary? Why are we substracting
+        // the padding bits?
         let bits_to_next_boundary = current_fr_bits_end - offset_total_bits;
 
         let raw_end = min(end, source.len());
@@ -464,13 +558,19 @@ where
             break;
         }
         let raw_bits = Fr32BitVec::from(&source[start..raw_end]);
+        // TODO: New `raw` terminology, can we classify this as padded/unpadded data?
+
         let skipped = raw_bits.into_iter().skip(bits_to_skip);
         let restricted = skipped.take(bits_to_next_boundary);
+        // TODO: "restricted"? from what?
 
         let bits_left_to_write = bits_to_write - bits_out.len();
         let bits_needed = ((end - start) * 8) - bits_to_skip;
         let bits_to_take = min(bits_needed, bits_left_to_write);
         let taken = restricted.take(bits_to_take);
+
+        // TODO: Why do we need 15+ statements to extract some data bits from a field?
+        // Is this Rust related?
 
         bits_out.extend(taken);
 
@@ -478,6 +578,7 @@ where
             bytes: end,
             bits: 0,
         };
+        // TODO: This would indicate that we always pad to a byte-align boundary.
     }
 
     // TODO: Don't write the whole output into a huge BitVec.
