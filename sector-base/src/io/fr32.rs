@@ -10,6 +10,9 @@ pub type Fr32BitVec = BitVec<bitvec::LittleEndian, u8>;
 #[derive(Debug)]
 // PaddingMap represents a mapping between data and its padded equivalent.
 // Padding is at the bit-level.
+// It takes an unpadded byte-aligned *raw* data as input and returns an unaligned
+// *padded* data output in the (forward) *padding* process, its inverse is the
+// *unpadding* process.
 // At the *byte level*, the padded layout is:
 //
 //           (full)                   (full)                 (incomplete)
@@ -26,24 +29,27 @@ pub type Fr32BitVec = BitVec<bitvec::LittleEndian, u8>;
 // TODO: Find terms for a complete data unit of `data_bits` and units smaller than
 // that, avoiding the same term used for the completeness at the element level.
 //
-// At the *bit level*, the layout of the last byte is:
+// At the *bit level*, the persisted padded layout of the last byte is:
 //
 //  |  D  D  D  D  D  x  x  x  |
-//        (data)       (DC)
+//      (valid data)    (R)
 //
-// The data is always written in groups of bytes but as the padding may have
-// any `pad_bits` size, the last byte in a padded layout may contain a number
-// of *valid* bits (D) minor than 8 followed by the 8-complement of "don't care"
-// (DC) that are *not* padding but rather the bits necessary to form a byte-aligned
-// output (which later will have its bits place taken with actual data bits *and*
-// padding bits).
-//
-// TODO: Clearly explain why the DC bits can't be padding: 1. padding is byte-aligned
+// The data is always *persisted* (written) in a byte-aligned layout, but as the
+// padded layout is unaligned that means that its last byte may contain a number
+// *redundant* bits (R) following the *valid* data bits (D) to complete it. It's
+// important to distinguish these redundant bits (generated as a side effect of
+// a byte-aligned persistence) from the padding bits introduced in the padding
+// process: this redundant bits are a place-holder for actual data bits that may
+// replace them in the future when the padding layout extended with more data.
+// TODO: Review the redundant definition.
+// TODO: Evaluate replacing *persisted* with just *written* to avoid too many terms.
+// TODO: Clearly explain why the R bits can't be padding: 1. padding is byte-aligned
 // (so we wouldn't have this problem in the first place), 2. padding is complete
 // by definition.
 //
 // A byte-aligned padded layout is one where the last byte is comprised *only* of
-// valid bits.
+// valid bits, that is, the next data bit will be placed in a new byte (since there
+// are no redundant bits to replace).
 // TODO: Elaborate on this definition to drop the "prefix" term.
 //
 // List of definitions:
@@ -52,13 +58,9 @@ pub type Fr32BitVec = BitVec<bitvec::LittleEndian, u8>;
 // * Unit (to distinguish it from element) of data or pad.
 // * Valid (bits).
 // * Prefix (?)
+// * Persisted.
+// * Raw vs padded. Padding vs unpadding.
 // TODO: Add "boundary limit".
-//
-// TODO: Introduce "raw" term to distinguish it from the "valid" bits, and also
-// (to be able to talk about that), clearly define *What* do we use the `PaddingMap`
-// for, it's simpler to see it as a padder/unpadder with an unpadded and padded
-// input/outputs.
-// TODO: Decide if using "unpadded" or plain "data" terms.
 //
 // TODO: Evaluate representing this information as data bits and padding bit
 // which together would form  what is now called `padded_chunk_bits` (which
@@ -276,41 +278,37 @@ impl PaddingMap {
         BitByte::from_bits(next_bit_boundary)
     }
 
-    // For a seekable target, return
-    // - the actual padded size in bytes
-    // - the unpadded size in bytes which generated the padded size
-    // - a BitByte representing the number of bits and bytes of actual data contained
-    // TODO: What is the difference with `calculate_offsets`?
-    // Just `padded_bytes`? Why are these two function split?
+    // For a `Seek`able target with a persisted padded layout, return:
+    // - the persisted size in bytes
+    // - the size in bytes of raw data which corresponds to the persisted size
+    // - a BitByte representing the number of valid bits and bytes of actual
+    //   padded data contained in the persisted layout (that is, not counting
+    //   the redundant bits)
     pub fn target_offsets<W: ?Sized>(&self, target: &mut W) -> io::Result<(u64, u64, BitByte)>
     where
         W: Seek,
     {
-        // The current position in target is the number of PADDED bytes already written.
-        let padded_bytes = target.seek(SeekFrom::End(0))?;
+        // The current position in target is the number of PADDED bytes already persisted.
+        let persisted_padded_bytes = target.seek(SeekFrom::End(0))?;
+        // TODO: Is is worth specifying the unit in the name of the variable?
 
-        let (unpadded_bytes, padded_bit_bytes) = self.calculate_offsets(padded_bytes)?;
+        // Deduce the number of input raw bytes that generated the persisted padded size.
+        // `contract_bytes` will first assume that `persisted_padded_bytes` is actually byte
+        // aligned (containing no redundant bits) and will calculate the number of raw bits
+        // needed to generate that size. Then it will round that down to the lower byte (since
+        // raw data is byte aligned), the result is *unique*: a persisted padded layout may
+        // contain different numbers of redundant bits in its last byte but there is only one
+        // configuration that could have been generated by padding a byte-aligned raw data.
+        let raw_data_bytes = self.contract_bytes(persisted_padded_bytes as usize);
 
-        Ok((padded_bytes, unpadded_bytes, padded_bit_bytes))
-    }
+        // With the number of raw data bytes elucidated it can now be specified the
+        // size of the valid padded data contained inside the persisted layout, as
+        // that size may be unaligned its represented with `BitByte`.
+        // Invariant: `padded_data_bit_precision` <=  `persisted_padded_bytes`.
+        let padded_data_bit_precision = self.padded_bit_bytes_from_bits(raw_data_bytes * 8);
 
-    // For a given number of padded_bytes, calculate and return
-    // - the unpadded size in bytes which generates the padded size
-    // - a BitByte representing the number of bits and bytes of actual data contained when so generated
-    // TODO: What is the `_offsets` referring to?
-    pub fn calculate_offsets(&self, padded_bytes: u64) -> io::Result<(u64, BitByte)> {
-        // Convert to unpadded equivalent, rounding down.
-        let unpadded_bytes = self.contract_bytes(padded_bytes as usize);
-
-        // Convert back to padded BUT NOW WITH BIT-LEVEL PRECISION.
-        // The result contains information about how many partial bits (if any) were in the last padded byte.
-        // TODO: "result contains information ..." why? how? Are we assuming that a "partial"
-        // byte will happen only at the padding boundary and we won't have a partial byte
-        // only with data because we are always writing bytes?
-        // TODO: Why is the information not lost if we're dropping the bit precision?
-        let padded_bit_bytes = self.padded_bit_bytes_from_bits(unpadded_bytes * 8);
-
-        Ok((unpadded_bytes as u64, padded_bit_bytes))
+        Ok((persisted_padded_bytes, raw_data_bytes as u64, padded_data_bit_precision))
+        // TODO: Why do we use `usize` internally and `u64` externally?
     }
 }
 
@@ -826,4 +824,8 @@ mod tests {
             assert_eq!(expected, &unpadded[..]);
         }
     }
+
+    // TODO: Add a test that checks integrity counting the number of set bits
+    // before and after padding. This would need to assume that padding is
+    // always zero and the DC bit are also zero in the underlying implementation.
 }
