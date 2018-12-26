@@ -10,6 +10,56 @@ pub type Fr32BitVec = BitVec<bitvec::LittleEndian, u8>;
 #[derive(Debug)]
 // PaddingMap represents a mapping between data and its padded equivalent.
 // Padding is at the bit-level.
+// At the *byte level*, the padded layout is:
+//
+//           (full)                   (full)                 (incomplete)
+// ||  data_bits  pad_bits  ||  data_bits  pad_bits  ||  some_data  (no_padding)
+// ^^                       ^^                               ^^
+// start             element boundary                (some_data < data_bits)
+//
+// Each *full* element is a byte-aligned stream comprised of `data_bits` with
+// `pad_bits` at the end. A single *incomplete* element may be present at the end,
+// comprised only of data with a length smaller than `data_bits`, that is,
+// padding only exists at the end of a *full* element and an entire `data_bits`
+// unit can't exist without padding.
+// TODO: Evaluate renaming `full` to `filled` or `complete`.
+// TODO: Find terms for a complete data unit of `data_bits` and units smaller than
+// that, avoiding the same term used for the completeness at the element level.
+//
+// At the *bit level*, the layout of the last byte is:
+//
+//  |  D  D  D  D  D  x  x  x  |
+//        (data)       (DC)
+//
+// The data is always written in groups of bytes but as the padding may have
+// any `pad_bits` size, the last byte in a padded layout may contain a number
+// of *valid* bits (D) minor than 8 followed by the 8-complement of "don't care"
+// (DC) that are *not* padding but rather the bits necessary to form a byte-aligned
+// output (which later will have its bits place taken with actual data bits *and*
+// padding bits).
+//
+// TODO: Clearly explain why the DC bits can't be padding: 1. padding is byte-aligned
+// (so we wouldn't have this problem in the first place), 2. padding is complete
+// by definition.
+//
+// A byte-aligned padded layout is one where the last byte is comprised *only* of
+// valid bits.
+// TODO: Elaborate on this definition to drop the "prefix" term.
+//
+// List of definitions:
+// * Full (or filled or complete).
+// * Element.
+// * Unit (to distinguish it from element) of data or pad.
+// * Valid (bits).
+// * Prefix (?)
+// TODO: Add "boundary limit".
+//
+// TODO: Introduce "raw" term to distinguish it from the "valid" bits, and also
+// (to be able to talk about that), clearly define *What* do we use the `PaddingMap`
+// for, it's simpler to see it as a padder/unpadder with an unpadded and padded
+// input/outputs.
+// TODO: Decide if using "unpadded" or plain "data" terms.
+//
 // TODO: Evaluate representing this information as data bits and padding bit
 // which together would form  what is now called `padded_chunk_bits` (which
 // may give the wrong impression this is just the *extra* bits and not the
@@ -21,17 +71,9 @@ pub type Fr32BitVec = BitVec<bitvec::LittleEndian, u8>;
 // TODO: Document here the boundary invariant mentioned in `next_fr_end`, if
 // that holds up we shouldn't need to much logic to deduce how many bits are
 // data and how many are padding bits.
-// TODO: Add a simple padding diagram to visualize this quantities, e.g.,
-//
-// || data_size pad_size || data_size pad_size || truncated..
-//                       ^^
-//             padded element boundary
-//
 // TODO: We should keep a simple state while padding, maybe not here but in
 // a new `Padder` structure which would know if we are in the data or pad
 // areas (bit position), and how much bits until we reach a boundary.
-// TODO: Add "full" unit/element terminology to clearly mean a padded element
-// with the exact size of `padded_chunk_bits`.
 pub struct PaddingMap {
     // The number of bits in the unpadded data.
     data_chunk_bits: usize,
