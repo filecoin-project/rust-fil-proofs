@@ -8,6 +8,12 @@ use itertools::Itertools;
 pub type Fr32BitVec = BitVec<bitvec::LittleEndian, u8>;
 
 #[derive(Debug)]
+//
+// TODO: Use subtitles? e.g., "padding operation", "element configuration",
+// "bit-alignment", etc. (the Rust core seems to do so)
+// TODO: Maybe we should be using `///` here,
+// (https://doc.rust-lang.org/reference/comments.html).
+//
 // PaddingMap represents a mapping between data and its padded equivalent.
 // Padding is at the bit-level.
 // It takes an unpadded byte-aligned *raw* data as input and returns an unaligned
@@ -17,17 +23,22 @@ pub type Fr32BitVec = BitVec<bitvec::LittleEndian, u8>;
 //
 //           (full)                   (full)                 (incomplete)
 // ||  data_bits  pad_bits  ||  data_bits  pad_bits  ||  some_data  (no_padding)
-// ^^                       ^^                               ^^
-// start             element boundary                (some_data < data_bits)
+//                          ^^                               ^^
+//                   element boundary                (some_data < data_bits)
 //
-// Each *full* element is a byte-aligned stream comprised of `data_bits` with
-// `pad_bits` at the end. A single *incomplete* element may be present at the end,
-// comprised only of data with a length smaller than `data_bits`, that is,
-// padding only exists at the end of a *full* element and an entire `data_bits`
-// unit can't exist without padding.
-// TODO: Evaluate renaming `full` to `filled` or `complete`.
-// TODO: Find terms for a complete data unit of `data_bits` and units smaller than
-// that, avoiding the same term used for the completeness at the element level.
+// TODO: Check that the names on the diagram match the ones on the structure.
+//
+// Each *element* is a byte-aligned stream comprised of *full unit* of `data_bits`
+// with `pad_bits` at the end.
+// After the last element boundary there may be an incomplete unit of data
+// (`some_data`) that hasn't been padded yet with a length smaller than `data_bits`.
+// That is the only configuration available after the last element boundary because:
+//   1. Padding can only be applied to a full unit of `data_bits`.
+//   2. A full data unit cannot exist without its corresponding padding.
+//   3. If there is padding present then it would already be an element formed there.
+// TODO: Check the 3rd one, might be redundant.
+// TODO: Check if this byte-aligned invariant is meant to be that way (that is,
+// `padded_chunk_bits % 8 == 0`).
 //
 // At the *bit level*, the persisted padded layout of the last byte is:
 //
@@ -50,12 +61,14 @@ pub type Fr32BitVec = BitVec<bitvec::LittleEndian, u8>;
 // A byte-aligned padded layout is one where the last byte is comprised *only* of
 // valid bits, that is, the next data bit will be placed in a new byte (since there
 // are no redundant bits to replace).
+// ^^ May be useful in `write_padded_aligned`.
 // TODO: Elaborate on this definition to drop the "prefix" term.
 //
 // List of definitions:
 // * Full (or filled or complete).
 // * Element.
 // * Unit (to distinguish it from element) of data or pad.
+// * Full unit.
 // * Valid (bits).
 // * Prefix (?)
 // * Persisted.
@@ -83,6 +96,8 @@ pub struct PaddingMap {
     // The difference between padded_chunk_bits and data_chunk_bits is the number of zero/false bits
     // that should be inserted as padding.
     padded_chunk_bits: usize,
+    // TODO: Rename to refer to "element" and not just padding,
+    // the terminology in the model should be "data" + "padding" = "element".
 }
 
 pub const FR_UNPADDED_BITS: usize = 254;
@@ -256,26 +271,16 @@ impl PaddingMap {
         self.unpadded_bit_bytes_from_bits(bytes * 8)
     }
 
-    // TODO: Is Fr the basic element of which we are passing the size?
-    // Returns a BitByte representing the distance between current position and next Fr boundary.
-    // Padding is directly before the boundary.
-    pub fn next_fr_end(&self, current: &BitByte) -> BitByte {
-        let current_bits = current.total_bits();
+    // Returns a BitByte representing the distance between the `position`
+    // passed and its next element boundary in a padded layout.
+    pub fn next_element_boundary(&self, position: &BitByte) -> BitByte {
+        let position_bits = position.total_bits();
 
-        let (previous, remainder) = div_rem(current_bits, self.padded_chunk_bits);
-        // TODO: Do we need to access `div_rem` directly? Yes, because we need the remainder.
+        let (_, bits_after_last_boundary) = div_rem(position_bits, self.padded_chunk_bits);
 
-        let next_bit_boundary = if remainder == 0 {
-            current_bits + self.padded_chunk_bits
-        } else {
-            (previous * self.padded_chunk_bits) + self.padded_chunk_bits
-            // TODO: `(previous + 1) * self.padded_chunk_bits` seems more clear, we basically
-            // start at the "ceil" boundary (previous * self.padded_chunk_bits) and need to
-            // decide wether we add another `padded_chunk_bits` or not.
-            // TODO: Document that `padded_chunk_bits` is the length of the FR element.
-        };
-
-        BitByte::from_bits(next_bit_boundary)
+        BitByte::from_bits(position_bits + (self.padded_chunk_bits - bits_after_last_boundary))
+        // Add the `padded_chunk_bits` (element size) complement to reach
+        // the next boundary from our current position.
     }
 
     // For a `Seek`able target with a persisted padded layout, return:
@@ -392,7 +397,7 @@ where
 
     // The next boundary marks the start of the following Fr.
     // TODO: But the function is talking about `_fr_end` not start.
-    let next_boundary = padding_map.next_fr_end(&offset);
+    let next_boundary = padding_map.next_element_boundary(&offset);
 
     // How many whole bytes lie between the current position and the new Fr?
     let bytes_to_next_boundary = next_boundary.bytes - offset.bytes;
@@ -584,7 +589,7 @@ where
         let start = offset.bytes;
         let bits_to_skip = offset.bits;
         let offset_total_bits = offset.total_bits();
-        let next_boundary = padding_map.next_fr_end(&offset);
+        let next_boundary = padding_map.next_element_boundary(&offset);
         let end = next_boundary.bytes;
 
         let current_fr_bits_end = next_boundary.total_bits() - padding_map.padding_bits();
