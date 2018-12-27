@@ -402,17 +402,10 @@ where
     // How many whole bytes lie between the current position and the new Fr?
     let bytes_to_next_boundary = next_boundary.bytes - offset.bytes;
 
-    if offset.is_byte_aligned() {
+    let (next_boundary_bits, prefix_bits) = if offset.is_byte_aligned() {
         // If current offset is byte-aligned, then write_padded_aligned's invariant is satisfied,
         // and we can call it directly.
-        // TODO: Review this invariant.
-        write_padded_aligned(
-            padding_map,
-            source,
-            target,
-            bytes_to_next_boundary * 8,
-            None,
-        )
+        (bytes_to_next_boundary * 8, None)
     } else {
         // Otherwise, we need to align by filling in the previous, incomplete byte.
         // Prefix will hold that single byte.
@@ -442,14 +435,17 @@ where
 
         // Now we are aligned and can write the rest. We have to pass the prefix to
         // write_padded_aligned because we don't yet know what bits should follow the prefix.
-        write_padded_aligned(
-            padding_map,
-            source,
-            target,
-            (bytes_to_next_boundary * 8) - prefix_bit_count,
-            Some(prefix_bitvec),
-        )
-    }
+        ((bytes_to_next_boundary * 8) - prefix_bit_count, Some(prefix_bitvec))
+    };
+
+    write_padded_aligned(
+        padding_map,
+        source,
+        target,
+        next_boundary_bits,
+        prefix_bits,
+    )
+
 }
 
 // Invariant: the input so far MUST be byte-aligned (not pad-aligned).
