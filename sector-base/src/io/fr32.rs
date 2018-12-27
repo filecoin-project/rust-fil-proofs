@@ -62,6 +62,7 @@ pub type Fr32BitVec = BitVec<bitvec::LittleEndian, u8>;
 // valid bits, that is, the next data bit will be placed in a new byte (since there
 // are no redundant bits to replace).
 // ^^ May be useful in `write_padded_aligned`.
+// TODO: Also add *incomplete last byte* (it's the only byte that can be incomplete).
 // TODO: Elaborate on this definition to drop the "prefix" term.
 //
 // List of definitions:
@@ -69,6 +70,7 @@ pub type Fr32BitVec = BitVec<bitvec::LittleEndian, u8>;
 // * Element.
 // * Unit (to distinguish it from element) of data or pad.
 // * Full unit.
+// TODO: Maybe *filled data unit*.
 // * Valid (bits).
 // * Prefix (?)
 // * Persisted.
@@ -273,6 +275,10 @@ impl PaddingMap {
 
     // Returns a BitByte representing the distance between the `position`
     // passed and its next element boundary in a padded layout.
+    // TODO: We seem to be using this method to get the distance to the
+    // next boundary more than the absolute position itself, that added
+    // logic could be encapsulated here (which would even simplify this
+    // method).
     pub fn next_element_boundary(&self, position: &BitByte) -> BitByte {
         let position_bits = position.total_bits();
 
@@ -385,6 +391,18 @@ where
     Ok(written)
 }
 
+// The ideal alignment scenario is for the position to be at the element boundary
+// where the persisted data is byte-aligned (no redundant bits), and just write
+// chunks of `data_chunk_bits` followed by its corresponding padding, but to get
+// there first there are two potential misalignments to handle:
+//   1. The last persisted byte is only partially valid so we need to get some
+//      bits from the `source` to overwrite the redundant bits and make it byte
+//      aligned.
+//   2. With a byte-aligned persisted padded layout we need to fill the rest
+//      of the incomplete data unit to make it a full unit, add the padding
+//      and form a element that would position as at the desired boundary.
+// TODO: Change name, this is the real write padded function, the previous one
+// just partition data in chunks.
 fn write_padded_aux<W: ?Sized>(
     padding_map: &PaddingMap,
     source: &[u8],
@@ -393,128 +411,107 @@ fn write_padded_aux<W: ?Sized>(
 where
     W: Read + Write + Seek,
 {
-    let (padded_offset_bytes, _, offset) = padding_map.target_offsets(target)?;
+    // TODO: Check `source` length, if it's zero we should return here and avoid all
+    // the alignment calculations that will be worthless (because we wont' have any
+    // data with which to align).
 
-    // The next boundary marks the start of the following Fr.
-    // TODO: But the function is talking about `_fr_end` not start.
-    let next_boundary = padding_map.next_element_boundary(&offset);
+    // bits_out is a sink for bits, to be written at the end.
+    let mut bits_out = Fr32BitVec::new();
 
-    // How many whole bytes lie between the current position and the new Fr?
-    let bytes_to_next_boundary = next_boundary.bytes - offset.bytes;
+    let (persisted_padded_bytes, _, padded_data_bit_precision) = padding_map.target_offsets(target)?;
 
-    let (next_boundary_bits, prefix_bits) = if offset.is_byte_aligned() {
-        // If current offset is byte-aligned, then write_padded_aligned's invariant is satisfied,
-        // and we can call it directly.
-        (bytes_to_next_boundary * 8, None)
-    } else {
-        // Otherwise, we need to align by filling in the previous, incomplete byte.
-        // Prefix will hold that single byte.
-        let prefix_bytes = &mut [0u8; 1];
+    // Get how many whole bytes lie between the current position and the next boundary.
+    let next_boundary = padding_map.next_element_boundary(&padded_data_bit_precision);
+    let bytes_to_next_boundary = next_boundary.bytes - padded_data_bit_precision.bytes;
+    let mut next_boundary_bits = bytes_to_next_boundary * 8;
+
+    // (1): Byte align the persisted padded data.
+    if !padded_data_bit_precision.is_byte_aligned() {
+        // Remove the valid bits from the last byte and add it to `bits_out`
+        // (simulating that it's new data to write coming from the source).
+
+        let last_persisted_byte = &mut [0u8; 1];
 
         // Seek backward far enough to read just the prefix.
-        target.seek(SeekFrom::Start(padded_offset_bytes - 1))?;
+        target.seek(SeekFrom::Start(persisted_padded_bytes - 1))?;
+        // TODO: Can we use a relative `SeekFrom::End` seek to avoid
+        // setting our absolute `persisted_padded_bytes` position?
 
         // And read it in.
-        target.read_exact(prefix_bytes)?;
-
+        target.read_exact(last_persisted_byte)?;
         // NOTE: seek position is now back to where we started.
 
-        // How many significant bits did the prefix contain?
-        let prefix_bit_count = offset.bits;
+        // How many valid bits did the prefix contain?
+        let valid_bit_count = padded_data_bit_precision.bits;
 
-        // Rewind by 1 again because we need to overwrite the previous, incomplete byte.
-        // Because we've now rewound to before the prefix, target is indeed byte-aligned.
-        // (Only the last byte was incomplete.)
-        target.seek(SeekFrom::Start(padded_offset_bytes - 1))?;
+        // Rewind by 1 again effectively taking the last byte out from the persisted
+        // padded layout, it will be rewritten (now as a complete byte with added
+        // `source` bits) later. By dropping this last incomplete byte the persisted
+        // target is now byte-aligned.
+        target.seek(SeekFrom::Start(persisted_padded_bytes - 1))?;
 
-        // Package up the prefix into a BitVec.
-        let mut prefix_bitvec = Fr32BitVec::from(&prefix_bytes[..]);
+        // Package up the last byte into a `BitVec` to extract its `valid_bit_count` bits.
+        let mut last_byte_as_bitvec = Fr32BitVec::from(&last_persisted_byte[..]);
+        last_byte_as_bitvec.truncate(valid_bit_count);
+        bits_out.extend(last_byte_as_bitvec);
 
-        // But only take the number of bits that are actually part of the prefix!
-        prefix_bitvec.truncate(prefix_bit_count);
-
-        // Now we are aligned and can write the rest. We have to pass the prefix to
-        // write_padded_aligned because we don't yet know what bits should follow the prefix.
-        ((bytes_to_next_boundary * 8) - prefix_bit_count, Some(prefix_bitvec))
+        // Adjust the distance to the next boundary taking into account the
+        // valid bits we took from the last byte.
+        next_boundary_bits -= valid_bit_count
+        // TODO: Clarify the use of `next_boundary_bits`, the subtraction is misleading,
+        // it's necessary because we rounded the distance to the boundary up (by taking
+        // its bytes). The entire distance-byte-only math should be revised.
     };
 
-    write_padded_aligned(
-        padding_map,
-        source,
-        target,
-        next_boundary_bits,
-        prefix_bits,
-    )
+    // (2): Complete the current element to position the writer in the next element boundary.
 
-}
+    // TODO: What happens if we were already at the element boundary?
+    // Would this code write 0 (`data_bits_to_write`) bits and then
+    // add an extra padding?
 
-// Invariant: the input so far MUST be byte-aligned (not pad-aligned).
-// Any prefix_bits passed will be inserted before the bits pulled from source.
-fn write_padded_aligned<W: ?Sized>(
-    padding_map: &PaddingMap,
-    source: &[u8],
-    target: &mut W,
-    next_boundary_bits: usize,
-    prefix_bits: Option<Fr32BitVec>,
-) -> io::Result<usize>
-where
-    W: Write,
-{
-    // bits_out is a sink for bits, to be written at the end.
-    // If we received prefix_bits, put them in the sink first.
-    let mut bits_out = match prefix_bits {
-        None => Fr32BitVec::new(),
-        Some(bv) => bv,
-    };
-
-    // We want to read up to the next Fr boundary, but we don't want to read the padding.
-    let next_boundary_bits = next_boundary_bits - padding_map.padding_bits();
+    // How many bits are missing to have a full unit of data?
+    let missing_data_bits = next_boundary_bits - padding_map.padding_bits();
 
     // How many new bits do we need to write?
     let source_bits = source.len() * 8;
 
-    // How many bits should we write in the first chunk - and should that chunk be padded?
-    let (first_bits, pad_first_chunk) = if next_boundary_bits < source_bits {
-        // If we have enough bits (more than to the next boundary), we will write all of them first,
-        // and add padding.
-        (next_boundary_bits, true)
+    // Check if we have enough `source_bits` to complete the data unit (and hence
+    // add the padding and complete the element) or if we'll use all the `source_bits`
+    // to increase (but not complete) the current data unit (and hence we won't pad).
+    let (data_bits_to_write, is_full_data_unit) = if missing_data_bits < source_bits {
+        (missing_data_bits, true)
     } else {
-        // Otherwise, we will write everything we have – but we won't pad it.
         (source_bits, false)
     };
-
-    {
-        // Write the first chunk, padding if necessary.
-        let first_unpadded_chunk = Fr32BitVec::from(source).into_iter().take(first_bits);
-
-        bits_out.extend(first_unpadded_chunk);
-
-        // pad
-        if pad_first_chunk {
-            padding_map.pad(&mut bits_out);
-        }
+    // Take the first `data_bits_to_write` from `source` (which might be all
+    // that's available) and flush it to `bits_out`.
+    bits_out.extend(Fr32BitVec::from(source).into_iter().take(data_bits_to_write));
+    // If we had enough to fill the data unit add the padding (completing the element).
+    if is_full_data_unit {
+        padding_map.pad(&mut bits_out);
     }
 
-    {
-        // TODO: If `pad_first_chunk` is false is this executed, it would seem
-        // we already have writen the entire `source`.
+    // Now we are at the element boundary.
 
-        // Write all following chunks, padding if necessary.
+    // If we completed the previous element then we may still have some data left,
+    // write entire chunks of filled data units with its padding.
+    if is_full_data_unit {
         let remaining_unpadded_chunks = Fr32BitVec::from(source)
             .into_iter()
-            .skip(first_bits)
+            .skip(data_bits_to_write)
+            // TODO: Not having a "drop first N bits" in `BitVec` makes us remember
+            // the already used bits in our logic dragging them until we apply the
+            // iterator.
             .chunks(padding_map.data_chunk_bits);
-
-        // TODO: This seems like the core of the algorithm, we should clearly differentiate
-        // it from the initial padding and alignment check.
 
         for chunk in remaining_unpadded_chunks.into_iter() {
             let mut bits = Fr32BitVec::from_iter(chunk);
 
-            // TODO: What is this check enforcing? We're already chunking at `data_chunk_bits` size.
-            if bits.len() >= padding_map.data_chunk_bits
-                && (bits.len() < padding_map.padded_chunk_bits)
-            {
+            // If this chunk is a full unit of data then add the padding; if not,
+            // this is the last (incomplete) chunk, it will be `some_data` in the
+            // next write cycle (which will again try to align it to the element
+            // boundary).
+            if bits.len() == padding_map.data_chunk_bits {
                 padding_map.pad(&mut bits);
             }
 
