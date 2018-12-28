@@ -30,6 +30,8 @@ pub type Fr32BitVec = BitVec<bitvec::LittleEndian, u8>;
 //
 // Each *element* is a byte-aligned stream comprised of *full unit* of `data_bits`
 // with `pad_bits` at the end.
+// TODO: Explain that the boundary is the position of the NEXT element (not
+// the pos of the last byte of the previous one).
 // After the last element boundary there may be an incomplete unit of data
 // (`some_data`) that hasn't been padded yet with a length smaller than `data_bits`.
 // That is the only configuration available after the last element boundary because:
@@ -553,6 +555,10 @@ where
 
     for chunk in source.chunks(chunk_size) {
         let this_len = min(len, chunk.len());
+        // TODO: Rename, "this" seems ambiguous.
+        // TODO: Why are we partitioning in chunks and not using them?
+        // (just taking their len, but that can be done with the original
+        // source length, without doing the actual chunking operation).
 
         written += write_unpadded_aux(&FR32_PADDING_MAP, source, target, offset, this_len)?;
         offset += this_len;
@@ -562,68 +568,86 @@ where
     Ok(written)
 }
 
+// Unpad, take a `source` of padded data and recover from it the
+// (byte-aligned) raw data writing it in `target`, where `write_pos`
+// specifies from which byte of the raw data to start recovering, up
+// to `max_write_size`.
+//
+// There are 3 limits that tell us how much padded data to process in
+// each iteration (`bits_to_extract`):
+// 1. Element boundary: we can process one element at a time, to be
+//    able to read the data unit and skip the padding bits.
+// 2. End of `source`: no more data to read.
+// 3. No more space to write the recovered raw data: we shouldn't write
+//    into the `target` beyond `max_write_size`.
 pub fn write_unpadded_aux<W: ?Sized>(
     padding_map: &PaddingMap,
     source: &[u8],
     target: &mut W,
-    offset_bytes: usize,
-    len: usize,
+    write_pos: usize,
+    max_write_size: usize,
 ) -> io::Result<usize>
 where
     W: Write,
 {
-    let mut offset = padding_map.padded_bit_bytes_from_bytes(offset_bytes);
+    // Position of the reader in the padded layout, deduced from the position
+    // of the writer (`write_pos`) in the raw data unpadded layout. Since the
+    // raw data is byte-aligned and the padded data isn't, this transformation
+    // converts from a byte size into a `BitByte` size.
+    let mut read_pos = padding_map.padded_bit_bytes_from_bytes(write_pos);
 
-    let bits_to_write = len * 8;
+    // Specify the maximum data to recover (write) in bits, since the data unit
+    // in the element (in contrast with the original raw data that generated it)
+    // is not byte aligned.
+    let max_write_size_bits = max_write_size * 8;
 
-    let mut bits_out = Fr32BitVec::new();
+    // Recovered raw data unpadded from the `source` which will
+    // be later packed in bytes and written to the `target`.
+    let mut raw_data = Fr32BitVec::new();
 
-    while bits_out.len() < bits_to_write {
-        let start = offset.bytes;
-        let bits_to_skip = offset.bits;
-        let offset_total_bits = offset.total_bits();
-        let next_boundary = padding_map.next_element_boundary(&offset);
-        let end = next_boundary.bytes;
+    // If there is no more data to read or no more space to write stop.
+    while read_pos.bytes < source.len() && raw_data.len() < max_write_size_bits {
 
-        let current_fr_bits_end = next_boundary.total_bits() - padding_map.padding_bits();
-        // TODO: This is where it gets confusing, since we already have the next boundary,
-        // isn't that where the `current_fr_bits_end`? In the boundary? Why are we substracting
-        // the padding bits?
-        let bits_to_next_boundary = current_fr_bits_end - offset_total_bits;
+        // (1): Find the element boundary and, assuming that there is a full
+        //      unit of data (which actually may be incomplete), where would
+        //      its end be.
+        let next_boundary = padding_map.next_element_boundary(&read_pos);
+        let data_unit_end_pos = next_boundary.total_bits() - padding_map.padding_bits();
+        let mut bits_to_extract = data_unit_end_pos - read_pos.total_bits();
+        // TODO: Can we combine these? Or create an end of data method? (instead of end of element)
 
-        let raw_end = min(end, source.len());
-        if start > source.len() {
-            break;
-        }
-        let raw_bits = Fr32BitVec::from(&source[start..raw_end]);
-        // TODO: New `raw` terminology, can we classify this as padded/unpadded data?
+        // (2): As the element may be incomplete check how much data is
+        //      actually available so as not to access the `source` past
+        //      its limit.
+        let mut read_element_end = next_boundary.bytes;
+        read_element_end = min(read_element_end, source.len());
 
-        let skipped = raw_bits.into_iter().skip(bits_to_skip);
-        let restricted = skipped.take(bits_to_next_boundary);
-        // TODO: "restricted"? from what?
+        // (3): Don't read more than `max_write_size`.
+        let bits_left_to_write = max_write_size_bits - raw_data.len();
+        bits_to_extract = min(bits_to_extract, bits_left_to_write);
 
-        let bits_left_to_write = bits_to_write - bits_out.len();
-        let bits_needed = ((end - start) * 8) - bits_to_skip;
-        let bits_to_take = min(bits_needed, bits_left_to_write);
-        let taken = restricted.take(bits_to_take);
+        // Extract the specified `bits_to_extract` bits, skipping the first
+        // `read_pos.bits` which have already been processed in a previous
+        // iteration.
+        raw_data.extend(Fr32BitVec::from(&source[read_pos.bytes..read_element_end]).into_iter()
+            .skip(read_pos.bits)
+            .take(bits_to_extract));
 
-        // TODO: Why do we need 15+ statements to extract some data bits from a field?
-        // Is this Rust related?
-
-        bits_out.extend(taken);
-
-        offset = BitByte {
-            bytes: end,
+        // Position the reader in the next element boundary.
+        read_pos = BitByte {
+            bytes: next_boundary.bytes,
             bits: 0,
         };
-        // TODO: This would indicate that we always pad to a byte-align boundary.
+        // TODO: We move to the end even if we didn't read the entire element? What
+        // happens if in the first call there wasn't enough `max_write_size` space?
+        // A following call would miss the data bits skipped here.
     }
 
     // TODO: Don't write the whole output into a huge BitVec.
     // Instead, write it incrementally –
     // but ONLY when the bits waiting in bits_out are byte-aligned. i.e. a multiple of 8
 
-    let boxed_slice = bits_out.into_boxed_slice();
+    let boxed_slice = raw_data.into_boxed_slice();
 
     target.write_all(&boxed_slice)?;
 
@@ -826,4 +850,7 @@ mod tests {
     // TODO: Add a test that checks integrity counting the number of set bits
     // before and after padding. This would need to assume that padding is
     // always zero and the DC bit are also zero in the underlying implementation.
+
+    // TODO: Add a test that drops the last part of an element and tries to recover
+    // the rest of the data (may already be present in some form in the above tests).
 }
