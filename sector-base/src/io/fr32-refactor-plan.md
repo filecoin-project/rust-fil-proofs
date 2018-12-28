@@ -10,7 +10,7 @@
 
 - [x] Review `write_unpadded_aux`. Much of the logic and insight from `write_padded_aligned` should be applicable here.
 
-- [ ] Evaluate reworking `next_element_boundary` to give distance and not position (see `TODO`).
+- [x] Evaluate reworking `next_element_boundary` to give distance and not position (see `TODO`).
 
 - [ ] Leave this for last: go to the lower levels of the of bit/byte positions transformation logic (only after resolving the higher level logic of the write functions), review and document `transform_bit_pos` and `transform_byte_pos` functions. It should be clear why the work the way they do, based on the `PaddingMap` invariants. They seem to be correct, but in a implicit and subtle way: they handle the padding case, and its inverse, unpadding, with the same logic; there's a symmetry that draws my attention that I'm not sure I can explain clearly.
 

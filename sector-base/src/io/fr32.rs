@@ -275,20 +275,24 @@ impl PaddingMap {
         self.unpadded_bit_bytes_from_bits(bytes * 8)
     }
 
-    // Returns a BitByte representing the distance between the `position`
-    // passed and its next element boundary in a padded layout.
-    // TODO: We seem to be using this method to get the distance to the
-    // next boundary more than the absolute position itself, that added
-    // logic could be encapsulated here (which would even simplify this
-    // method).
-    pub fn next_element_boundary(&self, position: &BitByte) -> BitByte {
+    // From the `position` specified, it returns:
+    // - the absolute position of the start of the next element,
+    //   in bytes (since elements -with padding- are byte aligned).
+    // - the number of bits left to read/write from/to the data unit
+    //   (assuming it's full).
+    pub fn next_boundaries(&self, position: &BitByte) -> (usize, usize) {
         let position_bits = position.total_bits();
 
         let (_, bits_after_last_boundary) = div_rem(position_bits, self.padded_chunk_bits);
 
-        BitByte::from_bits(position_bits + (self.padded_chunk_bits - bits_after_last_boundary))
-        // Add the `padded_chunk_bits` (element size) complement to reach
+        let next_element_position_bits = position_bits +
+            (self.padded_chunk_bits - bits_after_last_boundary);
+        // Add the complement of `padded_chunk_bits` (element size) to reach
         // the next boundary from our current position.
+
+        let remaining_data_unit_bits = next_element_position_bits - self.padding_bits() - position_bits;
+
+        (next_element_position_bits / 8, remaining_data_unit_bits)
     }
 
     // For a `Seek`able target with a persisted padded layout, return:
@@ -405,6 +409,9 @@ where
 //      and form a element that would position as at the desired boundary.
 // TODO: Change name, this is the real write padded function, the previous one
 // just partition data in chunks.
+// TODO: Document in a way similar to the unpadding function, focusing the names
+// on which is reading and which writing (specifing that we read from a raw data
+// layout and write to a padded layout).
 fn write_padded_aux<W: ?Sized>(
     padding_map: &PaddingMap,
     source: &[u8],
@@ -422,10 +429,8 @@ where
 
     let (persisted_padded_bytes, _, padded_data_bit_precision) = padding_map.target_offsets(target)?;
 
-    // Get how many whole bytes lie between the current position and the next boundary.
-    let next_boundary = padding_map.next_element_boundary(&padded_data_bit_precision);
-    let bytes_to_next_boundary = next_boundary.bytes - padded_data_bit_precision.bytes;
-    let mut next_boundary_bits = bytes_to_next_boundary * 8;
+    // Determine the number of bits needed to fill the current unit of data in the element.
+    let (_, missing_data_bits) = padding_map.next_boundaries(&padded_data_bit_precision);
 
     // (1): Byte align the persisted padded data.
     if !padded_data_bit_precision.is_byte_aligned() {
@@ -443,9 +448,6 @@ where
         target.read_exact(last_persisted_byte)?;
         // NOTE: seek position is now back to where we started.
 
-        // How many valid bits did the prefix contain?
-        let valid_bit_count = padded_data_bit_precision.bits;
-
         // Rewind by 1 again effectively taking the last byte out from the persisted
         // padded layout, it will be rewritten (now as a complete byte with added
         // `source` bits) later. By dropping this last incomplete byte the persisted
@@ -454,15 +456,8 @@ where
 
         // Package up the last byte into a `BitVec` to extract its `valid_bit_count` bits.
         let mut last_byte_as_bitvec = Fr32BitVec::from(&last_persisted_byte[..]);
-        last_byte_as_bitvec.truncate(valid_bit_count);
+        last_byte_as_bitvec.truncate(padded_data_bit_precision.bits);
         bits_out.extend(last_byte_as_bitvec);
-
-        // Adjust the distance to the next boundary taking into account the
-        // valid bits we took from the last byte.
-        next_boundary_bits -= valid_bit_count
-        // TODO: Clarify the use of `next_boundary_bits`, the subtraction is misleading,
-        // it's necessary because we rounded the distance to the boundary up (by taking
-        // its bytes). The entire distance-byte-only math should be revised.
     };
 
     // (2): Complete the current element to position the writer in the next element boundary.
@@ -470,9 +465,6 @@ where
     // TODO: What happens if we were already at the element boundary?
     // Would this code write 0 (`data_bits_to_write`) bits and then
     // add an extra padding?
-
-    // How many bits are missing to have a full unit of data?
-    let missing_data_bits = next_boundary_bits - padding_map.padding_bits();
 
     // How many new bits do we need to write?
     let source_bits = source.len() * 8;
@@ -609,18 +601,14 @@ where
     while read_pos.bytes < source.len() && raw_data.len() < max_write_size_bits {
 
         // (1): Find the element boundary and, assuming that there is a full
-        //      unit of data (which actually may be incomplete), where would
-        //      its end be.
-        let next_boundary = padding_map.next_element_boundary(&read_pos);
-        let data_unit_end_pos = next_boundary.total_bits() - padding_map.padding_bits();
-        let mut bits_to_extract = data_unit_end_pos - read_pos.total_bits();
-        // TODO: Can we combine these? Or create an end of data method? (instead of end of element)
+        //      unit of data (which actually may be incomplete), how many bits
+        //      are left to read from `read_pos`.
+        let (next_element_position, mut bits_to_extract) = padding_map.next_boundaries(&read_pos);
 
         // (2): As the element may be incomplete check how much data is
         //      actually available so as not to access the `source` past
         //      its limit.
-        let mut read_element_end = next_boundary.bytes;
-        read_element_end = min(read_element_end, source.len());
+        let read_element_end = min(next_element_position, source.len());
 
         // (3): Don't read more than `max_write_size`.
         let bits_left_to_write = max_write_size_bits - raw_data.len();
@@ -636,7 +624,7 @@ where
         // Position the reader in the next element boundary, this will be ignored
         // if we already hit limits (2) or (3) (in that case this was the last iteration).
         read_pos = BitByte {
-            bytes: next_boundary.bytes,
+            bytes: next_element_position,
             bits: 0,
         };
     }
