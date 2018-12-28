@@ -633,14 +633,12 @@ where
             .skip(read_pos.bits)
             .take(bits_to_extract));
 
-        // Position the reader in the next element boundary.
+        // Position the reader in the next element boundary, this will be ignored
+        // if we already hit limits (2) or (3) (in that case this was the last iteration).
         read_pos = BitByte {
             bytes: next_boundary.bytes,
             bits: 0,
         };
-        // TODO: We move to the end even if we didn't read the entire element? What
-        // happens if in the first call there wasn't enough `max_write_size` space?
-        // A following call would miss the data bits skipped here.
     }
 
     // TODO: Don't write the whole output into a huge BitVec.
