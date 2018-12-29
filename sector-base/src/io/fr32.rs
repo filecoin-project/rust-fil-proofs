@@ -229,28 +229,83 @@ impl PaddingMap {
         self.padded_chunk_bits - self.data_chunk_bits
     }
 
-    // TODO: Document the whole group of converting functions.
+    // Transform a position/size expressed in bits from a padded
+    // and to an unpadded layout (if `padding_direction` is `true`)
+    // or vice versa (if `false`).
+    // TODO: Abusing the element terminology here: explaining that we
+    // are converting from one element size to another when in the current
+    // documentation one is actually *the* (complete) element and the
+    // other the data unit *inside* it.
+    pub fn transform_bit_pos(&self, pos: usize, padding_direction: bool) -> usize {
+
+        // Set the sizes of the elements we're converting to and from.
+        let (from_size, to_size) = if padding_direction {
+            (self.data_chunk_bits, self.padded_chunk_bits)
+        } else {
+            (self.padded_chunk_bits, self.data_chunk_bits)
+        };
+
+        // For both the padding and unpadding cases the operation is the same.
+        // The quotient is the number of full elements that can be directly converted
+        // to the equivalent size in the other layout.
+        // The remainder (in both cases) is the last *incomplete* data unit,
+        // even in the padded layout, if there is an incomplete element it has
+        // to consist *only* of data, the presence of padding indicates a complete
+        // element. That amount of spare (unpadded) raw data doesn't need conversion,
+        // it can just be added to the new position.
+        let (full_elements, incomplete_data) = div_rem(pos, from_size);
+        (full_elements * to_size) + incomplete_data
+    }
+
+    // Similar `to transform_bit_pos` this function transforms a position/size
+    // expressed in bytes.
+    // TODO: Expand on the difference between the two functions, we deal with
+    // bits when manipulating the data itself, we deal with bytes when we care
+    // about how we persist the padded layout in byte-aligned streams.
+    pub fn transform_byte_pos(&self, pos: usize, padding_direction: bool) -> usize {
+        let transformed_bit_pos = self.transform_bit_pos(pos * 8, padding_direction);
+
+        let transformed_byte_pos = transformed_bit_pos as f64 / 8.;
+
+        // There's one-to-one equivalence between the bytes in a raw data
+        // input that are converted to a persisted padded layout.
+        // When padding, the last (incomplete) byte is persisted in its
+        // entirety, so round the number up (`ceil`). When unpadding a
+        // persisted layout there's no way to know a priori how many valid
+        // bits are in the last byte, we have to choose the number that fits
+        // in a byte-aligned raw data size, so round the number down to that
+        // (`floor`).
+        // TODO: Some of this documentation should be higher in the call stack,
+        // many functions rely on this implicit logic, maybe it should be
+        // documented up in `PaddingMap`.
+        (if padding_direction {
+            transformed_byte_pos.ceil()
+        } else {
+            transformed_byte_pos.floor()
+        }) as usize
+    }
+
     // TODO: Could we just store the conversion ratio instead of passing
     // data/padded bits all the time?
     // TODO: Drop the expand/contract terminology in favor of pad/unpad to be
     // more consistent.
     pub fn expand_bits(&self, size: usize) -> usize {
-        transform_bit_pos(size, self.data_chunk_bits, self.padded_chunk_bits)
+        self.transform_bit_pos(size, true)
     }
 
     pub fn contract_bits(&self, size: usize) -> usize {
-        transform_bit_pos(size, self.padded_chunk_bits, self.data_chunk_bits)
+        self.transform_bit_pos(size, false)
     }
 
     // Calculate padded byte size from unpadded byte size, rounding up.
     // TODO: The `expand` family of methods are not used/tested here.
     pub fn expand_bytes(&self, bytes: usize) -> usize {
-        transform_byte_pos(bytes, self.data_chunk_bits, self.padded_chunk_bits)
+        self.transform_byte_pos(bytes, true)
     }
 
     // Calculate unpadded byte size from padded byte size, rounding down.
     pub fn contract_bytes(&self, bytes: usize) -> usize {
-        transform_byte_pos(bytes, self.padded_chunk_bits, self.data_chunk_bits)
+        self.transform_byte_pos(bytes, false)
     }
 
     // TODO: This is the place where we figure out if we are byte-aligned or not,
@@ -334,48 +389,6 @@ fn div_rem(a: usize, b: usize) -> (usize, usize) {
     let div = a / b;
     let rem = a % b;
     (div, rem)
-}
-
-// Transform a position between a padded and an unpadded layout.
-// TODO: Move inside `PaddingMap` since it works under its semantics,
-// this is not a general function. Also remove the `from_size`
-// and `to_size` arguments, we always call it with the pad/unpad
-// sizes, just use a bool for direction.
-// TODO: Review this.
-// TODO: `size` of what?
-// TODO: Is `p` a position or a size itself?
-// TODO: The use of `rem` seems to imply `from_size` smaller than `to_size`?
-// TODO: Could we return `rem` separately?
-fn transform_bit_pos(p: usize, from_size: usize, to_size: usize) -> usize {
-    // For both the padding and unpadding direction the operation is the same.
-    // The quotient is the conversion of full elements, the remainder is the
-    // amount of unpadded data which is directly added to the result since
-    // it carries no padding bits.
-    let (div, rem) = div_rem(p, from_size);
-
-    (div * to_size) + rem
-    // TODO: `rem` is added because it's supposed to be bits without padding?
-    // (in the case of contracting: padded -> data.)
-}
-
-// Similar `to transform_bit_pos` this function converts sizes expressed
-// in bytes, al
-fn transform_byte_pos(p: usize, from_bit_size: usize, to_bit_size: usize) -> usize {
-    let bit_pos = p * 8;
-    let transformed_bit_pos = transform_bit_pos(bit_pos, from_bit_size, to_bit_size);
-    let transformed_byte_pos1 = transformed_bit_pos as f64 / 8.;
-    // TODO: Drop the `1` suffix.
-
-    // TODO: Similar to `transform_bit_pos`, remove the from/to argument and make
-    // this `if` evalute the padding/unpadding direction.
-    (if from_bit_size < to_bit_size {
-        transformed_byte_pos1.ceil()
-    } else {
-        transformed_byte_pos1.floor()
-        // We are using this in the case when we want to estimate how much input
-        // bytes do we need to generate the padded layout.
-        // TODO: But this should be documented way up in the call stack.
-    }) as usize
 }
 
 pub fn write_padded<W: ?Sized>(source: &[u8], target: &mut W) -> io::Result<usize>
