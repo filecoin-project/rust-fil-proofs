@@ -140,7 +140,7 @@ pub fn almost_truncate_to_unpadded_bytes<W: ?Sized>(
 where
     W: Read + Write + Seek,
 {
-    let padded = FR32_PADDING_MAP.padded_bit_bytes_from_bytes(length as usize);
+    let padded = BitByte::from_bits(FR32_PADDING_MAP.transform_bit_pos((length * 8) as usize, true));
     let real_length = padded.bytes_needed();
     let _final_bit_count = padded.bits;
     // TODO (maybe): Rewind stream and use final_bit_count to zero-pad last byte of data (post-truncation).
@@ -285,28 +285,6 @@ impl PaddingMap {
         }) as usize
     }
 
-    // TODO: This is the place where we figure out if we are byte-aligned or not,
-    // review and document it. It receives a multiple of 8 number of bits from
-    // `calculate_offsets`.
-    pub fn padded_bit_bytes_from_bits(&self, bits: usize) -> BitByte {
-        let expanded = self.transform_bit_pos(bits, true);
-        BitByte::from_bits(expanded)
-    }
-
-    // Calculate and return bits and bytes to which a given number of bytes expands.
-    pub fn padded_bit_bytes_from_bytes(&self, bytes: usize) -> BitByte {
-        self.padded_bit_bytes_from_bits(bytes * 8)
-    }
-
-    pub fn unpadded_bit_bytes_from_bits(&self, bits: usize) -> BitByte {
-        let contracted = self.transform_bit_pos(bits, false);
-        BitByte::from_bits(contracted)
-    }
-
-    pub fn unpadded_bit_bytes_from_bytes(&self, bytes: usize) -> BitByte {
-        self.unpadded_bit_bytes_from_bits(bytes * 8)
-    }
-
     // From the `position` specified, it returns:
     // - the absolute position of the start of the next element,
     //   in bytes (since elements -with padding- are byte aligned).
@@ -354,9 +332,9 @@ impl PaddingMap {
         // size of the valid padded data contained inside the persisted layout, as
         // that size may be unaligned its represented with `BitByte`.
         // Invariant: `padded_data_bit_precision` <=  `persisted_padded_bytes`.
-        let padded_data_bit_precision = self.padded_bit_bytes_from_bits(raw_data_bytes * 8);
+        let padded_data_bits = self.transform_bit_pos(raw_data_bytes * 8, true);
 
-        Ok((persisted_padded_bytes, raw_data_bytes as u64, padded_data_bit_precision))
+        Ok((persisted_padded_bytes, raw_data_bytes as u64, BitByte::from_bits(padded_data_bits)))
         // TODO: Why do we use `usize` internally and `u64` externally?
     }
 }
@@ -576,7 +554,7 @@ where
     // of the writer (`write_pos`) in the raw data unpadded layout. Since the
     // raw data is byte-aligned and the padded data isn't, this transformation
     // converts from a byte size into a `BitByte` size.
-    let mut read_pos = padding_map.padded_bit_bytes_from_bytes(write_pos);
+    let mut read_pos = BitByte::from_bits(padding_map.transform_bit_pos(write_pos * 8, true));
 
     // Specify the maximum data to recover (write) in bits, since the data unit
     // in the element (in contrast with the original raw data that generated it)

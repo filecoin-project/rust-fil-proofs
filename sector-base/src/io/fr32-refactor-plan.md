@@ -16,6 +16,8 @@
 
 - [x] Remove the whole group of expand/contract functions.
 
-- [ ] Review `padded_bit_bytes_from_bits` family of methods.
+- [x] Review `padded_bit_bytes_from_bits` family of methods.
+
+- [ ] Review `almost_truncate_to_unpadded_bytes` and any other loose function in `fr32.rs`.
 
 - [ ] Final review and formatting to the `PaddingMap` documentation.
