@@ -20,4 +20,6 @@
 
 - [ ] Review `almost_truncate_to_unpadded_bytes` and any other loose function in `fr32.rs`.
 
-- [ ] Final review and formatting to the `PaddingMap` documentation.
+- [x] Take a look at the tests to better understand the system in its context but do not modify anything in this PR to make it clear that we are not changing the behavior here, just clarifying the code. Include a brief description of every test.
+
+- [ ] Final review and formatting to the `PaddingMap` documentation. 

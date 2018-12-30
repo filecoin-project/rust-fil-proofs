@@ -93,6 +93,8 @@ pub type Fr32BitVec = BitVec<bitvec::LittleEndian, u8>;
 // TODO: We should keep a simple state while padding, maybe not here but in
 // a new `Padder` structure which would know if we are in the data or pad
 // areas (bit position), and how much bits until we reach a boundary.
+// TOOD: Clarify that the diagrams are illustrative but we actually use a
+// little endian to persist padded data (see `Fr32BitVec`).
 pub struct PaddingMap {
     // The number of bits in the unpadded data.
     data_chunk_bits: usize,
@@ -261,7 +263,8 @@ impl PaddingMap {
     // expressed in bytes.
     // TODO: Expand on the difference between the two functions, we deal with
     // bits when manipulating the data itself, we deal with bytes when we care
-    // about how we persist the padded layout in byte-aligned streams.
+    // about how we persist the padded layout in byte-aligned streams. So the
+    // difference is actually data vs persisted, not bit vs byte.
     pub fn transform_byte_pos(&self, pos: usize, padding_direction: bool) -> usize {
         let transformed_bit_pos = self.transform_bit_pos(pos * 8, padding_direction);
 
@@ -349,6 +352,8 @@ fn div_rem(a: usize, b: usize) -> (usize, usize) {
 pub fn write_padded<W: ?Sized>(source: &[u8], target: &mut W) -> io::Result<usize>
 where
     W: Read + Write + Seek,
+// TODO: Document why we need a `Read + Write + Seek` and
+// `write_unpadded` needs only `Write`.
 {
     // In order to optimize alignment in the common case of writing from an aligned start,
     // we should make the chunk a multiple of 128.
@@ -628,6 +633,7 @@ mod tests {
         }
     }
 
+    // `write_padded` for 151 bytes of 1s, check padding bits in byte 31 and 63.
     #[test]
     fn test_write_padded() {
         let data = vec![255u8; 151];
@@ -644,6 +650,9 @@ mod tests {
         assert_eq!(padded[63], 0b0011_1111);
     }
 
+    // `write_padded` for 256 bytes of 1s, splitting it in two calls of 128 bytes,
+    // aligning the calls with the padded element boundaries, check padding bits
+    // in byte 31 and 63.
     #[test]
     fn test_write_padded_multiple_aligned() {
         let data = vec![255u8; 256];
@@ -660,8 +669,14 @@ mod tests {
         assert_eq!(padded[32], 0b1111_1111);
         assert_eq!(&padded[33..63], vec![255u8; 30].as_slice());
         assert_eq!(padded[63], 0b0011_1111);
+        // TODO: This test is not checking the padding in the boundary between the
+        // `write_padded` calls, it doesn't seem then to be testing anything different
+        // from the previous one.
     }
 
+    // `write_padded` for 265 bytes of 1s, splitting it in two calls of 128 bytes,
+    // aligning the calls with the padded element boundaries, check padding bits
+    // in byte 31 and 63.
     #[test]
     fn test_write_padded_multiple_first_aligned() {
         let data = vec![255u8; 265];
@@ -678,6 +693,7 @@ mod tests {
         assert_eq!(padded[32], 0b1111_1111);
         assert_eq!(&padded[33..63], vec![255u8; 30].as_slice());
         assert_eq!(padded[63], 0b0011_1111);
+        // TODO: Same observation as before, what are we testing here?
     }
 
     fn validate_fr32(bytes: &[u8]) {
@@ -689,6 +705,10 @@ mod tests {
             ));
         }
     }
+
+    // `write_padded` for 127 bytes of 1s, splitting it in two calls of varying
+    // sizes, from 0 to the full size, generating many unaligned calls, check
+    // padding bits in byte 31 and 63.
     #[test]
     fn test_write_padded_multiple_unaligned() {
         // Use 127 for this test because it unpads to 128 – a multiple of 32.
@@ -708,9 +728,14 @@ mod tests {
             assert_eq!(padded[32], 0b1111_1111);
             assert_eq!(&padded[33..63], vec![255u8; 30].as_slice());
             assert_eq!(padded[63], 0b0011_1111);
+            // TODO: We seem to be repeating the same series of asserts,
+            // maybe this can be abstracted away in a helper function.
         }
     }
 
+    // `write_padded` for a raw data stream of increasing values and specific
+    // outliers (0xFF, 9), check the content of the raw data encoded (with
+    // different alignments) in the padded layouts.
     #[test]
     fn test_write_padded_alt() {
         let mut source = vec![
@@ -742,6 +767,8 @@ mod tests {
         assert_eq!(buf[68], 0x0f); // And here is the second.
     }
 
+    // `write_padded` and `write_unpadded` for 1016 bytes of 1s, check the
+    // recovered raw data.
     #[test]
     fn test_read_write_padded() {
         let len = 1016; // Use a multiple of 254.
@@ -760,6 +787,8 @@ mod tests {
         assert_eq!(data, unpadded);
     }
 
+    // `write_padded` and `write_unpadded` for 1016 bytes of random data, recover
+    // different lengths of raw data at different offset, check integrity.
     #[test]
     fn test_read_write_padded_offset() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
