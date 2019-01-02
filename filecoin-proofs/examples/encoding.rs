@@ -144,6 +144,11 @@ where
         "encoding time/byte: {:?}",
         encoding_time / data_size as u32; "target" => "stats"
     );
+    info!(
+        FCP_LOG,
+        "encoding time/GiB: {:?}",
+        (1 << 30) * encoding_time / data_size as u32; "target" => "stats"
+    );
 }
 
 fn main() {

@@ -173,6 +173,11 @@ fn do_the_work<H: 'static>(
         "replication_time/byte: {:?}",
         replication_duration / data_size as u32; "target" => "stats"
     );
+    info!(
+        FCP_LOG,
+        "replication_time/GiB: {:?}",
+        (1 << 30) * replication_duration / data_size as u32; "target" => "stats"
+    );
 
     let mut total_proving = Duration::new(0, 0);
     info!(FCP_LOG, "generating one proof");
