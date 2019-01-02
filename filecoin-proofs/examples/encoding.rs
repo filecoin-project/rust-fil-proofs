@@ -23,21 +23,14 @@ use pairing::bls12_381::Bls12;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::fs::File;
 use std::io::Write;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-use bellman::Circuit;
-use sapling_crypto::jubjub::JubjubBls12;
-
-use storage_proofs::circuit::test::*;
-use storage_proofs::circuit::zigzag::{ZigZagCircuit, ZigZagCompound};
-use storage_proofs::compound_proof::{self, CircuitComponent, CompoundProof};
 use storage_proofs::drgporep;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
-use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
+use storage_proofs::hasher::{Hasher, PedersenHasher};
 use storage_proofs::layered_drgporep;
-use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::vde;
 use storage_proofs::zigzag_drgporep::*;
@@ -105,7 +98,6 @@ where
     let mut data = file_backed_mmap_from_random_bytes(nodes);
 
     let replica_id: H::Domain = rng.gen();
-    let mut data_copy = file_backed_mmap_from(&data);
 
     let sp = layered_drgporep::SetupParams {
         drg_porep_setup_params: drgporep::SetupParams {
@@ -128,7 +120,6 @@ where
     stop_profile();
 
     let start = Instant::now();
-    let mut encode_duration = Duration::new(0, 0);
 
     info!(FCP_LOG, "encoding");
 
