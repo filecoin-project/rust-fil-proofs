@@ -55,11 +55,12 @@ fn common_setup(index: u32, precomputed: FeistelPrecomputed) -> (u32, u32, u32, 
 
     (left, right, right_mask, half_bits)
 }
+pub const FEISTEL_ROUNDS: usize = 4;
 
 fn encode(index: u32, keys: &[u32], precomputed: FeistelPrecomputed) -> u32 {
     let (mut left, mut right, right_mask, half_bits) = common_setup(index, precomputed);
 
-    for key in keys.iter().take(4) {
+    for key in keys.iter().take(FEISTEL_ROUNDS) {
         let (l, r) = (right, left ^ feistel(right, *key, right_mask));
         left = l;
         right = r;
@@ -71,7 +72,7 @@ fn encode(index: u32, keys: &[u32], precomputed: FeistelPrecomputed) -> u32 {
 fn decode(index: u32, keys: &[u32], precomputed: FeistelPrecomputed) -> u32 {
     let (mut left, mut right, right_mask, half_bits) = common_setup(index, precomputed);
 
-    for i in (0..4).rev() {
+    for i in (0..FEISTEL_ROUNDS).rev() {
         let (l, r) = ((right ^ feistel(left, keys[i], right_mask)), left);
         left = l;
         right = r;
