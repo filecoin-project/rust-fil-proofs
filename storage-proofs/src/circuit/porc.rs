@@ -141,10 +141,8 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 32;
-        let lambda = 32;
 
         let pub_params = porc::PublicParams {
-            lambda,
             leaves,
             sectors_count: 2,
         };
@@ -157,10 +155,10 @@ mod tests {
             .collect();
 
         let graph1 = BucketGraph::<PedersenHasher>::new(32, 5, 0, new_seed());
-        let tree1 = graph1.merkle_tree(data1.as_slice(), 32).unwrap();
+        let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
 
         let graph2 = BucketGraph::<PedersenHasher>::new(32, 5, 0, new_seed());
-        let tree2 = graph2.merkle_tree(data1.as_slice(), 32).unwrap();
+        let tree2 = graph2.merkle_tree(data1.as_slice()).unwrap();
 
         let pub_inputs = porc::PublicInputs {
             challenges: &vec![rng.gen(), rng.gen()],

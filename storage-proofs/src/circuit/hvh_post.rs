@@ -125,7 +125,6 @@ mod tests {
                 key: rng.gen(),
                 rounds: 1,
             },
-            lambda,
             sectors_count: 2,
         };
 
@@ -139,9 +138,9 @@ mod tests {
             .collect();
 
         let graph0 = BucketGraph::<PedersenHasher>::new(1024, 5, 0, new_seed());
-        let tree0 = graph0.merkle_tree(data0.as_slice(), lambda).unwrap();
+        let tree0 = graph0.merkle_tree(data0.as_slice()).unwrap();
         let graph1 = BucketGraph::<PedersenHasher>::new(1024, 5, 0, new_seed());
-        let tree1 = graph1.merkle_tree(data1.as_slice(), lambda).unwrap();
+        let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
 
         let pub_inputs = hvh_post::PublicInputs {
             challenges: vec![rng.gen(), rng.gen()],
