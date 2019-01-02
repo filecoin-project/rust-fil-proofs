@@ -35,11 +35,30 @@ pub struct PrivateInputs<'a, H: 'a + Hasher> {
     _h: PhantomData<H>,
 }
 
+impl<'a, H: 'a + Hasher> PrivateInputs<'a, H> {
+    pub fn new(
+        replicas: &'a [&'a [u8]],
+        trees: &'a [&'a MerkleTree<H::Domain, H::Function>],
+    ) -> Self {
+        PrivateInputs {
+            replicas,
+            trees,
+            _h: PhantomData,
+        }
+    }
+}
+
 /// Bacon-PoSt
 /// This is one construction of a Proof-of-Spacetime.
 /// It currently only supports proving over a single sector.
 #[derive(Clone, Debug)]
 pub struct Proof<'a, H: Hasher + 'a, V: Vdf<H::Domain>>(Vec<hvh_post::Proof<'a, H, V>>);
+
+impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> Proof<'a, H, V> {
+    pub fn proofs(&self) -> &[hvh_post::Proof<'a, H, V>] {
+        &self.0
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct BaconPost<H: Hasher, V: Vdf<H::Domain>> {
