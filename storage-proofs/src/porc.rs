@@ -20,6 +20,7 @@ pub struct SetupParams {
 
 #[derive(Debug, Clone)]
 pub struct PublicParams {
+    // NOTE: This assumes all sectors are the same size, which may not remain a valid assumption.
     /// How many leaves the underlying merkle tree has.
     pub leaves: usize,
     /// The number of sectors that are proven over.
@@ -67,11 +68,14 @@ impl<H: Hasher> Proof<H> {
 }
 
 #[derive(Debug, Clone)]
-pub struct PoRC<H: Hasher> {
-    _h: PhantomData<H>,
+pub struct PoRC<'a, H>
+where
+    H: 'a + Hasher,
+{
+    _h: PhantomData<&'a H>,
 }
 
-impl<'a, H: 'a + Hasher> ProofScheme<'a> for PoRC<H> {
+impl<'a, H: 'a + Hasher> ProofScheme<'a> for PoRC<'a, H> {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<'a, H::Domain>;

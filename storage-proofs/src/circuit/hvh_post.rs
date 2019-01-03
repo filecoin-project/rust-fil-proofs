@@ -29,12 +29,12 @@ impl<'a, E: JubjubEngine> Circuit<E> for HvhPost<'a, E> {
             cs,
             self.params,
             self.vdf_key,
-            &self.vdf_ys,
-            &self.vdf_xs,
+            self.vdf_ys,
+            self.vdf_xs,
             self.vdf_sloth_rounds,
-            &self.challenged_leafs_vec,
-            &self.commitments_vec,
-            &self.paths_vec,
+            self.challenged_leafs_vec,
+            self.commitments_vec,
+            self.paths_vec,
         )
     }
 }
@@ -43,12 +43,12 @@ pub fn hvh_post<E: JubjubEngine, CS: ConstraintSystem<E>>(
     cs: &mut CS,
     params: &E::Params,
     vdf_key: Option<E::Fr>,
-    vdf_ys: &[Option<E::Fr>],
-    vdf_xs: &[Option<E::Fr>],
+    vdf_ys: Vec<Option<E::Fr>>,
+    vdf_xs: Vec<Option<E::Fr>>,
     vdf_sloth_rounds: usize,
-    challenged_leafs_vec: &[Vec<Option<E::Fr>>],
-    commitments_vec: &[Vec<Option<E::Fr>>],
-    paths_vec: &[Vec<Vec<Option<(E::Fr, bool)>>>],
+    challenged_leafs_vec: Vec<Vec<Option<E::Fr>>>,
+    commitments_vec: Vec<Vec<Option<E::Fr>>>,
+    paths_vec: Vec<Vec<Vec<Option<(E::Fr, bool)>>>>,
 ) -> Result<(), SynthesisError> {
     // VDF Output Verification
     assert_eq!(vdf_xs.len(), vdf_ys.len());
@@ -87,7 +87,13 @@ pub fn hvh_post<E: JubjubEngine, CS: ConstraintSystem<E>>(
         .enumerate()
     {
         let mut cs = cs.namespace(|| format!("porc_verification_round_{}", i));
-        porc::porc(&mut cs, params, challenged_leafs, commitments, paths)?;
+        porc::PoRCCircuit::synthesize(
+            &mut cs,
+            params,
+            challenged_leafs.to_vec(),
+            commitments.to_vec(),
+            paths.to_vec(),
+        )?;
     }
 
     Ok(())

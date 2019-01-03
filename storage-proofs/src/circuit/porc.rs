@@ -1,11 +1,17 @@
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
+use pairing::bls12_381::{Bls12, Fr};
 use sapling_crypto::circuit::{boolean, multipack, num, pedersen_hash};
 use sapling_crypto::jubjub::JubjubEngine;
 
 use crate::circuit::constraint;
+use crate::compound_proof::{CircuitComponent, CompoundProof};
+use crate::hasher::Hasher;
+use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
+use crate::porc::PoRC;
+use crate::proof::ProofScheme;
 
 /// This is an instance of the `ProofOfRetrievableCommitments` circuit.
-pub struct ProofOfRetrievableCommitments<'a, E: JubjubEngine> {
+pub struct PoRCCircuit<'a, E: JubjubEngine> {
     /// Paramters for the engine.
     pub params: &'a E::Params,
 
@@ -14,109 +20,157 @@ pub struct ProofOfRetrievableCommitments<'a, E: JubjubEngine> {
     pub paths: Vec<Vec<Option<(E::Fr, bool)>>>,
 }
 
-impl<'a, E: JubjubEngine> Circuit<E> for ProofOfRetrievableCommitments<'a, E> {
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        porc::<E, CS>(
-            cs,
-            self.params,
-            &self.challenged_leafs,
-            &self.commitments,
-            &self.paths,
-        )
+pub struct PoRCCompound {}
+
+impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParameters<E, C, P>
+    for PoRCCompound
+{
+    fn cache_prefix() -> String {
+        String::from("proof-of-retrievable-commitments")
     }
 }
 
-pub fn porc<'a, E: JubjubEngine, CS: ConstraintSystem<E>>(
-    cs: &mut CS,
-    params: &'a E::Params,
-    challenged_leafs: &[Option<E::Fr>],
-    commitments: &[Option<E::Fr>],
-    paths: &[Vec<Option<(E::Fr, bool)>>],
-) -> Result<(), SynthesisError> {
-    assert_eq!(challenged_leafs.len(), paths.len());
-    assert_eq!(paths.len(), commitments.len());
+#[derive(Clone, Default)]
+pub struct ComponentPrivateInputs {}
 
-    for (i, (challenged_leaf, (path, commitment))) in challenged_leafs
-        .iter()
-        .zip(paths.iter().zip(commitments))
-        .enumerate()
-    {
-        let mut cs = cs.namespace(|| format!("challenge_{}", i));
+impl<'a, E: JubjubEngine> CircuitComponent for PoRCCircuit<'a, E> {
+    type ComponentPrivateInputs = ComponentPrivateInputs;
+}
 
-        // Allocate the commitment
-        let rt = num::AllocatedNum::alloc(cs.namespace(|| "commitment_num"), || {
-            commitment.ok_or(SynthesisError::AssignmentMissing)
-        })?;
-
-        let params = params;
-
-        let leaf_num = num::AllocatedNum::alloc(cs.namespace(|| "leaf_num"), || {
-            challenged_leaf.ok_or_else(|| SynthesisError::AssignmentMissing)
-        })?;
-
-        leaf_num.inputize(cs.namespace(|| "leaf_input"))?;
-
-        // This is an injective encoding, as cur is a
-        // point in the prime order subgroup.
-        let mut cur = leaf_num;
-
-        let mut path_bits = Vec::with_capacity(path.len());
-
-        // Ascend the merkle tree authentication path
-        for (i, e) in path.iter().enumerate() {
-            let cs = &mut cs.namespace(|| format!("merkle tree hash {}", i));
-
-            // Determines if the current subtree is the "right" leaf at this
-            // depth of the tree.
-            let cur_is_right = boolean::Boolean::from(boolean::AllocatedBit::alloc(
-                cs.namespace(|| "position bit"),
-                e.map(|e| e.1),
-            )?);
-
-            // Witness the authentication path element adjacent
-            // at this depth.
-            let path_element = num::AllocatedNum::alloc(cs.namespace(|| "path element"), || {
-                Ok(e.ok_or(SynthesisError::AssignmentMissing)?.0)
-            })?;
-
-            // Swap the two if the current subtree is on the right
-            let (xl, xr) = num::AllocatedNum::conditionally_reverse(
-                cs.namespace(|| "conditional reversal of preimage"),
-                &cur,
-                &path_element,
-                &cur_is_right,
-            )?;
-
-            let mut preimage = vec![];
-            preimage.extend(xl.into_bits_le(cs.namespace(|| "xl into bits"))?);
-            preimage.extend(xr.into_bits_le(cs.namespace(|| "xr into bits"))?);
-
-            // Compute the new subtree value
-            cur = pedersen_hash::pedersen_hash(
-                cs.namespace(|| "computation of pedersen hash"),
-                pedersen_hash::Personalization::MerkleTree(i),
-                &preimage,
-                params,
-            )?
-            .get_x()
-            .clone(); // Injective encoding
-
-            path_bits.push(cur_is_right);
-        }
-
-        // allocate input for is_right path
-        multipack::pack_into_inputs(cs.namespace(|| "packed path"), &path_bits)?;
-
-        {
-            // Validate that the root of the merkle tree that we calculated is the same as the input.
-            constraint::equal(&mut cs, || "enforce commitment correct", &cur, &rt);
-        }
-
-        // Expose the root
-        rt.inputize(cs.namespace(|| "commitment"))?;
+impl<'a, H> CompoundProof<'a, Bls12, PoRC<'a, H>, PoRCCircuit<'a, Bls12>> for PoRCCompound
+where
+    H: 'a + Hasher,
+{
+    fn generate_public_inputs(
+        pub_in: &<PoRC<'a, H> as ProofScheme<'a>>::PublicInputs,
+        pub_params: &<PoRC<'a, H> as ProofScheme<'a>>::PublicParams,
+        partition_k: Option<usize>,
+    ) -> Vec<Fr> {
+        unimplemented!();
     }
 
-    Ok(())
+    fn circuit(
+        pub_in: &<PoRC<'a, H> as ProofScheme<'a>>::PublicInputs,
+        component_private_inputs: <PoRCCircuit<'a, Bls12> as CircuitComponent>::ComponentPrivateInputs,
+        vanilla_proof: &<PoRC<'a, H> as ProofScheme<'a>>::Proof,
+        pub_params: &<PoRC<'a, H> as ProofScheme<'a>>::PublicParams,
+        engine_params: &'a <Bls12 as JubjubEngine>::Params,
+    ) -> PoRCCircuit<'a, Bls12> {
+        unimplemented!()
+    }
+}
+
+impl<'a, E: JubjubEngine> Circuit<E> for PoRCCircuit<'a, E> {
+    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+        let params = self.params;
+        let challenged_leafs = self.challenged_leafs;
+        let commitments = self.commitments;
+        let paths = self.paths;
+
+        assert_eq!(challenged_leafs.len(), paths.len());
+        assert_eq!(paths.len(), commitments.len());
+
+        for (i, (challenged_leaf, (path, commitment))) in challenged_leafs
+            .iter()
+            .zip(paths.iter().zip(commitments))
+            .enumerate()
+        {
+            let mut cs = cs.namespace(|| format!("challenge_{}", i));
+
+            // Allocate the commitment
+            let rt = num::AllocatedNum::alloc(cs.namespace(|| "commitment_num"), || {
+                commitment.ok_or(SynthesisError::AssignmentMissing)
+            })?;
+
+            let params = params;
+
+            let leaf_num = num::AllocatedNum::alloc(cs.namespace(|| "leaf_num"), || {
+                challenged_leaf.ok_or_else(|| SynthesisError::AssignmentMissing)
+            })?;
+
+            leaf_num.inputize(cs.namespace(|| "leaf_input"))?;
+
+            // This is an injective encoding, as cur is a
+            // point in the prime order subgroup.
+            let mut cur = leaf_num;
+
+            let mut path_bits = Vec::with_capacity(path.len());
+
+            // Ascend the merkle tree authentication path
+            for (i, e) in path.iter().enumerate() {
+                let cs = &mut cs.namespace(|| format!("merkle tree hash {}", i));
+
+                // Determines if the current subtree is the "right" leaf at this
+                // depth of the tree.
+                let cur_is_right = boolean::Boolean::from(boolean::AllocatedBit::alloc(
+                    cs.namespace(|| "position bit"),
+                    e.map(|e| e.1),
+                )?);
+
+                // Witness the authentication path element adjacent
+                // at this depth.
+                let path_element =
+                    num::AllocatedNum::alloc(cs.namespace(|| "path element"), || {
+                        Ok(e.ok_or(SynthesisError::AssignmentMissing)?.0)
+                    })?;
+
+                // Swap the two if the current subtree is on the right
+                let (xl, xr) = num::AllocatedNum::conditionally_reverse(
+                    cs.namespace(|| "conditional reversal of preimage"),
+                    &cur,
+                    &path_element,
+                    &cur_is_right,
+                )?;
+
+                let mut preimage = vec![];
+                preimage.extend(xl.into_bits_le(cs.namespace(|| "xl into bits"))?);
+                preimage.extend(xr.into_bits_le(cs.namespace(|| "xr into bits"))?);
+
+                // Compute the new subtree value
+                cur = pedersen_hash::pedersen_hash(
+                    cs.namespace(|| "computation of pedersen hash"),
+                    pedersen_hash::Personalization::MerkleTree(i),
+                    &preimage,
+                    params,
+                )?
+                .get_x()
+                .clone(); // Injective encoding
+
+                path_bits.push(cur_is_right);
+            }
+
+            // allocate input for is_right path
+            multipack::pack_into_inputs(cs.namespace(|| "packed path"), &path_bits)?;
+
+            {
+                // Validate that the root of the merkle tree that we calculated is the same as the input.
+                constraint::equal(&mut cs, || "enforce commitment correct", &cur, &rt);
+            }
+
+            // Expose the root
+            rt.inputize(cs.namespace(|| "commitment"))?;
+        }
+
+        Ok(())
+    }
+}
+
+impl<'a, E: JubjubEngine> PoRCCircuit<'a, E> {
+    pub fn synthesize<CS: ConstraintSystem<E>>(
+        cs: &mut CS,
+        params: &'a E::Params,
+        challenged_leafs: Vec<Option<E::Fr>>,
+        commitments: Vec<Option<E::Fr>>,
+        paths: Vec<Vec<Option<(E::Fr, bool)>>>,
+    ) -> Result<(), SynthesisError> {
+        PoRCCircuit {
+            params,
+            challenged_leafs,
+            commitments,
+            paths,
+        }
+        .synthesize(cs)
+    }
 }
 
 #[cfg(test)]
@@ -194,7 +248,7 @@ mod tests {
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        let instance = ProofOfRetrievableCommitments {
+        let instance = PoRCCircuit {
             params,
             challenged_leafs,
             paths,

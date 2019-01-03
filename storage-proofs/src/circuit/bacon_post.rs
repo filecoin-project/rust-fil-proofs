@@ -107,12 +107,12 @@ impl<'a, E: JubjubEngine> Circuit<E> for BaconPost<'a, E> {
                 &mut cs.namespace(|| "hvh_post"),
                 self.params,
                 self.vdf_key,
-                &self.vdf_ys_vec[0],
-                &self.vdf_xs_vec[0],
+                self.vdf_ys_vec[0].clone(),
+                self.vdf_xs_vec[0].clone(),
                 self.vdf_sloth_rounds,
-                &self.challenged_leafs_vec_vec[0],
-                &self.commitments_vec_vec[0],
-                &self.paths_vec_vec[0],
+                self.challenged_leafs_vec_vec[0].clone(),
+                self.commitments_vec_vec[0].clone(),
+                self.paths_vec_vec[0].clone(),
             )?;
         }
 
@@ -147,12 +147,12 @@ impl<'a, E: JubjubEngine> Circuit<E> for BaconPost<'a, E> {
                 &mut cs.namespace(|| "hvh_post"),
                 self.params,
                 self.vdf_key,
-                &self.vdf_ys_vec[t],
-                &self.vdf_xs_vec[t],
+                self.vdf_ys_vec[t].clone(),
+                self.vdf_xs_vec[t].clone(),
                 self.vdf_sloth_rounds,
-                &self.challenged_leafs_vec_vec[t],
-                &self.commitments_vec_vec[t],
-                &self.paths_vec_vec[t],
+                self.challenged_leafs_vec_vec[t].clone(),
+                self.commitments_vec_vec[t].clone(),
+                self.paths_vec_vec[t].clone(),
             )?;
         }
 

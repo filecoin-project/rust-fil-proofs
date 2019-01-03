@@ -71,7 +71,7 @@ impl<'a, H: 'a + Hasher> PrivateInputs<'a, H> {
 #[derive(Clone, Debug)]
 pub struct Proof<'a, H: Hasher + 'a, V: Vdf<H::Domain>> {
     /// `post_iteration` online Proof-of-Replication proofs.
-    pub proofs_porep: Vec<<PoRC<H> as ProofScheme<'a>>::Proof>,
+    pub proofs_porep: Vec<<PoRC<'a, H> as ProofScheme<'a>>::Proof>,
     /// `post_epochs - 1` VDF proofs
     pub proofs_vdf: Vec<V::Proof>,
     pub ys: Vec<H::Domain>,
