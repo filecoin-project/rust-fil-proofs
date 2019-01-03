@@ -10,7 +10,7 @@ use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use crate::porc::PoRC;
 use crate::proof::ProofScheme;
 
-/// This is an instance of the `ProofOfRetrievableCommitments` circuit.
+/// This is the `PoRC` circuit.
 pub struct PoRCCircuit<'a, E: JubjubEngine> {
     /// Paramters for the engine.
     pub params: &'a E::Params,

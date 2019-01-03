@@ -1,14 +1,18 @@
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
-// use sapling_crypto::circuit::boolean::Boolean;
-// use sapling_crypto::circuit::{num, uint32};
+use pairing::bls12_381::{Bls12, Fr};
 use sapling_crypto::jubjub::JubjubEngine;
 
+use crate::bacon_post::BaconPoSt;
 use crate::circuit::hvh_post;
-// use crate::circuit::pedersen::pedersen_compression_num;
+use crate::compound_proof::{CircuitComponent, CompoundProof};
+use crate::hasher::Hasher;
+use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
+use crate::proof::ProofScheme;
+use crate::vdf::Vdf;
 
-/// This is an instance of the `BACON-PoSt` circuit.
-pub struct BaconPost<'a, E: JubjubEngine> {
-    /// Paramters for the engine.
+/// This is the `BACON-PoSt` circuit.
+pub struct BaconPoStCircuit<'a, E: JubjubEngine> {
+    /// Parameters for the engine.
     pub params: &'a E::Params,
 
     // Beacon
@@ -24,6 +28,48 @@ pub struct BaconPost<'a, E: JubjubEngine> {
     pub challenged_leafs_vec_vec: Vec<Vec<Vec<Option<E::Fr>>>>,
     pub commitments_vec_vec: Vec<Vec<Vec<Option<E::Fr>>>>,
     pub paths_vec_vec: Vec<Vec<Vec<Vec<Option<(E::Fr, bool)>>>>>,
+}
+
+pub struct BaconPoStCompound {}
+
+#[derive(Clone, Default)]
+pub struct ComponentPrivateInputs {}
+
+impl<'a, E: JubjubEngine> CircuitComponent for BaconPoStCircuit<'a, E> {
+    type ComponentPrivateInputs = ComponentPrivateInputs;
+}
+
+impl<'a, H: Hasher, V: Vdf<H::Domain>>
+    CompoundProof<'a, Bls12, BaconPoSt<H, V>, BaconPoStCircuit<'a, Bls12>> for BaconPoStCompound
+where
+    <V as Vdf<H::Domain>>::PublicParams: Send + Sync,
+    <V as Vdf<H::Domain>>::Proof: Send + Sync,
+    H: 'a,
+{
+    fn generate_public_inputs(
+        _pub_in: &<BaconPoSt<H, V> as ProofScheme<'a>>::PublicInputs,
+        _pub_params: &<BaconPoSt<H, V> as ProofScheme<'a>>::PublicParams,
+        _partition_k: Option<usize>,
+    ) -> Vec<Fr> {
+        unimplemented!();
+    }
+    fn circuit(
+        _pub_in: &<BaconPoSt<H, V> as ProofScheme<'a>>::PublicInputs,
+        _component_private_inputs:<BaconPoStCircuit<'a, Bls12> as CircuitComponent>::ComponentPrivateInputs,
+        _vanilla_proof: &<BaconPoSt<H, V> as ProofScheme<'a>>::Proof,
+        _pub_params: &<BaconPoSt<H, V> as ProofScheme<'a>>::PublicParams,
+        _engine_params: &'a <Bls12 as JubjubEngine>::Params,
+    ) -> BaconPoStCircuit<'a, Bls12> {
+        unimplemented!()
+    }
+}
+
+impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParameters<E, C, P>
+    for BaconPoStCompound
+{
+    fn cache_prefix() -> String {
+        String::from("bacon-post")
+    }
 }
 
 // fn extract_post_input<E: JubjubEngine, CS: ConstraintSystem<E>>(
@@ -68,7 +114,7 @@ pub struct BaconPost<'a, E: JubjubEngine> {
 //     Ok(res)
 // }
 
-impl<'a, E: JubjubEngine> Circuit<E> for BaconPost<'a, E> {
+impl<'a, E: JubjubEngine> Circuit<E> for BaconPoStCircuit<'a, E> {
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let post_periods_count = self.vdf_ys_vec.len();
 
@@ -164,7 +210,6 @@ impl<'a, E: JubjubEngine> Circuit<E> for BaconPost<'a, E> {
 mod tests {
     use super::*;
 
-    use pairing::bls12_381::*;
     use pairing::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
@@ -199,9 +244,8 @@ mod tests {
             post_periods_count: 3,
         };
 
-        let mut bacon_post = bacon_post::BaconPost::<PedersenHasher, vdf_sloth::Sloth>::default();
-
-        let pub_params = bacon_post.setup(&sp).unwrap();
+        let pub_params =
+            bacon_post::BaconPoSt::<PedersenHasher, vdf_sloth::Sloth>::setup(&sp).unwrap();
 
         let data0: Vec<u8> = (0..256)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
@@ -222,11 +266,9 @@ mod tests {
         let trees = [&tree0, &tree1];
         let priv_inputs = bacon_post::PrivateInputs::new(&replicas[..], &trees[..]);
 
-        let proof = bacon_post
-            .prove(&pub_params, &pub_inputs, &priv_inputs)
-            .unwrap();
+        let proof = BaconPoSt::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
 
-        assert!(bacon_post.verify(&pub_params, &pub_inputs, &proof).unwrap());
+        assert!(BaconPoSt::verify(&pub_params, &pub_inputs, &proof).unwrap());
 
         // actual circuit test
 
@@ -237,7 +279,7 @@ mod tests {
                 proof
                     .ys
                     .iter()
-                    .map(|y| Some(y.clone().into()))
+                    .map(|y: &PedersenDomain| Some(y.clone().into()))
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
@@ -303,7 +345,7 @@ mod tests {
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        let instance = BaconPost {
+        let instance = BaconPoStCircuit {
             params,
             // beacon_randomness_vec,
             // challenges_vec,
