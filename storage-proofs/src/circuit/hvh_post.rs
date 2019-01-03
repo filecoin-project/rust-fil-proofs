@@ -1,13 +1,20 @@
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
+use pairing::bls12_381::{Bls12, Fr};
 use sapling_crypto::circuit::num;
 use sapling_crypto::jubjub::JubjubEngine;
 
 use crate::circuit::constraint;
 use crate::circuit::porc;
 use crate::circuit::sloth;
+use crate::compound_proof::{CircuitComponent, CompoundProof};
+use crate::hasher::Hasher;
+use crate::hvh_post::HvhPost;
+use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
+use crate::proof::ProofScheme;
+use crate::vdf::Vdf;
 
-/// This is an instance of the `HVH-PoSt` circuit.
-pub struct HvhPost<'a, E: JubjubEngine> {
+/// This is the `HVH-PoSt` circuit.
+pub struct HvhPostCircuit<'a, E: JubjubEngine> {
     /// Paramters for the engine.
     pub params: &'a E::Params,
 
@@ -23,87 +30,140 @@ pub struct HvhPost<'a, E: JubjubEngine> {
     pub paths_vec: Vec<Vec<Vec<Option<(E::Fr, bool)>>>>,
 }
 
-impl<'a, E: JubjubEngine> Circuit<E> for HvhPost<'a, E> {
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        hvh_post(
-            cs,
-            self.params,
-            self.vdf_key,
-            self.vdf_ys,
-            self.vdf_xs,
-            self.vdf_sloth_rounds,
-            self.challenged_leafs_vec,
-            self.commitments_vec,
-            self.paths_vec,
-        )
+pub struct HvhPostCompound {}
+
+impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParameters<E, C, P>
+    for HvhPostCompound
+{
+    fn cache_prefix() -> String {
+        String::from("hvh-post")
     }
 }
 
-pub fn hvh_post<E: JubjubEngine, CS: ConstraintSystem<E>>(
-    cs: &mut CS,
-    params: &E::Params,
-    vdf_key: Option<E::Fr>,
-    vdf_ys: Vec<Option<E::Fr>>,
-    vdf_xs: Vec<Option<E::Fr>>,
-    vdf_sloth_rounds: usize,
-    challenged_leafs_vec: Vec<Vec<Option<E::Fr>>>,
-    commitments_vec: Vec<Vec<Option<E::Fr>>>,
-    paths_vec: Vec<Vec<Vec<Option<(E::Fr, bool)>>>>,
-) -> Result<(), SynthesisError> {
-    // VDF Output Verification
-    assert_eq!(vdf_xs.len(), vdf_ys.len());
+#[derive(Clone, Default)]
+pub struct ComponentPrivateInputs {}
 
-    let vdf_key = num::AllocatedNum::alloc(cs.namespace(|| "vdf_key"), || {
-        vdf_key.ok_or_else(|| SynthesisError::AssignmentMissing)
-    })?;
+impl<'a, E: JubjubEngine> CircuitComponent for HvhPostCircuit<'a, E> {
+    type ComponentPrivateInputs = ComponentPrivateInputs;
+}
 
-    for (i, (y, x)) in vdf_ys.iter().zip(vdf_xs.iter()).enumerate() {
-        let mut cs = cs.namespace(|| format!("vdf_verification_round_{}", i));
+impl<'a, H, V> CompoundProof<'a, Bls12, HvhPost<H, V>, HvhPostCircuit<'a, Bls12>>
+    for HvhPostCompound
+where
+    H: 'a + Hasher,
+    V: Vdf<H::Domain>,
+    <V as Vdf<H::Domain>>::PublicParams: Send + Sync,
+    <V as Vdf<H::Domain>>::Proof: Send + Sync,
+{
+    fn generate_public_inputs(
+        _pub_in: &<HvhPost<H, V> as ProofScheme<'a>>::PublicInputs,
+        _pub_params: &<HvhPost<H, V> as ProofScheme<'a>>::PublicParams,
+        _partition_k: Option<usize>,
+    ) -> Vec<Fr> {
+        unimplemented!();
+    }
+    fn circuit(
+        _pub_in: &<HvhPost<H, V> as ProofScheme<'a>>::PublicInputs,
+        _component_private_inputs:<HvhPostCircuit<'a, Bls12> as CircuitComponent>::ComponentPrivateInputs,
+        _vanilla_proof: &<HvhPost<H, V> as ProofScheme<'a>>::Proof,
+        _pub_params: &<HvhPost<H, V> as ProofScheme<'a>>::PublicParams,
+        _engine_params: &'a <Bls12 as JubjubEngine>::Params,
+    ) -> HvhPostCircuit<'a, Bls12> {
+        unimplemented!()
+    }
+}
 
-        let decoded = sloth::decode(
-            cs.namespace(|| "sloth_decode"),
-            &vdf_key,
-            *y,
-            vdf_sloth_rounds,
-        )?;
+impl<'a, E: JubjubEngine> Circuit<E> for HvhPostCircuit<'a, E> {
+    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+        let params = self.params;
+        let vdf_key = self.vdf_key;
+        let vdf_ys = self.vdf_ys;
+        let vdf_xs = self.vdf_xs;
+        let vdf_sloth_rounds = self.vdf_sloth_rounds;
+        let challenged_leafs_vec = self.challenged_leafs_vec;
+        let commitments_vec = self.commitments_vec;
+        let paths_vec = self.paths_vec;
 
-        let x_alloc = num::AllocatedNum::alloc(cs.namespace(|| "x"), || {
-            x.ok_or_else(|| SynthesisError::AssignmentMissing)
+        // VDF Output Verification
+        assert_eq!(vdf_xs.len(), vdf_ys.len());
+
+        let vdf_key = num::AllocatedNum::alloc(cs.namespace(|| "vdf_key"), || {
+            vdf_key.ok_or_else(|| SynthesisError::AssignmentMissing)
         })?;
 
-        constraint::equal(&mut cs, || "equality", &x_alloc, &decoded);
+        for (i, (y, x)) in vdf_ys.iter().zip(vdf_xs.iter()).enumerate() {
+            let mut cs = cs.namespace(|| format!("vdf_verification_round_{}", i));
 
-        // TODO: is this the right thing to inputize?
-        decoded.inputize(cs.namespace(|| "vdf_result"))?;
+            let decoded = sloth::decode(
+                cs.namespace(|| "sloth_decode"),
+                &vdf_key,
+                *y,
+                vdf_sloth_rounds,
+            )?;
+
+            let x_alloc = num::AllocatedNum::alloc(cs.namespace(|| "x"), || {
+                x.ok_or_else(|| SynthesisError::AssignmentMissing)
+            })?;
+
+            constraint::equal(&mut cs, || "equality", &x_alloc, &decoded);
+
+            // TODO: is this the right thing to inputize?
+            decoded.inputize(cs.namespace(|| "vdf_result"))?;
+        }
+
+        // PoRC Verification
+        assert_eq!(challenged_leafs_vec.len(), commitments_vec.len());
+        assert_eq!(paths_vec.len(), commitments_vec.len());
+
+        for (i, (challenged_leafs, (commitments, paths))) in challenged_leafs_vec
+            .iter()
+            .zip(commitments_vec.iter().zip(paths_vec.iter()))
+            .enumerate()
+        {
+            let mut cs = cs.namespace(|| format!("porc_verification_round_{}", i));
+            porc::PoRCCircuit::synthesize(
+                &mut cs,
+                params,
+                challenged_leafs.to_vec(),
+                commitments.to_vec(),
+                paths.to_vec(),
+            )?;
+        }
+
+        Ok(())
     }
+}
 
-    // PoRC Verification
-    assert_eq!(challenged_leafs_vec.len(), commitments_vec.len());
-    assert_eq!(paths_vec.len(), commitments_vec.len());
-
-    for (i, (challenged_leafs, (commitments, paths))) in challenged_leafs_vec
-        .iter()
-        .zip(commitments_vec.iter().zip(paths_vec.iter()))
-        .enumerate()
-    {
-        let mut cs = cs.namespace(|| format!("porc_verification_round_{}", i));
-        porc::PoRCCircuit::synthesize(
-            &mut cs,
+impl<'a, E: JubjubEngine> HvhPostCircuit<'a, E> {
+    pub fn synthesize<CS: ConstraintSystem<E>>(
+        cs: &mut CS,
+        params: &E::Params,
+        vdf_key: Option<E::Fr>,
+        vdf_ys: Vec<Option<E::Fr>>,
+        vdf_xs: Vec<Option<E::Fr>>,
+        vdf_sloth_rounds: usize,
+        challenged_leafs_vec: Vec<Vec<Option<E::Fr>>>,
+        commitments_vec: Vec<Vec<Option<E::Fr>>>,
+        paths_vec: Vec<Vec<Vec<Option<(E::Fr, bool)>>>>,
+    ) -> Result<(), SynthesisError> {
+        HvhPostCircuit {
             params,
-            challenged_leafs.to_vec(),
-            commitments.to_vec(),
-            paths.to_vec(),
-        )?;
+            vdf_key,
+            vdf_ys,
+            vdf_xs,
+            vdf_sloth_rounds,
+            challenged_leafs_vec,
+            commitments_vec,
+            paths_vec,
+        }
+        .synthesize(cs)
     }
-
-    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use pairing::bls12_381::*;
     use pairing::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
@@ -181,7 +241,7 @@ mod tests {
             .map(|y| Some(y.clone().into()))
             .collect::<Vec<_>>();
         let vdf_xs = proof
-            .proofs_porep
+            .porep_proofs
             .iter()
             .take(vdf_ys.len())
             .map(|p| Some(hvh_post::extract_vdf_input::<PedersenHasher>(p).into()))
@@ -191,10 +251,10 @@ mod tests {
         let mut challenged_leafs_vec = Vec::new();
         let mut commitments_vec = Vec::new();
 
-        for proof_porep in &proof.proofs_porep {
+        for porep_proof in &proof.porep_proofs {
             // -- paths
             paths_vec.push(
-                proof_porep
+                porep_proof
                     .paths()
                     .iter()
                     .map(|p| {
@@ -207,7 +267,7 @@ mod tests {
 
             // -- challenged leafs
             challenged_leafs_vec.push(
-                proof_porep
+                porep_proof
                     .leafs()
                     .iter()
                     .map(|l| Some((**l).into()))
@@ -216,7 +276,7 @@ mod tests {
 
             // -- commitments
             commitments_vec.push(
-                proof_porep
+                porep_proof
                     .commitments()
                     .iter()
                     .map(|c| Some((**c).into()))
@@ -226,7 +286,7 @@ mod tests {
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        let instance = HvhPost {
+        let instance = HvhPostCircuit {
             params,
             vdf_key: Some(pub_params.pub_params_vdf.key.into()),
             vdf_xs,

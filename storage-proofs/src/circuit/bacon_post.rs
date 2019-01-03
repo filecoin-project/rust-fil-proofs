@@ -103,7 +103,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for BaconPost<'a, E> {
             //     constraint::equal(&mut cs, || "challenge_equality", actual, expected_num);
             // }
 
-            hvh_post::hvh_post(
+            hvh_post::HvhPostCircuit::synthesize(
                 &mut cs.namespace(|| "hvh_post"),
                 self.params,
                 self.vdf_key,
@@ -143,7 +143,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for BaconPost<'a, E> {
             //     constraint::equal(&mut cs, || "challenge_equality", actual, expected_num);
             // }
 
-            hvh_post::hvh_post(
+            hvh_post::HvhPostCircuit::synthesize(
                 &mut cs.namespace(|| "hvh_post"),
                 self.params,
                 self.vdf_key,
@@ -246,7 +246,7 @@ mod tests {
             .iter()
             .map(|proof| {
                 proof
-                    .proofs_porep
+                    .porep_proofs
                     .iter()
                     .take(vdf_ys_vec[0].len())
                     .map(|p| Some(hvh_post::extract_vdf_input::<PedersenHasher>(p).into()))
@@ -263,10 +263,10 @@ mod tests {
             let mut challenged_leafs_vec = Vec::new();
             let mut commitments_vec = Vec::new();
 
-            for proof_porep in &p.proofs_porep {
+            for porep_proof in &p.porep_proofs {
                 // -- paths
                 paths_vec.push(
-                    proof_porep
+                    porep_proof
                         .paths()
                         .iter()
                         .map(|p| {
@@ -279,7 +279,7 @@ mod tests {
 
                 // -- challenged leafs
                 challenged_leafs_vec.push(
-                    proof_porep
+                    porep_proof
                         .leafs()
                         .iter()
                         .map(|l| Some((**l).into()))
@@ -288,7 +288,7 @@ mod tests {
 
                 // -- commitments
                 commitments_vec.push(
-                    proof_porep
+                    porep_proof
                         .commitments()
                         .iter()
                         .map(|c| Some((**c).into()))

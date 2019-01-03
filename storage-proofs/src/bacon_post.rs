@@ -238,7 +238,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> BaconPost<H, V> {
 }
 
 fn extract_post_input<H: Hasher, V: Vdf<H::Domain>>(proof: &hvh_post::Proof<H, V>) -> H::Domain {
-    let leafs: Vec<u8> = proof.proofs_porep.iter().fold(Vec::new(), |mut acc, p| {
+    let leafs: Vec<u8> = proof.porep_proofs.iter().fold(Vec::new(), |mut acc, p| {
         acc.extend(p.leafs().into_iter().fold(
             Vec::new(),
             |mut inner_acc: Vec<u8>, leaf: &H::Domain| {

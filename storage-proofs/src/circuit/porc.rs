@@ -42,19 +42,19 @@ where
     H: 'a + Hasher,
 {
     fn generate_public_inputs(
-        pub_in: &<PoRC<'a, H> as ProofScheme<'a>>::PublicInputs,
-        pub_params: &<PoRC<'a, H> as ProofScheme<'a>>::PublicParams,
-        partition_k: Option<usize>,
+        _pub_in: &<PoRC<'a, H> as ProofScheme<'a>>::PublicInputs,
+        _pub_params: &<PoRC<'a, H> as ProofScheme<'a>>::PublicParams,
+        _partition_k: Option<usize>,
     ) -> Vec<Fr> {
         unimplemented!();
     }
 
     fn circuit(
-        pub_in: &<PoRC<'a, H> as ProofScheme<'a>>::PublicInputs,
-        component_private_inputs: <PoRCCircuit<'a, Bls12> as CircuitComponent>::ComponentPrivateInputs,
-        vanilla_proof: &<PoRC<'a, H> as ProofScheme<'a>>::Proof,
-        pub_params: &<PoRC<'a, H> as ProofScheme<'a>>::PublicParams,
-        engine_params: &'a <Bls12 as JubjubEngine>::Params,
+        _pub_in: &<PoRC<'a, H> as ProofScheme<'a>>::PublicInputs,
+        _component_private_inputs: <PoRCCircuit<'a, Bls12> as CircuitComponent>::ComponentPrivateInputs,
+        _vanilla_proof: &<PoRC<'a, H> as ProofScheme<'a>>::Proof,
+        _pub_params: &<PoRC<'a, H> as ProofScheme<'a>>::PublicParams,
+        _engine_params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> PoRCCircuit<'a, Bls12> {
         unimplemented!()
     }
@@ -177,7 +177,6 @@ impl<'a, E: JubjubEngine> PoRCCircuit<'a, E> {
 mod tests {
     use super::*;
 
-    use pairing::bls12_381::*;
     use pairing::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
