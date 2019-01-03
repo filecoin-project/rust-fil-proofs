@@ -138,6 +138,17 @@ where
 
     let encoding_time = start.elapsed();
     info!(FCP_LOG, "encoding_time: {:?}", encoding_time; "target" => "stats");
+
+    info!(
+        FCP_LOG,
+        "encoding time/byte: {:?}",
+        encoding_time / data_size as u32; "target" => "stats"
+    );
+    info!(
+        FCP_LOG,
+        "encoding time/GiB: {:?}",
+        (1 << 30) * encoding_time / data_size as u32; "target" => "stats"
+    );
 }
 
 fn main() {

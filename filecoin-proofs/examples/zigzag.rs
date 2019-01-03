@@ -143,7 +143,7 @@ fn do_the_work<H: 'static>(
     stop_profile();
 
     let start = Instant::now();
-    let mut param_duration = Duration::new(0, 0);
+    let mut replication_duration = Duration::new(0, 0);
 
     info!(FCP_LOG, "running replicate");
 
@@ -165,9 +165,19 @@ fn do_the_work<H: 'static>(
         tau: tau.layer_taus,
     };
 
-    param_duration += start.elapsed();
+    replication_duration += start.elapsed();
 
-    info!(FCP_LOG, "replication_time: {:?}", param_duration; "target" => "stats");
+    info!(FCP_LOG, "replication_time: {:?}", replication_duration; "target" => "stats");
+    info!(
+        FCP_LOG,
+        "replication_time/byte: {:?}",
+        replication_duration / data_size as u32; "target" => "stats"
+    );
+    info!(
+        FCP_LOG,
+        "replication_time/GiB: {:?}",
+        (1 << 30) * replication_duration / data_size as u32; "target" => "stats"
+    );
 
     let mut total_proving = Duration::new(0, 0);
     info!(FCP_LOG, "generating one proof");
