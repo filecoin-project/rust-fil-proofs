@@ -1,5 +1,6 @@
 use blake2::{Blake2s, Digest};
 
+pub const FEISTEL_ROUNDS: usize = 3;
 pub type FeistelPrecomputed = (u32, u32, u32);
 
 pub fn precompute(num_elements: u32) -> FeistelPrecomputed {
@@ -55,7 +56,6 @@ fn common_setup(index: u32, precomputed: FeistelPrecomputed) -> (u32, u32, u32, 
 
     (left, right, right_mask, half_bits)
 }
-pub const FEISTEL_ROUNDS: usize = 4;
 
 fn encode(index: u32, keys: &[u32], precomputed: FeistelPrecomputed) -> u32 {
     let (mut left, mut right, right_mask, half_bits) = common_setup(index, precomputed);
