@@ -22,4 +22,20 @@
 
 - [x] Take a look at the tests to better understand the system in its context but do not modify anything in this PR to make it clear that we are not changing the behavior here, just clarifying the code. Include a brief description of every test.
 
-- [ ] Final review and formatting to the `PaddingMap` documentation. 
+- [In progress] Final review and formatting to the `PaddingMap` documentation. 
+
+- [ ] Addressing review comments:
+
+  - [ ] Clarify that we do sub-byte padding, that is, we pad to the next byte boundary (our current logic depends on it). ([https://github.com/filecoin-project/rust-proofs/pull/419#discussion_r245882697] comment)
+
+  - [ ] Rename `Fr32BitVec`, drop "Fr32" (do the same otherwise where possible). ([comment](https://github.com/filecoin-project/rust-proofs/pull/419#discussion_r246131741))
+  
+  - [ ] Clarify how we deduce how many redundant bits there are mentioning the position ([comment](https://github.com/filecoin-project/rust-proofs/pull/419#discussion_r245795289)).
+  
+  - [ ] Drop ["adjusted"](https://github.com/filecoin-project/rust-proofs/pull/419#discussion_r245797577) term.
+  
+  - [ ]  [Clarify](https://github.com/filecoin-project/rust-proofs/pull/419#discussion_r245851629) the "Key definitions" section, it's actually a summary, not self-contained..
+  
+  - [ ] Add a note to [drop](https://github.com/filecoin-project/rust-proofs/pull/419#discussion_r245802815) the `/8` (float) conversion.
+  
+  - [ ]  [Rename](https://github.com/filecoin-project/rust-proofs/pull/419#discussion_r245803585) `next_boundaries`.
