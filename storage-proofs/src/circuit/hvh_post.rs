@@ -303,8 +303,8 @@ mod tests {
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
-        assert_eq!(cs.num_inputs(), 69, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 304140, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 47, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 304118, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
     }
 }

@@ -1,13 +1,17 @@
+use std::marker::PhantomData;
+
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use pairing::bls12_381::{Bls12, Fr};
 use sapling_crypto::circuit::{boolean, multipack, num, pedersen_hash};
 use sapling_crypto::jubjub::JubjubEngine;
 
 use crate::circuit::constraint;
+use crate::circuit::por::challenge_into_auth_path_bits;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
+use crate::fr32::fr_into_bytes;
 use crate::hasher::Hasher;
 use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
-use crate::porc::PoRC;
+use crate::porc::{slice_mod, PoRC};
 use crate::proof::ProofScheme;
 
 /// This is the `PoRC` circuit.
@@ -20,10 +24,15 @@ pub struct PoRCCircuit<'a, E: JubjubEngine> {
     pub paths: Vec<Vec<Option<(E::Fr, bool)>>>,
 }
 
-pub struct PoRCCompound {}
+pub struct PoRCCompound<H>
+where
+    H: Hasher,
+{
+    _h: PhantomData<H>,
+}
 
-impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParameters<E, C, P>
-    for PoRCCompound
+impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier, H: Hasher>
+    CacheableParameters<E, C, P> for PoRCCompound<H>
 {
     fn cache_prefix() -> String {
         String::from("proof-of-retrievable-commitments")
@@ -37,26 +46,66 @@ impl<'a, E: JubjubEngine> CircuitComponent for PoRCCircuit<'a, E> {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
-impl<'a, H> CompoundProof<'a, Bls12, PoRC<'a, H>, PoRCCircuit<'a, Bls12>> for PoRCCompound
+impl<'a, H> CompoundProof<'a, Bls12, PoRC<'a, H>, PoRCCircuit<'a, Bls12>> for PoRCCompound<H>
 where
     H: 'a + Hasher,
 {
     fn generate_public_inputs(
-        _pub_in: &<PoRC<'a, H> as ProofScheme<'a>>::PublicInputs,
-        _pub_params: &<PoRC<'a, H> as ProofScheme<'a>>::PublicParams,
+        pub_in: &<PoRC<'a, H> as ProofScheme<'a>>::PublicInputs,
+        pub_params: &<PoRC<'a, H> as ProofScheme<'a>>::PublicParams,
         _partition_k: Option<usize>,
     ) -> Vec<Fr> {
-        unimplemented!();
+        let mut inputs = Vec::new();
+
+        let challenges: Vec<_> = pub_in.challenges.iter().map(|l| (*l).into()).collect();
+
+        let commitments: Vec<_> = pub_in.commitments.iter().map(|c| (*c).into()).collect();
+
+        for (challenge, commitment) in challenges.iter().zip(commitments) {
+            // TODO: What about challenged sector?
+            let challenged_leaf = slice_mod(fr_into_bytes::<Bls12>(challenge), pub_params.leaves);
+            let auth_path_bits = challenge_into_auth_path_bits(challenged_leaf, pub_params.leaves);
+            let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
+
+            inputs.extend(packed_auth_path);
+
+            inputs.push(commitment);
+        }
+
+        inputs
     }
 
     fn circuit(
-        _pub_in: &<PoRC<'a, H> as ProofScheme<'a>>::PublicInputs,
+        pub_in: &<PoRC<'a, H> as ProofScheme<'a>>::PublicInputs,
         _component_private_inputs: <PoRCCircuit<'a, Bls12> as CircuitComponent>::ComponentPrivateInputs,
-        _vanilla_proof: &<PoRC<'a, H> as ProofScheme<'a>>::Proof,
+        vanilla_proof: &<PoRC<'a, H> as ProofScheme<'a>>::Proof,
         _pub_params: &<PoRC<'a, H> as ProofScheme<'a>>::PublicParams,
-        _engine_params: &'a <Bls12 as JubjubEngine>::Params,
+        engine_params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> PoRCCircuit<'a, Bls12> {
-        unimplemented!()
+        let challenged_leafs = vanilla_proof
+            .leafs()
+            .iter()
+            .map(|l| Some((**l).into()))
+            .collect();
+
+        let commitments: Vec<_> = pub_in
+            .commitments
+            .iter()
+            .map(|c| Some((*c).into()))
+            .collect();
+
+        let paths: Vec<Vec<_>> = vanilla_proof
+            .paths()
+            .iter()
+            .map(|v| v.iter().map(|p| Some(((*p).0.into(), p.1))).collect())
+            .collect();
+
+        PoRCCircuit {
+            params: engine_params,
+            challenged_leafs,
+            commitments,
+            paths,
+        }
     }
 }
 
@@ -87,8 +136,6 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoRCCircuit<'a, E> {
             let leaf_num = num::AllocatedNum::alloc(cs.namespace(|| "leaf_num"), || {
                 challenged_leaf.ok_or_else(|| SynthesisError::AssignmentMissing)
             })?;
-
-            leaf_num.inputize(cs.namespace(|| "leaf_input"))?;
 
             // This is an injective encoding, as cur is a
             // point in the prime order subgroup.
@@ -182,6 +229,7 @@ mod tests {
     use sapling_crypto::jubjub::JubjubBls12;
 
     use crate::circuit::test::*;
+    use crate::compound_proof;
     use crate::drgraph::{new_seed, BucketGraph, Graph};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::pedersen::*;
@@ -260,8 +308,72 @@ mod tests {
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
-        assert_eq!(cs.num_inputs(), 7, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 13828, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 5, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 13826, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
+    }
+
+    #[test]
+    fn porc_test_compound() {
+        let params = &JubjubBls12::new();
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let leaves = 32;
+
+        let setup_params = compound_proof::SetupParams {
+            vanilla_params: &porc::SetupParams {
+                leaves,
+                sectors_count: 2,
+            },
+            engine_params: params,
+            partitions: None,
+        };
+
+        let pub_params =
+            PoRCCompound::<PedersenHasher>::setup(&setup_params).expect("setup failed");
+
+        let data1: Vec<u8> = (0..32)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
+        let data2: Vec<u8> = (0..32)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
+
+        let graph1 = BucketGraph::<PedersenHasher>::new(32, 5, 0, new_seed());
+        let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
+
+        let graph2 = BucketGraph::<PedersenHasher>::new(32, 5, 0, new_seed());
+        let tree2 = graph2.merkle_tree(data1.as_slice()).unwrap();
+
+        let pub_inputs = porc::PublicInputs {
+            challenges: &vec![rng.gen(), rng.gen()],
+            commitments: &[tree1.root(), tree2.root()],
+        };
+
+        let priv_inputs = porc::PrivateInputs::<PedersenHasher> {
+            trees: &[&tree1, &tree2],
+            replicas: &[&data1, &data2],
+        };
+
+        let proof =
+            PoRCCompound::<PedersenHasher>::prove(&pub_params, &pub_inputs, &priv_inputs, None)
+                .expect("failed while proving");
+
+        let (circuit, inputs) = PoRCCompound::<PedersenHasher>::circuit_for_test(
+            &pub_params,
+            &pub_inputs,
+            &priv_inputs,
+        );
+
+        let mut cs = TestConstraintSystem::new();
+
+        let _ = circuit.synthesize(&mut cs);
+        assert!(cs.is_satisfied());
+        assert!(cs.verify(&inputs));
+
+        let verified = PoRCCompound::<PedersenHasher>::verify(&pub_params, &pub_inputs, &proof)
+            .expect("failed while verifying");
+
+        assert!(verified);
     }
 }

@@ -53,7 +53,7 @@ impl<T: Domain, V: Vdf<T>> ParameterSetIdentifier for PublicParams<T, V> {
 pub struct PublicInputs<T: Domain> {
     /// The root hash of the merkle tree of the sealed sector.
     pub commitments: Vec<T>,
-    /// The initial set of challengs. Must be of length `challenge_count`.
+    /// The initial set of challenges. Must be of length `challenge_count`.
     pub challenges: Vec<T>,
 }
 
