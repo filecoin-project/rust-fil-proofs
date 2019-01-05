@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use pairing::bls12_381::{Bls12, Fr};
 use sapling_crypto::jubjub::JubjubEngine;
@@ -11,7 +13,7 @@ use crate::proof::ProofScheme;
 use crate::vdf::Vdf;
 
 /// This is the `BACON-PoSt` circuit.
-pub struct BaconPoStCircuit<'a, E: JubjubEngine> {
+pub struct BaconPoStCircuit<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> {
     /// Parameters for the engine.
     pub params: &'a E::Params,
 
@@ -28,6 +30,8 @@ pub struct BaconPoStCircuit<'a, E: JubjubEngine> {
     pub challenged_leafs_vec_vec: Vec<Vec<Vec<Option<E::Fr>>>>,
     pub commitments_vec_vec: Vec<Vec<Vec<Option<E::Fr>>>>,
     pub paths_vec_vec: Vec<Vec<Vec<Vec<Option<(E::Fr, bool)>>>>>,
+    _h: PhantomData<H>,
+    _v: PhantomData<V>,
 }
 
 pub struct BaconPoStCompound {}
@@ -35,12 +39,15 @@ pub struct BaconPoStCompound {}
 #[derive(Clone, Default)]
 pub struct ComponentPrivateInputs {}
 
-impl<'a, E: JubjubEngine> CircuitComponent for BaconPoStCircuit<'a, E> {
+impl<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> CircuitComponent
+    for BaconPoStCircuit<'a, E, H, V>
+{
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
 impl<'a, H: Hasher, V: Vdf<H::Domain>>
-    CompoundProof<'a, Bls12, BaconPoSt<H, V>, BaconPoStCircuit<'a, Bls12>> for BaconPoStCompound
+    CompoundProof<'a, Bls12, BaconPoSt<H, V>, BaconPoStCircuit<'a, Bls12, H, V>>
+    for BaconPoStCompound
 where
     <V as Vdf<H::Domain>>::PublicParams: Send + Sync,
     <V as Vdf<H::Domain>>::Proof: Send + Sync,
@@ -55,11 +62,11 @@ where
     }
     fn circuit(
         _pub_in: &<BaconPoSt<H, V> as ProofScheme<'a>>::PublicInputs,
-        _component_private_inputs:<BaconPoStCircuit<'a, Bls12> as CircuitComponent>::ComponentPrivateInputs,
+        _component_private_inputs:<BaconPoStCircuit<'a, Bls12,H,V> as CircuitComponent>::ComponentPrivateInputs,
         _vanilla_proof: &<BaconPoSt<H, V> as ProofScheme<'a>>::Proof,
         _pub_params: &<BaconPoSt<H, V> as ProofScheme<'a>>::PublicParams,
         _engine_params: &'a <Bls12 as JubjubEngine>::Params,
-    ) -> BaconPoStCircuit<'a, Bls12> {
+    ) -> BaconPoStCircuit<'a, Bls12, H, V> {
         unimplemented!()
     }
 }
@@ -114,7 +121,9 @@ impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParamet
 //     Ok(res)
 // }
 
-impl<'a, E: JubjubEngine> Circuit<E> for BaconPoStCircuit<'a, E> {
+impl<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> Circuit<E>
+    for BaconPoStCircuit<'a, E, H, V>
+{
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let post_periods_count = self.vdf_ys_vec.len();
 
@@ -345,7 +354,7 @@ mod tests {
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        let instance = BaconPoStCircuit {
+        let instance = BaconPoStCircuit::<Bls12, PedersenHasher, vdf_sloth::Sloth> {
             params,
             // beacon_randomness_vec,
             // challenges_vec,
@@ -356,6 +365,8 @@ mod tests {
             challenged_leafs_vec_vec,
             paths_vec_vec,
             commitments_vec_vec,
+            _h: PhantomData,
+            _v: PhantomData,
         };
 
         instance

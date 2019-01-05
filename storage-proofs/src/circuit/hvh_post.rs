@@ -4,10 +4,11 @@ use sapling_crypto::circuit::num;
 use sapling_crypto::jubjub::JubjubEngine;
 
 use crate::circuit::constraint;
-use crate::circuit::porc;
+use crate::circuit::porc::{self, PoRCCompound};
 use crate::circuit::sloth;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::hasher::Hasher;
+use crate::hvh_post;
 use crate::hvh_post::HvhPost;
 use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use crate::proof::ProofScheme;
@@ -65,11 +66,70 @@ where
     fn circuit(
         _pub_in: &<HvhPost<H, V> as ProofScheme<'a>>::PublicInputs,
         _component_private_inputs:<HvhPostCircuit<'a, Bls12> as CircuitComponent>::ComponentPrivateInputs,
-        _vanilla_proof: &<HvhPost<H, V> as ProofScheme<'a>>::Proof,
-        _pub_params: &<HvhPost<H, V> as ProofScheme<'a>>::PublicParams,
-        _engine_params: &'a <Bls12 as JubjubEngine>::Params,
+        vanilla_proof: &<HvhPost<H, V> as ProofScheme<'a>>::Proof,
+        pub_params: &<HvhPost<H, V> as ProofScheme<'a>>::PublicParams,
+        engine_params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> HvhPostCircuit<'a, Bls12> {
-        unimplemented!()
+        let vdf_ys = vanilla_proof
+            .ys
+            .iter()
+            .map(|y| Some(y.clone().into()))
+            .collect::<Vec<_>>();
+
+        let vdf_xs = vanilla_proof
+            .porep_proofs
+            .iter()
+            .take(vdf_ys.len())
+            .map(|p| Some(hvh_post::extract_vdf_input(p).into()))
+            .collect();
+
+        let mut paths_vec = Vec::new();
+        let mut challenged_leafs_vec = Vec::new();
+        let mut commitments_vec = Vec::new();
+
+        for porep_proof in &vanilla_proof.porep_proofs {
+            // -- paths
+            paths_vec.push(
+                porep_proof
+                    .paths()
+                    .iter()
+                    .map(|p| {
+                        p.iter()
+                            .map(|v| Some((v.0.into(), v.1)))
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>(),
+            );
+
+            // -- challenged leafs
+            challenged_leafs_vec.push(
+                porep_proof
+                    .leafs()
+                    .iter()
+                    .map(|l| Some((**l).into()))
+                    .collect::<Vec<_>>(),
+            );
+
+            // -- commitments
+            commitments_vec.push(
+                porep_proof
+                    .commitments()
+                    .iter()
+                    .map(|c| Some((**c).into()))
+                    .collect::<Vec<_>>(),
+            );
+        }
+
+        HvhPostCircuit {
+            params: engine_params,
+            vdf_key: Some(V::key(&pub_params.pub_params_vdf).into()),
+            vdf_ys,
+            vdf_xs,
+            vdf_sloth_rounds: V::rounds(&pub_params.pub_params_vdf),
+            challenged_leafs_vec,
+            commitments_vec,
+            paths_vec,
+        }
     }
 }
 
@@ -169,6 +229,7 @@ mod tests {
     use sapling_crypto::jubjub::JubjubBls12;
 
     use crate::circuit::test::*;
+    use crate::compound_proof;
     use crate::drgraph::{new_seed, BucketGraph, Graph};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::pedersen::*;
@@ -307,4 +368,77 @@ mod tests {
         assert_eq!(cs.num_constraints(), 304118, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
     }
+
+    #[test]
+    fn test_hvh_post_compound() {
+        let params = &JubjubBls12::new();
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let lambda = 32;
+
+        let setup_params = compound_proof::SetupParams {
+            vanilla_params: &hvh_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
+                challenge_count: 10,
+                sector_size: 1024 * lambda,
+                post_epochs: 3,
+                setup_params_vdf: vdf_sloth::SetupParams {
+                    key: rng.gen(),
+                    rounds: 1,
+                },
+                sectors_count: 2,
+            },
+            engine_params: params,
+            partitions: None,
+        };
+
+        let pub_params: compound_proof::PublicParams<
+            _,
+            hvh_post::HvhPost<PedersenHasher, vdf_sloth::Sloth>,
+        > = HvhPostCompound::setup(&setup_params).expect("setup failed");
+
+        let data0: Vec<u8> = (0..1024)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
+        let data1: Vec<u8> = (0..1024)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
+
+        let graph0 = BucketGraph::<PedersenHasher>::new(1024, 5, 0, new_seed());
+        let tree0 = graph0.merkle_tree(data0.as_slice()).unwrap();
+        let graph1 = BucketGraph::<PedersenHasher>::new(1024, 5, 0, new_seed());
+        let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
+
+        let pub_inputs = hvh_post::PublicInputs {
+            challenges: vec![rng.gen(), rng.gen()],
+            commitments: vec![tree0.root(), tree1.root()],
+        };
+
+        let replicas = [&data0[..], &data1[..]];
+        let trees = [&tree0, &tree1];
+        let priv_inputs = //: hvh_post::PrivateInputs<PedersenHasher> =
+            hvh_post::PrivateInputs::<PedersenHasher>::new(&replicas[..], &trees[..]);
+
+        // Without the commented section below, this test doesn't do much.
+        // However, the test cannot pass until generate_public_inputs is implemented.
+        // That is currently blocked on a clearer sense of how the circuit should behave.
+        /*
+        let proof = HvhPostCompound::prove(&pub_params, &pub_inputs, &priv_inputs, None)
+            .expect("failed while proving");
+
+        let (circuit, inputs) =
+            HvhPostCompound::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs);
+
+        let mut cs = TestConstraintSystem::new();
+
+        let _ = circuit.synthesize(&mut cs);
+        assert!(cs.is_satisfied());
+        assert!(cs.verify(&inputs));
+
+        let verified = HvhPostCompound::verify(&pub_params, &pub_inputs, &proof)
+            .expect("failed while verifying");
+
+        assert!(verified);
+        */
+    }
+
 }
