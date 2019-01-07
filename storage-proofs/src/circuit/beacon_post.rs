@@ -4,7 +4,7 @@ use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use pairing::bls12_381::{Bls12, Fr};
 use sapling_crypto::jubjub::JubjubEngine;
 
-use crate::bacon_post::BaconPoSt;
+use crate::beacon_post::BeaconPoSt;
 use crate::circuit::hvh_post;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::hasher::Hasher;
@@ -12,8 +12,8 @@ use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use crate::proof::ProofScheme;
 use crate::vdf::Vdf;
 
-/// This is the `BACON-PoSt` circuit.
-pub struct BaconPoStCircuit<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> {
+/// This is the `Beacon-PoSt` circuit.
+pub struct BeaconPoStCircuit<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> {
     /// Parameters for the engine.
     pub params: &'a E::Params,
 
@@ -34,48 +34,48 @@ pub struct BaconPoStCircuit<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> {
     _v: PhantomData<V>,
 }
 
-pub struct BaconPoStCompound {}
+pub struct BeaconPoStCompound {}
 
 #[derive(Clone, Default)]
 pub struct ComponentPrivateInputs {}
 
 impl<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> CircuitComponent
-    for BaconPoStCircuit<'a, E, H, V>
+    for BeaconPoStCircuit<'a, E, H, V>
 {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
 impl<'a, H: Hasher, V: Vdf<H::Domain>>
-    CompoundProof<'a, Bls12, BaconPoSt<H, V>, BaconPoStCircuit<'a, Bls12, H, V>>
-    for BaconPoStCompound
+    CompoundProof<'a, Bls12, BeaconPoSt<H, V>, BeaconPoStCircuit<'a, Bls12, H, V>>
+    for BeaconPoStCompound
 where
     <V as Vdf<H::Domain>>::PublicParams: Send + Sync,
     <V as Vdf<H::Domain>>::Proof: Send + Sync,
     H: 'a,
 {
     fn generate_public_inputs(
-        _pub_in: &<BaconPoSt<H, V> as ProofScheme<'a>>::PublicInputs,
-        _pub_params: &<BaconPoSt<H, V> as ProofScheme<'a>>::PublicParams,
+        _pub_in: &<BeaconPoSt<H, V> as ProofScheme<'a>>::PublicInputs,
+        _pub_params: &<BeaconPoSt<H, V> as ProofScheme<'a>>::PublicParams,
         _partition_k: Option<usize>,
     ) -> Vec<Fr> {
         unimplemented!();
     }
     fn circuit(
-        _pub_in: &<BaconPoSt<H, V> as ProofScheme<'a>>::PublicInputs,
-        _component_private_inputs:<BaconPoStCircuit<'a, Bls12,H,V> as CircuitComponent>::ComponentPrivateInputs,
-        _vanilla_proof: &<BaconPoSt<H, V> as ProofScheme<'a>>::Proof,
-        _pub_params: &<BaconPoSt<H, V> as ProofScheme<'a>>::PublicParams,
+        _pub_in: &<BeaconPoSt<H, V> as ProofScheme<'a>>::PublicInputs,
+        _component_private_inputs:<BeaconPoStCircuit<'a, Bls12,H,V> as CircuitComponent>::ComponentPrivateInputs,
+        _vanilla_proof: &<BeaconPoSt<H, V> as ProofScheme<'a>>::Proof,
+        _pub_params: &<BeaconPoSt<H, V> as ProofScheme<'a>>::PublicParams,
         _engine_params: &'a <Bls12 as JubjubEngine>::Params,
-    ) -> BaconPoStCircuit<'a, Bls12, H, V> {
+    ) -> BeaconPoStCircuit<'a, Bls12, H, V> {
         unimplemented!()
     }
 }
 
 impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParameters<E, C, P>
-    for BaconPoStCompound
+    for BeaconPoStCompound
 {
     fn cache_prefix() -> String {
-        String::from("bacon-post")
+        String::from("beacon-post")
     }
 }
 
@@ -122,7 +122,7 @@ impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParamet
 // }
 
 impl<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> Circuit<E>
-    for BaconPoStCircuit<'a, E, H, V>
+    for BeaconPoStCircuit<'a, E, H, V>
 {
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let post_periods_count = self.vdf_ys_vec.len();
@@ -223,7 +223,7 @@ mod tests {
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
 
-    use crate::bacon_post;
+    use crate::beacon_post;
     use crate::circuit::test::*;
     use crate::drgraph::{new_seed, BucketGraph, Graph};
     use crate::fr32::fr_into_bytes;
@@ -233,13 +233,13 @@ mod tests {
     use crate::vdf_sloth;
 
     #[test]
-    fn test_bacon_post_circuit_with_bls12_381() {
+    fn test_beacon_post_circuit_with_bls12_381() {
         let params = &JubjubBls12::new();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let lambda = 32;
 
-        let sp = bacon_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
+        let sp = beacon_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
             setup_params_hvh_post: hvh_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
                 challenge_count: 4,
                 sector_size: 256 * lambda,
@@ -254,7 +254,7 @@ mod tests {
         };
 
         let pub_params =
-            bacon_post::BaconPoSt::<PedersenHasher, vdf_sloth::Sloth>::setup(&sp).unwrap();
+            beacon_post::BeaconPoSt::<PedersenHasher, vdf_sloth::Sloth>::setup(&sp).unwrap();
 
         let data0: Vec<u8> = (0..256)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
@@ -268,16 +268,16 @@ mod tests {
         let graph1 = BucketGraph::<PedersenHasher>::new(256, 5, 0, new_seed());
         let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
 
-        let pub_inputs = bacon_post::PublicInputs {
+        let pub_inputs = beacon_post::PublicInputs {
             commitments: vec![tree0.root(), tree1.root()],
         };
         let replicas = [&data0[..], &data1[..]];
         let trees = [&tree0, &tree1];
-        let priv_inputs = bacon_post::PrivateInputs::new(&replicas[..], &trees[..]);
+        let priv_inputs = beacon_post::PrivateInputs::new(&replicas[..], &trees[..]);
 
-        let proof = BaconPoSt::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+        let proof = BeaconPoSt::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
 
-        assert!(BaconPoSt::verify(&pub_params, &pub_inputs, &proof).unwrap());
+        assert!(BeaconPoSt::verify(&pub_params, &pub_inputs, &proof).unwrap());
 
         // actual circuit test
 
@@ -354,7 +354,7 @@ mod tests {
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        let instance = BaconPoStCircuit::<Bls12, PedersenHasher, vdf_sloth::Sloth> {
+        let instance = BeaconPoStCircuit::<Bls12, PedersenHasher, vdf_sloth::Sloth> {
             params,
             // beacon_randomness_vec,
             // challenges_vec,

@@ -26,7 +26,7 @@ pub struct PublicParams<T: Domain, V: Vdf<T>> {
 impl<T: Domain, V: Vdf<T>> ParameterSetIdentifier for PublicParams<T, V> {
     fn parameter_set_identifier(&self) -> String {
         format!(
-            "bacon_post::PublicParams{{pub_params_hvh_post: {}, post_periods_count: {}",
+            "beacon_post::PublicParams{{pub_params_hvh_post: {}, post_periods_count: {}",
             self.pub_params_hvh_post.parameter_set_identifier(),
             self.post_periods_count
         )
@@ -59,7 +59,7 @@ impl<'a, H: 'a + Hasher> PrivateInputs<'a, H> {
     }
 }
 
-/// Bacon-PoSt
+/// Beacon-PoSt
 /// This is one construction of a Proof-of-Spacetime.
 /// It currently only supports proving over a single sector.
 #[derive(Clone, Debug)]
@@ -72,7 +72,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> Proof<'a, H, V> {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct BaconPoSt<H: Hasher, V: Vdf<H::Domain>> {
+pub struct BeaconPoSt<H: Hasher, V: Vdf<H::Domain>> {
     _t: PhantomData<H>,
     _v: PhantomData<V>,
 }
@@ -98,7 +98,7 @@ impl Beacon {
     }
 }
 
-impl<'a, H: Hasher, V: Vdf<H::Domain>> ProofScheme<'a> for BaconPoSt<H, V>
+impl<'a, H: Hasher, V: Vdf<H::Domain>> ProofScheme<'a> for BeaconPoSt<H, V>
 where
     H: 'a,
 {
@@ -138,7 +138,7 @@ where
 
         // First (t = 0)
         {
-            // Run Bacon
+            // Run Beacon
             let r = beacon.get::<H::Domain>(0);
 
             // Generate challenges
@@ -162,7 +162,7 @@ where
 
         // The rest (t = 1..post_periods_count)
         for t in 1..post_periods_count {
-            // Run Bacon
+            // Run Beacon
             let r = beacon.get::<H::Domain>(t);
             let x = extract_post_input::<H, V>(&proofs_hvh_post[t - 1]);
 
@@ -289,7 +289,7 @@ mod tests {
     use crate::vdf_sloth;
 
     #[test]
-    fn test_bacon_post_basics() {
+    fn test_beacon_post_basics() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let sp = SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
@@ -306,7 +306,7 @@ mod tests {
             post_periods_count: 3,
         };
 
-        let pub_params = BaconPoSt::<PedersenHasher, vdf_sloth::Sloth>::setup(&sp).unwrap();
+        let pub_params = BeaconPoSt::<PedersenHasher, vdf_sloth::Sloth>::setup(&sp).unwrap();
 
         let data0: Vec<u8> = (0..1024)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
@@ -330,8 +330,8 @@ mod tests {
             _h: PhantomData,
         };
 
-        let proof = BaconPoSt::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+        let proof = BeaconPoSt::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
 
-        assert!(BaconPoSt::verify(&pub_params, &pub_inputs, &proof).unwrap());
+        assert!(BeaconPoSt::verify(&pub_params, &pub_inputs, &proof).unwrap());
     }
 }
