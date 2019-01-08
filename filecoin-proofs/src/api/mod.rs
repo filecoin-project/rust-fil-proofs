@@ -139,6 +139,8 @@ pub extern "C" fn verify_post(
     _flattened_comm_rs_len: libc::size_t,
     _challenge_seed: &[u8; 32],
     proof: &[u8; API_POST_PROOF_BYTES],
+    _faults_ptr: *const u64,
+    _faults_len: libc::size_t,
 ) -> *mut responses::VerifyPoSTResponse {
     let mut res: responses::VerifyPoSTResponse = Default::default();
 
@@ -504,6 +506,8 @@ mod tests {
                 32,
                 &challenge_seed,
                 &(*generate_post_res).proof,
+                (*generate_post_res).faults_ptr,
+                (*generate_post_res).faults_len,
             );
 
             assert_eq!(
