@@ -2,6 +2,8 @@ use crate::error::Result;
 use merkle_light::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
 use pairing::bls12_381::Fr;
 use rand::Rand;
+use serde::de::DeserializeOwned;
+use serde::ser::Serialize;
 
 pub trait Domain:
     Ord
@@ -16,6 +18,8 @@ pub trait Domain:
     + From<Fr>
     + Into<Fr>
     + Rand
+    + Serialize
+    + DeserializeOwned
 {
     fn serialize(&self) -> Vec<u8>;
     fn into_bytes(&self) -> Vec<u8>;

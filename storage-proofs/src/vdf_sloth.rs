@@ -34,7 +34,7 @@ impl ParameterSetIdentifier for PublicParams {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proof {}
 
 impl Vdf<PedersenDomain> for Sloth {

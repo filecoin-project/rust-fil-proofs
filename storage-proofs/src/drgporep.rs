@@ -1,6 +1,8 @@
 use std::marker::PhantomData;
 
 use byteorder::{LittleEndian, WriteBytesExt};
+use serde::de::Deserialize;
+use serde::ser::Serialize;
 
 use crate::drgraph::Graph;
 use crate::error::Result;
@@ -83,8 +85,12 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataProof<H: Hasher> {
+    #[serde(bound(
+        serialize = "MerkleProof<H>: Serialize",
+        deserialize = "MerkleProof<H>: Deserialize<'de>"
+    ))]
     pub proof: MerkleProof<H>,
     pub data: H::Domain,
 }
@@ -122,12 +128,32 @@ impl<H: Hasher> DataProof<H> {
 
 pub type ReplicaParents<H> = Vec<(usize, DataProof<H>)>;
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Proof<H: Hasher> {
+    #[serde(bound(
+        serialize = "H::Domain: Serialize",
+        deserialize = "H::Domain: Deserialize<'de>"
+    ))]
     pub data_root: H::Domain,
+    #[serde(bound(
+        serialize = "H::Domain: Serialize",
+        deserialize = "H::Domain: Deserialize<'de>"
+    ))]
     pub replica_root: H::Domain,
+    #[serde(bound(
+        serialize = "DataProof<H>: Serialize",
+        deserialize = "DataProof<H>: Deserialize<'de>"
+    ))]
     pub replica_nodes: Vec<DataProof<H>>,
+    #[serde(bound(
+        serialize = "H::Domain: Serialize",
+        deserialize = "H::Domain: Deserialize<'de>"
+    ))]
     pub replica_parents: Vec<ReplicaParents<H>>,
+    #[serde(bound(
+        serialize = "H::Domain: Serialize",
+        deserialize = "H::Domain: Deserialize<'de>"
+    ))]
     pub nodes: Vec<DataProof<H>>,
 }
 

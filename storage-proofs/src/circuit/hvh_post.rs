@@ -4,7 +4,7 @@ use sapling_crypto::circuit::num;
 use sapling_crypto::jubjub::JubjubEngine;
 
 use crate::circuit::constraint;
-use crate::circuit::porc::{self, PoRCCompound};
+use crate::circuit::porc;
 use crate::circuit::sloth;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::hasher::Hasher;
