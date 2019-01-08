@@ -133,14 +133,12 @@ pub unsafe extern "C" fn generate_post(
 
 /// Verifies that a proof-of-spacetime is valid.
 ///
-/// # Arguments
-///
-/// * `proof`          - a proof-of-spacetime
-/// * `_challenge_seed`       - currently unused
 #[no_mangle]
 pub extern "C" fn verify_post(
-    proof: &[u8; API_POST_PROOF_BYTES],
+    _flattened_comm_rs_ptr: *const u8,
+    _flattened_comm_rs_len: libc::size_t,
     _challenge_seed: &[u8; 32],
+    proof: &[u8; API_POST_PROOF_BYTES],
 ) -> *mut responses::VerifyPoSTResponse {
     let mut res: responses::VerifyPoSTResponse = Default::default();
 
@@ -501,7 +499,12 @@ mod tests {
                 "generate_post failed"
             );
 
-            let verify_post_res = verify_post(&(*generate_post_res).proof, &[0; 32]);
+            let verify_post_res = verify_post(
+                &comm_rs[0],
+                32,
+                &challenge_seed,
+                &(*generate_post_res).proof,
+            );
 
             assert_eq!(
                 FCPResponseStatus::FCPNoError,
