@@ -80,14 +80,27 @@ impl FrReprDef {
             writer.write_u64::<LittleEndian>(*digit).unwrap();
         }
 
-        serializer.serialize_bytes(&writer)
+        if serializer.is_human_readable() {
+            serializer.collect_str(&base64::display::Base64Display::with_config(
+                &writer,
+                base64::STANDARD,
+            ))
+        } else {
+            serializer.serialize_bytes(&writer)
+        }
     }
 
     fn deserialize<'de, D>(deserializer: D) -> ::std::result::Result<FrRepr, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let arr: Vec<u8> = Vec::deserialize(deserializer)?;
+        let arr: Vec<u8> = if deserializer.is_human_readable() {
+            let raw = String::deserialize(deserializer)?;
+            base64::decode(&raw).unwrap()
+        } else {
+            Vec::deserialize(deserializer)?
+        };
+
         let mut digits = [0u64; 4];
         let mut source = ::std::io::Cursor::new(arr);
         for digit in digits.iter_mut() {
