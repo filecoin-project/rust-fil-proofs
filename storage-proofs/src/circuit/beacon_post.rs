@@ -1,14 +1,20 @@
+use std::marker::PhantomData;
+
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
-// use sapling_crypto::circuit::boolean::Boolean;
-// use sapling_crypto::circuit::{num, uint32};
+use pairing::bls12_381::{Bls12, Fr};
 use sapling_crypto::jubjub::JubjubEngine;
 
+use crate::beacon_post::BeaconPoSt;
 use crate::circuit::hvh_post;
-// use crate::circuit::pedersen::pedersen_compression_num;
+use crate::compound_proof::{CircuitComponent, CompoundProof};
+use crate::hasher::Hasher;
+use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
+use crate::proof::ProofScheme;
+use crate::vdf::Vdf;
 
-/// This is an instance of the `BACON-PoSt` circuit.
-pub struct BaconPost<'a, E: JubjubEngine> {
-    /// Paramters for the engine.
+/// This is the `Beacon-PoSt` circuit.
+pub struct BeaconPoStCircuit<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> {
+    /// Parameters for the engine.
     pub params: &'a E::Params,
 
     // Beacon
@@ -24,6 +30,53 @@ pub struct BaconPost<'a, E: JubjubEngine> {
     pub challenged_leafs_vec_vec: Vec<Vec<Vec<Option<E::Fr>>>>,
     pub commitments_vec_vec: Vec<Vec<Vec<Option<E::Fr>>>>,
     pub paths_vec_vec: Vec<Vec<Vec<Vec<Option<(E::Fr, bool)>>>>>,
+    _h: PhantomData<H>,
+    _v: PhantomData<V>,
+}
+
+pub struct BeaconPoStCompound {}
+
+#[derive(Clone, Default)]
+pub struct ComponentPrivateInputs {}
+
+impl<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> CircuitComponent
+    for BeaconPoStCircuit<'a, E, H, V>
+{
+    type ComponentPrivateInputs = ComponentPrivateInputs;
+}
+
+impl<'a, H: Hasher, V: Vdf<H::Domain>>
+    CompoundProof<'a, Bls12, BeaconPoSt<H, V>, BeaconPoStCircuit<'a, Bls12, H, V>>
+    for BeaconPoStCompound
+where
+    <V as Vdf<H::Domain>>::PublicParams: Send + Sync,
+    <V as Vdf<H::Domain>>::Proof: Send + Sync,
+    H: 'a,
+{
+    fn generate_public_inputs(
+        _pub_in: &<BeaconPoSt<H, V> as ProofScheme<'a>>::PublicInputs,
+        _pub_params: &<BeaconPoSt<H, V> as ProofScheme<'a>>::PublicParams,
+        _partition_k: Option<usize>,
+    ) -> Vec<Fr> {
+        unimplemented!();
+    }
+    fn circuit(
+        _pub_in: &<BeaconPoSt<H, V> as ProofScheme<'a>>::PublicInputs,
+        _component_private_inputs:<BeaconPoStCircuit<'a, Bls12,H,V> as CircuitComponent>::ComponentPrivateInputs,
+        _vanilla_proof: &<BeaconPoSt<H, V> as ProofScheme<'a>>::Proof,
+        _pub_params: &<BeaconPoSt<H, V> as ProofScheme<'a>>::PublicParams,
+        _engine_params: &'a <Bls12 as JubjubEngine>::Params,
+    ) -> BeaconPoStCircuit<'a, Bls12, H, V> {
+        unimplemented!()
+    }
+}
+
+impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParameters<E, C, P>
+    for BeaconPoStCompound
+{
+    fn cache_prefix() -> String {
+        String::from("beacon-post")
+    }
 }
 
 // fn extract_post_input<E: JubjubEngine, CS: ConstraintSystem<E>>(
@@ -68,7 +121,9 @@ pub struct BaconPost<'a, E: JubjubEngine> {
 //     Ok(res)
 // }
 
-impl<'a, E: JubjubEngine> Circuit<E> for BaconPost<'a, E> {
+impl<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> Circuit<E>
+    for BeaconPoStCircuit<'a, E, H, V>
+{
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let post_periods_count = self.vdf_ys_vec.len();
 
@@ -103,16 +158,16 @@ impl<'a, E: JubjubEngine> Circuit<E> for BaconPost<'a, E> {
             //     constraint::equal(&mut cs, || "challenge_equality", actual, expected_num);
             // }
 
-            hvh_post::hvh_post(
+            hvh_post::HvhPostCircuit::synthesize(
                 &mut cs.namespace(|| "hvh_post"),
                 self.params,
                 self.vdf_key,
-                &self.vdf_ys_vec[0],
-                &self.vdf_xs_vec[0],
+                self.vdf_ys_vec[0].clone(),
+                self.vdf_xs_vec[0].clone(),
                 self.vdf_sloth_rounds,
-                &self.challenged_leafs_vec_vec[0],
-                &self.commitments_vec_vec[0],
-                &self.paths_vec_vec[0],
+                self.challenged_leafs_vec_vec[0].clone(),
+                self.commitments_vec_vec[0].clone(),
+                self.paths_vec_vec[0].clone(),
             )?;
         }
 
@@ -143,16 +198,16 @@ impl<'a, E: JubjubEngine> Circuit<E> for BaconPost<'a, E> {
             //     constraint::equal(&mut cs, || "challenge_equality", actual, expected_num);
             // }
 
-            hvh_post::hvh_post(
+            hvh_post::HvhPostCircuit::synthesize(
                 &mut cs.namespace(|| "hvh_post"),
                 self.params,
                 self.vdf_key,
-                &self.vdf_ys_vec[t],
-                &self.vdf_xs_vec[t],
+                self.vdf_ys_vec[t].clone(),
+                self.vdf_xs_vec[t].clone(),
                 self.vdf_sloth_rounds,
-                &self.challenged_leafs_vec_vec[t],
-                &self.commitments_vec_vec[t],
-                &self.paths_vec_vec[t],
+                self.challenged_leafs_vec_vec[t].clone(),
+                self.commitments_vec_vec[t].clone(),
+                self.paths_vec_vec[t].clone(),
             )?;
         }
 
@@ -164,12 +219,11 @@ impl<'a, E: JubjubEngine> Circuit<E> for BaconPost<'a, E> {
 mod tests {
     use super::*;
 
-    use pairing::bls12_381::*;
     use pairing::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
 
-    use crate::bacon_post;
+    use crate::beacon_post;
     use crate::circuit::test::*;
     use crate::drgraph::{new_seed, BucketGraph, Graph};
     use crate::fr32::fr_into_bytes;
@@ -179,13 +233,13 @@ mod tests {
     use crate::vdf_sloth;
 
     #[test]
-    fn test_bacon_post_circuit_with_bls12_381() {
+    fn test_beacon_post_circuit_with_bls12_381() {
         let params = &JubjubBls12::new();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let lambda = 32;
 
-        let sp = bacon_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
+        let sp = beacon_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
             setup_params_hvh_post: hvh_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
                 challenge_count: 4,
                 sector_size: 256 * lambda,
@@ -199,9 +253,8 @@ mod tests {
             post_periods_count: 3,
         };
 
-        let mut bacon_post = bacon_post::BaconPost::<PedersenHasher, vdf_sloth::Sloth>::default();
-
-        let pub_params = bacon_post.setup(&sp).unwrap();
+        let pub_params =
+            beacon_post::BeaconPoSt::<PedersenHasher, vdf_sloth::Sloth>::setup(&sp).unwrap();
 
         let data0: Vec<u8> = (0..256)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
@@ -215,18 +268,16 @@ mod tests {
         let graph1 = BucketGraph::<PedersenHasher>::new(256, 5, 0, new_seed());
         let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
 
-        let pub_inputs = bacon_post::PublicInputs {
+        let pub_inputs = beacon_post::PublicInputs {
             commitments: vec![tree0.root(), tree1.root()],
         };
         let replicas = [&data0[..], &data1[..]];
         let trees = [&tree0, &tree1];
-        let priv_inputs = bacon_post::PrivateInputs::new(&replicas[..], &trees[..]);
+        let priv_inputs = beacon_post::PrivateInputs::new(&replicas[..], &trees[..]);
 
-        let proof = bacon_post
-            .prove(&pub_params, &pub_inputs, &priv_inputs)
-            .unwrap();
+        let proof = BeaconPoSt::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
 
-        assert!(bacon_post.verify(&pub_params, &pub_inputs, &proof).unwrap());
+        assert!(BeaconPoSt::verify(&pub_params, &pub_inputs, &proof).unwrap());
 
         // actual circuit test
 
@@ -237,7 +288,7 @@ mod tests {
                 proof
                     .ys
                     .iter()
-                    .map(|y| Some(y.clone().into()))
+                    .map(|y: &PedersenDomain| Some(y.clone().into()))
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
@@ -246,7 +297,7 @@ mod tests {
             .iter()
             .map(|proof| {
                 proof
-                    .proofs_porep
+                    .porep_proofs
                     .iter()
                     .take(vdf_ys_vec[0].len())
                     .map(|p| Some(hvh_post::extract_vdf_input::<PedersenHasher>(p).into()))
@@ -263,10 +314,10 @@ mod tests {
             let mut challenged_leafs_vec = Vec::new();
             let mut commitments_vec = Vec::new();
 
-            for proof_porep in &p.proofs_porep {
+            for porep_proof in &p.porep_proofs {
                 // -- paths
                 paths_vec.push(
-                    proof_porep
+                    porep_proof
                         .paths()
                         .iter()
                         .map(|p| {
@@ -279,7 +330,7 @@ mod tests {
 
                 // -- challenged leafs
                 challenged_leafs_vec.push(
-                    proof_porep
+                    porep_proof
                         .leafs()
                         .iter()
                         .map(|l| Some((**l).into()))
@@ -288,7 +339,7 @@ mod tests {
 
                 // -- commitments
                 commitments_vec.push(
-                    proof_porep
+                    porep_proof
                         .commitments()
                         .iter()
                         .map(|c| Some((**c).into()))
@@ -303,7 +354,7 @@ mod tests {
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        let instance = BaconPost {
+        let instance = BeaconPoStCircuit::<Bls12, PedersenHasher, vdf_sloth::Sloth> {
             params,
             // beacon_randomness_vec,
             // challenges_vec,
@@ -314,6 +365,8 @@ mod tests {
             challenged_leafs_vec_vec,
             paths_vec_vec,
             commitments_vec_vec,
+            _h: PhantomData,
+            _v: PhantomData,
         };
 
         instance
@@ -322,8 +375,8 @@ mod tests {
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
-        assert_eq!(cs.num_inputs(), 115, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 398196, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 79, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 398160, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
     }
 }

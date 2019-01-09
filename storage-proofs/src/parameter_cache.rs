@@ -16,7 +16,7 @@ use std::time::Instant;
 use crate::SP_LOG;
 
 /// Bump this when circuits change to invalidate the cache.
-pub const VERSION: usize = 7;
+pub const VERSION: usize = 8;
 
 pub const PARAMETER_CACHE_DIR: &str = "/tmp/filecoin-proof-parameters/";
 

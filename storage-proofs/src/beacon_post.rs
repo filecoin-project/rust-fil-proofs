@@ -7,6 +7,7 @@ use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::hvh_post;
 use crate::merkle::MerkleTree;
+use crate::parameter_cache::ParameterSetIdentifier;
 use crate::proof::ProofScheme;
 use crate::vdf::Vdf;
 
@@ -20,6 +21,16 @@ pub struct SetupParams<T: Domain, V: Vdf<T>> {
 pub struct PublicParams<T: Domain, V: Vdf<T>> {
     pub pub_params_hvh_post: hvh_post::PublicParams<T, V>,
     pub post_periods_count: usize,
+}
+
+impl<T: Domain, V: Vdf<T>> ParameterSetIdentifier for PublicParams<T, V> {
+    fn parameter_set_identifier(&self) -> String {
+        format!(
+            "beacon_post::PublicParams{{pub_params_hvh_post: {}, post_periods_count: {}",
+            self.pub_params_hvh_post.parameter_set_identifier(),
+            self.post_periods_count
+        )
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -48,7 +59,7 @@ impl<'a, H: 'a + Hasher> PrivateInputs<'a, H> {
     }
 }
 
-/// Bacon-PoSt
+/// Beacon-PoSt
 /// This is one construction of a Proof-of-Spacetime.
 /// It currently only supports proving over a single sector.
 #[derive(Clone, Debug)]
@@ -60,25 +71,15 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> Proof<'a, H, V> {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct BaconPost<H: Hasher, V: Vdf<H::Domain>> {
+#[derive(Clone, Debug, Default)]
+pub struct BeaconPoSt<H: Hasher, V: Vdf<H::Domain>> {
     _t: PhantomData<H>,
     _v: PhantomData<V>,
-    beacon: Beacon,
 }
 
 #[derive(Clone, Debug, Default)]
 struct Beacon {
     count: usize,
-}
-impl<H: Hasher, V: Vdf<H::Domain>> Default for BaconPost<H, V> {
-    fn default() -> Self {
-        BaconPost {
-            _t: PhantomData,
-            _v: PhantomData,
-            beacon: Default::default(),
-        }
-    }
 }
 
 impl Beacon {
@@ -86,7 +87,7 @@ impl Beacon {
         // TODO: actual beacon
 
         if self.count < t {
-            // sleep a bit, to simulate dely
+            // sleep a bit, to simulate delay
             thread::sleep(time::Duration::from_millis(10));
             self.count += 1;
         }
@@ -97,16 +98,24 @@ impl Beacon {
     }
 }
 
-impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> BaconPost<H, V> {
-    pub fn setup(&self, sp: &SetupParams<H::Domain, V>) -> Result<PublicParams<H::Domain, V>> {
+impl<'a, H: Hasher, V: Vdf<H::Domain>> ProofScheme<'a> for BeaconPoSt<H, V>
+where
+    H: 'a,
+{
+    type PublicParams = PublicParams<H::Domain, V>;
+    type SetupParams = SetupParams<H::Domain, V>;
+    type PublicInputs = PublicInputs<H::Domain>;
+    type PrivateInputs = PrivateInputs<'a, H>;
+    type Proof = Proof<'a, H, V>;
+
+    fn setup(sp: &SetupParams<H::Domain, V>) -> Result<PublicParams<H::Domain, V>> {
         Ok(PublicParams {
             pub_params_hvh_post: hvh_post::HvhPost::<H, V>::setup(&sp.setup_params_hvh_post)?,
             post_periods_count: sp.post_periods_count,
         })
     }
 
-    pub fn prove<'b>(
-        &mut self,
+    fn prove<'b>(
         pub_params: &'b PublicParams<H::Domain, V>,
         pub_inputs: &'b PublicInputs<H::Domain>,
         priv_inputs: &'b PrivateInputs<'a, H>,
@@ -125,10 +134,12 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> BaconPost<H, V> {
 
         let mut proofs_hvh_post = Vec::with_capacity(post_periods_count);
 
+        let mut beacon = Beacon::default();
+
         // First (t = 0)
         {
-            // Run Bacon
-            let r = self.beacon.get::<H::Domain>(0);
+            // Run Beacon
+            let r = beacon.get::<H::Domain>(0);
 
             // Generate challenges
             let challenges = derive_challenges::<H>(challenge_count, 0, &[], r.as_ref());
@@ -151,8 +162,8 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> BaconPost<H, V> {
 
         // The rest (t = 1..post_periods_count)
         for t in 1..post_periods_count {
-            // Run Bacon
-            let r = self.beacon.get::<H::Domain>(t);
+            // Run Beacon
+            let r = beacon.get::<H::Domain>(t);
             let x = extract_post_input::<H, V>(&proofs_hvh_post[t - 1]);
 
             // Generate challenges
@@ -178,8 +189,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> BaconPost<H, V> {
         Ok(Proof(proofs_hvh_post))
     }
 
-    pub fn verify(
-        &mut self,
+    fn verify(
         pub_params: &PublicParams<H::Domain, V>,
         pub_inputs: &PublicInputs<H::Domain>,
         proof: &Proof<H, V>,
@@ -189,9 +199,11 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> BaconPost<H, V> {
 
         // HVH Post Verification
 
+        let mut beacon = Beacon::default();
+
         // First (t = 0)
         {
-            let r = self.beacon.get::<H::Domain>(0);
+            let r = beacon.get::<H::Domain>(0);
             // Generate challenges
             let challenges = derive_challenges::<H>(challenge_count, 0, &[], r.as_ref());
 
@@ -213,7 +225,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> BaconPost<H, V> {
         // The rest (t = 1..post_periods_count)
         for t in 1..post_periods_count {
             // Generate challenges
-            let r = self.beacon.get::<H::Domain>(t);
+            let r = beacon.get::<H::Domain>(t);
             let x = extract_post_input::<H, V>(&proof.0[t - 1]);
 
             let challenges = derive_challenges::<H>(challenge_count, t, x.as_ref(), r.as_ref());
@@ -238,7 +250,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> BaconPost<H, V> {
 }
 
 fn extract_post_input<H: Hasher, V: Vdf<H::Domain>>(proof: &hvh_post::Proof<H, V>) -> H::Domain {
-    let leafs: Vec<u8> = proof.proofs_porep.iter().fold(Vec::new(), |mut acc, p| {
+    let leafs: Vec<u8> = proof.porep_proofs.iter().fold(Vec::new(), |mut acc, p| {
         acc.extend(p.leafs().into_iter().fold(
             Vec::new(),
             |mut inner_acc: Vec<u8>, leaf: &H::Domain| {
@@ -277,7 +289,7 @@ mod tests {
     use crate::vdf_sloth;
 
     #[test]
-    fn test_bacon_post_basics() {
+    fn test_beacon_post_basics() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let sp = SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
@@ -294,9 +306,7 @@ mod tests {
             post_periods_count: 3,
         };
 
-        let mut bacon_post = BaconPost::<PedersenHasher, vdf_sloth::Sloth>::default();
-
-        let pub_params = bacon_post.setup(&sp).unwrap();
+        let pub_params = BeaconPoSt::<PedersenHasher, vdf_sloth::Sloth>::setup(&sp).unwrap();
 
         let data0: Vec<u8> = (0..1024)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
@@ -314,16 +324,14 @@ mod tests {
             commitments: vec![tree0.root(), tree1.root()],
         };
 
-        let priv_inputs = PrivateInputs {
+        let priv_inputs = PrivateInputs::<PedersenHasher> {
             trees: &[&tree0, &tree1],
             replicas: &[&data0, &data1],
             _h: PhantomData,
         };
 
-        let proof = bacon_post
-            .prove(&pub_params, &pub_inputs, &priv_inputs)
-            .unwrap();
+        let proof = BeaconPoSt::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
 
-        assert!(bacon_post.verify(&pub_params, &pub_inputs, &proof).unwrap());
+        assert!(BeaconPoSt::verify(&pub_params, &pub_inputs, &proof).unwrap());
     }
 }

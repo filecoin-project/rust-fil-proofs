@@ -47,8 +47,8 @@ pub mod test_helper;
 
 pub mod example_helper;
 
-pub mod bacon_post;
 pub mod batchpost;
+pub mod beacon_post;
 pub mod challenge_derivation;
 pub mod circuit;
 pub mod compound_proof;
