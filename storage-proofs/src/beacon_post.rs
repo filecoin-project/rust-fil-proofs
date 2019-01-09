@@ -6,30 +6,30 @@ use serde::de::Deserialize;
 use serde::ser::Serialize;
 
 use crate::error::{Error, Result};
-use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::hvh_post;
+use crate::hasher::{Domain, Hasher};
 use crate::merkle::MerkleTree;
 use crate::parameter_cache::ParameterSetIdentifier;
 use crate::proof::ProofScheme;
 use crate::vdf::Vdf;
+use crate::vdf_post;
 
 #[derive(Clone, Debug)]
 pub struct SetupParams<T: Domain, V: Vdf<T>> {
-    pub setup_params_hvh_post: hvh_post::SetupParams<T, V>,
+    pub vdf_post_setup_params: vdf_post::SetupParams<T, V>,
     pub post_periods_count: usize,
 }
 
 #[derive(Clone, Debug)]
 pub struct PublicParams<T: Domain, V: Vdf<T>> {
-    pub pub_params_hvh_post: hvh_post::PublicParams<T, V>,
+    pub vdf_post_pub_params: vdf_post::PublicParams<T, V>,
     pub post_periods_count: usize,
 }
 
 impl<T: Domain, V: Vdf<T>> ParameterSetIdentifier for PublicParams<T, V> {
     fn parameter_set_identifier(&self) -> String {
         format!(
-            "beacon_post::PublicParams{{pub_params_hvh_post: {}, post_periods_count: {}",
-            self.pub_params_hvh_post.parameter_set_identifier(),
+            "beacon_post::PublicParams{{vdf_post_pub_params: {}, post_periods_count: {}",
+            self.vdf_post_pub_params.parameter_set_identifier(),
             self.post_periods_count
         )
     }
@@ -67,14 +67,14 @@ impl<'a, H: 'a + Hasher> PrivateInputs<'a, H> {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Proof<'a, H: Hasher + 'a, V: Vdf<H::Domain>>(
     #[serde(bound(
-        serialize = "hvh_post::Proof<'a, H, V>: Serialize",
-        deserialize = "hvh_post::Proof<'a, H, V>: Deserialize<'de>"
+        serialize = "vdf_post::Proof<'a, H, V>: Serialize",
+        deserialize = "vdf_post::Proof<'a, H, V>: Deserialize<'de>"
     ))]
-    Vec<hvh_post::Proof<'a, H, V>>,
+    Vec<vdf_post::Proof<'a, H, V>>,
 );
 
 impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> Proof<'a, H, V> {
-    pub fn proofs(&self) -> &[hvh_post::Proof<'a, H, V>] {
+    pub fn proofs(&self) -> &[vdf_post::Proof<'a, H, V>] {
         &self.0
     }
 }
@@ -86,10 +86,13 @@ pub struct BeaconPoSt<H: Hasher, V: Vdf<H::Domain>> {
 }
 
 #[derive(Clone, Debug, Default)]
-struct Beacon {
+pub struct Beacon {
     count: usize,
 }
 
+// TODO: We should make Beacon a trait and parameterize BeaconPoSt on that trait.
+// This will allow for multiple Beacon implementations, particularly for tests.
+// `Beacon::get(…)` should never block for values of `t` which are in the past.
 impl Beacon {
     pub fn get<T: Domain>(&mut self, t: usize) -> T {
         // TODO: actual beacon
@@ -118,7 +121,7 @@ where
 
     fn setup(sp: &SetupParams<H::Domain, V>) -> Result<PublicParams<H::Domain, V>> {
         Ok(PublicParams {
-            pub_params_hvh_post: hvh_post::HvhPost::<H, V>::setup(&sp.setup_params_hvh_post)?,
+            vdf_post_pub_params: vdf_post::VDFPoSt::<H, V>::setup(&sp.vdf_post_setup_params)?,
             post_periods_count: sp.post_periods_count,
         })
     }
@@ -128,8 +131,7 @@ where
         pub_inputs: &'b PublicInputs<H::Domain>,
         priv_inputs: &'b PrivateInputs<'a, H>,
     ) -> Result<Proof<'a, H, V>> {
-        let sectors_count = pub_params.pub_params_hvh_post.sectors_count;
-        let challenge_count = pub_params.pub_params_hvh_post.challenge_count;
+        let sectors_count = pub_params.vdf_post_pub_params.sectors_count;
         let post_periods_count = pub_params.post_periods_count;
 
         if priv_inputs.replicas.len() != sectors_count {
@@ -140,61 +142,31 @@ where
             return Err(Error::MalformedInput);
         }
 
-        let mut proofs_hvh_post = Vec::with_capacity(post_periods_count);
+        let mut proofs_vdf_post = Vec::with_capacity(post_periods_count);
 
         let mut beacon = Beacon::default();
 
-        // First (t = 0)
-        {
-            // Run Beacon
-            let r = beacon.get::<H::Domain>(0);
-
-            // Generate challenges
-            let challenges = derive_challenges::<H>(challenge_count, 0, &[], r.as_ref());
-
-            // TODO: avoid cloining
-            let pub_inputs_hvh_post = hvh_post::PublicInputs {
-                commitments: pub_inputs.commitments.clone(),
-                challenges,
-            };
-
-            let priv_inputs_hvh_post =
-                hvh_post::PrivateInputs::<'a, H>::new(priv_inputs.replicas, priv_inputs.trees);
-
-            proofs_hvh_post.push(hvh_post::HvhPost::prove(
-                &pub_params.pub_params_hvh_post,
-                &pub_inputs_hvh_post,
-                &priv_inputs_hvh_post,
-            )?);
-        }
-
-        // The rest (t = 1..post_periods_count)
-        for t in 1..post_periods_count {
+        for t in 0..post_periods_count {
             // Run Beacon
             let r = beacon.get::<H::Domain>(t);
-            let x = extract_post_input::<H, V>(&proofs_hvh_post[t - 1]);
-
-            // Generate challenges
-            let challenges = derive_challenges::<H>(challenge_count, t, x.as_ref(), r.as_ref());
 
             // Generate proof
-            // TODO: avoid cloining
-            let pub_inputs_hvh_post = hvh_post::PublicInputs {
-                challenges,
+            // TODO: avoid cloning
+            let pub_inputs_vdf_post = vdf_post::PublicInputs {
+                challenge_seed: r,
                 commitments: pub_inputs.commitments.clone(),
             };
 
-            let priv_inputs_hvh_post =
-                hvh_post::PrivateInputs::new(priv_inputs.replicas, priv_inputs.trees);
+            let priv_inputs_vdf_post = vdf_post::PrivateInputs::new(priv_inputs.trees);
 
-            proofs_hvh_post.push(hvh_post::HvhPost::prove(
-                &pub_params.pub_params_hvh_post,
-                &pub_inputs_hvh_post,
-                &priv_inputs_hvh_post,
+            proofs_vdf_post.push(vdf_post::VDFPoSt::prove(
+                &pub_params.vdf_post_pub_params,
+                &pub_inputs_vdf_post,
+                &priv_inputs_vdf_post,
             )?);
         }
 
-        Ok(Proof(proofs_hvh_post))
+        Ok(Proof(proofs_vdf_post))
     }
 
     fn verify(
@@ -202,51 +174,25 @@ where
         pub_inputs: &PublicInputs<H::Domain>,
         proof: &Proof<H, V>,
     ) -> Result<bool> {
-        let challenge_count = pub_params.pub_params_hvh_post.challenge_count;
         let post_periods_count = pub_params.post_periods_count;
 
-        // HVH Post Verification
+        // VDF PoSt Verification
 
         let mut beacon = Beacon::default();
 
-        // First (t = 0)
-        {
-            let r = beacon.get::<H::Domain>(0);
-            // Generate challenges
-            let challenges = derive_challenges::<H>(challenge_count, 0, &[], r.as_ref());
-
-            // TODO: avoid cloining
-            let pub_inputs_hvh_post = hvh_post::PublicInputs {
-                challenges,
-                commitments: pub_inputs.commitments.clone(),
-            };
-
-            if !hvh_post::HvhPost::verify(
-                &pub_params.pub_params_hvh_post,
-                &pub_inputs_hvh_post,
-                &proof.0[0],
-            )? {
-                return Ok(false);
-            }
-        }
-
-        // The rest (t = 1..post_periods_count)
-        for t in 1..post_periods_count {
+        for t in 0..post_periods_count {
             // Generate challenges
             let r = beacon.get::<H::Domain>(t);
-            let x = extract_post_input::<H, V>(&proof.0[t - 1]);
 
-            let challenges = derive_challenges::<H>(challenge_count, t, x.as_ref(), r.as_ref());
-
-            // TODO: avoid cloining
-            let pub_inputs_hvh_post = hvh_post::PublicInputs {
-                challenges,
+            // TODO: avoid cloning
+            let pub_inputs_vdf_post = vdf_post::PublicInputs {
+                challenge_seed: r,
                 commitments: pub_inputs.commitments.clone(),
             };
 
-            if !hvh_post::HvhPost::verify(
-                &pub_params.pub_params_hvh_post,
-                &pub_inputs_hvh_post,
+            if !vdf_post::VDFPoSt::verify(
+                &pub_params.vdf_post_pub_params,
+                &pub_inputs_vdf_post,
                 &proof.0[t],
             )? {
                 return Ok(false);
@@ -255,33 +201,6 @@ where
 
         Ok(true)
     }
-}
-
-fn extract_post_input<H: Hasher, V: Vdf<H::Domain>>(proof: &hvh_post::Proof<H, V>) -> H::Domain {
-    let leafs: Vec<u8> = proof.porep_proofs.iter().fold(Vec::new(), |mut acc, p| {
-        acc.extend(p.leafs().into_iter().fold(
-            Vec::new(),
-            |mut inner_acc: Vec<u8>, leaf: &H::Domain| {
-                inner_acc.extend(leaf.as_ref());
-                inner_acc
-            },
-        ));
-        acc
-    });
-
-    H::Function::hash(&leafs)
-}
-
-fn derive_challenges<H: Hasher>(count: usize, t: usize, x: &[u8], r: &[u8]) -> Vec<H::Domain> {
-    (0..count)
-        .map(|i| {
-            let mut i_bytes = [0u8; 32];
-            LittleEndian::write_u32(&mut i_bytes[0..4], t as u32);
-            LittleEndian::write_u32(&mut i_bytes[4..8], i as u32);
-
-            H::Function::hash(&[x, r, &i_bytes].concat())
-        })
-        .collect()
 }
 
 #[cfg(test)]
@@ -301,7 +220,7 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let sp = SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
-            setup_params_hvh_post: hvh_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
+            vdf_post_setup_params: vdf_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
                 challenge_count: 10,
                 sector_size: 1024 * 32,
                 post_epochs: 3,

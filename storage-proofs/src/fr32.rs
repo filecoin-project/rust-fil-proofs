@@ -1,4 +1,7 @@
 use crate::error::*;
+
+use byteorder::{LittleEndian, WriteBytesExt};
+
 use pairing::{Engine, PrimeField, PrimeFieldRepr};
 
 // Contains 32 bytes whose little-endian value represents an Fr.
@@ -51,6 +54,15 @@ pub fn bytes_into_frs<E: Engine>(bytes: &[u8]) -> Result<Vec<E::Fr>> {
 // with every 32-byte chunk representing a valid Fr.
 pub fn frs_into_bytes<E: Engine>(frs: &[E::Fr]) -> Fr32Vec {
     frs.iter().flat_map(|fr| fr_into_bytes::<E>(fr)).collect()
+}
+
+// Takes a u32 and returns an Fr.
+pub fn u32_into_fr<E: Engine>(n: u32) -> E::Fr {
+    let mut buf: Fr32Vec = vec![0u8; 32];
+    let mut w = &mut buf[0..4];
+    w.write_u32::<LittleEndian>(n).unwrap();
+
+    bytes_into_fr::<E>(&buf).expect("should never fail since u32 is in the field")
 }
 
 #[cfg(test)]
