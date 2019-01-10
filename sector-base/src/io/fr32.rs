@@ -67,16 +67,21 @@ pub type Fr32BitVec = BitVec<bitvec::LittleEndian, u8>;
 // be extra bits after padding bits.
 //
 // There's no metadata signaling the number of extra bits present in the
-// last byte in any given padded layout, but it can be deduced knowing that
-// only a *single* D/R configuration in the last byte maps to a byte-aligned
-// raw data stream and a specified `padded_chunk_bits` of padding.
+// last byte in any given padded layout, this is deduced from the fact
+// that only a single number of valid data bits in the last byte, and
+// hence a number of data bits in total, that maps to a byte-aligned
+// (multiple of 8) raw data stream that could have been used as input.
 //
-// Key terms and definitions:
+// Key terms: Collection of terms introduced in this documentation
+// (with the format `*<new-term>*`). This section doesn't provide
+// a self-contained definition of them (to avoid unnecessary repetition),
+// it just provides (when appropriate) an additional summary of what was
+// already discussed.
+//
 // * Raw data: unpadded user-supplied data (we don't use the *unpadded* term
 //   to avoid excessive *padding* suffixes in the code). Padding (data) bits.
-// * Element: generated in the padding process to adjust the raw data to a size
-//   of `padded_chunk_bits`: byte-aligned stream consisting of a full data unit
-//   and padding bits.
+// * Element: byte-aligned stream consisting of a full unit of data plus the
+//   padding bits.
 // * Full unit of `data_chunk_bits` raw data bits, always followed by padding.
 //   Incomplete unit, not followed by padding, doesn't form an element.
 // * Byte-aligned stream: always input and output, either as raw data or padded
@@ -271,6 +276,8 @@ impl PaddingMap {
         let transformed_bit_pos = self.transform_bit_pos(pos * 8, padding_direction);
 
         let transformed_byte_pos = transformed_bit_pos as f64 / 8.;
+        // NOTE: It might end up being cheaper to avoid this float conversion and
+        // use / and %.
 
         // There's one-to-one equivalence between the bytes in a raw data
         // input that are converted to a byte-aligned padded layout (see `PaddingMap`).
@@ -295,7 +302,7 @@ impl PaddingMap {
     //   in bytes (since elements -with padding- are byte aligned).
     // - the number of bits left to read (write) from (to) the current
     //   data unit (assuming it's full).
-    pub fn next_boundaries(&self, position: &BitByte) -> (usize, usize) {
+    pub fn next_boundary(&self, position: &BitByte) -> (usize, usize) {
         let position_bits = position.total_bits();
 
         let (_, bits_after_last_boundary) = div_rem(position_bits, self.element_bits);
@@ -421,7 +428,7 @@ where
 
     // (2): Fill the current data unit adding `missing_data_bits` from the
     // `source` (if available, or as many bits as we have).
-    let (_, missing_data_bits) = padding_map.next_boundaries(&padded_bits);
+    let (_, missing_data_bits) = padding_map.next_boundary(&padded_bits);
 
     // Check if we have enough `source_bits` to complete the data unit (and hence
     // add the padding and complete the element) or if we'll use all the `source_bits`
@@ -563,7 +570,7 @@ where
         // (1): Find the element boundary and, assuming that there is a full
         //      unit of data (which actually may be incomplete), how many bits
         //      are left to read from `read_pos`.
-        let (next_element_position, mut bits_to_extract) = padding_map.next_boundaries(&read_pos);
+        let (next_element_position, mut bits_to_extract) = padding_map.next_boundary(&read_pos);
 
         // (2): As the element may be incomplete check how much data is
         //      actually available so as not to access the `source` past
