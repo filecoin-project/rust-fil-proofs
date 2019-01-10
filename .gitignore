@@ -5,3 +5,4 @@ Cargo.lock
 **/*.h
 heaptrack*
 .bencher
+logging-toolkit

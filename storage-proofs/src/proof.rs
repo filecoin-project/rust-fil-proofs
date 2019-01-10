@@ -1,4 +1,6 @@
 use crate::error::Result;
+use serde::de::DeserializeOwned;
+use serde::ser::Serialize;
 
 /// The ProofScheme trait provides the methods that any proof scheme needs to implement.
 pub trait ProofScheme<'a> {
@@ -6,7 +8,7 @@ pub trait ProofScheme<'a> {
     type SetupParams;
     type PublicInputs: Clone;
     type PrivateInputs;
-    type Proof: Clone;
+    type Proof: Clone + Serialize + DeserializeOwned;
 
     /// setup is used to generate public parameters from setup parameters in order to specialize
     /// a ProofScheme to the specific parameters required by a consumer.

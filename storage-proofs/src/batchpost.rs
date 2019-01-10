@@ -3,6 +3,8 @@ use std::marker::PhantomData;
 use byteorder::{LittleEndian, WriteBytesExt};
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
+use serde::de::Deserialize;
+use serde::ser::Serialize;
 
 use crate::crypto::blake2s::blake2s;
 use crate::error::Result;
@@ -23,8 +25,12 @@ pub struct PublicParams {
 #[derive(Debug)]
 pub struct SetupParams {}
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proof<H: Hasher> {
+    #[serde(bound(
+        serialize = "merklepor::Proof<H>: Serialize",
+        deserialize = "merklepor::Proof<H>: Deserialize<'de>"
+    ))]
     pub proofs: Vec<merklepor::Proof<H>>,
     pub challenges: Vec<usize>,
 }

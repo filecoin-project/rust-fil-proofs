@@ -2,6 +2,8 @@ use std::sync::mpsc::channel;
 
 use crate::merkle::MerkleTree;
 use crossbeam_utils::thread;
+use serde::de::Deserialize;
+use serde::ser::Serialize;
 use slog::*;
 
 use crate::challenge_derivation::derive_challenges;
@@ -108,8 +110,12 @@ pub struct PrivateInputs<'a, H: Hasher> {
     pub tau: Vec<porep::Tau<H::Domain>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proof<H: Hasher> {
+    #[serde(bound(
+        serialize = "EncodingProof<H>: Serialize",
+        deserialize = "EncodingProof<H>: Deserialize<'de>"
+    ))]
     pub encoding_proofs: Vec<EncodingProof<H>>,
     pub tau: Vec<porep::Tau<H::Domain>>,
 }

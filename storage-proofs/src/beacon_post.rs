@@ -2,6 +2,8 @@ use std::marker::PhantomData;
 use std::{thread, time};
 
 use byteorder::{ByteOrder, LittleEndian};
+use serde::de::Deserialize;
+use serde::ser::Serialize;
 
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
@@ -62,8 +64,14 @@ impl<'a, H: 'a + Hasher> PrivateInputs<'a, H> {
 /// Beacon-PoSt
 /// This is one construction of a Proof-of-Spacetime.
 /// It currently only supports proving over a single sector.
-#[derive(Clone, Debug)]
-pub struct Proof<'a, H: Hasher + 'a, V: Vdf<H::Domain>>(Vec<hvh_post::Proof<'a, H, V>>);
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Proof<'a, H: Hasher + 'a, V: Vdf<H::Domain>>(
+    #[serde(bound(
+        serialize = "hvh_post::Proof<'a, H, V>: Serialize",
+        deserialize = "hvh_post::Proof<'a, H, V>: Deserialize<'de>"
+    ))]
+    Vec<hvh_post::Proof<'a, H, V>>,
+);
 
 impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> Proof<'a, H, V> {
     pub fn proofs(&self) -> &[hvh_post::Proof<'a, H, V>] {

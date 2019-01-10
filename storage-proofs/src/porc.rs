@@ -2,6 +2,8 @@ use std::marker::PhantomData;
 
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
+use serde::de::Deserialize;
+use serde::ser::Serialize;
 
 use crate::drgraph::graph_height;
 use crate::error::{Error, Result};
@@ -50,8 +52,14 @@ pub struct PrivateInputs<'a, H: 'a + Hasher> {
     pub trees: &'a [&'a MerkleTree<H::Domain, H::Function>],
 }
 
-#[derive(Debug, Clone)]
-pub struct Proof<H: Hasher>(Vec<MerkleProof<H>>);
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Proof<H: Hasher>(
+    #[serde(bound(
+        serialize = "MerkleProof<H>: Serialize",
+        deserialize = "MerkleProof<H>: Deserialize<'de>"
+    ))]
+    Vec<MerkleProof<H>>,
+);
 
 impl<H: Hasher> Proof<H> {
     pub fn leafs(&self) -> Vec<&H::Domain> {
