@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-RELEASE_BRANCH="master"
+RELEASE_BRANCH="spikes/release-publishing-paramcache"
 RELEASE_NAME="$CIRCLE_PROJECT_REPONAME-$(uname)"
 RELEASE_PATH="$CIRCLE_ARTIFACTS/$RELEASE_NAME"
 RELEASE_FILE="$RELEASE_PATH.tar.gz"
