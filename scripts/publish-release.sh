@@ -22,10 +22,11 @@ echo "preparing release file"
 
 # pack up compiled lib and header
 mkdir $RELEASE_PATH
+cp target/release/paramcache $RELEASE_PATH
 cp target/release/libfilecoin_proofs.a $RELEASE_PATH
 cp filecoin-proofs/libfilecoin_proofs.h $RELEASE_PATH
 pushd $RELEASE_PATH
-tar -czf $RELEASE_FILE ./libfilecoin_proofs.*
+tar -czf $RELEASE_FILE ./*
 popd
 
 echo "release file created: $RELEASE_FILE"
