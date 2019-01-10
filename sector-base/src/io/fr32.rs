@@ -435,13 +435,14 @@ where
     // TODO: What happens if we were already at the element boundary?
     // Would this code write 0 (`data_bits_to_write`) bits and then
     // add an extra padding?
-    // TODO: Added an equal in the comparison (`<=`), before it was just `<`, which seems
-    // not to cover the corner case when we have exactly the number of available bits to
-    // write (and no more), add a test case for it.
     bit_stream.extend(Fr32BitVec::from(source).into_iter().take(data_bits_to_write));
     if fills_data_unit {
         padding_map.pad(&mut bit_stream);
     }
+
+    // TODO: Optimization case: if `missing_data_bits == source_bits` (last chunk being
+    // processed) do not bother to pad (setting `fills_data_unit` to `false`) which will
+    // implicitly convert the extra bits to padding bits.
 
     // Now we are at the element boundary, write entire chunks of full data
     // units with its padding.

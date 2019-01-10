@@ -26,7 +26,7 @@
 
 - [ ] Addressing review comments:
 
-  - [ ] Clarify that we do sub-byte padding, that is, we pad to the next byte boundary (our current logic depends on it). ([https://github.com/filecoin-project/rust-proofs/pull/419#discussion_r245882697] comment)
+  - [x] Clarify that we do sub-byte padding, that is, we pad to the next byte boundary (our current logic depends on it). ([https://github.com/filecoin-project/rust-proofs/pull/419#discussion_r245882697] comment)
 
   - [ ] Rename `Fr32BitVec`, drop "Fr32" (do the same otherwise where possible). ([comment](https://github.com/filecoin-project/rust-proofs/pull/419#discussion_r246131741))
   
