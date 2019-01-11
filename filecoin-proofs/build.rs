@@ -2,12 +2,17 @@ extern crate bindgen;
 extern crate cbindgen;
 
 use std::env;
+use std::fs::File;
+use std::io::Write;
 use std::path::PathBuf;
+use std::process::Command;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 fn main() {
     let crate_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let target_path = out_path.join("../../..");
 
     let cfg = cbindgen::Config::from_root_or_default(std::path::Path::new(&crate_dir));
 
@@ -40,8 +45,6 @@ fn main() {
 
     match b {
         Ok(res) => {
-            let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
-
             res.write_to_file(out_path.join("libfilecoin_proofs.rs"))
                 .expect("could not write file");
         }
@@ -50,4 +53,38 @@ fn main() {
             std::process::exit(1);
         }
     }
+
+    let git_output = Command::new("git")
+        .args(&["rev-parse", "HEAD"])
+        .output()
+        .unwrap();
+    let git_hash = String::from_utf8(git_output.stdout).unwrap();
+
+    let libs = if cfg!(target_os = "linux") {
+        "-lutil -lutil -ldl -lrt -lpthread -lgcc_s -lc -lm -lrt -lpthread -lutil -lutil"
+    } else if cfg!(target_os = "macos") {
+        "-framework Security -lSystem -lresolv -lc -lm"
+    } else {
+        ""
+    };
+
+    let mut pc_file = File::create(target_path.join("libfilecoin_proofs.pc"))
+        .expect("unable to generate .pc file: {:?}");
+
+    write!(
+        pc_file,
+        "prefix=/usr/local
+libdir=${{prefix}}/lib
+includedir=${{prefix}}/include
+
+Name: libfilecoin_proofs
+Version: {version}
+Description: rust-proofs library
+Libs: -L${{libdir}} -lfilecoin_proofs {libs}
+Cflags: -I${{includedir}}
+",
+        version = git_hash.trim(),
+        libs = libs
+    )
+    .expect("unable to write to .pc file: {:?}");
 }
