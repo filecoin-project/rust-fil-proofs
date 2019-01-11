@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 RELEASE_BRANCH="master"
-RELEASE_NAME="$CIRCLE_PROJECT_REPONAME-$(uname)"
+RELEASE_NAME="$CIRCLE_PROJECT_REPONAME-`uname`"
 RELEASE_PATH="$CIRCLE_ARTIFACTS/$RELEASE_NAME"
 RELEASE_FILE="$RELEASE_PATH.tar.gz"
 RELEASE_TAG="${CIRCLE_SHA1:0:16}"
@@ -23,7 +23,29 @@ echo "preparing release file"
 mkdir $RELEASE_PATH
 mkdir $RELEASE_PATH/bin
 mkdir $RELEASE_PATH/include
-mkdir $RELEASE_PATH/lib
+mkdir -p $RELEASE_PATH/lib/pkgconfig
+
+# pkg-config .pc file generation
+case `uname` in
+  "Darwin")
+    RELEASE_LIBS="-framework Security -lSystem -lresolv -lc -lm"
+    ;;
+  "Linux")
+    RELEASE_LIBS="-lutil -lutil -ldl -lrt -lpthread -lgcc_s -lc -lm -lrt -lpthread -lutil -lutil"
+    ;;
+  *)
+    echo "unknown system libraries for architecture"
+    ;;
+esac
+
+echo "libdir=\${prefix}/lib
+includedir=\${prefix}/include
+
+Name: libfilecoin_proofs
+Version: $RELEASE_TAG
+Description: rust-proofs library
+Libs: -L\${libdir} -lfilecoin_proofs $RELEASE_LIBS
+Cflags: -I\${includedir}" > $RELEASE_PATH/lib/pkgconfig/libfilecoin_proofs.pc
 
 cp target/release/paramcache $RELEASE_PATH/bin/
 cp filecoin-proofs/libfilecoin_proofs.h $RELEASE_PATH/include/
