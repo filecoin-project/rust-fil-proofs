@@ -26,7 +26,7 @@ mkdir $RELEASE_PATH/include
 mkdir -p $RELEASE_PATH/lib/pkgconfig
 
 cp target/release/paramcache $RELEASE_PATH/bin/
-cp filecoin-proofs/libfilecoin_proofs.h $RELEASE_PATH/include/
+cp target/release/libfilecoin_proofs.h $RELEASE_PATH/include/
 cp target/release/libfilecoin_proofs.a $RELEASE_PATH/lib/
 cp target/release/libfilecoin_proofs.pc $RELEASE_PATH/lib/pkgconfig
 

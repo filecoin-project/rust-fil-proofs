@@ -27,7 +27,7 @@ fn main() {
     // but rather just tell the rest of the system we can't proceed.
     match c {
         Ok(res) => {
-            res.write_to_file("libfilecoin_proofs.h");
+            res.write_to_file(target_path.join("libfilecoin_proofs.h"));
         }
         Err(err) => {
             eprintln!("unable to generate bindings: {:?}", err);
@@ -36,7 +36,7 @@ fn main() {
     }
 
     let b = bindgen::builder()
-        .header("libfilecoin_proofs.h")
+        .header(target_path.join("libfilecoin_proofs.h").to_string_lossy())
         // Here, we tell Rust to link libfilecoin_proofs so that auto-generated
         // symbols are linked to symbols in the compiled dylib. For reasons
         // unbeknown to me, the link attribute needs to precede an extern block.
