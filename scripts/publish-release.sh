@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 RELEASE_BRANCH="master"
-RELEASE_NAME="$CIRCLE_PROJECT_REPONAME-$(uname)"
+RELEASE_NAME="$CIRCLE_PROJECT_REPONAME-`uname`"
 RELEASE_PATH="$CIRCLE_ARTIFACTS/$RELEASE_NAME"
 RELEASE_FILE="$RELEASE_PATH.tar.gz"
 RELEASE_TAG="${CIRCLE_SHA1:0:16}"
@@ -23,11 +23,12 @@ echo "preparing release file"
 mkdir $RELEASE_PATH
 mkdir $RELEASE_PATH/bin
 mkdir $RELEASE_PATH/include
-mkdir $RELEASE_PATH/lib
+mkdir -p $RELEASE_PATH/lib/pkgconfig
 
 cp target/release/paramcache $RELEASE_PATH/bin/
-cp filecoin-proofs/libfilecoin_proofs.h $RELEASE_PATH/include/
+cp target/release/libfilecoin_proofs.h $RELEASE_PATH/include/
 cp target/release/libfilecoin_proofs.a $RELEASE_PATH/lib/
+cp target/release/libfilecoin_proofs.pc $RELEASE_PATH/lib/pkgconfig
 
 pushd $RELEASE_PATH
 
