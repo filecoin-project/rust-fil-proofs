@@ -1,9 +1,7 @@
 use std::cmp::min;
 use std::io::{self, Read, Seek, SeekFrom, Write};
-use std::iter::FromIterator;
 
-use bitvec::{self, BitVec};
-use itertools::Itertools;
+use bitvec::{self, BitVec, LittleEndian};
 
 /** PaddingMap represents a mapping between data and its padded equivalent.
 
@@ -53,7 +51,7 @@ bits (X) necessary to complete the byte-aligned stream:
 ```
 
 (This diagram is just for illustrative purposes, we actually return the output
- in little-endian order, see `Fr32BitVec`).
+ in little-endian order, see `BitVecLEu8`).
 
 It's important to distinguish these extra bits (generated as a side
 effect of the conversion to a byte-aligned stream) from the padding bits
@@ -135,9 +133,7 @@ pub const FR32_PADDING_MAP: PaddingMap = PaddingMap {
     element_bits: 256,
 };
 
-pub type Fr32BitVec = BitVec<bitvec::LittleEndian, u8>;
-// TODO: Rename, drop the `Fr32` prefix. Leaving it for now since
-// the optimization stage will likely remove it.
+pub type BitVecLEu8 = BitVec<LittleEndian, u8>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Convenience interface for API functions – all bundling FR32_PADDING_MAP
@@ -236,7 +232,7 @@ impl PaddingMap {
         }
     }
 
-    pub fn pad(&self, bits_out: &mut Fr32BitVec) {
+    pub fn pad(&self, bits_out: &mut BitVecLEu8) {
         for _ in 0..self.pad_bits() {
             bits_out.push(false)
         }
@@ -355,6 +351,257 @@ fn div_rem(a: usize, b: usize) -> (usize, usize) {
     (div, rem)
 }
 
+// TODO: The following extraction functions could be moved to a different file.
+
+/** Shift an `amount` of bits from the `input` in the direction indicated by `is_left`.
+
+This function tries to imitate the behavior of `shl` and `shr` of a
+`BitVec<LittleEndian, u8>`, where the inner vector is traversed one byte
+at a time (`u8`), and inside each byte, bits are traversed (`LittleEndian`)
+from LSB ("right") to MSB ("left"). For example, the bits in the this two-byte
+slice will be traversed according to their numbering:
+
+```text
+ADDR     |  7  6  5  4  3  2  1  0  |
+
+ADDR +1  |  F  E  D  C  B  A  9  8  |
+```
+
+`BitVec` uses the opposite naming convention than this function, shifting left
+here is equivalent to `shr` there, and shifting right to `shl`.
+
+If shifting in the left direction, the `input` is expanded by one extra byte to
+accommodate the overflow (instead of just discarding it, which is what's done
+in the right direction).
+
+The maximum `amount` to shift is 7 (and the minimum is 1), that is, we always
+shift less than a byte. This precondition is only checked during testing (with
+`debug_assert!`) for performance reasons, it is up to the caller to enforce it.
+
+# Examples
+
+Shift the `input` (taken from the diagram above) left by an `amount` of 3 bits,
+growing the output slice:
+
+```text
+ADDR     |  4  3  2  1  0  _  _  _  |  Filled with zeros.
+
+ADDR +1  |  C  B  A  9  8  7  6  5  |
+
+ADDR +2  |  _  _  _  _  _  F  E  D  |  The overflow of the last input byte
+                                               is moved to this (new) byte.
+```
+
+Same, but shift right:
+
+```text
+ADDR     |  A  9  8  7  6  5  4  3  |  The overflow `[2,1,0]` is just discarded,
+                                                         the slice doesn't grow.
+ADDR +1  |  _  _  _  F  E  D  C  B  |
+```
+
+(Note: `0`, `1`, `2`, etc. are bits identified by their original position,
+`_` means a bit left at zero after shifting, to avoid confusions with
+the unique bit `0`, that just *started* at that position but doesn't
+necessarily carry that value.)
+
+**/
+pub fn shift_bits(input: &[u8], amount: usize, is_left: bool) -> (Vec<u8>) {
+    debug_assert!(amount >= 1);
+    debug_assert!(amount <= 7);
+
+    // Create the `output` vector from the original input values, extending
+    // its size by one if shifting left.
+    let mut output = Vec::with_capacity(input.len() + if is_left { 1 } else { 0 });
+    output.extend_from_slice(input);
+    if is_left {
+        output.push(0);
+    }
+    // TODO: Is there a cleaner way to do this? Is the extra byte worth the initial
+    // `with_capacity` call?
+
+    // Split the shift in two parts. First, do a simple bit shift (losing the
+    // overflow) for each byte, then, in a second pass, recover the lost overflow
+    // from the `input`. The advantage of splitting it like this is that the place-holder
+    // spaces are already being cleared with zeros to just join the overflow part with an
+    // single `OR` operation (instead of assembling both parts together at the same time
+    // which requires an extra clear operation with a mask of zeros).
+    for output_byte in output.iter_mut().take(input.len()) {
+        if is_left {
+            *output_byte <<= amount;
+        } else {
+            *output_byte >>= amount;
+        }
+    }
+
+    if is_left {
+        // The `output` looks at this point like this (following the original
+        // example):
+        //
+        // ADDR     |  4  3  2  1  0  _  _  _  |
+        //
+        // ADDR +1  |  C  B  A  9  8  _  _  _  |
+        //
+        // ADDR +2  |  _  _  _  _  _  _  _  _  |  Extra byte allocated to extend the `input`,
+        //                                            hasn't been modified in the first pass.
+        //
+        // We need to recover the overflow of each shift (e.g., `[7,6,5]` from
+        // the first byte and `[F,E,D]` from the second) and move it to the next
+        // byte, shifting it to place it at the "start" (in the current ordering
+        // that means aligning it to the LSB). For example, the overflow of (also)
+        // `amount` bits from the first byte is:
+        //
+        // ADDR     |  7  6  5  4  3  2  1  0  |
+        //             +-----+
+        //           overflow lost
+        //
+        // and it's "recovered" with a shift in the opposite direction, which both
+        // positions it in the correct place *and* leaves cleared the rest of the
+        // bits to be able to `OR` (join) it with the next byte of `output` (shifted
+        // in the first pass):
+        //
+        // (`output` so far)
+        // ADDR +1  |  C  B  A  9  8  _  _  _  |    +
+        //                                          |
+        // (shifted overflow                        |  join both (`|=`)
+        //      from `input`)                       |
+        // ADDR     |  _  _  _  _  _  7  6  5  |    V
+        //             +------------->
+        //
+        for i in 0..input.len() {
+            let overflow = input[i] >> (8 - amount);
+            output[i + 1] |= overflow;
+        }
+    } else {
+        // The overflow handling in the right shift follows the same logic as the left
+        // one with just two differences: (1) the overflow goes to the *previous* byte
+        // in memory and (2) the overflow of the first byte is discarded (hence the `for`
+        // loop iterates just `input.len` *minus one* positions).
+        for i in 1..input.len() {
+            let overflow = input[i] << (8 - amount);
+            output[i - 1] |= overflow;
+        }
+    }
+
+    // TODO: Optimization: Join both passes in one `for` loop for cache
+    // efficiency (do everything we need to do in the same address once).
+    // (This is low priority since we normally shift small arrays -32 byte
+    // elements- per call.)
+
+    output
+}
+
+/** Extract bits and relocate them.
+
+Extract `num_bits` from the `input` starting at absolute `pos` (expressed in
+bits). Format the extracted bit stream as a byte stream `output` (in a `Vec<u8>`)
+where the extracted bits start at `new_offset` bits in the first byte (i.e.,
+`new_offset` can't be bigger than 7) allowing them to be relocated from their
+original bit-offset (encoded in `pos`). The rest of the bits (below `new_offset`
+and after the extracted `num_bits`) are left at zero (to prepare them to be
+joined with another extracted `output`). This function follows the ordering in
+`BitVec<LittleEndian, u8>` (see `shift_bits` for more details).
+
+The length of the input must be big enough to perform the extraction
+of `num_bits`. This precondition is only checked during testing (with
+`debug_assert!`) for performance reasons, it is up to the caller to enforce it.
+
+# Example
+
+Taking as `input` the original two-byte layout from `shift_bits`, extracting 4
+`num_bits` from `pos` 12 and relocating them in `new_offset` 2 would result in
+an `output` of a single byte like:
+
+```text
+ADDR     |  _  _  F  E  D  C  _  _  |
+```
+
+(The second byte in `ADDR +1` has been dropped after the extraction
+as it's no longer needed.)
+
+**/
+//
+// TODO: Replace the byte terminology for a generic term that can mean
+// anything that implements the `bitvec::Bits` trait (`u8`, `u32`, etc.).
+// `BitVec` calls it "element" but that's already used here (this function
+// may need to be moved elsewhere which would allow to reuse that term).
+// This also will imply removing the hardcoded `8`s (size of byte).
+#[inline]
+pub fn extract_bits_and_shift(
+    input: &[u8],
+    pos: usize,
+    num_bits: usize,
+    new_offset: usize,
+) -> (Vec<u8>) {
+    debug_assert!(input.len() * 8 >= pos + num_bits);
+    debug_assert!(new_offset <= 7);
+
+    // 1. Trim the whole bytes (before and after) we don't need for the
+    //    extraction (we don't want to waste shift operations on them).
+    // 2. Shift from the original `pos` to the `new_offset`.
+    // 3. Trim the bits in the first and last byte we also don't need.
+    //
+    // TODO: Does (3) need to happen *after* the shift in (2)? It feels
+    // more natural but can't we just trim everything in (1)?
+
+    // Determine from `pos` the number of full bytes that can be completely skipped
+    // (`skip_bytes`), and the number of bits within the first byte of interest that
+    // we'll start extracting from (`extraction_offset`).
+    let (skip_bytes, extraction_offset) = div_rem(pos, 8);
+
+    // (1).
+    let input = &input[skip_bytes..];
+    let input = &input[..BitByte::from_bits(extraction_offset + num_bits).bytes_needed()];
+    // TODO: Optimization: Don't use BitByte here, add a similar function.
+
+    // (2).
+    let mut output = if new_offset < extraction_offset {
+        // Shift right.
+        shift_bits(input, extraction_offset - new_offset, false)
+    } else if new_offset > extraction_offset {
+        // Shift left.
+        shift_bits(input, new_offset - extraction_offset, true)
+    } else {
+        // No shift needed, take the `input` as is.
+        input.to_vec()
+    };
+
+    // After the shift we may not need the last byte of the `output` (either
+    // because the left shift extended it by one byte or because the right shift
+    // move the extraction span below that threshold).
+    if output.len() > BitByte::from_bits(new_offset + num_bits).bytes_needed() {
+        output.pop();
+    }
+    // TODO: Optimization: Don't use BitByte here, add a similar function.
+    // TODO: Optimization: A more specialized shift would have just dropped
+    // that byte (we would need to pass it the `num_bits` we want).
+
+    // (3).
+    if new_offset != 0 {
+        clear_right_bits(output.first_mut().unwrap(), new_offset);
+    }
+    let end_offset = (new_offset + num_bits) % 8;
+    if end_offset != 0 {
+        clear_left_bits(output.last_mut().unwrap(), end_offset);
+    }
+
+    output
+}
+
+// Set to zero all the bits to the "left" of the `offset` including
+// it, that is, [MSB; `offset`].
+#[inline]
+pub fn clear_left_bits(byte: &mut u8, offset: usize) {
+    *(byte) &= (1 << offset) - 1
+}
+
+// Set to zero all the bits to the "right" of the `offset` excluding
+// it, that is, (`offset`; LSB].
+#[inline]
+pub fn clear_right_bits(byte: &mut u8, offset: usize) {
+    *(byte) &= !((1 << offset) - 1)
+}
+
 pub fn write_padded<W: ?Sized>(source: &[u8], target: &mut W) -> io::Result<usize>
 where
     W: Read + Write + Seek,
@@ -394,6 +641,8 @@ need to handle the potential bit-level misalignments:
   2. Incomplete data unit: we need to fill the rest of it and add the padding
      to form a element that would position the writer at the desired boundary.
 **/
+// TODO: Change name, this is the real write padded function, the previous one
+// just partition data in chunks.
 fn write_padded_aux<W: ?Sized>(
     padding_map: &PaddingMap,
     source: &[u8],
@@ -402,21 +651,16 @@ fn write_padded_aux<W: ?Sized>(
 where
     W: Read + Write + Seek,
 {
-    // TODO: Change name, this is the real write padded function, the previous one
-    // just partition data in chunks.
-
     // TODO: Check `source` length, if it's zero we should return here and avoid all
     // the alignment calculations that will be worthless (because we wont' have any
     // data with which to align).
 
-    // Bit stream collecting the bits that will be written to the byte-aligned `target`.
-    let mut bit_stream = Fr32BitVec::new();
-
     let (padded_bytes, _, padded_bits) = padding_map.target_offsets(target)?;
 
     // (1): Overwrite the extra bits (if any): we actually don't write in-place, we
-    // remove the last byte and extract its valid bits to `bit_stream` to be later rewritten
-    // with new data taken from the `source`.
+    // remove the last byte and extract its valid bits to `last_bits` to be later
+    // rewritten with new data taken from the `source`.
+    let mut last_bits = BitVecLEu8::new();
     if !padded_bits.is_byte_aligned() {
         // Read the last incomplete byte and left the `target` positioned to overwrite
         // it in the next `write_all`.
@@ -429,9 +673,9 @@ where
 
         // Extract the valid bit from the last byte (the `bits` fraction
         // of the `padded_bits` bit stream that doesn't complete a byte).
-        let mut last_byte_as_bitvec = Fr32BitVec::from(&last_byte[..]);
+        let mut last_byte_as_bitvec = BitVecLEu8::from(&last_byte[..]);
         last_byte_as_bitvec.truncate(padded_bits.bits);
-        bit_stream.extend(last_byte_as_bitvec);
+        last_bits.extend(last_byte_as_bitvec);
     };
 
     // (2): Fill the current data unit adding `missing_data_bits` from the
@@ -450,50 +694,62 @@ where
     // TODO: What happens if we were already at the element boundary?
     // Would this code write 0 (`data_bits_to_write`) bits and then
     // add an extra padding?
-    bit_stream.extend(
-        Fr32BitVec::from(source)
+    last_bits.extend(
+        BitVecLEu8::from(source)
             .into_iter()
             .take(data_bits_to_write),
     );
-    if fills_data_unit {
-        padding_map.pad(&mut bit_stream);
-    }
 
-    // TODO: Optimization case: if `missing_data_bits == source_bits` (last chunk being
-    // processed) do not bother to pad (setting `fills_data_unit` to `false`) which will
-    // implicitly convert the extra bits to padding bits.
+    target.write_all(&last_bits.into_boxed_slice())?;
+    // The `into_boxed_slice` conversion will byte-align the bit stream and implicitly
+    // add the padding bits (that by definition are the bits necessary to reach the byte
+    // boundary).
+    // TODO: Optimization: Remove the use of this `BitVecLEu8`. (Low priority, it's
+    // a corner case that doesn't take too much of the overall operations.)
 
     // Now we are at the element boundary, write entire chunks of full data
     // units with its padding.
 
-    // If we completed the previous element (`fills_data_unit`) then we may still have
-    // some data left.
+    let mut padded_output: Vec<u8> = Vec::new();
+    // TODO: Optimization: Determine the size of this vector and use `with_capacity`.
+
     if fills_data_unit {
-        let remaining_unpadded_chunks = Fr32BitVec::from(source)
-            .into_iter()
-            .skip(data_bits_to_write)
-            // TODO: Not having a "drop first N bits" in `BitVec` makes us remember
-            // the already used bits in our logic dragging them until we apply the
-            // iterator.
-            .chunks(padding_map.data_bits);
+        // If we completed the previous element (`fills_data_unit`) then we may still have
+        // some data left to try to form full elements writing them as a whole in each
+        // iteration.
 
-        for chunk in remaining_unpadded_chunks.into_iter() {
-            let mut bits = Fr32BitVec::from_iter(chunk);
+        // Position the reader in the raw data source we're extracting bits from
+        // after the `data_bits_to_write` taken to complete the previous element.
+        let mut read_pos = data_bits_to_write;
+        // TODO: Rename `data_bits_to_write` (it's confusing outside of its context).
 
-            // If this chunk is a full unit of data then add the padding; if not,
-            // this is the last (incomplete) chunk, it will be `some_data` in the
-            // next write cycle (which we'll again try to align it to the element
-            // boundary).
-            if bits.len() == padding_map.data_bits {
-                padding_map.pad(&mut bits);
-            }
+        while read_pos < source_bits {
+            // TODO: Optimization: We can determine how many full data units are and
+            // avoid checks unrolling the incomplete data unit (last iteration) in
+            // a separate block. (Related to the `padded_output` optimization note.)
 
-            bit_stream.extend(bits);
+            // Extract `data_bits` (or whatever we have left) from the `source` where
+            // the `read_pos` left off and reposition them at the byte boundary (setting
+            // `new_offset` to 0) since elements are byte-aligned.
+            // We're are doing an implicit padding in the shift process inside of
+            // `extract_bits_and_shift`: since this function returns the extracted data
+            // in a byte stream, filling the remaining bits with zeros, those bits will
+            // effectively become the padding bits.
+            padded_output.append(&mut extract_bits_and_shift(
+                source,
+                read_pos,
+                min(padding_map.data_bits, source_bits - read_pos),
+                0,
+            ));
+
+            read_pos += padding_map.data_bits;
+            // Position at the data that would start filling the next element (if this
+            // was the last element we had data for -and maybe it can be incomplete-
+            // this addition will break the loop).
         }
     }
 
-    let out = &bit_stream.into_boxed_slice();
-    target.write_all(&out)?;
+    target.write_all(&padded_output)?;
 
     // Always return the expected number of bytes, since this function will fail if write_all does.
     Ok(source.len())
@@ -572,11 +828,21 @@ where
     let max_write_size_bits = max_write_size * 8;
 
     // Recovered raw data unpadded from the `source` which will
-    // be later packed in bytes and written to the `target`.
-    let mut raw_data = Fr32BitVec::new();
+    // be written to the `target`.
+    let mut raw_data: Vec<u8> = Vec::new();
+    // TODO: Similar to the padding process (in the `padded_output` vector)
+    // we can determine the final length here instead of allocating more space
+    // in each iteration.
+
+    // Total number of raw data bits we have written (unpadded from the `source`).
+    let mut written_bits = 0;
+    // Bit offset within the last byte at which the next write needs to happen
+    // (derived from `written_bits`), we keep track of this since we write in chunks
+    // that may not be byte-aligned.
+    let mut write_bit_offset = 0;
 
     // If there is no more data to read or no more space to write stop.
-    while read_pos.bytes < source.len() && raw_data.len() < max_write_size_bits {
+    while read_pos.bytes < source.len() && written_bits < max_write_size_bits {
         // (1): Find the element boundary and, assuming that there is a full
         //      unit of data (which actually may be incomplete), how many bits
         //      are left to read from `read_pos`.
@@ -585,21 +851,43 @@ where
         // (2): As the element may be incomplete check how much data is
         //      actually available so as not to access the `source` past
         //      its limit.
-        let read_element_end = min(next_element_position, source.len());
+        bits_to_extract = min(bits_to_extract, source.len() * 8 - read_pos.total_bits());
 
         // (3): Don't read more than `max_write_size`.
-        let bits_left_to_write = max_write_size_bits - raw_data.len();
+        let bits_left_to_write = max_write_size_bits - written_bits;
         bits_to_extract = min(bits_to_extract, bits_left_to_write);
 
-        // Extract the specified `bits_to_extract` bits, skipping the first
-        // `read_pos.bits` which have already been processed in a previous
-        // iteration.
-        raw_data.extend(
-            Fr32BitVec::from(&source[read_pos.bytes..read_element_end])
-                .into_iter()
-                .skip(read_pos.bits)
-                .take(bits_to_extract),
+        // Extract the next data unit from the element (or whatever space we
+        // have left to write) and reposition it in the `write_bit_offset`.
+        // N.B., the bit offset of the data in the original raw data byte
+        // stream and the same data in the padded layout are not necessarily
+        // the same (since the added padding bits shift it).
+        let mut recovered = extract_bits_and_shift(
+            &source,
+            read_pos.total_bits(),
+            bits_to_extract,
+            write_bit_offset,
         );
+
+        if write_bit_offset != 0 {
+            // Since the two data units we are joining are not byte-aligned we can't
+            // just append the whole bytes to `raw_data`, we need to join the last
+            // byte of the already written `raw_data` with the first one of data unit
+            // `recovered` in this iteration. Since `extract_bits_and_shift` already
+            // takes care of setting to zero the bits beyond the extraction limit we
+            // can just `OR` the two.
+            *(raw_data.last_mut().unwrap()) |= *(recovered.first().unwrap());
+            recovered.remove(0);
+            // The contents of the first byte of `recovered` have been transferred to
+            // `raw_data`, we can drop it (we should always have `recovered` something,
+            // otherwise it's fine to panic here).
+            // TODO: Removing from the front of the vector seems like an expensive work
+            // we can just ignore it and append [1..] to raw_data later.
+        }
+
+        raw_data.append(&mut recovered);
+        written_bits += bits_to_extract;
+        write_bit_offset = written_bits % 8;
 
         // Position the reader in the next element boundary, this will be ignored
         // if we already hit limits (2) or (3) (in that case this was the last iteration).
@@ -613,11 +901,9 @@ where
     // Instead, write it incrementally –
     // but ONLY when the bits waiting in bits_out are byte-aligned. i.e. a multiple of 8
 
-    let boxed_slice = raw_data.into_boxed_slice();
+    target.write_all(&raw_data)?;
 
-    target.write_all(&boxed_slice)?;
-
-    Ok(boxed_slice.len())
+    Ok(raw_data.len())
 }
 
 #[cfg(test)]
@@ -636,6 +922,65 @@ mod tests {
                 let position = BitByte { bytes: i, bits: j };
                 assert_eq!(position.total_bits(), bits);
                 bits += 1;
+            }
+        }
+    }
+
+    // Test the `extract_bits_le` function against the `BitVec` functionality
+    // (assumed to be correct).
+    #[test]
+    fn test_random_bit_extraction() {
+        // Length of the data vector we'll be extracting from.
+        let len = 20;
+
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
+
+        // TODO: Evaluate designing a scattered pattered of `pos` and `num_bits`
+        // instead of repeating too many iterations with any number.
+        for _ in 0..100 {
+            let pos = rng.gen_range(0, data.len() / 2);
+            let num_bits = rng.gen_range(1, data.len() * 8 - pos);
+            let new_offset = rng.gen_range(0, 8);
+
+            let mut bv = BitVecLEu8::new();
+            bv.extend(
+                BitVecLEu8::from(&data[..])
+                    .into_iter()
+                    .skip(pos)
+                    .take(num_bits),
+            );
+            let shifted_bv: BitVecLEu8 = bv >> new_offset;
+
+            assert_eq!(
+                shifted_bv.into_boxed_slice(),
+                extract_bits_and_shift(&data, pos, num_bits, new_offset).into_boxed_slice()
+            );
+        }
+    }
+
+    // Test the `shift_bits` function against the `BitVec<LittleEndian, u8>`
+    // implementation of `shr_assign` and `shl_assign`.
+    #[test]
+    fn test_bit_shifts() {
+        let len = 5;
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        for amount in 1..8 {
+            for left in [true, false].iter() {
+                let data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
+
+                let shifted_bits = shift_bits(&data, amount, *left);
+
+                let mut bv: BitVec<LittleEndian, u8> = data.into();
+                if *left {
+                    bv >>= amount;
+                } else {
+                    bv <<= amount;
+                }
+                // We use the opposite shift notation (see `shift_bits`).
+
+                assert_eq!(bv.into_boxed_slice(), shifted_bits.into_boxed_slice());
             }
         }
     }
