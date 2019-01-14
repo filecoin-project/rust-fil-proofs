@@ -421,7 +421,7 @@ pub mod tests {
             assert_eq!(504, buf.len());
 
             // also ensure this is the amount we calculate
-            let expected_padded_bytes = FR32_PADDING_MAP.transform_byte_pos(contents.len(), true);
+            let expected_padded_bytes = FR32_PADDING_MAP.transform_byte_offset(contents.len(), true);
             assert_eq!(expected_padded_bytes, output_bytes_written);
 
             // ensure num_unsealed_bytes returns the number of data bytes written.

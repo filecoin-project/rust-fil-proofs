@@ -5,117 +5,139 @@ use std::iter::FromIterator;
 use bitvec::{self, BitVec};
 use itertools::Itertools;
 
-pub type Fr32BitVec = BitVec<bitvec::LittleEndian, u8>;
+/** PaddingMap represents a mapping between data and its padded equivalent.
 
+The padding process takes a *byte-aligned stream* of unpadded *raw* data
+as input and returns another byte stream where padding is applied every
+`data_bits` to align them to the byte boundary (`element_bits`). The
+(inverse) *unpadding* process maps that output back to the raw input
+that generated it.
+
+# Padded layout
+
+At the *byte-level*, the padded layout is:
+
+```text
+      (full element)              (full)                 (incomplete)
+||  data_bits  pad_bits  ||  data_bits  pad_bits  ||  some_data  (no_padding)
+                         ^^                               ^^
+                  element boundary                (some_data < data_bits)
+                   (byte-aligned)
+```
+
+Each *element* is a byte-aligned stream comprised of a *full unit* of `data_bits`
+with `pad_bits` at the end to byte-align it (where `pad_bits` is less than a byte,
+this is a *sub-byte padding* scheme). After the last element boundary there may be
+an incomplete unit of data (`some_data`) with a length smaller than `data_bits`
+that hasn't been padded. The padding rules are:
+  1. Padding is always applied to a full unit of `data_bits`.
+  2. A full data unit cannot exist without its corresponding padding.
+  3. A unit of padding is complete by definition: padding can only be
+     applied fully to each element.
+  4. If there is padding present then there has to be an already formed
+     element there (an element is full if and only if its data unit is full).
+
+# Last byte
+
+When returning the byte-aligned output generated from the padded *bitstream*
+(since the padding is done at the bit-level) the conversion results in the
+last byte having (potentially) more bits than desired. At the *bit-level*
+the layout of the last byte can either be a complete element (bits of raw
+data followed by the corresponding padding bits) or an incomplete unit of
+data: some number of *valid* data (D) bits followed by any number of *extra*
+bits (X) necessary to complete the byte-aligned stream:
+
+```text
+ |   D   D   D   D   X   X   X   X   |
+         (data)         (extra)      ^ byte boundary (end of output)
+```
+
+(This diagram is just for illustrative purposes, we actually return the output
+ in little-endian order, see `Fr32BitVec`).
+
+It's important to distinguish these extra bits (generated as a side
+effect of the conversion to a byte-aligned stream) from the padding bits
+themselves introduced in the padding process: even though both will be
+left with a zero value, these extra bits are a place-holder for the actual
+raw data bits needed to complete the current unit of data (and hence also
+the element, with the corresponding padding bits added after it). Since
+extra bits are only a product of an incomplete unit of data there can't
+be extra bits after padding bits.
+
+There's no metadata signaling the number of extra bits present in the
+last byte in any given padded layout, this is deduced from the fact
+that there's only a single number of valid data bits in the last byte,
+and hence a number of data bits in total, that maps to a byte-aligned
+(multiple of 8) raw data stream that could have been used as input.
+
+# Example: `FR32_PADDING_MAP`
+
+In this case the `PaddingMap` is defined with a data unit of 254 bits that
+are byte aligned to a 256-bit (32-byte) element. If the user writes as input,
+say, 40 bytes (320 bits) of raw input data to the padding process the resulting
+layout would be, at the element (byte) level:
+
+```text
+      (full element: 32 bytes)         (incomplete: 9 bytes)
+||  data_bits: 254  pad_bits: 2  ||   some_data: 66 bits (+ extra bits)
+                                 ^^
+                          element boundary
+```
+
+That is, of the original 320 bits (40 bytes) of raw input data, 254 are
+padded in the first element and the remaining 66 bits form the incomplete
+data unit after it, which is aligned to 9 bytes. At the bit level, that
+last incomplete byte will have 2 valid bits and 6 extra bits.
+
+# Key terms
+
+Collection of terms introduced in this documentation (with the format
+`*<new-term>*`). This section doesn't provide a self-contained definition
+of them (to avoid unnecessary repetition), it just provides (when appropriate)
+an additional summary of what was already discussed.
+
+ * Raw data: unpadded user-supplied data (we don't use the *unpadded* term
+   to avoid excessive *padding* suffixes in the code). Padding (data) bits.
+ * Element: byte-aligned stream consisting of a full unit of data plus the
+   padding bits.
+ * Full unit of raw `data_bits` (always followed by padding). Incomplete unit,
+   not followed by padding, doesn't form an element.
+ * Byte-aligned stream: always input and output of the (un)padding process,
+   either as raw data or padded (using the term "byte-aligned" and not "byte
+   stream" to stress the boundaries of the elements). Bit streams: used internally
+   when padding data (never returned as bits).
+ * Valid data bits, only in the context of the last byte of a byte-aligned stream
+   generated from the padding process. Extra bits: what's left unused of the last
+   byte (in a way the extra bits are the padding at the byte-level, but we don't
+   use that term here to avoid confusions).
+ * Sub-byte padding.
+
+**/
 #[derive(Debug)]
-//
-// TODO: Use headings? e.g., "padding operation", "element configuration",
-// "bit-alignment", etc. (the Rust core seems to do so)
-// TODO: Maybe we should be using `///` or `/**` here,
-// (https://doc.rust-lang.org/reference/comments.html).
-//
-// PaddingMap represents a mapping between data and its padded equivalent.
-// The padding process takes a *byte-aligned stream* of unpadded *raw* data
-// as input, applies padding at the bit-level according to `padded_chunk_bits`
-// and returns an (also) byte-aligned stream of *padded* data as output. The
-// (inverse) *unpadding* process maps that output back to the raw input
-// that generated it.
-//
-// At the *byte-level*, the padded layout is:
-//
-//           (full)                   (full)                 (incomplete)
-// ||  data_bits  pad_bits  ||  data_bits  pad_bits  ||  some_data  (no_padding)
-//                          ^^                               ^^
-//                   element boundary                (some_data < data_bits)
-//
-// TODO: Check that the names on the diagram match the ones on the structure.
-// TODO: Maybe use the `FR32_PADDING_MAP` example.
-//
-// Each *element* is a byte-aligned stream comprised of a *full unit* of `data_bits`
-// with `pad_bits` at the end, where `pad_bits` is less than a byte (we add the number
-// of `pad_bits` necessary to reach the next byte-boundary from `data_bits`, this is
-// a *sub-byte padding* scheme). After the last element boundary there may be an
-// incomplete unit of data (`some_data`) with a length smaller than `data_bits`
-// that hasn't been padded (yet), that is the only configuration possible:
-//   1. Padding can only be applied to a full unit of `data_bits`.
-//   2. A full data unit cannot exist without its corresponding padding.
-//   3. A unit of padding is complete by definition: padding can only be
-//      applied fully to each element.
-//   4. If there is padding present then there has to be an already formed element there.
-//
-// When returning the byte-aligned output generated from the padded *bitstream*
-// (since the padding is done at the bit-level) the conversion results in the
-// last byte having (potentially) more bits than desired. At the *bit-level*
-// the layout of the last byte can either be a complete element (bits of raw
-// data followed by the corresponding padding bits) or an incomplete unit of
-// data: some number of *valid* data (D) bits followed by any number of *extra*
-// bits (X) necessary to complete the byte-aligned stream:
-//
-//  |   D   D   D   D   X   X   X   X   |
-//          (data)         (extra)      ^ byte boundary (end of output)
-//
-// (This diagram is just for illustrative purposes, we actually return the output
-//  in little-endian order, see `Fr32BitVec`).
-//
-// It's important to distinguish these extra bits (generated as a side
-// effect of the conversion to a byte-aligned stream) from the padding bits
-// themselves introduced in the padding process: even though both will be
-// left with a zero value, these extra bits are a place-holder for the actual
-// raw data bits needed to complete the current unit of data (and hence also
-// the element, with the corresponding padding bits added after it). Since
-// extra bits are only a product of an incomplete unit of data there can't
-// be extra bits after padding bits.
-//
-// There's no metadata signaling the number of extra bits present in the
-// last byte in any given padded layout, this is deduced from the fact
-// that only a single number of valid data bits in the last byte, and
-// hence a number of data bits in total, that maps to a byte-aligned
-// (multiple of 8) raw data stream that could have been used as input.
-//
-// Key terms: Collection of terms introduced in this documentation
-// (with the format `*<new-term>*`). This section doesn't provide
-// a self-contained definition of them (to avoid unnecessary repetition),
-// it just provides (when appropriate) an additional summary of what was
-// already discussed.
-//
-// * Raw data: unpadded user-supplied data (we don't use the *unpadded* term
-//   to avoid excessive *padding* suffixes in the code). Padding (data) bits.
-// * Element: byte-aligned stream consisting of a full unit of data plus the
-//   padding bits.
-// * Full unit of `data_chunk_bits` raw data bits, always followed by padding.
-//   Incomplete unit, not followed by padding, doesn't form an element.
-// * Byte-aligned stream: always input and output, either as raw data or padded
-//   (using the term "byte-aligned" and not "byte stream" to stress the boundaries).
-//   Bit streams: used internally when padding data.
-// * Valid (data and padding) bits, only in the context of the last byte of
-//   a byte-aligned stream generated from the padding process. extra bits:
-//   what's left unused of the last byte (in a way the extra bits are the
-//   padding at the byte-level, but don't use that term here to avoid confusions).
-// * Sub-byte padding.
-//
-// TODO: Add "boundary limit"?
-//
-// TODO: We should keep a simple state while padding, maybe not here but in
-// a new `Padder` structure which would know if we are in the data or pad
-// areas (bit position), and how much bits until we reach a boundary.
 pub struct PaddingMap {
-    // The number of bits of raw data in an element.
+    /// The number of bits of raw data in an element.
     data_bits: usize,
-    // Number of bits in an element: `data_bits` + `padding_bits()`. Its value
-    // is fixed to the next byte-aligned size after `data_bits` (sub-byte padding).
+    /// Number of bits in an element: `data_bits` + `pad_bits()`. Its value
+    /// is fixed to the next byte-aligned size after `data_bits` (sub-byte padding).
     element_bits: usize,
 }
-
-pub const FR_UNPADDED_BITS: usize = 254;
-pub const FR_PADDED_BITS: usize = 256;
+// TODO: Optimization: Evaluate saving the state of a (un)padding operation
+// inside (e.g., as a cursor like in `BitVec`), maybe not in this structure but
+// in a new `Padder` structure which would remember the positions (remaining
+// data bits in the element, etc.) to avoid recalculating them each time across
+// different (un)pad calls.
 
 // This is the padding map corresponding to Fr32.
 // Most of the code in this module is general-purpose and could move elsewhere.
 // The application-specific wrappers which implicitly use Fr32 embed the FR32_PADDING_MAP.
 pub const FR32_PADDING_MAP: PaddingMap = PaddingMap {
-    data_bits: FR_UNPADDED_BITS,
-    element_bits: FR_PADDED_BITS,
+    data_bits: 254,
+    element_bits: 256,
 };
+
+pub type Fr32BitVec = BitVec<bitvec::LittleEndian, u8>;
+// TODO: Rename, drop the `Fr32` prefix. Leaving it for now since
+// the optimization stage will likely remove it.
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Convenience interface for API functions – all bundling FR32_PADDING_MAP
@@ -142,29 +164,24 @@ pub fn almost_truncate_to_unpadded_bytes<W: ?Sized>(
 where
     W: Read + Write + Seek,
 {
-    let padded = BitByte::from_bits(FR32_PADDING_MAP.transform_bit_pos((length * 8) as usize, true));
+    let padded = BitByte::from_bits(FR32_PADDING_MAP.transform_bit_offset((length * 8) as usize, true));
     let real_length = padded.bytes_needed();
     let _final_bit_count = padded.bits;
-    // TODO (maybe): Rewind stream and use final_bit_count to zero-pad last byte of data (post-truncation).
     Ok(real_length)
 }
 
 pub fn unpadded_bytes(padded_bytes: u64) -> u64 {
-    FR32_PADDING_MAP.transform_byte_pos(padded_bytes as usize, false) as u64
+    FR32_PADDING_MAP.transform_byte_offset(padded_bytes as usize, false) as u64
 }
 
 pub fn padded_bytes(unpadded_bytes: usize) -> usize {
-    FR32_PADDING_MAP.transform_byte_pos(unpadded_bytes, true)
+    FR32_PADDING_MAP.transform_byte_offset(unpadded_bytes, true)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // BitByte represents a size expressed in bytes extended
 // with bit precision, that is, not rounded.
 // Invariant: it is an error for bits to be > 7.
-// TODO: Evaluate dropping the entire structure altogether in favor of only
-// handling bit lengths which might better represent the nature of the internal
-// bit streams in the padding process. Provide the functions to covert to byte
-// only when necessary.
 #[derive(Debug)]
 pub struct BitByte {
     bytes: usize,
@@ -195,15 +212,12 @@ impl BitByte {
     }
 
     // How many distinct bytes are needed to represent data of this size?
-    // TODO: Maybe closer to a `ceil` method?
     pub fn bytes_needed(&self) -> usize {
         self.bytes
             + if self.bits == 0 {
                 0
             } else {
                 (self.bits + 8) / 8
-            // TODO: Since `bits` > 0 and < 7 (invariant) why not just
-            // explicitly make this 1?
             }
     }
 }
@@ -222,75 +236,64 @@ impl PaddingMap {
     }
 
     pub fn pad(&self, bits_out: &mut Fr32BitVec) {
-        for _ in 0..self.padding_bits() {
+        for _ in 0..self.pad_bits() {
             bits_out.push(false)
         }
-        // TODO: Can we push an entire stream of zero pad bits?
+        // TODO: Optimization: Drop this explicit `push` padding, the padding
+        // should happen implicitly when byte-aligning the data unit.
     }
 
-    pub fn padding_bits(&self) -> usize {
+    pub fn pad_bits(&self) -> usize {
         self.element_bits - self.data_bits
     }
 
-    // Transform a position in a raw byte-aligned data stream (expressed
-    // in bits) to its equivalent in a generated padded bit stream (if
-    // `padding_direction` is `true`: padding process) or vice versa
-    // (if `false`: unpadding).
-    //
-    // TODO: Abusing the element terminology here: explaining that we
-    // are converting from one element size to another when, in the current
-    // documentation one is actually *the* (complete) element and the other
-    // is the data unit *inside* it.
-    // TODO: This is also used for sizes, not only positions, use a more
-    // general term like offset.
-    // TODO: Why are we interpreting a byte-aligned stream position in bits
-    // in the first place?
-    pub fn transform_bit_pos(&self, pos: usize, padding_direction: bool) -> usize {
+    // Transform an offset (either a position or a size) *expressed in
+    // bits* in a raw byte-aligned data stream to its equivalent in a
+    // generated padded bit stream, that is, not byte aligned (so we
+    // don't count the extra bits here). If `padding` is `false` calculate
+    // the inverse transformation.
+    pub fn transform_bit_offset(&self, pos: usize, padding: bool) -> usize {
 
-        // Set the sizes of the elements we're converting to and from.
-        let (from_size, to_size) = if padding_direction {
+        // Set the sizes we're converting to and from.
+        let (from_size, to_size) = if padding {
             (self.data_bits, self.element_bits)
         } else {
             (self.element_bits, self.data_bits)
         };
 
         // For both the padding and unpadding cases the operation is the same.
-        // The quotient is the number of full elements that can be directly converted
-        // to the equivalent size in the other layout.
-        // The remainder (in both cases) is the last *incomplete* data unit. Even
-        // in the padded layout, if there is an incomplete element it has to consist
-        // *only* of data (see `PaddingMap`). That amount of spare raw data doesn't
-        // need conversion, it can just be added to the new position.
-        // TODO: Good example of when a heading is needed in the main doc, we want to
-        // point to the section that contains the list that explains the properties of
-        // an element.
+        // The quotient is the number of full, either elements, in the padded layout,
+        // or groups of `data_bits`, in the raw data input (that will be converted
+        // to full elements).
+        // The remainder (in both cases) is the last *incomplete* part of either of
+        // the two. Even in the padded layout, if there is an incomplete element it
+        // has to consist *only* of data (see `PaddingMap#padded-layout`). That amount
+        // of spare raw data doesn't need conversion, it can just be added to the new
+        // position.
         let (full_elements, incomplete_data) = div_rem(pos, from_size);
         (full_elements * to_size) + incomplete_data
     }
 
-    // Similar to `transform_bit_pos` this function transforms a position
-    // expressed in bytes.
-    // TODO: Expand on the difference between the two functions, do we actually
-    // need both? Can they be merged?
-    pub fn transform_byte_pos(&self, pos: usize, padding_direction: bool) -> usize {
-        let transformed_bit_pos = self.transform_bit_pos(pos * 8, padding_direction);
+    // Similar to `transform_bit_pos` this function transforms an offset
+    // expressed in bytes, that is, we are taking into account the extra
+    // bits here.
+    // TODO: Evaluate the relationship between this function and `transform_bit_offset`,
+    // it seems the two could be merged, or at least restructured to better expose
+    // their differences.
+    pub fn transform_byte_offset(&self, pos: usize, padding: bool) -> usize {
+        let transformed_bit_pos = self.transform_bit_offset(pos * 8, padding);
 
         let transformed_byte_pos = transformed_bit_pos as f64 / 8.;
-        // NOTE: It might end up being cheaper to avoid this float conversion and
-        // use / and %.
+        // TODO: Optimization: It might end up being cheaper to avoid this
+        // float conversion and use / and %.
 
-        // There's one-to-one equivalence between the bytes in a raw data
-        // input that are converted to a byte-aligned padded layout (see `PaddingMap`).
-        // TODO: Add heading in the doc to point to.
         // When padding, the final bits in the bit stream will grow into the
         // last (potentially incomplete) byte of the byte stream, so round the
         // number up (`ceil`). When unpadding, there's no way to know a priori
         // how many valid bits are in the last byte, we have to choose the number
         // that fits in a byte-aligned raw data stream, so round the number down
         // to that (`floor`).
-        // TODO: Make sure this doesn't overlap too much with the `PaddingMap` doc,
-        // this is about implementation, not the general concept.
-        (if padding_direction {
+        (if padding {
             transformed_byte_pos.ceil()
         } else {
             transformed_byte_pos.floor()
@@ -310,7 +313,7 @@ impl PaddingMap {
         let remaining_data_unit_bits = self.data_bits - bits_after_last_boundary;
 
         let next_element_position_bits = position_bits +
-            remaining_data_unit_bits + self.padding_bits();
+            remaining_data_unit_bits + self.pad_bits();
 
         (next_element_position_bits / 8, remaining_data_unit_bits)
     }
@@ -329,13 +332,13 @@ impl PaddingMap {
         let padded_bytes = target.seek(SeekFrom::End(0))?;
 
         // Deduce the number of input raw bytes that generated that padded byte size.
-        let raw_data_bytes = self.transform_byte_pos(padded_bytes as usize, false);
+        let raw_data_bytes = self.transform_byte_offset(padded_bytes as usize, false);
 
         // With the number of raw data bytes elucidated it can now be specified the
         // number of padding bits in the generated bit stream (before it was converted
         // to a byte-aligned stream), that is, `raw_data_bytes * 8` is not necessarily
         // `padded_bits`).
-        let padded_bits = self.transform_bit_pos(raw_data_bytes * 8, true);
+        let padded_bits = self.transform_bit_offset(raw_data_bytes * 8, true);
 
         Ok((padded_bytes, raw_data_bytes as u64, BitByte::from_bits(padded_bits)))
         // TODO: Why do we use `usize` internally and `u64` externally?
@@ -352,8 +355,6 @@ fn div_rem(a: usize, b: usize) -> (usize, usize) {
 pub fn write_padded<W: ?Sized>(source: &[u8], target: &mut W) -> io::Result<usize>
 where
     W: Read + Write + Seek,
-// TODO: Document why we need a `Read + Write + Seek` and
-// `write_unpadded` needs only `Write`.
 {
     // In order to optimize alignment in the common case of writing from an aligned start,
     // we should make the chunk a multiple of 128.
@@ -370,24 +371,26 @@ where
     Ok(written)
 }
 
-// Padding process: read a `source` of raw byte-aligned data, pad it in
-// a bit stream and write a byte-aligned version of it in the `target`.
-//
-// The reader will always be byte-aligned, the writer will operate with
-// bit precision since we may have (when calling this function multiple
-// times) a written `target` with extra bits (that need to be overwritten)
-// and also incomplete data units.
-// The ideal alignment scenario is for the writer to be positioned at the
-// byte-aligned element boundary and just write whole chunks of `data_chunk_bits`
-// (full data units) followed by its corresponding padding. To get there then we
-// need to handle the potential bit-level misalignments:
-//   1. extra bits: the last byte is only partially valid so we
-//      need to get some bits from the `source` to overwrite them.
-//   2. Incomplete data unit: we need to fill the rest of it and add the padding
-//      to form a element that would position the writer at the desired boundary.
-//
-// TODO: Change name, this is the real write padded function, the previous one
-// just partition data in chunks.
+/** Padding process.
+
+Read a `source` of raw byte-aligned data, pad it in a bit stream and
+write a byte-aligned version of it in the `target`. The `target` needs
+to implement (besides `Write`) the `Read` and `Seek` traits since the
+last byte written may be incomplete and will need to be rewritten.
+
+The reader will always be byte-aligned, the writer will operate with
+bit precision since we may have (when calling this function multiple
+times) a written `target` with extra bits (that need to be overwritten)
+and also incomplete data units.
+The ideal alignment scenario is for the writer to be positioned at the
+byte-aligned element boundary and just write whole chunks of `data_chunk_bits`
+(full data units) followed by its corresponding padding. To get there then we
+need to handle the potential bit-level misalignments:
+  1. extra bits: the last byte is only partially valid so we
+     need to get some bits from the `source` to overwrite them.
+  2. Incomplete data unit: we need to fill the rest of it and add the padding
+     to form a element that would position the writer at the desired boundary.
+**/
 fn write_padded_aux<W: ?Sized>(
     padding_map: &PaddingMap,
     source: &[u8],
@@ -396,6 +399,9 @@ fn write_padded_aux<W: ?Sized>(
 where
     W: Read + Write + Seek,
 {
+    // TODO: Change name, this is the real write padded function, the previous one
+    // just partition data in chunks.
+
     // TODO: Check `source` length, if it's zero we should return here and avoid all
     // the alignment calculations that will be worthless (because we wont' have any
     // data with which to align).
@@ -511,36 +517,35 @@ where
     let mut len = len;
 
     for chunk in source.chunks(chunk_size) {
-        let this_len = min(len, chunk.len());
-        // TODO: Rename, "this" seems ambiguous.
-        // TODO: Why are we partitioning in chunks and not using them?
-        // (just taking their len, but that can be done with the original
-        // source length, without doing the actual chunking operation).
+        let write_len = min(len, chunk.len());
 
-        written += write_unpadded_aux(&FR32_PADDING_MAP, source, target, offset, this_len)?;
-        offset += this_len;
-        len -= this_len;
+        written += write_unpadded_aux(&FR32_PADDING_MAP, source, target, offset, write_len)?;
+        offset += write_len;
+        len -= write_len;
     }
 
     Ok(written)
 }
 
-// Unpad, read a `source` of padded data and recover from it the
-// byte-aligned raw data writing it in `target`, where `write_pos`
-// specifies from which byte of the raw data to start recovering, up
-// to `max_write_size`.
-//
-// There are 3 limits that tell us how much padded data to process in
-// each iteration (`bits_to_extract`):
-// 1. Element boundary: we can process only one element at a time (to be
-//    able to skip the padding bits).
-// 2. End of `source`: no more data to read.
-// 3. No more space to write the recovered raw data: we shouldn't write
-//    into the `target` beyond `max_write_size`.
-//
-// The reader will generally operate with bit precision, even if the padded
-// layout is byte-aligned (no extra bits) the data inside it isn't (since
-// we pad at the bit-level).
+/**  Unpadding process.
+
+Read a `source` of padded data and recover from it the byte-aligned
+raw data writing it in `target`, where `write_pos` specifies from which
+byte of the raw data stream to start recovering to, up to `max_write_size`
+bytes.
+
+There are 3 limits that tell us how much padded data to process in
+each iteration (`bits_to_extract`):
+1. Element boundary: we can process only one element at a time (to be
+   able to skip the padding bits).
+2. End of `source`: no more data to read.
+3. No more space to write the recovered raw data: we shouldn't write
+   into the `target` beyond `max_write_size`.
+
+The reader will generally operate with bit precision, even if the padded
+layout is byte-aligned (no extra bits) the data inside it isn't (since
+we pad at the bit-level).
+**/
 pub fn write_unpadded_aux<W: ?Sized>(
     padding_map: &PaddingMap,
     source: &[u8],
@@ -553,7 +558,7 @@ where
 {
     // Position of the reader in the padded bit stream layout, deduced from
     // the position of the writer (`write_pos`) in the raw data layout.
-    let mut read_pos = BitByte::from_bits(padding_map.transform_bit_pos(write_pos * 8, true));
+    let mut read_pos = BitByte::from_bits(padding_map.transform_bit_offset(write_pos * 8, true));
 
     // Specify the maximum data to recover (write) in bits, since the data unit
     // in the element (in contrast with the original raw data that generated it)
@@ -636,7 +641,7 @@ mod tests {
         let written = write_padded(&data, &mut cursor).unwrap();
         let padded = cursor.into_inner();
         assert_eq!(written, 151);
-        assert_eq!(padded.len(), FR32_PADDING_MAP.transform_byte_pos(151, true));
+        assert_eq!(padded.len(), FR32_PADDING_MAP.transform_byte_offset(151, true));
         assert_eq!(&padded[0..31], &data[0..31]);
         assert_eq!(padded[31], 0b0011_1111);
         assert_eq!(padded[32], 0b1111_1111);
@@ -657,7 +662,7 @@ mod tests {
         let padded = cursor.into_inner();
 
         assert_eq!(written, 256);
-        assert_eq!(padded.len(), FR32_PADDING_MAP.transform_byte_pos(256, true));
+        assert_eq!(padded.len(), FR32_PADDING_MAP.transform_byte_offset(256, true));
         assert_eq!(&padded[0..31], &data[0..31]);
         assert_eq!(padded[31], 0b0011_1111);
         assert_eq!(padded[32], 0b1111_1111);
@@ -681,7 +686,7 @@ mod tests {
         let padded = cursor.into_inner();
 
         assert_eq!(written, 265);
-        assert_eq!(padded.len(), FR32_PADDING_MAP.transform_byte_pos(265, true));
+        assert_eq!(padded.len(), FR32_PADDING_MAP.transform_byte_offset(265, true));
         assert_eq!(&padded[0..31], &data[0..31]);
         assert_eq!(padded[31], 0b0011_1111);
         assert_eq!(padded[32], 0b1111_1111);
@@ -716,7 +721,7 @@ mod tests {
             let padded = cursor.into_inner();
             validate_fr32(&padded);
             assert_eq!(written, 127);
-            assert_eq!(padded.len(), FR32_PADDING_MAP.transform_byte_pos(127, true));
+            assert_eq!(padded.len(), FR32_PADDING_MAP.transform_byte_offset(127, true));
             assert_eq!(&padded[0..31], &data[0..31]);
             assert_eq!(padded[31], 0b0011_1111);
             assert_eq!(padded[32], 0b1111_1111);
@@ -773,7 +778,7 @@ mod tests {
         let padded = cursor.into_inner();
 
         assert_eq!(padded_written, len);
-        assert_eq!(padded.len(), FR32_PADDING_MAP.transform_byte_pos(len, true));
+        assert_eq!(padded.len(), FR32_PADDING_MAP.transform_byte_offset(len, true));
 
         let mut unpadded = Vec::new();
         let unpadded_written = write_unpadded(&padded, &mut unpadded, 0, len).unwrap();
