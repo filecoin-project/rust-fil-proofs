@@ -1,6 +1,9 @@
-use sha2::{Digest, Sha256};
+use blake2::{Blake2s, Digest};
 
-pub fn precompute(num_elements: u32) -> u32 {
+pub const FEISTEL_ROUNDS: usize = 3;
+pub type FeistelPrecomputed = (u32, u32, u32);
+
+pub fn precompute(num_elements: u32) -> FeistelPrecomputed {
     let mut next_pow4 = 4;
     let mut log4 = 1;
 
@@ -8,32 +11,45 @@ pub fn precompute(num_elements: u32) -> u32 {
         next_pow4 *= 4;
         log4 += 1;
     }
-    log4
+
+    let left_mask = ((1 << log4) - 1) << log4;
+    let right_mask = (1 << log4) - 1;
+    let half_bits = log4;
+
+    (left_mask, right_mask, half_bits)
 }
 
-pub fn permute(num_elements: u32, index: u32, keys: &[u32], log4: u32) -> u32 {
-    let mut u = encode(index, keys, log4);
+pub fn permute(
+    num_elements: u32,
+    index: u32,
+    keys: &[u32],
+    precomputed: FeistelPrecomputed,
+) -> u32 {
+    let mut u = encode(index, keys, precomputed);
 
     while u >= num_elements {
-        u = encode(u, keys, log4)
+        u = encode(u, keys, precomputed)
     }
     u
 }
 
-pub fn invert_permute(num_elements: u32, index: u32, keys: &[u32], log4: u32) -> u32 {
-    let mut u = decode(index, keys, log4);
+pub fn invert_permute(
+    num_elements: u32,
+    index: u32,
+    keys: &[u32],
+    precomputed: FeistelPrecomputed,
+) -> u32 {
+    let mut u = decode(index, keys, precomputed);
 
     while u >= num_elements {
-        u = decode(u, keys, log4);
+        u = decode(u, keys, precomputed);
     }
     u
 }
 
 /// common_setup performs common calculations on inputs shared by encode and decode.
-fn common_setup(index: u32, log4: u32) -> (u32, u32, u32, u32) {
-    let left_mask = ((1 << log4) - 1) << log4;
-    let right_mask = (1 << log4) - 1;
-    let half_bits = log4;
+fn common_setup(index: u32, precomputed: FeistelPrecomputed) -> (u32, u32, u32, u32) {
+    let (left_mask, right_mask, half_bits) = precomputed;
 
     let left = (index & left_mask) >> half_bits;
     let right = index & right_mask;
@@ -41,10 +57,10 @@ fn common_setup(index: u32, log4: u32) -> (u32, u32, u32, u32) {
     (left, right, right_mask, half_bits)
 }
 
-fn encode(index: u32, keys: &[u32], log4: u32) -> u32 {
-    let (mut left, mut right, right_mask, half_bits) = common_setup(index, log4);
+fn encode(index: u32, keys: &[u32], precomputed: FeistelPrecomputed) -> u32 {
+    let (mut left, mut right, right_mask, half_bits) = common_setup(index, precomputed);
 
-    for key in keys.iter().take(4) {
+    for key in keys.iter().take(FEISTEL_ROUNDS) {
         let (l, r) = (right, left ^ feistel(right, *key, right_mask));
         left = l;
         right = r;
@@ -53,10 +69,10 @@ fn encode(index: u32, keys: &[u32], log4: u32) -> u32 {
     (left << half_bits) | right
 }
 
-fn decode(index: u32, keys: &[u32], log4: u32) -> u32 {
-    let (mut left, mut right, right_mask, half_bits) = common_setup(index, log4);
+fn decode(index: u32, keys: &[u32], precomputed: FeistelPrecomputed) -> u32 {
+    let (mut left, mut right, right_mask, half_bits) = common_setup(index, precomputed);
 
-    for i in (0..4).rev() {
+    for i in (0..FEISTEL_ROUNDS).rev() {
         let (l, r) = ((right ^ feistel(left, keys[i], right_mask)), left);
         left = l;
         right = r;
@@ -77,7 +93,7 @@ fn feistel(right: u32, key: u32, right_mask: u32) -> u32 {
     data[6] = (key >> 8) as u8;
     data[7] = key as u8;
 
-    let hash = Sha256::digest(&data);
+    let hash = Blake2s::digest(&data);
 
     let r = u32::from(hash[0]) << 24
         | u32::from(hash[1]) << 16
@@ -97,10 +113,10 @@ mod tests {
 
     fn encode_decode(n: u32, expect_success: bool) {
         let mut failed = false;
-        let log4 = precompute(n);
+        let precomputed = precompute(n);
         for i in 0..n {
-            let p = encode(i, &[1, 2, 3, 4], log4);
-            let v = decode(p, &[1, 2, 3, 4], log4);
+            let p = encode(i, &[1, 2, 3, 4], precomputed);
+            let v = decode(p, &[1, 2, 3, 4], precomputed);
             let equal = i == v;
             let in_range = p <= n;
             if expect_success {
@@ -139,10 +155,10 @@ mod tests {
     #[test]
     fn test_feistel_on_arbitrary_set() {
         for n in BAD_NS.iter() {
-            let log4 = precompute(*n as u32);
+            let precomputed = precompute(*n as u32);
             for i in 0..*n {
-                let p = permute(*n, i, &[1, 2, 3, 4], log4);
-                let v = invert_permute(*n, p, &[1, 2, 3, 4], log4);
+                let p = permute(*n, i, &[1, 2, 3, 4], precomputed);
+                let v = invert_permute(*n, p, &[1, 2, 3, 4], precomputed);
                 // Since every element in the set is reversibly mapped to another element also in the set,
                 // this is indeed a permutation.
                 assert_eq!(i, v, "failed to permute");

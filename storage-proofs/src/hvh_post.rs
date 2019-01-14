@@ -1,10 +1,13 @@
 use std::marker::PhantomData;
 
 use byteorder::{ByteOrder, LittleEndian};
+use serde::de::Deserialize;
+use serde::ser::Serialize;
 
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::merkle::MerkleTree;
+use crate::parameter_cache::ParameterSetIdentifier;
 use crate::porc::{self, PoRC};
 use crate::proof::ProofScheme;
 use crate::vdf::Vdf;
@@ -37,11 +40,22 @@ pub struct PublicParams<T: Domain, V: Vdf<T>> {
     pub sectors_count: usize,
 }
 
+impl<T: Domain, V: Vdf<T>> ParameterSetIdentifier for PublicParams<T, V> {
+    fn parameter_set_identifier(&self) -> String {
+        format!(
+            "hvh_post::PublicParams{{challenge_count: {}, sector_size: {}, post_epochs: {}, pub_params_vdf: FIXME, leaves: {}, sectors_count: {}}}",
+            self.challenge_count, self.sector_size, self.post_epochs,
+            //self.pub_params_vdf.parameter_set_identifier(), // FIXME: implement
+            self.leaves, self.sectors_count
+        )
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct PublicInputs<T: Domain> {
     /// The root hash of the merkle tree of the sealed sector.
     pub commitments: Vec<T>,
-    /// The initial set of challengs. Must be of length `challenge_count`.
+    /// The initial set of challenges. Must be of length `challenge_count`.
     pub challenges: Vec<T>,
 }
 
@@ -68,12 +82,24 @@ impl<'a, H: 'a + Hasher> PrivateInputs<'a, H> {
 /// HVH-PoSt
 /// This is one construction of a Proof-of-Spacetime.
 /// It currently only supports proving over a single sector.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Proof<'a, H: Hasher + 'a, V: Vdf<H::Domain>> {
     /// `post_iteration` online Proof-of-Replication proofs.
-    pub proofs_porep: Vec<<PoRC<H> as ProofScheme<'a>>::Proof>,
+    #[serde(bound(
+        serialize = "V::Proof: Serialize",
+        deserialize = "V::Proof: Deserialize<'de>"
+    ))]
+    pub porep_proofs: Vec<<PoRC<'a, H> as ProofScheme<'a>>::Proof>,
     /// `post_epochs - 1` VDF proofs
-    pub proofs_vdf: Vec<V::Proof>,
+    #[serde(bound(
+        serialize = "V::Proof: Serialize",
+        deserialize = "V::Proof: Deserialize<'de>"
+    ))]
+    pub vdf_proofs: Vec<V::Proof>,
+    #[serde(bound(
+        serialize = "H::Domain: Serialize",
+        deserialize = "H::Domain: Deserialize<'de>"
+    ))]
     pub ys: Vec<H::Domain>,
 }
 
@@ -117,7 +143,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
         let challenge_count = pub_params.challenge_count;
         let post_epochs = pub_params.post_epochs;
 
-        let mut proofs_porep = Vec::with_capacity(post_epochs);
+        let mut porep_proofs = Vec::with_capacity(post_epochs);
 
         let pub_params_porep = porc::PublicParams {
             leaves: pub_params.leaves,
@@ -135,7 +161,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
                 replicas: priv_inputs.replicas,
                 trees: priv_inputs.trees,
             };
-            proofs_porep.push(PoRC::prove(
+            porep_proofs.push(PoRC::prove(
                 &pub_params_porep,
                 &pub_inputs_porep,
                 &priv_inputs_porep,
@@ -149,10 +175,10 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
 
         for k in 1..post_epochs {
             // Run VDF
-            let x = extract_vdf_input::<H>(&proofs_porep[k - 1]);
-            let (y, proof_vdf) = V::eval(&pub_params.pub_params_vdf, &x)?;
+            let x = extract_vdf_input::<H>(&porep_proofs[k - 1]);
+            let (y, vdf_proof) = V::eval(&pub_params.pub_params_vdf, &x)?;
 
-            proofs_vdf.push(proof_vdf);
+            proofs_vdf.push(vdf_proof);
             ys.push(y);
 
             let r = H::Function::hash_single_node(&y);
@@ -170,7 +196,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
                 replicas: priv_inputs.replicas,
                 trees: priv_inputs.trees,
             };
-            proofs_porep.push(PoRC::prove(
+            porep_proofs.push(PoRC::prove(
                 &pub_params_porep,
                 &pub_inputs_porep,
                 &priv_inputs_porep,
@@ -178,8 +204,8 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
         }
 
         Ok(Proof {
-            proofs_porep,
-            proofs_vdf,
+            porep_proofs,
+            vdf_proofs: proofs_vdf,
             ys,
         })
     }
@@ -196,9 +222,9 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
         for i in 0..post_epochs - 1 {
             if !V::verify(
                 &pub_params.pub_params_vdf,
-                &extract_vdf_input::<H>(&proof.proofs_porep[i]),
+                &extract_vdf_input::<H>(&proof.porep_proofs[i]),
                 &proof.ys[i],
-                &proof.proofs_vdf[i],
+                &proof.vdf_proofs[i],
             )? {
                 return Ok(false);
             }
@@ -218,7 +244,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
                 commitments: &pub_inputs.commitments,
             };
 
-            if !PoRC::verify(&pub_params_porep, &pub_inputs_porep, &proof.proofs_porep[0])? {
+            if !PoRC::verify(&pub_params_porep, &pub_inputs_porep, &proof.porep_proofs[0])? {
                 return Ok(false);
             }
         }
@@ -235,7 +261,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for HvhPost<H, V> {
                 commitments: &pub_inputs.commitments,
             };
 
-            if !PoRC::verify(&pub_params_porep, &pub_inputs_porep, &proof.proofs_porep[i])? {
+            if !PoRC::verify(&pub_params_porep, &pub_inputs_porep, &proof.porep_proofs[i])? {
                 return Ok(false);
             }
         }

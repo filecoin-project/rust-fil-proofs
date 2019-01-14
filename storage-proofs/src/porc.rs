@@ -2,6 +2,8 @@ use std::marker::PhantomData;
 
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
+use serde::de::Deserialize;
+use serde::ser::Serialize;
 
 use crate::drgraph::graph_height;
 use crate::error::{Error, Result};
@@ -20,6 +22,7 @@ pub struct SetupParams {
 
 #[derive(Debug, Clone)]
 pub struct PublicParams {
+    // NOTE: This assumes all sectors are the same size, which may not remain a valid assumption.
     /// How many leaves the underlying merkle tree has.
     pub leaves: usize,
     /// The number of sectors that are proven over.
@@ -37,9 +40,9 @@ impl ParameterSetIdentifier for PublicParams {
 
 #[derive(Debug, Clone)]
 pub struct PublicInputs<'a, T: 'a + Domain> {
-    /// The challenge, which leafs to prove.
+    /// The challenges, which leafs to prove.
     pub challenges: &'a [T],
-    /// The root hash of the underlying merkle tree.
+    /// The root hashes of the underlying merkle trees.
     pub commitments: &'a [T],
 }
 
@@ -49,21 +52,38 @@ pub struct PrivateInputs<'a, H: 'a + Hasher> {
     pub trees: &'a [&'a MerkleTree<H::Domain, H::Function>],
 }
 
-#[derive(Debug, Clone)]
-pub struct Proof<H: Hasher>(Vec<MerkleProof<H>>);
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Proof<H: Hasher>(
+    #[serde(bound(
+        serialize = "MerkleProof<H>: Serialize",
+        deserialize = "MerkleProof<H>: Deserialize<'de>"
+    ))]
+    Vec<MerkleProof<H>>,
+);
 
 impl<H: Hasher> Proof<H> {
     pub fn leafs(&self) -> Vec<&H::Domain> {
         self.0.iter().map(|p| p.leaf()).collect()
     }
+
+    pub fn commitments(&self) -> Vec<&H::Domain> {
+        self.0.iter().map(|p| p.root()).collect()
+    }
+
+    pub fn paths(&self) -> Vec<&Vec<(H::Domain, bool)>> {
+        self.0.iter().map(|p| p.path()).collect()
+    }
 }
 
 #[derive(Debug, Clone)]
-pub struct PoRC<H: Hasher> {
-    _h: PhantomData<H>,
+pub struct PoRC<'a, H>
+where
+    H: 'a + Hasher,
+{
+    _h: PhantomData<&'a H>,
 }
 
-impl<'a, H: 'a + Hasher> ProofScheme<'a> for PoRC<H> {
+impl<'a, H: 'a + Hasher> ProofScheme<'a> for PoRC<'a, H> {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<'a, H::Domain>;
@@ -141,7 +161,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for PoRC<H> {
     }
 }
 
-fn slice_mod(challenge: impl AsRef<[u8]>, count: usize) -> usize {
+pub fn slice_mod(challenge: impl AsRef<[u8]>, count: usize) -> usize {
     // TODO: verify this is the correct way to derive the challenge
     let big_challenge = BigUint::from_bytes_be(challenge.as_ref());
 

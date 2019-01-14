@@ -13,12 +13,13 @@ use crate::hasher::{Domain, Hasher};
 /// Representation of a merkle proof.
 /// Each element in the `path` vector consists of a tuple `(hash, is_right)`, with `hash` being the the hash of the node at the current level and `is_right` a boolean indicating if the path is taking the right path.
 /// The first element is the hash of leaf itself, and the last is the root hash.
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct MerkleProof<H: Hasher> {
     pub root: H::Domain,
     path: Vec<(H::Domain, bool)>,
     leaf: H::Domain,
 
+    #[serde(skip)]
     _h: PhantomData<H>,
 }
 

@@ -86,7 +86,7 @@ impl<D: Digester> StdHasher for DigestFunction<D> {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, PartialOrd, Ord, Default)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, PartialOrd, Ord, Default, Serialize, Deserialize)]
 pub struct DigestDomain(pub [u8; 32]);
 
 impl DigestDomain {

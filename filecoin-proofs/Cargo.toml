@@ -7,7 +7,7 @@ license = "MIT OR Apache-2.0"
 edition = "2018"
 
 [lib]
-crate-type = ["rlib", "cdylib"]
+crate-type = ["rlib", "staticlib", "cdylib"]
 
 [dependencies]
 sector-base = { path = "../sector-base" }
@@ -21,7 +21,7 @@ rand = "0.4"
 libc = "0.2"
 failure = "0.1"
 bellman = "0.1"
-lazy_static = "1.0"
+lazy_static = "1.2"
 memmap = "0.6"
 clap = "2"
 colored = "1.6"
@@ -31,7 +31,7 @@ byteorder = "1"
 itertools = "0.7.3"
 serde_cbor = "0.9.0"
 serde = { version = "1", features = ["rc"] }
-serde_derive = "1"
+serde_derive = "1.0"
 blake2 = "0.8"
 slog = { version = "2.4.1", features = ["max_level_trace", "release_max_level_trace"] }
 
@@ -44,8 +44,8 @@ version = "0.14.2"
 features = ["expose-arith"]
 
 [build-dependencies]
-bindgen = "0.43.1"
-cbindgen = "0.6.3"
+bindgen = "0.46"
+cbindgen = "0.6.8"
 
 [features]
 default = []

@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::crypto::feistel;
+use crate::crypto::feistel::{self, FeistelPrecomputed};
 use crate::drgraph::{BucketGraph, Graph};
 use crate::hasher::Hasher;
 use crate::layered_drgporep::Layerable;
@@ -17,7 +17,7 @@ where
     expansion_degree: usize,
     base_graph: G,
     pub reversed: bool,
-    precomputed_log4: u32,
+    feistel_precomputed: FeistelPrecomputed,
     _h: PhantomData<H>,
 }
 
@@ -49,7 +49,7 @@ where
             },
             expansion_degree,
             reversed: false,
-            precomputed_log4: feistel::precompute((expansion_degree * nodes) as u32),
+            feistel_precomputed: feistel::precompute((expansion_degree * nodes) as u32),
             _h: PhantomData,
         }
     }
@@ -166,14 +166,14 @@ where
                 self.size() as u32 * self.expansion_degree as u32,
                 a,
                 feistel_keys,
-                self.precomputed_log4,
+                self.feistel_precomputed,
             )
         } else {
             feistel::permute(
                 self.size() as u32 * self.expansion_degree as u32,
                 a,
                 feistel_keys,
-                self.precomputed_log4,
+                self.feistel_precomputed,
             )
         };
         transformed as usize / self.expansion_degree
@@ -204,7 +204,7 @@ where
             base_graph: self.base_graph.clone(),
             expansion_degree: self.expansion_degree,
             reversed: !self.reversed,
-            precomputed_log4: feistel::precompute((self.expansion_degree * self.size()) as u32),
+            feistel_precomputed: feistel::precompute((self.expansion_degree * self.size()) as u32),
             _h: PhantomData,
         }
     }

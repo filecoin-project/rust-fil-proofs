@@ -8,8 +8,8 @@ pub struct PublicParams {
     pub time: usize,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct Tau<T: Domain> {
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct Tau<T> {
     pub comm_r: T,
     pub comm_d: T,
 }

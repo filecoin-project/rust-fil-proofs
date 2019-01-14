@@ -3,11 +3,15 @@ use pairing::bls12_381::{Bls12, Fr};
 use crate::crypto::sloth;
 use crate::error::Result;
 use crate::hasher::pedersen::PedersenDomain;
+use crate::parameter_cache::ParameterSetIdentifier;
 use crate::vdf::Vdf;
 
 /// VDF construction using sloth.
 #[derive(Debug, Clone)]
 pub struct Sloth {}
+
+unsafe impl Sync for Sloth {}
+unsafe impl Send for Sloth {}
 
 #[derive(Debug, Clone)]
 pub struct SetupParams {
@@ -21,7 +25,16 @@ pub struct PublicParams {
     pub rounds: usize,
 }
 
-#[derive(Debug, Clone)]
+impl ParameterSetIdentifier for PublicParams {
+    fn parameter_set_identifier(&self) -> String {
+        format!(
+            "vdf_sloth::PublicParams{{key: {:?}; rounds: {}}}",
+            self.key, self.rounds
+        )
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proof {}
 
 impl Vdf<PedersenDomain> for Sloth {
@@ -55,5 +68,12 @@ impl Vdf<PedersenDomain> for Sloth {
         let decoded: PedersenDomain = sloth::decode::<Bls12>(&key, &y, pp.rounds).into();
 
         Ok(&decoded == x)
+    }
+
+    fn key(pp: &self::PublicParams) -> PedersenDomain {
+        pp.key
+    }
+    fn rounds(pp: &self::PublicParams) -> usize {
+        pp.rounds
     }
 }
