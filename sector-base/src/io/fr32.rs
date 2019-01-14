@@ -164,7 +164,8 @@ pub fn almost_truncate_to_unpadded_bytes<W: ?Sized>(
 where
     W: Read + Write + Seek,
 {
-    let padded = BitByte::from_bits(FR32_PADDING_MAP.transform_bit_offset((length * 8) as usize, true));
+    let padded =
+        BitByte::from_bits(FR32_PADDING_MAP.transform_bit_offset((length * 8) as usize, true));
     let real_length = padded.bytes_needed();
     let _final_bit_count = padded.bits;
     Ok(real_length)
@@ -253,7 +254,6 @@ impl PaddingMap {
     // don't count the extra bits here). If `padding` is `false` calculate
     // the inverse transformation.
     pub fn transform_bit_offset(&self, pos: usize, padding: bool) -> usize {
-
         // Set the sizes we're converting to and from.
         let (from_size, to_size) = if padding {
             (self.data_bits, self.element_bits)
@@ -312,8 +312,7 @@ impl PaddingMap {
 
         let remaining_data_unit_bits = self.data_bits - bits_after_last_boundary;
 
-        let next_element_position_bits = position_bits +
-            remaining_data_unit_bits + self.pad_bits();
+        let next_element_position_bits = position_bits + remaining_data_unit_bits + self.pad_bits();
 
         (next_element_position_bits / 8, remaining_data_unit_bits)
     }
@@ -340,7 +339,11 @@ impl PaddingMap {
         // `padded_bits`).
         let padded_bits = self.transform_bit_offset(raw_data_bytes * 8, true);
 
-        Ok((padded_bytes, raw_data_bytes as u64, BitByte::from_bits(padded_bits)))
+        Ok((
+            padded_bytes,
+            raw_data_bytes as u64,
+            BitByte::from_bits(padded_bits),
+        ))
         // TODO: Why do we use `usize` internally and `u64` externally?
     }
 }
@@ -415,7 +418,6 @@ where
     // remove the last byte and extract its valid bits to `bit_stream` to be later rewritten
     // with new data taken from the `source`.
     if !padded_bits.is_byte_aligned() {
-
         // Read the last incomplete byte and left the `target` positioned to overwrite
         // it in the next `write_all`.
         let last_byte = &mut [0u8; 1];
@@ -448,7 +450,11 @@ where
     // TODO: What happens if we were already at the element boundary?
     // Would this code write 0 (`data_bits_to_write`) bits and then
     // add an extra padding?
-    bit_stream.extend(Fr32BitVec::from(source).into_iter().take(data_bits_to_write));
+    bit_stream.extend(
+        Fr32BitVec::from(source)
+            .into_iter()
+            .take(data_bits_to_write),
+    );
     if fills_data_unit {
         padding_map.pad(&mut bit_stream);
     }
@@ -571,7 +577,6 @@ where
 
     // If there is no more data to read or no more space to write stop.
     while read_pos.bytes < source.len() && raw_data.len() < max_write_size_bits {
-
         // (1): Find the element boundary and, assuming that there is a full
         //      unit of data (which actually may be incomplete), how many bits
         //      are left to read from `read_pos`.
@@ -589,9 +594,12 @@ where
         // Extract the specified `bits_to_extract` bits, skipping the first
         // `read_pos.bits` which have already been processed in a previous
         // iteration.
-        raw_data.extend(Fr32BitVec::from(&source[read_pos.bytes..read_element_end]).into_iter()
-            .skip(read_pos.bits)
-            .take(bits_to_extract));
+        raw_data.extend(
+            Fr32BitVec::from(&source[read_pos.bytes..read_element_end])
+                .into_iter()
+                .skip(read_pos.bits)
+                .take(bits_to_extract),
+        );
 
         // Position the reader in the next element boundary, this will be ignored
         // if we already hit limits (2) or (3) (in that case this was the last iteration).
@@ -641,7 +649,10 @@ mod tests {
         let written = write_padded(&data, &mut cursor).unwrap();
         let padded = cursor.into_inner();
         assert_eq!(written, 151);
-        assert_eq!(padded.len(), FR32_PADDING_MAP.transform_byte_offset(151, true));
+        assert_eq!(
+            padded.len(),
+            FR32_PADDING_MAP.transform_byte_offset(151, true)
+        );
         assert_eq!(&padded[0..31], &data[0..31]);
         assert_eq!(padded[31], 0b0011_1111);
         assert_eq!(padded[32], 0b1111_1111);
@@ -662,7 +673,10 @@ mod tests {
         let padded = cursor.into_inner();
 
         assert_eq!(written, 256);
-        assert_eq!(padded.len(), FR32_PADDING_MAP.transform_byte_offset(256, true));
+        assert_eq!(
+            padded.len(),
+            FR32_PADDING_MAP.transform_byte_offset(256, true)
+        );
         assert_eq!(&padded[0..31], &data[0..31]);
         assert_eq!(padded[31], 0b0011_1111);
         assert_eq!(padded[32], 0b1111_1111);
@@ -686,7 +700,10 @@ mod tests {
         let padded = cursor.into_inner();
 
         assert_eq!(written, 265);
-        assert_eq!(padded.len(), FR32_PADDING_MAP.transform_byte_offset(265, true));
+        assert_eq!(
+            padded.len(),
+            FR32_PADDING_MAP.transform_byte_offset(265, true)
+        );
         assert_eq!(&padded[0..31], &data[0..31]);
         assert_eq!(padded[31], 0b0011_1111);
         assert_eq!(padded[32], 0b1111_1111);
@@ -721,7 +738,10 @@ mod tests {
             let padded = cursor.into_inner();
             validate_fr32(&padded);
             assert_eq!(written, 127);
-            assert_eq!(padded.len(), FR32_PADDING_MAP.transform_byte_offset(127, true));
+            assert_eq!(
+                padded.len(),
+                FR32_PADDING_MAP.transform_byte_offset(127, true)
+            );
             assert_eq!(&padded[0..31], &data[0..31]);
             assert_eq!(padded[31], 0b0011_1111);
             assert_eq!(padded[32], 0b1111_1111);
@@ -778,7 +798,10 @@ mod tests {
         let padded = cursor.into_inner();
 
         assert_eq!(padded_written, len);
-        assert_eq!(padded.len(), FR32_PADDING_MAP.transform_byte_offset(len, true));
+        assert_eq!(
+            padded.len(),
+            FR32_PADDING_MAP.transform_byte_offset(len, true)
+        );
 
         let mut unpadded = Vec::new();
         let unpadded_written = write_unpadded(&padded, &mut unpadded, 0, len).unwrap();
