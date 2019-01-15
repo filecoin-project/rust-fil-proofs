@@ -36,6 +36,8 @@ slog = { version = "2.4.1", features = ["max_level_trace", "release_max_level_tr
 serde = "1.0"
 serde_derive = "1.0"
 base64 = "0.10.0"
+# accumulators = { git = "https://github.com/dignifiedquire/rust-accumulators", branch = "master" }
+accumulators = { path = "../../../../opensource/rust-accumulators" }
 
 [dependencies.pairing]
 version = "0.14.2"

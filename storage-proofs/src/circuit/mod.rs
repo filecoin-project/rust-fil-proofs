@@ -2,6 +2,7 @@ mod constraint;
 
 pub mod por;
 
+pub mod bbf_vc;
 pub mod beacon_post;
 pub mod drgporep;
 pub mod kdf;

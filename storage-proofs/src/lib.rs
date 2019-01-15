@@ -44,6 +44,7 @@ extern crate slog;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
+extern crate accumulators;
 
 #[macro_use]
 pub mod test_helper;
@@ -51,6 +52,7 @@ pub mod test_helper;
 pub mod example_helper;
 
 pub mod batchpost;
+pub mod bbf_vc;
 pub mod beacon_post;
 pub mod challenge_derivation;
 pub mod circuit;
