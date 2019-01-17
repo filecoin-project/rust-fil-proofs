@@ -17,7 +17,6 @@ use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgporep::{self, DrgParams};
 use storage_proofs::drgraph::{new_seed, DefaultTreeHasher};
-use storage_proofs::error::Result;
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
 use storage_proofs::hasher::Hasher;
 use storage_proofs::layered_drgporep;
@@ -29,6 +28,8 @@ use storage_proofs::porep::{replica_id, PoRep, Tau};
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
 use storage_proofs::zigzag_graph::ZigZagBucketGraph;
+
+use crate::error;
 
 type Commitment = [u8; 32];
 
@@ -160,6 +161,34 @@ pub fn get_config(sector_config: &SectorConfig) -> (bool, Option<u32>, usize, us
     )
 }
 
+pub struct PoStOutput {
+    pub snark_proof: [u8; 192],
+    pub faults: Vec<u64>,
+}
+
+pub struct PoStInputPart {
+    pub sealed_sector_access: Option<String>,
+    pub comm_r: [u8; 32],
+}
+
+pub struct PoStInput {
+    pub challenge_seed: [u8; 32],
+    pub input_parts: Vec<PoStInputPart>,
+}
+
+pub fn generate_post(input: PoStInput) -> error::Result<PoStOutput> {
+    let faults: Vec<u64> = if !input.input_parts.is_empty() {
+        vec![0]
+    } else {
+        Default::default()
+    };
+
+    Ok(PoStOutput {
+        snark_proof: [42; 192],
+        faults,
+    })
+}
+
 pub struct SealOutput {
     pub comm_r: Commitment,
     pub comm_r_star: Commitment,
@@ -173,7 +202,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     out_path: T,
     prover_id_in: &FrSafe,
     sector_id_in: &FrSafe,
-) -> Result<SealOutput> {
+) -> error::Result<SealOutput> {
     let (fake, delay_seconds, sector_bytes, proof_sector_bytes, uses_official_circuit) =
         get_config(sector_config);
 
@@ -313,7 +342,7 @@ fn perform_replication<T: AsRef<Path>>(
     data: &mut [u8],
     fake: bool,
     proof_sector_bytes: usize,
-) -> Result<(
+) -> error::Result<(
     layered_drgporep::Tau<<DefaultTreeHasher as Hasher>::Domain>,
     Vec<MerkleTree<<DefaultTreeHasher as Hasher>::Domain, <DefaultTreeHasher as Hasher>::Function>>,
 )> {
@@ -343,7 +372,7 @@ fn perform_replication<T: AsRef<Path>>(
     }
 }
 
-fn write_data<T: AsRef<Path>>(out_path: T, data: &[u8]) -> Result<()> {
+fn write_data<T: AsRef<Path>>(out_path: T, data: &[u8]) -> error::Result<()> {
     // Write replicated data to out_path.
     let f_out = File::create(out_path)?;
     let mut buf_writer = BufWriter::new(f_out);
@@ -359,7 +388,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     sector_id_in: &FrSafe,
     offset: u64,
     num_bytes: u64,
-) -> Result<(u64)> {
+) -> error::Result<(u64)> {
     let (fake, delay_seconds, sector_bytes, proof_sector_bytes, _uses_official_circuit) =
         get_config(sector_config);
     if let Some(delay) = delay_seconds {
@@ -401,7 +430,7 @@ pub fn verify_seal(
     prover_id_in: &FrSafe,
     sector_id_in: &FrSafe,
     proof_vec: &[u8],
-) -> Result<bool> {
+) -> error::Result<bool> {
     let (_fake, _delay_seconds, _sector_bytes, proof_sector_bytes, uses_official_circuit) =
         get_config(sector_config);
 
@@ -455,7 +484,7 @@ pub fn verify_seal(
 
     let proof = MultiProof::new_from_reader(Some(POREP_PARTITIONS), proof_vec, groth_params)?;
 
-    ZigZagCompound::verify(&compound_public_params, &public_inputs, &proof)
+    ZigZagCompound::verify(&compound_public_params, &public_inputs, &proof).map_err(|e| e.into())
 }
 
 #[cfg(test)]
