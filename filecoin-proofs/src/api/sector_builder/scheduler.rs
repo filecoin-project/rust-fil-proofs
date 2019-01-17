@@ -1,4 +1,6 @@
 use crate::api::internal;
+use crate::api::internal::PoStInput;
+use crate::api::internal::PoStInputPart;
 use crate::api::internal::PoStOutput;
 use crate::api::sector_builder::errors::err_piecenotfound;
 use crate::api::sector_builder::errors::err_unrecov;
@@ -174,13 +176,16 @@ impl SectorMetadataManager {
                 acc
             });
 
-        let mut comm_r_paths: Vec<String> = Default::default();
+        let mut input_parts: Vec<PoStInputPart> = Default::default();
 
         // eject from this loop with an error if we've been provided a comm_r
         // which does not correspond to any sealed sector metadata
         for comm_r in comm_rs {
             if let Some(sector_access) = comm_r_to_sector_access.get(comm_r) {
-                comm_r_paths.push(sector_access.clone());
+                input_parts.push(PoStInputPart {
+                    sealed_sector_access: sector_access.clone(),
+                    comm_r: *comm_r,
+                });
             } else {
                 return_channel
                     .send(Err(err_unrecov("no metadata for comm_r").into()))
@@ -189,7 +194,10 @@ impl SectorMetadataManager {
             }
         }
 
-        let output = internal::generate_post(&comm_r_paths, &challenge_seed);
+        let output = internal::generate_post(PoStInput {
+            challenge_seed: *challenge_seed,
+            input_parts,
+        });
 
         // TODO: Where should this work be scheduled? New worker type?
         return_channel.send(output).expects(FATAL_HUNGUP);

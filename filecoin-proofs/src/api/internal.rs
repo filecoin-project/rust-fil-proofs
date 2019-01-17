@@ -166,11 +166,18 @@ pub struct PoStOutput {
     pub faults: Vec<u64>,
 }
 
-pub fn generate_post<T: Into<PathBuf> + AsRef<Path>>(
-    comm_r_paths: &[T],
-    _challenge_seed: &[u8; 32],
-) -> error::Result<PoStOutput> {
-    let faults: Vec<u64> = if !comm_r_paths.is_empty() {
+pub struct PoStInputPart {
+    pub sealed_sector_access: String,
+    pub comm_r: [u8; 32],
+}
+
+pub struct PoStInput {
+    pub challenge_seed: [u8; 32],
+    pub input_parts: Vec<PoStInputPart>,
+}
+
+pub fn generate_post(input: PoStInput) -> error::Result<PoStOutput> {
+    let faults: Vec<u64> = if !input.input_parts.is_empty() {
         vec![0]
     } else {
         Default::default()
