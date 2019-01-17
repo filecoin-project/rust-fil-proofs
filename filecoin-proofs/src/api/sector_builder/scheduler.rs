@@ -1,3 +1,5 @@
+use crate::api::internal;
+use crate::api::internal::PoStOutput;
 use crate::api::sector_builder::errors::err_piecenotfound;
 use crate::api::sector_builder::errors::err_unrecov;
 use crate::api::sector_builder::helpers::add_piece::add_piece;
@@ -17,6 +19,7 @@ use crate::api::sector_builder::WrappedKeyValueStore;
 use crate::api::sector_builder::WrappedSectorStore;
 use crate::error::ExpectWithBacktrace;
 use crate::error::Result;
+use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
@@ -40,6 +43,11 @@ pub enum Request {
     GetSealedSectors(mpsc::SyncSender<Result<Vec<SealedSectorMetadata>>>),
     GetStagedSectors(mpsc::SyncSender<Result<Vec<StagedSectorMetadata>>>),
     GetSealStatus(SectorId, mpsc::SyncSender<Result<SealStatus>>),
+    GeneratePoSt(
+        Vec<[u8; 32]>,
+        [u8; 32],
+        mpsc::SyncSender<Result<PoStOutput>>,
+    ),
     RetrievePiece(String, mpsc::SyncSender<Result<Vec<u8>>>),
     SealAllStagedSectors(mpsc::SyncSender<Result<()>>),
     GetMaxUserBytesPerStagedSector(mpsc::SyncSender<u64>),
@@ -117,6 +125,9 @@ impl Scheduler {
                     Request::HandleSealResult(sector_id, result) => {
                         m.handle_seal_result(sector_id, *result);
                     }
+                    Request::GeneratePoSt(comm_rs, chg_seed, tx) => {
+                        m.generate_post(&comm_rs, &chg_seed, tx)
+                    }
                     Request::Shutdown => break,
                 }
             }
@@ -143,6 +154,47 @@ pub struct SectorMetadataManager {
 }
 
 impl SectorMetadataManager {
+    pub fn generate_post(
+        &self,
+        comm_rs: &[[u8; 32]],
+        challenge_seed: &[u8; 32],
+        return_channel: mpsc::SyncSender<Result<PoStOutput>>,
+    ) {
+        // reduce our sealed sector state-map to a mapping of comm_r to sealed
+        // sector access (AKA path to sealed sector file)
+        let comm_r_to_sector_access: HashMap<[u8; 32], String> = self
+            .state
+            .sealed
+            .sectors
+            .values()
+            .fold(HashMap::new(), |mut acc, item| {
+                let v = item.sector_access.clone();
+                let k = item.comm_r;
+                acc.entry(k).or_insert(v);
+                acc
+            });
+
+        let mut comm_r_paths: Vec<String> = Default::default();
+
+        // eject from this loop with an error if we've been provided a comm_r
+        // which does not correspond to any sealed sector metadata
+        for comm_r in comm_rs {
+            if let Some(sector_access) = comm_r_to_sector_access.get(comm_r) {
+                comm_r_paths.push(sector_access.clone());
+            } else {
+                return_channel
+                    .send(Err(err_unrecov("no metadata for comm_r").into()))
+                    .expects(FATAL_HUNGUP);
+                return;
+            }
+        }
+
+        let output = internal::generate_post(&comm_r_paths, &challenge_seed);
+
+        // TODO: Where should this work be scheduled? New worker type?
+        return_channel.send(output).expects(FATAL_HUNGUP);
+    }
+
     // Unseals the sector containing the referenced piece and returns its
     // bytes. Produces an error if this sector builder does not have a sealed
     // sector containing the referenced piece.

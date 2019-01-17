@@ -1,3 +1,4 @@
+use crate::api::internal::PoStOutput;
 use crate::api::sector_builder::errors::SectorBuilderErr;
 use crate::api::sector_builder::kv_store::fs::FileSystemKvs;
 use crate::api::sector_builder::kv_store::KeyValueStore;
@@ -143,7 +144,18 @@ impl SectorBuilder {
 
     // Returns all staged sector metadata.
     pub fn get_staged_sectors(&self) -> Result<Vec<StagedSectorMetadata>> {
-        self.run_blocking(Request::GetStagedSectors)
+        log_unrecov(self.run_blocking(Request::GetStagedSectors))
+    }
+
+    // Generates a proof-of-spacetime. Blocks the calling thread.
+    pub fn generate_post(
+        &self,
+        comm_rs: &[[u8; 32]],
+        challenge_seed: &[u8; 32],
+    ) -> Result<PoStOutput> {
+        log_unrecov(
+            self.run_blocking(|tx| Request::GeneratePoSt(Vec::from(comm_rs), *challenge_seed, tx)),
+        )
     }
 
     // Run a task, blocking on the return channel.
