@@ -181,17 +181,10 @@ impl SectorMetadataManager {
         // eject from this loop with an error if we've been provided a comm_r
         // which does not correspond to any sealed sector metadata
         for comm_r in comm_rs {
-            if let Some(sector_access) = comm_r_to_sector_access.get(comm_r) {
-                input_parts.push(PoStInputPart {
-                    sealed_sector_access: sector_access.clone(),
-                    comm_r: *comm_r,
-                });
-            } else {
-                return_channel
-                    .send(Err(err_unrecov("no metadata for comm_r").into()))
-                    .expects(FATAL_HUNGUP);
-                return;
-            }
+            input_parts.push(PoStInputPart {
+                sealed_sector_access: comm_r_to_sector_access.get(comm_r).cloned(),
+                comm_r: *comm_r,
+            });
         }
 
         let output = internal::generate_post(PoStInput {

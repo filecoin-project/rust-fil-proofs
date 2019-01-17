@@ -167,7 +167,7 @@ pub struct PoStOutput {
 }
 
 pub struct PoStInputPart {
-    pub sealed_sector_access: String,
+    pub sealed_sector_access: Option<String>,
     pub comm_r: [u8; 32],
 }
 
