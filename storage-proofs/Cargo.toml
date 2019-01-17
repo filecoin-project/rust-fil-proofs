@@ -20,7 +20,7 @@ crossbeam-utils = "0.6"
 itertools = "0.7.3"
 lazy_static = "1.2"
 memmap = "0.6"
-num-bigint = "0.2"
+num-bigint = { git = "https://github.com/dignifiedquire/num-bigint", features = ["rand", "i128", "u64_digit", "serde", "prime"], package = "num-bigint-dig" }
 num-traits = "0.2"
 clap = "2"
 colored = "1.6"
@@ -37,7 +37,8 @@ serde = "1.0"
 serde_derive = "1.0"
 base64 = "0.10.0"
 # accumulators = { git = "https://github.com/dignifiedquire/rust-accumulators", branch = "master" }
-accumulators = { path = "../../../../opensource/rust-accumulators" }
+accumulators = { path = "../../../../opensource/rust-accumulators", features = ["serde"] }
+hex = "0.3.2"
 
 [dependencies.pairing]
 version = "0.14.2"
