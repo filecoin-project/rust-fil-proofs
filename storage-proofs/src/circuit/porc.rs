@@ -2,24 +2,51 @@ use std::marker::PhantomData;
 
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use pairing::bls12_381::{Bls12, Fr};
-use sapling_crypto::circuit::{boolean, multipack, num, pedersen_hash};
+use pairing::{Engine, Field};
+use sapling_crypto::circuit::boolean::Boolean;
+use sapling_crypto::circuit::num::{AllocatedNum, Num};
+use sapling_crypto::circuit::{boolean, num, pedersen_hash};
 use sapling_crypto::jubjub::JubjubEngine;
 
 use crate::circuit::constraint;
-use crate::circuit::por::challenge_into_auth_path_bits;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
-use crate::fr32::fr_into_bytes;
+use crate::fr32::u32_into_fr;
 use crate::hasher::Hasher;
 use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
-use crate::porc::{slice_mod, PoRC};
+use crate::porc::PoRC;
 use crate::proof::ProofScheme;
+
+/// Takes a sequence of booleans and returns a single `E::Fr` as a packed representation.
+/// NOTE: bit length must be less than `Fr::capacity()` for the field, or this will overflow.
+pub fn pack_into_allocated_num<E, CS>(
+    mut cs: CS,
+    bits: &[Boolean],
+) -> Result<AllocatedNum<E>, SynthesisError>
+where
+    E: Engine,
+    CS: ConstraintSystem<E>,
+{
+    let mut num = Num::<E>::zero();
+    let mut coeff = E::Fr::one();
+
+    //    for (i, bits) in bits.chunks(E::Fr::CAPACITY as usize).enumerate() {
+    for bit in bits {
+        num = num.add_bool_with_coeff(CS::one(), bit, coeff);
+
+        coeff.double();
+    }
+    let val = num::AllocatedNum::alloc(cs.namespace(|| "val"), || Ok(num.get_value().unwrap()))?;
+
+    Ok(val)
+}
 
 /// This is the `PoRC` circuit.
 pub struct PoRCCircuit<'a, E: JubjubEngine> {
     /// Paramters for the engine.
     pub params: &'a E::Params,
-
+    pub challenges: Vec<Option<E::Fr>>,
     pub challenged_leafs: Vec<Option<E::Fr>>,
+    pub challenged_sectors: Vec<usize>,
     pub commitments: Vec<Option<E::Fr>>,
     pub paths: Vec<Vec<Option<(E::Fr, bool)>>>,
 }
@@ -51,28 +78,11 @@ where
     H: 'a + Hasher,
 {
     fn generate_public_inputs(
-        pub_in: &<PoRC<'a, H> as ProofScheme<'a>>::PublicInputs,
-        pub_params: &<PoRC<'a, H> as ProofScheme<'a>>::PublicParams,
+        _pub_in: &<PoRC<'a, H> as ProofScheme<'a>>::PublicInputs,
+        _pub_params: &<PoRC<'a, H> as ProofScheme<'a>>::PublicParams,
         _partition_k: Option<usize>,
     ) -> Vec<Fr> {
-        let mut inputs = Vec::new();
-
-        let challenges: Vec<_> = pub_in.challenges.iter().map(|l| (*l).into()).collect();
-
-        let commitments: Vec<_> = pub_in.commitments.iter().map(|c| (*c).into()).collect();
-
-        for (challenge, commitment) in challenges.iter().zip(commitments) {
-            // TODO: What about challenged sector?
-            let challenged_leaf = slice_mod(fr_into_bytes::<Bls12>(challenge), pub_params.leaves);
-            let auth_path_bits = challenge_into_auth_path_bits(challenged_leaf, pub_params.leaves);
-            let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
-
-            inputs.extend(packed_auth_path);
-
-            inputs.push(commitment);
-        }
-
-        inputs
+        Vec::new()
     }
 
     fn circuit(
@@ -100,10 +110,20 @@ where
             .map(|v| v.iter().map(|p| Some(((*p).0.into(), p.1))).collect())
             .collect();
 
+        let challenges: Vec<_> = pub_in
+            .challenges
+            .iter()
+            .map(|c| Some(u32_into_fr::<Bls12>(*c as u32)))
+            .collect();
+
+        let challenged_sectors = pub_in.challenged_sectors.to_vec();
+
         PoRCCircuit {
             params: engine_params,
+            challenges,
             challenged_leafs,
             commitments,
+            challenged_sectors,
             paths,
         }
     }
@@ -112,6 +132,8 @@ where
 impl<'a, E: JubjubEngine> Circuit<E> for PoRCCircuit<'a, E> {
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let params = self.params;
+        let challenges = self.challenges;
+        let challenged_sectors = self.challenged_sectors;
         let challenged_leafs = self.challenged_leafs;
         let commitments = self.commitments;
         let paths = self.paths;
@@ -119,12 +141,10 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoRCCircuit<'a, E> {
         assert_eq!(challenged_leafs.len(), paths.len());
         assert_eq!(paths.len(), commitments.len());
 
-        for (i, (challenged_leaf, (path, commitment))) in challenged_leafs
-            .iter()
-            .zip(paths.iter().zip(commitments))
-            .enumerate()
-        {
+        for (i, (challenged_leaf, path)) in challenged_leafs.iter().zip(paths).enumerate() {
             let mut cs = cs.namespace(|| format!("challenge_{}", i));
+
+            let commitment = commitments[challenged_sectors[i]];
 
             // Allocate the commitment
             let rt = num::AllocatedNum::alloc(cs.namespace(|| "commitment_num"), || {
@@ -186,16 +206,23 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoRCCircuit<'a, E> {
                 path_bits.push(cur_is_right);
             }
 
-            // allocate input for is_right path
-            multipack::pack_into_inputs(cs.namespace(|| "packed path"), &path_bits)?;
+            let challenge_num =
+                num::AllocatedNum::alloc(cs.namespace(|| format!("challenge {}", i)), || {
+                    Ok(challenges[i].ok_or(SynthesisError::AssignmentMissing)?)
+                })?;
 
+            // allocate value for is_right path
+            let packed = pack_into_allocated_num(cs.namespace(|| "packed path"), &path_bits)?;
+            constraint::equal(
+                &mut cs,
+                || "enforce path equals challenge",
+                &packed,
+                &challenge_num,
+            );
             {
                 // Validate that the root of the merkle tree that we calculated is the same as the input.
                 constraint::equal(&mut cs, || "enforce commitment correct", &cur, &rt);
             }
-
-            // Expose the root
-            rt.inputize(cs.namespace(|| "commitment"))?;
         }
 
         Ok(())
@@ -206,13 +233,17 @@ impl<'a, E: JubjubEngine> PoRCCircuit<'a, E> {
     pub fn synthesize<CS: ConstraintSystem<E>>(
         cs: &mut CS,
         params: &'a E::Params,
+        challenges: Vec<Option<E::Fr>>,
+        challenged_sectors: Vec<usize>,
         challenged_leafs: Vec<Option<E::Fr>>,
         commitments: Vec<Option<E::Fr>>,
         paths: Vec<Vec<Option<(E::Fr, bool)>>>,
     ) -> Result<(), SynthesisError> {
         PoRCCircuit {
             params,
+            challenges,
             challenged_leafs,
+            challenged_sectors,
             commitments,
             paths,
         }
@@ -259,16 +290,19 @@ mod tests {
         let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
 
         let graph2 = BucketGraph::<PedersenHasher>::new(32, 5, 0, new_seed());
-        let tree2 = graph2.merkle_tree(data1.as_slice()).unwrap();
+        let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
+
+        let challenges = vec![rng.gen_range(0, leaves), rng.gen_range(0, leaves)];
+        let challenged_sectors = &[0, 0];
 
         let pub_inputs = porc::PublicInputs {
-            challenges: &vec![rng.gen(), rng.gen()],
+            challenges: &challenges,
+            challenged_sectors,
             commitments: &[tree1.root(), tree2.root()],
         };
 
         let priv_inputs = porc::PrivateInputs::<PedersenHasher> {
             trees: &[&tree1, &tree2],
-            replicas: &[&data1, &data2],
         };
 
         let proof = PoRC::<PedersenHasher>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
@@ -297,6 +331,11 @@ mod tests {
 
         let instance = PoRCCircuit {
             params,
+            challenges: challenges
+                .iter()
+                .map(|c| Some(u32_into_fr::<Bls12>(*c as u32)))
+                .collect(),
+            challenged_sectors: challenged_sectors.to_vec(),
             challenged_leafs,
             paths,
             commitments,
@@ -308,11 +347,12 @@ mod tests {
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
-        assert_eq!(cs.num_inputs(), 5, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 13826, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 1, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 13824, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
     }
 
+    #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn porc_test_compound() {
         let params = &JubjubBls12::new();
@@ -343,16 +383,16 @@ mod tests {
         let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
 
         let graph2 = BucketGraph::<PedersenHasher>::new(32, 5, 0, new_seed());
-        let tree2 = graph2.merkle_tree(data1.as_slice()).unwrap();
+        let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
 
         let pub_inputs = porc::PublicInputs {
-            challenges: &vec![rng.gen(), rng.gen()],
+            challenges: &vec![rng.gen_range(0, leaves), rng.gen_range(0, leaves)],
+            challenged_sectors: &[0, 1],
             commitments: &[tree1.root(), tree2.root()],
         };
 
         let priv_inputs = porc::PrivateInputs::<PedersenHasher> {
             trees: &[&tree1, &tree2],
-            replicas: &[&data1, &data2],
         };
 
         let proof =

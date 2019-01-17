@@ -41,14 +41,14 @@ impl ParameterSetIdentifier for PublicParams {
 #[derive(Debug, Clone)]
 pub struct PublicInputs<'a, T: 'a + Domain> {
     /// The challenges, which leafs to prove.
-    pub challenges: &'a [T],
+    pub challenges: &'a [usize],
+    pub challenged_sectors: &'a [usize],
     /// The root hashes of the underlying merkle trees.
     pub commitments: &'a [T],
 }
 
 #[derive(Debug, Clone)]
 pub struct PrivateInputs<'a, H: 'a + Hasher> {
-    pub replicas: &'a [&'a [u8]],
     pub trees: &'a [&'a MerkleTree<H::Domain, H::Function>],
 }
 
@@ -102,29 +102,26 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for PoRC<'a, H> {
         pub_inputs: &'b Self::PublicInputs,
         priv_inputs: &'b Self::PrivateInputs,
     ) -> Result<Self::Proof> {
-        if priv_inputs.replicas.len() != pub_params.sectors_count {
+        if priv_inputs.trees.len() != pub_params.sectors_count {
             return Err(Error::MalformedInput);
         }
 
         if priv_inputs.trees.len() != pub_params.sectors_count {
             return Err(Error::MalformedInput);
         }
-
         let proofs = pub_inputs
             .challenges
             .iter()
-            .map(|challenge| {
-                // challenge derivation
-                let challenged_sector = slice_mod(challenge, pub_params.sectors_count);
-                let challenged_leaf = slice_mod(challenge, pub_params.leaves);
-                let tree = priv_inputs.trees[challenged_sector];
+            .zip(pub_inputs.challenged_sectors)
+            .map(|(challenged_leaf, challenged_sector)| {
+                let tree = priv_inputs.trees[*challenged_sector];
 
-                if pub_inputs.commitments[challenged_sector] != tree.root() {
+                if pub_inputs.commitments[*challenged_sector] != tree.root() {
                     return Err(Error::InvalidCommitment);
                 }
 
                 Ok(MerkleProof::new_from_proof(
-                    &tree.gen_proof(challenged_leaf),
+                    &tree.gen_proof(*challenged_leaf),
                 ))
             })
             .collect::<Result<Vec<_>>>()?;
@@ -138,11 +135,14 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for PoRC<'a, H> {
         proof: &Self::Proof,
     ) -> Result<bool> {
         // validate each proof
-        for (merkle_proof, challenge) in proof.0.iter().zip(pub_inputs.challenges.iter()) {
-            let challenged_sector = slice_mod(challenge, pub_params.sectors_count);
-
+        for (merkle_proof, (challenged_leaf, challenged_sector)) in proof.0.iter().zip(
+            pub_inputs
+                .challenges
+                .iter()
+                .zip(pub_inputs.challenged_sectors.iter()),
+        ) {
             // validate the commitment
-            if merkle_proof.root() != &pub_inputs.commitments[challenged_sector] {
+            if merkle_proof.root() != &pub_inputs.commitments[*challenged_sector] {
                 return Ok(false);
             }
 
@@ -151,8 +151,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for PoRC<'a, H> {
                 return Ok(false);
             }
 
-            let challenged_leaf = slice_mod(challenge, pub_params.leaves);
-            if !merkle_proof.validate(challenged_leaf) {
+            if !merkle_proof.validate(*challenged_leaf) {
                 return Ok(false);
             }
         }
@@ -184,8 +183,9 @@ mod tests {
     fn test_porc<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
+        let leaves = 32;
         let pub_params = PublicParams {
-            leaves: 32,
+            leaves,
             sectors_count: 1,
         };
 
@@ -197,14 +197,12 @@ mod tests {
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {
-            challenges: &vec![rng.gen(), rng.gen()],
+            challenges: &vec![rng.gen_range(0, leaves), rng.gen_range(0, leaves)],
+            challenged_sectors: &[0, 0],
             commitments: &[tree.root()],
         };
 
-        let priv_inputs = PrivateInputs::<H> {
-            trees: &[&tree],
-            replicas: &[&data],
-        };
+        let priv_inputs = PrivateInputs::<H> { trees: &[&tree] };
 
         let proof = PoRC::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
 
@@ -262,6 +260,7 @@ mod tests {
 
         let pub_inputs = PublicInputs::<H::Domain> {
             challenges: &vec![rng.gen(), rng.gen()],
+            challenged_sectors: &[0],
             commitments: &[tree.root()],
         };
 
@@ -294,8 +293,10 @@ mod tests {
     fn test_porc_validates_challenge_identity<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
+        let leaves = 32;
+
         let pub_params = PublicParams {
-            leaves: 32,
+            leaves,
             sectors_count: 1,
         };
 
@@ -307,19 +308,18 @@ mod tests {
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {
-            challenges: &vec![rng.gen(), rng.gen()],
+            challenges: &vec![rng.gen_range(0, leaves), rng.gen_range(0, leaves)],
+            challenged_sectors: &[0],
             commitments: &[tree.root()],
         };
 
-        let priv_inputs = PrivateInputs::<H> {
-            trees: &[&tree],
-            replicas: &[&data],
-        };
+        let priv_inputs = PrivateInputs::<H> { trees: &[&tree] };
 
         let proof = PoRC::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
 
         let different_pub_inputs = PublicInputs {
-            challenges: &vec![rng.gen(), rng.gen()],
+            challenges: &vec![rng.gen_range(0, leaves), rng.gen_range(0, leaves)],
+            challenged_sectors: &[0],
             commitments: &[tree.root()],
         };
 
