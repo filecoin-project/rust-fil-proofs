@@ -21,21 +21,19 @@ use crate::vde::{self, decode_block, decode_domain_block};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tau {
-    // pub comm: <VectorCommitment<Accumulator> as StaticVectorCommitment>::Commitment,
+    // TODO: ensure the serialization only contains the state it has to transmit, to be able to reconstruct itself.
+    pub comm: VectorCommitment<Accumulator>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PublicInputs<T: Domain> {
     pub replica_id: T,
     pub challenges: Vec<usize>,
-    pub tau: Option<Tau>,
+    pub tau: Tau,
 }
-
-pub type ProverAux = VectorCommitment<Accumulator>;
 
 #[derive(Debug)]
 pub struct PrivateInputs<'a> {
-    pub aux: ProverAux,
     pub replica: &'a [u8],
 }
 
@@ -102,6 +100,8 @@ where
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proof {
     pub proof: <VectorCommitment<Accumulator> as StaticVectorCommitment>::BatchCommitment,
+    pub indices: Vec<usize>,
+    pub nodes: Vec<BigUint>,
 }
 
 impl Proof {
@@ -111,8 +111,14 @@ impl Proof {
 
     pub fn new(
         proof: <VectorCommitment<Accumulator> as StaticVectorCommitment>::BatchCommitment,
+        indices: Vec<usize>,
+        nodes: Vec<BigUint>,
     ) -> Self {
-        Proof { proof }
+        Proof {
+            proof,
+            indices,
+            nodes,
+        }
     }
 }
 
@@ -155,56 +161,54 @@ where
     ) -> Result<Self::Proof> {
         let len = pub_inputs.challenges.len();
         let replica = priv_inputs.replica;
-        let vc = &priv_inputs.aux;
+        let vc = &pub_inputs.tau.comm;
 
-        let mut nodes = Vec::with_capacity(len);
-        let mut indices = Vec::with_capacity(len);
-        println!("replica: {:?}", replica);
+        // can only open values once
+        // TODO: verify this is okay, security wise
+
+        use std::collections::BTreeMap;
+        let mut indices = BTreeMap::new();
+
         // accumulate
         // - replicated node
         // - original node
         // - parent nodes
         for challenge in &pub_inputs.challenges {
             let node_index = challenge % pub_params.graph.size();
-            println!(
-                "{}, {}, {}, {}",
-                len,
-                pub_params.graph.size(),
-                challenge,
-                node_index
-            );
-
             assert_ne!(node_index, 0, "cannot prove the first node");
 
-            let replica_node = data_at_node(replica, node_index)?;
-            let original_node = decode_block(
-                &pub_params.graph,
-                pub_params.sloth_iter,
-                &pub_inputs.replica_id,
-                replica,
-                node_index,
-            )?
-            .into_bytes();
+            if !indices.contains_key(&node_index) {
+                let replica_node = data_at_node(replica, node_index)?;
+                let original_node = decode_block(
+                    &pub_params.graph,
+                    pub_params.sloth_iter,
+                    &pub_inputs.replica_id,
+                    replica,
+                    node_index,
+                )?
+                .into_bytes();
 
-            nodes.push(BigUint::from_bytes_be(&replica_node));
-            indices.push(len + node_index);
-
-            nodes.push(BigUint::from_bytes_be(&original_node));
-            indices.push(node_index);
+                indices.insert(node_index, BigUint::from_bytes_le(&original_node));
+                indices.insert(len + node_index, BigUint::from_bytes_le(&replica_node));
+            }
 
             // TODO: ask research
             // - if we need to do inclusion proofs for parents?
             // - do we need to reveal the q-bits for the replica bits?
             let parents = pub_params.graph.parents(node_index);
             for p in &parents {
-                let parent = data_at_node(replica, *p)?;
-                nodes.push(BigUint::from_bytes_be(&parent));
-                indices.push(len + p);
+                if !indices.contains_key(p) {
+                    let data = data_at_node(replica, *p).expect("bad index logic");
+                    indices.insert(len + p, BigUint::from_bytes_le(&data));
+                }
             }
         }
-        println!("open: {:?}", &nodes);
-        let comm = vc.batch_open(&nodes[..], &indices[..]);
-        Ok(Proof::new(comm))
+
+        let ind: Vec<usize> = indices.keys().cloned().collect();
+        let nodes: Vec<BigUint> = indices.into_iter().map(|(_, v)| v).collect();
+
+        let comm = vc.batch_open(&nodes[..], &ind[..]);
+        Ok(Proof::new(comm, ind, nodes))
     }
 
     fn verify(
@@ -212,9 +216,8 @@ where
         pub_inputs: &Self::PublicInputs,
         proof: &Self::Proof,
     ) -> Result<bool> {
-        // TODO: verify
-
-        Ok(true)
+        let vc = &pub_inputs.tau.comm;
+        Ok(vc.batch_verify(&proof.nodes, &proof.indices, &proof.proof))
     }
 }
 
@@ -224,7 +227,7 @@ where
     G: 'a + Graph<H> + ParameterSetIdentifier + Sync + Send,
 {
     type Tau = Tau;
-    type ProverAux = ProverAux;
+    type ProverAux = ();
 
     fn replicate(
         pp: &Self::PublicParams,
@@ -233,8 +236,8 @@ where
         _data_tree: Option<MerkleTree<H::Domain, H::Function>>,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         // TODO: right parameters
-        let n = 1024;
-        let lambda = 128;
+        let n = 64;
+        let lambda = 64;
         let mut vc = create_vector_commitment::<Accumulator, RSAGroup>(lambda, n);
 
         let nodes = pp.graph.size();
@@ -245,11 +248,10 @@ where
         let big_data: Vec<BigUint> = (0..nodes)
             .map(|i| {
                 let el = data_at_node(&data, i).expect("data_at_node math failed");
-                BigUint::from_bytes_be(el)
+                BigUint::from_bytes_le(el)
             })
             .collect();
 
-        println!("data: {:?}", &big_data);
         vc.commit(&big_data[..]);
 
         vde::encode(&pp.graph, pp.sloth_iter, replica_id, data)?;
@@ -258,16 +260,13 @@ where
         let big_data_enc: Vec<BigUint> = (0..nodes)
             .map(|i| {
                 let el = data_at_node(&data, i).expect("data_at_node math failed");
-                BigUint::from_bytes_be(el)
+                BigUint::from_bytes_le(el)
             })
             .collect();
 
-        println!("enc: {:?}", &big_data);
         vc.commit(&big_data_enc[..]);
 
-        // TODO: put the public state into Tau
-
-        Ok((Tau {}, vc))
+        Ok((Tau { comm: vc }, ()))
     }
 
     fn extract_all<'b>(
@@ -419,64 +418,57 @@ mod tests {
     fn prove_verify_aux<H: Hasher>(nodes: usize, i: usize) {
         assert!(i < nodes);
 
-        // The loop is here in case we need to retry because of an edge case in the test design.
-        loop {
-            let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-            let sloth_iter = 1;
-            let degree = 10;
-            let expansion_degree = 0;
-            let seed = new_seed();
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let sloth_iter = 1;
+        let degree = 10;
+        let expansion_degree = 0;
+        let seed = new_seed();
 
-            let replica_id: H::Domain = rng.gen();
-            let data: Vec<u8> = (0..nodes)
-                .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
-                .collect();
+        let replica_id: H::Domain = rng.gen();
+        let data: Vec<u8> = (0..nodes)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
 
-            // create a copy, so we can comare roundtrips
-            let mut mmapped_data_copy = file_backed_mmap_from(&data);
+        // create a copy, so we can comare roundtrips
+        let mut mmapped_data_copy = file_backed_mmap_from(&data);
 
-            let challenge = i;
+        let challenge = i;
 
-            let sp = SetupParams {
-                drg: DrgParams {
-                    nodes,
-                    degree,
-                    expansion_degree,
-                    seed,
-                },
-                sloth_iter,
-            };
+        let sp = SetupParams {
+            drg: DrgParams {
+                nodes,
+                degree,
+                expansion_degree,
+                seed,
+            },
+            sloth_iter,
+        };
 
-            let pp = BbfVc::<H, BucketGraph<_>>::setup(&sp).unwrap();
+        let pp = BbfVc::<H, BucketGraph<_>>::setup(&sp).unwrap();
 
-            let (tau, aux) =
-                BbfVc::<H, _>::replicate(&pp, &replica_id, &mut mmapped_data_copy, None).unwrap();
+        let (tau, _aux) =
+            BbfVc::<H, _>::replicate(&pp, &replica_id, &mut mmapped_data_copy, None).unwrap();
 
-            let mut copied = vec![0; data.len()];
-            copied.copy_from_slice(&mmapped_data_copy);
+        let mut copied = vec![0; data.len()];
+        copied.copy_from_slice(&mmapped_data_copy);
 
-            assert_ne!(data, copied, "replication did not change data");
+        assert_ne!(data, copied, "replication did not change data");
 
-            let pub_inputs = PublicInputs::<H::Domain> {
-                replica_id,
-                challenges: vec![challenge, challenge],
-                tau: Some(tau.clone().into()),
-            };
+        let pub_inputs = PublicInputs::<H::Domain> {
+            replica_id,
+            challenges: vec![challenge, challenge],
+            tau: tau.clone().into(),
+        };
 
-            let priv_inputs = PrivateInputs {
-                aux,
-                replica: &mmapped_data_copy,
-            };
+        let priv_inputs = PrivateInputs {
+            replica: &mmapped_data_copy,
+        };
 
-            let proof = BbfVc::<H, _>::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
-            assert!(
-                BbfVc::<H, _>::verify(&pp, &pub_inputs, &proof).unwrap(),
-                "failed to verify"
-            );
-
-            // Normally, just run once.
-            break;
-        }
+        let proof = BbfVc::<H, _>::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
+        assert!(
+            BbfVc::<H, _>::verify(&pp, &pub_inputs, &proof).unwrap(),
+            "failed to verify"
+        );
     }
 
     fn prove_verify(n: usize, i: usize) {
