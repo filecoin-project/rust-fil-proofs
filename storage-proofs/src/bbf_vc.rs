@@ -192,6 +192,9 @@ where
             nodes.push(BigUint::from_bytes_be(&original_node));
             indices.push(node_index);
 
+            // TODO: ask research
+            // - if we need to do inclusion proofs for parents?
+            // - do we need to reveal the q-bits for the replica bits?
             let parents = pub_params.graph.parents(node_index);
             for p in &parents {
                 let parent = data_at_node(replica, *p)?;
@@ -261,6 +264,8 @@ where
 
         println!("enc: {:?}", &big_data);
         vc.commit(&big_data_enc[..]);
+
+        // TODO: put the public state into Tau
 
         Ok((Tau {}, vc))
     }
