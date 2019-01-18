@@ -5,19 +5,16 @@ use accumulators::group::RSAGroup;
 use accumulators::traits::*;
 use accumulators::vc::*;
 use num_bigint::BigUint;
-use num_traits::Zero;
-use serde::de::Deserialize;
-use serde::ser::Serialize;
 
 use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::hasher::{Domain, Hasher};
-use crate::merkle::{MerkleProof, MerkleTree};
+use crate::merkle::MerkleTree;
 use crate::parameter_cache::ParameterSetIdentifier;
 use crate::porep::PoRep;
 use crate::proof::ProofScheme;
 use crate::util::data_at_node;
-use crate::vde::{self, decode_block, decode_domain_block};
+use crate::vde::{self, decode_block};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tau {
