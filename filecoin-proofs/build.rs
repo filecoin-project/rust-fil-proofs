@@ -73,15 +73,10 @@ fn main() {
 
     write!(
         pc_file,
-        "prefix=/usr/local
-libdir=${{prefix}}/lib
-includedir=${{prefix}}/include
-
-Name: libfilecoin_proofs
+        "Name: libfilecoin_proofs
 Version: {version}
 Description: rust-proofs library
-Libs: -L${{libdir}} -lfilecoin_proofs {libs}
-Cflags: -I${{includedir}}
+Libs: {libs}
 ",
         version = git_hash.trim(),
         libs = libs
