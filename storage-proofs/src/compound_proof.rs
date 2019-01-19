@@ -82,16 +82,16 @@ where
         let vanilla_proofs =
             S::prove_all_partitions(&pub_params.vanilla_params, &pub_in, priv_in, partitions)?;
 
+        let sanity_check =
+            S::verify_all_partitions(&pub_params.vanilla_params, &pub_in, &vanilla_proofs)?;
+        assert!(sanity_check, "sanity check failed");
+
         // This will always run at least once, since there cannot be zero partitions.
         assert!(partition_count > 0);
 
         // If groth_params is None, generate once and share with each thread.
         let actual_groth_params = match groth_params {
             None => {
-                // TODO: eventually, don't generate random params here at all.
-                let rng =
-                    &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-
                 let circuit = Self::circuit(
                     &pub_in,
                     C::ComponentPrivateInputs::default(),
@@ -100,7 +100,7 @@ where
                     &pub_params.vanilla_params,
                     &pub_params.engine_params,
                 );
-                Self::get_groth_params(circuit, &pub_params.vanilla_params, rng)?
+                Self::get_groth_params(circuit, &pub_params.vanilla_params)?
             }
             Some(gp) => gp,
         };

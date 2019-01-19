@@ -187,10 +187,13 @@ impl SectorMetadataManager {
             });
         }
 
-        let output = internal::generate_post(PoStInput {
-            challenge_seed: *challenge_seed,
-            input_parts,
-        });
+        let output = internal::generate_post(
+            self.sector_store.inner.config().sector_bytes(),
+            PoStInput {
+                challenge_seed: *challenge_seed,
+                input_parts,
+            },
+        );
 
         // TODO: Where should this work be scheduled? New worker type?
         return_channel.send(output).expects(FATAL_HUNGUP);

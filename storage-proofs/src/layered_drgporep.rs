@@ -36,7 +36,7 @@ where
     pub challenge_count: usize,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Tau<T: Domain> {
     pub layer_taus: Vec<porep::Tau<T>>,
     pub comm_r_star: T,

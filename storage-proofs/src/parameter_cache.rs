@@ -3,7 +3,7 @@ use bellman::groth16::Parameters;
 use bellman::{groth16, Circuit};
 use fs2::FileExt;
 use itertools::Itertools;
-use rand::XorShiftRng;
+use rand::{SeedableRng, XorShiftRng};
 use sapling_crypto::jubjub::JubjubEngine;
 use sha2::{Digest, Sha256};
 
@@ -19,6 +19,9 @@ use crate::SP_LOG;
 pub const VERSION: usize = 9;
 
 pub const PARAMETER_CACHE_DIR: &str = "/tmp/filecoin-proof-parameters/";
+
+/// If this changes, parameters generated under different conditions may vary. Don't change it.
+pub const PARAMETER_RNG_SEED: [u32; 4] = [0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654];
 
 fn parameter_cache_dir_name() -> String {
     match env::var("FILECOIN_PARAMETER_CACHE") {
@@ -59,12 +62,11 @@ where
         ))
     }
 
-    fn get_groth_params(
-        circuit: C,
-        pub_params: &PP,
-        rng: &mut XorShiftRng,
-    ) -> Result<groth16::Parameters<E>> {
+    fn get_groth_params(circuit: C, pub_params: &PP) -> Result<groth16::Parameters<E>> {
+        // Always seed the rng identically so parameter generation will be deterministic.
+
         let generate = || {
+            let rng = &mut XorShiftRng::from_seed(PARAMETER_RNG_SEED);
             info!(SP_LOG, "Actually generating groth params."; "target" => "params");
             let start = Instant::now();
             let parameters = groth16::generate_random_parameters::<E, _, _>(circuit, rng);
