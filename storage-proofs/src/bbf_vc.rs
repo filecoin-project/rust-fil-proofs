@@ -4,7 +4,7 @@ use accumulators::accumulator::Accumulator;
 use accumulators::group::RSAGroup;
 use accumulators::traits::*;
 use accumulators::vc::*;
-use num_bigint::BigUint;
+use rayon::prelude::*;
 
 use crate::drgraph::Graph;
 use crate::error::Result;
@@ -97,25 +97,21 @@ where
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proof {
     pub proof: <VectorCommitment<Accumulator> as StaticVectorCommitment>::BatchCommitment,
-    pub indices: Vec<usize>,
-    pub nodes: Vec<BigUint>,
+    // TODO: derive indices, instead of adding them to the proof
+    pub nodes: Vec<(Vec<u8>, usize)>,
 }
 
 impl Proof {
     pub fn serialize(&self) -> Vec<u8> {
-        unimplemented!()
+        // TODO: implement using serde
+        vec![]
     }
 
     pub fn new(
         proof: <VectorCommitment<Accumulator> as StaticVectorCommitment>::BatchCommitment,
-        indices: Vec<usize>,
-        nodes: Vec<BigUint>,
+        nodes: Vec<(Vec<u8>, usize)>,
     ) -> Self {
-        Proof {
-            proof,
-            indices,
-            nodes,
-        }
+        Proof { proof, nodes }
     }
 }
 
@@ -185,8 +181,8 @@ where
                 )?
                 .into_bytes();
 
-                indices.insert(node_index, BigUint::from_bytes_le(&original_node));
-                indices.insert(len + node_index, BigUint::from_bytes_le(&replica_node));
+                indices.insert(node_index, original_node.to_vec());
+                indices.insert(len + node_index, replica_node.to_vec());
             }
 
             // TODO: ask research
@@ -196,16 +192,15 @@ where
             for p in &parents {
                 if !indices.contains_key(p) {
                     let data = data_at_node(replica, *p).expect("bad index logic");
-                    indices.insert(len + p, BigUint::from_bytes_le(&data));
+                    indices.insert(len + p, data.to_vec());
                 }
             }
         }
 
-        let ind: Vec<usize> = indices.keys().cloned().collect();
-        let nodes: Vec<BigUint> = indices.into_iter().map(|(_, v)| v).collect();
+        let nodes = indices.into_iter().map(|(k, v)| (v, k)).collect::<Vec<_>>();
+        let comm = vc.batch_open(nodes.clone());
 
-        let comm = vc.batch_open(&nodes[..], &ind[..]);
-        Ok(Proof::new(comm, ind, nodes))
+        Ok(Proof::new(comm, nodes))
     }
 
     fn verify(
@@ -214,7 +209,7 @@ where
         proof: &Self::Proof,
     ) -> Result<bool> {
         let vc = &pub_inputs.tau.comm;
-        Ok(vc.batch_verify(&proof.nodes, &proof.indices, &proof.proof))
+        Ok(vc.batch_verify(proof.nodes.clone(), &proof.proof))
     }
 }
 
@@ -233,8 +228,8 @@ where
         _data_tree: Option<MerkleTree<H::Domain, H::Function>>,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         // TODO: right parameters
-        let n = 64;
-        let lambda = 64;
+        let n = 1024;
+        let lambda = 256;
         let mut vc = create_vector_commitment::<Accumulator, RSAGroup>(lambda, n);
 
         let nodes = pp.graph.size();
@@ -242,26 +237,24 @@ where
         let node_size = 32;
 
         // TODO: use iterator & allow passing raw bytes
-        let big_data: Vec<BigUint> = (0..nodes)
-            .map(|i| {
-                let el = data_at_node(&data, i).expect("data_at_node math failed");
-                BigUint::from_bytes_le(el)
-            })
-            .collect();
+        let big_data = (0..nodes).map(|i| {
+            data_at_node(&data, i)
+                .expect("data_at_node math failed")
+                .to_vec()
+        });
 
-        vc.commit(&big_data[..]);
+        vc.commit(big_data);
 
         vde::encode(&pp.graph, pp.sloth_iter, replica_id, data)?;
 
         // TODO: use iterator & allow passing raw bytes
-        let big_data_enc: Vec<BigUint> = (0..nodes)
-            .map(|i| {
-                let el = data_at_node(&data, i).expect("data_at_node math failed");
-                BigUint::from_bytes_le(el)
-            })
-            .collect();
+        let big_data_enc = (0..nodes).map(|i| {
+            data_at_node(&data, i)
+                .expect("data_at_node math failed")
+                .to_vec()
+        });
 
-        vc.commit(&big_data_enc[..]);
+        vc.commit(big_data_enc);
 
         Ok((Tau { comm: vc }, ()))
     }

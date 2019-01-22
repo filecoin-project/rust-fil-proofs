@@ -20,7 +20,7 @@ use std::time::{Duration, Instant};
 #[cfg(feature = "profile")]
 use gperftools::profiler::PROFILER;
 
-use storage_proofs::drgporep::*;
+use storage_proofs::bbf_vc::*;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
@@ -84,7 +84,7 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
 
     info!(FCP_LOG, "running setup");
     start_profile("setup");
-    let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).unwrap();
+    let pp = BbfVc::<H, BucketGraph<H>>::setup(&sp).unwrap();
     stop_profile();
 
     let start = Instant::now();
@@ -93,19 +93,18 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     info!(FCP_LOG, "running replicate");
 
     start_profile("replicate");
-    let (tau, aux) =
-        DrgPoRep::<H, _>::replicate(&pp, &replica_id, data.as_mut_slice(), None).unwrap();
+    let (tau, _) = BbfVc::<H, _>::replicate(&pp, &replica_id, data.as_mut_slice(), None).unwrap();
     stop_profile();
     let pub_inputs = PublicInputs {
         replica_id,
         challenges,
-        tau: Some(tau),
+        tau,
     };
 
-    let priv_inputs = PrivateInputs::<H> { aux: &aux };
+    let priv_inputs = PrivateInputs { replica: &data };
 
     param_duration += start.elapsed();
-    let samples: u32 = 30;
+    let samples: u32 = 10;
 
     let mut total_proving = Duration::new(0, 0);
     let mut total_verifying = Duration::new(0, 0);
@@ -118,21 +117,20 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     for _ in 0..samples {
         let start = Instant::now();
         start_profile("prove");
-        let proof =
-            DrgPoRep::<H, _>::prove(&pp, &pub_inputs, &priv_inputs).expect("failed to prove");
+        let proof = BbfVc::<H, _>::prove(&pp, &pub_inputs, &priv_inputs).expect("failed to prove");
         stop_profile();
         total_proving += start.elapsed();
 
         let start = Instant::now();
         start_profile("verify");
-        DrgPoRep::<H, _>::verify(&pp, &pub_inputs, &proof).expect("failed to verify");
+        BbfVc::<H, _>::verify(&pp, &pub_inputs, &proof).expect("failed to verify");
         stop_profile();
         total_verifying += start.elapsed();
         proofs.push(proof);
     }
 
     // -- print statistics
-
+    info!(FCP_LOG, "hello?");
     let serialized_proofs = proofs.iter().fold(Vec::new(), |mut acc, p| {
         acc.extend(p.serialize());
         acc
@@ -156,7 +154,7 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
 }
 
 fn main() {
-    let matches = App::new(stringify!("DrgPoRep Vanilla Bench"))
+    let matches = App::new(stringify!("DrgPoRep BBF-VC Vanilla Bench"))
         .version("1.0")
         .arg(
             Arg::with_name("size")
