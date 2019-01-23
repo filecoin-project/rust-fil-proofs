@@ -36,7 +36,7 @@ use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
 use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
-use storage_proofs::layered_drgporep;
+use storage_proofs::layered_drgporep::{self, Challenges};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::zigzag_drgporep::*;
@@ -92,7 +92,7 @@ fn do_the_work<H: 'static>(
     m: usize,
     expansion_degree: usize,
     sloth_iter: usize,
-    challenge_count: usize,
+    challenges: Challenges,
     layers: usize,
     partitions: usize,
     circuit: bool,
@@ -108,7 +108,7 @@ fn do_the_work<H: 'static>(
     info!(FCP_LOG, "m: {}", m; "target" => "config");
     info!(FCP_LOG, "expansion_degree: {}", expansion_degree; "target" => "config");
     info!(FCP_LOG, "sloth: {}", sloth_iter; "target" => "config");
-    info!(FCP_LOG, "challenge_count: {}", challenge_count; "target" => "config");
+    info!(FCP_LOG, "challenges: {:?}", challenges; "target" => "config");
     info!(FCP_LOG, "layers: {}", layers; "target" => "config");
     info!(FCP_LOG, "partitions: {}", partitions; "target" => "config");
     info!(FCP_LOG, "circuit: {:?}", circuit; "target" => "config");
@@ -134,7 +134,7 @@ fn do_the_work<H: 'static>(
             sloth_iter,
         },
         layers,
-        challenge_count,
+        challenges: challenges.clone(),
     };
 
     info!(FCP_LOG, "running setup");
@@ -153,7 +153,7 @@ fn do_the_work<H: 'static>(
     stop_profile();
     let pub_inputs = layered_drgporep::PublicInputs::<H::Domain> {
         replica_id,
-        challenge_count,
+        challenges,
         tau: Some(tau.simplify().into()),
         comm_r_star: tau.comm_r_star,
         k: Some(0),
@@ -398,6 +398,7 @@ fn main() {
     let expansion_degree = value_t!(matches, "exp", usize).unwrap();
     let sloth_iter = value_t!(matches, "sloth", usize).unwrap();
     let challenge_count = value_t!(matches, "challenges", usize).unwrap();
+    let challenges = Challenges::new_fixed(challenge_count);
     let hasher = value_t!(matches, "hasher", String).unwrap();
     let layers = value_t!(matches, "layers", usize).unwrap();
     let partitions = value_t!(matches, "partitions", usize).unwrap();
@@ -414,7 +415,7 @@ fn main() {
                 m,
                 expansion_degree,
                 sloth_iter,
-                challenge_count,
+                challenges,
                 layers,
                 partitions,
                 circuit,
@@ -429,7 +430,7 @@ fn main() {
                 m,
                 expansion_degree,
                 sloth_iter,
-                challenge_count,
+                challenges,
                 layers,
                 partitions,
                 circuit,
@@ -444,7 +445,7 @@ fn main() {
                 m,
                 expansion_degree,
                 sloth_iter,
-                challenge_count,
+                challenges,
                 layers,
                 partitions,
                 circuit,

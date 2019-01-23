@@ -62,7 +62,9 @@ mod tests {
     use crate::drgraph::new_seed;
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
-    use crate::layered_drgporep::{PrivateInputs, PublicInputs, PublicParams, SetupParams};
+    use crate::layered_drgporep::{
+        Challenges, PrivateInputs, PublicInputs, PublicParams, SetupParams,
+    };
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
 
@@ -88,7 +90,7 @@ mod tests {
         let sloth_iter = 1;
         let replica_id: H::Domain = rng.gen();
         let data = vec![2u8; 32 * 3];
-        let challenge_count = 5;
+        let challenges = Challenges::new_fixed(5);
 
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
@@ -104,7 +106,7 @@ mod tests {
                 sloth_iter,
             },
             layers: DEFAULT_ZIGZAG_LAYERS,
-            challenge_count,
+            challenges: challenges.clone(),
         };
 
         let mut pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
@@ -119,7 +121,7 @@ mod tests {
         let transformed_params = PublicParams {
             drg_porep_public_params: pp.drg_porep_public_params,
             layers: pp.layers,
-            challenge_count,
+            challenges: challenges.clone(),
         };
 
         assert_ne!(data, data_copy);
@@ -152,7 +154,7 @@ mod tests {
             .collect();
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
-        let challenge_count = 5;
+        let challenges = Challenges::new_fixed(5);
         let partitions = 2;
 
         let sp = SetupParams {
@@ -166,7 +168,7 @@ mod tests {
                 sloth_iter,
             },
             layers: DEFAULT_ZIGZAG_LAYERS,
-            challenge_count,
+            challenges: challenges.clone(),
         };
 
         let pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
@@ -177,7 +179,7 @@ mod tests {
 
         let pub_inputs = PublicInputs::<H::Domain> {
             replica_id,
-            challenge_count,
+            challenges,
             tau: Some(tau.simplify().into()),
             comm_r_star: tau.comm_r_star,
             k: None,

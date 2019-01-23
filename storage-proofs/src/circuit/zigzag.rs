@@ -327,10 +327,11 @@ mod tests {
     use crate::drgraph::new_seed;
     use crate::fr32::fr_into_bytes;
     use crate::hasher::pedersen::*;
-    use crate::layered_drgporep;
+    use crate::layered_drgporep::{self, Challenges};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
     use crate::zigzag_graph::{ZigZag, ZigZagGraph};
+
     use pairing::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
@@ -341,7 +342,7 @@ mod tests {
         let nodes = 5;
         let degree = 1;
         let expansion_degree = 2;
-        let challenge_count = 1;
+        let challenges = Challenges::new_fixed(1);
         let num_layers = 2;
         let sloth_iter = 1;
 
@@ -369,7 +370,7 @@ mod tests {
                 sloth_iter,
             },
             layers: num_layers,
-            challenge_count,
+            challenges: challenges.clone(),
         };
 
         let pp = ZigZagDrgPoRep::setup(&sp).unwrap();
@@ -382,7 +383,7 @@ mod tests {
 
         let pub_inputs = layered_drgporep::PublicInputs::<PedersenDomain> {
             replica_id: replica_id.into(),
-            challenge_count,
+            challenges: challenges.clone(),
             tau: Some(tau.simplify().into()),
             comm_r_star: tau.comm_r_star.into(),
             k: None,
@@ -455,7 +456,7 @@ mod tests {
         let base_degree = 2;
         let expansion_degree = 2;
         let replica_id: Fr = rng.gen();
-        let challenge_count = 1;
+        let challenges = Challenges::new_fixed(1);
         let challenge = 1;
         let sloth_iter = 2;
 
@@ -479,7 +480,7 @@ mod tests {
                 sloth_iter,
             ),
             layers: num_layers,
-            challenge_count,
+            challenges,
         };
 
         ZigZagCircuit::<Bls12, PedersenHasher>::synthesize(
@@ -506,7 +507,7 @@ mod tests {
         let nodes = 5;
         let degree = 2;
         let expansion_degree = 1;
-        let challenge_count = 2;
+        let challenges = Challenges::new_fixed(2);
         let num_layers = 2;
         let sloth_iter = 1;
         let partition_count = 1;
@@ -538,7 +539,7 @@ mod tests {
                     sloth_iter,
                 },
                 layers: num_layers,
-                challenge_count,
+                challenges: challenges.clone(),
             },
             partitions: Some(partition_count),
         };
@@ -555,7 +556,7 @@ mod tests {
 
         let public_inputs = layered_drgporep::PublicInputs::<PedersenDomain> {
             replica_id: replica_id.into(),
-            challenge_count,
+            challenges: challenges.clone(),
             tau: Some(tau.simplify()),
             comm_r_star: tau.comm_r_star,
             k: None,

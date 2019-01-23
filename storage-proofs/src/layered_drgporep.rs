@@ -18,11 +18,36 @@ use crate::proof::ProofScheme;
 use crate::vde;
 use crate::SP_LOG;
 
+#[derive(Debug, Clone)]
+pub enum Challenges {
+    Fixed(usize),
+    Tapered { lambda: usize, levels: usize },
+}
+
+impl Challenges {
+    pub const fn new_fixed(count: usize) -> Self {
+        Challenges::Fixed(count)
+    }
+
+    pub const fn new_tapered(lambda: usize, levels: usize) -> Self {
+        Challenges::Tapered { lambda, levels }
+    }
+
+    pub fn challenges_for_layer(&self, layer: u8) -> usize {
+        match self {
+            Challenges::Fixed(size) => *size,
+            Challenges::Tapered { lambda, levels } => {
+                unimplemented!("tapered challenges");
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct SetupParams {
     pub drg_porep_setup_params: drgporep::SetupParams,
     pub layers: usize,
-    pub challenge_count: usize,
+    pub challenges: Challenges,
 }
 
 #[derive(Debug, Clone)]
@@ -33,7 +58,7 @@ where
 {
     pub drg_porep_public_params: drgporep::PublicParams<H, G>,
     pub layers: usize,
-    pub challenge_count: usize,
+    pub challenges: Challenges,
 }
 
 #[derive(Debug, Clone)]
@@ -59,10 +84,10 @@ where
 {
     fn parameter_set_identifier(&self) -> String {
         format!(
-            "layered_drgporep::PublicParams{{ drg_porep_identifier: {}, layers: {}, challenge_count: {} }}",
+            "layered_drgporep::PublicParams{{ drg_porep_identifier: {}, layers: {}, challenges: {:?} }}",
             self.drg_porep_public_params.parameter_set_identifier(),
             self.layers,
-            self.challenge_count,
+            self.challenges,
         )
     }
 }
@@ -76,7 +101,7 @@ where
         PublicParams {
             drg_porep_public_params: pp.drg_porep_public_params.clone(),
             layers: pp.layers,
-            challenge_count: pp.challenge_count,
+            challenges: pp.challenges.clone(),
         }
     }
 }
@@ -86,7 +111,7 @@ pub type EncodingProof<H> = drgporep::Proof<H>;
 #[derive(Debug, Clone)]
 pub struct PublicInputs<T: Domain> {
     pub replica_id: T,
-    pub challenge_count: usize,
+    pub challenges: Challenges,
     pub tau: Option<porep::Tau<T>>,
     pub comm_r_star: T,
     pub k: Option<usize>,
@@ -95,7 +120,7 @@ pub struct PublicInputs<T: Domain> {
 impl<T: Domain> PublicInputs<T> {
     pub fn challenges(&self, leaves: usize, layer: u8, partition_k: Option<usize>) -> Vec<usize> {
         derive_challenges::<T>(
-            self.challenge_count,
+            &self.challenges,
             layer,
             leaves,
             &self.replica_id,
@@ -390,7 +415,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         let pp = PublicParams {
             drg_porep_public_params: dp_sp,
             layers: sp.layers,
-            challenge_count: sp.challenge_count,
+            challenges: sp.challenges.clone(),
         };
 
         Ok(pp)
@@ -506,7 +531,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
     fn with_partition(pub_in: Self::PublicInputs, k: Option<usize>) -> Self::PublicInputs {
         self::PublicInputs {
             replica_id: pub_in.replica_id,
-            challenge_count: pub_in.challenge_count,
+            challenges: pub_in.challenges,
             tau: pub_in.tau,
             comm_r_star: pub_in.comm_r_star,
             k,

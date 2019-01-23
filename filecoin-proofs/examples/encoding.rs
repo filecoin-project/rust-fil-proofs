@@ -30,7 +30,7 @@ use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
 use storage_proofs::hasher::{Hasher, PedersenHasher};
-use storage_proofs::layered_drgporep;
+use storage_proofs::layered_drgporep::{self, Challenges};
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::vde;
 use storage_proofs::zigzag_drgporep::*;
@@ -110,7 +110,7 @@ where
             sloth_iter,
         },
         layers: 1,
-        challenge_count: 1,
+        challenges: Challenges::new_fixed(1),
     };
 
     info!(FCP_LOG, "running setup");
