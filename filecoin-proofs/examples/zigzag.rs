@@ -93,7 +93,6 @@ fn do_the_work<H: 'static>(
     expansion_degree: usize,
     sloth_iter: usize,
     challenges: Challenges,
-    layers: usize,
     partitions: usize,
     circuit: bool,
     groth: bool,
@@ -109,7 +108,7 @@ fn do_the_work<H: 'static>(
     info!(FCP_LOG, "expansion_degree: {}", expansion_degree; "target" => "config");
     info!(FCP_LOG, "sloth: {}", sloth_iter; "target" => "config");
     info!(FCP_LOG, "challenges: {:?}", challenges; "target" => "config");
-    info!(FCP_LOG, "layers: {}", layers; "target" => "config");
+    info!(FCP_LOG, "layers: {}", challenges.layers(); "target" => "config");
     info!(FCP_LOG, "partitions: {}", partitions; "target" => "config");
     info!(FCP_LOG, "circuit: {:?}", circuit; "target" => "config");
     info!(FCP_LOG, "groth: {:?}", groth; "target" => "config");
@@ -133,7 +132,6 @@ fn do_the_work<H: 'static>(
             },
             sloth_iter,
         },
-        layers,
         challenges: challenges.clone(),
     };
 
@@ -398,7 +396,6 @@ fn main() {
     let expansion_degree = value_t!(matches, "exp", usize).unwrap();
     let sloth_iter = value_t!(matches, "sloth", usize).unwrap();
     let challenge_count = value_t!(matches, "challenges", usize).unwrap();
-    let challenges = Challenges::new_fixed(challenge_count);
     let hasher = value_t!(matches, "hasher", String).unwrap();
     let layers = value_t!(matches, "layers", usize).unwrap();
     let partitions = value_t!(matches, "partitions", usize).unwrap();
@@ -406,6 +403,8 @@ fn main() {
     let bench = !matches.is_present("no-bench");
     let circuit = matches.is_present("circuit");
     let extract = matches.is_present("extract");
+
+    let challenges = Challenges::new_fixed(layers, challenge_count);
 
     info!(FCP_LOG, "hasher: {}", hasher; "target" => "config");
     match hasher.as_ref() {
@@ -416,7 +415,6 @@ fn main() {
                 expansion_degree,
                 sloth_iter,
                 challenges,
-                layers,
                 partitions,
                 circuit,
                 groth,
@@ -431,7 +429,6 @@ fn main() {
                 expansion_degree,
                 sloth_iter,
                 challenges,
-                layers,
                 partitions,
                 circuit,
                 groth,
@@ -446,7 +443,6 @@ fn main() {
                 expansion_degree,
                 sloth_iter,
                 challenges,
-                layers,
                 partitions,
                 circuit,
                 groth,

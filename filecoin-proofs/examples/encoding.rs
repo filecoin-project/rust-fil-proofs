@@ -109,8 +109,7 @@ where
             },
             sloth_iter,
         },
-        layers: 1,
-        challenges: Challenges::new_fixed(1),
+        challenges: Challenges::new_fixed(1, 1),
     };
 
     info!(FCP_LOG, "running setup");

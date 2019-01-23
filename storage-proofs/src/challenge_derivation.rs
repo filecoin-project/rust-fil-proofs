@@ -14,7 +14,7 @@ pub fn derive_challenges<D: Domain>(
     commitment: &D,
     k: u8,
 ) -> Vec<usize> {
-    let n = challenges.challenges_for_layer(layer);
+    let n = challenges.challenges_for_layer(layer as usize);
     (0..n)
         .map(|i| {
             let mut bytes = replica_id.into_bytes();
@@ -43,14 +43,15 @@ mod test {
     #[test]
     fn challenge_derivation() {
         let n = 200;
-        let challenges = Challenges::new_fixed(n);
+        let layers = 100;
+
+        let challenges = Challenges::new_fixed(layers, n);
         let leaves = 1 << 30;
         let mut rng = thread_rng();
         let replica_id: PedersenDomain = rng.gen();
         let commitment: PedersenDomain = rng.gen();
         let partitions = 5;
         let total_challenges = partitions * n;
-        let layers = 100;
 
         let mut layers_with_duplicates = 0;
 
@@ -59,7 +60,7 @@ mod test {
             for k in 0..partitions {
                 let challenges = derive_challenges(
                     &challenges,
-                    layer,
+                    layer as u8,
                     leaves,
                     &replica_id,
                     &commitment,
@@ -97,8 +98,8 @@ mod test {
 
         for layer in 0..layers {
             let one_partition_challenges = derive_challenges(
-                &Challenges::new_fixed(total_challenges),
-                layer,
+                &Challenges::new_fixed(layers, total_challenges),
+                layer as u8,
                 leaves,
                 &replica_id,
                 &commitment,
@@ -107,8 +108,8 @@ mod test {
             let many_partition_challenges = (0..partitions)
                 .flat_map(|k| {
                     derive_challenges(
-                        &Challenges::new_fixed(n),
-                        layer,
+                        &Challenges::new_fixed(layers, n),
+                        layer as u8,
                         leaves,
                         &replica_id,
                         &commitment,

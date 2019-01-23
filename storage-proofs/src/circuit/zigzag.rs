@@ -223,7 +223,7 @@ impl<'a, H: 'static + Hasher>
         let comm_r = pub_in.tau.unwrap().comm_r.into();
         inputs.push(comm_r);
 
-        for i in 0..pub_params.layers {
+        for i in 0..pub_params.challenges.layers() {
             let drgporep_pub_inputs = drgporep::PublicInputs {
                 replica_id: pub_in.replica_id,
                 challenges: pub_in.challenges(
@@ -243,7 +243,7 @@ impl<'a, H: 'static + Hasher>
             drgporep_pub_params = <ZigZagDrgPoRep<H> as layered_drgporep::Layers>::transform(
                 &drgporep_pub_params,
                 i,
-                pub_params.layers,
+                pub_params.challenges.layers(),
             );
         }
         inputs.push(pub_in.comm_r_star.into());
@@ -290,7 +290,7 @@ impl<'a, H: 'static + Hasher>
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let replica_id = rng.gen();
 
-        let layers = (0..public_params.layers)
+        let layers = (0..public_params.challenges.layers())
             .map(|_| {
                 let layer_public_inputs = drgporep::PublicInputs {
                     replica_id,
@@ -342,8 +342,8 @@ mod tests {
         let nodes = 5;
         let degree = 1;
         let expansion_degree = 2;
-        let challenges = Challenges::new_fixed(1);
         let num_layers = 2;
+        let challenges = Challenges::new_fixed(num_layers, 1);
         let sloth_iter = 1;
 
         let n = nodes; // FIXME: Consolidate variable names.
@@ -369,7 +369,6 @@ mod tests {
                 },
                 sloth_iter,
             },
-            layers: num_layers,
             challenges: challenges.clone(),
         };
 
@@ -456,7 +455,7 @@ mod tests {
         let base_degree = 2;
         let expansion_degree = 2;
         let replica_id: Fr = rng.gen();
-        let challenges = Challenges::new_fixed(1);
+        let challenges = Challenges::new_fixed(num_layers, 1);
         let challenge = 1;
         let sloth_iter = 2;
 
@@ -479,7 +478,6 @@ mod tests {
                 ZigZagGraph::new_zigzag(n, base_degree, expansion_degree, new_seed()),
                 sloth_iter,
             ),
-            layers: num_layers,
             challenges,
         };
 
@@ -507,8 +505,8 @@ mod tests {
         let nodes = 5;
         let degree = 2;
         let expansion_degree = 1;
-        let challenges = Challenges::new_fixed(2);
         let num_layers = 2;
+        let challenges = Challenges::new_fixed(num_layers, 2);
         let sloth_iter = 1;
         let partition_count = 1;
 
@@ -538,7 +536,6 @@ mod tests {
                     },
                     sloth_iter,
                 },
-                layers: num_layers,
                 challenges: challenges.clone(),
             },
             partitions: Some(partition_count),

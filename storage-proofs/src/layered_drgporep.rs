@@ -20,25 +20,30 @@ use crate::SP_LOG;
 
 #[derive(Debug, Clone)]
 pub enum Challenges {
-    Fixed(usize),
-    Tapered { lambda: usize, levels: usize },
+    Fixed { layers: usize, count: usize },
+    Tapered(Vec<usize>),
 }
 
 impl Challenges {
-    pub const fn new_fixed(count: usize) -> Self {
-        Challenges::Fixed(count)
+    pub const fn new_fixed(layers: usize, count: usize) -> Self {
+        Challenges::Fixed { layers, count }
     }
 
-    pub const fn new_tapered(lambda: usize, levels: usize) -> Self {
-        Challenges::Tapered { lambda, levels }
+    pub fn new_tapered(challenges: Vec<usize>) -> Self {
+        Challenges::Tapered(challenges)
     }
 
-    pub fn challenges_for_layer(&self, layer: u8) -> usize {
+    pub fn layers(&self) -> usize {
         match self {
-            Challenges::Fixed(size) => *size,
-            Challenges::Tapered { lambda, levels } => {
-                unimplemented!("tapered challenges");
-            }
+            Challenges::Fixed { layers, .. } => *layers,
+            Challenges::Tapered(cs) => cs.len(),
+        }
+    }
+
+    pub fn challenges_for_layer(&self, layer: usize) -> usize {
+        match self {
+            Challenges::Fixed { count, .. } => *count,
+            Challenges::Tapered(cs) => cs[layer],
         }
     }
 }
@@ -46,7 +51,6 @@ impl Challenges {
 #[derive(Debug)]
 pub struct SetupParams {
     pub drg_porep_setup_params: drgporep::SetupParams,
-    pub layers: usize,
     pub challenges: Challenges,
 }
 
@@ -57,7 +61,6 @@ where
     G: Graph<H> + ParameterSetIdentifier,
 {
     pub drg_porep_public_params: drgporep::PublicParams<H, G>,
-    pub layers: usize,
     pub challenges: Challenges,
 }
 
@@ -84,9 +87,8 @@ where
 {
     fn parameter_set_identifier(&self) -> String {
         format!(
-            "layered_drgporep::PublicParams{{ drg_porep_identifier: {}, layers: {}, challenges: {:?} }}",
+            "layered_drgporep::PublicParams{{ drg_porep_identifier: {}, challenges: {:?} }}",
             self.drg_porep_public_params.parameter_set_identifier(),
-            self.layers,
             self.challenges,
         )
     }
@@ -100,7 +102,6 @@ where
     fn from(pp: &PublicParams<H, G>) -> PublicParams<H, G> {
         PublicParams {
             drg_porep_public_params: pp.drg_porep_public_params.clone(),
-            layers: pp.layers,
             challenges: pp.challenges.clone(),
         }
     }
@@ -414,7 +415,6 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         let dp_sp = DrgPoRep::setup(&sp.drg_porep_setup_params)?;
         let pp = PublicParams {
             drg_porep_public_params: dp_sp,
-            layers: sp.layers,
             challenges: sp.challenges.clone(),
         };
 
@@ -448,8 +448,8 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
             pub_inputs,
             &priv_inputs.tau,
             &priv_inputs.aux,
-            pub_params.layers,
-            pub_params.layers,
+            pub_params.challenges.layers(),
+            pub_params.challenges.layers(),
             partition_count,
         )?;
 
@@ -475,11 +475,11 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         partition_proofs: &[Self::Proof],
     ) -> Result<bool> {
         for (k, proof) in partition_proofs.iter().enumerate() {
-            if proof.encoding_proofs.len() != pub_params.layers {
+            if proof.encoding_proofs.len() != pub_params.challenges.layers() {
                 return Ok(false);
             }
 
-            let total_layers = pub_params.layers;
+            let total_layers = pub_params.challenges.layers();
             let mut pp = pub_params.drg_porep_public_params.clone();
             // TODO: verification is broken for the first node, figure out how to unbreak
             // with permutations
@@ -568,7 +568,7 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let (taus, auxs) = Self::transform_and_replicate_layers(
             &pp.drg_porep_public_params,
-            pp.layers,
+            pp.challenges.layers(),
             replica_id,
             data,
         )?;
@@ -591,7 +591,7 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
 
         Self::extract_and_invert_transform_layers(
             &pp.drg_porep_public_params,
-            pp.layers,
+            pp.challenges.layers(),
             replica_id,
             &mut data,
         )?;

@@ -114,7 +114,7 @@ const DEGREE: usize = 1; // TODO: 5; FIXME: increasing degree introduces a test 
 const EXPANSION_DEGREE: usize = 6;
 const SLOTH_ITER: usize = 0;
 const LAYERS: usize = 2; // TODO: 10;
-const CHALLENGES: Challenges = Challenges::new_fixed(1);
+const CHALLENGES: Challenges = Challenges::new_fixed(LAYERS, 1);
 
 fn setup_params(sector_bytes: usize) -> layered_drgporep::SetupParams {
     assert!(
@@ -133,7 +133,6 @@ fn setup_params(sector_bytes: usize) -> layered_drgporep::SetupParams {
             },
             sloth_iter: SLOTH_ITER,
         },
-        layers: LAYERS,
         challenges: CHALLENGES,
     }
 }
