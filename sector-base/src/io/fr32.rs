@@ -710,8 +710,13 @@ where
     // Now we are at the element boundary, write entire chunks of full data
     // units with its padding.
 
-    let mut padded_output: Vec<u8> = Vec::new();
-    // TODO: Optimization: Determine the size of this vector and use `with_capacity`.
+    // Estimate how many bytes we'll need for the `padded_output` to allocate
+    // them all at once.
+    let source_bits_left = source.len() * 8 - data_bits_to_write;
+    let padded_output_size =
+        BitByte::from_bits(padding_map.transform_bit_offset(source_bits_left, true)).bytes_needed();
+    // TODO: Optimization: Don't use BitByte here, add a similar function.
+    let mut padded_output: Vec<u8> = Vec::with_capacity(padded_output_size);
 
     if fills_data_unit {
         // If we completed the previous element (`fills_data_unit`) then we may still have
@@ -748,6 +753,9 @@ where
             // this addition will break the loop).
         }
     }
+
+    // Check that our estimated `padded_output_size` was correct.
+    debug_assert_eq!(padded_output.len(), padded_output_size);
 
     target.write_all(&padded_output)?;
 
@@ -832,7 +840,9 @@ where
     let mut raw_data: Vec<u8> = Vec::new();
     // TODO: Similar to the padding process (in the `padded_output` vector)
     // we can determine the final length here instead of allocating more space
-    // in each iteration.
+    // in each iteration. This is harder than the estimation of `padded_output_size`
+    // because we start anywhere (`write_pos`) and we have to take into account
+    // the `max_write_size` restriction.
 
     // Total number of raw data bits we have written (unpadded from the `source`).
     let mut written_bits = 0;
