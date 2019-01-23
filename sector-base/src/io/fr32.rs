@@ -754,7 +754,7 @@ where
         }
     }
 
-    // Check that our estimated `padded_output_size` was correct.
+    // Check that our estimated size was correct.
     debug_assert_eq!(padded_output.len(), padded_output_size);
 
     target.write_all(&padded_output)?;
@@ -835,14 +835,29 @@ where
     // is not byte aligned.
     let max_write_size_bits = max_write_size * 8;
 
+    // Estimate how many bytes we'll need for the `raw_data` to allocate
+    // them all at once. We need to take into account both how much do
+    // we have left to read *and* write, and even then, since we may start
+    // in the middle of an element (`write_pos`) there's some variabitlity
+    // as to how many padding bits will be encountered.
+    // Allow then an *over*-estimation error of 1 byte: `transform_bit_offset`
+    // has the implicit assumption that the data provided is starting at the
+    // beginning of an element, i.e., the padding bits are as far as possible,
+    // which maximizes the chances of not getting an extra `pad_bits` in the
+    // `source` (which are unpadded away and not carried to the `target`). That
+    // is, in this context `transform_bit_offset` is optimistic about the number
+    // of raw data bits we'll be able to recover from a fixed number of `source`
+    // bits.
+    let mut raw_data_size = BitByte::from_bits(
+        padding_map.transform_bit_offset(source.len() * 8 - read_pos.total_bits(), false),
+    )
+    .bytes_needed();
+    raw_data_size = min(raw_data_size, max_write_size);
+    // TODO: Optimization: Don't use BitByte here, add a similar function.
+
     // Recovered raw data unpadded from the `source` which will
     // be written to the `target`.
-    let mut raw_data: Vec<u8> = Vec::new();
-    // TODO: Similar to the padding process (in the `padded_output` vector)
-    // we can determine the final length here instead of allocating more space
-    // in each iteration. This is harder than the estimation of `padded_output_size`
-    // because we start anywhere (`write_pos`) and we have to take into account
-    // the `max_write_size` restriction.
+    let mut raw_data: Vec<u8> = Vec::with_capacity(raw_data_size);
 
     // Total number of raw data bits we have written (unpadded from the `source`).
     let mut written_bits = 0;
@@ -910,6 +925,11 @@ where
     // TODO: Don't write the whole output into a huge BitVec.
     // Instead, write it incrementally –
     // but ONLY when the bits waiting in bits_out are byte-aligned. i.e. a multiple of 8
+
+    // Check that our estimated size was correct, allow it to be overestimated
+    // (not *under*) by 1 byte.
+    debug_assert!(raw_data_size - raw_data.len() <= 1);
+    debug_assert!(raw_data_size >= raw_data.len());
 
     target.write_all(&raw_data)?;
 
