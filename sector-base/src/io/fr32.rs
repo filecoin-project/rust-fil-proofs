@@ -400,10 +400,10 @@ where
     W: Read + Write + Seek,
 {
     // In order to optimize alignment in the common case of writing from an aligned start,
-    // we should make the chunk a multiple of 128.
+    // we should make the chunk a multiple of 127 (4 full elements, see `PaddingMap#alignment`).
     // n was hand-tuned to do reasonably well in the benchmarks.
     let n = 1000;
-    let chunk_size = 128 * n;
+    let chunk_size = 127 * n;
 
     let mut written = 0;
 
@@ -552,7 +552,7 @@ where
     W: Write,
 {
     // In order to optimize alignment in the common case of writing from an aligned start,
-    // we should make the chunk a multiple of 128.
+    // we should make the chunk a multiple of 128 (4 full elements in the padded layout).
     // n was hand-tuned to do reasonably well in the benchmarks.
     let n = 1000;
     let chunk_size = 128 * n;
@@ -700,22 +700,22 @@ mod tests {
         assert_eq!(padded[63], 0b0011_1111);
     }
 
-    // `write_padded` for 256 bytes of 1s, splitting it in two calls of 128 bytes,
+    // `write_padded` for 256 bytes of 1s, splitting it in two calls of 127 bytes,
     // aligning the calls with the padded element boundaries, check padding bits
     // in byte 31 and 63.
     #[test]
     fn test_write_padded_multiple_aligned() {
-        let data = vec![255u8; 256];
+        let data = vec![255u8; 254];
         let buf = Vec::new();
         let mut cursor = Cursor::new(buf);
-        let mut written = write_padded(&data[0..128], &mut cursor).unwrap();
-        written += write_padded(&data[128..], &mut cursor).unwrap();
+        let mut written = write_padded(&data[0..127], &mut cursor).unwrap();
+        written += write_padded(&data[127..], &mut cursor).unwrap();
         let padded = cursor.into_inner();
 
-        assert_eq!(written, 256);
+        assert_eq!(written, 254);
         assert_eq!(
             padded.len(),
-            FR32_PADDING_MAP.transform_byte_offset(256, true)
+            FR32_PADDING_MAP.transform_byte_offset(254, true)
         );
         assert_eq!(&padded[0..31], &data[0..31]);
         assert_eq!(padded[31], 0b0011_1111);
@@ -727,7 +727,7 @@ mod tests {
         // from the previous one.
     }
 
-    // `write_padded` for 265 bytes of 1s, splitting it in two calls of 128 bytes,
+    // `write_padded` for 265 bytes of 1s, splitting it in two calls of 127 bytes,
     // aligning the calls with the padded element boundaries, check padding bits
     // in byte 31 and 63.
     #[test]
@@ -735,8 +735,8 @@ mod tests {
         let data = vec![255u8; 265];
         let buf = Vec::new();
         let mut cursor = Cursor::new(buf);
-        let mut written = write_padded(&data[0..128], &mut cursor).unwrap();
-        written += write_padded(&data[128..], &mut cursor).unwrap();
+        let mut written = write_padded(&data[0..127], &mut cursor).unwrap();
+        written += write_padded(&data[127..], &mut cursor).unwrap();
         let padded = cursor.into_inner();
 
         assert_eq!(written, 265);
