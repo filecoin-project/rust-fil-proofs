@@ -210,12 +210,7 @@ impl BitByte {
 
     // How many distinct bytes are needed to represent data of this size?
     pub fn bytes_needed(&self) -> usize {
-        self.bytes
-            + if self.bits == 0 {
-                0
-            } else {
-                (self.bits + 8) / 8
-            }
+        self.bytes + if self.bits == 0 { 0 } else { 1 }
     }
 }
 
@@ -552,7 +547,6 @@ pub fn extract_bits_and_shift(
     // (1).
     let input = &input[skip_bytes..];
     let input = &input[..BitByte::from_bits(extraction_offset + num_bits).bytes_needed()];
-    // TODO: Optimization: Don't use BitByte here, add a similar function.
 
     // (2).
     let mut output = if new_offset < extraction_offset {
@@ -572,7 +566,6 @@ pub fn extract_bits_and_shift(
     if output.len() > BitByte::from_bits(new_offset + num_bits).bytes_needed() {
         output.pop();
     }
-    // TODO: Optimization: Don't use BitByte here, add a similar function.
     // TODO: Optimization: A more specialized shift would have just dropped
     // that byte (we would need to pass it the `num_bits` we want).
 
@@ -715,7 +708,6 @@ where
     let source_bits_left = source.len() * 8 - data_bits_to_write;
     let padded_output_size =
         BitByte::from_bits(padding_map.transform_bit_offset(source_bits_left, true)).bytes_needed();
-    // TODO: Optimization: Don't use BitByte here, add a similar function.
     let mut padded_output: Vec<u8> = Vec::with_capacity(padded_output_size);
 
     if fills_data_unit {
@@ -853,7 +845,6 @@ where
     )
     .bytes_needed();
     raw_data_size = min(raw_data_size, max_write_size);
-    // TODO: Optimization: Don't use BitByte here, add a similar function.
 
     // Recovered raw data unpadded from the `source` which will
     // be written to the `target`.
