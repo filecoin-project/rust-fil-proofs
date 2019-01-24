@@ -7,7 +7,7 @@ license = "MIT OR Apache-2.0"
 edition = "2018"
 
 [dependencies]
-bitvec = "0.5"
+bitvec = "0.9"
 failure = "0.1"
 itertools = "0.7.3"
 libc = "0.2"
