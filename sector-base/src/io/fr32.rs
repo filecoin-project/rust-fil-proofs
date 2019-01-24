@@ -902,15 +902,11 @@ where
             // takes care of setting to zero the bits beyond the extraction limit we
             // can just `OR` the two.
             *(raw_data.last_mut().unwrap()) |= *(recovered.first().unwrap());
-            recovered.remove(0);
-            // The contents of the first byte of `recovered` have been transferred to
-            // `raw_data`, we can drop it (we should always have `recovered` something,
-            // otherwise it's fine to panic here).
-            // TODO: Removing from the front of the vector seems like an expensive work
-            // we can just ignore it and append [1..] to raw_data later.
+            raw_data.append(&mut recovered[1..].to_vec());
+        } else {
+            raw_data.append(&mut recovered);
         }
 
-        raw_data.append(&mut recovered);
         written_bits += bits_to_extract;
         write_bit_offset = written_bits % 8;
 
