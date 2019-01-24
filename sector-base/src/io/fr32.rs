@@ -1288,10 +1288,6 @@ mod tests {
         }
     }
 
-    // TODO: Add a test that checks integrity counting the number of set bits
-    // before and after padding. This would need to assume that padding is
-    // always zero and the DC bit are also zero in the underlying implementation.
-
     // TODO: Add a test that drops the last part of an element and tries to recover
     // the rest of the data (may already be present in some form in the above tests).
 }
