@@ -9,10 +9,11 @@ pub trait Vdf<T: Domain>: Clone + ::std::fmt::Debug {
     type PublicParams: Clone + ::std::fmt::Debug;
     type Proof: Clone + ::std::fmt::Debug + Serialize + DeserializeOwned;
 
-    fn setup(_: &Self::SetupParams) -> Result<Self::PublicParams>;
-    fn eval(_: &Self::PublicParams, _: &T) -> Result<(T, Self::Proof)>;
-    fn verify(_: &Self::PublicParams, _: &T, _: &T, _: &Self::Proof) -> Result<bool>;
+    fn setup(setup_params: &Self::SetupParams) -> Result<Self::PublicParams>;
+    fn eval(public_params: &Self::PublicParams, input: &T) -> Result<(T, Self::Proof)>;
+    fn verify(public_params: &Self::PublicParams, input: &T, proof: &Self::Proof) -> Result<bool>;
 
     fn key(pp: &Self::PublicParams) -> T;
     fn rounds(pp: &Self::PublicParams) -> usize;
+    fn extract_output(proof: &Self::Proof) -> T;
 }

@@ -1,3 +1,4 @@
+use crate::api::internal::PoStOutput;
 use crate::api::responses::err_code_and_msg;
 use crate::api::responses::FCPResponseStatus;
 use crate::api::responses::FFIPieceMetadata;
@@ -69,7 +70,7 @@ pub unsafe extern "C" fn verify_seal(
                 response.is_valid = false;
             }
             Err(err) => {
-                let (code, ptr) = err_code_and_msg(&err.into());
+                let (code, ptr) = err_code_and_msg(&err);
                 response.status_code = code;
                 response.error_msg = ptr;
             }
@@ -87,18 +88,12 @@ pub unsafe extern "C" fn verify_seal(
 
 /// Generates a proof-of-spacetime for the given replica commitments.
 ///
-/// # Arguments
-///
-/// * `flattened_comm_rs_ptr` - pointer to the first cell in an array containing replica commitment
-///                             bytes
-/// * `flattened_comm_rs_len` - number of bytes in the flattened_comm_rs_ptr array (must be a
-///                             multiple of 32)
-/// * `_challenge_seed`       - currently unused
 #[no_mangle]
 pub unsafe extern "C" fn generate_post(
+    ptr: *mut SectorBuilder,
     flattened_comm_rs_ptr: *const u8,
     flattened_comm_rs_len: libc::size_t,
-    _challenge_seed: &[u8; 32],
+    challenge_seed: &[u8; 32],
 ) -> *mut responses::GeneratePoSTResponse {
     let comm_rs = from_raw_parts(flattened_comm_rs_ptr, flattened_comm_rs_len)
         .iter()
@@ -111,24 +106,30 @@ pub unsafe extern "C" fn generate_post(
             acc
         });
 
-    // if more than one comm_r was provided, pretend like the first was faulty
-    let fault_idxs: Vec<u64> = vec![0]
-        .into_iter()
-        .take(if comm_rs.len() > 1 { 1 } else { 0 })
-        .collect();
+    let mut response: responses::GeneratePoSTResponse = Default::default();
 
-    let mut result: responses::GeneratePoSTResponse = Default::default();
+    match (*ptr).generate_post(&comm_rs, challenge_seed) {
+        Ok(PoStOutput {
+            snark_proof,
+            faults,
+        }) => {
+            response.status_code = FCPResponseStatus::FCPNoError;
+            response.proof = snark_proof;
 
-    result.faults_len = fault_idxs.len();
-    result.faults_ptr = fault_idxs.as_ptr();
+            response.faults_len = faults.len();
+            response.faults_ptr = faults.as_ptr();
 
-    // tell Rust to forget about the Vec; we'll free it when we free the GeneratePoSTResult
-    mem::forget(fault_idxs);
+            // we'll free this stuff when we free the GeneratePoSTResponse
+            mem::forget(faults);
+        }
+        Err(err) => {
+            let (code, ptr) = err_code_and_msg(&err);
+            response.status_code = code;
+            response.error_msg = ptr;
+        }
+    }
 
-    // write some fake proof
-    result.proof = [42; API_POST_PROOF_BYTES];
-
-    Box::into_raw(Box::new(result))
+    raw_ptr(response)
 }
 
 /// Verifies that a proof-of-spacetime is valid.
@@ -481,44 +482,4 @@ pub unsafe extern "C" fn get_staged_sectors(
     }
 
     raw_ptr(response)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rand::{thread_rng, Rng};
-
-    #[test]
-    fn generate_verify_post_roundtrip_test() {
-        unsafe {
-            let comm_rs: [u8; 32] = thread_rng().gen();
-            let challenge_seed: [u8; 32] = thread_rng().gen();
-            let generate_post_res = generate_post(&comm_rs[0], 32, &challenge_seed);
-
-            assert_eq!(
-                FCPResponseStatus::FCPNoError,
-                (*generate_post_res).status_code,
-                "generate_post failed"
-            );
-
-            let verify_post_res = verify_post(
-                &comm_rs[0],
-                32,
-                &challenge_seed,
-                &(*generate_post_res).proof,
-                (*generate_post_res).faults_ptr,
-                (*generate_post_res).faults_len,
-            );
-
-            assert_eq!(
-                FCPResponseStatus::FCPNoError,
-                (*verify_post_res).status_code,
-                "error verifying PoSt"
-            );
-            assert_eq!(true, (*verify_post_res).is_valid, "invalid PoSt");
-
-            responses::destroy_generate_post_response(generate_post_res);
-            responses::destroy_verify_post_response(verify_post_res);
-        }
-    }
 }

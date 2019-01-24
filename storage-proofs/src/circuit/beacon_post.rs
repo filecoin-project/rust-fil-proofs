@@ -5,7 +5,7 @@ use pairing::bls12_381::{Bls12, Fr};
 use sapling_crypto::jubjub::JubjubEngine;
 
 use crate::beacon_post::BeaconPoSt;
-use crate::circuit::hvh_post;
+use crate::circuit::vdf_post;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::hasher::Hasher;
 use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
@@ -17,17 +17,16 @@ pub struct BeaconPoStCircuit<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> 
     /// Parameters for the engine.
     pub params: &'a E::Params,
 
-    // Beacon
-    // TODO:
-    // pub beacon_randomness_vec: Vec<Option<E::Fr>>,
-    // pub challenges_vec: Vec<Vec<Option<E::Fr>>>,
-
-    // HVH-PoSt
+    // VDF-PoSt
+    pub challenge_seed: Option<E::Fr>,
     pub vdf_key: Option<E::Fr>,
     pub vdf_ys_vec: Vec<Vec<Option<E::Fr>>>,
     pub vdf_xs_vec: Vec<Vec<Option<E::Fr>>>,
     pub vdf_sloth_rounds: usize,
+    pub challenges_vec_vec: Vec<Vec<Vec<usize>>>,
+    pub challenged_sectors_vec_vec: Vec<Vec<Vec<usize>>>,
     pub challenged_leafs_vec_vec: Vec<Vec<Vec<Option<E::Fr>>>>,
+    pub root_commitment: Option<E::Fr>,
     pub commitments_vec_vec: Vec<Vec<Vec<Option<E::Fr>>>>,
     pub paths_vec_vec: Vec<Vec<Vec<Vec<Option<(E::Fr, bool)>>>>>,
     _h: PhantomData<H>,
@@ -51,6 +50,7 @@ impl<'a, H: Hasher, V: Vdf<H::Domain>>
 where
     <V as Vdf<H::Domain>>::PublicParams: Send + Sync,
     <V as Vdf<H::Domain>>::Proof: Send + Sync,
+    V: Sync + Send,
     H: 'a,
 {
     fn generate_public_inputs(
@@ -79,48 +79,6 @@ impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParamet
     }
 }
 
-// fn extract_post_input<E: JubjubEngine, CS: ConstraintSystem<E>>(
-//     _cs: &mut CS,
-//     _params: &E::Params,
-// ) -> Result<num::AllocatedNum<E>, SynthesisError> {
-//     unimplemented!()
-// }
-
-// fn derive_challenges<E: JubjubEngine, CS: ConstraintSystem<E>>(
-//     cs: &mut CS,
-//     params: &E::Params,
-//     count: usize,
-//     t: usize,
-//     x: Option<&num::AllocatedNum<E>>,
-//     r: &num::AllocatedNum<E>,
-// ) -> Result<Vec<num::AllocatedNum<E>>, SynthesisError> {
-//     let t_u32 = uint32::UInt32::alloc(cs.namespace(|| "t_u32"), Some(t as u32))?;
-//     let t_bits = t_u32.into_bits();
-//     let x_bits = x.map(|x| x.into_bits_le(cs.namespace(|| "x_bits")));
-
-//     let mut res = Vec::new();
-//     for i in 0..count {
-//         let mut cs = cs.namespace(|| format!("count_{}", i));
-//         let i_u32 = uint32::UInt32::alloc(cs.namespace(|| "i_u32"), Some(i as u32))?;
-
-//         let mut bits: Vec<Boolean> = Vec::new();
-
-//         if let Some(x_bits) = x_bits {
-//             bits.extend(x_bits.as_ref()?);
-//         }
-
-//         bits.extend(r.into_bits_le(cs.namespace(|| "r_bits"))?);
-//         bits.extend(&t_bits);
-//         bits.extend(i_u32.into_bits());
-
-//         let h =
-//             pedersen_compression_num(cs.namespace(|| format!("hash_{}", i)), params, &bits[..])?;
-//         res.push(h);
-//     }
-
-//     Ok(res)
-// }
-
 impl<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> Circuit<E>
     for BeaconPoStCircuit<'a, E, H, V>
 {
@@ -131,81 +89,21 @@ impl<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> Circuit<E>
         assert_eq!(self.challenged_leafs_vec_vec.len(), post_periods_count);
         assert_eq!(self.commitments_vec_vec.len(), post_periods_count);
         assert_eq!(self.paths_vec_vec.len(), post_periods_count);
-        // assert_eq!(self.beacon_randomness_vec.len(), post_periods_count);
-        // assert_eq!(self.challenges_vec.len(), post_periods_count);
 
-        // t = 0
-        {
-            // let mut cs = cs.namespace(|| "t_0");
-            // let r = num::AllocatedNum::alloc(cs.namespace(|| "r"), || {
-            //     self.beacon_randomness_vec[0].ok_or_else(|| SynthesisError::AssignmentMissing)
-            // })?;
-
-            // let challenges = derive_challenges(
-            //     cs.namespace(|| "derive_challenge"),
-            //     self.params,
-            //     0,
-            //     None,
-            //     &r,
-            // )?;
-            // for (actual, expected) in challenges.iter().zip(self.challenges_vec[0].iter()) {
-            //     let mut cs = cs.namespace(|| format!("challenge_check_{}", i));
-
-            //     let expected_num = num::AllocatedNum::alloc(cs.namespace(|| "expected"), || {
-            //         expected.ok_or_else(|| SynthesisError::AssignmentMissing)
-            //     })?;
-
-            //     constraint::equal(&mut cs, || "challenge_equality", actual, expected_num);
-            // }
-
-            hvh_post::HvhPostCircuit::synthesize(
-                &mut cs.namespace(|| "hvh_post"),
-                self.params,
-                self.vdf_key,
-                self.vdf_ys_vec[0].clone(),
-                self.vdf_xs_vec[0].clone(),
-                self.vdf_sloth_rounds,
-                self.challenged_leafs_vec_vec[0].clone(),
-                self.commitments_vec_vec[0].clone(),
-                self.paths_vec_vec[0].clone(),
-            )?;
-        }
-
-        // t = 1..periods_count
-        for t in 1..post_periods_count {
+        for t in 0..post_periods_count {
             let mut cs = cs.namespace(|| format!("t_{}", t));
-
-            // let r = num::AllocatedNum::alloc(cs.namespace(|| "r"), || {
-            //     self.beacon_randomness_vec[t].ok_or_else(|| SynthesisError::AssignmentMissing)
-            // })?;
-
-            // let x = extract_post_input(cs.namespace(|| "extract_post_input"), self.params)?;
-
-            // let challenges = derive_challenges(
-            //     cs.namespace(|| "derive_challenge"),
-            //     self.params,
-            //     t,
-            //     Some(&x),
-            //     &r,
-            // )?;
-            // for (actual, expected) in challenges.iter().zip(self.challenges_vec[t].iter()) {
-            //     let mut cs = cs.namespace(|| format!("challenge_check_{}", i));
-
-            //     let expected_num = num::AllocatedNum::alloc(cs.namespace(|| "expected"), || {
-            //         expected.ok_or_else(|| SynthesisError::AssignmentMissing)
-            //     })?;
-
-            //     constraint::equal(&mut cs, || "challenge_equality", actual, expected_num);
-            // }
-
-            hvh_post::HvhPostCircuit::synthesize(
-                &mut cs.namespace(|| "hvh_post"),
+            vdf_post::VDFPoStCircuit::synthesize(
+                &mut cs.namespace(|| "vdf_post"),
                 self.params,
+                self.challenge_seed,
                 self.vdf_key,
                 self.vdf_ys_vec[t].clone(),
                 self.vdf_xs_vec[t].clone(),
                 self.vdf_sloth_rounds,
+                self.challenges_vec_vec[t].clone(),
+                self.challenged_sectors_vec_vec[t].clone(),
                 self.challenged_leafs_vec_vec[t].clone(),
+                self.root_commitment,
                 self.commitments_vec_vec[t].clone(),
                 self.paths_vec_vec[t].clone(),
             )?;
@@ -223,13 +121,12 @@ mod tests {
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
 
-    use crate::beacon_post;
+    use crate::beacon_post::{self, Beacon};
     use crate::circuit::test::*;
     use crate::drgraph::{new_seed, BucketGraph, Graph};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::pedersen::*;
-    use crate::hvh_post;
-    //use crate::proof::ProofScheme;
+    use crate::vdf_post::{self, compute_root_commitment};
     use crate::vdf_sloth;
 
     #[test]
@@ -240,7 +137,7 @@ mod tests {
         let lambda = 32;
 
         let sp = beacon_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
-            setup_params_hvh_post: hvh_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
+            vdf_post_setup_params: vdf_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
                 challenge_count: 4,
                 sector_size: 256 * lambda,
                 post_epochs: 3,
@@ -300,7 +197,7 @@ mod tests {
                     .porep_proofs
                     .iter()
                     .take(vdf_ys_vec[0].len())
-                    .map(|p| Some(hvh_post::extract_vdf_input::<PedersenHasher>(p).into()))
+                    .map(|p| Some(vdf_post::extract_vdf_input::<PedersenHasher>(p).into()))
                     .collect()
             })
             .collect::<Vec<_>>();
@@ -308,7 +205,8 @@ mod tests {
         let mut paths_vec_vec = Vec::new();
         let mut challenged_leafs_vec_vec = Vec::new();
         let mut commitments_vec_vec = Vec::new();
-
+        let mut challenges_vec_vec = Vec::new();
+        let mut challenged_sectors_vec_vec = Vec::new();
         for p in proof.proofs() {
             let mut paths_vec = Vec::new();
             let mut challenged_leafs_vec = Vec::new();
@@ -350,20 +248,28 @@ mod tests {
             paths_vec_vec.push(paths_vec);
             challenged_leafs_vec_vec.push(challenged_leafs_vec);
             commitments_vec_vec.push(commitments_vec);
+            challenges_vec_vec.push(p.challenges.clone());
+            challenged_sectors_vec_vec.push(p.challenged_sectors.clone());
         }
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
+
+        let mut beacon = Beacon::default();
 
         let instance = BeaconPoStCircuit::<Bls12, PedersenHasher, vdf_sloth::Sloth> {
             params,
             // beacon_randomness_vec,
             // challenges_vec,
-            vdf_key: Some(pub_params.pub_params_hvh_post.pub_params_vdf.key.into()),
+            challenges_vec_vec,
+            challenged_sectors_vec_vec,
+            challenge_seed: Some(beacon.get::<PedersenDomain>(0).into()),
+            vdf_key: Some(pub_params.vdf_post_pub_params.pub_params_vdf.key.into()),
             vdf_xs_vec,
             vdf_ys_vec,
-            vdf_sloth_rounds: pub_params.pub_params_hvh_post.pub_params_vdf.rounds,
+            vdf_sloth_rounds: pub_params.vdf_post_pub_params.pub_params_vdf.rounds,
             challenged_leafs_vec_vec,
             paths_vec_vec,
+            root_commitment: Some(compute_root_commitment(&pub_inputs.commitments).into()),
             commitments_vec_vec,
             _h: PhantomData,
             _v: PhantomData,
@@ -375,8 +281,8 @@ mod tests {
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
-        assert_eq!(cs.num_inputs(), 79, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 398160, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 7, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 132711, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
     }
 }
