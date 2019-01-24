@@ -1064,7 +1064,7 @@ mod tests {
 
     // `write_padded` for 256 bytes of 1s, splitting it in two calls of 127 bytes,
     // aligning the calls with the padded element boundaries, check padding bits
-    // in byte 31 and 63.
+    // in the call's boundaries.
     #[test]
     fn test_write_padded_multiple_aligned() {
         let data = vec![255u8; 254];
@@ -1079,19 +1079,14 @@ mod tests {
             padded.len(),
             FR32_PADDING_MAP.transform_byte_offset(254, true)
         );
-        assert_eq!(&padded[0..31], &data[0..31]);
-        assert_eq!(padded[31], 0b0011_1111);
-        assert_eq!(padded[32], 0b1111_1111);
-        assert_eq!(&padded[33..63], vec![255u8; 30].as_slice());
-        assert_eq!(padded[63], 0b0011_1111);
-        // TODO: This test is not checking the padding in the boundary between the
-        // `write_padded` calls, it doesn't seem then to be testing anything different
-        // from the previous one.
+        assert_eq!(padded[127], 0b0011_1111);
+        assert_eq!(padded[128], 0b1111_1111);
+        assert_eq!(&padded[128..159], vec![255u8; 31].as_slice());
     }
 
     // `write_padded` for 265 bytes of 1s, splitting it in two calls of 127 bytes,
     // aligning the calls with the padded element boundaries, check padding bits
-    // in byte 31 and 63.
+    // in the call's boundaries and also in the last incomplete element.
     #[test]
     fn test_write_padded_multiple_first_aligned() {
         let data = vec![255u8; 265];
@@ -1106,12 +1101,11 @@ mod tests {
             padded.len(),
             FR32_PADDING_MAP.transform_byte_offset(265, true)
         );
-        assert_eq!(&padded[0..31], &data[0..31]);
-        assert_eq!(padded[31], 0b0011_1111);
-        assert_eq!(padded[32], 0b1111_1111);
-        assert_eq!(&padded[33..63], vec![255u8; 30].as_slice());
-        assert_eq!(padded[63], 0b0011_1111);
-        // TODO: Same observation as before, what are we testing here?
+        assert_eq!(padded[127], 0b0011_1111);
+        assert_eq!(padded[128], 0b1111_1111);
+        assert_eq!(&padded[128..159], vec![255u8; 31].as_slice());
+
+        assert_eq!(padded[data.len()], 0b1111_1111);
     }
 
     fn validate_fr32(bytes: &[u8]) {
@@ -1125,13 +1119,13 @@ mod tests {
     }
 
     // `write_padded` for 127 bytes of 1s, splitting it in two calls of varying
-    // sizes, from 0 to the full size, generating many unaligned calls, check
-    // padding bits in byte 31 and 63.
+    // sizes, from 0 to the full size, generating many unaligned calls, check padding bits
+    // in the call's boundaries
     #[test]
     fn test_write_padded_multiple_unaligned() {
         // Use 127 for this test because it unpads to 128 – a multiple of 32.
         // Otherwise the last chunk will be too short and cannot be converted to Fr.
-        for i in 0..127 {
+        for i in 1..126 {
             let data = vec![255u8; 127];
             let buf = Vec::new();
             let mut cursor = Cursor::new(buf);
@@ -1144,13 +1138,16 @@ mod tests {
                 padded.len(),
                 FR32_PADDING_MAP.transform_byte_offset(127, true)
             );
-            assert_eq!(&padded[0..31], &data[0..31]);
-            assert_eq!(padded[31], 0b0011_1111);
-            assert_eq!(padded[32], 0b1111_1111);
-            assert_eq!(&padded[33..63], vec![255u8; 30].as_slice());
-            assert_eq!(padded[63], 0b0011_1111);
-            // TODO: We seem to be repeating the same series of asserts,
-            // maybe this can be abstracted away in a helper function.
+
+            // Check bytes in the boundary between calls: `i` and `i-1`.
+            for offset in [i - 1, i].iter() {
+                if *offset % 32 == 31 {
+                    // Byte with padding.
+                    assert_eq!(padded[*offset], 0b0011_1111);
+                } else {
+                    assert_eq!(padded[*offset], 255u8);
+                }
+            }
         }
     }
 
