@@ -1,7 +1,7 @@
 use std::sync::mpsc::channel;
 
-use crate::merkle::MerkleTree;
 use crossbeam_utils::thread;
+use rayon::prelude::*;
 use serde::de::Deserialize;
 use serde::ser::Serialize;
 use slog::*;
@@ -11,6 +11,7 @@ use crate::drgporep::{self, DrgPoRep};
 use crate::drgraph::Graph;
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
+use crate::merkle::MerkleTree;
 use crate::parameter_cache::ParameterSetIdentifier;
 use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
@@ -172,53 +173,50 @@ pub trait Layers {
         >],
         layers: usize,
         total_layers: usize,
-        proofs: &'a mut Vec<Vec<EncodingProof<Self::Hasher>>>,
         partition_count: usize,
-    ) -> Result<&'a Vec<Vec<EncodingProof<Self::Hasher>>>> {
+    ) -> Result<Vec<Vec<EncodingProof<Self::Hasher>>>> {
         assert!(layers > 0);
 
-        let new_priv_inputs = drgporep::PrivateInputs {
-            aux: &porep::ProverAux {
-                tree_d: aux[0].clone(),
-                tree_r: aux[1].clone(),
-            },
-        };
+        let mut new_pp = None;
 
-        let mut partition_proofs = Vec::with_capacity(partition_count);
+        (0..layers)
+            .map(|layer| {
+                let pp = match new_pp {
+                    Some(ref new_pp) => new_pp,
+                    None => pp,
+                };
+                let inner_layers = layers - layer;
 
-        for k in 0..partition_count {
-            let drgporep_pub_inputs = drgporep::PublicInputs {
-                replica_id: pub_inputs.replica_id,
-                challenges: pub_inputs.challenges(
-                    pp.graph.size(),
-                    (total_layers - layers) as u8,
-                    Some(k),
-                ),
-                tau: Some(tau[0]),
-            };
-            let drg_proof = DrgPoRep::prove(&pp, &drgporep_pub_inputs, &new_priv_inputs)?;
+                let new_priv_inputs = drgporep::PrivateInputs {
+                    aux: &porep::ProverAux {
+                        tree_d: aux[layer].clone(),
+                        tree_r: aux[layer + 1].clone(),
+                    },
+                };
+                let layer_diff = total_layers - inner_layers;
 
-            partition_proofs.push(drg_proof);
-        }
+                let partition_proofs: Vec<_> = (0..partition_count)
+                    .into_par_iter()
+                    .map(|k| {
+                        let drgporep_pub_inputs = drgporep::PublicInputs {
+                            replica_id: pub_inputs.replica_id,
+                            challenges: pub_inputs.challenges(
+                                pp.graph.size(),
+                                layer_diff as u8,
+                                Some(k),
+                            ),
+                            tau: Some(tau[layer]),
+                        };
 
-        proofs.push(partition_proofs);
+                        DrgPoRep::prove(pp, &drgporep_pub_inputs, &new_priv_inputs)
+                    })
+                    .collect::<Result<Vec<_>>>()?;
 
-        let pp = &Self::transform(pp, total_layers - layers, total_layers);
+                new_pp = Some(Self::transform(pp, layer_diff, total_layers));
 
-        if layers != 1 {
-            Self::prove_layers(
-                pp,
-                pub_inputs,
-                &tau[1..],
-                &aux[1..],
-                layers - 1,
-                total_layers,
-                proofs,
-                partition_count,
-            )?;
-        }
-
-        Ok(proofs)
+                Ok(partition_proofs)
+            })
+            .collect::<Result<Vec<_>>>()
     }
 
     fn extract_and_invert_transform_layers<'a>(
@@ -418,26 +416,23 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         priv_inputs: &'b Self::PrivateInputs,
         partition_count: usize,
     ) -> Result<Vec<Self::Proof>> {
-        let mut proofs = Vec::with_capacity(pub_params.layers);
+        assert!(partition_count > 0);
 
-        Self::prove_layers(
+        let proofs = Self::prove_layers(
             &pub_params.drg_porep_public_params,
             pub_inputs,
             &priv_inputs.tau,
             &priv_inputs.aux,
             pub_params.layers,
             pub_params.layers,
-            &mut proofs,
             partition_count,
         )?;
 
-        assert!(partition_count > 0);
         let mut proof_columns = vec![Vec::new(); partition_count];
 
-        // TODO: Avoid all the cloning
-        for partition_proofs in &proofs {
-            for (j, proof) in partition_proofs.iter().enumerate() {
-                proof_columns[j].push(proof.clone());
+        for partition_proofs in proofs.into_iter() {
+            for (j, proof) in partition_proofs.into_iter().enumerate() {
+                proof_columns[j].push(proof);
             }
         }
 

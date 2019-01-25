@@ -1,7 +1,8 @@
-use crate::error;
 use bellman::{ConstraintSystem, SynthesisError};
 use pairing::Engine;
 use sapling_crypto::circuit::boolean::{self, AllocatedBit, Boolean};
+
+use crate::error;
 
 pub const NODE_SIZE: usize = 32;
 

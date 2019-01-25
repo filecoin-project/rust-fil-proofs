@@ -281,7 +281,6 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
             panic!("{}", c_str_to_rust_str((*resp).error_msg))
         }
 
-        // copy the bytes from C to Rust
         let data_ptr = (*resp).data_ptr as *mut u8;
         let data_len = (*resp).data_len;
         let mut bytes_out = Vec::with_capacity(data_len);

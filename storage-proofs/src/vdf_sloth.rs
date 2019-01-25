@@ -35,7 +35,9 @@ impl ParameterSetIdentifier for PublicParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Proof {}
+pub struct Proof {
+    y: PedersenDomain,
+}
 
 impl Vdf<PedersenDomain> for Sloth {
     type SetupParams = SetupParams;
@@ -54,16 +56,11 @@ impl Vdf<PedersenDomain> for Sloth {
         let x: Fr = (*x).into();
         let y = sloth::encode::<Bls12>(&key, &x, pp.rounds);
 
-        Ok((y.into(), Proof {}))
+        Ok((y.into(), Proof { y: y.into() }))
     }
 
-    fn verify(
-        pp: &Self::PublicParams,
-        x: &PedersenDomain,
-        y: &PedersenDomain,
-        _proof: &Self::Proof,
-    ) -> Result<bool> {
-        let y: Fr = (*y).into();
+    fn verify(pp: &Self::PublicParams, x: &PedersenDomain, proof: &Self::Proof) -> Result<bool> {
+        let y: Fr = Self::extract_output(proof).into();
         let key: Fr = pp.key.into();
         let decoded: PedersenDomain = sloth::decode::<Bls12>(&key, &y, pp.rounds).into();
 
@@ -75,5 +72,8 @@ impl Vdf<PedersenDomain> for Sloth {
     }
     fn rounds(pp: &self::PublicParams) -> usize {
         pp.rounds
+    }
+    fn extract_output(proof: &Proof) -> PedersenDomain {
+        proof.y
     }
 }
