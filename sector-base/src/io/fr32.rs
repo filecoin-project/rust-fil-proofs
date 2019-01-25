@@ -87,6 +87,43 @@ padded in the first element and the remaining 66 bits form the incomplete
 data unit after it, which is aligned to 9 bytes. At the bit level, that
 last incomplete byte will have 2 valid bits and 6 extra bits.
 
+# Alignment of raw data bytes in the padded output
+
+This section is not necessary to use this structure but it does help to
+reason about it. By the previous definition, the raw data bits *embedded*
+in the padded layout are not necessarily grouped in the same byte units
+as in the original raw data input (due to the inclusion of the padding
+bits interleaved in that bit stream, which keep shifting the data bits
+after them).
+
+This can also be stated as: the offsets of the bits (relative to the byte
+they belong to, i.e., *bit-offset*) in the raw data input won't necessarily
+match the bit-offsets of the raw data bits embedded in the padded layout.
+The consequence is that each raw byte written to the padded layout won't
+result in a byte-aligned bit stream output, i.e., it may cause the appearance
+of extra bits (to convert the output to a byte-aligned stream).
+
+There are portions of the padded layout, however, where this alignment does
+happen. Particularly, when the padded layout accumulates enough padding bits
+that they altogether add up to a byte, the following raw data byte written
+will result in a byte-aligned output, and the same is true for all the other
+raw data byte that follow it up until the element end, where new padding bits
+shift away this alignment. (The other obvious case is the first element, which,
+with no padded bits in front of it, has by definition all its embedded raw data
+bytes aligned, independently of the `data_bits`/`pad_bits` configuration used.)
+
+In the previous example, that happens after the fourth element, where 4 units
+of `pad_bits` add up to one byte and all of the raw data bytes in the fifth
+element will keep its original alignment from the byte input stream (and the
+same will happen with every other element multiple of 4). When that fourth
+element is completed we have then 127 bytes of raw data and 1 byte of padding
+(totalling 32 * 4 = 128 bytes of padded output), so the interval of raw data
+bytes `[127..159]` (indexed like this in the input raw data stream) will keep
+its original alignment when embedded in the padded layout, i.e., every raw
+data byte written will keep the output bit stream byte-aligned (without extra
+bits). (Technically, the last byte actually won't be a full byte since its last
+bits will be replaced by padding).
+
 # Key terms
 
 Collection of terms introduced in this documentation (with the format
@@ -109,6 +146,9 @@ an additional summary of what was already discussed.
    byte (in a way the extra bits are the padding at the byte-level, but we don't
    use that term here to avoid confusions).
  * Sub-byte padding.
+ * Bit-offset: offset of a bit within the byte it belongs to, ranging in `[0..8]`.
+ * Embedded raw data: view of the input raw data when it has been decomposed in
+   bit streams and padded in the resulting output.
 
 **/
 #[derive(Debug)]
@@ -600,10 +640,10 @@ where
     W: Read + Write + Seek,
 {
     // In order to optimize alignment in the common case of writing from an aligned start,
-    // we should make the chunk a multiple of 128.
+    // we should make the chunk a multiple of 127 (4 full elements, see `PaddingMap#alignment`).
     // n was hand-tuned to do reasonably well in the benchmarks.
     let n = 1000;
-    let chunk_size = 128 * n;
+    let chunk_size = 127 * n;
 
     let mut written = 0;
 
@@ -768,7 +808,7 @@ where
     W: Write,
 {
     // In order to optimize alignment in the common case of writing from an aligned start,
-    // we should make the chunk a multiple of 128.
+    // we should make the chunk a multiple of 128 (4 full elements in the padded layout).
     // n was hand-tuned to do reasonably well in the benchmarks.
     let n = 1000;
     let chunk_size = 128 * n;
@@ -1022,22 +1062,22 @@ mod tests {
         assert_eq!(padded[63], 0b0011_1111);
     }
 
-    // `write_padded` for 256 bytes of 1s, splitting it in two calls of 128 bytes,
+    // `write_padded` for 256 bytes of 1s, splitting it in two calls of 127 bytes,
     // aligning the calls with the padded element boundaries, check padding bits
     // in byte 31 and 63.
     #[test]
     fn test_write_padded_multiple_aligned() {
-        let data = vec![255u8; 256];
+        let data = vec![255u8; 254];
         let buf = Vec::new();
         let mut cursor = Cursor::new(buf);
-        let mut written = write_padded(&data[0..128], &mut cursor).unwrap();
-        written += write_padded(&data[128..], &mut cursor).unwrap();
+        let mut written = write_padded(&data[0..127], &mut cursor).unwrap();
+        written += write_padded(&data[127..], &mut cursor).unwrap();
         let padded = cursor.into_inner();
 
-        assert_eq!(written, 256);
+        assert_eq!(written, 254);
         assert_eq!(
             padded.len(),
-            FR32_PADDING_MAP.transform_byte_offset(256, true)
+            FR32_PADDING_MAP.transform_byte_offset(254, true)
         );
         assert_eq!(&padded[0..31], &data[0..31]);
         assert_eq!(padded[31], 0b0011_1111);
@@ -1049,7 +1089,7 @@ mod tests {
         // from the previous one.
     }
 
-    // `write_padded` for 265 bytes of 1s, splitting it in two calls of 128 bytes,
+    // `write_padded` for 265 bytes of 1s, splitting it in two calls of 127 bytes,
     // aligning the calls with the padded element boundaries, check padding bits
     // in byte 31 and 63.
     #[test]
@@ -1057,8 +1097,8 @@ mod tests {
         let data = vec![255u8; 265];
         let buf = Vec::new();
         let mut cursor = Cursor::new(buf);
-        let mut written = write_padded(&data[0..128], &mut cursor).unwrap();
-        written += write_padded(&data[128..], &mut cursor).unwrap();
+        let mut written = write_padded(&data[0..127], &mut cursor).unwrap();
+        written += write_padded(&data[127..], &mut cursor).unwrap();
         let padded = cursor.into_inner();
 
         assert_eq!(written, 265);
