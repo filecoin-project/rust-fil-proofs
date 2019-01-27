@@ -111,7 +111,7 @@ where
     Ok(H::sloth_decode(&key, &node_data, sloth_iter))
 }
 
-fn create_key<H: Hasher>(
+pub fn create_key<H: Hasher>(
     id: &H::Domain,
     node: usize,
     parents: &[usize],

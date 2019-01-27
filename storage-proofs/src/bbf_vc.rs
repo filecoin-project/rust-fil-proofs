@@ -13,7 +13,7 @@ use crate::merkle::MerkleTree;
 use crate::parameter_cache::ParameterSetIdentifier;
 use crate::porep::PoRep;
 use crate::proof::ProofScheme;
-use crate::util::data_at_node;
+use crate::util::{data_at_node, data_at_node_offset};
 use crate::vde::{self, decode_block};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -236,25 +236,7 @@ where
         // TODO: is this the right size, with accumulators?
         let node_size = 32;
 
-        // TODO: use iterator & allow passing raw bytes
-        let big_data = (0..nodes).map(|i| {
-            data_at_node(&data, i)
-                .expect("data_at_node math failed")
-                .to_vec()
-        });
-
-        vc.commit(big_data);
-
-        vde::encode(&pp.graph, pp.sloth_iter, replica_id, data)?;
-
-        // TODO: use iterator & allow passing raw bytes
-        let big_data_enc = (0..nodes).map(|i| {
-            data_at_node(&data, i)
-                .expect("data_at_node math failed")
-                .to_vec()
-        });
-
-        vc.commit(big_data_enc);
+        encode(&pp.graph, pp.sloth_iter, replica_id, data, &mut vc)?;
 
         Ok((Tau { comm: vc }, ()))
     }
@@ -275,6 +257,59 @@ where
     ) -> Result<Vec<u8>> {
         Ok(decode_block(&pp.graph, pp.sloth_iter, replica_id, data, node)?.into_bytes())
     }
+}
+
+/// encodes the data and overwrites the original data slice.
+pub fn encode<'a, H, G>(
+    graph: &'a G,
+    sloth_iter: usize,
+    replica_id: &'a H::Domain,
+    data: &'a mut [u8],
+    vc: &mut VectorCommitment<Accumulator>,
+) -> Result<()>
+where
+    H: Hasher,
+    G: Graph<H>,
+{
+    let degree = graph.degree();
+
+    // Because a node always follows all of its parents in the data,
+    // the nodes are by definition already topologically sorted.
+    // Therefore, if we simply traverse the data in order, encoding each node in place,
+    // we can always get each parent's encodings with a simple lookup --
+    // since we will already have encoded the parent earlier in the traversal.
+    // The only subtlety is that a ZigZag graph may be reversed, so the direction
+    // of the traversal must also be.
+
+    for n in 0..graph.size() {
+        let node = if graph.forward() {
+            n
+        } else {
+            // If the graph is reversed, traverse in reverse order.
+            (graph.size() - n) - 1
+        };
+
+        let parents = graph.parents(node);
+        assert_eq!(parents.len(), graph.degree(), "wrong number of parents");
+
+        let key = vde::create_key::<H>(replica_id, node, &parents, data, degree)?;
+        let start = data_at_node_offset(node);
+        let end = start + 32;
+
+        // commit original data
+        let original_data = vec![data[start..end].to_vec()];
+        vc.commit(original_data);
+
+        // encode data
+        let node_data = H::Domain::try_from_bytes(&data[start..end])?;
+        let encoded = H::sloth_encode(&key, &node_data, sloth_iter);
+        encoded.write_bytes(&mut data[start..end])?;
+
+        // commit encoded data
+        vc.commit(vec![data[start..end].to_vec()]);
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
