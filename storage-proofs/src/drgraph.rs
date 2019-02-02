@@ -72,13 +72,13 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
         graph_height(self.size()) as u64
     }
 
-    /// Returns a sorted list of all parents of this node.
+    /// Returns a sorted list of all parents of this node. The parents may be repeated.
     fn parents(&self, node: usize) -> Vec<usize>;
 
-    /// Returns the size of the node.
+    /// Returns the size of the graph (number of nodes).
     fn size(&self) -> usize;
 
-    /// Returns the degree of the graph.
+    /// Returns the number of parents of each node in the graph.
     fn degree(&self) -> usize;
 
     fn new(nodes: usize, base_degree: usize, expansion_degree: usize, seed: [u32; 7]) -> Self;

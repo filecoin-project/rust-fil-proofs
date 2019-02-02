@@ -1,8 +1,19 @@
 use blake2::{Blake2s, Digest};
 
 pub const FEISTEL_ROUNDS: usize = 3;
+// 3 rounds is an acceptable value for a pseudo-random permutation,
+// see https://github.com/filecoin-project/rust-proofs/issues/425
+// (and also https://en.wikipedia.org/wiki/Feistel_cipher#Theoretical_work).
+
 pub type FeistelPrecomputed = (u32, u32, u32);
 
+// Find the minimum number of even bits to represent `num_elements`
+// within a `u32` maximum. Returns the left and right masks evenly
+// distributed that together add up to that minimum number of bits.
+// TODO: Optimization: Evaluate dropping the `right_mask` inside
+// all of the internal computations, just apply it at the end to
+// get the output into the desired range (the internal hash won't
+// care if we use less than 32 bits, it will take the same time).
 pub fn precompute(num_elements: u32) -> FeistelPrecomputed {
     let mut next_pow4 = 4;
     let mut log4 = 1;
@@ -19,6 +30,9 @@ pub fn precompute(num_elements: u32) -> FeistelPrecomputed {
     (left_mask, right_mask, half_bits)
 }
 
+// Pseudo-randomly shuffle an input from a starting position to another
+// one within the `[0, num_elements)` range using a `key` that will allow
+// the reverse operation to take place.
 pub fn permute(
     num_elements: u32,
     index: u32,
@@ -30,9 +44,17 @@ pub fn permute(
     while u >= num_elements {
         u = encode(u, keys, precomputed)
     }
+    // Since we are representing `num_elements` using an even number of bits,
+    // that can encode many values above it, so keep repeating the operation
+    // until we land in the permitted range.
+    // TODO: Optimization: Do not repeat the entire `encode`, just one round
+    // at a time (following the `keys` order) until where in the `num_elements`
+    // range.
+
     u
 }
 
+// Inverts the `permute` result to its starting value for the same `key`.
 pub fn invert_permute(
     num_elements: u32,
     index: u32,
@@ -48,6 +70,9 @@ pub fn invert_permute(
 }
 
 /// common_setup performs common calculations on inputs shared by encode and decode.
+/// Decompress the `precomputed` part of the algorithm into the initial `left` and
+/// `right` pieces `(L_0, R_0)` with the `right_mask` and `half_bits` to manipulate
+/// them.
 fn common_setup(index: u32, precomputed: FeistelPrecomputed) -> (u32, u32, u32, u32) {
     let (left_mask, right_mask, half_bits) = precomputed;
 
@@ -81,6 +106,9 @@ fn decode(index: u32, keys: &[u32], precomputed: FeistelPrecomputed) -> u32 {
     (left << half_bits) | right
 }
 
+// Round function of the Feistel network: `F(Ri, Ki)`. Joins the `right`
+// piece and the `key`, hashes it and returns the lower `u32` part of
+// the hash filtered trough the `right_mask`.
 fn feistel(right: u32, key: u32, right_mask: u32) -> u32 {
     let mut data: [u8; 8] = [0; 8];
     data[0] = (right >> 24) as u8;
@@ -92,6 +120,7 @@ fn feistel(right: u32, key: u32, right_mask: u32) -> u32 {
     data[5] = (key >> 16) as u8;
     data[6] = (key >> 8) as u8;
     data[7] = key as u8;
+    // TODO: Optimization: use `load` as `u64`.
 
     let hash = Blake2s::digest(&data);
 
@@ -99,6 +128,7 @@ fn feistel(right: u32, key: u32, right_mask: u32) -> u32 {
         | u32::from(hash[1]) << 16
         | u32::from(hash[2]) << 8
         | u32::from(hash[3]);
+    // TODO: Optimization: same with `u32`.
 
     r & right_mask
 }
