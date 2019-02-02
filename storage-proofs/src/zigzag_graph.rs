@@ -157,6 +157,41 @@ where
     H: Hasher,
     G: Graph<H>,
 {
+    // Assign `expansion_degree` parents to `node` using an invertible function. That
+    // means we can't just generate random values between `[0, size())`, we need to
+    // expand the search space (domain) to accommodate every unique parent assignment
+    // generated here. This can be visualized more clearly as a matrix where the each
+    // new parent of each new node is assigned a unique `index`:
+    //
+    //
+    //          | Parent 1 | Parent 2 | Parent 3 |
+    //
+    // | Node 1 |     0    |     1    |     2    |
+    //
+    // | Node 2 |     3    |     4    |     5    |
+    //
+    // | Node 3 |     6    |     7    |     8    |
+    //
+    // | Node 4 |     9    |     A    |     B    |
+    //
+    // This starting `index` will be shuffled to another position to generate a
+    // parent-child relationship, e.g., if generating the parents for the second node,
+    // `permute` would be called with values `[3; 4; 5]` that would be mapped to other
+    // indexes in the search space of `[0, B]`, say, values `[A; 0; 4]`, that would
+    // correspond to nodes numbered `[4; 1, 2]` which will become the parents of the
+    // second node. In a later pass invalid parents like 2, self-referencing, and parents
+    // with indexes bigger than 2 (if in the `forward` direction, smaller than 2 if the
+    // inverse), will be removed.
+    //
+    // Since `permute` is a bijective function which has the inverse `invert_permute`,
+    // it is guaranteed that when looking for the parents in the `reversed` direction
+    // the child `node` used earlier will now actually be the parent of the output
+    // parents generated before (inverting the relationship). Following the example,
+    // in the reverse direction, when looking for the parents of, say, node 1,
+    // `invert_permute` (that maps back the output of `permute` to its input) would
+    // receive the indexes `[0; 1; 2]`, where the index `0` is guaranteed to map back
+    // to the index `4` that generated it earlier, corresponding to the node 2, inverting
+    // in fact the child-parent relationship.
     fn correspondent(&self, node: usize, i: usize) -> usize {
         let a = (node * self.expansion_degree) as u32 + i as u32;
         let feistel_keys = &[1, 2, 3, 4];
@@ -177,6 +212,9 @@ where
             )
         };
         transformed as usize / self.expansion_degree
+        // Collapse the output in the matrix search space to the row of the corresponding
+        // node (losing the column information, that will be regenerated later when calling
+        // back this function in the `reversed` direction).
     }
 }
 
