@@ -66,6 +66,7 @@ pub struct PublicInputs<T: Domain> {
     pub commitments: Vec<T>,
     /// The initial set of challenges. Must be of length `challenge_count`.
     pub challenge_seed: T,
+    pub faults: Vec<u64>, // TODO: Actually use the faults once faults are designed.
 }
 
 #[derive(Clone, Debug)]
@@ -325,7 +326,7 @@ fn derive_partial_challenges<H: Hasher>(count: usize, seed: &[u8]) -> Vec<H::Dom
 /// requires a new random input (`mix`).
 /// A `ChallengeStream` mediates between this usage requirement and the implementation details
 /// of the actual challenge generation mechanism.
-struct ChallengeStream<H: Hasher, V: Vdf<H::Domain>> {
+pub struct ChallengeStream<H: Hasher, V: Vdf<H::Domain>> {
     partial_challenges: Option<Vec<H::Domain>>,
     challenge_count: usize,
     partial_challenge_count: usize,
@@ -337,7 +338,7 @@ struct ChallengeStream<H: Hasher, V: Vdf<H::Domain>> {
 impl<H: Hasher, V: Vdf<H::Domain>> ChallengeStream<H, V> {
     /// A `ChallengeStream` must derive some shared parameters used in challenge derivation.
     /// `new` initializes a new, stateful, `ChallengeStream` with these parameters.
-    fn new(pp: &PublicParams<H::Domain, V>) -> ChallengeStream<H, V> {
+    pub fn new(pp: &PublicParams<H::Domain, V>) -> ChallengeStream<H, V> {
         let challenge_count = pp.challenge_count;
         let sectors_count = pp.sectors_count;
         let challenge_bits = pp.challenge_bits;
@@ -557,6 +558,7 @@ mod tests {
         let pub_inputs = PublicInputs {
             challenge_seed: rng.gen(),
             commitments: vec![tree0.root(), tree1.root()],
+            faults: Vec::new(),
         };
 
         let priv_inputs = PrivateInputs {

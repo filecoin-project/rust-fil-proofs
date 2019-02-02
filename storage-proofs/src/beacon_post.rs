@@ -155,6 +155,7 @@ where
             let pub_inputs_vdf_post = vdf_post::PublicInputs {
                 challenge_seed: r,
                 commitments: pub_inputs.commitments.clone(),
+                faults: Vec::new(),
             };
 
             let priv_inputs_vdf_post = vdf_post::PrivateInputs::new(priv_inputs.trees);
@@ -188,6 +189,7 @@ where
             let pub_inputs_vdf_post = vdf_post::PublicInputs {
                 challenge_seed: r,
                 commitments: pub_inputs.commitments.clone(),
+                faults: Vec::new(),
             };
 
             if !vdf_post::VDFPoSt::verify(

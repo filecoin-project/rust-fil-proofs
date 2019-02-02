@@ -1,6 +1,6 @@
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use pairing::bls12_381::{Bls12, Fr};
-use pairing::Engine;
+use pairing::{Engine, Field};
 use sapling_crypto::circuit::num;
 use sapling_crypto::jubjub::JubjubEngine;
 
@@ -13,8 +13,7 @@ use crate::hasher::Hasher;
 use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use crate::proof::ProofScheme;
 use crate::vdf::Vdf;
-use crate::vdf_post;
-use crate::vdf_post::{compute_root_commitment, VDFPoSt};
+use crate::vdf_post::{self, compute_root_commitment, VDFPoSt};
 
 /// This is the `VDF-PoSt` circuit.
 pub struct VDFPoStCircuit<'a, E: JubjubEngine> {
@@ -58,7 +57,7 @@ impl<'a, E: JubjubEngine> CircuitComponent for VDFPoStCircuit<'a, E> {
 impl<'a, H, V> CompoundProof<'a, Bls12, VDFPoSt<H, V>, VDFPoStCircuit<'a, Bls12>>
     for VDFPostCompound
 where
-    H: 'a + Hasher,
+    H: 'static + Hasher,
     V: Vdf<H::Domain>,
     <V as Vdf<H::Domain>>::PublicParams: Send + Sync,
     <V as Vdf<H::Domain>>::Proof: Send + Sync,
@@ -146,6 +145,64 @@ where
             paths_vec,
         }
     }
+
+    fn blank_circuit(
+        pub_params: &<VDFPoSt<H, V> as ProofScheme>::PublicParams,
+        engine_params: &'a <Bls12 as JubjubEngine>::Params,
+    ) -> VDFPoStCircuit<'a, Bls12> {
+        use rand::{Rng, SeedableRng, XorShiftRng};
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let mut challenges_vec = Vec::new();
+        let mut challenged_sectors_vec = Vec::new();
+        let mut challenged_leafs_vec = Vec::new();
+        let mut commitments_vec = Vec::new();
+        let mut vdf_xs = Vec::new();
+        let mut vdf_ys = Vec::new();
+        let mut paths_vec = Vec::new();
+
+        for _ in 0..pub_params.post_epochs {
+            let mut epoch_challenges = Vec::new();
+            let mut epoch_challenged_sectors = Vec::new();
+            let mut epoch_challenged_leafs = Vec::new();
+            let mut epoch_commitments = Vec::new();
+            let mut epoch_paths_vec = Vec::new();
+
+            for _ in 0..pub_params.challenge_count {
+                epoch_challenges.push(rng.gen());
+                epoch_challenged_leafs.push(Some(Fr::zero()));
+                epoch_challenged_sectors.push(0);
+                epoch_commitments.push(Some(rng.gen()));
+                let path = (0..=pub_params.challenge_bits)
+                    .map(|_| Some((rng.gen(), true)))
+                    .collect::<Vec<_>>();
+
+                epoch_paths_vec.push(path);
+            }
+            challenges_vec.push(epoch_challenges);
+            challenged_leafs_vec.push(epoch_challenged_leafs);
+            challenged_sectors_vec.push(epoch_challenged_sectors);
+            commitments_vec.push(epoch_commitments);
+            paths_vec.push(epoch_paths_vec);
+            vdf_xs.push(Some(rng.gen()));
+            vdf_ys.push(Some(rng.gen()));
+        }
+
+        VDFPoStCircuit {
+            params: engine_params,
+            challenges_vec,
+            challenged_sectors_vec,
+            challenge_seed: Some(rng.gen()),
+            vdf_key: Some(rng.gen()),
+            vdf_xs,
+            vdf_ys,
+            vdf_sloth_rounds: V::rounds(&pub_params.pub_params_vdf),
+            challenged_leafs_vec,
+            paths_vec,
+            root_commitment: rng.gen(),
+            commitments_vec,
+        }
+    }
 }
 
 impl<'a, E: JubjubEngine> Circuit<E> for VDFPoStCircuit<'a, E> {
@@ -176,6 +233,11 @@ impl<'a, E: JubjubEngine> Circuit<E> for VDFPoStCircuit<'a, E> {
             },
         )?;
 
+        // FIXME:
+        // API tests pass with input verification only, but fail when any constraints are added
+        // below. CompoundProof tests pass, though — so the problem may be with how the proof
+        // is assembled or verification requested in the API tests. Debugging circuits is not fun.
+
         // VDF Output Verification
         assert_eq!(vdf_xs.len(), vdf_ys.len());
 
@@ -187,8 +249,8 @@ impl<'a, E: JubjubEngine> Circuit<E> for VDFPoStCircuit<'a, E> {
             {
                 // VDF Verification
                 let mut cs = cs.namespace(|| format!("vdf_verification_round_{}", i));
-
-                // FIXME: make this a generic call to Vdf proof circuit function.
+                //
+                //                // FIXME: make this a generic call to Vdf proof circuit function.
                 let decoded = sloth::decode(
                     cs.namespace(|| "sloth_decode"),
                     &vdf_key,
@@ -261,7 +323,6 @@ impl<'a, E: JubjubEngine> Circuit<E> for VDFPoStCircuit<'a, E> {
                 paths.to_vec(),
             )?;
         }
-
         Ok(())
     }
 }
@@ -369,6 +430,7 @@ mod tests {
         let pub_inputs = vdf_post::PublicInputs {
             challenge_seed: rng.gen(),
             commitments: vec![tree0.root(), tree1.root()],
+            faults: Vec::new(),
         };
 
         let trees = [&tree0, &tree1];
@@ -512,6 +574,7 @@ mod tests {
         let pub_inputs = vdf_post::PublicInputs {
             challenge_seed: rng.gen(),
             commitments: vec![tree0.root(), tree1.root()],
+            faults: Vec::new(),
         };
 
         let trees = [&tree0, &tree1];
