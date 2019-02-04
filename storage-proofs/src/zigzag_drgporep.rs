@@ -63,7 +63,7 @@ mod tests {
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
     use crate::layered_drgporep::{
-        Challenges, PrivateInputs, PublicInputs, PublicParams, SetupParams,
+        LayerChallenges, PrivateInputs, PublicInputs, PublicParams, SetupParams,
     };
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
@@ -90,7 +90,7 @@ mod tests {
         let sloth_iter = 1;
         let replica_id: H::Domain = rng.gen();
         let data = vec![2u8; 32 * 3];
-        let challenges = Challenges::new_fixed(DEFAULT_ZIGZAG_LAYERS, 5);
+        let challenges = LayerChallenges::new_fixed(DEFAULT_ZIGZAG_LAYERS, 5);
 
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
@@ -105,13 +105,13 @@ mod tests {
                 },
                 sloth_iter,
             },
-            challenges: challenges.clone(),
+            layer_challenges: challenges.clone(),
         };
 
         let mut pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
         // Get the public params for the last layer.
         // In reality, this is a no-op with an even number of layers.
-        for _ in 0..pp.challenges.layers() {
+        for _ in 0..pp.layer_challenges.layers() {
             pp.drg_porep_public_params = zigzag(&pp.drg_porep_public_params);
         }
 
@@ -119,7 +119,7 @@ mod tests {
 
         let transformed_params = PublicParams {
             drg_porep_public_params: pp.drg_porep_public_params,
-            challenges: challenges.clone(),
+            layer_challenges: challenges.clone(),
         };
 
         assert_ne!(data, data_copy);
@@ -135,7 +135,7 @@ mod tests {
     }
 
     fn prove_verify_fixed(n: usize, i: usize) {
-        let challenges = Challenges::new_fixed(DEFAULT_ZIGZAG_LAYERS, 5);
+        let challenges = LayerChallenges::new_fixed(DEFAULT_ZIGZAG_LAYERS, 5);
 
         test_prove_verify::<PedersenHasher>(n, i, challenges.clone());
         test_prove_verify::<Sha256Hasher>(n, i, challenges.clone());
@@ -143,14 +143,14 @@ mod tests {
     }
 
     fn prove_verify_tapered(n: usize, i: usize) {
-        let challenges = Challenges::new_tapered(vec![2, 3, 4, 5, 6, 7]);
+        let challenges = LayerChallenges::new_tapered(vec![2, 3, 4, 5, 6, 7]);
 
         test_prove_verify::<PedersenHasher>(n, i, challenges.clone());
         test_prove_verify::<Sha256Hasher>(n, i, challenges.clone());
         test_prove_verify::<Blake2sHasher>(n, i, challenges.clone());
     }
 
-    fn test_prove_verify<H: 'static + Hasher>(n: usize, i: usize, challenges: Challenges) {
+    fn test_prove_verify<H: 'static + Hasher>(n: usize, i: usize, challenges: LayerChallenges) {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let degree = 1 + i;
@@ -174,7 +174,7 @@ mod tests {
                 },
                 sloth_iter,
             },
-            challenges: challenges.clone(),
+            layer_challenges: challenges.clone(),
         };
 
         let pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
@@ -185,7 +185,7 @@ mod tests {
 
         let pub_inputs = PublicInputs::<H::Domain> {
             replica_id,
-            challenges,
+            layer_challenges: challenges,
             tau: Some(tau.simplify().into()),
             comm_r_star: tau.comm_r_star,
             k: None,

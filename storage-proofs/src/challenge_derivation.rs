@@ -4,10 +4,10 @@ use num_traits::cast::ToPrimitive;
 
 use crate::crypto::blake2s::blake2s;
 use crate::hasher::Domain;
-use crate::layered_drgporep::Challenges;
+use crate::layered_drgporep::LayerChallenges;
 
 pub fn derive_challenges<D: Domain>(
-    challenges: &Challenges,
+    challenges: &LayerChallenges,
     layer: u8,
     leaves: usize,
     replica_id: &D,
@@ -45,7 +45,7 @@ mod test {
         let n = 200;
         let layers = 100;
 
-        let challenges = Challenges::new_fixed(layers, n);
+        let challenges = LayerChallenges::new_fixed(layers, n);
         let leaves = 1 << 30;
         let mut rng = thread_rng();
         let replica_id: PedersenDomain = rng.gen();
@@ -98,7 +98,7 @@ mod test {
 
         for layer in 0..layers {
             let one_partition_challenges = derive_challenges(
-                &Challenges::new_fixed(layers, total_challenges),
+                &LayerChallenges::new_fixed(layers, total_challenges),
                 layer as u8,
                 leaves,
                 &replica_id,
@@ -108,7 +108,7 @@ mod test {
             let many_partition_challenges = (0..partitions)
                 .flat_map(|k| {
                     derive_challenges(
-                        &Challenges::new_fixed(layers, n),
+                        &LayerChallenges::new_fixed(layers, n),
                         layer as u8,
                         leaves,
                         &replica_id,

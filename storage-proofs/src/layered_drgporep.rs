@@ -19,31 +19,31 @@ use crate::vde;
 use crate::SP_LOG;
 
 #[derive(Debug, Clone)]
-pub enum Challenges {
+pub enum LayerChallenges {
     Fixed { layers: usize, count: usize },
     Tapered(Vec<usize>),
 }
 
-impl Challenges {
+impl LayerChallenges {
     pub const fn new_fixed(layers: usize, count: usize) -> Self {
-        Challenges::Fixed { layers, count }
+        LayerChallenges::Fixed { layers, count }
     }
 
     pub fn new_tapered(challenges: Vec<usize>) -> Self {
-        Challenges::Tapered(challenges)
+        LayerChallenges::Tapered(challenges)
     }
 
     pub fn layers(&self) -> usize {
         match self {
-            Challenges::Fixed { layers, .. } => *layers,
-            Challenges::Tapered(cs) => cs.len(),
+            LayerChallenges::Fixed { layers, .. } => *layers,
+            LayerChallenges::Tapered(cs) => cs.len(),
         }
     }
 
     pub fn challenges_for_layer(&self, layer: usize) -> usize {
         match self {
-            Challenges::Fixed { count, .. } => *count,
-            Challenges::Tapered(cs) => cs[layer],
+            LayerChallenges::Fixed { count, .. } => *count,
+            LayerChallenges::Tapered(cs) => cs[layer],
         }
     }
 }
@@ -51,7 +51,7 @@ impl Challenges {
 #[derive(Debug)]
 pub struct SetupParams {
     pub drg_porep_setup_params: drgporep::SetupParams,
-    pub challenges: Challenges,
+    pub layer_challenges: LayerChallenges,
 }
 
 #[derive(Debug, Clone)]
@@ -61,7 +61,7 @@ where
     G: Graph<H> + ParameterSetIdentifier,
 {
     pub drg_porep_public_params: drgporep::PublicParams<H, G>,
-    pub challenges: Challenges,
+    pub layer_challenges: LayerChallenges,
 }
 
 #[derive(Debug, Clone)]
@@ -89,7 +89,7 @@ where
         format!(
             "layered_drgporep::PublicParams{{ drg_porep_identifier: {}, challenges: {:?} }}",
             self.drg_porep_public_params.parameter_set_identifier(),
-            self.challenges,
+            self.layer_challenges,
         )
     }
 }
@@ -102,7 +102,7 @@ where
     fn from(pp: &PublicParams<H, G>) -> PublicParams<H, G> {
         PublicParams {
             drg_porep_public_params: pp.drg_porep_public_params.clone(),
-            challenges: pp.challenges.clone(),
+            layer_challenges: pp.layer_challenges.clone(),
         }
     }
 }
@@ -112,7 +112,7 @@ pub type EncodingProof<H> = drgporep::Proof<H>;
 #[derive(Debug, Clone)]
 pub struct PublicInputs<T: Domain> {
     pub replica_id: T,
-    pub challenges: Challenges,
+    pub layer_challenges: LayerChallenges,
     pub tau: Option<porep::Tau<T>>,
     pub comm_r_star: T,
     pub k: Option<usize>,
@@ -121,7 +121,7 @@ pub struct PublicInputs<T: Domain> {
 impl<T: Domain> PublicInputs<T> {
     pub fn challenges(&self, leaves: usize, layer: u8, partition_k: Option<usize>) -> Vec<usize> {
         derive_challenges::<T>(
-            &self.challenges,
+            &self.layer_challenges,
             layer,
             leaves,
             &self.replica_id,
@@ -415,7 +415,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         let dp_sp = DrgPoRep::setup(&sp.drg_porep_setup_params)?;
         let pp = PublicParams {
             drg_porep_public_params: dp_sp,
-            challenges: sp.challenges.clone(),
+            layer_challenges: sp.layer_challenges.clone(),
         };
 
         Ok(pp)
@@ -448,8 +448,8 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
             pub_inputs,
             &priv_inputs.tau,
             &priv_inputs.aux,
-            pub_params.challenges.layers(),
-            pub_params.challenges.layers(),
+            pub_params.layer_challenges.layers(),
+            pub_params.layer_challenges.layers(),
             partition_count,
         )?;
 
@@ -475,11 +475,11 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         partition_proofs: &[Self::Proof],
     ) -> Result<bool> {
         for (k, proof) in partition_proofs.iter().enumerate() {
-            if proof.encoding_proofs.len() != pub_params.challenges.layers() {
+            if proof.encoding_proofs.len() != pub_params.layer_challenges.layers() {
                 return Ok(false);
             }
 
-            let total_layers = pub_params.challenges.layers();
+            let total_layers = pub_params.layer_challenges.layers();
             let mut pp = pub_params.drg_porep_public_params.clone();
             // TODO: verification is broken for the first node, figure out how to unbreak
             // with permutations
@@ -531,7 +531,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
     fn with_partition(pub_in: Self::PublicInputs, k: Option<usize>) -> Self::PublicInputs {
         self::PublicInputs {
             replica_id: pub_in.replica_id,
-            challenges: pub_in.challenges,
+            layer_challenges: pub_in.layer_challenges,
             tau: pub_in.tau,
             comm_r_star: pub_in.comm_r_star,
             k,
@@ -568,7 +568,7 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let (taus, auxs) = Self::transform_and_replicate_layers(
             &pp.drg_porep_public_params,
-            pp.challenges.layers(),
+            pp.layer_challenges.layers(),
             replica_id,
             data,
         )?;
@@ -591,7 +591,7 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
 
         Self::extract_and_invert_transform_layers(
             &pp.drg_porep_public_params,
-            pp.challenges.layers(),
+            pp.layer_challenges.layers(),
             replica_id,
             &mut data,
         )?;

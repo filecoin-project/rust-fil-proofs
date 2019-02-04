@@ -223,7 +223,7 @@ impl<'a, H: 'static + Hasher>
         let comm_r = pub_in.tau.unwrap().comm_r.into();
         inputs.push(comm_r);
 
-        for i in 0..pub_params.challenges.layers() {
+        for i in 0..pub_params.layer_challenges.layers() {
             let drgporep_pub_inputs = drgporep::PublicInputs {
                 replica_id: pub_in.replica_id,
                 challenges: pub_in.challenges(
@@ -243,7 +243,7 @@ impl<'a, H: 'static + Hasher>
             drgporep_pub_params = <ZigZagDrgPoRep<H> as layered_drgporep::Layers>::transform(
                 &drgporep_pub_params,
                 i,
-                pub_params.challenges.layers(),
+                pub_params.layer_challenges.layers(),
             );
         }
         inputs.push(pub_in.comm_r_star.into());
@@ -290,7 +290,7 @@ impl<'a, H: 'static + Hasher>
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let replica_id = rng.gen();
 
-        let layers = (0..public_params.challenges.layers())
+        let layers = (0..public_params.layer_challenges.layers())
             .map(|_| {
                 let layer_public_inputs = drgporep::PublicInputs {
                     replica_id,
@@ -327,7 +327,7 @@ mod tests {
     use crate::drgraph::new_seed;
     use crate::fr32::fr_into_bytes;
     use crate::hasher::pedersen::*;
-    use crate::layered_drgporep::{self, Challenges};
+    use crate::layered_drgporep::{self, LayerChallenges};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
     use crate::zigzag_graph::{ZigZag, ZigZagGraph};
@@ -343,7 +343,7 @@ mod tests {
         let degree = 1;
         let expansion_degree = 2;
         let num_layers = 2;
-        let challenges = Challenges::new_fixed(num_layers, 1);
+        let layer_challenges = LayerChallenges::new_fixed(num_layers, 1);
         let sloth_iter = 1;
 
         let n = nodes; // FIXME: Consolidate variable names.
@@ -369,7 +369,7 @@ mod tests {
                 },
                 sloth_iter,
             },
-            challenges: challenges.clone(),
+            layer_challenges: layer_challenges.clone(),
         };
 
         let pp = ZigZagDrgPoRep::setup(&sp).unwrap();
@@ -382,7 +382,7 @@ mod tests {
 
         let pub_inputs = layered_drgporep::PublicInputs::<PedersenDomain> {
             replica_id: replica_id.into(),
-            challenges: challenges.clone(),
+            layer_challenges: layer_challenges.clone(),
             tau: Some(tau.simplify().into()),
             comm_r_star: tau.comm_r_star.into(),
             k: None,
@@ -455,7 +455,7 @@ mod tests {
         let base_degree = 2;
         let expansion_degree = 2;
         let replica_id: Fr = rng.gen();
-        let challenges = Challenges::new_fixed(num_layers, 1);
+        let layer_challenges = LayerChallenges::new_fixed(num_layers, 1);
         let challenge = 1;
         let sloth_iter = 2;
 
@@ -478,7 +478,7 @@ mod tests {
                 ZigZagGraph::new_zigzag(n, base_degree, expansion_degree, new_seed()),
                 sloth_iter,
             ),
-            challenges,
+            layer_challenges,
         };
 
         ZigZagCircuit::<Bls12, PedersenHasher>::synthesize(
@@ -506,7 +506,7 @@ mod tests {
         let degree = 2;
         let expansion_degree = 1;
         let num_layers = 2;
-        let challenges = Challenges::new_fixed(num_layers, 2);
+        let layer_challenges = LayerChallenges::new_fixed(num_layers, 2);
         let sloth_iter = 1;
         let partition_count = 1;
 
@@ -536,7 +536,7 @@ mod tests {
                     },
                     sloth_iter,
                 },
-                challenges: challenges.clone(),
+                layer_challenges: layer_challenges.clone(),
             },
             partitions: Some(partition_count),
         };
@@ -553,7 +553,7 @@ mod tests {
 
         let public_inputs = layered_drgporep::PublicInputs::<PedersenDomain> {
             replica_id: replica_id.into(),
-            challenges: challenges.clone(),
+            layer_challenges: layer_challenges.clone(),
             tau: Some(tau.simplify()),
             comm_r_star: tau.comm_r_star,
             k: None,
