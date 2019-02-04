@@ -185,7 +185,6 @@ mod tests {
 
         let pub_inputs = PublicInputs::<H::Domain> {
             replica_id,
-            layer_challenges: challenges,
             tau: Some(tau.simplify().into()),
             comm_r_star: tau.comm_r_star,
             k: None,

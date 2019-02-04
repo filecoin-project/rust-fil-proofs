@@ -151,7 +151,6 @@ fn do_the_work<H: 'static>(
     stop_profile();
     let pub_inputs = layered_drgporep::PublicInputs::<H::Domain> {
         replica_id,
-        layer_challenges,
         tau: Some(tau.simplify().into()),
         comm_r_star: tau.comm_r_star,
         k: Some(0),

@@ -112,16 +112,21 @@ pub type EncodingProof<H> = drgporep::Proof<H>;
 #[derive(Debug, Clone)]
 pub struct PublicInputs<T: Domain> {
     pub replica_id: T,
-    pub layer_challenges: LayerChallenges,
     pub tau: Option<porep::Tau<T>>,
     pub comm_r_star: T,
     pub k: Option<usize>,
 }
 
 impl<T: Domain> PublicInputs<T> {
-    pub fn challenges(&self, leaves: usize, layer: u8, partition_k: Option<usize>) -> Vec<usize> {
+    pub fn challenges(
+        &self,
+        layer_challenges: &LayerChallenges,
+        leaves: usize,
+        layer: u8,
+        partition_k: Option<usize>,
+    ) -> Vec<usize> {
         derive_challenges::<T>(
-            &self.layer_challenges,
+            layer_challenges,
             layer,
             leaves,
             &self.replica_id,
@@ -197,6 +202,7 @@ pub trait Layers {
             <Self::Hasher as Hasher>::Domain,
             <Self::Hasher as Hasher>::Function,
         >],
+        layer_challenges: &LayerChallenges,
         layers: usize,
         total_layers: usize,
         partition_count: usize,
@@ -227,6 +233,7 @@ pub trait Layers {
                         let drgporep_pub_inputs = drgporep::PublicInputs {
                             replica_id: pub_inputs.replica_id,
                             challenges: pub_inputs.challenges(
+                                layer_challenges,
                                 pp.graph.size(),
                                 layer_diff as u8,
                                 Some(k),
@@ -448,6 +455,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
             pub_inputs,
             &priv_inputs.tau,
             &priv_inputs.aux,
+            &pub_params.layer_challenges,
             pub_params.layer_challenges.layers(),
             pub_params.layer_challenges.layers(),
             partition_count,
@@ -492,6 +500,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
                 let new_pub_inputs = drgporep::PublicInputs {
                     replica_id: pub_inputs.replica_id,
                     challenges: pub_inputs.challenges(
+                        &pub_params.layer_challenges,
                         pub_params.drg_porep_public_params.graph.size(),
                         layer as u8,
                         Some(k),
@@ -531,7 +540,6 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
     fn with_partition(pub_in: Self::PublicInputs, k: Option<usize>) -> Self::PublicInputs {
         self::PublicInputs {
             replica_id: pub_in.replica_id,
-            layer_challenges: pub_in.layer_challenges,
             tau: pub_in.tau,
             comm_r_star: pub_in.comm_r_star,
             k,

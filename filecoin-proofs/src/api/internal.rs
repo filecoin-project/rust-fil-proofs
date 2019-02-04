@@ -433,7 +433,6 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
 
     let public_inputs = layered_drgporep::PublicInputs {
         replica_id,
-        layer_challenges: challenges,
         tau: Some(public_tau),
         comm_r_star: tau.comm_r_star,
         k: None,
@@ -637,7 +636,6 @@ pub fn verify_seal(
 
     let public_inputs = layered_drgporep::PublicInputs::<<DefaultTreeHasher as Hasher>::Domain> {
         replica_id,
-        layer_challenges: challenges,
         tau: Some(Tau {
             comm_r: comm_r.into(),
             comm_d: comm_d.into(),
