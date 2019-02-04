@@ -1,3 +1,4 @@
+use std::cmp::min;
 use std::sync::mpsc::channel;
 
 use crossbeam_utils::thread;
@@ -20,8 +21,16 @@ use crate::SP_LOG;
 
 #[derive(Debug, Clone)]
 pub enum LayerChallenges {
-    Fixed { layers: usize, count: usize },
-    Tapered(Vec<usize>),
+    Fixed {
+        layers: usize,
+        count: usize,
+    },
+    Tapered {
+        layers: usize,
+        count: usize,
+        taper: f64,
+        taper_layers: usize,
+    },
 }
 
 impl LayerChallenges {
@@ -29,21 +38,38 @@ impl LayerChallenges {
         LayerChallenges::Fixed { layers, count }
     }
 
-    pub fn new_tapered(challenges: Vec<usize>) -> Self {
-        LayerChallenges::Tapered(challenges)
+    pub fn new_tapered(layers: usize, challenges: usize, taper_layers: usize, taper: f64) -> Self {
+        LayerChallenges::Tapered {
+            layers,
+            count: challenges,
+            taper,
+            taper_layers,
+        }
     }
 
     pub fn layers(&self) -> usize {
         match self {
             LayerChallenges::Fixed { layers, .. } => *layers,
-            LayerChallenges::Tapered(cs) => cs.len(),
+            LayerChallenges::Tapered { layers, .. } => *layers,
         }
     }
 
     pub fn challenges_for_layer(&self, layer: usize) -> usize {
         match self {
             LayerChallenges::Fixed { count, .. } => *count,
-            LayerChallenges::Tapered(cs) => cs[layer],
+            LayerChallenges::Tapered {
+                taper,
+                taper_layers,
+                count,
+                layers,
+            } => {
+                assert!(layer < *layers);
+                let r: f64 = 1.0 - *taper;
+                let t = min(layer, *taper_layers); // FIXME: Verify this is not off by one.
+                let total_taper = r.powi(t as i32);
+
+                (total_taper * *count as f64).ceil() as usize
+            }
         }
     }
 }
@@ -615,4 +641,32 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
     ) -> Result<Vec<u8>> {
         unimplemented!();
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_calculate_taper_challenges() {
+        let layer_challenges = LayerChallenges::new_tapered(10, 333, 7, 1.0 / 3.0);
+        let expected = [333, 223, 149, 99, 66, 44, 30, 20, 20, 20];
+
+        for (i, expected_count) in expected.iter().enumerate() {
+            let calculated_count = layer_challenges.challenges_for_layer(i);
+            assert_eq!(*expected_count as usize, calculated_count);
+        }
+    }
+
+    #[test]
+    fn test_calculate_fixed_challenges() {
+        let layer_challenges = LayerChallenges::new_fixed(10, 333);
+        let expected = [333, 333, 333, 333, 333, 333, 333, 333, 333, 333];
+
+        for (i, expected_count) in expected.iter().enumerate() {
+            let calculated_count = layer_challenges.challenges_for_layer(i);
+            assert_eq!(*expected_count as usize, calculated_count);
+        }
+    }
+
 }

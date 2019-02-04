@@ -143,7 +143,7 @@ mod tests {
     }
 
     fn prove_verify_tapered(n: usize, i: usize) {
-        let challenges = LayerChallenges::new_tapered(vec![2, 3, 4, 5, 6, 7]);
+        let challenges = LayerChallenges::new_tapered(5, 10, 5, 0.9);
 
         test_prove_verify::<PedersenHasher>(n, i, challenges.clone());
         test_prove_verify::<Sha256Hasher>(n, i, challenges.clone());
