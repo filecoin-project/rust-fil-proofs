@@ -199,8 +199,18 @@ where
         engine_params: &'a E::Params,
     ) -> C;
 
-    fn blank_circuit(_public_param: &S::PublicParams, _engine_params: &'a E::Params) -> C {
+    fn blank_circuit(_public_params: &S::PublicParams, _engine_params: &'a E::Params) -> C {
         unimplemented!();
+    }
+
+    fn groth_params(
+        public_params: &S::PublicParams,
+        engine_params: &'a E::Params,
+    ) -> Result<groth16::Parameters<E>> {
+        Self::get_groth_params(
+            Self::blank_circuit(public_params, engine_params),
+            public_params,
+        )
     }
 
     fn circuit_for_test(

@@ -100,7 +100,7 @@ mod tests {
                 drg: drgporep::DrgParams {
                     nodes: data.len() / 32,
                     degree: 5,
-                    expansion_degree: 5,
+                    expansion_degree: 8,
                     seed: new_seed(),
                 },
                 sloth_iter,
