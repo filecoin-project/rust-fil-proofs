@@ -1,17 +1,20 @@
-use crate::crypto::blake2s::blake2s;
-use crate::hasher::Domain;
 use byteorder::{LittleEndian, WriteBytesExt};
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
 
+use crate::crypto::blake2s::blake2s;
+use crate::hasher::Domain;
+use crate::layered_drgporep::LayerChallenges;
+
 pub fn derive_challenges<D: Domain>(
-    n: usize,
+    challenges: &LayerChallenges,
     layer: u8,
     leaves: usize,
     replica_id: &D,
     commitment: &D,
     k: u8,
 ) -> Vec<usize> {
+    let n = challenges.challenges_for_layer(layer as usize);
     (0..n)
         .map(|i| {
             let mut bytes = replica_id.into_bytes();
@@ -40,21 +43,29 @@ mod test {
     #[test]
     fn challenge_derivation() {
         let n = 200;
+        let layers = 100;
+
+        let challenges = LayerChallenges::new_fixed(layers, n);
         let leaves = 1 << 30;
         let mut rng = thread_rng();
         let replica_id: PedersenDomain = rng.gen();
         let commitment: PedersenDomain = rng.gen();
         let partitions = 5;
         let total_challenges = partitions * n;
-        let layers = 100;
 
         let mut layers_with_duplicates = 0;
 
         for layer in 0..layers {
             let mut histogram = HashMap::new();
             for k in 0..partitions {
-                let challenges =
-                    derive_challenges(n, layer, leaves, &replica_id, &commitment, k as u8);
+                let challenges = derive_challenges(
+                    &challenges,
+                    layer as u8,
+                    leaves,
+                    &replica_id,
+                    &commitment,
+                    k as u8,
+                );
 
                 for challenge in challenges {
                     let counter = histogram.entry(challenge).or_insert(0);
@@ -84,12 +95,26 @@ mod test {
         let partitions = 5;
         let layers = 100;
         let total_challenges = n * partitions;
+
         for layer in 0..layers {
-            let one_partition_challenges =
-                derive_challenges(total_challenges, layer, leaves, &replica_id, &commitment, 0);
+            let one_partition_challenges = derive_challenges(
+                &LayerChallenges::new_fixed(layers, total_challenges),
+                layer as u8,
+                leaves,
+                &replica_id,
+                &commitment,
+                0,
+            );
             let many_partition_challenges = (0..partitions)
                 .flat_map(|k| {
-                    derive_challenges(n, layer, leaves, &replica_id, &commitment, k as u8)
+                    derive_challenges(
+                        &LayerChallenges::new_fixed(layers, n),
+                        layer as u8,
+                        leaves,
+                        &replica_id,
+                        &commitment,
+                        k as u8,
+                    )
                 })
                 .collect::<Vec<_>>();
 

@@ -1,3 +1,4 @@
+use std::cmp::min;
 use std::sync::mpsc::channel;
 
 use crossbeam_utils::thread;
@@ -18,11 +19,65 @@ use crate::proof::ProofScheme;
 use crate::vde;
 use crate::SP_LOG;
 
+#[derive(Debug, Clone)]
+pub enum LayerChallenges {
+    Fixed {
+        layers: usize,
+        count: usize,
+    },
+    Tapered {
+        layers: usize,
+        count: usize,
+        taper: f64,
+        taper_layers: usize,
+    },
+}
+
+impl LayerChallenges {
+    pub const fn new_fixed(layers: usize, count: usize) -> Self {
+        LayerChallenges::Fixed { layers, count }
+    }
+
+    pub fn new_tapered(layers: usize, challenges: usize, taper_layers: usize, taper: f64) -> Self {
+        LayerChallenges::Tapered {
+            layers,
+            count: challenges,
+            taper,
+            taper_layers,
+        }
+    }
+
+    pub fn layers(&self) -> usize {
+        match self {
+            LayerChallenges::Fixed { layers, .. } => *layers,
+            LayerChallenges::Tapered { layers, .. } => *layers,
+        }
+    }
+
+    pub fn challenges_for_layer(&self, layer: usize) -> usize {
+        match self {
+            LayerChallenges::Fixed { count, .. } => *count,
+            LayerChallenges::Tapered {
+                taper,
+                taper_layers,
+                count,
+                layers,
+            } => {
+                assert!(layer < *layers);
+                let r: f64 = 1.0 - *taper;
+                let t = min(layer, *taper_layers); // FIXME: Verify this is not off by one.
+                let total_taper = r.powi(t as i32);
+
+                (total_taper * *count as f64).ceil() as usize
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct SetupParams {
     pub drg_porep_setup_params: drgporep::SetupParams,
-    pub layers: usize,
-    pub challenge_count: usize,
+    pub layer_challenges: LayerChallenges,
 }
 
 #[derive(Debug, Clone)]
@@ -32,8 +87,7 @@ where
     G: Graph<H> + ParameterSetIdentifier,
 {
     pub drg_porep_public_params: drgporep::PublicParams<H, G>,
-    pub layers: usize,
-    pub challenge_count: usize,
+    pub layer_challenges: LayerChallenges,
 }
 
 #[derive(Debug, Clone)]
@@ -59,10 +113,9 @@ where
 {
     fn parameter_set_identifier(&self) -> String {
         format!(
-            "layered_drgporep::PublicParams{{ drg_porep_identifier: {}, layers: {}, challenge_count: {} }}",
+            "layered_drgporep::PublicParams{{ drg_porep_identifier: {}, challenges: {:?} }}",
             self.drg_porep_public_params.parameter_set_identifier(),
-            self.layers,
-            self.challenge_count,
+            self.layer_challenges,
         )
     }
 }
@@ -75,8 +128,7 @@ where
     fn from(pp: &PublicParams<H, G>) -> PublicParams<H, G> {
         PublicParams {
             drg_porep_public_params: pp.drg_porep_public_params.clone(),
-            layers: pp.layers,
-            challenge_count: pp.challenge_count,
+            layer_challenges: pp.layer_challenges.clone(),
         }
     }
 }
@@ -86,16 +138,21 @@ pub type EncodingProof<H> = drgporep::Proof<H>;
 #[derive(Debug, Clone)]
 pub struct PublicInputs<T: Domain> {
     pub replica_id: T,
-    pub challenge_count: usize,
     pub tau: Option<porep::Tau<T>>,
     pub comm_r_star: T,
     pub k: Option<usize>,
 }
 
 impl<T: Domain> PublicInputs<T> {
-    pub fn challenges(&self, leaves: usize, layer: u8, partition_k: Option<usize>) -> Vec<usize> {
+    pub fn challenges(
+        &self,
+        layer_challenges: &LayerChallenges,
+        leaves: usize,
+        layer: u8,
+        partition_k: Option<usize>,
+    ) -> Vec<usize> {
         derive_challenges::<T>(
-            self.challenge_count,
+            layer_challenges,
             layer,
             leaves,
             &self.replica_id,
@@ -171,6 +228,7 @@ pub trait Layers {
             <Self::Hasher as Hasher>::Domain,
             <Self::Hasher as Hasher>::Function,
         >],
+        layer_challenges: &LayerChallenges,
         layers: usize,
         total_layers: usize,
         partition_count: usize,
@@ -201,6 +259,7 @@ pub trait Layers {
                         let drgporep_pub_inputs = drgporep::PublicInputs {
                             replica_id: pub_inputs.replica_id,
                             challenges: pub_inputs.challenges(
+                                layer_challenges,
                                 pp.graph.size(),
                                 layer_diff as u8,
                                 Some(k),
@@ -389,8 +448,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         let dp_sp = DrgPoRep::setup(&sp.drg_porep_setup_params)?;
         let pp = PublicParams {
             drg_porep_public_params: dp_sp,
-            layers: sp.layers,
-            challenge_count: sp.challenge_count,
+            layer_challenges: sp.layer_challenges.clone(),
         };
 
         Ok(pp)
@@ -423,8 +481,9 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
             pub_inputs,
             &priv_inputs.tau,
             &priv_inputs.aux,
-            pub_params.layers,
-            pub_params.layers,
+            &pub_params.layer_challenges,
+            pub_params.layer_challenges.layers(),
+            pub_params.layer_challenges.layers(),
             partition_count,
         )?;
 
@@ -450,11 +509,11 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         partition_proofs: &[Self::Proof],
     ) -> Result<bool> {
         for (k, proof) in partition_proofs.iter().enumerate() {
-            if proof.encoding_proofs.len() != pub_params.layers {
+            if proof.encoding_proofs.len() != pub_params.layer_challenges.layers() {
                 return Ok(false);
             }
 
-            let total_layers = pub_params.layers;
+            let total_layers = pub_params.layer_challenges.layers();
             let mut pp = pub_params.drg_porep_public_params.clone();
             // TODO: verification is broken for the first node, figure out how to unbreak
             // with permutations
@@ -467,6 +526,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
                 let new_pub_inputs = drgporep::PublicInputs {
                     replica_id: pub_inputs.replica_id,
                     challenges: pub_inputs.challenges(
+                        &pub_params.layer_challenges,
                         pub_params.drg_porep_public_params.graph.size(),
                         layer as u8,
                         Some(k),
@@ -506,7 +566,6 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
     fn with_partition(pub_in: Self::PublicInputs, k: Option<usize>) -> Self::PublicInputs {
         self::PublicInputs {
             replica_id: pub_in.replica_id,
-            challenge_count: pub_in.challenge_count,
             tau: pub_in.tau,
             comm_r_star: pub_in.comm_r_star,
             k,
@@ -543,7 +602,7 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let (taus, auxs) = Self::transform_and_replicate_layers(
             &pp.drg_porep_public_params,
-            pp.layers,
+            pp.layer_challenges.layers(),
             replica_id,
             data,
         )?;
@@ -566,7 +625,7 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
 
         Self::extract_and_invert_transform_layers(
             &pp.drg_porep_public_params,
-            pp.layers,
+            pp.layer_challenges.layers(),
             replica_id,
             &mut data,
         )?;
@@ -582,4 +641,32 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
     ) -> Result<Vec<u8>> {
         unimplemented!();
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_calculate_taper_challenges() {
+        let layer_challenges = LayerChallenges::new_tapered(10, 333, 7, 1.0 / 3.0);
+        let expected = [333, 223, 149, 99, 66, 44, 30, 20, 20, 20];
+
+        for (i, expected_count) in expected.iter().enumerate() {
+            let calculated_count = layer_challenges.challenges_for_layer(i);
+            assert_eq!(*expected_count as usize, calculated_count);
+        }
+    }
+
+    #[test]
+    fn test_calculate_fixed_challenges() {
+        let layer_challenges = LayerChallenges::new_fixed(10, 333);
+        let expected = [333, 333, 333, 333, 333, 333, 333, 333, 333, 333];
+
+        for (i, expected_count) in expected.iter().enumerate() {
+            let calculated_count = layer_challenges.challenges_for_layer(i);
+            assert_eq!(*expected_count as usize, calculated_count);
+        }
+    }
+
 }

@@ -36,7 +36,7 @@ use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
 use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
-use storage_proofs::layered_drgporep;
+use storage_proofs::layered_drgporep::{self, LayerChallenges};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::zigzag_drgporep::*;
@@ -92,8 +92,7 @@ fn do_the_work<H: 'static>(
     m: usize,
     expansion_degree: usize,
     sloth_iter: usize,
-    challenge_count: usize,
-    layers: usize,
+    layer_challenges: LayerChallenges,
     partitions: usize,
     circuit: bool,
     groth: bool,
@@ -108,8 +107,8 @@ fn do_the_work<H: 'static>(
     info!(FCP_LOG, "m: {}", m; "target" => "config");
     info!(FCP_LOG, "expansion_degree: {}", expansion_degree; "target" => "config");
     info!(FCP_LOG, "sloth: {}", sloth_iter; "target" => "config");
-    info!(FCP_LOG, "challenge_count: {}", challenge_count; "target" => "config");
-    info!(FCP_LOG, "layers: {}", layers; "target" => "config");
+    info!(FCP_LOG, "layer_challenges: {:?}", layer_challenges; "target" => "config");
+    info!(FCP_LOG, "layers: {}", layer_challenges.layers(); "target" => "config");
     info!(FCP_LOG, "partitions: {}", partitions; "target" => "config");
     info!(FCP_LOG, "circuit: {:?}", circuit; "target" => "config");
     info!(FCP_LOG, "groth: {:?}", groth; "target" => "config");
@@ -133,8 +132,7 @@ fn do_the_work<H: 'static>(
             },
             sloth_iter,
         },
-        layers,
-        challenge_count,
+        layer_challenges: layer_challenges.clone(),
     };
 
     info!(FCP_LOG, "running setup");
@@ -153,7 +151,6 @@ fn do_the_work<H: 'static>(
     stop_profile();
     let pub_inputs = layered_drgporep::PublicInputs::<H::Domain> {
         replica_id,
-        challenge_count,
         tau: Some(tau.simplify().into()),
         comm_r_star: tau.comm_r_star,
         k: Some(0),
@@ -406,6 +403,8 @@ fn main() {
     let circuit = matches.is_present("circuit");
     let extract = matches.is_present("extract");
 
+    let challenges = LayerChallenges::new_fixed(layers, challenge_count);
+
     info!(FCP_LOG, "hasher: {}", hasher; "target" => "config");
     match hasher.as_ref() {
         "pedersen" => {
@@ -414,8 +413,7 @@ fn main() {
                 m,
                 expansion_degree,
                 sloth_iter,
-                challenge_count,
-                layers,
+                challenges,
                 partitions,
                 circuit,
                 groth,
@@ -429,8 +427,7 @@ fn main() {
                 m,
                 expansion_degree,
                 sloth_iter,
-                challenge_count,
-                layers,
+                challenges,
                 partitions,
                 circuit,
                 groth,
@@ -444,8 +441,7 @@ fn main() {
                 m,
                 expansion_degree,
                 sloth_iter,
-                challenge_count,
-                layers,
+                challenges,
                 partitions,
                 circuit,
                 groth,

@@ -21,7 +21,7 @@ use storage_proofs::drgraph::{new_seed, DefaultTreeHasher, Graph};
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
 use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::hasher::{Domain, Hasher};
-use storage_proofs::layered_drgporep;
+use storage_proofs::layered_drgporep::{self, LayerChallenges};
 use storage_proofs::merkle::MerkleTree;
 use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::parameter_cache::{
@@ -113,7 +113,7 @@ const DEGREE: usize = 1; // TODO: 5; FIXME: increasing degree introduces a test 
 const EXPANSION_DEGREE: usize = 6;
 const SLOTH_ITER: usize = 0;
 const LAYERS: usize = 2; // TODO: 10;
-const CHALLENGE_COUNT: usize = 1;
+const CHALLENGES: LayerChallenges = LayerChallenges::new_fixed(LAYERS, 1);
 
 fn setup_params(sector_bytes: usize) -> layered_drgporep::SetupParams {
     assert!(
@@ -132,8 +132,7 @@ fn setup_params(sector_bytes: usize) -> layered_drgporep::SetupParams {
             },
             sloth_iter: SLOTH_ITER,
         },
-        layers: LAYERS,
-        challenge_count: CHALLENGE_COUNT,
+        layer_challenges: CHALLENGES,
     }
 }
 
@@ -387,7 +386,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         get_config(sector_config);
 
     let public_params = public_params(proof_sector_bytes);
-    let challenge_count = public_params.challenge_count;
+    let challenges = public_params.layer_challenges;
     if let Some(delay) = delay_seconds {
         delay_seal(delay);
     };
@@ -434,7 +433,6 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
 
     let public_inputs = layered_drgporep::PublicInputs {
         replica_id,
-        challenge_count,
         tau: Some(public_tau),
         comm_r_star: tau.comm_r_star,
         k: None,
@@ -614,7 +612,7 @@ pub fn verify_seal(
     let (_fake, _delay_seconds, _sector_bytes, proof_sector_bytes, uses_official_circuit) =
         get_config(sector_config);
 
-    let challenge_count = CHALLENGE_COUNT;
+    let challenges = CHALLENGES;
     let prover_id = pad_safe_fr(prover_id_in);
     let sector_id = pad_safe_fr(sector_id_in);
     let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
@@ -638,7 +636,6 @@ pub fn verify_seal(
 
     let public_inputs = layered_drgporep::PublicInputs::<<DefaultTreeHasher as Hasher>::Domain> {
         replica_id,
-        challenge_count,
         tau: Some(Tau {
             comm_r: comm_r.into(),
             comm_d: comm_d.into(),
