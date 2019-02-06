@@ -38,6 +38,7 @@ serde_derive = "1.0"
 base64 = "0.10.0"
 # accumulators = { git = "https://github.com/dignifiedquire/rust-accumulators", branch = "master", features = ["serde"] }
 accumulators = { path = "../../../../opensource/rust-accumulators", features = ["serde"] }
+serde_cbor = "0.9"
 
 [dependencies.pairing]
 version = "0.14.2"

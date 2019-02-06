@@ -45,6 +45,7 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate accumulators;
+extern crate serde_cbor;
 
 #[macro_use]
 pub mod test_helper;

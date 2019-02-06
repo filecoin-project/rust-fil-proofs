@@ -4,8 +4,8 @@ use accumulators::accumulator::Accumulator;
 use accumulators::group::RSAGroup;
 use accumulators::traits::*;
 use accumulators::vc::*;
-use rayon::prelude::*;
 
+use crate::drgporep::{DrgParams, PublicParams};
 use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::hasher::{Domain, Hasher};
@@ -40,60 +40,6 @@ pub struct SetupParams {
     pub sloth_iter: usize,
 }
 
-#[derive(Debug, Clone)]
-pub struct DrgParams {
-    // Number of nodes
-    pub nodes: usize,
-
-    // Base degree of DRG
-    pub degree: usize,
-
-    pub expansion_degree: usize,
-
-    // Random seed
-    pub seed: [u32; 7],
-}
-
-#[derive(Debug, Clone)]
-pub struct PublicParams<H, G>
-where
-    H: Hasher,
-    G: Graph<H> + ParameterSetIdentifier,
-{
-    pub graph: G,
-    pub sloth_iter: usize,
-
-    _h: PhantomData<H>,
-}
-
-impl<H, G> PublicParams<H, G>
-where
-    H: Hasher,
-    G: Graph<H> + ParameterSetIdentifier,
-{
-    pub fn new(graph: G, sloth_iter: usize) -> Self {
-        PublicParams {
-            graph,
-            sloth_iter,
-            _h: PhantomData,
-        }
-    }
-}
-
-impl<H, G> ParameterSetIdentifier for PublicParams<H, G>
-where
-    H: Hasher,
-    G: Graph<H> + ParameterSetIdentifier,
-{
-    fn parameter_set_identifier(&self) -> String {
-        format!(
-            "bbf_vc::PublicParams{{graph: {}; sloth_iter: {}}}",
-            self.graph.parameter_set_identifier(),
-            self.sloth_iter
-        )
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proof {
     pub proof: <VectorCommitment<Accumulator> as StaticVectorCommitment>::BatchCommitment,
@@ -103,8 +49,7 @@ pub struct Proof {
 
 impl Proof {
     pub fn serialize(&self) -> Vec<u8> {
-        // TODO: implement using serde
-        vec![]
+        serde_cbor::to_vec(self).unwrap()
     }
 
     pub fn new(
@@ -228,15 +173,21 @@ where
         _data_tree: Option<MerkleTree<H::Domain, H::Function>>,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         // TODO: right parameters
-        let n = 1024;
-        let lambda = 256;
+        // TODO: is this the right size, with accumulators?
+        let node_size = 32;
+        let n = 2048;
+        let lambda = node_size * 8;
         let mut vc = create_vector_commitment::<Accumulator, RSAGroup>(lambda, n);
 
         let nodes = pp.graph.size();
-        // TODO: is this the right size, with accumulators?
-        let node_size = 32;
 
-        encode(&pp.graph, pp.sloth_iter, replica_id, data, &mut vc)?;
+        // commit raw data
+        vc.commit_refs((0..node_size).map(|i| data_at_node(data, i).unwrap()));
+
+        vde::encode(&pp.graph, pp.sloth_iter, replica_id, data)?;
+
+        // commit encoded data
+        vc.commit_refs((0..node_size).map(|i| data_at_node(data, i).unwrap()));
 
         Ok((Tau { comm: vc }, ()))
     }
@@ -257,59 +208,6 @@ where
     ) -> Result<Vec<u8>> {
         Ok(decode_block(&pp.graph, pp.sloth_iter, replica_id, data, node)?.into_bytes())
     }
-}
-
-/// encodes the data and overwrites the original data slice.
-pub fn encode<'a, H, G>(
-    graph: &'a G,
-    sloth_iter: usize,
-    replica_id: &'a H::Domain,
-    data: &'a mut [u8],
-    vc: &mut VectorCommitment<Accumulator>,
-) -> Result<()>
-where
-    H: Hasher,
-    G: Graph<H>,
-{
-    let degree = graph.degree();
-
-    // Because a node always follows all of its parents in the data,
-    // the nodes are by definition already topologically sorted.
-    // Therefore, if we simply traverse the data in order, encoding each node in place,
-    // we can always get each parent's encodings with a simple lookup --
-    // since we will already have encoded the parent earlier in the traversal.
-    // The only subtlety is that a ZigZag graph may be reversed, so the direction
-    // of the traversal must also be.
-
-    for n in 0..graph.size() {
-        let node = if graph.forward() {
-            n
-        } else {
-            // If the graph is reversed, traverse in reverse order.
-            (graph.size() - n) - 1
-        };
-
-        let parents = graph.parents(node);
-        assert_eq!(parents.len(), graph.degree(), "wrong number of parents");
-
-        let key = vde::create_key::<H>(replica_id, node, &parents, data, degree)?;
-        let start = data_at_node_offset(node);
-        let end = start + 32;
-
-        // commit original data
-        let original_data = vec![data[start..end].to_vec()];
-        vc.commit(original_data);
-
-        // encode data
-        let node_data = H::Domain::try_from_bytes(&data[start..end])?;
-        let encoded = H::sloth_encode(&key, &node_data, sloth_iter);
-        encoded.write_bytes(&mut data[start..end])?;
-
-        // commit encoded data
-        vc.commit(vec![data[start..end].to_vec()]);
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]

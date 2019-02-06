@@ -21,6 +21,7 @@ use std::time::{Duration, Instant};
 use gperftools::profiler::PROFILER;
 
 use storage_proofs::bbf_vc::*;
+use storage_proofs::drgporep::DrgParams;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
@@ -112,7 +113,7 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     let mut proofs = Vec::with_capacity(samples as usize);
     info!(
         FCP_LOG,
-        "sampling proving & verifying (samples: {})", samples
+        "sampling proving & verifying (samples: {})", samples,
     );
     for _ in 0..samples {
         let start = Instant::now();
@@ -130,7 +131,6 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     }
 
     // -- print statistics
-    info!(FCP_LOG, "hello?");
     let serialized_proofs = proofs.iter().fold(Vec::new(), |mut acc, p| {
         acc.extend(p.serialize());
         acc
