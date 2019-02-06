@@ -6,7 +6,7 @@ extern crate storage_proofs;
 use filecoin_proofs::api::internal;
 use pairing::bls12_381::Bls12;
 
-use sector_base::api::disk_backed_storage::{FAST_SECTOR_SIZE, REAL_SECTOR_SIZE, SLOW_SECTOR_SIZE};
+use sector_base::api::disk_backed_storage::{LIVE_SECTOR_SIZE, TEST_SECTOR_SIZE};
 use storage_proofs::circuit::vdf_post::{VDFPoStCircuit, VDFPostCompound};
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::CompoundProof;
@@ -32,7 +32,6 @@ fn cache_params(sector_size: u64) {
 
 // Run this from the command-line to pre-generate the groth parameters used by the API.
 pub fn main() {
-    cache_params(REAL_SECTOR_SIZE);
-    cache_params(FAST_SECTOR_SIZE);
-    cache_params(SLOW_SECTOR_SIZE);
+    cache_params(TEST_SECTOR_SIZE);
+    cache_params(LIVE_SECTOR_SIZE);
 }

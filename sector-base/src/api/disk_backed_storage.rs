@@ -15,14 +15,11 @@ use std::path::Path;
 // but this is not recommended, since some sealed sector sizes are invalid. If you must set this manually,
 // ensure the chosen sector size is a multiple of 32.
 
-// Sector size, in bytes, to use when testing real proofs. (real sector store)
-pub const REAL_SECTOR_SIZE: u64 = 128;
+// Sector size, in bytes, for tests.
+pub const TEST_SECTOR_SIZE: u64 = 1024;
 
-// Sector size, in bytes, for tests which fake sealing with a subset of the data. (fast fake sector store)
-pub const FAST_SECTOR_SIZE: u64 = 1024;
-
-// Sector size, in bytes, during live operation -- which also fakes sealing with a subset of the data. (slow fake sector store)
-pub const SLOW_SECTOR_SIZE: u64 = 1 << 30;
+// Sector size, in bytes, during live operation.
+pub const LIVE_SECTOR_SIZE: u64 = 1 << 25; // 32MiB
 
 /// Initializes and returns a boxed SectorStore instance with very small, unrealistic/insecure parameters
 /// for use in testing.
@@ -181,11 +178,7 @@ impl DiskManager {
     }
 }
 
-pub struct RealConfig {
-    sector_bytes: u64,
-}
-
-pub struct FakeConfig {
+pub struct Config {
     sector_bytes: u64,
 }
 
@@ -228,38 +221,16 @@ pub fn new_sector_store(
 
 pub fn new_sector_config(cs: &ConfiguredStore) -> Box<SectorConfig> {
     match *cs {
-        ConfiguredStore::Live => Box::new(FakeConfig {
-            sector_bytes: SLOW_SECTOR_SIZE,
+        ConfiguredStore::Live => Box::new(Config {
+            sector_bytes: LIVE_SECTOR_SIZE,
         }),
-        ConfiguredStore::Test => Box::new(FakeConfig {
-            sector_bytes: FAST_SECTOR_SIZE,
+        ConfiguredStore::Test => Box::new(Config {
+            sector_bytes: TEST_SECTOR_SIZE,
         }),
     }
 }
 
-impl SectorConfig for RealConfig {
-    fn is_fake(&self) -> bool {
-        false
-    }
-
-    fn max_unsealed_bytes_per_sector(&self) -> u64 {
-        unpadded_bytes(self.sector_bytes)
-    }
-
-    fn sector_bytes(&self) -> u64 {
-        self.sector_bytes
-    }
-
-    fn dummy_parameter_cache_name(&self) -> String {
-        String::from("REAL_DUMMY_API_PARAMETERS")
-    }
-}
-
-impl SectorConfig for FakeConfig {
-    fn is_fake(&self) -> bool {
-        true
-    }
-
+impl SectorConfig for Config {
     fn max_unsealed_bytes_per_sector(&self) -> u64 {
         unpadded_bytes(self.sector_bytes)
     }
@@ -308,7 +279,7 @@ pub mod tests {
     #[test]
     fn max_unsealed_bytes_per_sector_checks() {
         let xs = vec![
-            (ConfiguredStore::Live, 1065353216),
+            (ConfiguredStore::Live, 33292288),
             (ConfiguredStore::Test, 1016),
         ];
 

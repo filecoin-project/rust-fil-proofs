@@ -1,9 +1,6 @@
 use crate::api::errors::SectorManagerErr;
 
 pub trait SectorConfig {
-    /// if true, uses something other exact bits, correct parameters, or full proofs
-    fn is_fake(&self) -> bool;
-
     /// returns the number of bytes that will fit into a sector managed by this store
     fn max_unsealed_bytes_per_sector(&self) -> u64;
 

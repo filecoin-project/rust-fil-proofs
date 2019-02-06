@@ -1,3 +1,4 @@
+use std::env;
 use std::fs::File;
 use std::io::{BufWriter, Read, Write};
 use std::path::PathBuf;
@@ -8,7 +9,7 @@ use pairing::bls12_381::{Bls12, Fr};
 use pairing::{Engine, PrimeField};
 use sapling_crypto::jubjub::JubjubBls12;
 
-use sector_base::api::disk_backed_storage::REAL_SECTOR_SIZE;
+use sector_base::api::disk_backed_storage::LIVE_SECTOR_SIZE;
 use sector_base::api::sector_store::SectorConfig;
 use sector_base::io::fr32::write_unpadded;
 use std::path::Path;
@@ -63,6 +64,10 @@ type ChallengeSeed = Fr32Ary;
 /// FrSafe is an array of the largest whole number of bytes guaranteed not to overflow the field.
 type FrSafe = [u8; 31];
 
+/// Test clusters want to be able to seal sectors very fast, so we define a very small sector size
+/// to allow that.
+const SMALL_SECTOR_SIZE: usize = 128;
+
 /// How big, in bytes, is the SNARK proof exposed by the API?
 ///
 /// Note: These values need to be kept in sync with what's in api/mod.rs.
@@ -77,9 +82,6 @@ const POST_PARTITIONS: usize = 1;
 const POST_PROOF_BYTES: usize = SNARK_BYTES * POST_PARTITIONS;
 
 type SnarkProof = [u8; POREP_PROOF_BYTES];
-
-/// How big should a fake sector be when faking proofs?
-const FAKE_SECTOR_BYTES: usize = 128;
 
 fn dummy_parameter_cache_path(sector_config: &SectorConfig, sector_size: usize) -> PathBuf {
     parameter_cache_path(&format!(
@@ -131,8 +133,8 @@ fn get_post_params(sector_bytes: usize) -> error::Result<groth16::Parameters<Bls
 const DEGREE: usize = 2;
 const EXPANSION_DEGREE: usize = 8;
 const SLOTH_ITER: usize = 0;
-const LAYERS: usize = 2; // TODO: 10;
-const TAPER_LAYERS: usize = LAYERS; // TODO: 7
+const LAYERS: usize = 5; // TODO: 10;
+const TAPER_LAYERS: usize = 3; // TODO: 7
 const TAPER: f64 = 1.0 / 3.0;
 const CHALLENGE_COUNT: usize = 2;
 const DRG_SEED: [u32; 7] = [1, 2, 3, 4, 5, 6, 7]; // Arbitrary, need a theory for how to vary this over time.
@@ -216,27 +218,22 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
 /// Validate sector_config configuration and calculates derived configuration.
 ///
 /// # Return Values
-/// * - `fake` is true when faking.
 /// * - `sector_bytes` is the size (in bytes) of sector which should be stored on disk.
 /// * - `proof_sector_bytes` is the size of the sector which will be proved when faking.
-pub fn get_config(sector_config: &SectorConfig) -> (bool, usize, usize, bool) {
-    let fake = sector_config.is_fake();
-    let sector_bytes = sector_config.sector_bytes() as usize;
-    let proof_sector_bytes = if fake {
-        FAKE_SECTOR_BYTES
+pub fn get_config(sector_config: &SectorConfig) -> (usize, bool) {
+    let use_small_sectors = env::var("FIL_USE_SMALL_SECTORS").is_ok();
+
+    let sector_bytes = if use_small_sectors {
+        SMALL_SECTOR_SIZE
     } else {
-        sector_bytes
+        sector_config.sector_bytes() as usize
     };
 
+    // NOTE: When multiple sector sizes are supported, this concept will change.
     // If configuration is 'completely real', then we can use the parameters pre-generated for the real circuit.
-    let uses_official_circuit = !fake && (sector_bytes as u64 == REAL_SECTOR_SIZE);
+    let uses_official_circuit = sector_bytes as u64 == LIVE_SECTOR_SIZE;
 
-    (
-        fake,
-        sector_bytes,
-        proof_sector_bytes,
-        uses_official_circuit,
-    )
+    (sector_bytes, uses_official_circuit)
 }
 
 pub struct PoStOutput {
@@ -400,9 +397,9 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     prover_id_in: &FrSafe,
     sector_id_in: &FrSafe,
 ) -> error::Result<SealOutput> {
-    let (fake, sector_bytes, proof_sector_bytes, uses_official_circuit) = get_config(sector_config);
+    let (sector_bytes, uses_official_circuit) = get_config(sector_config);
 
-    let public_params = public_params(proof_sector_bytes);
+    let public_params = public_params(sector_bytes);
     let challenges = public_params.layer_challenges;
 
     let f_in = File::open(in_path)?;
@@ -427,7 +424,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
 
     let compound_setup_params = compound_proof::SetupParams {
         // The proof might use a different number of bytes than we read and copied, if we are faking.
-        vanilla_params: &setup_params(proof_sector_bytes),
+        vanilla_params: &setup_params(sector_bytes),
         engine_params: &(*ENGINE_PARAMS),
         partitions: Some(POREP_PARTITIONS),
     };
@@ -439,8 +436,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         &compound_public_params.vanilla_params,
         &replica_id,
         &mut data,
-        fake,
-        proof_sector_bytes,
+        sector_bytes,
     )?;
 
     let public_tau = tau.simplify();
@@ -453,7 +449,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     };
 
     let private_inputs = layered_drgporep::PrivateInputs::<DefaultTreeHasher> {
-        replica: &data_copy[0..proof_sector_bytes],
+        replica: &data_copy[0..sector_bytes],
         aux,
         tau: tau.layer_taus,
     };
@@ -488,7 +484,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     if must_cache_params {
         write_params_to_cache(
             proof.groth_params.clone(),
-            &dummy_parameter_cache_path(sector_config, proof_sector_bytes),
+            &dummy_parameter_cache_path(sector_config, sector_bytes),
         )?;
     }
 
@@ -522,36 +518,15 @@ fn perform_replication<T: AsRef<Path>>(
     public_params: &<ZigZagDrgPoRep<DefaultTreeHasher> as ProofScheme>::PublicParams,
     replica_id: &<DefaultTreeHasher as Hasher>::Domain,
     data: &mut [u8],
-    fake: bool,
     proof_sector_bytes: usize,
 ) -> error::Result<(
     layered_drgporep::Tau<<DefaultTreeHasher as Hasher>::Domain>,
     Vec<MerkleTree<<DefaultTreeHasher as Hasher>::Domain, <DefaultTreeHasher as Hasher>::Function>>,
 )> {
-    if fake {
-        // When faking replication, we write the original data to disk, before replication.
-        write_data(out_path, data)?;
+    let (tau, aux) = ZigZagDrgPoRep::replicate(public_params, &replica_id, data, None)?;
 
-        assert!(
-            data.len() >= FAKE_SECTOR_BYTES,
-            "data length ({}) is less than FAKE_SECTOR_BYTES ({}) when faking replication",
-            data.len(),
-            FAKE_SECTOR_BYTES
-        );
-        let (tau, aux) = ZigZagDrgPoRep::replicate(
-            public_params,
-            &replica_id,
-            &mut data[0..proof_sector_bytes],
-            None,
-        )?;
-        Ok((tau, aux))
-    } else {
-        // When not faking replication, we write the replicated data to disk, after replication.
-        let (tau, aux) = ZigZagDrgPoRep::replicate(public_params, &replica_id, data, None)?;
-
-        write_data(out_path, data)?;
-        Ok((tau, aux))
-    }
+    write_data(out_path, data)?;
+    Ok((tau, aux))
 }
 
 fn write_data<T: AsRef<Path>>(out_path: T, data: &[u8]) -> error::Result<()> {
@@ -571,8 +546,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     offset: u64,
     num_bytes: u64,
 ) -> error::Result<(u64)> {
-    let (fake, sector_bytes, proof_sector_bytes, _uses_official_circuit) =
-        get_config(sector_config);
+    let (sector_bytes, _uses_official_circuit) = get_config(sector_config);
 
     let prover_id = pad_safe_fr(prover_id_in);
     let sector_id = pad_safe_fr(sector_id_in);
@@ -585,11 +559,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     let f_out = File::create(output_path)?;
     let mut buf_writer = BufWriter::new(f_out);
 
-    let unsealed = if fake {
-        data
-    } else {
-        ZigZagDrgPoRep::extract_all(&public_params(proof_sector_bytes), &replica_id, &data)?
-    };
+    let unsealed = ZigZagDrgPoRep::extract_all(&public_params(sector_bytes), &replica_id, &data)?;
 
     let written = write_unpadded(
         &unsealed,
@@ -610,8 +580,7 @@ pub fn verify_seal(
     sector_id_in: &FrSafe,
     proof_vec: &[u8],
 ) -> error::Result<bool> {
-    let (_fake, _sector_bytes, proof_sector_bytes, uses_official_circuit) =
-        get_config(sector_config);
+    let (sector_bytes, uses_official_circuit) = get_config(sector_config);
 
     let prover_id = pad_safe_fr(prover_id_in);
     let sector_id = pad_safe_fr(sector_id_in);
@@ -623,7 +592,7 @@ pub fn verify_seal(
 
     let compound_setup_params = compound_proof::SetupParams {
         // The proof might use a different number of bytes than we read and copied, if we are faking.
-        vanilla_params: &setup_params(proof_sector_bytes),
+        vanilla_params: &setup_params(sector_bytes),
         engine_params: &(*ENGINE_PARAMS),
         partitions: Some(POREP_PARTITIONS),
     };
@@ -647,16 +616,10 @@ pub fn verify_seal(
     let groth_params = if uses_official_circuit {
         match get_zigzag_params() {
             Some(p) => p,
-            None => read_cached_params(&dummy_parameter_cache_path(
-                sector_config,
-                proof_sector_bytes,
-            ))?,
+            None => read_cached_params(&dummy_parameter_cache_path(sector_config, sector_bytes))?,
         }
     } else {
-        read_cached_params(&dummy_parameter_cache_path(
-            sector_config,
-            proof_sector_bytes,
-        ))?
+        read_cached_params(&dummy_parameter_cache_path(sector_config, sector_bytes))?
     };
 
     let proof = MultiProof::new_from_reader(Some(POREP_PARTITIONS), proof_vec, groth_params)?;
@@ -1100,9 +1063,6 @@ mod tests {
     #[test]
     #[ignore]
     fn post_verify_test() {
-        // FIXME: Make the comment below apply to Test, so we can get rid of ProofTest.
-        // Use `ProofTest` because we need the replicated data to actually be written to disk
-        // so we can regenerate merkle trees corresponding to the `comm_r`s returned from `seal`.
         post_verify_aux(ConfiguredStore::Test, BytesAmount::Max);
     }
 }

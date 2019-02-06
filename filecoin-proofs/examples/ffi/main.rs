@@ -114,10 +114,10 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
     // TODO: Replace the hard-coded byte amounts with values computed
     // from whatever was retrieved from the SectorBuilder.
-    if max_bytes != 127 {
+    if max_bytes != 1016 {
         panic!(
             "test assumes the wrong number of bytes (expected: {}, actual: {})",
-            127, max_bytes
+            1016, max_bytes
         );
     }
 
@@ -144,7 +144,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
     // add first piece, which lazily provisions a new staged sector
     {
-        let (_, _, resp) = create_and_add_piece(sector_builder_a, 10);
+        let (_, _, resp) = create_and_add_piece(sector_builder_a, 100);
         defer!(destroy_add_piece_response(resp));
 
         if (*resp).status_code != 0 {
@@ -156,7 +156,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
     // add second piece, which fits into existing staged sector
     {
-        let (_, _, resp) = create_and_add_piece(sector_builder_a, 50);
+        let (_, _, resp) = create_and_add_piece(sector_builder_a, 500);
         defer!(destroy_add_piece_response(resp));
 
         if (*resp).status_code != 0 {
@@ -168,7 +168,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
     // add third piece, which won't fit into existing staging sector
     {
-        let (_, _, resp) = create_and_add_piece(sector_builder_a, 100);
+        let (_, _, resp) = create_and_add_piece(sector_builder_a, 600);
         defer!(destroy_add_piece_response(resp));
 
         if (*resp).status_code != 0 {
@@ -203,7 +203,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
     // add fourth piece, where size(piece) == max (will trigger sealing)
     let (bytes_in, piece_key) = {
-        let (piece_bytes, piece_key, resp) = create_and_add_piece(sector_builder_b, 127);
+        let (piece_bytes, piece_key, resp) = create_and_add_piece(sector_builder_b, 1016);
         defer!(destroy_add_piece_response(resp));
 
         if (*resp).status_code != 0 {
