@@ -97,23 +97,29 @@ fn get_zigzag_params() -> Option<groth16::Parameters<Bls12>> {
     (*ZIGZAG_PARAMS).clone()
 }
 
-fn get_post_params(sector_bytes: usize) -> groth16::Parameters<Bls12> {
-    println!("getting post params for sector size: {}", sector_bytes);
+fn get_post_params(sector_bytes: usize) -> error::Result<groth16::Parameters<Bls12>> {
     let post_public_params = post_public_params(sector_bytes as usize);
-    let post_circuit: VDFPoStCircuit<Bls12> =
-        <VDFPostCompound as CompoundProof<
-            Bls12,
-            VDFPoSt<PedersenHasher, Sloth>,
-            VDFPoStCircuit<Bls12>,
-        >>::blank_circuit(&post_public_params, &ENGINE_PARAMS);
-    VDFPostCompound::get_groth_params(post_circuit, &post_public_params).unwrap()
+    <VDFPostCompound as CompoundProof<
+        Bls12,
+        VDFPoSt<PedersenHasher, Sloth>,
+        VDFPoStCircuit<Bls12>,
+    >>::groth_params(&post_public_params, &ENGINE_PARAMS)
+    .map_err(|e| e.into())
 }
 
-const DEGREE: usize = 1; // TODO: 5; FIXME: increasing degree introduces a test failure. Figure out why.
-const EXPANSION_DEGREE: usize = 6;
+const DEGREE: usize = 2;
+const EXPANSION_DEGREE: usize = 8;
 const SLOTH_ITER: usize = 0;
 const LAYERS: usize = 2; // TODO: 10;
-const CHALLENGES: LayerChallenges = LayerChallenges::new_fixed(LAYERS, 1);
+const TAPER_LAYERS: usize = LAYERS; // TODO: 7
+const TAPER: f64 = 1.0 / 3.0;
+const CHALLENGE_COUNT: usize = 2;
+const DRG_SEED: [u32; 7] = [1, 2, 3, 4, 5, 6, 7]; // Arbitrary, need a theory for how to vary this over time.
+
+lazy_static! {
+    static ref CHALLENGES: LayerChallenges =
+        LayerChallenges::new_tapered(LAYERS, CHALLENGE_COUNT, TAPER_LAYERS, TAPER);
+}
 
 fn setup_params(sector_bytes: usize) -> layered_drgporep::SetupParams {
     assert!(
@@ -128,11 +134,11 @@ fn setup_params(sector_bytes: usize) -> layered_drgporep::SetupParams {
                 nodes,
                 degree: DEGREE,
                 expansion_degree: EXPANSION_DEGREE,
-                seed: new_seed(),
+                seed: DRG_SEED,
             },
             sloth_iter: SLOTH_ITER,
         },
-        layer_challenges: CHALLENGES,
+        layer_challenges: CHALLENGES.clone(),
     }
 }
 
@@ -285,7 +291,7 @@ pub fn generate_post(sector_bytes: u64, input: PoStInput) -> error::Result<PoStO
 
     let priv_inputs = vdf_post::PrivateInputs::<PedersenHasher>::new(&borrowed_trees[..]);
 
-    let groth_params = get_post_params(sector_bytes as usize);
+    let groth_params = get_post_params(sector_bytes as usize)?;
 
     let proof = VDFPostCompound::prove(&pub_params, &pub_inputs, &priv_inputs, Some(groth_params))
         .expect("failed while proving");
@@ -339,7 +345,7 @@ pub fn verify_post(
         faults,
     };
 
-    let groth_params = get_post_params(sector_bytes as usize);
+    let groth_params = get_post_params(sector_bytes as usize)?;
 
     let proof = MultiProof::new_from_reader(Some(POST_PARTITIONS), proof_vec, groth_params)?;
 
@@ -612,7 +618,6 @@ pub fn verify_seal(
     let (_fake, _delay_seconds, _sector_bytes, proof_sector_bytes, uses_official_circuit) =
         get_config(sector_config);
 
-    let challenges = CHALLENGES;
     let prover_id = pad_safe_fr(prover_id_in);
     let sector_id = pad_safe_fr(sector_id_in);
     let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
