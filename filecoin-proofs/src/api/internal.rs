@@ -1061,23 +1061,9 @@ mod tests {
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
-    fn seal_verify_proof_test() {
-        seal_verify_aux(ConfiguredStore::ProofTest, BytesAmount::Max);
-        seal_verify_aux(ConfiguredStore::ProofTest, BytesAmount::Offset(5));
-    }
-
-    #[test]
-    #[ignore] // Slow test – run only when compiled for release.
     fn seal_unsealed_roundtrip_test() {
         seal_unsealed_roundtrip_aux(ConfiguredStore::Test, BytesAmount::Max);
         seal_unsealed_roundtrip_aux(ConfiguredStore::Test, BytesAmount::Offset(5));
-    }
-
-    #[test]
-    #[ignore] // Slow test – run only when compiled for release.
-    fn seal_unsealed_roundtrip_proof_test() {
-        seal_unsealed_roundtrip_aux(ConfiguredStore::ProofTest, BytesAmount::Max);
-        seal_unsealed_roundtrip_aux(ConfiguredStore::ProofTest, BytesAmount::Offset(5));
     }
 
     #[test]
@@ -1089,26 +1075,19 @@ mod tests {
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
-    fn seal_unsealed_range_roundtrip_proof_test() {
-        seal_unsealed_range_roundtrip_aux(ConfiguredStore::ProofTest, BytesAmount::Max);
-        seal_unsealed_range_roundtrip_aux(ConfiguredStore::ProofTest, BytesAmount::Offset(5));
-    }
-
-    #[test]
-    #[ignore] // Slow test – run only when compiled for release.
     fn write_and_preprocess_overwrites_unaligned_last_bytes() {
-        write_and_preprocess_overwrites_unaligned_last_bytes_aux(ConfiguredStore::ProofTest);
+        write_and_preprocess_overwrites_unaligned_last_bytes_aux(ConfiguredStore::Test);
     }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
-    fn concurrent_seal_unsealed_range_roundtrip_proof_test() {
+    fn concurrent_seal_unsealed_range_roundtrip_test() {
         let threads = 5;
 
         let spawned = (0..threads)
             .map(|_| {
                 thread::spawn(|| {
-                    seal_unsealed_range_roundtrip_aux(ConfiguredStore::ProofTest, BytesAmount::Max)
+                    seal_unsealed_range_roundtrip_aux(ConfiguredStore::Test, BytesAmount::Max)
                 })
             })
             .collect::<Vec<_>>();
@@ -1121,8 +1100,9 @@ mod tests {
     #[test]
     #[ignore]
     fn post_verify_test() {
+        // FIXME: Make the comment below apply to Test, so we can get rid of ProofTest.
         // Use `ProofTest` because we need the replicated data to actually be written to disk
         // so we can regenerate merkle trees corresponding to the `comm_r`s returned from `seal`.
-        post_verify_aux(ConfiguredStore::ProofTest, BytesAmount::Max);
+        post_verify_aux(ConfiguredStore::Test, BytesAmount::Max);
     }
 }

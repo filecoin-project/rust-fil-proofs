@@ -66,7 +66,7 @@ unsafe fn create_sector_builder(
     last_committed_sector_id: u64,
 ) -> (*mut SectorBuilder, u64) {
     let mut prover_id: [u8; 31] = prover_id;
-    let sector_store_config: ConfiguredStore = ConfiguredStore_ProofTest;
+    let sector_store_config: ConfiguredStore = ConfiguredStore_Test;
 
     let c_metadata_dir = rust_str_to_c_str(metadata_dir.path().to_str().unwrap());
     let c_sealed_dir = rust_str_to_c_str(sealed_dir.path().to_str().unwrap());

@@ -24,26 +24,6 @@ pub const FAST_SECTOR_SIZE: u64 = 1024;
 // Sector size, in bytes, during live operation -- which also fakes sealing with a subset of the data. (slow fake sector store)
 pub const SLOW_SECTOR_SIZE: u64 = 1 << 30;
 
-/// Initializes and returns a boxed SectorStore instance suitable for exercising the proofs code
-/// to its fullest capacity.
-///
-/// # Arguments
-///
-/// * `staging_dir_path` - path to the staging directory
-/// * `sealed_dir_path`  - path to the sealed directory
-#[no_mangle]
-pub unsafe extern "C" fn init_new_proof_test_sector_store(
-    staging_dir_path: *const libc::c_char,
-    sealed_dir_path: *const libc::c_char,
-) -> *mut Box<SectorStore> {
-    let boxed = Box::new(new_sector_store(
-        &ConfiguredStore::ProofTest,
-        c_str_to_rust_str(sealed_dir_path).to_string(),
-        c_str_to_rust_str(staging_dir_path).to_string(),
-    ));
-    raw_ptr(boxed)
-}
-
 /// Initializes and returns a boxed SectorStore instance with very small, unrealistic/insecure parameters
 /// for use in testing.
 ///
@@ -214,7 +194,6 @@ pub struct FakeConfig {
 pub enum ConfiguredStore {
     Live = 0,
     Test = 1,
-    ProofTest = 2,
 }
 
 pub struct ConcreteSectorStore {
@@ -254,9 +233,6 @@ pub fn new_sector_config(cs: &ConfiguredStore) -> Box<SectorConfig> {
         }),
         ConfiguredStore::Test => Box::new(FakeConfig {
             sector_bytes: FAST_SECTOR_SIZE,
-        }),
-        ConfiguredStore::ProofTest => Box::new(RealConfig {
-            sector_bytes: REAL_SECTOR_SIZE,
         }),
     }
 }
@@ -334,7 +310,6 @@ pub mod tests {
         let xs = vec![
             (ConfiguredStore::Live, 1065353216),
             (ConfiguredStore::Test, 1016),
-            (ConfiguredStore::ProofTest, 127),
         ];
 
         for (configured_store, num_bytes) in xs {
@@ -346,7 +321,7 @@ pub mod tests {
 
     #[test]
     fn unsealed_sector_write_and_truncate() {
-        let configured_store = ConfiguredStore::ProofTest;
+        let configured_store = ConfiguredStore::Test;
         let storage: Box<SectorStore> = create_sector_store(&configured_store);
         let mgr = storage.manager();
 
@@ -428,7 +403,7 @@ pub mod tests {
 
     #[test]
     fn deletes_staging_access() {
-        let configured_store = ConfiguredStore::ProofTest;
+        let configured_store = ConfiguredStore::Test;
 
         let store = create_sector_store(&configured_store);
         let access = store.manager().new_staging_sector_access().unwrap();
