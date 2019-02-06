@@ -17,13 +17,12 @@ use storage_proofs::circuit::vdf_post::{VDFPoStCircuit, VDFPostCompound};
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgporep::{self, DrgParams};
-use storage_proofs::drgraph::{new_seed, DefaultTreeHasher, Graph};
+use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
 use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::layered_drgporep::{self, LayerChallenges};
 use storage_proofs::merkle::MerkleTree;
-use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::parameter_cache::{
     parameter_cache_dir, parameter_cache_path, read_cached_params, write_params_to_cache,
 };
@@ -35,6 +34,28 @@ use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
 use storage_proofs::zigzag_graph::ZigZagBucketGraph;
 
 use crate::error;
+
+/*
+Sector configuration design notes.
+
+- Don't break existing tests.
+- Don't run 'unrealistic' parameters outside of tests.
+- We can detune security consciously for devnet practicality.
+- Define this — consider adding an explicit, single-valued security parameter for that purpose.
+ - Ideally, limit this to two parameter choices:
+  - Layers
+  - Partitions
+
+Is this a test?
+ - Yes
+  - Is this a 'ProofTest'?
+   - YES or NO: we can collapse this distinction now because we are able to run
+   - Use super small bogus parameters
+ - No
+  - Is the env var (FIL_USE_SMALL_SECTORS) set?
+   - YES
+   - NO
+*/
 
 type Commitment = Fr32Ary;
 type ChallengeSeed = Fr32Ary;
