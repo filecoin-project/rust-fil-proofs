@@ -4,9 +4,6 @@ pub trait SectorConfig {
     /// if true, uses something other exact bits, correct parameters, or full proofs
     fn is_fake(&self) -> bool;
 
-    /// if provided, an artificial delay to seal
-    fn simulate_delay_seconds(&self) -> Option<u32>;
-
     /// returns the number of bytes that will fit into a sector managed by this store
     fn max_unsealed_bytes_per_sector(&self) -> u64;
 

@@ -217,13 +217,10 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
 ///
 /// # Return Values
 /// * - `fake` is true when faking.
-/// * - `delay_seconds` is None if no delay.
 /// * - `sector_bytes` is the size (in bytes) of sector which should be stored on disk.
 /// * - `proof_sector_bytes` is the size of the sector which will be proved when faking.
-pub fn get_config(sector_config: &SectorConfig) -> (bool, Option<u32>, usize, usize, bool) {
+pub fn get_config(sector_config: &SectorConfig) -> (bool, usize, usize, bool) {
     let fake = sector_config.is_fake();
-    let delay_seconds = sector_config.simulate_delay_seconds();
-    let delayed = delay_seconds.is_some();
     let sector_bytes = sector_config.sector_bytes() as usize;
     let proof_sector_bytes = if fake {
         FAKE_SECTOR_BYTES
@@ -234,14 +231,8 @@ pub fn get_config(sector_config: &SectorConfig) -> (bool, Option<u32>, usize, us
     // If configuration is 'completely real', then we can use the parameters pre-generated for the real circuit.
     let uses_official_circuit = !fake && (sector_bytes as u64 == REAL_SECTOR_SIZE);
 
-    // It doesn't make sense to set a delay when not faking. The current implementations of SectorStore
-    // never do, but if that were to change, it would be a mistake.
-    let valid = if fake { true } else { !delayed };
-    assert!(valid, "delay is only valid when faking");
-
     (
         fake,
-        delay_seconds,
         sector_bytes,
         proof_sector_bytes,
         uses_official_circuit,
@@ -409,14 +400,10 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     prover_id_in: &FrSafe,
     sector_id_in: &FrSafe,
 ) -> error::Result<SealOutput> {
-    let (fake, delay_seconds, sector_bytes, proof_sector_bytes, uses_official_circuit) =
-        get_config(sector_config);
+    let (fake, sector_bytes, proof_sector_bytes, uses_official_circuit) = get_config(sector_config);
 
     let public_params = public_params(proof_sector_bytes);
     let challenges = public_params.layer_challenges;
-    if let Some(delay) = delay_seconds {
-        delay_seal(delay);
-    };
 
     let f_in = File::open(in_path)?;
 
@@ -530,16 +517,6 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     })
 }
 
-fn delay_seal(seconds: u32) {
-    let delay = time::Duration::from_secs(u64::from(seconds));
-    thread::sleep(delay);
-}
-
-fn delay_get_unsealed_range(base_seconds: u32) {
-    let delay = time::Duration::from_secs(u64::from(base_seconds / 2));
-    thread::sleep(delay);
-}
-
 fn perform_replication<T: AsRef<Path>>(
     out_path: T,
     public_params: &<ZigZagDrgPoRep<DefaultTreeHasher> as ProofScheme>::PublicParams,
@@ -594,11 +571,8 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     offset: u64,
     num_bytes: u64,
 ) -> error::Result<(u64)> {
-    let (fake, delay_seconds, sector_bytes, proof_sector_bytes, _uses_official_circuit) =
+    let (fake, sector_bytes, proof_sector_bytes, _uses_official_circuit) =
         get_config(sector_config);
-    if let Some(delay) = delay_seconds {
-        delay_get_unsealed_range(delay);
-    }
 
     let prover_id = pad_safe_fr(prover_id_in);
     let sector_id = pad_safe_fr(sector_id_in);
@@ -636,7 +610,7 @@ pub fn verify_seal(
     sector_id_in: &FrSafe,
     proof_vec: &[u8],
 ) -> error::Result<bool> {
-    let (_fake, _delay_seconds, _sector_bytes, proof_sector_bytes, uses_official_circuit) =
+    let (_fake, _sector_bytes, proof_sector_bytes, uses_official_circuit) =
         get_config(sector_config);
 
     let prover_id = pad_safe_fr(prover_id_in);
