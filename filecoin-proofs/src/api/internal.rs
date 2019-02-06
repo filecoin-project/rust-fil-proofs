@@ -97,16 +97,14 @@ fn get_zigzag_params() -> Option<groth16::Parameters<Bls12>> {
     (*ZIGZAG_PARAMS).clone()
 }
 
-fn get_post_params(sector_bytes: usize) -> groth16::Parameters<Bls12> {
-    println!("getting post params for sector size: {}", sector_bytes);
+fn get_post_params(sector_bytes: usize) -> error::Result<groth16::Parameters<Bls12>> {
     let post_public_params = post_public_params(sector_bytes as usize);
-    let post_circuit: VDFPoStCircuit<Bls12> =
-        <VDFPostCompound as CompoundProof<
-            Bls12,
-            VDFPoSt<PedersenHasher, Sloth>,
-            VDFPoStCircuit<Bls12>,
-        >>::blank_circuit(&post_public_params, &ENGINE_PARAMS);
-    VDFPostCompound::get_groth_params(post_circuit, &post_public_params).unwrap()
+    <VDFPostCompound as CompoundProof<
+        Bls12,
+        VDFPoSt<PedersenHasher, Sloth>,
+        VDFPoStCircuit<Bls12>,
+    >>::groth_params(&post_public_params, &ENGINE_PARAMS)
+    .map_err(|e| e.into())
 }
 
 const DEGREE: usize = 2;
@@ -293,7 +291,7 @@ pub fn generate_post(sector_bytes: u64, input: PoStInput) -> error::Result<PoStO
 
     let priv_inputs = vdf_post::PrivateInputs::<PedersenHasher>::new(&borrowed_trees[..]);
 
-    let groth_params = get_post_params(sector_bytes as usize);
+    let groth_params = get_post_params(sector_bytes as usize)?;
 
     let proof = VDFPostCompound::prove(&pub_params, &pub_inputs, &priv_inputs, Some(groth_params))
         .expect("failed while proving");
@@ -347,7 +345,7 @@ pub fn verify_post(
         faults,
     };
 
-    let groth_params = get_post_params(sector_bytes as usize);
+    let groth_params = get_post_params(sector_bytes as usize)?;
 
     let proof = MultiProof::new_from_reader(Some(POST_PARTITIONS), proof_vec, groth_params)?;
 
