@@ -95,7 +95,7 @@ To benchmark the examples you can [bencher](src/bin/bencher.rs).
 
 The results are written into the `.bencher` directory, as JSON files. The benchmarks are controlled through the [bench.config.toml](bench.config.toml) file.
 
-Note: on macOS you need `gtime`, as the built in `time` command is not enough.
+Note: on macOS you need `gtime` (`brew install gnu-time`), as the built in `time` command is not enough.
 
 ## Logging
 
