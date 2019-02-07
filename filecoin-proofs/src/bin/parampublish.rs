@@ -1,4 +1,5 @@
 use clap::{App, AppSettings, Arg, SubCommand};
+use std::collections::HashMap;
 
 use filecoin_proofs::param::*;
 
@@ -23,7 +24,7 @@ pub fn main() {
         .get_matches();
 
     if let Some(matches) = matches.subcommand_matches("publish") {
-        let mut map = load_parameter_map().expect(ERROR_PARAMETER_MAP_LOAD);
+        let mut map = HashMap::new();
         let parameters = if matches.is_present("all") {
             get_local_parameters()
         } else {
