@@ -281,12 +281,12 @@ where
             let parents = pub_params.graph.parents(challenge);
             let mut replica_parentsi = Vec::with_capacity(parents.len());
 
-            for p in parents {
-                replica_parentsi.push((p, {
-                    let proof = tree_r.gen_proof(p);
+            for p in &parents {
+                replica_parentsi.push((*p, {
+                    let proof = tree_r.gen_proof(*p);
                     DataProof {
                         proof: MerkleProof::new_from_proof(&proof),
-                        data: domain_replica[p],
+                        data: domain_replica[*p],
                     }
                 }));
             }
@@ -310,6 +310,7 @@ where
                     &pub_inputs.replica_id,
                     domain_replica,
                     challenge,
+                    parents,
                 )?
                 .into_bytes();
                 data_nodes.push(DataProof {
