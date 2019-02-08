@@ -372,7 +372,7 @@ fn main() {
         .arg(
             Arg::with_name("no-bench")
                 .long("no-bench")
-                .help("Synthesize and report inputs/constraints for a circuit.")
+                .help("Don't synthesize and report inputs/constraints for a circuit.")
         )
         .arg(
             Arg::with_name("circuit")
