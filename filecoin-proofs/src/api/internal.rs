@@ -83,14 +83,6 @@ const POST_PROOF_BYTES: usize = SNARK_BYTES * POST_PARTITIONS;
 
 type SnarkProof = [u8; POREP_PROOF_BYTES];
 
-fn dummy_parameter_cache_path(sector_config: &SectorConfig, sector_size: usize) -> PathBuf {
-    parameter_cache_path(&format!(
-        "{}[{}]",
-        sector_config.dummy_parameter_cache_name(),
-        sector_size
-    ))
-}
-
 pub const OFFICIAL_ZIGZAG_PARAM_FILENAME: &str = "params.out";
 pub const OFFICIAL_POST_PARAM_FILENAME: &str = "post-params.out";
 
@@ -116,8 +108,19 @@ fn official_post_params_path() -> PathBuf {
     parameter_cache_dir().join(OFFICIAL_POST_PARAM_FILENAME)
 }
 
-fn get_zigzag_params() -> Option<groth16::Parameters<Bls12>> {
-    (*ZIGZAG_PARAMS).clone()
+fn get_zigzag_params(
+    sector_bytes: usize,
+    use_official_circuit: bool,
+) -> error::Result<groth16::Parameters<Bls12>> {
+    if use_official_circuit {
+        if let Some(z) = (*ZIGZAG_PARAMS).clone() {
+            return Ok(z);
+        }
+    }
+
+    let public_params = public_params(sector_bytes as usize);
+
+    ZigZagCompound::groth_params(&public_params, &ENGINE_PARAMS).map_err(|e| e.into())
 }
 
 fn get_post_params(sector_bytes: usize) -> error::Result<groth16::Parameters<Bls12>> {
@@ -221,13 +224,18 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
 /// * - `sector_bytes` is the size (in bytes) of sector which should be stored on disk.
 /// * - `proof_sector_bytes` is the size of the sector which will be proved when faking.
 pub fn get_config(sector_config: &SectorConfig) -> (usize, bool) {
-    let use_small_sectors = env::var("FIL_USE_SMALL_SECTORS").is_ok();
-
-    let sector_bytes = if use_small_sectors {
-        SMALL_SECTOR_SIZE
-    } else {
-        sector_config.sector_bytes() as usize
+    let sector_bytes = match env::var("FIL_USE_SMALL_SECTORS") {
+        Ok(s) => {
+            if s == "TRUE" {
+                SMALL_SECTOR_SIZE
+            } else {
+                sector_config.sector_bytes() as usize
+            }
+        }
+        Err(_) => sector_config.sector_bytes() as usize,
     };
+
+    let sector_bytes = sector_config.sector_bytes() as usize;
 
     // NOTE: When multiple sector sizes are supported, this concept will change.
     // If configuration is 'completely real', then we can use the parameters pre-generated for the real circuit.
@@ -454,24 +462,13 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         tau: tau.layer_taus,
     };
 
-    let groth_params = if uses_official_circuit {
-        get_zigzag_params()
-    } else {
-        None
-    };
-
-    let must_cache_params = if groth_params.is_some() {
-        println!("Using official parameters.");
-        false
-    } else {
-        true
-    };
+    let groth_params = get_zigzag_params(sector_bytes, uses_official_circuit)?;
 
     let proof = ZigZagCompound::prove(
         &compound_public_params,
         &public_inputs,
         &private_inputs,
-        groth_params,
+        Some(groth_params),
     )?;
 
     let mut buf = Vec::with_capacity(POREP_PROOF_BYTES);
@@ -480,13 +477,6 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
 
     let mut proof_bytes = [0; POREP_PROOF_BYTES];
     proof_bytes.copy_from_slice(&buf);
-
-    if must_cache_params {
-        write_params_to_cache(
-            proof.groth_params.clone(),
-            &dummy_parameter_cache_path(sector_config, sector_bytes),
-        )?;
-    }
 
     let comm_r = commitment_from_fr::<Bls12>(public_tau.comm_r.into());
     let comm_d = commitment_from_fr::<Bls12>(public_tau.comm_d.into());
@@ -613,14 +603,7 @@ pub fn verify_seal(
         k: None,
     };
 
-    let groth_params = if uses_official_circuit {
-        match get_zigzag_params() {
-            Some(p) => p,
-            None => read_cached_params(&dummy_parameter_cache_path(sector_config, sector_bytes))?,
-        }
-    } else {
-        read_cached_params(&dummy_parameter_cache_path(sector_config, sector_bytes))?
-    };
+    let groth_params = get_zigzag_params(sector_bytes, uses_official_circuit)?;
 
     let proof = MultiProof::new_from_reader(Some(POREP_PARTITIONS), proof_vec, groth_params)?;
 

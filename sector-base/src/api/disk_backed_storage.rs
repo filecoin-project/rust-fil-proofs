@@ -238,10 +238,6 @@ impl SectorConfig for Config {
     fn sector_bytes(&self) -> u64 {
         self.sector_bytes
     }
-
-    fn dummy_parameter_cache_name(&self) -> String {
-        String::from("FAKE_DUMMY_API_PARAMETERS_{}")
-    }
 }
 
 #[cfg(test)]

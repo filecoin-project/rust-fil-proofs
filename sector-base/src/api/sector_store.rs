@@ -6,11 +6,6 @@ pub trait SectorConfig {
 
     /// returns the number of bytes in a sealed sector managed by this store
     fn sector_bytes(&self) -> u64;
-
-    /// We need a distinguished place to cache 'the' parameters corresponding to the SetupParams
-    /// currently being used. These are only easily generated at replication time but need to be
-    /// accessed at verification time too.
-    fn dummy_parameter_cache_name(&self) -> String;
 }
 
 pub trait SectorManager {
