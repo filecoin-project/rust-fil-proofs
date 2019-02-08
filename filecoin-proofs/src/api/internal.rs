@@ -358,9 +358,6 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         data.push(0);
     }
 
-    // Copy all the data.
-    let data_copy = data.clone();
-
     // Zero-pad the prover_id to 32 bytes (and therefore Fr32).
     let prover_id = pad_safe_fr(prover_id_in);
     // Zero-pad the sector_id to 32 bytes (and therefore Fr32).
@@ -395,7 +392,6 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     };
 
     let private_inputs = layered_drgporep::PrivateInputs::<DefaultTreeHasher> {
-        replica: &data_copy[0..sector_bytes],
         aux,
         tau: tau.layer_taus,
     };

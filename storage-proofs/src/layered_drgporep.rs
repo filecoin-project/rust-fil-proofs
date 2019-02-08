@@ -164,8 +164,7 @@ impl<T: Domain> PublicInputs<T> {
     }
 }
 
-pub struct PrivateInputs<'a, H: Hasher> {
-    pub replica: &'a [u8],
+pub struct PrivateInputs<H: Hasher> {
     pub aux: Vec<MerkleTree<H::Domain, H::Function>>,
     pub tau: Vec<porep::Tau<H::Domain>>,
 }
@@ -443,7 +442,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
     type PublicParams = PublicParams<L::Hasher, L::Graph>;
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<<L::Hasher as Hasher>::Domain>;
-    type PrivateInputs = PrivateInputs<'a, L::Hasher>;
+    type PrivateInputs = PrivateInputs<L::Hasher>;
     type Proof = Proof<L::Hasher>;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {

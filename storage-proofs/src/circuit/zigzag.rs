@@ -392,7 +392,6 @@ mod tests {
         };
 
         let priv_inputs = layered_drgporep::PrivateInputs::<PedersenHasher> {
-            replica: data.as_slice(),
             aux: aux.into(),
             tau: tau.layer_taus.into(),
         };
@@ -561,7 +560,6 @@ mod tests {
             k: None,
         };
         let private_inputs = layered_drgporep::PrivateInputs::<PedersenHasher> {
-            replica: data.as_slice(),
             aux,
             tau: tau.layer_taus,
         };

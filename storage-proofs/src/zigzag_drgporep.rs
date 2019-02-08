@@ -191,7 +191,6 @@ mod tests {
         };
 
         let priv_inputs = PrivateInputs {
-            replica: data.as_slice(),
             aux,
             tau: tau.layer_taus,
         };
