@@ -1,7 +1,6 @@
 use std::fs::File;
 use std::io::{BufWriter, Read, Write};
 use std::path::PathBuf;
-use std::thread;
 
 use bellman::groth16;
 use pairing::bls12_381::{Bls12, Fr};
@@ -23,9 +22,7 @@ use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::layered_drgporep::{self, LayerChallenges};
 use storage_proofs::merkle::MerkleTree;
-use storage_proofs::parameter_cache::{
-    parameter_cache_dir, read_cached_params, write_params_to_cache,
-};
+use storage_proofs::parameter_cache::{parameter_cache_dir, read_cached_params};
 use storage_proofs::porep::{replica_id, PoRep, Tau};
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::vdf_post::{self, VDFPoSt};
@@ -40,10 +37,6 @@ type ChallengeSeed = Fr32Ary;
 
 /// FrSafe is an array of the largest whole number of bytes guaranteed not to overflow the field.
 type FrSafe = [u8; 31];
-
-/// Test clusters want to be able to seal sectors very fast, so we define a very small sector size
-/// to allow that.
-const SMALL_SECTOR_SIZE: usize = 128;
 
 /// How big, in bytes, is the SNARK proof exposed by the API?
 ///
@@ -354,9 +347,6 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     sector_id_in: &FrSafe,
 ) -> error::Result<SealOutput> {
     let sector_bytes = sector_config.sector_bytes() as usize;
-
-    let public_params = public_params(sector_bytes);
-
     let f_in = File::open(in_path)?;
 
     // Read all the provided data, even if we will prove less of it because we are faking.
@@ -386,13 +376,14 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
 
     let compound_public_params = ZigZagCompound::setup(&compound_setup_params)?;
 
-    let (tau, aux) = perform_replication(
-        out_path,
+    let (tau, aux) = ZigZagDrgPoRep::replicate(
         &compound_public_params.vanilla_params,
         &replica_id,
         &mut data,
-        sector_bytes,
+        None,
     )?;
+
+    write_data(out_path, &data)?;
 
     let public_tau = tau.simplify();
 
@@ -448,21 +439,6 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         comm_d,
         snark_proof: proof_bytes,
     })
-}
-
-fn perform_replication<T: AsRef<Path>>(
-    out_path: T,
-    public_params: &<ZigZagDrgPoRep<DefaultTreeHasher> as ProofScheme>::PublicParams,
-    replica_id: &<DefaultTreeHasher as Hasher>::Domain,
-    data: &mut [u8],
-) -> error::Result<(
-    layered_drgporep::Tau<<DefaultTreeHasher as Hasher>::Domain>,
-    Vec<MerkleTree<<DefaultTreeHasher as Hasher>::Domain, <DefaultTreeHasher as Hasher>::Function>>,
-)> {
-    let (tau, aux) = ZigZagDrgPoRep::replicate(public_params, &replica_id, data, None)?;
-
-    write_data(out_path, data)?;
-    Ok((tau, aux))
 }
 
 fn write_data<T: AsRef<Path>>(out_path: T, data: &[u8]) -> error::Result<()> {
@@ -567,6 +543,7 @@ mod tests {
     use std::fs::create_dir_all;
     use std::fs::File;
     use std::io::Read;
+    use std::thread;
 
     struct Harness {
         prover_id: FrSafe,
