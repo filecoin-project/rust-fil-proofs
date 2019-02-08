@@ -1,8 +1,7 @@
-use std::env;
 use std::fs::File;
 use std::io::{BufWriter, Read, Write};
 use std::path::PathBuf;
-use std::{thread, time};
+use std::thread;
 
 use bellman::groth16;
 use pairing::bls12_381::{Bls12, Fr};
@@ -25,7 +24,7 @@ use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::layered_drgporep::{self, LayerChallenges};
 use storage_proofs::merkle::MerkleTree;
 use storage_proofs::parameter_cache::{
-    parameter_cache_dir, parameter_cache_path, read_cached_params, write_params_to_cache,
+    parameter_cache_dir, read_cached_params, write_params_to_cache,
 };
 use storage_proofs::porep::{replica_id, PoRep, Tau};
 use storage_proofs::proof::ProofScheme;
@@ -35,28 +34,6 @@ use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
 use storage_proofs::zigzag_graph::ZigZagBucketGraph;
 
 use crate::error;
-
-/*
-Sector configuration design notes.
-
-- Don't break existing tests.
-- Don't run 'unrealistic' parameters outside of tests.
-- We can detune security consciously for devnet practicality.
-- Define this — consider adding an explicit, single-valued security parameter for that purpose.
- - Ideally, limit this to two parameter choices:
-  - Layers
-  - Partitions
-
-Is this a test?
- - Yes
-  - Is this a 'ProofTest'?
-   - YES or NO: we can collapse this distinction now because we are able to run
-   - Use super small bogus parameters
- - No
-  - Is the env var (FIL_USE_SMALL_SECTORS) set?
-   - YES
-   - NO
-*/
 
 type Commitment = Fr32Ary;
 type ChallengeSeed = Fr32Ary;
@@ -108,11 +85,8 @@ fn official_post_params_path() -> PathBuf {
     parameter_cache_dir().join(OFFICIAL_POST_PARAM_FILENAME)
 }
 
-fn get_zigzag_params(
-    sector_bytes: usize,
-    use_official_circuit: bool,
-) -> error::Result<groth16::Parameters<Bls12>> {
-    if use_official_circuit {
+fn get_zigzag_params(sector_bytes: usize) -> error::Result<groth16::Parameters<Bls12>> {
+    if sector_bytes as u64 == LIVE_SECTOR_SIZE {
         if let Some(z) = (*ZIGZAG_PARAMS).clone() {
             return Ok(z);
         }
@@ -216,32 +190,6 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
     let mut res = [0; 32];
     res[0..31].copy_from_slice(unpadded);
     res
-}
-
-/// Validate sector_config configuration and calculates derived configuration.
-///
-/// # Return Values
-/// * - `sector_bytes` is the size (in bytes) of sector which should be stored on disk.
-/// * - `proof_sector_bytes` is the size of the sector which will be proved when faking.
-pub fn get_config(sector_config: &SectorConfig) -> (usize, bool) {
-    let sector_bytes = match env::var("FIL_USE_SMALL_SECTORS") {
-        Ok(s) => {
-            if s == "TRUE" {
-                SMALL_SECTOR_SIZE
-            } else {
-                sector_config.sector_bytes() as usize
-            }
-        }
-        Err(_) => sector_config.sector_bytes() as usize,
-    };
-
-    let sector_bytes = sector_config.sector_bytes() as usize;
-
-    // NOTE: When multiple sector sizes are supported, this concept will change.
-    // If configuration is 'completely real', then we can use the parameters pre-generated for the real circuit.
-    let uses_official_circuit = sector_bytes as u64 == LIVE_SECTOR_SIZE;
-
-    (sector_bytes, uses_official_circuit)
 }
 
 pub struct PoStOutput {
@@ -405,10 +353,9 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     prover_id_in: &FrSafe,
     sector_id_in: &FrSafe,
 ) -> error::Result<SealOutput> {
-    let (sector_bytes, uses_official_circuit) = get_config(sector_config);
+    let sector_bytes = sector_config.sector_bytes() as usize;
 
     let public_params = public_params(sector_bytes);
-    let challenges = public_params.layer_challenges;
 
     let f_in = File::open(in_path)?;
 
@@ -462,7 +409,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         tau: tau.layer_taus,
     };
 
-    let groth_params = get_zigzag_params(sector_bytes, uses_official_circuit)?;
+    let groth_params = get_zigzag_params(sector_bytes)?;
 
     let proof = ZigZagCompound::prove(
         &compound_public_params,
@@ -508,7 +455,6 @@ fn perform_replication<T: AsRef<Path>>(
     public_params: &<ZigZagDrgPoRep<DefaultTreeHasher> as ProofScheme>::PublicParams,
     replica_id: &<DefaultTreeHasher as Hasher>::Domain,
     data: &mut [u8],
-    proof_sector_bytes: usize,
 ) -> error::Result<(
     layered_drgporep::Tau<<DefaultTreeHasher as Hasher>::Domain>,
     Vec<MerkleTree<<DefaultTreeHasher as Hasher>::Domain, <DefaultTreeHasher as Hasher>::Function>>,
@@ -536,7 +482,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     offset: u64,
     num_bytes: u64,
 ) -> error::Result<(u64)> {
-    let (sector_bytes, _uses_official_circuit) = get_config(sector_config);
+    let sector_bytes = sector_config.sector_bytes() as usize;
 
     let prover_id = pad_safe_fr(prover_id_in);
     let sector_id = pad_safe_fr(sector_id_in);
@@ -570,7 +516,7 @@ pub fn verify_seal(
     sector_id_in: &FrSafe,
     proof_vec: &[u8],
 ) -> error::Result<bool> {
-    let (sector_bytes, uses_official_circuit) = get_config(sector_config);
+    let sector_bytes = sector_config.sector_bytes() as usize;
 
     let prover_id = pad_safe_fr(prover_id_in);
     let sector_id = pad_safe_fr(sector_id_in);
@@ -603,7 +549,7 @@ pub fn verify_seal(
         k: None,
     };
 
-    let groth_params = get_zigzag_params(sector_bytes, uses_official_circuit)?;
+    let groth_params = get_zigzag_params(sector_bytes)?;
 
     let proof = MultiProof::new_from_reader(Some(POREP_PARTITIONS), proof_vec, groth_params)?;
 
