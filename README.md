@@ -1,5 +1,3 @@
-**Note: THE FILECOIN PROJECT IS STILL EXTREMELY CONFIDENTIAL. Do not share or discuss the project outside of designated preview channels (chat channels, Discourse forum, GitHub, emails to Filecoin team), not even with partners/spouses/family members. If you have any questions, please email [legal@protocol.ai](mailto:legal@protocol.ai).**
-
 # Filecoin Proving Subsystem (FPS)
 
 The **Filecoin Proving Subsystem** provides the storage proofs required by the Filecoin protocol.  It is implemented entirely in Rust, as a series of partially inter-dependent crates – some of which export C bindings to the supported API. This decomposition into distinct crates/modules is relatively recent, and in some cases current code has not been fully refactored to reflect the intended eventual organization.
