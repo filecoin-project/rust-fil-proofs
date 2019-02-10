@@ -7,7 +7,7 @@ There are currently four different crates:
 - [**Storage Proofs (`storage-proofs`)**](./storage-proofs)
     A library for constructing storage proofs – including non-circuit proofs, corresponding SNARK circuits, and a method of combining them.
 
-    `storage-proofs` is intended to serve as a reference implementation for _**Proof-of-Replication**_, while also performing the heavy lifting for `filecoin-proofs`.
+    `storage-proofs` is intended to serve as a reference implementation for _**Proof-of-Replication**_ (**PoRep**), while also performing the heavy lifting for `filecoin-proofs`.
 
      Primary Components:
      -   **PoR** (**_Proof-of-Retrievability_**: Merkle inclusion proof)
