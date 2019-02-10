@@ -64,8 +64,10 @@ impl LayerChallenges {
                 layers,
             } => {
                 assert!(layer < *layers);
+                let l = (layers - 1) - layer;
+
                 let r: f64 = 1.0 - *taper;
-                let t = min(layer, *taper_layers); // FIXME: Verify this is not off by one.
+                let t = min(l, *taper_layers);
                 let total_taper = r.powi(t as i32);
 
                 (total_taper * *count as f64).ceil() as usize
@@ -650,7 +652,8 @@ mod tests {
     #[test]
     fn test_calculate_taper_challenges() {
         let layer_challenges = LayerChallenges::new_tapered(10, 333, 7, 1.0 / 3.0);
-        let expected = [333, 223, 149, 99, 66, 44, 30, 20, 20, 20];
+        // Last layers should have most challenges.
+        let expected = [20, 20, 20, 30, 44, 66, 99, 149, 223, 333];
 
         for (i, expected_count) in expected.iter().enumerate() {
             let calculated_count = layer_challenges.challenges_for_layer(i);
