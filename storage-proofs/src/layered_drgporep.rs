@@ -1,4 +1,4 @@
-use std::cmp::min;
+use std::cmp::{max, min};
 use std::sync::mpsc::channel;
 
 use crossbeam_utils::thread;
@@ -70,9 +70,18 @@ impl LayerChallenges {
                 let t = min(l, *taper_layers);
                 let total_taper = r.powi(t as i32);
 
-                (total_taper * *count as f64).ceil() as usize
+                let calculated = (total_taper * *count as f64).ceil() as usize;
+
+                // Although implied by the call to `ceil()` above, be explicit that a layer cannot contain 0 challenges.
+                max(1, calculated)
             }
         }
+    }
+
+    pub fn total_challenges(&self) -> usize {
+        (0..self.layers())
+            .map(|x| self.challenges_for_layer(x))
+            .sum()
     }
 }
 
@@ -658,6 +667,9 @@ mod tests {
             let calculated_count = layer_challenges.challenges_for_layer(i);
             assert_eq!(*expected_count as usize, calculated_count);
         }
+
+        let live_challenges = LayerChallenges::new_tapered(10, 2, 10, 1.0 / 3.0);
+        assert_eq!(live_challenges.total_challenges(), 12)
     }
 
     #[test]
