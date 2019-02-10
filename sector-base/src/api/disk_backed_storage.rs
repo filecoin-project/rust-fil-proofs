@@ -19,7 +19,7 @@ use std::path::Path;
 pub const TEST_SECTOR_SIZE: u64 = 1024;
 
 // Sector size, in bytes, during live operation.
-pub const LIVE_SECTOR_SIZE: u64 = 1 << 25; // 32MiB
+pub const LIVE_SECTOR_SIZE: u64 = 1 << 28; // 256MiB
 
 /// Initializes and returns a boxed SectorStore instance with very small, unrealistic/insecure parameters
 /// for use in testing.
@@ -275,7 +275,7 @@ pub mod tests {
     #[test]
     fn max_unsealed_bytes_per_sector_checks() {
         let xs = vec![
-            (ConfiguredStore::Live, 33292288),
+            (ConfiguredStore::Live, 266338304),
             (ConfiguredStore::Test, 1016),
         ];
 
