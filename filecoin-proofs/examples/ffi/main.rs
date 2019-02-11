@@ -16,6 +16,7 @@ use ffi_toolkit::c_str_to_rust_str;
 use ffi_toolkit::free_c_str;
 use ffi_toolkit::rust_str_to_c_str;
 use rand::{thread_rng, Rng};
+use std::env;
 use std::error::Error;
 use std::ptr;
 use std::sync::atomic::AtomicPtr;
@@ -64,9 +65,9 @@ unsafe fn create_sector_builder(
     sealed_dir: &TempDir,
     prover_id: [u8; 31],
     last_committed_sector_id: u64,
-) -> (*mut SectorBuilder, u64) {
+    sector_store_config: ConfiguredStore,
+) -> (*mut SectorBuilder, usize) {
     let mut prover_id: [u8; 31] = prover_id;
-    let sector_store_config: ConfiguredStore = ConfiguredStore_Test;
 
     let c_metadata_dir = rust_str_to_c_str(metadata_dir.path().to_str().unwrap());
     let c_sealed_dir = rust_str_to_c_str(sealed_dir.path().to_str().unwrap());
@@ -100,8 +101,16 @@ unsafe fn create_sector_builder(
 
     (
         (*resp).sector_builder,
-        (*resp_2).max_staged_bytes_per_sector,
+        (*resp_2).max_staged_bytes_per_sector as usize,
     )
+}
+
+struct ConfigurableSizes {
+    store: ConfiguredStore,
+    max_bytes: usize,
+    first_piece_bytes: usize,
+    second_piece_bytes: usize,
+    third_piece_bytes: usize,
 }
 
 unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
@@ -109,15 +118,38 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
     let staging_dir = tempfile::tempdir().unwrap();
     let sealed_dir = tempfile::tempdir().unwrap();
 
-    let (sector_builder_a, max_bytes) =
-        create_sector_builder(&metadata_dir, &staging_dir, &sealed_dir, [0; 31], 123);
+    let sizes = match env::var("USE_LIVE_STORE") {
+        Ok(_) => ConfigurableSizes {
+            store: ConfiguredStore_Live,
+            max_bytes: 266338304,
+            first_piece_bytes: 26214400,
+            second_piece_bytes: 131072000,
+            third_piece_bytes: 157286400,
+        },
+        Err(_) => ConfigurableSizes {
+            store: ConfiguredStore_Test,
+            max_bytes: 1016,
+            first_piece_bytes: 100,
+            second_piece_bytes: 500,
+            third_piece_bytes: 600,
+        },
+    };
+
+    let (sector_builder_a, max_bytes) = create_sector_builder(
+        &metadata_dir,
+        &staging_dir,
+        &sealed_dir,
+        [0; 31],
+        123,
+        sizes.store,
+    );
 
     // TODO: Replace the hard-coded byte amounts with values computed
     // from whatever was retrieved from the SectorBuilder.
-    if max_bytes != 1016 {
+    if max_bytes != sizes.max_bytes {
         panic!(
             "test assumes the wrong number of bytes (expected: {}, actual: {})",
-            1016, max_bytes
+            sizes.max_bytes, max_bytes
         );
     }
 
@@ -144,7 +176,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
     // add first piece, which lazily provisions a new staged sector
     {
-        let (_, _, resp) = create_and_add_piece(sector_builder_a, 100);
+        let (_, _, resp) = create_and_add_piece(sector_builder_a, sizes.first_piece_bytes);
         defer!(destroy_add_piece_response(resp));
 
         if (*resp).status_code != 0 {
@@ -156,7 +188,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
     // add second piece, which fits into existing staged sector
     {
-        let (_, _, resp) = create_and_add_piece(sector_builder_a, 500);
+        let (_, _, resp) = create_and_add_piece(sector_builder_a, sizes.second_piece_bytes);
         defer!(destroy_add_piece_response(resp));
 
         if (*resp).status_code != 0 {
@@ -168,7 +200,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
     // add third piece, which won't fit into existing staging sector
     {
-        let (_, _, resp) = create_and_add_piece(sector_builder_a, 600);
+        let (_, _, resp) = create_and_add_piece(sector_builder_a, sizes.third_piece_bytes);
         defer!(destroy_add_piece_response(resp));
 
         if (*resp).status_code != 0 {
@@ -197,13 +229,20 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
     // create a new sector builder using same prover id, which should
     // initialize with metadata persisted by previous sector builder
-    let (sector_builder_b, _) =
-        create_sector_builder(&metadata_dir, &staging_dir, &sealed_dir, [0; 31], 123);
+    let (sector_builder_b, _) = create_sector_builder(
+        &metadata_dir,
+        &staging_dir,
+        &sealed_dir,
+        [0; 31],
+        123,
+        sizes.store,
+    );
     defer!(destroy_sector_builder(sector_builder_b));
 
     // add fourth piece, where size(piece) == max (will trigger sealing)
     let (bytes_in, piece_key) = {
-        let (piece_bytes, piece_key, resp) = create_and_add_piece(sector_builder_b, 1016);
+        let (piece_bytes, piece_key, resp) =
+            create_and_add_piece(sector_builder_b, sizes.max_bytes);
         defer!(destroy_add_piece_response(resp));
 
         if (*resp).status_code != 0 {
