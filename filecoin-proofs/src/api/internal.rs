@@ -200,6 +200,19 @@ pub struct PoStInput {
     pub input_parts: Vec<PoStInputPart>,
 }
 
+pub fn fake_generate_post(sector_bytes: u64, input: PoStInput) -> error::Result<PoStOutput> {
+    let faults: Vec<u64> = if !input.input_parts.is_empty() {
+        vec![0]
+    } else {
+        Default::default()
+    };
+
+    Ok(PoStOutput {
+        snark_proof: [42; 192],
+        faults,
+    })
+}
+
 pub fn generate_post(sector_bytes: u64, input: PoStInput) -> error::Result<PoStOutput> {
     let faults: Vec<u64> = Vec::new();
 

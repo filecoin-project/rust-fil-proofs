@@ -187,7 +187,7 @@ impl SectorMetadataManager {
             });
         }
 
-        let output = internal::generate_post(
+        let output = internal::fake_generate_post(
             self.sector_store.inner.config().sector_bytes(),
             PoStInput {
                 challenge_seed: *challenge_seed,
