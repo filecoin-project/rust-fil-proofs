@@ -5,8 +5,8 @@ use std::fs::{read_dir, File};
 use std::io::{stdin, stdout, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 use std::process::Command;
+use storage_proofs::parameter_cache::parameter_cache_dir;
 
-const PARAMETER_PATH: &str = "/tmp/filecoin-proof-parameters";
 const PARAMETER_JSON_PATH: &str = "./parameters.json";
 
 pub const ERROR_PARAMETER_ID: &str = "failed to find parameter in map";
@@ -26,7 +26,7 @@ pub type Result<T> = ::std::result::Result<T, Error>;
 pub type ParameterMap = HashMap<String, String>;
 
 pub fn get_local_parameters() -> Result<Vec<String>> {
-    Ok(read_dir(PARAMETER_PATH)?
+    Ok(read_dir(parameter_cache_dir())?
         .map(|f| f.unwrap().path())
         .filter(|p| p.is_file())
         .map(|p| {
@@ -67,7 +67,7 @@ pub fn save_parameter_map(map: ParameterMap) -> Result<()> {
 }
 
 pub fn publish_parameter_file(parameter: String) -> Result<String> {
-    let mut path = PathBuf::from(PARAMETER_PATH);
+    let mut path = parameter_cache_dir();
     path.push(parameter);
 
     let output = Command::new("ipfs")
@@ -92,7 +92,7 @@ pub fn fetch_parameter_file(parameter: String) -> Result<()> {
     let map = load_parameter_map()?;
     let cid = map.get(&parameter).expect(ERROR_PARAMETER_ID);
 
-    let mut path = PathBuf::from(PARAMETER_PATH);
+    let mut path = parameter_cache_dir();
     path.push(parameter);
 
     let output = Command::new("ipfs")

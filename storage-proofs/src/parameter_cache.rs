@@ -23,7 +23,7 @@ pub const PARAMETER_CACHE_DIR: &str = "/tmp/filecoin-proof-parameters/";
 /// If this changes, parameters generated under different conditions may vary. Don't change it.
 pub const PARAMETER_RNG_SEED: [u32; 4] = [0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654];
 
-fn parameter_cache_dir_name() -> String {
+pub fn parameter_cache_dir_name() -> String {
     match env::var("FILECOIN_PARAMETER_CACHE") {
         Ok(dir) => dir,
         Err(_) => String::from(PARAMETER_CACHE_DIR),
