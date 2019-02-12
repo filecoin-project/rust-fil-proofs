@@ -6,7 +6,7 @@ use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use crate::partitions;
 use crate::proof::ProofScheme;
 use bellman::{groth16, Circuit};
-use rand::{SeedableRng, XorShiftRng};
+use rand::OsRng;
 use sapling_crypto::jubjub::JubjubEngine;
 
 pub struct SetupParams<'a, 'b: 'a, E: JubjubEngine, S: ProofScheme<'a>>
@@ -155,7 +155,7 @@ where
         groth_params: &groth16::Parameters<E>,
     ) -> Result<groth16::Proof<E>> {
         // TODO: eventually, don't generate 'random proof' here at all.
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut OsRng::new().unwrap();
 
         // We need to make the circuit repeatedly because we can't clone it.
         // Fortunately, doing so is cheap.

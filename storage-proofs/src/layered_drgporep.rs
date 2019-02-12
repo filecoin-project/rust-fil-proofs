@@ -1,4 +1,4 @@
-use std::cmp::min;
+use std::cmp::{max, min};
 use std::sync::mpsc::channel;
 
 use crossbeam_utils::thread;
@@ -64,13 +64,24 @@ impl LayerChallenges {
                 layers,
             } => {
                 assert!(layer < *layers);
+                let l = (layers - 1) - layer;
+
                 let r: f64 = 1.0 - *taper;
-                let t = min(layer, *taper_layers); // FIXME: Verify this is not off by one.
+                let t = min(l, *taper_layers);
                 let total_taper = r.powi(t as i32);
 
-                (total_taper * *count as f64).ceil() as usize
+                let calculated = (total_taper * *count as f64).ceil() as usize;
+
+                // Although implied by the call to `ceil()` above, be explicit that a layer cannot contain 0 challenges.
+                max(1, calculated)
             }
         }
+    }
+
+    pub fn total_challenges(&self) -> usize {
+        (0..self.layers())
+            .map(|x| self.challenges_for_layer(x))
+            .sum()
     }
 }
 
@@ -162,8 +173,7 @@ impl<T: Domain> PublicInputs<T> {
     }
 }
 
-pub struct PrivateInputs<'a, H: Hasher> {
-    pub replica: &'a [u8],
+pub struct PrivateInputs<H: Hasher> {
     pub aux: Vec<MerkleTree<H::Domain, H::Function>>,
     pub tau: Vec<porep::Tau<H::Domain>>,
 }
@@ -441,7 +451,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
     type PublicParams = PublicParams<L::Hasher, L::Graph>;
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<<L::Hasher as Hasher>::Domain>;
-    type PrivateInputs = PrivateInputs<'a, L::Hasher>;
+    type PrivateInputs = PrivateInputs<L::Hasher>;
     type Proof = Proof<L::Hasher>;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
@@ -650,12 +660,16 @@ mod tests {
     #[test]
     fn test_calculate_taper_challenges() {
         let layer_challenges = LayerChallenges::new_tapered(10, 333, 7, 1.0 / 3.0);
-        let expected = [333, 223, 149, 99, 66, 44, 30, 20, 20, 20];
+        // Last layers should have most challenges.
+        let expected = [20, 20, 20, 30, 44, 66, 99, 149, 223, 333];
 
         for (i, expected_count) in expected.iter().enumerate() {
             let calculated_count = layer_challenges.challenges_for_layer(i);
             assert_eq!(*expected_count as usize, calculated_count);
         }
+
+        let live_challenges = LayerChallenges::new_tapered(4, 2, 2, 1.0 / 3.0);
+        assert_eq!(live_challenges.total_challenges(), 6)
     }
 
     #[test]
