@@ -103,8 +103,8 @@ fn get_post_params(sector_bytes: usize) -> error::Result<groth16::Parameters<Bls
 const DEGREE: usize = 5;
 const EXPANSION_DEGREE: usize = 8;
 const SLOTH_ITER: usize = 0;
-const LAYERS: usize = 8; // TODO: 10;
-const TAPER_LAYERS: usize = 5; // TODO: 7
+const LAYERS: usize = 2; // TODO: 10;
+const TAPER_LAYERS: usize = 2; // TODO: 7
 const TAPER: f64 = 1.0 / 3.0;
 const CHALLENGE_COUNT: usize = 2;
 const DRG_SEED: [u32; 7] = [1, 2, 3, 4, 5, 6, 7]; // Arbitrary, need a theory for how to vary this over time.
@@ -910,24 +910,24 @@ mod tests {
     }
 
     /*
-
+    
     TODO: create a way to run these super-slow-by-design tests manually.
-
+    
     fn seal_verify_live() {
         seal_verify_aux(ConfiguredStore::Live, 0);
         seal_verify_aux(ConfiguredStore::Live, 5);
     }
-
+    
     fn seal_unsealed_roundtrip_live() {
         seal_unsealed_roundtrip_aux(ConfiguredStore::Live, 0);
         seal_unsealed_roundtrip_aux(ConfiguredStore::Live, 5);
     }
-
+    
     fn seal_unsealed_range_roundtrip_live() {
         seal_unsealed_range_roundtrip_aux(ConfiguredStore::Live, 0);
         seal_unsealed_range_roundtrip_aux(ConfiguredStore::Live, 5);
     }
-
+    
     */
 
     #[test]
