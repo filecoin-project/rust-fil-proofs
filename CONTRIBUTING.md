@@ -11,13 +11,23 @@ Please start by reviewing this file.
 
 - No compiler warnings.
 - No [clippy](https://github.com/rust-lang/rust-clippy) warnings.
-- `unsafe` as little as possible.
-- Use `expect` instead of `unwrap` with a good description.
+- Minimize use of `unsafe` and justify usage in comments.
+- Prefer `expect` with a good description to `unwrap`.
 - Write unit tests in the same file.
 - Format your code with `rustfmt`
 - Code should compile on `stable` and `nightly`. If adding `nightly` only features they should be behind a flag.
 - Write benchmarks for performance sensitive areas. We use [criterion.rs](https://github.com/japaric/criterion.rs).
 
+
+## General Guidelines
+- PRs require code owner approval to merge.
+- Please scope PRs to areas in which you have expertise. This code is still close to research.
+- Welcome contribution areas might include:
+  - SNARKs
+  - Proof-of-replication
+  - Rust improvements
+  - Optimizations
+  - Documentation (expertise would require careful reading of the code)
 
 ## Resources for learning Rust
 
