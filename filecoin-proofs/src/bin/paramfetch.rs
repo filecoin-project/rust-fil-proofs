@@ -1,11 +1,21 @@
 use clap::{App, AppSettings, Arg, SubCommand};
 
 use filecoin_proofs::param::*;
+use storage_proofs::parameter_cache::PARAMETER_CACHE_DIR;
 
 pub fn main() {
     let matches = App::new("paramfetch")
         .setting(AppSettings::ArgRequiredElseHelp)
         .version("1.0")
+        .about("")
+        .about(
+            &format!(
+                "
+Set $FILECOIN_PARAMETER_CACHE to specify parameter directory. Defaults to '{}'
+",
+                PARAMETER_CACHE_DIR
+            )[..],
+        )
         .subcommand(
             SubCommand::with_name("fetch")
                 .arg(

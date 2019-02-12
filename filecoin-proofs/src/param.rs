@@ -9,16 +9,17 @@ use storage_proofs::parameter_cache::parameter_cache_dir;
 
 const PARAMETER_JSON_PATH: &str = "./parameters.json";
 
-pub const ERROR_PARAMETER_ID: &str = "failed to find parameter in map";
-pub const ERROR_PARAMETER_MAP_LOAD: &str = "failed to load parameter map";
-pub const ERROR_PARAMETER_MAP_SAVE: &str = "failed to load parameter map";
-pub const ERROR_PARAMETERS_MAPPED: &str = "failed to load mapped parameters";
-pub const ERROR_PARAMETERS_LOCAL: &str = "failed to load local parameters";
+pub const ERROR_CURL_COMMAND: &str = "failed to run curl";
+pub const ERROR_CURL_FETCH: &str = "failed to fetch via curl";
 pub const ERROR_IPFS_COMMAND: &str = "failed to run ipfs";
 pub const ERROR_IPFS_OUTPUT: &str = "failed to capture ipfs output";
 pub const ERROR_IPFS_PARSE: &str = "failed to parse ipfs output";
 pub const ERROR_IPFS_PUBLISH: &str = "failed to publish via ipfs";
-pub const ERROR_IPFS_FETCH: &str = "failed to fetch via ipfs";
+pub const ERROR_PARAMETERS_LOCAL: &str = "failed to load local parameters";
+pub const ERROR_PARAMETERS_MAPPED: &str = "failed to load mapped parameters";
+pub const ERROR_PARAMETER_ID: &str = "failed to find parameter in map";
+pub const ERROR_PARAMETER_MAP_LOAD: &str = "failed to load parameter map";
+pub const ERROR_PARAMETER_MAP_SAVE: &str = "failed to save parameter map";
 pub const ERROR_STRING: &str = "invalid string";
 
 pub type Result<T> = ::std::result::Result<T, Error>;
@@ -26,18 +27,29 @@ pub type Result<T> = ::std::result::Result<T, Error>;
 pub type ParameterMap = HashMap<String, String>;
 
 pub fn get_local_parameters() -> Result<Vec<String>> {
-    Ok(read_dir(parameter_cache_dir())?
-        .map(|f| f.unwrap().path())
-        .filter(|p| p.is_file())
-        .map(|p| {
-            p.as_path()
-                .file_name()
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .to_string()
-        })
-        .collect())
+    let path = parameter_cache_dir();
+
+    if path.exists() {
+        Ok(read_dir(path)?
+            .map(|f| f.unwrap().path())
+            .filter(|p| p.is_file())
+            .map(|p| {
+                p.as_path()
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_string()
+            })
+            .collect())
+    } else {
+        println!(
+            "parameter cache directory '{}' does not exist",
+            path.as_path().to_str().unwrap()
+        );
+
+        Ok(Vec::new())
+    }
 }
 
 pub fn get_mapped_parameters() -> Result<Vec<String>> {
@@ -54,6 +66,11 @@ pub fn load_parameter_map() -> Result<ParameterMap> {
 
         Ok(map)
     } else {
+        println!(
+            "parameter manifest '{}' does not exist",
+            path.as_path().to_str().unwrap()
+        );
+
         Ok(HashMap::new())
     }
 }
@@ -95,16 +112,15 @@ pub fn fetch_parameter_file(parameter: String) -> Result<()> {
     let mut path = parameter_cache_dir();
     path.push(parameter);
 
-    let output = Command::new("ipfs")
-        .arg("get")
+    let output = Command::new("curl")
         .arg("-o")
         .arg(path.as_path().to_str().unwrap().to_string())
-        .arg(cid.to_string())
+        .arg(format!("https://ipfs.io/ipfs/{}", cid))
         .output()
-        .expect(ERROR_IPFS_COMMAND);
+        .expect(ERROR_CURL_COMMAND);
 
     if !output.status.success() {
-        Err(err_msg(ERROR_IPFS_FETCH))
+        Err(err_msg(ERROR_CURL_FETCH))
     } else {
         Ok(())
     }
