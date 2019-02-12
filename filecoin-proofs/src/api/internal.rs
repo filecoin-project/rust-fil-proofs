@@ -40,7 +40,7 @@ type FrSafe = [u8; 31];
 
 /// How big, in bytes, is the SNARK proof exposed by the API?
 ///
-/// Note: These values need to be kept in sync with what's in api/mod.rs.
+/// Note: These values need to be ept in sync with what's in api/mod.rs.
 /// Due to limitations of cbindgen, we can't define a constant whose value is
 /// a non-primitive (e.g. an expression like 192 * 2 or internal::STUFF) and
 /// see the constant in the generated C-header file.
@@ -103,7 +103,7 @@ fn get_post_params(sector_bytes: usize) -> error::Result<groth16::Parameters<Bls
 const DEGREE: usize = 5;
 const EXPANSION_DEGREE: usize = 8;
 const SLOTH_ITER: usize = 0;
-const LAYERS: usize = 2; // TODO: 10;
+const LAYERS: usize = 4; // TODO: 10;
 const TAPER_LAYERS: usize = 2; // TODO: 7
 const TAPER: f64 = 1.0 / 3.0;
 const CHALLENGE_COUNT: usize = 2;
@@ -910,24 +910,24 @@ mod tests {
     }
 
     /*
-    
+
     TODO: create a way to run these super-slow-by-design tests manually.
-    
+
     fn seal_verify_live() {
         seal_verify_aux(ConfiguredStore::Live, 0);
         seal_verify_aux(ConfiguredStore::Live, 5);
     }
-    
+
     fn seal_unsealed_roundtrip_live() {
         seal_unsealed_roundtrip_aux(ConfiguredStore::Live, 0);
         seal_unsealed_roundtrip_aux(ConfiguredStore::Live, 5);
     }
-    
+
     fn seal_unsealed_range_roundtrip_live() {
         seal_unsealed_range_roundtrip_aux(ConfiguredStore::Live, 0);
         seal_unsealed_range_roundtrip_aux(ConfiguredStore::Live, 5);
     }
-    
+
     */
 
     #[test]

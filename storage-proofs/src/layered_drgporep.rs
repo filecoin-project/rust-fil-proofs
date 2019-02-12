@@ -668,8 +668,8 @@ mod tests {
             assert_eq!(*expected_count as usize, calculated_count);
         }
 
-        let live_challenges = LayerChallenges::new_tapered(8, 2, 5, 1.0 / 3.0);
-        assert_eq!(live_challenges.total_challenges(), 10)
+        let live_challenges = LayerChallenges::new_tapered(4, 2, 2, 1.0 / 3.0);
+        assert_eq!(live_challenges.total_challenges(), 6)
     }
 
     #[test]
