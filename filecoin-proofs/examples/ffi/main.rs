@@ -314,7 +314,7 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
 
     // after sealing, read the bytes (causes unseal) and compare with what we
     // added to the sector
-    if !use_live_store {
+    {
         let c_piece_key = rust_str_to_c_str(piece_key);
         defer!(free_c_str(c_piece_key));
 
