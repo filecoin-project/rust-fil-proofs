@@ -113,26 +113,27 @@ struct ConfigurableSizes {
     third_piece_bytes: usize,
 }
 
-unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
+unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error>> {
     let metadata_dir = tempfile::tempdir().unwrap();
     let staging_dir = tempfile::tempdir().unwrap();
     let sealed_dir = tempfile::tempdir().unwrap();
 
-    let sizes = match env::var("USE_LIVE_STORE") {
-        Ok(_) => ConfigurableSizes {
+    let sizes = if use_live_store {
+        ConfigurableSizes {
             store: ConfiguredStore_Live,
             max_bytes: 266338304,
             first_piece_bytes: 26214400,
             second_piece_bytes: 131072000,
             third_piece_bytes: 157286400,
-        },
-        Err(_) => ConfigurableSizes {
+        }
+    } else {
+        ConfigurableSizes {
             store: ConfiguredStore_Test,
             max_bytes: 1016,
             first_piece_bytes: 100,
             second_piece_bytes: 500,
             third_piece_bytes: 600,
-        },
+        }
     };
 
     let (sector_builder_a, max_bytes) = create_sector_builder(
@@ -290,7 +291,11 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
         });
 
         // wait up to 5 minutes for sealing to complete
-        let now_sealed_sector_id = result_rx.recv_timeout(Duration::from_secs(300)).unwrap();
+        let now_sealed_sector_id = if use_live_store {
+            result_rx.recv().unwrap()
+        } else {
+            result_rx.recv_timeout(Duration::from_secs(300)).unwrap()
+        };
 
         assert_eq!(now_sealed_sector_id, 126);
     }
@@ -309,7 +314,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
     // after sealing, read the bytes (causes unseal) and compare with what we
     // added to the sector
-    {
+    if !use_live_store {
         let c_piece_key = rust_str_to_c_str(piece_key);
         defer!(free_c_str(c_piece_key));
 
@@ -333,5 +338,12 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 }
 
 fn main() {
-    unsafe { sector_builder_lifecycle().unwrap() };
+    // If TEST_LIVE_SEAL is set, use the Live configuration, and don't unseal
+    // — so process running time will closely approximate sealing time.
+    let use_live_store = match env::var("TEST_LIVE_SEAL") {
+        Ok(_) => true,
+        Err(_) => false,
+    };
+
+    unsafe { sector_builder_lifecycle(use_live_store).unwrap() };
 }
