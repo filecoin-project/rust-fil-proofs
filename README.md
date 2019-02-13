@@ -195,6 +195,10 @@ Or better, generate the documentation locally (until repository is public). Foll
 - [Go implementation of filecoin-proofs API](https://github.com/filecoin-project/go-filecoin/blob/master/proofs/rustprover.go) and [associated interface structures](https://github.com/filecoin-project/go-filecoin/blob/master/proofs/interface.go).
 - [Go implementation of sector-base API](https://github.com/filecoin-project/go-filecoin/blob/master/proofs/disk_backed_sector_store.go).
 
+## Contributing
+
+See [Contributing](./contributing.md)
+
 ## License
 
 The Filecoin Project is dual-licensed under Apache 2.0 and MIT terms:
