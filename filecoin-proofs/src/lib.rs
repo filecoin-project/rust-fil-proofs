@@ -28,6 +28,7 @@ extern crate slog;
 
 pub mod api;
 pub mod error;
+pub mod param;
 pub mod serde_big_array;
 
 use logging_toolkit::make_logger;
