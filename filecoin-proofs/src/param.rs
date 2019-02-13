@@ -44,7 +44,7 @@ pub fn get_local_parameters() -> Result<Vec<String>> {
             .collect())
     } else {
         println!(
-            "parameter cache directory '{}' does not exist",
+            "parameter directory '{}' does not exist",
             path.as_path().to_str().unwrap()
         );
 
@@ -112,23 +112,33 @@ pub fn fetch_parameter_file(parameter: String) -> Result<()> {
     let mut path = parameter_cache_dir();
     path.push(parameter);
 
-    let output = Command::new("curl")
-        .arg("-o")
-        .arg(path.as_path().to_str().unwrap().to_string())
-        .arg(format!("https://ipfs.io/ipfs/{}", cid))
-        .output()
-        .expect(ERROR_CURL_COMMAND);
+    if path.exists() {
+        println!(
+            "parameter file '{}' already exists",
+            path.as_path().to_str().unwrap()
+        );
 
-    if !output.status.success() {
-        Err(err_msg(ERROR_CURL_FETCH))
-    } else {
         Ok(())
+    } else {
+        let output = Command::new("curl")
+            .arg("-o")
+            .arg(path.as_path().to_str().unwrap().to_string())
+            .arg(format!("https://ipfs.io/ipfs/{}", cid))
+            .output()
+            .expect(ERROR_CURL_COMMAND);
+
+        if !output.status.success() {
+            Err(err_msg(ERROR_CURL_FETCH))
+        } else {
+            Ok(())
+        }
     }
 }
 
 pub fn choose(message: String) -> bool {
     loop {
         print!("{} [y/n]: ", message);
+
         let _ = stdout().flush();
         let mut s = String::new();
         stdin().read_line(&mut s).expect(ERROR_STRING);
