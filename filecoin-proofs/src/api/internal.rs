@@ -1,6 +1,9 @@
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufWriter, Read, Write};
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use bellman::groth16;
 use pairing::bls12_381::{Bls12, Fr};
@@ -31,6 +34,7 @@ use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
 use storage_proofs::zigzag_graph::ZigZagBucketGraph;
 
 use crate::error;
+use crate::FCP_LOG;
 
 type Commitment = Fr32Ary;
 type ChallengeSeed = Fr32Ary;
@@ -70,6 +74,34 @@ lazy_static! {
         read_cached_params(&official_post_params_path()).ok();
 }
 
+////////////////////////////////////////////////////////////////////////////////
+/// Groth Params Memory Cache
+
+type Bls12GrothParams = groth16::Parameters<Bls12>;
+type GrothMemCache = HashMap<String, Bls12GrothParams>;
+
+lazy_static! {
+    static ref GROTH_PARAM_MEMORY_CACHE: Mutex<GrothMemCache> = Default::default();
+}
+
+fn lookup_groth_params<F: FnOnce() -> error::Result<Bls12GrothParams>>(
+    cache: &mut GrothMemCache,
+    identifier: String,
+    generator: F,
+) -> error::Result<Bls12GrothParams> {
+    info!(FCP_LOG, "trying memory cache for: {}", &identifier; "target" => "params");
+    let params = match cache.entry(identifier) {
+        Entry::Vacant(entry) => entry.insert(generator()?).clone(),
+        Entry::Occupied(entry) => {
+            info!(FCP_LOG, "found params in memory cache"; "target" => "params");
+            entry.get().clone()
+        }
+    };
+
+    Ok(params)
+}
+////////////////////////////////////////////////////////////////////////////////
+
 fn official_params_path() -> PathBuf {
     parameter_cache_dir().join(OFFICIAL_ZIGZAG_PARAM_FILENAME)
 }
@@ -87,17 +119,33 @@ fn get_zigzag_params(sector_bytes: usize) -> error::Result<groth16::Parameters<B
 
     let public_params = public_params(sector_bytes as usize);
 
-    ZigZagCompound::groth_params(&public_params, &ENGINE_PARAMS).map_err(|e| e.into())
+    let get_params =
+        || ZigZagCompound::groth_params(&public_params, &ENGINE_PARAMS).map_err(|e| e.into());
+
+    Ok(lookup_groth_params(
+        &mut (*GROTH_PARAM_MEMORY_CACHE).lock().unwrap(),
+        format!("ZIGZAG[{}]", sector_bytes),
+        get_params,
+    )?)
 }
 
 fn get_post_params(sector_bytes: usize) -> error::Result<groth16::Parameters<Bls12>> {
     let post_public_params = post_public_params(sector_bytes as usize);
-    <VDFPostCompound as CompoundProof<
-        Bls12,
-        VDFPoSt<PedersenHasher, Sloth>,
-        VDFPoStCircuit<Bls12>,
-    >>::groth_params(&post_public_params, &ENGINE_PARAMS)
-    .map_err(|e| e.into())
+
+    let get_params = || {
+        <VDFPostCompound as CompoundProof<
+            Bls12,
+            VDFPoSt<PedersenHasher, Sloth>,
+            VDFPoStCircuit<Bls12>,
+        >>::groth_params(&post_public_params, &ENGINE_PARAMS)
+        .map_err(|e| e.into())
+    };
+
+    Ok(lookup_groth_params(
+        &mut (*GROTH_PARAM_MEMORY_CACHE).lock().unwrap(),
+        format!("POST[{}]", sector_bytes),
+        get_params,
+    )?)
 }
 
 const DEGREE: usize = 5;
@@ -410,7 +458,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     };
 
     let groth_params = get_zigzag_params(sector_bytes)?;
-
+    info!(FCP_LOG, "got groth params ({}) while sealing", sector_bytes; "target" => "params");
     let proof = ZigZagCompound::prove(
         &compound_public_params,
         &public_inputs,
@@ -535,6 +583,7 @@ pub fn verify_seal(
     };
 
     let groth_params = get_zigzag_params(sector_bytes)?;
+    info!(FCP_LOG, "got groth params ({}) while verifying seal", sector_bytes; "target" => "params");
 
     let proof = MultiProof::new_from_reader(Some(POREP_PARTITIONS), proof_vec, groth_params)?;
 
