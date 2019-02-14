@@ -1,6 +1,7 @@
 use clap::{App, AppSettings, Arg, SubCommand};
 
 use filecoin_proofs::param::*;
+use std::path::PathBuf;
 use storage_proofs::parameter_cache::PARAMETER_CACHE_DIR;
 
 pub fn main() {
@@ -15,6 +16,15 @@ Set $FILECOIN_PARAMETER_CACHE to specify parameter directory. Defaults to '{}'
 ",
                 PARAMETER_CACHE_DIR
             )[..],
+        )
+        .arg(
+            Arg::with_name("json")
+                .global(true)
+                .value_name("JSON")
+                .takes_value(true)
+                .short("j")
+                .long("json")
+                .help("Use specific json file"),
         )
         .subcommand(
             SubCommand::with_name("fetch")
@@ -31,11 +41,14 @@ Set $FILECOIN_PARAMETER_CACHE to specify parameter directory. Defaults to '{}'
         )
         .get_matches();
 
+    let json = PathBuf::from(matches.value_of("json").unwrap_or("./parameters.json"));
+    let parameter_map = load_parameter_map(&json).expect(ERROR_PARAMETERS_MAPPED);
+
     if let Some(matches) = matches.subcommand_matches("fetch") {
         let parameters = if matches.is_present("all") {
-            get_mapped_parameters()
+            get_mapped_parameters(&parameter_map)
         } else {
-            choose_mapped_parameters()
+            choose_mapped_parameters(&parameter_map)
         }
         .expect(ERROR_PARAMETERS_MAPPED);
 
@@ -45,7 +58,7 @@ Set $FILECOIN_PARAMETER_CACHE to specify parameter directory. Defaults to '{}'
             parameters.iter().for_each(|p| {
                 println!("{}...", p);
 
-                match fetch_parameter_file(p.to_string()) {
+                match fetch_parameter_file(&parameter_map, p.to_string()) {
                     Ok(_) => println!("ok"),
                     Err(_) => println!("error"),
                 }
@@ -56,7 +69,8 @@ Set $FILECOIN_PARAMETER_CACHE to specify parameter directory. Defaults to '{}'
     }
 
     if let Some(_) = matches.subcommand_matches("check") {
-        let mapped_parameters = get_mapped_parameters().expect(ERROR_PARAMETERS_MAPPED);
+        let mapped_parameters =
+            get_mapped_parameters(&parameter_map).expect(ERROR_PARAMETERS_MAPPED);
         let local_parameters = get_local_parameters().expect(ERROR_PARAMETERS_LOCAL);
 
         mapped_parameters.iter().for_each(|p| {

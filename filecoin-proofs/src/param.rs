@@ -7,8 +7,6 @@ use std::path::PathBuf;
 use std::process::Command;
 use storage_proofs::parameter_cache::parameter_cache_dir;
 
-const PARAMETER_JSON_PATH: &str = "./parameters.json";
-
 pub const ERROR_CURL_COMMAND: &str = "failed to run curl";
 pub const ERROR_CURL_FETCH: &str = "failed to fetch via curl";
 pub const ERROR_IPFS_COMMAND: &str = "failed to run ipfs";
@@ -52,13 +50,11 @@ pub fn get_local_parameters() -> Result<Vec<String>> {
     }
 }
 
-pub fn get_mapped_parameters() -> Result<Vec<String>> {
-    Ok(load_parameter_map()?.into_iter().map(|(k, _)| k).collect())
+pub fn get_mapped_parameters(map: &ParameterMap) -> Result<Vec<String>> {
+    Ok(map.into_iter().map(|(k, _)| k.clone()).collect())
 }
 
-pub fn load_parameter_map() -> Result<ParameterMap> {
-    let path = PathBuf::from(PARAMETER_JSON_PATH);
-
+pub fn load_parameter_map(path: &PathBuf) -> Result<ParameterMap> {
     if path.exists() {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
@@ -75,8 +71,8 @@ pub fn load_parameter_map() -> Result<ParameterMap> {
     }
 }
 
-pub fn save_parameter_map(map: ParameterMap) -> Result<()> {
-    let file = File::create(PARAMETER_JSON_PATH)?;
+pub fn save_parameter_map(map: &ParameterMap, path: &PathBuf) -> Result<()> {
+    let file = File::create(path)?;
     let writer = BufWriter::new(file);
     serde_json::to_writer_pretty(writer, &map)?;
 
@@ -105,8 +101,7 @@ pub fn publish_parameter_file(parameter: String) -> Result<String> {
     }
 }
 
-pub fn fetch_parameter_file(parameter: String) -> Result<()> {
-    let map = load_parameter_map()?;
+pub fn fetch_parameter_file(map: &ParameterMap, parameter: String) -> Result<()> {
     let cid = map.get(&parameter).expect(ERROR_PARAMETER_ID);
 
     let mut path = parameter_cache_dir();
@@ -162,6 +157,6 @@ pub fn choose_local_parameters() -> Result<Vec<String>> {
     choose_from(get_local_parameters()?)
 }
 
-pub fn choose_mapped_parameters() -> Result<Vec<String>> {
-    choose_from(get_mapped_parameters()?)
+pub fn choose_mapped_parameters(map: &ParameterMap) -> Result<Vec<String>> {
+    choose_from(get_mapped_parameters(&map)?)
 }
