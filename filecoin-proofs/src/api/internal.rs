@@ -1,13 +1,15 @@
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufWriter, Read, Write};
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use bellman::groth16;
 use pairing::bls12_381::{Bls12, Fr};
 use pairing::{Engine, PrimeField};
 use sapling_crypto::jubjub::JubjubBls12;
 
-use sector_base::api::disk_backed_storage::LIVE_SECTOR_SIZE;
 use sector_base::api::sector_store::SectorConfig;
 use sector_base::io::fr32::write_unpadded;
 use std::path::Path;
@@ -22,7 +24,6 @@ use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::layered_drgporep::{self, LayerChallenges};
 use storage_proofs::merkle::MerkleTree;
-use storage_proofs::parameter_cache::{parameter_cache_dir, read_cached_params};
 use storage_proofs::porep::{replica_id, PoRep, Tau};
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::vdf_post::{self, VDFPoSt};
@@ -31,6 +32,7 @@ use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
 use storage_proofs::zigzag_graph::ZigZagBucketGraph;
 
 use crate::error;
+use crate::FCP_LOG;
 
 type Commitment = Fr32Ary;
 type ChallengeSeed = Fr32Ary;
@@ -53,51 +55,119 @@ const POST_PROOF_BYTES: usize = SNARK_BYTES * POST_PARTITIONS;
 
 type SnarkProof = [u8; POREP_PROOF_BYTES];
 
-pub const OFFICIAL_ZIGZAG_PARAM_FILENAME: &str = "params.out";
-pub const OFFICIAL_POST_PARAM_FILENAME: &str = "post-params.out";
-
 lazy_static! {
     pub static ref ENGINE_PARAMS: JubjubBls12 = JubjubBls12::new();
 }
 
-lazy_static! {
-    static ref ZIGZAG_PARAMS: Option<groth16::Parameters<Bls12>> =
-        read_cached_params(&official_params_path()).ok();
-}
+////////////////////////////////////////////////////////////////////////////////
+/// Groth Params/Verifying-keys Memory Cache
+
+type Bls12GrothParams = groth16::Parameters<Bls12>;
+type Bls12VerifyingKey = groth16::VerifyingKey<Bls12>;
+type GrothMemCache = HashMap<String, Bls12GrothParams>;
+type VerifyingKeyMemCache = HashMap<String, Bls12VerifyingKey>;
 
 lazy_static! {
-    static ref POST_PARAMS: Option<groth16::Parameters<Bls12>> =
-        read_cached_params(&official_post_params_path()).ok();
+    static ref GROTH_PARAM_MEMORY_CACHE: Mutex<GrothMemCache> = Default::default();
+    static ref VERIFYING_KEY_MEMORY_CACHE: Mutex<VerifyingKeyMemCache> = Default::default();
 }
 
-fn official_params_path() -> PathBuf {
-    parameter_cache_dir().join(OFFICIAL_ZIGZAG_PARAM_FILENAME)
+fn lookup_groth_params<F: FnOnce() -> error::Result<Bls12GrothParams>>(
+    identifier: String,
+    generator: F,
+) -> error::Result<Bls12GrothParams> {
+    let cache = &mut (*GROTH_PARAM_MEMORY_CACHE).lock().unwrap();
+    info!(FCP_LOG, "trying groth parameters memory cache for: {}", &identifier; "target" => "params");
+    let params = match cache.entry(identifier) {
+        Entry::Vacant(entry) => entry.insert(generator()?).clone(),
+        Entry::Occupied(entry) => {
+            info!(FCP_LOG, "found params in memory cache"; "target" => "params");
+            entry.get().clone()
+        }
+    };
+
+    Ok(params)
 }
 
-fn official_post_params_path() -> PathBuf {
-    parameter_cache_dir().join(OFFICIAL_POST_PARAM_FILENAME)
+fn lookup_verifying_key<F: FnOnce() -> error::Result<Bls12VerifyingKey>>(
+    identifier: String,
+    generator: F,
+) -> error::Result<Bls12VerifyingKey> {
+    let cache = &mut (*VERIFYING_KEY_MEMORY_CACHE).lock().unwrap();
+    let vk_identifier = format!("{}-verifying-key", &identifier);
+
+    info!(FCP_LOG, "trying verifying key memory cache for: {}", &vk_identifier; "target" => "verifying_key");
+    let verifying_key = match cache.entry(vk_identifier) {
+        Entry::Vacant(entry) => entry.insert(generator()?).clone(),
+        Entry::Occupied(entry) => {
+            info!(FCP_LOG, "found verifying_key in memory cache"; "target" => "verifying_key");
+            entry.get().clone()
+        }
+    };
+
+    Ok(verifying_key)
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 fn get_zigzag_params(sector_bytes: usize) -> error::Result<groth16::Parameters<Bls12>> {
-    if sector_bytes as u64 == LIVE_SECTOR_SIZE {
-        if let Some(z) = (*ZIGZAG_PARAMS).clone() {
-            return Ok(z);
-        }
-    }
-
     let public_params = public_params(sector_bytes as usize);
 
-    ZigZagCompound::groth_params(&public_params, &ENGINE_PARAMS).map_err(|e| e.into())
+    let get_params =
+        || ZigZagCompound::groth_params(&public_params, &ENGINE_PARAMS).map_err(|e| e.into());
+
+    Ok(lookup_groth_params(
+        format!("ZIGZAG[{}]", sector_bytes),
+        get_params,
+    )?)
 }
 
 fn get_post_params(sector_bytes: usize) -> error::Result<groth16::Parameters<Bls12>> {
     let post_public_params = post_public_params(sector_bytes as usize);
-    <VDFPostCompound as CompoundProof<
-        Bls12,
-        VDFPoSt<PedersenHasher, Sloth>,
-        VDFPoStCircuit<Bls12>,
-    >>::groth_params(&post_public_params, &ENGINE_PARAMS)
-    .map_err(|e| e.into())
+
+    let get_params = || {
+        <VDFPostCompound as CompoundProof<
+            Bls12,
+            VDFPoSt<PedersenHasher, Sloth>,
+            VDFPoStCircuit<Bls12>,
+        >>::groth_params(&post_public_params, &ENGINE_PARAMS)
+        .map_err(|e| e.into())
+    };
+
+    Ok(lookup_groth_params(
+        format!("POST[{}]", sector_bytes),
+        get_params,
+    )?)
+}
+
+fn get_zigzag_verifying_key(sector_bytes: usize) -> error::Result<Bls12VerifyingKey> {
+    let public_params = public_params(sector_bytes as usize);
+
+    let get_verifying_key =
+        || ZigZagCompound::verifying_key(&public_params, &ENGINE_PARAMS).map_err(|e| e.into());
+
+    Ok(lookup_verifying_key(
+        format!("ZIGZAG[{}]", sector_bytes),
+        get_verifying_key,
+    )?)
+}
+
+fn get_post_verifying_key(sector_bytes: usize) -> error::Result<Bls12VerifyingKey> {
+    let post_public_params = post_public_params(sector_bytes as usize);
+
+    let get_verifying_key = || {
+        <VDFPostCompound as CompoundProof<
+            Bls12,
+            VDFPoSt<PedersenHasher, Sloth>,
+            VDFPoStCircuit<Bls12>,
+        >>::verifying_key(&post_public_params, &ENGINE_PARAMS)
+        .map_err(|e| e.into())
+    };
+
+    Ok(lookup_verifying_key(
+        format!("POST[{}]", sector_bytes),
+        get_verifying_key,
+    )?)
 }
 
 const DEGREE: usize = 5;
@@ -316,9 +386,9 @@ pub fn verify_post(
         faults,
     };
 
-    let groth_params = get_post_params(sector_bytes as usize)?;
+    let verifying_key = get_post_verifying_key(sector_bytes as usize)?;
 
-    let proof = MultiProof::new_from_reader(Some(POST_PARTITIONS), proof_vec, groth_params)?;
+    let proof = MultiProof::new_from_reader(Some(POST_PARTITIONS), proof_vec, verifying_key)?;
 
     // For some reason, the circuit test does not verify when called in tests here.
     // However, everything up to that point does/should work — so we want to continue to exercise
@@ -410,7 +480,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     };
 
     let groth_params = get_zigzag_params(sector_bytes)?;
-
+    info!(FCP_LOG, "got groth params ({}) while sealing", sector_bytes; "target" => "params");
     let proof = ZigZagCompound::prove(
         &compound_public_params,
         &public_inputs,
@@ -534,9 +604,10 @@ pub fn verify_seal(
         k: None,
     };
 
-    let groth_params = get_zigzag_params(sector_bytes)?;
+    let verifying_key = get_zigzag_verifying_key(sector_bytes)?;
+    info!(FCP_LOG, "got verifying key ({}) while verifying seal", sector_bytes; "target" => "params");
 
-    let proof = MultiProof::new_from_reader(Some(POREP_PARTITIONS), proof_vec, groth_params)?;
+    let proof = MultiProof::new_from_reader(Some(POREP_PARTITIONS), proof_vec, verifying_key)?;
 
     ZigZagCompound::verify(&compound_public_params, &public_inputs, &proof).map_err(|e| e.into())
 }
