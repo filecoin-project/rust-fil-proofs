@@ -46,7 +46,7 @@ Set $FILECOIN_PARAMETER_CACHE to specify parameter directory. Defaults to '{}'
     let parameter_map = load_parameter_map(&json).expect(ERROR_PARAMETERS_MAPPED);
 
     if let Some(matches) = matches.subcommand_matches("publish") {
-        let mut new_parameter_map = HashMap::new();
+        let mut new_parameter_map: ParameterMap = HashMap::new();
         let parameters = if matches.is_present("all") {
             get_local_parameters()
         } else {
@@ -55,19 +55,27 @@ Set $FILECOIN_PARAMETER_CACHE to specify parameter directory. Defaults to '{}'
         .expect(ERROR_PARAMETERS_LOCAL);
 
         if parameters.len() > 0 {
-            println!("publishing parameters:");
+            println!("publishing parameters");
 
-            parameters.iter().for_each(|p| {
-                print!("{}... ", p);
+            for parameter in parameters.iter() {
+                println!("publishing '{}'...", parameter);
 
-                match publish_parameter_file(p.to_string()) {
+                match publish_parameter_file(parameter.to_string()) {
                     Ok(cid) => {
-                        new_parameter_map.insert(p.to_string(), cid);
-                        println!("ok");
+                        println!("generating sha256...");
+                        let sha256 =
+                            get_parameter_sha256(parameter.to_string()).expect(ERROR_SHA256);
+                        let data = ParameterData {
+                            cid: cid,
+                            sha256: sha256,
+                        };
+
+                        println!("ok.");
+                        new_parameter_map.insert(parameter.to_string(), data);
                     }
-                    Err(_) => println!("error"),
+                    Err(err) => println!("err: {}", err),
                 }
-            });
+            }
 
             save_parameter_map(&new_parameter_map, &json).expect(ERROR_PARAMETER_MAP_SAVE);
         } else {

@@ -1,7 +1,11 @@
+use crypto::digest::Digest;
+use crypto::sha2::Sha256;
 use failure::{err_msg, Error};
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{read_dir, File};
+use std::io::prelude::*;
 use std::io::{stdin, stdout, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 use std::process::Command;
@@ -15,14 +19,21 @@ pub const ERROR_IPFS_PARSE: &str = "failed to parse ipfs output";
 pub const ERROR_IPFS_PUBLISH: &str = "failed to publish via ipfs";
 pub const ERROR_PARAMETERS_LOCAL: &str = "failed to load local parameters";
 pub const ERROR_PARAMETERS_MAPPED: &str = "failed to load mapped parameters";
+pub const ERROR_PARAMETER_FILE: &str = "failed to find parameter file";
 pub const ERROR_PARAMETER_ID: &str = "failed to find parameter in map";
 pub const ERROR_PARAMETER_MAP_LOAD: &str = "failed to load parameter map";
 pub const ERROR_PARAMETER_MAP_SAVE: &str = "failed to save parameter map";
+pub const ERROR_SHA256: &str = "failed to generate sha256 digest";
 pub const ERROR_STRING: &str = "invalid string";
 
 pub type Result<T> = ::std::result::Result<T, Error>;
+pub type ParameterMap = HashMap<String, ParameterData>;
 
-pub type ParameterMap = HashMap<String, String>;
+#[derive(Deserialize, Serialize)]
+pub struct ParameterData {
+    pub cid: String,
+    pub sha256: String,
+}
 
 pub fn get_local_parameters() -> Result<Vec<String>> {
     let path = parameter_cache_dir();
@@ -51,7 +62,7 @@ pub fn get_local_parameters() -> Result<Vec<String>> {
 }
 
 pub fn get_mapped_parameters(map: &ParameterMap) -> Result<Vec<String>> {
-    Ok(map.into_iter().map(|(k, _)| k.clone()).collect())
+    Ok(map.iter().map(|(k, _)| k.clone()).collect())
 }
 
 pub fn load_parameter_map(path: &PathBuf) -> Result<ParameterMap> {
@@ -79,9 +90,31 @@ pub fn save_parameter_map(map: &ParameterMap, path: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-pub fn publish_parameter_file(parameter: String) -> Result<String> {
+pub fn parameter_file_path(parameter: String) -> Result<PathBuf> {
     let mut path = parameter_cache_dir();
     path.push(parameter);
+
+    if path.exists() {
+        Ok(path)
+    } else {
+        Err(err_msg(ERROR_PARAMETER_FILE))
+    }
+}
+
+pub fn get_parameter_sha256(parameter: String) -> Result<String> {
+    let path = parameter_file_path(parameter)?;
+    let mut file = File::open(path)?;
+    let mut buffer = Vec::new();
+    let _ = file.read_to_end(&mut buffer);
+    let mut sha256 = Sha256::new();
+
+    sha256.input(buffer.as_mut_slice());
+
+    Ok(sha256.result_str())
+}
+
+pub fn publish_parameter_file(parameter: String) -> Result<String> {
+    let path = parameter_file_path(parameter)?;
 
     let output = Command::new("ipfs")
         .arg("add")
@@ -102,10 +135,8 @@ pub fn publish_parameter_file(parameter: String) -> Result<String> {
 }
 
 pub fn fetch_parameter_file(map: &ParameterMap, parameter: String) -> Result<()> {
-    let cid = map.get(&parameter).expect(ERROR_PARAMETER_ID);
-
-    let mut path = parameter_cache_dir();
-    path.push(parameter);
+    let data = map.get(&parameter).expect(ERROR_PARAMETER_ID);
+    let path = parameter_file_path(parameter)?;
 
     if path.exists() {
         println!(
@@ -118,7 +149,7 @@ pub fn fetch_parameter_file(map: &ParameterMap, parameter: String) -> Result<()>
         let output = Command::new("curl")
             .arg("-o")
             .arg(path.as_path().to_str().unwrap().to_string())
-            .arg(format!("https://ipfs.io/ipfs/{}", cid))
+            .arg(format!("https://ipfs.io/ipfs/{}", data.cid))
             .output()
             .expect(ERROR_CURL_COMMAND);
 

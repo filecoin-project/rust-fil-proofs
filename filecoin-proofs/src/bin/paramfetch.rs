@@ -53,16 +53,26 @@ Set $FILECOIN_PARAMETER_CACHE to specify parameter directory. Defaults to '{}'
         .expect(ERROR_PARAMETERS_MAPPED);
 
         if parameters.len() > 0 {
-            println!("fetching parameters:");
+            println!("fetching parameters");
 
-            parameters.iter().for_each(|p| {
-                println!("{}...", p);
+            for parameter in parameters.iter() {
+                println!("fetching '{}'...", parameter);
 
-                match fetch_parameter_file(&parameter_map, p.to_string()) {
-                    Ok(_) => println!("ok"),
+                match fetch_parameter_file(&parameter_map, parameter.to_string()) {
+                    Ok(_) => {
+                        println!("checking sha256...");
+                        let sha256 =
+                            get_parameter_sha256(parameter.to_string()).expect(ERROR_SHA256);
+
+                        if sha256 != parameter_map.get(parameter).unwrap().sha256 {
+                            println!("failed integrity check. you should remove this parameter and try again");
+                        } else {
+                            println!("ok");
+                        }
+                    }
                     Err(_) => println!("error"),
                 }
-            });
+            }
         } else {
             println!("nothing to fetch");
         }

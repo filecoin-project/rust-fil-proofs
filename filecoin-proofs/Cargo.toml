@@ -36,6 +36,7 @@ serde_json = "1.0"
 blake2 = "0.8"
 slog = { version = "2.4.1", features = ["max_level_trace", "release_max_level_trace"] }
 regex = "1"
+rust-crypto = "0.2.36"
 
 [dev-dependencies]
 gperftools = { git = "https://github.com/dignifiedquire/rust-gperftools" }
