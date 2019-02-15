@@ -1,5 +1,4 @@
-use crypto::digest::Digest;
-use crypto::sha2::Sha256;
+use blake2::{Blake2b, Digest};
 use failure::{err_msg, Error};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -23,7 +22,7 @@ pub const ERROR_PARAMETER_FILE: &str = "failed to find parameter file";
 pub const ERROR_PARAMETER_ID: &str = "failed to find parameter in map";
 pub const ERROR_PARAMETER_MAP_LOAD: &str = "failed to load parameter map";
 pub const ERROR_PARAMETER_MAP_SAVE: &str = "failed to save parameter map";
-pub const ERROR_SHA256: &str = "failed to generate sha256 digest";
+pub const ERROR_DIGEST: &str = "failed to generate digest";
 pub const ERROR_STRING: &str = "invalid string";
 
 pub type Result<T> = ::std::result::Result<T, Error>;
@@ -32,7 +31,7 @@ pub type ParameterMap = HashMap<String, ParameterData>;
 #[derive(Deserialize, Serialize)]
 pub struct ParameterData {
     pub cid: String,
-    pub sha256: String,
+    pub digest: String,
 }
 
 pub fn get_local_parameters() -> Result<Vec<String>> {
@@ -101,16 +100,18 @@ pub fn parameter_file_path(parameter: String) -> Result<PathBuf> {
     }
 }
 
-pub fn get_parameter_sha256(parameter: String) -> Result<String> {
+pub fn get_parameter_digest(parameter: String) -> Result<String> {
     let path = parameter_file_path(parameter)?;
     let mut file = File::open(path)?;
     let mut buffer = Vec::new();
     let _ = file.read_to_end(&mut buffer);
-    let mut sha256 = Sha256::new();
+    let mut hasher = Blake2b::new();
 
-    sha256.input(buffer.as_mut_slice());
+    hasher.input(buffer.as_mut_slice());
 
-    Ok(sha256.result_str())
+    let result = hasher.result();
+
+    Ok(format!("{:.32x}", &result))
 }
 
 pub fn publish_parameter_file(parameter: String) -> Result<String> {

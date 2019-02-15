@@ -62,12 +62,12 @@ Set $FILECOIN_PARAMETER_CACHE to specify parameter directory. Defaults to '{}'
 
                 match publish_parameter_file(parameter.to_string()) {
                     Ok(cid) => {
-                        println!("generating sha256...");
-                        let sha256 =
-                            get_parameter_sha256(parameter.to_string()).expect(ERROR_SHA256);
+                        println!("generating digest...");
+                        let digest =
+                            get_parameter_digest(parameter.to_string()).expect(ERROR_DIGEST);
                         let data = ParameterData {
                             cid: cid,
-                            sha256: sha256,
+                            digest: digest,
                         };
 
                         println!("ok.");
