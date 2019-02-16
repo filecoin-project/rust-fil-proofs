@@ -176,7 +176,7 @@ fn write_usize(target: &mut Vec<u8>, value: usize) -> ::std::result::Result<(), 
 }
 
 #[cfg(target_pointer_width = "32")]
-fn write_usize(target: &mut Vec<u8>, value: usize) -> ::std::result::Result<(), ::std::io::ERror> {
+fn write_usize(target: &mut Vec<u8>, value: usize) -> ::std::result::Result<(), ::std::io::Error> {
     target.write_u32::<LittleEndian>(value as u32)
 }
 
