@@ -47,31 +47,30 @@ Set $FILECOIN_PARAMETER_CACHE to specify parameter directory. Defaults to '{}'
 
     if let Some(matches) = matches.subcommand_matches("publish") {
         let mut new_parameter_map: ParameterMap = HashMap::new();
-        let parameters = if matches.is_present("all") {
+        let parameter_ids = if matches.is_present("all") {
             get_local_parameter_ids()
         } else {
             choose_local_parameter_ids()
         }
         .expect(ERROR_PARAMETERS_LOCAL);
 
-        if parameters.len() > 0 {
+        if parameter_ids.len() > 0 {
             println!("publishing parameters");
 
-            for parameter in parameters.iter() {
-                println!("publishing '{}'...", parameter);
+            for parameter_id in parameter_ids.iter() {
+                println!("publishing '{}'...", parameter_id);
 
-                match publish_parameter_file(parameter.to_string()) {
+                match publish_parameter_file(&parameter_id) {
                     Ok(cid) => {
                         println!("generating digest...");
-                        let digest =
-                            get_parameter_digest(parameter.to_string()).expect(ERROR_DIGEST);
+                        let digest = get_parameter_digest(&parameter_id).expect(ERROR_DIGEST);
                         let data = ParameterData {
                             cid: cid,
                             digest: digest,
                         };
 
                         println!("ok.");
-                        new_parameter_map.insert(parameter.to_string(), data);
+                        new_parameter_map.insert(parameter_id.to_string(), data);
                     }
                     Err(err) => println!("err: {}", err),
                 }

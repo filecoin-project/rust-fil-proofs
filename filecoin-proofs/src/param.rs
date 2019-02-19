@@ -81,12 +81,12 @@ pub fn get_parameter_map(path: &PathBuf) -> Result<ParameterMap> {
     }
 }
 
-pub fn get_parameter_data(
-    parameter_map: &ParameterMap,
-    parameter_id: String,
-) -> Result<&ParameterData> {
-    if parameter_map.contains_key(&parameter_id) {
-        Ok(parameter_map.get(&parameter_id).unwrap())
+pub fn get_parameter_data<'a>(
+    parameter_map: &'a ParameterMap,
+    parameter_id: &str,
+) -> Result<&'a ParameterData> {
+    if parameter_map.contains_key(parameter_id) {
+        Ok(parameter_map.get(parameter_id).unwrap())
     } else {
         Err(err_msg(ERROR_PARAMETER_ID))
     }
@@ -100,13 +100,13 @@ pub fn save_parameter_map(parameter_map: &ParameterMap, file_path: &PathBuf) -> 
     Ok(())
 }
 
-pub fn get_parameter_file_path(parameter_id: String) -> PathBuf {
+pub fn get_parameter_file_path(parameter_id: &str) -> PathBuf {
     let mut path = parameter_cache_dir();
     path.push(parameter_id);
     path
 }
 
-pub fn get_parameter_digest(parameter_id: String) -> Result<String> {
+pub fn get_parameter_digest(parameter_id: &str) -> Result<String> {
     let path = get_parameter_file_path(parameter_id);
     let mut file = File::open(path)?;
     let mut hasher = Blake2b::new();
@@ -116,12 +116,12 @@ pub fn get_parameter_digest(parameter_id: String) -> Result<String> {
     Ok(format!("{:.32x}", &hasher.result()))
 }
 
-pub fn publish_parameter_file(parameter_id: String) -> Result<String> {
+pub fn publish_parameter_file(parameter_id: &str) -> Result<String> {
     let path = get_parameter_file_path(parameter_id);
 
     let output = Command::new("ipfs")
         .arg("add")
-        .arg(path.as_path().to_str().unwrap().to_string())
+        .arg(&path)
         .output()
         .expect(ERROR_IPFS_COMMAND);
 
@@ -137,9 +137,9 @@ pub fn publish_parameter_file(parameter_id: String) -> Result<String> {
     }
 }
 
-pub fn fetch_parameter_file(parameter_map: &ParameterMap, parameter_id: String) -> Result<()> {
-    let parameter_data = get_parameter_data(parameter_map, parameter_id.to_string())?;
-    let path = get_parameter_file_path(parameter_id.to_string());
+pub fn fetch_parameter_file(parameter_map: &ParameterMap, parameter_id: &str) -> Result<()> {
+    let parameter_data = get_parameter_data(parameter_map, parameter_id)?;
+    let path = get_parameter_file_path(parameter_id);
 
     if path.exists() {
         println!(
@@ -151,7 +151,7 @@ pub fn fetch_parameter_file(parameter_map: &ParameterMap, parameter_id: String) 
     } else {
         let output = Command::new("curl")
             .arg("-o")
-            .arg(path.as_path().to_str().unwrap().to_string())
+            .arg(&path)
             .arg(format!("https://ipfs.io/ipfs/{}", parameter_data.cid))
             .output();
 
@@ -161,11 +161,10 @@ pub fn fetch_parameter_file(parameter_map: &ParameterMap, parameter_id: String) 
                 if !output.status.success() {
                     Err(err_msg(ERROR_CURL_FETCH))
                 } else {
-                    let is_valid =
-                        validate_parameter_file(&parameter_map, parameter_id.to_string())?;
+                    let is_valid = validate_parameter_file(&parameter_map, parameter_id)?;
 
                     if !is_valid {
-                        invalidate_parameter_file(parameter_id.to_string())?;
+                        invalidate_parameter_file(parameter_id)?;
                         Err(err_msg(ERROR_PARAMETER_INVALID))
                     } else {
                         Ok(())
@@ -176,9 +175,9 @@ pub fn fetch_parameter_file(parameter_map: &ParameterMap, parameter_id: String) 
     }
 }
 
-pub fn validate_parameter_file(parameter_map: &ParameterMap, parameter_id: String) -> Result<bool> {
-    let parameter_data = get_parameter_data(parameter_map, parameter_id.to_string())?;
-    let digest = get_parameter_digest(parameter_id.to_string())?;
+pub fn validate_parameter_file(parameter_map: &ParameterMap, parameter_id: &str) -> Result<bool> {
+    let parameter_data = get_parameter_data(parameter_map, parameter_id)?;
+    let digest = get_parameter_digest(parameter_id)?;
 
     if parameter_data.digest != digest {
         Ok(false)
@@ -187,10 +186,10 @@ pub fn validate_parameter_file(parameter_map: &ParameterMap, parameter_id: Strin
     }
 }
 
-pub fn invalidate_parameter_file(parameter_id: String) -> Result<()> {
-    let parameter_file_path = get_parameter_file_path(parameter_id.to_string());
+pub fn invalidate_parameter_file(parameter_id: &str) -> Result<()> {
+    let parameter_file_path = get_parameter_file_path(parameter_id);
     let target_parameter_file_path =
-        parameter_file_path.with_file_name(format!("{}-invalid-digest", parameter_id.to_string()));
+        parameter_file_path.with_file_name(format!("{}-invalid-digest", parameter_id));
 
     if parameter_file_path.exists() {
         rename(parameter_file_path, target_parameter_file_path)?;
@@ -200,7 +199,7 @@ pub fn invalidate_parameter_file(parameter_id: String) -> Result<()> {
     }
 }
 
-pub fn choose(message: String) -> bool {
+pub fn choose(message: &str) -> bool {
     loop {
         print!("{} [y/n]: ", message);
 
@@ -217,10 +216,7 @@ pub fn choose(message: String) -> bool {
 }
 
 pub fn choose_from(vector: Vec<String>) -> Result<Vec<String>> {
-    Ok(vector
-        .into_iter()
-        .filter(|i| choose(i.to_string()))
-        .collect())
+    Ok(vector.into_iter().filter(|i| choose(i)).collect())
 }
 
 pub fn choose_local_parameter_ids() -> Result<Vec<String>> {

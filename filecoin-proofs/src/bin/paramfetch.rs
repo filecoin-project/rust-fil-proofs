@@ -58,7 +58,7 @@ Set $FILECOIN_PARAMETER_CACHE to specify parameter directory. Defaults to '{}'
             for parameter_id in parameter_ids.iter() {
                 println!("fetching '{}'...", parameter_id);
 
-                match fetch_parameter_file(&parameter_map, parameter_id.to_string()) {
+                match fetch_parameter_file(&parameter_map, &parameter_id) {
                     Ok(_) => println!("ok"),
                     Err(err) => println!("error: {}", err),
                 }
