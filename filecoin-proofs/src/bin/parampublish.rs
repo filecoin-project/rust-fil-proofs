@@ -57,7 +57,7 @@ Set $FILECOIN_PARAMETER_CACHE to specify parameter directory. Defaults to '{}'
         if parameter_ids.len() > 0 {
             println!("publishing parameters");
 
-            for parameter_id in parameter_ids.iter() {
+            for parameter_id in parameter_ids.into_iter() {
                 println!("publishing '{}'...", parameter_id);
 
                 match publish_parameter_file(&parameter_id) {
@@ -70,7 +70,7 @@ Set $FILECOIN_PARAMETER_CACHE to specify parameter directory. Defaults to '{}'
                         };
 
                         println!("ok.");
-                        new_parameter_map.insert(parameter_id.to_string(), data);
+                        new_parameter_map.insert(parameter_id, data);
                     }
                     Err(err) => println!("err: {}", err),
                 }
