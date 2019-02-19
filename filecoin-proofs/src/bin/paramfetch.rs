@@ -42,35 +42,25 @@ Set $FILECOIN_PARAMETER_CACHE to specify parameter directory. Defaults to '{}'
         .get_matches();
 
     let json = PathBuf::from(matches.value_of("json").unwrap_or("./parameters.json"));
-    let parameter_map = load_parameter_map(&json).expect(ERROR_PARAMETERS_MAPPED);
+    let parameter_map = get_parameter_map(&json).expect(ERROR_PARAMETERS_MAPPED);
 
     if let Some(matches) = matches.subcommand_matches("fetch") {
-        let parameters = if matches.is_present("all") {
-            get_mapped_parameters(&parameter_map)
+        let parameter_ids = if matches.is_present("all") {
+            get_mapped_parameter_ids(&parameter_map)
         } else {
-            choose_mapped_parameters(&parameter_map)
+            choose_mapped_parameter_ids(&parameter_map)
         }
         .expect(ERROR_PARAMETERS_MAPPED);
 
-        if parameters.len() > 0 {
+        if parameter_ids.len() > 0 {
             println!("fetching parameters");
 
-            for parameter in parameters.iter() {
-                println!("fetching '{}'...", parameter);
+            for parameter_id in parameter_ids.iter() {
+                println!("fetching '{}'...", parameter_id);
 
-                match fetch_parameter_file(&parameter_map, parameter.to_string()) {
-                    Ok(_) => {
-                        println!("checking digest...");
-                        let digest =
-                            get_parameter_digest(parameter.to_string()).expect(ERROR_DIGEST);
-
-                        if digest != parameter_map.get(parameter).unwrap().digest {
-                            println!("failed integrity check. you should remove this parameter and try again");
-                        } else {
-                            println!("ok");
-                        }
-                    }
-                    Err(_) => println!("error"),
+                match fetch_parameter_file(&parameter_map, parameter_id.to_string()) {
+                    Ok(_) => println!("ok"),
+                    Err(err) => println!("error: {}", err),
                 }
             }
         } else {
@@ -80,8 +70,8 @@ Set $FILECOIN_PARAMETER_CACHE to specify parameter directory. Defaults to '{}'
 
     if let Some(_) = matches.subcommand_matches("check") {
         let mapped_parameters =
-            get_mapped_parameters(&parameter_map).expect(ERROR_PARAMETERS_MAPPED);
-        let local_parameters = get_local_parameters().expect(ERROR_PARAMETERS_LOCAL);
+            get_mapped_parameter_ids(&parameter_map).expect(ERROR_PARAMETERS_MAPPED);
+        let local_parameters = get_local_parameter_ids().expect(ERROR_PARAMETERS_LOCAL);
 
         mapped_parameters.iter().for_each(|p| {
             let local = local_parameters.contains(p);

@@ -43,14 +43,14 @@ Set $FILECOIN_PARAMETER_CACHE to specify parameter directory. Defaults to '{}'
         .get_matches();
 
     let json = PathBuf::from(matches.value_of("json").unwrap_or("./parameters.json"));
-    let parameter_map = load_parameter_map(&json).expect(ERROR_PARAMETERS_MAPPED);
+    let parameter_map = get_parameter_map(&json).expect(ERROR_PARAMETERS_MAPPED);
 
     if let Some(matches) = matches.subcommand_matches("publish") {
         let mut new_parameter_map: ParameterMap = HashMap::new();
         let parameters = if matches.is_present("all") {
-            get_local_parameters()
+            get_local_parameter_ids()
         } else {
-            choose_local_parameters()
+            choose_local_parameter_ids()
         }
         .expect(ERROR_PARAMETERS_LOCAL);
 
@@ -85,8 +85,8 @@ Set $FILECOIN_PARAMETER_CACHE to specify parameter directory. Defaults to '{}'
 
     if let Some(_) = matches.subcommand_matches("check") {
         let mapped_parameters =
-            get_mapped_parameters(&parameter_map).expect(ERROR_PARAMETERS_MAPPED);
-        let local_parameters = get_local_parameters().expect(ERROR_PARAMETERS_LOCAL);
+            get_mapped_parameter_ids(&parameter_map).expect(ERROR_PARAMETERS_MAPPED);
+        let local_parameters = get_local_parameter_ids().expect(ERROR_PARAMETERS_LOCAL);
 
         local_parameters.iter().for_each(|p| {
             let mapped = mapped_parameters.contains(p);
