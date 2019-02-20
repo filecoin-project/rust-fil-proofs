@@ -54,7 +54,7 @@ Set $FILECOIN_PARAMETER_CACHE to specify parameter directory. Defaults to '{}'
         }
         .expect(ERROR_PARAMETERS_LOCAL);
 
-        if parameter_ids.len() > 0 {
+        if !parameter_ids.is_empty() {
             println!("publishing parameters");
 
             for parameter_id in parameter_ids.into_iter() {
@@ -64,10 +64,7 @@ Set $FILECOIN_PARAMETER_CACHE to specify parameter directory. Defaults to '{}'
                     Ok(cid) => {
                         println!("generating digest...");
                         let digest = get_parameter_digest(&parameter_id).expect(ERROR_DIGEST);
-                        let data = ParameterData {
-                            cid: cid,
-                            digest: digest,
-                        };
+                        let data = ParameterData { cid, digest };
 
                         println!("ok.");
                         new_parameter_map.insert(parameter_id, data);
@@ -82,7 +79,7 @@ Set $FILECOIN_PARAMETER_CACHE to specify parameter directory. Defaults to '{}'
         }
     }
 
-    if let Some(_) = matches.subcommand_matches("check") {
+    if matches.subcommand_matches("check").is_some() {
         let mapped_parameters =
             get_mapped_parameter_ids(&parameter_map).expect(ERROR_PARAMETERS_MAPPED);
         let local_parameters = get_local_parameter_ids().expect(ERROR_PARAMETERS_LOCAL);

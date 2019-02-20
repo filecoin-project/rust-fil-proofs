@@ -28,6 +28,7 @@ pub struct BeaconPoStCircuit<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> 
     pub challenged_leafs_vec_vec: Vec<Vec<Vec<Option<E::Fr>>>>,
     pub root_commitment: Option<E::Fr>,
     pub commitments_vec_vec: Vec<Vec<Vec<Option<E::Fr>>>>,
+    #[allow(clippy::type_complexity)]
     pub paths_vec_vec: Vec<Vec<Vec<Vec<Option<(E::Fr, bool)>>>>>,
     _h: PhantomData<H>,
     _v: PhantomData<V>,
