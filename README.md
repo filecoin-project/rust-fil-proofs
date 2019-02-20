@@ -37,9 +37,9 @@ If at any point it were to become clear that the FFI approach is irredeemably pr
 
 ## Install and configure Rust
 
-**NOTE:** If you have installed `rust-proofs` incidentally, as a submodule of `go-filecoin`, then you may already have installed Rust.
+**NOTE:** If you have installed `rust-fil-proofs` incidentally, as a submodule of `go-filecoin`, then you may already have installed Rust.
 
-The instructions below assume you have independently installed `rust-proofs` in order to test, develop, or experiment with it.
+The instructions below assume you have independently installed `rust-fil-proofs` in order to test, develop, or experiment with it.
 
 [Install Rust.](https://www.rust-lang.org/en-US/install.html)
 
@@ -99,7 +99,7 @@ Note: On macOS you need `gtime` (`brew install gnu-time`), as the built in `time
 
 For better logging with backtraces on errors, developers should use `expects` rather than `expect` on `Result<T, E>` and `Option<T>`.
 
-Developers can control `rust-proofs` logging through environment variables:
+Developers can control `rust-fil-proofs` logging through environment variables:
 
 -
   `RUST_PROOFS_LOG_JSON`
@@ -156,25 +156,25 @@ docker build -t foo -f ./Dockerfile-ci . && \
 
 ## Generate Documentation
 
-First, navigate to the `rust-proofs` directory.
-- If you installed `rust-proofs` automatically as a submodule of `go-filecoin`:
+First, navigate to the `rust-fil-proofs` directory.
+- If you installed `rust-fil-proofs` automatically as a submodule of `go-filecoin`:
 ```
-> cd <go-filecoin-install-path>/go-filecoin/proofs/rust-proofs
-```
-
-- If you cloned `rust-proofs` manually, it will be wherever you cloned it:
-```
-> cd <install-path>/rust-proofs
+> cd <go-filecoin-install-path>/go-filecoin/proofs/rust-fil-proofs
 ```
 
-[Note that the version of `rust-proofs` included in `go-filecoin` as a submodule is not always the current head of `rust-proofs/master`. For documentation corresponding to the latest source, you should clone `rust-proofs` yourself.]
+- If you cloned `rust-fil-proofs` manually, it will be wherever you cloned it:
+```
+> cd <install-path>/rust-fil-proofs
+```
+
+[Note that the version of `rust-fil-proofs` included in `go-filecoin` as a submodule is not always the current head of `rust-fil-proofs/master`. For documentation corresponding to the latest source, you should clone `rust-fil-proofs` yourself.]
 
 Now, generate the documentation:
 ```
 > cargo doc --all --no-deps
 ```
 
-View the docs by pointing your browser at: `…/rust-proofs/target/doc/proofs/index.html`.
+View the docs by pointing your browser at: `…/rust-fil-proofs/target/doc/proofs/index.html`.
 
 ---
 
@@ -184,24 +184,24 @@ The **FPS** is accessed from [**go-filecoin**](https://github.com/filecoin-proje
 
  The Rust source code serves as the source of truth defining the **FPS** APIs. View the source directly:
 
-- [**filecoin-proofs**](https://github.com/filecoin-project/rust-proofs/blob/master/filecoin-proofs/src/api/mod.rs)
-- [**sector-base**](https://github.com/filecoin-project/rust-proofs/blob/master/sector-base/README.md#api-reference).
+- [**filecoin-proofs**](https://github.com/filecoin-project/rust-fil-proofs/blob/master/filecoin-proofs/src/api/mod.rs)
+- [**sector-base**](https://github.com/filecoin-project/rust-fil-proofs/blob/master/sector-base/README.md#api-reference).
 
 
 Or better, generate the documentation locally (until repository is public). Follow the instructions to generate documentation above. Then navigate to:
-- **Sector Base API:** `…/rust-proofs/target/doc/sector_base/api/index.html`
-- **Filecoin Proofs API:** `…/rust-proofs/target/doc/filecoin_proofs/api/index.html`
+- **Sector Base API:** `…/rust-fil-proofs/target/doc/sector_base/api/index.html`
+- **Filecoin Proofs API:** `…/rust-fil-proofs/target/doc/filecoin_proofs/api/index.html`
 
 - [Go implementation of filecoin-proofs API](https://github.com/filecoin-project/go-filecoin/blob/master/proofs/rustprover.go) and [associated interface structures](https://github.com/filecoin-project/go-filecoin/blob/master/proofs/interface.go).
 - [Go implementation of sector-base API](https://github.com/filecoin-project/go-filecoin/blob/master/proofs/disk_backed_sector_store.go).
 
 ## Contributing
 
-See [Contributing](./CONTRIBUTING.md)
+See [Contributing](CONTRIBUTING.md)
 
 ## License
 
 The Filecoin Project is dual-licensed under Apache 2.0 and MIT terms:
 
-- Apache license, Version 2.0, ([LICENSE-APACHE](https://github.com/filecoin-project/rust-proofs/blob/master/LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-- MIT license ([LICENSE-MIT](https://github.com/filecoin-project/rust-proofs/blob/master/LICENSE-MIT) or http://opensource.org/licenses/MIT)
+- Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
