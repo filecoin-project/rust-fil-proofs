@@ -21,6 +21,7 @@ pub struct ParallelProofOfRetrievability<'a, E: JubjubEngine> {
     pub values: Vec<Option<E::Fr>>,
 
     /// The authentication path of the commitment in the tree.
+    #[allow(clippy::type_complexity)]
     pub auth_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
 
     /// The root of the underyling merkle tree.

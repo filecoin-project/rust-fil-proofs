@@ -136,13 +136,13 @@ pub unsafe extern "C" fn generate_post(
 ///
 #[no_mangle]
 pub unsafe extern "C" fn verify_post(
-    flattened_comm_rs_ptr: *const u8,
-    flattened_comm_rs_len: libc::size_t,
-    challenge_seed: &[u8; 32],
+    _flattened_comm_rs_ptr: *const u8,
+    _flattened_comm_rs_len: libc::size_t,
+    _challenge_seed: &[u8; 32],
     proof: &[u8; API_POST_PROOF_BYTES],
-    faults_ptr: *const u64,
-    faults_len: libc::size_t,
-    sector_bytes: u64,
+    _faults_ptr: *const u64,
+    _faults_len: libc::size_t,
+    _sector_bytes: u64,
 ) -> *mut responses::VerifyPoSTResponse {
     let mut response: responses::VerifyPoSTResponse = Default::default();
 
@@ -153,51 +153,51 @@ pub unsafe extern "C" fn verify_post(
     };
 
     // Stay mocked for now — remove early return when ready to use.
-    return Box::into_raw(Box::new(response));
-
-    let comm_rs = from_raw_parts(flattened_comm_rs_ptr, flattened_comm_rs_len)
-        .iter()
-        .step_by(32)
-        .fold(Default::default(), |mut acc: Vec<[u8; 32]>, item| {
-            let sliced = from_raw_parts(item, 32);
-            let mut x: [u8; 32] = Default::default();
-            x.copy_from_slice(&sliced[..32]);
-            acc.push(x);
-            acc
-        });
-
-    let faults = from_raw_parts(faults_ptr, faults_len);
-
-    let safe_challenge_seed = {
-        let mut cs = [0; 32];
-        cs.copy_from_slice(challenge_seed);
-        cs[31] &= 0b00111111;
-        cs
-    };
-
-    match internal::verify_post(
-        sector_bytes,
-        &comm_rs,
-        &safe_challenge_seed,
-        proof,
-        faults.to_vec(),
-    ) {
-        Ok(true) => {
-            response.status_code = FCPResponseStatus::FCPNoError;
-            response.is_valid = true;
-        }
-        Ok(false) => {
-            response.status_code = FCPResponseStatus::FCPNoError;
-            response.is_valid = false;
-        }
-        Err(err) => {
-            let (code, ptr) = err_code_and_msg(&err);
-            response.status_code = code;
-            response.error_msg = ptr;
-        }
-    }
-
     Box::into_raw(Box::new(response))
+
+    // let comm_rs = from_raw_parts(flattened_comm_rs_ptr, flattened_comm_rs_len)
+    //     .iter()
+    //     .step_by(32)
+    //     .fold(Default::default(), |mut acc: Vec<[u8; 32]>, item| {
+    //         let sliced = from_raw_parts(item, 32);
+    //         let mut x: [u8; 32] = Default::default();
+    //         x.copy_from_slice(&sliced[..32]);
+    //         acc.push(x);
+    //         acc
+    //     });
+
+    // let faults = from_raw_parts(faults_ptr, faults_len);
+
+    // let safe_challenge_seed = {
+    //     let mut cs = [0; 32];
+    //     cs.copy_from_slice(challenge_seed);
+    //     cs[31] &= 0b00111111;
+    //     cs
+    // };
+
+    // match internal::verify_post(
+    //     sector_bytes,
+    //     &comm_rs,
+    //     &safe_challenge_seed,
+    //     proof,
+    //     faults.to_vec(),
+    // ) {
+    //     Ok(true) => {
+    //         response.status_code = FCPResponseStatus::FCPNoError;
+    //         response.is_valid = true;
+    //     }
+    //     Ok(false) => {
+    //         response.status_code = FCPResponseStatus::FCPNoError;
+    //         response.is_valid = false;
+    //     }
+    //     Err(err) => {
+    //         let (code, ptr) = err_code_and_msg(&err);
+    //         response.status_code = code;
+    //         response.error_msg = ptr;
+    //     }
+    // }
+
+    // Box::into_raw(Box::new(response))
 }
 
 /// Initializes and returns a SectorBuilder.

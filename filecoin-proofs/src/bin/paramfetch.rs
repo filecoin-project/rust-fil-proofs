@@ -52,7 +52,7 @@ Set $FILECOIN_PARAMETER_CACHE to specify parameter directory. Defaults to '{}'
         }
         .expect(ERROR_PARAMETERS_MAPPED);
 
-        if parameter_ids.len() > 0 {
+        if !parameter_ids.is_empty() {
             println!("fetching parameters");
 
             for parameter_id in parameter_ids.iter() {
@@ -68,7 +68,7 @@ Set $FILECOIN_PARAMETER_CACHE to specify parameter directory. Defaults to '{}'
         }
     }
 
-    if let Some(_) = matches.subcommand_matches("check") {
+    if matches.subcommand_matches("check").is_some() {
         let mapped_parameters =
             get_mapped_parameter_ids(&parameter_map).expect(ERROR_PARAMETERS_MAPPED);
         let local_parameters = get_local_parameter_ids().expect(ERROR_PARAMETERS_LOCAL);

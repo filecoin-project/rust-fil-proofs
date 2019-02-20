@@ -58,6 +58,7 @@ pub enum Request {
 }
 
 impl Scheduler {
+    #[allow(clippy::too_many_arguments)]
     pub fn start_with_metadata(
         scheduler_input_rx: mpsc::Receiver<Request>,
         scheduler_input_tx: mpsc::SyncSender<Request>,

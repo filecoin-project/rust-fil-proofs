@@ -31,6 +31,7 @@ pub struct FakeDrgParams {
     pub replica_nodes_paths: Vec<Vec<Option<(Fr, bool)>>>,
     pub replica_root: Fr,
     pub replica_parents: Vec<Vec<Fr>>,
+    #[allow(clippy::type_complexity)]
     pub replica_parents_paths: Vec<Vec<Vec<Option<(Fr, bool)>>>>,
     pub data_nodes: Vec<Fr>,
     pub data_nodes_paths: Vec<Vec<Option<(Fr, bool)>>>,

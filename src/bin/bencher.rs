@@ -463,16 +463,13 @@ impl LogResult {
             let parsed: serde_json::Result<HashMap<String, String>> = serde_json::from_str(l);
             let parsed = parsed.expects("The bencher requires JSON log-output.");
 
-            let raw = parsed.get("msg").unwrap();
-            let system = parsed
-                .get("target")
-                .map(|x| x.clone())
-                .unwrap_or(String::from(""));
+            let raw = &parsed["msg"];
+            let system = parsed.get("target").cloned().unwrap_or_default();
             let kv = raw.trim().split(": ").collect::<Vec<&str>>();
             let key = kv[0].trim();
             let value = if kv.len() > 1 { kv[1].trim() } else { "" };
 
-            (String::from(system), String::from(key), String::from(value))
+            (system, String::from(key), String::from(value))
         });
 
         let mut config = HashMap::new();
