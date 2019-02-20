@@ -1,8 +1,11 @@
 use crate::api::errors::SectorManagerErr;
 
 pub trait SectorConfig {
-    /// returns the number of bytes that will fit into a sector managed by this store
+    /// returns the number of user-provided bytes that will fit into a sector managed by this store
     fn max_unsealed_bytes_per_sector(&self) -> u64;
+
+    /// returns the number of bytes that will fit into a sector managed by this store
+    fn max_sealed_bytes_per_sector(&self) -> u64;
 
     /// returns the number of bytes in a sealed sector managed by this store
     fn sector_bytes(&self) -> u64;

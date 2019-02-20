@@ -179,7 +179,7 @@ impl DiskManager {
 }
 
 pub struct Config {
-    sector_bytes: u64,
+    pub sector_bytes: u64,
 }
 
 #[derive(Debug)]
@@ -233,6 +233,10 @@ pub fn new_sector_config(cs: &ConfiguredStore) -> Box<SectorConfig> {
 impl SectorConfig for Config {
     fn max_unsealed_bytes_per_sector(&self) -> u64 {
         unpadded_bytes(self.sector_bytes)
+    }
+
+    fn max_sealed_bytes_per_sector(&self) -> u64 {
+        self.sector_bytes
     }
 
     fn sector_bytes(&self) -> u64 {
