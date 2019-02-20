@@ -16,7 +16,7 @@ extern crate storage_proofs;
 
 use clap::{App, Arg};
 #[cfg(feature = "profile")]
-use gperftools::profiler::PROFILER;
+use gperftools::heap_profiler::HEAP_PROFILER;
 use memmap::MmapMut;
 use memmap::MmapOptions;
 use pairing::bls12_381::Bls12;
@@ -46,7 +46,8 @@ use filecoin_proofs::FCP_LOG;
 #[cfg(feature = "profile")]
 #[inline(always)]
 fn start_profile(stage: &str) {
-    PROFILER
+    println!("Saving profile in {}", format!("./{}.profile", stage));
+    HEAP_PROFILER
         .lock()
         .unwrap()
         .start(format!("./{}.profile", stage))
@@ -60,7 +61,7 @@ fn start_profile(_stage: &str) {}
 #[cfg(feature = "profile")]
 #[inline(always)]
 fn stop_profile() {
-    PROFILER.lock().unwrap().stop().unwrap();
+    HEAP_PROFILER.lock().unwrap().stop().unwrap();
 }
 
 #[cfg(not(feature = "profile"))]
