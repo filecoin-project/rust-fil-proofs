@@ -10,10 +10,6 @@ pub type FeistelPrecomputed = (u32, u32, u32);
 // Find the minimum number of even bits to represent `num_elements`
 // within a `u32` maximum. Returns the left and right masks evenly
 // distributed that together add up to that minimum number of bits.
-// TODO: Optimization: Evaluate dropping the `right_mask` inside
-// all of the internal computations, just apply it at the end to
-// get the output into the desired range (the internal hash won't
-// care if we use less than 32 bits, it will take the same time).
 pub fn precompute(num_elements: u32) -> FeistelPrecomputed {
     let mut next_pow4 = 4;
     let mut log4 = 1;
@@ -47,9 +43,6 @@ pub fn permute(
     // Since we are representing `num_elements` using an even number of bits,
     // that can encode many values above it, so keep repeating the operation
     // until we land in the permitted range.
-    // TODO: Optimization: Do not repeat the entire `encode`, just one round
-    // at a time (following the `keys` order) until where in the `num_elements`
-    // range.
 
     u
 }
@@ -120,7 +113,6 @@ fn feistel(right: u32, key: u32, right_mask: u32) -> u32 {
     data[5] = (key >> 16) as u8;
     data[6] = (key >> 8) as u8;
     data[7] = key as u8;
-    // TODO: Optimization: use `load` as `u64`.
 
     let hash = Blake2s::digest(&data);
 
@@ -128,7 +120,6 @@ fn feistel(right: u32, key: u32, right_mask: u32) -> u32 {
         | u32::from(hash[1]) << 16
         | u32::from(hash[2]) << 8
         | u32::from(hash[3]);
-    // TODO: Optimization: same with `u32`.
 
     r & right_mask
 }
