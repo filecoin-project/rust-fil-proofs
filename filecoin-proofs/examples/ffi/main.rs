@@ -333,7 +333,7 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
             32,
             &challenge_seed,
         );
-        defer!(destroy_generate_post_response(resp));
+        defer!(THIS_SHOUDLNT_COMPILE(resp));
 
         if (*resp).status_code != 0 {
             panic!("{}", c_str_to_rust_str((*resp).error_msg))
