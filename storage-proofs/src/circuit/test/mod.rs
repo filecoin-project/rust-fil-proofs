@@ -22,6 +22,7 @@ enum NamedObject {
 pub struct TestConstraintSystem<E: Engine> {
     named_objects: HashMap<String, NamedObject>,
     current_namespace: Vec<String>,
+    #[allow(clippy::type_complexity)]
     constraints: Vec<(
         LinearCombination<E>,
         LinearCombination<E>,

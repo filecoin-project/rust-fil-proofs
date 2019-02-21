@@ -1,13 +1,13 @@
+use blake2::{Blake2b, Digest};
 use failure::{err_msg, Error};
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs::{read_dir, File};
+use std::fs::{read_dir, rename, File};
 use std::io::{stdin, stdout, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 use std::process::Command;
 use storage_proofs::parameter_cache::parameter_cache_dir;
-
-const PARAMETER_JSON_PATH: &str = "./parameters.json";
 
 pub const ERROR_CURL_COMMAND: &str = "failed to run curl";
 pub const ERROR_CURL_FETCH: &str = "failed to fetch via curl";
@@ -17,16 +17,24 @@ pub const ERROR_IPFS_PARSE: &str = "failed to parse ipfs output";
 pub const ERROR_IPFS_PUBLISH: &str = "failed to publish via ipfs";
 pub const ERROR_PARAMETERS_LOCAL: &str = "failed to load local parameters";
 pub const ERROR_PARAMETERS_MAPPED: &str = "failed to load mapped parameters";
+pub const ERROR_PARAMETER_FILE: &str = "failed to find parameter file";
 pub const ERROR_PARAMETER_ID: &str = "failed to find parameter in map";
 pub const ERROR_PARAMETER_MAP_LOAD: &str = "failed to load parameter map";
 pub const ERROR_PARAMETER_MAP_SAVE: &str = "failed to save parameter map";
+pub const ERROR_PARAMETER_INVALID: &str = "invalid parameter file";
+pub const ERROR_DIGEST: &str = "failed to generate digest";
 pub const ERROR_STRING: &str = "invalid string";
 
 pub type Result<T> = ::std::result::Result<T, Error>;
+pub type ParameterMap = HashMap<String, ParameterData>;
 
-pub type ParameterMap = HashMap<String, String>;
+#[derive(Deserialize, Serialize)]
+pub struct ParameterData {
+    pub cid: String,
+    pub digest: String,
+}
 
-pub fn get_local_parameters() -> Result<Vec<String>> {
+pub fn get_local_parameter_ids() -> Result<Vec<String>> {
     let path = parameter_cache_dir();
 
     if path.exists() {
@@ -52,19 +60,17 @@ pub fn get_local_parameters() -> Result<Vec<String>> {
     }
 }
 
-pub fn get_mapped_parameters() -> Result<Vec<String>> {
-    Ok(load_parameter_map()?.into_iter().map(|(k, _)| k).collect())
+pub fn get_mapped_parameter_ids(parameter_map: &ParameterMap) -> Result<Vec<String>> {
+    Ok(parameter_map.iter().map(|(k, _)| k.clone()).collect())
 }
 
-pub fn load_parameter_map() -> Result<ParameterMap> {
-    let path = PathBuf::from(PARAMETER_JSON_PATH);
-
+pub fn get_parameter_map(path: &PathBuf) -> Result<ParameterMap> {
     if path.exists() {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
-        let map = serde_json::from_reader(reader)?;
+        let parameter_map = serde_json::from_reader(reader)?;
 
-        Ok(map)
+        Ok(parameter_map)
     } else {
         println!(
             "parameter manifest '{}' does not exist",
@@ -75,21 +81,47 @@ pub fn load_parameter_map() -> Result<ParameterMap> {
     }
 }
 
-pub fn save_parameter_map(map: ParameterMap) -> Result<()> {
-    let file = File::create(PARAMETER_JSON_PATH)?;
+pub fn get_parameter_data<'a>(
+    parameter_map: &'a ParameterMap,
+    parameter_id: &str,
+) -> Result<&'a ParameterData> {
+    if parameter_map.contains_key(parameter_id) {
+        Ok(parameter_map.get(parameter_id).unwrap())
+    } else {
+        Err(err_msg(ERROR_PARAMETER_ID))
+    }
+}
+
+pub fn save_parameter_map(parameter_map: &ParameterMap, file_path: &PathBuf) -> Result<()> {
+    let file = File::create(file_path)?;
     let writer = BufWriter::new(file);
-    serde_json::to_writer_pretty(writer, &map)?;
+    serde_json::to_writer_pretty(writer, &parameter_map)?;
 
     Ok(())
 }
 
-pub fn publish_parameter_file(parameter: String) -> Result<String> {
+pub fn get_parameter_file_path(parameter_id: &str) -> PathBuf {
     let mut path = parameter_cache_dir();
-    path.push(parameter);
+    path.push(parameter_id);
+    path
+}
+
+pub fn get_parameter_digest(parameter_id: &str) -> Result<String> {
+    let path = get_parameter_file_path(parameter_id);
+    let mut file = File::open(path)?;
+    let mut hasher = Blake2b::new();
+
+    std::io::copy(&mut file, &mut hasher)?;
+
+    Ok(format!("{:.32x}", &hasher.result()))
+}
+
+pub fn publish_parameter_file(parameter_id: &str) -> Result<String> {
+    let path = get_parameter_file_path(parameter_id);
 
     let output = Command::new("ipfs")
         .arg("add")
-        .arg(path.as_path().to_str().unwrap().to_string())
+        .arg(&path)
         .output()
         .expect(ERROR_IPFS_COMMAND);
 
@@ -105,12 +137,9 @@ pub fn publish_parameter_file(parameter: String) -> Result<String> {
     }
 }
 
-pub fn fetch_parameter_file(parameter: String) -> Result<()> {
-    let map = load_parameter_map()?;
-    let cid = map.get(&parameter).expect(ERROR_PARAMETER_ID);
-
-    let mut path = parameter_cache_dir();
-    path.push(parameter);
+pub fn fetch_parameter_file(parameter_map: &ParameterMap, parameter_id: &str) -> Result<()> {
+    let parameter_data = get_parameter_data(parameter_map, parameter_id)?;
+    let path = get_parameter_file_path(parameter_id);
 
     if path.exists() {
         println!(
@@ -122,20 +151,55 @@ pub fn fetch_parameter_file(parameter: String) -> Result<()> {
     } else {
         let output = Command::new("curl")
             .arg("-o")
-            .arg(path.as_path().to_str().unwrap().to_string())
-            .arg(format!("https://ipfs.io/ipfs/{}", cid))
-            .output()
-            .expect(ERROR_CURL_COMMAND);
+            .arg(&path)
+            .arg(format!("https://ipfs.io/ipfs/{}", parameter_data.cid))
+            .output();
 
-        if !output.status.success() {
-            Err(err_msg(ERROR_CURL_FETCH))
-        } else {
-            Ok(())
+        match output {
+            Err(_) => Err(err_msg(ERROR_CURL_COMMAND)),
+            Ok(output) => {
+                if !output.status.success() {
+                    Err(err_msg(ERROR_CURL_FETCH))
+                } else {
+                    let is_valid = validate_parameter_file(&parameter_map, parameter_id)?;
+
+                    if !is_valid {
+                        invalidate_parameter_file(parameter_id)?;
+                        Err(err_msg(ERROR_PARAMETER_INVALID))
+                    } else {
+                        Ok(())
+                    }
+                }
+            }
         }
     }
 }
 
-pub fn choose(message: String) -> bool {
+pub fn validate_parameter_file(parameter_map: &ParameterMap, parameter_id: &str) -> Result<bool> {
+    let parameter_data = get_parameter_data(parameter_map, parameter_id)?;
+    let digest = get_parameter_digest(parameter_id)?;
+
+    if parameter_data.digest != digest {
+        Ok(false)
+    } else {
+        Ok(true)
+    }
+}
+
+pub fn invalidate_parameter_file(parameter_id: &str) -> Result<()> {
+    let parameter_file_path = get_parameter_file_path(parameter_id);
+    let target_parameter_file_path =
+        parameter_file_path.with_file_name(format!("{}-invalid-digest", parameter_id));
+
+    if parameter_file_path.exists() {
+        rename(parameter_file_path, target_parameter_file_path)?;
+        Ok(())
+    } else {
+        Err(err_msg(ERROR_PARAMETER_FILE))
+    }
+}
+
+pub fn choose(message: &str) -> bool {
     loop {
         print!("{} [y/n]: ", message);
 
@@ -152,16 +216,13 @@ pub fn choose(message: String) -> bool {
 }
 
 pub fn choose_from(vector: Vec<String>) -> Result<Vec<String>> {
-    Ok(vector
-        .into_iter()
-        .filter(|i| choose(i.to_string()))
-        .collect())
+    Ok(vector.into_iter().filter(|i| choose(i)).collect())
 }
 
-pub fn choose_local_parameters() -> Result<Vec<String>> {
-    choose_from(get_local_parameters()?)
+pub fn choose_local_parameter_ids() -> Result<Vec<String>> {
+    choose_from(get_local_parameter_ids()?)
 }
 
-pub fn choose_mapped_parameters() -> Result<Vec<String>> {
-    choose_from(get_mapped_parameters()?)
+pub fn choose_mapped_parameter_ids(map: &ParameterMap) -> Result<Vec<String>> {
+    choose_from(get_mapped_parameter_ids(&map)?)
 }

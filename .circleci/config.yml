@@ -78,7 +78,7 @@ jobs:
           name: Test (stable) in release profile
           command: |
             cargo +stable test --verbose --release --frozen --all
-            cargo +stable build --examples --release --frozen --all
+            RUSTFLAGS="-D warnings" cargo +stable build --examples --release --frozen --all
 
   ffi_regression:
     docker:
