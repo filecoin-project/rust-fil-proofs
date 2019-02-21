@@ -2,6 +2,8 @@ use std::cmp::{max, min};
 use std::sync::mpsc::channel;
 
 use crossbeam_utils::thread;
+use memmap::MmapMut;
+use memmap::MmapOptions;
 use rayon::prelude::*;
 use serde::de::Deserialize;
 use serde::ser::Serialize;
@@ -18,6 +20,10 @@ use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
 use crate::vde;
 use crate::SP_LOG;
+
+fn anonymous_mmap(len: usize) -> MmapMut {
+    unsafe { MmapOptions::new().len(len).map_anon().unwrap() }
+}
 
 #[derive(Debug, Clone)]
 pub enum LayerChallenges {
@@ -373,8 +379,9 @@ pub trait Layers {
                     let mut threads = Vec::with_capacity(layers + 1);
                     let initial_pp = (*drgpp).clone();
                     (0..=layers).fold(initial_pp, |current_drgpp, layer| {
-                        let mut data_copy = vec![0; data.len()];
+                        let mut data_copy = anonymous_mmap(data.len());
                         data_copy[0..data.len()].clone_from_slice(data);
+
 
                         let return_channel = tx.clone();
                         let (transfer_tx, transfer_rx) =
