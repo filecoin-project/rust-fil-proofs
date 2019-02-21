@@ -24,6 +24,10 @@ where
     // The only subtlety is that a ZigZag graph may be reversed, so the direction
     // of the traversal must also be.
 
+    let mut ciphertexts = vec![0u8; 32 * (graph.degree() + 1)];
+    // Preallocate the KDF vector where the parents of the current
+    // node `n` will be loaded to be hashed.
+
     for n in 0..graph.size() {
         let node = if graph.forward() {
             n
@@ -35,7 +39,14 @@ where
         let parents = graph.parents(node);
         assert_eq!(parents.len(), graph.degree(), "wrong number of parents");
 
-        let key = create_key::<H>(replica_id, node, &parents, data, degree)?;
+        let key = create_key::<H>(
+            replica_id,
+            node,
+            &parents,
+            data,
+            degree,
+            Some(&mut ciphertexts),
+        )?;
         let start = data_at_node_offset(node);
         let end = start + 32;
 
@@ -79,7 +90,7 @@ where
     G: Graph<H>,
 {
     let parents = graph.parents(v);
-    let key = create_key::<H>(replica_id, v, &parents, &data, graph.degree())?;
+    let key = create_key::<H>(replica_id, v, &parents, &data, graph.degree(), None)?;
     let node_data = H::Domain::try_from_bytes(&data_at_node(data, v)?)?;
 
     // TODO: round constant
@@ -104,7 +115,7 @@ where
         .flat_map(H::Domain::into_bytes)
         .collect::<Vec<u8>>();
 
-    let key = create_key::<H>(replica_id, v, &parents, &byte_data, graph.degree())?;
+    let key = create_key::<H>(replica_id, v, &parents, &byte_data, graph.degree(), None)?;
     let node_data = data[v];
 
     // TODO: round constant
@@ -117,11 +128,20 @@ fn create_key<H: Hasher>(
     parents: &[usize],
     data: &[u8],
     m: usize,
+    ciphertexts: Option<&mut Vec<u8>>,
 ) -> Result<H::Domain> {
     // ciphertexts will become a buffer of the layout
     // id | encodedParentNode1 | encodedParentNode1 | ...
 
-    let mut ciphertexts = vec![0u8; 32 * (parents.len() + 1)];
+    let mut owned_vector: Vec<u8>;
+    let ciphertexts: &mut Vec<u8> = match ciphertexts {
+        Some(preallocated) => preallocated,
+        None => {
+            owned_vector = vec![0u8; 32 * (parents.len() + 1)];
+            owned_vector.as_mut()
+        }
+    };
+
     id.write_bytes(&mut ciphertexts[0..32])?;
 
     for (i, parent) in parents.iter().enumerate() {
