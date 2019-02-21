@@ -33,7 +33,7 @@ Earlier in the design process, we considered implementing what has become the **
 
 We also considered whether the **FPS** should be implemented as a standalone binary accessed from [**`go-filecoin`**](https://github.com/filecoin-project/go-filecoin) either as a single-invocation CLI or as a long-running daemon process. Bundling the **FPS** as an FFI dependency was chosen for both the simplicity of having a Filecoin node deliverable as a single monolithic binary, and for the (perceived) relative development simplicity of the API implementation.
 
-If at any point it were to become clear that the FFI approach is irredeemably problematic, the option of moving to a standalone **FPS** remains. However, the majority of technical problems associated with calling from Go into Rust are now solved, even while allowing for a high degree of runtime configurability. Therefore, continuing down the same path we have already invested in, and begin to reap rewards from, seems likely.
+If at any point it were to become clear that the FFI approach is irredeemably problematic, the option of moving to a standalone **FPS** remains. However, the majority of technical problems associated with calling from Go into Rust are now solved, even while allowing for a high degree of runtime configurability. Therefore, continuing down the same path we have already invested in, and have begun to reap rewards from, seems likely.
 
 ## Install and configure Rust
 
