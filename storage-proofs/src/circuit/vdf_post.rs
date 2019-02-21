@@ -34,6 +34,7 @@ pub struct VDFPoStCircuit<'a, E: JubjubEngine> {
     pub challenged_leafs_vec: Vec<Vec<Option<E::Fr>>>,
     pub commitments_vec: Vec<Vec<Option<E::Fr>>>,
     pub root_commitment: Option<E::Fr>,
+    #[allow(clippy::type_complexity)]
     pub paths_vec: Vec<Vec<Vec<Option<(E::Fr, bool)>>>>,
 }
 
@@ -345,6 +346,7 @@ fn verify_challenges<E: Engine, CS: ConstraintSystem<E>, T>(
 }
 
 impl<'a, E: JubjubEngine> VDFPoStCircuit<'a, E> {
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     pub fn synthesize<CS: ConstraintSystem<E>>(
         cs: &mut CS,
         params: &E::Params,

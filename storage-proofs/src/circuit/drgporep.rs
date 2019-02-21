@@ -55,11 +55,14 @@ pub struct DrgPoRepCircuit<'a, E: JubjubEngine> {
     params: &'a E::Params,
     sloth_iter: usize,
     replica_nodes: Vec<Option<E::Fr>>,
+    #[allow(clippy::type_complexity)]
     replica_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
     replica_root: Root<E>,
     replica_parents: Vec<Vec<Option<E::Fr>>>,
+    #[allow(clippy::type_complexity)]
     replica_parents_paths: Vec<Vec<Vec<Option<(E::Fr, bool)>>>>,
     data_nodes: Vec<Option<E::Fr>>,
+    #[allow(clippy::type_complexity)]
     data_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
     data_root: Root<E>,
     replica_id: Option<E::Fr>,
@@ -68,6 +71,7 @@ pub struct DrgPoRepCircuit<'a, E: JubjubEngine> {
 }
 
 impl<'a, E: JubjubEngine> DrgPoRepCircuit<'a, E> {
+    #[allow(clippy::type_complexity, clippy::too_many_arguments)]
     pub fn synthesize<CS>(
         mut cs: CS,
         params: &E::Params,

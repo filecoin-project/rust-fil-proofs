@@ -48,6 +48,7 @@ pub struct PoRCCircuit<'a, E: JubjubEngine> {
     pub challenged_leafs: Vec<Option<E::Fr>>,
     pub challenged_sectors: Vec<usize>,
     pub commitments: Vec<Option<E::Fr>>,
+    #[allow(clippy::type_complexity)]
     pub paths: Vec<Vec<Option<(E::Fr, bool)>>>,
 }
 
@@ -230,6 +231,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoRCCircuit<'a, E> {
 }
 
 impl<'a, E: JubjubEngine> PoRCCircuit<'a, E> {
+    #[allow(clippy::type_complexity)]
     pub fn synthesize<CS: ConstraintSystem<E>>(
         cs: &mut CS,
         params: &'a E::Params,

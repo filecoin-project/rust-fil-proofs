@@ -378,6 +378,7 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
     fn samples() -> usize;
 
     /// Create a new random proof
+    #[allow(clippy::too_many_arguments)]
     fn create_circuit<R: Rng>(
         &mut self,
         _: &mut R,
@@ -389,6 +390,7 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
         _: usize,
     ) -> C;
 
+    #[allow(clippy::too_many_arguments)]
     fn create_proof<R: Rng>(
         &mut self,
         rng: &mut R,
@@ -416,6 +418,7 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
     fn verify_proof(&mut self, _: &Proof<Bls12>, _: &PreparedVerifyingKey<Bls12>) -> Option<bool>;
 
     /// Get the number of constraints of the circuit
+    #[allow(clippy::too_many_arguments)]
     fn get_num_constraints<R: Rng>(
         &mut self,
         rng: &mut R,

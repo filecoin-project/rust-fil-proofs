@@ -1,5 +1,3 @@
-**Note: THE FILECOIN PROJECT IS STILL EXTREMELY CONFIDENTIAL. Do not share or discuss the project outside of designated preview channels (chat channels, Discourse forum, GitHub, emails to Filecoin team), not even with partners/spouses/family members. If you have any questions, please email [legal@protocol.ai](mailto:legal@protocol.ai).**
-
 # Filecoin Proving Subsystem (FPS)
 
 The **Filecoin Proving Subsystem** provides the storage proofs required by the Filecoin protocol.  It is implemented entirely in Rust, as a series of partially inter-dependent crates – some of which export C bindings to the supported API. This decomposition into distinct crates/modules is relatively recent, and in some cases current code has not been fully refactored to reflect the intended eventual organization.
@@ -9,7 +7,7 @@ There are currently four different crates:
 - [**Storage Proofs (`storage-proofs`)**](./storage-proofs)
     A library for constructing storage proofs – including non-circuit proofs, corresponding SNARK circuits, and a method of combining them.
 
-    `storage-proofs` is intended to serve as a reference implementation for _**Proof-of-Replication**_, while also performing the heavy lifting for `filecoin-proofs`.
+    `storage-proofs` is intended to serve as a reference implementation for _**Proof-of-Replication**_ (**PoRep**), while also performing the heavy lifting for `filecoin-proofs`.
 
      Primary Components:
      -   **PoR** (**_Proof-of-Retrievability_**: Merkle inclusion proof)
@@ -196,6 +194,10 @@ Or better, generate the documentation locally (until repository is public). Foll
 
 - [Go implementation of filecoin-proofs API](https://github.com/filecoin-project/go-filecoin/blob/master/proofs/rustprover.go) and [associated interface structures](https://github.com/filecoin-project/go-filecoin/blob/master/proofs/interface.go).
 - [Go implementation of sector-base API](https://github.com/filecoin-project/go-filecoin/blob/master/proofs/disk_backed_sector_store.go).
+
+## Contributing
+
+See [Contributing](./contributing.md)
 
 ## License
 

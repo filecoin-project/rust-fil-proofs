@@ -58,6 +58,7 @@ pub enum Request {
 }
 
 impl Scheduler {
+    #[allow(clippy::too_many_arguments)]
     pub fn start_with_metadata(
         scheduler_input_rx: mpsc::Receiver<Request>,
         scheduler_input_tx: mpsc::SyncSender<Request>,
@@ -187,7 +188,7 @@ impl SectorMetadataManager {
             });
         }
 
-        let output = internal::generate_post(
+        let output = internal::fake_generate_post(
             self.sector_store.inner.config().sector_bytes(),
             PoStInput {
                 challenge_seed: *challenge_seed,

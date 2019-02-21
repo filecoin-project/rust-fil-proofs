@@ -1,6 +1,5 @@
 #![deny(clippy::all, clippy::perf, clippy::correctness)]
 #![allow(clippy::unreadable_literal)]
-#![warn(clippy::type_complexity, clippy::too_many_arguments)]
 
 extern crate ffi_toolkit;
 extern crate logging_toolkit;
@@ -28,6 +27,7 @@ extern crate slog;
 
 pub mod api;
 pub mod error;
+pub mod param;
 pub mod serde_big_array;
 
 use logging_toolkit::make_logger;

@@ -121,7 +121,11 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
                     typed_proof
                 }
                 // Synthesize a default drgporep if none is supplied – for use in tests, etc.
-                None => drgporep::Proof::new_empty(height, graph.degree()),
+                None => drgporep::Proof::new_empty(
+                    height,
+                    graph.degree(),
+                    self.public_params.layer_challenges.challenges_for_layer(l),
+                ),
             };
 
             let comm_r = proof.replica_root;
@@ -302,7 +306,6 @@ impl<'a, H: 'static + Hasher>
                 (layer_public_inputs, None)
             })
             .collect();
-
         let pp: <ZigZagDrgPoRep<H> as ProofScheme>::PublicParams = public_params.into();
 
         ZigZagCircuit {
@@ -389,7 +392,6 @@ mod tests {
         };
 
         let priv_inputs = layered_drgporep::PrivateInputs::<PedersenHasher> {
-            replica: data.as_slice(),
             aux: aux.into(),
             tau: tau.layer_taus.into(),
         };
@@ -505,8 +507,8 @@ mod tests {
         let nodes = 5;
         let degree = 2;
         let expansion_degree = 1;
-        let num_layers = 2;
-        let layer_challenges = LayerChallenges::new_fixed(num_layers, 2);
+        let num_layers = 4;
+        let layer_challenges = LayerChallenges::new_tapered(num_layers, 4, num_layers, 1.0 / 3.0);
         let sloth_iter = 1;
         let partition_count = 1;
 
@@ -558,7 +560,6 @@ mod tests {
             k: None,
         };
         let private_inputs = layered_drgporep::PrivateInputs::<PedersenHasher> {
-            replica: data.as_slice(),
             aux,
             tau: tau.layer_taus,
         };
@@ -578,9 +579,16 @@ mod tests {
                 "verification failed with TestContraintSystem and generated inputs"
             );
         }
+        let blank_groth_params =
+            ZigZagCompound::groth_params(&public_params.vanilla_params, params).unwrap();
 
-        let proof = ZigZagCompound::prove(&public_params, &public_inputs, &private_inputs, None)
-            .expect("failed while proving");
+        let proof = ZigZagCompound::prove(
+            &public_params,
+            &public_inputs,
+            &private_inputs,
+            Some(blank_groth_params),
+        )
+        .expect("failed while proving");
 
         let verified = ZigZagCompound::verify(&public_params, &public_inputs, &proof)
             .expect("failed while verifying");

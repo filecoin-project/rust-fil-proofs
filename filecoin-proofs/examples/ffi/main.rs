@@ -16,6 +16,7 @@ use ffi_toolkit::c_str_to_rust_str;
 use ffi_toolkit::free_c_str;
 use ffi_toolkit::rust_str_to_c_str;
 use rand::{thread_rng, Rng};
+use std::env;
 use std::error::Error;
 use std::ptr;
 use std::sync::atomic::AtomicPtr;
@@ -64,9 +65,9 @@ unsafe fn create_sector_builder(
     sealed_dir: &TempDir,
     prover_id: [u8; 31],
     last_committed_sector_id: u64,
-) -> (*mut SectorBuilder, u64) {
+    sector_store_config: ConfiguredStore,
+) -> (*mut SectorBuilder, usize) {
     let mut prover_id: [u8; 31] = prover_id;
-    let sector_store_config: ConfiguredStore = ConfiguredStore_ProofTest;
 
     let c_metadata_dir = rust_str_to_c_str(metadata_dir.path().to_str().unwrap());
     let c_sealed_dir = rust_str_to_c_str(sealed_dir.path().to_str().unwrap());
@@ -100,24 +101,56 @@ unsafe fn create_sector_builder(
 
     (
         (*resp).sector_builder,
-        (*resp_2).max_staged_bytes_per_sector,
+        (*resp_2).max_staged_bytes_per_sector as usize,
     )
 }
 
-unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
+struct ConfigurableSizes {
+    store: ConfiguredStore,
+    max_bytes: usize,
+    first_piece_bytes: usize,
+    second_piece_bytes: usize,
+    third_piece_bytes: usize,
+}
+
+unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error>> {
     let metadata_dir = tempfile::tempdir().unwrap();
     let staging_dir = tempfile::tempdir().unwrap();
     let sealed_dir = tempfile::tempdir().unwrap();
 
-    let (sector_builder_a, max_bytes) =
-        create_sector_builder(&metadata_dir, &staging_dir, &sealed_dir, [0; 31], 123);
+    let sizes = if use_live_store {
+        ConfigurableSizes {
+            store: ConfiguredStore_Live,
+            max_bytes: 266338304,
+            first_piece_bytes: 26214400,
+            second_piece_bytes: 131072000,
+            third_piece_bytes: 157286400,
+        }
+    } else {
+        ConfigurableSizes {
+            store: ConfiguredStore_Test,
+            max_bytes: 1016,
+            first_piece_bytes: 100,
+            second_piece_bytes: 500,
+            third_piece_bytes: 600,
+        }
+    };
+
+    let (sector_builder_a, max_bytes) = create_sector_builder(
+        &metadata_dir,
+        &staging_dir,
+        &sealed_dir,
+        [0; 31],
+        123,
+        sizes.store,
+    );
 
     // TODO: Replace the hard-coded byte amounts with values computed
     // from whatever was retrieved from the SectorBuilder.
-    if max_bytes != 127 {
+    if max_bytes != sizes.max_bytes {
         panic!(
             "test assumes the wrong number of bytes (expected: {}, actual: {})",
-            127, max_bytes
+            sizes.max_bytes, max_bytes
         );
     }
 
@@ -144,7 +177,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
     // add first piece, which lazily provisions a new staged sector
     {
-        let (_, _, resp) = create_and_add_piece(sector_builder_a, 10);
+        let (_, _, resp) = create_and_add_piece(sector_builder_a, sizes.first_piece_bytes);
         defer!(destroy_add_piece_response(resp));
 
         if (*resp).status_code != 0 {
@@ -156,7 +189,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
     // add second piece, which fits into existing staged sector
     {
-        let (_, _, resp) = create_and_add_piece(sector_builder_a, 50);
+        let (_, _, resp) = create_and_add_piece(sector_builder_a, sizes.second_piece_bytes);
         defer!(destroy_add_piece_response(resp));
 
         if (*resp).status_code != 0 {
@@ -168,7 +201,7 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
     // add third piece, which won't fit into existing staging sector
     {
-        let (_, _, resp) = create_and_add_piece(sector_builder_a, 100);
+        let (_, _, resp) = create_and_add_piece(sector_builder_a, sizes.third_piece_bytes);
         defer!(destroy_add_piece_response(resp));
 
         if (*resp).status_code != 0 {
@@ -197,13 +230,20 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 
     // create a new sector builder using same prover id, which should
     // initialize with metadata persisted by previous sector builder
-    let (sector_builder_b, _) =
-        create_sector_builder(&metadata_dir, &staging_dir, &sealed_dir, [0; 31], 123);
+    let (sector_builder_b, _) = create_sector_builder(
+        &metadata_dir,
+        &staging_dir,
+        &sealed_dir,
+        [0; 31],
+        123,
+        sizes.store,
+    );
     defer!(destroy_sector_builder(sector_builder_b));
 
     // add fourth piece, where size(piece) == max (will trigger sealing)
     let (bytes_in, piece_key) = {
-        let (piece_bytes, piece_key, resp) = create_and_add_piece(sector_builder_b, 127);
+        let (piece_bytes, piece_key, resp) =
+            create_and_add_piece(sector_builder_b, sizes.max_bytes);
         defer!(destroy_add_piece_response(resp));
 
         if (*resp).status_code != 0 {
@@ -251,7 +291,11 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
         });
 
         // wait up to 5 minutes for sealing to complete
-        let now_sealed_sector_id = result_rx.recv_timeout(Duration::from_secs(300)).unwrap();
+        let now_sealed_sector_id = if use_live_store {
+            result_rx.recv().unwrap()
+        } else {
+            result_rx.recv_timeout(Duration::from_secs(300)).unwrap()
+        };
 
         assert_eq!(now_sealed_sector_id, 126);
     }
@@ -294,5 +338,12 @@ unsafe fn sector_builder_lifecycle() -> Result<(), Box<Error>> {
 }
 
 fn main() {
-    unsafe { sector_builder_lifecycle().unwrap() };
+    // If TEST_LIVE_SEAL is set, use the Live configuration, and don't unseal
+    // — so process running time will closely approximate sealing time.
+    let use_live_store = match env::var("TEST_LIVE_SEAL") {
+        Ok(_) => true,
+        Err(_) => false,
+    };
+
+    unsafe { sector_builder_lifecycle(use_live_store).unwrap() };
 }
