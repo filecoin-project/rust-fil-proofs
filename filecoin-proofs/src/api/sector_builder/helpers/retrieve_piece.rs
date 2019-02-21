@@ -4,6 +4,7 @@ use crate::api::sector_builder::metadata::sector_id_as_bytes;
 use crate::api::sector_builder::metadata::SealedSectorMetadata;
 use crate::api::sector_builder::WrappedSectorStore;
 use crate::error;
+use sector_base::api::sector_store::UnpaddedBytesAmount;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -47,7 +48,7 @@ fn retrieve_piece_aux<'a>(
     prover_id: &[u8; 31],
     piece_key: &'a str,
     staging_sector_access: &'a str,
-) -> error::Result<(u64, Vec<u8>)> {
+) -> error::Result<(UnpaddedBytesAmount, Vec<u8>)> {
     let (start_offset, num_bytes) = piece_pos(&sealed_sector, piece_key).ok_or_else(|| {
         let msg = format!(
             "piece {} not found in sector {}",
@@ -69,7 +70,8 @@ fn retrieve_piece_aux<'a>(
     if num_bytes_unsealed != num_bytes {
         let s = format!(
             "expected to unseal {} bytes, but unsealed {} bytes",
-            num_bytes, num_bytes_unsealed
+            u64::from(num_bytes),
+            u64::from(num_bytes_unsealed)
         );
 
         return Err(err_unrecov(s).into());
@@ -86,16 +88,23 @@ fn retrieve_piece_aux<'a>(
 
 // Returns a tuple of piece bytes-offset and number-of-bytes in piece if the
 // provided sealed sector contains a matching piece.
-fn piece_pos(sealed_sector: &SealedSectorMetadata, piece_key: &str) -> Option<(u64, u64)> {
+fn piece_pos(
+    sealed_sector: &SealedSectorMetadata,
+    piece_key: &str,
+) -> Option<(u64, UnpaddedBytesAmount)> {
     let (found_piece, start_offset, num_bytes) = sealed_sector.pieces.iter().fold(
-        (false, 0, 0),
+        (false, 0, UnpaddedBytesAmount(0)),
         |(eject, start_offset, num_bytes), item| {
             if eject {
                 (eject, start_offset, num_bytes)
             } else if item.piece_key == piece_key {
                 (true, start_offset, item.num_bytes)
             } else {
-                (false, start_offset + item.num_bytes, item.num_bytes)
+                (
+                    false,
+                    start_offset + u64::from(item.num_bytes),
+                    item.num_bytes,
+                )
             }
         },
     );
@@ -118,31 +127,31 @@ mod tests {
 
         sealed_sector.pieces.push(PieceMetadata {
             piece_key: String::from("x"),
-            num_bytes: 5,
+            num_bytes: UnpaddedBytesAmount(5),
         });
 
         sealed_sector.pieces.push(PieceMetadata {
             piece_key: String::from("y"),
-            num_bytes: 30,
+            num_bytes: UnpaddedBytesAmount(30),
         });
 
         sealed_sector.pieces.push(PieceMetadata {
             piece_key: String::from("z"),
-            num_bytes: 100,
+            num_bytes: UnpaddedBytesAmount(100),
         });
 
         match piece_pos(&sealed_sector, "x") {
-            Some(pair) => assert_eq!(pair, (0, 5)),
+            Some(pair) => assert_eq!(pair, (0, UnpaddedBytesAmount(5))),
             None => panic!(),
         }
 
         match piece_pos(&sealed_sector, "y") {
-            Some(pair) => assert_eq!(pair, (5, 30)),
+            Some(pair) => assert_eq!(pair, (5, UnpaddedBytesAmount(30))),
             None => panic!(),
         }
 
         match piece_pos(&sealed_sector, "z") {
-            Some(pair) => assert_eq!(pair, (35, 100)),
+            Some(pair) => assert_eq!(pair, (35, UnpaddedBytesAmount(100))),
             None => panic!(),
         }
     }

@@ -136,68 +136,69 @@ pub unsafe extern "C" fn generate_post(
 ///
 #[no_mangle]
 pub unsafe extern "C" fn verify_post(
-    _flattened_comm_rs_ptr: *const u8,
-    _flattened_comm_rs_len: libc::size_t,
-    _challenge_seed: &[u8; 32],
+    cfg_ptr: *const ConfiguredStore,
+    flattened_comm_rs_ptr: *const u8,
+    flattened_comm_rs_len: libc::size_t,
+    challenge_seed: &[u8; 32],
     proof: &[u8; API_POST_PROOF_BYTES],
-    _faults_ptr: *const u64,
-    _faults_len: libc::size_t,
-    _sector_bytes: u64,
+    faults_ptr: *const u64,
+    faults_len: libc::size_t,
 ) -> *mut responses::VerifyPoSTResponse {
     let mut response: responses::VerifyPoSTResponse = Default::default();
 
-    if proof[0] == 42 {
-        response.is_valid = true;
+    if let Some(cfg) = cfg_ptr.as_ref() {
+        let cfg = new_sector_config(cfg);
+
+        let comm_rs = from_raw_parts(flattened_comm_rs_ptr, flattened_comm_rs_len)
+            .iter()
+            .step_by(32)
+            .fold(Default::default(), |mut acc: Vec<[u8; 32]>, item| {
+                let sliced = from_raw_parts(item, 32);
+                let mut x: [u8; 32] = Default::default();
+                x.copy_from_slice(&sliced[..32]);
+                acc.push(x);
+                acc
+            });
+
+        let faults = from_raw_parts(faults_ptr, faults_len);
+
+        let safe_challenge_seed = {
+            let mut cs = [0; 32];
+            cs.copy_from_slice(challenge_seed);
+            cs[31] &= 0b00111111;
+            cs
+        };
+
+        match internal::verify_post(
+            &(*cfg),
+            &comm_rs,
+            &safe_challenge_seed,
+            proof,
+            faults.to_vec(),
+        ) {
+            Ok(true) => {
+                response.status_code = FCPResponseStatus::FCPNoError;
+                response.is_valid = true;
+            }
+            Ok(false) => {
+                response.status_code = FCPResponseStatus::FCPNoError;
+                response.is_valid = false;
+            }
+            Err(err) => {
+                let (code, ptr) = err_code_and_msg(&err);
+                response.status_code = code;
+                response.error_msg = ptr;
+            }
+        }
     } else {
-        response.is_valid = false;
-    };
+        response.status_code = FCPResponseStatus::FCPCallerError;
 
-    // Stay mocked for now — remove early return when ready to use.
+        let msg = CString::new("caller did not provide ConfiguredStore").unwrap();
+        response.error_msg = msg.as_ptr();
+        mem::forget(msg);
+    }
+
     Box::into_raw(Box::new(response))
-
-    // let comm_rs = from_raw_parts(flattened_comm_rs_ptr, flattened_comm_rs_len)
-    //     .iter()
-    //     .step_by(32)
-    //     .fold(Default::default(), |mut acc: Vec<[u8; 32]>, item| {
-    //         let sliced = from_raw_parts(item, 32);
-    //         let mut x: [u8; 32] = Default::default();
-    //         x.copy_from_slice(&sliced[..32]);
-    //         acc.push(x);
-    //         acc
-    //     });
-
-    // let faults = from_raw_parts(faults_ptr, faults_len);
-
-    // let safe_challenge_seed = {
-    //     let mut cs = [0; 32];
-    //     cs.copy_from_slice(challenge_seed);
-    //     cs[31] &= 0b00111111;
-    //     cs
-    // };
-
-    // match internal::verify_post(
-    //     sector_bytes,
-    //     &comm_rs,
-    //     &safe_challenge_seed,
-    //     proof,
-    //     faults.to_vec(),
-    // ) {
-    //     Ok(true) => {
-    //         response.status_code = FCPResponseStatus::FCPNoError;
-    //         response.is_valid = true;
-    //     }
-    //     Ok(false) => {
-    //         response.status_code = FCPResponseStatus::FCPNoError;
-    //         response.is_valid = false;
-    //     }
-    //     Err(err) => {
-    //         let (code, ptr) = err_code_and_msg(&err);
-    //         response.status_code = code;
-    //         response.error_msg = ptr;
-    //     }
-    // }
-
-    // Box::into_raw(Box::new(response))
 }
 
 /// Initializes and returns a SectorBuilder.
@@ -341,7 +342,7 @@ pub unsafe extern "C" fn get_max_user_bytes_per_staged_sector(
     let mut response: responses::GetMaxStagedBytesPerSector = Default::default();
 
     response.status_code = FCPResponseStatus::FCPNoError;
-    response.max_staged_bytes_per_sector = (*ptr).get_max_user_bytes_per_staged_sector();;
+    response.max_staged_bytes_per_sector = (*ptr).get_max_user_bytes_per_staged_sector().into();
 
     raw_ptr(response)
 }
@@ -377,7 +378,7 @@ pub unsafe extern "C" fn get_seal_status(
                         .iter()
                         .map(|p| FFIPieceMetadata {
                             piece_key: rust_str_to_c_str(p.piece_key.to_string()),
-                            num_bytes: p.num_bytes,
+                            num_bytes: p.num_bytes.into(),
                         })
                         .collect::<Vec<FFIPieceMetadata>>();
 
@@ -426,7 +427,7 @@ pub unsafe extern "C" fn get_sealed_sectors(
                         .iter()
                         .map(|p| FFIPieceMetadata {
                             piece_key: rust_str_to_c_str(p.piece_key.to_string()),
-                            num_bytes: p.num_bytes,
+                            num_bytes: p.num_bytes.into(),
                         })
                         .collect::<Vec<FFIPieceMetadata>>();
 
@@ -480,7 +481,7 @@ pub unsafe extern "C" fn get_staged_sectors(
                         .iter()
                         .map(|p| FFIPieceMetadata {
                             piece_key: rust_str_to_c_str(p.piece_key.to_string()),
-                            num_bytes: p.num_bytes,
+                            num_bytes: p.num_bytes.into(),
                         })
                         .collect::<Vec<FFIPieceMetadata>>();
 

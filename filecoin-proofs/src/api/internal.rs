@@ -8,7 +8,7 @@ use pairing::{Engine, PrimeField};
 use sapling_crypto::jubjub::JubjubBls12;
 
 use sector_base::api::disk_backed_storage::LIVE_SECTOR_SIZE;
-use sector_base::api::sector_store::SectorConfig;
+use sector_base::api::sector_store::{SectorConfig, UnpaddedBytesAmount};
 use sector_base::io::fr32::write_unpadded;
 use std::path::Path;
 use storage_proofs::circuit::multi_proof::MultiProof;
@@ -31,6 +31,7 @@ use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
 use storage_proofs::zigzag_graph::ZigZagBucketGraph;
 
 use crate::error;
+use sector_base::api::sector_store::PaddedBytesAmount;
 
 type Commitment = Fr32Ary;
 type ChallengeSeed = Fr32Ary;
@@ -78,20 +79,23 @@ fn official_post_params_path() -> PathBuf {
     parameter_cache_dir().join(OFFICIAL_POST_PARAM_FILENAME)
 }
 
-fn get_zigzag_params(sector_bytes: usize) -> error::Result<groth16::Parameters<Bls12>> {
-    if sector_bytes as u64 == LIVE_SECTOR_SIZE {
+fn get_zigzag_params(sector_bytes: PaddedBytesAmount) -> error::Result<groth16::Parameters<Bls12>> {
+    if u64::from(sector_bytes) == LIVE_SECTOR_SIZE {
         if let Some(z) = (*ZIGZAG_PARAMS).clone() {
             return Ok(z);
         }
     }
 
-    let public_params = public_params(sector_bytes as usize);
+    let public_params = public_params(sector_bytes);
 
     ZigZagCompound::groth_params(&public_params, &ENGINE_PARAMS).map_err(|e| e.into())
 }
 
-fn get_post_params(sector_bytes: usize) -> error::Result<groth16::Parameters<Bls12>> {
-    let post_public_params = post_public_params(sector_bytes as usize);
+fn get_post_params(
+    sectors_count: usize,
+    sector_bytes: PaddedBytesAmount,
+) -> error::Result<groth16::Parameters<Bls12>> {
+    let post_public_params = post_public_params(sectors_count, sector_bytes);
     <VDFPostCompound as CompoundProof<
         Bls12,
         VDFPoSt<PedersenHasher, Sloth>,
@@ -114,7 +118,9 @@ lazy_static! {
         LayerChallenges::new_tapered(LAYERS, CHALLENGE_COUNT, TAPER_LAYERS, TAPER);
 }
 
-fn setup_params(sector_bytes: usize) -> layered_drgporep::SetupParams {
+fn setup_params(sector_bytes: PaddedBytesAmount) -> layered_drgporep::SetupParams {
+    let sector_bytes = usize::from(sector_bytes);
+
     assert!(
         sector_bytes % 32 == 0,
         "sector_bytes ({}) must be a multiple of 32",
@@ -136,7 +142,7 @@ fn setup_params(sector_bytes: usize) -> layered_drgporep::SetupParams {
 }
 
 pub fn public_params(
-    sector_bytes: usize,
+    sector_bytes: PaddedBytesAmount,
 ) -> layered_drgporep::PublicParams<DefaultTreeHasher, ZigZagBucketGraph<DefaultTreeHasher>> {
     ZigZagDrgPoRep::<DefaultTreeHasher>::setup(&setup_params(sector_bytes)).unwrap()
 }
@@ -146,7 +152,6 @@ pub type PostPublicParams = vdf_post::PublicParams<PedersenDomain, vdf_sloth::Sl
 
 const POST_CHALLENGE_COUNT: usize = 30;
 const POST_EPOCHS: usize = 3;
-const POST_SECTORS_COUNT: usize = 2;
 const POST_VDF_ROUNDS: usize = 1;
 
 lazy_static! {
@@ -154,21 +159,28 @@ lazy_static! {
         PedersenDomain(Fr::from_str("12345").unwrap().into_repr());
 }
 
-fn post_setup_params(sector_bytes: usize) -> PostSetupParams {
+fn post_setup_params(sectors_count: usize, sector_bytes: PaddedBytesAmount) -> PostSetupParams {
     vdf_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
         challenge_count: POST_CHALLENGE_COUNT,
-        sector_size: sector_bytes,
+        sector_size: sector_bytes.into(),
         post_epochs: POST_EPOCHS,
         setup_params_vdf: vdf_sloth::SetupParams {
             key: *POST_VDF_KEY,
             rounds: POST_VDF_ROUNDS,
         },
-        sectors_count: POST_SECTORS_COUNT,
+        sectors_count,
     }
 }
 
-pub fn post_public_params(sector_bytes: usize) -> PostPublicParams {
-    VDFPoSt::<PedersenHasher, vdf_sloth::Sloth>::setup(&post_setup_params(sector_bytes)).unwrap()
+pub fn post_public_params(
+    sectors_count: usize,
+    sector_bytes: PaddedBytesAmount,
+) -> PostPublicParams {
+    VDFPoSt::<PedersenHasher, vdf_sloth::Sloth>::setup(&post_setup_params(
+        sectors_count,
+        sector_bytes,
+    ))
+    .unwrap()
 }
 
 fn commitment_from_fr<E: Engine>(fr: E::Fr) -> Commitment {
@@ -200,24 +212,11 @@ pub struct PoStInput {
     pub input_parts: Vec<PoStInputPart>,
 }
 
-pub fn fake_generate_post(_sector_bytes: u64, input: PoStInput) -> error::Result<PoStOutput> {
-    let faults: Vec<u64> = if !input.input_parts.is_empty() {
-        vec![0]
-    } else {
-        Default::default()
-    };
-
-    Ok(PoStOutput {
-        snark_proof: [42; 192],
-        faults,
-    })
-}
-
-pub fn generate_post(sector_bytes: u64, input: PoStInput) -> error::Result<PoStOutput> {
+pub fn generate_post(sector_config: &SectorConfig, input: PoStInput) -> error::Result<PoStOutput> {
     let faults: Vec<u64> = Vec::new();
 
     let setup_params = compound_proof::SetupParams {
-        vanilla_params: &post_setup_params(sector_bytes as usize),
+        vanilla_params: &post_setup_params(input.input_parts.len(), sector_config.sector_bytes()),
         engine_params: &(*ENGINE_PARAMS),
         partitions: None,
     };
@@ -251,7 +250,11 @@ pub fn generate_post(sector_bytes: u64, input: PoStInput) -> error::Result<PoStO
         .iter()
         .map(|p| {
             if let Some(s) = &p.sealed_sector_access {
-                make_merkle_tree(s, pub_params.vanilla_params.sector_size).unwrap()
+                make_merkle_tree(
+                    s,
+                    PaddedBytesAmount(pub_params.vanilla_params.sector_size as u64),
+                )
+                .unwrap()
             } else {
                 panic!("faults are not yet supported")
             }
@@ -262,7 +265,7 @@ pub fn generate_post(sector_bytes: u64, input: PoStInput) -> error::Result<PoStO
 
     let priv_inputs = vdf_post::PrivateInputs::<PedersenHasher>::new(&borrowed_trees[..]);
 
-    let groth_params = get_post_params(sector_bytes as usize)?;
+    let groth_params = get_post_params(borrowed_trees.len(), sector_config.sector_bytes())?;
 
     let proof = VDFPostCompound::prove(&pub_params, &pub_inputs, &priv_inputs, Some(groth_params))
         .expect("failed while proving");
@@ -281,7 +284,7 @@ pub fn generate_post(sector_bytes: u64, input: PoStInput) -> error::Result<PoStO
 }
 
 pub fn verify_post(
-    sector_bytes: u64,
+    sector_config: &SectorConfig,
     comm_rs: &[Commitment],
     challenge_seed: &ChallengeSeed,
     proof_vec: &[u8],
@@ -295,7 +298,7 @@ pub fn verify_post(
     };
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: &post_setup_params(sector_bytes as usize),
+        vanilla_params: &post_setup_params(comm_rs.len(), sector_config.sector_bytes()),
         engine_params: &(*ENGINE_PARAMS),
         partitions: None,
     };
@@ -316,7 +319,7 @@ pub fn verify_post(
         faults,
     };
 
-    let groth_params = get_post_params(sector_bytes as usize)?;
+    let groth_params = get_post_params(comm_rs.len(), sector_config.sector_bytes())?;
 
     let proof = MultiProof::new_from_reader(Some(POST_PARTITIONS), proof_vec, groth_params)?;
 
@@ -334,7 +337,7 @@ pub fn verify_post(
 type Tree = MerkleTree<PedersenDomain, <PedersenHasher as Hasher>::Function>;
 fn make_merkle_tree<T: Into<PathBuf> + AsRef<Path>>(
     sealed_path: T,
-    bytes: usize,
+    bytes: PaddedBytesAmount,
 ) -> storage_proofs::error::Result<Tree> {
     let mut f_in = File::open(sealed_path.into())?;
     let mut data = Vec::new();
@@ -359,7 +362,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     prover_id_in: &FrSafe,
     sector_id_in: &FrSafe,
 ) -> error::Result<SealOutput> {
-    let sector_bytes = sector_config.sector_bytes() as usize;
+    let sector_bytes = usize::from(sector_config.sector_bytes());
     let f_in = File::open(in_path)?;
 
     // Read all the provided data, even if we will prove less of it because we are faking.
@@ -379,7 +382,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
 
     let compound_setup_params = compound_proof::SetupParams {
         // The proof might use a different number of bytes than we read and copied, if we are faking.
-        vanilla_params: &setup_params(sector_bytes),
+        vanilla_params: &setup_params(sector_config.sector_bytes()),
         engine_params: &(*ENGINE_PARAMS),
         partitions: Some(POREP_PARTITIONS),
     };
@@ -409,7 +412,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         tau: tau.layer_taus,
     };
 
-    let groth_params = get_zigzag_params(sector_bytes)?;
+    let groth_params = get_zigzag_params(sector_config.sector_bytes())?;
 
     let proof = ZigZagCompound::prove(
         &compound_public_params,
@@ -465,9 +468,9 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     prover_id_in: &FrSafe,
     sector_id_in: &FrSafe,
     offset: u64,
-    num_bytes: u64,
-) -> error::Result<(u64)> {
-    let sector_bytes = sector_config.sector_bytes() as usize;
+    num_bytes: UnpaddedBytesAmount,
+) -> error::Result<(UnpaddedBytesAmount)> {
+    let sector_bytes: usize = sector_config.sector_bytes().into();
 
     let prover_id = pad_safe_fr(prover_id_in);
     let sector_id = pad_safe_fr(sector_id_in);
@@ -480,16 +483,20 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     let f_out = File::create(output_path)?;
     let mut buf_writer = BufWriter::new(f_out);
 
-    let unsealed = ZigZagDrgPoRep::extract_all(&public_params(sector_bytes), &replica_id, &data)?;
+    let unsealed = ZigZagDrgPoRep::extract_all(
+        &public_params(sector_config.sector_bytes()),
+        &replica_id,
+        &data,
+    )?;
 
     let written = write_unpadded(
         &unsealed,
         &mut buf_writer,
         offset as usize,
-        num_bytes as usize,
+        num_bytes.into(),
     )?;
 
-    Ok(written as u64)
+    Ok(UnpaddedBytesAmount(written as u64))
 }
 
 pub fn verify_seal(
@@ -501,8 +508,6 @@ pub fn verify_seal(
     sector_id_in: &FrSafe,
     proof_vec: &[u8],
 ) -> error::Result<bool> {
-    let sector_bytes = sector_config.sector_bytes() as usize;
-
     let prover_id = pad_safe_fr(prover_id_in);
     let sector_id = pad_safe_fr(sector_id_in);
     let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
@@ -513,7 +518,7 @@ pub fn verify_seal(
 
     let compound_setup_params = compound_proof::SetupParams {
         // The proof might use a different number of bytes than we read and copied, if we are faking.
-        vanilla_params: &setup_params(sector_bytes),
+        vanilla_params: &setup_params(sector_config.sector_bytes()),
         engine_params: &(*ENGINE_PARAMS),
         partitions: Some(POREP_PARTITIONS),
     };
@@ -534,7 +539,7 @@ pub fn verify_seal(
         k: None,
     };
 
-    let groth_params = get_zigzag_params(sector_bytes)?;
+    let groth_params = get_zigzag_params(sector_config.sector_bytes())?;
 
     let proof = MultiProof::new_from_reader(Some(POREP_PARTITIONS), proof_vec, groth_params)?;
 
@@ -575,6 +580,7 @@ mod tests {
         let store = create_sector_store(cs);
         let mgr = store.manager();
         let cfg = store.config();
+        let max: u64 = store.config().max_unsealed_bytes_per_sector().into();
 
         let staged_access = mgr
             .new_staging_sector_access()
@@ -595,18 +601,16 @@ mod tests {
         for bytes_amt in bytes_amts {
             let contents = match bytes_amt {
                 BytesAmount::Exact(bs) => bs.to_vec(),
-                BytesAmount::Max => {
-                    make_random_bytes(store.config().max_unsealed_bytes_per_sector())
-                }
-                BytesAmount::Offset(m) => {
-                    make_random_bytes(store.config().max_unsealed_bytes_per_sector() - m)
-                }
+                BytesAmount::Max => make_random_bytes(max),
+                BytesAmount::Offset(m) => make_random_bytes(max - m),
             };
 
             assert_eq!(
-                contents.len() as u64,
-                mgr.write_and_preprocess(&staged_access, &contents)
-                    .expect("failed to write and preprocess")
+                contents.len(),
+                usize::from(
+                    mgr.write_and_preprocess(&staged_access, &contents)
+                        .expect("failed to write and preprocess")
+                )
             );
 
             written_contents.push(contents);
@@ -644,17 +648,19 @@ mod tests {
 
         // unseal the whole thing
         assert_eq!(
-            cfg.max_unsealed_bytes_per_sector(),
-            get_unsealed_range(
-                cfg,
-                &sealed_access,
-                &unseal_access,
-                &prover_id,
-                &sector_id,
-                0,
-                cfg.max_unsealed_bytes_per_sector(),
+            u64::from(cfg.max_unsealed_bytes_per_sector()),
+            u64::from(
+                get_unsealed_range(
+                    cfg,
+                    &sealed_access,
+                    &unseal_access,
+                    &prover_id,
+                    &sector_id,
+                    0,
+                    cfg.max_unsealed_bytes_per_sector(),
+                )
+                .expect("failed to unseal")
             )
-            .expect("failed to unseal")
         );
 
         Harness {
@@ -715,13 +721,12 @@ mod tests {
         let h = create_harness(&cs, &vec![bytes_amt]);
         let seal_output = h.seal_output;
 
-        let sector_bytes = h.store.config().sector_bytes();
         let comm_r = seal_output.comm_r;
         let comm_rs = vec![comm_r, comm_r];
         let challenge_seed = rng.gen();
 
         let post_output = generate_post(
-            sector_bytes,
+            h.store.config(),
             PoStInput {
                 challenge_seed,
                 input_parts: vec![
@@ -739,7 +744,7 @@ mod tests {
         .expect("PoSt generation failed");
 
         let is_valid = verify_post(
-            sector_bytes,
+            h.store.config(),
             &comm_rs,
             &challenge_seed,
             &post_output.snark_proof,
@@ -762,7 +767,7 @@ mod tests {
             let read_unsealed_buf = h
                 .store
                 .manager()
-                .read_raw(&h.unseal_access, 0, buf.len() as u64)
+                .read_raw(&h.unseal_access, 0, UnpaddedBytesAmount(buf.len() as u64))
                 .expect("failed to read_raw a");
 
             assert_eq!(
@@ -777,7 +782,11 @@ mod tests {
             let read_unsealed_buf = h
                 .store
                 .manager()
-                .read_raw(&h.unseal_access, 1, buf.len() as u64 - 2)
+                .read_raw(
+                    &h.unseal_access,
+                    1,
+                    UnpaddedBytesAmount(buf.len() as u64 - 2),
+                )
                 .expect("failed to read_raw a");
 
             assert_eq!(
@@ -791,7 +800,8 @@ mod tests {
 
         let byte_padding_amount = match bytes_amt {
             BytesAmount::Exact(bs) => {
-                h.store.config().max_unsealed_bytes_per_sector() - (bs.len() as u64)
+                let max: u64 = h.store.config().max_unsealed_bytes_per_sector().into();
+                max - (bs.len() as u64)
             }
             BytesAmount::Max => 0,
             BytesAmount::Offset(m) => m,
@@ -822,16 +832,18 @@ mod tests {
 
         assert_eq!(
             range_length,
-            get_unsealed_range(
-                h.store.config(),
-                &PathBuf::from(&h.sealed_access),
-                &PathBuf::from(&h.unseal_access),
-                &h.prover_id,
-                &h.sector_id,
-                offset,
-                range_length,
+            u64::from(
+                get_unsealed_range(
+                    h.store.config(),
+                    &PathBuf::from(&h.sealed_access),
+                    &PathBuf::from(&h.unseal_access),
+                    &h.prover_id,
+                    &h.sector_id,
+                    offset,
+                    UnpaddedBytesAmount(range_length),
+                )
+                .expect("failed to unseal")
             )
-            .expect("failed to unseal")
         );
 
         let mut file = File::open(&h.unseal_access).unwrap();
@@ -879,7 +891,7 @@ mod tests {
             &h.prover_id,
             &h.sector_id,
             0,
-            (contents_a.len() + contents_b.len()) as u64,
+            UnpaddedBytesAmount((contents_a.len() + contents_b.len()) as u64),
         )
         .expect("failed to unseal");
 

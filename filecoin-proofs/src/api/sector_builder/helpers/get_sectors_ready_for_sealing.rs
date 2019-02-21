@@ -4,11 +4,12 @@ use crate::api::sector_builder::metadata::StagedSectorMetadata;
 use crate::api::sector_builder::state::StagedState;
 use crate::api::sector_builder::SectorId;
 use itertools::chain;
+use sector_base::api::sector_store::UnpaddedBytesAmount;
 use std::cmp::Reverse;
 
 pub fn get_sectors_ready_for_sealing(
     staged_state: &StagedState,
-    max_user_bytes_per_staged_sector: u64,
+    max_user_bytes_per_staged_sector: UnpaddedBytesAmount,
     max_num_staged_sectors: u8,
     seal_all_staged_sectors: bool,
 ) -> Vec<SectorId> {
@@ -59,7 +60,7 @@ mod tests {
                 sector_id,
                 pieces: vec![PieceMetadata {
                     piece_key: format!("{}", sector_id),
-                    num_bytes,
+                    num_bytes: UnpaddedBytesAmount(num_bytes),
                 }],
                 seal_status,
                 ..Default::default()
@@ -79,9 +80,10 @@ mod tests {
             sectors: m,
         };
 
-        let to_seal: Vec<SectorId> = get_sectors_ready_for_sealing(&state, 127, 10, true)
-            .into_iter()
-            .collect();
+        let to_seal: Vec<SectorId> =
+            get_sectors_ready_for_sealing(&state, UnpaddedBytesAmount(127), 10, true)
+                .into_iter()
+                .collect();
 
         assert_eq!(vec![201 as SectorId, 200 as SectorId], to_seal);
     }
@@ -98,9 +100,10 @@ mod tests {
             sectors: m,
         };
 
-        let to_seal: Vec<SectorId> = get_sectors_ready_for_sealing(&state, 127, 10, false)
-            .into_iter()
-            .collect();
+        let to_seal: Vec<SectorId> =
+            get_sectors_ready_for_sealing(&state, UnpaddedBytesAmount(127), 10, false)
+                .into_iter()
+                .collect();
 
         assert_eq!(vec![200 as SectorId], to_seal);
     }
@@ -119,9 +122,10 @@ mod tests {
             sectors: m,
         };
 
-        let to_seal: Vec<SectorId> = get_sectors_ready_for_sealing(&state, 127, 2, false)
-            .into_iter()
-            .collect();
+        let to_seal: Vec<SectorId> =
+            get_sectors_ready_for_sealing(&state, UnpaddedBytesAmount(127), 2, false)
+                .into_iter()
+                .collect();
 
         assert_eq!(vec![201 as SectorId, 200 as SectorId], to_seal);
     }
@@ -140,9 +144,10 @@ mod tests {
             sectors: m,
         };
 
-        let to_seal: Vec<SectorId> = get_sectors_ready_for_sealing(&state, 127, 4, false)
-            .into_iter()
-            .collect();
+        let to_seal: Vec<SectorId> =
+            get_sectors_ready_for_sealing(&state, UnpaddedBytesAmount(127), 4, false)
+                .into_iter()
+                .collect();
 
         assert_eq!(vec![0; 0], to_seal);
     }
@@ -161,9 +166,10 @@ mod tests {
             sectors: m,
         };
 
-        let to_seal: Vec<SectorId> = get_sectors_ready_for_sealing(&state, 127, 4, false)
-            .into_iter()
-            .collect();
+        let to_seal: Vec<SectorId> =
+            get_sectors_ready_for_sealing(&state, UnpaddedBytesAmount(127), 4, false)
+                .into_iter()
+                .collect();
 
         assert_eq!(vec![0; 0], to_seal);
     }

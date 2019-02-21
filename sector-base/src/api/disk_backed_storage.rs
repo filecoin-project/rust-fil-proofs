@@ -1,5 +1,7 @@
 use crate::api::errors::SectorManagerErr;
-use crate::api::sector_store::{SectorConfig, SectorManager, SectorStore};
+use crate::api::sector_store::{
+    PaddedBytesAmount, SectorConfig, SectorManager, SectorStore, UnpaddedBytesAmount,
+};
 use crate::api::util;
 use crate::io::fr32::{
     almost_truncate_to_unpadded_bytes, target_unpadded_bytes, unpadded_bytes, write_padded,
@@ -113,7 +115,11 @@ impl SectorManager for DiskManager {
     }
 
     // TODO: write_and_preprocess should refuse to write more data than will fit. In that case, return 0.
-    fn write_and_preprocess(&self, access: &str, data: &[u8]) -> Result<u64, SectorManagerErr> {
+    fn write_and_preprocess(
+        &self,
+        access: &str,
+        data: &[u8],
+    ) -> Result<UnpaddedBytesAmount, SectorManagerErr> {
         OpenOptions::new()
             .read(true)
             .write(true)
@@ -122,7 +128,7 @@ impl SectorManager for DiskManager {
             .and_then(|mut file| {
                 write_padded(data, &mut file)
                     .map_err(|err| SectorManagerErr::ReceiverError(format!("{:?}", err)))
-                    .map(|n| n as u64)
+                    .map(|n| UnpaddedBytesAmount(n as u64))
             })
     }
 
@@ -134,7 +140,7 @@ impl SectorManager for DiskManager {
         &self,
         access: &str,
         start_offset: u64,
-        num_bytes: u64,
+        num_bytes: UnpaddedBytesAmount,
     ) -> Result<Vec<u8>, SectorManagerErr> {
         OpenOptions::new()
             .read(true)
@@ -144,7 +150,7 @@ impl SectorManager for DiskManager {
                 file.seek(SeekFrom::Start(start_offset))
                     .map_err(|err| SectorManagerErr::CallerError(format!("{:?}", err)))?;
 
-                let mut buf = vec![0; num_bytes as usize];
+                let mut buf = vec![0; usize::from(num_bytes)];
 
                 file.read_exact(buf.as_mut_slice())
                     .map_err(|err| SectorManagerErr::CallerError(format!("{:?}", err)))?;
@@ -231,16 +237,12 @@ pub fn new_sector_config(cs: &ConfiguredStore) -> Box<SectorConfig> {
 }
 
 impl SectorConfig for Config {
-    fn max_unsealed_bytes_per_sector(&self) -> u64 {
-        unpadded_bytes(self.sector_bytes)
+    fn max_unsealed_bytes_per_sector(&self) -> UnpaddedBytesAmount {
+        UnpaddedBytesAmount(unpadded_bytes(self.sector_bytes))
     }
 
-    fn max_sealed_bytes_per_sector(&self) -> u64 {
-        self.sector_bytes
-    }
-
-    fn sector_bytes(&self) -> u64 {
-        self.sector_bytes
+    fn sector_bytes(&self) -> PaddedBytesAmount {
+        PaddedBytesAmount(self.sector_bytes)
     }
 }
 
@@ -286,7 +288,8 @@ pub mod tests {
         for (configured_store, num_bytes) in xs {
             let storage: Box<SectorStore> = create_sector_store(&configured_store);
             let cfg = storage.config();
-            assert_eq!(cfg.max_unsealed_bytes_per_sector(), num_bytes);
+            let max: u64 = cfg.max_unsealed_bytes_per_sector().into();
+            assert_eq!(max, num_bytes);
         }
     }
 
@@ -314,7 +317,7 @@ pub mod tests {
             let output_bytes_written = buf.len();
 
             // ensure that we reported the correct number of written bytes
-            assert_eq!(contents.len(), n as usize);
+            assert_eq!(contents.len(), usize::from(n));
 
             // ensure the file we wrote to contains the expected bytes
             assert_eq!(contents[0..32], buf[0..32]);
@@ -379,13 +382,19 @@ pub mod tests {
         let store = create_sector_store(&configured_store);
         let access = store.manager().new_staging_sector_access().unwrap();
 
-        assert!(store.manager().read_raw(&access, 0, 0).is_ok());
+        assert!(store
+            .manager()
+            .read_raw(&access, 0, UnpaddedBytesAmount(0))
+            .is_ok());
 
         assert!(store
             .manager()
             .delete_staging_sector_access(&access)
             .is_ok());
 
-        assert!(store.manager().read_raw(&access, 0, 0).is_err());
+        assert!(store
+            .manager()
+            .read_raw(&access, 0, UnpaddedBytesAmount(0))
+            .is_err());
     }
 }

@@ -12,6 +12,7 @@ use crate::FCP_LOG;
 use sector_base::api::disk_backed_storage::new_sector_store;
 use sector_base::api::disk_backed_storage::ConfiguredStore;
 use sector_base::api::sector_store::SectorStore;
+use sector_base::api::sector_store::UnpaddedBytesAmount;
 use slog::*;
 use std::sync::{mpsc, Arc, Mutex};
 
@@ -109,7 +110,7 @@ impl SectorBuilder {
 
     // Returns the number of user-provided bytes that will fit into a staged
     // sector.
-    pub fn get_max_user_bytes_per_staged_sector(&self) -> u64 {
+    pub fn get_max_user_bytes_per_staged_sector(&self) -> UnpaddedBytesAmount {
         self.run_blocking(Request::GetMaxUserBytesPerStagedSector)
     }
 
