@@ -1,5 +1,5 @@
 use std::cmp::min;
-use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::io::{self, Error, ErrorKind, Read, Seek, SeekFrom, Write};
 
 use bitvec::{self, BitVec, LittleEndian};
 
@@ -807,6 +807,23 @@ pub fn write_unpadded<W: ?Sized>(
 where
     W: Write,
 {
+    // Check that there's actually `len` raw data bytes encoded inside
+    // `source` starting at `offset`.
+    let read_pos = BitByte::from_bits(FR32_PADDING_MAP.transform_bit_offset(offset * 8, true));
+    let raw_data_size = BitByte::from_bits(
+        FR32_PADDING_MAP.transform_bit_offset(source.len() * 8 - read_pos.total_bits(), false),
+    )
+    .bytes_needed();
+    if raw_data_size < len {
+        return Err(Error::new(
+            ErrorKind::Other,
+            format!(
+                "requested extraction of {} raw data bytes when there's at most {} in the source",
+                len, raw_data_size
+            ),
+        ));
+    }
+
     // In order to optimize alignment in the common case of writing from an aligned start,
     // we should make the chunk a multiple of 128 (4 full elements in the padded layout).
     // n was hand-tuned to do reasonably well in the benchmarks.
@@ -870,7 +887,7 @@ where
     // Estimate how many bytes we'll need for the `raw_data` to allocate
     // them all at once. We need to take into account both how much do
     // we have left to read *and* write, and even then, since we may start
-    // in the middle of an element (`write_pos`) there's some variabitlity
+    // in the middle of an element (`write_pos`) there's some variability
     // as to how many padding bits will be encountered.
     // Allow then an *over*-estimation error of 1 byte: `transform_bit_offset`
     // has the implicit assumption that the data provided is starting at the
@@ -1275,16 +1292,10 @@ mod tests {
             assert_eq!(expected.len(), unpadded.len());
             assert_eq!(expected, &unpadded[..]);
         }
-        for start in 0..1016 {
-            let mut unpadded = Vec::new();
 
-            let len = 35;
-            let unpadded_bytes = write_unpadded(&padded, &mut unpadded, start, len).unwrap();
-            let actual_len = min(data.len() - start, len);
-            assert_eq!(unpadded_bytes, actual_len);
-
-            let expected = &data[start..start + actual_len];
-            assert_eq!(expected, &unpadded[..]);
+        let excessive_len = 35;
+        for start in (1016 - excessive_len + 2)..1016 {
+            assert!(write_unpadded(&padded, &mut Vec::new(), start, excessive_len).is_err());
         }
     }
 
