@@ -1,6 +1,6 @@
 # Filecoin Proving Subsystem (FPS)
 
-The **Filecoin Proving Subsystem** provides the storage proofs required by the Filecoin protocol.  It is implemented entirely in Rust, as a series of partially inter-dependent crates – some of which export C bindings to the supported API. This decomposition into distinct crates/modules is relatively recent, and in some cases current code has not been fully refactored to reflect the intended eventual organization.
+The **Filecoin Proving Subsystem** provides the storage proofs required by the Filecoin protocol. It is implemented entirely in Rust, as a series of partially inter-dependent crates – some of which export C bindings to the supported API. This decomposition into distinct crates/modules is relatively recent, and in some cases current code has not been fully refactored to reflect the intended eventual organization.
 
 There are currently four different crates:
 
@@ -23,17 +23,17 @@ There are currently four different crates:
   A sector database abstracting away underlying storage considerations. This abstraction will allow for alternate implementations mapping logical sectors to physical storage – facilitating both support for miner specialization, and configurable adaptation to a given miner’s physical hardware and preferences.
 
 - [**Storage Backend (`storage-backend`)**](./storage-backend)
-  The `storage-backend` crate is intended to contain abstractions and implementations of non-filecoin-specific storage mechanisms require by `storage-proofs`. However, for the sake of simplicity, it is currently an empty placeholder.
+  The `storage-backend` crate is intended to contain abstractions and implementations of non-Filecoin-specific storage mechanisms require by `storage-proofs`. However, for the sake of simplicity, it is currently an empty placeholder.
 
     ![FPS crate dependencies](/img/fps-dependencies.png?raw=true)
 
 ## Design Notes
 
-Earlier in the design process, we considered implementing what has become the **FPS** in Go – as a wrapper around potentially multiple SNARK circuit libraries. We eventually decided to use [bellman](https://github.com/zkcrypto/bellman) – a library developed by ZCash, which supports efficient pedersen hashing inside of SNARKs. Having made that decision, it was natural and efficient to implement the entire subsystem in Rust. We considered the benefits (self-contained code base, ability to rely on static typing across layers) and costs (developer ramp-up, sometimes unwieldiness of borrow-checker) as part of that larger decision and determined that the overall project benefits (in particular ability to build on Zcash’s work) outweighed the costs.
+Earlier in the design process, we considered implementing what has become the **FPS** in Go – as a wrapper around potentially multiple SNARK circuit libraries. We eventually decided to use [bellman](https://github.com/zkcrypto/bellman) – a library developed by Zcash, which supports efficient pedersen hashing inside of SNARKs. Having made that decision, it was natural and efficient to implement the entire subsystem in Rust. We considered the benefits (self-contained codebase, ability to rely on static typing across layers) and costs (developer ramp-up, sometimes unwieldiness of borrow-checker) as part of that larger decision and determined that the overall project benefits (in particular ability to build on Zcash’s work) outweighed the costs.
 
-We also considered whether the **FPS** should be implemented as a standalone binary accessed from [**`go-filecoin`**](https://github.com/filecoin-project/go-filecoin) either as a single-invocation CLI or as a long-running daemon process. We chose to bundle the **FPS** as an FFI dependency for both the simplicity of having a Filecoin node be deliverable as a single monolithic binary, and for the (perceived) relative development simplicity of the API implementation.
+We also considered whether the **FPS** should be implemented as a standalone binary accessed from [**`go-filecoin`**](https://github.com/filecoin-project/go-filecoin) either as a single-invocation CLI or as a long-running daemon process. Bundling the **FPS** as an FFI dependency was chosen for both the simplicity of having a Filecoin node deliverable as a single monolithic binary, and for the (perceived) relative development simplicity of the API implementation.
 
-If at any point it were to become clear that the FFI approach is irredeemably problematic, the option of moving to a standalone **FPS** remains. However, we have now already solved the majority of technical problems associated with calling from Go into Rust even while allowing for a high degree of runtime configurability. Therefore, it seems most likely that we continue down the path in which we have already invested and begin to reap reward.
+If at any point it were to become clear that the FFI approach is irredeemably problematic, the option of moving to a standalone **FPS** remains. However, the majority of technical problems associated with calling from Go into Rust are now solved, even while allowing for a high degree of runtime configurability. Therefore, continuing down the same path we have already invested in, and have begun to reap rewards from, seems likely.
 
 ## Install and configure Rust
 
@@ -93,7 +93,7 @@ To benchmark the examples you can [bencher](src/bin/bencher.rs).
 
 The results are written into the `.bencher` directory, as JSON files. The benchmarks are controlled through the [bench.config.toml](bench.config.toml) file.
 
-Note: on macOS you need `gtime` (`brew install gnu-time`), as the built in `time` command is not enough.
+Note: On macOS you need `gtime` (`brew install gnu-time`), as the built in `time` command is not enough.
 
 ## Logging
 
@@ -138,7 +138,7 @@ can run the following command:
 RUSTFLAGS="-Z sanitizer=leak" cargo run --release --package filecoin-proofs --example ffi --target x86_64-unknown-linux-gnu
 ```
 
-If using OSX, you'll have to run the leak detection from within a Docker
+If using mac OS, you'll have to run the leak detection from within a Docker
 container. After installing Docker, run the following commands to build and run
 the proper Docker image and then the leak detector itself:
 
@@ -197,11 +197,11 @@ Or better, generate the documentation locally (until repository is public). Foll
 
 ## Contributing
 
-See [Contributing](./contributing.md)
+See [Contributing](./CONTRIBUTING.md)
 
 ## License
 
 The Filecoin Project is dual-licensed under Apache 2.0 and MIT terms:
 
-- Apache License, Version 2.0, ([LICENSE-APACHE](https://github.com/filecoin-project/rust-proofs/blob/master/LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+- Apache license, Version 2.0, ([LICENSE-APACHE](https://github.com/filecoin-project/rust-proofs/blob/master/LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 - MIT license ([LICENSE-MIT](https://github.com/filecoin-project/rust-proofs/blob/master/LICENSE-MIT) or http://opensource.org/licenses/MIT)
