@@ -1,11 +1,12 @@
+use crate::api::bytes_amount::{PaddedBytesAmount, UnpaddedBytesAmount};
 use crate::api::errors::SectorManagerErr;
 
 pub trait SectorConfig {
-    /// returns the number of bytes that will fit into a sector managed by this store
-    fn max_unsealed_bytes_per_sector(&self) -> u64;
+    /// returns the number of user-provided bytes that will fit into a sector managed by this store
+    fn max_unsealed_bytes_per_sector(&self) -> UnpaddedBytesAmount;
 
     /// returns the number of bytes in a sealed sector managed by this store
-    fn sector_bytes(&self) -> u64;
+    fn sector_bytes(&self) -> PaddedBytesAmount;
 }
 
 pub trait SectorManager {
@@ -22,7 +23,11 @@ pub trait SectorManager {
     fn truncate_unsealed(&self, access: &str, size: u64) -> Result<(), SectorManagerErr>;
 
     /// writes `data` to the staging sector identified by `access`, incrementally preprocessing `access`
-    fn write_and_preprocess(&self, access: &str, data: &[u8]) -> Result<u64, SectorManagerErr>;
+    fn write_and_preprocess(
+        &self,
+        access: &str,
+        data: &[u8],
+    ) -> Result<UnpaddedBytesAmount, SectorManagerErr>;
 
     fn delete_staging_sector_access(&self, access: &str) -> Result<(), SectorManagerErr>;
 
@@ -30,7 +35,7 @@ pub trait SectorManager {
         &self,
         access: &str,
         start_offset: u64,
-        num_bytes: u64,
+        num_bytes: UnpaddedBytesAmount,
     ) -> Result<Vec<u8>, SectorManagerErr>;
 }
 

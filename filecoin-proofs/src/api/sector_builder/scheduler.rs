@@ -21,6 +21,7 @@ use crate::api::sector_builder::WrappedKeyValueStore;
 use crate::api::sector_builder::WrappedSectorStore;
 use crate::error::ExpectWithBacktrace;
 use crate::error::Result;
+use sector_base::api::bytes_amount::UnpaddedBytesAmount;
 use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::Arc;
@@ -52,7 +53,7 @@ pub enum Request {
     ),
     RetrievePiece(String, mpsc::SyncSender<Result<Vec<u8>>>),
     SealAllStagedSectors(mpsc::SyncSender<Result<()>>),
-    GetMaxUserBytesPerStagedSector(mpsc::SyncSender<u64>),
+    GetMaxUserBytesPerStagedSector(mpsc::SyncSender<UnpaddedBytesAmount>),
     HandleSealResult(SectorId, Box<Result<SealedSectorMetadata>>),
     Shutdown,
 }
@@ -153,7 +154,7 @@ pub struct SectorMetadataManager {
     sealer_input_tx: mpsc::Sender<SealerInput>,
     scheduler_input_tx: mpsc::SyncSender<Request>,
     max_num_staged_sectors: u8,
-    max_user_bytes_per_staged_sector: u64,
+    max_user_bytes_per_staged_sector: UnpaddedBytesAmount,
 }
 
 impl SectorMetadataManager {
@@ -188,7 +189,10 @@ impl SectorMetadataManager {
             });
         }
 
-        let output = internal::fake_generate_post(
+        let mut seed = [0; 32];
+        seed.copy_from_slice(challenge_seed);
+
+        let output = internal::generate_post(
             self.sector_store.inner.config().sector_bytes(),
             PoStInput {
                 challenge_seed: *challenge_seed,
@@ -272,7 +276,7 @@ impl SectorMetadataManager {
 
     // Returns the number of user-provided bytes that will fit into a staged
     // sector.
-    pub fn max_user_bytes(&self) -> u64 {
+    pub fn max_user_bytes(&self) -> UnpaddedBytesAmount {
         self.max_user_bytes_per_staged_sector
     }
 
