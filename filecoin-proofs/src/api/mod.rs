@@ -136,13 +136,13 @@ pub unsafe extern "C" fn generate_post(
 ///
 #[no_mangle]
 pub unsafe extern "C" fn verify_post(
+    _cfg_ptr: *const ConfiguredStore,
     _flattened_comm_rs_ptr: *const u8,
     _flattened_comm_rs_len: libc::size_t,
     _challenge_seed: &[u8; 32],
     proof: &[u8; API_POST_PROOF_BYTES],
     _faults_ptr: *const u64,
     _faults_len: libc::size_t,
-    _sector_bytes: u64,
 ) -> *mut responses::VerifyPoSTResponse {
     let mut response: responses::VerifyPoSTResponse = Default::default();
 
