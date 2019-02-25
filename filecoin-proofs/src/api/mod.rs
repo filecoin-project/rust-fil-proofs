@@ -341,7 +341,7 @@ pub unsafe extern "C" fn get_max_user_bytes_per_staged_sector(
     let mut response: responses::GetMaxStagedBytesPerSector = Default::default();
 
     response.status_code = FCPResponseStatus::FCPNoError;
-    response.max_staged_bytes_per_sector = (*ptr).get_max_user_bytes_per_staged_sector();;
+    response.max_staged_bytes_per_sector = (*ptr).get_max_user_bytes_per_staged_sector().into();
 
     raw_ptr(response)
 }
@@ -377,7 +377,7 @@ pub unsafe extern "C" fn get_seal_status(
                         .iter()
                         .map(|p| FFIPieceMetadata {
                             piece_key: rust_str_to_c_str(p.piece_key.to_string()),
-                            num_bytes: p.num_bytes,
+                            num_bytes: p.num_bytes.into(),
                         })
                         .collect::<Vec<FFIPieceMetadata>>();
 
@@ -426,7 +426,7 @@ pub unsafe extern "C" fn get_sealed_sectors(
                         .iter()
                         .map(|p| FFIPieceMetadata {
                             piece_key: rust_str_to_c_str(p.piece_key.to_string()),
-                            num_bytes: p.num_bytes,
+                            num_bytes: p.num_bytes.into(),
                         })
                         .collect::<Vec<FFIPieceMetadata>>();
 
@@ -480,7 +480,7 @@ pub unsafe extern "C" fn get_staged_sectors(
                         .iter()
                         .map(|p| FFIPieceMetadata {
                             piece_key: rust_str_to_c_str(p.piece_key.to_string()),
-                            num_bytes: p.num_bytes,
+                            num_bytes: p.num_bytes.into(),
                         })
                         .collect::<Vec<FFIPieceMetadata>>();
 
