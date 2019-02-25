@@ -160,15 +160,16 @@ pub struct Proof<H: Hasher> {
 impl<H: Hasher> Proof<H> {
     // FIXME: should we also take a number of challenges here and construct
     // vectors of that length?
-    pub fn new_empty(height: usize, degree: usize) -> Proof<H> {
+    pub fn new_empty(height: usize, degree: usize, challenges: usize) -> Proof<H> {
         Proof {
             data_root: Default::default(),
             replica_root: Default::default(),
-            replica_nodes: vec![DataProof::new(height)],
-            replica_parents: vec![vec![(0, DataProof::new(height)); degree]],
-            nodes: vec![DataProof::new(height)],
+            replica_nodes: vec![DataProof::new(height); challenges],
+            replica_parents: vec![vec![(0, DataProof::new(height)); degree]; challenges],
+            nodes: vec![DataProof::new(height); challenges],
         }
     }
+
     pub fn serialize(&self) -> Vec<u8> {
         let res: Vec<_> = (0..self.nodes.len())
             .map(|i| {

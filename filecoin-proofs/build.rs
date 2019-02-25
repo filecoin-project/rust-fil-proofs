@@ -75,7 +75,7 @@ fn main() {
         pc_file,
         "Name: libfilecoin_proofs
 Version: {version}
-Description: rust-proofs library
+Description: rust-fil-proofs library
 Libs: {libs}
 ",
         version = git_hash.trim(),

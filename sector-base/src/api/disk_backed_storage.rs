@@ -6,7 +6,6 @@ use crate::io::fr32::{
 };
 use ffi_toolkit::{c_str_to_rust_str, raw_ptr};
 use libc;
-use std::env;
 use std::fs::{create_dir_all, remove_file, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
@@ -16,63 +15,14 @@ use std::path::Path;
 // but this is not recommended, since some sealed sector sizes are invalid. If you must set this manually,
 // ensure the chosen sector size is a multiple of 32.
 
-// Sector size, in bytes, to use when testing real proofs. (real sector store)
-pub const REAL_SECTOR_SIZE: u64 = 128; // Override with FILECOIN_PROOFS_REAL_SECTOR_SIZE env var.
+// Sector size, in bytes, for tests.
+pub const TEST_SECTOR_SIZE: u64 = 1024;
 
-// Sector size, in bytes, for tests which fake sealing with a subset of the data. (fast fake sector store)
-pub const FAST_SECTOR_SIZE: u64 = 1024; // Override with FILECOIN_PROOFS_FAST_SECTOR_SIZE env var.
+// Sector size, in bytes, during live operation.
+pub const LIVE_SECTOR_SIZE: u64 = 1 << 28; // 256MiB
 
-// Sector size, in bytes, during live operation -- which also fakes sealing with a subset of the data. (slow fake sector store)
-pub const SLOW_SECTOR_SIZE: u64 = 1 << 30; // Override with FILECOIN_PROOFS_SLOW_SECTOR_SIZE env var.
-
-// The delay constants can be overridden by setting the corresponding environment variable (with FILECOIN_PROOFS_ prefix)
-// For example, since SLOW_DELAY_SECONDS is used for live sealing, outside of tests,
-// setting the environment variable, FILECOIN_PROOFS_SLOW_DELAY_SECONDS to 30, will result in sealing
-// which takes approximately 30 seconds (with 15 seconds to get unsealed data).
-
-// Delay, in seconds, for tests which fake sealing with a subset of the data. (fast fake sector store)
-pub const FAST_DELAY_SECONDS: u32 = 10; // Override with FILECOIN_PROOFS_FAST_DELAY_SECONDS env var.
-
-// Delay, in seconds during live operation which also fakes sealing with a subset of the data. (slow fake sector store)
-pub const SLOW_DELAY_SECONDS: u32 = 0; // Override with FILECOIN_PROOFS_SLOW_DELAY_SECONDS env var.
-
-fn sector_size(env_var_name: &str, default: u64) -> u64 {
-    match env::var(env_var_name) {
-        Ok(bytes_string) => bytes_string.parse().unwrap_or(default),
-        Err(_) => default,
-    }
-}
-
-fn delay_seconds(env_var_name: &str, default: u32) -> u32 {
-    match env::var(env_var_name) {
-        Ok(seconds_string) => seconds_string.parse().unwrap_or(default),
-        Err(_) => default,
-    }
-}
-
-/// Initializes and returns a boxed SectorStore instance suitable for exercising the proofs code
-/// to its fullest capacity.
-///
-/// # Arguments
-///
-/// * `staging_dir_path` - path to the staging directory
-/// * `sealed_dir_path`  - path to the sealed directory
-#[no_mangle]
-pub unsafe extern "C" fn init_new_proof_test_sector_store(
-    staging_dir_path: *const libc::c_char,
-    sealed_dir_path: *const libc::c_char,
-) -> *mut Box<SectorStore> {
-    let boxed = Box::new(new_sector_store(
-        &ConfiguredStore::ProofTest,
-        c_str_to_rust_str(sealed_dir_path).to_string(),
-        c_str_to_rust_str(staging_dir_path).to_string(),
-    ));
-    raw_ptr(boxed)
-}
-
-/// Initializes and returns a boxed SectorStore instance which is very similar to the Alpha-release
-/// SectorStore that Filecoin node-users will rely upon - but with manageably-small delays for seal
-/// and unseal.
+/// Initializes and returns a boxed SectorStore instance with very small, unrealistic/insecure parameters
+/// for use in testing.
 ///
 /// # Arguments
 ///
@@ -91,9 +41,7 @@ pub unsafe extern "C" fn init_new_test_sector_store(
     raw_ptr(boxed)
 }
 
-/// Initializes and returns a boxed SectorStore instance which Alpha Filecoin node-users will rely
-/// upon. Some operations are substantially delayed; sealing an unsealed sector using this could
-/// take several hours.
+/// Initializes and returns a boxed SectorStore instance for non-test use.
 ///
 /// # Arguments
 ///
@@ -230,13 +178,8 @@ impl DiskManager {
     }
 }
 
-pub struct RealConfig {
+pub struct Config {
     sector_bytes: u64,
-}
-
-pub struct FakeConfig {
-    sector_bytes: u64,
-    delay_seconds: u32,
 }
 
 #[derive(Debug)]
@@ -244,7 +187,6 @@ pub struct FakeConfig {
 pub enum ConfiguredStore {
     Live = 0,
     Test = 1,
-    ProofTest = 2,
 }
 
 pub struct ConcreteSectorStore {
@@ -279,61 +221,22 @@ pub fn new_sector_store(
 
 pub fn new_sector_config(cs: &ConfiguredStore) -> Box<SectorConfig> {
     match *cs {
-        ConfiguredStore::Live => Box::new(FakeConfig {
-            sector_bytes: sector_size("FILECOIN_PROOFS_SLOW_SECTOR_SIZE", SLOW_SECTOR_SIZE),
-            delay_seconds: delay_seconds("FILECOIN_PROOFS_SLOW_DELAY_SECONDS", SLOW_DELAY_SECONDS),
+        ConfiguredStore::Live => Box::new(Config {
+            sector_bytes: LIVE_SECTOR_SIZE,
         }),
-        ConfiguredStore::Test => Box::new(FakeConfig {
-            sector_bytes: sector_size("FILECOIN_PROOFS_FAST_SECTOR_SIZE", FAST_SECTOR_SIZE),
-            delay_seconds: delay_seconds("FILECOIN_PROOFS_FAST_DELAY_SECONDS", FAST_DELAY_SECONDS),
-        }),
-        ConfiguredStore::ProofTest => Box::new(RealConfig {
-            sector_bytes: sector_size("FILECOIN_PROOFS_SECTOR_SIZE", REAL_SECTOR_SIZE),
+        ConfiguredStore::Test => Box::new(Config {
+            sector_bytes: TEST_SECTOR_SIZE,
         }),
     }
 }
 
-impl SectorConfig for RealConfig {
-    fn is_fake(&self) -> bool {
-        false
-    }
-
-    fn simulate_delay_seconds(&self) -> Option<u32> {
-        None
-    }
-
+impl SectorConfig for Config {
     fn max_unsealed_bytes_per_sector(&self) -> u64 {
         unpadded_bytes(self.sector_bytes)
     }
 
     fn sector_bytes(&self) -> u64 {
         self.sector_bytes
-    }
-
-    fn dummy_parameter_cache_name(&self) -> String {
-        String::from("REAL_DUMMY_API_PARAMETERS")
-    }
-}
-
-impl SectorConfig for FakeConfig {
-    fn is_fake(&self) -> bool {
-        true
-    }
-
-    fn simulate_delay_seconds(&self) -> Option<u32> {
-        Some(self.delay_seconds)
-    }
-
-    fn max_unsealed_bytes_per_sector(&self) -> u64 {
-        unpadded_bytes(self.sector_bytes)
-    }
-
-    fn sector_bytes(&self) -> u64 {
-        self.sector_bytes
-    }
-
-    fn dummy_parameter_cache_name(&self) -> String {
-        String::from("FAKE_DUMMY_API_PARAMETERS_{}")
     }
 }
 
@@ -372,9 +275,8 @@ pub mod tests {
     #[test]
     fn max_unsealed_bytes_per_sector_checks() {
         let xs = vec![
-            (ConfiguredStore::Live, 1065353216),
+            (ConfiguredStore::Live, 266338304),
             (ConfiguredStore::Test, 1016),
-            (ConfiguredStore::ProofTest, 127),
         ];
 
         for (configured_store, num_bytes) in xs {
@@ -386,7 +288,7 @@ pub mod tests {
 
     #[test]
     fn unsealed_sector_write_and_truncate() {
-        let configured_store = ConfiguredStore::ProofTest;
+        let configured_store = ConfiguredStore::Test;
         let storage: Box<SectorStore> = create_sector_store(&configured_store);
         let mgr = storage.manager();
 
@@ -468,7 +370,7 @@ pub mod tests {
 
     #[test]
     fn deletes_staging_access() {
-        let configured_store = ConfiguredStore::ProofTest;
+        let configured_store = ConfiguredStore::Test;
 
         let store = create_sector_store(&configured_store);
         let access = store.manager().new_staging_sector_access().unwrap();

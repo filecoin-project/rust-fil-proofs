@@ -118,10 +118,9 @@ fn do_the_work<H: 'static>(
 
     let nodes = data_size / 32;
 
-    let data = file_backed_mmap_from_random_bytes(nodes);
+    let mut data = file_backed_mmap_from_random_bytes(nodes);
 
     let replica_id: H::Domain = rng.gen();
-    let mut data_copy = file_backed_mmap_from(&data);
     let sp = layered_drgporep::SetupParams {
         drg_porep_setup_params: drgporep::SetupParams {
             drg: drgporep::DrgParams {
@@ -146,8 +145,7 @@ fn do_the_work<H: 'static>(
     info!(FCP_LOG, "running replicate");
 
     start_profile("replicate");
-    let (tau, aux) =
-        ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, &mut data_copy, None).unwrap();
+    let (tau, aux) = ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, &mut data, None).unwrap();
     stop_profile();
     let pub_inputs = layered_drgporep::PublicInputs::<H::Domain> {
         replica_id,
@@ -157,7 +155,6 @@ fn do_the_work<H: 'static>(
     };
 
     let priv_inputs = layered_drgporep::PrivateInputs {
-        replica: &data,
         aux,
         tau: tau.layer_taus,
     };
@@ -299,7 +296,7 @@ fn do_the_work<H: 'static>(
         let start = Instant::now();
         info!(FCP_LOG, "Extracting.");
         start_profile("extract");
-        let decoded_data = ZigZagDrgPoRep::<H>::extract_all(&pp, &replica_id, &data_copy).unwrap();
+        let decoded_data = ZigZagDrgPoRep::<H>::extract_all(&pp, &replica_id, &data).unwrap();
         stop_profile();
         let extracting = start.elapsed();
         info!(FCP_LOG, "extracting_time: {:?}", extracting; "target" => "stats");
@@ -375,7 +372,7 @@ fn main() {
         .arg(
             Arg::with_name("no-bench")
                 .long("no-bench")
-                .help("Synthesize and report inputs/constraints for a circuit.")
+                .help("Don't synthesize and report inputs/constraints for a circuit.")
         )
         .arg(
             Arg::with_name("circuit")
