@@ -1,4 +1,5 @@
 use clap::{App, Arg, ArgMatches};
+use failure::err_msg;
 use filecoin_proofs::param::*;
 use std::path::PathBuf;
 use std::process::exit;
@@ -43,6 +44,14 @@ Defaults to '{}'
 
 fn fetch(matches: &ArgMatches) -> Result<()> {
     let json = PathBuf::from(matches.value_of("json").unwrap_or("./parameters.json"));
+
+    if !json.exists() {
+        return Err(err_msg(format!(
+            "json file '{}' does not exist",
+            &json.to_str().unwrap_or("")
+        )));
+    }
+
     let parameter_map = get_parameter_map(&json)?;
 
     let parameter_ids = if matches.is_present("all") {

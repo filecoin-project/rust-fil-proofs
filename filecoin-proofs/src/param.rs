@@ -57,20 +57,11 @@ pub fn get_mapped_parameter_ids(parameter_map: &ParameterMap) -> Result<Vec<Stri
 }
 
 pub fn get_parameter_map(path: &PathBuf) -> Result<ParameterMap> {
-    if path.exists() {
-        let file = File::open(path)?;
-        let reader = BufReader::new(file);
-        let parameter_map = serde_json::from_reader(reader)?;
+    let file = File::open(path)?;
+    let reader = BufReader::new(file);
+    let parameter_map = serde_json::from_reader(reader)?;
 
-        Ok(parameter_map)
-    } else {
-        println!(
-            "parameter manifest '{}' does not exist",
-            path.as_path().to_str().unwrap()
-        );
-
-        Ok(HashMap::new())
-    }
+    Ok(parameter_map)
 }
 
 pub fn get_parameter_data<'a>(
