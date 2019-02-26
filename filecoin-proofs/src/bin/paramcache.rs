@@ -16,7 +16,7 @@ use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::vdf_post::VDFPoSt;
 use storage_proofs::vdf_sloth::Sloth;
 
-use clap::{Arg, App};
+use clap::{App, Arg};
 use slog::*;
 
 fn cache_porep_params(sector_size: u64) {
@@ -68,14 +68,18 @@ pub fn main() {
     let matches = App::new("paramcache")
         .version("0.1")
         .about("Generate and persist Groth parameters")
-        .arg(Arg::with_name("test-only")
-            .long("test-only")
-            .help("generate only parameters useful for testing")
-            .takes_value(false))
-        .arg(Arg::with_name("include-post")
-            .long("include-post")
-            .help("generate PoSt parameters in addition to PoRep")
-            .takes_value(false))
+        .arg(
+            Arg::with_name("test-only")
+                .long("test-only")
+                .help("generate only parameters useful for testing")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("include-post")
+                .long("include-post")
+                .help("generate PoSt parameters in addition to PoRep")
+                .takes_value(false),
+        )
         .get_matches();
 
     let include_post: bool = matches.is_present("include-post");
