@@ -3,27 +3,19 @@ use failure::{err_msg, Error};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs::{read_dir, rename, File};
+use std::fs::{create_dir_all, read_dir, rename, File};
 use std::io::{stdin, stdout, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 use std::process::Command;
 use storage_proofs::parameter_cache::parameter_cache_dir;
 
-pub const ERROR_CURL_COMMAND: &str = "failed to run curl";
-pub const ERROR_CURL_FETCH: &str = "failed to fetch via curl";
-pub const ERROR_IPFS_COMMAND: &str = "failed to run ipfs";
-pub const ERROR_IPFS_OUTPUT: &str = "failed to capture ipfs output";
-pub const ERROR_IPFS_PARSE: &str = "failed to parse ipfs output";
-pub const ERROR_IPFS_PUBLISH: &str = "failed to publish via ipfs";
-pub const ERROR_PARAMETERS_LOCAL: &str = "failed to load local parameters";
-pub const ERROR_PARAMETERS_MAPPED: &str = "failed to load mapped parameters";
-pub const ERROR_PARAMETER_FILE: &str = "failed to find parameter file";
-pub const ERROR_PARAMETER_ID: &str = "failed to find parameter in map";
-pub const ERROR_PARAMETER_MAP_LOAD: &str = "failed to load parameter map";
-pub const ERROR_PARAMETER_MAP_SAVE: &str = "failed to save parameter map";
-pub const ERROR_PARAMETER_INVALID: &str = "invalid parameter file";
-pub const ERROR_DIGEST: &str = "failed to generate digest";
-pub const ERROR_STRING: &str = "invalid string";
+const ERROR_IPFS_COMMAND: &str = "failed to run ipfs";
+const ERROR_IPFS_OUTPUT: &str = "failed to capture ipfs output";
+const ERROR_IPFS_PARSE: &str = "failed to parse ipfs output";
+const ERROR_IPFS_PUBLISH: &str = "failed to publish via ipfs";
+const ERROR_PARAMETER_FILE: &str = "failed to find parameter file";
+const ERROR_PARAMETER_ID: &str = "failed to find parameter in map";
+const ERROR_STRING: &str = "invalid string";
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 pub type ParameterMap = HashMap<String, ParameterData>;
@@ -141,37 +133,18 @@ pub fn fetch_parameter_file(parameter_map: &ParameterMap, parameter_id: &str) ->
     let parameter_data = get_parameter_data(parameter_map, parameter_id)?;
     let path = get_parameter_file_path(parameter_id);
 
-    if path.exists() {
-        println!(
-            "parameter file '{}' already exists",
-            path.as_path().to_str().unwrap()
-        );
+    create_dir_all(parameter_cache_dir())?;
 
-        Ok(())
+    let output = Command::new("curl")
+        .arg("-o")
+        .arg(&path)
+        .arg(format!("https://ipfs.io/ipfs/{}", parameter_data.cid))
+        .output()?;
+
+    if !output.status.success() {
+        Err(err_msg(String::from_utf8(output.stderr)?))
     } else {
-        let output = Command::new("curl")
-            .arg("-o")
-            .arg(&path)
-            .arg(format!("https://ipfs.io/ipfs/{}", parameter_data.cid))
-            .output();
-
-        match output {
-            Err(_) => Err(err_msg(ERROR_CURL_COMMAND)),
-            Ok(output) => {
-                if !output.status.success() {
-                    Err(err_msg(ERROR_CURL_FETCH))
-                } else {
-                    let is_valid = validate_parameter_file(&parameter_map, parameter_id)?;
-
-                    if !is_valid {
-                        invalidate_parameter_file(parameter_id)?;
-                        Err(err_msg(ERROR_PARAMETER_INVALID))
-                    } else {
-                        Ok(())
-                    }
-                }
-            }
-        }
+        Ok(())
     }
 }
 
@@ -217,12 +190,4 @@ pub fn choose(message: &str) -> bool {
 
 pub fn choose_from(vector: Vec<String>) -> Result<Vec<String>> {
     Ok(vector.into_iter().filter(|i| choose(i)).collect())
-}
-
-pub fn choose_local_parameter_ids() -> Result<Vec<String>> {
-    choose_from(get_local_parameter_ids()?)
-}
-
-pub fn choose_mapped_parameter_ids(map: &ParameterMap) -> Result<Vec<String>> {
-    choose_from(get_mapped_parameter_ids(&map)?)
 }
