@@ -1,11 +1,13 @@
+use std::sync::Arc;
+
 use crate::api::sector_builder::errors::*;
 use crate::api::sector_builder::metadata::sum_piece_bytes;
 use crate::api::sector_builder::metadata::StagedSectorMetadata;
 use crate::api::sector_builder::state::StagedState;
 use crate::api::sector_builder::*;
 use crate::error;
+use sector_base::api::bytes_amount::UnpaddedBytesAmount;
 use sector_base::api::sector_store::SectorManager;
-use std::sync::Arc;
 
 pub fn add_piece(
     sector_store: &Arc<WrappedSectorStore>,
@@ -16,7 +18,7 @@ pub fn add_piece(
     let sector_mgr = sector_store.inner.manager();
     let sector_max = sector_store.inner.config().max_unsealed_bytes_per_sector();
 
-    let piece_bytes_len = piece_bytes.len() as u64;
+    let piece_bytes_len = UnpaddedBytesAmount(piece_bytes.len() as u64);
 
     let opt_dest_sector_id = {
         let candidates: Vec<StagedSectorMetadata> = staged_state
@@ -41,7 +43,10 @@ pub fn add_piece(
             .map_err(|err| err.into())
             .and_then(|num_bytes_written| {
                 if num_bytes_written != piece_bytes_len {
-                    Err(err_inc_write(num_bytes_written, piece_bytes_len).into())
+                    Err(
+                        err_inc_write(u64::from(num_bytes_written), u64::from(piece_bytes_len))
+                            .into(),
+                    )
                 } else {
                     Ok(s.sector_id)
                 }
@@ -63,11 +68,11 @@ pub fn add_piece(
 // first staged sector into which the bytes will fit.
 fn compute_destination_sector_id(
     candidate_sectors: &[StagedSectorMetadata],
-    max_bytes_per_sector: u64,
-    num_bytes_in_piece: u64,
+    max_bytes_per_sector: UnpaddedBytesAmount,
+    num_bytes_in_piece: UnpaddedBytesAmount,
 ) -> error::Result<Option<SectorId>> {
     if num_bytes_in_piece > max_bytes_per_sector {
-        Err(err_overflow(num_bytes_in_piece, max_bytes_per_sector).into())
+        Err(err_overflow(num_bytes_in_piece.into(), max_bytes_per_sector.into()).into())
     } else {
         Ok(candidate_sectors
             .iter()
@@ -116,25 +121,29 @@ mod tests {
 
         sealed_sector_a.pieces.push(PieceMetadata {
             piece_key: String::from("x"),
-            num_bytes: 5,
+            num_bytes: UnpaddedBytesAmount(5),
         });
 
         sealed_sector_a.pieces.push(PieceMetadata {
             piece_key: String::from("x"),
-            num_bytes: 10,
+            num_bytes: UnpaddedBytesAmount(10),
         });
 
         let mut sealed_sector_b: StagedSectorMetadata = Default::default();
 
         sealed_sector_b.pieces.push(PieceMetadata {
             piece_key: String::from("x"),
-            num_bytes: 5,
+            num_bytes: UnpaddedBytesAmount(5),
         });
 
         let staged_sectors = vec![sealed_sector_a.clone(), sealed_sector_b.clone()];
 
         // piece takes up all remaining space in first sector
-        match compute_destination_sector_id(&staged_sectors, 100, 85) {
+        match compute_destination_sector_id(
+            &staged_sectors,
+            UnpaddedBytesAmount(100),
+            UnpaddedBytesAmount(85),
+        ) {
             Ok(Some(destination_sector_id)) => {
                 assert_eq!(destination_sector_id, sealed_sector_a.sector_id)
             }
@@ -142,7 +151,11 @@ mod tests {
         }
 
         // piece doesn't fit into the first, but does the second
-        match compute_destination_sector_id(&staged_sectors, 100, 90) {
+        match compute_destination_sector_id(
+            &staged_sectors,
+            UnpaddedBytesAmount(100),
+            UnpaddedBytesAmount(90),
+        ) {
             Ok(Some(destination_sector_id)) => {
                 assert_eq!(destination_sector_id, sealed_sector_b.sector_id)
             }
@@ -150,13 +163,21 @@ mod tests {
         }
 
         // piece doesn't fit into any in the list
-        match compute_destination_sector_id(&staged_sectors, 100, 100) {
+        match compute_destination_sector_id(
+            &staged_sectors,
+            UnpaddedBytesAmount(100),
+            UnpaddedBytesAmount(100),
+        ) {
             Ok(None) => (),
             _ => panic!(),
         }
 
         // piece is over max
-        match compute_destination_sector_id(&staged_sectors, 100, 101) {
+        match compute_destination_sector_id(
+            &staged_sectors,
+            UnpaddedBytesAmount(100),
+            UnpaddedBytesAmount(101),
+        ) {
             Err(_) => (),
             _ => panic!(),
         }

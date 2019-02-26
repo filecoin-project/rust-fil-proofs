@@ -1,3 +1,6 @@
+use slog::*;
+use std::sync::{mpsc, Arc, Mutex};
+
 use crate::api::internal::PoStOutput;
 use crate::api::sector_builder::errors::SectorBuilderErr;
 use crate::api::sector_builder::kv_store::fs::FileSystemKvs;
@@ -9,11 +12,10 @@ use crate::api::sector_builder::sealer::*;
 use crate::error::ExpectWithBacktrace;
 use crate::error::Result;
 use crate::FCP_LOG;
+use sector_base::api::bytes_amount::UnpaddedBytesAmount;
 use sector_base::api::disk_backed_storage::new_sector_store;
 use sector_base::api::disk_backed_storage::ConfiguredStore;
 use sector_base::api::sector_store::SectorStore;
-use slog::*;
-use std::sync::{mpsc, Arc, Mutex};
 
 pub mod errors;
 mod helpers;
@@ -109,7 +111,7 @@ impl SectorBuilder {
 
     // Returns the number of user-provided bytes that will fit into a staged
     // sector.
-    pub fn get_max_user_bytes_per_staged_sector(&self) -> u64 {
+    pub fn get_max_user_bytes_per_staged_sector(&self) -> UnpaddedBytesAmount {
         self.run_blocking(Request::GetMaxUserBytesPerStagedSector)
     }
 

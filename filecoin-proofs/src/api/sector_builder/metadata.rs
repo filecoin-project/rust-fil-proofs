@@ -3,6 +3,7 @@ use crate::error;
 use crate::serde_big_array::BigArray;
 use byteorder::LittleEndian;
 use byteorder::WriteBytesExt;
+use sector_base::api::bytes_amount::UnpaddedBytesAmount;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -30,7 +31,7 @@ pub struct SealedSectorMetadata {
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub struct PieceMetadata {
     pub piece_key: String,
-    pub num_bytes: u64,
+    pub num_bytes: UnpaddedBytesAmount,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
@@ -84,8 +85,10 @@ impl Default for SealedSectorMetadata {
     }
 }
 
-pub fn sum_piece_bytes(s: &StagedSectorMetadata) -> u64 {
-    s.pieces.iter().map(|x| x.num_bytes).sum()
+pub fn sum_piece_bytes(s: &StagedSectorMetadata) -> UnpaddedBytesAmount {
+    s.pieces
+        .iter()
+        .fold(UnpaddedBytesAmount(0), |acc, x| acc + x.num_bytes)
 }
 
 pub fn sector_id_as_bytes(sector_id: SectorId) -> error::Result<[u8; 31]> {

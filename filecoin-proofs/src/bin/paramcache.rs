@@ -6,6 +6,7 @@ extern crate storage_proofs;
 use filecoin_proofs::api::internal;
 use pairing::bls12_381::Bls12;
 
+use sector_base::api::bytes_amount::PaddedBytesAmount;
 use sector_base::api::disk_backed_storage::{LIVE_SECTOR_SIZE, TEST_SECTOR_SIZE};
 use storage_proofs::circuit::vdf_post::{VDFPoStCircuit, VDFPostCompound};
 use storage_proofs::circuit::zigzag::ZigZagCompound;
@@ -18,19 +19,40 @@ use storage_proofs::vdf_sloth::Sloth;
 const GENERATE_POST_PARAMS: bool = false;
 
 fn cache_params(sector_size: u64) {
-    let public_params = internal::public_params(sector_size as usize);
-    let circuit = ZigZagCompound::blank_circuit(&public_params, &internal::ENGINE_PARAMS);
-    let _ = ZigZagCompound::get_groth_params(circuit, &public_params);
+    let bytes_amount = PaddedBytesAmount(sector_size);
+
+    let public_params = internal::public_params(bytes_amount);
+    {
+        let circuit = ZigZagCompound::blank_circuit(&public_params, &internal::ENGINE_PARAMS);
+
+        let _ = ZigZagCompound::get_groth_params(circuit, &public_params);
+    }
+    {
+        let circuit = ZigZagCompound::blank_circuit(&public_params, &internal::ENGINE_PARAMS);
+        let _ = ZigZagCompound::get_verifying_key(circuit, &public_params);
+    }
 
     if GENERATE_POST_PARAMS {
-        let post_public_params = internal::post_public_params(sector_size as usize);
-        let post_circuit: VDFPoStCircuit<Bls12> =
-            <VDFPostCompound as CompoundProof<
-                Bls12,
-                VDFPoSt<PedersenHasher, Sloth>,
-                VDFPoStCircuit<Bls12>,
-            >>::blank_circuit(&post_public_params, &internal::ENGINE_PARAMS);
-        let _ = VDFPostCompound::get_groth_params(post_circuit, &post_public_params);
+        let post_public_params = internal::post_public_params(bytes_amount);
+        {
+            let post_circuit: VDFPoStCircuit<Bls12> =
+                <VDFPostCompound as CompoundProof<
+                    Bls12,
+                    VDFPoSt<PedersenHasher, Sloth>,
+                    VDFPoStCircuit<Bls12>,
+                >>::blank_circuit(&post_public_params, &internal::ENGINE_PARAMS);
+            let _ = VDFPostCompound::get_groth_params(post_circuit, &post_public_params);
+        }
+        {
+            let post_circuit: VDFPoStCircuit<Bls12> =
+                <VDFPostCompound as CompoundProof<
+                    Bls12,
+                    VDFPoSt<PedersenHasher, Sloth>,
+                    VDFPoStCircuit<Bls12>,
+                >>::blank_circuit(&post_public_params, &internal::ENGINE_PARAMS);
+
+            let _ = VDFPostCompound::get_verifying_key(post_circuit, &post_public_params);
+        }
     }
 }
 
