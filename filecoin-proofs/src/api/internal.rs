@@ -274,7 +274,7 @@ pub struct PoStInput {
 }
 
 pub fn fake_generate_post(
-    _sector_bytes: UnpaddedBytesAmount,
+    _sector_bytes: PaddedBytesAmount,
     input: PoStInput,
 ) -> error::Result<PoStOutput> {
     let faults: Vec<u64> = if !input.input_parts.is_empty() {
