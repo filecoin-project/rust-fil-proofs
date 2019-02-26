@@ -4,7 +4,7 @@ extern crate rand;
 extern crate sapling_crypto;
 #[macro_use]
 extern crate clap;
-#[cfg(feature = "profile")]
+#[cfg(feature = "cpu-profile")]
 extern crate gperftools;
 #[macro_use]
 extern crate slog;
@@ -17,7 +17,7 @@ use pairing::bls12_381::Bls12;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::time::{Duration, Instant};
 
-#[cfg(feature = "profile")]
+#[cfg(feature = "cpu-profile")]
 use gperftools::profiler::PROFILER;
 
 use storage_proofs::drgporep::*;
@@ -30,7 +30,7 @@ use storage_proofs::proof::ProofScheme;
 
 use filecoin_proofs::FCP_LOG;
 
-#[cfg(feature = "profile")]
+#[cfg(feature = "cpu-profile")]
 #[inline(always)]
 fn start_profile(stage: &str) {
     PROFILER
@@ -40,17 +40,17 @@ fn start_profile(stage: &str) {
         .unwrap();
 }
 
-#[cfg(not(feature = "profile"))]
+#[cfg(not(feature = "cpu-profile"))]
 #[inline(always)]
 fn start_profile(_stage: &str) {}
 
-#[cfg(feature = "profile")]
+#[cfg(feature = "cpu-profile")]
 #[inline(always)]
 fn stop_profile() {
     PROFILER.lock().unwrap().stop().unwrap();
 }
 
-#[cfg(not(feature = "profile"))]
+#[cfg(not(feature = "cpu-profile"))]
 #[inline(always)]
 fn stop_profile() {}
 
