@@ -93,12 +93,17 @@ jobs:
           keys:
             - cargo-v7-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
             - parameter-cache-{{ .Revision }}
-      - restore_cache:
-          keys:
-            - parameter-cache-{{ .Revision }}
+      - run:
+          name: Ensure cache is hydrated with PoRep and PoSt Groth parameters (for test)
+          command: |
+            cargo run --release --color=always --package filecoin-proofs --bin paramcache -- --include-post --test-only
       - run:
           name: run regression tests (examples) against FFI-exposed filecoin-proofs API
           command: RUSTFLAGS="-Z sanitizer=leak" cargo run --release --package filecoin-proofs --example ffi --target x86_64-unknown-linux-gnu
+      - save_cache:
+          key: parameter-cache-{{ .Revision }}
+          paths:
+          - /root/.filecoin-parameter-cache
 
   test_ignored_release:
     docker:

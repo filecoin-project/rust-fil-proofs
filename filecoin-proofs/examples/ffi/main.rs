@@ -19,6 +19,7 @@ use rand::{thread_rng, Rng};
 use std::env;
 use std::error::Error;
 use std::ptr;
+use std::slice::from_raw_parts;
 use std::sync::atomic::AtomicPtr;
 use std::sync::mpsc;
 use std::thread;
@@ -310,6 +311,50 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
         }
 
         assert_eq!(1, (*resp).sectors_len);
+    }
+
+    // generate and then verify a proof-of-spacetime for the sealed sectors
+    {
+        let resp = get_sealed_sectors(sector_builder_b);
+        defer!(destroy_get_sealed_sectors_response(resp));
+
+        if (*resp).status_code != 0 {
+            panic!("{}", c_str_to_rust_str((*resp).error_msg))
+        }
+
+        let sealed_sector_metadata: FFISealedSectorMetadata =
+            from_raw_parts((*resp).sectors_ptr, (*resp).sectors_len)[0];
+        let sealed_sector_replica_commitment: [u8; 32] = sealed_sector_metadata.comm_r;
+        let challenge_seed: [u8; 32] = [0; 32];
+
+        let resp = generate_post(
+            sector_builder_b,
+            &sealed_sector_replica_commitment[0],
+            32,
+            &challenge_seed,
+        );
+        defer!(destroy_generate_post_response(resp));
+
+        if (*resp).status_code != 0 {
+            panic!("{}", c_str_to_rust_str((*resp).error_msg))
+        }
+
+        let resp = verify_post(
+            &sizes.store,
+            &sealed_sector_replica_commitment[0],
+            32,
+            &challenge_seed,
+            &((*resp).proof),
+            (*resp).faults_ptr,
+            (*resp).faults_len,
+        );
+        defer!(destroy_verify_post_response(resp));
+
+        if (*resp).status_code != 0 {
+            panic!("{}", c_str_to_rust_str((*resp).error_msg))
+        }
+
+        assert!((*resp).is_valid)
     }
 
     // after sealing, read the bytes (causes unseal) and compare with what we
