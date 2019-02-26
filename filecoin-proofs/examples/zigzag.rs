@@ -98,6 +98,8 @@ fn do_the_work<H: 'static>(
     groth: bool,
     bench: bool,
     extract: bool,
+    _taper: f64,
+    _taper_layers: usize,
 ) where
     H: Hasher,
 {
@@ -108,6 +110,8 @@ fn do_the_work<H: 'static>(
     info!(FCP_LOG, "expansion_degree: {}", expansion_degree; "target" => "config");
     info!(FCP_LOG, "sloth: {}", sloth_iter; "target" => "config");
     info!(FCP_LOG, "layer_challenges: {:?}", layer_challenges; "target" => "config");
+    info!(FCP_LOG, "all_challenges: {:?}", layer_challenges.all_challenges(); "target" => "config");
+    info!(FCP_LOG, "total_challenges: {:?}", layer_challenges.total_challenges(); "target" => "config");
     info!(FCP_LOG, "layers: {}", layer_challenges.layers(); "target" => "config");
     info!(FCP_LOG, "partitions: {}", partitions; "target" => "config");
     info!(FCP_LOG, "circuit: {:?}", circuit; "target" => "config");
@@ -117,8 +121,6 @@ fn do_the_work<H: 'static>(
     info!(FCP_LOG, "generating fake data"; "target" => "status");
 
     let nodes = data_size / 32;
-
-    let mut data = file_backed_mmap_from_random_bytes(nodes);
 
     let replica_id: H::Domain = rng.gen();
     let sp = layered_drgporep::SetupParams {
@@ -138,6 +140,12 @@ fn do_the_work<H: 'static>(
     start_profile("setup");
     let pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
     stop_profile();
+
+    if groth {
+        let engine_params = JubjubBls12::new();
+        let _ = ZigZagCompound::groth_params(&pp, &engine_params);
+    }
+    let mut data = file_backed_mmap_from_random_bytes(nodes);
 
     let start = Instant::now();
     let mut replication_duration = Duration::new(0, 0);
@@ -174,7 +182,7 @@ fn do_the_work<H: 'static>(
     );
 
     let mut total_proving = Duration::new(0, 0);
-    info!(FCP_LOG, "generating one proof");
+    info!(FCP_LOG, "generating {} partition proofs", partitions);
 
     let start = Instant::now();
     start_profile("prove");
@@ -256,7 +264,6 @@ fn do_the_work<H: 'static>(
         if groth {
             info!(FCP_LOG, "Performing circuit groth."; "target" => "status");
             let multi_proof = {
-                // TODO: Make this a macro.
                 let start = Instant::now();
                 start_profile("groth-prove");
                 let result =
@@ -326,7 +333,7 @@ fn main() {
             Arg::with_name("exp")
                 .help("Expansion degree")
                 .long("expansion")
-                .default_value("6")
+                .default_value("8")
                 .takes_value(true),
         )
         .arg(
@@ -384,6 +391,18 @@ fn main() {
                 .long("extract")
                 .help("Extract data after proving and verifying.")
         )
+        .arg(
+            Arg::with_name("taper")
+                .long("taper")
+                .help("fraction of challenges by which to taper at each layer")
+                .default_value("0.0")
+        )
+        .arg(
+            Arg::with_name("taper-layers")
+                .long("taper-layers")
+                .help("number of layers to taper")
+                .takes_value(true)
+        )
 
         .get_matches();
 
@@ -395,12 +414,18 @@ fn main() {
     let hasher = value_t!(matches, "hasher", String).unwrap();
     let layers = value_t!(matches, "layers", usize).unwrap();
     let partitions = value_t!(matches, "partitions", usize).unwrap();
+    let taper = value_t!(matches, "taper", f64).unwrap();
+    let taper_layers = value_t!(matches, "taper-layers", usize).unwrap_or(layers);
     let groth = matches.is_present("groth");
     let bench = !matches.is_present("no-bench");
     let circuit = matches.is_present("circuit");
     let extract = matches.is_present("extract");
 
-    let challenges = LayerChallenges::new_fixed(layers, challenge_count);
+    let challenges = if taper == 0.0 {
+        LayerChallenges::new_fixed(layers, challenge_count)
+    } else {
+        LayerChallenges::new_tapered(layers, challenge_count, taper_layers, taper)
+    };
 
     info!(FCP_LOG, "hasher: {}", hasher; "target" => "config");
     match hasher.as_ref() {
@@ -416,6 +441,8 @@ fn main() {
                 groth,
                 bench,
                 extract,
+                taper,
+                taper_layers,
             );
         }
         "sha256" => {
@@ -430,6 +457,8 @@ fn main() {
                 groth,
                 bench,
                 extract,
+                taper,
+                taper_layers,
             );
         }
         "blake2s" => {
@@ -444,6 +473,8 @@ fn main() {
                 groth,
                 bench,
                 extract,
+                taper,
+                taper_layers,
             );
         }
         _ => panic!(format!("invalid hasher: {}", hasher)),

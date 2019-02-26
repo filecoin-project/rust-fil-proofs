@@ -85,6 +85,11 @@ impl LayerChallenges {
             .map(|x| self.challenges_for_layer(x))
             .sum()
     }
+    pub fn all_challenges(&self) -> Vec<usize> {
+        (0..self.layers())
+            .map(|x| self.challenges_for_layer(x))
+            .collect()
+    }
 }
 
 #[derive(Debug)]
@@ -656,13 +661,15 @@ mod tests {
     fn test_calculate_taper_challenges() {
         let layer_challenges = LayerChallenges::new_tapered(10, 333, 7, 1.0 / 3.0);
         // Last layers should have most challenges.
-        let expected = [20, 20, 20, 30, 44, 66, 99, 149, 223, 333];
+        let expected: Vec<usize> = vec![20, 20, 20, 30, 44, 66, 99, 149, 223, 333];
 
         for (i, expected_count) in expected.iter().enumerate() {
             let calculated_count = layer_challenges.challenges_for_layer(i);
             assert_eq!(*expected_count as usize, calculated_count);
         }
 
+        assert_eq!(expected, layer_challenges.all_challenges());
+        assert_eq!(layer_challenges.total_challenges(), 1004);
         let live_challenges = LayerChallenges::new_tapered(4, 2, 2, 1.0 / 3.0);
         assert_eq!(live_challenges.total_challenges(), 6)
     }
