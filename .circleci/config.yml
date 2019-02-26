@@ -96,7 +96,7 @@ jobs:
       - run:
           name: Ensure cache is hydrated with PoRep and PoSt Groth parameters (for test)
           command: |
-            cargo +stable run --release --color=always --package filecoin-proofs --bin paramcache -- --include-post --test-only
+            cargo run --release --color=always --package filecoin-proofs --bin paramcache -- --include-post --test-only
       - run:
           name: run regression tests (examples) against FFI-exposed filecoin-proofs API
           command: RUSTFLAGS="-Z sanitizer=leak" cargo run --release --package filecoin-proofs --example ffi --target x86_64-unknown-linux-gnu
