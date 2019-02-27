@@ -161,8 +161,11 @@ where
         // in PublicInputs.
         _k: Option<usize>,
     ) -> Vec<Fr> {
-        let replica_id = pub_in.replica_id;
+        let replica_id = pub_in.replica_id.expect("missing replica id");
         let challenges = &pub_in.challenges;
+
+        assert_eq!(pub_in.tau.is_none(), pub_params.private);
+
         let (comm_r, comm_d) = match pub_in.tau {
             None => (None, None),
             Some(tau) => (Some(tau.comm_r), Some(tau.comm_d)),
@@ -177,11 +180,11 @@ where
 
         let por_pub_params = merklepor::PublicParams {
             leaves,
-            private: comm_d.is_none(),
+            private: pub_params.private,
         };
 
         let mut input = Vec::new();
-        input.extend(packed_replica_id.clone());
+        input.extend(packed_replica_id);
 
         for challenge in challenges {
             let mut por_nodes = vec![*challenge];
@@ -221,27 +224,42 @@ where
         public_params: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
         engine_params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> DrgPoRepCircuit<'a, Bls12> {
-        let replica_nodes = proof
+        let challenges = public_params.challenges_count;
+        let len = proof.nodes.len();
+
+        assert!(len <= challenges, "too many challenges");
+        assert_eq!(proof.replica_parents.len(), len);
+        assert_eq!(proof.replica_nodes.len(), len);
+
+        let replica_nodes: Vec<_> = proof
             .replica_nodes
             .iter()
             .map(|node| Some(node.data.into()))
             .collect();
 
-        let replica_nodes_paths = proof
+        let replica_nodes_paths: Vec<_> = proof
             .replica_nodes
             .iter()
             .map(|node| node.proof.as_options())
             .collect();
 
-        let private_data_root = component_private_inputs.comm_d;
-        let private_replica_root = component_private_inputs.comm_r;
-        let replica_root =
-            private_replica_root.unwrap_or_else(|| Root::Val(Some(proof.replica_root.into())));
-        let data_root =
-            private_data_root.unwrap_or_else(|| Root::Val(Some((proof.data_root).into())));
-        let replica_id = Some(public_inputs.replica_id);
+        let is_private = public_params.private;
 
-        let replica_parents = proof
+        let (data_root, replica_root) = if is_private {
+            (
+                component_private_inputs.comm_d.expect("is_private"),
+                component_private_inputs.comm_r.expect("is_private"),
+            )
+        } else {
+            (
+                Root::Val(Some(proof.data_root.into())),
+                Root::Val(Some(proof.replica_root.into())),
+            )
+        };
+
+        let replica_id = public_inputs.replica_id;
+
+        let replica_parents: Vec<_> = proof
             .replica_parents
             .iter()
             .map(|parents| {
@@ -264,17 +282,23 @@ where
             })
             .collect();
 
-        let data_nodes = proof
+        let data_nodes: Vec<_> = proof
             .nodes
             .iter()
             .map(|node| Some(node.data.into()))
             .collect();
 
-        let data_nodes_paths = proof
+        let data_nodes_paths: Vec<_> = proof
             .nodes
             .iter()
             .map(|node| node.proof.as_options())
             .collect();
+
+        assert_eq!(
+            public_inputs.tau.is_none(),
+            public_params.private,
+            "inconsistent private state"
+        );
 
         DrgPoRepCircuit {
             params: engine_params,
@@ -287,17 +311,45 @@ where
             data_nodes,
             data_nodes_paths,
             data_root,
-            replica_id: replica_id.map(|f| f.into()),
+            replica_id: replica_id.map(Into::into),
             degree: public_params.graph.degree(),
-            private: public_inputs.tau.is_none(),
+            private: public_params.private,
         }
     }
 
     fn blank_circuit(
-        _public_params: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
-        _engine_params: &'a <Bls12 as JubjubEngine>::Params,
+        public_params: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
+        params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> DrgPoRepCircuit<'a, Bls12> {
-        unimplemented!("");
+        let depth = public_params.graph.merkle_tree_depth() as usize;
+        let degree = public_params.graph.degree();
+        let challenges_count = public_params.challenges_count;
+
+        let replica_nodes = vec![None; challenges_count];
+        let replica_nodes_paths = vec![vec![None; depth]; challenges_count];
+
+        let replica_root = Root::Val(None);
+        let replica_parents = vec![vec![None; degree]; challenges_count];
+        let replica_parents_paths = vec![vec![vec![None; depth]; degree]; challenges_count];
+        let data_nodes = vec![None; challenges_count];
+        let data_nodes_paths = vec![vec![None; depth]; challenges_count];
+        let data_root = Root::Val(None);
+
+        DrgPoRepCircuit {
+            params,
+            sloth_iter: public_params.sloth_iter,
+            replica_nodes,
+            replica_nodes_paths,
+            replica_root,
+            replica_parents,
+            replica_parents_paths,
+            data_nodes,
+            data_nodes_paths,
+            data_root,
+            replica_id: None,
+            degree: public_params.graph.degree(),
+            private: public_params.private,
+        }
     }
 }
 
@@ -336,6 +388,14 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
         let data_root = self.data_root;
 
         let degree = self.degree;
+        let nodes = self.data_nodes.len();
+
+        assert_eq!(self.replica_nodes.len(), nodes);
+        assert_eq!(self.replica_nodes_paths.len(), nodes);
+        assert_eq!(self.replica_parents.len(), nodes);
+        assert_eq!(self.replica_parents_paths.len(), nodes);
+
+        assert_eq!(self.data_nodes_paths.len(), nodes);
 
         let raw_bytes; // Need let here so borrow in match lives long enough.
         let replica_id_bytes = match replica_id {
@@ -350,18 +410,15 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
 
         // get the replica_id in bits
         let replica_id_bits =
-            bytes_into_boolean_vec(cs.namespace(|| "replica_id_bits"), replica_id_bytes, 32)?;
+            bytes_into_boolean_vec(cs.namespace(|| "replica_id_bits"), replica_id_bytes, 256)?;
 
         multipack::pack_into_inputs(
             cs.namespace(|| "replica_id"),
             &replica_id_bits[0..Fr::CAPACITY as usize],
         )?;
 
-        let replica_root_num = replica_root.allocated(cs.namespace(|| "replica_root"))?;
-        let replica_root_var = Root::Var(replica_root_num);
-
-        let data_root_num = data_root.allocated(cs.namespace(|| "data_root"))?;
-        let data_root_var = Root::Var(data_root_num);
+        let replica_root_var = Root::Var(replica_root.allocated(cs.namespace(|| "replica_root"))?);
+        let data_root_var = Root::Var(data_root.allocated(cs.namespace(|| "data_root"))?);
 
         for i in 0..self.data_nodes.len() {
             let mut cs = cs.namespace(|| format!("challenge_{}", i));
@@ -375,11 +432,11 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
             let data_node = &self.data_nodes[i];
 
             assert_eq!(data_node_path.len(), replica_node_path.len());
+            assert_eq!(replica_node.is_some(), data_node.is_some());
 
             // Inclusion checks
             {
                 let mut cs = cs.namespace(|| "inclusion_checks");
-
                 PoRCircuit::synthesize(
                     cs.namespace(|| "replica_inclusion"),
                     &params,
@@ -390,12 +447,12 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
                 )?;
 
                 // validate each replica_parents merkle proof
-                for i in 0..replica_parents.len() {
+                for j in 0..replica_parents.len() {
                     PoRCircuit::synthesize(
-                        cs.namespace(|| format!("parents_inclusion_{}", i)),
+                        cs.namespace(|| format!("parents_inclusion_{}", j)),
                         &params,
-                        replica_parents[i],
-                        replica_parents_paths[i].clone(),
+                        replica_parents[j],
+                        replica_parents_paths[j].clone(),
                         replica_root_var.clone(),
                         self.private,
                     )?;
@@ -429,6 +486,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
                             while v.len() < 256 {
                                 v.push(boolean::Boolean::Constant(false));
                             }
+
                             Ok(v)
                         })
                         .collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?
@@ -514,6 +572,8 @@ mod tests {
                 seed: new_seed(),
             },
             sloth_iter,
+            private: false,
+            challenges_count: 1,
         };
 
         let pp = drgporep::DrgPoRep::<PedersenHasher, BucketGraph<_>>::setup(&sp)
@@ -527,7 +587,7 @@ mod tests {
         .expect("failed to replicate");
 
         let pub_inputs = drgporep::PublicInputs {
-            replica_id: replica_id.into(),
+            replica_id: Some(replica_id.into()),
             challenges: vec![challenge],
             tau: Some(tau.into()),
         };
@@ -549,18 +609,28 @@ mod tests {
         let replica_node: Option<Fr> = Some(proof_nc.replica_nodes[0].data.into());
 
         let replica_node_path = proof_nc.replica_nodes[0].proof.as_options();
-        let replica_root = Root::Val(Some((proof_nc.replica_root).into()));
-        let replica_parents = proof_nc.replica_parents[0]
+        let replica_root = Root::Val(Some(proof_nc.replica_root.into()));
+        let replica_parents = proof_nc
+            .replica_parents
             .iter()
-            .map(|(_, parent)| Some(parent.data.into()))
+            .map(|v| {
+                v.iter()
+                    .map(|(_, parent)| Some(parent.data.into()))
+                    .collect()
+            })
             .collect();
-        let replica_parents_paths: Vec<_> = proof_nc.replica_parents[0]
+        let replica_parents_paths: Vec<_> = proof_nc
+            .replica_parents
             .iter()
-            .map(|(_, parent)| parent.proof.as_options())
+            .map(|v| {
+                v.iter()
+                    .map(|(_, parent)| parent.proof.as_options())
+                    .collect()
+            })
             .collect();
 
         let data_node_path = proof_nc.nodes[0].proof.as_options();
-        let data_root = Root::Val(Some((proof_nc.data_root).into()));
+        let data_root = Root::Val(Some(proof_nc.data_root.into()));
         let replica_id = Some(replica_id);
 
         assert!(
@@ -582,8 +652,8 @@ mod tests {
             vec![replica_node],
             vec![replica_node_path],
             replica_root,
-            vec![replica_parents],
-            vec![replica_parents_paths],
+            replica_parents,
+            replica_parents_paths,
             vec![data_node],
             vec![data_node_path],
             data_root,
@@ -674,6 +744,8 @@ mod tests {
                     seed,
                 },
                 sloth_iter,
+                private: false,
+                challenges_count: 2,
             },
             engine_params: params,
             partitions: None,
@@ -692,7 +764,7 @@ mod tests {
         .expect("failed to replicate");
 
         let public_inputs = drgporep::PublicInputs::<PedersenDomain> {
-            replica_id: replica_id.into(),
+            replica_id: Some(replica_id.into()),
             challenges,
             tau: Some(tau),
         };
@@ -711,6 +783,8 @@ mod tests {
                     seed,
                 },
                 sloth_iter,
+                private: false,
+                challenges_count: 2,
             },
             engine_params: params,
             partitions: None,
@@ -720,36 +794,43 @@ mod tests {
             DrgPoRepCompound::<PedersenHasher, BucketGraph<_>>::setup(&setup_params)
                 .expect("setup failed");
 
-        let gparams = DrgPoRepCompound::<PedersenHasher, _>::groth_params(
-            &public_params.vanilla_params,
-            &params,
-        )
-        .unwrap();
+        {
+            let (circuit, inputs) = DrgPoRepCompound::<PedersenHasher, _>::circuit_for_test(
+                &public_params,
+                &public_inputs,
+                &private_inputs,
+            );
 
-        let proof = DrgPoRepCompound::<PedersenHasher, _>::prove(
-            &public_params,
-            &public_inputs,
-            &private_inputs,
-            &gparams,
-        )
-        .expect("failed while proving");
+            let mut cs = TestConstraintSystem::new();
 
-        let (circuit, inputs) = DrgPoRepCompound::<PedersenHasher, _>::circuit_for_test(
-            &public_params,
-            &public_inputs,
-            &private_inputs,
-        );
+            circuit.synthesize(&mut cs).expect("failed to synthesize");
+            assert!(cs.is_satisfied());
+            assert!(cs.verify(&inputs));
+        }
 
-        let mut cs = TestConstraintSystem::new();
+        {
+            let gparams = DrgPoRepCompound::<PedersenHasher, _>::groth_params(
+                &public_params.vanilla_params,
+                &params,
+            )
+            .expect("failed to get groth params");
 
-        let _ = circuit.synthesize(&mut cs);
-        assert!(cs.is_satisfied());
-        assert!(cs.verify(&inputs));
+            let proof = DrgPoRepCompound::<PedersenHasher, _>::prove(
+                &public_params,
+                &public_inputs,
+                &private_inputs,
+                &gparams,
+            )
+            .expect("failed while proving");
 
-        let verified =
-            DrgPoRepCompound::<PedersenHasher, _>::verify(&public_params, &public_inputs, &proof)
-                .expect("failed while verifying");
+            let verified = DrgPoRepCompound::<PedersenHasher, _>::verify(
+                &public_params,
+                &public_inputs,
+                &proof,
+            )
+            .expect("failed while verifying");
 
-        assert!(verified);
+            assert!(verified);
+        }
     }
 }

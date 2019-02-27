@@ -1,6 +1,6 @@
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use pairing::bls12_381::{Bls12, Fr};
-use pairing::{Engine, Field};
+use pairing::Engine;
 use sapling_crypto::circuit::num;
 use sapling_crypto::jubjub::JubjubEngine;
 
@@ -16,6 +16,7 @@ use crate::vdf::Vdf;
 use crate::vdf_post::{self, compute_root_commitment, VDFPoSt};
 
 /// This is the `VDF-PoSt` circuit.
+#[derive(Debug)]
 pub struct VDFPoStCircuit<'a, E: JubjubEngine> {
     /// Paramters for the engine.
     pub params: &'a E::Params,
@@ -29,8 +30,8 @@ pub struct VDFPoStCircuit<'a, E: JubjubEngine> {
     pub vdf_sloth_rounds: usize,
 
     // PoRCs
-    pub challenges_vec: Vec<Vec<usize>>,
-    pub challenged_sectors_vec: Vec<Vec<usize>>,
+    pub challenges_vec: Vec<Vec<Option<usize>>>,
+    pub challenged_sectors_vec: Vec<Vec<Option<usize>>>,
     pub challenged_leafs_vec: Vec<Vec<Option<E::Fr>>>,
     pub commitments_vec: Vec<Vec<Option<E::Fr>>>,
     pub root_commitment: Option<E::Fr>,
@@ -38,6 +39,7 @@ pub struct VDFPoStCircuit<'a, E: JubjubEngine> {
     pub paths_vec: Vec<Vec<Vec<Option<(E::Fr, bool)>>>>,
 }
 
+#[derive(Debug)]
 pub struct VDFPostCompound {}
 
 impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParameters<E, C, P>
@@ -48,7 +50,7 @@ impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParamet
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ComponentPrivateInputs {}
 
 impl<'a, E: JubjubEngine> CircuitComponent for VDFPoStCircuit<'a, E> {
@@ -74,6 +76,7 @@ where
         inputs.push(compute_root_commitment(&pub_in.commitments).into());
         inputs
     }
+
     fn circuit(
         pub_in: &<VDFPoSt<H, V> as ProofScheme<'a>>::PublicInputs,
         _component_private_inputs:<VDFPoStCircuit<'a, Bls12> as CircuitComponent>::ComponentPrivateInputs,
@@ -81,6 +84,16 @@ where
         pub_params: &<VDFPoSt<H, V> as ProofScheme<'a>>::PublicParams,
         engine_params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> VDFPoStCircuit<'a, Bls12> {
+        let post_epochs = pub_params.post_epochs;
+        let challenge_count = pub_params.challenge_count;
+
+        assert_eq!(vanilla_proof.porep_proofs.len(), post_epochs);
+        assert_eq!(vanilla_proof.ys.len(), post_epochs - 1);
+        assert!(
+            vanilla_proof.challenges.len() <= challenge_count,
+            "too many challenges"
+        );
+
         let vdf_ys = vanilla_proof
             .ys
             .iter()
@@ -133,8 +146,16 @@ where
 
         VDFPoStCircuit {
             params: engine_params,
-            challenges_vec: vanilla_proof.challenges.clone(),
-            challenged_sectors_vec: vanilla_proof.challenged_sectors.clone(),
+            challenges_vec: vanilla_proof
+                .challenges
+                .iter()
+                .map(|v| v.iter().map(|&s| Some(s)).collect())
+                .collect(),
+            challenged_sectors_vec: vanilla_proof
+                .challenged_sectors
+                .iter()
+                .map(|v| v.iter().map(|&s| Some(s)).collect())
+                .collect(),
             challenge_seed: Some(pub_in.challenge_seed.into()),
             vdf_key: Some(V::key(&pub_params.pub_params_vdf).into()),
             vdf_ys,
@@ -151,56 +172,30 @@ where
         pub_params: &<VDFPoSt<H, V> as ProofScheme>::PublicParams,
         engine_params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> VDFPoStCircuit<'a, Bls12> {
-        use rand::{Rng, SeedableRng, XorShiftRng};
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let post_epochs = pub_params.post_epochs;
+        let challenge_bits = pub_params.challenge_bits;
+        let challenge_count = pub_params.challenge_count;
 
-        let mut challenges_vec = Vec::new();
-        let mut challenged_sectors_vec = Vec::new();
-        let mut challenged_leafs_vec = Vec::new();
-        let mut commitments_vec = Vec::new();
-        let mut vdf_xs = Vec::new();
-        let mut vdf_ys = Vec::new();
-        let mut paths_vec = Vec::new();
-
-        for _ in 0..pub_params.post_epochs {
-            let mut epoch_challenges = Vec::new();
-            let mut epoch_challenged_sectors = Vec::new();
-            let mut epoch_challenged_leafs = Vec::new();
-            let mut epoch_commitments = Vec::new();
-            let mut epoch_paths_vec = Vec::new();
-
-            for _ in 0..pub_params.challenge_count {
-                epoch_challenges.push(rng.gen());
-                epoch_challenged_leafs.push(Some(Fr::zero()));
-                epoch_challenged_sectors.push(0);
-                epoch_commitments.push(Some(rng.gen()));
-                let path = (0..=pub_params.challenge_bits)
-                    .map(|_| Some((rng.gen(), true)))
-                    .collect::<Vec<_>>();
-
-                epoch_paths_vec.push(path);
-            }
-            challenges_vec.push(epoch_challenges);
-            challenged_leafs_vec.push(epoch_challenged_leafs);
-            challenged_sectors_vec.push(epoch_challenged_sectors);
-            commitments_vec.push(epoch_commitments);
-            paths_vec.push(epoch_paths_vec);
-            vdf_xs.push(Some(rng.gen()));
-            vdf_ys.push(Some(rng.gen()));
-        }
+        let challenges_vec = vec![vec![None; challenge_count]; post_epochs];
+        let challenged_sectors_vec = vec![vec![None; challenge_count]; post_epochs];
+        let challenged_leafs_vec = vec![vec![None; challenge_count]; post_epochs];
+        let commitments_vec = vec![vec![None; challenge_count]; post_epochs];
+        let vdf_xs = vec![None; post_epochs - 1];
+        let vdf_ys = vec![None; post_epochs - 1];
+        let paths_vec = vec![vec![vec![None; challenge_bits]; challenge_count]; post_epochs];
 
         VDFPoStCircuit {
             params: engine_params,
             challenges_vec,
             challenged_sectors_vec,
-            challenge_seed: Some(rng.gen()),
-            vdf_key: Some(rng.gen()),
+            challenge_seed: None,
+            vdf_key: None,
             vdf_xs,
             vdf_ys,
             vdf_sloth_rounds: V::rounds(&pub_params.pub_params_vdf),
             challenged_leafs_vec,
             paths_vec,
-            root_commitment: rng.gen(),
+            root_commitment: None,
             commitments_vec,
         }
     }
@@ -272,10 +267,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for VDFPoStCircuit<'a, E> {
                     verify_challenges(
                         &mut cs,
                         // Should be CHALLENGES, not CHALLENGED_LEAFS.
-                        challenged_leafs_vec[i]
-                            .iter()
-                            .map(|l| (*l).unwrap())
-                            .collect::<Vec<_>>(),
+                        challenged_leafs_vec[i].iter().collect::<Vec<_>>(),
                         partial_challenge,
                         Some(challenge_seed), // First iteration uses supplied challenge seed.
                         paths_vec[i][0].len(),
@@ -283,10 +275,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for VDFPoStCircuit<'a, E> {
                 } else {
                     verify_challenges(
                         &mut cs,
-                        challenged_leafs_vec[i]
-                            .iter()
-                            .map(|l| (*l).unwrap())
-                            .collect::<Vec<_>>(),
+                        challenged_leafs_vec[i].iter().collect::<Vec<_>>(),
                         partial_challenge,
                         *y, // Subsequent iterations use computed Vdf result
                         paths_vec[i][0].len(),
@@ -316,7 +305,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for VDFPoStCircuit<'a, E> {
                 params,
                 challenges_vec[i]
                     .iter()
-                    .map(|c| Some(u32_into_fr::<E>(*c as u32)))
+                    .map(|c| c.map(|c| u32_into_fr::<E>(c as u32)))
                     .collect(),
                 challenged_sectors_vec[i].clone(),
                 challenged_leafs.to_vec(),
@@ -330,7 +319,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for VDFPoStCircuit<'a, E> {
 
 fn verify_challenges<E: Engine, CS: ConstraintSystem<E>, T>(
     _cs: &mut CS,
-    _challenges: Vec<E::Fr>,
+    _challenges: Vec<&Option<E::Fr>>,
     _partial_challenge: &Option<E::Fr>,
     // This is generic because it needs to work with a public input (challenge seed) on first iteration
     // then an allocated number subsequently.
@@ -355,8 +344,8 @@ impl<'a, E: JubjubEngine> VDFPoStCircuit<'a, E> {
         vdf_ys: Vec<Option<E::Fr>>,
         vdf_xs: Vec<Option<E::Fr>>,
         vdf_sloth_rounds: usize,
-        challenges_vec: Vec<Vec<usize>>,
-        challenged_sectors_vec: Vec<Vec<usize>>,
+        challenges_vec: Vec<Vec<Option<usize>>>,
+        challenged_sectors_vec: Vec<Vec<Option<usize>>>,
         challenged_leafs_vec: Vec<Vec<Option<E::Fr>>>,
         root_commitment: Option<E::Fr>,
         commitments_vec: Vec<Vec<Option<E::Fr>>>,
@@ -510,8 +499,16 @@ mod tests {
 
         let instance = VDFPoStCircuit {
             params,
-            challenges_vec: proof.challenges,
-            challenged_sectors_vec: proof.challenged_sectors,
+            challenges_vec: proof
+                .challenges
+                .iter()
+                .map(|v| v.iter().map(|&s| Some(s)).collect())
+                .collect(),
+            challenged_sectors_vec: proof
+                .challenged_sectors
+                .iter()
+                .map(|v| v.iter().map(|&s| Some(s)).collect())
+                .collect(),
             challenge_seed: Some(pub_inputs.challenge_seed.into()),
             vdf_key: Some(pub_params.pub_params_vdf.key.into()),
             vdf_xs,
@@ -530,7 +527,7 @@ mod tests {
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
         assert_eq!(cs.num_inputs(), 3, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 276450, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 414670, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
     }
 
@@ -584,10 +581,6 @@ mod tests {
         let priv_inputs = //: vdf_post::PrivateInputs<PedersenHasher> =
             vdf_post::PrivateInputs::<PedersenHasher>::new(&trees[..]);
 
-        // Without the commented section below, this test doesn't do much.
-        // However, the test cannot pass until generate_public_inputs is implemented.
-        // That is currently blocked on a clearer sense of how the circuit should behave.
-
         let gparams: groth16::Parameters<_> =
             <VDFPostCompound as CompoundProof<
                 '_,
@@ -605,14 +598,43 @@ mod tests {
 
         let mut cs = TestConstraintSystem::new();
 
-        let _ = circuit.synthesize(&mut cs);
+        circuit.synthesize(&mut cs).expect("failed to synthesize");
         assert!(cs.is_satisfied());
         assert!(cs.verify(&inputs));
+
+        // Use this to debug differences between blank and regular circuit generation.
+        // {
+        //     let blank_circuit = <VDFPostCompound as CompoundProof<
+        //         Bls12,
+        //         VDFPoSt<PedersenHasher, _>,
+        //         VDFPoStCircuit<Bls12>,
+        //     >>::blank_circuit(&pub_params.vanilla_params, params);
+        //     let (circuit1, _inputs) =
+        //         VDFPostCompound::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs);
+
+        //     let mut cs_blank = TestConstraintSystem::new();
+        //     blank_circuit
+        //         .synthesize(&mut cs_blank)
+        //         .expect("failed to synthesize");
+
+        //     let a = cs_blank.pretty_print();
+
+        //     let mut cs1 = TestConstraintSystem::new();
+        //     circuit1.synthesize(&mut cs1).expect("failed to synthesize");
+        //     let b = cs1.pretty_print();
+
+        //     let a_vec = a.split("\n").collect::<Vec<_>>();
+        //     let b_vec = b.split("\n").collect::<Vec<_>>();
+
+        //     for (i, (a, b)) in a_vec.chunks(100).zip(b_vec.chunks(100)).enumerate() {
+        //         println!("chunk {}", i);
+        //         assert_eq!(a, b);
+        //     }
+        // }
 
         let verified = VDFPostCompound::verify(&pub_params, &pub_inputs, &proof)
             .expect("failed while verifying");
 
         assert!(verified);
     }
-
 }

@@ -71,6 +71,8 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
             seed: new_seed(),
         },
         sloth_iter,
+        private: true,
+        challenges_count: challenge_count,
     };
 
     info!(FCP_LOG, "running setup");
@@ -84,7 +86,7 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
         DrgPoRep::<H, _>::replicate(&pp, &replica_id.into(), &mut mmapped, None).unwrap();
 
     let pub_inputs = PublicInputs::<H::Domain> {
-        replica_id: replica_id.into(),
+        replica_id: Some(replica_id.into()),
         challenges,
         tau: Some(tau),
     };

@@ -46,7 +46,7 @@ version = "0.14.2"
 features = ["expose-arith"]
 
 [build-dependencies]
-bindgen = "0.46"
+bindgen = "0.47"
 cbindgen = "0.6.8"
 
 [features]

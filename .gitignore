@@ -6,3 +6,5 @@ Cargo.lock
 heaptrack*
 .bencher
 logging-toolkit
+*.profile
+*.heap

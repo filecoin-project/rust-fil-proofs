@@ -325,13 +325,14 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
         let sealed_sector_metadata: FFISealedSectorMetadata =
             from_raw_parts((*resp).sectors_ptr, (*resp).sectors_len)[0];
         let sealed_sector_replica_commitment: [u8; 32] = sealed_sector_metadata.comm_r;
-        let challenge_seed: [u8; 32] = [0; 32];
+        // FIXME: for some reason bindgen generates *mut instead of *const.
+        let mut challenge_seed: [u8; 32] = [0; 32];
 
         let resp = generate_post(
             sector_builder_b,
             &sealed_sector_replica_commitment[0],
             32,
-            &challenge_seed,
+            &mut challenge_seed,
         );
         defer!(destroy_generate_post_response(resp));
 
@@ -343,7 +344,7 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
             &sizes.store,
             &sealed_sector_replica_commitment[0],
             32,
-            &challenge_seed,
+            &mut challenge_seed,
             (*resp).flattened_proofs_ptr,
             (*resp).flattened_proofs_len,
             (*resp).faults_ptr,

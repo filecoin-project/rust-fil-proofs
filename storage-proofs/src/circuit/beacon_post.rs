@@ -23,8 +23,8 @@ pub struct BeaconPoStCircuit<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> 
     pub vdf_ys_vec: Vec<Vec<Option<E::Fr>>>,
     pub vdf_xs_vec: Vec<Vec<Option<E::Fr>>>,
     pub vdf_sloth_rounds: usize,
-    pub challenges_vec_vec: Vec<Vec<Vec<usize>>>,
-    pub challenged_sectors_vec_vec: Vec<Vec<Vec<usize>>>,
+    pub challenges_vec_vec: Vec<Vec<Vec<Option<usize>>>>,
+    pub challenged_sectors_vec_vec: Vec<Vec<Vec<Option<usize>>>>,
     pub challenged_leafs_vec_vec: Vec<Vec<Vec<Option<E::Fr>>>>,
     pub root_commitment: Option<E::Fr>,
     pub commitments_vec_vec: Vec<Vec<Vec<Option<E::Fr>>>>,
@@ -256,8 +256,18 @@ mod tests {
             paths_vec_vec.push(paths_vec);
             challenged_leafs_vec_vec.push(challenged_leafs_vec);
             commitments_vec_vec.push(commitments_vec);
-            challenges_vec_vec.push(p.challenges.clone());
-            challenged_sectors_vec_vec.push(p.challenged_sectors.clone());
+            challenges_vec_vec.push(
+                p.challenges
+                    .iter()
+                    .map(|v| v.iter().map(|&s| Some(s)).collect())
+                    .collect(),
+            );
+            challenged_sectors_vec_vec.push(
+                p.challenged_sectors
+                    .iter()
+                    .map(|v| v.iter().map(|&s| Some(s)).collect())
+                    .collect(),
+            )
         }
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
@@ -290,7 +300,7 @@ mod tests {
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
         assert_eq!(cs.num_inputs(), 7, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 132711, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 398118, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
     }
 }

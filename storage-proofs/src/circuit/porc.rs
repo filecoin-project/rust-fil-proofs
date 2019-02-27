@@ -10,6 +10,7 @@ use sapling_crypto::jubjub::JubjubEngine;
 
 use crate::circuit::constraint;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
+use crate::drgraph;
 use crate::fr32::u32_into_fr;
 use crate::hasher::Hasher;
 use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
@@ -46,7 +47,7 @@ pub struct PoRCCircuit<'a, E: JubjubEngine> {
     pub params: &'a E::Params,
     pub challenges: Vec<Option<E::Fr>>,
     pub challenged_leafs: Vec<Option<E::Fr>>,
-    pub challenged_sectors: Vec<usize>,
+    pub challenged_sectors: Vec<Option<usize>>,
     pub commitments: Vec<Option<E::Fr>>,
     #[allow(clippy::type_complexity)]
     pub paths: Vec<Vec<Option<(E::Fr, bool)>>>,
@@ -117,7 +118,7 @@ where
             .map(|c| Some(u32_into_fr::<Bls12>(*c as u32)))
             .collect();
 
-        let challenged_sectors = pub_in.challenged_sectors.to_vec();
+        let challenged_sectors = pub_in.challenged_sectors.iter().map(|&v| Some(v)).collect();
 
         PoRCCircuit {
             params: engine_params,
@@ -130,10 +131,27 @@ where
     }
 
     fn blank_circuit(
-        _pub_params: &<PoRC<'a, H> as ProofScheme<'a>>::PublicParams,
-        _engine_params: &'a <Bls12 as JubjubEngine>::Params,
+        pub_params: &<PoRC<'a, H> as ProofScheme<'a>>::PublicParams,
+        params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> PoRCCircuit<'a, Bls12> {
-        unimplemented!("")
+        let challenges_count = pub_params.challenges_count;
+        let height = drgraph::graph_height(pub_params.leaves);
+        let challenged_leafs = vec![None; challenges_count];
+
+        let commitments = vec![None; pub_params.sectors_count];
+        let paths = vec![vec![None; height]; challenges_count];
+
+        let challenges = vec![None; challenges_count];
+        let challenged_sectors = vec![None; challenges_count];
+
+        PoRCCircuit {
+            params,
+            challenges,
+            challenged_leafs,
+            commitments,
+            challenged_sectors,
+            paths,
+        }
     }
 }
 
@@ -152,11 +170,11 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoRCCircuit<'a, E> {
         for (i, (challenged_leaf, path)) in challenged_leafs.iter().zip(paths).enumerate() {
             let mut cs = cs.namespace(|| format!("challenge_{}", i));
 
-            let commitment = commitments[challenged_sectors[i]];
+            let commitment = challenged_sectors[i].and_then(|s| commitments[s]);
 
             // Allocate the commitment
             let rt = num::AllocatedNum::alloc(cs.namespace(|| "commitment_num"), || {
-                commitment.ok_or(SynthesisError::AssignmentMissing)
+                commitment.ok_or_else(|| SynthesisError::AssignmentMissing)
             })?;
 
             let params = params;
@@ -186,7 +204,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoRCCircuit<'a, E> {
                 // at this depth.
                 let path_element =
                     num::AllocatedNum::alloc(cs.namespace(|| "path element"), || {
-                        Ok(e.ok_or(SynthesisError::AssignmentMissing)?.0)
+                        Ok(e.ok_or_else(|| SynthesisError::AssignmentMissing)?.0)
                     })?;
 
                 // Swap the two if the current subtree is on the right
@@ -216,7 +234,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoRCCircuit<'a, E> {
 
             let challenge_num =
                 num::AllocatedNum::alloc(cs.namespace(|| format!("challenge {}", i)), || {
-                    Ok(challenges[i].ok_or(SynthesisError::AssignmentMissing)?)
+                    challenges[i].ok_or_else(|| SynthesisError::AssignmentMissing)
                 })?;
 
             // allocate value for is_right path
@@ -243,7 +261,7 @@ impl<'a, E: JubjubEngine> PoRCCircuit<'a, E> {
         cs: &mut CS,
         params: &'a E::Params,
         challenges: Vec<Option<E::Fr>>,
-        challenged_sectors: Vec<usize>,
+        challenged_sectors: Vec<Option<usize>>,
         challenged_leafs: Vec<Option<E::Fr>>,
         commitments: Vec<Option<E::Fr>>,
         paths: Vec<Vec<Option<(E::Fr, bool)>>>,
@@ -286,6 +304,7 @@ mod tests {
         let pub_params = porc::PublicParams {
             leaves,
             sectors_count: 2,
+            challenges_count: 2,
         };
 
         let data1: Vec<u8> = (0..32)
@@ -344,7 +363,7 @@ mod tests {
                 .iter()
                 .map(|c| Some(u32_into_fr::<Bls12>(*c as u32)))
                 .collect(),
-            challenged_sectors: challenged_sectors.to_vec(),
+            challenged_sectors: challenged_sectors.iter().map(|&s| Some(s)).collect(),
             challenged_leafs,
             paths,
             commitments,
@@ -373,6 +392,7 @@ mod tests {
             vanilla_params: &porc::SetupParams {
                 leaves,
                 sectors_count: 2,
+                challenges_count: 2,
             },
             engine_params: params,
             partitions: None,
@@ -420,7 +440,7 @@ mod tests {
 
         let mut cs = TestConstraintSystem::new();
 
-        let _ = circuit.synthesize(&mut cs);
+        circuit.synthesize(&mut cs).expect("failed to synthesize");
         assert!(cs.is_satisfied());
         assert!(cs.verify(&inputs));
 

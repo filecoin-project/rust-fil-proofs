@@ -76,7 +76,7 @@ impl Scheduler {
             let state = {
                 let loaded = load_snapshot(&kv_store, &prover_id)
                     .expects(FATAL_NOLOAD)
-                    .map(|x| x.into());
+                    .map(Into::into);
 
                 loaded.unwrap_or_else(|| SectorBuilderState {
                     prover_id,

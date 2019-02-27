@@ -18,6 +18,8 @@ pub struct SetupParams {
     pub leaves: usize,
     /// The number of sectors that are proven over.
     pub sectors_count: usize,
+    /// How many challenges there are in total.
+    pub challenges_count: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -27,13 +29,15 @@ pub struct PublicParams {
     pub leaves: usize,
     /// The number of sectors that are proven over.
     pub sectors_count: usize,
+    /// How many challenges there are in total.
+    pub challenges_count: usize,
 }
 
 impl ParameterSetIdentifier for PublicParams {
     fn parameter_set_identifier(&self) -> String {
         format!(
-            "porc::PublicParams{{leaves: {} sectors_count: {}}}",
-            self.leaves, self.sectors_count,
+            "porc::PublicParams{{leaves: {} sectors_count: {} challenges_count: {}}}",
+            self.leaves, self.sectors_count, self.challenges_count,
         )
     }
 }
@@ -63,15 +67,15 @@ pub struct Proof<H: Hasher>(
 
 impl<H: Hasher> Proof<H> {
     pub fn leafs(&self) -> Vec<&H::Domain> {
-        self.0.iter().map(|p| p.leaf()).collect()
+        self.0.iter().map(MerkleProof::leaf).collect()
     }
 
     pub fn commitments(&self) -> Vec<&H::Domain> {
-        self.0.iter().map(|p| p.root()).collect()
+        self.0.iter().map(MerkleProof::root).collect()
     }
 
     pub fn paths(&self) -> Vec<&Vec<(H::Domain, bool)>> {
-        self.0.iter().map(|p| p.path()).collect()
+        self.0.iter().map(MerkleProof::path).collect()
     }
 }
 
@@ -94,6 +98,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for PoRC<'a, H> {
         Ok(PublicParams {
             leaves: sp.leaves,
             sectors_count: sp.sectors_count,
+            challenges_count: sp.challenges_count,
         })
     }
 
@@ -109,6 +114,15 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for PoRC<'a, H> {
         if priv_inputs.trees.len() != pub_params.sectors_count {
             return Err(Error::MalformedInput);
         }
+
+        if pub_inputs.challenges.len() != pub_params.challenges_count {
+            return Err(Error::MalformedInput);
+        }
+
+        if pub_inputs.challenged_sectors.len() != pub_params.challenges_count {
+            return Err(Error::MalformedInput);
+        }
+
         let proofs = pub_inputs
             .challenges
             .iter()
@@ -134,6 +148,14 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for PoRC<'a, H> {
         pub_inputs: &Self::PublicInputs,
         proof: &Self::Proof,
     ) -> Result<bool> {
+        if pub_inputs.challenges.len() != pub_params.challenges_count {
+            return Err(Error::MalformedInput);
+        }
+
+        if pub_inputs.challenged_sectors.len() != pub_params.challenges_count {
+            return Err(Error::MalformedInput);
+        }
+
         // validate each proof
         for (merkle_proof, (challenged_leaf, challenged_sector)) in proof.0.iter().zip(
             pub_inputs
@@ -187,6 +209,7 @@ mod tests {
         let pub_params = PublicParams {
             leaves,
             sectors_count: 1,
+            challenges_count: 2,
         };
 
         let data: Vec<u8> = (0..32)
@@ -249,6 +272,7 @@ mod tests {
         let pub_params = PublicParams {
             leaves: 32,
             sectors_count: 1,
+            challenges_count: 2,
         };
 
         let data: Vec<u8> = (0..32)
@@ -260,7 +284,7 @@ mod tests {
 
         let pub_inputs = PublicInputs::<H::Domain> {
             challenges: &vec![rng.gen(), rng.gen()],
-            challenged_sectors: &[0],
+            challenged_sectors: &[0, 0],
             commitments: &[tree.root()],
         };
 
@@ -298,6 +322,7 @@ mod tests {
         let pub_params = PublicParams {
             leaves,
             sectors_count: 1,
+            challenges_count: 2,
         };
 
         let data: Vec<u8> = (0..32)
@@ -309,7 +334,7 @@ mod tests {
 
         let pub_inputs = PublicInputs {
             challenges: &vec![rng.gen_range(0, leaves), rng.gen_range(0, leaves)],
-            challenged_sectors: &[0],
+            challenged_sectors: &[0, 0],
             commitments: &[tree.root()],
         };
 
@@ -319,7 +344,7 @@ mod tests {
 
         let different_pub_inputs = PublicInputs {
             challenges: &vec![rng.gen_range(0, leaves), rng.gen_range(0, leaves)],
-            challenged_sectors: &[0],
+            challenged_sectors: &[0, 0],
             commitments: &[tree.root()],
         };
 

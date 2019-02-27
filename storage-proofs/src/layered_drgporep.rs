@@ -1,4 +1,5 @@
 use std::cmp::{max, min};
+use std::marker::PhantomData;
 use std::sync::mpsc::channel;
 
 use crossbeam_utils::thread;
@@ -100,7 +101,8 @@ impl LayerChallenges {
 
 #[derive(Debug)]
 pub struct SetupParams {
-    pub drg_porep_setup_params: drgporep::SetupParams,
+    pub drg: drgporep::DrgParams,
+    pub sloth_iter: usize,
     pub layer_challenges: LayerChallenges,
 }
 
@@ -110,8 +112,10 @@ where
     H: Hasher,
     G: Graph<H> + ParameterSetIdentifier,
 {
-    pub drg_porep_public_params: drgporep::PublicParams<H, G>,
+    pub graph: G,
+    pub sloth_iter: usize,
     pub layer_challenges: LayerChallenges,
+    _h: PhantomData<H>,
 }
 
 #[derive(Debug, Clone)]
@@ -130,6 +134,21 @@ impl<T: Domain> Tau<T> {
     }
 }
 
+impl<H, G> PublicParams<H, G>
+where
+    H: Hasher,
+    G: Graph<H> + ParameterSetIdentifier,
+{
+    pub fn new(graph: G, sloth_iter: usize, layer_challenges: LayerChallenges) -> Self {
+        PublicParams {
+            graph,
+            sloth_iter,
+            layer_challenges,
+            _h: PhantomData,
+        }
+    }
+}
+
 impl<H, G> ParameterSetIdentifier for PublicParams<H, G>
 where
     H: Hasher,
@@ -137,8 +156,9 @@ where
 {
     fn parameter_set_identifier(&self) -> String {
         format!(
-            "layered_drgporep::PublicParams{{ drg_porep_identifier: {}, challenges: {:?} }}",
-            self.drg_porep_public_params.parameter_set_identifier(),
+            "layered_drgporep::PublicParams{{ graph: {}, sloth: {}, challenges: {:?} }}",
+            self.graph.parameter_set_identifier(),
+            self.sloth_iter,
             self.layer_challenges,
         )
     }
@@ -149,11 +169,12 @@ where
     H: Hasher,
     G: Graph<H> + ParameterSetIdentifier,
 {
-    fn from(pp: &PublicParams<H, G>) -> PublicParams<H, G> {
-        PublicParams {
-            drg_porep_public_params: pp.drg_porep_public_params.clone(),
-            layer_challenges: pp.layer_challenges.clone(),
-        }
+    fn from(other: &PublicParams<H, G>) -> PublicParams<H, G> {
+        PublicParams::new(
+            other.graph.clone(),
+            other.sloth_iter,
+            other.layer_challenges.clone(),
+        )
     }
 }
 
@@ -232,23 +253,19 @@ pub trait Layers {
     type Hasher: Hasher;
     type Graph: Layerable<Self::Hasher> + ParameterSetIdentifier + Sync + Send;
 
-    /// transform a layer's public parameters, returning new public parameters corresponding to the next layer.
-    fn transform(
-        pp: &drgporep::PublicParams<Self::Hasher, Self::Graph>,
-        layer: usize,
-        layers: usize,
-    ) -> drgporep::PublicParams<Self::Hasher, Self::Graph>;
+    /// Transform a layer's public parameters, returning new public parameters corresponding to the next layer.
+    /// Warning: This method will likely need to be extended for other implementations
+    /// but because it is not clear what parameters they will need, only the ones needed
+    /// for zizag are currently present (same applies to [invert_transform]).
+    fn transform(graph: &Self::Graph) -> Self::Graph;
 
-    /// transform a layer's public parameters, returning new public parameters corresponding to the previous layer.
-    fn invert_transform(
-        pp: &drgporep::PublicParams<Self::Hasher, Self::Graph>,
-        layer: usize,
-        layers: usize,
-    ) -> drgporep::PublicParams<Self::Hasher, Self::Graph>;
+    /// Transform a layer's public parameters, returning new public parameters corresponding to the previous layer.
+    fn invert_transform(graph: &Self::Graph) -> Self::Graph;
 
     #[allow(clippy::too_many_arguments)]
     fn prove_layers<'a>(
-        pp: &drgporep::PublicParams<Self::Hasher, Self::Graph>,
+        graph: &Self::Graph,
+        sloth_iter: usize,
         pub_inputs: &PublicInputs<<Self::Hasher as Hasher>::Domain>,
         tau: &[PorepTau<Self::Hasher>],
         aux: &'a [Tree<Self::Hasher>],
@@ -259,14 +276,11 @@ pub trait Layers {
     ) -> Result<Vec<Vec<EncodingProof<Self::Hasher>>>> {
         assert!(layers > 0);
 
-        let mut new_pp = None;
+        let mut new_graph = Some(graph.clone());
 
         (0..layers)
             .map(|layer| {
-                let pp = match new_pp {
-                    Some(ref new_pp) => new_pp,
-                    None => pp,
-                };
+                let current_graph = new_graph.take().unwrap();
                 let inner_layers = layers - layer;
 
                 let new_priv_inputs = drgporep::PrivateInputs {
@@ -274,26 +288,32 @@ pub trait Layers {
                     tree_r: &aux[layer + 1],
                 };
                 let layer_diff = total_layers - inner_layers;
+                let graph_size = current_graph.size();
+                new_graph = Some(Self::transform(&current_graph));
 
+                let pp = drgporep::PublicParams::new(
+                    current_graph,
+                    sloth_iter,
+                    true,
+                    layer_challenges.challenges_for_layer(layer),
+                );
                 let partition_proofs: Vec<_> = (0..partition_count)
                     .into_par_iter()
                     .map(|k| {
                         let drgporep_pub_inputs = drgporep::PublicInputs {
-                            replica_id: pub_inputs.replica_id,
+                            replica_id: Some(pub_inputs.replica_id),
                             challenges: pub_inputs.challenges(
                                 layer_challenges,
-                                pp.graph.size(),
+                                graph_size,
                                 layer_diff as u8,
                                 Some(k),
                             ),
                             tau: Some(tau[layer]),
                         };
 
-                        DrgPoRep::prove(pp, &drgporep_pub_inputs, &new_priv_inputs)
+                        DrgPoRep::prove(&pp, &drgporep_pub_inputs, &new_priv_inputs)
                     })
                     .collect::<Result<Vec<_>>>()?;
-
-                new_pp = Some(Self::transform(pp, layer_diff, total_layers));
 
                 Ok(partition_proofs)
             })
@@ -301,16 +321,24 @@ pub trait Layers {
     }
 
     fn extract_and_invert_transform_layers<'a>(
-        drgpp: &drgporep::PublicParams<Self::Hasher, Self::Graph>,
-        layers: usize,
+        graph: &Self::Graph,
+        sloth_iter: usize,
+        layer_challenges: &LayerChallenges,
         replica_id: &<Self::Hasher as Hasher>::Domain,
         data: &'a mut [u8],
     ) -> Result<()> {
+        let layers = layer_challenges.layers();
         assert!(layers > 0);
 
-        (0..layers).fold((*drgpp).clone(), |current_drgpp, layer| {
-            let inverted = Self::invert_transform(&current_drgpp, layer, layers);
-            let mut res = DrgPoRep::extract_all(&inverted, replica_id, data).unwrap();
+        (0..layers).fold(graph.clone(), |current_graph, layer| {
+            let inverted = Self::invert_transform(&current_graph);
+            let pp = drgporep::PublicParams::new(
+                inverted.clone(),
+                sloth_iter,
+                true,
+                layer_challenges.challenges_for_layer(layer),
+            );
+            let mut res = DrgPoRep::extract_all(&pp, replica_id, data).unwrap();
 
             for (i, r) in res.iter_mut().enumerate() {
                 data[i] = *r;
@@ -322,11 +350,13 @@ pub trait Layers {
     }
 
     fn transform_and_replicate_layers(
-        drgpp: &drgporep::PublicParams<Self::Hasher, Self::Graph>,
-        layers: usize,
+        graph: &Self::Graph,
+        sloth_iter: usize,
+        layer_challenges: &LayerChallenges,
         replica_id: &<Self::Hasher as Hasher>::Domain,
         data: &mut [u8],
     ) -> Result<TransformedLayers<Self::Hasher>> {
+        let layers = layer_challenges.layers();
         assert!(layers > 0);
         let mut taus = Vec::with_capacity(layers);
         let mut auxs: Vec<Tree<Self::Hasher>> = Vec::with_capacity(layers);
@@ -339,21 +369,28 @@ pub trait Layers {
             // alert us if drgporep's implementation changes (and breaks type-checking).
             // It would not be a bad idea to add tests ensuring the parallel and serial cases
             // generate the same results.
-            (0..layers).fold((*drgpp).clone(), |current_drgpp, layer| {
+            (0..layers).fold(graph.clone(), |current_graph, layer| {
                 let previous_replica_tree = if !auxs.is_empty() {
                     auxs.last().cloned()
                 } else {
                     None
                 };
 
+                let next_graph = Self::transform(&current_graph);
+
+                let pp = drgporep::PublicParams::new(
+                    current_graph,
+                    sloth_iter,
+                    true,
+                    layer_challenges.challenges_for_layer(layer),
+                );
+
                 let (tau, aux) =
-                    DrgPoRep::replicate(&current_drgpp, replica_id, data, previous_replica_tree)
-                        .unwrap();
+                    DrgPoRep::replicate(&pp, replica_id, data, previous_replica_tree).unwrap();
 
                 taus.push(tau);
                 auxs.push(aux.tree_r);
-
-                Self::transform(&current_drgpp, layer, layers)
+                next_graph
             });
         } else {
             // The parallel case is more complicated but should produce the same results as the
@@ -378,22 +415,20 @@ pub trait Layers {
 
                 let _ = thread::scope(|scope| -> Result<()> {
                     let mut threads = Vec::with_capacity(layers + 1);
-                    let initial_pp = (*drgpp).clone();
-                    (0..=layers).fold(initial_pp, |current_drgpp, layer| {
+                    (0..=layers).fold(graph.clone(), |current_graph, layer| {
                         let mut data_copy = anonymous_mmap(data.len());
                         data_copy[0..data.len()].clone_from_slice(data);
 
                         let return_channel = tx.clone();
-                        let (transfer_tx, transfer_rx) =
-                            channel::<drgporep::PublicParams<Self::Hasher, Self::Graph>>();
+                        let (transfer_tx, transfer_rx) = channel::<Self::Graph>();
 
-                        transfer_tx.send(current_drgpp.clone()).unwrap();
+                        transfer_tx.send(current_graph.clone()).unwrap();
 
                         let thread = scope.spawn(move |_| {
                             // If we panic anywhere in this closure, thread.join() below will receive an error —
                             // so it is safe to unwrap.
-                            let drgpp = transfer_rx.recv().unwrap();
-                            let tree_d = drgpp.graph.merkle_tree(&data_copy).unwrap();
+                            let graph = transfer_rx.recv().unwrap();
+                            let tree_d = graph.merkle_tree(&data_copy).unwrap();
 
                             info!(SP_LOG, "returning tree"; "layer" => format!("{}", layer));
                             return_channel.send((layer, tree_d)).unwrap();
@@ -403,15 +438,10 @@ pub trait Layers {
 
                         if layer < layers {
                             info!(SP_LOG, "encoding"; "layer {}" => format!("{}", layer));
-                            vde::encode(
-                                &current_drgpp.graph,
-                                current_drgpp.sloth_iter,
-                                replica_id,
-                                data,
-                            )
-                            .expect("encoding failed in thread");
+                            vde::encode(&current_graph, sloth_iter, replica_id, data)
+                                .expect("encoding failed in thread");
                         }
-                        Self::transform(&current_drgpp, layer, layers)
+                        Self::transform(&current_graph)
                     });
 
                     for thread in threads {
@@ -462,13 +492,18 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
     type Proof = Proof<L::Hasher>;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
-        let dp_sp = DrgPoRep::setup(&sp.drg_porep_setup_params)?;
-        let pp = PublicParams {
-            drg_porep_public_params: dp_sp,
-            layer_challenges: sp.layer_challenges.clone(),
-        };
+        let graph = L::Graph::new(
+            sp.drg.nodes,
+            sp.drg.degree,
+            sp.drg.expansion_degree,
+            sp.drg.seed,
+        );
 
-        Ok(pp)
+        Ok(PublicParams::new(
+            graph,
+            sp.sloth_iter,
+            sp.layer_challenges.clone(),
+        ))
     }
 
     fn prove<'b>(
@@ -494,7 +529,8 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         assert!(partition_count > 0);
 
         let proofs = Self::prove_layers(
-            &pub_params.drg_porep_public_params,
+            &pub_params.graph,
+            pub_params.sloth_iter,
             pub_inputs,
             &priv_inputs.tau,
             &priv_inputs.aux,
@@ -530,21 +566,30 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
                 return Ok(false);
             }
 
-            let total_layers = pub_params.layer_challenges.layers();
-            let mut pp = pub_params.drg_porep_public_params.clone();
             // TODO: verification is broken for the first node, figure out how to unbreak
             // with permutations
 
             let mut comm_rs = Vec::new();
+            let mut graph = Some(pub_params.graph.clone());
 
             for (layer, proof_layer) in proof.encoding_proofs.iter().enumerate() {
                 comm_rs.push(proof.tau[layer].comm_r);
 
+                let current_graph = graph.take().unwrap();
+                let graph_size = current_graph.size();
+                graph = Some(Self::transform(&current_graph));
+
+                let pp = drgporep::PublicParams::new(
+                    current_graph,
+                    pub_params.sloth_iter,
+                    true,
+                    pub_params.layer_challenges.challenges_for_layer(layer),
+                );
                 let new_pub_inputs = drgporep::PublicInputs {
-                    replica_id: pub_inputs.replica_id,
+                    replica_id: Some(pub_inputs.replica_id),
                     challenges: pub_inputs.challenges(
                         &pub_params.layer_challenges,
-                        pub_params.drg_porep_public_params.graph.size(),
+                        graph_size,
                         layer as u8,
                         Some(k),
                     ),
@@ -564,8 +609,6 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
                         nodes: ep.nodes.clone(),
                     },
                 )?;
-
-                pp = Self::transform(&pp, layer, total_layers);
 
                 if !res {
                     return Ok(false);
@@ -615,8 +658,9 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
         _data_tree: Option<Tree<L::Hasher>>,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let (taus, auxs) = Self::transform_and_replicate_layers(
-            &pp.drg_porep_public_params,
-            pp.layer_challenges.layers(),
+            &pp.graph,
+            pp.sloth_iter,
+            &pp.layer_challenges,
             replica_id,
             data,
         )?;
@@ -638,8 +682,9 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
         let mut data = data.to_vec();
 
         Self::extract_and_invert_transform_layers(
-            &pp.drg_porep_public_params,
-            pp.layer_challenges.layers(),
+            &pp.graph,
+            pp.sloth_iter,
+            &pp.layer_challenges,
             replica_id,
             &mut data,
         )?;

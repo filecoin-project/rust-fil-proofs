@@ -40,7 +40,7 @@ pub fn add_piece(
             .inner
             .manager()
             .write_and_preprocess(&s.sector_access, &piece_bytes)
-            .map_err(|err| err.into())
+            .map_err(Into::into)
             .and_then(|num_bytes_written| {
                 if num_bytes_written != piece_bytes_len {
                     Err(

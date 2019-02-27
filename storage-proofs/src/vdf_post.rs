@@ -176,10 +176,11 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for VDFPoSt<H, V> {
         let pub_params_porep = porc::PublicParams {
             leaves: pub_params.leaves,
             sectors_count: pub_params.sectors_count,
+            challenges_count: pub_params.challenge_count,
         };
 
         let mut porep_proofs = Vec::with_capacity(post_epochs);
-        let mut vdf_proofs = Vec::with_capacity(post_epochs);
+        let mut vdf_proofs = Vec::with_capacity(post_epochs - 1);
         let mut ys = Vec::with_capacity(post_epochs - 1);
         let mut challenges_vec = Vec::with_capacity(post_epochs);
         let mut challenged_sectors_vec = Vec::with_capacity(post_epochs);
@@ -213,9 +214,10 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for VDFPoSt<H, V> {
                 };
 
                 let proof = PoRC::prove(&pub_params_porep, &pub_inputs_porep, &priv_inputs_porep)?;
+                porep_proofs.push(proof.clone());
 
                 // Skip last VDF evaluation.
-                if i < post_epochs {
+                if i + 1 < post_epochs {
                     let x = extract_vdf_input::<H>(&proof);
                     let (y, vdf_proof) = V::eval(&pub_params.pub_params_vdf, &x)?;
 
@@ -225,11 +227,15 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for VDFPoSt<H, V> {
                 } else {
                     break;
                 }
-                porep_proofs.push(proof);
-
                 i += 1;
             }
         }
+
+        assert_eq!(porep_proofs.len(), pub_params.post_epochs);
+        assert_eq!(ys.len(), pub_params.post_epochs - 1);
+        assert_eq!(vdf_proofs.len(), pub_params.post_epochs - 1);
+        assert_eq!(challenges_vec.len(), pub_params.post_epochs);
+        assert_eq!(challenged_sectors_vec.len(), pub_params.post_epochs);
 
         Ok(Proof {
             porep_proofs,
@@ -253,7 +259,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for VDFPoSt<H, V> {
 
         let mut i = 0;
         while let Some((challenges, challenged_sectors)) = challenge_stream.next(mix) {
-            if i >= post_epochs {
+            if i + 1 >= post_epochs {
                 break;
             }
 
@@ -279,6 +285,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for VDFPoSt<H, V> {
                 let pub_params_porep = porc::PublicParams {
                     leaves: pub_params.leaves,
                     sectors_count: pub_params.sectors_count,
+                    challenges_count: pub_params.challenge_count,
                 };
 
                 let pub_inputs_porep = porc::PublicInputs {
@@ -329,6 +336,7 @@ fn derive_partial_challenges<H: Hasher>(count: usize, seed: &[u8]) -> Vec<H::Dom
 pub struct ChallengeStream<H: Hasher, V: Vdf<H::Domain>> {
     partial_challenges: Option<Vec<H::Domain>>,
     challenge_count: usize,
+    challenge_rounds: usize,
     partial_challenge_count: usize,
     sectors_count: usize,
     challenge_bits: usize,
@@ -340,6 +348,7 @@ impl<H: Hasher, V: Vdf<H::Domain>> ChallengeStream<H, V> {
     /// `new` initializes a new, stateful, `ChallengeStream` with these parameters.
     pub fn new(pp: &PublicParams<H::Domain, V>) -> ChallengeStream<H, V> {
         let challenge_count = pp.challenge_count;
+        let challenge_rounds = pp.post_epochs;
         let sectors_count = pp.sectors_count;
         let challenge_bits = pp.challenge_bits;
         let sub_challenges = pp.seed_bits / challenge_bits;
@@ -349,6 +358,7 @@ impl<H: Hasher, V: Vdf<H::Domain>> ChallengeStream<H, V> {
         ChallengeStream {
             partial_challenges: None,
             challenge_count,
+            challenge_rounds,
             partial_challenge_count,
             sectors_count,
             challenge_bits,
@@ -363,7 +373,7 @@ impl<H: Hasher, V: Vdf<H::Domain>> ChallengeStream<H, V> {
     fn ensure_partial_challenges(&mut self, mix: H::Domain) {
         if self.partial_challenges.is_none() {
             let partial_challenges = derive_partial_challenges::<H>(
-                self.partial_challenge_count,
+                self.challenge_rounds * self.partial_challenge_count,
                 &fr_into_bytes::<Bls12>(&mix.into()),
             );
 
