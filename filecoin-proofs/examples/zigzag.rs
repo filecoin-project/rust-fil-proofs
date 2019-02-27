@@ -194,15 +194,13 @@ fn do_the_work<H: 'static>(
 
     let replica_id: H::Domain = rng.gen();
     let sp = layered_drgporep::SetupParams {
-        drg_porep_setup_params: drgporep::SetupParams {
-            drg: drgporep::DrgParams {
-                nodes,
-                degree: m,
-                expansion_degree,
-                seed: new_seed(),
-            },
-            sloth_iter,
+        drg: drgporep::DrgParams {
+            nodes,
+            degree: m,
+            expansion_degree,
+            seed: new_seed(),
         },
+        sloth_iter,
         layer_challenges: layer_challenges.clone(),
     };
 
@@ -322,6 +320,8 @@ fn do_the_work<H: 'static>(
             ZigZagCompound::blank_circuit(&pp, &engine_params)
                 .synthesize(&mut cs)
                 .expect("failed to synthesize circuit");
+
+            assert!(cs.is_satisfied(), "constraints not satisfied");
 
             info!(FCP_LOG, "circuit_num_inputs: {}", cs.num_inputs(); "target" => "stats");
             info!(FCP_LOG, "circuit_num_constraints: {}", cs.num_constraints(); "target" => "stats");

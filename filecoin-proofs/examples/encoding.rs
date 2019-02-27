@@ -100,22 +100,19 @@ where
     let replica_id: H::Domain = rng.gen();
 
     let sp = layered_drgporep::SetupParams {
-        drg_porep_setup_params: drgporep::SetupParams {
-            drg: drgporep::DrgParams {
-                nodes,
-                degree: m,
-                expansion_degree,
-                seed: new_seed(),
-            },
-            sloth_iter,
+        drg: drgporep::DrgParams {
+            nodes,
+            degree: m,
+            expansion_degree,
+            seed: new_seed(),
         },
+        sloth_iter,
         layer_challenges: LayerChallenges::new_fixed(1, 1),
     };
 
     info!(FCP_LOG, "running setup");
     start_profile("setup");
     let pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
-    let drgpp = pp.drg_porep_public_params;
     stop_profile();
 
     let start = Instant::now();
@@ -123,7 +120,7 @@ where
     info!(FCP_LOG, "encoding");
 
     start_profile("encode");
-    vde::encode(&drgpp.graph, drgpp.sloth_iter, &replica_id, &mut data).unwrap();
+    vde::encode(&pp.graph, pp.sloth_iter, &replica_id, &mut data).unwrap();
     stop_profile();
 
     let encoding_time = start.elapsed();

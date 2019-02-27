@@ -1,6 +1,5 @@
 use std::marker::PhantomData;
 
-use crate::drgporep;
 use crate::drgraph::Graph;
 use crate::hasher::Hasher;
 use crate::layered_drgporep::Layers;
@@ -27,29 +26,21 @@ impl<'a, H: 'static + Hasher> Layers for ZigZagDrgPoRep<'a, H> where {
     type Hasher = <ZigZagBucketGraph<H> as ZigZag>::BaseHasher;
     type Graph = ZigZagBucketGraph<Self::Hasher>;
 
-    fn transform(
-        pp: &drgporep::PublicParams<Self::Hasher, Self::Graph>,
-        _layer: usize,
-        _layers: usize,
-    ) -> drgporep::PublicParams<Self::Hasher, Self::Graph> {
-        zigzag::<Self::Hasher, Self::Graph>(pp)
+    fn transform(graph: &Self::Graph) -> Self::Graph {
+        zigzag::<Self::Hasher, Self::Graph>(graph)
     }
 
-    fn invert_transform(
-        pp: &drgporep::PublicParams<Self::Hasher, Self::Graph>,
-        _layer: usize,
-        _layers: usize,
-    ) -> drgporep::PublicParams<Self::Hasher, Self::Graph> {
-        zigzag::<Self::Hasher, Self::Graph>(pp)
+    fn invert_transform(graph: &Self::Graph) -> Self::Graph {
+        zigzag::<Self::Hasher, Self::Graph>(graph)
     }
 }
 
-fn zigzag<H, Z>(pp: &drgporep::PublicParams<H, Z>) -> drgporep::PublicParams<H, Z>
+fn zigzag<H, Z>(graph: &Z) -> Z
 where
     H: Hasher,
     Z: ZigZag + Graph<H> + ParameterSetIdentifier,
 {
-    drgporep::PublicParams::new(pp.graph.zigzag(), pp.sloth_iter)
+    graph.zigzag()
 }
 
 #[cfg(test)]
@@ -59,6 +50,7 @@ mod tests {
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
+    use crate::drgporep;
     use crate::drgraph::new_seed;
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
@@ -96,31 +88,26 @@ mod tests {
         let mut data_copy = data.clone();
 
         let sp = SetupParams {
-            drg_porep_setup_params: drgporep::SetupParams {
-                drg: drgporep::DrgParams {
-                    nodes: data.len() / 32,
-                    degree: 5,
-                    expansion_degree: 8,
-                    seed: new_seed(),
-                },
-                sloth_iter,
+            drg: drgporep::DrgParams {
+                nodes: data.len() / 32,
+                degree: 5,
+                expansion_degree: 8,
+                seed: new_seed(),
             },
+            sloth_iter,
             layer_challenges: challenges.clone(),
         };
 
         let mut pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
-        // Get the public params for the last layer.
+        // Get the graph for the last layer.
         // In reality, this is a no-op with an even number of layers.
         for _ in 0..pp.layer_challenges.layers() {
-            pp.drg_porep_public_params = zigzag(&pp.drg_porep_public_params);
+            pp.graph = zigzag(&pp.graph);
         }
 
         ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None).unwrap();
 
-        let transformed_params = PublicParams {
-            drg_porep_public_params: pp.drg_porep_public_params,
-            layer_challenges: challenges.clone(),
-        };
+        let transformed_params = PublicParams::new(pp.graph, pp.sloth_iter, challenges.clone());
 
         assert_ne!(data, data_copy);
 
@@ -165,15 +152,13 @@ mod tests {
         let partitions = 2;
 
         let sp = SetupParams {
-            drg_porep_setup_params: drgporep::SetupParams {
-                drg: drgporep::DrgParams {
-                    nodes: n,
-                    degree,
-                    expansion_degree,
-                    seed: new_seed(),
-                },
-                sloth_iter,
+            drg: drgporep::DrgParams {
+                nodes: n,
+                degree,
+                expansion_degree,
+                seed: new_seed(),
             },
+            sloth_iter,
             layer_challenges: challenges.clone(),
         };
 
@@ -238,15 +223,13 @@ mod tests {
         let sloth_iter = 0;
         let layer_challenges = LayerChallenges::new_tapered(10, 333, 7, 0.3);
         let sp = SetupParams {
-            drg_porep_setup_params: drgporep::SetupParams {
-                drg: drgporep::DrgParams {
-                    nodes,
-                    degree,
-                    expansion_degree,
-                    seed: new_seed(),
-                },
-                sloth_iter,
+            drg: drgporep::DrgParams {
+                nodes,
+                degree,
+                expansion_degree,
+                seed: new_seed(),
             },
+            sloth_iter,
             layer_challenges: layer_challenges.clone(),
         };
 

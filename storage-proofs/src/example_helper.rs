@@ -283,6 +283,7 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
         );
         let mut cs = TestConstraintSystem::<Bls12>::new();
         c.synthesize(&mut cs).expect("failed to synthesize circuit");
+        assert!(cs.is_satisfied(), "constraints not satisfied");
 
         println!("{}", cs.pretty_print());
     }
@@ -441,6 +442,7 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
 
         let mut cs = BenchCS::<Bls12>::new();
         c.synthesize(&mut cs).expect("failed to synthesize circuit");
+
         cs.num_constraints()
     }
 }

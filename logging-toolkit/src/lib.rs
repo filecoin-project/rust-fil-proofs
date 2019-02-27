@@ -16,7 +16,7 @@ pub fn make_logger(
     use_json_env_name: &str,
     min_log_level_env_name: &str,
 ) -> Logger {
-    let drain = match env::var(use_json_env_name).as_ref().map(|x| x.as_str()) {
+    let drain = match env::var(use_json_env_name).as_ref().map(String::as_str) {
         Ok("true") => {
             let json_drain = slog_json::Json::new(std::io::stdout())
                 .add_default_keys()

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::fs::{copy, remove_file, File, OpenOptions};
-use std::io::{BufWriter, Read, Write};
+use std::io::{BufWriter, Read};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex};
 
 use bellman::groth16;
 use memmap::MmapOptions;
@@ -20,7 +20,7 @@ use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::vdf_post::{VDFPoStCircuit, VDFPostCompound};
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::drgporep::{self, DrgParams};
+use storage_proofs::drgporep::DrgParams;
 use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
 use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
@@ -64,38 +64,56 @@ lazy_static! {
 
 type Bls12GrothParams = groth16::Parameters<Bls12>;
 type Bls12VerifyingKey = groth16::VerifyingKey<Bls12>;
-type GrothMemCache = HashMap<String, Arc<Bls12GrothParams>>;
-type VerifyingKeyMemCache = HashMap<String, Arc<Bls12VerifyingKey>>;
+
+type Cache<G> = HashMap<String, Arc<G>>;
+type GrothMemCache = Cache<Bls12GrothParams>;
+type VerifyingKeyMemCache = Cache<Bls12VerifyingKey>;
 
 lazy_static! {
-    static ref GROTH_PARAM_MEMORY_CACHE: RwLock<GrothMemCache> = Default::default();
-    static ref VERIFYING_KEY_MEMORY_CACHE: RwLock<VerifyingKeyMemCache> = Default::default();
+    static ref GROTH_PARAM_MEMORY_CACHE: Mutex<GrothMemCache> = Default::default();
+    static ref VERIFYING_KEY_MEMORY_CACHE: Mutex<VerifyingKeyMemCache> = Default::default();
 }
 
+fn cache_lookup<F, G>(
+    cache_ref: &Mutex<Cache<G>>,
+    identifier: String,
+    generator: F,
+) -> error::Result<Arc<G>>
+where
+    F: FnOnce() -> error::Result<G>,
+    G: Send + Sync,
+{
+    info!(FCP_LOG, "trying parameters memory cache for: {}", &identifier; "target" => "params");
+    {
+        let cache = (*cache_ref).lock().unwrap();
+
+        if let Some(entry) = cache.get(&identifier) {
+            info!(FCP_LOG, "found params in memory cache for {}", &identifier; "target" => "params");
+            return Ok(entry.clone());
+        }
+    }
+
+    info!(FCP_LOG, "no params in memory cache for {}", &identifier; "target" => "params");
+
+    let new_entry = Arc::new(generator()?);
+    let res = new_entry.clone();
+    {
+        let cache = &mut (*cache_ref).lock().unwrap();
+        cache.insert(identifier, new_entry);
+    }
+
+    Ok(res)
+}
+
+#[inline]
 fn lookup_groth_params<F>(identifier: String, generator: F) -> error::Result<Arc<Bls12GrothParams>>
 where
     F: FnOnce() -> error::Result<Bls12GrothParams>,
 {
-    let cache = (*GROTH_PARAM_MEMORY_CACHE).read().unwrap();
-    info!(FCP_LOG, "trying groth parameters memory cache for: {}", &identifier; "target" => "params");
-
-    if let Some(entry) = cache.get(&identifier) {
-        info!(FCP_LOG, "found params in memory cache"; "target" => "params");
-        return Ok(entry.clone());
-    }
-
-    {
-        let new_entry = Arc::new(generator()?);
-        let res = new_entry.clone();
-
-        // write lock only held in this block
-        let cache = &mut (*GROTH_PARAM_MEMORY_CACHE).write().unwrap();
-        cache.insert(identifier, new_entry);
-
-        Ok(res)
-    }
+    cache_lookup(&*GROTH_PARAM_MEMORY_CACHE, identifier, generator)
 }
 
+#[inline]
 fn lookup_verifying_key<F>(
     identifier: String,
     generator: F,
@@ -103,26 +121,8 @@ fn lookup_verifying_key<F>(
 where
     F: FnOnce() -> error::Result<Bls12VerifyingKey>,
 {
-    let cache = (*VERIFYING_KEY_MEMORY_CACHE).read().unwrap();
     let vk_identifier = format!("{}-verifying-key", &identifier);
-
-    info!(FCP_LOG, "trying verifying key memory cache for: {}", &vk_identifier; "target" => "verifying_key");
-
-    if let Some(entry) = cache.get(&vk_identifier) {
-        info!(FCP_LOG, "found verifying_key in memory cache"; "target" => "verifying_key");
-        return Ok(entry.clone());
-    }
-
-    {
-        let new_entry = Arc::new(generator()?);
-        let res = new_entry.clone();
-
-        // write lock only held in this block
-        let cache = &mut (*VERIFYING_KEY_MEMORY_CACHE).write().unwrap();
-        cache.insert(vk_identifier, new_entry);
-
-        Ok(res)
-    }
+    cache_lookup(&*VERIFYING_KEY_MEMORY_CACHE, vk_identifier, generator)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -133,7 +133,7 @@ fn get_zigzag_params(
     let public_params = public_params(sector_bytes);
 
     let get_params =
-        || ZigZagCompound::groth_params(&public_params, &ENGINE_PARAMS).map_err(|e| e.into());
+        || ZigZagCompound::groth_params(&public_params, &ENGINE_PARAMS).map_err(Into::into);
 
     Ok(lookup_groth_params(
         format!("ZIGZAG[{}]", usize::from(sector_bytes)),
@@ -152,7 +152,7 @@ fn get_post_params(
             VDFPoSt<PedersenHasher, Sloth>,
             VDFPoStCircuit<Bls12>,
         >>::groth_params(&post_public_params, &ENGINE_PARAMS)
-        .map_err(|e| e.into())
+        .map_err(Into::into)
     };
 
     Ok(lookup_groth_params(
@@ -167,7 +167,7 @@ fn get_zigzag_verifying_key(
     let public_params = public_params(sector_bytes);
 
     let get_verifying_key =
-        || ZigZagCompound::verifying_key(&public_params, &ENGINE_PARAMS).map_err(|e| e.into());
+        || ZigZagCompound::verifying_key(&public_params, &ENGINE_PARAMS).map_err(Into::into);
 
     Ok(lookup_verifying_key(
         format!("ZIGZAG[{}]", usize::from(sector_bytes)),
@@ -186,7 +186,7 @@ fn get_post_verifying_key(
             VDFPoSt<PedersenHasher, Sloth>,
             VDFPoStCircuit<Bls12>,
         >>::verifying_key(&post_public_params, &ENGINE_PARAMS)
-        .map_err(|e| e.into())
+        .map_err(Into::into)
     };
 
     Ok(lookup_verifying_key(
@@ -219,15 +219,13 @@ fn setup_params(sector_bytes: PaddedBytesAmount) -> layered_drgporep::SetupParam
     );
     let nodes = sector_bytes / 32;
     layered_drgporep::SetupParams {
-        drg_porep_setup_params: drgporep::SetupParams {
-            drg: DrgParams {
-                nodes,
-                degree: DEGREE,
-                expansion_degree: EXPANSION_DEGREE,
-                seed: DRG_SEED,
-            },
-            sloth_iter: SLOTH_ITER,
+        drg: DrgParams {
+            nodes,
+            degree: DEGREE,
+            expansion_degree: EXPANSION_DEGREE,
+            seed: DRG_SEED,
         },
+        sloth_iter: SLOTH_ITER,
         layer_challenges: CHALLENGES.clone(),
     }
 }
@@ -437,7 +435,7 @@ fn verify_post_fixed_sectors_count(
     // for integration purposes.
     let _fixme_ignore: error::Result<bool> =
         VDFPostCompound::verify(&compound_public_params, &public_inputs, &proof)
-            .map_err(|e| e.into());
+            .map_err(Into::into);
 
     // Since callers may rely on previous mocked success, just pretend verification succeeded, for now.
     Ok(VerifyPoStFixedSectorsCountOutput { is_valid: true })
@@ -452,9 +450,7 @@ fn make_merkle_tree<T: Into<PathBuf> + AsRef<Path>>(
     let mut data = Vec::new();
     f_in.read_to_end(&mut data)?;
 
-    let g = public_params(bytes).drg_porep_public_params.graph;
-
-    g.merkle_tree(&data)
+    public_params(bytes).graph.merkle_tree(&data)
 }
 
 pub struct SealOutput {
@@ -673,7 +669,7 @@ pub fn verify_seal(
 
     let proof = MultiProof::new_from_reader(Some(POREP_PARTITIONS), proof_vec, &verifying_key)?;
 
-    ZigZagCompound::verify(&compound_public_params, &public_inputs, &proof).map_err(|e| e.into())
+    ZigZagCompound::verify(&compound_public_params, &public_inputs, &proof).map_err(Into::into)
 }
 
 #[cfg(test)]

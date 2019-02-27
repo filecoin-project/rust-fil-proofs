@@ -233,7 +233,7 @@ fn print_result_table(name: &str, example: &Case, results: &[BenchmarkResult]) {
         "max resident set size",
     ];
 
-    titles.extend(params.iter().map(|v| v.as_str()));
+    titles.extend(params.iter().map(String::as_str));
 
     table.set_titles(Row::new(titles.iter().map(|v| Cell::new(v)).collect()));
 
@@ -247,16 +247,16 @@ fn print_result_table(name: &str, example: &Case, results: &[BenchmarkResult]) {
             res.log_res
                 .stats
                 .get("params_generation_time")
-                .map(|v| v.as_str())
+                .map(String::as_str)
                 .unwrap_or_else(|| ""),
             res.log_res
                 .stats
                 .get("replication_time")
-                .map(|v| v.as_str())
+                .map(String::as_str)
                 .unwrap_or_else(|| ""),
             &timing,
         ];
-        values.extend(res.combination.iter().map(|v| v.as_str()));
+        values.extend(res.combination.iter().map(String::as_str));
 
         table.add_row(Row::new(values.into_iter().map(Cell::new).collect()));
     }
@@ -441,7 +441,7 @@ impl BenchmarkResult {
         let log_res = LogResult::from_str(&stdout)?;
 
         Ok(BenchmarkResult {
-            combination: combination.iter().map(|v| v.to_string()).collect(),
+            combination: combination.iter().map(ToString::to_string).collect(),
             stdout: stdout.to_owned(),
             stderr,
             time_res,

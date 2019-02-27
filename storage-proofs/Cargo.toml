@@ -53,6 +53,7 @@ proptest = "0.7"
 criterion = "0.2"
 sector-base = { path = "../sector-base" }
 serde_json = "1.0"
+pretty_assertions = "0.6.1"
 
 [[bench]]
 name = "pedersen"

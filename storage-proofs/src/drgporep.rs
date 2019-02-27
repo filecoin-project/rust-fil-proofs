@@ -17,7 +17,7 @@ use crate::vde::{self, decode_block, decode_domain_block};
 
 #[derive(Debug, Clone)]
 pub struct PublicInputs<T: Domain> {
-    pub replica_id: T,
+    pub replica_id: Option<T>,
     pub challenges: Vec<usize>,
     pub tau: Option<porep::Tau<T>>,
 }
@@ -32,6 +32,8 @@ pub struct PrivateInputs<'a, H: 'a + Hasher> {
 pub struct SetupParams {
     pub drg: DrgParams,
     pub sloth_iter: usize,
+    pub private: bool,
+    pub challenges_count: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -56,6 +58,8 @@ where
 {
     pub graph: G,
     pub sloth_iter: usize,
+    pub private: bool,
+    pub challenges_count: usize,
 
     _h: PhantomData<H>,
 }
@@ -65,10 +69,12 @@ where
     H: Hasher,
     G: Graph<H> + ParameterSetIdentifier,
 {
-    pub fn new(graph: G, sloth_iter: usize) -> Self {
+    pub fn new(graph: G, sloth_iter: usize, private: bool, challenges_count: usize) -> Self {
         PublicParams {
             graph,
             sloth_iter,
+            private,
+            challenges_count,
             _h: PhantomData,
         }
     }
@@ -161,8 +167,6 @@ pub struct Proof<H: Hasher> {
 }
 
 impl<H: Hasher> Proof<H> {
-    // FIXME: should we also take a number of challenges here and construct
-    // vectors of that length?
     pub fn new_empty(height: usize, degree: usize, challenges: usize) -> Proof<H> {
         Proof {
             data_root: Default::default(),
@@ -253,7 +257,12 @@ where
             sp.drg.seed,
         );
 
-        Ok(PublicParams::new(graph, sp.sloth_iter))
+        Ok(PublicParams::new(
+            graph,
+            sp.sloth_iter,
+            sp.private,
+            sp.challenges_count,
+        ))
     }
 
     fn prove<'b>(
@@ -262,6 +271,12 @@ where
         priv_inputs: &'b Self::PrivateInputs,
     ) -> Result<Self::Proof> {
         let len = pub_inputs.challenges.len();
+        assert!(
+            len <= pub_params.challenges_count,
+            "too many challenges {} > {}",
+            len,
+            pub_params.challenges_count
+        );
 
         let mut replica_nodes = Vec::with_capacity(len);
         let mut replica_parents = Vec::with_capacity(len);
@@ -310,7 +325,7 @@ where
 
                 let extracted = decode_domain_block::<H>(
                     pub_params.sloth_iter,
-                    &pub_inputs.replica_id,
+                    &pub_inputs.replica_id.expect("missing replica_id"),
                     domain_replica,
                     challenge,
                     &parents,
@@ -372,20 +387,19 @@ where
             assert_ne!(challenge, 0, "cannot prove the first node");
 
             if !proof.replica_nodes[i].proof.validate(challenge) {
-                println!("invalid replica node");
                 return Ok(false);
             }
 
             for (parent_node, p) in &proof.replica_parents[i] {
                 if !p.proof.validate(*parent_node) {
-                    println!("invalid replica parent: {:?}", p);
                     return Ok(false);
                 }
             }
 
             let key = {
                 let mut hasher = Blake2s::new().hash_length(32).to_state();
-                hasher.update(pub_inputs.replica_id.as_ref());
+                let prover_bytes = pub_inputs.replica_id.expect("missing replica_id");
+                hasher.update(prover_bytes.as_ref());
 
                 for p in proof.replica_parents[i].iter() {
                     hasher.update(p.1.data.as_ref());
@@ -502,6 +516,8 @@ mod tests {
                 seed: new_seed(),
             },
             sloth_iter,
+            private: false,
+            challenges_count: 1,
         };
 
         let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).unwrap();
@@ -551,6 +567,8 @@ mod tests {
                 seed: new_seed(),
             },
             sloth_iter,
+            private: false,
+            challenges_count: 1,
         };
 
         let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).unwrap();
@@ -623,6 +641,8 @@ mod tests {
                     seed,
                 },
                 sloth_iter,
+                private: false,
+                challenges_count: 2,
             };
 
             let pp = DrgPoRep::<H, BucketGraph<_>>::setup(&sp).unwrap();
@@ -637,7 +657,7 @@ mod tests {
             assert_ne!(data, copied, "replication did not change data");
 
             let pub_inputs = PublicInputs::<H::Domain> {
-                replica_id,
+                replica_id: Some(replica_id),
                 challenges: vec![challenge, challenge],
                 tau: Some(tau.clone().into()),
             };
@@ -719,7 +739,7 @@ mod tests {
 
             if use_wrong_challenge {
                 let pub_inputs_with_wrong_challenge_for_proof = PublicInputs::<H::Domain> {
-                    replica_id,
+                    replica_id: Some(replica_id),
                     challenges: vec![if challenge == 1 { 2 } else { 1 }],
                     tau: Some(tau.into()),
                 };
