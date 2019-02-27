@@ -1,9 +1,8 @@
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fs::{copy, remove_file, File, OpenOptions};
-use std::io::{BufWriter, Read};
+use std::io::{BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, RwLock};
 
 use bellman::groth16;
 use memmap::MmapOptions;
@@ -65,53 +64,72 @@ lazy_static! {
 
 type Bls12GrothParams = groth16::Parameters<Bls12>;
 type Bls12VerifyingKey = groth16::VerifyingKey<Bls12>;
-type GrothMemCache = HashMap<String, Bls12GrothParams>;
-type VerifyingKeyMemCache = HashMap<String, Bls12VerifyingKey>;
+type GrothMemCache = HashMap<String, Arc<Bls12GrothParams>>;
+type VerifyingKeyMemCache = HashMap<String, Arc<Bls12VerifyingKey>>;
 
 lazy_static! {
-    static ref GROTH_PARAM_MEMORY_CACHE: Mutex<GrothMemCache> = Default::default();
-    static ref VERIFYING_KEY_MEMORY_CACHE: Mutex<VerifyingKeyMemCache> = Default::default();
+    static ref GROTH_PARAM_MEMORY_CACHE: RwLock<GrothMemCache> = Default::default();
+    static ref VERIFYING_KEY_MEMORY_CACHE: RwLock<VerifyingKeyMemCache> = Default::default();
 }
 
-fn lookup_groth_params<F: FnOnce() -> error::Result<Bls12GrothParams>>(
-    identifier: String,
-    generator: F,
-) -> error::Result<Bls12GrothParams> {
-    let cache = &mut (*GROTH_PARAM_MEMORY_CACHE).lock().unwrap();
+fn lookup_groth_params<F>(identifier: String, generator: F) -> error::Result<Arc<Bls12GrothParams>>
+where
+    F: FnOnce() -> error::Result<Bls12GrothParams>,
+{
+    let cache = (*GROTH_PARAM_MEMORY_CACHE).read().unwrap();
     info!(FCP_LOG, "trying groth parameters memory cache for: {}", &identifier; "target" => "params");
-    let params = match cache.entry(identifier) {
-        Entry::Vacant(entry) => entry.insert(generator()?).clone(),
-        Entry::Occupied(entry) => {
-            info!(FCP_LOG, "found params in memory cache"; "target" => "params");
-            entry.get().clone()
-        }
-    };
 
-    Ok(params)
+    if let Some(entry) = cache.get(&identifier) {
+        info!(FCP_LOG, "found params in memory cache"; "target" => "params");
+        return Ok(entry.clone());
+    }
+
+    {
+        let new_entry = Arc::new(generator()?);
+        let res = new_entry.clone();
+
+        // write lock only held in this block
+        let cache = &mut (*GROTH_PARAM_MEMORY_CACHE).write().unwrap();
+        cache.insert(identifier, new_entry);
+
+        Ok(res)
+    }
 }
 
-fn lookup_verifying_key<F: FnOnce() -> error::Result<Bls12VerifyingKey>>(
+fn lookup_verifying_key<F>(
     identifier: String,
     generator: F,
-) -> error::Result<Bls12VerifyingKey> {
-    let cache = &mut (*VERIFYING_KEY_MEMORY_CACHE).lock().unwrap();
+) -> error::Result<Arc<Bls12VerifyingKey>>
+where
+    F: FnOnce() -> error::Result<Bls12VerifyingKey>,
+{
+    let cache = (*VERIFYING_KEY_MEMORY_CACHE).read().unwrap();
     let vk_identifier = format!("{}-verifying-key", &identifier);
 
     info!(FCP_LOG, "trying verifying key memory cache for: {}", &vk_identifier; "target" => "verifying_key");
-    let verifying_key = match cache.entry(vk_identifier) {
-        Entry::Vacant(entry) => entry.insert(generator()?).clone(),
-        Entry::Occupied(entry) => {
-            info!(FCP_LOG, "found verifying_key in memory cache"; "target" => "verifying_key");
-            entry.get().clone()
-        }
-    };
 
-    Ok(verifying_key)
+    if let Some(entry) = cache.get(&vk_identifier) {
+        info!(FCP_LOG, "found verifying_key in memory cache"; "target" => "verifying_key");
+        return Ok(entry.clone());
+    }
+
+    {
+        let new_entry = Arc::new(generator()?);
+        let res = new_entry.clone();
+
+        // write lock only held in this block
+        let cache = &mut (*VERIFYING_KEY_MEMORY_CACHE).write().unwrap();
+        cache.insert(vk_identifier, new_entry);
+
+        Ok(res)
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-fn get_zigzag_params(sector_bytes: PaddedBytesAmount) -> error::Result<groth16::Parameters<Bls12>> {
+fn get_zigzag_params(
+    sector_bytes: PaddedBytesAmount,
+) -> error::Result<Arc<groth16::Parameters<Bls12>>> {
     let public_params = public_params(sector_bytes);
 
     let get_params =
@@ -123,7 +141,9 @@ fn get_zigzag_params(sector_bytes: PaddedBytesAmount) -> error::Result<groth16::
     )?)
 }
 
-fn get_post_params(sector_bytes: PaddedBytesAmount) -> error::Result<groth16::Parameters<Bls12>> {
+fn get_post_params(
+    sector_bytes: PaddedBytesAmount,
+) -> error::Result<Arc<groth16::Parameters<Bls12>>> {
     let post_public_params = post_public_params(sector_bytes);
 
     let get_params = || {
@@ -141,7 +161,9 @@ fn get_post_params(sector_bytes: PaddedBytesAmount) -> error::Result<groth16::Pa
     )?)
 }
 
-fn get_zigzag_verifying_key(sector_bytes: PaddedBytesAmount) -> error::Result<Bls12VerifyingKey> {
+fn get_zigzag_verifying_key(
+    sector_bytes: PaddedBytesAmount,
+) -> error::Result<Arc<Bls12VerifyingKey>> {
     let public_params = public_params(sector_bytes);
 
     let get_verifying_key =
@@ -153,7 +175,9 @@ fn get_zigzag_verifying_key(sector_bytes: PaddedBytesAmount) -> error::Result<Bl
     )?)
 }
 
-fn get_post_verifying_key(sector_bytes: PaddedBytesAmount) -> error::Result<Bls12VerifyingKey> {
+fn get_post_verifying_key(
+    sector_bytes: PaddedBytesAmount,
+) -> error::Result<Arc<Bls12VerifyingKey>> {
     let post_public_params = post_public_params(sector_bytes);
 
     let get_verifying_key = || {
