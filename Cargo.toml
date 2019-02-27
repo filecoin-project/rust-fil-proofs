@@ -13,8 +13,7 @@ sector-base = { path = "./sector-base" }
 storage-backend = { path = "./storage-backend" }
 
 clap = "2"
-serde = "1"
-serde_derive = "1.0"
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.4"
 failure = "0.1"
