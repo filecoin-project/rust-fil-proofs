@@ -1,5 +1,5 @@
 #[macro_use]
-extern crate serde_derive;
+extern crate serde;
 #[macro_use]
 extern crate failure;
 #[macro_use]
@@ -9,7 +9,6 @@ extern crate glob;
 extern crate human_size;
 extern crate permutate;
 extern crate prettytable;
-extern crate serde;
 extern crate serde_json;
 extern crate toml;
 

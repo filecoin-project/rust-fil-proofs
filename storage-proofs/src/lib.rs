@@ -40,9 +40,8 @@ extern crate pbr;
 extern crate rayon;
 #[macro_use]
 extern crate slog;
-extern crate serde;
 #[macro_use]
-extern crate serde_derive;
+extern crate serde;
 
 #[macro_use]
 pub mod test_helper;

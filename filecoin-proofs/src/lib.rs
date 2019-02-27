@@ -16,13 +16,12 @@ extern crate sapling_crypto;
 extern crate tempfile;
 #[macro_use]
 extern crate failure;
+extern crate blake2;
 extern crate byteorder;
 extern crate itertools;
+#[macro_use]
 extern crate serde;
 extern crate serde_cbor;
-#[macro_use]
-extern crate serde_derive;
-extern crate blake2;
 #[macro_use]
 extern crate slog;
 
