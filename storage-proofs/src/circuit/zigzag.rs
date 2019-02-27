@@ -586,7 +586,7 @@ mod tests {
             &public_params,
             &public_inputs,
             &private_inputs,
-            Some(blank_groth_params),
+            &blank_groth_params,
         )
         .expect("failed while proving");
 

@@ -354,7 +354,7 @@ pub fn generate_post_fixed_sectors_count(
 
     let groth_params = get_post_params(fixed.sector_bytes)?;
 
-    let proof = VDFPostCompound::prove(&pub_params, &pub_inputs, &priv_inputs, Some(groth_params))
+    let proof = VDFPostCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)
         .expect("failed while proving");
 
     let mut buf = Vec::with_capacity(POST_PROOF_BYTES);
@@ -406,7 +406,7 @@ fn verify_post_fixed_sectors_count(
     let verifying_key = get_post_verifying_key(fixed.sector_bytes)?;
 
     let proof =
-        MultiProof::new_from_reader(Some(POST_PARTITIONS), &fixed.proof[0..192], verifying_key)?;
+        MultiProof::new_from_reader(Some(POST_PARTITIONS), &fixed.proof[0..192], &verifying_key)?;
 
     // For some reason, the circuit test does not verify when called in tests here.
     // However, everything up to that point does/should work — so we want to continue to exercise
@@ -530,7 +530,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         &compound_public_params,
         &public_inputs,
         &private_inputs,
-        Some(groth_params),
+        &groth_params,
     )?;
 
     let mut buf = Vec::with_capacity(POREP_PROOF_BYTES);
@@ -647,7 +647,7 @@ pub fn verify_seal(
 
     info!(FCP_LOG, "got verifying key ({}) while verifying seal", u64::from(sector_bytes); "target" => "params");
 
-    let proof = MultiProof::new_from_reader(Some(POREP_PARTITIONS), proof_vec, verifying_key)?;
+    let proof = MultiProof::new_from_reader(Some(POREP_PARTITIONS), proof_vec, &verifying_key)?;
 
     ZigZagCompound::verify(&compound_public_params, &public_inputs, &proof).map_err(|e| e.into())
 }

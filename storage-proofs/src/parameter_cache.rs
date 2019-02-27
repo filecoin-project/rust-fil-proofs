@@ -158,12 +158,12 @@ pub fn read_cached_params<E: JubjubEngine>(cache_path: &PathBuf) -> Result<groth
     info!(SP_LOG, "reading groth params from cache: {:?}", cache_path; "target" => "params");
 
     // TODO: Should we be passing true, to perform a checked read?
-    let params = Parameters::read(&f, false).map_err(Error::from);
+    let params = Parameters::read(&f, false).map_err(Error::from)?;
 
     let bytes = f.seek(SeekFrom::End(0))?;
     info!(SP_LOG, "groth_parameter_bytes: {}", bytes; "target" => "stats");
 
-    params
+    Ok(params)
 }
 
 pub fn read_cached_verifying_key<E: JubjubEngine>(

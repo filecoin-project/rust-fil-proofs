@@ -384,6 +384,7 @@ impl<'a, E: JubjubEngine> VDFPoStCircuit<'a, E> {
 mod tests {
     use super::*;
 
+    use bellman::groth16;
     use pairing::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
@@ -587,7 +588,16 @@ mod tests {
         // However, the test cannot pass until generate_public_inputs is implemented.
         // That is currently blocked on a clearer sense of how the circuit should behave.
 
-        let proof = VDFPostCompound::prove(&pub_params, &pub_inputs, &priv_inputs, None)
+        let gparams: groth16::Parameters<_> =
+            <VDFPostCompound as CompoundProof<
+                '_,
+                Bls12,
+                VDFPoSt<PedersenHasher, _>,
+                VDFPoStCircuit<_>,
+            >>::groth_params(&pub_params.vanilla_params, &params)
+            .unwrap();
+
+        let proof = VDFPostCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &gparams)
             .expect("failed while proving");
 
         let (circuit, inputs) =

@@ -128,6 +128,13 @@ where
             paths,
         }
     }
+
+    fn blank_circuit(
+        _pub_params: &<PoRC<'a, H> as ProofScheme<'a>>::PublicParams,
+        _engine_params: &'a <Bls12 as JubjubEngine>::Params,
+    ) -> PoRCCircuit<'a, Bls12> {
+        unimplemented!("")
+    }
 }
 
 impl<'a, E: JubjubEngine> Circuit<E> for PoRCCircuit<'a, E> {
@@ -397,8 +404,12 @@ mod tests {
             trees: &[&tree1, &tree2],
         };
 
+        let gparams =
+            PoRCCompound::<PedersenHasher>::groth_params(&pub_params.vanilla_params, &params)
+                .unwrap();
+
         let proof =
-            PoRCCompound::<PedersenHasher>::prove(&pub_params, &pub_inputs, &priv_inputs, None)
+            PoRCCompound::<PedersenHasher>::prove(&pub_params, &pub_inputs, &priv_inputs, &gparams)
                 .expect("failed while proving");
 
         let (circuit, inputs) = PoRCCompound::<PedersenHasher>::circuit_for_test(

@@ -4,16 +4,16 @@ use crate::error::Result;
 use pairing::Engine;
 use std::io::{self, Read, Write};
 
-pub struct MultiProof<E: Engine> {
+pub struct MultiProof<'a, E: Engine> {
     pub circuit_proofs: Vec<groth16::Proof<E>>,
-    pub verifying_key: groth16::VerifyingKey<E>,
+    pub verifying_key: &'a groth16::VerifyingKey<E>,
 }
 
-impl<E: Engine> MultiProof<E> {
+impl<'a, E: Engine> MultiProof<'a, E> {
     pub fn new(
         groth_proofs: Vec<groth16::Proof<E>>,
-        verifying_key: groth16::VerifyingKey<E>,
-    ) -> MultiProof<E> {
+        verifying_key: &'a groth16::VerifyingKey<E>,
+    ) -> Self {
         MultiProof {
             circuit_proofs: groth_proofs,
             verifying_key,
@@ -23,8 +23,8 @@ impl<E: Engine> MultiProof<E> {
     pub fn new_from_reader<R: Read>(
         partitions: Option<usize>,
         mut reader: R,
-        verifying_key: groth16::VerifyingKey<E>,
-    ) -> Result<MultiProof<E>> {
+        verifying_key: &'a groth16::VerifyingKey<E>,
+    ) -> Result<Self> {
         let num_proofs = match partitions {
             Some(n) => n,
             None => 1,

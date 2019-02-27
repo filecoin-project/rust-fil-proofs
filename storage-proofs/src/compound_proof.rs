@@ -71,8 +71,8 @@ where
         pub_params: &'b PublicParams<'a, E, S>,
         pub_in: &'b S::PublicInputs,
         priv_in: &'b S::PrivateInputs,
-        groth_params: Option<groth16::Parameters<E>>,
-    ) -> Result<MultiProof<E>>
+        groth_params: &'b groth16::Parameters<E>,
+    ) -> Result<MultiProof<'b, E>>
     where
         E::Params: Sync,
     {
@@ -89,22 +89,6 @@ where
         // This will always run at least once, since there cannot be zero partitions.
         assert!(partition_count > 0);
 
-        // If groth_params is None, generate once and share with each thread.
-        let actual_groth_params = match groth_params {
-            None => {
-                let circuit = Self::circuit(
-                    &pub_in,
-                    C::ComponentPrivateInputs::default(),
-                    // Use first vanilla proof to get circuit exemplar for parameter generation.
-                    &vanilla_proofs[0],
-                    &pub_params.vanilla_params,
-                    &pub_params.engine_params,
-                );
-                Self::get_groth_params(circuit, &pub_params.vanilla_params)?
-            }
-            Some(gp) => gp,
-        };
-
         let groth_proofs: Result<Vec<_>> = vanilla_proofs
             .par_iter()
             .map(|vanilla_proof| {
@@ -113,12 +97,12 @@ where
                     &vanilla_proof,
                     &pub_params.vanilla_params,
                     &pub_params.engine_params,
-                    &actual_groth_params,
+                    groth_params,
                 )
             })
             .collect();
 
-        Ok(MultiProof::new(groth_proofs?, actual_groth_params.vk))
+        Ok(MultiProof::new(groth_proofs?, &groth_params.vk))
     }
 
     // verify is equivalent to ProofScheme::verify.
@@ -198,9 +182,7 @@ where
         engine_params: &'a E::Params,
     ) -> C;
 
-    fn blank_circuit(_public_params: &S::PublicParams, _engine_params: &'a E::Params) -> C {
-        unimplemented!();
-    }
+    fn blank_circuit(public_params: &S::PublicParams, engine_params: &'a E::Params) -> C;
 
     fn groth_params(
         public_params: &S::PublicParams,
