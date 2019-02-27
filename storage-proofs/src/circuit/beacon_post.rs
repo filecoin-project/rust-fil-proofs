@@ -70,6 +70,13 @@ where
     ) -> BeaconPoStCircuit<'a, Bls12, H, V> {
         unimplemented!()
     }
+
+    fn blank_circuit(
+        _public_params: &<BeaconPoSt<H, V> as ProofScheme<'a>>::PublicParams,
+        _engine_params: &'a <Bls12 as JubjubEngine>::Params,
+    ) -> BeaconPoStCircuit<'a, Bls12, H, V> {
+        unimplemented!("")
+    }
 }
 
 impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParameters<E, C, P>

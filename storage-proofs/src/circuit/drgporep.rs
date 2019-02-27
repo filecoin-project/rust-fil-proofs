@@ -292,6 +292,13 @@ where
             private: public_inputs.tau.is_none(),
         }
     }
+
+    fn blank_circuit(
+        _public_params: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
+        _engine_params: &'a <Bls12 as JubjubEngine>::Params,
+    ) -> DrgPoRepCircuit<'a, Bls12> {
+        unimplemented!("");
+    }
 }
 
 ///
@@ -713,11 +720,17 @@ mod tests {
             DrgPoRepCompound::<PedersenHasher, BucketGraph<_>>::setup(&setup_params)
                 .expect("setup failed");
 
+        let gparams = DrgPoRepCompound::<PedersenHasher, _>::groth_params(
+            &public_params.vanilla_params,
+            &params,
+        )
+        .unwrap();
+
         let proof = DrgPoRepCompound::<PedersenHasher, _>::prove(
             &public_params,
             &public_inputs,
             &private_inputs,
-            None,
+            &gparams,
         )
         .expect("failed while proving");
 

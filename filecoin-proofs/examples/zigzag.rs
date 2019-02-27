@@ -342,12 +342,22 @@ fn do_the_work<H: 'static>(
             // We should also allow the serialized vanilla proofs to be passed (as a file) to the example
             // and skip replication/vanilla-proving entirely.
             info!(FCP_LOG, "Performing circuit groth."; "target" => "status");
+            let gparams = ZigZagCompound::groth_params(
+                &compound_public_params.vanilla_params,
+                &engine_params,
+            )
+            .unwrap();
+
             let multi_proof = {
                 let start = Instant::now();
                 start_profile("groth-prove");
-                let result =
-                    ZigZagCompound::prove(&compound_public_params, &pub_inputs, &priv_inputs, None)
-                        .unwrap();
+                let result = ZigZagCompound::prove(
+                    &compound_public_params,
+                    &pub_inputs,
+                    &priv_inputs,
+                    &gparams,
+                )
+                .unwrap();
                 stop_profile();
                 let groth_proving = start.elapsed();
                 info!(FCP_LOG, "groth_proving_time: {:?} seconds", groth_proving; "target" => "stats");

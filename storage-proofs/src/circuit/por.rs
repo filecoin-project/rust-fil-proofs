@@ -87,6 +87,13 @@ where
         }
     }
 
+    fn blank_circuit(
+        _public_params: &<MerklePoR<H> as ProofScheme<'a>>::PublicParams,
+        _engine_params: &'a JubjubBls12,
+    ) -> PoRCircuit<'a, Bls12> {
+        unimplemented!("")
+    }
+
     fn generate_public_inputs(
         pub_inputs: &<MerklePoR<H> as ProofScheme<'a>>::PublicInputs,
         pub_params: &<MerklePoR<H> as ProofScheme<'a>>::PublicParams,
@@ -286,11 +293,16 @@ mod tests {
                 &tree,
             );
 
+            let gparams = PoRCompound::<PedersenHasher>::groth_params(
+                &public_params.vanilla_params,
+                setup_params.engine_params,
+            )
+            .unwrap();
             let proof = PoRCompound::<PedersenHasher>::prove(
                 &public_params,
                 &public_inputs,
                 &private_inputs,
-                None,
+                &gparams,
             )
             .expect("failed while proving");
 
@@ -450,11 +462,17 @@ mod tests {
                 &tree,
             );
 
+            let gparams = PoRCompound::<PedersenHasher>::groth_params(
+                &public_params.vanilla_params,
+                setup_params.engine_params,
+            )
+            .unwrap();
+
             let proof = PoRCompound::<PedersenHasher>::prove(
                 &public_params,
                 &public_inputs,
                 &private_inputs,
-                None,
+                &gparams,
             )
             .expect("failed while proving");
 
