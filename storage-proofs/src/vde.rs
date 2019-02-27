@@ -86,25 +86,23 @@ where
     Ok(H::sloth_decode(&key, &node_data, sloth_iter))
 }
 
-pub fn decode_domain_block<'a, H, G>(
-    graph: &'a G,
+pub fn decode_domain_block<'a, H>(
+    degree: usize,
     sloth_iter: usize,
     replica_id: &'a H::Domain,
     data: &'a [H::Domain],
     v: usize,
+    parents: Vec<usize>,
 ) -> Result<H::Domain>
 where
     H: Hasher,
-    G: Graph<H>,
 {
-    let parents = graph.parents(v);
-
     let byte_data = data
         .iter()
         .flat_map(H::Domain::into_bytes)
         .collect::<Vec<u8>>();
 
-    let key = create_key::<H>(replica_id, v, &parents, &byte_data, graph.degree())?;
+    let key = create_key::<H>(replica_id, v, &parents, &byte_data, degree)?;
     let node_data = data[v];
 
     // TODO: round constant

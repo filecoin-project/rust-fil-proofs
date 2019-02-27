@@ -118,7 +118,7 @@ where
             })
             .collect();
 
-        Ok(MultiProof::new(groth_proofs?, actual_groth_params.clone()))
+        Ok(MultiProof::new(groth_proofs?, actual_groth_params.vk))
     }
 
     // verify is equivalent to ProofScheme::verify.
@@ -128,7 +128,7 @@ where
         multi_proof: &MultiProof<E>,
     ) -> Result<bool> {
         let vanilla_public_params = &public_params.vanilla_params;
-        let pvk = groth16::prepare_verifying_key(&multi_proof.groth_params.vk);
+        let pvk = groth16::prepare_verifying_key(&multi_proof.verifying_key);
         if multi_proof.circuit_proofs.len() != Self::partition_count(public_params) {
             return Ok(false);
         }
@@ -154,7 +154,6 @@ where
         params: &'a E::Params,
         groth_params: &groth16::Parameters<E>,
     ) -> Result<groth16::Proof<E>> {
-        // TODO: eventually, don't generate 'random proof' here at all.
         let rng = &mut OsRng::new().unwrap();
 
         // We need to make the circuit repeatedly because we can't clone it.
@@ -208,6 +207,16 @@ where
         engine_params: &'a E::Params,
     ) -> Result<groth16::Parameters<E>> {
         Self::get_groth_params(
+            Self::blank_circuit(public_params, engine_params),
+            public_params,
+        )
+    }
+
+    fn verifying_key(
+        public_params: &S::PublicParams,
+        engine_params: &'a E::Params,
+    ) -> Result<groth16::VerifyingKey<E>> {
+        Self::get_verifying_key(
             Self::blank_circuit(public_params, engine_params),
             public_params,
         )

@@ -19,6 +19,8 @@ use crate::proof::ProofScheme;
 use crate::vde;
 use crate::SP_LOG;
 
+type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
+
 #[derive(Debug, Clone)]
 pub enum LayerChallenges {
     Fixed {
@@ -82,6 +84,11 @@ impl LayerChallenges {
         (0..self.layers())
             .map(|x| self.challenges_for_layer(x))
             .sum()
+    }
+    pub fn all_challenges(&self) -> Vec<usize> {
+        (0..self.layers())
+            .map(|x| self.challenges_for_layer(x))
+            .collect()
     }
 }
 
@@ -174,7 +181,7 @@ impl<T: Domain> PublicInputs<T> {
 }
 
 pub struct PrivateInputs<H: Hasher> {
-    pub aux: Vec<MerkleTree<H::Domain, H::Function>>,
+    pub aux: Vec<Tree<H>>,
     pub tau: Vec<porep::Tau<H::Domain>>,
 }
 
@@ -210,6 +217,9 @@ impl<H: Hasher> Proof<H> {
 
 pub trait Layerable<H: Hasher>: Graph<H> {}
 
+type PorepTau<H> = porep::Tau<<H as Hasher>::Domain>;
+type TransformedLayers<H> = (Vec<PorepTau<H>>, Vec<Tree<H>>);
+
 /// Layers provides default implementations of methods required to handle proof and verification
 /// of layered proofs of replication. Implementations must provide transform and invert_transform methods.
 pub trait Layers {
@@ -230,14 +240,12 @@ pub trait Layers {
         layers: usize,
     ) -> drgporep::PublicParams<Self::Hasher, Self::Graph>;
 
+    #[allow(clippy::too_many_arguments)]
     fn prove_layers<'a>(
         pp: &drgporep::PublicParams<Self::Hasher, Self::Graph>,
         pub_inputs: &PublicInputs<<Self::Hasher as Hasher>::Domain>,
-        tau: &[porep::Tau<<Self::Hasher as Hasher>::Domain>],
-        aux: &'a [MerkleTree<
-            <Self::Hasher as Hasher>::Domain,
-            <Self::Hasher as Hasher>::Function,
-        >],
+        tau: &[PorepTau<Self::Hasher>],
+        aux: &'a [Tree<Self::Hasher>],
         layer_challenges: &LayerChallenges,
         layers: usize,
         total_layers: usize,
@@ -314,15 +322,10 @@ pub trait Layers {
         layers: usize,
         replica_id: &<Self::Hasher as Hasher>::Domain,
         data: &mut [u8],
-    ) -> Result<(
-        Vec<porep::Tau<<Self::Hasher as Hasher>::Domain>>,
-        Vec<MerkleTree<<Self::Hasher as Hasher>::Domain, <Self::Hasher as Hasher>::Function>>,
-    )> {
+    ) -> Result<TransformedLayers<Self::Hasher>> {
         assert!(layers > 0);
         let mut taus = Vec::with_capacity(layers);
-        let mut auxs: Vec<
-            MerkleTree<<Self::Hasher as Hasher>::Domain, <Self::Hasher as Hasher>::Function>,
-        > = Vec::with_capacity(layers);
+        let mut auxs: Vec<Tree<Self::Hasher>> = Vec::with_capacity(layers);
 
         let generate_merkle_trees_in_parallel = true;
         if !generate_merkle_trees_in_parallel {
@@ -599,16 +602,13 @@ fn comm_r_star<H: Hasher>(replica_id: &H::Domain, comm_rs: &[H::Domain]) -> Resu
 
 impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
     type Tau = Tau<<L::Hasher as Hasher>::Domain>;
-    type ProverAux =
-        Vec<MerkleTree<<L::Hasher as Hasher>::Domain, <L::Hasher as Hasher>::Function>>;
+    type ProverAux = Vec<Tree<L::Hasher>>;
 
     fn replicate(
         pp: &'a PublicParams<L::Hasher, L::Graph>,
         replica_id: &<L::Hasher as Hasher>::Domain,
         data: &mut [u8],
-        _data_tree: Option<
-            MerkleTree<<L::Hasher as Hasher>::Domain, <L::Hasher as Hasher>::Function>,
-        >,
+        _data_tree: Option<Tree<L::Hasher>>,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let (taus, auxs) = Self::transform_and_replicate_layers(
             &pp.drg_porep_public_params,
@@ -661,13 +661,15 @@ mod tests {
     fn test_calculate_taper_challenges() {
         let layer_challenges = LayerChallenges::new_tapered(10, 333, 7, 1.0 / 3.0);
         // Last layers should have most challenges.
-        let expected = [20, 20, 20, 30, 44, 66, 99, 149, 223, 333];
+        let expected: Vec<usize> = vec![20, 20, 20, 30, 44, 66, 99, 149, 223, 333];
 
         for (i, expected_count) in expected.iter().enumerate() {
             let calculated_count = layer_challenges.challenges_for_layer(i);
             assert_eq!(*expected_count as usize, calculated_count);
         }
 
+        assert_eq!(expected, layer_challenges.all_challenges());
+        assert_eq!(layer_challenges.total_challenges(), 1004);
         let live_challenges = LayerChallenges::new_tapered(4, 2, 2, 1.0 / 3.0);
         assert_eq!(live_challenges.total_challenges(), 6)
     }

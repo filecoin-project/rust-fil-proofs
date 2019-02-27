@@ -1,6 +1,5 @@
 #![deny(clippy::all, clippy::perf, clippy::correctness)]
 #![allow(clippy::unreadable_literal)]
-#![warn(clippy::type_complexity, clippy::too_many_arguments)]
 
 extern crate ffi_toolkit;
 extern crate logging_toolkit;
@@ -24,6 +23,7 @@ extern crate serde_cbor;
 #[macro_use]
 extern crate serde_derive;
 extern crate blake2;
+#[macro_use]
 extern crate slog;
 
 pub mod api;

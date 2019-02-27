@@ -49,17 +49,17 @@ where
     PP: ParameterSetIdentifier,
 {
     fn cache_prefix() -> String;
-    fn cache_identifier(pub_params: &PP) -> Option<String> {
+    fn cache_identifier(pub_params: &PP) -> String {
         let param_identifier = pub_params.parameter_set_identifier();
         info!(SP_LOG, "parameter set identifier for cache: {}", param_identifier; "target" => "params");
         let mut hasher = Sha256::default();
         hasher.input(&param_identifier.into_bytes());
         let circuit_hash = hasher.result();
-        Some(format!(
+        format!(
             "{}-{:02x}",
             Self::cache_prefix(),
             circuit_hash.iter().format("")
-        ))
+        )
     }
 
     fn get_groth_params(circuit: C, pub_params: &PP) -> Result<groth16::Parameters<E>> {
@@ -75,36 +75,68 @@ where
             parameters
         };
 
-        match Self::cache_identifier(pub_params) {
-            Some(id) => {
-                let cache_dir = parameter_cache_dir();
-                create_dir_all(cache_dir)?;
-                let cache_path = parameter_cache_path(&id);
-                info!(SP_LOG, "checking cache_path: {:?}", cache_path; "target" => "params");
+        let id = Self::cache_identifier(pub_params);
+        let cache_dir = parameter_cache_dir();
+        create_dir_all(cache_dir)?;
+        let cache_path = parameter_cache_path(&id);
+        info!(SP_LOG, "checking cache_path: {:?}", cache_path; "target" => "params");
 
-                read_cached_params(&cache_path).or_else(|_| {
-                    ensure_parent(&cache_path)?;
+        read_cached_params(&cache_path).or_else(|_| {
+            ensure_parent(&cache_path)?;
 
-                    let mut f = fs::OpenOptions::new()
-                        .read(true)
-                        .write(true)
-                        .create(true)
-                        .open(&cache_path)?;
-                    f.lock_exclusive()?;
+            let mut f = fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .open(&cache_path)?;
+            f.lock_exclusive()?;
 
-                    let p = generate()?;
+            let p = generate()?;
 
-                    p.write(&mut f)?;
+            p.write(&mut f)?;
 
-                    let bytes = f.seek(SeekFrom::End(0))?;
+            let bytes = f.seek(SeekFrom::End(0))?;
 
-                    info!(SP_LOG, "wrote parameters to cache {:?} ", f; "target" => "params");
-                    info!(SP_LOG, "groth_parameter_bytes: {}", bytes; "target" => "stats");
-                    Ok(p)
-                })
-            }
-            None => Ok(generate()?),
-        }
+            info!(SP_LOG, "wrote parameters to cache {:?} ", f; "target" => "params");
+            info!(SP_LOG, "groth_parameter_bytes: {}", bytes; "target" => "stats");
+            Ok(p)
+        })
+    }
+
+    fn get_verifying_key(circuit: C, pub_params: &PP) -> Result<groth16::VerifyingKey<E>> {
+        let generate = || -> Result<groth16::VerifyingKey<E>> {
+            let groth_params = Self::get_groth_params(circuit, pub_params)?;
+            info!(SP_LOG, "Getting verifying key."; "target" => "verifying_key");
+            Ok(groth_params.vk)
+        };
+
+        let id = Self::cache_identifier(pub_params);
+        let vk_id = format!("{}.vk", id);
+        let cache_dir = parameter_cache_dir();
+        create_dir_all(cache_dir)?;
+        let cache_path = parameter_cache_path(&vk_id);
+        info!(SP_LOG, "checking cache_path: {:?}", cache_path; "target" => "verifying_key");
+
+        read_cached_verifying_key(&cache_path).or_else(|_| {
+            ensure_parent(&cache_path)?;
+
+            let mut f = fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .open(&cache_path)?;
+            f.lock_exclusive()?;
+
+            let p = generate()?;
+
+            p.write(&mut f)?;
+
+            let bytes = f.seek(SeekFrom::End(0))?;
+
+            info!(SP_LOG, "wrote verifying key to cache {:?} ", f; "target" => "verifying_key");
+            info!(SP_LOG, "verifying_key_bytes: {}", bytes; "target" => "stats");
+            Ok(p)
+        })
     }
 }
 
@@ -125,12 +157,30 @@ pub fn read_cached_params<E: JubjubEngine>(cache_path: &PathBuf) -> Result<groth
     f.lock_exclusive()?;
     info!(SP_LOG, "reading groth params from cache: {:?}", cache_path; "target" => "params");
 
+    // TODO: Should we be passing true, to perform a checked read?
     let params = Parameters::read(&f, false).map_err(Error::from);
 
     let bytes = f.seek(SeekFrom::End(0))?;
     info!(SP_LOG, "groth_parameter_bytes: {}", bytes; "target" => "stats");
 
     params
+}
+
+pub fn read_cached_verifying_key<E: JubjubEngine>(
+    cache_path: &PathBuf,
+) -> Result<groth16::VerifyingKey<E>> {
+    ensure_parent(cache_path)?;
+
+    let mut f = fs::OpenOptions::new().read(true).open(&cache_path)?;
+    f.lock_exclusive()?;
+    info!(SP_LOG, "reading verifying key from cache: {:?}", cache_path; "target" => "verifying_key");
+
+    let verifying_key = groth16::VerifyingKey::read(&f).map_err(Error::from);
+
+    let bytes = f.seek(SeekFrom::End(0))?;
+    info!(SP_LOG, "verifying_key_bytes: {}", bytes; "target" => "stats");
+
+    verifying_key
 }
 
 pub fn write_params_to_cache<E: JubjubEngine>(
