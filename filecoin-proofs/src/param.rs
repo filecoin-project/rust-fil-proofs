@@ -165,7 +165,7 @@ pub fn invalidate_parameter_file(parameter_id: &str) -> Result<()> {
 
 pub fn choose(message: &str) -> bool {
     loop {
-        print!("{} [y/n]: ", message);
+        print!("[y/n] {}: ", message);
 
         let _ = stdout().flush();
         let mut s = String::new();
