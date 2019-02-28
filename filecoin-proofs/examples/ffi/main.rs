@@ -344,7 +344,8 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
             &sealed_sector_replica_commitment[0],
             32,
             &challenge_seed,
-            &((*resp).proof),
+            (*resp).proofs_ptr,
+            (*resp).proofs_len,
             (*resp).faults_ptr,
             (*resp).faults_len,
         );

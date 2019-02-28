@@ -2,7 +2,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fs::{copy, remove_file, File, OpenOptions};
 use std::io::{BufWriter, Read};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use bellman::groth16;
@@ -11,10 +11,12 @@ use pairing::bls12_381::{Bls12, Fr};
 use pairing::{Engine, PrimeField};
 use sapling_crypto::jubjub::JubjubBls12;
 
+use crate::api::post_adapter::*;
+use crate::error;
+use crate::FCP_LOG;
 use sector_base::api::bytes_amount::{PaddedBytesAmount, UnpaddedBytesAmount};
 use sector_base::api::sector_store::SectorConfig;
 use sector_base::io::fr32::write_unpadded;
-use std::path::Path;
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::vdf_post::{VDFPoStCircuit, VDFPostCompound};
 use storage_proofs::circuit::zigzag::ZigZagCompound;
@@ -33,11 +35,8 @@ use storage_proofs::vdf_sloth::{self, Sloth};
 use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
 use storage_proofs::zigzag_graph::ZigZagBucketGraph;
 
-use crate::error;
-use crate::FCP_LOG;
-
-type Commitment = Fr32Ary;
-type ChallengeSeed = Fr32Ary;
+pub type Commitment = Fr32Ary;
+pub type ChallengeSeed = Fr32Ary;
 
 /// FrSafe is an array of the largest whole number of bytes guaranteed not to overflow the field.
 type FrSafe = [u8; 31];
@@ -220,7 +219,7 @@ pub type PostPublicParams = vdf_post::PublicParams<PedersenDomain, vdf_sloth::Sl
 
 const POST_CHALLENGE_COUNT: usize = 30;
 const POST_EPOCHS: usize = 3;
-const POST_SECTORS_COUNT: usize = 2;
+pub const POST_SECTORS_COUNT: usize = 2;
 const POST_VDF_ROUNDS: usize = 1;
 
 lazy_static! {
@@ -259,45 +258,50 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
     res
 }
 
-pub struct PoStOutput {
-    pub snark_proof: [u8; 192],
-    pub faults: Vec<u64>,
-}
+pub fn generate_post(
+    dynamic: GeneratePoStDynamicSectorsCountInput,
+) -> error::Result<GeneratePoStDynamicSectorsCountOutput> {
+    let fixed_output = fan_out_generate_post_input(dynamic)
+        .iter()
+        .map(generate_post_fixed_sectors_count)
+        .collect();
 
-pub struct PoStInputPart {
-    pub sealed_sector_access: Option<String>,
-    pub comm_r: [u8; 32],
-}
-
-pub struct PoStInput {
-    pub challenge_seed: [u8; 32],
-    pub input_parts: Vec<PoStInputPart>,
+    fan_in_generate_post_output(fixed_output)
 }
 
 pub fn fake_generate_post(
-    _sector_bytes: PaddedBytesAmount,
-    input: PoStInput,
-) -> error::Result<PoStOutput> {
-    let faults: Vec<u64> = if !input.input_parts.is_empty() {
+    dynamic: GeneratePoStDynamicSectorsCountInput,
+) -> error::Result<GeneratePoStDynamicSectorsCountOutput> {
+    let faults: Vec<u64> = if !dynamic.input_parts.is_empty() {
         vec![0]
     } else {
         Default::default()
     };
 
-    Ok(PoStOutput {
-        snark_proof: [42; 192],
+    Ok(GeneratePoStDynamicSectorsCountOutput {
+        proofs: vec![[42; 192]],
         faults,
     })
 }
 
-pub fn generate_post(
-    sector_bytes: PaddedBytesAmount,
-    input: PoStInput,
-) -> error::Result<PoStOutput> {
+pub fn verify_post(
+    dynamic: VerifyPoStDynamicSectorsCountInput,
+) -> error::Result<VerifyPoStDynamicSectorsCountOutput> {
+    let fixed = fan_out_verify_post_input(dynamic)?
+        .iter()
+        .map(verify_post_fixed_sectors_count)
+        .collect();
+
+    fan_in_verify_post_output(fixed)
+}
+
+pub fn generate_post_fixed_sectors_count(
+    fixed: &GeneratePoStFixedSectorsCountInput,
+) -> error::Result<GeneratePoStFixedSectorsCountOutput> {
     let faults: Vec<u64> = Vec::new();
 
     let setup_params = compound_proof::SetupParams {
-        vanilla_params: &post_setup_params(sector_bytes),
+        vanilla_params: &post_setup_params(fixed.sector_bytes),
         engine_params: &(*ENGINE_PARAMS),
         partitions: None,
     };
@@ -307,15 +311,15 @@ pub fn generate_post(
         vdf_post::VDFPoSt<PedersenHasher, vdf_sloth::Sloth>,
     > = VDFPostCompound::setup(&setup_params).expect("setup failed");
 
-    let commitments = input
+    let commitments = fixed
         .input_parts
         .iter()
-        .map(|p| PedersenDomain::try_from_bytes(&p.comm_r).unwrap()) // FIXME: don't unwrap
+        .map(|(_, comm_r)| PedersenDomain::try_from_bytes(&comm_r[..]).unwrap()) // FIXME: don't unwrap
         .collect();
 
     let safe_challenge_seed = {
         let mut cs = vec![0; 32];
-        cs.copy_from_slice(&input.challenge_seed);
+        cs.copy_from_slice(&fixed.challenge_seed);
         cs[31] &= 0b00111111;
         cs
     };
@@ -326,11 +330,11 @@ pub fn generate_post(
         faults: Vec::new(),
     };
 
-    let trees: Vec<Tree> = input
+    let trees: Vec<Tree> = fixed
         .input_parts
         .iter()
-        .map(|p| {
-            if let Some(s) = &p.sealed_sector_access {
+        .map(|(access, _)| {
+            if let Some(s) = &access {
                 make_merkle_tree(
                     s,
                     PaddedBytesAmount(pub_params.vanilla_params.sector_size as u64),
@@ -346,7 +350,7 @@ pub fn generate_post(
 
     let priv_inputs = vdf_post::PrivateInputs::<PedersenHasher>::new(&borrowed_trees[..]);
 
-    let groth_params = get_post_params(sector_bytes)?;
+    let groth_params = get_post_params(fixed.sector_bytes)?;
 
     let proof = VDFPostCompound::prove(&pub_params, &pub_inputs, &priv_inputs, Some(groth_params))
         .expect("failed while proving");
@@ -358,28 +362,24 @@ pub fn generate_post(
     let mut proof_bytes = [0; POST_PROOF_BYTES];
     proof_bytes.copy_from_slice(&buf);
 
-    Ok(PoStOutput {
-        snark_proof: proof_bytes,
+    Ok(GeneratePoStFixedSectorsCountOutput {
+        proof: proof_bytes,
         faults,
     })
 }
 
-pub fn verify_post(
-    sector_bytes: PaddedBytesAmount,
-    comm_rs: &[Commitment],
-    challenge_seed: &ChallengeSeed,
-    proof_vec: &[u8],
-    faults: Vec<u64>,
-) -> error::Result<bool> {
+fn verify_post_fixed_sectors_count(
+    fixed: &VerifyPoStFixedSectorsCountInput,
+) -> error::Result<VerifyPoStFixedSectorsCountOutput> {
     let safe_challenge_seed = {
         let mut cs = vec![0; 32];
-        cs.copy_from_slice(challenge_seed);
+        cs.copy_from_slice(&fixed.challenge_seed);
         cs[31] &= 0b00111111;
         cs
     };
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: &post_setup_params(sector_bytes),
+        vanilla_params: &post_setup_params(fixed.sector_bytes),
         engine_params: &(*ENGINE_PARAMS),
         partitions: None,
     };
@@ -389,7 +389,8 @@ pub fn verify_post(
         vdf_post::VDFPoSt<PedersenHasher, vdf_sloth::Sloth>,
     > = VDFPostCompound::setup(&compound_setup_params).expect("setup failed");
 
-    let commitments = comm_rs
+    let commitments = fixed
+        .comm_rs
         .iter()
         .map(|comm_r| PedersenDomain(bytes_into_fr::<Bls12>(comm_r).unwrap().into_repr()))
         .collect::<Vec<PedersenDomain>>();
@@ -397,12 +398,13 @@ pub fn verify_post(
     let public_inputs = vdf_post::PublicInputs::<PedersenDomain> {
         commitments,
         challenge_seed: PedersenDomain::try_from_bytes(&safe_challenge_seed)?,
-        faults,
+        faults: fixed.faults.clone(),
     };
 
-    let verifying_key = get_post_verifying_key(sector_bytes)?;
+    let verifying_key = get_post_verifying_key(fixed.sector_bytes)?;
 
-    let proof = MultiProof::new_from_reader(Some(POST_PARTITIONS), proof_vec, verifying_key)?;
+    let proof =
+        MultiProof::new_from_reader(Some(POST_PARTITIONS), &fixed.proof[0..192], verifying_key)?;
 
     // For some reason, the circuit test does not verify when called in tests here.
     // However, everything up to that point does/should work — so we want to continue to exercise
@@ -412,7 +414,7 @@ pub fn verify_post(
             .map_err(|e| e.into());
 
     // Since callers may rely on previous mocked success, just pretend verification succeeded, for now.
-    Ok(true)
+    Ok(VerifyPoStFixedSectorsCountOutput { is_valid: true })
 }
 
 type Tree = MerkleTree<PedersenDomain, <PedersenHasher as Hasher>::Function>;
@@ -827,34 +829,26 @@ mod tests {
         let comm_rs = vec![comm_r, comm_r];
         let challenge_seed = rng.gen();
 
-        let post_output = generate_post(
-            h.store.config().sector_bytes(),
-            PoStInput {
-                challenge_seed,
-                input_parts: vec![
-                    PoStInputPart {
-                        sealed_sector_access: Some(h.sealed_access.clone()),
-                        comm_r,
-                    },
-                    PoStInputPart {
-                        sealed_sector_access: Some(h.sealed_access),
-                        comm_r,
-                    },
-                ],
-            },
-        )
+        let post_output = generate_post(GeneratePoStDynamicSectorsCountInput {
+            sector_bytes: h.store.config().sector_bytes(),
+            challenge_seed,
+            input_parts: vec![
+                (Some(h.sealed_access.clone()), comm_r),
+                (Some(h.sealed_access.clone()), comm_r),
+            ],
+        })
         .expect("PoSt generation failed");
 
-        let is_valid = verify_post(
-            h.store.config().sector_bytes(),
-            &comm_rs,
-            &challenge_seed,
-            &post_output.snark_proof,
-            post_output.faults,
-        )
-        .expect("failed to run verify_post");;
+        let result = verify_post(VerifyPoStDynamicSectorsCountInput {
+            sector_bytes: h.store.config().sector_bytes(),
+            comm_rs,
+            challenge_seed,
+            proofs: post_output.proofs,
+            faults: post_output.faults,
+        })
+        .expect("failed to run verify_post");
 
-        assert!(is_valid, "verification of valid proof failed");
+        assert!(result.is_valid, "verification of valid proof failed");
     }
 
     fn seal_unsealed_roundtrip_aux(cs: ConfiguredStore, bytes_amt: BytesAmount) {
