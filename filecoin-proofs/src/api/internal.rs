@@ -261,12 +261,14 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
 pub fn generate_post(
     dynamic: GeneratePoStDynamicSectorsCountInput,
 ) -> error::Result<GeneratePoStDynamicSectorsCountOutput> {
+    let n = { dynamic.input_parts.len() };
+
     let fixed_output = generate_post_spread_input(dynamic)
         .iter()
         .map(generate_post_fixed_sectors_count)
         .collect();
 
-    generate_post_collect_output(fixed_output)
+    generate_post_collect_output(n, fixed_output)
 }
 
 pub fn fake_generate_post(

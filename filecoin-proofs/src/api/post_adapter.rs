@@ -95,9 +95,11 @@ pub fn generate_post_spread_input(
 }
 
 /// Collapses return values from multiple fixed sectors-count PoSt generation
-/// operations into a single return value for dynamic sector count.
+/// operations into a single return value for dynamic sector count. This
+/// function discards any faults reported for duplicated CommRs.
 ///
 pub fn generate_post_collect_output(
+    orig_comm_rs_len: usize,
     xs: Vec<error::Result<GeneratePoStFixedSectorsCountOutput>>,
 ) -> error::Result<GeneratePoStDynamicSectorsCountOutput> {
     if xs.is_empty() {
@@ -122,6 +124,8 @@ pub fn generate_post_collect_output(
             }
         }
     }
+
+    dynamic.faults = dynamic.faults.into_iter().take(orig_comm_rs_len).collect();
 
     Ok(dynamic)
 }
@@ -561,20 +565,27 @@ mod tests {
             proof: [2; 192],
             faults: vec![1],
         };
+        let fixed_e = GeneratePoStFixedSectorsCountOutput {
+            proof: [2; 192],
+            faults: vec![0, 1],
+        };
 
         // returns first error encountered (from head of vector)
-        let result_a = generate_post_collect_output(vec![
-            Ok(fixed_a),
-            Err(format_err!("alpha")),
-            Err(format_err!("beta")),
-        ]);
+        let result_a = generate_post_collect_output(
+            6,
+            vec![
+                Ok(fixed_a),
+                Err(format_err!("alpha")),
+                Err(format_err!("beta")),
+            ],
+        );
         let error_a = result_a.err().unwrap();
         assert_eq!(true, format!("{:?}", error_a).contains("alpha"));
         assert_eq!(false, format!("{:?}", error_a).contains("beta"));
 
         // combines proofs into single vector
         let result_b =
-            generate_post_collect_output(vec![Ok(fixed_b), Ok(fixed_c), Ok(fixed_d)]).unwrap();
+            generate_post_collect_output(6, vec![Ok(fixed_b), Ok(fixed_c), Ok(fixed_d)]).unwrap();
         assert_eq!(0, result_b.proofs[0][0]);
         assert_eq!(1, result_b.proofs[1][0]);
         assert_eq!(2, result_b.proofs[2][0]);
@@ -582,6 +593,11 @@ mod tests {
         // transforms static sectors count faults-offsets to dynamic sectors
         // count equivalents
         assert_eq!(vec![0, 1, 5], result_b.faults);
+
+        // drops any faults reported on duplicated replicas
+        let result_b = generate_post_collect_output(1, vec![Ok(fixed_e)]).unwrap();
+
+        assert_eq!(vec![0], result_b.faults);
     }
 
     #[test]
