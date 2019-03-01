@@ -52,36 +52,11 @@ pub struct VerifyPoStFixedSectorsCountOutput {
     pub is_valid: bool,
 }
 
-pub fn fan_in_generate_post_output(
-    xs: Vec<error::Result<GeneratePoStFixedSectorsCountOutput>>,
-) -> error::Result<GeneratePoStDynamicSectorsCountOutput> {
-    if xs.is_empty() {
-        return Err(format_err!("input vector must not be empty"));
-    }
 
-    let mut dynamic = GeneratePoStDynamicSectorsCountOutput {
-        proofs: Vec::new(),
-        faults: Vec::new(),
-    };
-
-    for (i, x) in xs.into_iter().enumerate() {
-        match x {
-            Err(e) => {
-                return Err(e);
-            }
-            Ok(fixed) => {
-                dynamic.proofs.push(fixed.proof);
-                for fault in fixed.faults.iter() {
-                    dynamic.faults.push(((i as u64) * 2) + fault)
-                }
-            }
-        }
-    }
-
-    Ok(dynamic)
-}
-
-pub fn fan_out_generate_post_input(
+/// Maps inputs for a single dynamic sectors-count PoSt generation operation to
+/// a vector of PoSt generation inputs for fixed sectors-count.
+///
+pub fn generate_post_spread_input(
     dynamic: GeneratePoStDynamicSectorsCountInput,
 ) -> Vec<GeneratePoStFixedSectorsCountInput> {
     let mut fixed: Vec<GeneratePoStFixedSectorsCountInput> = vec![];
@@ -120,22 +95,31 @@ pub fn fan_out_generate_post_input(
     fixed
 }
 
-pub fn fan_in_verify_post_output(
-    xs: Vec<error::Result<VerifyPoStFixedSectorsCountOutput>>,
-) -> error::Result<VerifyPoStDynamicSectorsCountOutput> {
+/// Collapses return values from multiple fixed sectors-count PoSt generation
+/// operations into a single return value for dynamic sector count.
+///
+pub fn generate_post_collect_output(
+    xs: Vec<error::Result<GeneratePoStFixedSectorsCountOutput>>,
+) -> error::Result<GeneratePoStDynamicSectorsCountOutput> {
     if xs.is_empty() {
         return Err(format_err!("input vector must not be empty"));
     }
 
-    let mut dynamic = VerifyPoStDynamicSectorsCountOutput { is_valid: true };
+    let mut dynamic = GeneratePoStDynamicSectorsCountOutput {
+        proofs: Vec::new(),
+        faults: Vec::new(),
+    };
 
-    for x in xs.into_iter() {
+    for (i, x) in xs.into_iter().enumerate() {
         match x {
             Err(e) => {
                 return Err(e);
             }
-            Ok(VerifyPoStFixedSectorsCountOutput { is_valid }) => {
-                dynamic.is_valid = dynamic.is_valid && is_valid;
+            Ok(fixed) => {
+                dynamic.proofs.push(fixed.proof);
+                for fault in fixed.faults.iter() {
+                    dynamic.faults.push(((i as u64) * 2) + fault)
+                }
             }
         }
     }
@@ -143,7 +127,10 @@ pub fn fan_in_verify_post_output(
     Ok(dynamic)
 }
 
-pub fn fan_out_verify_post_input(
+/// Maps inputs for a single dynamic sectors-count PoSt verify operation to a
+/// vector of PoSt verify inputs for fixed sectors-count.
+///
+pub fn verify_post_spread_input(
     dynamic: VerifyPoStDynamicSectorsCountInput,
 ) -> error::Result<Vec<VerifyPoStFixedSectorsCountInput>> {
     let faults_len = dynamic.faults.len();
@@ -173,13 +160,13 @@ pub fn fan_out_verify_post_input(
     if faults_max
         .map(|m| *m > commrs_len as u64 - 1)
         .unwrap_or(false)
-    {
-        return Err(format_err!(
+        {
+            return Err(format_err!(
             "MAX(faults) must <= LEN(comm_rs)-1: {:?}, {:?}",
             faults_max,
             commrs_len - 1
         ));
-    }
+        }
 
     let mut fixed: Vec<VerifyPoStFixedSectorsCountInput> = vec![];
 
@@ -256,6 +243,32 @@ pub fn fan_out_verify_post_input(
     Ok(fixed)
 }
 
+/// Collapses return values from multiple fixed sectors-count PoSt verify
+/// operations into a single return value for dynamic sector count.
+///
+pub fn verify_post_collect_output(
+    xs: Vec<error::Result<VerifyPoStFixedSectorsCountOutput>>,
+) -> error::Result<VerifyPoStDynamicSectorsCountOutput> {
+    if xs.is_empty() {
+        return Err(format_err!("input vector must not be empty"));
+    }
+
+    let mut dynamic = VerifyPoStDynamicSectorsCountOutput { is_valid: true };
+
+    for x in xs.into_iter() {
+        match x {
+            Err(e) => {
+                return Err(e);
+            }
+            Ok(VerifyPoStFixedSectorsCountOutput { is_valid }) => {
+                dynamic.is_valid = dynamic.is_valid && is_valid;
+            }
+        }
+    }
+
+    Ok(dynamic)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -318,10 +331,10 @@ mod tests {
             ],
         };
 
-        let fixed_a = fan_out_generate_post_input(dynamic_a);
-        let fixed_b = fan_out_generate_post_input(dynamic_b);
-        let fixed_c = fan_out_generate_post_input(dynamic_c);
-        let fixed_d = fan_out_generate_post_input(dynamic_d);
+        let fixed_a = generate_post_spread_input(dynamic_a);
+        let fixed_b = generate_post_spread_input(dynamic_b);
+        let fixed_c = generate_post_spread_input(dynamic_c);
+        let fixed_d = generate_post_spread_input(dynamic_d);
 
         // sanity check
         assert_eq!(POST_SECTORS_COUNT, 2);
@@ -384,10 +397,10 @@ mod tests {
             faults: Vec::new(),
         };
 
-        let fixed_a = fan_out_verify_post_input(dynamic_a).unwrap();
-        let fixed_b = fan_out_verify_post_input(dynamic_b).unwrap();
-        let fixed_c = fan_out_verify_post_input(dynamic_c).unwrap();
-        let fixed_d = fan_out_verify_post_input(dynamic_d).unwrap();
+        let fixed_a = verify_post_spread_input(dynamic_a).unwrap();
+        let fixed_b = verify_post_spread_input(dynamic_b).unwrap();
+        let fixed_c = verify_post_spread_input(dynamic_c).unwrap();
+        let fixed_d = verify_post_spread_input(dynamic_d).unwrap();
 
         // sanity check
         assert_eq!(POST_SECTORS_COUNT, 2);
@@ -413,7 +426,7 @@ mod tests {
         // LEN(proofs) must equal CEIL(LEN(comm_rs)/2))
         assert_eq!(
             true,
-            fan_out_verify_post_input(VerifyPoStDynamicSectorsCountInput {
+            verify_post_spread_input(VerifyPoStDynamicSectorsCountInput {
                 sector_bytes: PaddedBytesAmount(1),
                 comm_rs: vec![comm_r_a.clone()],
                 challenge_seed: [0; 32],
@@ -426,7 +439,7 @@ mod tests {
         // LEN(proofs) must equal CEIL(LEN(comm_rs)/2))
         assert_eq!(
             true,
-            fan_out_verify_post_input(VerifyPoStDynamicSectorsCountInput {
+            verify_post_spread_input(VerifyPoStDynamicSectorsCountInput {
                 sector_bytes: PaddedBytesAmount(1),
                 comm_rs: vec![comm_r_a.clone()],
                 challenge_seed: [0; 32],
@@ -439,7 +452,7 @@ mod tests {
         // 0 <= MAX(faults) <= (LEN(comm_rs)-1)
         assert_eq!(
             true,
-            fan_out_verify_post_input(VerifyPoStDynamicSectorsCountInput {
+            verify_post_spread_input(VerifyPoStDynamicSectorsCountInput {
                 sector_bytes: PaddedBytesAmount(1),
                 comm_rs: vec![comm_r_a.clone()],
                 challenge_seed: [0; 32],
@@ -452,7 +465,7 @@ mod tests {
         // LEN(FAULTS) <= LEN(COMM_RS)
         assert_eq!(
             true,
-            fan_out_verify_post_input(VerifyPoStDynamicSectorsCountInput {
+            verify_post_spread_input(VerifyPoStDynamicSectorsCountInput {
                 sector_bytes: PaddedBytesAmount(1),
                 comm_rs: vec![comm_r_a.clone()],
                 challenge_seed: [0; 32],
@@ -463,7 +476,7 @@ mod tests {
         );
 
         // map dynamic sectors count indices to fixed count fault indices
-        let fixed_e = fan_out_verify_post_input(VerifyPoStDynamicSectorsCountInput {
+        let fixed_e = verify_post_spread_input(VerifyPoStDynamicSectorsCountInput {
             sector_bytes: PaddedBytesAmount(1),
             comm_rs: vec![
                 comm_r_a.clone(),
@@ -480,7 +493,7 @@ mod tests {
         assert_eq!(vec![None, Some(vec![1 as u64])], fault_vecs(&fixed_e));
 
         // ensure fault-values map to appropriate, duplicated comm_r
-        let fixed_f = fan_out_verify_post_input(VerifyPoStDynamicSectorsCountInput {
+        let fixed_f = verify_post_spread_input(VerifyPoStDynamicSectorsCountInput {
             sector_bytes: PaddedBytesAmount(1),
             comm_rs: vec![comm_r_a.clone()],
             challenge_seed: [0; 32],
@@ -495,7 +508,7 @@ mod tests {
         //
         // explanation: faults=[3] corresponds to faults=[1] in the second fixed
         // count pair and faults=[] in the first
-        let fixed_g = fan_out_verify_post_input(VerifyPoStDynamicSectorsCountInput {
+        let fixed_g = verify_post_spread_input(VerifyPoStDynamicSectorsCountInput {
             sector_bytes: PaddedBytesAmount(1),
             comm_rs: vec![
                 comm_r_a.clone(),
@@ -516,7 +529,7 @@ mod tests {
         // explanation: faults=[0,2] corresponds to faults[0] in the first pair
         // and faults[0, 1] in the second (because the third commitment was
         // duplicated
-        let fixed_h = fan_out_verify_post_input(VerifyPoStDynamicSectorsCountInput {
+        let fixed_h = verify_post_spread_input(VerifyPoStDynamicSectorsCountInput {
             sector_bytes: PaddedBytesAmount(1),
             comm_rs: vec![comm_r_a.clone(), comm_r_b.clone(), comm_r_c.clone()],
             challenge_seed: [0; 32],
@@ -551,7 +564,7 @@ mod tests {
         };
 
         // returns first error encountered (from head of vector)
-        let result_a = fan_in_generate_post_output(vec![
+        let result_a = generate_post_collect_output(vec![
             Ok(fixed_a),
             Err(format_err!("alpha")),
             Err(format_err!("beta")),
@@ -562,7 +575,7 @@ mod tests {
 
         // combines proofs into single vector
         let result_b =
-            fan_in_generate_post_output(vec![Ok(fixed_b), Ok(fixed_c), Ok(fixed_d)]).unwrap();
+            generate_post_collect_output(vec![Ok(fixed_b), Ok(fixed_c), Ok(fixed_d)]).unwrap();
         assert_eq!(0, result_b.proofs[0][0]);
         assert_eq!(1, result_b.proofs[1][0]);
         assert_eq!(2, result_b.proofs[2][0]);
@@ -577,7 +590,7 @@ mod tests {
         let ok = |x| Ok(VerifyPoStFixedSectorsCountOutput { is_valid: x });
 
         // returns first error encountered (from head of vector)
-        let result_a = fan_in_verify_post_output(vec![
+        let result_a = verify_post_collect_output(vec![
             ok(false),
             Err(format_err!("alpha")),
             Err(format_err!("beta")),
@@ -588,11 +601,11 @@ mod tests {
         assert_eq!(false, format!("{:?}", error_a).contains("beta"));
 
         // verify all proofs as one (invalid)
-        let result_b = fan_in_verify_post_output(vec![ok(false), ok(true)]).unwrap();
+        let result_b = verify_post_collect_output(vec![ok(false), ok(true)]).unwrap();
         assert_eq!(false, result_b.is_valid);
 
         // verify all proofs as one (valid)
-        let result_c = fan_in_verify_post_output(vec![ok(true), ok(true)]).unwrap();
+        let result_c = verify_post_collect_output(vec![ok(true), ok(true)]).unwrap();
         assert_eq!(true, result_c.is_valid);
     }
 }
