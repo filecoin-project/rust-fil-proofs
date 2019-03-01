@@ -52,7 +52,6 @@ pub struct VerifyPoStFixedSectorsCountOutput {
     pub is_valid: bool,
 }
 
-
 /// Maps inputs for a single dynamic sectors-count PoSt generation operation to
 /// a vector of PoSt generation inputs for fixed sectors-count.
 ///
@@ -160,13 +159,13 @@ pub fn verify_post_spread_input(
     if faults_max
         .map(|m| *m > commrs_len as u64 - 1)
         .unwrap_or(false)
-        {
-            return Err(format_err!(
+    {
+        return Err(format_err!(
             "MAX(faults) must <= LEN(comm_rs)-1: {:?}, {:?}",
             faults_max,
             commrs_len - 1
         ));
-        }
+    }
 
     let mut fixed: Vec<VerifyPoStFixedSectorsCountInput> = vec![];
 
