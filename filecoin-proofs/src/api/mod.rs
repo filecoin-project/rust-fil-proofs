@@ -136,15 +136,30 @@ pub unsafe extern "C" fn generate_post(
 ///
 #[no_mangle]
 pub unsafe extern "C" fn verify_post(
-    cfg_ptr: *const ConfiguredStore,
-    flattened_comm_rs_ptr: *const u8,
-    flattened_comm_rs_len: libc::size_t,
-    challenge_seed: &[u8; 32],
+    _cfg_ptr: *const ConfiguredStore,
+    _flattened_comm_rs_ptr: *const u8,
+    _flattened_comm_rs_len: libc::size_t,
+    _challenge_seed: &[u8; 32],
     proofs_ptr: *const [u8; 192],
     proofs_len: libc::size_t,
-    faults_ptr: *const u64,
-    faults_len: libc::size_t,
+    _faults_ptr: *const u64,
+    _faults_len: libc::size_t,
 ) -> *mut responses::VerifyPoSTResponse {
+    let mut response: responses::VerifyPoSTResponse = Default::default();
+
+    let proofs: &[[u8; 192]] = from_raw_parts(proofs_ptr, proofs_len);
+
+    if proofs[0][0] == 42 {
+        response.is_valid = true;
+    } else {
+        response.is_valid = false;
+    };
+
+    // Stay mocked for now — remove early return when ready to use.
+    Box::into_raw(Box::new(response))
+
+    /*
+
     let mut response: responses::VerifyPoSTResponse = Default::default();
 
     if let Some(cfg) = cfg_ptr.as_ref() {
@@ -196,6 +211,8 @@ pub unsafe extern "C" fn verify_post(
     }
 
     Box::into_raw(Box::new(response))
+
+    */
 }
 
 /// Initializes and returns a SectorBuilder.
