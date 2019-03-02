@@ -1,4 +1,5 @@
 extern crate bellman;
+extern crate chrono;
 extern crate pairing;
 extern crate rand;
 extern crate sapling_crypto;
@@ -7,6 +8,7 @@ extern crate clap;
 #[cfg(any(feature = "cpu-profile", feature = "heap-profile"))]
 extern crate gperftools;
 extern crate memmap;
+extern crate serde_json;
 extern crate tempfile;
 #[macro_use]
 extern crate slog;
@@ -14,6 +16,7 @@ extern crate slog;
 extern crate filecoin_proofs;
 extern crate storage_proofs;
 
+use chrono::Utc;
 use clap::{App, Arg};
 #[cfg(feature = "heap-profile")]
 use gperftools::heap_profiler::HEAP_PROFILER;
@@ -23,7 +26,7 @@ use memmap::MmapMut;
 use memmap::MmapOptions;
 use pairing::bls12_381::Bls12;
 use rand::{Rng, SeedableRng, XorShiftRng};
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::time::{Duration, Instant};
 
@@ -88,17 +91,43 @@ fn stop_profile() {
 #[inline(always)]
 fn stop_profile() {}
 
-fn file_backed_mmap_from_random_bytes(n: usize) -> MmapMut {
+fn _file_backed_mmap_from_random_bytes(n: usize, use_tmp: bool) -> MmapMut {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-    let mut tmpfile: File = tempfile::tempfile().unwrap();
+    let mut file: File = if use_tmp {
+        tempfile::tempfile().unwrap()
+    } else {
+        OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(format!("./random-zigzag-data-{:?}", Utc::now()))
+            .unwrap()
+    };
+    info!(FCP_LOG, "generating fake data"; "target" => "status");
 
     for _ in 0..n {
-        tmpfile
-            .write_all(&fr_into_bytes::<Bls12>(&rng.gen()))
-            .unwrap();
+        file.write_all(&fr_into_bytes::<Bls12>(&rng.gen())).unwrap();
     }
 
-    unsafe { MmapOptions::new().map_mut(&tmpfile).unwrap() }
+    unsafe { MmapOptions::new().map_mut(&file).unwrap() }
+}
+
+fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> MmapMut {
+    let file: File = if use_tmp {
+        tempfile::tempfile().unwrap()
+    } else {
+        OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(format!("./zigzag-data-{:?}", Utc::now()))
+            .unwrap()
+    };
+
+    info!(FCP_LOG, "generating zeroed data"; "target" => "status");
+    file.set_len(32 * n as u64).unwrap();
+
+    unsafe { MmapOptions::new().map_mut(&file).unwrap() }
 }
 
 pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
@@ -106,6 +135,21 @@ pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
     tmpfile.write_all(data).unwrap();
 
     unsafe { MmapOptions::new().map_mut(&tmpfile).unwrap() }
+}
+
+fn dump_proof_bytes(serialized_proofs: &[u8]) {
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .open(format!("./proofs-{:?}", Utc::now()))
+        .unwrap();
+
+    info!(
+        FCP_LOG,
+        "dumping proofs ({} bytes)",
+        serialized_proofs.len(); "target" => "status"
+    );
+    let _ = file.write_all(serialized_proofs);
 }
 
 fn do_the_work<H: 'static>(
@@ -119,8 +163,8 @@ fn do_the_work<H: 'static>(
     groth: bool,
     bench: bool,
     extract: bool,
-    _taper: f64,
-    _taper_layers: usize,
+    use_tmp: bool,
+    dump_proofs: bool,
 ) where
     H: Hasher,
 {
@@ -138,8 +182,6 @@ fn do_the_work<H: 'static>(
     info!(FCP_LOG, "circuit: {:?}", circuit; "target" => "config");
     info!(FCP_LOG, "groth: {:?}", groth; "target" => "config");
     info!(FCP_LOG, "bench: {:?}", bench; "target" => "config");
-
-    info!(FCP_LOG, "generating fake data"; "target" => "status");
 
     let nodes = data_size / 32;
 
@@ -160,13 +202,10 @@ fn do_the_work<H: 'static>(
     info!(FCP_LOG, "running setup");
     start_profile("setup");
     let pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
+    info!(FCP_LOG, "setup complete");
     stop_profile();
 
-    if groth {
-        let engine_params = JubjubBls12::new();
-        let _ = ZigZagCompound::groth_params(&pp, &engine_params);
-    }
-    let mut data = file_backed_mmap_from_random_bytes(nodes);
+    let mut data = file_backed_mmap_from_zeroes(nodes, use_tmp);
 
     let start = Instant::now();
     let mut replication_duration = Duration::new(0, 0);
@@ -214,21 +253,13 @@ fn do_the_work<H: 'static>(
     let vanilla_proving = start.elapsed();
     total_proving += vanilla_proving;
 
-    let proving_avg = total_proving;
-    let proving_avg =
-        f64::from(proving_avg.subsec_nanos()) / 1_000_000_000f64 + (proving_avg.as_secs() as f64);
+    let serialized_proofs = (serde_json::to_string(&all_partition_proofs))
+        .unwrap()
+        .into_bytes();
 
-    // -- print statistics
-
-    //    let serialized_proofs = proofs.iter().fold(Vec::new(), |mut acc, p| {
-    //        acc.extend(p.serialize());
-    //        acc
-    //    });
-    //    let avg_proof_size = serialized_proofs.len() / samples as usize;
-    //
-    //info!(target: "stats", "Average proof size {}", prettyb(avg_proof_size));
-
-    info!(FCP_LOG, "vanilla_proving_time: {:?} seconds", proving_avg; "target" => "stats");
+    if dump_proofs {
+        dump_proof_bytes(&serialized_proofs);
+    }
 
     let samples: u32 = 5;
     info!(FCP_LOG, "sampling verifying (samples: {})", samples);
@@ -283,6 +314,12 @@ fn do_the_work<H: 'static>(
         }
 
         if groth {
+            // TODO: The time measured for Groth proving also includes parameter loading (which can be long)
+            // and vanilla proving, which may also be.
+            // For now, analysis should note and subtract out these times.
+            // We should implement a method of CompoundProof, which will skip vanilla proving.
+            // We should also allow the serialized vanilla proofs to be passed (as a file) to the example
+            // and skip replication/vanilla-proving entirely.
             info!(FCP_LOG, "Performing circuit groth."; "target" => "status");
             let multi_proof = {
                 let start = Instant::now();
@@ -385,6 +422,16 @@ fn main() {
                 .default_value("10")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("no-tmp")
+                .long("no-tmp")
+                .help("Don't use a temp file for random data (write to current directory instead).")
+        )
+        .arg(
+            Arg::with_name("dump")
+                .long("dump")
+                .help("Dump vanilla proofs to current directory.")
+        )
        .arg(
             Arg::with_name("partitions")
                 .long("partitions")
@@ -437,6 +484,8 @@ fn main() {
     let partitions = value_t!(matches, "partitions", usize).unwrap();
     let taper = value_t!(matches, "taper", f64).unwrap();
     let taper_layers = value_t!(matches, "taper-layers", usize).unwrap_or(layers);
+    let use_tmp = !matches.is_present("no-tmp");
+    let dump_proofs = matches.is_present("dump");
     let groth = matches.is_present("groth");
     let bench = !matches.is_present("no-bench");
     let circuit = matches.is_present("circuit");
@@ -462,8 +511,8 @@ fn main() {
                 groth,
                 bench,
                 extract,
-                taper,
-                taper_layers,
+                use_tmp,
+                dump_proofs,
             );
         }
         "sha256" => {
@@ -478,8 +527,8 @@ fn main() {
                 groth,
                 bench,
                 extract,
-                taper,
-                taper_layers,
+                use_tmp,
+                dump_proofs,
             );
         }
         "blake2s" => {
@@ -494,8 +543,8 @@ fn main() {
                 groth,
                 bench,
                 extract,
-                taper,
-                taper_layers,
+                use_tmp,
+                dump_proofs,
             );
         }
         _ => panic!(format!("invalid hasher: {}", hasher)),

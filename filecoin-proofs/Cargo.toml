@@ -15,6 +15,7 @@ storage-proofs = { path = "../storage-proofs" }
 ffi-toolkit = { path = "../ffi-toolkit" }
 logging-toolkit = { path = "../logging-toolkit" }
 bitvec = "0.5"
+chrono = "0.4"
 phase2 = "0.2.2"
 sapling-crypto = { git = "https://github.com/zcash-hackworks/sapling-crypto", branch = "master" }
 rand = "0.4"
