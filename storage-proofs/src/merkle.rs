@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 // Reexport here, so we don't depend on merkle_light directly in other places.
 use merkle_light::hash::Algorithm;
 pub use merkle_light::merkle::MerkleTree;
+pub use merkle_light::merkle::VecStore;
 use merkle_light::proof;
 use pairing::bls12_381::Fr;
 

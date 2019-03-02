@@ -4,7 +4,7 @@ use crate::drgporep::DataProof;
 use crate::drgraph::graph_height;
 use crate::error::*;
 use crate::hasher::{Domain, Hasher};
-use crate::merkle::{MerkleProof, MerkleTree};
+use crate::merkle::{MerkleProof, MerkleTree, VecStore};
 use crate::parameter_cache::ParameterSetIdentifier;
 use crate::proof::ProofScheme;
 
@@ -40,12 +40,15 @@ pub struct PrivateInputs<'a, H: 'a + Hasher> {
     /// The data of the leaf.
     pub leaf: H::Domain,
     /// The underlying merkle tree.
-    pub tree: &'a MerkleTree<H::Domain, H::Function>,
+    pub tree: &'a MerkleTree<H::Domain, H::Function, VecStore<H::Domain>>,
     _h: PhantomData<H>,
 }
 
 impl<'a, H: Hasher> PrivateInputs<'a, H> {
-    pub fn new(leaf: H::Domain, tree: &'a MerkleTree<H::Domain, H::Function>) -> Self {
+    pub fn new(
+        leaf: H::Domain,
+        tree: &'a MerkleTree<H::Domain, H::Function, VecStore<H::Domain>>,
+    ) -> Self {
         PrivateInputs {
             leaf,
             tree,

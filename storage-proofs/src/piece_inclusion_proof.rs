@@ -5,8 +5,7 @@ use merkle_light::proof::Proof;
 
 use crate::error::*;
 use crate::hasher::{Domain, Hasher};
-use crate::merkle::MerkleTree;
-
+use crate::merkle::{MerkleTree, VecStore};
 type InclusionProof<T> = Proof<T>;
 
 /// A FileInclusionProof contains a merkle inclusion proof for the first and last node
@@ -28,7 +27,7 @@ pub struct PieceInclusionProof<H: Hasher> {
 /// For this method to work, the piece data used to validate pieces will need to be padded as necessary,
 /// and pieces will need to be aligned (to 128-byte chunks for Fr32 bit-padding) when written.
 pub fn file_inclusion_proofs<H: Hasher>(
-    tree: &MerkleTree<H::Domain, H::Function>,
+    tree: &MerkleTree<H::Domain, H::Function, VecStore<H::Domain>>,
     piece_lengths: &[usize],
 ) -> Vec<PieceInclusionProof<H>> {
     bounds(piece_lengths)
@@ -53,7 +52,7 @@ fn bounds(lengths: &[usize]) -> Vec<(usize, usize)> {
 /// of the piece whose inclusion should be proved. It returns a corresponding file_inclusion_proof.
 /// For the resulting proof to be valid, first_node must be <= last_node.
 pub fn file_inclusion_proof<H: Hasher>(
-    tree: &MerkleTree<H::Domain, H::Function>,
+    tree: &MerkleTree<H::Domain, H::Function, VecStore<H::Domain>>,
     first_node: usize,
     last_node: usize,
 ) -> PieceInclusionProof<H> {

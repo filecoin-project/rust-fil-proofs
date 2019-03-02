@@ -3,6 +3,7 @@ use std::hash::Hasher as StdHasher;
 use bitvec::{self, BitVec};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use merkle_light::hash::{Algorithm as LightAlgorithm, Hashable};
+use merkle_light::merkle::Element;
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
 use pairing::{PrimeField, PrimeFieldRepr};
 use rand::{Rand, Rng};
@@ -163,20 +164,20 @@ impl Domain for PedersenDomain {
     // QUESTION: When, if ever, should serialize and into_bytes return different results?
     // The definitions here at least are equivalent.
     fn serialize(&self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(32);
+        let mut bytes = Vec::with_capacity(PedersenDomain::byte_len());
         self.0.write_le(&mut bytes).unwrap();
         bytes
     }
 
     fn into_bytes(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(32);
+        let mut out = Vec::with_capacity(PedersenDomain::byte_len());
         self.0.write_le(&mut out).unwrap();
 
         out
     }
 
     fn try_from_bytes(raw: &[u8]) -> Result<Self> {
-        if raw.len() != 32 {
+        if raw.len() != PedersenDomain::byte_len() {
             return Err(Error::BadFrBytes);
         }
         let mut res: FrRepr = Default::default();
@@ -188,6 +189,19 @@ impl Domain for PedersenDomain {
     fn write_bytes(&self, dest: &mut [u8]) -> Result<()> {
         self.0.write_le(dest)?;
         Ok(())
+    }
+}
+
+impl Element for PedersenDomain {
+    fn byte_len() -> usize {
+        32
+    }
+
+    fn from_slice(bytes: &[u8]) -> Self {
+        match PedersenDomain::try_from_bytes(bytes) {
+            Ok(res) => res,
+            Err(err) => panic!(err),
+        }
     }
 }
 
@@ -270,12 +284,12 @@ mod tests {
 
     use merkle_light::hash::Hashable;
 
-    use crate::merkle::MerkleTree;
-
+    use crate::merkle::{MerkleTree, VecStore};
     #[test]
     fn test_path() {
         let values = ["hello", "world", "you", "two"];
-        let t = MerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter());
+        let t =
+            MerkleTree::<PedersenDomain, PedersenFunction, VecStore<_>>::from_data(values.iter());
 
         let p = t.gen_proof(0); // create a proof for the first value = "hello"
         assert_eq!(*p.path(), vec![true, true]);
@@ -286,7 +300,8 @@ mod tests {
     fn test_pedersen_hasher() {
         let values = ["hello", "world", "you", "two"];
 
-        let t = MerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter());
+        let t =
+            MerkleTree::<PedersenDomain, PedersenFunction, VecStore<_>>::from_data(values.iter());
 
         assert_eq!(t.leafs(), 4);
 

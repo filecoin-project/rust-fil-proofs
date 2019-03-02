@@ -9,7 +9,7 @@ use serde::ser::Serialize;
 use crate::crypto::blake2s::blake2s;
 use crate::error::Result;
 use crate::hasher::{Domain, Hasher};
-use crate::merkle::MerkleTree;
+use crate::merkle::{MerkleTree, VecStore};
 use crate::merklepor;
 use crate::proof::ProofScheme;
 use crate::util::data_at_node;
@@ -51,11 +51,14 @@ pub struct PrivateInputs<'a, H: 'a + Hasher> {
     /// The underlying data.
     pub data: &'a [u8],
     /// The underlying merkle tree.
-    pub tree: &'a MerkleTree<H::Domain, H::Function>,
+    pub tree: &'a MerkleTree<H::Domain, H::Function, VecStore<H::Domain>>,
 }
 
 impl<'a, H: Hasher> PrivateInputs<'a, H> {
-    pub fn new(data: &'a [u8], tree: &'a MerkleTree<H::Domain, H::Function>) -> Self {
+    pub fn new(
+        data: &'a [u8],
+        tree: &'a MerkleTree<H::Domain, H::Function, VecStore<H::Domain>>,
+    ) -> Self {
         PrivateInputs { data, tree }
     }
 }

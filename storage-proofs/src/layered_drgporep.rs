@@ -12,14 +12,15 @@ use crate::drgporep::{self, DrgPoRep};
 use crate::drgraph::Graph;
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::MerkleTree;
+use crate::merkle::{MerkleTree, VecStore};
 use crate::parameter_cache::ParameterSetIdentifier;
 use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
 use crate::vde;
 use crate::SP_LOG;
 
-type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
+type Tree<H> =
+    MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, VecStore<<H as Hasher>::Domain>>;
 
 #[derive(Debug, Clone)]
 pub enum LayerChallenges {
@@ -429,7 +430,7 @@ pub trait Layers {
 
             sorted_trees.iter().fold(
                 None,
-                |previous_tree: Option<&MerkleTree<_, _>>, (i, replica_tree)| {
+                |previous_tree: Option<&MerkleTree<_, _, _>>, (i, replica_tree)| {
                     // Each iteration's replica_tree becomes the next iteration's previous_tree (data_tree).
                     // The first iteration has no previous_tree.
                     if let Some(data_tree) = previous_tree {

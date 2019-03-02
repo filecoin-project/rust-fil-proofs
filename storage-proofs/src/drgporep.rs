@@ -7,7 +7,7 @@ use serde::ser::Serialize;
 use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::hasher::{Domain, Hasher};
-use crate::merkle::{MerkleProof, MerkleTree};
+use crate::merkle::{MerkleProof, MerkleTree, VecStore};
 use crate::parameter_cache::ParameterSetIdentifier;
 use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
@@ -422,7 +422,7 @@ where
         pp: &Self::PublicParams,
         replica_id: &H::Domain,
         data: &mut [u8],
-        data_tree: Option<MerkleTree<H::Domain, H::Function>>,
+        data_tree: Option<MerkleTree<H::Domain, H::Function, VecStore<H::Domain>>>,
     ) -> Result<(porep::Tau<H::Domain>, porep::ProverAux<H>)> {
         let tree_d = match data_tree {
             Some(tree) => tree,

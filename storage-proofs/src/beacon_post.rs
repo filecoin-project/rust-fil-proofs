@@ -7,7 +7,7 @@ use serde::ser::Serialize;
 
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, Hasher};
-use crate::merkle::MerkleTree;
+use crate::merkle::{MerkleTree, VecStore};
 use crate::parameter_cache::ParameterSetIdentifier;
 use crate::proof::ProofScheme;
 use crate::vdf::Vdf;
@@ -44,14 +44,14 @@ pub struct PublicInputs<T: Domain> {
 #[derive(Clone, Debug)]
 pub struct PrivateInputs<'a, H: 'a + Hasher> {
     pub replicas: &'a [&'a [u8]],
-    pub trees: &'a [&'a MerkleTree<H::Domain, H::Function>],
+    pub trees: &'a [&'a MerkleTree<H::Domain, H::Function, VecStore<H::Domain>>],
     _h: PhantomData<H>,
 }
 
 impl<'a, H: 'a + Hasher> PrivateInputs<'a, H> {
     pub fn new(
         replicas: &'a [&'a [u8]],
-        trees: &'a [&'a MerkleTree<H::Domain, H::Function>],
+        trees: &'a [&'a MerkleTree<H::Domain, H::Function, VecStore<H::Domain>>],
     ) -> Self {
         PrivateInputs {
             replicas,

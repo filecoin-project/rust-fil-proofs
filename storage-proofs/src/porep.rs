@@ -1,6 +1,6 @@
 use crate::error::Result;
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::MerkleTree;
+use crate::merkle::{MerkleTree, VecStore};
 use crate::proof::ProofScheme;
 
 #[derive(Debug)]
@@ -34,14 +34,14 @@ pub struct PrivateInputs<'a> {
 
 #[derive(Debug, Clone)]
 pub struct ProverAux<H: Hasher> {
-    pub tree_d: MerkleTree<H::Domain, H::Function>,
-    pub tree_r: MerkleTree<H::Domain, H::Function>,
+    pub tree_d: MerkleTree<H::Domain, H::Function, VecStore<H::Domain>>,
+    pub tree_r: MerkleTree<H::Domain, H::Function, VecStore<H::Domain>>,
 }
 
 impl<H: Hasher> ProverAux<H> {
     pub fn new(
-        tree_d: MerkleTree<H::Domain, H::Function>,
-        tree_r: MerkleTree<H::Domain, H::Function>,
+        tree_d: MerkleTree<H::Domain, H::Function, VecStore<H::Domain>>,
+        tree_r: MerkleTree<H::Domain, H::Function, VecStore<H::Domain>>,
     ) -> Self {
         ProverAux { tree_d, tree_r }
     }
@@ -55,7 +55,7 @@ pub trait PoRep<'a, H: Hasher>: ProofScheme<'a> {
         pub_params: &'a Self::PublicParams,
         replica_id: &H::Domain,
         data: &mut [u8],
-        data_tree: Option<MerkleTree<H::Domain, H::Function>>,
+        data_tree: Option<MerkleTree<H::Domain, H::Function, VecStore<H::Domain>>>,
     ) -> Result<(Self::Tau, Self::ProverAux)>;
 
     fn extract_all(
