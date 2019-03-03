@@ -1,11 +1,12 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::{BufWriter, Read, Write};
+use std::fs::{copy, remove_file, File, OpenOptions};
+use std::io::{BufWriter, Read};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 use bellman::groth16;
+use memmap::MmapOptions;
 use pairing::bls12_381::{Bls12, Fr};
 use pairing::{Engine, PrimeField};
 use sapling_crypto::jubjub::JubjubBls12;
@@ -443,16 +444,15 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     sector_id_in: &FrSafe,
 ) -> error::Result<SealOutput> {
     let sector_bytes = usize::from(sector_config.sector_bytes());
-    let f_in = File::open(in_path)?;
 
-    // Read all the provided data, even if we will prove less of it because we are faking.
-    let mut data = Vec::with_capacity(sector_bytes);
-    f_in.take(sector_bytes as u64).read_to_end(&mut data)?;
+    // Copy unsealed data to output location, where it will be sealed in place.
+    copy(&in_path, &out_path)?;
+    let f_data = OpenOptions::new().read(true).write(true).open(&out_path)?;
 
-    // Zero-pad the data to the requested size.
-    for _ in data.len()..sector_bytes {
-        data.push(0);
-    }
+    // Zero-pad the data to the requested size by extending the underlying file if needed.
+    f_data.set_len(sector_bytes as u64)?;
+
+    let mut data = unsafe { MmapOptions::new().map_mut(&f_data).unwrap() };
 
     // Zero-pad the prover_id to 32 bytes (and therefore Fr32).
     let prover_id = pad_safe_fr(prover_id_in);
@@ -461,7 +461,6 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
 
     let compound_setup_params = compound_proof::SetupParams {
-        // The proof might use a different number of bytes than we read and copied, if we are faking.
         vanilla_params: &setup_params(sector_config.sector_bytes()),
         engine_params: &(*ENGINE_PARAMS),
         partitions: Some(POREP_PARTITIONS),
@@ -474,9 +473,15 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         &replica_id,
         &mut data,
         None,
-    )?;
+    )
+    .map_err(|e| {
+        // If there was an error during replication, remove the incomplete replica.
+        let _ = remove_file(&out_path);
+        e
+    })?;
 
-    write_data(out_path, &data)?;
+    // If we succeeded in replicating, flush the data.
+    data.flush()?;
 
     let public_tau = tau.simplify();
 
@@ -533,14 +538,6 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         comm_d,
         snark_proof: proof_bytes,
     })
-}
-
-fn write_data<T: AsRef<Path>>(out_path: T, data: &[u8]) -> error::Result<()> {
-    // Write replicated data to out_path.
-    let f_out = File::create(out_path)?;
-    let mut buf_writer = BufWriter::new(f_out);
-    buf_writer.write_all(&data)?;
-    Ok(())
 }
 
 pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
@@ -600,7 +597,6 @@ pub fn verify_seal(
     let comm_r_star = bytes_into_fr::<Bls12>(&comm_r_star)?;
 
     let compound_setup_params = compound_proof::SetupParams {
-        // The proof might use a different number of bytes than we read and copied, if we are faking.
         vanilla_params: &setup_params(sector_config.sector_bytes()),
         engine_params: &(*ENGINE_PARAMS),
         partitions: Some(POREP_PARTITIONS),
