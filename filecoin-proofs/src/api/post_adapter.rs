@@ -277,15 +277,15 @@ pub fn verify_post_spread_input(
     //   {comm_rs=[c, c] faults=[0, 1]}
     // ]
     if !remainder.is_empty() {
-        let fixed_len = { fixed.len() - 1 };
+        let fixed_len = { fixed.len() };
         let remdr_len = { remainder.len() };
 
         let last_remainder_fault: Option<u64> =
-            { fixed[fixed_len].faults.get(remdr_len - 1).cloned() };
+            { fixed[fixed_len - 1].faults.get(remdr_len - 1).cloned() };
 
         if let Some(fault) = last_remainder_fault {
             for n in 0..(POST_SECTORS_COUNT - remdr_len) {
-                fixed[fixed_len].faults.push(1 + fault + n as u64);
+                fixed[fixed_len - 1].faults.push(1 + fault + n as u64);
             }
         }
     }
