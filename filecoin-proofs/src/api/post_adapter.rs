@@ -126,7 +126,9 @@ pub fn generate_post_collect_output(
             Ok(fixed) => {
                 dynamic.proofs.push(fixed.proof);
                 for fault in fixed.faults.iter() {
-                    dynamic.faults.push(((i as u64) * 2) + fault)
+                    dynamic
+                        .faults
+                        .push(((i as u64) * POST_SECTORS_COUNT as u64) + fault)
                 }
             }
         }
