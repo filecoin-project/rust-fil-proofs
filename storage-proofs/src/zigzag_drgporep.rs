@@ -227,4 +227,31 @@ mod tests {
             prove_verify_tapered_32_5_3(5, 3);
         }
     }
+
+    #[test]
+    // We are seeing a bug, in which setup never terminates for some sector sizes.
+    // This test is to debug that and should remain as a regression teset.
+    fn setup_terminates() {
+        let degree = 5;
+        let expansion_degree = 8;
+        let nodes = 1024 * 1024 * 32 * 8; // This corresponds to 8GiB sectors (32-byte nodes)
+        let sloth_iter = 0;
+        let layer_challenges = LayerChallenges::new_tapered(10, 333, 7, 0.3);
+        let sp = SetupParams {
+            drg_porep_setup_params: drgporep::SetupParams {
+                drg: drgporep::DrgParams {
+                    nodes,
+                    degree,
+                    expansion_degree,
+                    seed: new_seed(),
+                },
+                sloth_iter,
+            },
+            layer_challenges: layer_challenges.clone(),
+        };
+
+        // When this fails, the call to setup should panic, but seems to actually hang (i.e. neither return nor panic) for some reason.
+        // When working as designed, the call to setup returns without error.
+        let _pp = ZigZagDrgPoRep::<PedersenHasher>::setup(&sp).unwrap();
+    }
 }
