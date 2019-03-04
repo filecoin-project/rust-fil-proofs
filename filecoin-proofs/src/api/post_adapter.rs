@@ -83,11 +83,14 @@ pub fn generate_post_spread_input(
         let mut input_parts: [(Option<String>, Commitment); POST_SECTORS_COUNT] =
             Default::default();
 
-        let vs = repeat_with(|| remainder[remainder.len() - 1].clone());
-        let rs = remainder.iter().cloned();
-        let it = rs.chain(vs).take(POST_SECTORS_COUNT).enumerate();
+        let iter_with_idx = remainder
+            .iter()
+            .cloned()
+            .chain(repeat_with(|| remainder[remainder.len() - 1].clone()))
+            .take(POST_SECTORS_COUNT)
+            .enumerate();
 
-        for (i, input_part) in it {
+        for (i, input_part) in iter_with_idx {
             input_parts[i] = input_part;
         }
 
@@ -210,11 +213,14 @@ pub fn verify_post_spread_input(
     if !remainder.is_empty() {
         let mut comm_rs: [Commitment; POST_SECTORS_COUNT] = Default::default();
 
-        let vs = repeat(remainder[remainder.len() - 1]);
-        let rs = remainder.iter().cloned();
-        let it = rs.chain(vs).take(POST_SECTORS_COUNT).enumerate();
+        let iter_with_idx = remainder
+            .iter()
+            .cloned()
+            .chain(repeat(remainder[remainder.len() - 1]))
+            .take(POST_SECTORS_COUNT)
+            .enumerate();
 
-        for (i, comm_r) in it {
+        for (i, comm_r) in iter_with_idx {
             comm_rs[i] = comm_r;
         }
 
