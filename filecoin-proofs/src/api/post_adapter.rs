@@ -236,6 +236,22 @@ pub fn verify_post_spread_input(
     }
 
     // Map the dynamic sectors count indices to the fixed sectors count indices.
+    //
+    // For example:
+    //
+    // POST_SECTORS_COUNT = 2
+    //
+    // dynamic = {
+    //   comm_rs=[a, b, c, d, e, f, g, h]
+    //   faults=[0, 1, 5, 6]
+    // }
+    //
+    // fixed = [
+    //   {comm_rs=[a, b] faults=[0, 1]}
+    //   {comm_rs=[c, d] faults=[]}
+    //   {comm_rs=[e, f] faults=[1]}
+    //   {comm_rs=[g, h] faults=[0]}
+    // ]
     for fault in dynamic.faults {
         let i = (fault as f64 / POST_SECTORS_COUNT as f64).floor();
         fixed[i as usize]
@@ -246,6 +262,20 @@ pub fn verify_post_spread_input(
     // If we had to duplicate commitments to make LEN(COMMITMENTS) ==
     // POST_SECTORS_COUNT and the thing we duplicated was faulty, ensure that
     // the duplicates are marked as faulty, too.
+    //
+    // For example:
+    //
+    // POST_SECTORS_COUNT = 2
+    //
+    // dynamic = {
+    //   comm_rs=[a, b, c]
+    //   faults=[2]
+    // }
+    //
+    // fixed = [
+    //   {comm_rs=[a, b] faults=[]}
+    //   {comm_rs=[c, c] faults=[0, 1]}
+    // ]
     if !remainder.is_empty() {
         let fixed_len = { fixed.len() - 1 };
         let remdr_len = { remainder.len() };
