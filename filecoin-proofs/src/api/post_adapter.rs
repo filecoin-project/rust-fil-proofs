@@ -112,34 +112,36 @@ pub fn generate_post_collect_output(
     orig_comm_rs_len: usize,
     xs: Vec<error::Result<GeneratePoStFixedSectorsCountOutput>>,
 ) -> error::Result<GeneratePoStDynamicSectorsCountOutput> {
-    if xs.is_empty() {
-        return Err(format_err!("input vector must not be empty"));
-    }
-
-    let mut dynamic = GeneratePoStDynamicSectorsCountOutput {
-        proofs: Vec::new(),
-        faults: Vec::new(),
+    let seed = if xs.is_empty() {
+        Err(format_err!("input vector must not be empty"))
+    } else {
+        Ok(GeneratePoStDynamicSectorsCountOutput {
+            proofs: Vec::new(),
+            faults: Vec::new(),
+        })
     };
 
-    for (i, x) in xs.into_iter().enumerate() {
-        match x {
-            Err(e) => {
-                return Err(e);
-            }
-            Ok(fixed) => {
-                dynamic.proofs.push(fixed.proof);
-                for fault in fixed.faults.iter() {
-                    dynamic
-                        .faults
-                        .push(((i as u64) * POST_SECTORS_COUNT as u64) + fault)
-                }
-            }
-        }
-    }
-
-    dynamic.faults = dynamic.faults.into_iter().take(orig_comm_rs_len).collect();
-
-    Ok(dynamic)
+    xs.into_iter()
+        .enumerate()
+        .fold(seed, |acc, (i, item)| {
+            acc.and_then(|d1| {
+                item.map(|d2| GeneratePoStDynamicSectorsCountOutput {
+                    proofs: [d1.proofs, vec![d2.proof]].concat(),
+                    faults: [
+                        d1.faults,
+                        d2.faults
+                            .iter()
+                            .map(|fault| ((i as u64) * POST_SECTORS_COUNT as u64) + fault)
+                            .collect(),
+                    ]
+                    .concat(),
+                })
+            })
+        })
+        .map(|dynamic| GeneratePoStDynamicSectorsCountOutput {
+            proofs: dynamic.proofs,
+            faults: dynamic.faults.into_iter().take(orig_comm_rs_len).collect(),
+        })
 }
 
 /// Maps inputs for a single dynamic sectors-count PoSt verify operation to a
