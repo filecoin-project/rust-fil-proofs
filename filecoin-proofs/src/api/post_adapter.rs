@@ -267,24 +267,19 @@ pub fn verify_post_spread_input(
 pub fn verify_post_collect_output(
     xs: Vec<error::Result<VerifyPoStFixedSectorsCountOutput>>,
 ) -> error::Result<VerifyPoStDynamicSectorsCountOutput> {
-    if xs.is_empty() {
-        return Err(format_err!("input vector must not be empty"));
-    }
+    let x = if xs.is_empty() {
+        Err(format_err!("input vector must not be empty"))
+    } else {
+        Ok(VerifyPoStDynamicSectorsCountOutput { is_valid: true })
+    };
 
-    let mut dynamic = VerifyPoStDynamicSectorsCountOutput { is_valid: true };
-
-    for x in xs.into_iter() {
-        match x {
-            Err(e) => {
-                return Err(e);
-            }
-            Ok(VerifyPoStFixedSectorsCountOutput { is_valid }) => {
-                dynamic.is_valid = dynamic.is_valid && is_valid;
-            }
-        }
-    }
-
-    Ok(dynamic)
+    xs.into_iter().fold(x, |acc, item| {
+        acc.and_then(|d1| {
+            item.map(|d2| VerifyPoStDynamicSectorsCountOutput {
+                is_valid: d1.is_valid && d2.is_valid,
+            })
+        })
+    })
 }
 
 #[cfg(test)]
