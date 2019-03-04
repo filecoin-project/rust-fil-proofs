@@ -65,10 +65,17 @@ pub fn generate_post_spread_input(
     let remainder = chunks.remainder();
 
     for chunk in chunks {
+        let mut input_parts: [(Option<String>, Commitment); POST_SECTORS_COUNT] =
+            Default::default();
+
+        for (i, input_part) in chunk.iter().cloned().enumerate() {
+            input_parts[i] = input_part
+        }
+
         fixed.push(GeneratePoStFixedSectorsCountInput {
             sector_bytes: dynamic.sector_bytes,
             challenge_seed: dynamic.challenge_seed,
-            input_parts: [chunk[0].clone(), chunk[1].clone()],
+            input_parts,
         });
     }
 
