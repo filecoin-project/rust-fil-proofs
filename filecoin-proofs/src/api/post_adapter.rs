@@ -269,13 +269,13 @@ pub fn verify_post_spread_input(
 pub fn verify_post_collect_output(
     xs: Vec<error::Result<VerifyPoStFixedSectorsCountOutput>>,
 ) -> error::Result<VerifyPoStDynamicSectorsCountOutput> {
-    let x = if xs.is_empty() {
+    let seed = if xs.is_empty() {
         Err(format_err!("input vector must not be empty"))
     } else {
         Ok(VerifyPoStDynamicSectorsCountOutput { is_valid: true })
     };
 
-    xs.into_iter().fold(x, |acc, item| {
+    xs.into_iter().fold(seed, |acc, item| {
         acc.and_then(|d1| {
             item.map(|d2| VerifyPoStDynamicSectorsCountOutput {
                 is_valid: d1.is_valid && d2.is_valid,
