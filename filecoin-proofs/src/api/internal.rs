@@ -436,6 +436,29 @@ pub struct SealOutput {
     pub snark_proof: SnarkProof,
 }
 
+/// Minimal support for cleaning (deleting) a file unless it was successfully populated.
+struct FileCleanup<T: AsRef<Path>> {
+    path: T,
+    success: bool,
+}
+
+impl<'a, T: AsRef<Path>> FileCleanup<T> {
+    fn new(path: T) -> FileCleanup<T> {
+        FileCleanup {
+            path,
+            success: false,
+        }
+    }
+}
+
+impl<T: AsRef<Path>> Drop for FileCleanup<T> {
+    fn drop(&mut self) {
+        if !self.success {
+            let _ = remove_file(&self.path);
+        }
+    }
+}
+
 pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     sector_config: &SectorConfig,
     in_path: T,
@@ -444,6 +467,8 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     sector_id_in: &FrSafe,
 ) -> error::Result<SealOutput> {
     let sector_bytes = usize::from(sector_config.sector_bytes());
+
+    let mut cleanup = FileCleanup::new(&out_path);
 
     // Copy unsealed data to output location, where it will be sealed in place.
     copy(&in_path, &out_path)?;
@@ -473,15 +498,11 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         &replica_id,
         &mut data,
         None,
-    )
-    .map_err(|e| {
-        // If there was an error during replication, remove the incomplete replica.
-        let _ = remove_file(&out_path);
-        e
-    })?;
+    )?;
 
-    // If we succeeded in replicating, flush the data.
+    // If we succeeded in replicating, flush the data and protect output from being cleaned up.
     data.flush()?;
+    cleanup.success = true;
 
     let public_tau = tau.simplify();
 
