@@ -167,7 +167,7 @@ pub fn verify_post_spread_input(
 
     if proofs_len != replicas_c {
         return Err(format_err!(
-            "LEN(proofs) must == CEIL(LEN(comm_rs)/2): {:?}, {:?}",
+            "LEN(proofs) must == CEIL(LEN(comm_rs)/POST_SECTORS_COUNT): {:?}, {:?}",
             proofs_len,
             replicas_c
         ));
