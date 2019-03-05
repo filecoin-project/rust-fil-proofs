@@ -108,36 +108,43 @@ const FEISTEL_BYTES: usize = 2 * HALF_FEISTEL_BYTES;
 // Round function of the Feistel network: `F(Ri, Ki)`. Joins the `right`
 // piece and the `key`, hashes it and returns the lower `u32` part of
 // the hash filtered trough the `right_mask`.
-#[allow(clippy::needless_range_loop)]
 fn feistel(right: Index, key: Index, right_mask: Index) -> Index {
     let mut data: [u8; FEISTEL_BYTES] = [0; FEISTEL_BYTES];
 
     {
-        let mut shift = (HALF_FEISTEL_BYTES - 1) * 8;
+        let mut shift = HALF_FEISTEL_BYTES * 8;
 
         for item in data.iter_mut().take(HALF_FEISTEL_BYTES) {
+            shift -= 8;
             *item = (right >> shift) as u8;
-            if shift > 0 {
-                shift -= 8;
-            }
         }
     }
 
     {
-        let mut shift = (HALF_FEISTEL_BYTES - 1) * 8;
-        for i in 0..HALF_FEISTEL_BYTES {
-            data[i] = (key >> shift) as u8;
-            if shift > 0 {
-                shift -= 8;
-            }
+        let mut shift = HALF_FEISTEL_BYTES * 8;
+
+        for item in data
+            .iter_mut()
+            .skip(HALF_FEISTEL_BYTES)
+            .take(HALF_FEISTEL_BYTES)
+        {
+            shift -= 8;
+            *item = (key >> shift) as u8;
         }
     }
 
     let hash = FeistelHash::digest(&data);
 
-    let r = (0..HALF_FEISTEL_BYTES).fold(0, |acc, i| acc | Index::from(hash[i * 8]));
+    {
+        let mut r = 0;
+        let mut shift = HALF_FEISTEL_BYTES * 8;
+        for item in hash.iter().take(HALF_FEISTEL_BYTES) {
+            shift -= 8;
+            r |= Index::from(*item) << shift;
+        }
 
-    r & right_mask
+        r & right_mask
+    }
 }
 
 #[cfg(test)]
