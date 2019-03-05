@@ -123,6 +123,7 @@ pub unsafe extern "C" fn generate_post(
             response.faults_ptr = faults.as_ptr();
 
             // we'll free this stuff when we free the GeneratePoSTResponse
+            mem::forget(flattened_proofs);
             mem::forget(faults);
         }
         Err(err) => {
