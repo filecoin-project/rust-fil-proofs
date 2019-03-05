@@ -113,8 +113,11 @@ pub unsafe extern "C" fn generate_post(
     match (*ptr).generate_post(&comm_rs, challenge_seed) {
         Ok(GeneratePoStDynamicSectorsCountOutput { proofs, faults }) => {
             response.status_code = FCPResponseStatus::FCPNoError;
-            response.proofs_len = proofs.len();
-            response.proofs_ptr = proofs.as_ptr();
+
+            let flattened_proofs: Vec<u8> = proofs.iter().flat_map(|x| x.iter().cloned()).collect();
+
+            response.flattened_proofs_len = flattened_proofs.len();
+            response.flattened_proofs_ptr = flattened_proofs.as_ptr();
 
             response.faults_len = faults.len();
             response.faults_ptr = faults.as_ptr();
@@ -140,16 +143,16 @@ pub unsafe extern "C" fn verify_post(
     _flattened_comm_rs_ptr: *const u8,
     _flattened_comm_rs_len: libc::size_t,
     _challenge_seed: &[u8; 32],
-    proofs_ptr: *const [u8; 192],
-    proofs_len: libc::size_t,
+    flattened_proofs_ptr: *const u8,
+    flattened_proofs_len: libc::size_t,
     _faults_ptr: *const u64,
     _faults_len: libc::size_t,
 ) -> *mut responses::VerifyPoSTResponse {
     let mut response: responses::VerifyPoSTResponse = Default::default();
 
-    let proofs: &[[u8; 192]] = from_raw_parts(proofs_ptr, proofs_len);
+    let proofs: &[u8] = from_raw_parts(flattened_proofs_ptr, flattened_proofs_len);
 
-    if proofs[0][0] == 42 {
+    if proofs[0] == 42 {
         response.is_valid = true;
     } else {
         response.is_valid = false;
