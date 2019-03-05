@@ -1,4 +1,5 @@
-use blake2::{Blake2b, Digest};
+// use blake2::{Blake2b, Digest};
+use blake2b_simd::blake2b;
 use std::mem;
 
 pub const FEISTEL_ROUNDS: usize = 3;
@@ -7,7 +8,7 @@ pub const FEISTEL_ROUNDS: usize = 3;
 // (and also https://en.wikipedia.org/wiki/Feistel_cipher#Theoretical_work).
 
 pub type Index = u64;
-pub type FeistelHash = Blake2b;
+// pub type FeistelHash = Blake2b;
 
 pub type FeistelPrecomputed = (Index, Index, Index);
 
@@ -133,12 +134,12 @@ fn feistel(right: Index, key: Index, right_mask: Index) -> Index {
         }
     }
 
-    let hash = FeistelHash::digest(&data);
+    let hash = blake2b(&data);
 
     {
         let mut r = 0;
         let mut shift = HALF_FEISTEL_BYTES * 8;
-        for item in hash.iter().take(HALF_FEISTEL_BYTES) {
+        for item in hash.as_ref().iter().take(HALF_FEISTEL_BYTES) {
             shift -= 8;
             r |= Index::from(*item) << shift;
         }
