@@ -138,19 +138,19 @@ pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
     unsafe { MmapOptions::new().map_mut(&tmpfile).unwrap() }
 }
 
-fn dump_proof_bytes(serialized_proofs: &[u8]) {
-    let mut file = OpenOptions::new()
+fn dump_proof_bytes<H: Hasher>(all_partition_proofs: &[layered_drgporep::Proof<H>]) {
+    let file = OpenOptions::new()
         .write(true)
         .create(true)
         .open(format!("./proofs-{:?}", Utc::now()))
         .unwrap();
-
     info!(
         FCP_LOG,
-        "dumping proofs ({} bytes)",
-        serialized_proofs.len(); "target" => "status"
+        "dumping {} proofs",
+        all_partition_proofs.len(); "target" => "status"
     );
-    if let Err(e) = file.write_all(serialized_proofs) {
+
+    if let Err(e) = serde_json::to_writer(file, all_partition_proofs) {
         info!(
             FCP_LOG,
             "Encountered error while writing serialized proofs: {}", e
@@ -272,12 +272,8 @@ fn do_the_work<H: 'static>(
     let vanilla_proving = start.elapsed();
     total_proving += vanilla_proving;
 
-    let serialized_proofs = (serde_json::to_string(&all_partition_proofs))
-        .unwrap()
-        .into_bytes();
-
     if dump_proofs {
-        dump_proof_bytes(&serialized_proofs);
+        dump_proof_bytes(&all_partition_proofs);
     }
 
     let samples: u32 = 5;
