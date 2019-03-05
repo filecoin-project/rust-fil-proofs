@@ -1,4 +1,4 @@
-use crate::api::internal::PoStOutput;
+use crate::api::post_adapter::*;
 use crate::api::responses::err_code_and_msg;
 use crate::api::responses::FCPResponseStatus;
 use crate::api::responses::FFIPieceMetadata;
@@ -7,15 +7,17 @@ use crate::api::sector_builder::metadata::SealStatus;
 use crate::api::sector_builder::SectorBuilder;
 use ffi_toolkit::rust_str_to_c_str;
 use ffi_toolkit::{c_str_to_rust_str, raw_ptr};
-use libc;
 use sector_base::api::disk_backed_storage::new_sector_config;
 use sector_base::api::disk_backed_storage::ConfiguredStore;
+
+use libc;
 use std::ffi::CString;
 use std::mem;
 use std::ptr;
 use std::slice::from_raw_parts;
 
 pub mod internal;
+pub mod post_adapter;
 pub mod responses;
 mod sector_builder;
 
@@ -94,7 +96,7 @@ pub unsafe extern "C" fn generate_post(
     flattened_comm_rs_ptr: *const u8,
     flattened_comm_rs_len: libc::size_t,
     challenge_seed: &[u8; 32],
-) -> *mut responses::GeneratePoSTResponse {
+) -> *mut responses::GeneratePoStResponse {
     let comm_rs = from_raw_parts(flattened_comm_rs_ptr, flattened_comm_rs_len)
         .iter()
         .step_by(32)
@@ -106,15 +108,13 @@ pub unsafe extern "C" fn generate_post(
             acc
         });
 
-    let mut response: responses::GeneratePoSTResponse = Default::default();
+    let mut response: responses::GeneratePoStResponse = Default::default();
 
     match (*ptr).generate_post(&comm_rs, challenge_seed) {
-        Ok(PoStOutput {
-            snark_proof,
-            faults,
-        }) => {
+        Ok(GeneratePoStDynamicSectorsCountOutput { proofs, faults }) => {
             response.status_code = FCPResponseStatus::FCPNoError;
-            response.proof = snark_proof;
+            response.proofs_len = proofs.len();
+            response.proofs_ptr = proofs.as_ptr();
 
             response.faults_len = faults.len();
             response.faults_ptr = faults.as_ptr();
@@ -140,13 +140,16 @@ pub unsafe extern "C" fn verify_post(
     _flattened_comm_rs_ptr: *const u8,
     _flattened_comm_rs_len: libc::size_t,
     _challenge_seed: &[u8; 32],
-    proof: &[u8; API_POST_PROOF_BYTES],
+    proofs_ptr: *const [u8; 192],
+    proofs_len: libc::size_t,
     _faults_ptr: *const u64,
     _faults_len: libc::size_t,
 ) -> *mut responses::VerifyPoSTResponse {
     let mut response: responses::VerifyPoSTResponse = Default::default();
 
-    if proof[0] == 42 {
+    let proofs: &[[u8; 192]] = from_raw_parts(proofs_ptr, proofs_len);
+
+    if proofs[0][0] == 42 {
         response.is_valid = true;
     } else {
         response.is_valid = false;
@@ -155,49 +158,61 @@ pub unsafe extern "C" fn verify_post(
     // Stay mocked for now — remove early return when ready to use.
     Box::into_raw(Box::new(response))
 
-    // let comm_rs = from_raw_parts(flattened_comm_rs_ptr, flattened_comm_rs_len)
-    //     .iter()
-    //     .step_by(32)
-    //     .fold(Default::default(), |mut acc: Vec<[u8; 32]>, item| {
-    //         let sliced = from_raw_parts(item, 32);
-    //         let mut x: [u8; 32] = Default::default();
-    //         x.copy_from_slice(&sliced[..32]);
-    //         acc.push(x);
-    //         acc
-    //     });
+    /*
 
-    // let faults = from_raw_parts(faults_ptr, faults_len);
+    let mut response: responses::VerifyPoSTResponse = Default::default();
 
-    // let safe_challenge_seed = {
-    //     let mut cs = [0; 32];
-    //     cs.copy_from_slice(challenge_seed);
-    //     cs[31] &= 0b00111111;
-    //     cs
-    // };
+    if let Some(cfg) = cfg_ptr.as_ref() {
+        let cfg = new_sector_config(cfg);
 
-    // match internal::verify_post(
-    //     sector_bytes,
-    //     &comm_rs,
-    //     &safe_challenge_seed,
-    //     proof,
-    //     faults.to_vec(),
-    // ) {
-    //     Ok(true) => {
-    //         response.status_code = FCPResponseStatus::FCPNoError;
-    //         response.is_valid = true;
-    //     }
-    //     Ok(false) => {
-    //         response.status_code = FCPResponseStatus::FCPNoError;
-    //         response.is_valid = false;
-    //     }
-    //     Err(err) => {
-    //         let (code, ptr) = err_code_and_msg(&err);
-    //         response.status_code = code;
-    //         response.error_msg = ptr;
-    //     }
-    // }
+        let comm_rs = from_raw_parts(flattened_comm_rs_ptr, flattened_comm_rs_len)
+            .iter()
+            .step_by(32)
+            .fold(Default::default(), |mut acc: Vec<[u8; 32]>, item| {
+                let sliced = from_raw_parts(item, 32);
+                let mut x: [u8; 32] = Default::default();
+                x.copy_from_slice(&sliced[..32]);
+                acc.push(x);
+                acc
+            });
 
-    // Box::into_raw(Box::new(response))
+        let faults = from_raw_parts(faults_ptr, faults_len);
+
+        let safe_challenge_seed = {
+            let mut cs = [0; 32];
+            cs.copy_from_slice(challenge_seed);
+            cs[31] &= 0b00111111;
+            cs
+        };
+
+        match internal::verify_post(VerifyPoStDynamicSectorsCountInput {
+            sector_bytes: cfg.sector_bytes(),
+            comm_rs,
+            challenge_seed: safe_challenge_seed,
+            proofs: from_raw_parts(proofs_ptr, proofs_len).to_vec(),
+            faults: faults.to_vec(),
+        }) {
+            Ok(dynamic) => {
+                response.status_code = FCPResponseStatus::FCPNoError;
+                response.is_valid = dynamic.is_valid;
+            }
+            Err(err) => {
+                let (code, ptr) = err_code_and_msg(&err);
+                response.status_code = code;
+                response.error_msg = ptr;
+            }
+        }
+    } else {
+        response.status_code = FCPResponseStatus::FCPCallerError;
+
+        let msg = CString::new("caller did not provide ConfiguredStore").unwrap();
+        response.error_msg = msg.as_ptr();
+        mem::forget(msg);
+    }
+
+    Box::into_raw(Box::new(response))
+
+    */
 }
 
 /// Initializes and returns a SectorBuilder.

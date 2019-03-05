@@ -1,7 +1,7 @@
 use slog::*;
 use std::sync::{mpsc, Arc, Mutex};
 
-use crate::api::internal::PoStOutput;
+use crate::api::post_adapter::*;
 use crate::api::sector_builder::errors::SectorBuilderErr;
 use crate::api::sector_builder::kv_store::fs::FileSystemKvs;
 use crate::api::sector_builder::kv_store::KeyValueStore;
@@ -154,7 +154,7 @@ impl SectorBuilder {
         &self,
         comm_rs: &[[u8; 32]],
         challenge_seed: &[u8; 32],
-    ) -> Result<PoStOutput> {
+    ) -> Result<GeneratePoStDynamicSectorsCountOutput> {
         log_unrecov(
             self.run_blocking(|tx| Request::GeneratePoSt(Vec::from(comm_rs), *challenge_seed, tx)),
         )

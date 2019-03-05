@@ -1,7 +1,5 @@
 use crate::api::internal;
-use crate::api::internal::PoStInput;
-use crate::api::internal::PoStInputPart;
-use crate::api::internal::PoStOutput;
+use crate::api::post_adapter::*;
 use crate::api::sector_builder::errors::err_piecenotfound;
 use crate::api::sector_builder::errors::err_unrecov;
 use crate::api::sector_builder::helpers::add_piece::add_piece;
@@ -22,6 +20,7 @@ use crate::api::sector_builder::WrappedSectorStore;
 use crate::error::ExpectWithBacktrace;
 use crate::error::Result;
 use sector_base::api::bytes_amount::UnpaddedBytesAmount;
+
 use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::Arc;
@@ -49,7 +48,7 @@ pub enum Request {
     GeneratePoSt(
         Vec<[u8; 32]>,
         [u8; 32],
-        mpsc::SyncSender<Result<PoStOutput>>,
+        mpsc::SyncSender<Result<GeneratePoStDynamicSectorsCountOutput>>,
     ),
     RetrievePiece(String, mpsc::SyncSender<Result<Vec<u8>>>),
     SealAllStagedSectors(mpsc::SyncSender<Result<()>>),
@@ -162,7 +161,7 @@ impl SectorMetadataManager {
         &self,
         comm_rs: &[[u8; 32]],
         challenge_seed: &[u8; 32],
-        return_channel: mpsc::SyncSender<Result<PoStOutput>>,
+        return_channel: mpsc::SyncSender<Result<GeneratePoStDynamicSectorsCountOutput>>,
     ) {
         // reduce our sealed sector state-map to a mapping of comm_r to sealed
         // sector access (AKA path to sealed sector file)
@@ -178,27 +177,22 @@ impl SectorMetadataManager {
                 acc
             });
 
-        let mut input_parts: Vec<PoStInputPart> = Default::default();
+        let mut input_parts: Vec<(Option<String>, [u8; 32])> = Default::default();
 
         // eject from this loop with an error if we've been provided a comm_r
         // which does not correspond to any sealed sector metadata
         for comm_r in comm_rs {
-            input_parts.push(PoStInputPart {
-                sealed_sector_access: comm_r_to_sector_access.get(comm_r).cloned(),
-                comm_r: *comm_r,
-            });
+            input_parts.push((comm_r_to_sector_access.get(comm_r).cloned(), *comm_r))
         }
 
         let mut seed = [0; 32];
         seed.copy_from_slice(challenge_seed);
 
-        let output = internal::fake_generate_post(
-            self.sector_store.inner.config().sector_bytes(),
-            PoStInput {
-                challenge_seed: seed,
-                input_parts,
-            },
-        );
+        let output = internal::fake_generate_post(GeneratePoStDynamicSectorsCountInput {
+            sector_bytes: self.sector_store.inner.config().sector_bytes(),
+            challenge_seed: seed,
+            input_parts,
+        });
 
         // TODO: Where should this work be scheduled? New worker type?
         return_channel.send(output).expects(FATAL_HUNGUP);

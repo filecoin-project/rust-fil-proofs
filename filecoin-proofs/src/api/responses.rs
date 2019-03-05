@@ -1,6 +1,7 @@
 use crate::api::sector_builder::errors::SectorBuilderErr;
 use crate::api::sector_builder::SectorBuilder;
-use crate::api::{API_POREP_PROOF_BYTES, API_POST_PROOF_BYTES};
+use crate::api::API_POREP_PROOF_BYTES;
+use crate::api::API_POST_PROOF_BYTES;
 use failure::Error;
 use ffi_toolkit::free_c_str;
 use libc;
@@ -67,27 +68,29 @@ pub unsafe extern "C" fn destroy_verify_seal_response(ptr: *mut VerifySealRespon
 //////////////////////
 
 #[repr(C)]
-pub struct GeneratePoSTResponse {
+pub struct GeneratePoStResponse {
     pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
     pub faults_len: libc::size_t,
     pub faults_ptr: *const u64,
-    pub proof: [u8; API_POST_PROOF_BYTES],
+    pub proofs_len: libc::size_t,
+    pub proofs_ptr: *const [u8; API_POST_PROOF_BYTES],
 }
 
-impl Default for GeneratePoSTResponse {
-    fn default() -> GeneratePoSTResponse {
-        GeneratePoSTResponse {
+impl Default for GeneratePoStResponse {
+    fn default() -> GeneratePoStResponse {
+        GeneratePoStResponse {
             status_code: FCPResponseStatus::FCPNoError,
             error_msg: ptr::null(),
             faults_len: 0,
             faults_ptr: ptr::null(),
-            proof: [0; API_POST_PROOF_BYTES],
+            proofs_len: 0,
+            proofs_ptr: ptr::null(),
         }
     }
 }
 
-impl Drop for GeneratePoSTResponse {
+impl Drop for GeneratePoStResponse {
     fn drop(&mut self) {
         unsafe {
             drop(Vec::from_raw_parts(
@@ -102,7 +105,7 @@ impl Drop for GeneratePoSTResponse {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn destroy_generate_post_response(ptr: *mut GeneratePoSTResponse) {
+pub unsafe extern "C" fn destroy_generate_post_response(ptr: *mut GeneratePoStResponse) {
     let _ = Box::from_raw(ptr);
 }
 
