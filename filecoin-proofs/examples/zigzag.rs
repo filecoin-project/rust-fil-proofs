@@ -149,7 +149,12 @@ fn dump_proof_bytes(serialized_proofs: &[u8]) {
         "dumping proofs ({} bytes)",
         serialized_proofs.len(); "target" => "status"
     );
-    let _ = file.write_all(serialized_proofs);
+    if let Err(e) = file.write_all(serialized_proofs) {
+        info!(
+            FCP_LOG,
+            "Encountered error while writing serialized proofs: {}", e
+        );
+    }
 }
 
 fn do_the_work<H: 'static>(
