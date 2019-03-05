@@ -98,6 +98,12 @@ impl Drop for GeneratePoStResponse {
                 self.faults_len,
             ));
 
+            drop(Vec::from_raw_parts(
+                self.flattened_proofs_ptr as *mut u8,
+                self.flattened_proofs_len,
+                self.flattened_proofs_len,
+            ));
+
             free_c_str(self.error_msg as *mut libc::c_char);
         };
     }
