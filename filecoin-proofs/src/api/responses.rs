@@ -1,7 +1,6 @@
 use crate::api::sector_builder::errors::SectorBuilderErr;
 use crate::api::sector_builder::SectorBuilder;
 use crate::api::API_POREP_PROOF_BYTES;
-use crate::api::API_POST_PROOF_BYTES;
 use failure::Error;
 use ffi_toolkit::free_c_str;
 use libc;
@@ -73,8 +72,8 @@ pub struct GeneratePoStResponse {
     pub error_msg: *const libc::c_char,
     pub faults_len: libc::size_t,
     pub faults_ptr: *const u64,
-    pub proofs_len: libc::size_t,
-    pub proofs_ptr: *const [u8; API_POST_PROOF_BYTES],
+    pub flattened_proofs_len: libc::size_t,
+    pub flattened_proofs_ptr: *const u8,
 }
 
 impl Default for GeneratePoStResponse {
@@ -84,8 +83,8 @@ impl Default for GeneratePoStResponse {
             error_msg: ptr::null(),
             faults_len: 0,
             faults_ptr: ptr::null(),
-            proofs_len: 0,
-            proofs_ptr: ptr::null(),
+            flattened_proofs_len: 0,
+            flattened_proofs_ptr: ptr::null(),
         }
     }
 }
@@ -97,6 +96,12 @@ impl Drop for GeneratePoStResponse {
                 self.faults_ptr as *mut u8,
                 self.faults_len,
                 self.faults_len,
+            ));
+
+            drop(Vec::from_raw_parts(
+                self.flattened_proofs_ptr as *mut u8,
+                self.flattened_proofs_len,
+                self.flattened_proofs_len,
             ));
 
             free_c_str(self.error_msg as *mut libc::c_char);
