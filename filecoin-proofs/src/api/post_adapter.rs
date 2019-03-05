@@ -115,7 +115,7 @@ pub fn generate_post_collect_output(
     orig_comm_rs_len: usize,
     xs: Vec<error::Result<GeneratePoStFixedSectorsCountOutput>>,
 ) -> error::Result<GeneratePoStDynamicSectorsCountOutput> {
-    let seed = if xs.is_empty() {
+    let z = if xs.is_empty() {
         Err(format_err!("input vector must not be empty"))
     } else {
         Ok(GeneratePoStDynamicSectorsCountOutput {
@@ -126,7 +126,7 @@ pub fn generate_post_collect_output(
 
     xs.into_iter()
         .enumerate()
-        .fold(seed, |acc, (i, item)| {
+        .fold(z, |acc, (i, item)| {
             acc.and_then(|d1| {
                 item.map(|d2| GeneratePoStDynamicSectorsCountOutput {
                     proofs: [d1.proofs, vec![d2.proof]].concat(),
@@ -300,13 +300,13 @@ pub fn verify_post_spread_input(
 pub fn verify_post_collect_output(
     xs: Vec<error::Result<VerifyPoStFixedSectorsCountOutput>>,
 ) -> error::Result<VerifyPoStDynamicSectorsCountOutput> {
-    let seed = if xs.is_empty() {
+    let z = if xs.is_empty() {
         Err(format_err!("input vector must not be empty"))
     } else {
         Ok(VerifyPoStDynamicSectorsCountOutput { is_valid: true })
     };
 
-    xs.into_iter().fold(seed, |acc, item| {
+    xs.into_iter().fold(z, |acc, item| {
         acc.and_then(|d1| {
             item.map(|d2| VerifyPoStDynamicSectorsCountOutput {
                 is_valid: d1.is_valid && d2.is_valid,
