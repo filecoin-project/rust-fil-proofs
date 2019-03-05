@@ -83,6 +83,9 @@ pub fn generate_post_spread_input(
         let mut input_parts: [(Option<String>, Commitment); POST_SECTORS_COUNT] =
             Default::default();
 
+        // This commitment duplicating logic might need to be revisited. For
+        // now, we duplicate the last commitment until LEN(COMM_R) divides
+        // evenly by POST_SECTORS_COUNT.
         let iter_with_idx = remainder
             .iter()
             .cloned()
