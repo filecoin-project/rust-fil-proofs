@@ -153,8 +153,7 @@ pub fn verify_post_spread_input(
     let faults_len = dynamic.faults.len();
     let commrs_len = dynamic.comm_rs.len();
     let proofs_len = dynamic.proofs.len();
-    let replicas_c = (commrs_len as f64 / POST_SECTORS_COUNT as f64)
-        .ceil() as usize;
+    let replicas_c = (commrs_len as f64 / POST_SECTORS_COUNT as f64).ceil() as usize;
     let faults_max = dynamic.faults.iter().max();
 
     if faults_len > commrs_len {
