@@ -49,7 +49,7 @@ where
             },
             expansion_degree,
             reversed: false,
-            feistel_precomputed: feistel::precompute((expansion_degree * nodes) as u32),
+            feistel_precomputed: feistel::precompute((expansion_degree * nodes) as feistel::Index),
             _h: PhantomData,
         }
     }
@@ -193,19 +193,19 @@ where
     // to the index `4` that generated it earlier, corresponding to the node 2, inverting
     // in fact the child-parent relationship.
     fn correspondent(&self, node: usize, i: usize) -> usize {
-        let a = (node * self.expansion_degree) as u32 + i as u32;
+        let a = (node * self.expansion_degree) as feistel::Index + i as feistel::Index;
         let feistel_keys = &[1, 2, 3, 4];
 
         let transformed = if self.reversed {
             feistel::invert_permute(
-                self.size() as u32 * self.expansion_degree as u32,
+                self.size() as feistel::Index * self.expansion_degree as feistel::Index,
                 a,
                 feistel_keys,
                 self.feistel_precomputed,
             )
         } else {
             feistel::permute(
-                self.size() as u32 * self.expansion_degree as u32,
+                self.size() as feistel::Index * self.expansion_degree as feistel::Index,
                 a,
                 feistel_keys,
                 self.feistel_precomputed,
@@ -242,7 +242,9 @@ where
             base_graph: self.base_graph.clone(),
             expansion_degree: self.expansion_degree,
             reversed: !self.reversed,
-            feistel_precomputed: feistel::precompute((self.expansion_degree * self.size()) as u32),
+            feistel_precomputed: feistel::precompute(
+                (self.expansion_degree * self.size()) as feistel::Index,
+            ),
             _h: PhantomData,
         }
     }
