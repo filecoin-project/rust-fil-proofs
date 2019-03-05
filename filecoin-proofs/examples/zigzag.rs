@@ -29,6 +29,7 @@ use rand::{Rng, SeedableRng, XorShiftRng};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::time::{Duration, Instant};
+use std::u32;
 
 use bellman::Circuit;
 use sapling_crypto::jubjub::JubjubBls12;
@@ -235,15 +236,28 @@ fn do_the_work<H: 'static>(
     replication_duration += start.elapsed();
 
     info!(FCP_LOG, "replication_time: {:?}", replication_duration; "target" => "stats");
+
+    let time_per_byte = if data_size > (u32::MAX as usize) {
+        // Duration only supports division by u32, so if data_size (of type usize) is larger,
+        // we have to jump through some hoops to get the value we want, which is duration / size.
+        // Consider: x = size / max
+        //           y = duration / x = duration * max / size
+        //           y / max = duration * max / size * max = duration / size
+        let x = data_size as f64 / u32::MAX as f64;
+        let y = replication_duration / x as u32;
+        y / u32::MAX
+    } else {
+        replication_duration / (data_size as u32)
+    };
     info!(
         FCP_LOG,
         "replication_time/byte: {:?}",
-        replication_duration / data_size as u32; "target" => "stats"
+        time_per_byte; "target" => "stats"
     );
     info!(
         FCP_LOG,
         "replication_time/GiB: {:?}",
-        (1 << 30) * replication_duration / data_size as u32; "target" => "stats"
+        (1 << 30) * time_per_byte; "target" => "stats"
     );
 
     let mut total_proving = Duration::new(0, 0);
