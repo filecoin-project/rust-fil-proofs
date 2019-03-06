@@ -151,7 +151,7 @@ fn dump_proof_bytes<H: Hasher>(all_partition_proofs: &[layered_drgporep::Proof<H
     );
 
     if let Err(e) = serde_json::to_writer(file, all_partition_proofs) {
-        info!(
+        warn!(
             FCP_LOG,
             "Encountered error while writing serialized proofs: {}", e
         );
