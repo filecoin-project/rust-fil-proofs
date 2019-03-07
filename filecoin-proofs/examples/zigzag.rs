@@ -35,8 +35,8 @@ use bellman::Circuit;
 use sapling_crypto::jubjub::JubjubBls12;
 
 use storage_proofs::circuit::test::*;
-use storage_proofs::circuit::zigzag::{ZigZagCircuit, ZigZagCompound};
-use storage_proofs::compound_proof::{self, CircuitComponent, CompoundProof};
+use storage_proofs::circuit::zigzag::ZigZagCompound;
+use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgporep;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
@@ -171,6 +171,7 @@ fn do_the_work<H: 'static>(
     extract: bool,
     use_tmp: bool,
     dump_proofs: bool,
+    bench_only: bool,
 ) where
     H: Hasher,
 {
@@ -211,93 +212,100 @@ fn do_the_work<H: 'static>(
     info!(FCP_LOG, "setup complete");
     stop_profile();
 
-    let mut data = file_backed_mmap_from_zeroes(nodes, use_tmp);
-
-    let start = Instant::now();
-    let mut replication_duration = Duration::new(0, 0);
-
-    info!(FCP_LOG, "running replicate");
-
-    start_profile("replicate");
-    let (tau, aux) = ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, &mut data, None).unwrap();
-    stop_profile();
-    let pub_inputs = layered_drgporep::PublicInputs::<H::Domain> {
-        replica_id,
-        tau: Some(tau.simplify().into()),
-        comm_r_star: tau.comm_r_star,
-        k: Some(0),
-    };
-
-    let priv_inputs = layered_drgporep::PrivateInputs {
-        aux,
-        tau: tau.layer_taus,
-    };
-
-    replication_duration += start.elapsed();
-
-    info!(FCP_LOG, "replication_time: {:?}", replication_duration; "target" => "stats");
-
-    let time_per_byte = if data_size > (u32::MAX as usize) {
-        // Duration only supports division by u32, so if data_size (of type usize) is larger,
-        // we have to jump through some hoops to get the value we want, which is duration / size.
-        // Consider: x = size / max
-        //           y = duration / x = duration * max / size
-        //           y / max = duration * max / size * max = duration / size
-        let x = data_size as f64 / u32::MAX as f64;
-        let y = replication_duration / x as u32;
-        y / u32::MAX
-    } else {
-        replication_duration / (data_size as u32)
-    };
-    info!(
-        FCP_LOG,
-        "replication_time/byte: {:?}",
-        time_per_byte; "target" => "stats"
-    );
-    info!(
-        FCP_LOG,
-        "replication_time/GiB: {:?}",
-        (1 << 30) * time_per_byte; "target" => "stats"
-    );
-
-    let mut total_proving = Duration::new(0, 0);
-    info!(FCP_LOG, "generating {} partition proofs", partitions);
-
-    let start = Instant::now();
-    start_profile("prove");
-    let all_partition_proofs =
-        ZigZagDrgPoRep::<H>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, partitions)
-            .expect("failed to prove");
-    stop_profile();
-    let vanilla_proving = start.elapsed();
-    total_proving += vanilla_proving;
-
-    if dump_proofs {
-        dump_proof_bytes(&all_partition_proofs);
-    }
-
     let samples: u32 = 5;
-    info!(FCP_LOG, "sampling verifying (samples: {})", samples);
-    let mut total_verifying = Duration::new(0, 0);
+    let mut total_proving = Duration::new(0, 0);
 
-    start_profile("verify");
-    for _ in 0..samples {
+    let (pub_in, priv_in, d) = if bench_only {
+        (None, None, None)
+    } else {
+        let mut data = file_backed_mmap_from_zeroes(nodes, use_tmp);
+
         let start = Instant::now();
-        let verified =
-            ZigZagDrgPoRep::<H>::verify_all_partitions(&pp, &pub_inputs, &all_partition_proofs)
-                .expect("failed during verification");
-        if !verified {
-            info!(FCP_LOG, "Verification failed."; "target" => "results");
-        };
-        total_verifying += start.elapsed();
-    }
-    info!(FCP_LOG, "Verification complete"; "target" => "status");
-    stop_profile();
+        let mut replication_duration = Duration::new(0, 0);
 
-    let verifying_avg = total_verifying / samples;
-    let verifying_avg = f64::from(verifying_avg.subsec_nanos()) / 1_000_000_000f64
-        + (verifying_avg.as_secs() as f64);
-    info!(FCP_LOG, "average_vanilla_verifying_time: {:?} seconds", verifying_avg; "target" => "stats");
+        info!(FCP_LOG, "running replicate");
+
+        start_profile("replicate");
+        let (tau, aux) = ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, &mut data, None).unwrap();
+        stop_profile();
+        let pub_inputs = layered_drgporep::PublicInputs::<H::Domain> {
+            replica_id,
+            tau: Some(tau.simplify().into()),
+            comm_r_star: tau.comm_r_star,
+            k: Some(0),
+        };
+
+        let priv_inputs = layered_drgporep::PrivateInputs {
+            aux,
+            tau: tau.layer_taus,
+        };
+
+        replication_duration += start.elapsed();
+
+        info!(FCP_LOG, "replication_time: {:?}", replication_duration; "target" => "stats");
+
+        let time_per_byte = if data_size > (u32::MAX as usize) {
+            // Duration only supports division by u32, so if data_size (of type usize) is larger,
+            // we have to jump through some hoops to get the value we want, which is duration / size.
+            // Consider: x = size / max
+            //           y = duration / x = duration * max / size
+            //           y / max = duration * max / size * max = duration / size
+            let x = data_size as f64 / u32::MAX as f64;
+            let y = replication_duration / x as u32;
+            y / u32::MAX
+        } else {
+            replication_duration / (data_size as u32)
+        };
+        info!(
+            FCP_LOG,
+            "replication_time/byte: {:?}",
+            time_per_byte; "target" => "stats"
+        );
+        info!(
+            FCP_LOG,
+            "replication_time/GiB: {:?}",
+            (1 << 30) * time_per_byte; "target" => "stats"
+        );
+
+        info!(FCP_LOG, "generating {} partition proofs", partitions);
+
+        let start = Instant::now();
+        start_profile("prove");
+        let all_partition_proofs =
+            ZigZagDrgPoRep::<H>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, partitions)
+                .expect("failed to prove");
+        stop_profile();
+        let vanilla_proving = start.elapsed();
+        total_proving += vanilla_proving;
+
+        if dump_proofs {
+            dump_proof_bytes(&all_partition_proofs);
+        }
+
+        info!(FCP_LOG, "sampling verifying (samples: {})", samples);
+        let mut total_verifying = Duration::new(0, 0);
+
+        start_profile("verify");
+        for _ in 0..samples {
+            let start = Instant::now();
+            let verified =
+                ZigZagDrgPoRep::<H>::verify_all_partitions(&pp, &pub_inputs, &all_partition_proofs)
+                    .expect("failed during verification");
+            if !verified {
+                info!(FCP_LOG, "Verification failed."; "target" => "results");
+            };
+            total_verifying += start.elapsed();
+        }
+        info!(FCP_LOG, "Verification complete"; "target" => "status");
+        stop_profile();
+
+        let verifying_avg = total_verifying / samples;
+        let verifying_avg = f64::from(verifying_avg.subsec_nanos()) / 1_000_000_000f64
+            + (verifying_avg.as_secs() as f64);
+        info!(FCP_LOG, "average_vanilla_verifying_time: {:?} seconds", verifying_avg; "target" => "stats");
+
+        (Some(pub_inputs), Some(priv_inputs), Some(data))
+    };
 
     if circuit || groth || bench {
         let engine_params = JubjubBls12::new();
@@ -310,15 +318,9 @@ fn do_the_work<H: 'static>(
             info!(FCP_LOG, "Performing circuit bench."; "target" => "status");
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            ZigZagCompound::circuit(
-                &pub_inputs,
-                <ZigZagCircuit<Bls12, H> as CircuitComponent>::ComponentPrivateInputs::default(),
-                &all_partition_proofs[0],
-                &pp,
-                &engine_params,
-            )
-            .synthesize(&mut cs)
-            .expect("failed to synthesize circuit");
+            ZigZagCompound::blank_circuit(&pp, &engine_params)
+                .synthesize(&mut cs)
+                .expect("failed to synthesize circuit");
 
             info!(FCP_LOG, "circuit_num_inputs: {}", cs.num_inputs(); "target" => "stats");
             info!(FCP_LOG, "circuit_num_constraints: {}", cs.num_constraints(); "target" => "stats");
@@ -329,6 +331,9 @@ fn do_the_work<H: 'static>(
         }
 
         if groth {
+            let pub_inputs = pub_in.unwrap();
+            let priv_inputs = priv_in.unwrap();
+
             // TODO: The time measured for Groth proving also includes parameter loading (which can be long)
             // and vanilla proving, which may also be.
             // For now, analysis should note and subtract out these times.
@@ -372,16 +377,18 @@ fn do_the_work<H: 'static>(
         }
     }
 
-    if extract {
-        let start = Instant::now();
-        info!(FCP_LOG, "Extracting.");
-        start_profile("extract");
-        let decoded_data = ZigZagDrgPoRep::<H>::extract_all(&pp, &replica_id, &data).unwrap();
-        stop_profile();
-        let extracting = start.elapsed();
-        info!(FCP_LOG, "extracting_time: {:?}", extracting; "target" => "stats");
+    if let Some(data) = d {
+        if extract {
+            let start = Instant::now();
+            info!(FCP_LOG, "Extracting.");
+            start_profile("extract");
+            let decoded_data = ZigZagDrgPoRep::<H>::extract_all(&pp, &replica_id, &data).unwrap();
+            stop_profile();
+            let extracting = start.elapsed();
+            info!(FCP_LOG, "extracting_time: {:?}", extracting; "target" => "stats");
 
-        assert_eq!(&(*data), decoded_data.as_slice());
+            assert_eq!(&(*data), decoded_data.as_slice());
+        }
     }
 }
 
@@ -465,6 +472,13 @@ fn main() {
                 .help("Don't synthesize and report inputs/constraints for a circuit.")
         )
         .arg(
+            Arg::with_name("bench-only")
+                .long("bench-only")
+                .help("Don't replicate or perform Groth proving.")
+                .conflicts_with_all(&["no-bench", "groth", "extract"])
+        )
+
+        .arg(
             Arg::with_name("circuit")
                 .long("circuit")
                 .help("Print the constraint system.")
@@ -503,6 +517,7 @@ fn main() {
     let dump_proofs = matches.is_present("dump");
     let groth = matches.is_present("groth");
     let bench = !matches.is_present("no-bench");
+    let bench_only = matches.is_present("bench-only");
     let circuit = matches.is_present("circuit");
     let extract = matches.is_present("extract");
 
@@ -528,6 +543,7 @@ fn main() {
                 extract,
                 use_tmp,
                 dump_proofs,
+                bench_only,
             );
         }
         "sha256" => {
@@ -544,6 +560,7 @@ fn main() {
                 extract,
                 use_tmp,
                 dump_proofs,
+                bench_only,
             );
         }
         "blake2s" => {
@@ -560,6 +577,7 @@ fn main() {
                 extract,
                 use_tmp,
                 dump_proofs,
+                bench_only,
             );
         }
         _ => panic!(format!("invalid hasher: {}", hasher)),
