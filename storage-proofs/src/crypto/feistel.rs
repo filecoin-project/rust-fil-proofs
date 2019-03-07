@@ -139,14 +139,14 @@ fn feistel(right: Index, key: Index, right_mask: Index) -> Index {
         data[6] = (right >> 8) as u8;
         data[7] = right as u8;
 
-        data[0] = (key >> 56) as u8;
-        data[1] = (key >> 48) as u8;
-        data[2] = (key >> 40) as u8;
-        data[3] = (key >> 32) as u8;
-        data[4] = (key >> 24) as u8;
-        data[5] = (key >> 16) as u8;
-        data[6] = (key >> 8) as u8;
-        data[7] = key as u8;
+        data[8] = (key >> 56) as u8;
+        data[9] = (key >> 48) as u8;
+        data[10] = (key >> 40) as u8;
+        data[11] = (key >> 32) as u8;
+        data[12] = (key >> 24) as u8;
+        data[13] = (key >> 16) as u8;
+        data[14] = (key >> 8) as u8;
+        data[15] = key as u8;
 
         let raw = blake2b(&data);
         let hash = raw.as_bytes();
