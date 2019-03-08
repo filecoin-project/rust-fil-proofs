@@ -1,7 +1,8 @@
 use crate::error::*;
 
-use byteorder::{LittleEndian, WriteBytesExt};
+use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 
+use pairing::bls12_381::FrRepr;
 use pairing::{Engine, PrimeField, PrimeFieldRepr};
 
 // Contains 32 bytes whose little-endian value represents an Fr.
@@ -32,6 +33,27 @@ pub fn bytes_into_fr<E: Engine>(bytes: &[u8]) -> Result<E::Fr> {
     fr_repr.read_le(bytes).map_err(|_| Error::BadFrBytes)?;
 
     E::Fr::from_repr(fr_repr).map_err(|_| Error::BadFrBytes)
+}
+
+#[inline]
+pub fn bytes_into_fr_repr_safe(r: &[u8]) -> FrRepr {
+    debug_assert!(r.len() == 32);
+
+    let repr: [u64; 4] = [
+        LittleEndian::read_u64(&r[0..8]),
+        LittleEndian::read_u64(&r[8..16]),
+        LittleEndian::read_u64(&r[16..24]),
+        u64::from(r[31] & 0b0011_1111) << 56
+            | u64::from(r[30]) << 48
+            | u64::from(r[29]) << 40
+            | u64::from(r[28]) << 32
+            | u64::from(r[27]) << 24
+            | u64::from(r[26]) << 16
+            | u64::from(r[25]) << 8
+            | u64::from(r[24]),
+    ];
+
+    FrRepr(repr)
 }
 
 // Takes an Fr and returns a vector of exactly 32 bytes guaranteed to contain a valid Fr.

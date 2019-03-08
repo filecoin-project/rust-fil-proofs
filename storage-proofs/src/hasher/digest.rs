@@ -124,6 +124,15 @@ impl From<Fr> for DigestDomain {
     }
 }
 
+impl From<FrRepr> for DigestDomain {
+    fn from(val: FrRepr) -> Self {
+        let mut res = Self::default();
+        val.write_le(&mut res.0[0..32]).unwrap();
+
+        res
+    }
+}
+
 impl From<DigestDomain> for Fr {
     fn from(val: DigestDomain) -> Self {
         let mut res = FrRepr::default();

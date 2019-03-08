@@ -1,5 +1,8 @@
+use blake2s_simd::Params as Blake2s;
+
 use crate::drgraph::Graph;
 use crate::error::Result;
+use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Domain, Hasher};
 use crate::util::{data_at_node, data_at_node_offset};
 
@@ -109,30 +112,29 @@ where
     Ok(H::sloth_decode(&key, &node_data, sloth_iter))
 }
 
+/// Creates the encoding key.
+/// The algorithm for that is `Blake2s(id | encodedParentNode1 | encodedParentNode1 | ...)`.
 fn create_key<H: Hasher>(
     id: &H::Domain,
     node: usize,
     parents: &[usize],
     data: &[u8],
-    m: usize,
+    _m: usize,
 ) -> Result<H::Domain> {
-    // ciphertexts will become a buffer of the layout
-    // id | encodedParentNode1 | encodedParentNode1 | ...
+    let mut hasher = Blake2s::new().hash_length(32).to_state();
+    hasher.update(id.as_ref());
 
-    let mut ciphertexts = vec![0u8; 32 * (parents.len() + 1)];
-    id.write_bytes(&mut ciphertexts[0..32])?;
-
-    for (i, parent) in parents.iter().enumerate() {
+    for parent in parents.iter() {
         // special super shitty case
         // TODO: unsuck
         if node == parents[0] {
-            // skip, as we would only write 0s, but the vector is prefilled with 0.
+            // skip, as we would only write 0s
         } else {
-            let start = (i + 1) * 32;
-            let end = (i + 2) * 32;
-            ciphertexts[start..end].copy_from_slice(data_at_node(data, *parent)?);
+            let offset = data_at_node_offset(*parent);
+            hasher.update(&data[offset..offset + 32]);
         }
     }
 
-    Ok(H::kdf(ciphertexts.as_slice(), m))
+    let hash = hasher.finalize();
+    Ok(bytes_into_fr_repr_safe(hash.as_ref()).into())
 }
