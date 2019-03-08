@@ -13,7 +13,7 @@ use slog::*;
 use crate::challenge_derivation::derive_challenges;
 use crate::drgporep::{self, DrgPoRep};
 use crate::drgraph::Graph;
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::merkle::MerkleTree;
 use crate::parameter_cache::ParameterSetIdentifier;
@@ -397,89 +397,63 @@ pub trait Layers {
             // serial case. Note that to make lifetimes work out, we have to inline and tease apart
             // the definition of DrgPoRep::replicate. This is because as implemented, it entangles
             // encoding and merkle tree generation too tightly to be used as a subcomponent.
-            // Instead, we need to create a scope which encloses all the work, spawning threads
-            // for merkle tree generation and sending the results back to a channel.
-            // The received results need to be sorted by layer because ordering of the completed results
-            // is not guaranteed. Misordered results will be seen in practice when trees are small.
 
-            // The outer scope ensure that `tx` is dropped and closed before we read from `outer_rx`.
-            // Otherwise, the read loop will block forever waiting for more input.
-            let outer_rx = {
-                let (tx, rx) = channel();
+            let mut current_drgpp = drgpp.to_owned();
+            let mut trees = Vec::with_capacity(layers + 1);
+            for layer in 0..=layers {
+                // Create a copy so the merkle tree can be built independently of the new encoding.
+                let mut data_copy = anonymous_mmap(data.len());
+                let graph = current_drgpp.graph.clone();
 
-                let errf = |e| {
-                    let err_string = format!("{:?}", e);
-                    error!(SP_LOG, "MerkleTreeGenerationError"; "err" => &err_string, "backtrace" => format!("{:?}", failure::Backtrace::new()));
-                    Error::MerkleTreeGenerationError(err_string)
-                };
+                let (tree_d, params) = rayon::join(
+                    || {
+                        let tree_d = graph.merkle_tree(&data_copy);
+                        info!(SP_LOG, "returning tree"; "layer" => format!("{}", layer));
+                        tree_d
+                    },
+                    || {
+                        let (encoded, params) = rayon::join(
+                            || {
+                                if layer < layers {
+                                    info!(SP_LOG, "encoding"; "layer {}" => format!("{}", layer));
+                                    vde::encode(
+                                        &current_drgpp.graph,
+                                        current_drgpp.sloth_iter,
+                                        replica_id,
+                                        data,
+                                    )
+                                } else {
+                                    Ok(())
+                                }
+                            },
+                            || Self::transform(&current_drgpp, layer, layers),
+                        );
 
-                let _ = thread::scope(|scope| -> Result<()> {
-                    let mut threads = Vec::with_capacity(layers + 1);
-                    (0..=layers).fold(graph.clone(), |current_graph, layer| {
-                        let mut data_copy = anonymous_mmap(data.len());
-                        data_copy[0..data.len()].clone_from_slice(data);
+                        encoded.map(|_| params)
+                    },
+                );
 
-                        let return_channel = tx.clone();
-                        let (transfer_tx, transfer_rx) = channel::<Self::Graph>();
+                trees.push(tree_d?);
+                current_drgpp = params?;
+            }
 
-                        transfer_tx.send(current_graph.clone()).unwrap();
-
-                        let thread = scope.spawn(move |_| {
-                            // If we panic anywhere in this closure, thread.join() below will receive an error —
-                            // so it is safe to unwrap.
-                            let graph = transfer_rx.recv().unwrap();
-                            let tree_d = graph.merkle_tree(&data_copy).unwrap();
-
-                            info!(SP_LOG, "returning tree"; "layer" => format!("{}", layer));
-                            return_channel.send((layer, tree_d)).unwrap();
-                        });
-
-                        threads.push(thread);
-
-                        if layer < layers {
-                            info!(SP_LOG, "encoding"; "layer {}" => format!("{}", layer));
-                            vde::encode(&current_graph, sloth_iter, replica_id, data)
-                                .expect("encoding failed in thread");
-                        }
-                        Self::transform(&current_graph)
-                    });
-
-                    for thread in threads {
-                        thread.join().map_err(errf)?;
-                    }
-
-                    Ok(())
-                })
-                .map_err(errf)?;
-
-                rx
-            };
-
-            let sorted_trees = {
-                let mut labeled_trees = outer_rx.iter().collect::<Vec<_>>();
-                labeled_trees.sort_by_key(|x| x.0);
-                labeled_trees
-            };
-
-            sorted_trees.iter().fold(
-                None,
-                |previous_tree: Option<&MerkleTree<_, _>>, (i, replica_tree)| {
+            info!(SP_LOG, "reading results");
+            trees
+                .into_iter()
+                .enumerate()
+                .fold(None, |comm_d: Option<_>, (i, replica_tree)| {
                     // Each iteration's replica_tree becomes the next iteration's previous_tree (data_tree).
                     // The first iteration has no previous_tree.
-                    if let Some(data_tree) = previous_tree {
-                        let tau = porep::Tau {
-                            comm_r: replica_tree.root(),
-                            comm_d: data_tree.root(),
-                        };
+                    let comm_r = replica_tree.root();
+                    if let Some(comm_d) = comm_d {
                         info!(SP_LOG, "setting tau/aux"; "layer" => format!("{}", i - 1));
-                        taus.push(tau);
+                        taus.push(porep::Tau { comm_r, comm_d });
                     };
-                    auxs.push(replica_tree.clone());
 
-                    Some(replica_tree)
-                },
-            );
-        };
+                    auxs.push(replica_tree);
+                    Some(comm_r)
+                });
+        }
         Ok((taus, auxs))
     }
 }
