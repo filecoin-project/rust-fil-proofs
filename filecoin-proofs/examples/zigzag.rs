@@ -278,6 +278,7 @@ fn do_the_work<H: 'static>(
         let vanilla_proving = start.elapsed();
         total_proving += vanilla_proving;
 
+        info!(FCP_LOG, "vanilla_proving_time: {:?}", vanilla_proving; "target" => "stats");
         if dump_proofs {
             dump_proof_bytes(&all_partition_proofs);
         }

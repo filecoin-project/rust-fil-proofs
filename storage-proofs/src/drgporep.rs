@@ -24,7 +24,8 @@ pub struct PublicInputs<T: Domain> {
 
 #[derive(Debug)]
 pub struct PrivateInputs<'a, H: 'a + Hasher> {
-    pub aux: &'a porep::ProverAux<H>,
+    pub tree_d: &'a MerkleTree<H::Domain, H::Function>,
+    pub tree_r: &'a MerkleTree<H::Domain, H::Function>,
 }
 
 #[derive(Debug)]
@@ -270,8 +271,8 @@ where
             let challenge = pub_inputs.challenges[i] % pub_params.graph.size();
             assert_ne!(challenge, 0, "cannot prove the first node");
 
-            let tree_d = &priv_inputs.aux.tree_d;
-            let tree_r = &priv_inputs.aux.tree_r;
+            let tree_d = &priv_inputs.tree_d;
+            let tree_r = &priv_inputs.tree_r;
             let domain_replica = tree_r.as_slice();
 
             let data = domain_replica[challenge];
@@ -308,16 +309,14 @@ where
                 // )?;
 
                 let extracted = decode_domain_block::<H>(
-                    pub_params.graph.degree(),
                     pub_params.sloth_iter,
                     &pub_inputs.replica_id,
                     domain_replica,
                     challenge,
-                    parents,
-                )?
-                .into_bytes();
+                    &parents,
+                )?;
                 data_nodes.push(DataProof {
-                    data: H::Domain::try_from_bytes(&extracted)?,
+                    data: extracted,
                     proof: MerkleProof::new_from_proof(&node_proof),
                 });
             }
@@ -643,7 +642,10 @@ mod tests {
                 tau: Some(tau.clone().into()),
             };
 
-            let priv_inputs = PrivateInputs::<H> { aux: &aux };
+            let priv_inputs = PrivateInputs::<H> {
+                tree_d: &aux.tree_d,
+                tree_r: &aux.tree_r,
+            };
 
             let real_proof = DrgPoRep::<H, _>::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
 

@@ -524,7 +524,10 @@ mod tests {
             challenges: vec![challenge],
             tau: Some(tau.into()),
         };
-        let priv_inputs = drgporep::PrivateInputs::<PedersenHasher> { aux: &aux };
+        let priv_inputs = drgporep::PrivateInputs::<PedersenHasher> {
+            tree_d: &aux.tree_d,
+            tree_r: &aux.tree_r,
+        };
 
         let proof_nc =
             drgporep::DrgPoRep::<PedersenHasher, _>::prove(&pp, &pub_inputs, &priv_inputs)
@@ -686,7 +689,10 @@ mod tests {
             challenges,
             tau: Some(tau),
         };
-        let private_inputs = drgporep::PrivateInputs { aux: &aux };
+        let private_inputs = drgporep::PrivateInputs {
+            tree_d: &aux.tree_d,
+            tree_r: &aux.tree_r,
+        };
 
         // This duplication is necessary so public_params don't outlive public_inputs and private_inputs.
         let setup_params = compound_proof::SetupParams {

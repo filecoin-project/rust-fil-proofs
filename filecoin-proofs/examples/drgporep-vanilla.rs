@@ -102,7 +102,10 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
         tau: Some(tau),
     };
 
-    let priv_inputs = PrivateInputs::<H> { aux: &aux };
+    let priv_inputs = PrivateInputs::<H> {
+        tree_d: &aux.tree_d,
+        tree_r: &aux.tree_r,
+    };
 
     param_duration += start.elapsed();
     let samples: u32 = 30;
