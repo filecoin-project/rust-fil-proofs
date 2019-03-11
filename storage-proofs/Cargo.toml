@@ -12,7 +12,7 @@ bitvec = "0.5"
 sapling-crypto = { git = "https://github.com/zcash-hackworks/sapling-crypto", branch = "master" }
 rand = "0.4"
 libc = "0.2"
-merkle_light = { git = "https://github.com/filecoin-project/merkle_light", rev = "63a609decf3cc552b0aa79477b828f4a493f725d" }
+merkle_light = { git = "https://github.com/filecoin-project/merkle_light", branch = "master" }
 failure = "0.1"
 bellman = "0.1"
 byteorder = "1"
@@ -36,6 +36,7 @@ serde = { version = "1.0", features = ["derive"]}
 base64 = "0.10.0"
 blake2b_simd = "0.4.1"
 blake2s_simd = { git = "https://github.com/oconnor663/blake2s_simd", branch = "master"}
+crossbeam = "0.7.1"
 toml = "0.4"
 
 [dependencies.pairing]
