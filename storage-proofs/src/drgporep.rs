@@ -308,16 +308,14 @@ where
                 // )?;
 
                 let extracted = decode_domain_block::<H>(
-                    pub_params.graph.degree(),
                     pub_params.sloth_iter,
                     &pub_inputs.replica_id,
                     domain_replica,
                     challenge,
-                    parents,
-                )?
-                .into_bytes();
+                    &parents,
+                )?;
                 data_nodes.push(DataProof {
-                    data: H::Domain::try_from_bytes(&extracted)?,
+                    data: extracted,
                     proof: MerkleProof::new_from_proof(&node_proof),
                 });
             }
