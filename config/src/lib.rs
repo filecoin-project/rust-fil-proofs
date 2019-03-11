@@ -4,13 +4,13 @@ extern crate lazy_static;
 extern crate failure;
 extern crate toml;
 
-use failure::{Error, err_msg};
+use failure::{err_msg, Error};
 use std::collections::HashMap;
-use std::fs::File;
-use std::path::Path;
-use std::io::prelude::Read;
-use std::sync::Mutex;
 use std::env;
+use std::fs::File;
+use std::io::prelude::Read;
+use std::path::Path;
+use std::sync::Mutex;
 
 type Result<T> = ::std::result::Result<T, Error>;
 type Config = HashMap<String, bool>;
@@ -27,7 +27,11 @@ pub fn initialize_config() -> Result<Config> {
     let toml_config: Config = load_config_from_toml(CONFIG_PATH)?;
     let env_config: Config = load_config_from_env(&default_config)?;
 
-    Ok(default_config.into_iter().chain(toml_config).chain(env_config).collect())
+    Ok(default_config
+        .into_iter()
+        .chain(toml_config)
+        .chain(env_config)
+        .collect())
 }
 
 pub fn load_config_from_toml(path: &str) -> Result<Config> {
