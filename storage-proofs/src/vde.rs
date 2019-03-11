@@ -98,13 +98,13 @@ pub fn decode_domain_block<H>(
 where
     H: Hasher,
 {
-    let key = create_key_domain::<H>(replica_id, node, parents, data)?;
+    let key = create_domain_key::<H>(replica_id, node, parents, data)?;
 
     Ok(H::sloth_decode(&key, &data[node], sloth_iter))
 }
 
 /// Creates the encoding key, using domain encoded data.
-fn create_key_domain<H: Hasher>(
+fn create_domain_key<H: Hasher>(
     id: &H::Domain,
     node: usize,
     parents: &[usize],
