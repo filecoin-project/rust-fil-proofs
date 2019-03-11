@@ -1,8 +1,11 @@
 use std::cmp::{max, min};
 use std::marker::PhantomData;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering::SeqCst;
 use std::sync::mpsc::channel;
+use std::sync::{Arc, Mutex};
 
-use crossbeam_utils::thread;
+use crossbeam::{deque, thread};
 use memmap::MmapMut;
 use memmap::MmapOptions;
 use rayon::prelude::*;
@@ -398,52 +401,64 @@ pub trait Layers {
             // the definition of DrgPoRep::replicate. This is because as implemented, it entangles
             // encoding and merkle tree generation too tightly to be used as a subcomponent.
 
-            let mut current_drgpp = drgpp.to_owned();
-            let mut trees = Vec::with_capacity(layers + 1);
-            for layer in 0..=layers {
-                // Create a copy so the merkle tree can be built independently of the new encoding.
-                let mut data_copy = anonymous_mmap(data.len());
-                let graph = current_drgpp.graph.clone();
+            let q = deque::Injector::<(usize, Vec<u8>, Self::Graph)>::new();
 
-                let (tree_d, params) = rayon::join(
-                    || {
-                        let tree_d = graph.merkle_tree(&data_copy);
-                        info!(SP_LOG, "returning tree"; "layer" => format!("{}", layer));
-                        tree_d
-                    },
-                    || {
-                        let (encoded, params) = rayon::join(
-                            || {
-                                if layer < layers {
-                                    info!(SP_LOG, "encoding"; "layer {}" => format!("{}", layer));
-                                    vde::encode(
-                                        &current_drgpp.graph,
-                                        current_drgpp.sloth_iter,
-                                        replica_id,
-                                        data,
-                                    )
-                                } else {
-                                    Ok(())
-                                }
-                            },
-                            || Self::transform(&current_drgpp, layer, layers),
-                        );
+            let THREADS = 4;
+            let COUNT = layers + 1;
+            let remaining = Arc::new(AtomicUsize::new(COUNT));
+            let trees = Arc::new(Mutex::new(vec![None; layers + 1]));
 
-                        encoded.map(|_| params)
-                    },
-                );
+            // Spawn a number of threads to handle merkle tree generation
+            thread::scope(|s| {
+                let mut current_drgpp = drgpp.to_owned();
 
-                trees.push(tree_d?);
-                current_drgpp = params?;
-            }
+                for _ in 0..THREADS {
+                    let remaining = remaining.clone();
+                    let trees = trees.clone();
+                    let q = &q;
+
+                    s.spawn(move |_| {
+                        while remaining.load(SeqCst) > 0 {
+                            if let deque::Steal::Success((layer, data, graph)) = q.steal() {
+                                let tree = graph.merkle_tree(&data).expect("tree build fail");
+                                info!(SP_LOG, "returning tree"; "layer" => format!("{}", layer));
+                                trees.lock().unwrap()[layer] = Some(tree);
+                                remaining.fetch_sub(1, SeqCst);
+                            }
+                        }
+                    });
+                }
+
+                for layer in 0..=layers {
+                    // Schedule merkle tree generation
+                    q.push((layer, anonymous_mmap(data), current_drgpp.graph.clone()));
+
+                    if layer < layers {
+                        info!(SP_LOG, "encoding"; "layer {}" => format!("{}", layer));
+                        vde::encode(
+                            &current_drgpp.graph,
+                            current_drgpp.sloth_iter,
+                            replica_id,
+                            data,
+                        )
+                        .expect("failed encoding");
+                    }
+                    current_drgpp = Self::transform(&current_drgpp);
+                }
+            })
+            .unwrap();
 
             info!(SP_LOG, "reading results");
-            trees
-                .into_iter()
-                .enumerate()
-                .fold(None, |comm_d: Option<_>, (i, replica_tree)| {
-                    // Each iteration's replica_tree becomes the next iteration's previous_tree (data_tree).
-                    // The first iteration has no previous_tree.
+
+            {
+                // pull out of Arc<Mutex<>>
+                let trees = Arc::try_unwrap(trees).unwrap().into_inner().unwrap();
+                let mut comm_d = None;
+
+                for (i, replica_tree) in trees.into_iter().enumerate() {
+                    let replica_tree = replica_tree.unwrap();
+                    // Each iteration's replica_tree becomes the next iteration's previous_tree
+                    // (data_tree). The first iteration has no previous_tree.
                     let comm_r = replica_tree.root();
                     if let Some(comm_d) = comm_d {
                         info!(SP_LOG, "setting tau/aux"; "layer" => format!("{}", i - 1));
@@ -451,9 +466,11 @@ pub trait Layers {
                     };
 
                     auxs.push(replica_tree);
-                    Some(comm_r)
-                });
+                    comm_d = Some(comm_r);
+                }
+            }
         }
+
         Ok((taus, auxs))
     }
 }
