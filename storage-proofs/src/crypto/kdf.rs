@@ -1,11 +1,28 @@
+use blake2s_simd::Params as Blake2s;
 use pairing::bls12_381::Fr;
-use pairing::Engine;
+use pairing::PrimeField;
 
-use crate::hasher::{Blake2sHasher, Hasher};
+use crate::fr32::bytes_into_fr_repr_safe;
 
 /// Key derivation function, based on pedersen hashing.
-pub fn kdf<E: Engine>(data: &[u8], m: usize) -> Fr {
-    Blake2sHasher::kdf(&data, m).into()
+pub fn kdf(data: &[u8], m: usize) -> Fr {
+    // Blake2sHasher::kdf(&data, m).into()
+
+    assert_eq!(
+        data.len(),
+        32 * (1 + m),
+        "invalid input length: data.len(): {} m: {}",
+        data.len(),
+        m
+    );
+
+    let hash = Blake2s::new()
+        .hash_length(32)
+        .to_state()
+        .update(data)
+        .finalize();
+
+    Fr::from_repr(bytes_into_fr_repr_safe(hash.as_ref())).unwrap()
 }
 
 #[cfg(test)]
@@ -29,7 +46,7 @@ mod tests {
         )
         .unwrap();
 
-        let res = kdf::<Bls12>(&data, m);
+        let res = kdf(&data, m);
         assert_eq!(res, expected);
     }
 
@@ -38,6 +55,6 @@ mod tests {
     fn kdf_invalid_block_len() {
         let data = vec![2u8; 1234];
 
-        kdf::<Bls12>(&data, 44);
+        kdf(&data, 44);
     }
 }

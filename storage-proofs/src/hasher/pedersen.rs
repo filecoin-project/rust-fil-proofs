@@ -22,15 +22,17 @@ impl Hasher for PedersenHasher {
     type Function = PedersenFunction;
 
     fn kdf(data: &[u8], m: usize) -> Self::Domain {
-        kdf::kdf::<Bls12>(data, m).into()
+        kdf::kdf(data, m).into()
     }
 
+    #[inline]
     fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain, rounds: usize) -> Self::Domain {
         let key = Fr::from_repr(key.0).unwrap();
         let ciphertext = Fr::from_repr(ciphertext.0).unwrap();
         sloth::encode::<Bls12>(&key, &ciphertext, rounds).into()
     }
 
+    #[inline]
     fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain, rounds: usize) -> Self::Domain {
         let key = Fr::from_repr(key.0).unwrap();
         let ciphertext = Fr::from_repr(ciphertext.0).unwrap();
@@ -253,6 +255,13 @@ impl From<Fr> for PedersenDomain {
     #[inline]
     fn from(val: Fr) -> Self {
         PedersenDomain(val.into_repr())
+    }
+}
+
+impl From<FrRepr> for PedersenDomain {
+    #[inline]
+    fn from(val: FrRepr) -> Self {
+        PedersenDomain(val)
     }
 }
 

@@ -21,6 +21,7 @@ const SLOTH_V: [u64; 4] = [
 const FIVE: [u64; 1] = [5];
 
 /// Sloth based encoding.
+#[inline]
 pub fn encode<E: Engine>(key: &E::Fr, plaintext: &E::Fr, rounds: usize) -> E::Fr {
     let mut ciphertext = *plaintext;
 
@@ -37,6 +38,7 @@ pub fn encode<E: Engine>(key: &E::Fr, plaintext: &E::Fr, rounds: usize) -> E::Fr
 }
 
 /// Sloth based decoding.
+#[inline]
 pub fn decode<E: Engine>(key: &E::Fr, ciphertext: &E::Fr, rounds: usize) -> E::Fr {
     let mut plaintext = *ciphertext;
 

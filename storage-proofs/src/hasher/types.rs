@@ -1,6 +1,6 @@
 use crate::error::Result;
 use merkle_light::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
-use pairing::bls12_381::Fr;
+use pairing::bls12_381::{Fr, FrRepr};
 use rand::Rand;
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
@@ -16,6 +16,7 @@ pub trait Domain:
     + Send
     + Sync
     + From<Fr>
+    + From<FrRepr>
     + Into<Fr>
     + Rand
     + Serialize

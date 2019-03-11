@@ -1,11 +1,13 @@
 use std::marker::PhantomData;
 
+use blake2s_simd::Params as Blake2s;
 use byteorder::{LittleEndian, WriteBytesExt};
 use serde::de::Deserialize;
 use serde::ser::Serialize;
 
 use crate::drgraph::Graph;
 use crate::error::Result;
+use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetIdentifier;
@@ -382,17 +384,18 @@ where
                 }
             }
 
-            let prover_bytes = &pub_inputs.replica_id.into_bytes();
+            let key = {
+                let mut hasher = Blake2s::new().hash_length(32).to_state();
+                hasher.update(pub_inputs.replica_id.as_ref());
 
-            let key_input =
-                proof.replica_parents[i]
-                    .iter()
-                    .fold(prover_bytes.clone(), |mut acc, (_, p)| {
-                        acc.extend(&p.data.into_bytes());
-                        acc
-                    });
+                for p in proof.replica_parents[i].iter() {
+                    hasher.update(p.1.data.as_ref());
+                }
 
-            let key = H::kdf(key_input.as_slice(), pub_params.graph.degree());
+                let hash = hasher.finalize();
+                bytes_into_fr_repr_safe(hash.as_ref()).into()
+            };
+
             let unsealed =
                 H::sloth_decode(&key, &proof.replica_nodes[i].data, pub_params.sloth_iter);
 
