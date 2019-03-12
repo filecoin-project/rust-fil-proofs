@@ -1,9 +1,3 @@
-#[macro_use]
-extern crate lazy_static;
-
-extern crate failure;
-extern crate toml;
-
 use failure::{err_msg, Error};
 use std::collections::HashMap;
 use std::env;
@@ -15,22 +9,28 @@ use std::sync::Mutex;
 type Result<T> = ::std::result::Result<T, Error>;
 type Config = HashMap<String, bool>;
 
-const DEFAULT_CONFIG_PATH: &str = "./rust-fil-proofs.default.config.toml";
 const CONFIG_PATH: &str = "./rust-fil-proofs.config.toml";
+
+const DEFAULT_CONFIG: &[(&str, bool)] = &[("MAXIMIZE_CACHING", false)];
 
 lazy_static! {
     pub static ref CONFIG: Mutex<Config> = Mutex::new(initialize_config().unwrap());
 }
 
 pub fn initialize_config() -> Result<Config> {
-    let default_config: Config = load_config_from_toml(DEFAULT_CONFIG_PATH)?;
-    let toml_config: Config = load_config_from_toml(CONFIG_PATH)?;
-    let env_config: Config = load_config_from_env(&default_config)?;
+    let mut config: Config = Default::default();
 
-    Ok(default_config
-        .into_iter()
-        .chain(toml_config)
-        .chain(env_config)
+    config.extend(load_config_from_defaults()?);
+    config.extend(load_config_from_toml(CONFIG_PATH)?);
+    config.extend(load_config_from_env()?);
+
+    Ok(config)
+}
+
+pub fn load_config_from_defaults() -> Result<Config> {
+    Ok(DEFAULT_CONFIG
+        .iter()
+        .map(|&(k, v)| (k.to_string(), v))
         .collect())
 }
 
@@ -48,10 +48,10 @@ pub fn load_config_from_toml(path: &str) -> Result<Config> {
     }
 }
 
-pub fn load_config_from_env(config: &Config) -> Result<Config> {
+pub fn load_config_from_env() -> Result<Config> {
     let mut env_config: Config = Default::default();
 
-    for key in config.keys() {
+    for key in DEFAULT_CONFIG.iter().map(|(k, _)| k) {
         let var = env::var(&key);
 
         if var.is_ok() {

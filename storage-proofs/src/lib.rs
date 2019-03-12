@@ -42,6 +42,7 @@ extern crate rayon;
 extern crate slog;
 #[macro_use]
 extern crate serde;
+extern crate toml;
 
 #[cfg(test)]
 #[macro_use]
@@ -57,6 +58,7 @@ pub mod beacon_post;
 pub mod challenge_derivation;
 pub mod circuit;
 pub mod compound_proof;
+pub mod config;
 pub mod crypto;
 pub mod drgporep;
 pub mod drgraph;

@@ -37,6 +37,7 @@ serde = { version = "1.0", features = ["derive"]}
 base64 = "0.10.0"
 blake2b_simd = "0.4.1"
 blake2s_simd = { git = "https://github.com/oconnor663/blake2s_simd", branch = "master"}
+toml = "0.4"
 
 [dependencies.pairing]
 version = "0.14.2"
