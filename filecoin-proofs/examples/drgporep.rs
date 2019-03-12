@@ -14,8 +14,8 @@ use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 
 use storage_proofs::circuit;
 use storage_proofs::circuit::variables::Root;
-
 use storage_proofs::example_helper::Example;
+use storage_proofs::hasher::PedersenHasher;
 use storage_proofs::test_helper::fake_drgpoprep_proof;
 
 struct DrgPoRepExample<'a, E: JubjubEngine> {
@@ -35,7 +35,7 @@ struct DrgPoRepExample<'a, E: JubjubEngine> {
 
 impl<'a> Circuit<Bls12> for DrgPoRepExample<'a, Bls12> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        circuit::drgporep::DrgPoRepCircuit::synthesize(
+        circuit::drgporep::DrgPoRepCircuit::<_, PedersenHasher>::synthesize(
             cs.namespace(|| "drgporep"),
             self.params,
             self.sloth_iter,
