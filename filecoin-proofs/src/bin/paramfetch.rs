@@ -58,46 +58,41 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
     let all_parameter_ids = get_mapped_parameter_ids(&parameter_map)?;
 
     println!("checking {} parameters...", all_parameter_ids.len());
-    println!("");
+    println!();
 
     let mut parameter_ids = get_pending_parameter_ids(&parameter_map, all_parameter_ids.clone())?;
 
-    if !matches.is_present("all") && parameter_ids.len() > 0 {
+    if !matches.is_present("all") && !parameter_ids.is_empty() {
         parameter_ids = choose_from(parameter_ids)?;
-        println!("");
+        println!();
     }
 
-    // keeping loop/break logic in case failure prompt comes back
-    loop {
-        println!("{} parameters to fetch...", parameter_ids.len());
-        println!("");
+    println!("{} parameters to fetch...", parameter_ids.len());
+    println!();
+
+    for parameter_id in &parameter_ids {
+        println!("fetching: {}", parameter_id);
+        print!("downloading parameter... ");
+        io::stdout().flush().unwrap();
+
+        match fetch_parameter_file(&parameter_map, &parameter_id) {
+            Ok(_) => println!("ok\n"),
+            Err(err) => println!("error: {}\n", err),
+        }
+    }
+
+    parameter_ids = get_pending_parameter_ids(&parameter_map, parameter_ids)?;
+
+    if !parameter_ids.is_empty() {
+        println!("{} parameters failed to be fetched:", parameter_ids.len());
 
         for parameter_id in &parameter_ids {
-            println!("fetching: {}", parameter_id);
-            print!("downloading parameter... ");
-            io::stdout().flush().unwrap();
-
-            match fetch_parameter_file(&parameter_map, &parameter_id) {
-                Ok(_) => println!("ok\n"),
-                Err(err) => println!("error: {}\n", err),
-            }
+            println!("{}", parameter_id);
         }
 
-        parameter_ids = get_pending_parameter_ids(&parameter_map, parameter_ids)?;
+        println!();
 
-        if parameter_ids.is_empty() {
-            break;
-        } else {
-            println!("{} parameters failed to be fetched:", parameter_ids.len());
-
-            for parameter_id in &parameter_ids {
-                println!("{}", parameter_id);
-            }
-
-            println!("");
-
-            return Err(err_msg("some parameters failed to be fetched. try again, or run paramcache to generate locally"));
-        }
+        return Err(err_msg("some parameters failed to be fetched. try again, or run paramcache to generate locally"));
     }
 
     Ok(())
