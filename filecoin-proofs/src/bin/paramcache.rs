@@ -74,28 +74,15 @@ pub fn main() {
                 .help("generate only parameters useful for testing")
                 .takes_value(false),
         )
-        .arg(
-            Arg::with_name("include-post")
-                .long("include-post")
-                .help("generate PoSt parameters in addition to PoRep")
-                .takes_value(false),
-        )
         .get_matches();
 
-    let include_post: bool = matches.is_present("include-post");
     let test_only: bool = matches.is_present("test-only");
 
     cache_porep_params(TEST_SECTOR_SIZE);
+    cache_post_params(TEST_SECTOR_SIZE);
 
     if !test_only {
         cache_porep_params(LIVE_SECTOR_SIZE);
-    }
-
-    if include_post {
-        cache_post_params(TEST_SECTOR_SIZE);
-
-        if !test_only {
-            cache_post_params(LIVE_SECTOR_SIZE);
-        }
+        cache_post_params(LIVE_SECTOR_SIZE);
     }
 }
