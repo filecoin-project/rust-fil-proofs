@@ -67,6 +67,7 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
         println!("");
     }
 
+    // keeping loop/break logic in case failure prompt comes back
     loop {
         println!("{} parameters to fetch...", parameter_ids.len());
         println!("");
@@ -95,9 +96,7 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
 
             println!("");
 
-            if !choose("try again?") {
-                return Err(err_msg("some parameters failed to be fetched"));
-            }
+            return Err(err_msg("some parameters failed to be fetched. try again, or run paramcache to generate locally"));
         }
     }
 
