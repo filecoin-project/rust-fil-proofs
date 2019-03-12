@@ -330,7 +330,7 @@ mod tests {
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_pedersen() {
-        test_por_input_circuit_with_bls12_381::<PedersenHasher>(4148);
+        test_por_input_circuit_with_bls12_381::<PedersenHasher>(4149);
     }
 
     #[test]
