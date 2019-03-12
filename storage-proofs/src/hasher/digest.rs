@@ -2,17 +2,22 @@ use std::fmt;
 use std::hash::Hasher as StdHasher;
 use std::marker::PhantomData;
 
+use bellman::{ConstraintSystem, SynthesisError};
 use merkle_light::hash::{Algorithm, Hashable};
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
 use pairing::{PrimeField, PrimeFieldRepr};
 use rand::{Rand, Rng};
+use sapling_crypto::circuit::{boolean, num};
+use sapling_crypto::jubjub::JubjubEngine;
 use sha2::Digest;
 
 use super::{Domain, HashFunction, Hasher};
 use crate::crypto::sloth;
 use crate::error::*;
 
-pub trait Digester: Digest + Clone + Default + ::std::fmt::Debug + Send + Sync {}
+pub trait Digester: Digest + Clone + Default + ::std::fmt::Debug + Send + Sync {
+    fn name() -> String;
+}
 
 #[derive(Default, Copy, Clone, Debug)]
 pub struct DigestHasher<D: Digester> {
@@ -30,6 +35,10 @@ impl<D: Digester> Eq for DigestHasher<D> {}
 impl<D: Digester> Hasher for DigestHasher<D> {
     type Domain = DigestDomain;
     type Function = DigestFunction<D>;
+
+    fn name() -> String {
+        format!("DigestHasher<{}>", D::name())
+    }
 
     fn kdf(data: &[u8], m: usize) -> Self::Domain {
         assert_eq!(
@@ -176,6 +185,15 @@ impl<D: Digester> HashFunction<DigestDomain> for DigestFunction<D> {
         res.0.copy_from_slice(&hashed[..]);
         res.trim_to_fr32();
         res
+    }
+    fn hash_leaf_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+        _cs: CS,
+        _left: &[boolean::Boolean],
+        _right: &[boolean::Boolean],
+        _height: usize,
+        _params: &E::Params,
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+        unimplemented!("circuit hash");
     }
 }
 

@@ -1,12 +1,15 @@
+use std::marker::PhantomData;
+
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use pairing::bls12_381::{Bls12, Fr};
-use sapling_crypto::circuit::{boolean, multipack, num, pedersen_hash};
+use sapling_crypto::circuit::{boolean, multipack, num};
 use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 
 use crate::circuit::constraint;
 use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::drgraph::graph_height;
+use crate::hasher::{HashFunction, Hasher};
 use crate::merklepor::MerklePoR;
 use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use crate::proof::ProofScheme;
@@ -20,18 +23,16 @@ use crate::proof::ProofScheme;
 /// * `auth_path` - The authentication path of the leaf in the tree.
 /// * `root` - The merkle root of the tree.
 ///
-use crate::hasher::Hasher;
-use std::marker::PhantomData;
-
-pub struct PoRCircuit<'a, E: JubjubEngine> {
+pub struct PoRCircuit<'a, E: JubjubEngine, H: Hasher> {
     params: &'a E::Params,
     value: Option<E::Fr>,
     auth_path: Vec<Option<(E::Fr, bool)>>,
     root: Root<E>,
     private: bool,
+    _h: PhantomData<H>,
 }
 
-impl<'a, E: JubjubEngine> CircuitComponent for PoRCircuit<'a, E> {
+impl<'a, E: JubjubEngine, H: Hasher> CircuitComponent for PoRCircuit<'a, E, H> {
     type ComponentPrivateInputs = Option<Root<E>>;
 }
 
@@ -54,22 +55,22 @@ impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier, H: Hasher>
     CacheableParameters<E, C, P> for PoRCompound<H>
 {
     fn cache_prefix() -> String {
-        String::from("proof-of-retrievability")
+        format!("proof-of-retrievability-{}", H::name())
     }
 }
 
 // can only implment for Bls12 because merklepor is not generic over the engine.
-impl<'a, H> CompoundProof<'a, Bls12, MerklePoR<H>, PoRCircuit<'a, Bls12>> for PoRCompound<H>
+impl<'a, H> CompoundProof<'a, Bls12, MerklePoR<H>, PoRCircuit<'a, Bls12, H>> for PoRCompound<H>
 where
     H: 'a + Hasher,
 {
     fn circuit<'b>(
         public_inputs: &<MerklePoR<H> as ProofScheme<'a>>::PublicInputs,
-        _component_private_inputs: <PoRCircuit<'a, Bls12> as CircuitComponent>::ComponentPrivateInputs,
+        _component_private_inputs: <PoRCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
         proof: &'b <MerklePoR<H> as ProofScheme<'a>>::Proof,
         public_params: &'b <MerklePoR<H> as ProofScheme<'a>>::PublicParams,
         engine_params: &'a JubjubBls12,
-    ) -> PoRCircuit<'a, Bls12> {
+    ) -> PoRCircuit<'a, Bls12, H> {
         let (root, private) = match (*public_inputs).commitment {
             None => (Root::Val(Some(proof.proof.root.into())), true),
             Some(commitment) => (Root::Val(Some(commitment.into())), false),
@@ -78,25 +79,27 @@ where
         // Ensure inputs are consistent with public params.
         assert_eq!(private, public_params.private);
 
-        PoRCircuit::<Bls12> {
+        PoRCircuit::<Bls12, H> {
             params: engine_params,
             value: Some(proof.data.into()),
             auth_path: proof.proof.as_options(),
             root,
             private,
+            _h: Default::default(),
         }
     }
 
     fn blank_circuit(
         public_params: &<MerklePoR<H> as ProofScheme<'a>>::PublicParams,
         params: &'a JubjubBls12,
-    ) -> PoRCircuit<'a, Bls12> {
-        PoRCircuit::<Bls12> {
+    ) -> PoRCircuit<'a, Bls12, H> {
+        PoRCircuit::<Bls12, H> {
             params,
             value: None,
             auth_path: vec![None; graph_height(public_params.leaves)],
             root: Root::Val(None),
             private: public_params.private,
+            _h: Default::default(),
         }
     }
 
@@ -122,7 +125,7 @@ where
     }
 }
 
-impl<'a, E: JubjubEngine> Circuit<E> for PoRCircuit<'a, E> {
+impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for PoRCircuit<'a, E, H> {
     /// # Public Inputs
     ///
     /// This circuit expects the following public inputs.
@@ -178,24 +181,17 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoRCircuit<'a, E> {
                     &cur_is_right,
                 )?;
 
-                // We don't need to be strict, because the function is
-                // collision-resistant. If the prover witnesses a congruency,
-                // they will be unable to find an authentication path in the
-                // tree with high probability.
-                let mut preimage = vec![];
-                preimage.extend(xl.into_bits_le(cs.namespace(|| "xl into bits"))?);
-                preimage.extend(xr.into_bits_le(cs.namespace(|| "xr into bits"))?);
+                let xl_bits = xl.into_bits_le(cs.namespace(|| "xl into bits"))?;
+                let xr_bits = xr.into_bits_le(cs.namespace(|| "xr into bits"))?;
 
                 // Compute the new subtree value
-                cur = pedersen_hash::pedersen_hash(
+                cur = H::Function::hash_leaf_circuit(
                     cs.namespace(|| "computation of pedersen hash"),
-                    pedersen_hash::Personalization::MerkleTree(i),
-                    &preimage,
+                    &xl_bits,
+                    &xr_bits,
+                    i,
                     params,
-                )?
-                .get_x()
-                .clone(); // Injective encoding
-
+                )?;
                 auth_path_bits.push(cur_is_right);
             }
 
@@ -219,7 +215,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoRCircuit<'a, E> {
     }
 }
 
-impl<'a, E: JubjubEngine> PoRCircuit<'a, E> {
+impl<'a, E: JubjubEngine, H: Hasher> PoRCircuit<'a, E, H> {
     pub fn synthesize<CS>(
         mut cs: CS,
         params: &E::Params,
@@ -232,12 +228,13 @@ impl<'a, E: JubjubEngine> PoRCircuit<'a, E> {
         E: JubjubEngine,
         CS: ConstraintSystem<E>,
     {
-        let por = PoRCircuit::<E> {
+        let por = PoRCircuit::<E, H> {
             params,
             value,
             auth_path,
             root,
             private,
+            _h: Default::default(),
         };
 
         por.synthesize(&mut cs)
@@ -257,7 +254,7 @@ mod tests {
     use crate::compound_proof;
     use crate::drgraph::{new_seed, BucketGraph, Graph};
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
-    use crate::hasher::pedersen::*;
+    use crate::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher};
     use crate::merklepor;
     use crate::proof::ProofScheme;
     use crate::util::data_at_node;
@@ -332,7 +329,16 @@ mod tests {
     }
 
     #[test]
-    fn test_por_input_circuit_with_bls12_381() {
+    fn test_por_input_circuit_with_bls12_381_pedersen() {
+        test_por_input_circuit_with_bls12_381::<PedersenHasher>(4148);
+    }
+
+    #[test]
+    fn test_por_input_circuit_with_bls12_381_blake2s() {
+        test_por_input_circuit_with_bls12_381::<Blake2sHasher>(128928);
+    }
+
+    fn test_por_input_circuit_with_bls12_381<H: Hasher>(num_constraints: usize) {
         let params = &JubjubBls12::new();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
@@ -345,7 +351,7 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
                 .collect();
 
-            let graph = BucketGraph::<PedersenHasher>::new(leaves, 16, 0, new_seed());
+            let graph = BucketGraph::<H>::new(leaves, 16, 0, new_seed());
             let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
             // -- MerklePoR
@@ -354,52 +360,50 @@ mod tests {
                 leaves,
                 private: true,
             };
-            let pub_inputs = merklepor::PublicInputs {
+            let pub_inputs = merklepor::PublicInputs::<H::Domain> {
                 challenge: i,
-                commitment: Some(tree.root().into()),
+                commitment: Some(tree.root()),
             };
 
-            let priv_inputs = merklepor::PrivateInputs::<PedersenHasher>::new(
-                bytes_into_fr::<Bls12>(
+            let priv_inputs = merklepor::PrivateInputs::<H>::new(
+                H::Domain::try_from_bytes(
                     data_at_node(data.as_slice(), pub_inputs.challenge).unwrap(),
                 )
-                .unwrap()
-                .into(),
+                .unwrap(),
                 &tree,
             );
 
             // create a non circuit proof
-            let proof = merklepor::MerklePoR::<PedersenHasher>::prove(
-                &pub_params,
-                &pub_inputs,
-                &priv_inputs,
-            )
-            .unwrap();
+            let proof =
+                merklepor::MerklePoR::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
 
             // make sure it verifies
             assert!(
-                merklepor::MerklePoR::<PedersenHasher>::verify(&pub_params, &pub_inputs, &proof)
-                    .unwrap(),
+                merklepor::MerklePoR::<H>::verify(&pub_params, &pub_inputs, &proof).unwrap(),
                 "failed to verify merklepor proof"
             );
 
             // -- Circuit
 
             let mut cs = TestConstraintSystem::<Bls12>::new();
-
-            let por = PoRCircuit::<Bls12> {
+            let por = PoRCircuit::<Bls12, H> {
                 params,
                 value: Some(proof.data.into()),
                 auth_path: proof.proof.as_options(),
                 root: Root::Val(Some(pub_inputs.commitment.unwrap().into())),
                 private: false,
+                _h: Default::default(),
             };
 
             por.synthesize(&mut cs).unwrap();
             assert!(cs.is_satisfied(), "constraints not satisfied");
 
             assert_eq!(cs.num_inputs(), 3, "wrong number of inputs");
-            assert_eq!(cs.num_constraints(), 4149, "wrong number of constraints");
+            assert_eq!(
+                cs.num_constraints(),
+                num_constraints,
+                "wrong number of constraints"
+            );
 
             let auth_path_bits: Vec<bool> = proof
                 .proof
@@ -434,13 +438,23 @@ mod tests {
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
-    fn private_por_test_compound() {
+    fn test_private_por_compound_pedersen() {
+        private_por_test_compound::<PedersenHasher>();
+    }
+
+    #[ignore] // Slow test – run only when compiled for release.
+    #[test]
+    fn test_private_por_compound_blake2s() {
+        private_por_test_compound::<Blake2sHasher>();
+    }
+
+    fn private_por_test_compound<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let leaves = 6;
         let data: Vec<u8> = (0..leaves)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
-        let graph = BucketGraph::<PedersenHasher>::new(leaves, 16, 0, new_seed());
+        let graph = BucketGraph::<H>::new(leaves, 16, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
         for i in 0..3 {
@@ -457,10 +471,9 @@ mod tests {
                 engine_params: &JubjubBls12::new(),
                 partitions: None,
             };
-            let public_params =
-                PoRCompound::<PedersenHasher>::setup(&setup_params).expect("setup failed");
+            let public_params = PoRCompound::<H>::setup(&setup_params).expect("setup failed");
 
-            let private_inputs = merklepor::PrivateInputs::<PedersenHasher>::new(
+            let private_inputs = merklepor::PrivateInputs::<H>::new(
                 bytes_into_fr::<Bls12>(
                     data_at_node(data.as_slice(), public_inputs.challenge).unwrap(),
                 )
@@ -469,22 +482,18 @@ mod tests {
                 &tree,
             );
 
-            let gparams = PoRCompound::<PedersenHasher>::groth_params(
+            let gparams = PoRCompound::<H>::groth_params(
                 &public_params.vanilla_params,
                 setup_params.engine_params,
             )
             .unwrap();
 
-            let proof = PoRCompound::<PedersenHasher>::prove(
-                &public_params,
-                &public_inputs,
-                &private_inputs,
-                &gparams,
-            )
-            .expect("failed while proving");
+            let proof =
+                PoRCompound::<H>::prove(&public_params, &public_inputs, &private_inputs, &gparams)
+                    .expect("failed while proving");
 
             {
-                let (circuit, inputs) = PoRCompound::<PedersenHasher>::circuit_for_test(
+                let (circuit, inputs) = PoRCompound::<H>::circuit_for_test(
                     &public_params,
                     &public_inputs,
                     &private_inputs,
@@ -498,9 +507,8 @@ mod tests {
                 assert!(cs.verify(&inputs));
             }
 
-            let verified =
-                PoRCompound::<PedersenHasher>::verify(&public_params, &public_inputs, &proof)
-                    .expect("failed while verifying");
+            let verified = PoRCompound::<H>::verify(&public_params, &public_inputs, &proof)
+                .expect("failed while verifying");
             assert!(verified);
         }
     }
@@ -561,12 +569,13 @@ mod tests {
 
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            let por = PoRCircuit::<Bls12> {
+            let por = PoRCircuit::<Bls12, PedersenHasher> {
                 params,
                 value: Some(proof.data.into()),
                 auth_path: proof.proof.as_options(),
                 root: Root::Val(Some(tree.root().into())),
                 private: true,
+                _h: Default::default(),
             };
 
             por.synthesize(&mut cs).unwrap();

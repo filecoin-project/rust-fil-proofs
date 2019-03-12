@@ -51,7 +51,7 @@ use std::marker::PhantomData;
 use crate::circuit::por::{PoRCircuit, PoRCompound};
 use crate::hasher::{Domain, Hasher};
 
-pub struct DrgPoRepCircuit<'a, E: JubjubEngine> {
+pub struct DrgPoRepCircuit<'a, E: JubjubEngine, H: Hasher> {
     params: &'a E::Params,
     sloth_iter: usize,
     replica_nodes: Vec<Option<E::Fr>>,
@@ -68,9 +68,10 @@ pub struct DrgPoRepCircuit<'a, E: JubjubEngine> {
     replica_id: Option<E::Fr>,
     degree: usize,
     private: bool,
+    _h: PhantomData<H>,
 }
 
-impl<'a, E: JubjubEngine> DrgPoRepCircuit<'a, E> {
+impl<'a, E: JubjubEngine, H: Hasher> DrgPoRepCircuit<'a, E, H> {
     #[allow(clippy::type_complexity, clippy::too_many_arguments)]
     pub fn synthesize<CS>(
         mut cs: CS,
@@ -92,7 +93,7 @@ impl<'a, E: JubjubEngine> DrgPoRepCircuit<'a, E> {
         E: JubjubEngine,
         CS: ConstraintSystem<E>,
     {
-        DrgPoRepCircuit {
+        DrgPoRepCircuit::<_, H> {
             params,
             sloth_iter,
             replica_nodes,
@@ -106,6 +107,7 @@ impl<'a, E: JubjubEngine> DrgPoRepCircuit<'a, E> {
             replica_id,
             degree,
             private,
+            _h: Default::default(),
         }
         .synthesize(&mut cs)
     }
@@ -126,7 +128,7 @@ impl<E: JubjubEngine> Default for ComponentPrivateInputs<E> {
     }
 }
 
-impl<'a, E: JubjubEngine> CircuitComponent for DrgPoRepCircuit<'a, E> {
+impl<'a, E: JubjubEngine, H: Hasher> CircuitComponent for DrgPoRepCircuit<'a, E, H> {
     type ComponentPrivateInputs = ComponentPrivateInputs<E>;
 }
 
@@ -148,7 +150,7 @@ impl<E: JubjubEngine, C: Circuit<E>, H: Hasher, G: Graph<H>, P: ParameterSetIden
     }
 }
 
-impl<'a, H, G> CompoundProof<'a, Bls12, DrgPoRep<'a, H, G>, DrgPoRepCircuit<'a, Bls12>>
+impl<'a, H, G> CompoundProof<'a, Bls12, DrgPoRep<'a, H, G>, DrgPoRepCircuit<'a, Bls12, H>>
     for DrgPoRepCompound<H, G>
 where
     H: 'a + Hasher,
@@ -219,11 +221,11 @@ where
 
     fn circuit<'b>(
         public_inputs: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicInputs,
-        component_private_inputs: <DrgPoRepCircuit<'a, Bls12> as CircuitComponent>::ComponentPrivateInputs,
+        component_private_inputs: <DrgPoRepCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
         proof: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::Proof,
         public_params: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
         engine_params: &'a <Bls12 as JubjubEngine>::Params,
-    ) -> DrgPoRepCircuit<'a, Bls12> {
+    ) -> DrgPoRepCircuit<'a, Bls12, H> {
         let challenges = public_params.challenges_count;
         let len = proof.nodes.len();
 
@@ -314,13 +316,14 @@ where
             replica_id: replica_id.map(Into::into),
             degree: public_params.graph.degree(),
             private: public_params.private,
+            _h: Default::default(),
         }
     }
 
     fn blank_circuit(
         public_params: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
         params: &'a <Bls12 as JubjubEngine>::Params,
-    ) -> DrgPoRepCircuit<'a, Bls12> {
+    ) -> DrgPoRepCircuit<'a, Bls12, H> {
         let depth = public_params.graph.merkle_tree_depth() as usize;
         let degree = public_params.graph.degree();
         let challenges_count = public_params.challenges_count;
@@ -349,6 +352,7 @@ where
             replica_id: None,
             degree: public_params.graph.degree(),
             private: public_params.private,
+            _h: Default::default(),
         }
     }
 }
@@ -376,7 +380,7 @@ where
 ///
 /// Total = 2 + replica_parents.len()
 ///
-impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
+impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for DrgPoRepCircuit<'a, E, H> {
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError>
     where
         E: JubjubEngine,
@@ -437,7 +441,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
             // Inclusion checks
             {
                 let mut cs = cs.namespace(|| "inclusion_checks");
-                PoRCircuit::synthesize(
+                PoRCircuit::<_, H>::synthesize(
                     cs.namespace(|| "replica_inclusion"),
                     &params,
                     *replica_node,
@@ -448,7 +452,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
 
                 // validate each replica_parents merkle proof
                 for j in 0..replica_parents.len() {
-                    PoRCircuit::synthesize(
+                    PoRCircuit::<_, H>::synthesize(
                         cs.namespace(|| format!("parents_inclusion_{}", j)),
                         &params,
                         replica_parents[j],
@@ -459,7 +463,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for DrgPoRepCircuit<'a, E> {
                 }
 
                 // validate data node commitment
-                PoRCircuit::synthesize(
+                PoRCircuit::<_, H>::synthesize(
                     cs.namespace(|| "data_inclusion"),
                     &params,
                     *data_node,
@@ -645,7 +649,7 @@ mod tests {
         );
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        DrgPoRepCircuit::synthesize(
+        DrgPoRepCircuit::<_, PedersenHasher>::synthesize(
             cs.namespace(|| "drgporep"),
             params,
             sloth_iter,
@@ -694,7 +698,7 @@ mod tests {
         let sloth_iter = 1;
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        DrgPoRepCircuit::synthesize(
+        DrgPoRepCircuit::<_, PedersenHasher>::synthesize(
             cs.namespace(|| "drgporep"),
             params,
             sloth_iter,
