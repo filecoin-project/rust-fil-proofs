@@ -2,7 +2,6 @@ use std::cmp::{max, min};
 use std::marker::PhantomData;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::SeqCst;
-use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
 
 use crossbeam::{deque, thread};
@@ -401,7 +400,7 @@ pub trait Layers {
             // the definition of DrgPoRep::replicate. This is because as implemented, it entangles
             // encoding and merkle tree generation too tightly to be used as a subcomponent.
 
-            let q = deque::Injector::<(usize, Vec<u8>, Self::Graph)>::new();
+            let q = deque::Injector::<(usize, MmapMut, Self::Graph)>::new();
 
             let THREADS = 4;
             let COUNT = layers + 1;
@@ -410,7 +409,7 @@ pub trait Layers {
 
             // Spawn a number of threads to handle merkle tree generation
             thread::scope(|s| {
-                let mut current_drgpp = drgpp.to_owned();
+                let mut current_graph = graph.to_owned();
 
                 for _ in 0..THREADS {
                     let remaining = remaining.clone();
@@ -431,19 +430,16 @@ pub trait Layers {
 
                 for layer in 0..=layers {
                     // Schedule merkle tree generation
-                    q.push((layer, anonymous_mmap(data), current_drgpp.graph.clone()));
+                    let mut data_copy = anonymous_mmap(data.len());
+                    data_copy[0..data.len()].clone_from_slice(data);
+                    q.push((layer, data_copy, graph.clone()));
 
                     if layer < layers {
                         info!(SP_LOG, "encoding"; "layer {}" => format!("{}", layer));
-                        vde::encode(
-                            &current_drgpp.graph,
-                            current_drgpp.sloth_iter,
-                            replica_id,
-                            data,
-                        )
-                        .expect("failed encoding");
+                        vde::encode(&current_graph, sloth_iter, replica_id, data)
+                            .expect("failed encoding");
                     }
-                    current_drgpp = Self::transform(&current_drgpp);
+                    current_graph = Self::transform(&current_graph);
                 }
             })
             .unwrap();
