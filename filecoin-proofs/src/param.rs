@@ -137,19 +137,10 @@ pub fn spawn_fetch_parameter_file(
         &["--silent", "--show-error"]
     };
 
-
-    let connect_timeout = &[
-        "--connect-timeout",
-        "30",
-    ];
+    let connect_timeout = &["--connect-timeout", "30"];
 
     // time out if speed stays at below 1000 bytes/second for >= 15 seconds
-    let speed_timeout = &[
-        "--speed-time",
-        "15",
-        "--speed-limit",
-        "1000",
-    ];
+    let speed_timeout = &["--speed-time", "15", "--speed-limit", "1000"];
 
     Command::new("curl")
         .args(output_styling)
