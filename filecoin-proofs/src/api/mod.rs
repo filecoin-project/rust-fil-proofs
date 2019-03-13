@@ -140,30 +140,15 @@ pub unsafe extern "C" fn generate_post(
 ///
 #[no_mangle]
 pub unsafe extern "C" fn verify_post(
-    _cfg_ptr: *const ConfiguredStore,
-    _flattened_comm_rs_ptr: *const u8,
-    _flattened_comm_rs_len: libc::size_t,
-    _challenge_seed: &[u8; 32],
+    cfg_ptr: *const ConfiguredStore,
+    flattened_comm_rs_ptr: *const u8,
+    flattened_comm_rs_len: libc::size_t,
+    challenge_seed: &[u8; 32],
     flattened_proofs_ptr: *const u8,
     flattened_proofs_len: libc::size_t,
-    _faults_ptr: *const u64,
-    _faults_len: libc::size_t,
+    faults_ptr: *const u64,
+    faults_len: libc::size_t,
 ) -> *mut responses::VerifyPoSTResponse {
-    let mut response: responses::VerifyPoSTResponse = Default::default();
-
-    let proofs: &[u8] = from_raw_parts(flattened_proofs_ptr, flattened_proofs_len);
-
-    if proofs[0] == 42 {
-        response.is_valid = true;
-    } else {
-        response.is_valid = false;
-    };
-
-    // Stay mocked for now — remove early return when ready to use.
-    Box::into_raw(Box::new(response))
-
-    /*
-
     let mut response: responses::VerifyPoSTResponse = Default::default();
 
     if let Some(cfg) = cfg_ptr.as_ref() {
@@ -176,6 +161,17 @@ pub unsafe extern "C" fn verify_post(
                 let sliced = from_raw_parts(item, 32);
                 let mut x: [u8; 32] = Default::default();
                 x.copy_from_slice(&sliced[..32]);
+                acc.push(x);
+                acc
+            });
+
+        let proofs = from_raw_parts(flattened_proofs_ptr, flattened_proofs_len)
+            .iter()
+            .step_by(192)
+            .fold(Default::default(), |mut acc: Vec<[u8; 192]>, item| {
+                let sliced = from_raw_parts(item, 192);
+                let mut x: [u8; 192] = [0; 192];
+                x.copy_from_slice(&sliced[..192]);
                 acc.push(x);
                 acc
             });
@@ -193,7 +189,7 @@ pub unsafe extern "C" fn verify_post(
             sector_bytes: cfg.sector_bytes(),
             comm_rs,
             challenge_seed: safe_challenge_seed,
-            proofs: from_raw_parts(proofs_ptr, proofs_len).to_vec(),
+            proofs,
             faults: faults.to_vec(),
         }) {
             Ok(dynamic) => {
@@ -215,8 +211,6 @@ pub unsafe extern "C" fn verify_post(
     }
 
     Box::into_raw(Box::new(response))
-
-    */
 }
 
 /// Initializes and returns a SectorBuilder.

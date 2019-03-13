@@ -293,21 +293,6 @@ pub fn generate_post(
     generate_post_collect_output(n, fixed_output)
 }
 
-pub fn fake_generate_post(
-    dynamic: GeneratePoStDynamicSectorsCountInput,
-) -> error::Result<GeneratePoStDynamicSectorsCountOutput> {
-    let faults: Vec<u64> = if !dynamic.input_parts.is_empty() {
-        vec![0]
-    } else {
-        Default::default()
-    };
-
-    Ok(GeneratePoStDynamicSectorsCountOutput {
-        proofs: vec![[42; 192]],
-        faults,
-    })
-}
-
 pub fn verify_post(
     dynamic: VerifyPoStDynamicSectorsCountInput,
 ) -> error::Result<VerifyPoStDynamicSectorsCountOutput> {
