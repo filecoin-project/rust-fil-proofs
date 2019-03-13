@@ -31,7 +31,6 @@ use std::io::Write;
 use std::time::{Duration, Instant};
 use std::u32;
 
-use bellman::Circuit;
 use sapling_crypto::jubjub::JubjubBls12;
 
 use storage_proofs::circuit::test::*;
@@ -213,8 +212,8 @@ fn do_the_work<H: 'static>(
     let samples: u32 = 5;
     let mut total_proving = Duration::new(0, 0);
 
-    let (pub_in, priv_in, d) = if bench_only {
-        (None, None, None)
+    let (pub_in, priv_in, d, one_vanilla_proof) = if bench_only {
+        (None, None, None, None)
     } else {
         let mut data = file_backed_mmap_from_zeroes(nodes, use_tmp);
 
@@ -303,7 +302,12 @@ fn do_the_work<H: 'static>(
             + (verifying_avg.as_secs() as f64);
         info!(FCP_LOG, "average_vanilla_verifying_time: {:?} seconds", verifying_avg; "target" => "stats");
 
-        (Some(pub_inputs), Some(priv_inputs), Some(data))
+        (
+            Some(pub_inputs),
+            Some(priv_inputs),
+            Some(data),
+            Some(all_partition_proofs[0].clone()),
+        )
     };
 
     if circuit || groth || bench {
@@ -314,12 +318,18 @@ fn do_the_work<H: 'static>(
             partitions: Some(partitions),
         };
         if circuit || bench {
+            let pub_inputs = pub_in.clone().unwrap();
+            let vanilla_proof = one_vanilla_proof.unwrap();
             info!(FCP_LOG, "Performing circuit bench."; "target" => "status");
-            let mut cs = TestConstraintSystem::<Bls12>::new();
+            let cs = TestConstraintSystem::<Bls12>::new();
 
-            ZigZagCompound::blank_circuit(&pp, &engine_params)
-                .synthesize(&mut cs)
-                .expect("failed to synthesize circuit");
+            ZigZagCompound::circuit(
+                &pub_inputs,
+                Default::default(),
+                &vanilla_proof,
+                &pp.clone(),
+                &engine_params,
+            );
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
 
