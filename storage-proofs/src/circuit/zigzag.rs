@@ -372,6 +372,7 @@ impl<'a, H: 'static + Hasher>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::circuit::metric::*;
     use crate::circuit::test::*;
     use crate::compound_proof;
     use crate::drgporep;
@@ -446,6 +447,29 @@ mod tests {
 
         // End copied section.
 
+        let expected_inputs = 16;
+        let expected_constraints = 131094;
+        {
+            // Verify that MetricCS returns the same metrics as TestConstraintSystem.
+            let mut cs = MetricCS::<Bls12>::new();
+
+            ZigZagCompound::circuit(
+            &pub_inputs,
+            <ZigZagCircuit<Bls12, PedersenHasher> as CircuitComponent>::ComponentPrivateInputs::default(),
+            &proofs[0],
+            &pp,
+            params,
+        )
+            .synthesize(&mut cs.namespace(|| "zigzag drgporep"))
+            .expect("failed to synthesize circuit");
+
+            assert_eq!(cs.num_inputs(), expected_inputs, "wrong number of inputs");
+            assert_eq!(
+                cs.num_constraints(),
+                expected_constraints,
+                "wrong number of constraints"
+            );
+        }
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
         ZigZagCompound::circuit(
@@ -459,8 +483,12 @@ mod tests {
         .expect("failed to synthesize circuit");
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_inputs(), 16, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 131094, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), expected_inputs, "wrong number of inputs");
+        assert_eq!(
+            cs.num_constraints(),
+            expected_constraints,
+            "wrong number of constraints"
+        );
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
