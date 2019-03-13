@@ -146,7 +146,7 @@ impl<E: JubjubEngine, C: Circuit<E>, H: Hasher, G: Graph<H>, P: ParameterSetIden
     CacheableParameters<E, C, P> for DrgPoRepCompound<H, G>
 {
     fn cache_prefix() -> String {
-        String::from("drg-proof-of-replication")
+        format!("drg-proof-of-replication-{}", H::name())
     }
 }
 
@@ -534,10 +534,11 @@ mod tests {
     use crate::drgporep;
     use crate::drgraph::{graph_height, new_seed, BucketGraph};
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
-    use crate::hasher::pedersen::*;
+    use crate::hasher::{Blake2sHasher, Hasher, PedersenHasher};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
     use crate::util::data_at_node;
+
     use pairing::Field;
     use rand::Rand;
     use rand::{Rng, SeedableRng, XorShiftRng};
@@ -722,7 +723,17 @@ mod tests {
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
-    fn drgporep_test_compound() {
+    fn test_drgporep_compound_pedersen() {
+        drgporep_test_compound::<PedersenHasher>();
+    }
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn test_drgporep_compound_blake2s() {
+        drgporep_test_compound::<Blake2sHasher>();
+    }
+
+    fn drgporep_test_compound<H: Hasher>() {
         let params = &JubjubBls12::new();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
@@ -756,10 +767,9 @@ mod tests {
         };
 
         let public_params =
-            DrgPoRepCompound::<PedersenHasher, BucketGraph<_>>::setup(&setup_params)
-                .expect("setup failed");
+            DrgPoRepCompound::<H, BucketGraph<_>>::setup(&setup_params).expect("setup failed");
 
-        let (tau, aux) = drgporep::DrgPoRep::<PedersenHasher, _>::replicate(
+        let (tau, aux) = drgporep::DrgPoRep::<H, _>::replicate(
             &public_params.vanilla_params,
             &replica_id.into(),
             data.as_mut_slice(),
@@ -767,7 +777,7 @@ mod tests {
         )
         .expect("failed to replicate");
 
-        let public_inputs = drgporep::PublicInputs::<PedersenDomain> {
+        let public_inputs = drgporep::PublicInputs::<H::Domain> {
             replica_id: Some(replica_id.into()),
             challenges,
             tau: Some(tau),
@@ -795,11 +805,10 @@ mod tests {
         };
 
         let public_params =
-            DrgPoRepCompound::<PedersenHasher, BucketGraph<_>>::setup(&setup_params)
-                .expect("setup failed");
+            DrgPoRepCompound::<H, BucketGraph<_>>::setup(&setup_params).expect("setup failed");
 
         {
-            let (circuit, inputs) = DrgPoRepCompound::<PedersenHasher, _>::circuit_for_test(
+            let (circuit, inputs) = DrgPoRepCompound::<H, _>::circuit_for_test(
                 &public_params,
                 &public_inputs,
                 &private_inputs,
@@ -813,13 +822,11 @@ mod tests {
         }
 
         {
-            let gparams = DrgPoRepCompound::<PedersenHasher, _>::groth_params(
-                &public_params.vanilla_params,
-                &params,
-            )
-            .expect("failed to get groth params");
+            let gparams =
+                DrgPoRepCompound::<H, _>::groth_params(&public_params.vanilla_params, &params)
+                    .expect("failed to get groth params");
 
-            let proof = DrgPoRepCompound::<PedersenHasher, _>::prove(
+            let proof = DrgPoRepCompound::<H, _>::prove(
                 &public_params,
                 &public_inputs,
                 &private_inputs,
@@ -827,12 +834,8 @@ mod tests {
             )
             .expect("failed while proving");
 
-            let verified = DrgPoRepCompound::<PedersenHasher, _>::verify(
-                &public_params,
-                &public_inputs,
-                &proof,
-            )
-            .expect("failed while verifying");
+            let verified = DrgPoRepCompound::<H, _>::verify(&public_params, &public_inputs, &proof)
+                .expect("failed while verifying");
 
             assert!(verified);
         }

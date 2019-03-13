@@ -2,7 +2,7 @@ use std::fmt;
 use std::hash::Hasher as StdHasher;
 
 use bellman::{ConstraintSystem, SynthesisError};
-use blake2s_simd::{blake2s, Hash as Blake2sHash, Params as Blake2s, State};
+use blake2s_simd::{Hash as Blake2sHash, Params as Blake2s, State};
 use byteorder::{LittleEndian, WriteBytesExt};
 use merkle_light::hash::{Algorithm, Hashable};
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
@@ -182,7 +182,12 @@ impl Into<Blake2sDomain> for Blake2sHash {
 
 impl HashFunction<Blake2sDomain> for Blake2sFunction {
     fn hash(data: &[u8]) -> Blake2sDomain {
-        blake2s(data).into()
+        Blake2s::new()
+            .hash_length(32)
+            .to_state()
+            .update(data)
+            .finalize()
+            .into()
     }
 
     fn hash_leaf_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
