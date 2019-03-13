@@ -5,12 +5,14 @@ use crate::api::responses::FFIPieceMetadata;
 use crate::api::responses::FFISealStatus;
 use crate::api::sector_builder::metadata::SealStatus;
 use crate::api::sector_builder::SectorBuilder;
+use crate::FCP_LOG;
 use ffi_toolkit::rust_str_to_c_str;
 use ffi_toolkit::{c_str_to_rust_str, raw_ptr};
 use sector_base::api::disk_backed_storage::new_sector_config;
 use sector_base::api::disk_backed_storage::ConfiguredStore;
 
 use libc;
+use slog::*;
 use std::ffi::CString;
 use std::mem;
 use std::ptr;
@@ -49,6 +51,8 @@ pub unsafe extern "C" fn verify_seal(
     sector_id: &[u8; 31],
     proof: &[u8; API_POREP_PROOF_BYTES],
 ) -> *mut responses::VerifySealResponse {
+    info!(FCP_LOG, "verify_seal: {}", "start"; "target" => "FFI");
+
     let mut response: responses::VerifySealResponse = Default::default();
 
     if let Some(cfg) = cfg_ptr.as_ref() {
@@ -85,6 +89,8 @@ pub unsafe extern "C" fn verify_seal(
         mem::forget(msg);
     }
 
+    info!(FCP_LOG, "verify_seal: {}", "finish"; "target" => "FFI");
+
     raw_ptr(response)
 }
 
@@ -97,6 +103,8 @@ pub unsafe extern "C" fn generate_post(
     flattened_comm_rs_len: libc::size_t,
     challenge_seed: &[u8; 32],
 ) -> *mut responses::GeneratePoStResponse {
+    info!(FCP_LOG, "generate_post: {}", "start"; "target" => "FFI");
+
     let comm_rs = from_raw_parts(flattened_comm_rs_ptr, flattened_comm_rs_len)
         .iter()
         .step_by(32)
@@ -133,6 +141,8 @@ pub unsafe extern "C" fn generate_post(
         }
     }
 
+    info!(FCP_LOG, "generate_post: {}", "finish"; "target" => "FFI");
+
     raw_ptr(response)
 }
 
@@ -149,6 +159,8 @@ pub unsafe extern "C" fn verify_post(
     faults_ptr: *const u64,
     faults_len: libc::size_t,
 ) -> *mut responses::VerifyPoSTResponse {
+    info!(FCP_LOG, "verify_post: {}", "start"; "target" => "FFI");
+
     let mut response: responses::VerifyPoSTResponse = Default::default();
 
     if let Some(cfg) = cfg_ptr.as_ref() {
@@ -209,6 +221,8 @@ pub unsafe extern "C" fn verify_post(
         response.error_msg = msg.as_ptr();
         mem::forget(msg);
     }
+
+    info!(FCP_LOG, "verfiy_post: {}", "finish"; "target" => "FFI");
 
     Box::into_raw(Box::new(response))
 }
