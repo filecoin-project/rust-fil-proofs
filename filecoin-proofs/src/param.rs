@@ -131,8 +131,30 @@ pub fn spawn_fetch_parameter_file(
 
     create_dir_all(parameter_cache_dir())?;
 
+    let output_styling = if is_verbose {
+        &["--verbose", "--progress-bar"]
+    } else {
+        &["--silent", "--show-error"]
+    };
+
+
+    let connect_timeout = &[
+        "--connect-timeout",
+        "30",
+    ];
+
+    // time out if speed stays at below 1000 bytes/second for >= 15 seconds
+    let speed_timeout = &[
+        "--speed-time",
+        "15",
+        "--speed-limit",
+        "1000",
+    ];
+
     Command::new("curl")
-        .args(if is_verbose { &["--verbose", "--progress-bar"] } else { &["--silent", "--show-error"] })
+        .args(output_styling)
+        .args(connect_timeout)
+        .args(speed_timeout)
         .arg("--output")
         .arg(&path)
         .arg(format!("https://ipfs.io/ipfs/{}", parameter_data.cid))
