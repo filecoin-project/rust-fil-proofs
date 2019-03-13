@@ -1,6 +1,7 @@
 use crate::api::sector_builder::errors::SectorBuilderErr;
 use crate::api::sector_builder::SectorBuilder;
 use crate::api::API_POREP_PROOF_BYTES;
+use drop_struct_macro_derive::DropStructMacro;
 use failure::Error;
 use ffi_toolkit::free_c_str;
 use libc;
@@ -33,6 +34,7 @@ pub enum FFISealStatus {
 //////////////////////
 
 #[repr(C)]
+#[derive(DropStructMacro)]
 pub struct VerifySealResponse {
     pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
@@ -49,14 +51,6 @@ impl Default for VerifySealResponse {
     }
 }
 
-impl Drop for VerifySealResponse {
-    fn drop(&mut self) {
-        unsafe {
-            free_c_str(self.error_msg as *mut libc::c_char);
-        };
-    }
-}
-
 #[no_mangle]
 pub unsafe extern "C" fn destroy_verify_seal_response(ptr: *mut VerifySealResponse) {
     let _ = Box::from_raw(ptr);
@@ -67,6 +61,7 @@ pub unsafe extern "C" fn destroy_verify_seal_response(ptr: *mut VerifySealRespon
 //////////////////////
 
 #[repr(C)]
+#[derive(DropStructMacro)]
 pub struct GeneratePoStResponse {
     pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
@@ -89,26 +84,6 @@ impl Default for GeneratePoStResponse {
     }
 }
 
-impl Drop for GeneratePoStResponse {
-    fn drop(&mut self) {
-        unsafe {
-            drop(Vec::from_raw_parts(
-                self.faults_ptr as *mut u8,
-                self.faults_len,
-                self.faults_len,
-            ));
-
-            drop(Vec::from_raw_parts(
-                self.flattened_proofs_ptr as *mut u8,
-                self.flattened_proofs_len,
-                self.flattened_proofs_len,
-            ));
-
-            free_c_str(self.error_msg as *mut libc::c_char);
-        };
-    }
-}
-
 #[no_mangle]
 pub unsafe extern "C" fn destroy_generate_post_response(ptr: *mut GeneratePoStResponse) {
     let _ = Box::from_raw(ptr);
@@ -119,6 +94,7 @@ pub unsafe extern "C" fn destroy_generate_post_response(ptr: *mut GeneratePoStRe
 ////////////////////
 
 #[repr(C)]
+#[derive(DropStructMacro)]
 pub struct VerifyPoSTResponse {
     pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
@@ -132,14 +108,6 @@ impl Default for VerifyPoSTResponse {
             error_msg: ptr::null(),
             is_valid: false,
         }
-    }
-}
-
-impl Drop for VerifyPoSTResponse {
-    fn drop(&mut self) {
-        unsafe {
-            free_c_str(self.error_msg as *mut libc::c_char);
-        };
     }
 }
 
@@ -181,6 +149,7 @@ pub fn err_code_and_msg(err: &Error) -> (FCPResponseStatus, *const libc::c_char)
 /////////////////////////////
 
 #[repr(C)]
+#[derive(DropStructMacro)]
 pub struct InitSectorBuilderResponse {
     pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
@@ -197,14 +166,6 @@ impl Default for InitSectorBuilderResponse {
     }
 }
 
-impl Drop for InitSectorBuilderResponse {
-    fn drop(&mut self) {
-        unsafe {
-            free_c_str(self.error_msg as *mut libc::c_char);
-        };
-    }
-}
-
 #[no_mangle]
 pub unsafe extern "C" fn destroy_init_sector_builder_response(ptr: *mut InitSectorBuilderResponse) {
     let _ = Box::from_raw(ptr);
@@ -215,6 +176,7 @@ pub unsafe extern "C" fn destroy_init_sector_builder_response(ptr: *mut InitSect
 ////////////////////
 
 #[repr(C)]
+#[derive(DropStructMacro)]
 pub struct AddPieceResponse {
     pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
@@ -231,14 +193,6 @@ impl Default for AddPieceResponse {
     }
 }
 
-impl Drop for AddPieceResponse {
-    fn drop(&mut self) {
-        unsafe {
-            free_c_str(self.error_msg as *mut libc::c_char);
-        };
-    }
-}
-
 #[no_mangle]
 pub unsafe extern "C" fn destroy_add_piece_response(ptr: *mut AddPieceResponse) {
     let _ = Box::from_raw(ptr);
@@ -249,6 +203,7 @@ pub unsafe extern "C" fn destroy_add_piece_response(ptr: *mut AddPieceResponse) 
 /////////////////////////////////////
 
 #[repr(C)]
+#[derive(DropStructMacro)]
 pub struct ReadPieceFromSealedSectorResponse {
     pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
@@ -267,20 +222,6 @@ impl Default for ReadPieceFromSealedSectorResponse {
     }
 }
 
-impl Drop for ReadPieceFromSealedSectorResponse {
-    fn drop(&mut self) {
-        unsafe {
-            free_c_str(self.error_msg as *mut libc::c_char);
-
-            drop(Vec::from_raw_parts(
-                self.data_ptr as *mut u8,
-                self.data_len,
-                self.data_len,
-            ));
-        };
-    }
-}
-
 #[no_mangle]
 pub unsafe extern "C" fn destroy_read_piece_from_sealed_sector_response(
     ptr: *mut ReadPieceFromSealedSectorResponse,
@@ -293,6 +234,7 @@ pub unsafe extern "C" fn destroy_read_piece_from_sealed_sector_response(
 ////////////////////////////////
 
 #[repr(C)]
+#[derive(DropStructMacro)]
 pub struct SealAllStagedSectorsResponse {
     pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
@@ -304,14 +246,6 @@ impl Default for SealAllStagedSectorsResponse {
             status_code: FCPResponseStatus::FCPNoError,
             error_msg: ptr::null(),
         }
-    }
-}
-
-impl Drop for SealAllStagedSectorsResponse {
-    fn drop(&mut self) {
-        unsafe {
-            free_c_str(self.error_msg as *mut libc::c_char);
-        };
     }
 }
 
@@ -327,6 +261,7 @@ pub unsafe extern "C" fn destroy_seal_all_staged_sectors_response(
 //////////////////////////////
 
 #[repr(C)]
+#[derive(DropStructMacro)]
 pub struct GetMaxStagedBytesPerSector {
     pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
@@ -343,14 +278,6 @@ impl Default for GetMaxStagedBytesPerSector {
     }
 }
 
-impl Drop for GetMaxStagedBytesPerSector {
-    fn drop(&mut self) {
-        unsafe {
-            free_c_str(self.error_msg as *mut libc::c_char);
-        };
-    }
-}
-
 #[no_mangle]
 pub unsafe extern "C" fn destroy_get_max_user_bytes_per_staged_sector_response(
     ptr: *mut GetMaxStagedBytesPerSector,
@@ -363,6 +290,7 @@ pub unsafe extern "C" fn destroy_get_max_user_bytes_per_staged_sector_response(
 /////////////////////////
 
 #[repr(C)]
+#[derive(DropStructMacro)]
 pub struct GetSealStatusResponse {
     pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
@@ -384,17 +312,10 @@ pub struct GetSealStatusResponse {
 }
 
 #[repr(C)]
+#[derive(DropStructMacro)]
 pub struct FFIPieceMetadata {
     pub piece_key: *const libc::c_char,
     pub num_bytes: u64,
-}
-
-impl Drop for FFIPieceMetadata {
-    fn drop(&mut self) {
-        unsafe {
-            free_c_str(self.piece_key as *mut libc::c_char);
-        }
-    }
 }
 
 impl Default for GetSealStatusResponse {
@@ -419,21 +340,6 @@ impl Default for GetSealStatusResponse {
     }
 }
 
-impl Drop for GetSealStatusResponse {
-    fn drop(&mut self) {
-        unsafe {
-            free_c_str(self.error_msg as *mut libc::c_char);
-            free_c_str(self.seal_error_msg as *mut libc::c_char);
-            free_c_str(self.sector_access as *mut libc::c_char);
-            drop(Vec::from_raw_parts(
-                self.pieces_ptr as *mut FFIPieceMetadata,
-                self.pieces_len,
-                self.pieces_len,
-            ));
-        };
-    }
-}
-
 #[no_mangle]
 pub unsafe extern "C" fn destroy_get_seal_status_response(ptr: *mut GetSealStatusResponse) {
     let _ = Box::from_raw(ptr);
@@ -444,6 +350,7 @@ pub unsafe extern "C" fn destroy_get_seal_status_response(ptr: *mut GetSealStatu
 ///////////////////////////
 
 #[repr(C)]
+#[derive(DropStructMacro)]
 pub struct FFIStagedSectorMetadata {
     pub sector_access: *const libc::c_char,
     pub sector_id: u64,
@@ -457,25 +364,12 @@ pub struct FFIStagedSectorMetadata {
     pub seal_error_msg: *const libc::c_char,
 }
 
-impl Drop for FFIStagedSectorMetadata {
-    fn drop(&mut self) {
-        unsafe {
-            free_c_str(self.sector_access as *mut libc::c_char);
-            free_c_str(self.seal_error_msg as *mut libc::c_char);
-            drop(Vec::from_raw_parts(
-                self.pieces_ptr as *mut FFIPieceMetadata,
-                self.pieces_len,
-                self.pieces_len,
-            ));
-        }
-    }
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 /// FFISealedSectorMetadata
 ///////////////////////////
 
 #[repr(C)]
+#[derive(DropStructMacro)]
 pub struct FFISealedSectorMetadata {
     pub comm_d: [u8; 32],
     pub comm_r: [u8; 32],
@@ -487,24 +381,12 @@ pub struct FFISealedSectorMetadata {
     pub pieces_ptr: *const FFIPieceMetadata,
 }
 
-impl Drop for FFISealedSectorMetadata {
-    fn drop(&mut self) {
-        unsafe {
-            free_c_str(self.sector_access as *mut libc::c_char);
-            drop(Vec::from_raw_parts(
-                self.pieces_ptr as *mut FFIPieceMetadata,
-                self.pieces_len,
-                self.pieces_len,
-            ));
-        }
-    }
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 /// GetSealedSectorsResponse
 ////////////////////////////
 
 #[repr(C)]
+#[derive(DropStructMacro)]
 pub struct GetSealedSectorsResponse {
     pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
@@ -524,19 +406,6 @@ impl Default for GetSealedSectorsResponse {
     }
 }
 
-impl Drop for GetSealedSectorsResponse {
-    fn drop(&mut self) {
-        unsafe {
-            free_c_str(self.error_msg as *mut libc::c_char);
-            drop(Vec::from_raw_parts(
-                self.sectors_ptr as *mut FFISealedSectorMetadata,
-                self.sectors_len,
-                self.sectors_len,
-            ));
-        }
-    }
-}
-
 #[no_mangle]
 pub unsafe extern "C" fn destroy_get_sealed_sectors_response(ptr: *mut GetSealedSectorsResponse) {
     let _ = Box::from_raw(ptr);
@@ -547,6 +416,7 @@ pub unsafe extern "C" fn destroy_get_sealed_sectors_response(ptr: *mut GetSealed
 ////////////////////////////
 
 #[repr(C)]
+#[derive(DropStructMacro)]
 pub struct GetStagedSectorsResponse {
     pub status_code: FCPResponseStatus,
     pub error_msg: *const libc::c_char,
@@ -562,19 +432,6 @@ impl Default for GetStagedSectorsResponse {
             error_msg: ptr::null(),
             sectors_len: 0,
             sectors_ptr: ptr::null(),
-        }
-    }
-}
-
-impl Drop for GetStagedSectorsResponse {
-    fn drop(&mut self) {
-        unsafe {
-            free_c_str(self.error_msg as *mut libc::c_char);
-            drop(Vec::from_raw_parts(
-                self.sectors_ptr as *mut FFIStagedSectorMetadata,
-                self.sectors_len,
-                self.sectors_len,
-            ));
         }
     }
 }
