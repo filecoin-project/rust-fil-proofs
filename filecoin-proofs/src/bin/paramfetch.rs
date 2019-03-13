@@ -28,6 +28,12 @@ Defaults to '{}'
                 .help("Use specific json file"),
         )
         .arg(
+            Arg::with_name("retry")
+                .short("r")
+                .long("retry")
+                .help("Prompt to retry on failure"),
+        )
+        .arg(
             Arg::with_name("all")
                 .short("a")
                 .long("all")
@@ -46,6 +52,7 @@ Defaults to '{}'
 
 fn fetch(matches: &ArgMatches) -> Result<()> {
     let json_path = PathBuf::from(matches.value_of("json").unwrap_or("./parameters.json"));
+    let retry = matches.is_present("retry");
 
     if !json_path.exists() {
         return Err(err_msg(format!(
@@ -67,32 +74,41 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
         println!();
     }
 
-    println!("{} parameter files to fetch...", parameter_ids.len());
-    println!();
-
-    for parameter_id in &parameter_ids {
-        println!("fetching: {}", parameter_id);
-        print!("downloading parameter file... ");
-        io::stdout().flush().unwrap();
-
-        match fetch_parameter_file(&parameter_map, &parameter_id) {
-            Ok(_) => println!("ok\n"),
-            Err(err) => println!("error: {}\n", err),
-        }
-    }
-
-    parameter_ids = get_pending_parameter_ids(&parameter_map, parameter_ids)?;
-
-    if !parameter_ids.is_empty() {
-        println!("{} parameter files failed to be fetched:", parameter_ids.len());
-
-        for parameter_id in &parameter_ids {
-            println!("{}", parameter_id);
-        }
-
+    loop {
+        println!("{} parameter files to fetch...", parameter_ids.len());
         println!();
 
-        return Err(err_msg("some parameter files failed to be fetched. try again, or run paramcache to generate locally"));
+        for parameter_id in &parameter_ids {
+            println!("fetching: {}", parameter_id);
+            print!("downloading parameter file... ");
+            io::stdout().flush().unwrap();
+
+            match fetch_parameter_file(&parameter_map, &parameter_id) {
+                Ok(_) => println!("ok\n"),
+                Err(err) => println!("error: {}\n", err),
+            }
+        }
+
+        parameter_ids = get_pending_parameter_ids(&parameter_map, parameter_ids)?;
+
+        if parameter_ids.is_empty() {
+            break;
+        } else {
+            println!(
+                "{} parameter files failed to be fetched:",
+                parameter_ids.len()
+            );
+
+            for parameter_id in &parameter_ids {
+                println!("{}", parameter_id);
+            }
+
+            println!();
+
+            if !retry || !choose("try again?") {
+                return Err(err_msg("some parameter files failed to be fetched. try again, or run paramcache to generate locally"));
+            }
+        }
     }
 
     Ok(())
