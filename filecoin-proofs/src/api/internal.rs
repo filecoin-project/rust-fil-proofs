@@ -12,6 +12,7 @@ use sapling_crypto::jubjub::JubjubBls12;
 
 use crate::api::post_adapter::*;
 use crate::error;
+use crate::error::ExpectWithBacktrace;
 use crate::FCP_LOG;
 use sector_base::api::bytes_amount::{PaddedBytesAmount, UnpaddedBytesAmount};
 use sector_base::api::sector_store::SectorConfig;
@@ -401,7 +402,13 @@ fn verify_post_fixed_sectors_count(
     let commitments = fixed
         .comm_rs
         .iter()
-        .map(|comm_r| PedersenDomain(bytes_into_fr::<Bls12>(comm_r).unwrap().into_repr()))
+        .map(|comm_r| {
+            PedersenDomain(
+                bytes_into_fr::<Bls12>(comm_r)
+                    .expects("could not could not map comm_r to Fr")
+                    .into_repr(),
+            )
+        })
         .collect::<Vec<PedersenDomain>>();
 
     let public_inputs = vdf_post::PublicInputs::<PedersenDomain> {
