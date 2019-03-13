@@ -7,6 +7,7 @@ use std::fs::{create_dir_all, read_dir, rename, File};
 use std::io::{stdin, stdout, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 use std::process::Command;
+use std::process::Stdio;
 use storage_proofs::parameter_cache::parameter_cache_dir;
 
 const ERROR_IPFS_COMMAND: &str = "failed to run ipfs";
@@ -120,23 +121,37 @@ pub fn publish_parameter_file(parameter_id: &str) -> Result<String> {
     }
 }
 
-pub fn fetch_parameter_file(parameter_map: &ParameterMap, parameter_id: &str) -> Result<()> {
+pub fn spawn_fetch_parameter_file(
+    is_verbose: bool,
+    parameter_map: &ParameterMap,
+    parameter_id: &str,
+) -> Result<std::process::Child> {
     let parameter_data = get_parameter_data(parameter_map, parameter_id)?;
     let path = get_parameter_file_path(parameter_id);
 
     create_dir_all(parameter_cache_dir())?;
 
-    let output = Command::new("curl")
-        .arg("-o")
+    let output_styling = if is_verbose {
+        &["--verbose", "--progress-bar"]
+    } else {
+        &["--silent", "--show-error"]
+    };
+
+    let connect_timeout = &["--connect-timeout", "30"];
+
+    // time out if speed stays at below 1000 bytes/second for >= 15 seconds
+    let speed_timeout = &["--speed-time", "15", "--speed-limit", "1000"];
+
+    Command::new("curl")
+        .args(output_styling)
+        .args(connect_timeout)
+        .args(speed_timeout)
+        .arg("--output")
         .arg(&path)
         .arg(format!("https://ipfs.io/ipfs/{}", parameter_data.cid))
-        .output()?;
-
-    if !output.status.success() {
-        Err(err_msg(String::from_utf8(output.stderr)?))
-    } else {
-        Ok(())
-    }
+        .stdout(Stdio::inherit())
+        .spawn()
+        .map_err(failure::Error::from)
 }
 
 pub fn validate_parameter_file(parameter_map: &ParameterMap, parameter_id: &str) -> Result<bool> {

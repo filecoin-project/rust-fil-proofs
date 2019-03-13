@@ -39,6 +39,12 @@ Defaults to '{}'
                 .long("all")
                 .help("Download all available parameter files"),
         )
+        .arg(
+            Arg::with_name("verbose")
+                .short("a")
+                .long("verbose")
+                .help("Print diagnostic information to stdout"),
+        )
         .get_matches();
 
     match fetch(&matches) {
@@ -83,8 +89,15 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
             print!("downloading parameter file... ");
             io::stdout().flush().unwrap();
 
-            match fetch_parameter_file(&parameter_map, &parameter_id) {
-                Ok(_) => println!("ok\n"),
+            match spawn_fetch_parameter_file(
+                matches.is_present("verbose"),
+                &parameter_map,
+                &parameter_id,
+            ) {
+                Ok(mut child) => match child.wait() {
+                    Ok(_) => println!("ok\n"),
+                    Err(err) => println!("error: {}\n", err),
+                },
                 Err(err) => println!("error: {}\n", err),
             }
         }
