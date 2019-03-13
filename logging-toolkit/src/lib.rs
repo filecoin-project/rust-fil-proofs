@@ -16,70 +16,47 @@ pub fn make_logger(
     use_json_env_name: &str,
     min_log_level_env_name: &str,
 ) -> Logger {
-    let json_logging = env::var(use_json_env_name)
+    let min_log_level = match env::var(min_log_level_env_name) {
+        Ok(val) => match val.parse::<u64>() {
+            Ok(parsed) => match Level::from_usize(parsed as usize) {
+                Some(level) => level,
+                None => Level::Info,
+            },
+            _ => Level::Info,
+        },
+        _ => Level::Info,
+    };
+
+    let logging_config = o!("root" => root_name, "place" => FnValue(move |info| {
+        format!("{}:{} {}",
+                info.file(),
+                info.line(),
+                info.module(),
+                )
+    }));
+
+    let use_json_logger = env::var(use_json_env_name)
         .as_ref()
         .map(String::as_str)
         .map(|x| x == "true")
         .unwrap_or(false);
 
-    if json_logging {
-        let drain = slog_json::Json::new(std::io::stdout())
+    if use_json_logger {
+        let formatted = slog_json::Json::new(std::io::stdout())
             .add_default_keys()
             .build()
             .fuse();
+        let mutexed = std::sync::Mutex::new(formatted).fuse();
+        let filtered = LevelFilter::new(mutexed, min_log_level).map(slog::Fuse);
 
-        let drain = std::sync::Mutex::new(drain).fuse();
-
-        let min_log_level = match env::var(min_log_level_env_name) {
-            Ok(val) => match val.parse::<u64>() {
-                Ok(parsed) => match Level::from_usize(parsed as usize) {
-                    Some(level) => level,
-                    None => Level::Info,
-                },
-                _ => Level::Info,
-            },
-            _ => Level::Info,
-        };
-
-        let with_filter = LevelFilter::new(drain, min_log_level).map(slog::Fuse);
-
-        return Logger::root(
-            with_filter,
-            o!("root" => root_name, "place" => FnValue(move |info| {
-                format!("{}:{} {}",
-                        info.file(),
-                        info.line(),
-                        info.module(),
-                        )
-            })),
-        );
+        return Logger::root(filtered, logging_config);
     } else {
-        let term_decorator = slog_term::TermDecorator::new().build();
-        let drain = slog_term::FullFormat::new(term_decorator).build().fuse();
-        let drain = std::sync::Mutex::new(drain).fuse();
+        let formatted = slog_term::FullFormat::new(slog_term::TermDecorator::new().build())
+            .build()
+            .fuse();
+        let mutexed = std::sync::Mutex::new(formatted).fuse();
+        let filtered = LevelFilter::new(mutexed, min_log_level).map(slog::Fuse);
 
-        let min_log_level = match env::var(min_log_level_env_name) {
-            Ok(val) => match val.parse::<u64>() {
-                Ok(parsed) => match Level::from_usize(parsed as usize) {
-                    Some(level) => level,
-                    None => Level::Info,
-                },
-                _ => Level::Info,
-            },
-            _ => Level::Info,
-        };
-
-        let with_filter = LevelFilter::new(drain, min_log_level).map(slog::Fuse);
-
-        return Logger::root(
-            with_filter,
-            o!("root" => root_name, "place" => FnValue(move |info| {
-                format!("{}:{} {}",
-                        info.file(),
-                        info.line(),
-                        info.module(),
-                        )
-            })),
-        );
-    }
+        return Logger::root(filtered, logging_config);
+    };
 }
