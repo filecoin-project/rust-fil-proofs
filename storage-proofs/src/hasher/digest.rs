@@ -193,6 +193,13 @@ impl<D: Digester> HashFunction<DigestDomain> for DigestFunction<D> {
         _height: usize,
         _params: &E::Params,
     ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+        unimplemented!("circuit leaf hash");
+    }
+    fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+        _cs: CS,
+        _bits: &[boolean::Boolean],
+        _params: &E::Params,
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
         unimplemented!("circuit hash");
     }
 }

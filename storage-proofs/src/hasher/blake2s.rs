@@ -195,7 +195,7 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
         left: &[boolean::Boolean],
         right: &[boolean::Boolean],
         height: usize,
-        _params: &E::Params,
+        params: &E::Params,
     ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
         let mut preimage: Vec<boolean::Boolean> = vec![];
         let mut height_bytes = vec![];
@@ -226,9 +226,17 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
             preimage.push(boolean::Boolean::Constant(false));
         }
 
+        Self::hash_circuit(cs, &preimage[..], params)
+    }
+
+    fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+        mut cs: CS,
+        bits: &[boolean::Boolean],
+        _params: &E::Params,
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
         let personalization = vec![0u8; 8];
         let alloc_bits =
-            blake2s_circuit::blake2s(cs.namespace(|| "hash"), &preimage[..], &personalization)?;
+            blake2s_circuit::blake2s(cs.namespace(|| "hash"), &bits[..], &personalization)?;
         let fr = match alloc_bits[0].get_value() {
             Some(_) => {
                 let bits = alloc_bits

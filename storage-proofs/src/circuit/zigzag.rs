@@ -7,12 +7,11 @@ use sapling_crypto::jubjub::JubjubEngine;
 
 use crate::circuit::constraint;
 use crate::circuit::drgporep::{ComponentPrivateInputs, DrgPoRepCompound};
-use crate::circuit::pedersen::pedersen_md_no_padding;
 use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::drgporep::{self, DrgPoRep};
 use crate::drgraph::Graph;
-use crate::hasher::Hasher;
+use crate::hasher::{HashFunction, Hasher};
 use crate::layered_drgporep::{self, Layers as LayersTrait};
 use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use crate::porep;
@@ -226,10 +225,10 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
             }
 
             // Calculate the pedersen hash.
-            let computed_comm_r_star = pedersen_md_no_padding(
+            let computed_comm_r_star = H::Function::hash_circuit(
                 cs.namespace(|| "comm_r_star"),
-                self.params,
                 &crs_boolean[..],
+                self.params,
             )?;
 
             // Allocate the resulting hash.

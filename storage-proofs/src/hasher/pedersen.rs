@@ -13,9 +13,10 @@ use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::Serializer;
 
-use super::{Domain, HashFunction, Hasher};
+use crate::circuit::pedersen::pedersen_md_no_padding;
 use crate::crypto::{kdf, pedersen, sloth};
 use crate::error::{Error, Result};
+use crate::hasher::{Domain, HashFunction, Hasher};
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PedersenHasher {}
@@ -236,6 +237,14 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         )?
         .get_x()
         .clone())
+    }
+
+    fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+        cs: CS,
+        bits: &[boolean::Boolean],
+        params: &E::Params,
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+        pedersen_md_no_padding(cs, params, bits)
     }
 }
 

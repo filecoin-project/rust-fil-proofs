@@ -58,6 +58,12 @@ pub trait HashFunction<T: Domain>:
         height: usize,
         params: &E::Params,
     ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError>;
+
+    fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+        cs: CS,
+        bits: &[boolean::Boolean],
+        params: &E::Params,
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError>;
 }
 
 pub trait Hasher: Clone + ::std::fmt::Debug + Eq + Default + Send + Sync {
