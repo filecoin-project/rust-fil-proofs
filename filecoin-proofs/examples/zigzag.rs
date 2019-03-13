@@ -34,7 +34,7 @@ use std::u32;
 use bellman::Circuit;
 use sapling_crypto::jubjub::JubjubBls12;
 
-use storage_proofs::circuit::test::*;
+use storage_proofs::circuit::metric::*;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgporep;
@@ -315,13 +315,11 @@ fn do_the_work<H: 'static>(
         };
         if circuit || bench {
             info!(FCP_LOG, "Performing circuit bench."; "target" => "status");
-            let mut cs = TestConstraintSystem::<Bls12>::new();
+            let mut cs = MetricCS::<Bls12>::new();
 
             ZigZagCompound::blank_circuit(&pp, &engine_params)
                 .synthesize(&mut cs)
                 .expect("failed to synthesize circuit");
-
-            assert!(cs.is_satisfied(), "constraints not satisfied");
 
             info!(FCP_LOG, "circuit_num_inputs: {}", cs.num_inputs(); "target" => "stats");
             info!(FCP_LOG, "circuit_num_constraints: {}", cs.num_constraints(); "target" => "stats");
