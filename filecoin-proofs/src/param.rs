@@ -132,8 +132,8 @@ pub fn spawn_fetch_parameter_file(
     create_dir_all(parameter_cache_dir())?;
 
     Command::new("curl")
-        .arg(if is_verbose { "-v" } else { "-s" })
-        .arg("-o")
+        .args(if is_verbose { &["--verbose", "--progress-bar"] } else { &["--silent", "--show-error"] })
+        .arg("--output")
         .arg(&path)
         .arg(format!("https://ipfs.io/ipfs/{}", parameter_data.cid))
         .stdout(Stdio::inherit())
