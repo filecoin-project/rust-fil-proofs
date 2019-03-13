@@ -585,8 +585,8 @@ mod tests {
         let nodes = 5;
         let degree = 2;
         let expansion_degree = 1;
-        let num_layers = 4;
-        let layer_challenges = LayerChallenges::new_tapered(num_layers, 4, num_layers, 1.0 / 3.0);
+        let num_layers = 2;
+        let layer_challenges = LayerChallenges::new_tapered(num_layers, 3, num_layers, 1.0 / 3.0);
         let sloth_iter = 1;
         let partition_count = 1;
 
