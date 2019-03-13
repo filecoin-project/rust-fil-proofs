@@ -49,7 +49,7 @@ fn publish(matches: &ArgMatches) -> Result<()> {
 
     if !matches.is_present("all") {
         parameter_ids = choose_from(parameter_ids)?;
-        println!("");
+        println!();
     };
 
     let json = PathBuf::from(matches.value_of("json").unwrap_or("./parameters.json"));
@@ -57,7 +57,7 @@ fn publish(matches: &ArgMatches) -> Result<()> {
 
     if !parameter_ids.is_empty() {
         println!("publishing {} parameters...", parameter_ids.len());
-        println!("");
+        println!();
 
         for parameter_id in parameter_ids {
             println!("publishing: {}", parameter_id);
@@ -80,7 +80,7 @@ fn publish(matches: &ArgMatches) -> Result<()> {
                 Err(err) => println!("error: {}", err),
             }
 
-            println!("");
+            println!();
         }
 
         save_parameter_map(&parameter_map, &json)?;

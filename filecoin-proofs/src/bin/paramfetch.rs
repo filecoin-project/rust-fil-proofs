@@ -13,7 +13,7 @@ pub fn main() {
         .about(
             &format!(
                 "
-Set $FILECOIN_PARAMETER_CACHE to specify parameter directory.
+Set $FILECOIN_PARAMETER_CACHE to specify parameter file directory.
 Defaults to '{}'
 ",
                 PARAMETER_CACHE_DIR
@@ -28,10 +28,16 @@ Defaults to '{}'
                 .help("Use specific json file"),
         )
         .arg(
+            Arg::with_name("retry")
+                .short("r")
+                .long("retry")
+                .help("Prompt to retry on failure"),
+        )
+        .arg(
             Arg::with_name("all")
                 .short("a")
                 .long("all")
-                .help("Download all available parameters"),
+                .help("Download all available parameter files"),
         )
         .get_matches();
 
@@ -46,6 +52,7 @@ Defaults to '{}'
 
 fn fetch(matches: &ArgMatches) -> Result<()> {
     let json_path = PathBuf::from(matches.value_of("json").unwrap_or("./parameters.json"));
+    let retry = matches.is_present("retry");
 
     if !json_path.exists() {
         return Err(err_msg(format!(
@@ -57,23 +64,23 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
     let parameter_map = get_parameter_map(&json_path)?;
     let all_parameter_ids = get_mapped_parameter_ids(&parameter_map)?;
 
-    println!("checking {} parameters...", all_parameter_ids.len());
-    println!("");
+    println!("checking {} parameter files...", all_parameter_ids.len());
+    println!();
 
     let mut parameter_ids = get_pending_parameter_ids(&parameter_map, all_parameter_ids.clone())?;
 
-    if !matches.is_present("all") && parameter_ids.len() > 0 {
+    if !matches.is_present("all") && !parameter_ids.is_empty() {
         parameter_ids = choose_from(parameter_ids)?;
-        println!("");
+        println!();
     }
 
     loop {
-        println!("{} parameters to fetch...", parameter_ids.len());
-        println!("");
+        println!("{} parameter files to fetch...", parameter_ids.len());
+        println!();
 
         for parameter_id in &parameter_ids {
             println!("fetching: {}", parameter_id);
-            print!("downloading parameter... ");
+            print!("downloading parameter file... ");
             io::stdout().flush().unwrap();
 
             match fetch_parameter_file(&parameter_map, &parameter_id) {
@@ -87,16 +94,19 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
         if parameter_ids.is_empty() {
             break;
         } else {
-            println!("{} parameters failed to be fetched:", parameter_ids.len());
+            println!(
+                "{} parameter files failed to be fetched:",
+                parameter_ids.len()
+            );
 
             for parameter_id in &parameter_ids {
                 println!("{}", parameter_id);
             }
 
-            println!("");
+            println!();
 
-            if !choose("try again?") {
-                return Err(err_msg("some parameters failed to be fetched"));
+            if !retry || !choose("try again?") {
+                return Err(err_msg("some parameter files failed to be fetched. try again, or run paramcache to generate locally"));
             }
         }
     }
@@ -112,11 +122,11 @@ fn get_pending_parameter_ids(
         .into_iter()
         .filter(|parameter_id| {
             println!("checking: {}", parameter_id);
-            print!("does parameter exist... ");
+            print!("does parameter file exist... ");
 
             if get_parameter_file_path(parameter_id).exists() {
                 println!("yes");
-                print!("is parameter valid... ");
+                print!("is parameter file valid... ");
                 io::stdout().flush().unwrap();
 
                 match validate_parameter_file(&parameter_map, &parameter_id) {
