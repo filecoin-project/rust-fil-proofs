@@ -1,5 +1,6 @@
 use bellman::{ConstraintSystem, SynthesisError};
 use merkle_light::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
+use merkle_light::merkle::Element;
 use pairing::bls12_381::{Fr, FrRepr};
 use rand::Rand;
 use sapling_crypto::circuit::{boolean, num};
@@ -25,6 +26,7 @@ pub trait Domain:
     + Rand
     + Serialize
     + DeserializeOwned
+    + Element
 {
     fn serialize(&self) -> Vec<u8>;
     fn into_bytes(&self) -> Vec<u8>;

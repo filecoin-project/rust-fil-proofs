@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 
 use bellman::{ConstraintSystem, SynthesisError};
 use merkle_light::hash::{Algorithm, Hashable};
+use merkle_light::merkle::Element;
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
 use pairing::{PrimeField, PrimeFieldRepr};
 use rand::{Rand, Rng};
@@ -161,20 +162,33 @@ impl Domain for DigestDomain {
     }
 
     fn try_from_bytes(raw: &[u8]) -> Result<Self> {
-        if raw.len() != 32 {
+        if raw.len() != DigestDomain::byte_len() {
             return Err(Error::InvalidInputSize);
         }
         let mut res = DigestDomain::default();
-        res.0.copy_from_slice(&raw[0..32]);
+        res.0.copy_from_slice(&raw[0..DigestDomain::byte_len()]);
         Ok(res)
     }
 
     fn write_bytes(&self, dest: &mut [u8]) -> Result<()> {
-        if dest.len() < 32 {
+        if dest.len() < DigestDomain::byte_len() {
             return Err(Error::InvalidInputSize);
         }
-        dest[0..32].copy_from_slice(&self.0[..]);
+        dest[0..DigestDomain::byte_len()].copy_from_slice(&self.0[..]);
         Ok(())
+    }
+}
+
+impl Element for DigestDomain {
+    fn byte_len() -> usize {
+        32
+    }
+
+    fn from_slice(bytes: &[u8]) -> Self {
+        match DigestDomain::try_from_bytes(bytes) {
+            Ok(res) => res,
+            Err(err) => panic!(err),
+        }
     }
 }
 

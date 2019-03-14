@@ -91,40 +91,18 @@ where
 pub fn decode_domain_block<H>(
     sloth_iter: usize,
     replica_id: &H::Domain,
-    data: &[H::Domain],
+    byte_data: &[u8],
     node: usize,
+    node_data: <H as Hasher>::Domain,
     parents: &[usize],
+    _m: usize,
 ) -> Result<H::Domain>
 where
     H: Hasher,
 {
-    let key = create_domain_key::<H>(replica_id, node, parents, data)?;
+    let key = create_key::<H>(replica_id, node, parents, &byte_data, _m)?;
 
-    Ok(H::sloth_decode(&key, &data[node], sloth_iter))
-}
-
-/// Creates the encoding key, using domain encoded data.
-fn create_domain_key<H: Hasher>(
-    id: &H::Domain,
-    node: usize,
-    parents: &[usize],
-    data: &[H::Domain],
-) -> Result<H::Domain> {
-    let mut hasher = Blake2s::new().hash_length(32).to_state();
-    hasher.update(id.as_ref());
-
-    for parent in parents.iter() {
-        // special super shitty case
-        // TODO: unsuck
-        if node == parents[0] {
-            // skip, as we would only write 0s
-        } else {
-            hasher.update(data[*parent].as_ref());
-        }
-    }
-
-    let hash = hasher.finalize();
-    Ok(bytes_into_fr_repr_safe(hash.as_ref()).into())
+    Ok(H::sloth_decode(&key, &node_data, sloth_iter))
 }
 
 /// Creates the encoding key.
