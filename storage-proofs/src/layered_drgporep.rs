@@ -455,31 +455,27 @@ pub trait Layers {
                 rx
             };
 
-            let sorted_trees = {
-                let mut labeled_trees = outer_rx.iter().collect::<Vec<_>>();
-                labeled_trees.sort_by_key(|x| x.0);
-                labeled_trees
-            };
+            let mut sorted_trees = outer_rx.iter().collect::<Vec<_>>();
+            sorted_trees.sort_unstable_by_key(|k| k.0);
 
-            sorted_trees.iter().fold(
-                None,
-                |previous_tree: Option<&MerkleTree<_, _>>, (i, replica_tree)| {
+            sorted_trees
+                .into_iter()
+                .fold(None, |previous_comm_r: Option<_>, (i, replica_tree)| {
+                    let comm_r = replica_tree.root();
                     // Each iteration's replica_tree becomes the next iteration's previous_tree (data_tree).
                     // The first iteration has no previous_tree.
-                    if let Some(data_tree) = previous_tree {
-                        let tau = porep::Tau {
-                            comm_r: replica_tree.root(),
-                            comm_d: data_tree.root(),
-                        };
+                    if let Some(comm_d) = previous_comm_r {
+                        let tau = porep::Tau { comm_r, comm_d };
                         info!(SP_LOG, "setting tau/aux"; "layer" => format!("{}", i - 1));
                         taus.push(tau);
                     };
-                    auxs.push(replica_tree.clone());
 
-                    Some(replica_tree)
-                },
-            );
-        };
+                    auxs.push(replica_tree);
+
+                    Some(comm_r)
+                });
+        }
+
         Ok((taus, auxs))
     }
 }
