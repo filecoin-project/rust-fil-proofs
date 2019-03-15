@@ -87,9 +87,5 @@ use logging_toolkit::make_logger;
 use slog::Logger;
 
 lazy_static! {
-    pub static ref SP_LOG: Logger = make_logger(
-        "storage-proofs",
-        "RUST_PROOFS_LOG_JSON",
-        "RUST_PROOFS_MIN_LOG_LEVEL"
-    );
+    pub static ref SP_LOG: Logger = make_logger("storage-proofs");
 }
