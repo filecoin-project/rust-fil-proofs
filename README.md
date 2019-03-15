@@ -192,8 +192,9 @@ Or better, generate the documentation locally (until repository is public). Foll
 - **Sector Base API:** `…/rust-fil-proofs/target/doc/sector_base/api/index.html`
 - **Filecoin Proofs API:** `…/rust-fil-proofs/target/doc/filecoin_proofs/api/index.html`
 
-- [Go implementation of filecoin-proofs API](https://github.com/filecoin-project/go-filecoin/blob/master/proofs/rustprover.go) and [associated interface structures](https://github.com/filecoin-project/go-filecoin/blob/master/proofs/interface.go).
-- [Go implementation of sector-base API](https://github.com/filecoin-project/go-filecoin/blob/master/proofs/disk_backed_sector_store.go).
+- [Go implementation of filecoin-proofs sectorbuilder API](https://github.com/filecoin-project/go-filecoin/blob/master/proofs/sectorbuilder/rustsectorbuilder.go) and [associated interface structures](https://github.com/filecoin-project/go-filecoin/blob/master/proofs/sectorbuilder/interface.go).
+- [Go implementation of filecoin-proofs verifier API](https://github.com/filecoin-project/go-filecoin/blob/master/proofs/rustverifier.go) and [associated interface structures](https://github.com/filecoin-project/go-filecoin/blob/master/proofs/interface.go).
+
 
 ## Contributing
 
