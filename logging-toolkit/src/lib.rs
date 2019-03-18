@@ -15,7 +15,7 @@ use std::env;
 
 lazy_static! {
     static ref ROOT_LOGGER: Logger =
-        make_root_logger("RUST_PROOFS_LOG_JSON", "RUST_PROOFS_MIN_LOG_LEVEL");
+        make_root_logger("FIL_PROOFS_LOG_JSON", "FIL_PROOFS_MIN_LOG_LEVEL");
 }
 
 pub fn make_root_logger(use_json_env_name: &str, min_log_level_env_name: &str) -> Logger {

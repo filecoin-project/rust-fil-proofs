@@ -556,7 +556,7 @@ fn run_benchmark(name: &str, config: &Case) -> Result<Vec<BenchmarkResult>> {
 fn main() {
     // the bencher output-parsing code requires JSON, and an environment
     // variable is the mechanism for enabling JSON-log support
-    std::env::set_var("RUST_PROOFS_LOG_JSON", "true");
+    std::env::set_var("FIL_PROOFS_LOG_JSON", "true");
 
     let matches = App::new("Rust Proofs Bencher")
         .version("1.0")
