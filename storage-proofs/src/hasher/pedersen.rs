@@ -1,18 +1,22 @@
 use std::hash::Hasher as StdHasher;
 
+use bellman::{ConstraintSystem, SynthesisError};
 use bitvec::{self, BitVec};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use merkle_light::hash::{Algorithm as LightAlgorithm, Hashable};
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
 use pairing::{PrimeField, PrimeFieldRepr};
 use rand::{Rand, Rng};
+use sapling_crypto::circuit::{boolean, num, pedersen_hash as pedersen_hash_circuit};
+use sapling_crypto::jubjub::JubjubEngine;
 use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::Serializer;
 
-use super::{Domain, HashFunction, Hasher};
+use crate::circuit::pedersen::pedersen_md_no_padding;
 use crate::crypto::{kdf, pedersen, sloth};
 use crate::error::{Error, Result};
+use crate::hasher::{Domain, HashFunction, Hasher};
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PedersenHasher {}
@@ -20,6 +24,10 @@ pub struct PedersenHasher {}
 impl Hasher for PedersenHasher {
     type Domain = PedersenDomain;
     type Function = PedersenFunction;
+
+    fn name() -> String {
+        "PedersenHasher".into()
+    }
 
     fn kdf(data: &[u8], m: usize) -> Self::Domain {
         kdf::kdf(data, m).into()
@@ -208,6 +216,35 @@ impl StdHasher for PedersenFunction {
 impl HashFunction<PedersenDomain> for PedersenFunction {
     fn hash(data: &[u8]) -> PedersenDomain {
         pedersen::pedersen_md_no_padding(data).into()
+    }
+
+    fn hash_leaf_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+        cs: CS,
+        left: &[boolean::Boolean],
+        right: &[boolean::Boolean],
+        height: usize,
+        params: &E::Params,
+    ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+        let mut preimage: Vec<boolean::Boolean> = vec![];
+        preimage.extend_from_slice(left);
+        preimage.extend_from_slice(right);
+
+        Ok(pedersen_hash_circuit::pedersen_hash(
+            cs,
+            Personalization::MerkleTree(height),
+            &preimage,
+            params,
+        )?
+        .get_x()
+        .clone())
+    }
+
+    fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+        cs: CS,
+        bits: &[boolean::Boolean],
+        params: &E::Params,
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+        pedersen_md_no_padding(cs, params, bits)
     }
 }
 
