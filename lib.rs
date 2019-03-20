@@ -198,7 +198,7 @@
 //! just as before.
 
 extern crate bellman;
-extern crate blake2_rfc;
+extern crate blake2b_simd;
 extern crate byteorder;
 extern crate crossbeam;
 extern crate num_cpus;
@@ -206,7 +206,7 @@ extern crate pairing;
 extern crate rand;
 extern crate ff;
 
-use blake2_rfc::blake2b::Blake2b;
+use blake2b_simd::State as Blake2b;
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
@@ -1330,12 +1330,12 @@ impl<W: Write> HashWriter<W> {
     pub fn new(writer: W) -> Self {
         HashWriter {
             writer: writer,
-            hasher: Blake2b::new(64),
+            hasher: Blake2b::new(),
         }
     }
 
     /// Destroy this writer and return the hash of what was written.
-    pub fn into_hash(self) -> [u8; 64] {
+    pub fn into_hash(mut self) -> [u8; 64] {
         let mut tmp = [0u8; 64];
         tmp.copy_from_slice(self.hasher.finalize().as_ref());
         tmp
