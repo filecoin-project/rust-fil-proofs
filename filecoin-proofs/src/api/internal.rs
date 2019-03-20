@@ -5,9 +5,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use bellman::groth16;
+use ff::PrimeField;
 use memmap::MmapOptions;
 use pairing::bls12_381::{Bls12, Fr};
-use pairing::{Engine, PrimeField};
+use pairing::Engine;
 use sapling_crypto::jubjub::JubjubBls12;
 
 use crate::api::post_adapter::*;
@@ -43,7 +44,7 @@ type FrSafe = [u8; 31];
 
 /// How big, in bytes, is the SNARK proof exposed by the API?
 ///
-/// Note: These values need to be ept in sync with what's in api/mod.rs.
+/// Note: These values need to be kept in sync with what's in api/mod.rs.
 /// Due to limitations of cbindgen, we can't define a constant whose value is
 /// a non-primitive (e.g. an expression like 192 * 2 or internal::STUFF) and
 /// see the constant in the generated C-header file.

@@ -3,12 +3,11 @@ extern crate pairing;
 extern crate pbr;
 extern crate rand;
 extern crate sapling_crypto;
-
 extern crate storage_proofs;
 
 use bellman::groth16::*;
+use ff::Field;
 use pairing::bls12_381::{Bls12, Fr};
-use pairing::Field;
 use rand::Rng;
 use sapling_crypto::circuit::multipack;
 use sapling_crypto::jubjub::JubjubBls12;

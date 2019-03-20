@@ -1,15 +1,13 @@
-use pairing::{Engine, Field, PrimeField, PrimeFieldRepr};
-
-use bellman::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
-
+use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt::Write;
 
-use byteorder::{BigEndian, ByteOrder};
-use std::cmp::Ordering;
-use std::collections::BTreeMap;
-
+use bellman::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 use blake2::{Blake2s, Digest};
+use byteorder::{BigEndian, ByteOrder};
+use ff::{Field, PrimeField, PrimeFieldRepr};
+use pairing::Engine;
 
 #[derive(Debug)]
 enum NamedObject {
@@ -451,8 +449,8 @@ impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
 
 #[test]
 fn test_cs() {
+    use ff::PrimeField;
     use pairing::bls12_381::{Bls12, Fr};
-    use pairing::PrimeField;
 
     let mut cs = TestConstraintSystem::<Bls12>::new();
     assert!(cs.is_satisfied());

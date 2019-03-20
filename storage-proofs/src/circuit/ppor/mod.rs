@@ -130,8 +130,8 @@ mod tests {
     use crate::merklepor;
     use crate::proof::ProofScheme;
     use crate::util::data_at_node;
+    use ff::Field;
     use pairing::bls12_381::*;
-    use pairing::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
 

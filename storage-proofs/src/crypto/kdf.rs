@@ -1,6 +1,6 @@
 use blake2s_simd::Params as Blake2s;
+use ff::PrimeField;
 use pairing::bls12_381::Fr;
-use pairing::PrimeField;
 
 use crate::fr32::bytes_into_fr_repr_safe;
 

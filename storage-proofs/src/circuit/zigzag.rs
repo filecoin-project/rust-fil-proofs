@@ -382,7 +382,7 @@ mod tests {
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
 
-    use pairing::Field;
+    use ff::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
 

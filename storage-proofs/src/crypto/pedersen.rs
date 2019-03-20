@@ -1,11 +1,10 @@
+use bitvec::{self, BitVec};
+use ff::PrimeFieldRepr;
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
-use pairing::PrimeFieldRepr;
 use sapling_crypto::jubjub::JubjubBls12;
 use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 
 use crate::fr32::bytes_into_frs;
-
-use bitvec::{self, BitVec};
 
 lazy_static! {
     pub static ref JJ_PARAMS: JubjubBls12 = JubjubBls12::new();
@@ -73,8 +72,8 @@ pub fn pedersen_compression(bytes: &mut Vec<u8>) {
 mod tests {
     use super::*;
     use crate::util::bytes_into_bits;
+    use ff::Field;
     use pairing::bls12_381::Fr;
-    use pairing::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
     #[test]
     fn test_bit_vec_le() {
