@@ -49,7 +49,7 @@ git = "https://github.com/filecoin-project/bellman"
 branch = "master"
 
 [dependencies.pairing]
-git = "https://github.com/zkcrypto/pairing"
+git = "https://github.com/filecoin-project/pairing"
 branch = "master"
 
 [dev-dependencies]
