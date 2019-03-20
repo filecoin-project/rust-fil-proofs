@@ -710,12 +710,12 @@ impl MPCParameters {
             };
 
             // Perform wNAF over multiple cores, placing results into `projective`.
-            crossbeam::scope(|scope| {
+            crossbeam::thread::scope(|scope| {
                 for (bases, projective) in bases
                     .chunks_mut(chunk_size)
                     .zip(projective.chunks_mut(chunk_size))
                 {
-                    scope.spawn(move || {
+                    scope.spawn(move |_| {
                         let mut wnaf = Wnaf::new();
 
                         for (base, projective) in bases.iter_mut().zip(projective.iter_mut()) {
@@ -723,16 +723,16 @@ impl MPCParameters {
                         }
                     });
                 }
-            });
+            }).unwrap();
 
             // Perform batch normalization
-            crossbeam::scope(|scope| {
+            crossbeam::thread::scope(|scope| {
                 for projective in projective.chunks_mut(chunk_size) {
-                    scope.spawn(move || {
+                    scope.spawn(move |_| {
                         C::Projective::batch_normalization(projective);
                     });
                 }
-            });
+            }).unwrap();
 
             // Turn it all back into affine points
             for (projective, affine) in projective.iter().zip(bases.iter_mut()) {
@@ -1202,12 +1202,12 @@ fn merge_pairs<G: CurveAffine>(v1: &[G], v2: &[G]) -> (G, G) {
     let s = Arc::new(Mutex::new(G::Projective::zero()));
     let sx = Arc::new(Mutex::new(G::Projective::zero()));
 
-    crossbeam::scope(|scope| {
+    crossbeam::thread::scope(|scope| {
         for (v1, v2) in v1.chunks(chunk).zip(v2.chunks(chunk)) {
             let s = s.clone();
             let sx = sx.clone();
 
-            scope.spawn(move || {
+            scope.spawn(move |_| {
                 // We do not need to be overly cautious of the RNG
                 // used for this check.
                 let rng = &mut thread_rng();
@@ -1230,7 +1230,7 @@ fn merge_pairs<G: CurveAffine>(v1: &[G], v2: &[G]) -> (G, G) {
                 sx.lock().unwrap().add_assign(&local_sx);
             });
         }
-    });
+    }).unwrap();
 
     let s = s.lock().unwrap().into_affine();
     let sx = sx.lock().unwrap().into_affine();
