@@ -222,7 +222,7 @@ pub unsafe extern "C" fn verify_post(
         mem::forget(msg);
     }
 
-    info!(FCP_LOG, "verfiy_post: {}", "finish"; "target" => "FFI");
+    info!(FCP_LOG, "verify_post: {}", "finish"; "target" => "FFI");
 
     Box::into_raw(Box::new(response))
 }
