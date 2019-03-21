@@ -42,8 +42,6 @@ Bit-padding, also called 'preprocessing', refers to the two zero *bits* added af
 
 [**DiskBackedSectorStore API**](https://github.com/filecoin-project/rust-fil-proofs/blob/master/sector-base/src/api/disk_backed_storage.rs)
 
-[**Response Structs**](https://github.com/filecoin-project/rust-fil-proofs/blob/master/sector-base/src/api/responses.rs)
-
 ## License
 
 MIT or Apache 2.0
