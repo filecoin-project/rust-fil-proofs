@@ -102,7 +102,7 @@ For better logging with backtraces on errors, developers should use `expects` ra
 Developers can control `rust-fil-proofs` logging through environment variables:
 
 -
-  `RUST_PROOFS_LOG_JSON`
+  `FIL_PROOFS_LOG_JSON`
 
     Default: `false`
 
@@ -111,7 +111,7 @@ Developers can control `rust-fil-proofs` logging through environment variables:
     This is used to enable or disable logging as JSON. If it is `true`, log entries will be sent to stdout as JSON. Otherwise, log entries will be sent to stdout as plain text.
 
 -
-  `RUST_PROOFS_MIN_LOG_LEVEL`
+  `FIL_PROOFS_MIN_LOG_LEVEL`
 
     Default: `4`
 

@@ -188,7 +188,7 @@ impl SectorMetadataManager {
         let mut seed = [0; 32];
         seed.copy_from_slice(challenge_seed);
 
-        let output = internal::fake_generate_post(GeneratePoStDynamicSectorsCountInput {
+        let output = internal::generate_post(GeneratePoStDynamicSectorsCountInput {
             sector_bytes: self.sector_store.inner.config().sector_bytes(),
             challenge_seed: seed,
             input_parts,

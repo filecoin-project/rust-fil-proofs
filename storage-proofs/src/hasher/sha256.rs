@@ -2,7 +2,11 @@ use sha2::Sha256;
 
 use super::{DigestHasher, Digester};
 
-impl Digester for Sha256 {}
+impl Digester for Sha256 {
+    fn name() -> String {
+        "Sha256".into()
+    }
+}
 
 pub type Sha256Hasher = DigestHasher<Sha256>;
 

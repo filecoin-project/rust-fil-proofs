@@ -12,6 +12,7 @@ use sapling_crypto::jubjub::JubjubBls12;
 
 use crate::api::post_adapter::*;
 use crate::error;
+use crate::error::ExpectWithBacktrace;
 use crate::FCP_LOG;
 use sector_base::api::bytes_amount::{PaddedBytesAmount, UnpaddedBytesAmount};
 use sector_base::api::sector_store::SectorConfig;
@@ -293,21 +294,6 @@ pub fn generate_post(
     generate_post_collect_output(n, fixed_output)
 }
 
-pub fn fake_generate_post(
-    dynamic: GeneratePoStDynamicSectorsCountInput,
-) -> error::Result<GeneratePoStDynamicSectorsCountOutput> {
-    let faults: Vec<u64> = if !dynamic.input_parts.is_empty() {
-        vec![0]
-    } else {
-        Default::default()
-    };
-
-    Ok(GeneratePoStDynamicSectorsCountOutput {
-        proofs: vec![[42; 192]],
-        faults,
-    })
-}
-
 pub fn verify_post(
     dynamic: VerifyPoStDynamicSectorsCountInput,
 ) -> error::Result<VerifyPoStDynamicSectorsCountOutput> {
@@ -416,7 +402,13 @@ fn verify_post_fixed_sectors_count(
     let commitments = fixed
         .comm_rs
         .iter()
-        .map(|comm_r| PedersenDomain(bytes_into_fr::<Bls12>(comm_r).unwrap().into_repr()))
+        .map(|comm_r| {
+            PedersenDomain(
+                bytes_into_fr::<Bls12>(comm_r)
+                    .expects("could not could not map comm_r to Fr")
+                    .into_repr(),
+            )
+        })
         .collect::<Vec<PedersenDomain>>();
 
     let public_inputs = vdf_post::PublicInputs::<PedersenDomain> {

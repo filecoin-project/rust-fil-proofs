@@ -107,8 +107,10 @@ impl<H: Hasher> ParameterSetIdentifier for BucketGraph<H> {
     fn parameter_set_identifier(&self) -> String {
         // NOTE: Seed is not included because it does not influence parameter generation.
         format!(
-            "drgraph::BucketGraph{{size: {}; degree: {}}}",
-            self.nodes, self.base_degree,
+            "drgraph::BucketGraph{{size: {}; degree: {}; hasher: {}}}",
+            self.nodes,
+            self.base_degree,
+            H::name(),
         )
     }
 }

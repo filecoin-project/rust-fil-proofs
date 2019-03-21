@@ -7,12 +7,11 @@ use sapling_crypto::jubjub::JubjubEngine;
 
 use crate::circuit::constraint;
 use crate::circuit::drgporep::{ComponentPrivateInputs, DrgPoRepCompound};
-use crate::circuit::pedersen::pedersen_md_no_padding;
 use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::drgporep::{self, DrgPoRep};
 use crate::drgraph::Graph;
-use crate::hasher::Hasher;
+use crate::hasher::{HashFunction, Hasher};
 use crate::layered_drgporep::{self, Layers as LayersTrait};
 use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use crate::porep;
@@ -226,10 +225,10 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
             }
 
             // Calculate the pedersen hash.
-            let computed_comm_r_star = pedersen_md_no_padding(
+            let computed_comm_r_star = H::Function::hash_circuit(
                 cs.namespace(|| "comm_r_star"),
-                self.params,
                 &crs_boolean[..],
+                self.params,
             )?;
 
             // Allocate the resulting hash.
@@ -378,7 +377,7 @@ mod tests {
     use crate::drgporep;
     use crate::drgraph::new_seed;
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::pedersen::*;
+    use crate::hasher::{Blake2sHasher, Hasher, PedersenHasher};
     use crate::layered_drgporep::{self, LayerChallenges};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
@@ -429,7 +428,7 @@ mod tests {
 
         let simplified_tau = tau.clone().simplify();
 
-        let pub_inputs = layered_drgporep::PublicInputs::<PedersenDomain> {
+        let pub_inputs = layered_drgporep::PublicInputs::<<PedersenHasher as Hasher>::Domain> {
             replica_id: replica_id.into(),
             tau: Some(tau.simplify().into()),
             comm_r_star: tau.comm_r_star.into(),
@@ -571,13 +570,23 @@ mod tests {
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
-    fn zigzag_test_compound() {
+    fn test_zigzag_compound_pedersen() {
+        zigzag_test_compound::<PedersenHasher>();
+    }
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn test_zigzag_compound_blake2s() {
+        zigzag_test_compound::<Blake2sHasher>();
+    }
+
+    fn zigzag_test_compound<H: 'static + Hasher>() {
         let params = &JubjubBls12::new();
         let nodes = 5;
         let degree = 2;
         let expansion_degree = 1;
-        let num_layers = 4;
-        let layer_challenges = LayerChallenges::new_tapered(num_layers, 4, num_layers, 1.0 / 3.0);
+        let num_layers = 2;
+        let layer_challenges = LayerChallenges::new_tapered(num_layers, 3, num_layers, 1.0 / 3.0);
         let sloth_iter = 1;
         let partition_count = 1;
 
@@ -620,13 +629,13 @@ mod tests {
         .unwrap();
         assert_ne!(data, data_copy);
 
-        let public_inputs = layered_drgporep::PublicInputs::<PedersenDomain> {
+        let public_inputs = layered_drgporep::PublicInputs::<H::Domain> {
             replica_id: replica_id.into(),
             tau: Some(tau.simplify()),
             comm_r_star: tau.comm_r_star,
             k: None,
         };
-        let private_inputs = layered_drgporep::PrivateInputs::<PedersenHasher> {
+        let private_inputs = layered_drgporep::PrivateInputs::<H> {
             aux,
             tau: tau.layer_taus,
         };

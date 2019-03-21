@@ -313,7 +313,7 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
         assert_eq!(1, (*resp).sectors_len);
     }
 
-    // generate and then verify a proof-of-spacetime for the sealed sectors
+    // generate and then verify a proof-of-spacetime for the sealed sector
     {
         let resp = get_sealed_sectors(sector_builder_b);
         defer!(destroy_get_sealed_sectors_response(resp));
