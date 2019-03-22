@@ -14,8 +14,6 @@ pub enum Error {
         _0, _1, _2
     )]
     InvalidMerkleTreeArgs(usize, usize, usize),
-    #[fail(display = "invalid node size ({}), must be 16, 32 or 64", _0)]
-    InvalidNodeSize(usize),
     #[fail(display = "{}", _0)]
     Synthesis(#[cause] SynthesisError),
     #[fail(display = "{}", _0)]
