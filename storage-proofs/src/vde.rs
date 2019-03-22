@@ -4,7 +4,7 @@ use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Domain, Hasher};
-use crate::util::{data_at_node, data_at_node_offset};
+use crate::util::{data_at_node, data_at_node_offset, NODE_SIZE};
 
 /// encodes the data and overwrites the original data slice.
 pub fn encode<'a, H, G>(
@@ -40,7 +40,7 @@ where
 
         let key = create_key::<H>(replica_id, node, &parents, data, degree)?;
         let start = data_at_node_offset(node);
-        let end = start + 32;
+        let end = start + NODE_SIZE;
 
         let node_data = H::Domain::try_from_bytes(&data[start..end])?;
         let encoded = H::sloth_encode(&key, &node_data, sloth_iter);
@@ -107,14 +107,15 @@ where
 
 /// Creates the encoding key.
 /// The algorithm for that is `Blake2s(id | encodedParentNode1 | encodedParentNode1 | ...)`.
-fn create_key<H: Hasher>(
+/// It is only public so that it can be used for benchmarking
+pub fn create_key<H: Hasher>(
     id: &H::Domain,
     node: usize,
     parents: &[usize],
     data: &[u8],
     _m: usize,
 ) -> Result<H::Domain> {
-    let mut hasher = Blake2s::new().hash_length(32).to_state();
+    let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
     hasher.update(id.as_ref());
 
     for parent in parents.iter() {
@@ -124,7 +125,7 @@ fn create_key<H: Hasher>(
             // skip, as we would only write 0s
         } else {
             let offset = data_at_node_offset(*parent);
-            hasher.update(&data[offset..offset + 32]);
+            hasher.update(&data[offset..offset + NODE_SIZE]);
         }
     }
 
