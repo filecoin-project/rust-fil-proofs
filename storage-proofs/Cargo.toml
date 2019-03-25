@@ -9,12 +9,10 @@ edition = "2018"
 [dependencies]
 logging-toolkit = { path = "../logging-toolkit" }
 bitvec = "0.5"
-sapling-crypto = { git = "https://github.com/zcash-hackworks/sapling-crypto", branch = "master" }
 rand = "0.4"
 libc = "0.2"
 merkle_light = { git = "https://github.com/filecoin-project/merkle_light", branch = "master" }
 failure = "0.1"
-bellman = "0.1"
 byteorder = "1"
 crossbeam-utils = "0.6"
 itertools = "0.7.3"
@@ -38,14 +36,22 @@ base64 = "0.10.0"
 blake2b_simd = "0.4.1"
 blake2s_simd = { git = "https://github.com/oconnor663/blake2s_simd", branch = "master"}
 toml = "0.4"
+ff = "0.4.0"
+
+[dependencies.sapling-crypto]
+git = "https://github.com/filecoin-project/sapling-crypto"
+branch = "master"
+
+[dependencies.bellman]
+git = "https://github.com/filecoin-project/bellman"
+branch = "master"
 
 [dependencies.pairing]
-version = "0.14.2"
-features = ["expose-arith"]
+git = "https://github.com/filecoin-project/pairing"
+branch = "master"
 
 [features]
-default = ["u128-support"]
-u128-support = ["pairing/u128-support"]
+default = []
 simd = ["blake2/simd_opt"]
 asm = ["sha2/sha2-asm", "blake2/simd_asm"]
 

@@ -16,12 +16,9 @@ ffi-toolkit = { path = "../ffi-toolkit" }
 logging-toolkit = { path = "../logging-toolkit" }
 bitvec = "0.5"
 chrono = "0.4"
-phase2 = "0.2.2"
-sapling-crypto = { git = "https://github.com/zcash-hackworks/sapling-crypto", branch = "master" }
 rand = "0.4"
 libc = "0.2"
 failure = "0.1"
-bellman = "0.1"
 lazy_static = "1.2"
 memmap = "0.6"
 clap = "2"
@@ -37,14 +34,27 @@ blake2 = "0.8"
 slog = { version = "2.4.1", features = ["max_level_trace", "release_max_level_trace"] }
 regex = "1"
 drop_struct_macro_derive = { path = "../drop-struct-macro-derive" }
+ff = "0.4.0"
+
+[dependencies.sapling-crypto]
+git = "https://github.com/filecoin-project/sapling-crypto"
+branch = "master"
+
+[dependencies.phase2]
+git = "https://github.com/filecoin-project/phase2"
+branch = "master"
+
+[dependencies.bellman]
+git = "https://github.com/filecoin-project/bellman"
+branch = "master"
+
+[dependencies.pairing]
+git = "https://github.com/filecoin-project/pairing"
+branch = "master"
 
 [dev-dependencies]
 gperftools = "0.2"
 scopeguard = "0.3.3"
-
-[dependencies.pairing]
-version = "0.14.2"
-features = ["expose-arith"]
 
 [build-dependencies]
 bindgen = "0.47"

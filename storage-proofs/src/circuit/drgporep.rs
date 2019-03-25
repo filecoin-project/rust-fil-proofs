@@ -1,6 +1,6 @@
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
+use ff::PrimeField;
 use pairing::bls12_381::{Bls12, Fr};
-use pairing::PrimeField;
 use sapling_crypto::circuit::boolean::{self, Boolean};
 use sapling_crypto::circuit::{multipack, num};
 use sapling_crypto::jubjub::JubjubEngine;
@@ -539,9 +539,8 @@ mod tests {
     use crate::proof::ProofScheme;
     use crate::util::data_at_node;
 
-    use pairing::Field;
-    use rand::Rand;
-    use rand::{Rng, SeedableRng, XorShiftRng};
+    use ff::Field;
+    use rand::{Rand, Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
 
     #[test]

@@ -1,6 +1,5 @@
+use ff::{BitIterator, PrimeField, PrimeFieldRepr};
 use pairing::bls12_381::{Bls12, Fr};
-use pairing::PrimeFieldRepr;
-use pairing::{BitIterator, PrimeField};
 use rand::Rng;
 use sapling_crypto::pedersen_hash;
 

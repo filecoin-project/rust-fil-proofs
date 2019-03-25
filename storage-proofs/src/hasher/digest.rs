@@ -3,10 +3,10 @@ use std::hash::Hasher as StdHasher;
 use std::marker::PhantomData;
 
 use bellman::{ConstraintSystem, SynthesisError};
+use ff::{PrimeField, PrimeFieldRepr};
 use merkle_light::hash::{Algorithm, Hashable};
 use merkle_light::merkle::Element;
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
-use pairing::{PrimeField, PrimeFieldRepr};
 use rand::{Rand, Rng};
 use sapling_crypto::circuit::{boolean, num};
 use sapling_crypto::jubjub::JubjubEngine;

@@ -125,7 +125,7 @@ impl<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> Circuit<E>
 mod tests {
     use super::*;
 
-    use pairing::Field;
+    use ff::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
 

@@ -245,7 +245,7 @@ impl<'a, E: JubjubEngine, H: Hasher> PoRCircuit<'a, E, H> {
 mod tests {
     use super::*;
 
-    use pairing::Field;
+    use ff::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::circuit::multipack;
     use sapling_crypto::jubjub::JubjubBls12;

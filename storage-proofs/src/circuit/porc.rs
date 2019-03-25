@@ -1,8 +1,9 @@
 use std::marker::PhantomData;
 
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
+use ff::Field;
 use pairing::bls12_381::{Bls12, Fr};
-use pairing::{Engine, Field};
+use pairing::Engine;
 use sapling_crypto::circuit::boolean::Boolean;
 use sapling_crypto::circuit::num::{AllocatedNum, Num};
 use sapling_crypto::circuit::{boolean, num, pedersen_hash};
@@ -282,7 +283,7 @@ impl<'a, E: JubjubEngine> PoRCCircuit<'a, E> {
 mod tests {
     use super::*;
 
-    use pairing::Field;
+    use ff::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
 
