@@ -9,7 +9,7 @@ use crate::hasher::pedersen::PedersenHasher;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::MerkleTree;
 use crate::parameter_cache::ParameterSetIdentifier;
-use crate::util::data_at_node;
+use crate::util::{data_at_node, NODE_SIZE};
 /// The default hasher currently in use.
 pub type DefaultTreeHasher = PedersenHasher;
 
@@ -18,34 +18,27 @@ pub const PARALLEL_MERKLE: bool = true;
 /// A depth robust graph.
 pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
     /// Returns the expected size of all nodes in the graph.
-    fn expected_size(&self, node_size: usize) -> usize {
-        self.size() * node_size
+    fn expected_size(&self) -> usize {
+        self.size() * NODE_SIZE
     }
 
     /// Builds a merkle tree based on the given data.
     fn merkle_tree<'a>(&self, data: &'a [u8]) -> Result<MerkleTree<H::Domain, H::Function>> {
-        self.merkle_tree_aux(data, 32, PARALLEL_MERKLE)
+        self.merkle_tree_aux(data, PARALLEL_MERKLE)
     }
 
     /// Builds a merkle tree based on the given data.
     fn merkle_tree_aux<'a>(
         &self,
         data: &'a [u8],
-        node_size: usize,
         parallel: bool,
     ) -> Result<MerkleTree<H::Domain, H::Function>> {
-        if data.len() != (node_size * self.size()) as usize {
+        if data.len() != (NODE_SIZE * self.size()) as usize {
             return Err(Error::InvalidMerkleTreeArgs(
                 data.len(),
-                node_size,
+                NODE_SIZE,
                 self.size(),
             ));
-        }
-
-        // To avoid hashing the first node, the node size has to be the hash size.else
-        // We make this assumption pervasively anyway.
-        if node_size != 32 {
-            return Err(Error::InvalidNodeSize(node_size));
         }
 
         let f = |i| {
@@ -255,11 +248,10 @@ mod tests {
 
     fn gen_proof<H: Hasher>(parallel: bool) {
         let g = BucketGraph::<H>::new(5, 3, 0, new_seed());
-        let node_size = 32;
-        let data = vec![2u8; node_size * 5];
+        let data = vec![2u8; NODE_SIZE * 5];
 
         let mmapped = &mmap_from(&data);
-        let tree = g.merkle_tree_aux(mmapped, node_size, parallel).unwrap();
+        let tree = g.merkle_tree_aux(mmapped, parallel).unwrap();
         let proof = tree.gen_proof(2);
 
         assert!(proof.validate::<H::Function>());
