@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 
+set -e
+
 RELEASE_BRANCH="master"
 RELEASE_NAME="$CIRCLE_PROJECT_REPONAME-`uname`"
-RELEASE_PATH="$CIRCLE_ARTIFACTS/$RELEASE_NAME"
-RELEASE_FILE="$RELEASE_PATH.tar.gz"
+RELEASE_FILE="/tmp/$RELEASE_NAME.tar.gz"
 RELEASE_TAG="${CIRCLE_SHA1:0:16}"
 
 # make sure we're on the sanctioned branch
 if [ "$CIRCLE_BRANCH" != "$RELEASE_BRANCH" ]; then
-  echo "not on branch \"$BRANCH\", skipping publish"
+  echo "not on branch \"$RELEASE_BRANCH\", skipping publish"
   exit 0
 fi
 
@@ -20,24 +21,9 @@ fi
 
 echo "preparing release file"
 
-mkdir $RELEASE_PATH
-mkdir $RELEASE_PATH/bin
-mkdir $RELEASE_PATH/include
-mkdir -p $RELEASE_PATH/lib/pkgconfig
-mkdir $RELEASE_PATH/misc
+`dirname $0`/package-release.sh
 
-cp parameters.json $RELEASE_PATH/misc/
-cp target/release/paramcache $RELEASE_PATH/bin/
-cp target/release/paramfetch $RELEASE_PATH/bin/
-cp target/release/libfilecoin_proofs.h $RELEASE_PATH/include/
-cp target/release/libfilecoin_proofs.a $RELEASE_PATH/lib/
-cp target/release/libfilecoin_proofs.pc $RELEASE_PATH/lib/pkgconfig
-
-pushd $RELEASE_PATH
-
-tar -czf $RELEASE_FILE ./*
-
-popd
+mv /tmp/release.tar.gz $RELEASE_FILE
 
 echo "release file created: $RELEASE_FILE"
 
