@@ -66,6 +66,10 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
     }
 
     /// Returns a sorted list of all parents of this node. The parents may be repeated.
+    ///
+    /// If a node doesn't have any parents, then this vector needs to return a vector where
+    /// the first element is the requested node. This will be used as indicator for nodes
+    /// without parents.
     fn parents(&self, node: usize) -> Vec<usize>;
 
     /// Returns the size of the graph (number of nodes).
