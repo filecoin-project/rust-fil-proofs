@@ -117,8 +117,17 @@ impl SectorBuilder {
 
     // Stages user piece-bytes for sealing. Note that add_piece calls are
     // processed sequentially to make bin packing easier.
-    pub fn add_piece(&self, piece_key: String, piece_bytes: &[u8]) -> Result<SectorId> {
-        log_unrecov(self.run_blocking(|tx| Request::AddPiece(piece_key, piece_bytes.to_vec(), tx)))
+    pub fn add_piece(
+        &self,
+        piece_key: String,
+        piece_bytes_amount: u64,
+        piece_path: String,
+    ) -> Result<SectorId> {
+        log_unrecov(
+            self.run_blocking(|tx| {
+                Request::AddPiece(piece_key, piece_bytes_amount, piece_path, tx)
+            }),
+        )
     }
 
     // Returns sealing status for the sector with specified id. If no sealed or

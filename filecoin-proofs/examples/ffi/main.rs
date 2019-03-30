@@ -18,12 +18,14 @@ use ffi_toolkit::rust_str_to_c_str;
 use rand::{thread_rng, Rng};
 use std::env;
 use std::error::Error;
+use std::io::Write;
 use std::ptr;
 use std::slice::from_raw_parts;
 use std::sync::atomic::AtomicPtr;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
+use tempfile::NamedTempFile;
 use tempfile::TempDir;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -48,14 +50,20 @@ unsafe fn create_and_add_piece(
     let c_piece_key = rust_str_to_c_str(piece_key.clone());
     defer!(free_c_str(c_piece_key));
 
+    // write piece bytes to a temporary file
+    let mut file = NamedTempFile::new().unwrap();
+    let p = { String::from(file.path().to_str().unwrap().clone()) };
+    let _ = file.write_all(&piece_bytes);
+    let c_piece_read_pipe = rust_str_to_c_str(p);
+
     (
         piece_bytes.clone(),
         piece_key.clone(),
         add_piece(
             sector_builder,
             c_piece_key,
-            &piece_bytes[0],
-            piece_bytes.len(),
+            piece_bytes.len() as u64,
+            c_piece_read_pipe,
         ),
     )
 }

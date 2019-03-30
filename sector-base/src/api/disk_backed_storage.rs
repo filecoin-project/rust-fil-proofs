@@ -121,17 +121,19 @@ impl SectorManager for DiskManager {
     fn write_and_preprocess(
         &self,
         access: &str,
-        data: &[u8],
+        piece_path: &str,
     ) -> Result<UnpaddedBytesAmount, SectorManagerErr> {
         OpenOptions::new()
             .read(true)
             .write(true)
             .open(access)
             .map_err(|err| SectorManagerErr::CallerError(format!("{:?}", err)))
-            .and_then(|mut file| {
-                write_padded(data, &mut file)
-                    .map_err(|err| SectorManagerErr::ReceiverError(format!("{:?}", err)))
+            .and_then(|mut dest_file| {
+                // open piece file (could be a named pipe or normal file)
+                File::open(piece_path)
+                    .and_then(|mut piece_file| write_padded(&mut piece_file, &mut dest_file))
                     .map(|n| UnpaddedBytesAmount(n as u64))
+                    .map_err(|err| SectorManagerErr::ReceiverError(format!("{:?}", err)))
             })
     }
 
@@ -257,7 +259,9 @@ pub mod tests {
     use std::fs::create_dir_all;
     use std::fs::File;
     use std::io::Read;
+    use std::io::Write;
     use tempfile;
+    use tempfile::NamedTempFile;
 
     fn create_sector_store(cs: &ConfiguredStore) -> Box<SectorStore> {
         let staging_path = tempfile::tempdir().unwrap().path().to_owned();
@@ -308,10 +312,14 @@ pub mod tests {
         // shared amongst test cases
         let contents = &[2u8; 500];
 
+        let mut file = NamedTempFile::new().unwrap();
+        let path = { String::from(file.path().to_str().unwrap().clone()) };
+        let _ = file.write_all(contents);
+
         // write_and_preprocess
         {
             let n = mgr
-                .write_and_preprocess(&access, contents)
+                .write_and_preprocess(&access, &path)
                 .expect("failed to write");
 
             // buffer the file's bytes into memory after writing bytes

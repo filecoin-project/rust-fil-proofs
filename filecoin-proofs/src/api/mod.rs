@@ -286,15 +286,19 @@ pub unsafe extern "C" fn destroy_sector_builder(ptr: *mut SectorBuilder) {
 pub unsafe extern "C" fn add_piece(
     ptr: *mut SectorBuilder,
     piece_key: *const libc::c_char,
-    piece_ptr: *const u8,
-    piece_len: libc::size_t,
+    piece_bytes_amount: u64,
+    piece_path: *const libc::c_char,
 ) -> *mut responses::AddPieceResponse {
     let piece_key = c_str_to_rust_str(piece_key);
-    let piece_bytes = from_raw_parts(piece_ptr, piece_len);
+    let piece_path = c_str_to_rust_str(piece_path);
 
     let mut response: responses::AddPieceResponse = Default::default();
 
-    match (*ptr).add_piece(String::from(piece_key), piece_bytes) {
+    match (*ptr).add_piece(
+        String::from(piece_key),
+        piece_bytes_amount,
+        String::from(piece_path),
+    ) {
         Ok(sector_id) => {
             response.status_code = FCPResponseStatus::FCPNoError;
             response.sector_id = sector_id;

@@ -676,7 +676,9 @@ mod tests {
     use std::fs::create_dir_all;
     use std::fs::File;
     use std::io::Read;
+    use std::io::Write;
     use std::thread;
+    use tempfile::NamedTempFile;
 
     struct Harness {
         prover_id: FrSafe,
@@ -724,10 +726,14 @@ mod tests {
                 BytesAmount::Offset(m) => make_random_bytes(max - m),
             };
 
+            let mut file = NamedTempFile::new().unwrap();
+            let path = { String::from(file.path().to_str().unwrap().clone()) };
+            let _ = file.write_all(&contents);
+
             assert_eq!(
                 contents.len(),
                 usize::from(
-                    mgr.write_and_preprocess(&staged_access, &contents)
+                    mgr.write_and_preprocess(&staged_access, &path)
                         .expect("failed to write and preprocess")
                 )
             );

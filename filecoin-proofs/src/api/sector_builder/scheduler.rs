@@ -41,7 +41,7 @@ pub struct Scheduler {
 
 #[derive(Debug)]
 pub enum Request {
-    AddPiece(String, Vec<u8>, mpsc::SyncSender<Result<SectorId>>),
+    AddPiece(String, u64, String, mpsc::SyncSender<Result<SectorId>>),
     GetSealedSectors(mpsc::SyncSender<Result<Vec<SealedSectorMetadata>>>),
     GetStagedSectors(mpsc::SyncSender<Result<Vec<StagedSectorMetadata>>>),
     GetSealStatus(SectorId, mpsc::SyncSender<Result<SealStatus>>),
@@ -106,8 +106,8 @@ impl Scheduler {
 
                 // Dispatch to the appropriate task-handler.
                 match task {
-                    Request::AddPiece(key, bytes, tx) => {
-                        tx.send(m.add_piece(key, &bytes)).expects(FATAL_NOSEND);
+                    Request::AddPiece(key, amt, path, tx) => {
+                        tx.send(m.add_piece(key, amt, path)).expects(FATAL_NOSEND);
                     }
                     Request::GetSealStatus(sector_id, tx) => {
                         tx.send(m.get_seal_status(sector_id)).expects(FATAL_NOSEND);
@@ -236,12 +236,18 @@ impl SectorMetadataManager {
 
     // Write the piece to storage, obtaining the sector id with which the
     // piece-bytes are now associated.
-    pub fn add_piece(&mut self, piece_key: String, piece_bytes: &[u8]) -> Result<u64> {
+    pub fn add_piece(
+        &mut self,
+        piece_key: String,
+        piece_bytes_amount: u64,
+        piece_path: String,
+    ) -> Result<u64> {
         let destination_sector_id = add_piece(
             &self.sector_store,
             &mut self.state.staged,
             piece_key,
-            piece_bytes,
+            piece_bytes_amount,
+            piece_path,
         )?;
 
         self.check_and_schedule(false)?;

@@ -13,12 +13,13 @@ pub fn add_piece(
     sector_store: &Arc<WrappedSectorStore>,
     mut staged_state: &mut StagedState,
     piece_key: String,
-    piece_bytes: &[u8],
+    piece_bytes_amount: u64,
+    piece_path: String,
 ) -> error::Result<SectorId> {
     let sector_mgr = sector_store.inner.manager();
     let sector_max = sector_store.inner.config().max_unsealed_bytes_per_sector();
 
-    let piece_bytes_len = UnpaddedBytesAmount(piece_bytes.len() as u64);
+    let piece_bytes_len = UnpaddedBytesAmount(piece_bytes_amount);
 
     let opt_dest_sector_id = {
         let candidates: Vec<StagedSectorMetadata> = staged_state
@@ -39,7 +40,7 @@ pub fn add_piece(
         sector_store
             .inner
             .manager()
-            .write_and_preprocess(&s.sector_access, &piece_bytes)
+            .write_and_preprocess(&s.sector_access, &piece_path)
             .map_err(Into::into)
             .and_then(|num_bytes_written| {
                 if num_bytes_written != piece_bytes_len {
