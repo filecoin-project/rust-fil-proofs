@@ -55,6 +55,7 @@ unsafe fn create_and_add_piece(
     let p = { String::from(file.path().to_str().unwrap().clone()) };
     let _ = file.write_all(&piece_bytes);
     let c_piece_path = rust_str_to_c_str(p);
+    defer!(free_c_str(c_piece_path));
 
     (
         piece_bytes.clone(),
