@@ -54,7 +54,7 @@ unsafe fn create_and_add_piece(
     let mut file = NamedTempFile::new().unwrap();
     let p = { String::from(file.path().to_str().unwrap().clone()) };
     let _ = file.write_all(&piece_bytes);
-    let c_piece_read_pipe = rust_str_to_c_str(p);
+    let c_piece_path = rust_str_to_c_str(p);
 
     (
         piece_bytes.clone(),
@@ -63,7 +63,7 @@ unsafe fn create_and_add_piece(
             sector_builder,
             c_piece_key,
             piece_bytes.len() as u64,
-            c_piece_read_pipe,
+            c_piece_path,
         ),
     )
 }
