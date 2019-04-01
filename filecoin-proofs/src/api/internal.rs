@@ -726,8 +726,11 @@ mod tests {
                 BytesAmount::Offset(m) => make_random_bytes(max - m),
             };
 
-            let mut file = NamedTempFile::new().unwrap();
-            let _ = file.write_all(&contents);
+            let mut file = {
+                let mut file = NamedTempFile::new().unwrap();
+                let _ = file.write_all(&contents);
+                File::open(file.path().to_str().unwrap()).unwrap()
+            };
 
             assert_eq!(
                 contents.len(),
@@ -1073,7 +1076,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Slow test – run only when compiled for release.
     fn seal_unsealed_range_roundtrip_test() {
         seal_unsealed_range_roundtrip_aux(ConfiguredStore::Test, BytesAmount::Max);
         seal_unsealed_range_roundtrip_aux(ConfiguredStore::Test, BytesAmount::Offset(5));
