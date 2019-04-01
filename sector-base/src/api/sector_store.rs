@@ -28,7 +28,7 @@ pub trait SectorManager {
     fn write_and_preprocess(
         &self,
         access: &str,
-        byte_source: &mut dyn Read,
+        data: &mut dyn Read,
     ) -> Result<UnpaddedBytesAmount, SectorManagerErr>;
 
     fn delete_staging_sector_access(&self, access: &str) -> Result<(), SectorManagerErr>;

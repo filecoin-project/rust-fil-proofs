@@ -121,17 +121,17 @@ impl SectorManager for DiskManager {
     fn write_and_preprocess(
         &self,
         access: &str,
-        byte_source: &mut dyn Read,
+        data: &mut dyn Read,
     ) -> Result<UnpaddedBytesAmount, SectorManagerErr> {
         OpenOptions::new()
             .read(true)
             .write(true)
             .open(access)
             .map_err(|err| SectorManagerErr::CallerError(format!("{:?}", err)))
-            .and_then(|mut dest_file| {
-                write_padded(byte_source, &mut dest_file)
-                    .map(|n| UnpaddedBytesAmount(n as u64))
+            .and_then(|mut file| {
+                write_padded(data, &mut file)
                     .map_err(|err| SectorManagerErr::ReceiverError(format!("{:?}", err)))
+                    .map(|n| UnpaddedBytesAmount(n as u64))
             })
     }
 
