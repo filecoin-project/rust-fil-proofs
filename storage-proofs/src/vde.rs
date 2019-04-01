@@ -118,12 +118,9 @@ pub fn create_key<H: Hasher>(
     let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
     hasher.update(id.as_ref());
 
-    for parent in parents.iter() {
-        // special super shitty case
-        // TODO: unsuck
-        if node == parents[0] {
-            // skip, as we would only write 0s
-        } else {
+    // The hash is about the parents, hence skip if a node doesn't have any parents
+    if node != parents[0] {
+        for parent in parents.iter() {
             let offset = data_at_node_offset(*parent);
             hasher.update(&data[offset..offset + NODE_SIZE]);
         }
