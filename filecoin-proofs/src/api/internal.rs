@@ -1080,6 +1080,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Slow test – run only when compiled for release.
     fn seal_unsealed_range_roundtrip_test() {
         seal_unsealed_range_roundtrip_aux(ConfiguredStore::Test, BytesAmount::Max);
         seal_unsealed_range_roundtrip_aux(ConfiguredStore::Test, BytesAmount::Offset(5));
