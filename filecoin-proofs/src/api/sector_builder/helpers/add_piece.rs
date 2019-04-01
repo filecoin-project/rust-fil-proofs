@@ -1,3 +1,4 @@
+use std::fs::File;
 use std::sync::Arc;
 
 use crate::api::sector_builder::errors::*;
@@ -37,10 +38,12 @@ pub fn add_piece(
         .or_else(|_| provision_new_staged_sector(sector_mgr, &mut staged_state))?;
 
     if let Some(s) = staged_state.sectors.get_mut(&dest_sector_id) {
+        let mut file = File::open(piece_path)?;
+
         sector_store
             .inner
             .manager()
-            .write_and_preprocess(&s.sector_access, &piece_path)
+            .write_and_preprocess(&s.sector_access, &mut file)
             .map_err(Into::into)
             .and_then(|num_bytes_written| {
                 if num_bytes_written != piece_bytes_len {

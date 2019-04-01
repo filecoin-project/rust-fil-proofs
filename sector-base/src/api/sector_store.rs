@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use crate::api::bytes_amount::{PaddedBytesAmount, UnpaddedBytesAmount};
 use crate::api::errors::SectorManagerErr;
 
@@ -26,7 +28,7 @@ pub trait SectorManager {
     fn write_and_preprocess(
         &self,
         access: &str,
-        piece_path: &str,
+        byte_source: &mut dyn Read,
     ) -> Result<UnpaddedBytesAmount, SectorManagerErr>;
 
     fn delete_staging_sector_access(&self, access: &str) -> Result<(), SectorManagerErr>;

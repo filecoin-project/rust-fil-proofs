@@ -640,7 +640,7 @@ const CHUNK_SIZE: usize = 127 * N;
 
 pub fn write_padded<R, W>(source: &mut R, target: &mut W) -> io::Result<usize>
 where
-    R: Read,
+    R: Read + ?Sized,
     W: Read + Write + Seek + ?Sized,
 {
     // In order to optimize alignment in the common case of writing from an aligned start,

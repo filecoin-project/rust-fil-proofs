@@ -727,13 +727,12 @@ mod tests {
             };
 
             let mut file = NamedTempFile::new().unwrap();
-            let path = { String::from(file.path().to_str().unwrap().clone()) };
             let _ = file.write_all(&contents);
 
             assert_eq!(
                 contents.len(),
                 usize::from(
-                    mgr.write_and_preprocess(&staged_access, &path)
+                    mgr.write_and_preprocess(&staged_access, &mut file)
                         .expect("failed to write and preprocess")
                 )
             );

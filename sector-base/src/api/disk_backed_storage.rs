@@ -121,7 +121,7 @@ impl SectorManager for DiskManager {
     fn write_and_preprocess(
         &self,
         access: &str,
-        piece_path: &str,
+        byte_source: &mut dyn Read,
     ) -> Result<UnpaddedBytesAmount, SectorManagerErr> {
         OpenOptions::new()
             .read(true)
@@ -129,9 +129,7 @@ impl SectorManager for DiskManager {
             .open(access)
             .map_err(|err| SectorManagerErr::CallerError(format!("{:?}", err)))
             .and_then(|mut dest_file| {
-                // open piece file (could be a named pipe or normal file)
-                File::open(piece_path)
-                    .and_then(|mut piece_file| write_padded(&mut piece_file, &mut dest_file))
+                write_padded(byte_source, &mut dest_file)
                     .map(|n| UnpaddedBytesAmount(n as u64))
                     .map_err(|err| SectorManagerErr::ReceiverError(format!("{:?}", err)))
             })
@@ -313,13 +311,12 @@ pub mod tests {
         let contents = &[2u8; 500];
 
         let mut file = NamedTempFile::new().unwrap();
-        let path = { String::from(file.path().to_str().unwrap().clone()) };
         let _ = file.write_all(contents);
 
         // write_and_preprocess
         {
             let n = mgr
-                .write_and_preprocess(&access, &path)
+                .write_and_preprocess(&access, &mut file)
                 .expect("failed to write");
 
             // buffer the file's bytes into memory after writing bytes
