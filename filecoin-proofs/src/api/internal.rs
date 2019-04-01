@@ -676,6 +676,8 @@ mod tests {
     use std::fs::create_dir_all;
     use std::fs::File;
     use std::io::Read;
+    use std::io::Seek;
+    use std::io::SeekFrom;
     use std::io::Write;
     use std::thread;
     use tempfile::NamedTempFile;
@@ -726,10 +728,12 @@ mod tests {
                 BytesAmount::Offset(m) => make_random_bytes(max - m),
             };
 
+            // write contents to temp file and return mutable handle
             let mut file = {
                 let mut file = NamedTempFile::new().unwrap();
                 let _ = file.write_all(&contents);
-                File::open(file.path().to_str().unwrap()).unwrap()
+                let _ = file.seek(SeekFrom::Start(0)).unwrap();
+                file
             };
 
             assert_eq!(

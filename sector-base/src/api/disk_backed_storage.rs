@@ -314,7 +314,8 @@ pub mod tests {
         let mut file = {
             let mut file = NamedTempFile::new().unwrap();
             let _ = file.write_all(contents);
-            File::open(file.path().to_str().unwrap()).unwrap()
+            let _ = file.seek(SeekFrom::Start(0)).unwrap();
+            file
         };
 
         // write_and_preprocess
