@@ -310,8 +310,12 @@ pub mod tests {
         // shared amongst test cases
         let contents = &[2u8; 500];
 
-        let mut file = NamedTempFile::new().unwrap();
-        let _ = file.write_all(contents);
+        // write contents to temp file and return mutable handle
+        let mut file = {
+            let mut file = NamedTempFile::new().unwrap();
+            let _ = file.write_all(contents);
+            File::open(file.path().to_str().unwrap()).unwrap()
+        };
 
         // write_and_preprocess
         {
