@@ -635,6 +635,10 @@ pub fn clear_right_bits(byte: &mut u8, offset: usize) {
     *(byte) &= !((1 << offset) - 1)
 }
 
+// In order to optimize alignment in the common case of writing from an aligned
+// start, we should make the chunk a multiple of 127 (4 full elements, see
+// `PaddingMap#alignment`). N was hand-tuned to do reasonably well in the
+// benchmarks.
 const N: usize = 1000;
 const CHUNK_SIZE: usize = 127 * N;
 
@@ -643,9 +647,6 @@ where
     R: Read + ?Sized,
     W: Read + Write + Seek + ?Sized,
 {
-    // In order to optimize alignment in the common case of writing from an aligned start,
-    // we should make the chunk a multiple of 127 (4 full elements, see `PaddingMap#alignment`).
-    // N was hand-tuned to do reasonably well in the benchmarks.
     let mut buffer = [0; CHUNK_SIZE];
     let mut written = 0;
 
