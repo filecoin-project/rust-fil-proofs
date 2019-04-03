@@ -1,6 +1,6 @@
 use crate::api::sector_builder::kv_store::KeyValueStore;
 use crate::error::Result;
-use blake2::{Blake2b, Digest};
+use blake2b_simd::State as Blake2b;
 use std::fs::{self, File, OpenOptions};
 use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
@@ -24,12 +24,10 @@ impl FileSystemKvs {
 
     fn key_to_path(&self, key: &[u8]) -> PathBuf {
         let mut hasher = Blake2b::new();
-        hasher.input(key);
+        hasher.update(key);
 
-        let result = hasher.result();
-        let file = format!("{:.32x}", &result);
-
-        self.root_dir.join(file)
+        let file = hasher.finalize().to_hex();
+        self.root_dir.join(&file[..32])
     }
 }
 

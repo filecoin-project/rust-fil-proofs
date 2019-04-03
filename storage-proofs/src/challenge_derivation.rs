@@ -1,8 +1,8 @@
+use blake2s_simd::blake2s;
 use byteorder::{LittleEndian, WriteBytesExt};
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
 
-use crate::crypto::blake2s::blake2s;
 use crate::hasher::Domain;
 use crate::layered_drgporep::LayerChallenges;
 
@@ -24,7 +24,7 @@ pub fn derive_challenges<D: Domain>(
             bytes.write_u32::<LittleEndian>(j).unwrap();
 
             let hash = blake2s(bytes.as_slice());
-            let big_challenge = BigUint::from_bytes_le(hash.as_slice());
+            let big_challenge = BigUint::from_bytes_le(hash.as_ref());
 
             // For now, we cannot try to prove the first or last node, so make sure the challenge can never be 0 or leaves - 1.
             let big_mod_challenge = big_challenge % (leaves - 2);
