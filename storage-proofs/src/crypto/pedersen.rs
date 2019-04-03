@@ -1,4 +1,4 @@
-use bitvec::{self, BitVec, LittleEndian};
+use bitvec::{self, BitVec};
 use ff::PrimeFieldRepr;
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
 use sapling_crypto::jubjub::JubjubBls12;
@@ -75,12 +75,13 @@ mod tests {
     use ff::Field;
     use pairing::bls12_381::Fr;
     use rand::{Rng, SeedableRng, XorShiftRng};
+
     #[test]
     fn test_bit_vec_le() {
         let bytes = b"ABC";
         let bits = bytes_into_bits(bytes);
 
-        let mut bits2 = bitvec![LittleEndian, u8; 0; bits.len()];
+        let mut bits2 = bitvec![bitvec::LittleEndian, u8; 0; bits.len()];
         bits2.as_mut_slice()[0..bytes.len()].copy_from_slice(&bytes[..]);
 
         assert_eq!(bits, bits2.iter().collect::<Vec<bool>>());
