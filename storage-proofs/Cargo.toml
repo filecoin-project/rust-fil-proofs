@@ -55,7 +55,7 @@ simd = []
 asm = ["sha2/sha2-asm"]
 
 [dev-dependencies]
-proptest = "0.9"
+proptest = "0.8"
 criterion = "0.2"
 sector-base = { path = "../sector-base" }
 serde_json = "1.0"
