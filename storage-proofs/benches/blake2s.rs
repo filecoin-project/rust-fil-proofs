@@ -1,11 +1,5 @@
 #[macro_use]
 extern crate criterion;
-extern crate bellman;
-extern crate bitvec;
-extern crate pairing;
-extern crate rand;
-extern crate sapling_crypto;
-extern crate storage_proofs;
 
 use bellman::groth16::*;
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
@@ -16,7 +10,6 @@ use sapling_crypto::circuit as scircuit;
 use sapling_crypto::circuit::boolean::{self, Boolean};
 use sapling_crypto::jubjub::JubjubEngine;
 use storage_proofs::circuit::bench::BenchCS;
-use storage_proofs::crypto;
 
 struct Blake2sExample<'a> {
     data: &'a [Option<bool>],
@@ -68,7 +61,7 @@ fn blake2s_benchmark(c: &mut Criterion) {
                 let mut rng = thread_rng();
                 let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
 
-                b.iter(|| crypto::blake2s::blake2s(&data))
+                b.iter(|| blake2s_simd::blake2s(&data))
             },
             params,
         )
