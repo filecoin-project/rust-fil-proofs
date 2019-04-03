@@ -730,9 +730,11 @@ mod tests {
 
             // write contents to temp file and return mutable handle
             let mut file = {
-                let mut file = NamedTempFile::new().unwrap();
+                let mut file = NamedTempFile::new().expects("could not create named temp file");
                 let _ = file.write_all(&contents);
-                let _ = file.seek(SeekFrom::Start(0)).unwrap();
+                let _ = file
+                    .seek(SeekFrom::Start(0))
+                    .expects("failed to seek to beginning of file");
                 file
             };
 
