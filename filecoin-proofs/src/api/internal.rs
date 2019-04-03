@@ -676,7 +676,11 @@ mod tests {
     use std::fs::create_dir_all;
     use std::fs::File;
     use std::io::Read;
+    use std::io::Seek;
+    use std::io::SeekFrom;
+    use std::io::Write;
     use std::thread;
+    use tempfile::NamedTempFile;
 
     struct Harness {
         prover_id: FrSafe,
@@ -724,10 +728,20 @@ mod tests {
                 BytesAmount::Offset(m) => make_random_bytes(max - m),
             };
 
+            // write contents to temp file and return mutable handle
+            let mut file = {
+                let mut file = NamedTempFile::new().expects("could not create named temp file");
+                let _ = file.write_all(&contents);
+                let _ = file
+                    .seek(SeekFrom::Start(0))
+                    .expects("failed to seek to beginning of file");
+                file
+            };
+
             assert_eq!(
                 contents.len(),
                 usize::from(
-                    mgr.write_and_preprocess(&staged_access, &contents)
+                    mgr.write_and_preprocess(&staged_access, &mut file)
                         .expect("failed to write and preprocess")
                 )
             );

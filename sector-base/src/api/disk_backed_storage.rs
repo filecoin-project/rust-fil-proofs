@@ -121,7 +121,7 @@ impl SectorManager for DiskManager {
     fn write_and_preprocess(
         &self,
         access: &str,
-        data: &[u8],
+        data: &mut dyn Read,
     ) -> Result<UnpaddedBytesAmount, SectorManagerErr> {
         OpenOptions::new()
             .read(true)
@@ -257,7 +257,9 @@ pub mod tests {
     use std::fs::create_dir_all;
     use std::fs::File;
     use std::io::Read;
+    use std::io::Write;
     use tempfile;
+    use tempfile::NamedTempFile;
 
     fn create_sector_store(cs: &ConfiguredStore) -> Box<SectorStore> {
         let staging_path = tempfile::tempdir().unwrap().path().to_owned();
@@ -308,10 +310,20 @@ pub mod tests {
         // shared amongst test cases
         let contents = &[2u8; 500];
 
+        // write contents to temp file and return mutable handle
+        let mut file = {
+            let mut file = NamedTempFile::new().expect("could not create named temp file");
+            let _ = file.write_all(contents);
+            let _ = file
+                .seek(SeekFrom::Start(0))
+                .expect("failed to seek to beginning of file");
+            file
+        };
+
         // write_and_preprocess
         {
             let n = mgr
-                .write_and_preprocess(&access, contents)
+                .write_and_preprocess(&access, &mut file)
                 .expect("failed to write");
 
             // buffer the file's bytes into memory after writing bytes

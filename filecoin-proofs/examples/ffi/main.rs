@@ -15,15 +15,18 @@ include!(concat!(env!("OUT_DIR"), "/libfilecoin_proofs.rs"));
 use ffi_toolkit::c_str_to_rust_str;
 use ffi_toolkit::free_c_str;
 use ffi_toolkit::rust_str_to_c_str;
+use filecoin_proofs::error::ExpectWithBacktrace;
 use rand::{thread_rng, Rng};
 use std::env;
 use std::error::Error;
+use std::io::Write;
 use std::ptr;
 use std::slice::from_raw_parts;
 use std::sync::atomic::AtomicPtr;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
+use tempfile::NamedTempFile;
 use tempfile::TempDir;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -48,14 +51,21 @@ unsafe fn create_and_add_piece(
     let c_piece_key = rust_str_to_c_str(piece_key.clone());
     defer!(free_c_str(c_piece_key));
 
+    // write piece bytes to a temporary file
+    let mut file = NamedTempFile::new().expects("could not create named temp file");
+    let p = file.path().to_string_lossy().to_string();
+    let _ = file.write_all(&piece_bytes);
+    let c_piece_path = rust_str_to_c_str(p);
+    defer!(free_c_str(c_piece_path));
+
     (
         piece_bytes.clone(),
         piece_key.clone(),
         add_piece(
             sector_builder,
             c_piece_key,
-            &piece_bytes[0],
-            piece_bytes.len(),
+            piece_bytes.len() as u64,
+            c_piece_path,
         ),
     )
 }
