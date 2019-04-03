@@ -9,6 +9,8 @@ use bellman::{groth16, Circuit};
 use rand::OsRng;
 use sapling_crypto::jubjub::JubjubEngine;
 
+const NUM_PROVING_THREADS: usize = 4;
+
 pub struct SetupParams<'a, 'b: 'a, E: JubjubEngine, S: ProofScheme<'a>>
 where
     <S as ProofScheme<'a>>::SetupParams: 'b,
@@ -89,18 +91,26 @@ where
         // This will always run at least once, since there cannot be zero partitions.
         assert!(partition_count > 0);
 
-        let groth_proofs: Result<Vec<_>> = vanilla_proofs
-            .par_iter()
-            .map(|vanilla_proof| {
-                Self::circuit_proof(
-                    pub_in,
-                    &vanilla_proof,
-                    &pub_params.vanilla_params,
-                    &pub_params.engine_params,
-                    groth_params,
-                )
-            })
-            .collect();
+        // Use a custom pool for this, so we can control the number of threads being used.
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(NUM_PROVING_THREADS)
+            .build()
+            .expect("failed to build thread pool");
+
+        let groth_proofs: Result<Vec<_>> = pool.install(|| {
+            vanilla_proofs
+                .par_iter()
+                .map(|vanilla_proof| {
+                    Self::circuit_proof(
+                        pub_in,
+                        &vanilla_proof,
+                        &pub_params.vanilla_params,
+                        &pub_params.engine_params,
+                        groth_params,
+                    )
+                })
+                .collect()
+        });
 
         Ok(MultiProof::new(groth_proofs?, &groth_params.vk))
     }
