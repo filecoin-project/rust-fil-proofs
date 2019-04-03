@@ -1,33 +1,26 @@
-use crate::error::Result;
-use aes::block_cipher_trait::generic_array::GenericArray;
 use aes::Aes256;
 use block_modes::block_padding::ZeroPadding;
-use block_modes::{BlockMode, BlockModeIv, Cbc};
+use block_modes::{BlockMode, Cbc};
+
+use crate::error::Result;
+
+const IV: [u8; 16] = [0u8; 16];
 
 pub fn encode(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>> {
     assert_eq!(key.len(), 32, "invalid key length");
 
-    let iv = GenericArray::from_slice(&[0u8; 16]);
-    let mut mode = Cbc::<Aes256, ZeroPadding>::new_varkey(key, iv).expect("invalid key");
+    let mode = Cbc::<Aes256, ZeroPadding>::new_var(key, &IV).expect("invalid key");
 
-    let mut ciphertext = plaintext.to_vec();
-    mode.encrypt_nopad(&mut ciphertext)
-        .expect("failed to encrypt");
-
-    Ok(ciphertext)
+    Ok(mode.encrypt_vec(plaintext))
 }
 
 pub fn decode(key: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>> {
     assert_eq!(key.len(), 32, "invalid key length");
-    let iv = GenericArray::from_slice(&[0u8; 16]);
 
-    let mut mode = Cbc::<Aes256, ZeroPadding>::new_varkey(key, iv).expect("invalid key");
+    let mode = Cbc::<Aes256, ZeroPadding>::new_var(key, &IV).expect("invalid key");
 
-    let mut plaintext = ciphertext.to_vec();
-    mode.decrypt_nopad(&mut plaintext)
-        .expect("failed to decrypt");
-
-    Ok(plaintext)
+    let res = mode.decrypt_vec(ciphertext).expect("failed to decrypt");
+    Ok(res)
 }
 
 #[cfg(test)]

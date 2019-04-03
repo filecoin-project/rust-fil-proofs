@@ -8,22 +8,22 @@ edition = "2018"
 
 [dependencies]
 logging-toolkit = { path = "../logging-toolkit" }
-bitvec = "0.5"
+bitvec = "0.10"
 rand = "0.4"
 libc = "0.2"
 merkle_light = { git = "https://github.com/filecoin-project/merkle_light", branch = "master" }
 failure = "0.1"
 byteorder = "1"
 crossbeam-utils = "0.6"
-itertools = "0.7.3"
+itertools = "0.8"
 lazy_static = "1.2"
-memmap = "0.6"
+memmap = "0.7"
 num-bigint = "0.2"
 num-traits = "0.2"
 clap = "2"
 colored = "1.6"
-aes = "0.1"
-block-modes = "0.1"
+aes = "0.3"
+block-modes = "0.3"
 sha2 = "0.8"
 pbr = "1.0"
 tempfile = "3"
@@ -34,7 +34,7 @@ serde = { version = "1.0", features = ["derive"]}
 base64 = "0.10.0"
 blake2b_simd = "0.4.1"
 blake2s_simd = { git = "https://github.com/oconnor663/blake2s_simd", branch = "master"}
-toml = "0.4"
+toml = "0.5"
 ff = "0.4.0"
 
 [dependencies.sapling-crypto]
@@ -55,7 +55,7 @@ simd = []
 asm = ["sha2/sha2-asm"]
 
 [dev-dependencies]
-proptest = "0.7"
+proptest = "0.9"
 criterion = "0.2"
 sector-base = { path = "../sector-base" }
 serde_json = "1.0"

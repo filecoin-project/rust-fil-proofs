@@ -14,19 +14,19 @@ sector-base = { path = "../sector-base" }
 storage-proofs = { path = "../storage-proofs" }
 ffi-toolkit = { path = "../ffi-toolkit" }
 logging-toolkit = { path = "../logging-toolkit" }
-bitvec = "0.5"
+bitvec = "0.10"
 chrono = "0.4"
 rand = "0.4"
 libc = "0.2"
 failure = "0.1"
 lazy_static = "1.2"
-memmap = "0.6"
+memmap = "0.7"
 clap = "2"
 colored = "1.6"
 pbr = "1.0"
 tempfile = "3"
 byteorder = "1"
-itertools = "0.7.3"
+itertools = "0.8"
 serde_cbor = "0.9.0"
 serde = { version = "1", features = ["rc", "derive"] }
 serde_json = "1.0"
@@ -54,11 +54,11 @@ branch = "master"
 
 [dev-dependencies]
 gperftools = "0.2"
-scopeguard = "0.3.3"
+scopeguard = "1.0"
 
 [build-dependencies]
-bindgen = "0.47"
-cbindgen = "0.6.8"
+bindgen = "0.49"
+cbindgen = "0.8"
 
 [features]
 default = []

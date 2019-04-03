@@ -15,11 +15,11 @@ storage-backend = { path = "./storage-backend" }
 clap = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-toml = "0.4"
+toml = "0.5"
 failure = "0.1"
 permutate = "0.3"
 lazy_static = "1.2"
-glob = "0.2"
+glob = "0.3"
 human-size = "0.4"
 prettytable-rs = "0.8"
 

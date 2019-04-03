@@ -1,4 +1,4 @@
-use bitvec::{self, BitVec};
+use bitvec::{self, BitVec, LittleEndian};
 use ff::PrimeFieldRepr;
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
 use sapling_crypto::jubjub::JubjubBls12;
@@ -81,7 +81,7 @@ mod tests {
         let bits = bytes_into_bits(bytes);
 
         let mut bits2 = bitvec![LittleEndian, u8; 0; bits.len()];
-        bits2.as_mut()[0..bytes.len()].copy_from_slice(&bytes[..]);
+        bits2.as_mut_slice()[0..bytes.len()].copy_from_slice(&bytes[..]);
 
         assert_eq!(bits, bits2.iter().collect::<Vec<bool>>());
     }
