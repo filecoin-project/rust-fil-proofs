@@ -171,8 +171,6 @@ where
 
         BeaconPoStCircuit::<_, _, _> {
             params,
-            // beacon_randomness_vec,
-            // challenges_vec,
             challenges_vec_vec,
             challenged_sectors_vec_vec,
             challenge_seed: Some(pub_inputs.challenge_seed.into()),
@@ -219,8 +217,6 @@ where
 
         BeaconPoStCircuit::<_, _, _> {
             params,
-            // beacon_randomness_vec,
-            // challenges_vec,
             challenges_vec_vec,
             challenged_sectors_vec_vec,
             challenge_seed: None,
@@ -338,6 +334,7 @@ mod tests {
         let pub_inputs = beacon_post::PublicInputs {
             commitments: vec![tree0.root(), tree1.root()],
             challenge_seed: beacon.get::<PedersenDomain>(0),
+            faults: Vec::new(),
         };
         let replicas = [&data0[..], &data1[..]];
         let trees = [&tree0, &tree1];
@@ -437,8 +434,6 @@ mod tests {
 
         let instance = BeaconPoStCircuit::<Bls12, PedersenHasher, vdf_sloth::Sloth> {
             params,
-            // beacon_randomness_vec,
-            // challenges_vec,
             challenges_vec_vec,
             challenged_sectors_vec_vec,
             challenge_seed: Some(pub_inputs.challenge_seed.into()),
@@ -461,7 +456,7 @@ mod tests {
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
         assert_eq!(cs.num_inputs(), 7, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 398118, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 132696, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
     }
 
@@ -510,6 +505,7 @@ mod tests {
         let pub_inputs = beacon_post::PublicInputs {
             commitments: vec![tree0.root(), tree1.root()],
             challenge_seed: rng.gen(),
+            faults: Vec::new(),
         };
 
         let trees = [&tree0, &tree1];

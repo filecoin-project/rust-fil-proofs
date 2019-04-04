@@ -21,8 +21,9 @@ use sector_base::api::porep_config::PoRepProofPartitions;
 use sector_base::api::post_config::PoStConfig;
 use sector_base::api::post_config::PoStProofPartitions;
 use sector_base::io::fr32::write_unpadded;
+use storage_proofs::beacon_post::{self, BeaconPoSt};
+use storage_proofs::circuit::beacon_post::{BeaconPoStCircuit, BeaconPoStCompound};
 use storage_proofs::circuit::multi_proof::MultiProof;
-use storage_proofs::circuit::vdf_post::{VDFPoStCircuit, VDFPostCompound};
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgporep::DrgParams;
@@ -34,7 +35,7 @@ use storage_proofs::layered_drgporep::{self, LayerChallenges};
 use storage_proofs::merkle::MerkleTree;
 use storage_proofs::porep::{replica_id, PoRep, Tau};
 use storage_proofs::proof::ProofScheme;
-use storage_proofs::vdf_post::{self, VDFPoSt};
+use storage_proofs::vdf_post;
 use storage_proofs::vdf_sloth::{self, Sloth};
 use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
 use storage_proofs::zigzag_graph::ZigZagBucketGraph;
@@ -44,6 +45,8 @@ pub type ChallengeSeed = Fr32Ary;
 
 /// FrSafe is an array of the largest whole number of bytes guaranteed not to overflow the field.
 type FrSafe = [u8; 31];
+
+type Tree = MerkleTree<PedersenDomain, <PedersenHasher as Hasher>::Function>;
 
 /// How big, in bytes, is the SNARK proof exposed by the API?
 ///
@@ -151,10 +154,10 @@ fn get_post_params(post_config: PoStConfig) -> error::Result<Arc<groth16::Parame
     let post_public_params = post_public_params(post_config);
 
     let get_params = || {
-        <VDFPostCompound<PedersenHasher> as CompoundProof<
-            Bls12,
-            VDFPoSt<PedersenHasher, Sloth>,
-            VDFPoStCircuit<Bls12>,
+        <BeaconPoStCompound<PedersenHasher> as CompoundProof<
+            _,
+            BeaconPoSt<PedersenHasher, Sloth>,
+            BeaconPoStCircuit<_, PedersenHasher, Sloth>,
         >>::groth_params(&post_public_params, &ENGINE_PARAMS)
         .map_err(Into::into)
     };
@@ -187,10 +190,10 @@ fn get_post_verifying_key(post_config: PoStConfig) -> error::Result<Arc<Bls12Ver
     let post_public_params = post_public_params(post_config);
 
     let get_verifying_key = || {
-        <VDFPostCompound<PedersenHasher> as CompoundProof<
+        <BeaconPoStCompound<PedersenHasher> as CompoundProof<
             Bls12,
-            VDFPoSt<PedersenHasher, Sloth>,
-            VDFPoStCircuit<Bls12>,
+            BeaconPoSt<PedersenHasher, Sloth>,
+            BeaconPoStCircuit<Bls12, PedersenHasher, Sloth>,
         >>::verifying_key(&post_public_params, &ENGINE_PARAMS)
         .map_err(Into::into)
     };
@@ -245,14 +248,16 @@ pub fn public_params(
     ZigZagDrgPoRep::<DefaultTreeHasher>::setup(&setup_params(sector_bytes)).unwrap()
 }
 
-type PostSetupParams = vdf_post::SetupParams<PedersenDomain, vdf_sloth::Sloth>;
-pub type PostPublicParams = vdf_post::PublicParams<PedersenDomain, vdf_sloth::Sloth>;
+type PostSetupParams = beacon_post::SetupParams<PedersenDomain, vdf_sloth::Sloth>;
+pub type PostPublicParams = beacon_post::PublicParams<PedersenDomain, vdf_sloth::Sloth>;
 
 const POST_CHALLENGE_COUNT: usize = 30;
-const POST_EPOCHS: usize = 3;
+const POST_EPOCHS: usize = 0;
+const POST_PERIODS_COUNT: usize = 1;
 pub const POST_SECTORS_COUNT: usize = 2;
-const POST_VDF_ROUNDS: usize = 1;
+const POST_VDF_ROUNDS: usize = 0;
 
+// Note: the current setup does not actually use the vdf_key
 lazy_static! {
     static ref POST_VDF_KEY: PedersenDomain =
         PedersenDomain(Fr::from_str("12345").unwrap().into_repr());
@@ -261,20 +266,23 @@ lazy_static! {
 fn post_setup_params(post_config: PoStConfig) -> PostSetupParams {
     let size = PaddedBytesAmount::from(post_config);
 
-    vdf_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
-        challenge_count: POST_CHALLENGE_COUNT,
-        sector_size: size.into(),
-        post_epochs: POST_EPOCHS,
-        setup_params_vdf: vdf_sloth::SetupParams {
-            key: *POST_VDF_KEY,
-            rounds: POST_VDF_ROUNDS,
+    beacon_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
+        vdf_post_setup_params: vdf_post::SetupParams::<_, _> {
+            challenge_count: POST_CHALLENGE_COUNT,
+            sector_size: size.into(),
+            post_epochs: POST_EPOCHS,
+            setup_params_vdf: vdf_sloth::SetupParams {
+                key: *POST_VDF_KEY,
+                rounds: POST_VDF_ROUNDS,
+            },
+            sectors_count: POST_SECTORS_COUNT,
         },
-        sectors_count: POST_SECTORS_COUNT,
+        post_periods_count: POST_PERIODS_COUNT,
     }
 }
 
 pub fn post_public_params(post_config: PoStConfig) -> PostPublicParams {
-    VDFPoSt::<PedersenHasher, vdf_sloth::Sloth>::setup(&post_setup_params(post_config)).unwrap()
+    BeaconPoSt::<PedersenHasher, vdf_sloth::Sloth>::setup(&post_setup_params(post_config)).unwrap()
 }
 
 fn commitment_from_fr<E: Engine>(fr: E::Fr) -> Commitment {
@@ -328,8 +336,8 @@ pub fn generate_post_fixed_sectors_count(
 
     let pub_params: compound_proof::PublicParams<
         _,
-        vdf_post::VDFPoSt<PedersenHasher, vdf_sloth::Sloth>,
-    > = VDFPostCompound::setup(&setup_params).expect("setup failed");
+        beacon_post::BeaconPoSt<PedersenHasher, vdf_sloth::Sloth>,
+    > = BeaconPoStCompound::setup(&setup_params).expect("setup failed");
 
     let commitments = fixed
         .input_parts
@@ -344,35 +352,43 @@ pub fn generate_post_fixed_sectors_count(
         cs
     };
 
-    let pub_inputs = vdf_post::PublicInputs {
+    let pub_inputs = beacon_post::PublicInputs {
         challenge_seed: PedersenDomain::try_from_bytes(&safe_challenge_seed).unwrap(),
         commitments,
         faults: Vec::new(),
     };
 
-    let trees: Vec<Tree> = fixed
-        .input_parts
-        .iter()
-        .map(|(access, _)| {
-            if let Some(s) = &access {
-                make_merkle_tree(
-                    s,
-                    PaddedBytesAmount(pub_params.vanilla_params.sector_size as u64),
-                )
-                .unwrap()
-            } else {
-                panic!("faults are not yet supported")
-            }
-        })
-        .collect();
+    let sector_size = pub_params.vanilla_params.vdf_post_pub_params.sector_size as u64;
+    let bytes = PaddedBytesAmount(sector_size);
 
+    let mut replicas = Vec::with_capacity(fixed.input_parts.len());
+    let mut trees = Vec::with_capacity(fixed.input_parts.len());
+
+    for (access, _) in &fixed.input_parts {
+        if let Some(sealed_path) = access {
+            let mut f_in = File::open(sealed_path).expect("invalid path");
+            let mut replica = Vec::new();
+            f_in.read_to_end(&mut replica)
+                .expect("failed to read replica");
+
+            trees.push(public_params(bytes).graph.merkle_tree(&replica)?);
+            replicas.push(replica);
+        } else {
+            panic!("faults are not yet supported")
+        }
+    }
+
+    let borrowed_replicas: Vec<&[u8]> = replicas.iter().map(|t| &t[..]).collect();
     let borrowed_trees: Vec<&Tree> = trees.iter().map(|t| t).collect();
 
-    let priv_inputs = vdf_post::PrivateInputs::<PedersenHasher>::new(&borrowed_trees[..]);
+    let priv_inputs = beacon_post::PrivateInputs::<PedersenHasher>::new(
+        &borrowed_replicas[..],
+        &borrowed_trees[..],
+    );
 
     let groth_params = get_post_params(fixed.post_config)?;
 
-    let proof = VDFPostCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)
+    let proof = BeaconPoStCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)
         .expect("failed while proving");
 
     let mut buf = Vec::with_capacity(POST_PROOF_BYTES);
@@ -406,8 +422,8 @@ fn verify_post_fixed_sectors_count(
 
     let compound_public_params: compound_proof::PublicParams<
         _,
-        vdf_post::VDFPoSt<PedersenHasher, vdf_sloth::Sloth>,
-    > = VDFPostCompound::setup(&compound_setup_params).expect("setup failed");
+        beacon_post::BeaconPoSt<PedersenHasher, vdf_sloth::Sloth>,
+    > = BeaconPoStCompound::setup(&compound_setup_params).expect("setup failed");
 
     let commitments = fixed
         .comm_rs
@@ -421,7 +437,7 @@ fn verify_post_fixed_sectors_count(
         })
         .collect::<Vec<PedersenDomain>>();
 
-    let public_inputs = vdf_post::PublicInputs::<PedersenDomain> {
+    let public_inputs = beacon_post::PublicInputs::<PedersenDomain> {
         commitments,
         challenge_seed: PedersenDomain::try_from_bytes(&safe_challenge_seed)?,
         faults: fixed.faults.clone(),
@@ -439,23 +455,11 @@ fn verify_post_fixed_sectors_count(
     // However, everything up to that point does/should work — so we want to continue to exercise
     // for integration purposes.
     let _fixme_ignore: error::Result<bool> =
-        VDFPostCompound::verify(&compound_public_params, &public_inputs, &proof)
+        BeaconPoStCompound::verify(&compound_public_params, &public_inputs, &proof)
             .map_err(Into::into);
 
     // Since callers may rely on previous mocked success, just pretend verification succeeded, for now.
     Ok(VerifyPoStFixedSectorsCountOutput { is_valid: true })
-}
-
-type Tree = MerkleTree<PedersenDomain, <PedersenHasher as Hasher>::Function>;
-fn make_merkle_tree<T: Into<PathBuf> + AsRef<Path>>(
-    sealed_path: T,
-    bytes: PaddedBytesAmount,
-) -> storage_proofs::error::Result<Tree> {
-    let mut f_in = File::open(sealed_path.into())?;
-    let mut data = Vec::new();
-    f_in.read_to_end(&mut data)?;
-
-    public_params(bytes).graph.merkle_tree(&data)
 }
 
 pub struct SealOutput {

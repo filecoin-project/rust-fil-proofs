@@ -115,6 +115,8 @@ fn do_the_work(
 
     let pub_inputs = PublicInputs {
         commitments: trees.iter().map(|t| t.root()).collect(),
+        challenge_seed: rng.gen(),
+        faults: Vec::new(),
     };
 
     let trees_ref: Vec<_> = trees.iter().collect();

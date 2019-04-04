@@ -40,6 +40,8 @@ pub struct PublicInputs<T: Domain> {
     /// The root hashes of the merkle trees of the sealed sectors.
     pub commitments: Vec<T>,
     pub challenge_seed: T,
+    // TODO: Actually use the faults once faults are designed.
+    pub faults: Vec<u64>,
 }
 
 #[derive(Clone, Debug)]
@@ -253,6 +255,7 @@ mod tests {
         let pub_inputs = PublicInputs {
             commitments: vec![tree0.root(), tree1.root()],
             challenge_seed: rng.gen(),
+            faults: Vec::new(),
         };
 
         let priv_inputs = PrivateInputs::<PedersenHasher> {

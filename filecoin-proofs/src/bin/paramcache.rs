@@ -7,12 +7,12 @@ use filecoin_proofs::api::internal;
 use filecoin_proofs::FCP_LOG;
 use pairing::bls12_381::Bls12;
 use sector_base::api::bytes_amount::PaddedBytesAmount;
-use storage_proofs::circuit::vdf_post::{VDFPoStCircuit, VDFPostCompound};
+use storage_proofs::beacon_post::BeaconPoSt;
+use storage_proofs::circuit::beacon_post::{BeaconPoStCircuit, BeaconPoStCompound};
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::hasher::pedersen::PedersenHasher;
 use storage_proofs::parameter_cache::CacheableParameters;
-use storage_proofs::vdf_post::VDFPoSt;
 use storage_proofs::vdf_sloth::Sloth;
 
 use clap::{App, Arg};
@@ -47,24 +47,24 @@ fn cache_post_params(post_config: PoStConfig) {
 
     let post_public_params = internal::post_public_params(post_config);
     {
-        let post_circuit: VDFPoStCircuit<Bls12> =
-            <VDFPostCompound<PedersenHasher> as CompoundProof<
+        let post_circuit: BeaconPoStCircuit<_, _, _> =
+            <BeaconPoStCompound<PedersenHasher> as CompoundProof<
                 Bls12,
-                VDFPoSt<PedersenHasher, Sloth>,
-                VDFPoStCircuit<Bls12>,
+                BeaconPoSt<PedersenHasher, Sloth>,
+                BeaconPoStCircuit<Bls12, PedersenHasher, Sloth>,
             >>::blank_circuit(&post_public_params, &internal::ENGINE_PARAMS);
-        VDFPostCompound::<PedersenHasher>::get_groth_params(post_circuit, &post_public_params)
+        BeaconPoStCompound::<PedersenHasher>::get_groth_params(post_circuit, &post_public_params)
             .expect("failed to generate post params");
     }
     {
-        let post_circuit: VDFPoStCircuit<Bls12> =
-            <VDFPostCompound<PedersenHasher> as CompoundProof<
+        let post_circuit: BeaconPoStCircuit<_, _, _> =
+            <BeaconPoStCompound<PedersenHasher> as CompoundProof<
                 Bls12,
-                VDFPoSt<PedersenHasher, Sloth>,
-                VDFPoStCircuit<Bls12>,
+                BeaconPoSt<PedersenHasher, Sloth>,
+                BeaconPoStCircuit<Bls12, PedersenHasher, Sloth>,
             >>::blank_circuit(&post_public_params, &internal::ENGINE_PARAMS);
 
-        VDFPostCompound::<PedersenHasher>::get_verifying_key(post_circuit, &post_public_params)
+        BeaconPoStCompound::<PedersenHasher>::get_verifying_key(post_circuit, &post_public_params)
             .expect("failed to generate post verifying key");
     }
 }
