@@ -17,8 +17,6 @@ where
     H: Hasher,
     G: Graph<H>,
 {
-    let degree = graph.degree();
-
     // Because a node always follows all of its parents in the data,
     // the nodes are by definition already topologically sorted.
     // Therefore, if we simply traverse the data in order, encoding each node in place,
@@ -38,7 +36,7 @@ where
         let parents = graph.parents(node);
         assert_eq!(parents.len(), graph.degree(), "wrong number of parents");
 
-        let key = create_key::<H>(replica_id, node, &parents, data, degree)?;
+        let key = create_key::<H>(replica_id, node, &parents, data)?;
         let start = data_at_node_offset(node);
         let end = start + NODE_SIZE;
 
@@ -82,7 +80,7 @@ where
     G: Graph<H>,
 {
     let parents = graph.parents(v);
-    let key = create_key::<H>(replica_id, v, &parents, &data, graph.degree())?;
+    let key = create_key::<H>(replica_id, v, &parents, &data)?;
     let node_data = H::Domain::try_from_bytes(&data_at_node(data, v)?)?;
 
     Ok(H::sloth_decode(&key, &node_data, sloth_iter))
@@ -95,12 +93,11 @@ pub fn decode_domain_block<H>(
     node: usize,
     node_data: <H as Hasher>::Domain,
     parents: &[usize],
-    _m: usize,
 ) -> Result<H::Domain>
 where
     H: Hasher,
 {
-    let key = create_key::<H>(replica_id, node, parents, &byte_data, _m)?;
+    let key = create_key::<H>(replica_id, node, parents, &byte_data)?;
 
     Ok(H::sloth_decode(&key, &node_data, sloth_iter))
 }
@@ -113,7 +110,6 @@ pub fn create_key<H: Hasher>(
     node: usize,
     parents: &[usize],
     data: &[u8],
-    _m: usize,
 ) -> Result<H::Domain> {
     let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
     hasher.update(id.as_ref());

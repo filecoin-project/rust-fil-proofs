@@ -329,7 +329,6 @@ where
                     challenge,
                     tree_r.read_at(challenge),
                     &parents,
-                    pub_params.graph.degree(),
                 )?;
                 data_nodes.push(DataProof {
                     data: extracted,
