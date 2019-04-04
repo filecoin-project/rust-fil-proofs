@@ -23,7 +23,6 @@ use std::time::{Duration, SystemTime};
 
 use clap::{App, Arg};
 use failure::Error;
-use filecoin_proofs::error::ExpectWithBacktrace;
 use glob::glob;
 use human_size::{Byte, Kibibyte, SpecificSize};
 use permutate::Permutator;
@@ -35,12 +34,18 @@ type Result<T> = ::std::result::Result<T, Error>;
 
 #[derive(Debug, Deserialize)]
 struct Case {
-    command: Option<String>,
     challenges: Vec<usize>,
     size: Vec<Size>,
     sloth: Vec<usize>,
     m: Vec<usize>,
+
+    command: Option<String>,
+    expansion: Option<Vec<usize>>,
     hasher: Option<Vec<String>>,
+    layers: Option<Vec<usize>>,
+    partitions: Option<Vec<usize>>,
+    taper: Option<Vec<f64>>,
+    taper_layers: Option<Vec<usize>>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -106,14 +111,41 @@ impl<'de> Deserialize<'de> for Size {
 
 impl Case {
     pub fn params(&self) -> Vec<Vec<String>> {
-        let mut res = Vec::with_capacity(4);
+        let mut res = Vec::new();
 
         res.push(self.challenges.iter().map(ToString::to_string).collect());
         res.push(self.size.iter().map(ToString::to_string).collect());
         res.push(self.sloth.iter().map(ToString::to_string).collect());
         res.push(self.m.iter().map(ToString::to_string).collect());
+
         if let Some(ref hasher) = self.hasher {
-            res.push(hasher.clone());
+            res.push(hasher.iter().map(ToString::to_string).clone().collect());
+        }
+
+        if let Some(ref expansion) = self.expansion {
+            res.push(expansion.iter().map(ToString::to_string).clone().collect());
+        }
+
+        if let Some(ref layers) = self.layers {
+            res.push(layers.iter().map(ToString::to_string).clone().collect());
+        }
+
+        if let Some(ref partitions) = self.partitions {
+            res.push(partitions.iter().map(ToString::to_string).clone().collect());
+        }
+
+        if let Some(ref taper) = self.taper {
+            res.push(taper.iter().map(ToString::to_string).clone().collect());
+        }
+
+        if let Some(ref taper_layers) = self.taper_layers {
+            res.push(
+                taper_layers
+                    .iter()
+                    .map(ToString::to_string)
+                    .clone()
+                    .collect(),
+            );
         }
 
         res
@@ -138,6 +170,26 @@ impl Case {
 
         if self.hasher.is_some() {
             res.push("hasher".to_owned());
+        }
+
+        if self.expansion.is_some() {
+            res.push("expansion".to_owned());
+        }
+
+        if self.layers.is_some() {
+            res.push("layers".to_owned());
+        }
+
+        if self.partitions.is_some() {
+            res.push("partitions".to_owned());
+        }
+
+        if self.taper.is_some() {
+            res.push("taper".to_owned());
+        }
+
+        if self.taper_layers.is_some() {
+            res.push("taper-layers".to_owned());
         }
 
         res
@@ -208,9 +260,15 @@ fn run(config_path: &str, print_table: bool) -> Result<()> {
     }
 
     for (name, example) in config.iter() {
-        let results = run_benchmark(name, example)?;
-        if print_table {
-            print_result_table(name, example, &results);
+        match run_benchmark(name, example) {
+            Ok(results) => {
+                if print_table {
+                    print_result_table(name, example, &results);
+                }
+            }
+            Err(error) => {
+                println!("error: {}", error);
+            }
         }
     }
 
@@ -241,9 +299,21 @@ fn print_result_table(name: &str, example: &Case, results: &[BenchmarkResult]) {
         let timing = res.time_res.max_resident_set_size.to_string();
         let mut values: Vec<&str> = vec![
             name,
-            &res.log_res.config["data_size"],
-            &res.log_res.stats["avg_proving_time"],
-            &res.log_res.stats["avg_verifying_time"],
+            &res.log_res
+                .config
+                .get("data_size")
+                .map(String::as_str)
+                .unwrap_or_else(|| ""),
+            &res.log_res
+                .stats
+                .get("avg_proving_time")
+                .map(String::as_str)
+                .unwrap_or_else(|| ""),
+            &res.log_res
+                .stats
+                .get("avg_verifying_time")
+                .map(String::as_str)
+                .unwrap_or_else(|| ""),
             res.log_res
                 .stats
                 .get("params_generation_time")
@@ -458,17 +528,18 @@ struct LogResult {
 
 impl LogResult {
     fn from_str(raw: &str) -> Result<Self> {
-        let lines = raw.trim().split('\n').map(|l| {
-            let parsed: serde_json::Result<HashMap<String, String>> = serde_json::from_str(l);
-            let parsed = parsed.expects("The bencher requires JSON log-output.");
+        let lines = raw.trim().split('\n').filter_map(|l| {
+            if let Ok(parsed) = serde_json::from_str::<HashMap<String, String>>(l) {
+                let raw = &parsed["msg"];
+                let system = parsed.get("target").cloned().unwrap_or_default();
+                let kv = raw.trim().split(": ").collect::<Vec<&str>>();
+                let key = kv[0].trim();
+                let value = if kv.len() > 1 { kv[1].trim() } else { "" };
 
-            let raw = &parsed["msg"];
-            let system = parsed.get("target").cloned().unwrap_or_default();
-            let kv = raw.trim().split(": ").collect::<Vec<&str>>();
-            let key = kv[0].trim();
-            let value = if kv.len() > 1 { kv[1].trim() } else { "" };
-
-            (system, String::from(key), String::from(value))
+                Some((system, String::from(key), String::from(value)))
+            } else {
+                None
+            }
         });
 
         let mut config = HashMap::new();
@@ -534,6 +605,18 @@ fn run_benchmark(name: &str, config: &Case) -> Result<Vec<BenchmarkResult>> {
             &String::from_utf8_lossy(&output.stdout),
             &String::from_utf8_lossy(&output.stderr),
         )?;
+
+        match output.status.code() {
+            Some(code) => {
+                if code != 0 {
+                    println!("{}", &String::from_utf8_lossy(&output.stderr));
+                    return Err(format_err!("benchmark exited with non-zero status"));
+                }
+            }
+            None => {
+                return Err(format_err!("benchmark terminated by signal"));
+            }
+        }
 
         let mut data = serde_json::to_string(&res)?;
         data.push('\n');
