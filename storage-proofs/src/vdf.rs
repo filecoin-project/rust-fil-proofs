@@ -3,10 +3,15 @@ use crate::hasher::Domain;
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 
+pub trait VdfPublicParams<T: Domain>: Clone + ::std::fmt::Debug {
+    fn key(&self) -> T;
+    fn rounds(&self) -> usize;
+}
+
 /// Generic trait to represent any Verifiable Delay Function (VDF).
 pub trait Vdf<T: Domain>: Clone + ::std::fmt::Debug {
     type SetupParams: Clone + ::std::fmt::Debug;
-    type PublicParams: Clone + ::std::fmt::Debug;
+    type PublicParams: VdfPublicParams<T>;
     type Proof: Clone + ::std::fmt::Debug + Serialize + DeserializeOwned;
 
     fn setup(setup_params: &Self::SetupParams) -> Result<Self::PublicParams>;

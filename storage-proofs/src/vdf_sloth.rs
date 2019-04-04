@@ -4,7 +4,7 @@ use crate::crypto::sloth;
 use crate::error::Result;
 use crate::hasher::pedersen::PedersenDomain;
 use crate::parameter_cache::ParameterSetIdentifier;
-use crate::vdf::Vdf;
+use crate::vdf::{Vdf, VdfPublicParams};
 
 /// VDF construction using sloth.
 #[derive(Debug, Clone)]
@@ -23,6 +23,16 @@ pub struct SetupParams {
 pub struct PublicParams {
     pub key: PedersenDomain,
     pub rounds: usize,
+}
+
+impl VdfPublicParams<PedersenDomain> for PublicParams {
+    fn key(&self) -> PedersenDomain {
+        self.key
+    }
+
+    fn rounds(&self) -> usize {
+        self.rounds
+    }
 }
 
 impl ParameterSetIdentifier for PublicParams {

@@ -39,6 +39,7 @@ impl<T: Domain, V: Vdf<T>> ParameterSetIdentifier for PublicParams<T, V> {
 pub struct PublicInputs<T: Domain> {
     /// The root hashes of the merkle trees of the sealed sectors.
     pub commitments: Vec<T>,
+    pub challenge_seed: T,
 }
 
 #[derive(Clone, Debug)]
@@ -251,6 +252,7 @@ mod tests {
 
         let pub_inputs = PublicInputs {
             commitments: vec![tree0.root(), tree1.root()],
+            challenge_seed: rng.gen(),
         };
 
         let priv_inputs = PrivateInputs::<PedersenHasher> {

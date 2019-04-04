@@ -5,12 +5,13 @@ use pairing::bls12_381::{Bls12, Fr};
 use sapling_crypto::jubjub::JubjubEngine;
 
 use crate::beacon_post::BeaconPoSt;
-use crate::circuit::vdf_post;
+use crate::circuit::vdf_post as circuit_vdf_post;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::hasher::Hasher;
 use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use crate::proof::ProofScheme;
-use crate::vdf::Vdf;
+use crate::vdf::{Vdf, VdfPublicParams};
+use crate::vdf_post::{self, compute_root_commitment};
 
 /// This is the `Beacon-PoSt` circuit.
 pub struct BeaconPoStCircuit<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> {
@@ -62,20 +63,167 @@ where
         unimplemented!();
     }
     fn circuit(
-        _pub_in: &<BeaconPoSt<H, V> as ProofScheme<'a>>::PublicInputs,
+        pub_inputs: &<BeaconPoSt<H, V> as ProofScheme<'a>>::PublicInputs,
         _component_private_inputs:<BeaconPoStCircuit<'a, Bls12,H,V> as CircuitComponent>::ComponentPrivateInputs,
-        _vanilla_proof: &<BeaconPoSt<H, V> as ProofScheme<'a>>::Proof,
-        _pub_params: &<BeaconPoSt<H, V> as ProofScheme<'a>>::PublicParams,
-        _engine_params: &'a <Bls12 as JubjubEngine>::Params,
+        vanilla_proof: &<BeaconPoSt<H, V> as ProofScheme<'a>>::Proof,
+        pub_params: &<BeaconPoSt<H, V> as ProofScheme<'a>>::PublicParams,
+        params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> BeaconPoStCircuit<'a, Bls12, H, V> {
-        unimplemented!()
+        let vdf_ys_vec = vanilla_proof
+            .proofs()
+            .iter()
+            .map(|proof| {
+                proof
+                    .ys
+                    .iter()
+                    .map(|y: &H::Domain| Some(y.clone().into()))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let vdf_xs_vec = vanilla_proof
+            .proofs()
+            .iter()
+            .map(|proof| {
+                proof
+                    .porep_proofs
+                    .iter()
+                    .take(vdf_ys_vec[0].len())
+                    .map(|p| Some(vdf_post::extract_vdf_input::<_>(p).into()))
+                    .collect()
+            })
+            .collect::<Vec<_>>();
+
+        let mut paths_vec_vec = Vec::new();
+        let mut challenged_leafs_vec_vec = Vec::new();
+        let mut commitments_vec_vec = Vec::new();
+        let mut challenges_vec_vec = Vec::new();
+        let mut challenged_sectors_vec_vec = Vec::new();
+        for p in vanilla_proof.proofs() {
+            let mut paths_vec = Vec::new();
+            let mut challenged_leafs_vec = Vec::new();
+            let mut commitments_vec = Vec::new();
+
+            for porep_proof in &p.porep_proofs {
+                // -- paths
+                paths_vec.push(
+                    porep_proof
+                        .paths()
+                        .iter()
+                        .map(|p| {
+                            p.iter()
+                                .map(|v| Some((v.0.into(), v.1)))
+                                .collect::<Vec<_>>()
+                        })
+                        .collect::<Vec<_>>(),
+                );
+
+                // -- challenged leafs
+                challenged_leafs_vec.push(
+                    porep_proof
+                        .leafs()
+                        .iter()
+                        .map(|l| Some((**l).into()))
+                        .collect::<Vec<_>>(),
+                );
+
+                // -- commitments
+                commitments_vec.push(
+                    porep_proof
+                        .commitments()
+                        .iter()
+                        .map(|c| Some((**c).into()))
+                        .collect::<Vec<_>>(),
+                );
+            }
+
+            paths_vec_vec.push(paths_vec);
+            challenged_leafs_vec_vec.push(challenged_leafs_vec);
+            commitments_vec_vec.push(commitments_vec);
+            challenges_vec_vec.push(
+                p.challenges
+                    .iter()
+                    .map(|v| v.iter().map(|&s| Some(s)).collect())
+                    .collect(),
+            );
+            challenged_sectors_vec_vec.push(
+                p.challenged_sectors
+                    .iter()
+                    .map(|v| v.iter().map(|&s| Some(s)).collect())
+                    .collect(),
+            )
+        }
+
+        let vdf_sloth_rounds =
+            <V as Vdf<_>>::PublicParams::rounds(&pub_params.vdf_post_pub_params.pub_params_vdf);
+        let vdf_key =
+            <V as Vdf<_>>::PublicParams::key(&pub_params.vdf_post_pub_params.pub_params_vdf);
+
+        BeaconPoStCircuit::<_, _, _> {
+            params,
+            // beacon_randomness_vec,
+            // challenges_vec,
+            challenges_vec_vec,
+            challenged_sectors_vec_vec,
+            challenge_seed: Some(pub_inputs.challenge_seed.into()),
+            vdf_key: Some(vdf_key.into()),
+            vdf_xs_vec,
+            vdf_ys_vec,
+            vdf_sloth_rounds,
+            challenged_leafs_vec_vec,
+            paths_vec_vec,
+            root_commitment: Some(compute_root_commitment(&pub_inputs.commitments).into()),
+            commitments_vec_vec,
+            _h: PhantomData,
+            _v: PhantomData,
+        }
     }
 
     fn blank_circuit(
-        _public_params: &<BeaconPoSt<H, V> as ProofScheme<'a>>::PublicParams,
-        _engine_params: &'a <Bls12 as JubjubEngine>::Params,
+        pub_params: &<BeaconPoSt<H, V> as ProofScheme<'a>>::PublicParams,
+        params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> BeaconPoStCircuit<'a, Bls12, H, V> {
-        unimplemented!("")
+        let post_periods_count = pub_params.post_periods_count;
+        let challenge_bits = pub_params.vdf_post_pub_params.challenge_bits;
+        let challenge_count = pub_params.vdf_post_pub_params.challenge_count;
+        let post_epochs = pub_params.vdf_post_pub_params.post_epochs;
+
+        let challenges_vec_vec =
+            vec![vec![vec![None; challenge_count]; post_epochs]; post_periods_count];
+        let challenged_sectors_vec_vec =
+            vec![vec![vec![None; challenge_count]; post_epochs]; post_periods_count];
+        let challenged_leafs_vec_vec =
+            vec![vec![vec![None; challenge_count]; post_epochs]; post_periods_count];
+        let commitments_vec_vec =
+            vec![vec![vec![None; challenge_count]; post_epochs]; post_periods_count];
+        let vdf_xs_vec = vec![vec![None; post_epochs - 1]; post_periods_count];
+        let vdf_ys_vec = vec![vec![None; post_epochs - 1]; post_periods_count];
+        let paths_vec_vec =
+            vec![
+                vec![vec![vec![None; challenge_bits]; challenge_count]; post_epochs];
+                post_periods_count
+            ];
+
+        let vdf_sloth_rounds =
+            <V as Vdf<_>>::PublicParams::rounds(&pub_params.vdf_post_pub_params.pub_params_vdf);
+
+        BeaconPoStCircuit::<_, _, _> {
+            params,
+            // beacon_randomness_vec,
+            // challenges_vec,
+            challenges_vec_vec,
+            challenged_sectors_vec_vec,
+            challenge_seed: None,
+            vdf_key: None,
+            vdf_xs_vec,
+            vdf_ys_vec,
+            vdf_sloth_rounds,
+            challenged_leafs_vec_vec,
+            paths_vec_vec,
+            root_commitment: None,
+            commitments_vec_vec,
+            _h: PhantomData,
+            _v: PhantomData,
+        }
     }
 }
 
@@ -100,7 +248,7 @@ impl<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> Circuit<E>
 
         for t in 0..post_periods_count {
             let mut cs = cs.namespace(|| format!("t_{}", t));
-            vdf_post::VDFPoStCircuit::synthesize(
+            circuit_vdf_post::VDFPoStCircuit::synthesize(
                 &mut cs.namespace(|| "vdf_post"),
                 self.params,
                 self.challenge_seed,
@@ -125,12 +273,14 @@ impl<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> Circuit<E>
 mod tests {
     use super::*;
 
+    use bellman::groth16;
     use ff::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
 
     use crate::beacon_post::{self, Beacon};
     use crate::circuit::test::*;
+    use crate::compound_proof;
     use crate::drgraph::{new_seed, BucketGraph, Graph};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::pedersen::*;
@@ -148,10 +298,10 @@ mod tests {
             vdf_post_setup_params: vdf_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
                 challenge_count: 4,
                 sector_size: 256 * lambda,
-                post_epochs: 3,
+                post_epochs: 1,
                 setup_params_vdf: vdf_sloth::SetupParams {
                     key: rng.gen(),
-                    rounds: 1,
+                    rounds: 0,
                 },
                 sectors_count: 2,
             },
@@ -173,8 +323,11 @@ mod tests {
         let graph1 = BucketGraph::<PedersenHasher>::new(256, 5, 0, new_seed());
         let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
 
+        let mut beacon = Beacon::default();
+
         let pub_inputs = beacon_post::PublicInputs {
             commitments: vec![tree0.root(), tree1.root()],
+            challenge_seed: beacon.get::<PedersenDomain>(0),
         };
         let replicas = [&data0[..], &data1[..]];
         let trees = [&tree0, &tree1];
@@ -272,15 +425,13 @@ mod tests {
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        let mut beacon = Beacon::default();
-
         let instance = BeaconPoStCircuit::<Bls12, PedersenHasher, vdf_sloth::Sloth> {
             params,
             // beacon_randomness_vec,
             // challenges_vec,
             challenges_vec_vec,
             challenged_sectors_vec_vec,
-            challenge_seed: Some(beacon.get::<PedersenDomain>(0).into()),
+            challenge_seed: Some(pub_inputs.challenge_seed.into()),
             vdf_key: Some(pub_params.vdf_post_pub_params.pub_params_vdf.key.into()),
             vdf_xs_vec,
             vdf_ys_vec,
@@ -302,5 +453,115 @@ mod tests {
         assert_eq!(cs.num_inputs(), 7, "wrong number of inputs");
         assert_eq!(cs.num_constraints(), 398118, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
+    }
+
+    // #[ignore] // Slow test – run only when compiled for release.
+    #[test]
+    fn test_beacon_post_compound() {
+        let params = &JubjubBls12::new();
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let lambda = 32;
+
+        let setup_params = compound_proof::SetupParams {
+            vanilla_params: &beacon_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
+                vdf_post_setup_params: vdf_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
+                    challenge_count: 4,
+                    sector_size: 4 * lambda,
+                    post_epochs: 1,
+                    setup_params_vdf: vdf_sloth::SetupParams {
+                        key: rng.gen(),
+                        rounds: 0,
+                    },
+                    sectors_count: 2,
+                },
+                post_periods_count: 3,
+            },
+            engine_params: params,
+            partitions: None,
+        };
+
+        let pub_params: compound_proof::PublicParams<
+            _,
+            beacon_post::BeaconPoSt<PedersenHasher, vdf_sloth::Sloth>,
+        > = BeaconPoStCompound::setup(&setup_params).expect("setup failed");
+
+        let data0: Vec<u8> = (0..4)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
+        let data1: Vec<u8> = (0..4)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
+
+        let graph0 = BucketGraph::<PedersenHasher>::new(4, 5, 0, new_seed());
+        let tree0 = graph0.merkle_tree(data0.as_slice()).unwrap();
+        let graph1 = BucketGraph::<PedersenHasher>::new(4, 5, 0, new_seed());
+        let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
+
+        let pub_inputs = beacon_post::PublicInputs {
+            commitments: vec![tree0.root(), tree1.root()],
+            challenge_seed: rng.gen(),
+        };
+
+        let trees = [&tree0, &tree1];
+        let replicas = [&data0[..], &data1[..]];
+
+        let priv_inputs = beacon_post::PrivateInputs::<PedersenHasher>::new(&replicas, &trees[..]);
+
+        let gparams: groth16::Parameters<_> =
+            <BeaconPoStCompound as CompoundProof<
+                '_,
+                Bls12,
+                BeaconPoSt<PedersenHasher, _>,
+                BeaconPoStCircuit<_, _, _>,
+            >>::groth_params(&pub_params.vanilla_params, &params)
+            .unwrap();
+
+        let proof = BeaconPoStCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &gparams)
+            .expect("failed while proving");
+
+        let (circuit, inputs) =
+            BeaconPoStCompound::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs);
+
+        let mut cs = TestConstraintSystem::new();
+
+        circuit.synthesize(&mut cs).expect("failed to synthesize");
+        assert!(cs.is_satisfied());
+        assert!(cs.verify(&inputs));
+
+        // Use this to debug differences between blank and regular circuit generation.
+        // {
+        //     let blank_circuit = <VDFPostCompound as CompoundProof<
+        //         Bls12,
+        //         VDFPoSt<PedersenHasher, _>,
+        //         VDFPoStCircuit<Bls12>,
+        //     >>::blank_circuit(&pub_params.vanilla_params, params);
+        //     let (circuit1, _inputs) =
+        //         VDFPostCompound::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs);
+
+        //     let mut cs_blank = TestConstraintSystem::new();
+        //     blank_circuit
+        //         .synthesize(&mut cs_blank)
+        //         .expect("failed to synthesize");
+
+        //     let a = cs_blank.pretty_print();
+
+        //     let mut cs1 = TestConstraintSystem::new();
+        //     circuit1.synthesize(&mut cs1).expect("failed to synthesize");
+        //     let b = cs1.pretty_print();
+
+        //     let a_vec = a.split("\n").collect::<Vec<_>>();
+        //     let b_vec = b.split("\n").collect::<Vec<_>>();
+
+        //     for (i, (a, b)) in a_vec.chunks(100).zip(b_vec.chunks(100)).enumerate() {
+        //         println!("chunk {}", i);
+        //         assert_eq!(a, b);
+        //     }
+        // }
+
+        let verified = BeaconPoStCompound::verify(&pub_params, &pub_inputs, &proof)
+            .expect("failed while verifying");
+
+        assert!(verified);
     }
 }
