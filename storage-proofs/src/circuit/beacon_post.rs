@@ -35,7 +35,9 @@ pub struct BeaconPoStCircuit<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> 
     _v: PhantomData<V>,
 }
 
-pub struct BeaconPoStCompound {}
+pub struct BeaconPoStCompound<H: Hasher> {
+    _h: PhantomData<H>,
+}
 
 #[derive(Clone, Default)]
 pub struct ComponentPrivateInputs {}
@@ -48,7 +50,7 @@ impl<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> CircuitComponent
 
 impl<'a, H: Hasher, V: Vdf<H::Domain>>
     CompoundProof<'a, Bls12, BeaconPoSt<H, V>, BeaconPoStCircuit<'a, Bls12, H, V>>
-    for BeaconPoStCompound
+    for BeaconPoStCompound<H>
 where
     <V as Vdf<H::Domain>>::PublicParams: Send + Sync,
     <V as Vdf<H::Domain>>::Proof: Send + Sync,
@@ -56,12 +58,21 @@ where
     H: 'a,
 {
     fn generate_public_inputs(
-        _pub_in: &<BeaconPoSt<H, V> as ProofScheme<'a>>::PublicInputs,
-        _pub_params: &<BeaconPoSt<H, V> as ProofScheme<'a>>::PublicParams,
+        pub_in: &<BeaconPoSt<H, V> as ProofScheme<'a>>::PublicInputs,
+        pub_params: &<BeaconPoSt<H, V> as ProofScheme<'a>>::PublicParams,
         _partition_k: Option<usize>,
     ) -> Vec<Fr> {
-        unimplemented!();
+        let post_periods_count = pub_params.post_periods_count;
+
+        let mut inputs: Vec<Fr> = Vec::new();
+
+        for _ in 0..post_periods_count {
+            inputs.push(pub_in.challenge_seed.into());
+            inputs.push(compute_root_commitment(&pub_in.commitments).into());
+        }
+        inputs
     }
+
     fn circuit(
         pub_inputs: &<BeaconPoSt<H, V> as ProofScheme<'a>>::PublicInputs,
         _component_private_inputs:<BeaconPoStCircuit<'a, Bls12,H,V> as CircuitComponent>::ComponentPrivateInputs,
@@ -227,8 +238,8 @@ where
     }
 }
 
-impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParameters<E, C, P>
-    for BeaconPoStCompound
+impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier, H: Hasher>
+    CacheableParameters<E, C, P> for BeaconPoStCompound<H>
 {
     fn cache_prefix() -> String {
         String::from("beacon-post")
@@ -273,7 +284,6 @@ impl<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> Circuit<E>
 mod tests {
     use super::*;
 
-    use bellman::groth16;
     use ff::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
@@ -455,7 +465,6 @@ mod tests {
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
     }
 
-    // #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn test_beacon_post_compound() {
         let params = &JubjubBls12::new();
@@ -508,56 +517,37 @@ mod tests {
 
         let priv_inputs = beacon_post::PrivateInputs::<PedersenHasher>::new(&replicas, &trees[..]);
 
-        let gparams: groth16::Parameters<_> =
-            <BeaconPoStCompound as CompoundProof<
-                '_,
-                Bls12,
-                BeaconPoSt<PedersenHasher, _>,
-                BeaconPoStCircuit<_, _, _>,
-            >>::groth_params(&pub_params.vanilla_params, &params)
-            .unwrap();
+        {
+            let (circuit, inputs) =
+                BeaconPoStCompound::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs);
 
-        let proof = BeaconPoStCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &gparams)
-            .expect("failed while proving");
+            let mut cs = TestConstraintSystem::new();
 
-        let (circuit, inputs) =
-            BeaconPoStCompound::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs);
+            circuit.synthesize(&mut cs).expect("failed to synthesize");
 
-        let mut cs = TestConstraintSystem::new();
+            if !cs.is_satisfied() {
+                panic!(
+                    "failed to satisfy: {:?}",
+                    cs.which_is_unsatisfied().unwrap()
+                );
+            }
+            assert!(
+                cs.verify(&inputs),
+                "verification failed with TestContraintSystem and generated inputs"
+            );
+        }
 
-        circuit.synthesize(&mut cs).expect("failed to synthesize");
-        assert!(cs.is_satisfied());
-        assert!(cs.verify(&inputs));
+        let blank_groth_params =
+            BeaconPoStCompound::<PedersenHasher>::groth_params(&pub_params.vanilla_params, params)
+                .unwrap();
 
-        // Use this to debug differences between blank and regular circuit generation.
-        // {
-        //     let blank_circuit = <VDFPostCompound as CompoundProof<
-        //         Bls12,
-        //         VDFPoSt<PedersenHasher, _>,
-        //         VDFPoStCircuit<Bls12>,
-        //     >>::blank_circuit(&pub_params.vanilla_params, params);
-        //     let (circuit1, _inputs) =
-        //         VDFPostCompound::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs);
-
-        //     let mut cs_blank = TestConstraintSystem::new();
-        //     blank_circuit
-        //         .synthesize(&mut cs_blank)
-        //         .expect("failed to synthesize");
-
-        //     let a = cs_blank.pretty_print();
-
-        //     let mut cs1 = TestConstraintSystem::new();
-        //     circuit1.synthesize(&mut cs1).expect("failed to synthesize");
-        //     let b = cs1.pretty_print();
-
-        //     let a_vec = a.split("\n").collect::<Vec<_>>();
-        //     let b_vec = b.split("\n").collect::<Vec<_>>();
-
-        //     for (i, (a, b)) in a_vec.chunks(100).zip(b_vec.chunks(100)).enumerate() {
-        //         println!("chunk {}", i);
-        //         assert_eq!(a, b);
-        //     }
-        // }
+        let proof = BeaconPoStCompound::<PedersenHasher>::prove(
+            &pub_params,
+            &pub_inputs,
+            &priv_inputs,
+            &blank_groth_params,
+        )
+        .expect("failed while proving");
 
         let verified = BeaconPoStCompound::verify(&pub_params, &pub_inputs, &proof)
             .expect("failed while verifying");

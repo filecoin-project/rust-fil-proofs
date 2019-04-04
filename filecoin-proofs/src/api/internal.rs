@@ -151,7 +151,7 @@ fn get_post_params(post_config: PoStConfig) -> error::Result<Arc<groth16::Parame
     let post_public_params = post_public_params(post_config);
 
     let get_params = || {
-        <VDFPostCompound as CompoundProof<
+        <VDFPostCompound<PedersenHasher> as CompoundProof<
             Bls12,
             VDFPoSt<PedersenHasher, Sloth>,
             VDFPoStCircuit<Bls12>,
@@ -187,7 +187,7 @@ fn get_post_verifying_key(post_config: PoStConfig) -> error::Result<Arc<Bls12Ver
     let post_public_params = post_public_params(post_config);
 
     let get_verifying_key = || {
-        <VDFPostCompound as CompoundProof<
+        <VDFPostCompound<PedersenHasher> as CompoundProof<
             Bls12,
             VDFPoSt<PedersenHasher, Sloth>,
             VDFPoStCircuit<Bls12>,

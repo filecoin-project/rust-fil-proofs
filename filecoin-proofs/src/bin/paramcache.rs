@@ -30,12 +30,14 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     let public_params = internal::public_params(PaddedBytesAmount::from(porep_config));
     {
         let circuit = ZigZagCompound::blank_circuit(&public_params, &internal::ENGINE_PARAMS);
-
-        let _ = ZigZagCompound::get_groth_params(circuit, &public_params);
+        ZigZagCompound::get_groth_params(circuit, &public_params)
+            .expect("failed to generate zigzag groth params");
     }
+
     {
         let circuit = ZigZagCompound::blank_circuit(&public_params, &internal::ENGINE_PARAMS);
-        let _ = ZigZagCompound::get_verifying_key(circuit, &public_params);
+        ZigZagCompound::get_verifying_key(circuit, &public_params)
+            .expect("failed to generate zigzag verifying key");
     }
 }
 
@@ -46,22 +48,24 @@ fn cache_post_params(post_config: PoStConfig) {
     let post_public_params = internal::post_public_params(post_config);
     {
         let post_circuit: VDFPoStCircuit<Bls12> =
-            <VDFPostCompound as CompoundProof<
+            <VDFPostCompound<PedersenHasher> as CompoundProof<
                 Bls12,
                 VDFPoSt<PedersenHasher, Sloth>,
                 VDFPoStCircuit<Bls12>,
             >>::blank_circuit(&post_public_params, &internal::ENGINE_PARAMS);
-        let _ = VDFPostCompound::get_groth_params(post_circuit, &post_public_params);
+        VDFPostCompound::<PedersenHasher>::get_groth_params(post_circuit, &post_public_params)
+            .expect("failed to generate post params");
     }
     {
         let post_circuit: VDFPoStCircuit<Bls12> =
-            <VDFPostCompound as CompoundProof<
+            <VDFPostCompound<PedersenHasher> as CompoundProof<
                 Bls12,
                 VDFPoSt<PedersenHasher, Sloth>,
                 VDFPoStCircuit<Bls12>,
             >>::blank_circuit(&post_public_params, &internal::ENGINE_PARAMS);
 
-        let _ = VDFPostCompound::get_verifying_key(post_circuit, &post_public_params);
+        VDFPostCompound::<PedersenHasher>::get_verifying_key(post_circuit, &post_public_params)
+            .expect("failed to generate post verifying key");
     }
 }
 

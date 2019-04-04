@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
 use pairing::bls12_381::{Bls12, Fr};
 use pairing::Engine;
@@ -40,10 +42,12 @@ pub struct VDFPoStCircuit<'a, E: JubjubEngine> {
 }
 
 #[derive(Debug)]
-pub struct VDFPostCompound {}
+pub struct VDFPostCompound<H: Hasher> {
+    _h: PhantomData<H>,
+}
 
-impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParameters<E, C, P>
-    for VDFPostCompound
+impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier, H: Hasher>
+    CacheableParameters<E, C, P> for VDFPostCompound<H>
 {
     fn cache_prefix() -> String {
         String::from("vdf-post")
@@ -58,7 +62,7 @@ impl<'a, E: JubjubEngine> CircuitComponent for VDFPoStCircuit<'a, E> {
 }
 
 impl<'a, H, V> CompoundProof<'a, Bls12, VDFPoSt<H, V>, VDFPoStCircuit<'a, Bls12>>
-    for VDFPostCompound
+    for VDFPostCompound<H>
 where
     H: 'static + Hasher,
     V: Vdf<H::Domain>,
@@ -237,57 +241,58 @@ impl<'a, E: JubjubEngine> Circuit<E> for VDFPoStCircuit<'a, E> {
         // VDF Output Verification
         assert_eq!(vdf_xs.len(), vdf_ys.len());
 
-        let vdf_key = num::AllocatedNum::alloc(cs.namespace(|| "vdf_key"), || {
-            vdf_key.ok_or_else(|| SynthesisError::AssignmentMissing)
-        })?;
+        if !vdf_ys.is_empty() {
+            let vdf_key = num::AllocatedNum::alloc(cs.namespace(|| "vdf_key"), || {
+                vdf_key.ok_or_else(|| SynthesisError::AssignmentMissing)
+            })?;
 
-        for (i, (y, x)) in vdf_ys.iter().zip(vdf_xs.iter()).enumerate() {
-            {
-                // VDF Verification
-                let mut cs = cs.namespace(|| format!("vdf_verification_round_{}", i));
-                //
-                //                // FIXME: make this a generic call to Vdf proof circuit function.
-                let decoded = sloth::decode(
-                    cs.namespace(|| "sloth_decode"),
-                    &vdf_key,
-                    *y,
-                    vdf_sloth_rounds,
-                )?;
+            for (i, (y, x)) in vdf_ys.iter().zip(vdf_xs.iter()).enumerate() {
+                {
+                    // VDF Verification
+                    let mut cs = cs.namespace(|| format!("vdf_verification_round_{}", i));
+                    // FIXME: make this a generic call to Vdf proof circuit function.
+                    let decoded = sloth::decode(
+                        cs.namespace(|| "sloth_decode"),
+                        &vdf_key,
+                        *y,
+                        vdf_sloth_rounds,
+                    )?;
 
-                let x_alloc = num::AllocatedNum::alloc(cs.namespace(|| "x"), || {
-                    x.ok_or_else(|| SynthesisError::AssignmentMissing)
-                })?;
+                    let x_alloc = num::AllocatedNum::alloc(cs.namespace(|| "x"), || {
+                        x.ok_or_else(|| SynthesisError::AssignmentMissing)
+                    })?;
 
-                constraint::equal(&mut cs, || "equality", &x_alloc, &decoded);
+                    constraint::equal(&mut cs, || "equality", &x_alloc, &decoded);
 
-                let partial_challenge = x;
+                    let partial_challenge = x;
 
-                // Challenge Verification
-                if i == 0 {
-                    verify_challenges(
-                        &mut cs,
-                        // Should be CHALLENGES, not CHALLENGED_LEAFS.
-                        challenged_leafs_vec[i].iter().collect::<Vec<_>>(),
-                        partial_challenge,
-                        Some(challenge_seed), // First iteration uses supplied challenge seed.
-                        paths_vec[i][0].len(),
-                    );
-                } else {
-                    verify_challenges(
-                        &mut cs,
-                        challenged_leafs_vec[i].iter().collect::<Vec<_>>(),
-                        partial_challenge,
-                        *y, // Subsequent iterations use computed Vdf result
-                        paths_vec[i][0].len(),
-                    );
+                    // Challenge Verification
+                    if i == 0 {
+                        verify_challenges(
+                            &mut cs,
+                            // Should be CHALLENGES, not CHALLENGED_LEAFS.
+                            challenged_leafs_vec[i].iter().collect::<Vec<_>>(),
+                            partial_challenge,
+                            Some(challenge_seed), // First iteration uses supplied challenge seed.
+                            paths_vec[i][0].len(),
+                        );
+                    } else {
+                        verify_challenges(
+                            &mut cs,
+                            challenged_leafs_vec[i].iter().collect::<Vec<_>>(),
+                            partial_challenge,
+                            *y, // Subsequent iterations use computed Vdf result
+                            paths_vec[i][0].len(),
+                        );
+                    }
                 }
+
+                // TODO: VDF Input Verification
+                // Verify that proof leaves hash to next vdf input.
+
+                // TODO: Root Commitment verification.
+                // Skip for now, but this is an absence that needs to be addressed once we have a vector commitment strategy.
             }
-
-            // TODO: VDF Input Verification
-            // Verify that proof leaves hash to next vdf input.
-
-            // TODO: Root Commitment verification.
-            // Skip for now, but this is an absence that needs to be addressed once we have a vector commitment strategy.
         }
 
         // PoRC Verification
@@ -373,7 +378,6 @@ impl<'a, E: JubjubEngine> VDFPoStCircuit<'a, E> {
 mod tests {
     use super::*;
 
-    use bellman::groth16;
     use ff::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
@@ -533,7 +537,7 @@ mod tests {
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
-    fn test_vdf_post_compound() {
+    fn test_vdf_post_compound_multiple() {
         let params = &JubjubBls12::new();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
@@ -542,7 +546,7 @@ mod tests {
         let setup_params = compound_proof::SetupParams {
             vanilla_params: &vdf_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
                 challenge_count: 3,
-                sector_size: 1024 * lambda,
+                sector_size: 256 * lambda,
                 post_epochs: 3,
                 setup_params_vdf: vdf_sloth::SetupParams {
                     key: rng.gen(),
@@ -559,16 +563,16 @@ mod tests {
             vdf_post::VDFPoSt<PedersenHasher, vdf_sloth::Sloth>,
         > = VDFPostCompound::setup(&setup_params).expect("setup failed");
 
-        let data0: Vec<u8> = (0..1024)
+        let data0: Vec<u8> = (0..256)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
-        let data1: Vec<u8> = (0..1024)
+        let data1: Vec<u8> = (0..256)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph0 = BucketGraph::<PedersenHasher>::new(1024, 5, 0, new_seed());
+        let graph0 = BucketGraph::<PedersenHasher>::new(256, 5, 0, new_seed());
         let tree0 = graph0.merkle_tree(data0.as_slice()).unwrap();
-        let graph1 = BucketGraph::<PedersenHasher>::new(1024, 5, 0, new_seed());
+        let graph1 = BucketGraph::<PedersenHasher>::new(256, 5, 0, new_seed());
         let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
 
         let pub_inputs = vdf_post::PublicInputs {
@@ -580,18 +584,6 @@ mod tests {
         let trees = [&tree0, &tree1];
         let priv_inputs = //: vdf_post::PrivateInputs<PedersenHasher> =
             vdf_post::PrivateInputs::<PedersenHasher>::new(&trees[..]);
-
-        let gparams: groth16::Parameters<_> =
-            <VDFPostCompound as CompoundProof<
-                '_,
-                Bls12,
-                VDFPoSt<PedersenHasher, _>,
-                VDFPoStCircuit<_>,
-            >>::groth_params(&pub_params.vanilla_params, &params)
-            .unwrap();
-
-        let proof = VDFPostCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &gparams)
-            .expect("failed while proving");
 
         let (circuit, inputs) =
             VDFPostCompound::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs);
@@ -631,6 +623,123 @@ mod tests {
         //         assert_eq!(a, b);
         //     }
         // }
+        let blank_groth_params =
+            VDFPostCompound::<PedersenHasher>::groth_params(&pub_params.vanilla_params, params)
+                .unwrap();
+
+        let proof = VDFPostCompound::<PedersenHasher>::prove(
+            &pub_params,
+            &pub_inputs,
+            &priv_inputs,
+            &blank_groth_params,
+        )
+        .expect("failed while proving");
+
+        let verified = VDFPostCompound::verify(&pub_params, &pub_inputs, &proof)
+            .expect("failed while verifying");
+
+        assert!(verified);
+    }
+
+    #[ignore] // Slow test – run only when compiled for release.
+    #[test]
+    fn test_vdf_post_compound_simple() {
+        let params = &JubjubBls12::new();
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let lambda = 32;
+
+        let setup_params = compound_proof::SetupParams {
+            vanilla_params: &vdf_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
+                challenge_count: 3,
+                sector_size: 128 * lambda,
+                post_epochs: 1,
+                setup_params_vdf: vdf_sloth::SetupParams {
+                    key: rng.gen(),
+                    rounds: 0,
+                },
+                sectors_count: 2,
+            },
+            engine_params: params,
+            partitions: None,
+        };
+
+        let pub_params: compound_proof::PublicParams<
+            _,
+            vdf_post::VDFPoSt<PedersenHasher, vdf_sloth::Sloth>,
+        > = VDFPostCompound::setup(&setup_params).expect("setup failed");
+
+        let data0: Vec<u8> = (0..128)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
+        let data1: Vec<u8> = (0..128)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
+
+        let graph0 = BucketGraph::<PedersenHasher>::new(128, 5, 0, new_seed());
+        let tree0 = graph0.merkle_tree(data0.as_slice()).unwrap();
+        let graph1 = BucketGraph::<PedersenHasher>::new(128, 5, 0, new_seed());
+        let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
+
+        let pub_inputs = vdf_post::PublicInputs {
+            challenge_seed: rng.gen(),
+            commitments: vec![tree0.root(), tree1.root()],
+            faults: Vec::new(),
+        };
+
+        let trees = [&tree0, &tree1];
+        let priv_inputs = //: vdf_post::PrivateInputs<PedersenHasher> =
+            vdf_post::PrivateInputs::<PedersenHasher>::new(&trees[..]);
+
+        let (circuit, inputs) =
+            VDFPostCompound::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs);
+
+        let mut cs = TestConstraintSystem::new();
+
+        circuit.synthesize(&mut cs).expect("failed to synthesize");
+        assert!(cs.is_satisfied());
+        assert!(cs.verify(&inputs));
+
+        // Use this to debug differences between blank and regular circuit generation.
+        // {
+        //     let blank_circuit = <VDFPostCompound as CompoundProof<
+        //         Bls12,
+        //         VDFPoSt<PedersenHasher, _>,
+        //         VDFPoStCircuit<Bls12>,
+        //     >>::blank_circuit(&pub_params.vanilla_params, params);
+        //     let (circuit1, _inputs) =
+        //         VDFPostCompound::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs);
+
+        //     let mut cs_blank = TestConstraintSystem::new();
+        //     blank_circuit
+        //         .synthesize(&mut cs_blank)
+        //         .expect("failed to synthesize");
+
+        //     let a = cs_blank.pretty_print();
+
+        //     let mut cs1 = TestConstraintSystem::new();
+        //     circuit1.synthesize(&mut cs1).expect("failed to synthesize");
+        //     let b = cs1.pretty_print();
+
+        //     let a_vec = a.split("\n").collect::<Vec<_>>();
+        //     let b_vec = b.split("\n").collect::<Vec<_>>();
+
+        //     for (i, (a, b)) in a_vec.chunks(100).zip(b_vec.chunks(100)).enumerate() {
+        //         println!("chunk {}", i);
+        //         assert_eq!(a, b);
+        //     }
+        // }
+        let blank_groth_params =
+            VDFPostCompound::<PedersenHasher>::groth_params(&pub_params.vanilla_params, params)
+                .unwrap();
+
+        let proof = VDFPostCompound::<PedersenHasher>::prove(
+            &pub_params,
+            &pub_inputs,
+            &priv_inputs,
+            &blank_groth_params,
+        )
+        .expect("failed while proving");
 
         let verified = VDFPostCompound::verify(&pub_params, &pub_inputs, &proof)
             .expect("failed while verifying");
