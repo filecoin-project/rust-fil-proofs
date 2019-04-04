@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 // Reexport here, so we don't depend on merkletree directly in other places.
 use merkletree::hash::Algorithm;
 use merkletree::merkle;
+#[cfg(not(feature = "disk-trees"))]
 use merkletree::merkle::MmapStore;
 use merkletree::merkle::VecStore;
 use merkletree::proof;
@@ -15,8 +16,12 @@ use crate::hasher::{Domain, Hasher};
 // `mmap`ed `MerkleTree` (replacing the previously `Vec`-backed
 // `MerkleTree`, now encapsulated in `merkle::VecStore` and exposed
 // as `VecMerkleTree`).
-pub type MerkleTree<T, A> = merkle::MerkleTree<T, A, MmapStore<T>>;
+pub type DiskMmapStore<E> = merkle_light::merkle::DiskMmapStore<E>;
 pub type VecMerkleTree<T, A> = merkle::MerkleTree<T, A, VecStore<T>>;
+#[cfg(feature = "disk-trees")]
+pub type MerkleTree<T, A> = merkle::MerkleTree<T, A, DiskMmapStore<T>>;
+#[cfg(not(feature = "disk-trees"))]
+pub type MerkleTree<T, A> = merkle::MerkleTree<T, A, MmapStore<T>>;
 
 /// Representation of a merkle proof.
 /// Each element in the `path` vector consists of a tuple `(hash, is_right)`, with `hash` being the the hash of the node at the current level and `is_right` a boolean indicating if the path is taking the right path.

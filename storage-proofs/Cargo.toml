@@ -11,7 +11,7 @@ logging-toolkit = { path = "../logging-toolkit" }
 bitvec = "0.10"
 rand = "0.4"
 libc = "0.2"
-merkletree = "=0.4.0"
+merkletree = "=0.4.1"
 failure = "0.1"
 byteorder = "1"
 config = "0.9.3"
@@ -43,8 +43,14 @@ fil-sapling-crypto = "0.1"
 
 [features]
 default = []
+<<<<<<< HEAD
 simd = []
 asm = ["sha2/sha2-asm"]
+=======
+simd = ["blake2/simd_opt"]
+asm = ["sha2/sha2-asm", "blake2/simd_asm"]
+disk-trees = []
+>>>>>>> c07b01b... add disk-tree feature
 
 [dev-dependencies]
 proptest = "0.7"

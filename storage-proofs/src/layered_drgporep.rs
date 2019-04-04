@@ -5,10 +5,17 @@ use std::sync::mpsc::channel;
 use crossbeam_utils::thread;
 use memmap::MmapMut;
 use memmap::MmapOptions;
+use rand;
 use rayon::prelude::*;
 use serde::de::Deserialize;
 use serde::ser::Serialize;
 use slog::*;
+#[cfg(feature = "disk-trees")]
+use std::fs;
+#[cfg(feature = "disk-trees")]
+use std::io;
+#[cfg(feature = "disk-trees")]
+use std::path::PathBuf;
 
 use crate::challenge_derivation::derive_challenges;
 use crate::drgporep::{self, DrgPoRep};
@@ -433,6 +440,42 @@ pub trait Layers {
                             // If we panic anywhere in this closure, thread.join() below will receive an error —
                             // so it is safe to unwrap.
                             let graph = transfer_rx.recv().unwrap();
+
+                            #[cfg(feature = "disk-trees")]
+                            let tree_d = {
+                                // FIXME: Temporary hard-coded local path while `get_config` is being
+                                // enhanced (see https://github.com/filecoin-project/rust-fil-proofs/issues/586).
+                                let trees_dir = PathBuf::from("replicated-disk-trees");
+                                // It should be something like:
+                                //let tree_path = match get_config("REPLICATE_DISK_TREES_DIR") {
+                                //    Result::Ok(config_dir) => {
+                                //     // Most of the logic below should be here, if the
+                                //     // user didn't set REPLICATE_DISK_TREES_DIR we should
+                                //     // pass `None` to `graph.merkle_tree_path`.
+                                //    },
+                                //    Result::Err(_) => None,
+                                //};
+
+                                // Try to create `trees_dir`, ignore the error if `AlreadyExists`.
+                                if let Some(create_error) = fs::create_dir(&trees_dir).err() {
+                                    if create_error.kind() != io::ErrorKind::AlreadyExists {
+                                        panic!(create_error);
+                                    }
+                                }
+
+                                let tree_name = format!("tree-{}-{}", layer, rand::random::<u32>());
+                                // FIXME: The user of `REPLICATE_DISK_TREES_DIR` should figure out
+                                // how to manage this directory, for now we create every file with
+                                // a different random number; the problem being that tests now do
+                                // replications many times in the same run so they may end up reusing
+                                // the same files with invalid (old) data and failing.
+
+                                graph
+                                    .merkle_tree_path(&data_copy, Some(&trees_dir.join(tree_name)))
+                                    .unwrap()
+                            };
+
+                            #[cfg(not(feature = "disk-trees"))]
                             let tree_d = graph.merkle_tree(&data_copy).unwrap();
 
                             info!(SP_LOG, "returning tree"; "layer" => format!("{}", layer));
