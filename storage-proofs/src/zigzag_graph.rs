@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
-use crate::config::get_config;
+use crate::config::get_config_bool;
 use crate::crypto::feistel::{self, FeistelPrecomputed};
 use crate::drgraph::{BucketGraph, Graph};
 use crate::hasher::Hasher;
@@ -71,7 +71,7 @@ where
         expansion_degree: usize,
         seed: [u32; 7],
     ) -> Self {
-        let cache_entries = match get_config("MAXIMIZE_CACHING") {
+        let cache_entries = match get_config_bool("MAXIMIZE_CACHING") {
             Result::Ok(config) => {
                 if config {
                     info!(SP_LOG, "using parents cache of unlimited size",);
