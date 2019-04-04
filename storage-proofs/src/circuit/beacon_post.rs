@@ -196,6 +196,8 @@ where
         let challenge_count = pub_params.vdf_post_pub_params.challenge_count;
         let post_epochs = pub_params.vdf_post_pub_params.post_epochs;
 
+        assert!(post_epochs > 0);
+
         let challenges_vec_vec =
             vec![vec![vec![None; challenge_count]; post_epochs]; post_periods_count];
         let challenged_sectors_vec_vec =

@@ -252,7 +252,7 @@ type PostSetupParams = beacon_post::SetupParams<PedersenDomain, vdf_sloth::Sloth
 pub type PostPublicParams = beacon_post::PublicParams<PedersenDomain, vdf_sloth::Sloth>;
 
 const POST_CHALLENGE_COUNT: usize = 30;
-const POST_EPOCHS: usize = 0;
+const POST_EPOCHS: usize = 1;
 const POST_PERIODS_COUNT: usize = 1;
 pub const POST_SECTORS_COUNT: usize = 2;
 const POST_VDF_ROUNDS: usize = 0;
