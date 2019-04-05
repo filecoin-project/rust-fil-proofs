@@ -267,7 +267,7 @@ fn run(config_path: &str, print_table: bool) -> Result<()> {
                 }
             }
             Err(error) => {
-                println!("error: {}", error);
+                eprintln!("error: {}", error);
             }
         }
     }
@@ -609,7 +609,7 @@ fn run_benchmark(name: &str, config: &Case) -> Result<Vec<BenchmarkResult>> {
         match output.status.code() {
             Some(code) => {
                 if code != 0 {
-                    println!("{}", &String::from_utf8_lossy(&output.stderr));
+                    eprintln!("{}", &String::from_utf8_lossy(&output.stderr));
                     return Err(format_err!("benchmark exited with non-zero status"));
                 }
             }
