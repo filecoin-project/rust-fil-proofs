@@ -110,7 +110,7 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
         if let Some(path) = path {
             info!(SP_LOG, "creating tree mmap-file"; "path" => &path.to_str());
 
-            let disk_mmap = DiskMmapStore::new_with_path(self.size(), path);
+            let mut disk_mmap = DiskMmapStore::new_with_path(self.size(), path);
             // FIXME: `new_with_path` is using the `from_iter` implementation,
             //  instead the `parallel` flag should be passed also as argument
             //  and decide *there* which code to use (merging this into the
@@ -118,7 +118,7 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
 
             Ok(MerkleTree::from_data_with_store(
                 (0..self.size()).map(f),
-                disk_mmap,
+                &mut disk_mmap,
             ))
         } else if parallel {
             Ok(MerkleTree::from_par_iter(
