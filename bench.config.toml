@@ -1,4 +1,3 @@
-
 [merklepor]
 challenges = [ 1 ] #, 10, 50, 100, 200 ]
 size = [ "1 KiB" ] #, "64 MiB", "128 MiB", "256 MiB", "512 MiB", "1024 MiB"]
@@ -22,9 +21,13 @@ m = [ 6 ]
 
 [zigzag]
 challenges = [ 1 ]
-size = ["1 KiB"]
-hasher = ["pedersen"]
-command = "--groth"
+size = [ "1 KiB" ]
+hasher = [ "pedersen", "blake2s" ]
 sloth  = [ 0 ]
 m = [ 5 ]
-expansion = [ 6 ]
+command = "--groth"
+expansion = [ 8 ]
+layers = [ 10 ]
+partitions = [ 1 ]
+taper = [ 0.3333 ]
+taper_layers = [ 7 ]
