@@ -98,6 +98,8 @@ jobs:
           command: |
             cargo +stable test --verbose --release --frozen --all --features disk-trees
             RUSTFLAGS="-D warnings" cargo +stable build --examples --release --frozen --all --features disk-trees
+          environment:
+            REPLICATED_TREES_DIR: replicated-disk-trees
 
   ffi_regression:
     docker:
