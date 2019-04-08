@@ -279,6 +279,19 @@ pub unsafe extern "C" fn destroy_sector_builder(ptr: *mut SectorBuilder) {
     let _ = Box::from_raw(ptr);
 }
 
+/// Returns the SectorSize.
+///
+#[no_mangle]
+pub unsafe extern "C" fn sector_size(cfg_ptr: *const ConfiguredStore) -> u64 {
+    if let Some(cfg) = cfg_ptr.as_ref() {
+        let cfg = new_sector_config(cfg);
+        return u64::from(cfg.max_unsealed_bytes_per_sector())
+    } else {
+        error!(FCP_LOG, "sector_size: unsupported configuration: {:?}", cfg_ptr; "target" => "FFI");
+        return 0
+    }
+}
+
 /// Writes user piece-bytes to a staged sector and returns the id of the sector
 /// to which the bytes were written.
 ///
