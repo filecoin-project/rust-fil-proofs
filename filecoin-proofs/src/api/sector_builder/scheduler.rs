@@ -52,7 +52,6 @@ pub enum Request {
     ),
     RetrievePiece(String, mpsc::SyncSender<Result<Vec<u8>>>),
     SealAllStagedSectors(mpsc::SyncSender<Result<()>>),
-    GetMaxUserBytesPerStagedSector(mpsc::SyncSender<UnpaddedBytesAmount>),
     HandleSealResult(SectorId, Box<Result<SealedSectorMetadata>>),
     Shutdown,
 }
@@ -118,9 +117,6 @@ impl Scheduler {
                     }
                     Request::GetStagedSectors(tx) => {
                         tx.send(m.get_staged_sectors()).expect(FATAL_NOSEND);
-                    }
-                    Request::GetMaxUserBytesPerStagedSector(tx) => {
-                        tx.send(m.max_user_bytes()).expects(FATAL_NOSEND);
                     }
                     Request::SealAllStagedSectors(tx) => {
                         tx.send(m.seal_all_staged_sectors()).expects(FATAL_NOSEND);
@@ -272,12 +268,6 @@ impl SectorMetadataManager {
     // SectorBuilder knows about.
     pub fn get_staged_sectors(&self) -> Result<Vec<StagedSectorMetadata>> {
         Ok(self.state.staged.sectors.values().cloned().collect())
-    }
-
-    // Returns the number of user-provided bytes that will fit into a staged
-    // sector.
-    pub fn max_user_bytes(&self) -> UnpaddedBytesAmount {
-        self.max_user_bytes_per_staged_sector
     }
 
     // Update metadata to reflect the sealing results.

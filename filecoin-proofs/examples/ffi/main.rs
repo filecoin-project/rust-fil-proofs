@@ -105,14 +105,9 @@ unsafe fn create_sector_builder(
         panic!("{}", c_str_to_rust_str((*resp).error_msg))
     }
 
-    let resp_2 = get_max_user_bytes_per_staged_sector((*resp).sector_builder);
-    defer!(destroy_get_max_user_bytes_per_staged_sector_response(
-        resp_2
-    ));
-
     (
         (*resp).sector_builder,
-        (*resp_2).max_staged_bytes_per_sector as usize,
+        get_max_user_bytes_per_staged_sector(&sector_store_config) as usize,
     )
 }
 
