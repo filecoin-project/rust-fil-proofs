@@ -257,35 +257,6 @@ pub unsafe extern "C" fn destroy_seal_all_staged_sectors_response(
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-/// GetMaxStagedBytesPerSector
-//////////////////////////////
-
-#[repr(C)]
-#[derive(DropStructMacro)]
-pub struct GetMaxStagedBytesPerSector {
-    pub status_code: FCPResponseStatus,
-    pub error_msg: *const libc::c_char,
-    pub max_staged_bytes_per_sector: u64,
-}
-
-impl Default for GetMaxStagedBytesPerSector {
-    fn default() -> GetMaxStagedBytesPerSector {
-        GetMaxStagedBytesPerSector {
-            status_code: FCPResponseStatus::FCPNoError,
-            error_msg: ptr::null(),
-            max_staged_bytes_per_sector: 0,
-        }
-    }
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn destroy_get_max_user_bytes_per_staged_sector_response(
-    ptr: *mut GetMaxStagedBytesPerSector,
-) {
-    let _ = Box::from_raw(ptr);
-}
-
-///////////////////////////////////////////////////////////////////////////////
 /// GetSealStatusResponse
 /////////////////////////
 
