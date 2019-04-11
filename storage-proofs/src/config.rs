@@ -15,6 +15,7 @@ type Config = HashMap<String, String>;
 const DEFAULT_CONFIG: &[(&str, &str)] = &[
     ("MAXIMIZE_CACHING", "false"),
     ("MERKLE_TREE_PATH", "/tmp/merkle-trees"),
+    ("NUM_PROVING_THREADS", "4"),
 ];
 
 lazy_static! {
@@ -86,6 +87,10 @@ pub fn get_config_bool(key: &str) -> Result<bool> {
         "0" | "false" | "off" | "no" | "" => Ok(false),
         _ => Err(err_msg("cannot cast as bool")),
     }
+}
+
+pub fn must_get_num_proving_threads() -> usize {
+    get_config("NUM_PROVING_THREADS").unwrap().parse().unwrap()
 }
 
 pub fn debug_config() {
