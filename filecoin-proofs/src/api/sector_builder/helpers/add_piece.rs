@@ -18,7 +18,10 @@ pub fn add_piece(
     piece_path: String,
 ) -> error::Result<SectorId> {
     let sector_mgr = sector_store.inner.manager();
-    let sector_max = sector_store.inner.config().max_unsealed_bytes_per_sector();
+    let sector_max = sector_store
+        .inner
+        .sector_config()
+        .max_unsealed_bytes_per_sector();
 
     let piece_bytes_len = UnpaddedBytesAmount(piece_bytes_amount);
 

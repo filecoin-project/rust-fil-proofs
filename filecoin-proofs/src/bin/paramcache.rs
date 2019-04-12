@@ -7,7 +7,6 @@ use filecoin_proofs::api::internal;
 use filecoin_proofs::FCP_LOG;
 use pairing::bls12_381::Bls12;
 use sector_base::api::bytes_amount::PaddedBytesAmount;
-use sector_base::api::disk_backed_storage::{LIVE_SECTOR_SIZE, TEST_SECTOR_SIZE};
 use storage_proofs::circuit::vdf_post::{VDFPoStCircuit, VDFPostCompound};
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::CompoundProof;
@@ -17,14 +16,18 @@ use storage_proofs::vdf_post::VDFPoSt;
 use storage_proofs::vdf_sloth::Sloth;
 
 use clap::{App, Arg};
+use sector_base::api::porep_config::PoRepConfig;
+use sector_base::api::porep_config::PoRepProofPartitions;
+use sector_base::api::post_config::PoStConfig;
+use sector_base::api::post_config::PoStProofPartitions;
+use sector_base::api::sector_size::SectorSize;
 use slog::*;
 
-fn cache_porep_params(sector_size: u64) {
-    info!(FCP_LOG, "begin PoRep parameter-cache check/populate routine for {}-byte sectors", sector_size; "target" => "paramcache");
+fn cache_porep_params(porep_config: PoRepConfig) {
+    let n = u64::from(PaddedBytesAmount::from(porep_config));
+    info!(FCP_LOG, "begin PoRep parameter-cache check/populate routine for {}-byte sectors", n; "target" => "paramcache");
 
-    let bytes_amount = PaddedBytesAmount(sector_size);
-
-    let public_params = internal::public_params(bytes_amount);
+    let public_params = internal::public_params(PaddedBytesAmount::from(porep_config));
     {
         let circuit = ZigZagCompound::blank_circuit(&public_params, &internal::ENGINE_PARAMS);
 
@@ -36,12 +39,11 @@ fn cache_porep_params(sector_size: u64) {
     }
 }
 
-fn cache_post_params(sector_size: u64) {
-    info!(FCP_LOG, "begin PoSt parameter-cache check/populate routine for {}-byte sectors", sector_size; "target" => "paramcache");
+fn cache_post_params(post_config: PoStConfig) {
+    let n = u64::from(PaddedBytesAmount::from(post_config));
+    info!(FCP_LOG, "begin PoSt parameter-cache check/populate routine for {}-byte sectors", n; "target" => "paramcache");
 
-    let bytes_amount = PaddedBytesAmount(sector_size);
-
-    let post_public_params = internal::post_public_params(bytes_amount);
+    let post_public_params = internal::post_public_params(post_config);
     {
         let post_circuit: VDFPoStCircuit<Bls12> =
             <VDFPostCompound as CompoundProof<
@@ -78,11 +80,17 @@ pub fn main() {
 
     let test_only: bool = matches.is_present("test-only");
 
-    cache_porep_params(TEST_SECTOR_SIZE);
-    cache_post_params(TEST_SECTOR_SIZE);
+    cache_porep_params(PoRepConfig::Test);
+    cache_post_params(PoStConfig::Test);
 
     if !test_only {
-        cache_porep_params(LIVE_SECTOR_SIZE);
-        cache_post_params(LIVE_SECTOR_SIZE);
+        cache_porep_params(PoRepConfig::Live(
+            SectorSize::TwoHundredFiftySixMiB,
+            PoRepProofPartitions::Two,
+        ));
+        cache_post_params(PoStConfig::Live(
+            SectorSize::TwoHundredFiftySixMiB,
+            PoStProofPartitions::One,
+        ));
     }
 }

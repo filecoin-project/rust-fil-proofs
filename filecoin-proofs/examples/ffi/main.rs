@@ -76,7 +76,7 @@ unsafe fn create_sector_builder(
     sealed_dir: &TempDir,
     prover_id: [u8; 31],
     last_committed_sector_id: u64,
-    sector_store_config: ConfiguredStore,
+    sector_class: FFISectorClass,
 ) -> (*mut SectorBuilder, usize) {
     let mut prover_id: [u8; 31] = prover_id;
 
@@ -91,7 +91,7 @@ unsafe fn create_sector_builder(
     });
 
     let resp = init_sector_builder(
-        &sector_store_config,
+        sector_class,
         last_committed_sector_id,
         c_metadata_dir,
         &mut prover_id,
@@ -107,15 +107,15 @@ unsafe fn create_sector_builder(
 
     (
         (*resp).sector_builder,
-        get_max_user_bytes_per_staged_sector(&sector_store_config) as usize,
+        get_max_user_bytes_per_staged_sector(sector_class.sector_size) as usize,
     )
 }
 
 struct ConfigurableSizes {
-    store: ConfiguredStore,
-    max_bytes: usize,
     first_piece_bytes: usize,
+    max_bytes: usize,
     second_piece_bytes: usize,
+    sector_class: FFISectorClass,
     third_piece_bytes: usize,
 }
 
@@ -126,7 +126,11 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
 
     let sizes = if use_live_store {
         ConfigurableSizes {
-            store: ConfiguredStore_Live,
+            sector_class: FFISectorClass {
+                sector_size: FFISectorSize_SSB_TwoHundredFiftySixMiB,
+                seal_proof_partitions: FFISealProofPartitions_SPP_Two,
+                post_proof_partitions: FFIPoStProofPartitions_PPP_One,
+            },
             max_bytes: 266338304,
             first_piece_bytes: 26214400,
             second_piece_bytes: 131072000,
@@ -134,7 +138,11 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
         }
     } else {
         ConfigurableSizes {
-            store: ConfiguredStore_Test,
+            sector_class: FFISectorClass {
+                sector_size: FFISectorSize_SSB_OneKiB,
+                seal_proof_partitions: FFISealProofPartitions_SPP_Two,
+                post_proof_partitions: FFIPoStProofPartitions_PPP_One,
+            },
             max_bytes: 1016,
             first_piece_bytes: 100,
             second_piece_bytes: 500,
@@ -148,7 +156,7 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
         &sealed_dir,
         [0; 31],
         123,
-        sizes.store,
+        sizes.sector_class,
     );
 
     // TODO: Replace the hard-coded byte amounts with values computed
@@ -242,7 +250,7 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
         &sealed_dir,
         [0; 31],
         123,
-        sizes.store,
+        sizes.sector_class,
     );
     defer!(destroy_sector_builder(sector_builder_b));
 
@@ -346,7 +354,7 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
         }
 
         let resp = verify_post(
-            &sizes.store,
+            sizes.sector_class.sector_size,
             &sealed_sector_replica_commitment[0],
             32,
             &mut challenge_seed,

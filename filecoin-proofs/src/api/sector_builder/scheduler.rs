@@ -87,8 +87,10 @@ impl Scheduler {
                 })
             };
 
-            let max_user_bytes_per_staged_sector =
-                sector_store.inner.config().max_unsealed_bytes_per_sector();
+            let max_user_bytes_per_staged_sector = sector_store
+                .inner
+                .sector_config()
+                .max_unsealed_bytes_per_sector();
 
             let mut m = SectorMetadataManager {
                 kv_store,
@@ -185,7 +187,7 @@ impl SectorMetadataManager {
         seed.copy_from_slice(challenge_seed);
 
         let output = internal::generate_post(GeneratePoStDynamicSectorsCountInput {
-            sector_bytes: self.sector_store.inner.config().sector_bytes(),
+            post_config: self.sector_store.inner.proofs_config().post_config(),
             challenge_seed: seed,
             input_parts,
         });

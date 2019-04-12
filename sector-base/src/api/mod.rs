@@ -1,5 +1,9 @@
 pub mod bytes_amount;
 pub mod disk_backed_storage;
 pub mod errors;
+pub mod porep_config;
+pub mod post_config;
+pub mod sector_class;
+pub mod sector_size;
 pub mod sector_store;
 pub mod util;
