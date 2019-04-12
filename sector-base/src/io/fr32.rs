@@ -740,7 +740,7 @@ where
     );
 
     target.write_all(last_bits.as_slice())?;
-    // The `into_boxed_slice` conversion will byte-align the bit stream and implicitly
+    // The `as_slice` conversion will byte-align the bit stream and implicitly
     // add the padding bits (that by definition are the bits necessary to reach the byte
     // boundary).
     // TODO: Optimization: Remove the use of this `BitVecLEu8`. (Low priority, it's
