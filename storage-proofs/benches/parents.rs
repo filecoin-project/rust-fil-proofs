@@ -45,8 +45,10 @@ fn pregenerate_graph<H: Hasher>(size: usize) -> ZigZagBucketGraph<H> {
     ZigZagBucketGraph::<H>::new_zigzag(size, 5, 8, seed)
 }
 
-fn parents_loop<H: Hasher, G: Graph<H>>(graph: &G) -> Vec<Vec<usize>> {
-    (0..graph.size()).map(|node| graph.parents(node)).collect()
+fn parents_loop<H: Hasher, G: Graph<H>>(graph: &G, parents: &mut [usize]) {
+    (0..graph.size())
+        .map(|node| graph.parents(node, parents))
+        .collect()
 }
 
 fn parents_loop_benchmark(cc: &mut Criterion) {
@@ -58,19 +60,22 @@ fn parents_loop_benchmark(cc: &mut Criterion) {
             "Blake2s",
             |b, size| {
                 let graph = pregenerate_graph::<Blake2sHasher>(*size);
+                let mut parents = vec![0; graph.degree()];
                 start_profile(&format!("parents-blake2s-{}", *size));
-                b.iter(|| black_box(parents_loop::<Blake2sHasher, _>(&graph)));
+                b.iter(|| black_box(parents_loop::<Blake2sHasher, _>(&graph, &mut parents)));
                 stop_profile();
             },
             sizes,
         )
         .with_function("Pedersen", |b, degree| {
             let graph = pregenerate_graph::<PedersenHasher>(*degree);
-            b.iter(|| black_box(parents_loop::<PedersenHasher, _>(&graph)))
+            let mut parents = vec![0; graph.degree()];
+            b.iter(|| black_box(parents_loop::<PedersenHasher, _>(&graph, &mut parents)))
         })
         .with_function("Sha256", |b, degree| {
             let graph = pregenerate_graph::<Sha256Hasher>(*degree);
-            b.iter(|| black_box(parents_loop::<Sha256Hasher, _>(&graph)))
+            let mut parents = vec![0; graph.degree()];
+            b.iter(|| black_box(parents_loop::<Sha256Hasher, _>(&graph, &mut parents)))
         }),
     );
 }
