@@ -143,12 +143,6 @@ pub struct Config {
     pub post_config: PoStConfig,
 }
 
-#[derive(Debug)]
-pub enum ProofsMode {
-    Live,
-    Test,
-}
-
 pub struct ConcreteSectorStore {
     proofs_config: Box<ProofsConfig>,
     sector_config: Box<SectorConfig>,
