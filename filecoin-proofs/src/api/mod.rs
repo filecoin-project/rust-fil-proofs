@@ -548,7 +548,6 @@ pub enum FFISectorSize {
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub enum FFISealProofPartitions {
-    SPP_One,
     SPP_Two,
 }
 
@@ -570,7 +569,6 @@ impl From<FFISectorSize> for SectorSize {
 impl From<FFISealProofPartitions> for PoRepProofPartitions {
     fn from(x: FFISealProofPartitions) -> Self {
         match x {
-            FFISealProofPartitions::SPP_One => PoRepProofPartitions::One,
             FFISealProofPartitions::SPP_Two => PoRepProofPartitions::Two,
         }
     }

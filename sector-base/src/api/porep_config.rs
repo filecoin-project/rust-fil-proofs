@@ -11,7 +11,6 @@ pub enum PoRepConfig {
 
 #[derive(Clone, Copy, Debug)]
 pub enum PoRepProofPartitions {
-    One,
     Two,
 }
 
@@ -42,7 +41,7 @@ impl From<PoRepConfig> for UnpaddedBytesAmount {
 impl From<PoRepConfig> for PoRepProofPartitions {
     fn from(x: PoRepConfig) -> Self {
         match x {
-            PoRepConfig::Test => PoRepProofPartitions::One,
+            PoRepConfig::Test => PoRepProofPartitions::Two,
             PoRepConfig::Live(_, p) => p,
         }
     }
@@ -51,7 +50,6 @@ impl From<PoRepConfig> for PoRepProofPartitions {
 impl From<PoRepProofPartitions> for usize {
     fn from(x: PoRepProofPartitions) -> Self {
         match x {
-            PoRepProofPartitions::One => 1,
             PoRepProofPartitions::Two => 2,
         }
     }
