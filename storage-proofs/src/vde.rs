@@ -25,6 +25,7 @@ where
     // The only subtlety is that a ZigZag graph may be reversed, so the direction
     // of the traversal must also be.
 
+    let mut parents = vec![0; graph.degree()];
     for n in 0..graph.size() {
         let node = if graph.forward() {
             n
@@ -33,8 +34,7 @@ where
             (graph.size() - n) - 1
         };
 
-        let parents = graph.parents(node);
-        assert_eq!(parents.len(), graph.degree(), "wrong number of parents");
+        graph.parents(node, &mut parents);
 
         let key = create_key::<H>(replica_id, node, &parents, data)?;
         let start = data_at_node_offset(node);
@@ -79,7 +79,8 @@ where
     H: Hasher,
     G: Graph<H>,
 {
-    let parents = graph.parents(v);
+    let mut parents = vec![0; graph.degree()];
+    graph.parents(v, &mut parents);
     let key = create_key::<H>(replica_id, v, &parents, &data)?;
     let node_data = H::Domain::try_from_bytes(&data_at_node(data, v)?)?;
 
