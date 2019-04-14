@@ -13,7 +13,7 @@ use crate::error::ExpectWithBacktrace;
 use crate::error::Result;
 use crate::FCP_LOG;
 use sector_base::api::disk_backed_storage::new_sector_store;
-use sector_base::api::disk_backed_storage::ConfiguredStore;
+use sector_base::api::sector_class::SectorClass;
 use sector_base::api::sector_store::SectorStore;
 
 pub mod errors;
@@ -50,7 +50,7 @@ impl SectorBuilder {
     // it exists. Otherwise, initialize and return a fresh SectorBuilder. The
     // metadata key is equal to the prover_id.
     pub fn init_from_metadata<S: Into<String>>(
-        sector_store_config: &ConfiguredStore,
+        sector_class: SectorClass,
         last_committed_sector_id: SectorId,
         metadata_dir: S,
         prover_id: [u8; 31],
@@ -67,7 +67,7 @@ impl SectorBuilder {
         // SectorStore is safe for concurrent access.
         let sector_store = Arc::new(WrappedSectorStore {
             inner: Box::new(new_sector_store(
-                sector_store_config,
+                sector_class,
                 sealed_sector_dir.into(),
                 staged_sector_dir.into(),
             )),
