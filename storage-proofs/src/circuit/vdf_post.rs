@@ -383,7 +383,7 @@ mod tests {
     use crate::drgraph::{new_seed, BucketGraph, Graph};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::pedersen::*;
-    use crate::proof::ProofScheme;
+    use crate::proof::{NoRequirements, ProofScheme};
     use crate::vdf_post;
     use crate::vdf_sloth;
 
@@ -632,7 +632,7 @@ mod tests {
         //     }
         // }
 
-        let verified = VDFPostCompound::verify(&pub_params, &pub_inputs, &proof)
+        let verified = VDFPostCompound::verify(&pub_params, &pub_inputs, &proof, &NoRequirements)
             .expect("failed while verifying");
 
         assert!(verified);

@@ -10,7 +10,7 @@ use crate::error::{Error, Result};
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetIdentifier;
-use crate::proof::ProofScheme;
+use crate::proof::{NoRequirements, ProofScheme};
 
 #[derive(Debug, Clone)]
 pub struct SetupParams {
@@ -93,6 +93,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for PoRC<'a, H> {
     type PublicInputs = PublicInputs<'a, H::Domain>;
     type PrivateInputs = PrivateInputs<'a, H>;
     type Proof = Proof<H>;
+    type Requirements = NoRequirements;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
         Ok(PublicParams {

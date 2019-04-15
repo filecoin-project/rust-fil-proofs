@@ -13,6 +13,7 @@ pub trait ProofScheme<'a> {
     type PublicInputs: Clone;
     type PrivateInputs;
     type Proof: Clone + Serialize + DeserializeOwned;
+    type Requirements: Default;
 
     /// setup is used to generate public parameters from setup parameters in order to specialize
     /// a ProofScheme to the specific parameters required by a consumer.
@@ -88,4 +89,15 @@ pub trait ProofScheme<'a> {
     fn with_partition(pub_in: Self::PublicInputs, _k: Option<usize>) -> Self::PublicInputs {
         pub_in
     }
+
+    fn satisfies_requirements(
+        _pub_params: &Self::PublicParams,
+        _requirements: &Self::Requirements,
+        _partitions: usize,
+    ) -> bool {
+        true
+    }
 }
+
+#[derive(Default)]
+pub struct NoRequirements;

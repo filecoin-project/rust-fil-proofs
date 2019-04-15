@@ -378,7 +378,7 @@ mod tests {
     use crate::drgraph::new_seed;
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, Hasher, PedersenHasher};
-    use crate::layered_drgporep::{self, LayerChallenges};
+    use crate::layered_drgporep::{self, ChallengeRequirements, LayerChallenges};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
 
@@ -698,8 +698,15 @@ mod tests {
         )
         .expect("failed while proving");
 
-        let verified = ZigZagCompound::verify(&public_params, &public_inputs, &proof)
-            .expect("failed while verifying");
+        let verified = ZigZagCompound::verify(
+            &public_params,
+            &public_inputs,
+            &proof,
+            &ChallengeRequirements {
+                minimum_challenges: 1,
+            },
+        )
+        .expect("failed while verifying");
 
         assert!(verified);
     }

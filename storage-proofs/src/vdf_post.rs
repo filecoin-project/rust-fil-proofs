@@ -16,7 +16,7 @@ use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::merkle::MerkleTree;
 use crate::parameter_cache::ParameterSetIdentifier;
 use crate::porc::{self, PoRC};
-use crate::proof::ProofScheme;
+use crate::proof::{NoRequirements, ProofScheme};
 use crate::vdf::Vdf;
 
 #[derive(Clone, Debug)]
@@ -131,6 +131,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for VDFPoSt<H, V> {
     type PublicInputs = PublicInputs<H::Domain>;
     type PrivateInputs = PrivateInputs<'a, H>;
     type Proof = Proof<'a, H, V>;
+    type Requirements = NoRequirements;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
         // Sector sizes which are powers of two have the form 100000 (i.e. leading one and all zeroes after).
