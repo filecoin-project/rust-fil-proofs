@@ -1,9 +1,5 @@
 #[macro_use]
 extern crate criterion;
-extern crate rand;
-extern crate sector_base;
-extern crate storage_proofs;
-extern crate tempfile;
 
 use criterion::{Criterion, ParameterizedBenchmark, Throughput};
 use rand::{thread_rng, Rng};

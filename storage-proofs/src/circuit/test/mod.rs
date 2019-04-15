@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::fmt::Write;
 
 use bellman::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
-use blake2::{Blake2s, Digest};
+use blake2s_simd::State as Blake2s;
 use byteorder::{BigEndian, ByteOrder};
 use ff::{Field, PrimeField, PrimeFieldRepr};
 use pairing::Engine;
@@ -88,7 +88,7 @@ fn hash_lc<E: Engine>(terms: &[(Variable, E::Fr)], h: &mut Blake2s) {
 
     let mut buf = [0u8; 9 + 32];
     BigEndian::write_u64(&mut buf[0..8], map.len() as u64);
-    h.input(&buf[0..8]);
+    h.update(&buf[0..8]);
 
     for (var, coeff) in map {
         match var.0.get_unchecked() {
@@ -104,7 +104,7 @@ fn hash_lc<E: Engine>(terms: &[(Variable, E::Fr)], h: &mut Blake2s) {
 
         coeff.into_repr().write_be(&mut buf[9..]).unwrap();
 
-        h.input(&buf[..]);
+        h.update(&buf[..]);
     }
 }
 
@@ -252,7 +252,7 @@ impl<E: Engine> TestConstraintSystem<E> {
             BigEndian::write_u64(&mut buf[0..8], self.inputs.len() as u64);
             BigEndian::write_u64(&mut buf[8..16], self.aux.len() as u64);
             BigEndian::write_u64(&mut buf[16..24], self.constraints.len() as u64);
-            h.input(&buf);
+            h.update(&buf);
         }
 
         for constraint in &self.constraints {
@@ -262,7 +262,7 @@ impl<E: Engine> TestConstraintSystem<E> {
         }
 
         let mut s = String::new();
-        for b in h.result().as_ref() {
+        for b in h.finalize().as_ref() {
             s += &format!("{:02x}", b);
         }
 
