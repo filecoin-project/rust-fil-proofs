@@ -9,19 +9,12 @@ const FATAL_NOCREATE: &str = "[KeyValueStore#put] could not create path";
 
 // FileSystemKvs is a file system-backed key/value store, mostly lifted from
 // sile/ekvsb
+#[derive(Debug)]
 pub struct FileSystemKvs {
     root_dir: PathBuf,
 }
 
 impl FileSystemKvs {
-    pub fn initialize<P: AsRef<Path>>(root_dir: P) -> Result<Self> {
-        fs::create_dir_all(&root_dir)?;
-
-        Ok(FileSystemKvs {
-            root_dir: root_dir.as_ref().to_path_buf(),
-        })
-    }
-
     fn key_to_path(&self, key: &[u8]) -> PathBuf {
         let mut hasher = Blake2b::new();
         hasher.update(key);
@@ -32,6 +25,14 @@ impl FileSystemKvs {
 }
 
 impl KeyValueStore for FileSystemKvs {
+    fn initialize<P: AsRef<Path>>(root_dir: P) -> Result<Self> {
+        fs::create_dir_all(&root_dir)?;
+
+        Ok(FileSystemKvs {
+            root_dir: root_dir.as_ref().to_path_buf(),
+        })
+    }
+
     fn put(&self, key: &[u8], value: &[u8]) -> Result<()> {
         let path = self.key_to_path(key);
 

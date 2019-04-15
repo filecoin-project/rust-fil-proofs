@@ -8,6 +8,7 @@ use crate::api::sector_builder::helpers::get_sectors_ready_for_sealing::get_sect
 use crate::api::sector_builder::helpers::snapshots::load_snapshot;
 use crate::api::sector_builder::helpers::snapshots::make_snapshot;
 use crate::api::sector_builder::helpers::snapshots::persist_snapshot;
+use crate::api::sector_builder::kv_store::KeyValueStore;
 use crate::api::sector_builder::metadata::SealStatus;
 use crate::api::sector_builder::metadata::SealedSectorMetadata;
 use crate::api::sector_builder::metadata::StagedSectorMetadata;
@@ -15,8 +16,7 @@ use crate::api::sector_builder::sealer::SealerInput;
 use crate::api::sector_builder::state::SectorBuilderState;
 use crate::api::sector_builder::state::StagedState;
 use crate::api::sector_builder::SectorId;
-use crate::api::sector_builder::WrappedKeyValueStore;
-use crate::api::sector_builder::WrappedSectorStore;
+use crate::api::sector_builder::{WrappedKeyValueStore, WrappedSectorStore};
 use crate::error::ExpectWithBacktrace;
 use crate::error::Result;
 use sector_base::api::bytes_amount::UnpaddedBytesAmount;
@@ -58,11 +58,11 @@ pub enum Request {
 
 impl Scheduler {
     #[allow(clippy::too_many_arguments)]
-    pub fn start_with_metadata(
+    pub fn start_with_metadata<T: 'static + KeyValueStore>(
         scheduler_input_rx: mpsc::Receiver<Request>,
         scheduler_input_tx: mpsc::SyncSender<Request>,
         sealer_input_tx: mpsc::Sender<SealerInput>,
-        kv_store: Arc<WrappedKeyValueStore>,
+        kv_store: Arc<WrappedKeyValueStore<T>>,
         sector_store: Arc<WrappedSectorStore>,
         last_committed_sector_id: SectorId,
         max_num_staged_sectors: u8,
@@ -144,8 +144,8 @@ impl Scheduler {
 // It dispatches expensive operations (e.g. unseal and seal) to the sealer
 // worker-threads. Other, inexpensive work (or work which needs to be performed
 // serially) is handled by the SectorBuilderStateManager itself.
-pub struct SectorMetadataManager {
-    kv_store: Arc<WrappedKeyValueStore>,
+pub struct SectorMetadataManager<T: KeyValueStore> {
+    kv_store: Arc<WrappedKeyValueStore<T>>,
     sector_store: Arc<WrappedSectorStore>,
     state: SectorBuilderState,
     sealer_input_tx: mpsc::Sender<SealerInput>,
@@ -154,7 +154,7 @@ pub struct SectorMetadataManager {
     max_user_bytes_per_staged_sector: UnpaddedBytesAmount,
 }
 
-impl SectorMetadataManager {
+impl<T: KeyValueStore> SectorMetadataManager<T> {
     pub fn generate_post(
         &self,
         comm_rs: &[[u8; 32]],
