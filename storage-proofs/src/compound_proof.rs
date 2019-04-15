@@ -1,11 +1,11 @@
 use rayon::prelude::*;
 
 use crate::circuit::multi_proof::MultiProof;
-use crate::config::must_get_num_proving_threads;
 use crate::error::Result;
 use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use crate::partitions;
 use crate::proof::ProofScheme;
+use crate::settings;
 use bellman::{groth16, Circuit};
 use rand::OsRng;
 use sapling_crypto::jubjub::JubjubEngine;
@@ -92,7 +92,7 @@ where
 
         // Use a custom pool for this, so we can control the number of threads being used.
         let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(must_get_num_proving_threads())
+            .num_threads(settings::SETTINGS.lock().unwrap().num_proving_threads)
             .build()
             .expect("failed to build thread pool");
 
