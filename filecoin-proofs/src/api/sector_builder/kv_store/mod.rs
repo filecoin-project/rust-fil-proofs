@@ -1,8 +1,15 @@
+use std::path::Path;
+
 use crate::error::Result;
 
 pub mod fs;
+pub mod rocks;
 
-pub trait KeyValueStore {
+pub use self::fs::FileSystemKvs;
+pub use self::rocks::RocksKvs;
+
+pub trait KeyValueStore: Sized + std::fmt::Debug {
+    fn initialize<P: AsRef<Path>>(root_dir: P) -> Result<Self>;
     fn put(&self, key: &[u8], value: &[u8]) -> Result<()>;
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>>;
 }
@@ -15,7 +22,7 @@ mod tests {
     #[test]
     fn test_alpha() {
         let metadata_dir = tempfile::tempdir().unwrap();
-
+        println!("dir: {:?}", metadata_dir);
         let db = FileSystemKvs::initialize(metadata_dir).unwrap();
 
         let k_a = b"key-xx";

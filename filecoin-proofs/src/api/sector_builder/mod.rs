@@ -3,8 +3,7 @@ use std::sync::{mpsc, Arc, Mutex};
 
 use crate::api::post_adapter::*;
 use crate::api::sector_builder::errors::SectorBuilderErr;
-use crate::api::sector_builder::kv_store::fs::FileSystemKvs;
-use crate::api::sector_builder::kv_store::KeyValueStore;
+use crate::api::sector_builder::kv_store::{KeyValueStore, RocksKvs};
 use crate::api::sector_builder::metadata::*;
 use crate::api::sector_builder::scheduler::Request;
 use crate::api::sector_builder::scheduler::Scheduler;
@@ -59,7 +58,7 @@ impl SectorBuilder {
         max_num_staged_sectors: u8,
     ) -> Result<SectorBuilder> {
         let kv_store = Arc::new(WrappedKeyValueStore {
-            inner: Box::new(FileSystemKvs::initialize(metadata_dir.into())?),
+            inner: Box::new(RocksKvs::initialize(metadata_dir.into())?),
         });
 
         // Initialize a SectorStore and wrap it in an Arc so we can access it
@@ -216,12 +215,12 @@ pub struct WrappedSectorStore {
 unsafe impl Sync for WrappedSectorStore {}
 unsafe impl Send for WrappedSectorStore {}
 
-pub struct WrappedKeyValueStore {
-    inner: Box<KeyValueStore>,
+pub struct WrappedKeyValueStore<T: KeyValueStore> {
+    inner: Box<T>,
 }
 
-unsafe impl Sync for WrappedKeyValueStore {}
-unsafe impl Send for WrappedKeyValueStore {}
+unsafe impl<T: KeyValueStore> Sync for WrappedKeyValueStore<T> {}
+unsafe impl<T: KeyValueStore> Send for WrappedKeyValueStore<T> {}
 
 fn log_unrecov<T>(result: Result<T>) -> Result<T> {
     if let Err(err) = &result {
