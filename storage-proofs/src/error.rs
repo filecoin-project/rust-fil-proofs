@@ -7,6 +7,10 @@ pub type Result<T> = ::std::result::Result<T, Error>;
 pub enum Error {
     #[fail(display = "Bytes could not be converted to Fr")]
     BadFrBytes,
+    #[fail(
+        display = "Could not create PieceInclusionProof (probably bad piece commitment: comm_p)"
+    )]
+    BadPieceCommitment,
     #[fail(display = "Out of bounds access {} > {}", _0, _1)]
     OutOfBounds(usize, usize),
     #[fail(
@@ -14,8 +18,6 @@ pub enum Error {
         _0, _1, _2
     )]
     InvalidMerkleTreeArgs(usize, usize, usize),
-    #[fail(display = "invalid node size ({}), must be 16, 32 or 64", _0)]
-    InvalidNodeSize(usize),
     #[fail(display = "{}", _0)]
     Synthesis(#[cause] SynthesisError),
     #[fail(display = "{}", _0)]
@@ -24,10 +26,14 @@ pub enum Error {
     InvalidCommitment,
     #[fail(display = "malformed input")]
     MalformedInput,
+    #[fail(display = "malformed merkle tree")]
+    MalformedMerkleTree,
     #[fail(display = "invalid input size")]
     InvalidInputSize,
     #[fail(display = "merkle tree generation error: {}", _0)]
     MerkleTreeGenerationError(String),
+    #[fail(display = "Cannot (yet) generate inclusion proof for unaligned piece.")]
+    UnalignedPiece,
 }
 
 impl From<SynthesisError> for Error {

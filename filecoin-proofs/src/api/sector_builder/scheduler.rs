@@ -8,6 +8,7 @@ use crate::api::sector_builder::helpers::get_sectors_ready_for_sealing::get_sect
 use crate::api::sector_builder::helpers::snapshots::load_snapshot;
 use crate::api::sector_builder::helpers::snapshots::make_snapshot;
 use crate::api::sector_builder::helpers::snapshots::persist_snapshot;
+use crate::api::sector_builder::kv_store::KeyValueStore;
 use crate::api::sector_builder::metadata::SealStatus;
 use crate::api::sector_builder::metadata::SealedSectorMetadata;
 use crate::api::sector_builder::metadata::StagedSectorMetadata;
@@ -15,8 +16,7 @@ use crate::api::sector_builder::sealer::SealerInput;
 use crate::api::sector_builder::state::SectorBuilderState;
 use crate::api::sector_builder::state::StagedState;
 use crate::api::sector_builder::SectorId;
-use crate::api::sector_builder::WrappedKeyValueStore;
-use crate::api::sector_builder::WrappedSectorStore;
+use crate::api::sector_builder::{WrappedKeyValueStore, WrappedSectorStore};
 use crate::error::ExpectWithBacktrace;
 use crate::error::Result;
 use sector_base::api::bytes_amount::UnpaddedBytesAmount;
@@ -41,7 +41,7 @@ pub struct Scheduler {
 
 #[derive(Debug)]
 pub enum Request {
-    AddPiece(String, Vec<u8>, mpsc::SyncSender<Result<SectorId>>),
+    AddPiece(String, u64, String, mpsc::SyncSender<Result<SectorId>>),
     GetSealedSectors(mpsc::SyncSender<Result<Vec<SealedSectorMetadata>>>),
     GetStagedSectors(mpsc::SyncSender<Result<Vec<StagedSectorMetadata>>>),
     GetSealStatus(SectorId, mpsc::SyncSender<Result<SealStatus>>),
@@ -52,18 +52,17 @@ pub enum Request {
     ),
     RetrievePiece(String, mpsc::SyncSender<Result<Vec<u8>>>),
     SealAllStagedSectors(mpsc::SyncSender<Result<()>>),
-    GetMaxUserBytesPerStagedSector(mpsc::SyncSender<UnpaddedBytesAmount>),
     HandleSealResult(SectorId, Box<Result<SealedSectorMetadata>>),
     Shutdown,
 }
 
 impl Scheduler {
     #[allow(clippy::too_many_arguments)]
-    pub fn start_with_metadata(
+    pub fn start_with_metadata<T: 'static + KeyValueStore>(
         scheduler_input_rx: mpsc::Receiver<Request>,
         scheduler_input_tx: mpsc::SyncSender<Request>,
         sealer_input_tx: mpsc::Sender<SealerInput>,
-        kv_store: Arc<WrappedKeyValueStore>,
+        kv_store: Arc<WrappedKeyValueStore<T>>,
         sector_store: Arc<WrappedSectorStore>,
         last_committed_sector_id: SectorId,
         max_num_staged_sectors: u8,
@@ -88,8 +87,10 @@ impl Scheduler {
                 })
             };
 
-            let max_user_bytes_per_staged_sector =
-                sector_store.inner.config().max_unsealed_bytes_per_sector();
+            let max_user_bytes_per_staged_sector = sector_store
+                .inner
+                .sector_config()
+                .max_unsealed_bytes_per_sector();
 
             let mut m = SectorMetadataManager {
                 kv_store,
@@ -106,8 +107,8 @@ impl Scheduler {
 
                 // Dispatch to the appropriate task-handler.
                 match task {
-                    Request::AddPiece(key, bytes, tx) => {
-                        tx.send(m.add_piece(key, &bytes)).expects(FATAL_NOSEND);
+                    Request::AddPiece(key, amt, path, tx) => {
+                        tx.send(m.add_piece(key, amt, path)).expects(FATAL_NOSEND);
                     }
                     Request::GetSealStatus(sector_id, tx) => {
                         tx.send(m.get_seal_status(sector_id)).expects(FATAL_NOSEND);
@@ -118,9 +119,6 @@ impl Scheduler {
                     }
                     Request::GetStagedSectors(tx) => {
                         tx.send(m.get_staged_sectors()).expect(FATAL_NOSEND);
-                    }
-                    Request::GetMaxUserBytesPerStagedSector(tx) => {
-                        tx.send(m.max_user_bytes()).expects(FATAL_NOSEND);
                     }
                     Request::SealAllStagedSectors(tx) => {
                         tx.send(m.seal_all_staged_sectors()).expects(FATAL_NOSEND);
@@ -146,8 +144,8 @@ impl Scheduler {
 // It dispatches expensive operations (e.g. unseal and seal) to the sealer
 // worker-threads. Other, inexpensive work (or work which needs to be performed
 // serially) is handled by the SectorBuilderStateManager itself.
-pub struct SectorMetadataManager {
-    kv_store: Arc<WrappedKeyValueStore>,
+pub struct SectorMetadataManager<T: KeyValueStore> {
+    kv_store: Arc<WrappedKeyValueStore<T>>,
     sector_store: Arc<WrappedSectorStore>,
     state: SectorBuilderState,
     sealer_input_tx: mpsc::Sender<SealerInput>,
@@ -156,7 +154,7 @@ pub struct SectorMetadataManager {
     max_user_bytes_per_staged_sector: UnpaddedBytesAmount,
 }
 
-impl SectorMetadataManager {
+impl<T: KeyValueStore> SectorMetadataManager<T> {
     pub fn generate_post(
         &self,
         comm_rs: &[[u8; 32]],
@@ -189,7 +187,7 @@ impl SectorMetadataManager {
         seed.copy_from_slice(challenge_seed);
 
         let output = internal::generate_post(GeneratePoStDynamicSectorsCountInput {
-            sector_bytes: self.sector_store.inner.config().sector_bytes(),
+            post_config: self.sector_store.inner.proofs_config().post_config(),
             challenge_seed: seed,
             input_parts,
         });
@@ -236,12 +234,18 @@ impl SectorMetadataManager {
 
     // Write the piece to storage, obtaining the sector id with which the
     // piece-bytes are now associated.
-    pub fn add_piece(&mut self, piece_key: String, piece_bytes: &[u8]) -> Result<u64> {
+    pub fn add_piece(
+        &mut self,
+        piece_key: String,
+        piece_bytes_amount: u64,
+        piece_path: String,
+    ) -> Result<u64> {
         let destination_sector_id = add_piece(
             &self.sector_store,
             &mut self.state.staged,
             piece_key,
-            piece_bytes,
+            piece_bytes_amount,
+            piece_path,
         )?;
 
         self.check_and_schedule(false)?;
@@ -266,12 +270,6 @@ impl SectorMetadataManager {
     // SectorBuilder knows about.
     pub fn get_staged_sectors(&self) -> Result<Vec<StagedSectorMetadata>> {
         Ok(self.state.staged.sectors.values().cloned().collect())
-    }
-
-    // Returns the number of user-provided bytes that will fit into a staged
-    // sector.
-    pub fn max_user_bytes(&self) -> UnpaddedBytesAmount {
-        self.max_user_bytes_per_staged_sector
     }
 
     // Update metadata to reflect the sealing results.

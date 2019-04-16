@@ -29,7 +29,7 @@ pub fn seal(
         comm_r_star,
         snark_proof,
     } = seal_internal(
-        (*sector_store.inner).config(),
+        (*sector_store.inner).proofs_config().porep_config(),
         &PathBuf::from(staged_sector.sector_access.clone()),
         &PathBuf::from(sealed_sector_access.clone()),
         prover_id,

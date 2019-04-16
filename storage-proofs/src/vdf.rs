@@ -3,7 +3,7 @@ use crate::hasher::Domain;
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 
-/// Generic trait to represent any Verfiable Delay Function (VDF).
+/// Generic trait to represent any Verifiable Delay Function (VDF).
 pub trait Vdf<T: Domain>: Clone + ::std::fmt::Debug {
     type SetupParams: Clone + ::std::fmt::Debug;
     type PublicParams: Clone + ::std::fmt::Debug;

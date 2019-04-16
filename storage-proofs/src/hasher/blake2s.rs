@@ -4,9 +4,10 @@ use std::hash::Hasher as StdHasher;
 use bellman::{ConstraintSystem, SynthesisError};
 use blake2s_simd::{Hash as Blake2sHash, Params as Blake2s, State};
 use byteorder::{LittleEndian, WriteBytesExt};
+use ff::{PrimeField, PrimeFieldRepr};
 use merkle_light::hash::{Algorithm, Hashable};
+use merkle_light::merkle::Element;
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
-use pairing::{PrimeField, PrimeFieldRepr};
 use rand::{Rand, Rng};
 use sapling_crypto::circuit::{blake2s as blake2s_circuit, boolean, multipack, num};
 use sapling_crypto::jubjub::JubjubEngine;
@@ -131,6 +132,19 @@ impl From<FrRepr> for Blake2sDomain {
         val.write_le(&mut res.0[0..32]).unwrap();
 
         res
+    }
+}
+
+impl Element for Blake2sDomain {
+    fn byte_len() -> usize {
+        32
+    }
+
+    fn from_slice(bytes: &[u8]) -> Self {
+        match Blake2sDomain::try_from_bytes(bytes) {
+            Ok(res) => res,
+            Err(err) => panic!(err),
+        }
     }
 }
 

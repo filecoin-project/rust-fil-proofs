@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
-use crate::config::get_config;
 use crate::crypto::feistel::{self, FeistelPrecomputed};
 use crate::drgraph::{BucketGraph, Graph};
 use crate::hasher::Hasher;
 use crate::layered_drgporep::Layerable;
 use crate::parameter_cache::ParameterSetIdentifier;
+use crate::settings;
 use crate::SP_LOG;
 
 pub const DEFAULT_EXPANSION_DEGREE: usize = 8;
@@ -71,18 +71,11 @@ where
         expansion_degree: usize,
         seed: [u32; 7],
     ) -> Self {
-        let cache_entries = match get_config("MAXIMIZE_CACHING") {
-            Result::Ok(config) => {
-                if config {
-                    info!(SP_LOG, "using parents cache of unlimited size",);
-                    nodes
-                } else {
-                    0
-                }
-            }
-            Result::Err(_) => 0,
-            // If we can't find the `MAXIMIZE_CACHING` assume the conservative
-            // option of no cache.
+        let cache_entries = if settings::SETTINGS.lock().unwrap().maximize_caching {
+            info!(SP_LOG, "using parents cache of unlimited size",);
+            nodes
+        } else {
+            0
         };
 
         ZigZagGraph {

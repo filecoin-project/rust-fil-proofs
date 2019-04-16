@@ -567,7 +567,7 @@ pub fn extract_bits_and_shift(
     pos: usize,
     num_bits: usize,
     new_offset: usize,
-) -> (Vec<u8>) {
+) -> Vec<u8> {
     debug_assert!(input.len() * 8 >= pos + num_bits);
     debug_assert!(new_offset <= 7);
 
@@ -635,20 +635,26 @@ pub fn clear_right_bits(byte: &mut u8, offset: usize) {
     *(byte) &= !((1 << offset) - 1)
 }
 
-pub fn write_padded<W: ?Sized>(source: &[u8], target: &mut W) -> io::Result<usize>
-where
-    W: Read + Write + Seek,
-{
-    // In order to optimize alignment in the common case of writing from an aligned start,
-    // we should make the chunk a multiple of 127 (4 full elements, see `PaddingMap#alignment`).
-    // n was hand-tuned to do reasonably well in the benchmarks.
-    let n = 1000;
-    let chunk_size = 127 * n;
+// In order to optimize alignment in the common case of writing from an aligned
+// start, we should make the chunk a multiple of 127 (4 full elements, see
+// `PaddingMap#alignment`). N was hand-tuned to do reasonably well in the
+// benchmarks.
+const N: usize = 1000;
+const CHUNK_SIZE: usize = 127 * N;
 
+pub fn write_padded<R, W>(source: &mut R, target: &mut W) -> io::Result<usize>
+where
+    R: Read + ?Sized,
+    W: Read + Write + Seek + ?Sized,
+{
+    let mut buffer = [0; CHUNK_SIZE];
     let mut written = 0;
 
-    for chunk in source.chunks(chunk_size) {
-        written += write_padded_aux(&FR32_PADDING_MAP, chunk, target)?;
+    while let Ok(bytes_read) = source.read(&mut buffer) {
+        if bytes_read == 0 {
+            break;
+        }
+        written += write_padded_aux(&FR32_PADDING_MAP, &buffer[..bytes_read], target)?;
     }
 
     Ok(written)
@@ -733,8 +739,8 @@ where
             .take(data_bits_to_write),
     );
 
-    target.write_all(&last_bits.into_boxed_slice())?;
-    // The `into_boxed_slice` conversion will byte-align the bit stream and implicitly
+    target.write_all(last_bits.as_slice())?;
+    // The `as_slice` conversion will byte-align the bit stream and implicitly
     // add the padding bits (that by definition are the bits necessary to reach the byte
     // boundary).
     // TODO: Optimization: Remove the use of this `BitVecLEu8`. (Low priority, it's
@@ -1028,8 +1034,8 @@ mod tests {
             let shifted_bv: BitVecLEu8 = bv >> new_offset;
 
             assert_eq!(
-                shifted_bv.into_boxed_slice(),
-                extract_bits_and_shift(&data, pos, num_bits, new_offset).into_boxed_slice()
+                shifted_bv.as_slice(),
+                &extract_bits_and_shift(&data, pos, num_bits, new_offset)[..],
             );
         }
     }
@@ -1055,7 +1061,7 @@ mod tests {
                 }
                 // We use the opposite shift notation (see `shift_bits`).
 
-                assert_eq!(bv.into_boxed_slice(), shifted_bits.into_boxed_slice());
+                assert_eq!(bv.as_slice(), shifted_bits.as_slice());
             }
         }
     }
@@ -1086,16 +1092,16 @@ mod tests {
             }
         }
 
-        padded_data.into_boxed_slice()
+        padded_data.into()
     }
 
     // `write_padded` for 151 bytes of 1s, check padding.
     #[test]
     fn test_write_padded() {
-        let data = vec![255u8; 151];
+        let mut data: Vec<u8> = vec![255u8; 151];
         let buf = Vec::new();
         let mut cursor = Cursor::new(buf);
-        let written = write_padded(&data, &mut cursor).unwrap();
+        let written = write_padded(&mut data[..].as_ref(), &mut cursor).unwrap();
         let padded = cursor.into_inner();
         assert_eq!(written, 151);
         assert_eq!(
@@ -1115,11 +1121,11 @@ mod tests {
     // aligning the calls with the padded element boundaries, check padding.
     #[test]
     fn test_write_padded_multiple_aligned() {
-        let data = vec![255u8; 254];
+        let mut data = vec![255u8; 254];
         let buf = Vec::new();
         let mut cursor = Cursor::new(buf);
-        let mut written = write_padded(&data[0..127], &mut cursor).unwrap();
-        written += write_padded(&data[127..], &mut cursor).unwrap();
+        let mut written = write_padded(&mut data[0..127].as_ref(), &mut cursor).unwrap();
+        written += write_padded(&mut data[127..].as_ref(), &mut cursor).unwrap();
         let padded = cursor.into_inner();
 
         assert_eq!(written, 254);
@@ -1138,11 +1144,11 @@ mod tests {
     // aligning the calls with the padded element boundaries, check padding.
     #[test]
     fn test_write_padded_multiple_first_aligned() {
-        let data = vec![255u8; 265];
+        let mut data = vec![255u8; 265];
         let buf = Vec::new();
         let mut cursor = Cursor::new(buf);
-        let mut written = write_padded(&data[0..127], &mut cursor).unwrap();
-        written += write_padded(&data[127..], &mut cursor).unwrap();
+        let mut written = write_padded(&mut data[0..127].as_ref(), &mut cursor).unwrap();
+        written += write_padded(&mut data[127..].as_ref(), &mut cursor).unwrap();
         let padded = cursor.into_inner();
 
         assert_eq!(written, 265);
@@ -1175,11 +1181,11 @@ mod tests {
         // Use 127 for this test because it unpads to 128 – a multiple of 32.
         // Otherwise the last chunk will be too short and cannot be converted to Fr.
         for i in 1..126 {
-            let data = vec![255u8; 127];
+            let mut data = vec![255u8; 127];
             let buf = Vec::new();
             let mut cursor = Cursor::new(buf);
-            let mut written = write_padded(&data[0..i], &mut cursor).unwrap();
-            written += write_padded(&data[i..], &mut cursor).unwrap();
+            let mut written = write_padded(&mut data[0..i].as_ref(), &mut cursor).unwrap();
+            written += write_padded(&mut data[i..].as_ref(), &mut cursor).unwrap();
             let padded = cursor.into_inner();
             validate_fr32(&padded);
             assert_eq!(written, 127);
@@ -1217,7 +1223,7 @@ mod tests {
 
         let buf = Vec::new();
         let mut cursor = Cursor::new(buf);
-        write_padded(&source, &mut cursor).unwrap();
+        write_padded(&mut source[..].as_ref(), &mut cursor).unwrap();
         let buf = cursor.into_inner();
 
         for i in 0..31 {
@@ -1243,10 +1249,10 @@ mod tests {
     #[test]
     fn test_read_write_padded() {
         let len = 1016; // Use a multiple of 254.
-        let data = vec![255u8; len];
+        let mut data = vec![255u8; len];
         let buf = Vec::new();
         let mut cursor = Cursor::new(buf);
-        let padded_written = write_padded(&data, &mut cursor).unwrap();
+        let padded_written = write_padded(&mut data[..].as_ref(), &mut cursor).unwrap();
         let padded = cursor.into_inner();
 
         assert_eq!(padded_written, len);
@@ -1269,10 +1275,10 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let len = 1016;
-        let data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
+        let mut data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
         let buf = Vec::new();
         let mut cursor = Cursor::new(buf);
-        write_padded(&data, &mut cursor).unwrap();
+        write_padded(&mut data[..].as_ref(), &mut cursor).unwrap();
         let padded = cursor.into_inner();
 
         {

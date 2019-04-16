@@ -4,11 +4,19 @@ use std::marker::PhantomData;
 
 // Reexport here, so we don't depend on merkle_light directly in other places.
 use merkle_light::hash::Algorithm;
-pub use merkle_light::merkle::MerkleTree;
+use merkle_light::merkle;
+use merkle_light::merkle::MmapStore;
+use merkle_light::merkle::VecStore;
 use merkle_light::proof;
 use pairing::bls12_381::Fr;
 
 use crate::hasher::{Domain, Hasher};
+
+// `mmap`ed `MerkleTree` (replacing the previously `Vec`-backed
+// `MerkleTree`, now encapsulated in `merkle::VecStore` and exposed
+// as `VecMerkleTree`).
+pub type MerkleTree<T, A> = merkle::MerkleTree<T, A, MmapStore<T>>;
+pub type VecMerkleTree<T, A> = merkle::MerkleTree<T, A, VecStore<T>>;
 
 /// Representation of a merkle proof.
 /// Each element in the `path` vector consists of a tuple `(hash, is_right)`, with `hash` being the the hash of the node at the current level and `is_right` a boolean indicating if the path is taking the right path.

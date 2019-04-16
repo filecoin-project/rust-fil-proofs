@@ -8,26 +8,23 @@ edition = "2018"
 
 [dependencies]
 logging-toolkit = { path = "../logging-toolkit" }
-bitvec = "0.5"
-sapling-crypto = { git = "https://github.com/zcash-hackworks/sapling-crypto", branch = "master" }
+bitvec = "0.10"
 rand = "0.4"
 libc = "0.2"
-merkle_light = { git = "https://github.com/filecoin-project/merkle_light", rev = "63a609decf3cc552b0aa79477b828f4a493f725d" }
+merkle_light = { git = "https://github.com/filecoin-project/merkle_light", branch = "master" }
 failure = "0.1"
-bellman = "0.1"
 byteorder = "1"
 crossbeam-utils = "0.6"
-itertools = "0.7.3"
+itertools = "0.8"
 lazy_static = "1.2"
-memmap = "0.6"
+memmap = "0.7"
 num-bigint = "0.2"
 num-traits = "0.2"
 clap = "2"
 colored = "1.6"
-aes = "0.1"
-block-modes = "0.1"
+aes = "0.3"
+block-modes = "0.3"
 sha2 = "0.8"
-blake2 = "0.8"
 pbr = "1.0"
 tempfile = "3"
 fs2 = "0.4"
@@ -37,17 +34,31 @@ serde = { version = "1.0", features = ["derive"]}
 base64 = "0.10.0"
 blake2b_simd = "0.4.1"
 blake2s_simd = { git = "https://github.com/oconnor663/blake2s_simd", branch = "master"}
-toml = "0.4"
+toml = "0.5"
+ff = "0.4.0"
+
+[dependencies.config]
+version = "0.9.2"
+# switch back to crates.io version, once the PR is merged
+git = "https://github.com/tyranron/config-rs"
+branch = "60-fix-defaults"
+
+[dependencies.sapling-crypto]
+git = "https://github.com/filecoin-project/sapling-crypto"
+branch = "master"
+
+[dependencies.bellman]
+git = "https://github.com/filecoin-project/bellman"
+branch = "master"
 
 [dependencies.pairing]
-version = "0.14.2"
-features = ["expose-arith"]
+git = "https://github.com/filecoin-project/pairing"
+branch = "master"
 
 [features]
-default = ["u128-support"]
-u128-support = ["pairing/u128-support"]
-simd = ["blake2/simd_opt"]
-asm = ["sha2/sha2-asm", "blake2/simd_asm"]
+default = []
+simd = []
+asm = ["sha2/sha2-asm"]
 
 [dev-dependencies]
 proptest = "0.7"
@@ -78,4 +89,8 @@ harness = false
 
 [[bench]]
 name = "sloth"
+harness = false
+
+[[bench]]
+name = "encode"
 harness = false

@@ -1,9 +1,9 @@
 use crate::error::*;
 
 use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
-
+use ff::{PrimeField, PrimeFieldRepr, ScalarEngine};
 use pairing::bls12_381::FrRepr;
-use pairing::{Engine, PrimeField, PrimeFieldRepr};
+use pairing::Engine;
 
 // Contains 32 bytes whose little-endian value represents an Fr.
 // Invariants:
@@ -29,7 +29,7 @@ pub fn bytes_into_fr<E: Engine>(bytes: &[u8]) -> Result<E::Fr> {
     if bytes.len() != 32 {
         return Err(Error::BadFrBytes);
     }
-    let mut fr_repr = <<<E as Engine>::Fr as PrimeField>::Repr as Default>::default();
+    let mut fr_repr = <<<E as ScalarEngine>::Fr as PrimeField>::Repr as Default>::default();
     fr_repr.read_le(bytes).map_err(|_| Error::BadFrBytes)?;
 
     E::Fr::from_repr(fr_repr).map_err(|_| Error::BadFrBytes)

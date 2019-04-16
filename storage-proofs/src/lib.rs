@@ -14,7 +14,6 @@ extern crate bellman;
 extern crate bitvec;
 #[cfg(not(test))]
 extern crate bitvec;
-extern crate blake2;
 extern crate block_modes;
 extern crate byteorder;
 extern crate crossbeam_utils;
@@ -42,6 +41,7 @@ extern crate rayon;
 extern crate slog;
 #[macro_use]
 extern crate serde;
+extern crate config;
 extern crate toml;
 
 #[cfg(test)]
@@ -58,7 +58,6 @@ pub mod beacon_post;
 pub mod challenge_derivation;
 pub mod circuit;
 pub mod compound_proof;
-pub mod config;
 pub mod crypto;
 pub mod drgporep;
 pub mod drgraph;
@@ -74,6 +73,7 @@ pub mod piece_inclusion_proof;
 pub mod porc;
 pub mod porep;
 pub mod proof;
+pub mod settings;
 pub mod util;
 pub mod vdf;
 pub mod vdf_post;

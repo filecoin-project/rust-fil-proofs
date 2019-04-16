@@ -14,44 +14,60 @@ sector-base = { path = "../sector-base" }
 storage-proofs = { path = "../storage-proofs" }
 ffi-toolkit = { path = "../ffi-toolkit" }
 logging-toolkit = { path = "../logging-toolkit" }
-bitvec = "0.5"
+bitvec = "0.10"
 chrono = "0.4"
-phase2 = "0.2.2"
-sapling-crypto = { git = "https://github.com/zcash-hackworks/sapling-crypto", branch = "master" }
 rand = "0.4"
 libc = "0.2"
 failure = "0.1"
-bellman = "0.1"
 lazy_static = "1.2"
-memmap = "0.6"
+memmap = "0.7"
 clap = "2"
 colored = "1.6"
 pbr = "1.0"
 tempfile = "3"
 byteorder = "1"
-itertools = "0.7.3"
+itertools = "0.8"
 serde_cbor = "0.9.0"
 serde = { version = "1", features = ["rc", "derive"] }
 serde_json = "1.0"
-blake2 = "0.8"
 slog = { version = "2.4.1", features = ["max_level_trace", "release_max_level_trace"] }
 regex = "1"
 drop_struct_macro_derive = { path = "../drop-struct-macro-derive" }
+ff = "0.4.0"
+blake2b_simd = "0.4.1"
+
+[dependencies.sapling-crypto]
+git = "https://github.com/filecoin-project/sapling-crypto"
+branch = "master"
+
+[dependencies.phase2]
+git = "https://github.com/filecoin-project/phase2"
+branch = "master"
+
+[dependencies.bellman]
+git = "https://github.com/filecoin-project/bellman"
+branch = "master"
+
+[dependencies.pairing]
+git = "https://github.com/filecoin-project/pairing"
+branch = "master"
+
+[dependencies.rocksdb]
+version = "0.12"
+default-features = false
+features = ["snappy"]
+optional = true
 
 [dev-dependencies]
 gperftools = "0.2"
-scopeguard = "0.3.3"
-
-[dependencies.pairing]
-version = "0.14.2"
-features = ["expose-arith"]
+scopeguard = "1.0"
 
 [build-dependencies]
 bindgen = "0.47"
-cbindgen = "0.6.8"
+cbindgen = "0.8"
 
 [features]
-default = []
+default = ["rocksdb"]
 cpu-profile = []
 heap-profile = []
 simd = ["storage-proofs/simd"]

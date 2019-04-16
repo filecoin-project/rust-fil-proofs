@@ -7,9 +7,9 @@ license = "MIT OR Apache-2.0"
 edition = "2018"
 
 [dependencies]
-bitvec = "0.9"
+bitvec = "0.10"
 failure = "0.1"
-itertools = "0.7.3"
+itertools = "0.8"
 libc = "0.2"
 rand = "0.4"
 storage-proofs = { path = "../storage-proofs" }
@@ -19,8 +19,8 @@ serde = { version = "1", features = ["rc", "derive"] }
 serde_json = "1.0"
 
 [dependencies.pairing]
-version = "0.14.2"
-features = ["expose-arith"]
+git = "https://github.com/filecoin-project/pairing"
+branch = "master"
 
 [dev-dependencies]
 tempfile = "*"

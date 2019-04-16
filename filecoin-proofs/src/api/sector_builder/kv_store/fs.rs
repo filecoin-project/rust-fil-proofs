@@ -1,6 +1,6 @@
 use crate::api::sector_builder::kv_store::KeyValueStore;
 use crate::error::Result;
-use blake2::{Blake2b, Digest};
+use blake2b_simd::State as Blake2b;
 use std::fs::{self, File, OpenOptions};
 use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
@@ -9,12 +9,23 @@ const FATAL_NOCREATE: &str = "[KeyValueStore#put] could not create path";
 
 // FileSystemKvs is a file system-backed key/value store, mostly lifted from
 // sile/ekvsb
+#[derive(Debug)]
 pub struct FileSystemKvs {
     root_dir: PathBuf,
 }
 
 impl FileSystemKvs {
-    pub fn initialize<P: AsRef<Path>>(root_dir: P) -> Result<Self> {
+    fn key_to_path(&self, key: &[u8]) -> PathBuf {
+        let mut hasher = Blake2b::new();
+        hasher.update(key);
+
+        let file = hasher.finalize().to_hex();
+        self.root_dir.join(&file[..32])
+    }
+}
+
+impl KeyValueStore for FileSystemKvs {
+    fn initialize<P: AsRef<Path>>(root_dir: P) -> Result<Self> {
         fs::create_dir_all(&root_dir)?;
 
         Ok(FileSystemKvs {
@@ -22,18 +33,6 @@ impl FileSystemKvs {
         })
     }
 
-    fn key_to_path(&self, key: &[u8]) -> PathBuf {
-        let mut hasher = Blake2b::new();
-        hasher.input(key);
-
-        let result = hasher.result();
-        let file = format!("{:.32x}", &result);
-
-        self.root_dir.join(file)
-    }
-}
-
-impl KeyValueStore for FileSystemKvs {
     fn put(&self, key: &[u8], value: &[u8]) -> Result<()> {
         let path = self.key_to_path(key);
 

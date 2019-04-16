@@ -3,8 +3,7 @@ use std::sync::{mpsc, Arc, Mutex};
 
 use crate::api::post_adapter::*;
 use crate::api::sector_builder::errors::SectorBuilderErr;
-use crate::api::sector_builder::kv_store::fs::FileSystemKvs;
-use crate::api::sector_builder::kv_store::KeyValueStore;
+use crate::api::sector_builder::kv_store::{KeyValueStore, RocksKvs};
 use crate::api::sector_builder::metadata::*;
 use crate::api::sector_builder::scheduler::Request;
 use crate::api::sector_builder::scheduler::Scheduler;
@@ -12,9 +11,8 @@ use crate::api::sector_builder::sealer::*;
 use crate::error::ExpectWithBacktrace;
 use crate::error::Result;
 use crate::FCP_LOG;
-use sector_base::api::bytes_amount::UnpaddedBytesAmount;
 use sector_base::api::disk_backed_storage::new_sector_store;
-use sector_base::api::disk_backed_storage::ConfiguredStore;
+use sector_base::api::sector_class::SectorClass;
 use sector_base::api::sector_store::SectorStore;
 
 pub mod errors;
@@ -51,7 +49,7 @@ impl SectorBuilder {
     // it exists. Otherwise, initialize and return a fresh SectorBuilder. The
     // metadata key is equal to the prover_id.
     pub fn init_from_metadata<S: Into<String>>(
-        sector_store_config: &ConfiguredStore,
+        sector_class: SectorClass,
         last_committed_sector_id: SectorId,
         metadata_dir: S,
         prover_id: [u8; 31],
@@ -60,7 +58,7 @@ impl SectorBuilder {
         max_num_staged_sectors: u8,
     ) -> Result<SectorBuilder> {
         let kv_store = Arc::new(WrappedKeyValueStore {
-            inner: Box::new(FileSystemKvs::initialize(metadata_dir.into())?),
+            inner: Box::new(RocksKvs::initialize(metadata_dir.into())?),
         });
 
         // Initialize a SectorStore and wrap it in an Arc so we can access it
@@ -68,7 +66,7 @@ impl SectorBuilder {
         // SectorStore is safe for concurrent access.
         let sector_store = Arc::new(WrappedSectorStore {
             inner: Box::new(new_sector_store(
-                sector_store_config,
+                sector_class,
                 sealed_sector_dir.into(),
                 staged_sector_dir.into(),
             )),
@@ -109,16 +107,19 @@ impl SectorBuilder {
         })
     }
 
-    // Returns the number of user-provided bytes that will fit into a staged
-    // sector.
-    pub fn get_max_user_bytes_per_staged_sector(&self) -> UnpaddedBytesAmount {
-        self.run_blocking(Request::GetMaxUserBytesPerStagedSector)
-    }
-
     // Stages user piece-bytes for sealing. Note that add_piece calls are
     // processed sequentially to make bin packing easier.
-    pub fn add_piece(&self, piece_key: String, piece_bytes: &[u8]) -> Result<SectorId> {
-        log_unrecov(self.run_blocking(|tx| Request::AddPiece(piece_key, piece_bytes.to_vec(), tx)))
+    pub fn add_piece(
+        &self,
+        piece_key: String,
+        piece_bytes_amount: u64,
+        piece_path: String,
+    ) -> Result<SectorId> {
+        log_unrecov(
+            self.run_blocking(|tx| {
+                Request::AddPiece(piece_key, piece_bytes_amount, piece_path, tx)
+            }),
+        )
     }
 
     // Returns sealing status for the sector with specified id. If no sealed or
@@ -214,12 +215,12 @@ pub struct WrappedSectorStore {
 unsafe impl Sync for WrappedSectorStore {}
 unsafe impl Send for WrappedSectorStore {}
 
-pub struct WrappedKeyValueStore {
-    inner: Box<KeyValueStore>,
+pub struct WrappedKeyValueStore<T: KeyValueStore> {
+    inner: Box<T>,
 }
 
-unsafe impl Sync for WrappedKeyValueStore {}
-unsafe impl Send for WrappedKeyValueStore {}
+unsafe impl<T: KeyValueStore> Sync for WrappedKeyValueStore<T> {}
+unsafe impl<T: KeyValueStore> Send for WrappedKeyValueStore<T> {}
 
 fn log_unrecov<T>(result: Result<T>) -> Result<T> {
     if let Err(err) = &result {

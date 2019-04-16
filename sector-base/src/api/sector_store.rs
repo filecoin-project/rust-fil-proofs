@@ -1,5 +1,9 @@
+use std::io::Read;
+
 use crate::api::bytes_amount::{PaddedBytesAmount, UnpaddedBytesAmount};
 use crate::api::errors::SectorManagerErr;
+use crate::api::porep_config::PoRepConfig;
+use crate::api::post_config::PoStConfig;
 
 pub trait SectorConfig {
     /// returns the number of user-provided bytes that will fit into a sector managed by this store
@@ -7,6 +11,14 @@ pub trait SectorConfig {
 
     /// returns the number of bytes in a sealed sector managed by this store
     fn sector_bytes(&self) -> PaddedBytesAmount;
+}
+
+pub trait ProofsConfig {
+    /// returns the configuration used when verifying and generating PoReps
+    fn post_config(&self) -> PoStConfig;
+
+    /// returns the configuration used when verifying and generating PoSts
+    fn porep_config(&self) -> PoRepConfig;
 }
 
 pub trait SectorManager {
@@ -26,7 +38,7 @@ pub trait SectorManager {
     fn write_and_preprocess(
         &self,
         access: &str,
-        data: &[u8],
+        data: &mut dyn Read,
     ) -> Result<UnpaddedBytesAmount, SectorManagerErr>;
 
     fn delete_staging_sector_access(&self, access: &str) -> Result<(), SectorManagerErr>;
@@ -40,6 +52,7 @@ pub trait SectorManager {
 }
 
 pub trait SectorStore {
-    fn config(&self) -> &SectorConfig;
+    fn sector_config(&self) -> &SectorConfig;
+    fn proofs_config(&self) -> &ProofsConfig;
     fn manager(&self) -> &SectorManager;
 }

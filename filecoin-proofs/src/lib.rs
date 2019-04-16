@@ -16,7 +16,6 @@ extern crate sapling_crypto;
 extern crate tempfile;
 #[macro_use]
 extern crate failure;
-extern crate blake2;
 extern crate byteorder;
 extern crate itertools;
 #[macro_use]

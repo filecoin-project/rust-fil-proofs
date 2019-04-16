@@ -17,8 +17,8 @@ mod tests {
     use std::fmt;
     use std::iter::FromIterator;
 
+    use crate::merkle::VecMerkleTree;
     use merkle_light::hash::{Algorithm, Hashable};
-    use merkle_light::merkle::MerkleTree;
 
     use super::super::{DigestDomain, Hasher};
 
@@ -109,8 +109,12 @@ mod tests {
 
         let v: Vec<DigestDomain> = vec![h1.into(), h2.into(), h3.into()];
         let v2: Vec<DigestDomain> = vec![h1.into(), h2.into()];
-        let t = MerkleTree::<<Sha256Hasher as Hasher>::Domain, <Sha256Hasher as Hasher>::Function>::from_iter(v);
-        let t2 = MerkleTree::<<Sha256Hasher as Hasher>::Domain, <Sha256Hasher as Hasher>::Function>::from_iter(v2);
+        let t = VecMerkleTree::<<Sha256Hasher as Hasher>::Domain, <Sha256Hasher as Hasher>::Function>::from_iter(v);
+        let t2 = VecMerkleTree::<
+            <Sha256Hasher as Hasher>::Domain,
+            <Sha256Hasher as Hasher>::Function,
+        >::from_iter(v2);
+        // Using `VecMerkleTree` since the `MmapStore` of `MerkleTree` doesn't support `Deref` (`as_slice`).
 
         assert_eq!(t2.as_slice()[0].as_ref(), l1.as_ref());
         assert_eq!(t2.as_slice()[1].as_ref(), l2.as_ref());

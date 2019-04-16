@@ -10,7 +10,7 @@ use std::fs::File;
 
 use filecoin_proofs::api::internal;
 use sector_base::api::bytes_amount::PaddedBytesAmount;
-use sector_base::api::disk_backed_storage::LIVE_SECTOR_SIZE;
+use sector_base::api::porep_config::PoRepConfig;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::CompoundProof;
 
@@ -19,7 +19,7 @@ pub fn main() {
     let args: Vec<String> = env::args().collect();
     let out_file = &args[1];
 
-    let public_params = internal::public_params(PaddedBytesAmount(LIVE_SECTOR_SIZE));
+    let public_params = internal::public_params(PaddedBytesAmount::from(PoRepConfig::Test));
 
     let circuit = ZigZagCompound::blank_circuit(&public_params, &internal::ENGINE_PARAMS);
     let mut params = phase2::MPCParameters::new(circuit).unwrap();
