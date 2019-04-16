@@ -363,6 +363,7 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
             (*resp).flattened_proofs_len,
             (*resp).faults_ptr,
             (*resp).faults_len,
+            SINGLE_PARTITION_PROOF_LEN as usize,
         );
         defer!(destroy_verify_post_response(resp));
 

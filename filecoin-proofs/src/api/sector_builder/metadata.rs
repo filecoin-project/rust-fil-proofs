@@ -1,6 +1,5 @@
 use crate::api::sector_builder::SectorId;
 use crate::error;
-use crate::serde_big_array::BigArray;
 use byteorder::LittleEndian;
 use byteorder::WriteBytesExt;
 use sector_base::api::bytes_amount::UnpaddedBytesAmount;
@@ -23,9 +22,7 @@ pub struct SealedSectorMetadata {
     pub comm_r_star: [u8; 32],
     pub comm_r: [u8; 32],
     pub comm_d: [u8; 32],
-
-    #[serde(with = "BigArray")]
-    pub snark_proof: [u8; 384],
+    pub proof: Vec<u8>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
@@ -50,7 +47,7 @@ impl PartialEq for SealedSectorMetadata {
             && self.comm_r_star == other.comm_r_star
             && self.comm_r == other.comm_r
             && self.comm_d == other.comm_d
-            && self.snark_proof.iter().eq(other.snark_proof.iter())
+            && self.proof.iter().eq(other.proof.iter())
     }
 }
 
@@ -80,7 +77,7 @@ impl Default for SealedSectorMetadata {
             comm_r_star: Default::default(),
             comm_r: Default::default(),
             comm_d: Default::default(),
-            snark_proof: [0; 384],
+            proof: Default::default(),
         }
     }
 }

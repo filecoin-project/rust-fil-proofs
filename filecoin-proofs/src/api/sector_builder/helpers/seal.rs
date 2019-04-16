@@ -27,7 +27,7 @@ pub fn seal(
         comm_r,
         comm_d,
         comm_r_star,
-        snark_proof,
+        proof,
     } = seal_internal(
         (*sector_store.inner).proofs_config().porep_config(),
         &PathBuf::from(staged_sector.sector_access.clone()),
@@ -43,7 +43,7 @@ pub fn seal(
         comm_r_star,
         comm_r,
         comm_d,
-        snark_proof,
+        proof,
     };
 
     Ok(newly_sealed_sector)
