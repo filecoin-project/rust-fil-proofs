@@ -118,7 +118,7 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
 
             Ok(MerkleTree::from_data_with_store(
                 (0..self.size()).map(f),
-                &mut disk_mmap,
+                disk_mmap,
             ))
         // If path is `None` use the existing code that will eventually
         // call the default `DiskMmapStore::new` creating a temporary

@@ -444,7 +444,7 @@ pub trait Layers {
                             let graph = transfer_rx.recv().unwrap();
 
                             #[cfg(feature = "disk-trees")]
-                            let tree_d = {
+                            let mut tree_d = {
                                 let tree_dir = get_config("REPLICATED_TREES_DIR")
                                     .expect("REPLICATED_TREES_DIR not found");
                                 // We should always be able to get this configuration
@@ -469,7 +469,7 @@ pub trait Layers {
                                         }
                                     }
 
-                                    graph
+                                    let mut tree_d = graph
                                         .merkle_tree_path(
                                             &data_copy,
                                             Some(&PathBuf::from(tree_dir).join(format!(
@@ -478,12 +478,15 @@ pub trait Layers {
                                                 rand::random::<u32>()
                                             ))),
                                         )
-                                        .unwrap()
+                                        .unwrap();
                                     // FIXME: The user of `REPLICATED_TREES_DIR` should figure out
                                     // how to manage this directory, for now we create every file with
                                     // a different random number; the problem being that tests now do
                                     // replications many times in the same run so they may end up
                                     // reusing the same files with invalid (old) data and failing.
+
+                                    tree_d.offload_store();
+                                    tree_d
                                 }
                             };
 
@@ -531,11 +534,6 @@ pub trait Layers {
                     };
 
                     auxs.push(replica_tree);
-
-                    // FIXME: Basic offload test, after entire replication is
-                    // done, before prove begins. (Ideally we should offload as
-                    // soon as the MT is ready.)
-                    auxs.last_mut().unwrap().offload_store();
 
                     Some(comm_r)
                 });
