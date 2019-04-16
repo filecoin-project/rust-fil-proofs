@@ -219,14 +219,14 @@ lazy_static! {
 }
 
 fn setup_params(sector_bytes: PaddedBytesAmount) -> layered_drgporep::SetupParams {
-    let sector_bytes = usize::from(sector_bytes);
+    let sector_bytes = u64::from(sector_bytes);
 
     assert!(
         sector_bytes % 32 == 0,
         "sector_bytes ({}) must be a multiple of 32",
         sector_bytes,
     );
-    let nodes = sector_bytes / 32;
+    let nodes = sector_bytes / 32 as usize;
     layered_drgporep::SetupParams {
         drg: DrgParams {
             nodes,
@@ -495,7 +495,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     prover_id_in: &FrSafe,
     sector_id_in: &FrSafe,
 ) -> error::Result<SealOutput> {
-    let sector_bytes = usize::from(PaddedBytesAmount::from(porep_config));
+    let sector_bytes = u64::from(PaddedBytesAmount::from(porep_config));
 
     let mut cleanup = FileCleanup::new(&out_path);
 
@@ -504,7 +504,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     let f_data = OpenOptions::new().read(true).write(true).open(&out_path)?;
 
     // Zero-pad the data to the requested size by extending the underlying file if needed.
-    f_data.set_len(sector_bytes as u64)?;
+    f_data.set_len(sector_bytes)?;
 
     let mut data = unsafe { MmapOptions::new().map_mut(&f_data).unwrap() };
 
