@@ -27,13 +27,6 @@ pub mod post_adapter;
 pub mod responses;
 mod sector_builder;
 
-/// Note: These values need to be kept in sync with what's in api/internal.rs.
-/// Due to limitations of cbindgen, we can't define a constant whose value is
-/// a non-primitive (e.g. an expression like 192 * 2 or internal::STUFF) and
-/// see the constant in the generated C-header file.
-pub const API_POREP_PROOF_BYTES: usize = 384;
-pub const API_POST_PROOF_BYTES: usize = 192;
-
 /// Verifies the output of seal.
 ///
 #[no_mangle]
@@ -44,40 +37,45 @@ pub unsafe extern "C" fn verify_seal(
     comm_r_star: &[u8; 32],
     prover_id: &[u8; 31],
     sector_id: &[u8; 31],
-    proof: &[u8; API_POREP_PROOF_BYTES],
+    proof_ptr: *const u8,
+    proof_len: libc::size_t,
 ) -> *mut responses::VerifySealResponse {
     info!(FCP_LOG, "verify_seal: {}", "start"; "target" => "FFI");
 
     let mut response: responses::VerifySealResponse = Default::default();
 
-    let porep_config = match sector_size {
-        FFISectorSize::SSB_OneKiB => PoRepConfig::Test,
-        _ => PoRepConfig::Live(sector_size.into(), PoRepProofPartitions::Two),
-    };
+    let proof = from_raw_parts(proof_ptr, proof_len);
 
-    match internal::verify_seal(
-        porep_config,
-        *comm_r,
-        *comm_d,
-        *comm_r_star,
-        prover_id,
-        sector_id,
-        proof,
-    ) {
-        Ok(true) => {
-            response.status_code = FCPResponseStatus::FCPNoError;
-            response.is_valid = true;
-        }
-        Ok(false) => {
-            response.status_code = FCPResponseStatus::FCPNoError;
-            response.is_valid = false;
-        }
-        Err(err) => {
-            let (code, ptr) = err_code_and_msg(&err);
-            response.status_code = code;
-            response.error_msg = ptr;
-        }
-    }
+    let _ = try_into_porep_config(sector_size, proof_len)
+        .map_err(|err| {
+            response.status_code = FCPResponseStatus::FCPCallerError;
+            response.error_msg = rust_str_to_c_str(err);
+        })
+        .map(|porep_config| {
+            match internal::verify_seal(
+                porep_config,
+                *comm_r,
+                *comm_d,
+                *comm_r_star,
+                prover_id,
+                sector_id,
+                proof,
+            ) {
+                Ok(true) => {
+                    response.status_code = FCPResponseStatus::FCPNoError;
+                    response.is_valid = true;
+                }
+                Ok(false) => {
+                    response.status_code = FCPResponseStatus::FCPNoError;
+                    response.is_valid = false;
+                }
+                Err(err) => {
+                    let (code, ptr) = err_code_and_msg(&err);
+                    response.status_code = code;
+                    response.error_msg = ptr;
+                }
+            }
+        });
 
     info!(FCP_LOG, "verify_seal: {}", "finish"; "target" => "FFI");
 
@@ -148,68 +146,69 @@ pub unsafe extern "C" fn verify_post(
     flattened_proofs_len: libc::size_t,
     faults_ptr: *const u64,
     faults_len: libc::size_t,
+    single_proof_length: libc::size_t,
 ) -> *mut responses::VerifyPoSTResponse {
     info!(FCP_LOG, "verify_post: {}", "start"; "target" => "FFI");
 
     let mut response: responses::VerifyPoSTResponse = Default::default();
 
-    let post_config = match sector_size {
-        FFISectorSize::SSB_OneKiB => PoStConfig::Test,
-        _ => PoStConfig::Live(sector_size.into(), PoStProofPartitions::One),
-    };
-
-    let comm_rs = from_raw_parts(flattened_comm_rs_ptr, flattened_comm_rs_len)
-        .iter()
-        .step_by(32)
-        .fold(Default::default(), |mut acc: Vec<[u8; 32]>, item| {
-            let sliced = from_raw_parts(item, 32);
-            let mut x: [u8; 32] = Default::default();
-            x.copy_from_slice(&sliced[..32]);
-            acc.push(x);
-            acc
-        });
-
     let proofs = from_raw_parts(flattened_proofs_ptr, flattened_proofs_len)
         .iter()
-        .step_by(192)
-        .fold(Default::default(), |mut acc: Vec<[u8; 192]>, item| {
-            let sliced = from_raw_parts(item, 192);
-            let mut x: [u8; 192] = [0; 192];
-            x.copy_from_slice(&sliced[..192]);
-            acc.push(x);
+        .step_by(single_proof_length)
+        .fold(Default::default(), |mut acc: Vec<Vec<u8>>, item| {
+            let sliced = from_raw_parts(item, single_proof_length);
+            acc.push(sliced.to_vec());
             acc
         });
 
-    let faults = from_raw_parts(faults_ptr, faults_len);
+    let _ = try_into_post_config(sector_size, single_proof_length)
+        .map_err(|err| {
+            response.status_code = FCPResponseStatus::FCPCallerError;
+            response.error_msg = rust_str_to_c_str(err);
+        })
+        .map(|post_config| {
+            let comm_rs = from_raw_parts(flattened_comm_rs_ptr, flattened_comm_rs_len)
+                .iter()
+                .step_by(32)
+                .fold(Default::default(), |mut acc: Vec<[u8; 32]>, item| {
+                    let sliced = from_raw_parts(item, 32);
+                    let mut x: [u8; 32] = Default::default();
+                    x.copy_from_slice(&sliced[..32]);
+                    acc.push(x);
+                    acc
+                });
 
-    let safe_challenge_seed = {
-        let mut cs = [0; 32];
-        cs.copy_from_slice(challenge_seed);
-        cs[31] &= 0b00111111;
-        cs
-    };
+            let faults = from_raw_parts(faults_ptr, faults_len);
 
-    match internal::verify_post(VerifyPoStDynamicSectorsCountInput {
-        post_config,
-        comm_rs,
-        challenge_seed: safe_challenge_seed,
-        proofs,
-        faults: faults.to_vec(),
-    }) {
-        Ok(dynamic) => {
-            response.status_code = FCPResponseStatus::FCPNoError;
-            response.is_valid = dynamic.is_valid;
-        }
-        Err(err) => {
-            let (code, ptr) = err_code_and_msg(&err);
-            response.status_code = code;
-            response.error_msg = ptr;
-        }
-    }
+            let safe_challenge_seed = {
+                let mut cs = [0; 32];
+                cs.copy_from_slice(challenge_seed);
+                cs[31] &= 0b00111111;
+                cs
+            };
+
+            match internal::verify_post(VerifyPoStDynamicSectorsCountInput {
+                post_config,
+                comm_rs,
+                challenge_seed: safe_challenge_seed,
+                proofs,
+                faults: faults.to_vec(),
+            }) {
+                Ok(dynamic) => {
+                    response.status_code = FCPResponseStatus::FCPNoError;
+                    response.is_valid = dynamic.is_valid;
+                }
+                Err(err) => {
+                    let (code, ptr) = err_code_and_msg(&err);
+                    response.status_code = code;
+                    response.error_msg = ptr;
+                }
+            }
+        });
 
     info!(FCP_LOG, "verify_post: {}", "finish"; "target" => "FFI");
 
-    Box::into_raw(Box::new(response))
+    raw_ptr(response)
 }
 
 /// Initializes and returns a SectorBuilder.
@@ -365,14 +364,6 @@ pub unsafe extern "C" fn get_seal_status(
                 SealStatus::Sealed(meta) => {
                     let meta = *meta;
 
-                    response.seal_status_code = FFISealStatus::Sealed;
-                    response.comm_d = meta.comm_d;
-                    response.comm_r = meta.comm_r;
-                    response.comm_r_star = meta.comm_r_star;
-                    response.snark_proof = meta.snark_proof;
-                    response.sector_id = meta.sector_id;
-                    response.sector_access = rust_str_to_c_str(meta.sector_access);
-
                     let pieces = meta
                         .pieces
                         .iter()
@@ -382,9 +373,18 @@ pub unsafe extern "C" fn get_seal_status(
                         })
                         .collect::<Vec<FFIPieceMetadata>>();
 
-                    response.pieces_ptr = pieces.as_ptr();
+                    response.comm_d = meta.comm_d;
+                    response.comm_r = meta.comm_r;
+                    response.comm_r_star = meta.comm_r_star;
                     response.pieces_len = pieces.len();
+                    response.pieces_ptr = pieces.as_ptr();
+                    response.proofs_len = meta.proof.len();
+                    response.proofs_ptr = meta.proof.as_ptr();
+                    response.seal_status_code = FFISealStatus::Sealed;
+                    response.sector_access = rust_str_to_c_str(meta.sector_access);
+                    response.sector_id = meta.sector_id;
 
+                    mem::forget(meta.proof);
                     mem::forget(pieces);
                 }
                 SealStatus::Sealing => {
@@ -431,17 +431,21 @@ pub unsafe extern "C" fn get_sealed_sectors(
                         })
                         .collect::<Vec<FFIPieceMetadata>>();
 
+                    let snark_proof = meta.proof.clone();
+
                     let sector = responses::FFISealedSectorMetadata {
                         comm_d: meta.comm_d,
                         comm_r: meta.comm_r,
                         comm_r_star: meta.comm_r_star,
-                        sector_access: rust_str_to_c_str(meta.sector_access.clone()),
-                        sector_id: meta.sector_id,
-                        snark_proof: meta.snark_proof,
                         pieces_len: pieces.len(),
                         pieces_ptr: pieces.as_ptr(),
+                        proofs_len: snark_proof.len(),
+                        proofs_ptr: snark_proof.as_ptr(),
+                        sector_access: rust_str_to_c_str(meta.sector_access.clone()),
+                        sector_id: meta.sector_id,
                     };
 
+                    mem::forget(snark_proof);
                     mem::forget(pieces);
 
                     sector
@@ -539,6 +543,7 @@ pub struct FFISectorClass {
 }
 
 #[allow(non_camel_case_types)]
+#[derive(Clone, Debug, Copy)]
 #[repr(C)]
 pub enum FFISectorSize {
     SSB_OneKiB,
@@ -589,5 +594,47 @@ impl From<FFISectorClass> for SectorClass {
             x.seal_proof_partitions.into(),
             x.post_proof_partitions.into(),
         )
+    }
+}
+
+fn try_into_post_config(
+    ss: FFISectorSize,
+    post_proof: usize,
+) -> core::result::Result<PoStConfig, String> {
+    match (ss, post_proof) {
+        (FFISectorSize::SSB_OneKiB, _) => Ok(PoStConfig::Test),
+        (FFISectorSize::SSB_TwoHundredFiftySixMiB, n) => {
+            try_into_post_proof_partitions(n).map(|ppp| PoStConfig::Live(ss.into(), ppp))
+        }
+    }
+}
+
+fn try_into_porep_config(
+    ss: FFISectorSize,
+    proof_len: usize,
+) -> core::result::Result<PoRepConfig, String> {
+    match (ss, proof_len) {
+        (FFISectorSize::SSB_OneKiB, _) => Ok(PoRepConfig::Test),
+        (FFISectorSize::SSB_TwoHundredFiftySixMiB, n) => {
+            try_into_porep_proof_partitions(n).map(|ppp| PoRepConfig::Live(ss.into(), ppp))
+        }
+    }
+}
+
+fn try_into_post_proof_partitions(
+    post_proof_len: usize,
+) -> core::result::Result<PoStProofPartitions, String> {
+    match post_proof_len {
+        192 => Ok(PoStProofPartitions::One),
+        _ => Err(String::from("unsupported proof size")),
+    }
+}
+
+fn try_into_porep_proof_partitions(
+    porep_proof_len: usize,
+) -> core::result::Result<PoRepProofPartitions, String> {
+    match porep_proof_len {
+        384 => Ok(PoRepProofPartitions::Two),
+        _ => Err(String::from("unsupported proof size")),
     }
 }
