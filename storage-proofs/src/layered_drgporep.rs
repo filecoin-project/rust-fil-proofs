@@ -457,10 +457,9 @@ pub trait Layers {
                                     //  were creating a temporary `PathBuf` below).
                                     graph.merkle_tree_path(&data_copy, None).unwrap()
 
-                                    // FIXME: In the temporary case can we offload the file? The MT
-                                    //  implementation should ignore it (i.e., we only offload and
-                                    //  restore named files stored with `REPLICATED_TREES_DIR`).
-
+                                // FIXME: In the temporary case can we offload the file? The MT
+                                //  implementation should ignore it (i.e., we only offload and
+                                //  restore named files stored with `REPLICATED_TREES_DIR`).
                                 } else {
                                     // Try to create `tree_dir`, ignore the error if `AlreadyExists`.
                                     if let Some(create_error) = fs::create_dir(&tree_dir).err() {
