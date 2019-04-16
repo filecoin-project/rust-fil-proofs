@@ -110,7 +110,7 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
         if let Some(path) = path {
             info!(SP_LOG, "creating tree mmap-file"; "path" => &path.to_str());
 
-            let mut disk_mmap = DiskMmapStore::new_with_path(self.size(), path);
+            let disk_mmap = DiskMmapStore::new_with_path(self.size(), path);
             // FIXME: `new_with_path` is using the `from_iter` implementation,
             //  instead the `parallel` flag should be passed also as argument
             //  and decide *there* which code to use (merging this into the

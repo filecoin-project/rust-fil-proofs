@@ -145,9 +145,7 @@ pub fn create_key_from_tree<H: Hasher>(
     // The hash is about the parents, hence skip if a node doesn't have any parents
     if node != parents[0] {
         for parent in parents.iter() {
-            //            hasher.update(tree.read_at(*parent));
-            // FIXME: Add a `read_bytes` method to the tree (or `Element`)
-            //  to avoid using `AsRef` for the entire `Store`.
+            hasher.update(&tree.read_at(*parent).into_bytes());
         }
     }
 

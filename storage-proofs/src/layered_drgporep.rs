@@ -444,7 +444,7 @@ pub trait Layers {
                             let graph = transfer_rx.recv().unwrap();
 
                             #[cfg(feature = "disk-trees")]
-                            let mut tree_d = {
+                            let tree_d = {
                                 let tree_dir = get_config("REPLICATED_TREES_DIR")
                                     .expect("REPLICATED_TREES_DIR not found");
                                 // We should always be able to get this configuration
