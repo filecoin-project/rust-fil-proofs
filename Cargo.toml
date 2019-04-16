@@ -40,7 +40,7 @@ debug = true
 
 [features]
 default = []
-cpu-profile = ["filecoin-proofs/cpu-profile"]
+cpu-profile = ["filecoin-proofs/cpu-profile", "storage-proofs/cpu-profile"]
 heap-profile = ["filecoin-proofs/heap-profile"]
 simd = ["storage-proofs/simd", "filecoin-proofs/simd"]
 asm = ["storage-proofs/asm", "filecoin-proofs/asm"]

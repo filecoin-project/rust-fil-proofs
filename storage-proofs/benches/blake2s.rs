@@ -3,7 +3,7 @@ extern crate criterion;
 
 use bellman::groth16::*;
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
-use criterion::{black_box, Criterion, ParameterizedBenchmark};
+use criterion::{black_box, Criterion, ParameterizedBenchmark, Throughput};
 use pairing::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
 use sapling_crypto::circuit as scircuit;
@@ -51,12 +51,12 @@ fn blake2s_benchmark(c: &mut Criterion) {
     )
     .unwrap();
 
-    let params = vec![32];
+    let params = vec![32, 64, 14 * 32];
 
     c.bench(
         "blake2s",
         ParameterizedBenchmark::new(
-            "non-circuit-32bytes",
+            "non-circuit",
             |b, bytes| {
                 let mut rng = thread_rng();
                 let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
@@ -65,7 +65,7 @@ fn blake2s_benchmark(c: &mut Criterion) {
             },
             params,
         )
-        .with_function("circuit-32bytes-create_proof", move |b, bytes| {
+        .with_function("circuit-create_proof", move |b, bytes| {
             b.iter(|| {
                 let mut rng = rng1.clone();
                 let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
@@ -82,7 +82,7 @@ fn blake2s_benchmark(c: &mut Criterion) {
                 black_box(proof)
             });
         })
-        .with_function("circuit-32bytes-synthesize_circuit", move |b, bytes| {
+        .with_function("circuit-synthesize_circuit", move |b, bytes| {
             b.iter(|| {
                 let mut cs = BenchCS::<Bls12>::new();
 
@@ -98,7 +98,8 @@ fn blake2s_benchmark(c: &mut Criterion) {
                 black_box(cs)
             });
         })
-        .sample_size(20),
+        .sample_size(20)
+        .throughput(|s| Throughput::Bytes(*s as u32)),
     );
 }
 
