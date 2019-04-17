@@ -536,7 +536,7 @@ mod tests {
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
     use crate::hasher::{Blake2sHasher, Hasher, PedersenHasher};
     use crate::porep::PoRep;
-    use crate::proof::ProofScheme;
+    use crate::proof::{NoRequirements, ProofScheme};
     use crate::util::data_at_node;
 
     use ff::Field;
@@ -833,8 +833,13 @@ mod tests {
             )
             .expect("failed while proving");
 
-            let verified = DrgPoRepCompound::<H, _>::verify(&public_params, &public_inputs, &proof)
-                .expect("failed while verifying");
+            let verified = DrgPoRepCompound::<H, _>::verify(
+                &public_params,
+                &public_inputs,
+                &proof,
+                &NoRequirements,
+            )
+            .expect("failed while verifying");
 
             assert!(verified);
         }

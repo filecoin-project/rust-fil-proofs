@@ -12,7 +12,7 @@ use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetIdentifier;
 use crate::porep::{self, PoRep};
-use crate::proof::ProofScheme;
+use crate::proof::{NoRequirements, ProofScheme};
 use crate::vde::{self, decode_block, decode_domain_block};
 
 #[derive(Debug, Clone)]
@@ -248,6 +248,7 @@ where
     type PublicInputs = PublicInputs<H::Domain>;
     type PrivateInputs = PrivateInputs<'a, H>;
     type Proof = Proof<H>;
+    type Requirements = NoRequirements;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
         let graph = G::new(

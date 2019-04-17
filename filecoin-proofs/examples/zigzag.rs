@@ -42,7 +42,7 @@ use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
 use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
-use storage_proofs::layered_drgporep::{self, LayerChallenges};
+use storage_proofs::layered_drgporep::{self, ChallengeRequirements, LayerChallenges};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::zigzag_drgporep::*;
@@ -371,8 +371,15 @@ fn do_the_work<H: 'static>(
                 for _ in 0..samples {
                     let start = Instant::now();
                     let cur_result = result;
-                    ZigZagCompound::verify(&compound_public_params, &pub_inputs, &multi_proof)
-                        .unwrap();
+                    ZigZagCompound::verify(
+                        &compound_public_params,
+                        &pub_inputs,
+                        &multi_proof,
+                        &ChallengeRequirements {
+                            minimum_challenges: 1,
+                        },
+                    )
+                    .unwrap();
                     // If one verification fails, result becomes permanently false.
                     result = result && cur_result;
                     total_groth_verifying += start.elapsed();

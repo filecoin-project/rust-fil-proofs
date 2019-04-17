@@ -6,7 +6,7 @@ use crate::error::*;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetIdentifier;
-use crate::proof::ProofScheme;
+use crate::proof::{NoRequirements, ProofScheme};
 
 /// The parameters shared between the prover and verifier.
 #[derive(Clone, Debug)]
@@ -75,6 +75,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for MerklePoR<H> {
     type PublicInputs = PublicInputs<H::Domain>;
     type PrivateInputs = PrivateInputs<'a, H>;
     type Proof = Proof<H>;
+    type Requirements = NoRequirements;
 
     fn setup(sp: &SetupParams) -> Result<PublicParams> {
         Ok(PublicParams {

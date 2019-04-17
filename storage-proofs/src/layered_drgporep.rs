@@ -124,6 +124,11 @@ pub struct Tau<T: Domain> {
     pub comm_r_star: T,
 }
 
+#[derive(Default)]
+pub struct ChallengeRequirements {
+    pub minimum_challenges: usize,
+}
+
 impl<T: Domain> Tau<T> {
     /// Return a single porep::Tau with the initial data and final replica commitments of layer_taus.
     pub fn simplify(&self) -> porep::Tau<T> {
@@ -486,6 +491,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
     type PublicInputs = PublicInputs<<L::Hasher as Hasher>::Domain>;
     type PrivateInputs = PrivateInputs<L::Hasher>;
     type Proof = Proof<L::Hasher>;
+    type Requirements = ChallengeRequirements;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
         let graph = L::Graph::new(
@@ -626,6 +632,16 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
             comm_r_star: pub_in.comm_r_star,
             k,
         }
+    }
+
+    fn satisfies_requirements(
+        public_params: &PublicParams<L::Hasher, L::Graph>,
+        requirements: &ChallengeRequirements,
+        partitions: usize,
+    ) -> bool {
+        let partition_challenges = public_params.layer_challenges.total_challenges();
+
+        partition_challenges * partitions >= requirements.minimum_challenges
     }
 }
 

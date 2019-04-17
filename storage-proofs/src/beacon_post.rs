@@ -9,7 +9,7 @@ use crate::error::{Error, Result};
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::MerkleTree;
 use crate::parameter_cache::ParameterSetIdentifier;
-use crate::proof::ProofScheme;
+use crate::proof::{NoRequirements, ProofScheme};
 use crate::vdf::Vdf;
 use crate::vdf_post;
 
@@ -118,6 +118,7 @@ where
     type PublicInputs = PublicInputs<H::Domain>;
     type PrivateInputs = PrivateInputs<'a, H>;
     type Proof = Proof<'a, H, V>;
+    type Requirements = NoRequirements;
 
     fn setup(sp: &SetupParams<H::Domain, V>) -> Result<PublicParams<H::Domain, V>> {
         Ok(PublicParams {

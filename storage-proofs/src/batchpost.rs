@@ -11,7 +11,7 @@ use crate::error::Result;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::MerkleTree;
 use crate::merklepor;
-use crate::proof::ProofScheme;
+use crate::proof::{NoRequirements, ProofScheme};
 use crate::util::data_at_node;
 
 #[derive(Clone, Debug)]
@@ -71,6 +71,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for BatchPoST<H> {
     type PublicInputs = PublicInputs<'a, H::Domain>;
     type PrivateInputs = PrivateInputs<'a, H>;
     type Proof = Proof<H>;
+    type Requirements = NoRequirements;
 
     fn setup(_sp: &Self::SetupParams) -> Result<Self::PublicParams> {
         // merklepor does not have a setup currently

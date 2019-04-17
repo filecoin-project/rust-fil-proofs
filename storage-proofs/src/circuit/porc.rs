@@ -293,7 +293,7 @@ mod tests {
     use crate::fr32::fr_into_bytes;
     use crate::hasher::pedersen::*;
     use crate::porc::{self, PoRC};
-    use crate::proof::ProofScheme;
+    use crate::proof::{NoRequirements, ProofScheme};
 
     #[test]
     fn test_porc_circuit_with_bls12_381() {
@@ -445,8 +445,13 @@ mod tests {
         assert!(cs.is_satisfied());
         assert!(cs.verify(&inputs));
 
-        let verified = PoRCCompound::<PedersenHasher>::verify(&pub_params, &pub_inputs, &proof)
-            .expect("failed while verifying");
+        let verified = PoRCCompound::<PedersenHasher>::verify(
+            &pub_params,
+            &pub_inputs,
+            &proof,
+            &NoRequirements,
+        )
+        .expect("failed while verifying");
 
         assert!(verified);
     }

@@ -30,14 +30,16 @@ use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
 use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::hasher::{Domain, Hasher};
-use storage_proofs::layered_drgporep::{self, LayerChallenges};
+use storage_proofs::layered_drgporep::{self, ChallengeRequirements, LayerChallenges};
 use storage_proofs::merkle::MerkleTree;
 use storage_proofs::porep::{replica_id, PoRep, Tau};
-use storage_proofs::proof::ProofScheme;
+use storage_proofs::proof::{NoRequirements, ProofScheme};
 use storage_proofs::vdf_post::{self, VDFPoSt};
 use storage_proofs::vdf_sloth::{self, Sloth};
 use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
 use storage_proofs::zigzag_graph::ZigZagBucketGraph;
+
+const SINGLE_PARTITION_PROOF_LEN: usize = 192;
 
 pub type Commitment = Fr32Ary;
 pub type ChallengeSeed = Fr32Ary;
@@ -45,20 +47,7 @@ pub type ChallengeSeed = Fr32Ary;
 /// FrSafe is an array of the largest whole number of bytes guaranteed not to overflow the field.
 type FrSafe = [u8; 31];
 
-/// How big, in bytes, is the SNARK proof exposed by the API?
-///
-/// Note: These values need to be kept in sync with what's in api/mod.rs.
-/// Due to limitations of cbindgen, we can't define a constant whose value is
-/// a non-primitive (e.g. an expression like 192 * 2 or internal::STUFF) and
-/// see the constant in the generated C-header file.
-const SNARK_BYTES: usize = 192;
-const POREP_PARTITIONS: usize = 2;
-const POREP_PROOF_BYTES: usize = SNARK_BYTES * POREP_PARTITIONS;
-
-const POST_PARTITIONS: usize = 1;
-const POST_PROOF_BYTES: usize = SNARK_BYTES * POST_PARTITIONS;
-
-type SnarkProof = [u8; POREP_PROOF_BYTES];
+const POREP_MINIMUM_CHALLENGES: usize = 1; // FIXME: 8,000
 
 lazy_static! {
     pub static ref ENGINE_PARAMS: JubjubBls12 = JubjubBls12::new();
@@ -375,17 +364,13 @@ pub fn generate_post_fixed_sectors_count(
     let proof = VDFPostCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)
         .expect("failed while proving");
 
-    let mut buf = Vec::with_capacity(POST_PROOF_BYTES);
+    let mut buf = Vec::with_capacity(
+        SINGLE_PARTITION_PROOF_LEN * usize::from(PoStProofPartitions::from(fixed.post_config)),
+    );
 
     proof.write(&mut buf)?;
 
-    let mut proof_bytes = [0; POST_PROOF_BYTES];
-    proof_bytes.copy_from_slice(&buf);
-
-    Ok(GeneratePoStFixedSectorsCountOutput {
-        proof: proof_bytes,
-        faults,
-    })
+    Ok(GeneratePoStFixedSectorsCountOutput { proof: buf, faults })
 }
 
 fn verify_post_fixed_sectors_count(
@@ -429,18 +414,25 @@ fn verify_post_fixed_sectors_count(
 
     let verifying_key = get_post_verifying_key(fixed.post_config)?;
 
+    let num_post_proof_bytes =
+        SINGLE_PARTITION_PROOF_LEN * usize::from(PoStProofPartitions::from(fixed.post_config));
+
     let proof = MultiProof::new_from_reader(
         Some(usize::from(PoStProofPartitions::from(fixed.post_config))),
-        &fixed.proof[0..192],
+        &fixed.proof[0..num_post_proof_bytes],
         &verifying_key,
     )?;
 
     // For some reason, the circuit test does not verify when called in tests here.
     // However, everything up to that point does/should work — so we want to continue to exercise
     // for integration purposes.
-    let _fixme_ignore: error::Result<bool> =
-        VDFPostCompound::verify(&compound_public_params, &public_inputs, &proof)
-            .map_err(Into::into);
+    let _fixme_ignore: error::Result<bool> = VDFPostCompound::verify(
+        &compound_public_params,
+        &public_inputs,
+        &proof,
+        &NoRequirements,
+    )
+    .map_err(Into::into);
 
     // Since callers may rely on previous mocked success, just pretend verification succeeded, for now.
     Ok(VerifyPoStFixedSectorsCountOutput { is_valid: true })
@@ -458,11 +450,12 @@ fn make_merkle_tree<T: Into<PathBuf> + AsRef<Path>>(
     public_params(bytes).graph.merkle_tree(&data)
 }
 
+#[derive(Clone, Debug)]
 pub struct SealOutput {
     pub comm_r: Commitment,
     pub comm_r_star: Commitment,
     pub comm_d: Commitment,
-    pub snark_proof: SnarkProof,
+    pub proof: Vec<u8>,
 }
 
 /// Minimal support for cleaning (deleting) a file unless it was successfully populated.
@@ -558,14 +551,11 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         &groth_params,
     )?;
 
-    // TODO: POREP_PROOF_BYTES needs to be a function of PoRepPartitions
-    let mut buf = Vec::with_capacity(POREP_PROOF_BYTES);
+    let mut buf = Vec::with_capacity(
+        SINGLE_PARTITION_PROOF_LEN * usize::from(PoRepProofPartitions::from(porep_config)),
+    );
 
     proof.write(&mut buf)?;
-
-    // TODO: POREP_PROOF_BYTES needs to be a function of PoRepPartitions
-    let mut proof_bytes = [0; POREP_PROOF_BYTES];
-    proof_bytes.copy_from_slice(&buf);
 
     let comm_r = commitment_from_fr::<Bls12>(public_tau.comm_r.into());
     let comm_d = commitment_from_fr::<Bls12>(public_tau.comm_d.into());
@@ -580,7 +570,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         comm_r_star,
         prover_id_in,
         sector_id_in,
-        &proof_bytes,
+        &buf,
     )
     .expect("post-seal verification sanity check failed");
 
@@ -588,7 +578,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         comm_r,
         comm_r_star,
         comm_d,
-        snark_proof: proof_bytes,
+        proof: buf,
     })
 }
 
@@ -650,7 +640,7 @@ pub fn verify_seal(
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: &setup_params(PaddedBytesAmount::from(porep_config)),
         engine_params: &(*ENGINE_PARAMS),
-        partitions: Some(POREP_PARTITIONS),
+        partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };
 
     let compound_public_params: compound_proof::PublicParams<
@@ -679,7 +669,15 @@ pub fn verify_seal(
         &verifying_key,
     )?;
 
-    ZigZagCompound::verify(&compound_public_params, &public_inputs, &proof).map_err(Into::into)
+    ZigZagCompound::verify(
+        &compound_public_params,
+        &public_inputs,
+        &proof,
+        &ChallengeRequirements {
+            minimum_challenges: POREP_MINIMUM_CHALLENGES,
+        },
+    )
+    .map_err(Into::into)
 }
 
 #[cfg(test)]
@@ -779,8 +777,8 @@ mod tests {
             comm_r,
             comm_d,
             comm_r_star,
-            snark_proof,
-        } = seal_output;
+            proof,
+        } = seal_output.clone();
 
         // valid commitments
         {
@@ -791,7 +789,7 @@ mod tests {
                 comm_r_star,
                 &prover_id,
                 &sector_id,
-                &snark_proof,
+                &proof,
             )
             .expect("failed to run verify_seal");
 
@@ -861,7 +859,7 @@ mod tests {
                 h.seal_output.comm_r,
                 &h.prover_id,
                 &h.sector_id,
-                &h.seal_output.snark_proof,
+                &h.seal_output.proof,
             )
             .expect("failed to run verify_seal");
 
