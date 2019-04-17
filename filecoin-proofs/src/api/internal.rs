@@ -30,10 +30,10 @@ use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
 use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::hasher::{Domain, Hasher};
-use storage_proofs::layered_drgporep::{self, LayerChallenges};
+use storage_proofs::layered_drgporep::{self, ChallengeRequirements, LayerChallenges};
 use storage_proofs::merkle::MerkleTree;
 use storage_proofs::porep::{replica_id, PoRep, Tau};
-use storage_proofs::proof::ProofScheme;
+use storage_proofs::proof::{NoRequirements, ProofScheme};
 use storage_proofs::vdf_post::{self, VDFPoSt};
 use storage_proofs::vdf_sloth::{self, Sloth};
 use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
@@ -46,6 +46,8 @@ pub type ChallengeSeed = Fr32Ary;
 
 /// FrSafe is an array of the largest whole number of bytes guaranteed not to overflow the field.
 type FrSafe = [u8; 31];
+
+const POREP_MINIMUM_CHALLENGES: usize = 1; // FIXME: 8,000
 
 lazy_static! {
     pub static ref ENGINE_PARAMS: JubjubBls12 = JubjubBls12::new();
@@ -424,9 +426,13 @@ fn verify_post_fixed_sectors_count(
     // For some reason, the circuit test does not verify when called in tests here.
     // However, everything up to that point does/should work — so we want to continue to exercise
     // for integration purposes.
-    let _fixme_ignore: error::Result<bool> =
-        VDFPostCompound::verify(&compound_public_params, &public_inputs, &proof)
-            .map_err(Into::into);
+    let _fixme_ignore: error::Result<bool> = VDFPostCompound::verify(
+        &compound_public_params,
+        &public_inputs,
+        &proof,
+        &NoRequirements,
+    )
+    .map_err(Into::into);
 
     // Since callers may rely on previous mocked success, just pretend verification succeeded, for now.
     Ok(VerifyPoStFixedSectorsCountOutput { is_valid: true })
@@ -663,7 +669,15 @@ pub fn verify_seal(
         &verifying_key,
     )?;
 
-    ZigZagCompound::verify(&compound_public_params, &public_inputs, &proof).map_err(Into::into)
+    ZigZagCompound::verify(
+        &compound_public_params,
+        &public_inputs,
+        &proof,
+        &ChallengeRequirements {
+            minimum_challenges: POREP_MINIMUM_CHALLENGES,
+        },
+    )
+    .map_err(Into::into)
 }
 
 #[cfg(test)]

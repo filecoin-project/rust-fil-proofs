@@ -119,10 +119,19 @@ where
         public_params: &PublicParams<'a, E, S>,
         public_inputs: &S::PublicInputs,
         multi_proof: &MultiProof<E>,
+        requirements: &S::Requirements,
     ) -> Result<bool> {
         let vanilla_public_params = &public_params.vanilla_params;
         let pvk = groth16::prepare_verifying_key(&multi_proof.verifying_key);
         if multi_proof.circuit_proofs.len() != Self::partition_count(public_params) {
+            return Ok(false);
+        }
+
+        if !<S as ProofScheme>::satisfies_requirements(
+            &public_params.vanilla_params,
+            requirements,
+            multi_proof.circuit_proofs.len(),
+        ) {
             return Ok(false);
         }
 

@@ -245,6 +245,7 @@ impl<'a, E: JubjubEngine, H: Hasher> PoRCircuit<'a, E, H> {
 mod tests {
     use super::*;
 
+    use crate::proof::NoRequirements;
     use ff::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::circuit::multipack;
@@ -309,9 +310,13 @@ mod tests {
             )
             .expect("failed while proving");
 
-            let verified =
-                PoRCompound::<PedersenHasher>::verify(&public_params, &public_inputs, &proof)
-                    .expect("failed while verifying");
+            let verified = PoRCompound::<PedersenHasher>::verify(
+                &public_params,
+                &public_inputs,
+                &proof,
+                &NoRequirements,
+            )
+            .expect("failed while verifying");
             assert!(verified);
 
             let (circuit, inputs) = PoRCompound::<PedersenHasher>::circuit_for_test(
@@ -507,8 +512,9 @@ mod tests {
                 assert!(cs.verify(&inputs));
             }
 
-            let verified = PoRCompound::<H>::verify(&public_params, &public_inputs, &proof)
-                .expect("failed while verifying");
+            let verified =
+                PoRCompound::<H>::verify(&public_params, &public_inputs, &proof, &NoRequirements)
+                    .expect("failed while verifying");
             assert!(verified);
         }
     }
