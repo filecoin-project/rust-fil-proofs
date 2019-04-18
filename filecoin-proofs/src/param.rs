@@ -2,7 +2,7 @@ use blake2b_simd::State as Blake2b;
 use failure::{err_msg, Error};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs::{create_dir_all, read_dir, rename, File};
 use std::io::{stdin, stdout, BufReader, BufWriter, Write};
 use std::path::PathBuf;
@@ -19,7 +19,7 @@ const ERROR_PARAMETER_ID: &str = "failed to find parameter in map";
 const ERROR_STRING: &str = "invalid string";
 
 pub type Result<T> = ::std::result::Result<T, Error>;
-pub type ParameterMap = HashMap<String, ParameterData>;
+pub type ParameterMap = BTreeMap<String, ParameterData>;
 
 #[derive(Deserialize, Serialize)]
 pub struct ParameterData {
