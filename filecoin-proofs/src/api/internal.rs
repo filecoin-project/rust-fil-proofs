@@ -215,7 +215,7 @@ fn setup_params(sector_bytes: PaddedBytesAmount) -> layered_drgporep::SetupParam
         "sector_bytes ({}) must be a multiple of 32",
         sector_bytes,
     );
-    let nodes = sector_bytes / 32 as usize;
+    let nodes = (sector_bytes / 32) as usize;
     layered_drgporep::SetupParams {
         drg: DrgParams {
             nodes,
