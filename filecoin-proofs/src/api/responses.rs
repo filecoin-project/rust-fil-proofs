@@ -68,6 +68,7 @@ pub struct GeneratePoStResponse {
     pub faults_ptr: *const u64,
     pub flattened_proofs_len: libc::size_t,
     pub flattened_proofs_ptr: *const u8,
+    pub proof_partitions: u8,
 }
 
 impl Default for GeneratePoStResponse {
@@ -79,6 +80,7 @@ impl Default for GeneratePoStResponse {
             faults_ptr: ptr::null(),
             flattened_proofs_len: 0,
             flattened_proofs_ptr: ptr::null(),
+            proof_partitions: 0,
         }
     }
 }
@@ -276,8 +278,8 @@ pub struct GetSealStatusResponse {
     pub comm_r_star: [u8; 32],
     pub sector_access: *const libc::c_char,
     pub sector_id: u64,
-    pub proofs_len: libc::size_t,
-    pub proofs_ptr: *const u8,
+    pub proof_len: libc::size_t,
+    pub proof_ptr: *const u8,
     pub pieces_len: libc::size_t,
     pub pieces_ptr: *const FFIPieceMetadata,
 }
@@ -299,8 +301,8 @@ impl Default for GetSealStatusResponse {
             comm_r_star: Default::default(),
             pieces_len: 0,
             pieces_ptr: ptr::null(),
-            proofs_len: 0,
-            proofs_ptr: ptr::null(),
+            proof_len: 0,
+            proof_ptr: ptr::null(),
             seal_error_msg: ptr::null(),
             seal_status_code: FFISealStatus::Failed,
             sector_access: ptr::null(),

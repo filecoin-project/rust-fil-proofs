@@ -222,8 +222,8 @@ impl From<SectorClass> for Config {
 pub mod tests {
     use super::*;
 
-    use crate::api::porep_config::PoRepProofPartitions;
-    use crate::api::post_config::PoStProofPartitions;
+    use crate::api::porep_proof_partitions::PoRepProofPartitions;
+    use crate::api::post_proof_partitions::PoStProofPartitions;
     use crate::api::sector_size::SectorSize;
     use crate::io::fr32::FR32_PADDING_MAP;
     use std::fs::create_dir_all;

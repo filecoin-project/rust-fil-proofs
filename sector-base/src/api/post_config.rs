@@ -1,17 +1,13 @@
 use crate::api::bytes_amount::PaddedBytesAmount;
 use crate::api::bytes_amount::UnpaddedBytesAmount;
 use crate::api::disk_backed_storage::TEST_SECTOR_SIZE;
+use crate::api::post_proof_partitions::PoStProofPartitions;
 use crate::api::sector_size::SectorSize;
 
 #[derive(Clone, Copy, Debug)]
 pub enum PoStConfig {
     Live(SectorSize, PoStProofPartitions),
     Test,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum PoStProofPartitions {
-    One,
 }
 
 impl Default for PoStConfig {
@@ -43,14 +39,6 @@ impl From<PoStConfig> for PoStProofPartitions {
         match x {
             PoStConfig::Test => PoStProofPartitions::One,
             PoStConfig::Live(_, p) => p,
-        }
-    }
-}
-
-impl From<PoStProofPartitions> for usize {
-    fn from(x: PoStProofPartitions) -> Self {
-        match x {
-            PoStProofPartitions::One => 1,
         }
     }
 }

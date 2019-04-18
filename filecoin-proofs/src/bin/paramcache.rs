@@ -3,11 +3,19 @@ extern crate rand;
 extern crate sector_base;
 extern crate storage_proofs;
 
+use clap::{App, Arg};
+use slog::*;
+
 use filecoin_proofs::api::internal;
 use filecoin_proofs::FCP_LOG;
 use pairing::bls12_381::Bls12;
 use sector_base::api::bytes_amount::PaddedBytesAmount;
-use sector_base::api::porep_config::POREP_PROOF_PARTITION_CHOICES;
+use sector_base::api::porep_config::PoRepConfig;
+use sector_base::api::porep_proof_partitions::PoRepProofPartitions;
+use sector_base::api::porep_proof_partitions::POREP_PROOF_PARTITION_CHOICES;
+use sector_base::api::post_config::PoStConfig;
+use sector_base::api::post_proof_partitions::PoStProofPartitions;
+use sector_base::api::sector_size::SectorSize;
 use sector_base::api::sector_size::SECTOR_SIZE_CHOICES;
 use storage_proofs::circuit::vdf_post::{VDFPoStCircuit, VDFPostCompound};
 use storage_proofs::circuit::zigzag::ZigZagCompound;
@@ -16,14 +24,6 @@ use storage_proofs::hasher::pedersen::PedersenHasher;
 use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::vdf_post::VDFPoSt;
 use storage_proofs::vdf_sloth::Sloth;
-
-use clap::{App, Arg};
-use sector_base::api::porep_config::PoRepConfig;
-use sector_base::api::porep_config::PoRepProofPartitions;
-use sector_base::api::post_config::PoStConfig;
-use sector_base::api::post_config::PoStProofPartitions;
-use sector_base::api::sector_size::SectorSize;
-use slog::*;
 
 fn cache_porep_params(porep_config: PoRepConfig) {
     let n = u64::from(PaddedBytesAmount::from(porep_config));

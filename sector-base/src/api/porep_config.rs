@@ -1,6 +1,7 @@
 use crate::api::bytes_amount::PaddedBytesAmount;
 use crate::api::bytes_amount::UnpaddedBytesAmount;
 use crate::api::disk_backed_storage::TEST_SECTOR_SIZE;
+use crate::api::porep_proof_partitions::PoRepProofPartitions;
 use crate::api::sector_size::SectorSize;
 
 #[derive(Clone, Copy, Debug)]
@@ -8,14 +9,6 @@ pub enum PoRepConfig {
     Live(SectorSize, PoRepProofPartitions),
     Test,
 }
-
-// When modifying, update internal::tests::partition_layer_challenges_test to reflect supported PoRepProofPartitions.
-#[derive(Clone, Copy, Debug)]
-pub enum PoRepProofPartitions {
-    Two,
-}
-
-pub const POREP_PROOF_PARTITION_CHOICES: [PoRepProofPartitions; 1] = [PoRepProofPartitions::Two];
 
 impl Default for PoRepConfig {
     fn default() -> Self {
@@ -46,14 +39,6 @@ impl From<PoRepConfig> for PoRepProofPartitions {
         match x {
             PoRepConfig::Test => PoRepProofPartitions::Two,
             PoRepConfig::Live(_, p) => p,
-        }
-    }
-}
-
-impl From<PoRepProofPartitions> for usize {
-    fn from(x: PoRepProofPartitions) -> Self {
-        match x {
-            PoRepProofPartitions::Two => 2,
         }
     }
 }

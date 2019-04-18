@@ -17,9 +17,10 @@ use crate::error::ExpectWithBacktrace;
 use crate::FCP_LOG;
 use sector_base::api::bytes_amount::{PaddedBytesAmount, UnpaddedBytesAmount};
 use sector_base::api::porep_config::PoRepConfig;
-use sector_base::api::porep_config::PoRepProofPartitions;
+use sector_base::api::porep_proof_partitions::PoRepProofPartitions;
 use sector_base::api::post_config::PoStConfig;
-use sector_base::api::post_config::PoStProofPartitions;
+use sector_base::api::post_proof_partitions::PoStProofPartitions;
+use sector_base::api::SINGLE_PARTITION_PROOF_LEN;
 use sector_base::io::fr32::write_unpadded;
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::vdf_post::{VDFPoStCircuit, VDFPostCompound};
@@ -38,8 +39,6 @@ use storage_proofs::vdf_post::{self, VDFPoSt};
 use storage_proofs::vdf_sloth::{self, Sloth};
 use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
 use storage_proofs::zigzag_graph::ZigZagBucketGraph;
-
-const SINGLE_PARTITION_PROOF_LEN: usize = 192;
 
 pub type Commitment = Fr32Ary;
 pub type ChallengeSeed = Fr32Ary;

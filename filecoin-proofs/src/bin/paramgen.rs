@@ -10,7 +10,8 @@ use std::fs::File;
 
 use filecoin_proofs::api::internal;
 use sector_base::api::bytes_amount::PaddedBytesAmount;
-use sector_base::api::porep_config::{PoRepConfig, PoRepProofPartitions};
+use sector_base::api::porep_config::PoRepConfig;
+use sector_base::api::porep_proof_partitions::PoRepProofPartitions;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::CompoundProof;
 
