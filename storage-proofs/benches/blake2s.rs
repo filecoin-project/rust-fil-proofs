@@ -56,7 +56,7 @@ fn blake2s_benchmark(c: &mut Criterion) {
     c.bench(
         "blake2s",
         ParameterizedBenchmark::new(
-            "non-circuit",
+            "plain",
             |b, bytes| {
                 let mut rng = thread_rng();
                 let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
@@ -65,24 +65,36 @@ fn blake2s_benchmark(c: &mut Criterion) {
             },
             params,
         )
-        .with_function("circuit-create_proof", move |b, bytes| {
-            b.iter(|| {
-                let mut rng = rng1.clone();
-                let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
+        .sample_size(20)
+        .throughput(|s| Throughput::Bytes(*s as u32)),
+    );
 
-                let proof = create_random_proof(
-                    Blake2sExample {
-                        data: data.as_slice(),
-                    },
-                    &groth_params,
-                    &mut rng,
-                )
-                .unwrap();
+    // blake2s only handles upto 32 bytes atm
+    let params = vec![32];
+    c.bench(
+        "blake2s_circuit",
+        ParameterizedBenchmark::new(
+            "create_proof",
+            move |b, bytes| {
+                b.iter(|| {
+                    let mut rng = rng1.clone();
+                    let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
 
-                black_box(proof)
-            });
-        })
-        .with_function("circuit-synthesize_circuit", move |b, bytes| {
+                    let proof = create_random_proof(
+                        Blake2sExample {
+                            data: data.as_slice(),
+                        },
+                        &groth_params,
+                        &mut rng,
+                    )
+                    .unwrap();
+
+                    black_box(proof)
+                });
+            },
+            params,
+        )
+        .with_function("synthesize", move |b, bytes| {
             b.iter(|| {
                 let mut cs = BenchCS::<Bls12>::new();
 

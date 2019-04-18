@@ -6,18 +6,17 @@ use storage_proofs::drgraph::*;
 use storage_proofs::hasher::pedersen::*;
 
 fn drgraph(c: &mut Criterion) {
-    let params: Vec<_> = vec![12, 24, 128, 1024]
-        .iter()
-        .map(|n| (BucketGraph::<PedersenHasher>::new(*n, 6, 0, new_seed()), 2))
-        .collect();
+    let params: Vec<_> = vec![12, 24, 128, 1024];
     c.bench(
-        "sample",
+        "drgraph",
         ParameterizedBenchmark::new(
-            "bucket/m=6",
-            |b, (graph, i)| {
+            "parents/bucket/m=6",
+            |b, n| {
+                let i = 2;
+                let graph = BucketGraph::<PedersenHasher>::new(*n, 6, 0, new_seed());
                 b.iter(|| {
                     let mut parents = vec![0; 6];
-                    black_box(graph.parents(*i, &mut parents));
+                    black_box(graph.parents(i, &mut parents));
                 })
             },
             params,

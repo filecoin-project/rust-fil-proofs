@@ -171,7 +171,7 @@ impl<Z: ZigZag> Graph<Z::BaseHasher> for Z {
             }
         }
         assert!(parents.len() == self.degree());
-        parents.sort();
+        parents.sort_unstable();
 
         assert!(parents.iter().all(|p| if self.forward() {
             *p <= raw_node
