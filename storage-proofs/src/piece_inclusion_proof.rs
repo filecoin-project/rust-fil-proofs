@@ -3,7 +3,7 @@ use merkle_light::hash::Algorithm;
 use merkle_light::merkle::{self, next_pow2, VecStore};
 
 use crate::error::*;
-use crate::fr32::Fr32Vec;
+use crate::fr32::Fr32Ary;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::MerkleTree;
 
@@ -19,7 +19,7 @@ pub struct PieceInclusionProof<H: Hasher> {
 /// `position`, `length` are in H::Domain units
 #[derive(Clone, Debug)]
 pub struct PieceSpec<'a> {
-    comm_p: &'a Fr32Vec,
+    comm_p: &'a Fr32Ary,
     position: usize,
     length: usize,
 }
@@ -91,10 +91,13 @@ fn generate_piece_commitment<H: Hasher>(data: &[u8]) -> Result<H::Domain> {
 
 #[allow(dead_code)]
 /// Generate `comm_p` from bytes and return it as bytes.
-fn generate_piece_commitment_bytes<H: Hasher>(data: &[u8]) -> Result<Fr32Vec> {
+fn generate_piece_commitment_bytes<H: Hasher>(data: &[u8]) -> Result<Fr32Ary> {
     let comm_p = generate_piece_commitment::<H>(data)?;
+    let mut comm_p_bytes: Fr32Ary = [0; 32];
 
-    Ok(H::Domain::into_bytes(&comm_p))
+    comm_p.write_bytes(&mut comm_p_bytes)?;
+
+    Ok(comm_p_bytes)
 }
 
 pub fn piece_inclusion_proofs<H: Hasher>(
@@ -254,7 +257,7 @@ impl<H: Hasher> PieceInclusionProof<H> {
     pub fn verify_all(
         root: &[u8],
         proofs: &[PieceInclusionProof<H>],
-        comm_ps: &[Vec<u8>],
+        comm_ps: &[Fr32Ary],
         piece_sizes: &[usize],
         sector_size: usize,
     ) -> Result<bool> {
