@@ -329,6 +329,14 @@ pub trait Layers {
                     })
                     .collect::<Result<Vec<_>>>()?;
 
+                // Offload the data tree, we won't use it in the next iteration,
+                // only `tree_r` is reused (as the new `tree_d`).
+                aux[layer].offload_store();
+                // Only if this is the last iteration also offload `tree_r`.
+                if layer == layers - 1 {
+                    aux[layer + 1].offload_store();
+                }
+
                 Ok(partition_proofs)
             })
             .collect::<Result<Vec<_>>>()
@@ -468,7 +476,7 @@ pub trait Layers {
                                         }
                                     }
 
-                                    let mut tree_d = graph
+                                    let tree_d = graph
                                         .merkle_tree_path(
                                             &data_copy,
                                             Some(&PathBuf::from(tree_dir).join(format!(
