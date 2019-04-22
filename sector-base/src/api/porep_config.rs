@@ -9,10 +9,13 @@ pub enum PoRepConfig {
     Test,
 }
 
+// When modifying, update internal::tests::partition_layer_challenges_test to reflect supported PoRepProofPartitions.
 #[derive(Clone, Copy, Debug)]
 pub enum PoRepProofPartitions {
     Two,
 }
+
+pub const POREP_PROOF_PARTITION_CHOICES: [PoRepProofPartitions; 1] = [PoRepProofPartitions::Two];
 
 impl Default for PoRepConfig {
     fn default() -> Self {

@@ -47,8 +47,6 @@ pub type ChallengeSeed = Fr32Ary;
 /// FrSafe is an array of the largest whole number of bytes guaranteed not to overflow the field.
 type FrSafe = [u8; 31];
 
-const POREP_MINIMUM_CHALLENGES: usize = 1; // FIXME: 8,000
-
 lazy_static! {
     pub static ref ENGINE_PARAMS: JubjubBls12 = JubjubBls12::new();
 }
@@ -122,7 +120,10 @@ where
 ////////////////////////////////////////////////////////////////////////////////
 
 fn get_zigzag_params(porep_config: PoRepConfig) -> error::Result<Arc<groth16::Parameters<Bls12>>> {
-    let public_params = public_params(PaddedBytesAmount::from(porep_config));
+    let public_params = public_params(
+        PaddedBytesAmount::from(porep_config),
+        usize::from(PoRepProofPartitions::from(porep_config)),
+    );
 
     let get_params =
         || ZigZagCompound::groth_params(&public_params, &ENGINE_PARAMS).map_err(Into::into);
@@ -158,7 +159,10 @@ fn get_post_params(post_config: PoStConfig) -> error::Result<Arc<groth16::Parame
 }
 
 fn get_zigzag_verifying_key(porep_config: PoRepConfig) -> error::Result<Arc<Bls12VerifyingKey>> {
-    let public_params = public_params(PaddedBytesAmount::from(porep_config));
+    let public_params = public_params(
+        PaddedBytesAmount::from(porep_config),
+        usize::from(PoRepProofPartitions::from(porep_config)),
+    );
 
     let get_verifying_key =
         || ZigZagCompound::verifying_key(&public_params, &ENGINE_PARAMS).map_err(Into::into);
@@ -199,16 +203,49 @@ const SLOTH_ITER: usize = 0;
 const LAYERS: usize = 4; // TODO: 10;
 const TAPER_LAYERS: usize = 2; // TODO: 7
 const TAPER: f64 = 1.0 / 3.0;
-const CHALLENGE_COUNT: usize = 2;
+const POREP_MINIMUM_CHALLENGES: usize = 12; // FIXME: 8,000
+
 const DRG_SEED: [u32; 7] = [1, 2, 3, 4, 5, 6, 7]; // Arbitrary, need a theory for how to vary this over time.
 
-lazy_static! {
-    static ref CHALLENGES: LayerChallenges =
-        LayerChallenges::new_tapered(LAYERS, CHALLENGE_COUNT, TAPER_LAYERS, TAPER);
+fn select_challenges(
+    partitions: usize,
+    minimum_total_challenges: usize,
+    layers: usize,
+    taper_layers: usize,
+    taper: f64,
+) -> LayerChallenges {
+    let mut count = 1;
+    let mut guess = LayerChallenges::Tapered {
+        count,
+        layers,
+        taper,
+        taper_layers,
+    };
+    while partitions * guess.total_challenges() < minimum_total_challenges {
+        count += 1;
+        guess = LayerChallenges::Tapered {
+            count,
+            layers,
+            taper,
+            taper_layers,
+        };
+    }
+    guess
 }
 
-fn setup_params(sector_bytes: PaddedBytesAmount) -> layered_drgporep::SetupParams {
+fn setup_params(
+    sector_bytes: PaddedBytesAmount,
+    partitions: usize,
+) -> layered_drgporep::SetupParams {
     let sector_bytes = u64::from(sector_bytes);
+
+    let challenges = select_challenges(
+        partitions,
+        POREP_MINIMUM_CHALLENGES,
+        LAYERS,
+        TAPER_LAYERS,
+        TAPER,
+    );
 
     assert!(
         sector_bytes % 32 == 0,
@@ -224,14 +261,15 @@ fn setup_params(sector_bytes: PaddedBytesAmount) -> layered_drgporep::SetupParam
             seed: DRG_SEED,
         },
         sloth_iter: SLOTH_ITER,
-        layer_challenges: CHALLENGES.clone(),
+        layer_challenges: challenges,
     }
 }
 
 pub fn public_params(
     sector_bytes: PaddedBytesAmount,
+    partitions: usize,
 ) -> layered_drgporep::PublicParams<DefaultTreeHasher, ZigZagBucketGraph<DefaultTreeHasher>> {
-    ZigZagDrgPoRep::<DefaultTreeHasher>::setup(&setup_params(sector_bytes)).unwrap()
+    ZigZagDrgPoRep::<DefaultTreeHasher>::setup(&setup_params(sector_bytes, partitions)).unwrap()
 }
 
 type PostSetupParams = vdf_post::SetupParams<PedersenDomain, vdf_sloth::Sloth>;
@@ -447,7 +485,7 @@ fn make_merkle_tree<T: Into<PathBuf> + AsRef<Path>>(
     let mut data = Vec::new();
     f_in.read_to_end(&mut data)?;
 
-    public_params(bytes).graph.merkle_tree(&data)
+    public_params(bytes, 1).graph.merkle_tree(&data)
 }
 
 #[derive(Clone, Debug)]
@@ -508,7 +546,10 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: &setup_params(PaddedBytesAmount::from(porep_config)),
+        vanilla_params: &setup_params(
+            PaddedBytesAmount::from(porep_config),
+            usize::from(PoRepProofPartitions::from(porep_config)),
+        ),
         engine_params: &(*ENGINE_PARAMS),
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };
@@ -604,7 +645,10 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     let mut buf_writer = BufWriter::new(f_out);
 
     let unsealed = ZigZagDrgPoRep::extract_all(
-        &public_params(PaddedBytesAmount::from(porep_config)),
+        &public_params(
+            PaddedBytesAmount::from(porep_config),
+            usize::from(PoRepProofPartitions::from(porep_config)),
+        ),
         &replica_id,
         &data,
     )?;
@@ -638,7 +682,10 @@ pub fn verify_seal(
     let comm_r_star = bytes_into_fr::<Bls12>(&comm_r_star)?;
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: &setup_params(PaddedBytesAmount::from(porep_config)),
+        vanilla_params: &setup_params(
+            PaddedBytesAmount::from(porep_config),
+            usize::from(PoRepProofPartitions::from(porep_config)),
+        ),
         engine_params: &(*ENGINE_PARAMS),
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };
@@ -1141,5 +1188,25 @@ mod tests {
     #[ignore]
     fn post_verify_test() {
         post_verify_aux(SectorClass::Test, BytesAmount::Max);
+    }
+
+    #[test]
+    fn partition_layer_challenges_test() {
+        let f = |partitions| {
+            select_challenges(
+                partitions,
+                POREP_MINIMUM_CHALLENGES,
+                LAYERS,
+                TAPER_LAYERS,
+                TAPER,
+            )
+            .all_challenges()
+        };
+        // Update to ensure all supported PoRepProofPartitions options are represented here.
+        assert_eq!(vec![1, 1, 2, 2], f(usize::from(PoRepProofPartitions::Two)));
+
+        assert_eq!(vec![3, 3, 4, 5], f(1));
+        assert_eq!(vec![1, 1, 2, 2], f(2));
+        assert_eq!(vec![1, 1, 1, 1], f(4));
     }
 }

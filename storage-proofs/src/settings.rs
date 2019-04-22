@@ -21,7 +21,7 @@ impl Default for Settings {
         Settings {
             maximize_caching: false,
             merkle_tree_path: "/tmp/merkle-trees".into(),
-            num_proving_threads: 4,
+            num_proving_threads: 1,
         }
     }
 }

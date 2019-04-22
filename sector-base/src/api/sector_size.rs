@@ -10,6 +10,9 @@ pub enum SectorSize {
     TwoHundredFiftySixMiB,
 }
 
+pub const SECTOR_SIZE_CHOICES: [SectorSize; 2] =
+    [SectorSize::OneKiB, SectorSize::TwoHundredFiftySixMiB];
+
 impl From<SectorSize> for UnpaddedBytesAmount {
     fn from(x: SectorSize) -> Self {
         match x {
