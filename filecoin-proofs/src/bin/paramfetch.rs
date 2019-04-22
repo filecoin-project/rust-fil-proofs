@@ -94,10 +94,7 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
                 &parameter_map,
                 &parameter_id,
             ) {
-                Ok(mut child) => match child.wait() {
-                    Ok(_) => println!("ok\n"),
-                    Err(err) => println!("error: {}\n", err),
-                },
+                Ok(_) => println!("ok!"),
                 Err(err) => println!("error: {}\n", err),
             }
         }
