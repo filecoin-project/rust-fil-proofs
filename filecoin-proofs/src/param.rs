@@ -10,8 +10,8 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 
-use storage_proofs::parameter_cache::parameter_cache_dir;
 use pbr::{ProgressBar, Units};
+use storage_proofs::parameter_cache::parameter_cache_dir;
 
 const ERROR_IPFS_COMMAND: &str = "failed to run ipfs";
 const ERROR_IPFS_OUTPUT: &str = "failed to capture ipfs output";
@@ -142,9 +142,8 @@ pub fn spawn_fetch_parameter_file(
     let url = format!("https://ipfs.io/ipfs/{}", parameter_data.cid);
     let mut hdl = Easy::new();
     hdl.url(&url).unwrap();
-    hdl.write_function(move |data| {
-        Ok(paramfile.write(data).unwrap_or(0))
-    }).unwrap();
+    hdl.write_function(move |data| Ok(paramfile.write(data).unwrap_or(0)))
+        .unwrap();
 
     if is_verbose {
         let mut pb = ProgressBar::new(100);
@@ -154,7 +153,8 @@ pub fn spawn_fetch_parameter_file(
             pb.total = size_dl as u64;
             pb.set(dl_so_far as u64);
             true
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     hdl.connect_timeout(Duration::new(30, 0)).unwrap();
