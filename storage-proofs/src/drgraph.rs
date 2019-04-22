@@ -1,6 +1,8 @@
 use std::cmp;
 use std::marker::PhantomData;
 
+#[cfg(feature = "disk-trees")]
+use merkle_light::merkle::next_pow2;
 use rand::{ChaChaRng, OsRng, Rng, SeedableRng};
 use rayon::prelude::*;
 #[cfg(feature = "disk-trees")]
@@ -110,7 +112,17 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
         if let Some(path) = path {
             info!(SP_LOG, "creating tree mmap-file"; "path" => &path.to_str());
 
-            let disk_mmap = DiskMmapStore::new_with_path(self.size(), path);
+            // FIXME: CROSSING API BOUNDARIES HERE.
+            // The `Store` created here has an assigned size of *only* the
+            // leaves, not the *entire* tree, which is expected since the
+            // consumer shouldn't need to know how big the final `Store` is
+            // going to be. To *temporarily* accommodate this we *mangle* the
+            // received `size` (in a similar way to `MerkleTree::from_iter`) to
+            // expand it to the entire tree.
+            let pow = next_pow2(self.size());
+            let size = 2 * pow - 1;
+
+            let disk_mmap = DiskMmapStore::new_with_path(size, path);
             // FIXME: `new_with_path` is using the `from_iter` implementation,
             //  instead the `parallel` flag should be passed also as argument
             //  and decide *there* which code to use (merging this into the
