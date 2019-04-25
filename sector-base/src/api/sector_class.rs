@@ -5,16 +5,16 @@ use crate::api::post_proof_partitions::PoStProofPartitions;
 use crate::api::sector_size::SectorSize;
 
 #[derive(Clone, Copy, Debug)]
-pub enum SectorClass {
-    Live(SectorSize, PoRepProofPartitions, PoStProofPartitions),
-    Test,
-}
+pub struct SectorClass(
+    pub SectorSize,
+    pub PoRepProofPartitions,
+    pub PoStProofPartitions,
+);
 
 impl From<SectorClass> for PoStConfig {
     fn from(x: SectorClass) -> Self {
         match x {
-            SectorClass::Test => PoStConfig::Test,
-            SectorClass::Live(ss, _, ppp) => PoStConfig::Live(ss, ppp),
+            SectorClass(ss, _, ppp) => PoStConfig(ss, ppp),
         }
     }
 }
@@ -22,8 +22,7 @@ impl From<SectorClass> for PoStConfig {
 impl From<SectorClass> for PoRepConfig {
     fn from(x: SectorClass) -> Self {
         match x {
-            SectorClass::Test => PoRepConfig::Test,
-            SectorClass::Live(ss, ppp, _) => PoRepConfig::Live(ss, ppp),
+            SectorClass(ss, ppp, _) => PoRepConfig(ss, ppp),
         }
     }
 }

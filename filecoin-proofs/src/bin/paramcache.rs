@@ -85,16 +85,17 @@ pub fn main() {
 
     let test_only: bool = matches.is_present("test-only");
 
-    cache_porep_params(PoRepConfig::Test);
-    cache_post_params(PoStConfig::Test);
+    cache_porep_params(PoRepConfig(SectorSize::OneKiB, PoRepProofPartitions::Two));
+
+    cache_post_params(PoStConfig(SectorSize::OneKiB, PoStProofPartitions::One));
 
     if !test_only {
         for p in &POREP_PROOF_PARTITION_CHOICES {
             for s in &SECTOR_SIZE_CHOICES {
-                cache_porep_params(PoRepConfig::Live(*s, *p));
+                cache_porep_params(PoRepConfig(*s, *p));
             }
         }
-        cache_post_params(PoStConfig::Live(
+        cache_post_params(PoStConfig(
             SectorSize::TwoHundredFiftySixMiB,
             PoStProofPartitions::One,
         ));

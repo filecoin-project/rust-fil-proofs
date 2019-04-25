@@ -284,8 +284,7 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
         (piece_bytes, piece_key)
     };
 
-    // poll for sealed sector metadata through the FFI and then verify that the
-    // proof was valid
+    // poll for sealed sector metadata through the FFI
     {
         let (result_tx, result_rx) = mpsc::channel();
         let (kill_tx, kill_rx) = mpsc::channel();

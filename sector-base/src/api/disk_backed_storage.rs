@@ -206,13 +206,9 @@ impl ProofsConfig for Config {
 impl From<SectorClass> for Config {
     fn from(x: SectorClass) -> Self {
         match x {
-            SectorClass::Test => Config {
-                porep_config: PoRepConfig::Test,
-                post_config: PoStConfig::Test,
-            },
-            SectorClass::Live(size, porep_p, post_p) => Config {
-                porep_config: PoRepConfig::Live(size, porep_p),
-                post_config: PoStConfig::Live(size, post_p),
+            SectorClass(size, porep_p, post_p) => Config {
+                porep_config: PoRepConfig(size, porep_p),
+                post_config: PoStConfig(size, post_p),
             },
         }
     }
@@ -259,14 +255,21 @@ pub mod tests {
     fn max_unsealed_bytes_per_sector_checks() {
         let xs = vec![
             (
-                SectorClass::Live(
+                SectorClass(
                     SectorSize::TwoHundredFiftySixMiB,
                     PoRepProofPartitions::Two,
                     PoStProofPartitions::One,
                 ),
                 266338304,
             ),
-            (SectorClass::Test, 1016),
+            (
+                SectorClass(
+                    SectorSize::OneKiB,
+                    PoRepProofPartitions::Two,
+                    PoStProofPartitions::One,
+                ),
+                1016,
+            ),
         ];
 
         for (sector_class, num_bytes) in xs {
@@ -278,7 +281,11 @@ pub mod tests {
 
     #[test]
     fn unsealed_sector_write_and_truncate() {
-        let storage: Box<SectorStore> = create_sector_store(SectorClass::Test);
+        let storage: Box<SectorStore> = create_sector_store(SectorClass(
+            SectorSize::OneKiB,
+            PoRepProofPartitions::Two,
+            PoStProofPartitions::One,
+        ));
         let mgr = storage.manager();
 
         let access = mgr
@@ -369,7 +376,11 @@ pub mod tests {
 
     #[test]
     fn deletes_staging_access() {
-        let store = create_sector_store(SectorClass::Test);
+        let store = create_sector_store(SectorClass(
+            SectorSize::OneKiB,
+            PoRepProofPartitions::Two,
+            PoStProofPartitions::One,
+        ));
         let access = store.manager().new_staging_sector_access().unwrap();
 
         assert!(store
