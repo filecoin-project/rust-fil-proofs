@@ -1,4 +1,5 @@
 use blake2b_simd::State as Blake2b;
+use curl::easy::Easy;
 use failure::{err_msg, Error};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -7,7 +8,9 @@ use std::fs::{create_dir_all, read_dir, rename, File};
 use std::io::{stdin, stdout, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 use std::process::Command;
-use std::process::Stdio;
+use std::time::Duration;
+
+use pbr::{ProgressBar, Units};
 use storage_proofs::parameter_cache::parameter_cache_dir;
 
 const ERROR_IPFS_COMMAND: &str = "failed to run ipfs";
@@ -125,33 +128,39 @@ pub fn spawn_fetch_parameter_file(
     is_verbose: bool,
     parameter_map: &ParameterMap,
     parameter_id: &str,
-) -> Result<std::process::Child> {
+) -> Result<()> {
     let parameter_data = get_parameter_data(parameter_map, parameter_id)?;
     let path = get_parameter_file_path(parameter_id);
 
     create_dir_all(parameter_cache_dir())?;
 
-    let output_styling = if is_verbose {
-        &["--verbose", "--progress-bar"]
-    } else {
-        &["--silent", "--show-error"]
+    let mut paramfile = match File::create(&path).map_err(failure::Error::from) {
+        Err(why) => return Err(why),
+        Ok(file) => file,
     };
 
-    let connect_timeout = &["--connect-timeout", "30"];
+    let url = format!("https://ipfs.io/ipfs/{}", parameter_data.cid);
+    let mut hdl = Easy::new();
+    hdl.url(&url).unwrap();
+    hdl.write_function(move |data| Ok(paramfile.write(data).unwrap_or(0)))
+        .unwrap();
 
-    // time out if speed stays at below 1000 bytes/second for >= 15 seconds
-    let speed_timeout = &["--speed-time", "15", "--speed-limit", "1000"];
+    if is_verbose {
+        let mut pb = ProgressBar::new(100);
+        pb.set_units(Units::Bytes);
+        hdl.progress(true).unwrap();
+        hdl.progress_function(move |size_dl, dl_so_far, _, _| {
+            pb.total = size_dl as u64;
+            pb.set(dl_so_far as u64);
+            true
+        })
+        .unwrap();
+    }
 
-    Command::new("curl")
-        .args(output_styling)
-        .args(connect_timeout)
-        .args(speed_timeout)
-        .arg("--output")
-        .arg(&path)
-        .arg(format!("https://ipfs.io/ipfs/{}", parameter_data.cid))
-        .stdout(Stdio::inherit())
-        .spawn()
-        .map_err(failure::Error::from)
+    hdl.connect_timeout(Duration::new(30, 0)).unwrap();
+    hdl.low_speed_limit(1000).unwrap();
+    hdl.low_speed_time(Duration::new(15, 0)).unwrap();
+    hdl.perform().map_err(failure::Error::from)
 }
 
 pub fn validate_parameter_file(parameter_map: &ParameterMap, parameter_id: &str) -> Result<bool> {
