@@ -16,7 +16,6 @@ use sector_base::api::porep_proof_partitions::POREP_PROOF_PARTITION_CHOICES;
 use sector_base::api::post_config::PoStConfig;
 use sector_base::api::post_proof_partitions::PoStProofPartitions;
 use sector_base::api::sector_size::SectorSize;
-use sector_base::api::sector_size::SECTOR_SIZE_CHOICES;
 use storage_proofs::circuit::vdf_post::{VDFPoStCircuit, VDFPostCompound};
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::CompoundProof;
@@ -86,14 +85,11 @@ pub fn main() {
     let test_only: bool = matches.is_present("test-only");
 
     cache_porep_params(PoRepConfig(SectorSize::OneKiB, PoRepProofPartitions::Two));
-
     cache_post_params(PoStConfig(SectorSize::OneKiB, PoStProofPartitions::One));
 
     if !test_only {
         for p in &POREP_PROOF_PARTITION_CHOICES {
-            for s in &SECTOR_SIZE_CHOICES {
-                cache_porep_params(PoRepConfig(*s, *p));
-            }
+            cache_porep_params(PoRepConfig(SectorSize::TwoHundredFiftySixMiB, *p));
         }
         cache_post_params(PoStConfig(
             SectorSize::TwoHundredFiftySixMiB,
