@@ -19,6 +19,8 @@ use ffi_toolkit::free_c_str;
 use ffi_toolkit::rust_str_to_c_str;
 use filecoin_proofs::error::ExpectWithBacktrace;
 use rand::{thread_rng, Rng};
+use sector_base::api::disk_backed_storage::LIVE_SECTOR_SIZE;
+use sector_base::api::disk_backed_storage::TEST_SECTOR_SIZE;
 use std::env;
 use std::error::Error;
 use std::io::Write;
@@ -141,7 +143,7 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
     let sizes = if use_live_store {
         ConfigurableSizes {
             sector_class: FFISectorClass {
-                sector_size: 266338304,
+                sector_size: LIVE_SECTOR_SIZE,
                 porep_proof_partitions: 2,
                 post_proof_partitions: 1,
             },
@@ -153,7 +155,7 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
     } else {
         ConfigurableSizes {
             sector_class: FFISectorClass {
-                sector_size: 1024,
+                sector_size: TEST_SECTOR_SIZE,
                 porep_proof_partitions: 2,
                 post_proof_partitions: 1,
             },
