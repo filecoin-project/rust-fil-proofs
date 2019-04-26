@@ -1,6 +1,6 @@
 use clap::{App, Arg, ArgMatches};
 use filecoin_proofs::param::*;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::io;
 use std::io::prelude::*;
 use std::path::PathBuf;
@@ -53,7 +53,7 @@ fn publish(matches: &ArgMatches) -> Result<()> {
     };
 
     let json = PathBuf::from(matches.value_of("json").unwrap_or("./parameters.json"));
-    let mut parameter_map: ParameterMap = HashMap::new();
+    let mut parameter_map: ParameterMap = BTreeMap::new();
 
     if !parameter_ids.is_empty() {
         println!("publishing {} parameters...", parameter_ids.len());

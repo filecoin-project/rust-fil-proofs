@@ -7,6 +7,8 @@ use filecoin_proofs::api::internal;
 use filecoin_proofs::FCP_LOG;
 use pairing::bls12_381::Bls12;
 use sector_base::api::bytes_amount::PaddedBytesAmount;
+use sector_base::api::porep_config::POREP_PROOF_PARTITION_CHOICES;
+use sector_base::api::sector_size::SECTOR_SIZE_CHOICES;
 use storage_proofs::circuit::vdf_post::{VDFPoStCircuit, VDFPostCompound};
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::CompoundProof;
@@ -27,7 +29,10 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     let n = u64::from(PaddedBytesAmount::from(porep_config));
     info!(FCP_LOG, "begin PoRep parameter-cache check/populate routine for {}-byte sectors", n; "target" => "paramcache");
 
-    let public_params = internal::public_params(PaddedBytesAmount::from(porep_config));
+    let public_params = internal::public_params(
+        PaddedBytesAmount::from(porep_config),
+        usize::from(PoRepProofPartitions::from(porep_config)),
+    );
     {
         let circuit = ZigZagCompound::blank_circuit(&public_params, &internal::ENGINE_PARAMS);
 
@@ -84,10 +89,11 @@ pub fn main() {
     cache_post_params(PoStConfig::Test);
 
     if !test_only {
-        cache_porep_params(PoRepConfig::Live(
-            SectorSize::TwoHundredFiftySixMiB,
-            PoRepProofPartitions::Two,
-        ));
+        for p in &POREP_PROOF_PARTITION_CHOICES {
+            for s in &SECTOR_SIZE_CHOICES {
+                cache_porep_params(PoRepConfig::Live(*s, *p));
+            }
+        }
         cache_post_params(PoStConfig::Live(
             SectorSize::TwoHundredFiftySixMiB,
             PoStProofPartitions::One,
