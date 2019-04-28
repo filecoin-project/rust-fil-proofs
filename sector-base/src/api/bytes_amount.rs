@@ -15,12 +15,16 @@ impl From<UnpaddedBytesAmount> for u64 {
     }
 }
 
-impl From<UnpaddedBytesAmount> for usize {
-    fn from(n: UnpaddedBytesAmount) -> Self {
-        n.0 as usize
-    }
-}
+// //Delete the implementation for usize, since it could bring potential issue on a 32-bit system
+// // to fix #622
+// impl From<UnpaddedBytesAmount> for usize {
+//     fn from(n: UnpaddedBytesAmount) -> Self {
+//         n.0 as usize
+//     }
+// }
 
+// This could potentially trigger some issues, when convert u64 to usize and reverse back.
+// Todo: need to find where this function is called and what's the impact
 impl From<UnpaddedBytesAmount> for PaddedBytesAmount {
     fn from(n: UnpaddedBytesAmount) -> Self {
         PaddedBytesAmount(padded_bytes(n.0 as usize) as u64)
@@ -33,11 +37,12 @@ impl From<PaddedBytesAmount> for u64 {
     }
 }
 
-impl From<PaddedBytesAmount> for usize {
-    fn from(n: PaddedBytesAmount) -> Self {
-        n.0 as usize
-    }
-}
+// //Delete the implementation for usize, to fix issue #622
+// impl From<PaddedBytesAmount> for usize {
+//     fn from(n: PaddedBytesAmount) -> Self {
+//         n.0 as usize
+//     }
+// }
 
 impl From<PaddedBytesAmount> for UnpaddedBytesAmount {
     fn from(n: PaddedBytesAmount) -> Self {
