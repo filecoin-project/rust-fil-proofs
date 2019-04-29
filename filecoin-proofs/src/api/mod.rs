@@ -24,6 +24,7 @@ use sector_base::api::post_proof_partitions;
 use sector_base::api::post_proof_partitions::try_from_bytes;
 use sector_base::api::sector_class::SectorClass;
 use sector_base::api::sector_size;
+use sector_base::api::SINGLE_PARTITION_PROOF_LEN;
 
 pub mod internal;
 pub mod post_adapter;
@@ -35,7 +36,6 @@ mod sector_builder;
 #[no_mangle]
 pub unsafe extern "C" fn verify_seal(
     sector_size: u64,
-    proof_partitions: u8,
     comm_r: &[u8; 32],
     comm_d: &[u8; 32],
     comm_r_star: &[u8; 32],
@@ -47,10 +47,11 @@ pub unsafe extern "C" fn verify_seal(
     info!(FCP_LOG, "verify_seal: {}", "start"; "target" => "FFI");
 
     let porep_config = sector_size::try_from_u64(sector_size).and_then(|ss| {
-        porep_proof_partitions::try_from_u8(proof_partitions).map(|ppp| PoRepConfig(ss, ppp))
+        porep_proof_partitions::try_from_u8((proof_len / SINGLE_PARTITION_PROOF_LEN) as u8)
+            .map(|ppp| PoRepConfig(ss, ppp))
     });
 
-    let porep_bytes = try_into_porep_proof_bytes(proof_partitions, proof_ptr, proof_len);
+    let porep_bytes = try_into_porep_proof_bytes(proof_ptr, proof_len);
 
     let result = porep_config.and_then(|cfg| {
         porep_bytes.and_then(|bs| {
@@ -536,14 +537,13 @@ unsafe fn try_into_post_proofs_bytes(
 }
 
 unsafe fn try_into_porep_proof_bytes(
-    proof_partitions: u8,
-    flattened_proofs_ptr: *const u8,
-    flattened_proofs_len: libc::size_t,
+    proof_ptr: *const u8,
+    proof_len: libc::size_t,
 ) -> crate::error::Result<Vec<u8>> {
-    porep_proof_partitions::try_from_u8(proof_partitions)
+    porep_proof_partitions::try_from_u8((proof_len / SINGLE_PARTITION_PROOF_LEN) as u8)
         .map(PoRepProofBytesAmount::from)
         .map(usize::from)
-        .map(|chunk| into_proof_vecs(chunk, flattened_proofs_ptr, flattened_proofs_len))
+        .map(|chunk| into_proof_vecs(chunk, proof_ptr, proof_len))
         .and_then(|vs| {
             vs.first()
                 .map(Vec::clone)

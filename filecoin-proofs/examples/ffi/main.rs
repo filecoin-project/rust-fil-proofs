@@ -338,7 +338,6 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
         {
             let resp2 = verify_seal(
                 sizes.sector_class.sector_size,
-                sizes.sector_class.porep_proof_partitions,
                 &mut (*resp).comm_r,
                 &mut (*resp).comm_d,
                 &mut (*resp).comm_r_star,
