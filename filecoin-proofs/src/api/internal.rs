@@ -17,9 +17,10 @@ use crate::error::ExpectWithBacktrace;
 use crate::FCP_LOG;
 use sector_base::api::bytes_amount::{PaddedBytesAmount, UnpaddedBytesAmount};
 use sector_base::api::porep_config::PoRepConfig;
-use sector_base::api::porep_config::PoRepProofPartitions;
+use sector_base::api::porep_proof_partitions::PoRepProofPartitions;
 use sector_base::api::post_config::PoStConfig;
-use sector_base::api::post_config::PoStProofPartitions;
+use sector_base::api::post_proof_partitions::PoStProofPartitions;
+use sector_base::api::SINGLE_PARTITION_PROOF_LEN;
 use sector_base::io::fr32::write_unpadded;
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::vdf_post::{VDFPoStCircuit, VDFPostCompound};
@@ -38,8 +39,6 @@ use storage_proofs::vdf_post::{self, VDFPoSt};
 use storage_proofs::vdf_sloth::{self, Sloth};
 use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
 use storage_proofs::zigzag_graph::ZigZagBucketGraph;
-
-const SINGLE_PARTITION_PROOF_LEN: usize = 192;
 
 pub type Commitment = Fr32Ary;
 pub type ChallengeSeed = Fr32Ary;
@@ -734,6 +733,7 @@ mod tests {
     use rand::{thread_rng, Rng};
     use sector_base::api::disk_backed_storage::new_sector_store;
     use sector_base::api::sector_class::SectorClass;
+    use sector_base::api::sector_size::SectorSize;
     use sector_base::api::sector_store::SectorStore;
     use std::fs::create_dir_all;
     use std::fs::File;
@@ -743,6 +743,12 @@ mod tests {
     use std::io::Write;
     use std::thread;
     use tempfile::NamedTempFile;
+
+    const TEST_CLASS: SectorClass = SectorClass(
+        SectorSize::OneKiB,
+        PoRepProofPartitions::Two,
+        PoStProofPartitions::One,
+    );
 
     struct Harness {
         prover_id: FrSafe,
@@ -1142,28 +1148,28 @@ mod tests {
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn seal_verify_test() {
-        seal_verify_aux(SectorClass::Test, BytesAmount::Max);
-        seal_verify_aux(SectorClass::Test, BytesAmount::Offset(5));
+        seal_verify_aux(TEST_CLASS, BytesAmount::Max);
+        seal_verify_aux(TEST_CLASS, BytesAmount::Offset(5));
     }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn seal_unsealed_roundtrip_test() {
-        seal_unsealed_roundtrip_aux(SectorClass::Test, BytesAmount::Max);
-        seal_unsealed_roundtrip_aux(SectorClass::Test, BytesAmount::Offset(5));
+        seal_unsealed_roundtrip_aux(TEST_CLASS, BytesAmount::Max);
+        seal_unsealed_roundtrip_aux(TEST_CLASS, BytesAmount::Offset(5));
     }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn seal_unsealed_range_roundtrip_test() {
-        seal_unsealed_range_roundtrip_aux(SectorClass::Test, BytesAmount::Max);
-        seal_unsealed_range_roundtrip_aux(SectorClass::Test, BytesAmount::Offset(5));
+        seal_unsealed_range_roundtrip_aux(TEST_CLASS, BytesAmount::Max);
+        seal_unsealed_range_roundtrip_aux(TEST_CLASS, BytesAmount::Offset(5));
     }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn write_and_preprocess_overwrites_unaligned_last_bytes() {
-        write_and_preprocess_overwrites_unaligned_last_bytes_aux(SectorClass::Test);
+        write_and_preprocess_overwrites_unaligned_last_bytes_aux(TEST_CLASS);
     }
 
     #[test]
@@ -1173,9 +1179,7 @@ mod tests {
 
         let spawned = (0..threads)
             .map(|_| {
-                thread::spawn(|| {
-                    seal_unsealed_range_roundtrip_aux(SectorClass::Test, BytesAmount::Max)
-                })
+                thread::spawn(|| seal_unsealed_range_roundtrip_aux(TEST_CLASS, BytesAmount::Max))
             })
             .collect::<Vec<_>>();
 
@@ -1187,7 +1191,7 @@ mod tests {
     #[test]
     #[ignore]
     fn post_verify_test() {
-        post_verify_aux(SectorClass::Test, BytesAmount::Max);
+        post_verify_aux(TEST_CLASS, BytesAmount::Max);
     }
 
     #[test]

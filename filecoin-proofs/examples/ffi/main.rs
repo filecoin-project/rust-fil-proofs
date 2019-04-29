@@ -13,11 +13,14 @@ extern crate sector_base;
 
 include!(concat!(env!("OUT_DIR"), "/libfilecoin_proofs.rs"));
 
+use byteorder::{LittleEndian, WriteBytesExt};
 use ffi_toolkit::c_str_to_rust_str;
 use ffi_toolkit::free_c_str;
 use ffi_toolkit::rust_str_to_c_str;
 use filecoin_proofs::error::ExpectWithBacktrace;
 use rand::{thread_rng, Rng};
+use sector_base::api::disk_backed_storage::LIVE_SECTOR_SIZE;
+use sector_base::api::disk_backed_storage::TEST_SECTOR_SIZE;
 use std::env;
 use std::error::Error;
 use std::io::Write;
@@ -33,6 +36,18 @@ use tempfile::TempDir;
 ///////////////////////////////////////////////////////////////////////////////
 // SectorBuilder lifecycle test
 ///////////////////////////////
+
+fn u64_to_fr_safe(sector_id: u64) -> [u8; 31] {
+    let mut byte_vector = vec![];
+    byte_vector.write_u64::<LittleEndian>(sector_id).unwrap();
+    byte_vector.resize(31, 0);
+
+    let mut byte_array = [0; 31];
+    let bytes = &byte_vector[..byte_array.len()]; // panics if not enough data
+    byte_array.copy_from_slice(bytes);
+
+    byte_array
+}
 
 fn make_piece(num_bytes_in_piece: usize) -> (String, Vec<u8>) {
     let mut rng = thread_rng();
@@ -128,9 +143,9 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
     let sizes = if use_live_store {
         ConfigurableSizes {
             sector_class: FFISectorClass {
-                sector_size: FFISectorSize_SSB_TwoHundredFiftySixMiB,
-                seal_proof_partitions: FFISealProofPartitions_SPP_Two,
-                post_proof_partitions: FFIPoStProofPartitions_PPP_One,
+                sector_size: LIVE_SECTOR_SIZE,
+                porep_proof_partitions: 2,
+                post_proof_partitions: 1,
             },
             max_bytes: 266338304,
             first_piece_bytes: 26214400,
@@ -140,9 +155,9 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
     } else {
         ConfigurableSizes {
             sector_class: FFISectorClass {
-                sector_size: FFISectorSize_SSB_OneKiB,
-                seal_proof_partitions: FFISealProofPartitions_SPP_Two,
-                post_proof_partitions: FFIPoStProofPartitions_PPP_One,
+                sector_size: TEST_SECTOR_SIZE,
+                porep_proof_partitions: 2,
+                post_proof_partitions: 1,
             },
             max_bytes: 1016,
             first_piece_bytes: 100,
@@ -155,7 +170,7 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
         &metadata_dir,
         &staging_dir,
         &sealed_dir,
-        [0; 31],
+        u64_to_fr_safe(0),
         123,
         sizes.sector_class,
     );
@@ -249,7 +264,7 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
         &metadata_dir,
         &staging_dir,
         &sealed_dir,
-        [0; 31],
+        u64_to_fr_safe(0),
         123,
         sizes.sector_class,
     );
@@ -288,6 +303,8 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
                 };
 
                 let resp = get_seal_status(sector_builder, 126);
+                defer!(destroy_get_seal_status_response(resp));
+
                 if (*resp).status_code != 0 {
                     return;
                 }
@@ -295,7 +312,6 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
                 if (*resp).seal_status_code == FFISealStatus_Sealed {
                     let _ = result_tx.send((*resp).sector_id).unwrap();
                 }
-                defer!(destroy_get_seal_status_response(resp));
 
                 thread::sleep(Duration::from_millis(1000));
             }
@@ -313,6 +329,33 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
         };
 
         assert_eq!(now_sealed_sector_id, 126);
+    }
+
+    // get sealed sector and verify the PoRep proof
+    {
+        let resp = get_seal_status(sector_builder_b, 126);
+
+        {
+            let resp2 = verify_seal(
+                sizes.sector_class.sector_size,
+                &mut (*resp).comm_r,
+                &mut (*resp).comm_d,
+                &mut (*resp).comm_r_star,
+                &mut u64_to_fr_safe(0),
+                &mut u64_to_fr_safe(126),
+                (*resp).proof_ptr,
+                (*resp).proof_len,
+            );
+            defer!(destroy_verify_seal_response(resp2));
+
+            if (*resp2).status_code != 0 {
+                panic!("{}", c_str_to_rust_str((*resp2).error_msg))
+            }
+
+            assert!((*resp2).is_valid)
+        }
+
+        destroy_get_seal_status_response(resp);
     }
 
     // get sealed sectors - we should have just one
@@ -356,6 +399,7 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
 
         let resp = verify_post(
             sizes.sector_class.sector_size,
+            sizes.sector_class.post_proof_partitions,
             &sealed_sector_replica_commitment[0],
             32,
             &mut challenge_seed,
@@ -363,7 +407,6 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
             (*resp).flattened_proofs_len,
             (*resp).faults_ptr,
             (*resp).faults_len,
-            SINGLE_PARTITION_PROOF_LEN as usize,
         );
         defer!(destroy_verify_post_response(resp));
 

@@ -3,6 +3,10 @@ use crate::io::fr32::unpadded_bytes;
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, Sub};
 
+pub struct PoStProofBytesAmount(pub usize);
+
+pub struct PoRepProofBytesAmount(pub usize);
+
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct UnpaddedBytesAmount(pub u64);
 
@@ -74,6 +78,18 @@ impl Sub for PaddedBytesAmount {
 
     fn sub(self, other: PaddedBytesAmount) -> PaddedBytesAmount {
         PaddedBytesAmount(self.0 - other.0)
+    }
+}
+
+impl From<PoStProofBytesAmount> for usize {
+    fn from(x: PoStProofBytesAmount) -> Self {
+        x.0
+    }
+}
+
+impl From<PoRepProofBytesAmount> for usize {
+    fn from(x: PoRepProofBytesAmount) -> Self {
+        x.0
     }
 }
 
