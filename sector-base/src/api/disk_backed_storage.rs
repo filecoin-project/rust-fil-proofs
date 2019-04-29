@@ -255,7 +255,7 @@ pub mod tests {
         let xs = vec![
             (
                 SectorClass(
-                    SectorSize::TwoHundredFiftySixMiB,
+                    SectorSize(LIVE_SECTOR_SIZE),
                     PoRepProofPartitions::Two,
                     PoStProofPartitions::One,
                 ),
@@ -263,7 +263,7 @@ pub mod tests {
             ),
             (
                 SectorClass(
-                    SectorSize::OneKiB,
+                    SectorSize(TEST_SECTOR_SIZE),
                     PoRepProofPartitions::Two,
                     PoStProofPartitions::One,
                 ),
@@ -281,7 +281,7 @@ pub mod tests {
     #[test]
     fn unsealed_sector_write_and_truncate() {
         let storage: Box<SectorStore> = create_sector_store(SectorClass(
-            SectorSize::OneKiB,
+            SectorSize(TEST_SECTOR_SIZE),
             PoRepProofPartitions::Two,
             PoStProofPartitions::One,
         ));
@@ -376,7 +376,7 @@ pub mod tests {
     #[test]
     fn deletes_staging_access() {
         let store = create_sector_store(SectorClass(
-            SectorSize::OneKiB,
+            SectorSize(TEST_SECTOR_SIZE),
             PoRepProofPartitions::Two,
             PoStProofPartitions::One,
         ));

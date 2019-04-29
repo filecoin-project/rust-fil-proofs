@@ -732,6 +732,7 @@ mod tests {
 
     use rand::{thread_rng, Rng};
     use sector_base::api::disk_backed_storage::new_sector_store;
+    use sector_base::api::disk_backed_storage::TEST_SECTOR_SIZE;
     use sector_base::api::sector_class::SectorClass;
     use sector_base::api::sector_size::SectorSize;
     use sector_base::api::sector_store::SectorStore;
@@ -745,7 +746,7 @@ mod tests {
     use tempfile::NamedTempFile;
 
     const TEST_CLASS: SectorClass = SectorClass(
-        SectorSize::OneKiB,
+        SectorSize(TEST_SECTOR_SIZE),
         PoRepProofPartitions::Two,
         PoStProofPartitions::One,
     );

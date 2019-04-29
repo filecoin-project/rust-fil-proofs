@@ -5,38 +5,25 @@ use crate::api::disk_backed_storage::TEST_SECTOR_SIZE;
 use crate::io::fr32::unpadded_bytes;
 
 #[derive(Clone, Copy, Debug)]
-pub enum SectorSize {
-    OneKiB,
-    TwoHundredFiftySixMiB,
-}
+pub struct SectorSize(pub u64);
 
 pub const SECTOR_SIZE_CHOICES: [SectorSize; 2] =
-    [SectorSize::OneKiB, SectorSize::TwoHundredFiftySixMiB];
+    [SectorSize(TEST_SECTOR_SIZE), SectorSize(LIVE_SECTOR_SIZE)];
 
 impl From<SectorSize> for UnpaddedBytesAmount {
     fn from(x: SectorSize) -> Self {
-        match x {
-            SectorSize::OneKiB => UnpaddedBytesAmount(unpadded_bytes(TEST_SECTOR_SIZE)),
-            SectorSize::TwoHundredFiftySixMiB => {
-                UnpaddedBytesAmount(unpadded_bytes(LIVE_SECTOR_SIZE))
-            }
-        }
+        UnpaddedBytesAmount(unpadded_bytes(x.0))
     }
 }
 
 impl From<SectorSize> for PaddedBytesAmount {
     fn from(x: SectorSize) -> Self {
-        match x {
-            SectorSize::OneKiB => PaddedBytesAmount(TEST_SECTOR_SIZE),
-            SectorSize::TwoHundredFiftySixMiB => PaddedBytesAmount(LIVE_SECTOR_SIZE),
-        }
+        PaddedBytesAmount(x.0)
     }
 }
 
-pub fn try_from_u64(n: u64) -> ::std::result::Result<SectorSize, failure::Error> {
-    match n {
-        TEST_SECTOR_SIZE => Ok(SectorSize::OneKiB),
-        LIVE_SECTOR_SIZE => Ok(SectorSize::TwoHundredFiftySixMiB),
-        n => Err(format_err!("no SectorSize mapping for {}", n)),
+impl From<u64> for SectorSize {
+    fn from(x: u64) -> Self {
+        SectorSize(x)
     }
 }

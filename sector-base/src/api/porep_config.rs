@@ -1,5 +1,6 @@
 use crate::api::bytes_amount::PaddedBytesAmount;
 use crate::api::bytes_amount::UnpaddedBytesAmount;
+use crate::api::disk_backed_storage::LIVE_SECTOR_SIZE;
 use crate::api::porep_proof_partitions::PoRepProofPartitions;
 use crate::api::sector_size::SectorSize;
 
@@ -8,7 +9,7 @@ pub struct PoRepConfig(pub SectorSize, pub PoRepProofPartitions);
 
 impl Default for PoRepConfig {
     fn default() -> Self {
-        PoRepConfig(SectorSize::TwoHundredFiftySixMiB, PoRepProofPartitions::Two)
+        PoRepConfig(SectorSize(LIVE_SECTOR_SIZE), PoRepProofPartitions::Two)
     }
 }
 

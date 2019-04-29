@@ -10,6 +10,8 @@ use filecoin_proofs::api::internal;
 use filecoin_proofs::FCP_LOG;
 use pairing::bls12_381::Bls12;
 use sector_base::api::bytes_amount::PaddedBytesAmount;
+use sector_base::api::disk_backed_storage::LIVE_SECTOR_SIZE;
+use sector_base::api::disk_backed_storage::TEST_SECTOR_SIZE;
 use sector_base::api::porep_config::PoRepConfig;
 use sector_base::api::porep_proof_partitions::PoRepProofPartitions;
 use sector_base::api::porep_proof_partitions::POREP_PROOF_PARTITION_CHOICES;
@@ -84,15 +86,21 @@ pub fn main() {
 
     let test_only: bool = matches.is_present("test-only");
 
-    cache_porep_params(PoRepConfig(SectorSize::OneKiB, PoRepProofPartitions::Two));
-    cache_post_params(PoStConfig(SectorSize::OneKiB, PoStProofPartitions::One));
+    cache_porep_params(PoRepConfig(
+        SectorSize(TEST_SECTOR_SIZE),
+        PoRepProofPartitions::Two,
+    ));
+    cache_post_params(PoStConfig(
+        SectorSize(TEST_SECTOR_SIZE),
+        PoStProofPartitions::One,
+    ));
 
     if !test_only {
         for p in &POREP_PROOF_PARTITION_CHOICES {
-            cache_porep_params(PoRepConfig(SectorSize::TwoHundredFiftySixMiB, *p));
+            cache_porep_params(PoRepConfig(SectorSize(LIVE_SECTOR_SIZE), *p));
         }
         cache_post_params(PoStConfig(
-            SectorSize::TwoHundredFiftySixMiB,
+            SectorSize(LIVE_SECTOR_SIZE),
             PoStProofPartitions::One,
         ));
     }

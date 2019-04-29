@@ -23,7 +23,7 @@ use sector_base::api::post_config::PoStConfig;
 use sector_base::api::post_proof_partitions;
 use sector_base::api::post_proof_partitions::try_from_bytes;
 use sector_base::api::sector_class::SectorClass;
-use sector_base::api::sector_size;
+use sector_base::api::sector_size::SectorSize;
 use sector_base::api::SINGLE_PARTITION_PROOF_LEN;
 
 pub mod internal;
@@ -46,10 +46,9 @@ pub unsafe extern "C" fn verify_seal(
 ) -> *mut responses::VerifySealResponse {
     info!(FCP_LOG, "verify_seal: {}", "start"; "target" => "FFI");
 
-    let porep_config = sector_size::try_from_u64(sector_size).and_then(|ss| {
+    let porep_config =
         porep_proof_partitions::try_from_u8((proof_len / SINGLE_PARTITION_PROOF_LEN) as u8)
-            .map(|ppp| PoRepConfig(ss, ppp))
-    });
+            .map(|ppp| PoRepConfig(SectorSize::from(sector_size), ppp));
 
     let porep_bytes = try_into_porep_proof_bytes(proof_ptr, proof_len);
 
@@ -156,9 +155,8 @@ pub unsafe extern "C" fn verify_post(
 ) -> *mut responses::VerifyPoSTResponse {
     info!(FCP_LOG, "verify_post: {}", "start"; "target" => "FFI");
 
-    let post_config = sector_size::try_from_u64(sector_size).and_then(|ss| {
-        post_proof_partitions::try_from_u8(proof_partitions).map(|ppp| PoStConfig(ss, ppp))
-    });
+    let post_config = post_proof_partitions::try_from_u8(proof_partitions)
+        .map(|ppp| PoStConfig(SectorSize::from(sector_size), ppp));
 
     let post_bytes =
         try_into_post_proofs_bytes(proof_partitions, flattened_proofs_ptr, flattened_proofs_len);
@@ -246,10 +244,7 @@ pub unsafe extern "C" fn destroy_sector_builder(ptr: *mut SectorBuilder) {
 ///
 #[no_mangle]
 pub unsafe extern "C" fn get_max_user_bytes_per_staged_sector(sector_size: u64) -> u64 {
-    sector_size::try_from_u64(sector_size)
-        .map(UnpaddedBytesAmount::from)
-        .map(u64::from)
-        .unwrap_or(0)
+    u64::from(UnpaddedBytesAmount::from(SectorSize::from(sector_size)))
 }
 
 /// Writes user piece-bytes to a staged sector and returns the id of the sector
@@ -603,12 +598,11 @@ pub fn try_from_ffi_sector_class(fsc: FFISectorClass) -> crate::error::Result<Se
             porep_proof_partitions,
             post_proof_partitions,
         } => {
-            let r_ss = sector_size::try_from_u64(sector_size);
             let r_prep = porep_proof_partitions::try_from_u8(porep_proof_partitions);
             let r_post = post_proof_partitions::try_from_u8(post_proof_partitions);
 
-            r_ss.and_then(|ss| {
-                r_prep.and_then(|prep| r_post.map(|post| SectorClass(ss, prep, post)))
+            r_prep.and_then(|prep| {
+                r_post.map(|post| SectorClass(SectorSize::from(sector_size), prep, post))
             })
         }
     }

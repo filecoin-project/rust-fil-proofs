@@ -319,10 +319,12 @@ pub fn verify_post_collect_output(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sector_base::api::disk_backed_storage::TEST_SECTOR_SIZE;
     use sector_base::api::post_proof_partitions::PoStProofPartitions;
     use sector_base::api::sector_size::SectorSize;
 
-    const TEST_CONFIG: PoStConfig = PoStConfig(SectorSize::OneKiB, PoStProofPartitions::One);
+    const TEST_CONFIG: PoStConfig =
+        PoStConfig(SectorSize(TEST_SECTOR_SIZE), PoStProofPartitions::One);
 
     fn sector_access_flattened(fixed: &[GeneratePoStFixedSectorsCountInput]) -> Vec<&String> {
         fixed
