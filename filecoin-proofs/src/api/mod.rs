@@ -99,23 +99,21 @@ pub unsafe extern "C" fn generate_post(
 
     let comm_rs = into_commitments(flattened_comm_rs_ptr, flattened_comm_rs_len);
 
-    let result = (*ptr)
-        .generate_post(&comm_rs, challenge_seed)
-        .and_then(|output| {
-            try_from_bytes(output.proofs.first().unwrap_or(&vec![])).map(|ppp| (ppp, output))
-        });
+    let result = (*ptr).generate_post(&comm_rs, challenge_seed);
 
     let mut response = responses::GeneratePoStResponse::default();
 
     match result {
-        Ok((proof_partitions, GeneratePoStDynamicSectorsCountOutput { proofs, faults })) => {
+        Ok(GeneratePoStDynamicSectorsCountOutput { proofs, faults }) => {
             response.status_code = FCPResponseStatus::FCPNoError;
 
             let flattened_proofs: Vec<u8> = proofs.iter().flat_map(|x| x.iter().cloned()).collect();
             response.flattened_proofs_len = flattened_proofs.len();
             response.flattened_proofs_ptr = flattened_proofs.as_ptr();
 
-            response.proof_partitions = usize::from(proof_partitions) as u8;
+            let class = (*ptr).get_sector_class();
+            let PoStProofPartitions(n) = PoStProofPartitions::from(PoStConfig::from(class));
+            response.proof_partitions = n;
 
             response.faults_len = faults.len();
             response.faults_ptr = faults.as_ptr();
