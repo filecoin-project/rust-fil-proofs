@@ -324,7 +324,7 @@ mod tests {
     use sector_base::api::sector_size::SectorSize;
 
     const TEST_CONFIG: PoStConfig =
-        PoStConfig(SectorSize(TEST_SECTOR_SIZE), PoStProofPartitions::One);
+        PoStConfig(SectorSize(TEST_SECTOR_SIZE), PoStProofPartitions(1));
 
     fn sector_access_flattened(fixed: &[GeneratePoStFixedSectorsCountInput]) -> Vec<&String> {
         fixed

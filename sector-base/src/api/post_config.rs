@@ -9,7 +9,7 @@ pub struct PoStConfig(pub SectorSize, pub PoStProofPartitions);
 
 impl Default for PoStConfig {
     fn default() -> Self {
-        PoStConfig(SectorSize(LIVE_SECTOR_SIZE), PoStProofPartitions::One)
+        PoStConfig(SectorSize(LIVE_SECTOR_SIZE), PoStProofPartitions(1))
     }
 }
 

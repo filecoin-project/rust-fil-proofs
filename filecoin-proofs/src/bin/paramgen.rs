@@ -23,7 +23,7 @@ pub fn main() {
 
     let public_params = internal::public_params(
         PaddedBytesAmount::from(SectorSize(TEST_SECTOR_SIZE)),
-        usize::from(PoRepProofPartitions::Two),
+        usize::from(PoRepProofPartitions(2)),
     );
 
     let circuit = ZigZagCompound::blank_circuit(&public_params, &internal::ENGINE_PARAMS);

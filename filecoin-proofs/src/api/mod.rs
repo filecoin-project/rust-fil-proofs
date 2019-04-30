@@ -14,14 +14,12 @@ use crate::api::sector_builder::SectorBuilder;
 use crate::FCP_LOG;
 use ffi_toolkit::rust_str_to_c_str;
 use ffi_toolkit::{c_str_to_rust_str, raw_ptr};
-use sector_base::api::bytes_amount::{
-    PoRepProofBytesAmount, PoStProofBytesAmount, UnpaddedBytesAmount,
-};
+use sector_base::api::bytes_amount::UnpaddedBytesAmount;
 use sector_base::api::porep_config::PoRepConfig;
-use sector_base::api::porep_proof_partitions;
+use sector_base::api::porep_proof_partitions::PoRepProofPartitions;
 use sector_base::api::post_config::PoStConfig;
-use sector_base::api::post_proof_partitions;
 use sector_base::api::post_proof_partitions::try_from_bytes;
+use sector_base::api::post_proof_partitions::PoStProofPartitions;
 use sector_base::api::sector_class::SectorClass;
 use sector_base::api::sector_size::SectorSize;
 use sector_base::api::SINGLE_PARTITION_PROOF_LEN;
@@ -46,24 +44,23 @@ pub unsafe extern "C" fn verify_seal(
 ) -> *mut responses::VerifySealResponse {
     info!(FCP_LOG, "verify_seal: {}", "start"; "target" => "FFI");
 
-    let porep_config =
-        porep_proof_partitions::try_from_u8((proof_len / SINGLE_PARTITION_PROOF_LEN) as u8)
-            .map(|ppp| PoRepConfig(SectorSize::from(sector_size), ppp));
-
     let porep_bytes = try_into_porep_proof_bytes(proof_ptr, proof_len);
 
-    let result = porep_config.and_then(|cfg| {
-        porep_bytes.and_then(|bs| {
-            internal::verify_seal(
-                cfg,
-                *comm_r,
-                *comm_d,
-                *comm_r_star,
-                prover_id,
-                sector_id,
-                &bs,
-            )
-        })
+    let result = porep_bytes.and_then(|bs| {
+        let cfg = PoRepConfig(
+            SectorSize(sector_size),
+            PoRepProofPartitions((proof_len / SINGLE_PARTITION_PROOF_LEN) as u8),
+        );
+
+        internal::verify_seal(
+            cfg,
+            *comm_r,
+            *comm_d,
+            *comm_r_star,
+            prover_id,
+            sector_id,
+            &bs,
+        )
     });
 
     let mut response = responses::VerifySealResponse::default();
@@ -155,21 +152,21 @@ pub unsafe extern "C" fn verify_post(
 ) -> *mut responses::VerifyPoSTResponse {
     info!(FCP_LOG, "verify_post: {}", "start"; "target" => "FFI");
 
-    let post_config = post_proof_partitions::try_from_u8(proof_partitions)
-        .map(|ppp| PoStConfig(SectorSize::from(sector_size), ppp));
-
     let post_bytes =
         try_into_post_proofs_bytes(proof_partitions, flattened_proofs_ptr, flattened_proofs_len);
 
-    let result = post_config.and_then(|cfg| {
-        post_bytes.and_then(|bs| {
-            internal::verify_post(VerifyPoStDynamicSectorsCountInput {
-                post_config: cfg,
-                comm_rs: into_commitments(flattened_comm_rs_ptr, flattened_comm_rs_len),
-                challenge_seed: into_safe_challenge_seed(challenge_seed),
-                proofs: bs,
-                faults: from_raw_parts(faults_ptr, faults_len).to_vec(),
-            })
+    let result = post_bytes.and_then(|bs| {
+        let cfg = PoStConfig(
+            SectorSize(sector_size),
+            PoStProofPartitions(proof_partitions),
+        );
+
+        internal::verify_post(VerifyPoStDynamicSectorsCountInput {
+            post_config: cfg,
+            comm_rs: into_commitments(flattened_comm_rs_ptr, flattened_comm_rs_len),
+            challenge_seed: into_safe_challenge_seed(challenge_seed),
+            proofs: bs,
+            faults: from_raw_parts(faults_ptr, faults_len).to_vec(),
         })
     });
 
@@ -204,17 +201,15 @@ pub unsafe extern "C" fn init_sector_builder(
     staged_sector_dir: *const libc::c_char,
     max_num_staged_sectors: u8,
 ) -> *mut responses::InitSectorBuilderResponse {
-    let result = try_from_ffi_sector_class(sector_class).and_then(|sc| {
-        SectorBuilder::init_from_metadata(
-            sc,
-            last_used_sector_id,
-            c_str_to_rust_str(metadata_dir).to_string(),
-            *prover_id,
-            c_str_to_rust_str(sealed_sector_dir).to_string(),
-            c_str_to_rust_str(staged_sector_dir).to_string(),
-            max_num_staged_sectors,
-        )
-    });
+    let result = SectorBuilder::init_from_metadata(
+        from_ffi_sector_class(sector_class),
+        last_used_sector_id,
+        c_str_to_rust_str(metadata_dir).to_string(),
+        *prover_id,
+        c_str_to_rust_str(sealed_sector_dir).to_string(),
+        c_str_to_rust_str(staged_sector_dir).to_string(),
+        max_num_staged_sectors,
+    );
 
     let mut response = responses::InitSectorBuilderResponse::default();
 
@@ -244,7 +239,7 @@ pub unsafe extern "C" fn destroy_sector_builder(ptr: *mut SectorBuilder) {
 ///
 #[no_mangle]
 pub unsafe extern "C" fn get_max_user_bytes_per_staged_sector(sector_size: u64) -> u64 {
-    u64::from(UnpaddedBytesAmount::from(SectorSize::from(sector_size)))
+    u64::from(UnpaddedBytesAmount::from(SectorSize(sector_size)))
 }
 
 /// Writes user piece-bytes to a staged sector and returns the id of the sector
@@ -525,25 +520,31 @@ unsafe fn try_into_post_proofs_bytes(
     flattened_proofs_ptr: *const u8,
     flattened_proofs_len: libc::size_t,
 ) -> crate::error::Result<Vec<Vec<u8>>> {
-    post_proof_partitions::try_from_u8(proof_partitions)
-        .map(PoStProofBytesAmount::from)
-        .map(usize::from)
-        .map(|chunk| into_proof_vecs(chunk, flattened_proofs_ptr, flattened_proofs_len))
+    let chunk_size = proof_partitions as usize * SINGLE_PARTITION_PROOF_LEN;
+
+    if flattened_proofs_len % chunk_size != 0 {
+        Err(format_err!(
+            "proofs array len={:?} incompatible with partitions={:?}",
+            flattened_proofs_len,
+            proof_partitions
+        ))
+    } else {
+        Ok(into_proof_vecs(
+            chunk_size,
+            flattened_proofs_ptr,
+            flattened_proofs_len,
+        ))
+    }
 }
 
 unsafe fn try_into_porep_proof_bytes(
     proof_ptr: *const u8,
     proof_len: libc::size_t,
 ) -> crate::error::Result<Vec<u8>> {
-    porep_proof_partitions::try_from_u8((proof_len / SINGLE_PARTITION_PROOF_LEN) as u8)
-        .map(PoRepProofBytesAmount::from)
-        .map(usize::from)
-        .map(|chunk| into_proof_vecs(chunk, proof_ptr, proof_len))
-        .and_then(|vs| {
-            vs.first()
-                .map(Vec::clone)
-                .ok_or_else(|| format_err!("no proofs in chunked vec"))
-        })
+    into_proof_vecs(proof_len, proof_ptr, proof_len)
+        .first()
+        .map(Vec::clone)
+        .ok_or_else(|| format_err!("no proofs in chunked vec"))
 }
 
 unsafe fn into_proof_vecs(
@@ -591,19 +592,16 @@ pub struct FFISectorClass {
     post_proof_partitions: u8,
 }
 
-pub fn try_from_ffi_sector_class(fsc: FFISectorClass) -> crate::error::Result<SectorClass> {
+pub fn from_ffi_sector_class(fsc: FFISectorClass) -> SectorClass {
     match fsc {
         FFISectorClass {
             sector_size,
             porep_proof_partitions,
             post_proof_partitions,
-        } => {
-            let r_prep = porep_proof_partitions::try_from_u8(porep_proof_partitions);
-            let r_post = post_proof_partitions::try_from_u8(post_proof_partitions);
-
-            r_prep.and_then(|prep| {
-                r_post.map(|post| SectorClass(SectorSize::from(sector_size), prep, post))
-            })
-        }
+        } => SectorClass(
+            SectorSize(sector_size),
+            PoRepProofPartitions(porep_proof_partitions),
+            PoStProofPartitions(post_proof_partitions),
+        ),
     }
 }

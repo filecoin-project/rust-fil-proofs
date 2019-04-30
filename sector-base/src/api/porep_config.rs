@@ -9,7 +9,7 @@ pub struct PoRepConfig(pub SectorSize, pub PoRepProofPartitions);
 
 impl Default for PoRepConfig {
     fn default() -> Self {
-        PoRepConfig(SectorSize(LIVE_SECTOR_SIZE), PoRepProofPartitions::Two)
+        PoRepConfig(SectorSize(LIVE_SECTOR_SIZE), PoRepProofPartitions(2))
     }
 }
 
