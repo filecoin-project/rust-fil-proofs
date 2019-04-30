@@ -366,24 +366,24 @@ mod tests {
             })
             .collect();
 
-        assert_eq!(t[0], leaves[0]);
-        assert_eq!(t[1], leaves[1]);
-        assert_eq!(t[2], leaves[2]);
-        assert_eq!(t[3], leaves[3]);
+        assert_eq!(t.read_at(0), leaves[0]);
+        assert_eq!(t.read_at(1), leaves[1]);
+        assert_eq!(t.read_at(2), leaves[2]);
+        assert_eq!(t.read_at(3), leaves[3]);
 
         let i1 = a.node(leaves[0], leaves[1], 0);
         a.reset();
         let i2 = a.node(leaves[2], leaves[3], 0);
         a.reset();
 
-        assert_eq!(t[4], i1);
-        assert_eq!(t[5], i2);
+        assert_eq!(t.read_at(4), i1);
+        assert_eq!(t.read_at(5), i2);
 
         let root = a.node(i1, i2, 1);
         a.reset();
 
         assert_eq!(
-            t[0].0,
+            t.read_at(0).0,
             FrRepr([
                 5516429847681692214,
                 1363403528947283679,
@@ -398,11 +398,11 @@ mod tests {
             16116531553419129213,
             6357427774790868134,
         ]);
-        let actual = t[6].0;
+        let actual = t.read_at(6).0;
 
         assert_eq!(actual, expected);
 
-        assert_eq!(t[6], root);
+        assert_eq!(t.read_at(6), root);
     }
 
     #[test]

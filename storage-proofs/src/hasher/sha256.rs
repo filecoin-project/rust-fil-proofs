@@ -116,9 +116,9 @@ mod tests {
         >::from_iter(v2);
         // Using `VecMerkleTree` since the `MmapStore` of `MerkleTree` doesn't support `Deref` (`as_slice`).
 
-        assert_eq!(t2.as_slice()[0].as_ref(), l1.as_ref());
-        assert_eq!(t2.as_slice()[1].as_ref(), l2.as_ref());
-        assert_eq!(t2.as_slice()[2].as_ref(), h21.as_ref());
+        assert_eq!(t2.read_at(0).as_ref(), l1.as_ref());
+        assert_eq!(t2.read_at(1).as_ref(), l2.as_ref());
+        assert_eq!(t2.read_at(2).as_ref(), h21.as_ref());
 
         // TODO: Verify this is the right hash — bearing in mind that the two most significant bits must be cleared after each hash.
         assert_eq!(

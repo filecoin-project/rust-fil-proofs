@@ -3,6 +3,14 @@ use std::marker::PhantomData;
 
 use rand::{ChaChaRng, OsRng, Rng, SeedableRng};
 use rayon::prelude::*;
+<<<<<<< HEAD
+=======
+#[cfg(feature = "disk-trees")]
+use std::path::Path;
+// FIXME: Figure out what to do with all the conditional `use`es.
+#[cfg(feature = "disk-trees")]
+use std::path::PathBuf;
+>>>>>>> 828017a... use feat/decouple-data branch with separate data stores
 
 use crate::error::*;
 use crate::hasher::pedersen::PedersenHasher;
@@ -107,19 +115,20 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
         };
 
         if let Some(path) = path {
-            info!(SP_LOG, "creating tree mmap-file"; "path" => &path.to_str());
+            let path_prefix = path.to_str().expect("couldn't convert path to string");
+            let leaves_path = &PathBuf::from([path_prefix, "leaves"].join("-"));
+            let top_half_path = &PathBuf::from([path_prefix, "top-half"].join("-"));
+            // FIXME: There is probably a more direct way of doing this without
+            //  reconverting to string.
 
-            // FIXME: CROSSING API BOUNDARIES HERE.
-            // The `Store` created here has an assigned size of *only* the
-            // leaves, not the *entire* tree, which is expected since the
-            // consumer shouldn't need to know how big the final `Store` is
-            // going to be. To *temporarily* accommodate this we *mangle* the
-            // received `size` (in a similar way to `MerkleTree::from_iter`) to
-            // expand it to the entire tree.
-            let pow = next_pow2(self.size());
-            let size = 2 * pow - 1;
+            info!(SP_LOG, "creating leaves tree mmap-file"; "path-prefix" => leaves_path.to_str());
+            info!(SP_LOG, "creating top half tree mmap-file"; "path-prefix" => top_half_path.to_str());
 
-            let disk_mmap = DiskMmapStore::new_with_path(size, path);
+            let leaves_disk_mmap =
+                DiskMmapStore::new_with_path(next_pow2(self.size()), leaves_path);
+            let top_half_disk_mmap =
+                DiskMmapStore::new_with_path(next_pow2(self.size()), top_half_path);
+
             // FIXME: `new_with_path` is using the `from_iter` implementation,
             //  instead the `parallel` flag should be passed also as argument
             //  and decide *there* which code to use (merging this into the
@@ -127,7 +136,8 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
 
             Ok(MerkleTree::from_data_with_store(
                 (0..self.size()).map(f),
-                disk_mmap,
+                leaves_disk_mmap,
+                top_half_disk_mmap,
             ))
         // If path is `None` use the existing code that will eventually
         // call the default `DiskMmapStore::new` creating a temporary
