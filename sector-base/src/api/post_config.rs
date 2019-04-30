@@ -1,17 +1,10 @@
 use crate::api::bytes_amount::PaddedBytesAmount;
 use crate::api::bytes_amount::UnpaddedBytesAmount;
-use crate::api::disk_backed_storage::LIVE_SECTOR_SIZE;
 use crate::api::post_proof_partitions::PoStProofPartitions;
 use crate::api::sector_size::SectorSize;
 
 #[derive(Clone, Copy, Debug)]
 pub struct PoStConfig(pub SectorSize, pub PoStProofPartitions);
-
-impl Default for PoStConfig {
-    fn default() -> Self {
-        PoStConfig(SectorSize(LIVE_SECTOR_SIZE), PoStProofPartitions(1))
-    }
-}
 
 impl From<PoStConfig> for PaddedBytesAmount {
     fn from(x: PoStConfig) -> Self {

@@ -17,8 +17,8 @@ use ffi_toolkit::{c_str_to_rust_str, raw_ptr};
 use sector_base::api::bytes_amount::UnpaddedBytesAmount;
 use sector_base::api::porep_config::PoRepConfig;
 use sector_base::api::porep_proof_partitions::PoRepProofPartitions;
+use sector_base::api::porep_proof_partitions;
 use sector_base::api::post_config::PoStConfig;
-use sector_base::api::post_proof_partitions::try_from_bytes;
 use sector_base::api::post_proof_partitions::PoStProofPartitions;
 use sector_base::api::sector_class::SectorClass;
 use sector_base::api::sector_size::SectorSize;
@@ -47,20 +47,19 @@ pub unsafe extern "C" fn verify_seal(
     let porep_bytes = try_into_porep_proof_bytes(proof_ptr, proof_len);
 
     let result = porep_bytes.and_then(|bs| {
-        let cfg = PoRepConfig(
-            SectorSize(sector_size),
-            PoRepProofPartitions((proof_len / SINGLE_PARTITION_PROOF_LEN) as u8),
-        );
+        porep_proof_partitions::try_from_bytes(&bs).and_then(|ppp| {
+            let cfg = PoRepConfig(SectorSize(sector_size), ppp);
 
-        internal::verify_seal(
-            cfg,
-            *comm_r,
-            *comm_d,
-            *comm_r_star,
-            prover_id,
-            sector_id,
-            &bs,
-        )
+            internal::verify_seal(
+                cfg,
+                *comm_r,
+                *comm_d,
+                *comm_r_star,
+                prover_id,
+                sector_id,
+                &bs,
+            )
+        })
     });
 
     let mut response = responses::VerifySealResponse::default();
