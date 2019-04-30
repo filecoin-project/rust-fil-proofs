@@ -519,19 +519,18 @@ unsafe fn try_into_post_proofs_bytes(
 ) -> crate::error::Result<Vec<Vec<u8>>> {
     let chunk_size = proof_partitions as usize * SINGLE_PARTITION_PROOF_LEN;
 
-    if flattened_proofs_len % chunk_size != 0 {
-        Err(format_err!(
-            "proofs array len={:?} incompatible with partitions={:?}",
-            flattened_proofs_len,
-            proof_partitions
-        ))
-    } else {
-        Ok(into_proof_vecs(
-            chunk_size,
-            flattened_proofs_ptr,
-            flattened_proofs_len,
-        ))
-    }
+    ensure!(
+        flattened_proofs_len % chunk_size == 0,
+        "proofs array len={:?} incompatible with partitions={:?}",
+        flattened_proofs_len,
+        proof_partitions
+    );
+
+    Ok(into_proof_vecs(
+        chunk_size,
+        flattened_proofs_ptr,
+        flattened_proofs_len,
+    ))
 }
 
 unsafe fn try_into_porep_proof_bytes(

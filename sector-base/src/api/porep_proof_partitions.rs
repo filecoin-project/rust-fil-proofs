@@ -19,12 +19,11 @@ impl From<PoRepProofPartitions> for PoRepProofBytesAmount {
 pub fn try_from_bytes(bytes: &[u8]) -> ::std::result::Result<PoRepProofPartitions, failure::Error> {
     let n = bytes.len();
 
-    if n % SINGLE_PARTITION_PROOF_LEN == 0 {
-        Ok(PoRepProofPartitions((n / SINGLE_PARTITION_PROOF_LEN) as u8))
-    } else {
-        Err(format_err!(
-            "no PoRepProofPartitions mapping for {:x?}",
-            bytes
-        ))
-    }
+    ensure!(
+        n % SINGLE_PARTITION_PROOF_LEN == 0,
+        "no PoRepProofPartitions mapping for {:x?}",
+        bytes
+    );
+
+    Ok(PoRepProofPartitions((n / SINGLE_PARTITION_PROOF_LEN) as u8))
 }

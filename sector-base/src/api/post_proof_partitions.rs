@@ -19,12 +19,11 @@ impl From<PoStProofPartitions> for usize {
 pub fn try_from_bytes(bytes: &[u8]) -> ::std::result::Result<PoStProofPartitions, failure::Error> {
     let n = bytes.len();
 
-    if n % SINGLE_PARTITION_PROOF_LEN == 0 {
-        Ok(PoStProofPartitions((n / SINGLE_PARTITION_PROOF_LEN) as u8))
-    } else {
-        Err(format_err!(
-            "no PoStProofPartitions mapping for {:x?}",
-            bytes
-        ))
-    }
+    ensure!(
+        n % SINGLE_PARTITION_PROOF_LEN == 0,
+        "no PoStProofPartitions mapping for {:x?}",
+        bytes
+    );
+
+    Ok(PoStProofPartitions((n / SINGLE_PARTITION_PROOF_LEN) as u8))
 }
