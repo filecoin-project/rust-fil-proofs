@@ -7,8 +7,12 @@ use std::fs::{create_dir_all, read_dir, rename, File};
 use std::io::{stdin, stdout, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 use std::process::Command;
-use std::process::Stdio;
+use reqwest::{header, Client, Url};
+
+use pbr::{ProgressBar, Units};
 use storage_proofs::parameter_cache::parameter_cache_dir;
+use std::io::Stdout;
+use std::io::{self, copy, Read};
 
 const ERROR_IPFS_COMMAND: &str = "failed to run ipfs";
 const ERROR_IPFS_OUTPUT: &str = "failed to capture ipfs output";
@@ -25,6 +29,20 @@ pub type ParameterMap = BTreeMap<String, ParameterData>;
 pub struct ParameterData {
     pub cid: String,
     pub digest: String,
+}
+
+struct FetchProgress<R> {
+    inner: R,
+    progress_bar: ProgressBar<Stdout>,
+}
+
+impl<R: Read> Read for FetchProgress<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.inner.read(buf).map(|n| {
+            self.progress_bar.add(n as u64);
+            n
+        })
+    }
 }
 
 pub fn get_local_parameter_ids() -> Result<Vec<String>> {
@@ -125,33 +143,49 @@ pub fn spawn_fetch_parameter_file(
     is_verbose: bool,
     parameter_map: &ParameterMap,
     parameter_id: &str,
-) -> Result<std::process::Child> {
+) -> Result<()> {
     let parameter_data = get_parameter_data(parameter_map, parameter_id)?;
     let path = get_parameter_file_path(parameter_id);
 
     create_dir_all(parameter_cache_dir())?;
 
-    let output_styling = if is_verbose {
-        &["--verbose", "--progress-bar"]
-    } else {
-        &["--silent", "--show-error"]
+    let mut paramfile = match File::create(&path).map_err(failure::Error::from) {
+        Err(why) => return Err(why),
+        Ok(file) => file,
     };
 
-    let connect_timeout = &["--connect-timeout", "30"];
+    let client = Client::new();
+    let url = Url::parse(&format!("https://ipfs.io/ipfs/{}", parameter_data.cid))?;
+    let total_size = {
+        let res = client.head(url.as_str()).send()?;
+        if res.status().is_success() {
+            res.headers().get(header::CONTENT_LENGTH)
+                .and_then(|ct_len| ct_len.to_str().ok())
+                .and_then(|ct_len| ct_len.parse().ok())
+                .unwrap_or(0)
+        } else {
+            return Err(failure::err_msg("failed to download parameter file"))
+        }
+    };
 
-    // time out if speed stays at below 1000 bytes/second for >= 15 seconds
-    let speed_timeout = &["--speed-time", "15", "--speed-limit", "1000"];
+    let req = client.get(url.as_str());
+    if is_verbose {
+        let mut pb = ProgressBar::new(total_size);
+        pb.set_units(Units::Bytes);
 
-    Command::new("curl")
-        .args(output_styling)
-        .args(connect_timeout)
-        .args(speed_timeout)
-        .arg("--output")
-        .arg(&path)
-        .arg(format!("https://ipfs.io/ipfs/{}", parameter_data.cid))
-        .stdout(Stdio::inherit())
-        .spawn()
-        .map_err(failure::Error::from)
+        let mut source = FetchProgress {
+            inner: req.send()?,
+            progress_bar: pb,
+        };
+
+        let _ = copy(&mut source, &mut paramfile)?;
+    } else {
+        let mut source = req.send()?;
+        let _ = copy(&mut source, &mut paramfile)?;
+    }
+
+
+    Ok(())
 }
 
 pub fn validate_parameter_file(parameter_map: &ParameterMap, parameter_id: &str) -> Result<bool> {

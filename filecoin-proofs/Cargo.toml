@@ -35,6 +35,7 @@ regex = "1"
 drop_struct_macro_derive = { path = "../drop-struct-macro-derive" }
 ff = "0.4.0"
 blake2b_simd = "0.4.1"
+reqwest = "0.9.16"
 
 [dependencies.sapling-crypto]
 git = "https://github.com/filecoin-project/sapling-crypto"

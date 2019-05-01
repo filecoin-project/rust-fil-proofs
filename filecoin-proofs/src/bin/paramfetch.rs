@@ -1,10 +1,12 @@
-use clap::{App, Arg, ArgMatches};
-use failure::err_msg;
-use filecoin_proofs::param::*;
 use std::io;
 use std::io::prelude::*;
 use std::path::PathBuf;
 use std::process::exit;
+
+use clap::{App, Arg, ArgMatches};
+use failure::err_msg;
+
+use filecoin_proofs::param::*;
 use storage_proofs::parameter_cache::PARAMETER_CACHE_DIR;
 
 pub fn main() {
@@ -94,10 +96,7 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
                 &parameter_map,
                 &parameter_id,
             ) {
-                Ok(mut child) => match child.wait() {
-                    Ok(_) => println!("ok\n"),
-                    Err(err) => println!("error: {}\n", err),
-                },
+                Ok(_) => println!("ok\n"),
                 Err(err) => println!("error: {}\n", err),
             }
         }
