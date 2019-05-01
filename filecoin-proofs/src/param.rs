@@ -1,18 +1,18 @@
 use blake2b_simd::State as Blake2b;
 use failure::{err_msg, Error};
 use regex::Regex;
+use reqwest::{header, Client, Url};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs::{create_dir_all, read_dir, rename, File};
 use std::io::{stdin, stdout, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 use std::process::Command;
-use reqwest::{header, Client, Url};
 
 use pbr::{ProgressBar, Units};
-use storage_proofs::parameter_cache::parameter_cache_dir;
 use std::io::Stdout;
 use std::io::{self, copy, Read};
+use storage_proofs::parameter_cache::parameter_cache_dir;
 
 const ERROR_IPFS_COMMAND: &str = "failed to run ipfs";
 const ERROR_IPFS_OUTPUT: &str = "failed to capture ipfs output";
@@ -159,12 +159,13 @@ pub fn spawn_fetch_parameter_file(
     let total_size = {
         let res = client.head(url.as_str()).send()?;
         if res.status().is_success() {
-            res.headers().get(header::CONTENT_LENGTH)
+            res.headers()
+                .get(header::CONTENT_LENGTH)
                 .and_then(|ct_len| ct_len.to_str().ok())
                 .and_then(|ct_len| ct_len.parse().ok())
                 .unwrap_or(0)
         } else {
-            return Err(failure::err_msg("failed to download parameter file"))
+            return Err(failure::err_msg("failed to download parameter file"));
         }
     };
 
@@ -183,7 +184,6 @@ pub fn spawn_fetch_parameter_file(
         let mut source = req.send()?;
         let _ = copy(&mut source, &mut paramfile)?;
     }
-
 
     Ok(())
 }
