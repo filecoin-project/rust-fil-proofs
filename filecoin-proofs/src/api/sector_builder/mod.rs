@@ -3,7 +3,7 @@ use std::sync::{mpsc, Arc, Mutex};
 
 use crate::api::post_adapter::*;
 use crate::api::sector_builder::errors::SectorBuilderErr;
-use crate::api::sector_builder::kv_store::{KeyValueStore, RocksKvs};
+use crate::api::sector_builder::kv_store::{KeyValueStore, SledKvs};
 use crate::api::sector_builder::metadata::*;
 use crate::api::sector_builder::scheduler::Request;
 use crate::api::sector_builder::scheduler::Scheduler;
@@ -58,7 +58,7 @@ impl SectorBuilder {
         max_num_staged_sectors: u8,
     ) -> Result<SectorBuilder> {
         let kv_store = Arc::new(WrappedKeyValueStore {
-            inner: Box::new(RocksKvs::initialize(metadata_dir.into())?),
+            inner: Box::new(SledKvs::initialize(metadata_dir.into())?),
         });
 
         // Initialize a SectorStore and wrap it in an Arc so we can access it

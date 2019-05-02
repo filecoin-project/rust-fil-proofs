@@ -1,26 +1,22 @@
 use std::path::Path;
 
-use rocksdb::{Options, DB};
+use sled::Db;
 
 use crate::api::sector_builder::kv_store::KeyValueStore;
 use crate::error::Result;
 
-#[derive(Debug)]
-pub struct RocksKvs {
-    db: DB,
+pub struct SledKvs {
+    db: Db,
 }
 
-impl KeyValueStore for RocksKvs {
+impl KeyValueStore for SledKvs {
     fn initialize<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let mut opts = Options::default();
-        opts.create_if_missing(true);
-
-        let db = DB::open(&opts, path)?;
-        Ok(RocksKvs { db })
+        let db = Db::start_default(path)?;
+        Ok(SledKvs { db })
     }
 
     fn put(&self, key: &[u8], value: &[u8]) -> Result<()> {
-        self.db.put(key, value)?;
+        self.db.set(key, value)?;
         Ok(())
     }
 
@@ -38,7 +34,7 @@ mod tests {
     fn test_alpha() {
         let metadata_dir = tempfile::tempdir().unwrap();
 
-        let db = RocksKvs::initialize(metadata_dir).unwrap();
+        let db = SledKvs::initialize(metadata_dir).unwrap();
 
         let k_a = b"key-xx";
         let k_b = b"key-yy";
