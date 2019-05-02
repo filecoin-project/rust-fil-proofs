@@ -52,10 +52,8 @@ branch = "master"
 git = "https://github.com/filecoin-project/pairing"
 branch = "master"
 
-[dependencies.rocksdb]
-version = "0.12"
-default-features = false
-features = ["snappy"]
+[dependencies.sled]
+version = "0.23.0"
 optional = true
 
 [dev-dependencies]
@@ -67,7 +65,7 @@ bindgen = "0.47"
 cbindgen = "0.8"
 
 [features]
-default = ["rocksdb"]
+default = ["sled"]
 cpu-profile = []
 heap-profile = []
 simd = ["storage-proofs/simd"]
