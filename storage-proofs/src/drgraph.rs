@@ -70,7 +70,10 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
     /// If a node doesn't have any parents, then this vector needs to return a vector where
     /// the first element is the requested node. This will be used as indicator for nodes
     /// without parents.
-    fn parents(&self, node: usize) -> Vec<usize>;
+    ///
+    /// The `parents` parameter is used to store the result. This is done fore performance
+    /// reasons, so that the vector can be allocated outside this call.
+    fn parents(&self, node: usize, parents: &mut [usize]);
 
     /// Returns the size of the graph (number of nodes).
     fn size(&self) -> usize;
@@ -114,14 +117,19 @@ impl<H: Hasher> ParameterSetIdentifier for BucketGraph<H> {
 
 impl<H: Hasher> Graph<H> for BucketGraph<H> {
     #[inline]
-    fn parents(&self, node: usize) -> Vec<usize> {
+    fn parents(&self, node: usize, parents: &mut [usize]) {
         let m = self.base_degree;
 
         match node {
             // Special case for the first node, it self references.
-            0 => vec![0; m as usize],
             // Special case for the second node, it references only the first one.
-            1 => vec![0; m as usize],
+            0 | 1 => {
+                // Use the degree of the curren graph (`m`), as parents.len() might be bigger
+                // than that (that's the case for ZigZag Graph)
+                for parent in parents.iter_mut().take(m) {
+                    *parent = 0;
+                }
+            }
             _ => {
                 // seed = self.seed | node
                 let mut seed = [0u32; 8];
@@ -129,8 +137,7 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
                 seed[7] = node as u32;
                 let mut rng = ChaChaRng::from_seed(&seed);
 
-                let mut parents = Vec::with_capacity(m);
-                for k in 0..m {
+                for (k, parent) in parents.iter_mut().take(m).enumerate() {
                     // iterate over m meta nodes of the ith real node
                     // simulate the edges that we would add from previous graph nodes
                     // if any edge is added from a meta node of jth real node then add edge (j,i)
@@ -142,16 +149,16 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
 
                     // remove self references and replace with reference to previous node
                     if out == node {
-                        parents.push(node - 1);
+                        *parent = node - 1;
                     } else {
                         assert!(out <= node);
-                        parents.push(out);
+                        *parent = out;
                     }
                 }
 
-                parents.sort_unstable();
-
-                parents
+                // Use the degree of the curren graph (`m`), as parents.len() might be bigger
+                // than that (that's the case for ZigZag Graph)
+                parents[0..m].sort_unstable();
             }
         }
     }
@@ -209,18 +216,26 @@ mod tests {
 
                 assert_eq!(g.size(), size, "wrong nodes count");
 
-                assert_eq!(g.parents(0), vec![0; degree as usize]);
-                assert_eq!(g.parents(1), vec![0; degree as usize]);
+                let mut parents = vec![0; degree];
+                g.parents(0, &mut parents);
+                assert_eq!(parents, vec![0; degree as usize]);
+                parents = vec![0; degree];
+                g.parents(1, &mut parents);
+                assert_eq!(parents, vec![0; degree as usize]);
 
                 for i in 2..size {
-                    let pa1 = g.parents(i);
-                    let pa2 = g.parents(i);
+                    let mut pa1 = vec![0; degree];
+                    g.parents(i, &mut pa1);
+                    let mut pa2 = vec![0; degree];
+                    g.parents(i, &mut pa2);
 
                     assert_eq!(pa1.len(), degree);
                     assert_eq!(pa1, pa2, "different parents on the same node");
 
-                    let p1 = g.parents(i);
-                    let p2 = g.parents(i);
+                    let mut p1 = vec![0; degree];
+                    g.parents(i, &mut p1);
+                    let mut p2 = vec![0; degree];
+                    g.parents(i, &mut p2);
 
                     for parent in p1 {
                         // TODO: fix me

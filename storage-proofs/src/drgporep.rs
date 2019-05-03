@@ -297,7 +297,8 @@ where
                 data,
             });
 
-            let parents = pub_params.graph.parents(challenge);
+            let mut parents = vec![0; pub_params.graph.degree()];
+            pub_params.graph.parents(challenge, &mut parents);
             let mut replica_parentsi = Vec::with_capacity(parents.len());
 
             for p in &parents {
@@ -363,7 +364,10 @@ where
                     return Ok(false);
                 }
 
-                let expected_parents = pub_params.graph.parents(pub_inputs.challenges[i]);
+                let mut expected_parents = vec![0; pub_params.graph.degree()];
+                pub_params
+                    .graph
+                    .parents(pub_inputs.challenges[i], &mut expected_parents);
                 if proof.replica_parents[i].len() != expected_parents.len() {
                     println!(
                         "proof parents were not the same length as in public parameters: {} != {}",
