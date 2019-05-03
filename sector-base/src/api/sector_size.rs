@@ -32,3 +32,11 @@ impl From<SectorSize> for PaddedBytesAmount {
         }
     }
 }
+
+pub fn try_from_u64(n: u64) -> ::std::result::Result<SectorSize, failure::Error> {
+    match n {
+        TEST_SECTOR_SIZE => Ok(SectorSize::OneKiB),
+        LIVE_SECTOR_SIZE => Ok(SectorSize::TwoHundredFiftySixMiB),
+        n => Err(format_err!("no SectorSize mapping for {}", n)),
+    }
+}

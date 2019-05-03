@@ -61,9 +61,9 @@ fn main() {
     let git_hash = String::from_utf8(git_output.stdout).unwrap();
 
     let libs = if cfg!(target_os = "linux") {
-        "-lstdc++ -lutil -lutil -ldl -lrt -lpthread -lgcc_s -lc -lm -lrt -lpthread -lutil -lutil"
+        "-lutil -lutil -ldl -lrt -lpthread -lgcc_s -lc -lm -lrt -lpthread -lutil -lutil"
     } else if cfg!(target_os = "macos") {
-        "-lstdc++ -framework Security -lSystem -lresolv -lc -lm"
+        "-framework Security -lSystem -lresolv -lc -lm"
     } else {
         ""
     };
