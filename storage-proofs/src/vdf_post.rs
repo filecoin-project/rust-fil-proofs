@@ -24,7 +24,7 @@ pub struct SetupParams<T: Domain, V: Vdf<T>> {
     /// The number of challenges to be asked at each iteration.
     pub challenge_count: usize,
     /// Size of a sealed sector in bytes.
-    pub sector_size: usize,
+    pub sector_size: u64,
     /// Number of times we repeat an online Proof-of-Replication in one single PoSt.
     pub post_epochs: usize,
     pub setup_params_vdf: V::SetupParams,
@@ -37,7 +37,7 @@ pub struct PublicParams<T: Domain, V: Vdf<T>> {
     /// The number of challenges to be asked at each iteration.
     pub challenge_count: usize,
     /// Size of a sealed sector in bytes.
-    pub sector_size: usize,
+    pub sector_size: u64,
     /// Number of times we repeat an online Proof-of-Replication in one single PoSt.
     pub post_epochs: usize,
     pub pub_params_vdf: V::PublicParams,
