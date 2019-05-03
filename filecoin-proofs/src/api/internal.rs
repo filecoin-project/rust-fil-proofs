@@ -149,10 +149,7 @@ fn get_post_params(post_config: PoStConfig) -> error::Result<Arc<groth16::Parame
     };
 
     Ok(lookup_groth_params(
-        format!(
-            "POST[{}]",
-            u64::from(PaddedBytesAmount::from(post_config))
-        ),
+        format!("POST[{}]", u64::from(PaddedBytesAmount::from(post_config))),
         get_params,
     )?)
 }
@@ -188,10 +185,7 @@ fn get_post_verifying_key(post_config: PoStConfig) -> error::Result<Arc<Bls12Ver
     };
 
     Ok(lookup_verifying_key(
-        format!(
-            "POST[{}]",
-            u64::from(PaddedBytesAmount::from(post_config))
-        ),
+        format!("POST[{}]", u64::from(PaddedBytesAmount::from(post_config))),
         get_verifying_key,
     )?)
 }
