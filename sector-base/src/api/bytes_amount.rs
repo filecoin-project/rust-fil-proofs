@@ -125,9 +125,7 @@ mod tests {
 
         // Coercion to primitives work
         assert_eq!(1u64 + u64::from(b), 3u64);
-        assert_eq!(1usize + usize::from(b), 3usize);
         assert_eq!(1u64 + u64::from(e), 3u64);
-        assert_eq!(1usize + usize::from(e), 3usize);
 
         // But not between BytesAmount types
         // assert_eq!(a + UnpaddedBytesAmount::from(e), c);

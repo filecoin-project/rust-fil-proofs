@@ -97,7 +97,7 @@ fn do_the_work(
     let sp = SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
         vdf_post_setup_params: vdf_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
             challenge_count,
-            sector_size: size,
+            sector_size: size as u64,
             post_epochs,
             setup_params_vdf: vdf_sloth::SetupParams {
                 key: rng.gen(),

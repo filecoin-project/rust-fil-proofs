@@ -316,7 +316,7 @@ pub mod tests {
             let output_bytes_written = buf.len();
 
             // ensure that we reported the correct number of written bytes
-            assert_eq!(contents.len(), usize::from(n));
+            assert_eq!(contents.len(), u64::from(n) as usize);
 
             // ensure the file we wrote to contains the expected bytes
             assert_eq!(contents[0..32], buf[0..32]);

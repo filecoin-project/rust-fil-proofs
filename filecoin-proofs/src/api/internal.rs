@@ -809,10 +809,10 @@ mod tests {
 
             assert_eq!(
                 contents.len(),
-                usize::from(
+                u64::from(
                     mgr.write_and_preprocess(&staged_access, &mut file)
                         .expect("failed to write and preprocess")
-                )
+                ) as usize
             );
 
             written_contents.push(contents);
