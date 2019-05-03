@@ -656,7 +656,8 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
         &unsealed,
         &mut buf_writer,
         offset as usize,
-        num_bytes.into(),
+        // num_bytes.into(),
+        u64::from(num_bytes) as usize,
     )?;
 
     Ok(UnpaddedBytesAmount(written as u64))

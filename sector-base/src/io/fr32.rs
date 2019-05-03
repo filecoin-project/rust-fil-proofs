@@ -804,6 +804,7 @@ where
 // offset and num_bytes are based on the unpadded data, so
 // if [0, 1, ..., 255] was the original unpadded data, offset 3 and len 4 would return
 // [3, 4, 5, 6].
+// TODO: change the type of offset and len to u64, or limit this program only run on 64-bit system
 pub fn write_unpadded<W: ?Sized>(
     source: &[u8],
     target: &mut W,
