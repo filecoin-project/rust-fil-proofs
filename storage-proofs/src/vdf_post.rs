@@ -143,7 +143,7 @@ impl<'a, H: Hasher + 'a, V: Vdf<H::Domain>> ProofScheme<'a> for VDFPoSt<H, V> {
         );
         // Assuming well-formed (power of two) sector size, log2(sector_size) is given by number of trailing zeroes.
         let log2 = sector_size.trailing_zeros();
-        let leaves = sector_size / 32;
+        let leaves = (sector_size / 32) as usize;
         let challenge_bits = (log2 - 5) as usize;
         assert_eq!(
             2u64.pow(challenge_bits as u32),
