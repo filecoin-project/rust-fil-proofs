@@ -126,9 +126,8 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
             0 | 1 => {
                 // Use the degree of the curren graph (`m`), as parents.len() might be bigger
                 // than that (that's the case for ZigZag Graph)
-                #[allow(clippy::needless_range_loop)]
-                for k in 0..m {
-                    parents[k] = 0;
+                for parent in parents.iter_mut().take(m) {
+                    *parent = 0;
                 }
             }
             _ => {
@@ -138,8 +137,7 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
                 seed[7] = node as u32;
                 let mut rng = ChaChaRng::from_seed(&seed);
 
-                #[allow(clippy::needless_range_loop)]
-                for k in 0..m {
+                for (k, parent) in parents.iter_mut().take(m).enumerate() {
                     // iterate over m meta nodes of the ith real node
                     // simulate the edges that we would add from previous graph nodes
                     // if any edge is added from a meta node of jth real node then add edge (j,i)
@@ -151,10 +149,10 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
 
                     // remove self references and replace with reference to previous node
                     if out == node {
-                        parents[k] = node - 1;
+                        *parent = node - 1;
                     } else {
                         assert!(out <= node);
-                        parents[k] = out;
+                        *parent = out;
                     }
                 }
 

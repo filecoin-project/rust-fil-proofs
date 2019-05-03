@@ -149,9 +149,8 @@ impl<Z: ZigZag> Graph<Z::BaseHasher> for Z {
 
         self.base_graph()
             .parents(self.real_index(raw_node), parents);
-        #[allow(clippy::needless_range_loop)]
-        for ii in 0..self.base_graph().degree() {
-            parents[ii] = self.real_index(parents[ii]);
+        for parent in parents.iter_mut().take(self.base_graph().degree()) {
+            *parent = self.real_index(*parent);
         }
 
         // expanded_parents takes raw_node
