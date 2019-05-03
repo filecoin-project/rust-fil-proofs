@@ -103,7 +103,8 @@ impl SectorManager for DiskManager {
                 file.seek(SeekFrom::Start(start_offset))
                     .map_err(|err| SectorManagerErr::CallerError(format!("{:?}", err)))?;
 
-                let mut buf = vec![0; usize::from(num_bytes)];
+                // TODO: should we handle the scenario num_bytes>4G in a 32-bit syste? 
+                let mut buf = vec![0; (u64::from(num_bytes)) as usize];
 
                 file.read_exact(buf.as_mut_slice())
                     .map_err(|err| SectorManagerErr::CallerError(format!("{:?}", err)))?;

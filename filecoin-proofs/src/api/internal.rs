@@ -130,7 +130,7 @@ fn get_zigzag_params(porep_config: PoRepConfig) -> error::Result<Arc<groth16::Pa
     Ok(lookup_groth_params(
         format!(
             "ZIGZAG[{}]",
-            usize::from(PaddedBytesAmount::from(porep_config))
+            u64::from(PaddedBytesAmount::from(porep_config))
         ),
         get_params,
     )?)
@@ -151,7 +151,7 @@ fn get_post_params(post_config: PoStConfig) -> error::Result<Arc<groth16::Parame
     Ok(lookup_groth_params(
         format!(
             "POST[{}]",
-            usize::from(PaddedBytesAmount::from(post_config))
+            u64::from(PaddedBytesAmount::from(post_config))
         ),
         get_params,
     )?)
@@ -169,7 +169,7 @@ fn get_zigzag_verifying_key(porep_config: PoRepConfig) -> error::Result<Arc<Bls1
     Ok(lookup_verifying_key(
         format!(
             "ZIGZAG[{}]",
-            usize::from(PaddedBytesAmount::from(porep_config))
+            u64::from(PaddedBytesAmount::from(porep_config))
         ),
         get_verifying_key,
     )?)
@@ -190,7 +190,7 @@ fn get_post_verifying_key(post_config: PoStConfig) -> error::Result<Arc<Bls12Ver
     Ok(lookup_verifying_key(
         format!(
             "POST[{}]",
-            usize::from(PaddedBytesAmount::from(post_config))
+            u64::from(PaddedBytesAmount::from(post_config))
         ),
         get_verifying_key,
     )?)
