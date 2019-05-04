@@ -19,6 +19,8 @@ use crate::merkle::MerkleTree;
 use crate::parameter_cache::ParameterSetIdentifier;
 use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
+#[cfg(feature = "disk-trees")]
+use crate::settings;
 use crate::vde;
 use crate::SP_LOG;
 
@@ -453,50 +455,7 @@ pub trait Layers {
                             // so it is safe to unwrap.
                             let graph = transfer_rx.recv().unwrap();
 
-                            #[cfg(feature = "disk-trees")]
-                            let tree_d = {
-                                let tree_dir =
-                                    &settings::SETTINGS.lock().unwrap().replicated_trees_dir;
-                                // We should always be able to get this configuration
-                                // variable (at least as an empty string).
-
-                                if tree_dir.is_empty() {
-                                    // Signal `merkle_tree_path` to create a temporary file.
-                                    // FIXME: duplicating `merkle_tree_path` to avoid the
-                                    //  "temporary value dropped while borrowed" (because we
-                                    //  were creating a temporary `PathBuf` below).
-                                    graph.merkle_tree_path(&data_copy, None).unwrap()
-                                } else {
-                                    // Try to create `tree_dir`, ignore the error if `AlreadyExists`.
-                                    if let Some(create_error) = fs::create_dir(&tree_dir).err() {
-                                        if create_error.kind() != io::ErrorKind::AlreadyExists {
-                                            panic!(create_error);
-                                        }
-                                    }
-
-                                    let tree_d = graph
-                                        .merkle_tree_path(
-                                            &data_copy,
-                                            Some(&PathBuf::from(tree_dir).join(format!(
-                                                "tree-{}-{}",
-                                                layer,
-                                                rand::random::<u32>()
-                                            ))),
-                                        )
-                                        .unwrap();
-                                    // FIXME: The user of `REPLICATED_TREES_DIR` should figure out
-                                    // how to manage this directory, for now we create every file with
-                                    // a different random number; the problem being that tests now do
-                                    // replications many times in the same run so they may end up
-                                    // reusing the same files with invalid (old) data and failing.
-
-                                    tree_d.try_offload_store();
-                                    tree_d
-                                }
-                            };
-
-                            #[cfg(not(feature = "disk-trees"))]
-                            let tree_d = graph.merkle_tree(&data_copy).unwrap();
+                            let tree_d = Self::generate_data_tree(&graph, &data_copy);
 
                             info!(SP_LOG, "returning tree"; "layer" => format!("{}", layer));
                             return_channel.send((layer, tree_d)).unwrap();
@@ -545,6 +504,59 @@ pub trait Layers {
         }
 
         Ok((taus, auxs))
+    }
+
+    fn generate_data_tree(
+        graph: &Self::Graph,
+        data: &[u8],
+    ) -> MerkleTree<<Self::Hasher as Hasher>::Domain, <Self::Hasher as Hasher>::Function> {
+        #[cfg(not(feature = "disk-trees"))]
+        return graph.merkle_tree(&data).unwrap();
+
+        #[cfg(feature = "disk-trees")]
+        {
+            let tree_dir = settings::SETTINGS.lock().unwrap().replicated_trees_dir;
+            // We should always be able to get this configuration
+            // variable (at least as an empty string).
+
+            if tree_dir.is_empty() {
+                // Signal `merkle_tree_path` to create a temporary file.
+                // FIXME: duplicating `merkle_tree_path` to avoid the
+                //  "temporary value dropped while borrowed" (because we
+                //  were creating a temporary `PathBuf` below).
+                return graph.merkle_tree_path(&data, None).unwrap();
+
+            // FIXME: In the temporary case can we offload the file? The MT
+            //  implementation should ignore it (i.e., we only offload and
+            //  restore named files stored with `REPLICATED_TREES_DIR`).
+            } else {
+                // Try to create `tree_dir`, ignore the error if `AlreadyExists`.
+                if let Some(create_error) = fs::create_dir(&tree_dir).err() {
+                    if create_error.kind() != io::ErrorKind::AlreadyExists {
+                        panic!(create_error);
+                    }
+                }
+
+                let tree_d = graph
+                    .merkle_tree_path(
+                        &data,
+                        Some(&PathBuf::from(tree_dir).join(format!(
+                            "tree-{}-{}",
+                            layer,
+                            rand::random::<u32>()
+                        ))),
+                    )
+                    .unwrap();
+                // FIXME: The user of `REPLICATED_TREES_DIR` should figure out
+                // how to manage this directory, for now we create every file with
+                // a different random number; the problem being that tests now do
+                // replications many times in the same run so they may end up
+                // reusing the same files with invalid (old) data and failing.
+
+                tree_d.offload_store();
+                return tree_d;
+            }
+        }
     }
 }
 
