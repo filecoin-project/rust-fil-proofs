@@ -6,12 +6,6 @@ use crate::api::sector_size::SectorSize;
 #[derive(Clone, Copy, Debug)]
 pub struct PoStConfig(pub SectorSize, pub PoStProofPartitions);
 
-impl Default for PoStConfig {
-    fn default() -> Self {
-        PoStConfig(SectorSize::TwoHundredFiftySixMiB, PoStProofPartitions::One)
-    }
-}
-
 impl From<PoStConfig> for PaddedBytesAmount {
     fn from(x: PoStConfig) -> Self {
         match x {

@@ -42,6 +42,9 @@ pub struct SectorBuilder {
 
     // The main worker. Owns all mutable state for the SectorBuilder.
     scheduler: Scheduler,
+
+    // Configures size of proofs and sectors managed by the SectorBuilder.
+    sector_class: SectorClass,
 }
 
 impl SectorBuilder {
@@ -104,6 +107,7 @@ impl SectorBuilder {
             scheduler: main_worker,
             sealers_tx: seal_tx,
             sealers: seal_workers,
+            sector_class,
         })
     }
 
@@ -171,6 +175,11 @@ impl SectorBuilder {
             .expects(FATAL_NOSEND_TASK);
 
         rx.recv().expects(FATAL_NORECV_TASK)
+    }
+
+    // Return the SectorBuilder's configured sector class.
+    pub fn get_sector_class(&self) -> SectorClass {
+        self.sector_class
     }
 }
 
