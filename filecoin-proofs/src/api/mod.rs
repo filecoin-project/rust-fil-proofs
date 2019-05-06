@@ -31,6 +31,7 @@ mod sector_builder;
 
 /// Verifies the output of seal.
 ///
+#[allow(dead_code)]
 #[no_mangle]
 pub unsafe extern "C" fn verify_seal(
     sector_size: u64,
@@ -87,6 +88,7 @@ pub unsafe extern "C" fn verify_seal(
 
 /// Generates a proof-of-spacetime for the given replica commitments.
 ///
+#[allow(dead_code)]
 #[no_mangle]
 pub unsafe extern "C" fn generate_post(
     ptr: *mut SectorBuilder,
@@ -135,6 +137,7 @@ pub unsafe extern "C" fn generate_post(
 
 /// Verifies that a proof-of-spacetime is valid.
 ///
+#[allow(dead_code)]
 #[no_mangle]
 pub unsafe extern "C" fn verify_post(
     sector_size: u64,
@@ -188,6 +191,7 @@ pub unsafe extern "C" fn verify_post(
 
 /// Initializes and returns a SectorBuilder.
 ///
+#[allow(dead_code)]
 #[no_mangle]
 pub unsafe extern "C" fn init_sector_builder(
     sector_class: FFISectorClass,
@@ -227,6 +231,7 @@ pub unsafe extern "C" fn init_sector_builder(
 
 /// Destroys a SectorBuilder.
 ///
+#[allow(dead_code)]
 #[no_mangle]
 pub unsafe extern "C" fn destroy_sector_builder(ptr: *mut SectorBuilder) {
     let _ = Box::from_raw(ptr);
@@ -234,6 +239,7 @@ pub unsafe extern "C" fn destroy_sector_builder(ptr: *mut SectorBuilder) {
 
 /// Returns the number of user bytes that will fit into a staged sector.
 ///
+#[allow(dead_code)]
 #[no_mangle]
 pub unsafe extern "C" fn get_max_user_bytes_per_staged_sector(sector_size: u64) -> u64 {
     u64::from(UnpaddedBytesAmount::from(SectorSize(sector_size)))
@@ -242,6 +248,7 @@ pub unsafe extern "C" fn get_max_user_bytes_per_staged_sector(sector_size: u64) 
 /// Writes user piece-bytes to a staged sector and returns the id of the sector
 /// to which the bytes were written.
 ///
+#[allow(dead_code)]
 #[no_mangle]
 pub unsafe extern "C" fn add_piece(
     ptr: *mut SectorBuilder,
@@ -275,6 +282,7 @@ pub unsafe extern "C" fn add_piece(
 
 /// Unseals and returns the bytes associated with the provided piece key.
 ///
+#[allow(dead_code)]
 #[no_mangle]
 pub unsafe extern "C" fn read_piece_from_sealed_sector(
     ptr: *mut SectorBuilder,
@@ -303,6 +311,7 @@ pub unsafe extern "C" fn read_piece_from_sealed_sector(
 
 /// For demo purposes. Seals all staged sectors.
 ///
+#[allow(dead_code)]
 #[no_mangle]
 pub unsafe extern "C" fn seal_all_staged_sectors(
     ptr: *mut SectorBuilder,
@@ -326,6 +335,7 @@ pub unsafe extern "C" fn seal_all_staged_sectors(
 /// Returns sector sealing status for the provided sector id if it exists. If
 /// we don't know about the provided sector id, produce an error.
 ///
+#[allow(dead_code)]
 #[no_mangle]
 pub unsafe extern "C" fn get_seal_status(
     ptr: *mut SectorBuilder,
@@ -386,6 +396,7 @@ pub unsafe extern "C" fn get_seal_status(
     raw_ptr(response)
 }
 
+#[allow(dead_code)]
 #[no_mangle]
 pub unsafe extern "C" fn get_sealed_sectors(
     ptr: *mut SectorBuilder,
@@ -444,6 +455,7 @@ pub unsafe extern "C" fn get_sealed_sectors(
     raw_ptr(response)
 }
 
+#[allow(dead_code)]
 #[no_mangle]
 pub unsafe extern "C" fn get_staged_sectors(
     ptr: *mut SectorBuilder,
