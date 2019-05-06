@@ -23,7 +23,6 @@ pub fn raw_ptr<T>(thing: T) -> *mut T {
 
 // transmutes a C string to a copy-on-write Rust string
 pub unsafe fn c_str_to_rust_str<'a>(x: *const libc::c_char) -> Cow<'a, str> {
-    use std::borrow::Cow;
     if x.is_null() {
         Cow::from("")
     } else {
