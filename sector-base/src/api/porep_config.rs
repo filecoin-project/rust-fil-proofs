@@ -6,12 +6,6 @@ use crate::api::sector_size::SectorSize;
 #[derive(Clone, Copy, Debug)]
 pub struct PoRepConfig(pub SectorSize, pub PoRepProofPartitions);
 
-impl Default for PoRepConfig {
-    fn default() -> Self {
-        PoRepConfig(SectorSize::TwoHundredFiftySixMiB, PoRepProofPartitions::Two)
-    }
-}
-
 impl From<PoRepConfig> for PaddedBytesAmount {
     fn from(x: PoRepConfig) -> Self {
         match x {

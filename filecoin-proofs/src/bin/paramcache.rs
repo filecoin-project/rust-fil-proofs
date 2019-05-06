@@ -10,9 +10,10 @@ use filecoin_proofs::api::internal;
 use filecoin_proofs::FCP_LOG;
 use pairing::bls12_381::Bls12;
 use sector_base::api::bytes_amount::PaddedBytesAmount;
+use sector_base::api::disk_backed_storage::LIVE_SECTOR_SIZE;
+use sector_base::api::disk_backed_storage::TEST_SECTOR_SIZE;
 use sector_base::api::porep_config::PoRepConfig;
 use sector_base::api::porep_proof_partitions::PoRepProofPartitions;
-use sector_base::api::porep_proof_partitions::POREP_PROOF_PARTITION_CHOICES;
 use sector_base::api::post_config::PoStConfig;
 use sector_base::api::post_proof_partitions::PoStProofPartitions;
 use sector_base::api::sector_size::SectorSize;
@@ -23,6 +24,8 @@ use storage_proofs::hasher::pedersen::PedersenHasher;
 use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::vdf_post::VDFPoSt;
 use storage_proofs::vdf_sloth::Sloth;
+
+const POREP_PROOF_PARTITION_CHOICES: [PoRepProofPartitions; 1] = [PoRepProofPartitions(2)];
 
 fn cache_porep_params(porep_config: PoRepConfig) {
     let n = u64::from(PaddedBytesAmount::from(porep_config));
@@ -84,16 +87,23 @@ pub fn main() {
 
     let test_only: bool = matches.is_present("test-only");
 
-    cache_porep_params(PoRepConfig(SectorSize::OneKiB, PoRepProofPartitions::Two));
-    cache_post_params(PoStConfig(SectorSize::OneKiB, PoStProofPartitions::One));
+    cache_porep_params(PoRepConfig(
+        SectorSize(TEST_SECTOR_SIZE),
+        PoRepProofPartitions(2),
+    ));
+    cache_post_params(PoStConfig(
+        SectorSize(TEST_SECTOR_SIZE),
+        PoStProofPartitions(1),
+    ));
 
     if !test_only {
         for p in &POREP_PROOF_PARTITION_CHOICES {
-            cache_porep_params(PoRepConfig(SectorSize::TwoHundredFiftySixMiB, *p));
+            cache_porep_params(PoRepConfig(SectorSize(LIVE_SECTOR_SIZE), *p));
         }
+
         cache_post_params(PoStConfig(
-            SectorSize::TwoHundredFiftySixMiB,
-            PoStProofPartitions::One,
+            SectorSize(LIVE_SECTOR_SIZE),
+            PoStProofPartitions(1),
         ));
     }
 }

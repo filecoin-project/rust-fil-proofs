@@ -142,30 +142,31 @@ impl<Z: ZigZag> Graph<Z::BaseHasher> for Z {
     }
 
     #[inline]
-    fn parents(&self, raw_node: usize) -> Vec<usize> {
+    fn parents(&self, raw_node: usize, parents: &mut [usize]) {
         // If graph is reversed, use real_index to convert index to reversed index.
         // So we convert a raw reversed node to an unreversed node, calculate its parents,
         // then convert the parents to reversed.
 
-        let drg_parents = self
-            .base_graph()
-            .parents(self.real_index(raw_node))
-            .iter()
-            .map(|i| self.real_index(*i))
-            .collect::<Vec<_>>();
+        self.base_graph()
+            .parents(self.real_index(raw_node), parents);
+        for parent in parents.iter_mut().take(self.base_graph().degree()) {
+            *parent = self.real_index(*parent);
+        }
 
-        let mut parents = drg_parents;
         // expanded_parents takes raw_node
         let expanded_parents = self.expanded_parents(raw_node);
 
-        parents.extend(expanded_parents.iter());
+        for (ii, value) in expanded_parents.iter().enumerate() {
+            parents[ii + self.base_graph().degree()] = *value
+        }
 
         // Pad so all nodes have correct degree.
-        for _ in 0..(self.degree() - parents.len()) {
+        let current_length = self.base_graph().degree() + expanded_parents.len();
+        for ii in 0..(self.degree() - current_length) {
             if self.reversed() {
-                parents.push(self.size() - 1);
+                parents[ii + current_length] = self.size() - 1
             } else {
-                parents.push(0);
+                parents[ii + current_length] = 0
             }
         }
         assert!(parents.len() == self.degree());
@@ -176,8 +177,6 @@ impl<Z: ZigZag> Graph<Z::BaseHasher> for Z {
         } else {
             *p >= raw_node
         }));
-
-        parents
     }
 
     fn seed(&self) -> [u32; 7] {
@@ -424,7 +423,9 @@ mod tests {
 
     fn assert_graph_ascending<H: Hasher, G: Graph<H>>(g: G) {
         for i in 0..g.size() {
-            for p in g.parents(i) {
+            let mut parents = vec![0; g.degree()];
+            g.parents(i, &mut parents);
+            for p in parents {
                 if i == 0 {
                     assert!(p == i);
                 } else {
@@ -436,7 +437,8 @@ mod tests {
 
     fn assert_graph_descending<H: Hasher, G: Graph<H>>(g: G) {
         for i in 0..g.size() {
-            let parents = g.parents(i);
+            let mut parents = vec![0; g.degree()];
+            g.parents(i, &mut parents);
             for p in parents {
                 if i == g.size() - 1 {
                     assert!(p == i);

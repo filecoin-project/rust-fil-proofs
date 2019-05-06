@@ -16,7 +16,8 @@ fn drgraph(c: &mut Criterion) {
             "bucket/m=6",
             |b, (graph, i)| {
                 b.iter(|| {
-                    black_box(graph.parents(*i));
+                    let mut parents = vec![0; 6];
+                    black_box(graph.parents(*i, &mut parents));
                 })
             },
             params,

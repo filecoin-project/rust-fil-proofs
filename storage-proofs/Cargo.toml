@@ -94,3 +94,7 @@ harness = false
 [[bench]]
 name = "encode"
 harness = false
+
+[[bench]]
+name = "parents"
+harness = false

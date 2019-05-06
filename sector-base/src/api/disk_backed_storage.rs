@@ -1,4 +1,3 @@
-use libc;
 use std::fs::{create_dir_all, remove_file, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
@@ -256,17 +255,17 @@ pub mod tests {
         let xs = vec![
             (
                 SectorClass(
-                    SectorSize::TwoHundredFiftySixMiB,
-                    PoRepProofPartitions::Two,
-                    PoStProofPartitions::One,
+                    SectorSize(LIVE_SECTOR_SIZE),
+                    PoRepProofPartitions(2),
+                    PoStProofPartitions(1),
                 ),
                 266338304,
             ),
             (
                 SectorClass(
-                    SectorSize::OneKiB,
-                    PoRepProofPartitions::Two,
-                    PoStProofPartitions::One,
+                    SectorSize(TEST_SECTOR_SIZE),
+                    PoRepProofPartitions(2),
+                    PoStProofPartitions(1),
                 ),
                 1016,
             ),
@@ -282,9 +281,9 @@ pub mod tests {
     #[test]
     fn unsealed_sector_write_and_truncate() {
         let storage: Box<SectorStore> = create_sector_store(SectorClass(
-            SectorSize::OneKiB,
-            PoRepProofPartitions::Two,
-            PoStProofPartitions::One,
+            SectorSize(TEST_SECTOR_SIZE),
+            PoRepProofPartitions(2),
+            PoStProofPartitions(1),
         ));
         let mgr = storage.manager();
 
@@ -377,9 +376,9 @@ pub mod tests {
     #[test]
     fn deletes_staging_access() {
         let store = create_sector_store(SectorClass(
-            SectorSize::OneKiB,
-            PoRepProofPartitions::Two,
-            PoStProofPartitions::One,
+            SectorSize(TEST_SECTOR_SIZE),
+            PoRepProofPartitions(2),
+            PoStProofPartitions(1),
         ));
         let access = store.manager().new_staging_sector_access().unwrap();
 

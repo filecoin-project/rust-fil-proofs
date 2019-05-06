@@ -188,10 +188,11 @@ where
         let mut input = Vec::new();
         input.extend(packed_replica_id);
 
+        let mut parents = vec![0; pub_params.graph.degree()];
         for challenge in challenges {
             let mut por_nodes = vec![*challenge];
-            let parents = pub_params.graph.parents(*challenge);
-            por_nodes.extend(parents);
+            pub_params.graph.parents(*challenge, &mut parents);
+            por_nodes.extend_from_slice(&parents);
 
             for node in por_nodes {
                 let por_pub_inputs = merklepor::PublicInputs {

@@ -10,6 +10,7 @@ use std::fs::File;
 
 use filecoin_proofs::api::internal;
 use sector_base::api::bytes_amount::PaddedBytesAmount;
+use sector_base::api::disk_backed_storage::TEST_SECTOR_SIZE;
 use sector_base::api::porep_proof_partitions::PoRepProofPartitions;
 use sector_base::api::sector_size::SectorSize;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
@@ -21,8 +22,8 @@ pub fn main() {
     let out_file = &args[1];
 
     let public_params = internal::public_params(
-        PaddedBytesAmount::from(SectorSize::OneKiB),
-        usize::from(PoRepProofPartitions::Two),
+        PaddedBytesAmount::from(SectorSize(TEST_SECTOR_SIZE)),
+        usize::from(PoRepProofPartitions(2)),
     );
 
     let circuit = ZigZagCompound::blank_circuit(&public_params, &internal::ENGINE_PARAMS);

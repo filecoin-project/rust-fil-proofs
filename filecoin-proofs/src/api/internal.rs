@@ -732,6 +732,7 @@ mod tests {
 
     use rand::{thread_rng, Rng};
     use sector_base::api::disk_backed_storage::new_sector_store;
+    use sector_base::api::disk_backed_storage::TEST_SECTOR_SIZE;
     use sector_base::api::sector_class::SectorClass;
     use sector_base::api::sector_size::SectorSize;
     use sector_base::api::sector_store::SectorStore;
@@ -745,9 +746,9 @@ mod tests {
     use tempfile::NamedTempFile;
 
     const TEST_CLASS: SectorClass = SectorClass(
-        SectorSize::OneKiB,
-        PoRepProofPartitions::Two,
-        PoStProofPartitions::One,
+        SectorSize(TEST_SECTOR_SIZE),
+        PoRepProofPartitions(2),
+        PoStProofPartitions(1),
     );
 
     struct Harness {
@@ -1207,7 +1208,7 @@ mod tests {
             .all_challenges()
         };
         // Update to ensure all supported PoRepProofPartitions options are represented here.
-        assert_eq!(vec![1, 1, 2, 2], f(usize::from(PoRepProofPartitions::Two)));
+        assert_eq!(vec![1, 1, 2, 2], f(usize::from(PoRepProofPartitions(2))));
 
         assert_eq!(vec![3, 3, 4, 5], f(1));
         assert_eq!(vec![1, 1, 2, 2], f(2));
