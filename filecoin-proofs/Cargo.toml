@@ -61,7 +61,7 @@ optional = true
 [dependencies.reqwest]
 version = "0.9.16"
 default-features = false
-features = ["default_tls_vendored"]
+features = ["default-tls-vendored"]
 
 [dev-dependencies]
 gperftools = "0.2"
