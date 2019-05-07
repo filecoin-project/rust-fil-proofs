@@ -133,6 +133,7 @@ struct ConfigurableSizes {
     second_piece_bytes: usize,
     sector_class: FFISectorClass,
     third_piece_bytes: usize,
+    fourth_piece_bytes: usize,
 }
 
 unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error>> {
@@ -147,10 +148,11 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
                 porep_proof_partitions: 2,
                 post_proof_partitions: 1,
             },
-            max_bytes: 266338304,
-            first_piece_bytes: 26214400,
-            second_piece_bytes: 131072000,
-            third_piece_bytes: 157286400,
+            max_bytes: 1016 * 1024 * 256,
+            first_piece_bytes: 100 * 1024 * 256,
+            second_piece_bytes: 110 * 1024 * 256,
+            third_piece_bytes: 600 * 1024 * 256,
+            fourth_piece_bytes: 508 * 1024 * 256,
         }
     } else {
         ConfigurableSizes {
@@ -161,8 +163,9 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
             },
             max_bytes: 1016,
             first_piece_bytes: 100,
-            second_piece_bytes: 500,
+            second_piece_bytes: 110,
             third_piece_bytes: 600,
+            fourth_piece_bytes: 508,
         }
     };
 
@@ -270,10 +273,10 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
     );
     defer!(destroy_sector_builder(sector_builder_b));
 
-    // add fourth piece, where size(piece) == max (will trigger sealing)
+    // add fourth piece that will trigger sealing in the first sector
     let (bytes_in, piece_key) = {
         let (piece_bytes, piece_key, resp) =
-            create_and_add_piece(sector_builder_b, sizes.max_bytes);
+            create_and_add_piece(sector_builder_b, sizes.fourth_piece_bytes);
         defer!(destroy_add_piece_response(resp));
 
         if (*resp).status_code != 0 {
@@ -281,7 +284,7 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
         }
 
         // sector id changed again (piece wouldn't fit)
-        assert_eq!(126, (*resp).sector_id);
+        assert_eq!(124, (*resp).sector_id);
 
         (piece_bytes, piece_key)
     };
@@ -302,7 +305,7 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
                     _ => (),
                 };
 
-                let resp = get_seal_status(sector_builder, 126);
+                let resp = get_seal_status(sector_builder, 124);
                 defer!(destroy_get_seal_status_response(resp));
 
                 if (*resp).status_code != 0 {
@@ -328,12 +331,12 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
             result_rx.recv_timeout(Duration::from_secs(300)).unwrap()
         };
 
-        assert_eq!(now_sealed_sector_id, 126);
+        assert_eq!(now_sealed_sector_id, 124);
     }
 
     // get sealed sector and verify the PoRep proof
     {
-        let resp = get_seal_status(sector_builder_b, 126);
+        let resp = get_seal_status(sector_builder_b, 124);
 
         {
             let resp2 = verify_seal(
@@ -342,7 +345,7 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
                 &mut (*resp).comm_d,
                 &mut (*resp).comm_r_star,
                 &mut u64_to_fr_safe(0),
-                &mut u64_to_fr_safe(126),
+                &mut u64_to_fr_safe(124),
                 (*resp).proof_ptr,
                 (*resp).proof_len,
             );

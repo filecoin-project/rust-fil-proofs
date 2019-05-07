@@ -1,4 +1,4 @@
-use crate::api::sector_builder::metadata::sum_piece_bytes;
+use crate::api::sector_builder::pieces::sum_piece_lengths;
 use crate::api::sector_builder::metadata::SealStatus;
 use crate::api::sector_builder::metadata::StagedSectorMetadata;
 use crate::api::sector_builder::state::StagedState;
@@ -18,7 +18,7 @@ pub fn get_sectors_ready_for_sealing(
             .sectors
             .values()
             .filter(|x| x.seal_status == SealStatus::Pending)
-            .partition(|x| max_user_bytes_per_staged_sector <= sum_piece_bytes(x));
+            .partition(|x| max_user_bytes_per_staged_sector <= sum_piece_lengths(x.pieces.iter()));
 
     not_full.sort_unstable_by_key(|x| Reverse(x.sector_id));
 

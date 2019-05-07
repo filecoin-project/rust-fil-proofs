@@ -1,10 +1,12 @@
 use std::fs::File;
+use std::io::prelude::*;
 use std::sync::Arc;
 
 use crate::api::sector_builder::errors::*;
 use crate::api::sector_builder::metadata::sum_piece_bytes;
 use crate::api::sector_builder::metadata::StagedSectorMetadata;
 use crate::api::sector_builder::state::StagedState;
+use crate::api::sector_builder::pieces::{get_piece_padding, sum_piece_lengths};
 use crate::api::sector_builder::*;
 use crate::error;
 use sector_base::api::bytes_amount::UnpaddedBytesAmount;
@@ -41,15 +43,26 @@ pub fn add_piece(
         .or_else(|_| provision_new_staged_sector(sector_mgr, &mut staged_state))?;
 
     if let Some(s) = staged_state.sectors.get_mut(&dest_sector_id) {
-        let mut file = File::open(piece_path)?;
+        let file = File::open(piece_path)?;
+
+        let piece_lengths = sum_piece_lengths(s.pieces.iter());
+        let (left_padding, right_padding) = get_piece_padding(piece_lengths, piece_bytes_len);
+
+        let left_padding_vec = vec![0; left_padding.into()];
+        let left_padding_slice = &left_padding_vec[..];
+        let right_padding_vec = vec![0; right_padding.into()];
+        let right_padding_slice = &right_padding_vec[..];
+        let expected_num_bytes_written = left_padding + piece_bytes_len + right_padding;
+
+        let mut chain = left_padding_slice.chain(file).chain(right_padding_slice);
 
         sector_store
             .inner
             .manager()
-            .write_and_preprocess(&s.sector_access, &mut file)
+            .write_and_preprocess(&s.sector_access, &mut chain)
             .map_err(Into::into)
             .and_then(|num_bytes_written| {
-                if num_bytes_written != piece_bytes_len {
+                if num_bytes_written != expected_num_bytes_written {
                     Err(
                         err_inc_write(u64::from(num_bytes_written), u64::from(piece_bytes_len))
                             .into(),
@@ -84,7 +97,9 @@ fn compute_destination_sector_id(
         Ok(candidate_sectors
             .iter()
             .find(move |staged_sector| {
-                (max_bytes_per_sector - sum_piece_bytes(staged_sector)) >= num_bytes_in_piece
+                let piece_lengths = sum_piece_lengths(staged_sector.pieces.iter());
+                let (left_padding, right_padding) = get_piece_padding(piece_lengths, num_bytes_in_piece);
+                piece_lengths + left_padding + num_bytes_in_piece + right_padding <= max_bytes_per_sector
             })
             .map(|x| x.sector_id))
     }
