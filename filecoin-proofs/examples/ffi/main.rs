@@ -149,10 +149,10 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
                 post_proof_partitions: 1,
             },
             max_bytes: 1016 * 1024 * 256,
-            first_piece_bytes: 100 * 1024 * 256,
-            second_piece_bytes: 110 * 1024 * 256,
-            third_piece_bytes: 600 * 1024 * 256,
-            fourth_piece_bytes: 508 * 1024 * 256,
+            first_piece_bytes: 400 * 1024 * 256,
+            second_piece_bytes: 200 * 1024 * 256,
+            third_piece_bytes: 500 * 1024 * 256,
+            fourth_piece_bytes: 200 * 1024 * 256,
         }
     } else {
         ConfigurableSizes {
@@ -162,10 +162,10 @@ unsafe fn sector_builder_lifecycle(use_live_store: bool) -> Result<(), Box<Error
                 post_proof_partitions: 1,
             },
             max_bytes: 1016,
-            first_piece_bytes: 100,
-            second_piece_bytes: 110,
-            third_piece_bytes: 600,
-            fourth_piece_bytes: 508,
+            first_piece_bytes: 400,
+            second_piece_bytes: 200,
+            third_piece_bytes: 500,
+            fourth_piece_bytes: 200,
         }
     };
 

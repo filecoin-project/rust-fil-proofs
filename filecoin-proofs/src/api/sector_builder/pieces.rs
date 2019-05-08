@@ -1,6 +1,9 @@
 use crate::api::sector_builder::metadata::PieceMetadata;
 use sector_base::api::bytes_amount::UnpaddedBytesAmount;
 use std::cmp::max;
+use std::io::Read;
+use std::iter::Iterator;
+use std::io::Cursor;
 
 pub struct PieceAlignment {
     pub left_bytes: UnpaddedBytesAmount,
@@ -63,6 +66,36 @@ pub fn get_piece_alignment(
         left_bytes: UnpaddedBytesAmount(left_bytes),
         right_bytes: UnpaddedBytesAmount(right_bytes),
     }
+}
+
+pub fn with_alignment(
+    source: impl Read,
+    piece_alignment: PieceAlignment,
+) -> impl Read {
+    let PieceAlignment {
+        left_bytes,
+        right_bytes,
+    } = piece_alignment;
+
+    let left_padding = Cursor::new(vec![0; left_bytes.into()]);
+    let right_padding = Cursor::new(vec![0; right_bytes.into()]);
+
+    left_padding.chain(source).chain(right_padding)
+}
+
+pub fn get_aligned_source(
+    source: impl Read,
+    pieces: &[PieceMetadata],
+    piece_bytes: UnpaddedBytesAmount,
+) -> (UnpaddedBytesAmount, impl Read) {
+    let written_bytes = sum_piece_bytes_with_alignment(pieces.iter());
+    let piece_alignment = get_piece_alignment(written_bytes, piece_bytes);
+    let expected_num_bytes_written = piece_alignment.left_bytes + piece_bytes + piece_alignment.right_bytes;
+
+    (
+        expected_num_bytes_written,
+        with_alignment(source, piece_alignment),
+    )
 }
 
 #[cfg(test)]
