@@ -2,8 +2,8 @@ use crate::api::internal;
 use crate::api::sector_builder::errors::err_unrecov;
 use crate::api::sector_builder::metadata::sector_id_as_bytes;
 use crate::api::sector_builder::metadata::SealedSectorMetadata;
+use crate::api::sector_builder::pieces::{get_piece_by_key, get_piece_start_byte};
 use crate::api::sector_builder::WrappedSectorStore;
-use crate::api::sector_builder::pieces::{get_piece_start, get_piece_by_key};
 use crate::error;
 use sector_base::api::bytes_amount::UnpaddedBytesAmount;
 use std::path::PathBuf;
@@ -57,7 +57,7 @@ fn retrieve_piece_aux<'a>(
         );
         err_unrecov(msg)
     })?;
-    let start_offset = get_piece_start(&sealed_sector.pieces, piece);
+    let start_offset = get_piece_start_byte(&sealed_sector.pieces, piece);
 
     let num_bytes_unsealed = internal::get_unsealed_range(
         (*sector_store.inner).proofs_config().porep_config(),

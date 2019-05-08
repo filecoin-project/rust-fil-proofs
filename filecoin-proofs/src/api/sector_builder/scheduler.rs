@@ -204,12 +204,6 @@ impl<T: KeyValueStore> SectorMetadataManager<T> {
         piece_key: String,
         return_channel: mpsc::SyncSender<Result<Vec<u8>>>,
     ) {
-        println!("=== FOOBAR ===");
-        println!("=== FOOBAR ===");
-        println!("=== FOOBAR ===");
-        println!("=== FOOBAR ===");
-        println!("{:?}", self.state.staged.sectors);
-        println!("{:?}", self.state.sealed.sectors);
         let opt_sealed_sector = self.state.sealed.sectors.values().find(|sector| {
             sector
                 .pieces

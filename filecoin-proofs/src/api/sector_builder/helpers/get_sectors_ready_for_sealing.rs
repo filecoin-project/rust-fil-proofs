@@ -1,6 +1,6 @@
-use crate::api::sector_builder::pieces::sum_piece_lengths;
 use crate::api::sector_builder::metadata::SealStatus;
 use crate::api::sector_builder::metadata::StagedSectorMetadata;
+use crate::api::sector_builder::pieces::sum_piece_bytes_with_alignment;
 use crate::api::sector_builder::state::StagedState;
 use crate::api::sector_builder::SectorId;
 use itertools::chain;
@@ -18,7 +18,9 @@ pub fn get_sectors_ready_for_sealing(
             .sectors
             .values()
             .filter(|x| x.seal_status == SealStatus::Pending)
-            .partition(|x| max_user_bytes_per_staged_sector <= sum_piece_lengths(x.pieces.iter()));
+            .partition(|x| {
+                max_user_bytes_per_staged_sector <= sum_piece_bytes_with_alignment(x.pieces.iter())
+            });
 
     not_full.sort_unstable_by_key(|x| Reverse(x.sector_id));
 
@@ -58,10 +60,14 @@ mod tests {
             sector_id,
             StagedSectorMetadata {
                 sector_id,
-                pieces: vec![PieceMetadata {
-                    piece_key: format!("{}", sector_id),
-                    num_bytes: UnpaddedBytesAmount(num_bytes),
-                }],
+                pieces: if num_bytes > 0 {
+                    vec![PieceMetadata {
+                        piece_key: format!("{}", sector_id),
+                        num_bytes: UnpaddedBytesAmount(num_bytes),
+                    }]
+                } else {
+                    vec![]
+                },
                 seal_status,
                 ..Default::default()
             },
