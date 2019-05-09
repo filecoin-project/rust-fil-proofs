@@ -1,10 +1,11 @@
 use std::fs::File;
+use std::iter::Iterator;
 use std::sync::Arc;
 
 use crate::api::sector_builder::errors::*;
 use crate::api::sector_builder::metadata::StagedSectorMetadata;
 use crate::api::sector_builder::pieces::{
-    get_piece_alignment, sum_piece_bytes_with_alignment, PieceAlignment, get_aligned_source
+    get_aligned_source, get_piece_alignment, sum_piece_bytes_with_alignment, PieceAlignment,
 };
 use crate::api::sector_builder::state::StagedState;
 use crate::api::sector_builder::*;
@@ -35,7 +36,7 @@ pub fn add_piece(
             .map(|(_, v)| (*v).clone())
             .collect();
 
-        compute_destination_sector_id(&candidates[..], sector_max, piece_bytes_len)?
+        compute_destination_sector_id(&candidates, sector_max, piece_bytes_len)?
     };
 
     let dest_sector_id = opt_dest_sector_id
@@ -43,10 +44,8 @@ pub fn add_piece(
         .or_else(|_| provision_new_staged_sector(sector_mgr, &mut staged_state))?;
 
     if let Some(s) = staged_state.sectors.get_mut(&dest_sector_id) {
-        let (
-            expected_num_bytes_written,
-            mut chain,
-        ) = get_aligned_source(File::open(piece_path)?, &s.pieces, piece_bytes_len);
+        let (expected_num_bytes_written, mut chain) =
+            get_aligned_source(File::open(piece_path)?, &s.pieces, piece_bytes_len);
 
         sector_store
             .inner
@@ -86,7 +85,10 @@ fn compute_destination_sector_id(
     if num_bytes_in_piece > max_bytes_per_sector {
         Err(err_overflow(num_bytes_in_piece.into(), max_bytes_per_sector.into()).into())
     } else {
-        Ok(candidate_sectors
+        let mut vector = candidate_sectors.to_vec();
+        vector.sort_by(|a, b| a.sector_id.cmp(&b.sector_id));
+
+        Ok(vector
             .iter()
             .find(move |staged_sector| {
                 let preceding_piece_bytes =
