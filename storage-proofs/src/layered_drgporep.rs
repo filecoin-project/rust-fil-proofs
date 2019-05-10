@@ -19,7 +19,6 @@ use crate::merkle::MerkleTree;
 use crate::parameter_cache::ParameterSetIdentifier;
 use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
-#[cfg(feature = "disk-trees")]
 use crate::settings;
 use crate::vde;
 use crate::SP_LOG;
@@ -387,10 +386,11 @@ pub trait Layers {
         let mut taus = Vec::with_capacity(layers);
         let mut auxs: Vec<Tree<Self::Hasher>> = Vec::with_capacity(layers);
 
-        let generate_merkle_trees_in_parallel = false;
-        // FIXME: Move this to the new config system (after rebasing).
-
-        if !generate_merkle_trees_in_parallel {
+        if !&settings::SETTINGS
+            .lock()
+            .unwrap()
+            .generate_merkle_trees_in_parallel
+        {
             let mut sorted_trees: Vec<_> = Vec::new();
 
             (0..=layers).fold(graph.clone(), |current_graph, layer| {

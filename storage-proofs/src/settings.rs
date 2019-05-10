@@ -16,6 +16,9 @@ pub struct Settings {
     pub merkle_tree_path: String,
     pub num_proving_threads: usize,
     pub replicated_trees_dir: String,
+    pub generate_merkle_trees_in_parallel: bool,
+    // Generating MTs in parallel optimizes for speed while generating them
+    // in sequence (`false`) optimizes for memory.
 }
 
 impl Default for Settings {
@@ -25,6 +28,12 @@ impl Default for Settings {
             merkle_tree_path: "/tmp/merkle-trees".into(),
             num_proving_threads: 1,
             replicated_trees_dir: "".into(),
+            generate_merkle_trees_in_parallel: false,
+            // FIXME: Decide on a sensible default value, setting to `false`
+            //  at the moment for testing purposes only.
+            // FIXME: If the `disk-trees` feature is off the this should be
+            //  true *always*, there's nothing to win in terms of memory
+            //  with sequential generation if we're not offlading MTs to files.
         }
     }
 }
