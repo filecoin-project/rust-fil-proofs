@@ -10,10 +10,8 @@ pub struct PieceAlignment {
     pub right_bytes: UnpaddedBytesAmount,
 }
 
-pub fn sum_piece_bytes_with_alignment<'a, T: Iterator<Item = &'a PieceMetadata>>(
-    pieces: T,
-) -> UnpaddedBytesAmount {
-    pieces.fold(UnpaddedBytesAmount(0), |acc, p| {
+pub fn sum_piece_bytes_with_alignment(pieces: &[PieceMetadata]) -> UnpaddedBytesAmount {
+    pieces.iter().fold(UnpaddedBytesAmount(0), |acc, p| {
         let PieceAlignment {
             left_bytes,
             right_bytes,
@@ -31,9 +29,12 @@ pub fn get_piece_by_key<'a>(
 }
 
 pub fn get_piece_start_byte(pieces: &[PieceMetadata], piece: &PieceMetadata) -> u64 {
-    let last_byte = sum_piece_bytes_with_alignment(
-        pieces.iter().take_while(|p| p.piece_key != piece.piece_key),
-    );
+    let pieces: Vec<PieceMetadata> = pieces
+        .into_iter()
+        .take_while(|p| p.piece_key != piece.piece_key)
+        .map(PieceMetadata::clone)
+        .collect();
+    let last_byte = sum_piece_bytes_with_alignment(&pieces);
     let alignment = get_piece_alignment(last_byte, piece.num_bytes);
 
     u64::from(last_byte + alignment.left_bytes)
@@ -85,7 +86,7 @@ pub fn get_aligned_source(
     pieces: &[PieceMetadata],
     piece_bytes: UnpaddedBytesAmount,
 ) -> (UnpaddedBytesAmount, impl Read) {
-    let written_bytes = sum_piece_bytes_with_alignment(pieces.iter());
+    let written_bytes = sum_piece_bytes_with_alignment(pieces);
     let piece_alignment = get_piece_alignment(written_bytes, piece_bytes);
     let expected_num_bytes_written =
         piece_alignment.left_bytes + piece_bytes + piece_alignment.right_bytes;

@@ -91,8 +91,7 @@ fn compute_destination_sector_id(
         Ok(vector
             .iter()
             .find(move |staged_sector| {
-                let preceding_piece_bytes =
-                    sum_piece_bytes_with_alignment(staged_sector.pieces.iter());
+                let preceding_piece_bytes = sum_piece_bytes_with_alignment(&staged_sector.pieces);
                 let PieceAlignment {
                     left_bytes,
                     right_bytes,
