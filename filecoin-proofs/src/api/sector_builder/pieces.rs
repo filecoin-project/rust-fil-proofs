@@ -1,5 +1,5 @@
 use crate::api::sector_builder::metadata::PieceMetadata;
-use sector_base::api::bytes_amount::{UnpaddedBytesAmount, UnpaddedByteIndex};
+use sector_base::api::bytes_amount::{UnpaddedByteIndex, UnpaddedBytesAmount};
 use std::cmp::max;
 use std::io::Cursor;
 use std::io::Read;
@@ -22,7 +22,10 @@ pub fn sum_piece_bytes_with_alignment(pieces: &[PieceMetadata]) -> UnpaddedBytes
 }
 
 pub fn get_piece_by_key(pieces: &[PieceMetadata], piece_key: &str) -> Option<PieceMetadata> {
-    pieces.iter().find(|p| p.piece_key == piece_key).map(|p| p.clone())
+    pieces
+        .iter()
+        .find(|p| p.piece_key == piece_key)
+        .map(|p| p.clone())
 }
 
 pub fn get_piece_start_byte(pieces: &[PieceMetadata], piece: &PieceMetadata) -> UnpaddedByteIndex {
@@ -114,12 +117,20 @@ mod tests {
             (300, 300, (208, 208)),
         ];
 
-        for (x, y, (a, b)) in table.clone() {
+        for (bytes_in_sector, bytes_in_piece, (expected_left_align, expected_right_align)) in
+            table.clone()
+        {
             let PieceAlignment {
-                left_bytes: UnpaddedBytesAmount(c),
-                right_bytes: UnpaddedBytesAmount(d),
-            } = get_piece_alignment(UnpaddedBytesAmount(x), UnpaddedBytesAmount(y));
-            assert_eq!((c, d), (a, b));
+                left_bytes: UnpaddedBytesAmount(actual_left_align),
+                right_bytes: UnpaddedBytesAmount(actual_right_align),
+            } = get_piece_alignment(
+                UnpaddedBytesAmount(bytes_in_sector),
+                UnpaddedBytesAmount(bytes_in_piece),
+            );
+            assert_eq!(
+                (expected_left_align, expected_right_align),
+                (actual_left_align, actual_right_align)
+            );
         }
     }
 
@@ -146,8 +157,17 @@ mod tests {
         pieces.push(piece_b);
         pieces.push(piece_c);
 
-        assert_eq!(get_piece_start_byte(&pieces, &pieces[0]), UnpaddedByteIndex(0));
-        assert_eq!(get_piece_start_byte(&pieces, &pieces[1]), UnpaddedByteIndex(127));
-        assert_eq!(get_piece_start_byte(&pieces, &pieces[2]), UnpaddedByteIndex(254));
+        assert_eq!(
+            get_piece_start_byte(&pieces, &pieces[0]),
+            UnpaddedByteIndex(0)
+        );
+        assert_eq!(
+            get_piece_start_byte(&pieces, &pieces[1]),
+            UnpaddedByteIndex(127)
+        );
+        assert_eq!(
+            get_piece_start_byte(&pieces, &pieces[2]),
+            UnpaddedByteIndex(254)
+        );
     }
 }

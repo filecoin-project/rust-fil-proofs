@@ -15,7 +15,7 @@ use crate::api::post_adapter::*;
 use crate::error;
 use crate::error::ExpectWithBacktrace;
 use crate::FCP_LOG;
-use sector_base::api::bytes_amount::{PaddedBytesAmount, UnpaddedBytesAmount, UnpaddedByteIndex};
+use sector_base::api::bytes_amount::{PaddedBytesAmount, UnpaddedByteIndex, UnpaddedBytesAmount};
 use sector_base::api::porep_config::PoRepConfig;
 use sector_base::api::porep_proof_partitions::PoRepProofPartitions;
 use sector_base::api::post_config::PoStConfig;
@@ -648,12 +648,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
         &data,
     )?;
 
-    let written = write_unpadded(
-        &unsealed,
-        &mut buf_writer,
-        offset.into(),
-        num_bytes.into(),
-    )?;
+    let written = write_unpadded(&unsealed, &mut buf_writer, offset.into(), num_bytes.into())?;
 
     Ok(UnpaddedBytesAmount(written as u64))
 }
