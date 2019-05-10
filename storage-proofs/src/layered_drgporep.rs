@@ -455,7 +455,7 @@ pub trait Layers {
                             // so it is safe to unwrap.
                             let graph = transfer_rx.recv().unwrap();
 
-                            let tree_d = Self::generate_data_tree(&graph, &data_copy);
+                            let tree_d = Self::generate_data_tree(&graph, &data_copy, layer);
 
                             info!(SP_LOG, "returning tree"; "layer" => format!("{}", layer));
                             return_channel.send((layer, tree_d)).unwrap();
@@ -509,13 +509,14 @@ pub trait Layers {
     fn generate_data_tree(
         graph: &Self::Graph,
         data: &[u8],
+        layer: usize,
     ) -> MerkleTree<<Self::Hasher as Hasher>::Domain, <Self::Hasher as Hasher>::Function> {
         #[cfg(not(feature = "disk-trees"))]
         return graph.merkle_tree(&data).unwrap();
 
         #[cfg(feature = "disk-trees")]
         {
-            let tree_dir = settings::SETTINGS.lock().unwrap().replicated_trees_dir;
+            let tree_dir = &settings::SETTINGS.lock().unwrap().replicated_trees_dir;
             // We should always be able to get this configuration
             // variable (at least as an empty string).
 
