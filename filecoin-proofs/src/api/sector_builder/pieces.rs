@@ -1,5 +1,5 @@
 use crate::api::sector_builder::metadata::PieceMetadata;
-use sector_base::api::bytes_amount::UnpaddedBytesAmount;
+use sector_base::api::bytes_amount::{UnpaddedBytesAmount, UnpaddedByteIndex};
 use std::cmp::max;
 use std::io::Cursor;
 use std::io::Read;
@@ -25,7 +25,7 @@ pub fn get_piece_by_key(pieces: &[PieceMetadata], piece_key: &str) -> Option<Pie
     pieces.iter().find(|p| p.piece_key == piece_key).map(|p| p.clone())
 }
 
-pub fn get_piece_start_byte(pieces: &[PieceMetadata], piece: &PieceMetadata) -> u64 {
+pub fn get_piece_start_byte(pieces: &[PieceMetadata], piece: &PieceMetadata) -> UnpaddedByteIndex {
     let pieces: Vec<PieceMetadata> = pieces
         .into_iter()
         .take_while(|p| p.piece_key != piece.piece_key)
@@ -34,7 +34,7 @@ pub fn get_piece_start_byte(pieces: &[PieceMetadata], piece: &PieceMetadata) -> 
     let last_byte = sum_piece_bytes_with_alignment(&pieces);
     let alignment = get_piece_alignment(last_byte, piece.num_bytes);
 
-    u64::from(last_byte + alignment.left_bytes)
+    UnpaddedByteIndex::from(last_byte + alignment.left_bytes)
 }
 
 pub fn get_piece_alignment(
@@ -146,8 +146,8 @@ mod tests {
         pieces.push(piece_b);
         pieces.push(piece_c);
 
-        assert_eq!(get_piece_start_byte(&pieces, &pieces[0]), 0);
-        assert_eq!(get_piece_start_byte(&pieces, &pieces[1]), 127);
-        assert_eq!(get_piece_start_byte(&pieces, &pieces[2]), 254);
+        assert_eq!(get_piece_start_byte(&pieces, &pieces[0]), UnpaddedByteIndex(0));
+        assert_eq!(get_piece_start_byte(&pieces, &pieces[1]), UnpaddedByteIndex(127));
+        assert_eq!(get_piece_start_byte(&pieces, &pieces[2]), UnpaddedByteIndex(254));
     }
 }

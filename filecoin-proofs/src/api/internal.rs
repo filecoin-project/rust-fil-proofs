@@ -15,7 +15,7 @@ use crate::api::post_adapter::*;
 use crate::error;
 use crate::error::ExpectWithBacktrace;
 use crate::FCP_LOG;
-use sector_base::api::bytes_amount::{PaddedBytesAmount, UnpaddedBytesAmount};
+use sector_base::api::bytes_amount::{PaddedBytesAmount, UnpaddedBytesAmount, UnpaddedByteIndex};
 use sector_base::api::porep_config::PoRepConfig;
 use sector_base::api::porep_proof_partitions::PoRepProofPartitions;
 use sector_base::api::post_config::PoStConfig;
@@ -624,7 +624,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     output_path: T,
     prover_id_in: &FrSafe,
     sector_id_in: &FrSafe,
-    offset: u64,
+    offset: UnpaddedByteIndex,
     num_bytes: UnpaddedBytesAmount,
 ) -> error::Result<(UnpaddedBytesAmount)> {
     let prover_id = pad_safe_fr(prover_id_in);
@@ -651,7 +651,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     let written = write_unpadded(
         &unsealed,
         &mut buf_writer,
-        offset as usize,
+        offset.into(),
         num_bytes.into(),
     )?;
 
@@ -860,7 +860,7 @@ mod tests {
                     &unseal_access,
                     &prover_id,
                     &sector_id,
-                    0,
+                    UnpaddedByteIndex(0),
                     cfg.max_unsealed_bytes_per_sector(),
                 )
                 .expect("failed to unseal")
@@ -1039,7 +1039,7 @@ mod tests {
                     &PathBuf::from(&h.unseal_access),
                     &h.prover_id,
                     &h.sector_id,
-                    offset,
+                    UnpaddedByteIndex(offset),
                     UnpaddedBytesAmount(range_length),
                 )
                 .expect("failed to unseal")
@@ -1090,7 +1090,7 @@ mod tests {
             &unseal_access,
             &h.prover_id,
             &h.sector_id,
-            0,
+            UnpaddedByteIndex(0),
             UnpaddedBytesAmount((contents_a.len() + contents_b.len()) as u64),
         )
         .expect("failed to unseal");
