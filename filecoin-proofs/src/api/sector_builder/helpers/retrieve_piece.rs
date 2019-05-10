@@ -57,7 +57,6 @@ fn retrieve_piece_aux<'a>(
         );
         err_unrecov(msg)
     })?;
-    let start_offset = get_piece_start_byte(&sealed_sector.pieces, &piece);
 
     let num_bytes_unsealed = internal::get_unsealed_range(
         (*sector_store.inner).proofs_config().porep_config(),
@@ -65,7 +64,7 @@ fn retrieve_piece_aux<'a>(
         &PathBuf::from(staging_sector_access),
         prover_id,
         &sector_id_as_bytes(sealed_sector.sector_id)?,
-        start_offset,
+        get_piece_start_byte(&sealed_sector.pieces, &piece),
         piece.num_bytes,
     )?;
 
