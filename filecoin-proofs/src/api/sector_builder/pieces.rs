@@ -66,7 +66,7 @@ pub fn get_piece_alignment(
     }
 }
 
-pub fn with_alignment(source: impl Read, piece_alignment: PieceAlignment) -> impl Read {
+fn with_alignment(source: impl Read, piece_alignment: PieceAlignment) -> impl Read {
     let PieceAlignment {
         left_bytes,
         right_bytes,
