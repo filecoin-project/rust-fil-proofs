@@ -21,11 +21,8 @@ pub fn sum_piece_bytes_with_alignment(pieces: &[PieceMetadata]) -> UnpaddedBytes
     })
 }
 
-pub fn get_piece_by_key<'a>(
-    pieces: &'a [PieceMetadata],
-    piece_key: &str,
-) -> Option<&'a PieceMetadata> {
-    pieces.iter().find(|p| p.piece_key == piece_key)
+pub fn get_piece_by_key(pieces: &[PieceMetadata], piece_key: &str) -> Option<PieceMetadata> {
+    pieces.iter().find(|p| p.piece_key == piece_key).map(|p| p.clone())
 }
 
 pub fn get_piece_start_byte(pieces: &[PieceMetadata], piece: &PieceMetadata) -> u64 {

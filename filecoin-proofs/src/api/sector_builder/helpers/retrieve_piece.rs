@@ -57,7 +57,7 @@ fn retrieve_piece_aux<'a>(
         );
         err_unrecov(msg)
     })?;
-    let start_offset = get_piece_start_byte(&sealed_sector.pieces, piece);
+    let start_offset = get_piece_start_byte(&sealed_sector.pieces, &piece);
 
     let num_bytes_unsealed = internal::get_unsealed_range(
         (*sector_store.inner).proofs_config().porep_config(),
