@@ -387,37 +387,48 @@ pub trait Layers {
         let mut taus = Vec::with_capacity(layers);
         let mut auxs: Vec<Tree<Self::Hasher>> = Vec::with_capacity(layers);
 
-        let generate_merkle_trees_in_parallel = true;
+        let generate_merkle_trees_in_parallel = false;
+        // FIXME: Move this to the new config system (after rebasing).
+
         if !generate_merkle_trees_in_parallel {
-            // This branch serializes encoding and merkle tree generation.
-            // However, it makes clear the underlying algorithm we reproduce
-            // in the parallel case. We should keep this code for documentation and to help
-            // alert us if drgporep's implementation changes (and breaks type-checking).
-            // It would not be a bad idea to add tests ensuring the parallel and serial cases
-            // generate the same results.
-            (0..layers).fold(graph.clone(), |current_graph, layer| {
-                let previous_replica_tree = if !auxs.is_empty() {
-                    auxs.last().cloned()
-                } else {
-                    None
-                };
+            let mut sorted_trees: Vec<_> = Vec::new();
 
-                let next_graph = Self::transform(&current_graph);
+            (0..=layers).fold(graph.clone(), |current_graph, layer| {
+                let mut data_copy = anonymous_mmap(data.len());
+                data_copy[0..data.len()].clone_from_slice(data);
 
-                let pp = drgporep::PublicParams::new(
-                    current_graph,
-                    sloth_iter,
-                    true,
-                    layer_challenges.challenges_for_layer(layer),
-                );
+                let tree_d = Self::generate_data_tree(&current_graph, &data_copy, layer);
 
-                let (tau, aux) =
-                    DrgPoRep::replicate(&pp, replica_id, data, previous_replica_tree).unwrap();
+                info!(SP_LOG, "returning tree"; "layer" => format!("{}", layer));
 
-                taus.push(tau);
-                auxs.push(aux.tree_r);
-                next_graph
+                sorted_trees.push(tree_d);
+
+                if layer < layers {
+                    info!(SP_LOG, "encoding"; "layer {}" => format!("{}", layer));
+                    vde::encode(&current_graph, sloth_iter, replica_id, data)
+                        .expect("encoding failed in thread");
+                }
+
+                Self::transform(&current_graph)
             });
+
+            sorted_trees
+                .into_iter()
+                .fold(None, |previous_comm_r: Option<_>, replica_tree| {
+                    let comm_r = replica_tree.root();
+                    // Each iteration's replica_tree becomes the next iteration's previous_tree (data_tree).
+                    // The first iteration has no previous_tree.
+                    if let Some(comm_d) = previous_comm_r {
+                        let tau = porep::Tau { comm_r, comm_d };
+                        //                        info!(SP_LOG, "setting tau/aux"; "layer" => format!("{}", i - 1));
+                        // FIXME: Use `enumerate` if this log is worth it.
+                        taus.push(tau);
+                    };
+
+                    auxs.push(replica_tree);
+
+                    Some(comm_r)
+                });
         } else {
             // The parallel case is more complicated but should produce the same results as the
             // serial case. Note that to make lifetimes work out, we have to inline and tease apart
@@ -509,7 +520,7 @@ pub trait Layers {
     fn generate_data_tree(
         graph: &Self::Graph,
         data: &[u8],
-        layer: usize,
+        _layer: usize,
     ) -> MerkleTree<<Self::Hasher as Hasher>::Domain, <Self::Hasher as Hasher>::Function> {
         #[cfg(not(feature = "disk-trees"))]
         return graph.merkle_tree(&data).unwrap();
@@ -543,7 +554,8 @@ pub trait Layers {
                         &data,
                         Some(&PathBuf::from(tree_dir).join(format!(
                             "tree-{}-{}",
-                            layer,
+                            _layer,
+                            // FIXME: This argument is used only with `disk-trees`.
                             rand::random::<u32>()
                         ))),
                     )
