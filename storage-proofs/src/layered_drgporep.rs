@@ -394,10 +394,7 @@ pub trait Layers {
             let mut sorted_trees: Vec<_> = Vec::new();
 
             (0..=layers).fold(graph.clone(), |current_graph, layer| {
-                let mut data_copy = anonymous_mmap(data.len());
-                data_copy[0..data.len()].clone_from_slice(data);
-
-                let tree_d = Self::generate_data_tree(&current_graph, &data_copy, layer);
+                let tree_d = Self::generate_data_tree(&current_graph, &data, layer);
 
                 info!(SP_LOG, "returning tree"; "layer" => format!("{}", layer));
 
