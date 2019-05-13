@@ -460,19 +460,15 @@ fn verify_post_fixed_sectors_count(
         &verifying_key,
     )?;
 
-    // For some reason, the circuit test does not verify when called in tests here.
-    // However, everything up to that point does/should work — so we want to continue to exercise
-    // for integration purposes.
-    let _fixme_ignore: error::Result<bool> = VDFPostCompound::verify(
+    let is_valid = VDFPostCompound::verify(
         &compound_public_params,
         &public_inputs,
         &proof,
         &NoRequirements,
-    )
-    .map_err(Into::into);
+    )?;
 
     // Since callers may rely on previous mocked success, just pretend verification succeeded, for now.
-    Ok(VerifyPoStFixedSectorsCountOutput { is_valid: true })
+    Ok(VerifyPoStFixedSectorsCountOutput { is_valid })
 }
 
 type Tree = MerkleTree<PedersenDomain, <PedersenHasher as Hasher>::Function>;
