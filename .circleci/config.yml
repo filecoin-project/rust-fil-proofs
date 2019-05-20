@@ -96,8 +96,8 @@ jobs:
       - run:
           name: Test (stable) in release profile
           command: |
-            cargo +stable test --verbose --release --frozen --all --features disk-trees
-            RUSTFLAGS="-D warnings" cargo +stable build --examples --release --frozen --all --features disk-trees
+            cargo +stable test --verbose --release --all --features disk-trees
+            RUSTFLAGS="-D warnings" cargo +stable build --examples --release --all --features disk-trees
           environment:
             REPLICATED_TREES_DIR: replicated-disk-trees
 
