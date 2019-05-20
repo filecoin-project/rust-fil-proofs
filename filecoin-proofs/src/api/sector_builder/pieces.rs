@@ -1,6 +1,5 @@
 use crate::api::sector_builder::metadata::PieceMetadata;
 use sector_base::api::bytes_amount::{UnpaddedByteIndex, UnpaddedBytesAmount};
-use std::cmp::max;
 use std::io::Cursor;
 use std::io::Read;
 use std::iter::Iterator;
@@ -65,15 +64,13 @@ pub fn get_piece_alignment(
     // Bit padding causes bytes to only be aligned at every 127 bytes (for 31.75 bytes).
     // @TODO change this away from magic numbers.
     let minimum_piece_bytes = (4 * 32) - 1;
-    // Ensure the piece will be at the calculated minimum.
-    let adjusted_piece_bytes = max(minimum_piece_bytes, u64::from(piece_bytes));
 
     let mut piece_bytes_needed = minimum_piece_bytes;
 
     // Calculate the next power of two multiple that will fully contain the piece's data.
     // This is required to ensure a clean piece merkle root, without being affected by
     // preceding or following pieces.
-    while piece_bytes_needed < adjusted_piece_bytes {
+    while piece_bytes_needed < u64::from(piece_bytes) {
         piece_bytes_needed *= 2;
     }
 
@@ -96,7 +93,7 @@ pub fn get_piece_alignment(
 }
 
 /**
- * Wraps a Readable source with zero bytes on either end according to a provided PieceAlignment.
+ * Wraps a Readable source with null bytes on either end according to a provided PieceAlignment.
  */
 fn with_alignment(source: impl Read, piece_alignment: PieceAlignment) -> impl Read {
     let PieceAlignment {
