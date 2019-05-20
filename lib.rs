@@ -2,8 +2,8 @@
 //!
 //! ## Make your circuit
 //!
-//! Grab the [`bellman`](https://github.com/ebfull/bellman) and
-//! [`pairing`](https://github.com/ebfull/pairing) crates. Bellman
+//! Grab the [`bellperson`](https://github.com/filecoin-project/bellman) and
+//! [`paired`](https://github.com/filecoin-project/pairing) crates. Bellman
 //! provides a trait called `Circuit`, which you must implement
 //! for your computation.
 //!
@@ -11,13 +11,13 @@
 //! a field element.
 //!
 //! ```rust
-//! extern crate pairing;
-//! extern crate bellman;
+//! extern crate paired;
+//! extern crate bellperson;
 //! extern crate ff;
 //!
-//! use pairing::Engine;
+//! use paired::Engine;
 //! use ff::Field;
-//! use bellman::{
+//! use bellperson::{
 //!     Circuit,
 //!     ConstraintSystem,
 //!     SynthesisError,
@@ -87,8 +87,8 @@
 //! ```rust,ignore
 //! extern crate rand;
 //!
-//! use pairing::bls12_381::{Bls12, Fr};
-//! use bellman::groth16::{
+//! use paired::bls12_381::{Bls12, Fr};
+//! use bellperson::groth16::{
 //!     generate_random_parameters,
 //!     create_random_proof,
 //!     prepare_verifying_key,
@@ -145,16 +145,16 @@
 //! In order to convince others you didn't, a multi-party
 //! computation (MPC) can be used. The MPC has the property that
 //! only one participant needs to be honest for the parameters to
-//! be secure. This crate (`phase2`) is about creating parameters
+//! be secure. This crate (`phase21`) is about creating parameters
 //! securely using such an MPC.
 //!
-//! Let's start by using `phase2` to create some base parameters
+//! Let's start by using `phase21` to create some base parameters
 //! for our circuit:
 //!
 //! ```rust,ignore
-//! extern crate phase2;
+//! extern crate phase21;
 //!
-//! let mut params = phase2::MPCParameters::new(CubeRoot {
+//! let mut params = phase21::MPCParameters::new(CubeRoot {
 //!     cube_root: None
 //! }).unwrap();
 //! ```
@@ -190,21 +190,21 @@
 //!
 //! // We need to check the `contributions` to see if our `hash`
 //! // is in it (see above, when we first contributed)
-//! assert!(phase2::contains_contribution(&contributions, &hash));
+//! assert!(phase21::contains_contribution(&contributions, &hash));
 //! ```
 //!
 //! Great, now if you're happy, grab the Groth16 `Parameters` with
 //! `params.params()`, so that you can interact with the bellman APIs
 //! just as before.
 
-extern crate bellman;
+extern crate bellperson;
 extern crate blake2b_simd;
 extern crate byteorder;
 extern crate crossbeam;
-extern crate num_cpus;
-extern crate pairing;
-extern crate rand;
 extern crate ff;
+extern crate num_cpus;
+extern crate paired;
+extern crate rand;
 
 use blake2b_simd::State as Blake2b;
 
@@ -216,14 +216,14 @@ use std::{
     sync::Arc,
 };
 
-use pairing::{
+use paired::{
     bls12_381::{Bls12, Fr, G1Affine, G1Uncompressed, G2Affine, G2Uncompressed, G1, G2},
-    CurveAffine, CurveProjective, EncodedPoint, Wnaf, Engine,
+    CurveAffine, CurveProjective, EncodedPoint, Engine, Wnaf,
 };
 
 use ff::{Field, PrimeField};
 
-use bellman::{
+use bellperson::{
     groth16::{Parameters, VerifyingKey},
     multicore::Worker,
     Circuit, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable,
@@ -532,55 +532,57 @@ impl MPCParameters {
             assert_eq!(a_g1.len(), ext.len());
 
             // Evaluate polynomials in multiple threads
-            worker.scope(a_g1.len(), |scope, chunk| {
-                for ((((((a_g1, b_g1), b_g2), ext), at), bt), ct) in a_g1
-                    .chunks_mut(chunk)
-                    .zip(b_g1.chunks_mut(chunk))
-                    .zip(b_g2.chunks_mut(chunk))
-                    .zip(ext.chunks_mut(chunk))
-                    .zip(at.chunks(chunk))
-                    .zip(bt.chunks(chunk))
-                    .zip(ct.chunks(chunk))
-                {
-                    let coeffs_g1 = coeffs_g1.clone();
-                    let coeffs_g2 = coeffs_g2.clone();
-                    let alpha_coeffs_g1 = alpha_coeffs_g1.clone();
-                    let beta_coeffs_g1 = beta_coeffs_g1.clone();
+            worker
+                .scope(a_g1.len(), |scope, chunk| {
+                    for ((((((a_g1, b_g1), b_g2), ext), at), bt), ct) in a_g1
+                        .chunks_mut(chunk)
+                        .zip(b_g1.chunks_mut(chunk))
+                        .zip(b_g2.chunks_mut(chunk))
+                        .zip(ext.chunks_mut(chunk))
+                        .zip(at.chunks(chunk))
+                        .zip(bt.chunks(chunk))
+                        .zip(ct.chunks(chunk))
+                    {
+                        let coeffs_g1 = coeffs_g1.clone();
+                        let coeffs_g2 = coeffs_g2.clone();
+                        let alpha_coeffs_g1 = alpha_coeffs_g1.clone();
+                        let beta_coeffs_g1 = beta_coeffs_g1.clone();
 
-                    scope.spawn(move |_| {
-                        for ((((((a_g1, b_g1), b_g2), ext), at), bt), ct) in a_g1
-                            .iter_mut()
-                            .zip(b_g1.iter_mut())
-                            .zip(b_g2.iter_mut())
-                            .zip(ext.iter_mut())
-                            .zip(at.iter())
-                            .zip(bt.iter())
-                            .zip(ct.iter())
-                        {
-                            for &(coeff, lag) in at {
-                                a_g1.add_assign(&coeffs_g1[lag].mul(coeff));
-                                ext.add_assign(&beta_coeffs_g1[lag].mul(coeff));
+                        scope.spawn(move |_| {
+                            for ((((((a_g1, b_g1), b_g2), ext), at), bt), ct) in a_g1
+                                .iter_mut()
+                                .zip(b_g1.iter_mut())
+                                .zip(b_g2.iter_mut())
+                                .zip(ext.iter_mut())
+                                .zip(at.iter())
+                                .zip(bt.iter())
+                                .zip(ct.iter())
+                            {
+                                for &(coeff, lag) in at {
+                                    a_g1.add_assign(&coeffs_g1[lag].mul(coeff));
+                                    ext.add_assign(&beta_coeffs_g1[lag].mul(coeff));
+                                }
+
+                                for &(coeff, lag) in bt {
+                                    b_g1.add_assign(&coeffs_g1[lag].mul(coeff));
+                                    b_g2.add_assign(&coeffs_g2[lag].mul(coeff));
+                                    ext.add_assign(&alpha_coeffs_g1[lag].mul(coeff));
+                                }
+
+                                for &(coeff, lag) in ct {
+                                    ext.add_assign(&coeffs_g1[lag].mul(coeff));
+                                }
                             }
 
-                            for &(coeff, lag) in bt {
-                                b_g1.add_assign(&coeffs_g1[lag].mul(coeff));
-                                b_g2.add_assign(&coeffs_g2[lag].mul(coeff));
-                                ext.add_assign(&alpha_coeffs_g1[lag].mul(coeff));
-                            }
-
-                            for &(coeff, lag) in ct {
-                                ext.add_assign(&coeffs_g1[lag].mul(coeff));
-                            }
-                        }
-
-                        // Batch normalize
-                        G1::batch_normalization(a_g1);
-                        G1::batch_normalization(b_g1);
-                        G2::batch_normalization(b_g2);
-                        G1::batch_normalization(ext);
-                    });
-                }
-            }).unwrap();
+                            // Batch normalize
+                            G1::batch_normalization(a_g1);
+                            G1::batch_normalization(b_g1);
+                            G2::batch_normalization(b_g2);
+                            G1::batch_normalization(ext);
+                        });
+                    }
+                })
+                .unwrap();
         }
 
         let worker = Worker::new();
@@ -723,7 +725,8 @@ impl MPCParameters {
                         }
                     });
                 }
-            }).unwrap();
+            })
+            .unwrap();
 
             // Perform batch normalization
             crossbeam::thread::scope(|scope| {
@@ -732,7 +735,8 @@ impl MPCParameters {
                         C::Projective::batch_normalization(projective);
                     });
                 }
-            }).unwrap();
+            })
+            .unwrap();
 
             // Turn it all back into affine points
             for (projective, affine) in projective.iter().zip(bases.iter_mut()) {
@@ -1230,7 +1234,8 @@ fn merge_pairs<G: CurveAffine>(v1: &[G], v2: &[G]) -> (G, G) {
                 sx.lock().unwrap().add_assign(&local_sx);
             });
         }
-    }).unwrap();
+    })
+    .unwrap();
 
     let s = s.lock().unwrap().into_affine();
     let sx = sx.lock().unwrap().into_affine();
