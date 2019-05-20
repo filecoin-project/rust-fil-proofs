@@ -1,4 +1,4 @@
-use bellman::{ConstraintSystem, SynthesisError};
+use bellperson::{ConstraintSystem, SynthesisError};
 use sapling_crypto::circuit::boolean::Boolean;
 use sapling_crypto::jubjub::JubjubEngine;
 
@@ -33,8 +33,8 @@ mod tests {
     use crate::circuit::test::TestConstraintSystem;
     use crate::crypto;
     use crate::util::{bits_to_bytes, bytes_into_boolean_vec};
-    use bellman::ConstraintSystem;
-    use pairing::bls12_381::Bls12;
+    use bellperson::ConstraintSystem;
+    use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::circuit::boolean::Boolean;
 

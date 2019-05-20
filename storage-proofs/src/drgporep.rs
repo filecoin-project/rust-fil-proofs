@@ -486,7 +486,7 @@ mod tests {
 
     use memmap::MmapMut;
     use memmap::MmapOptions;
-    use pairing::bls12_381::Bls12;
+    use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use std::fs::File;
     use std::io::Write;

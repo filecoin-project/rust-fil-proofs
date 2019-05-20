@@ -1,5 +1,5 @@
-extern crate bellman;
-extern crate pairing;
+extern crate bellperson;
+extern crate paired;
 extern crate rand;
 extern crate sapling_crypto;
 #[macro_use]
@@ -19,7 +19,7 @@ use clap::{App, Arg};
 use gperftools::profiler::PROFILER;
 use memmap::MmapMut;
 use memmap::MmapOptions;
-use pairing::bls12_381::Bls12;
+use paired::bls12_381::Bls12;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::fs::File;
 use std::io::Write;

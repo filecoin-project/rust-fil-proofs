@@ -1,10 +1,10 @@
 #[macro_use]
 extern crate criterion;
 
-use bellman::groth16::*;
-use bellman::{Circuit, ConstraintSystem, SynthesisError};
+use bellperson::groth16::*;
+use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use criterion::{black_box, Criterion, ParameterizedBenchmark};
-use pairing::bls12_381::Bls12;
+use paired::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
 use sapling_crypto::circuit as scircuit;
 use sapling_crypto::circuit::boolean::{self, Boolean};

@@ -990,7 +990,7 @@ where
 mod tests {
     use super::*;
     use itertools::Itertools;
-    use pairing::bls12_381::Bls12;
+    use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use std::io::Cursor;
     use storage_proofs::fr32::bytes_into_fr;

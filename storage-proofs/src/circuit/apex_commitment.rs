@@ -18,7 +18,7 @@
 //! exceeds the cost (in constraints) of one hash, there's no potential savings. (Reference: 1 32-byte pedersen hash
 //! requires ~1152 constraints).
 
-use bellman::{ConstraintSystem, SynthesisError};
+use bellperson::{ConstraintSystem, SynthesisError};
 use sapling_crypto::circuit::boolean::Boolean;
 use sapling_crypto::circuit::num;
 use sapling_crypto::circuit::num::AllocatedNum;
@@ -250,9 +250,9 @@ impl<E: JubjubEngine> ApexCommitment<E> for FlatApexCommitment<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bellman::ConstraintSystem;
+    use bellperson::ConstraintSystem;
     use ff::ScalarEngine;
-    use pairing::bls12_381::Bls12;
+    use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::circuit::boolean::{AllocatedBit, Boolean};
     use sapling_crypto::circuit::num::AllocatedNum;

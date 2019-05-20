@@ -11,7 +11,7 @@ logging-toolkit = { path = "../logging-toolkit" }
 bitvec = "0.10"
 rand = "0.4"
 libc = "0.2"
-merkle_light = { git = "https://github.com/filecoin-project/merkle_light", branch = "master" }
+merkletree = "0.4"
 failure = "0.1"
 byteorder = "1"
 config = "0.9.3"
@@ -37,17 +37,11 @@ blake2b_simd = "0.4.1"
 blake2s_simd = { git = "https://github.com/oconnor663/blake2s_simd", branch = "master"}
 toml = "0.5"
 ff = "0.4.0"
+bellperson = "0.2"
+paired = "0.15"
 
 [dependencies.sapling-crypto]
 git = "https://github.com/filecoin-project/sapling-crypto"
-branch = "master"
-
-[dependencies.bellman]
-git = "https://github.com/filecoin-project/bellman"
-branch = "master"
-
-[dependencies.pairing]
-git = "https://github.com/filecoin-project/pairing"
 branch = "master"
 
 [features]

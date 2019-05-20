@@ -1,6 +1,6 @@
-use bellman::{Circuit, ConstraintSystem, SynthesisError};
-use pairing::bls12_381::{Bls12, Fr};
-use pairing::Engine;
+use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use paired::bls12_381::{Bls12, Fr};
+use paired::Engine;
 use sapling_crypto::circuit::num;
 use sapling_crypto::jubjub::JubjubEngine;
 
@@ -373,7 +373,7 @@ impl<'a, E: JubjubEngine> VDFPoStCircuit<'a, E> {
 mod tests {
     use super::*;
 
-    use bellman::groth16;
+    use bellperson::groth16;
     use ff::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;

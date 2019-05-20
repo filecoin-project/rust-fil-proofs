@@ -1,5 +1,5 @@
-extern crate bellman;
-extern crate pairing;
+extern crate bellperson;
+extern crate paired;
 extern crate rand;
 extern crate sapling_crypto;
 #[macro_use]
@@ -17,7 +17,7 @@ extern crate storage_proofs;
 use clap::{App, Arg};
 #[cfg(feature = "cpu-profile")]
 use gperftools::profiler::PROFILER;
-use pairing::bls12_381::Bls12;
+use paired::bls12_381::Bls12;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::time::{Duration, Instant};
 

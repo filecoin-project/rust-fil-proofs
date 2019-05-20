@@ -1,4 +1,4 @@
-use bellman::{ConstraintSystem, SynthesisError};
+use bellperson::{ConstraintSystem, SynthesisError};
 use sapling_crypto::circuit::blake2s::blake2s as blake2s_circuit;
 use sapling_crypto::circuit::boolean::Boolean;
 use sapling_crypto::circuit::{multipack, num};
@@ -49,8 +49,8 @@ mod tests {
     use crate::crypto;
     use crate::fr32::fr_into_bytes;
     use crate::util::bytes_into_boolean_vec;
-    use bellman::ConstraintSystem;
-    use pairing::bls12_381::Bls12;
+    use bellperson::ConstraintSystem;
+    use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::circuit::boolean::Boolean;
 

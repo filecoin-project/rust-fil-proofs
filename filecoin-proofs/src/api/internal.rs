@@ -4,11 +4,11 @@ use std::io::{BufWriter, Read};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use bellman::groth16;
+use bellperson::groth16;
 use ff::PrimeField;
 use memmap::MmapOptions;
-use pairing::bls12_381::{Bls12, Fr};
-use pairing::Engine;
+use paired::bls12_381::{Bls12, Fr};
+use paired::Engine;
 use sapling_crypto::jubjub::JubjubBls12;
 
 use crate::api::post_adapter::*;

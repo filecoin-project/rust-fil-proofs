@@ -1,5 +1,5 @@
 extern crate filecoin_proofs;
-extern crate phase2;
+extern crate phase21;
 extern crate rand;
 extern crate sector_base;
 extern crate storage_proofs;
@@ -27,7 +27,7 @@ pub fn main() {
     );
 
     let circuit = ZigZagCompound::blank_circuit(&public_params, &internal::ENGINE_PARAMS);
-    let mut params = phase2::MPCParameters::new(circuit).unwrap();
+    let mut params = phase21::MPCParameters::new(circuit).unwrap();
 
     let rng = &mut OsRng::new().unwrap();
     let hash = params.contribute(rng);
@@ -38,7 +38,7 @@ pub fn main() {
 
         // We need to check the `contributions` to see if our `hash`
         // is in it (see above, when we first contributed)
-        assert!(phase2::contains_contribution(&contributions, &hash));
+        assert!(phase21::contains_contribution(&contributions, &hash));
     }
 
     let mut buffer = File::create(out_file).unwrap();

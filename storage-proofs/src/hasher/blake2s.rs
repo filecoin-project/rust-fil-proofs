@@ -1,13 +1,13 @@
 use std::fmt;
 use std::hash::Hasher as StdHasher;
 
-use bellman::{ConstraintSystem, SynthesisError};
+use bellperson::{ConstraintSystem, SynthesisError};
 use blake2s_simd::{Hash as Blake2sHash, Params as Blake2s, State};
 use byteorder::{LittleEndian, WriteBytesExt};
 use ff::{PrimeField, PrimeFieldRepr};
-use merkle_light::hash::{Algorithm, Hashable};
-use merkle_light::merkle::Element;
-use pairing::bls12_381::{Bls12, Fr, FrRepr};
+use merkletree::hash::{Algorithm, Hashable};
+use merkletree::merkle::Element;
+use paired::bls12_381::{Bls12, Fr, FrRepr};
 use rand::{Rand, Rng};
 use sapling_crypto::circuit::{blake2s as blake2s_circuit, boolean, multipack, num};
 use sapling_crypto::jubjub::JubjubEngine;

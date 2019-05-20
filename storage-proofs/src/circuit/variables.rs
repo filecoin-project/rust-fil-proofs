@@ -1,7 +1,7 @@
 use std::fmt;
 
-use bellman::{ConstraintSystem, SynthesisError};
-use pairing::Engine;
+use bellperson::{ConstraintSystem, SynthesisError};
+use paired::Engine;
 use sapling_crypto::circuit::num::AllocatedNum;
 
 /// Root represents a root commitment which may be either a raw value or an already-allocated number.
