@@ -5,8 +5,8 @@ use bitvec::{self, BitVec};
 use byteorder::{ByteOrder, LittleEndian};
 use ff::{Field, PrimeField, ScalarEngine};
 use itertools::Itertools;
-use pairing::bls12_381::{Bls12, Fr, FrRepr};
-use pairing::Engine;
+use paired::bls12_381::{Bls12, Fr, FrRepr};
+use paired::Engine;
 use serde::de::Deserialize;
 use serde::ser::Serialize;
 
@@ -435,7 +435,7 @@ fn derive_final_challenges<H: Hasher, E: Engine>(
     challenge_bits: usize,
 ) -> (Vec<usize>, Vec<usize>)
 where
-    <E as ScalarEngine>::Fr: std::convert::From<pairing::bls12_381::Fr>,
+    <E as ScalarEngine>::Fr: std::convert::From<paired::bls12_381::Fr>,
 {
     type BV = BitVec<bitvec::LittleEndian, u8>;
 
@@ -505,7 +505,7 @@ fn verify_final_challenge_derivation<H: Hasher>(
 mod tests {
     use super::*;
 
-    use pairing::bls12_381::Bls12;
+    use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     use crate::drgraph::{new_seed, BucketGraph, Graph};

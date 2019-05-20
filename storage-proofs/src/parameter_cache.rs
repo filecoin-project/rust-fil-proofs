@@ -1,6 +1,6 @@
 use crate::error::*;
-use bellman::groth16::Parameters;
-use bellman::{groth16, Circuit};
+use bellperson::groth16::Parameters;
+use bellperson::{groth16, Circuit};
 use fs2::FileExt;
 use itertools::Itertools;
 use rand::{SeedableRng, XorShiftRng};

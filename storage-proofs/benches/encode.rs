@@ -3,7 +3,7 @@ extern crate criterion;
 extern crate storage_proofs;
 
 use criterion::{black_box, Criterion, ParameterizedBenchmark};
-use pairing::bls12_381::Bls12;
+use paired::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
 use storage_proofs::fr32::fr_into_bytes;
 use storage_proofs::hasher::blake2s::Blake2sHasher;

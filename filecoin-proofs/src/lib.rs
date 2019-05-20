@@ -8,9 +8,9 @@ extern crate storage_proofs;
 
 #[macro_use]
 extern crate lazy_static;
-extern crate bellman;
+extern crate bellperson;
 extern crate libc;
-extern crate pairing;
+extern crate paired;
 extern crate rand;
 extern crate sapling_crypto;
 extern crate tempfile;

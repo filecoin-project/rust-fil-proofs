@@ -1,9 +1,9 @@
 use std::marker::PhantomData;
 
-use bellman::{Circuit, ConstraintSystem, SynthesisError};
+use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::Field;
-use pairing::bls12_381::{Bls12, Fr};
-use pairing::Engine;
+use paired::bls12_381::{Bls12, Fr};
+use paired::Engine;
 use sapling_crypto::circuit::boolean::Boolean;
 use sapling_crypto::circuit::num::{AllocatedNum, Num};
 use sapling_crypto::circuit::{boolean, num, pedersen_hash};

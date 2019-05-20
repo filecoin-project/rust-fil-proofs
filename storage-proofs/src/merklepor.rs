@@ -133,7 +133,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for MerklePoR<H> {
 mod tests {
     use super::*;
 
-    use pairing::bls12_381::Bls12;
+    use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     use crate::drgraph::{new_seed, BucketGraph, Graph};

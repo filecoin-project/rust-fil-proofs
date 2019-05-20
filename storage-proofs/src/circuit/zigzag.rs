@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
-use bellman::{Circuit, ConstraintSystem, SynthesisError};
-use pairing::bls12_381::{Bls12, Fr};
+use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use paired::bls12_381::{Bls12, Fr};
 use sapling_crypto::circuit::{boolean, num};
 use sapling_crypto::jubjub::JubjubEngine;
 

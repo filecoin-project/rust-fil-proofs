@@ -6,7 +6,7 @@ use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use crate::partitions;
 use crate::proof::ProofScheme;
 use crate::settings;
-use bellman::{groth16, Circuit};
+use bellperson::{groth16, Circuit};
 use rand::OsRng;
 use sapling_crypto::jubjub::JubjubEngine;
 
@@ -35,7 +35,7 @@ pub trait CircuitComponent {
     type ComponentPrivateInputs: Default + Clone;
 }
 
-/// The CompoundProof trait bundles a proof::ProofScheme and a bellman::Circuit together.
+/// The CompoundProof trait bundles a proof::ProofScheme and a bellperson::Circuit together.
 /// It provides methods equivalent to those provided by proof::ProofScheme (setup, prove, verify).
 /// See documentation at proof::ProofScheme for details.
 /// Implementations should generally only need to supply circuit and generate_public_inputs.
@@ -181,7 +181,7 @@ where
     }
 
     /// generate_public_inputs generates public inputs suitable for use as input during verification
-    /// of a proof generated from this CompoundProof's bellman::Circuit (C). These inputs correspond
+    /// of a proof generated from this CompoundProof's bellperson::Circuit (C). These inputs correspond
     /// to those allocated when C is synthesized.
     fn generate_public_inputs(
         pub_in: &S::PublicInputs,
@@ -189,7 +189,7 @@ where
         partition_k: Option<usize>,
     ) -> Vec<E::Fr>;
 
-    /// circuit constructs an instance of this CompoundProof's bellman::Circuit.
+    /// circuit constructs an instance of this CompoundProof's bellperson::Circuit.
     /// circuit takes PublicInputs, PublicParams, and Proof from this CompoundProof's proof::ProofScheme (S)
     /// and uses them to initialize Circuit fields which will be used to construct public and private
     /// inputs during circuit synthesis.

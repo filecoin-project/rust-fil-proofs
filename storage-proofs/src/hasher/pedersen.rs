@@ -1,12 +1,12 @@
 use std::hash::Hasher as StdHasher;
 
-use bellman::{ConstraintSystem, SynthesisError};
+use bellperson::{ConstraintSystem, SynthesisError};
 use bitvec::{self, BitVec};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use ff::{PrimeField, PrimeFieldRepr};
-use merkle_light::hash::{Algorithm as LightAlgorithm, Hashable};
-use merkle_light::merkle::Element;
-use pairing::bls12_381::{Bls12, Fr, FrRepr};
+use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
+use merkletree::merkle::Element;
+use paired::bls12_381::{Bls12, Fr, FrRepr};
 use rand::{Rand, Rng};
 use sapling_crypto::circuit::{boolean, num, pedersen_hash as pedersen_hash_circuit};
 use sapling_crypto::jubjub::JubjubEngine;
@@ -328,7 +328,7 @@ mod tests {
     use super::*;
     use std::mem;
 
-    use merkle_light::hash::Hashable;
+    use merkletree::hash::Hashable;
 
     use crate::merkle::{MerkleTree, VecMerkleTree};
 

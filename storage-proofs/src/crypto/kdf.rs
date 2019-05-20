@@ -1,6 +1,6 @@
 use blake2s_simd::Params as Blake2s;
 use ff::PrimeField;
-use pairing::bls12_381::Fr;
+use paired::bls12_381::Fr;
 
 use crate::fr32::bytes_into_fr_repr_safe;
 
@@ -29,7 +29,7 @@ pub fn kdf(data: &[u8], m: usize) -> Fr {
 mod tests {
     use super::kdf;
     use crate::fr32::bytes_into_fr;
-    use pairing::bls12_381::Bls12;
+    use paired::bls12_381::Bls12;
 
     #[test]
     fn kdf_valid_block_len() {

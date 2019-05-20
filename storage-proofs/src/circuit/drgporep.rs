@@ -1,6 +1,6 @@
-use bellman::{Circuit, ConstraintSystem, SynthesisError};
+use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
-use pairing::bls12_381::{Bls12, Fr};
+use paired::bls12_381::{Bls12, Fr};
 use sapling_crypto::circuit::boolean::{self, Boolean};
 use sapling_crypto::circuit::{multipack, num};
 use sapling_crypto::jubjub::JubjubEngine;

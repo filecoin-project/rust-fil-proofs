@@ -1,14 +1,14 @@
-extern crate bellman;
-extern crate pairing;
+extern crate bellperson;
+extern crate paired;
 extern crate pbr;
 extern crate rand;
 extern crate sapling_crypto;
 
 extern crate storage_proofs;
 
-use bellman::groth16::*;
-use bellman::{Circuit, ConstraintSystem, SynthesisError};
-use pairing::bls12_381::Bls12;
+use bellperson::groth16::*;
+use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use paired::bls12_381::Bls12;
 use rand::Rng;
 use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 

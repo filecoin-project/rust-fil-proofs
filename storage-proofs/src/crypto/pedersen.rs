@@ -1,6 +1,6 @@
 use bitvec::{self, BitVec};
 use ff::PrimeFieldRepr;
-use pairing::bls12_381::{Bls12, Fr, FrRepr};
+use paired::bls12_381::{Bls12, Fr, FrRepr};
 use sapling_crypto::jubjub::JubjubBls12;
 use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 
@@ -73,7 +73,7 @@ mod tests {
     use super::*;
     use crate::util::bytes_into_bits;
     use ff::Field;
-    use pairing::bls12_381::Fr;
+    use paired::bls12_381::Fr;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]

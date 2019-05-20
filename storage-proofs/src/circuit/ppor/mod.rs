@@ -1,4 +1,4 @@
-use bellman::{Circuit, ConstraintSystem, SynthesisError};
+use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use sapling_crypto::circuit::{boolean, multipack, num, pedersen_hash};
 use sapling_crypto::jubjub::JubjubEngine;
 
@@ -131,7 +131,7 @@ mod tests {
     use crate::proof::ProofScheme;
     use crate::util::data_at_node;
     use ff::Field;
-    use pairing::bls12_381::*;
+    use paired::bls12_381::*;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use sapling_crypto::jubjub::JubjubBls12;
 
