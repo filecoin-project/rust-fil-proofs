@@ -5,6 +5,7 @@ use std::sync::mpsc::channel;
 use crossbeam_utils::thread;
 use memmap::MmapMut;
 use memmap::MmapOptions;
+#[cfg(feature = "disk-trees")]
 use rand;
 use rayon::prelude::*;
 use serde::de::Deserialize;
@@ -331,10 +332,10 @@ pub trait Layers {
 
                 // Offload the data tree, we won't use it in the next iteration,
                 // only `tree_r` is reused (as the new `tree_d`).
-                aux[layer].offload_store();
+                aux[layer].try_offload_store();
                 // Only if this is the last iteration also offload `tree_r`.
                 if layer == layers - 1 {
-                    aux[layer + 1].offload_store();
+                    aux[layer + 1].try_offload_store();
                 }
 
                 Ok(partition_proofs)

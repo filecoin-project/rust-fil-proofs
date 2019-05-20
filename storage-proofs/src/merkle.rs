@@ -16,7 +16,7 @@ use crate::hasher::{Domain, Hasher};
 // `mmap`ed `MerkleTree` (replacing the previously `Vec`-backed
 // `MerkleTree`, now encapsulated in `merkle::VecStore` and exposed
 // as `VecMerkleTree`).
-pub type DiskMmapStore<E> = merkle_light::merkle::DiskMmapStore<E>;
+pub type DiskMmapStore<E> = merkletree::merkle::DiskMmapStore<E>;
 pub type VecMerkleTree<T, A> = merkle::MerkleTree<T, A, VecStore<T>>;
 #[cfg(feature = "disk-trees")]
 pub type MerkleTree<T, A> = merkle::MerkleTree<T, A, DiskMmapStore<T>>;
