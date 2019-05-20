@@ -128,9 +128,7 @@ pub fn create_key<H: Hasher>(
     Ok(bytes_into_fr_repr_safe(hash.as_ref()).into())
 }
 
-// FIXME: CHECK THIS.
-//  Variant that takes the tree and not an internal reference to it.
-/// Creates the encoding key.
+/// Creates the encoding key from a `MerkleTree`.
 /// The algorithm for that is `Blake2s(id | encodedParentNode1 | encodedParentNode1 | ...)`.
 /// It is only public so that it can be used for benchmarking
 pub fn create_key_from_tree<H: Hasher>(
