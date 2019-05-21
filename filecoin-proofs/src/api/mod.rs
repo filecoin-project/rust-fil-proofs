@@ -28,7 +28,7 @@ pub mod internal;
 pub mod post_adapter;
 pub mod responses;
 pub mod safe;
-mod sector_builder;
+pub mod sector_builder;
 
 /// Verifies the output of seal.
 ///
