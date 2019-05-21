@@ -27,6 +27,7 @@ use sector_base::api::SINGLE_PARTITION_PROOF_LEN;
 pub mod internal;
 pub mod post_adapter;
 pub mod responses;
+pub mod safe;
 mod sector_builder;
 
 /// Verifies the output of seal.
