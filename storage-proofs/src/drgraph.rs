@@ -2,7 +2,7 @@ use std::cmp;
 use std::marker::PhantomData;
 
 #[cfg(feature = "disk-trees")]
-use merkle_light::merkle::next_pow2;
+use merkletree::merkle::next_pow2;
 use rand::{ChaChaRng, OsRng, Rng, SeedableRng};
 use rayon::prelude::*;
 #[cfg(feature = "disk-trees")]

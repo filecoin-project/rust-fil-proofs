@@ -19,8 +19,6 @@ use std::io;
 use std::path::PathBuf;
 
 use crate::challenge_derivation::derive_challenges;
-#[cfg(feature = "disk-trees")]
-use crate::config::get_config;
 use crate::drgporep::{self, DrgPoRep};
 use crate::drgraph::Graph;
 use crate::error::{Error, Result};
@@ -29,6 +27,8 @@ use crate::merkle::MerkleTree;
 use crate::parameter_cache::ParameterSetIdentifier;
 use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
+#[cfg(feature = "disk-trees")]
+use crate::settings;
 use crate::vde;
 use crate::SP_LOG;
 
@@ -454,8 +454,8 @@ pub trait Layers {
 
                             #[cfg(feature = "disk-trees")]
                             let tree_d = {
-                                let tree_dir = get_config("REPLICATED_TREES_DIR")
-                                    .expect("REPLICATED_TREES_DIR not found");
+                                let tree_dir =
+                                    &settings::SETTINGS.lock().unwrap().replicated_trees_dir;
                                 // We should always be able to get this configuration
                                 // variable (at least as an empty string).
 
@@ -493,7 +493,7 @@ pub trait Layers {
                                     // replications many times in the same run so they may end up
                                     // reusing the same files with invalid (old) data and failing.
 
-                                    tree_d.offload_store();
+                                    tree_d.try_offload_store();
                                     tree_d
                                 }
                             };
