@@ -296,6 +296,7 @@ pub struct GetSealStatusResponse {
 pub struct FFIPieceMetadata {
     pub piece_key: *const libc::c_char,
     pub num_bytes: u64,
+    pub comm_p: [u8; 32],
 }
 
 impl Default for GetSealStatusResponse {

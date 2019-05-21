@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs::{copy, remove_file, File, OpenOptions};
-use std::io::{BufWriter, Read};
+use std::io::{BufWriter, Cursor, Read};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -12,6 +12,7 @@ use paired::bls12_381::{Bls12, Fr};
 use paired::Engine;
 
 use crate::api::post_adapter::*;
+use crate::api::sector_builder::pieces::{get_piece_alignment, PieceAlignment};
 use crate::error;
 use crate::error::ExpectWithBacktrace;
 use crate::FCP_LOG;
@@ -33,6 +34,7 @@ use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::layered_drgporep::{self, ChallengeRequirements, LayerChallenges};
 use storage_proofs::merkle::MerkleTree;
+use storage_proofs::piece_inclusion_proof::generate_piece_commitment_bytes_from_source;
 use storage_proofs::porep::{replica_id, PoRep, Tau};
 use storage_proofs::proof::{NoRequirements, ProofScheme};
 use storage_proofs::vdf_post::{self, VDFPoSt};
@@ -489,6 +491,7 @@ pub struct SealOutput {
     pub comm_r_star: Commitment,
     pub comm_d: Commitment,
     pub proof: Vec<u8>,
+    pub comm_ps: Vec<Commitment>,
 }
 
 /// Minimal support for cleaning (deleting) a file unless it was successfully populated.
@@ -520,6 +523,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     out_path: T,
     prover_id_in: &FrSafe,
     sector_id_in: &FrSafe,
+    piece_lengths: &[u64],
 ) -> error::Result<SealOutput> {
     let sector_bytes = usize::from(PaddedBytesAmount::from(porep_config));
 
@@ -597,6 +601,38 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     let comm_d = commitment_from_fr::<Bls12>(public_tau.comm_d.into());
     let comm_r_star = commitment_from_fr::<Bls12>(tau.comm_r_star.into());
 
+    let mut comm_ps = Vec::new();
+    let mut cursor = UnpaddedBytesAmount(0);
+    let mut in_data = OpenOptions::new().read(true).open(&in_path)?;
+
+    for &piece_length in piece_lengths {
+        let unpadded_piece_length = UnpaddedBytesAmount(piece_length);
+        let PieceAlignment {
+            left_bytes,
+            right_bytes,
+        } = get_piece_alignment(cursor, unpadded_piece_length);
+
+        let padded_piece_length = PaddedBytesAmount::from(unpadded_piece_length);
+        let padded_left_bytes = PaddedBytesAmount::from(left_bytes);
+        let padded_right_bytes =
+            PaddedBytesAmount::from(unpadded_piece_length + right_bytes) - padded_piece_length;
+
+        cursor = cursor + left_bytes + unpadded_piece_length + right_bytes;
+
+        let mut buf = vec![0; usize::from(padded_left_bytes)];
+        in_data.read_exact(&mut buf)?;
+
+        let mut buf = vec![0; usize::from(padded_piece_length)];
+        in_data.read_exact(&mut buf)?;
+        let mut cursor = Cursor::new(buf);
+        let comm_p = generate_piece_commitment_bytes_from_source::<PedersenHasher>(&mut cursor)?;
+
+        let mut buf = vec![0; usize::from(padded_right_bytes)];
+        in_data.read_exact(&mut buf)?;
+
+        comm_ps.push(comm_p);
+    }
+
     // Verification is cheap when parameters are cached,
     // and it is never correct to return a proof which does not verify.
     verify_seal(
@@ -615,6 +651,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         comm_r_star,
         comm_d,
         proof: buf,
+        comm_ps,
     })
 }
 

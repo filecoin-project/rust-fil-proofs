@@ -357,6 +357,7 @@ pub unsafe extern "C" fn get_seal_status(
                         .map(|p| FFIPieceMetadata {
                             piece_key: rust_str_to_c_str(p.piece_key.to_string()),
                             num_bytes: p.num_bytes.into(),
+                            comm_p: p.comm_p.unwrap_or([0; 32]),
                         })
                         .collect::<Vec<FFIPieceMetadata>>();
 
@@ -416,6 +417,7 @@ pub unsafe extern "C" fn get_sealed_sectors(
                         .map(|p| FFIPieceMetadata {
                             piece_key: rust_str_to_c_str(p.piece_key.to_string()),
                             num_bytes: p.num_bytes.into(),
+                            comm_p: p.comm_p.unwrap_or([0; 32]),
                         })
                         .collect::<Vec<FFIPieceMetadata>>();
 
@@ -475,6 +477,7 @@ pub unsafe extern "C" fn get_staged_sectors(
                         .map(|p| FFIPieceMetadata {
                             piece_key: rust_str_to_c_str(p.piece_key.to_string()),
                             num_bytes: p.num_bytes.into(),
+                            comm_p: p.comm_p.unwrap_or([0; 32]),
                         })
                         .collect::<Vec<FFIPieceMetadata>>();
 

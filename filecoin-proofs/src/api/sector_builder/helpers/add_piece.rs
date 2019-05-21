@@ -45,7 +45,7 @@ pub fn add_piece(
 
     if let Some(s) = staged_state.sectors.get_mut(&dest_sector_id) {
         let (expected_num_bytes_written, mut chain) =
-            get_aligned_source(File::open(piece_path)?, &s.pieces, piece_bytes_len);
+            get_aligned_source(File::open(&piece_path)?, &s.pieces, piece_bytes_len);
 
         sector_store
             .inner
@@ -66,6 +66,7 @@ pub fn add_piece(
                 s.pieces.push(metadata::PieceMetadata {
                     piece_key,
                     num_bytes: piece_bytes_len,
+                    comm_p: None,
                 });
 
                 sector_id
