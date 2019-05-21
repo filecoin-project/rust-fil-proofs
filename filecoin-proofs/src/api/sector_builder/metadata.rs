@@ -82,12 +82,6 @@ impl Default for SealedSectorMetadata {
     }
 }
 
-pub fn sum_piece_bytes(s: &StagedSectorMetadata) -> UnpaddedBytesAmount {
-    s.pieces
-        .iter()
-        .fold(UnpaddedBytesAmount(0), |acc, x| acc + x.num_bytes)
-}
-
 pub fn sector_id_as_bytes(sector_id: SectorId) -> error::Result<[u8; 31]> {
     // Transmute a u64 sector id to a zero-padded byte array.
     let mut sector_id_as_bytes = [0u8; 31];
