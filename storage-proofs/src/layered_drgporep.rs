@@ -465,7 +465,6 @@ pub trait Layers {
                                     //  "temporary value dropped while borrowed" (because we
                                     //  were creating a temporary `PathBuf` below).
                                     graph.merkle_tree_path(&data_copy, None).unwrap()
-
                                 } else {
                                     // Try to create `tree_dir`, ignore the error if `AlreadyExists`.
                                     if let Some(create_error) = fs::create_dir(&tree_dir).err() {
