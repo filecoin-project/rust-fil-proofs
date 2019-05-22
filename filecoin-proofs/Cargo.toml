@@ -47,6 +47,11 @@ branch = "master"
 version = "0.23.0"
 optional = true
 
+[dependencies.reqwest]
+version = "0.9.16"
+default-features = false
+features = ["default-tls-vendored"]
+
 [dev-dependencies]
 gperftools = "0.2"
 scopeguard = "1.0"
