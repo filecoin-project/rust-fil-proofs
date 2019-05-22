@@ -11,7 +11,7 @@ logging-toolkit = { path = "../logging-toolkit" }
 bitvec = "0.10"
 rand = "0.4"
 libc = "0.2"
-merkletree = "0.4"
+merkletree = "=0.4.0"
 failure = "0.1"
 byteorder = "1"
 config = "0.9.3"
