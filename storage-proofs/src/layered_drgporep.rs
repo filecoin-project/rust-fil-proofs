@@ -5,18 +5,10 @@ use std::sync::mpsc::channel;
 use crossbeam_utils::thread;
 use memmap::MmapMut;
 use memmap::MmapOptions;
-#[cfg(feature = "disk-trees")]
-use rand;
 use rayon::prelude::*;
 use serde::de::Deserialize;
 use serde::ser::Serialize;
 use slog::*;
-#[cfg(feature = "disk-trees")]
-use std::fs;
-#[cfg(feature = "disk-trees")]
-use std::io;
-#[cfg(feature = "disk-trees")]
-use std::path::PathBuf;
 
 use crate::challenge_derivation::derive_challenges;
 use crate::drgporep::{self, DrgPoRep};
@@ -27,10 +19,19 @@ use crate::merkle::MerkleTree;
 use crate::parameter_cache::ParameterSetIdentifier;
 use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
-#[cfg(feature = "disk-trees")]
-use crate::settings;
 use crate::vde;
 use crate::SP_LOG;
+
+#[cfg(feature = "disk-trees")]
+use crate::settings;
+#[cfg(feature = "disk-trees")]
+use rand;
+#[cfg(feature = "disk-trees")]
+use std::fs;
+#[cfg(feature = "disk-trees")]
+use std::io;
+#[cfg(feature = "disk-trees")]
+use std::path::PathBuf;
 
 type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 

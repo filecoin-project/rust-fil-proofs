@@ -1,23 +1,25 @@
 use std::cmp;
 use std::marker::PhantomData;
 
-#[cfg(feature = "disk-trees")]
-use merkletree::merkle::next_pow2;
 use rand::{ChaChaRng, OsRng, Rng, SeedableRng};
 use rayon::prelude::*;
-#[cfg(feature = "disk-trees")]
-use std::path::Path;
 
 use crate::error::*;
 use crate::hasher::pedersen::PedersenHasher;
 use crate::hasher::{Domain, Hasher};
-#[cfg(feature = "disk-trees")]
-use crate::merkle::DiskMmapStore;
 use crate::merkle::MerkleTree;
 use crate::parameter_cache::ParameterSetIdentifier;
 use crate::util::{data_at_node, NODE_SIZE};
+
+#[cfg(feature = "disk-trees")]
+use crate::merkle::DiskMmapStore;
 #[cfg(feature = "disk-trees")]
 use crate::SP_LOG;
+#[cfg(feature = "disk-trees")]
+use merkletree::merkle::next_pow2;
+#[cfg(feature = "disk-trees")]
+use std::path::Path;
+
 /// The default hasher currently in use.
 pub type DefaultTreeHasher = PedersenHasher;
 
