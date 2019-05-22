@@ -8,7 +8,7 @@ extern crate failure;
 #[macro_use]
 extern crate lazy_static;
 extern crate aes;
-extern crate bellman;
+extern crate bellperson;
 #[cfg(test)]
 #[macro_use]
 extern crate bitvec;
@@ -21,10 +21,10 @@ extern crate fs2;
 extern crate itertools;
 extern crate libc;
 extern crate memmap;
-extern crate merkle_light;
+extern crate merkletree;
 extern crate num_bigint;
 extern crate num_traits;
-extern crate pairing;
+extern crate paired;
 extern crate rand;
 extern crate sapling_crypto;
 extern crate sha2;

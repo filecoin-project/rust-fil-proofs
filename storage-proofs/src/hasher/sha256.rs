@@ -18,7 +18,7 @@ mod tests {
     use std::iter::FromIterator;
 
     use crate::merkle::VecMerkleTree;
-    use merkle_light::hash::{Algorithm, Hashable};
+    use merkletree::hash::{Algorithm, Hashable};
 
     use super::super::{DigestDomain, Hasher};
 

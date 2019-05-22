@@ -195,7 +195,7 @@ pub fn slice_mod(challenge: impl AsRef<[u8]>, count: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pairing::bls12_381::Bls12;
+    use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     use crate::drgraph::{new_seed, BucketGraph, Graph};

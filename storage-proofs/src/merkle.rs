@@ -2,13 +2,13 @@
 
 use std::marker::PhantomData;
 
-// Reexport here, so we don't depend on merkle_light directly in other places.
-use merkle_light::hash::Algorithm;
-use merkle_light::merkle;
-use merkle_light::merkle::MmapStore;
-use merkle_light::merkle::VecStore;
-use merkle_light::proof;
-use pairing::bls12_381::Fr;
+// Reexport here, so we don't depend on merkletree directly in other places.
+use merkletree::hash::Algorithm;
+use merkletree::merkle;
+use merkletree::merkle::MmapStore;
+use merkletree::merkle::VecStore;
+use merkletree::proof;
+use paired::bls12_381::Fr;
 
 use crate::hasher::{Domain, Hasher};
 

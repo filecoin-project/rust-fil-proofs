@@ -1,6 +1,6 @@
-use bellman::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
+use bellperson::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 use ff::{Field, PrimeField};
-use pairing::Engine;
+use paired::Engine;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::collections::HashMap;

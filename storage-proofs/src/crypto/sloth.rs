@@ -1,5 +1,5 @@
 use ff::Field;
-use pairing::Engine;
+use paired::Engine;
 
 pub const DEFAULT_ROUNDS: usize = 1;
 
@@ -60,11 +60,11 @@ mod tests {
     use super::*;
     use ff::PrimeField;
     use num_bigint::BigUint;
-    use pairing::bls12_381::{Bls12, Fr, FrRepr};
+    use paired::bls12_381::{Bls12, Fr, FrRepr};
     use std::str::FromStr;
 
     // the modulus from `bls12_381::Fr`
-    // The definition of MODULUS and comment defining r come from pairing/src/bls_12_381/fr.rs.
+    // The definition of MODULUS and comment defining r come from paired/src/bls_12_381/fr.rs.
     // r = 52435875175126190479447740508185965837690552500527637822603658699938581184513
     const MODULUS: [u64; 4] = [
         0xffffffff00000001,

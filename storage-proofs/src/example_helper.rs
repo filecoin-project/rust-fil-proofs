@@ -3,10 +3,10 @@ use std::io::stderr;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use bellman::groth16::*;
-use bellman::Circuit;
+use bellperson::groth16::*;
+use bellperson::Circuit;
 use clap::{self, App, Arg, SubCommand};
-use pairing::bls12_381::Bls12;
+use paired::bls12_381::Bls12;
 use pbr::ProgressBar;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};

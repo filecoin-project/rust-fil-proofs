@@ -3,11 +3,11 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt::Write;
 
-use bellman::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
+use bellperson::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 use blake2s_simd::State as Blake2s;
 use byteorder::{BigEndian, ByteOrder};
 use ff::{Field, PrimeField, PrimeFieldRepr};
-use pairing::Engine;
+use paired::Engine;
 
 #[derive(Debug)]
 enum NamedObject {
@@ -450,7 +450,7 @@ impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
 #[test]
 fn test_cs() {
     use ff::PrimeField;
-    use pairing::bls12_381::{Bls12, Fr};
+    use paired::bls12_381::{Bls12, Fr};
 
     let mut cs = TestConstraintSystem::<Bls12>::new();
     assert!(cs.is_satisfied());

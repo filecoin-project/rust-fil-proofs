@@ -1,4 +1,4 @@
-use bellman::SynthesisError;
+use bellperson::SynthesisError;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 

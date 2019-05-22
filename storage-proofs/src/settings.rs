@@ -10,6 +10,7 @@ lazy_static! {
 const SETTINGS_PATH: &str = "./rust-fil-proofs.config.toml";
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Settings {
     pub maximize_caching: bool,
     pub merkle_tree_path: String,
@@ -30,7 +31,6 @@ impl Settings {
     fn new() -> Result<Settings, ConfigError> {
         let mut s = Config::new();
 
-        s.set_defaults(&Self::default())?;
         s.merge(File::with_name(SETTINGS_PATH).required(false))?;
         s.merge(Environment::with_prefix("FIL_PROOFS"))?;
 

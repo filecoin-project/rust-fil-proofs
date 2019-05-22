@@ -35,21 +35,12 @@ regex = "1"
 drop_struct_macro_derive = { path = "../drop-struct-macro-derive" }
 ff = "0.4.0"
 blake2b_simd = "0.4.1"
+phase21 = "0.3"
+bellperson = "0.2"
+paired = "0.15"
 
 [dependencies.sapling-crypto]
 git = "https://github.com/filecoin-project/sapling-crypto"
-branch = "master"
-
-[dependencies.phase2]
-git = "https://github.com/filecoin-project/phase2"
-branch = "master"
-
-[dependencies.bellman]
-git = "https://github.com/filecoin-project/bellman"
-branch = "master"
-
-[dependencies.pairing]
-git = "https://github.com/filecoin-project/pairing"
 branch = "master"
 
 [dependencies.sled]

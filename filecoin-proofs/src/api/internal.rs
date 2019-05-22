@@ -4,18 +4,18 @@ use std::io::{BufWriter, Read};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use bellman::groth16;
+use bellperson::groth16;
 use ff::PrimeField;
 use memmap::MmapOptions;
-use pairing::bls12_381::{Bls12, Fr};
-use pairing::Engine;
+use paired::bls12_381::{Bls12, Fr};
+use paired::Engine;
 use sapling_crypto::jubjub::JubjubBls12;
 
 use crate::api::post_adapter::*;
 use crate::error;
 use crate::error::ExpectWithBacktrace;
 use crate::FCP_LOG;
-use sector_base::api::bytes_amount::{PaddedBytesAmount, UnpaddedBytesAmount};
+use sector_base::api::bytes_amount::{PaddedBytesAmount, UnpaddedByteIndex, UnpaddedBytesAmount};
 use sector_base::api::porep_config::PoRepConfig;
 use sector_base::api::porep_proof_partitions::PoRepProofPartitions;
 use sector_base::api::post_config::PoStConfig;
@@ -460,19 +460,15 @@ fn verify_post_fixed_sectors_count(
         &verifying_key,
     )?;
 
-    // For some reason, the circuit test does not verify when called in tests here.
-    // However, everything up to that point does/should work — so we want to continue to exercise
-    // for integration purposes.
-    let _fixme_ignore: error::Result<bool> = VDFPostCompound::verify(
+    let is_valid = VDFPostCompound::verify(
         &compound_public_params,
         &public_inputs,
         &proof,
         &NoRequirements,
-    )
-    .map_err(Into::into);
+    )?;
 
     // Since callers may rely on previous mocked success, just pretend verification succeeded, for now.
-    Ok(VerifyPoStFixedSectorsCountOutput { is_valid: true })
+    Ok(VerifyPoStFixedSectorsCountOutput { is_valid })
 }
 
 type Tree = MerkleTree<PedersenDomain, <PedersenHasher as Hasher>::Function>;
@@ -628,7 +624,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     output_path: T,
     prover_id_in: &FrSafe,
     sector_id_in: &FrSafe,
-    offset: u64,
+    offset: UnpaddedByteIndex,
     num_bytes: UnpaddedBytesAmount,
 ) -> error::Result<(UnpaddedBytesAmount)> {
     let prover_id = pad_safe_fr(prover_id_in);
@@ -652,12 +648,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
         &data,
     )?;
 
-    let written = write_unpadded(
-        &unsealed,
-        &mut buf_writer,
-        offset as usize,
-        num_bytes.into(),
-    )?;
+    let written = write_unpadded(&unsealed, &mut buf_writer, offset.into(), num_bytes.into())?;
 
     Ok(UnpaddedBytesAmount(written as u64))
 }
@@ -864,7 +855,7 @@ mod tests {
                     &unseal_access,
                     &prover_id,
                     &sector_id,
-                    0,
+                    UnpaddedByteIndex(0),
                     cfg.max_unsealed_bytes_per_sector(),
                 )
                 .expect("failed to unseal")
@@ -1043,7 +1034,7 @@ mod tests {
                     &PathBuf::from(&h.unseal_access),
                     &h.prover_id,
                     &h.sector_id,
-                    offset,
+                    UnpaddedByteIndex(offset),
                     UnpaddedBytesAmount(range_length),
                 )
                 .expect("failed to unseal")
@@ -1094,7 +1085,7 @@ mod tests {
             &unseal_access,
             &h.prover_id,
             &h.sector_id,
-            0,
+            UnpaddedByteIndex(0),
             UnpaddedBytesAmount((contents_a.len() + contents_b.len()) as u64),
         )
         .expect("failed to unseal");

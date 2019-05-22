@@ -1,6 +1,6 @@
-use bellman::{ConstraintSystem, SynthesisError};
+use bellperson::{ConstraintSystem, SynthesisError};
 use ff::Field;
-use pairing::Engine;
+use paired::Engine;
 use sapling_crypto::circuit::num;
 
 use crate::circuit::constraint;
@@ -66,7 +66,7 @@ mod tests {
     use super::*;
     use crate::circuit::test::TestConstraintSystem;
     use crate::crypto::sloth;
-    use pairing::bls12_381::{Bls12, Fr};
+    use paired::bls12_381::{Bls12, Fr};
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]

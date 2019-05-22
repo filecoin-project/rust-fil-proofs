@@ -1,7 +1,7 @@
-use bellman::{ConstraintSystem, SynthesisError};
-use merkle_light::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
-use merkle_light::merkle::Element;
-use pairing::bls12_381::{Fr, FrRepr};
+use bellperson::{ConstraintSystem, SynthesisError};
+use merkletree::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
+use merkletree::merkle::Element;
+use paired::bls12_381::{Fr, FrRepr};
 use rand::Rand;
 use sapling_crypto::circuit::{boolean, num};
 use sapling_crypto::jubjub::JubjubEngine;

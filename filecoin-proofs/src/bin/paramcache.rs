@@ -8,7 +8,7 @@ use slog::*;
 
 use filecoin_proofs::api::internal;
 use filecoin_proofs::FCP_LOG;
-use pairing::bls12_381::Bls12;
+use paired::bls12_381::Bls12;
 use sector_base::api::bytes_amount::PaddedBytesAmount;
 use sector_base::api::disk_backed_storage::LIVE_SECTOR_SIZE;
 use sector_base::api::disk_backed_storage::TEST_SECTOR_SIZE;

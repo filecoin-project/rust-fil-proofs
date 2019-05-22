@@ -1,9 +1,12 @@
 use std::fs::File;
+use std::iter::Iterator;
 use std::sync::Arc;
 
 use crate::api::sector_builder::errors::*;
-use crate::api::sector_builder::metadata::sum_piece_bytes;
 use crate::api::sector_builder::metadata::StagedSectorMetadata;
+use crate::api::sector_builder::pieces::{
+    get_aligned_source, get_piece_alignment, sum_piece_bytes_with_alignment, PieceAlignment,
+};
 use crate::api::sector_builder::state::StagedState;
 use crate::api::sector_builder::*;
 use crate::error;
@@ -33,7 +36,7 @@ pub fn add_piece(
             .map(|(_, v)| (*v).clone())
             .collect();
 
-        compute_destination_sector_id(&candidates[..], sector_max, piece_bytes_len)?
+        compute_destination_sector_id(&candidates, sector_max, piece_bytes_len)?
     };
 
     let dest_sector_id = opt_dest_sector_id
@@ -41,15 +44,16 @@ pub fn add_piece(
         .or_else(|_| provision_new_staged_sector(sector_mgr, &mut staged_state))?;
 
     if let Some(s) = staged_state.sectors.get_mut(&dest_sector_id) {
-        let mut file = File::open(piece_path)?;
+        let (expected_num_bytes_written, mut chain) =
+            get_aligned_source(File::open(piece_path)?, &s.pieces, piece_bytes_len);
 
         sector_store
             .inner
             .manager()
-            .write_and_preprocess(&s.sector_access, &mut file)
+            .write_and_preprocess(&s.sector_access, &mut chain)
             .map_err(Into::into)
             .and_then(|num_bytes_written| {
-                if num_bytes_written != piece_bytes_len {
+                if num_bytes_written != expected_num_bytes_written {
                     Err(
                         err_inc_write(u64::from(num_bytes_written), u64::from(piece_bytes_len))
                             .into(),
@@ -81,10 +85,19 @@ fn compute_destination_sector_id(
     if num_bytes_in_piece > max_bytes_per_sector {
         Err(err_overflow(num_bytes_in_piece.into(), max_bytes_per_sector.into()).into())
     } else {
-        Ok(candidate_sectors
+        let mut vector = candidate_sectors.to_vec();
+        vector.sort_by(|a, b| a.sector_id.cmp(&b.sector_id));
+
+        Ok(vector
             .iter()
             .find(move |staged_sector| {
-                (max_bytes_per_sector - sum_piece_bytes(staged_sector)) >= num_bytes_in_piece
+                let preceding_piece_bytes = sum_piece_bytes_with_alignment(&staged_sector.pieces);
+                let PieceAlignment {
+                    left_bytes,
+                    right_bytes,
+                } = get_piece_alignment(preceding_piece_bytes, num_bytes_in_piece);
+                preceding_piece_bytes + left_bytes + num_bytes_in_piece + right_bytes
+                    <= max_bytes_per_sector
             })
             .map(|x| x.sector_id))
     }
@@ -128,19 +141,19 @@ mod tests {
 
         sealed_sector_a.pieces.push(PieceMetadata {
             piece_key: String::from("x"),
-            num_bytes: UnpaddedBytesAmount(5),
+            num_bytes: UnpaddedBytesAmount(508),
         });
 
         sealed_sector_a.pieces.push(PieceMetadata {
             piece_key: String::from("x"),
-            num_bytes: UnpaddedBytesAmount(10),
+            num_bytes: UnpaddedBytesAmount(254),
         });
 
         let mut sealed_sector_b: StagedSectorMetadata = Default::default();
 
         sealed_sector_b.pieces.push(PieceMetadata {
             piece_key: String::from("x"),
-            num_bytes: UnpaddedBytesAmount(5),
+            num_bytes: UnpaddedBytesAmount(508),
         });
 
         let staged_sectors = vec![sealed_sector_a.clone(), sealed_sector_b.clone()];
@@ -148,45 +161,45 @@ mod tests {
         // piece takes up all remaining space in first sector
         match compute_destination_sector_id(
             &staged_sectors,
-            UnpaddedBytesAmount(100),
-            UnpaddedBytesAmount(85),
+            UnpaddedBytesAmount(1016),
+            UnpaddedBytesAmount(254),
         ) {
             Ok(Some(destination_sector_id)) => {
                 assert_eq!(destination_sector_id, sealed_sector_a.sector_id)
             }
-            _ => panic!(),
+            _ => panic!("got no destination sector"),
         }
 
         // piece doesn't fit into the first, but does the second
         match compute_destination_sector_id(
             &staged_sectors,
-            UnpaddedBytesAmount(100),
-            UnpaddedBytesAmount(90),
+            UnpaddedBytesAmount(1016),
+            UnpaddedBytesAmount(508),
         ) {
             Ok(Some(destination_sector_id)) => {
                 assert_eq!(destination_sector_id, sealed_sector_b.sector_id)
             }
-            _ => panic!(),
+            _ => panic!("got no destination sector"),
         }
 
         // piece doesn't fit into any in the list
         match compute_destination_sector_id(
             &staged_sectors,
-            UnpaddedBytesAmount(100),
-            UnpaddedBytesAmount(100),
+            UnpaddedBytesAmount(1016),
+            UnpaddedBytesAmount(1016),
         ) {
             Ok(None) => (),
-            _ => panic!(),
+            _ => panic!("got no destination sector"),
         }
 
         // piece is over max
         match compute_destination_sector_id(
             &staged_sectors,
-            UnpaddedBytesAmount(100),
-            UnpaddedBytesAmount(101),
+            UnpaddedBytesAmount(1016),
+            UnpaddedBytesAmount(1024),
         ) {
             Err(_) => (),
-            _ => panic!(),
+            _ => panic!("got no destination sector"),
         }
     }
 }

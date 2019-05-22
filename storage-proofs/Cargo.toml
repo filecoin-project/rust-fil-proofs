@@ -11,9 +11,10 @@ logging-toolkit = { path = "../logging-toolkit" }
 bitvec = "0.10"
 rand = "0.4"
 libc = "0.2"
-merkle_light = { git = "https://github.com/filecoin-project/merkle_light", branch = "master" }
+merkletree = "=0.4.0"
 failure = "0.1"
 byteorder = "1"
+config = "0.9.3"
 crossbeam-utils = "0.6"
 itertools = "0.8"
 lazy_static = "1.2"
@@ -36,23 +37,11 @@ blake2b_simd = "0.4.1"
 blake2s_simd = { git = "https://github.com/oconnor663/blake2s_simd", branch = "master"}
 toml = "0.5"
 ff = "0.4.0"
-
-[dependencies.config]
-version = "0.9.2"
-# switch back to crates.io version, once the PR is merged
-git = "https://github.com/tyranron/config-rs"
-branch = "60-fix-defaults"
+bellperson = "0.2"
+paired = "0.15"
 
 [dependencies.sapling-crypto]
 git = "https://github.com/filecoin-project/sapling-crypto"
-branch = "master"
-
-[dependencies.bellman]
-git = "https://github.com/filecoin-project/bellman"
-branch = "master"
-
-[dependencies.pairing]
-git = "https://github.com/filecoin-project/pairing"
 branch = "master"
 
 [features]

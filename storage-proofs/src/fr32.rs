@@ -2,8 +2,8 @@ use crate::error::*;
 
 use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 use ff::{PrimeField, PrimeFieldRepr, ScalarEngine};
-use pairing::bls12_381::FrRepr;
-use pairing::Engine;
+use paired::bls12_381::FrRepr;
+use paired::Engine;
 
 // Contains 32 bytes whose little-endian value represents an Fr.
 // Invariants:
@@ -90,7 +90,7 @@ pub fn u32_into_fr<E: Engine>(n: u32) -> E::Fr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pairing::bls12_381::Bls12;
+    use paired::bls12_381::Bls12;
 
     fn bytes_fr_test<E: Engine>(bytes: Fr32Ary, expect_success: bool) {
         let mut b = &bytes[..];

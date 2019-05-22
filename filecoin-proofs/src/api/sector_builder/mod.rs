@@ -19,6 +19,7 @@ pub mod errors;
 mod helpers;
 mod kv_store;
 pub mod metadata;
+pub mod pieces;
 mod scheduler;
 mod sealer;
 mod state;

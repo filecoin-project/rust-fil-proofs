@@ -7,7 +7,7 @@ extern crate failure;
 extern crate ffi_toolkit;
 extern crate itertools;
 extern crate libc;
-extern crate pairing;
+extern crate paired;
 extern crate rand;
 extern crate storage_proofs;
 

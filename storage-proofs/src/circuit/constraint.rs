@@ -1,5 +1,5 @@
-use bellman::ConstraintSystem;
-use pairing::Engine;
+use bellperson::ConstraintSystem;
+use paired::Engine;
 use sapling_crypto::circuit::num;
 
 /// Adds a constraint to CS, enforcing an equality relationship between the allocated numbers a and b.

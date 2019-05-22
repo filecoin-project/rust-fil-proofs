@@ -1,5 +1,5 @@
-extern crate bellman;
-extern crate pairing;
+extern crate bellperson;
+extern crate paired;
 extern crate rand;
 extern crate sapling_crypto;
 #[macro_use]
@@ -14,7 +14,7 @@ extern crate filecoin_proofs;
 extern crate storage_proofs;
 
 use clap::{App, Arg};
-use pairing::bls12_381::{Bls12, Fr};
+use paired::bls12_381::{Bls12, Fr};
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::time::{Duration, Instant};
 

@@ -1,6 +1,6 @@
-extern crate bellman;
+extern crate bellperson;
 extern crate chrono;
-extern crate pairing;
+extern crate paired;
 extern crate rand;
 extern crate sapling_crypto;
 #[macro_use]
@@ -24,14 +24,14 @@ use gperftools::heap_profiler::HEAP_PROFILER;
 use gperftools::profiler::PROFILER;
 use memmap::MmapMut;
 use memmap::MmapOptions;
-use pairing::bls12_381::Bls12;
+use paired::bls12_381::Bls12;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::time::{Duration, Instant};
 use std::u32;
 
-use bellman::Circuit;
+use bellperson::Circuit;
 use sapling_crypto::jubjub::JubjubBls12;
 
 use storage_proofs::circuit::metric::*;

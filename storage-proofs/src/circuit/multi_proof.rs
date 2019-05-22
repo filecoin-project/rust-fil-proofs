@@ -1,7 +1,7 @@
-use bellman::groth16;
+use bellperson::groth16;
 
 use crate::error::Result;
-use pairing::Engine;
+use paired::Engine;
 use std::io::{self, Read, Write};
 
 pub struct MultiProof<'a, E: Engine> {

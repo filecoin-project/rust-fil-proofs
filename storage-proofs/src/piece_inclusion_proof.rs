@@ -1,6 +1,6 @@
 use itertools::Itertools;
-use merkle_light::hash::Algorithm;
-use merkle_light::merkle::{self, next_pow2, VecStore};
+use merkletree::hash::Algorithm;
+use merkletree::merkle::{self, next_pow2, VecStore};
 
 use crate::error::*;
 use crate::fr32::Fr32Vec;

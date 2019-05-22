@@ -8,6 +8,9 @@ pub struct PoStProofBytesAmount(pub usize);
 pub struct PoRepProofBytesAmount(pub usize);
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
+pub struct UnpaddedByteIndex(pub u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct UnpaddedBytesAmount(pub u64);
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
@@ -46,6 +49,24 @@ impl From<PaddedBytesAmount> for usize {
 impl From<PaddedBytesAmount> for UnpaddedBytesAmount {
     fn from(n: PaddedBytesAmount) -> Self {
         UnpaddedBytesAmount(unpadded_bytes(n.0))
+    }
+}
+
+impl From<UnpaddedBytesAmount> for UnpaddedByteIndex {
+    fn from(n: UnpaddedBytesAmount) -> Self {
+        UnpaddedByteIndex(n.0)
+    }
+}
+
+impl From<UnpaddedByteIndex> for u64 {
+    fn from(n: UnpaddedByteIndex) -> Self {
+        n.0
+    }
+}
+
+impl From<UnpaddedByteIndex> for usize {
+    fn from(n: UnpaddedByteIndex) -> Self {
+        n.0 as usize
     }
 }
 

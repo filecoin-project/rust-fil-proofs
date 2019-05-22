@@ -1,4 +1,4 @@
-use pairing::bls12_381::{Bls12, Fr};
+use paired::bls12_381::{Bls12, Fr};
 
 use crate::crypto::sloth;
 use crate::error::Result;
