@@ -2,12 +2,12 @@ use std::marker::PhantomData;
 
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::Field;
+use fil_sapling_crypto::circuit::boolean::Boolean;
+use fil_sapling_crypto::circuit::num::{AllocatedNum, Num};
+use fil_sapling_crypto::circuit::{boolean, num, pedersen_hash};
+use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 use paired::Engine;
-use sapling_crypto::circuit::boolean::Boolean;
-use sapling_crypto::circuit::num::{AllocatedNum, Num};
-use sapling_crypto::circuit::{boolean, num, pedersen_hash};
-use sapling_crypto::jubjub::JubjubEngine;
 
 use crate::circuit::constraint;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
@@ -284,8 +284,8 @@ mod tests {
     use super::*;
 
     use ff::Field;
+    use fil_sapling_crypto::jubjub::JubjubBls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
-    use sapling_crypto::jubjub::JubjubBls12;
 
     use crate::circuit::test::*;
     use crate::compound_proof;

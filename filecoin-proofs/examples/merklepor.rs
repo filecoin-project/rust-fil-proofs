@@ -1,16 +1,16 @@
 extern crate bellperson;
+extern crate fil_sapling_crypto;
 extern crate paired;
 extern crate pbr;
 extern crate rand;
-extern crate sapling_crypto;
 extern crate storage_proofs;
 
 use bellperson::groth16::*;
 use ff::Field;
+use fil_sapling_crypto::circuit::multipack;
+use fil_sapling_crypto::jubjub::JubjubBls12;
 use paired::bls12_381::{Bls12, Fr};
 use rand::Rng;
-use sapling_crypto::circuit::multipack;
-use sapling_crypto::jubjub::JubjubBls12;
 
 use storage_proofs::circuit;
 use storage_proofs::example_helper::Example;

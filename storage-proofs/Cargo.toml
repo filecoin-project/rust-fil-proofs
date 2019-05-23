@@ -33,16 +33,13 @@ rayon = "1.0.0"
 slog = { version = "2.4.1", features = ["max_level_trace", "release_max_level_trace"] }
 serde = { version = "1.0", features = ["derive"]}
 base64 = "0.10.0"
-blake2b_simd = "0.4.1"
-blake2s_simd = { git = "https://github.com/oconnor663/blake2s_simd", branch = "master"}
+blake2b_simd = "0.5"
+blake2s_simd = "0.5"
 toml = "0.5"
 ff = "0.4.0"
 bellperson = "0.2"
 paired = "0.15"
-
-[dependencies.sapling-crypto]
-git = "https://github.com/filecoin-project/sapling-crypto"
-branch = "master"
+fil-sapling-crypto = "0.1"
 
 [features]
 default = []

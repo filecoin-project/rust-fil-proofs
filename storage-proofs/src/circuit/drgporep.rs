@@ -1,9 +1,9 @@
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
+use fil_sapling_crypto::circuit::boolean::{self, Boolean};
+use fil_sapling_crypto::circuit::{multipack, num};
+use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
-use sapling_crypto::circuit::boolean::{self, Boolean};
-use sapling_crypto::circuit::{multipack, num};
-use sapling_crypto::jubjub::JubjubEngine;
 
 use crate::circuit::constraint;
 use crate::circuit::kdf::kdf;
@@ -541,8 +541,8 @@ mod tests {
     use crate::util::data_at_node;
 
     use ff::Field;
+    use fil_sapling_crypto::jubjub::JubjubBls12;
     use rand::{Rand, Rng, SeedableRng, XorShiftRng};
-    use sapling_crypto::jubjub::JubjubBls12;
 
     #[test]
     fn drgporep_input_circuit_with_bls12_381() {

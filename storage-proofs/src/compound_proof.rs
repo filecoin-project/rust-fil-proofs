@@ -7,8 +7,8 @@ use crate::partitions;
 use crate::proof::ProofScheme;
 use crate::settings;
 use bellperson::{groth16, Circuit};
+use fil_sapling_crypto::jubjub::JubjubEngine;
 use rand::OsRng;
-use sapling_crypto::jubjub::JubjubEngine;
 
 pub struct SetupParams<'a, 'b: 'a, E: JubjubEngine, S: ProofScheme<'a>>
 where

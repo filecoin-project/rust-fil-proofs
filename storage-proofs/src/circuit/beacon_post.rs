@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
-use sapling_crypto::jubjub::JubjubEngine;
 
 use crate::beacon_post::BeaconPoSt;
 use crate::circuit::vdf_post;
@@ -126,8 +126,8 @@ mod tests {
     use super::*;
 
     use ff::Field;
+    use fil_sapling_crypto::jubjub::JubjubBls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
-    use sapling_crypto::jubjub::JubjubBls12;
 
     use crate::beacon_post::{self, Beacon};
     use crate::circuit::test::*;

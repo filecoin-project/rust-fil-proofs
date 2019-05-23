@@ -1,7 +1,7 @@
 extern crate bellperson;
+extern crate fil_sapling_crypto;
 extern crate paired;
 extern crate rand;
-extern crate sapling_crypto;
 #[macro_use]
 extern crate clap;
 extern crate memmap;

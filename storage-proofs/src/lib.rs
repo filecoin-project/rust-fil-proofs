@@ -17,6 +17,7 @@ extern crate bitvec;
 extern crate block_modes;
 extern crate byteorder;
 extern crate crossbeam_utils;
+extern crate fil_sapling_crypto;
 extern crate fs2;
 extern crate itertools;
 extern crate libc;
@@ -26,7 +27,6 @@ extern crate num_bigint;
 extern crate num_traits;
 extern crate paired;
 extern crate rand;
-extern crate sapling_crypto;
 extern crate sha2;
 extern crate tempfile;
 #[cfg(test)]

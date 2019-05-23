@@ -4,11 +4,11 @@ extern crate criterion;
 use bellperson::groth16::*;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use criterion::{black_box, Criterion, ParameterizedBenchmark};
+use fil_sapling_crypto::circuit as scircuit;
+use fil_sapling_crypto::circuit::boolean::{self, Boolean};
+use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
-use sapling_crypto::circuit as scircuit;
-use sapling_crypto::circuit::boolean::{self, Boolean};
-use sapling_crypto::jubjub::JubjubEngine;
 use storage_proofs::circuit::bench::BenchCS;
 
 struct Blake2sExample<'a> {

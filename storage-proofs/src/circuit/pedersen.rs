@@ -1,7 +1,7 @@
 use bellperson::{ConstraintSystem, SynthesisError};
-use sapling_crypto::circuit::boolean::Boolean;
-use sapling_crypto::circuit::{num, pedersen_hash};
-use sapling_crypto::jubjub::JubjubEngine;
+use fil_sapling_crypto::circuit::boolean::Boolean;
+use fil_sapling_crypto::circuit::{num, pedersen_hash};
+use fil_sapling_crypto::jubjub::JubjubEngine;
 
 use crate::crypto::pedersen::PEDERSEN_BLOCK_SIZE;
 
@@ -85,10 +85,10 @@ mod tests {
     use crate::crypto;
     use crate::util::bytes_into_boolean_vec;
     use bellperson::ConstraintSystem;
+    use fil_sapling_crypto::circuit::boolean::Boolean;
+    use fil_sapling_crypto::jubjub::JubjubBls12;
     use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
-    use sapling_crypto::circuit::boolean::Boolean;
-    use sapling_crypto::jubjub::JubjubBls12;
 
     #[test]
     fn test_pedersen_input_circut() {

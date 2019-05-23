@@ -1,10 +1,10 @@
 use bellperson::{ConstraintSystem, SynthesisError};
+use fil_sapling_crypto::circuit::{boolean, num};
+use fil_sapling_crypto::jubjub::JubjubEngine;
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
 use merkletree::merkle::Element;
 use paired::bls12_381::{Fr, FrRepr};
 use rand::Rand;
-use sapling_crypto::circuit::{boolean, num};
-use sapling_crypto::jubjub::JubjubEngine;
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 

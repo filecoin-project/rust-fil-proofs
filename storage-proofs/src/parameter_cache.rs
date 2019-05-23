@@ -1,10 +1,10 @@
 use crate::error::*;
 use bellperson::groth16::Parameters;
 use bellperson::{groth16, Circuit};
+use fil_sapling_crypto::jubjub::JubjubEngine;
 use fs2::FileExt;
 use itertools::Itertools;
 use rand::{SeedableRng, XorShiftRng};
-use sapling_crypto::jubjub::JubjubEngine;
 use sha2::{Digest, Sha256};
 
 use std::env;

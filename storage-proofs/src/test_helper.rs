@@ -1,7 +1,7 @@
 use ff::{BitIterator, PrimeField, PrimeFieldRepr};
+use fil_sapling_crypto::pedersen_hash;
 use paired::bls12_381::{Bls12, Fr};
 use rand::Rng;
-use sapling_crypto::pedersen_hash;
 
 use crate::crypto;
 use crate::error;

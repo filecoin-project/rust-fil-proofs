@@ -4,13 +4,13 @@ use bellperson::{ConstraintSystem, SynthesisError};
 use bitvec::{self, BitVec};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use ff::{PrimeField, PrimeFieldRepr};
+use fil_sapling_crypto::circuit::{boolean, num, pedersen_hash as pedersen_hash_circuit};
+use fil_sapling_crypto::jubjub::JubjubEngine;
+use fil_sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 use rand::{Rand, Rng};
-use sapling_crypto::circuit::{boolean, num, pedersen_hash as pedersen_hash_circuit};
-use sapling_crypto::jubjub::JubjubEngine;
-use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::Serializer;
 

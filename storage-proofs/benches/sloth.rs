@@ -4,10 +4,10 @@ extern crate criterion;
 use bellperson::groth16::*;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use criterion::{black_box, Criterion, ParameterizedBenchmark};
+use fil_sapling_crypto::circuit::num;
+use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 use rand::{thread_rng, Rng};
-use sapling_crypto::circuit::num;
-use sapling_crypto::jubjub::JubjubEngine;
 use storage_proofs::circuit::bench::BenchCS;
 
 use storage_proofs::circuit;
