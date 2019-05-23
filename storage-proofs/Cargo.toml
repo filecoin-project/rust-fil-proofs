@@ -11,7 +11,7 @@ logging-toolkit = { path = "../logging-toolkit" }
 bitvec = "0.10"
 rand = "0.4"
 libc = "0.2"
-merkletree = "=0.4.1"
+merkletree = { git = "https://github.com/filecoin-project/merkle_light", branch = "feat/store/read_into"}
 failure = "0.1"
 byteorder = "1"
 config = "0.9.3"
