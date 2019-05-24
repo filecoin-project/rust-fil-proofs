@@ -1,6 +1,6 @@
 use bellperson::ConstraintSystem;
+use fil_sapling_crypto::circuit::num;
 use paired::Engine;
-use sapling_crypto::circuit::num;
 
 /// Adds a constraint to CS, enforcing an equality relationship between the allocated numbers a and b.
 ///

@@ -1,6 +1,6 @@
 use bellperson::{ConstraintSystem, SynthesisError};
-use sapling_crypto::circuit::boolean::Boolean;
-use sapling_crypto::jubjub::JubjubEngine;
+use fil_sapling_crypto::circuit::boolean::Boolean;
+use fil_sapling_crypto::jubjub::JubjubEngine;
 
 pub fn xor<E, CS>(
     cs: &mut CS,
@@ -34,9 +34,9 @@ mod tests {
     use crate::crypto;
     use crate::util::{bits_to_bytes, bytes_into_boolean_vec};
     use bellperson::ConstraintSystem;
+    use fil_sapling_crypto::circuit::boolean::Boolean;
     use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
-    use sapling_crypto::circuit::boolean::Boolean;
 
     #[test]
     fn test_xor_input_circut() {

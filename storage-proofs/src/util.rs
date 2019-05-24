@@ -1,6 +1,6 @@
 use bellperson::{ConstraintSystem, SynthesisError};
+use fil_sapling_crypto::circuit::boolean::{self, AllocatedBit, Boolean};
 use paired::Engine;
-use sapling_crypto::circuit::boolean::{self, AllocatedBit, Boolean};
 
 use crate::error;
 

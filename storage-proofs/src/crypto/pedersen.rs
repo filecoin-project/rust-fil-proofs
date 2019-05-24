@@ -1,8 +1,8 @@
 use bitvec::{self, BitVec};
 use ff::PrimeFieldRepr;
+use fil_sapling_crypto::jubjub::JubjubBls12;
+use fil_sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 use paired::bls12_381::{Bls12, Fr, FrRepr};
-use sapling_crypto::jubjub::JubjubBls12;
-use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 
 use crate::fr32::bytes_into_frs;
 

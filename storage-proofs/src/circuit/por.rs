@@ -1,9 +1,9 @@
 use std::marker::PhantomData;
 
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use fil_sapling_crypto::circuit::{boolean, multipack, num};
+use fil_sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 use paired::bls12_381::{Bls12, Fr};
-use sapling_crypto::circuit::{boolean, multipack, num};
-use sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 
 use crate::circuit::constraint;
 use crate::circuit::variables::Root;
@@ -247,9 +247,9 @@ mod tests {
 
     use crate::proof::NoRequirements;
     use ff::Field;
+    use fil_sapling_crypto::circuit::multipack;
+    use fil_sapling_crypto::jubjub::JubjubBls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
-    use sapling_crypto::circuit::multipack;
-    use sapling_crypto::jubjub::JubjubBls12;
 
     use crate::circuit::test::*;
     use crate::compound_proof;

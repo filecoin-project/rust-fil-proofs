@@ -1,8 +1,8 @@
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use fil_sapling_crypto::circuit::num;
+use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 use paired::Engine;
-use sapling_crypto::circuit::num;
-use sapling_crypto::jubjub::JubjubEngine;
 
 use crate::circuit::constraint;
 use crate::circuit::porc;
@@ -375,8 +375,8 @@ mod tests {
 
     use bellperson::groth16;
     use ff::Field;
+    use fil_sapling_crypto::jubjub::JubjubBls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
-    use sapling_crypto::jubjub::JubjubBls12;
 
     use crate::circuit::test::*;
     use crate::compound_proof;

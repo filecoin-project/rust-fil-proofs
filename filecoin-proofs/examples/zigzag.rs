@@ -1,8 +1,8 @@
 extern crate bellperson;
 extern crate chrono;
+extern crate fil_sapling_crypto;
 extern crate paired;
 extern crate rand;
-extern crate sapling_crypto;
 #[macro_use]
 extern crate clap;
 #[cfg(any(feature = "cpu-profile", feature = "heap-profile"))]
@@ -32,7 +32,7 @@ use std::time::{Duration, Instant};
 use std::u32;
 
 use bellperson::Circuit;
-use sapling_crypto::jubjub::JubjubBls12;
+use fil_sapling_crypto::jubjub::JubjubBls12;
 
 use storage_proofs::circuit::metric::*;
 use storage_proofs::circuit::zigzag::ZigZagCompound;

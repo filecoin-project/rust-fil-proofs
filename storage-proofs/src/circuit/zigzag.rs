@@ -1,9 +1,9 @@
 use std::marker::PhantomData;
 
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use fil_sapling_crypto::circuit::{boolean, num};
+use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
-use sapling_crypto::circuit::{boolean, num};
-use sapling_crypto::jubjub::JubjubEngine;
 
 use crate::circuit::constraint;
 use crate::circuit::drgporep::{ComponentPrivateInputs, DrgPoRepCompound};
@@ -383,8 +383,8 @@ mod tests {
     use crate::proof::ProofScheme;
 
     use ff::Field;
+    use fil_sapling_crypto::jubjub::JubjubBls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
-    use sapling_crypto::jubjub::JubjubBls12;
 
     #[test]
     fn zigzag_drgporep_input_circuit_with_bls12_381() {

@@ -34,14 +34,11 @@ slog = { version = "2.4.1", features = ["max_level_trace", "release_max_level_tr
 regex = "1"
 drop_struct_macro_derive = { path = "../drop-struct-macro-derive" }
 ff = "0.4.0"
-blake2b_simd = "0.4.1"
+blake2b_simd = "0.5"
 phase21 = "0.3"
 bellperson = "0.2"
 paired = "0.15"
-
-[dependencies.sapling-crypto]
-git = "https://github.com/filecoin-project/sapling-crypto"
-branch = "master"
+fil-sapling-crypto = "0.1"
 
 [dependencies.sled]
 version = "0.23.0"

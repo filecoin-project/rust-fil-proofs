@@ -1,8 +1,8 @@
 use bellperson::{ConstraintSystem, SynthesisError};
-use sapling_crypto::circuit::blake2s::blake2s as blake2s_circuit;
-use sapling_crypto::circuit::boolean::Boolean;
-use sapling_crypto::circuit::{multipack, num};
-use sapling_crypto::jubjub::JubjubEngine;
+use fil_sapling_crypto::circuit::blake2s::blake2s as blake2s_circuit;
+use fil_sapling_crypto::circuit::boolean::Boolean;
+use fil_sapling_crypto::circuit::{multipack, num};
+use fil_sapling_crypto::jubjub::JubjubEngine;
 
 /// Key derivation function, using pedersen hashes as the underlying primitive.
 pub fn kdf<E, CS>(
@@ -50,9 +50,9 @@ mod tests {
     use crate::fr32::fr_into_bytes;
     use crate::util::bytes_into_boolean_vec;
     use bellperson::ConstraintSystem;
+    use fil_sapling_crypto::circuit::boolean::Boolean;
     use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
-    use sapling_crypto::circuit::boolean::Boolean;
 
     #[test]
     fn kdf_circuit() {

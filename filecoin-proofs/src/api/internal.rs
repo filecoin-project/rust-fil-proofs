@@ -6,10 +6,10 @@ use std::sync::{Arc, Mutex};
 
 use bellperson::groth16;
 use ff::PrimeField;
+use fil_sapling_crypto::jubjub::JubjubBls12;
 use memmap::MmapOptions;
 use paired::bls12_381::{Bls12, Fr};
 use paired::Engine;
-use sapling_crypto::jubjub::JubjubBls12;
 
 use crate::api::post_adapter::*;
 use crate::error;

@@ -9,10 +9,10 @@ extern crate storage_proofs;
 #[macro_use]
 extern crate lazy_static;
 extern crate bellperson;
+extern crate fil_sapling_crypto;
 extern crate libc;
 extern crate paired;
 extern crate rand;
-extern crate sapling_crypto;
 extern crate tempfile;
 #[macro_use]
 extern crate failure;

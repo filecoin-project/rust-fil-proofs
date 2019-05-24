@@ -1,7 +1,7 @@
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::Field;
+use fil_sapling_crypto::circuit::num;
 use paired::Engine;
-use sapling_crypto::circuit::num;
 
 use crate::circuit::constraint;
 

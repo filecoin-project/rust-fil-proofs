@@ -19,10 +19,10 @@
 //! requires ~1152 constraints).
 
 use bellperson::{ConstraintSystem, SynthesisError};
-use sapling_crypto::circuit::boolean::Boolean;
-use sapling_crypto::circuit::num;
-use sapling_crypto::circuit::num::AllocatedNum;
-use sapling_crypto::jubjub::JubjubEngine;
+use fil_sapling_crypto::circuit::boolean::Boolean;
+use fil_sapling_crypto::circuit::num;
+use fil_sapling_crypto::circuit::num::AllocatedNum;
+use fil_sapling_crypto::jubjub::JubjubEngine;
 
 use crate::circuit::constraint;
 use crate::circuit::pedersen::pedersen_md_no_padding;
@@ -252,11 +252,11 @@ mod tests {
     use super::*;
     use bellperson::ConstraintSystem;
     use ff::ScalarEngine;
+    use fil_sapling_crypto::circuit::boolean::{AllocatedBit, Boolean};
+    use fil_sapling_crypto::circuit::num::AllocatedNum;
+    use fil_sapling_crypto::jubjub::JubjubBls12;
     use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
-    use sapling_crypto::circuit::boolean::{AllocatedBit, Boolean};
-    use sapling_crypto::circuit::num::AllocatedNum;
-    use sapling_crypto::jubjub::JubjubBls12;
 
     use crate::circuit::constraint;
     use crate::circuit::test::TestConstraintSystem;
