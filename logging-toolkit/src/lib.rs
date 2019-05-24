@@ -12,16 +12,38 @@ use slog::Level;
 use slog::LevelFilter;
 use slog::Logger;
 use std::env;
+use std::fs::OpenOptions;
 
 lazy_static! {
-    static ref ROOT_LOGGER: Logger =
-        make_root_logger("FIL_PROOFS_LOG_JSON", "FIL_PROOFS_MIN_LOG_LEVEL");
+    static ref ROOT_LOGGER: Logger = make_root_logger(
+        "FIL_PROOFS_LOG_JSON",
+        "FIL_PROOFS_MIN_LOG_LEVEL",
+        "FIL_PROOFS_LOG_FILE"
+    );
 }
 
-pub fn make_root_logger(use_json_env_name: &str, min_log_level_env_name: &str) -> Logger {
+pub fn make_root_logger(
+    use_json_env_name: &str,
+    min_log_level_env_name: &str,
+    log_file_env_name: &str,
+) -> Logger {
+    let log_file_name = env::var(log_file_env_name).unwrap_or_else(|_| "/dev/stdout".to_string());
+    let log_file: Box<std::io::Write + Send> = match log_file_name.as_ref() {
+        "/dev/stdout" => Box::new(std::io::stdout()),
+        "/dev/stderr" => Box::new(std::io::stderr()),
+        filename => {
+            let tryfile = OpenOptions::new().create(true).append(true).open(filename);
+            match tryfile {
+                Ok(file) => Box::new(file),
+                // Fallback to stdout if file cannot be opened
+                Err(_) => Box::new(std::io::stdout()),
+            }
+        }
+    };
+
     let drain = match env::var(use_json_env_name).as_ref().map(String::as_str) {
         Ok("true") => {
-            let json_drain = slog_json::Json::new(std::io::stdout())
+            let json_drain = slog_json::Json::new(log_file)
                 .add_default_keys()
                 .build()
                 .fuse();
@@ -29,10 +51,22 @@ pub fn make_root_logger(use_json_env_name: &str, min_log_level_env_name: &str) -
             slog_async::Async::new(json_drain).build().fuse()
         }
         _ => {
-            let term_decorator = slog_term::TermDecorator::new().build();
-            let term_drain = slog_term::FullFormat::new(term_decorator).build().fuse();
+            match log_file_name.as_ref() {
+                // Colored output for stdout/stderr
+                "/dev/stdout" | "/dev/stderr" => {
+                    let term_decorator = slog_term::TermDecorator::new().build();
+                    let term_drain = slog_term::FullFormat::new(term_decorator).build().fuse();
 
-            slog_async::Async::new(term_drain).build().fuse()
+                    slog_async::Async::new(term_drain).build().fuse()
+                }
+                // Use plain output if it is written into a file
+                _ => {
+                    let plain_decorator = slog_term::PlainDecorator::new(log_file);
+                    let plain_drain = slog_term::FullFormat::new(plain_decorator).build().fuse();
+
+                    slog_async::Async::new(plain_drain).build().fuse()
+                }
+            }
         }
     };
 
