@@ -3,13 +3,8 @@
 #![allow(non_snake_case)]
 #![allow(improper_ctypes)]
 
-extern crate ffi_toolkit;
-extern crate libc;
-extern crate rand;
-extern crate tempfile;
 #[macro_use(defer)]
 extern crate scopeguard;
-extern crate sector_base;
 
 include!(concat!(env!("OUT_DIR"), "/libfilecoin_proofs.rs"));
 

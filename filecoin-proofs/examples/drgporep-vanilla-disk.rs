@@ -1,17 +1,7 @@
-extern crate bellperson;
-extern crate fil_sapling_crypto;
-extern crate paired;
-extern crate rand;
 #[macro_use]
 extern crate clap;
-extern crate memmap;
-extern crate tempfile;
-
 #[macro_use]
 extern crate slog;
-
-extern crate filecoin_proofs;
-extern crate storage_proofs;
 
 use clap::{App, Arg};
 use paired::bls12_381::{Bls12, Fr};

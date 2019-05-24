@@ -4,13 +4,6 @@ extern crate serde;
 extern crate failure;
 #[macro_use]
 extern crate lazy_static;
-extern crate clap;
-extern crate glob;
-extern crate human_size;
-extern crate permutate;
-extern crate prettytable;
-extern crate serde_json;
-extern crate toml;
 
 use std::collections::HashMap;
 use std::env;
