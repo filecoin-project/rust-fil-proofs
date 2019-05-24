@@ -573,7 +573,7 @@ unsafe fn into_proof_vecs(
 fn into_safe_challenge_seed(challenge_seed: &[u8; 32]) -> [u8; 32] {
     let mut cs = [0; 32];
     cs.copy_from_slice(challenge_seed);
-    cs[31] &= 0b00111111;
+    cs[31] &= 0b0011_1111;
     cs
 }
 
