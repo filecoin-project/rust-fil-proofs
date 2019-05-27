@@ -24,8 +24,6 @@ use crate::vde;
 use crate::SP_LOG;
 
 #[cfg(feature = "disk-trees")]
-use crate::settings;
-#[cfg(feature = "disk-trees")]
 use rand;
 #[cfg(feature = "disk-trees")]
 use std::fs;
@@ -563,7 +561,7 @@ pub trait Layers {
                 // replications many times in the same run so they may end up
                 // reusing the same files with invalid (old) data and failing.
 
-                tree_d.offload_store();
+                tree_d.try_offload_store();
                 return tree_d;
             }
         }

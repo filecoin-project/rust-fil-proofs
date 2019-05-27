@@ -3,14 +3,6 @@ use std::marker::PhantomData;
 
 use rand::{ChaChaRng, OsRng, Rng, SeedableRng};
 use rayon::prelude::*;
-<<<<<<< HEAD
-=======
-#[cfg(feature = "disk-trees")]
-use std::path::Path;
-// FIXME: Figure out what to do with all the conditional `use`es.
-#[cfg(feature = "disk-trees")]
-use std::path::PathBuf;
->>>>>>> 828017a... use feat/decouple-data branch with separate data stores
 
 use crate::error::*;
 use crate::hasher::pedersen::PedersenHasher;
@@ -27,6 +19,8 @@ use crate::SP_LOG;
 use merkletree::merkle::next_pow2;
 #[cfg(feature = "disk-trees")]
 use std::path::Path;
+#[cfg(feature = "disk-trees")]
+use std::path::PathBuf;
 
 /// The default hasher currently in use.
 pub type DefaultTreeHasher = PedersenHasher;
