@@ -11,9 +11,7 @@ logging-toolkit = { path = "../logging-toolkit" }
 bitvec = "0.10"
 rand = "0.4"
 libc = "0.2"
-# FIXME: Point to release branch after review and `feat/disk-mmap` is merged.
-# merkletree = "0.4"
-merkletree = { git = "https://github.com/filecoin-project/merkle_light", branch = "feat/disk-mmap" }
+merkletree = "0.6"
 failure = "0.1"
 byteorder = "1"
 config = "0.9.3"
