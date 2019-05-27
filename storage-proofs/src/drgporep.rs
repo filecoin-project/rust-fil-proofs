@@ -327,7 +327,7 @@ where
                 let extracted = decode_domain_block::<H>(
                     pub_params.sloth_iter,
                     &pub_inputs.replica_id.expect("missing replica_id"),
-                    tree_r.as_ref(),
+                    tree_r,
                     challenge,
                     tree_r.read_at(challenge),
                     &parents,

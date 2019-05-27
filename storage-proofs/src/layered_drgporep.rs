@@ -22,6 +22,17 @@ use crate::proof::ProofScheme;
 use crate::vde;
 use crate::SP_LOG;
 
+#[cfg(feature = "disk-trees")]
+use crate::settings;
+#[cfg(feature = "disk-trees")]
+use rand;
+#[cfg(feature = "disk-trees")]
+use std::fs;
+#[cfg(feature = "disk-trees")]
+use std::io;
+#[cfg(feature = "disk-trees")]
+use std::path::PathBuf;
+
 type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 
 fn anonymous_mmap(len: usize) -> MmapMut {
@@ -320,6 +331,14 @@ pub trait Layers {
                     })
                     .collect::<Result<Vec<_>>>()?;
 
+                // Offload the data tree, we won't use it in the next iteration,
+                // only `tree_r` is reused (as the new `tree_d`).
+                aux[layer].try_offload_store();
+                // Only if this is the last iteration also offload `tree_r`.
+                if layer == layers - 1 {
+                    aux[layer + 1].try_offload_store();
+                }
+
                 Ok(partition_proofs)
             })
             .collect::<Result<Vec<_>>>()
@@ -433,6 +452,50 @@ pub trait Layers {
                             // If we panic anywhere in this closure, thread.join() below will receive an error —
                             // so it is safe to unwrap.
                             let graph = transfer_rx.recv().unwrap();
+
+                            #[cfg(feature = "disk-trees")]
+                            let tree_d = {
+                                let tree_dir =
+                                    &settings::SETTINGS.lock().unwrap().replicated_trees_dir;
+                                // We should always be able to get this configuration
+                                // variable (at least as an empty string).
+
+                                if tree_dir.is_empty() {
+                                    // Signal `merkle_tree_path` to create a temporary file.
+                                    // FIXME: duplicating `merkle_tree_path` to avoid the
+                                    //  "temporary value dropped while borrowed" (because we
+                                    //  were creating a temporary `PathBuf` below).
+                                    graph.merkle_tree_path(&data_copy, None).unwrap()
+                                } else {
+                                    // Try to create `tree_dir`, ignore the error if `AlreadyExists`.
+                                    if let Some(create_error) = fs::create_dir(&tree_dir).err() {
+                                        if create_error.kind() != io::ErrorKind::AlreadyExists {
+                                            panic!(create_error);
+                                        }
+                                    }
+
+                                    let tree_d = graph
+                                        .merkle_tree_path(
+                                            &data_copy,
+                                            Some(&PathBuf::from(tree_dir).join(format!(
+                                                "tree-{}-{}",
+                                                layer,
+                                                rand::random::<u32>()
+                                            ))),
+                                        )
+                                        .unwrap();
+                                    // FIXME: The user of `REPLICATED_TREES_DIR` should figure out
+                                    // how to manage this directory, for now we create every file with
+                                    // a different random number; the problem being that tests now do
+                                    // replications many times in the same run so they may end up
+                                    // reusing the same files with invalid (old) data and failing.
+
+                                    tree_d.try_offload_store();
+                                    tree_d
+                                }
+                            };
+
+                            #[cfg(not(feature = "disk-trees"))]
                             let tree_d = graph.merkle_tree(&data_copy).unwrap();
 
                             info!(SP_LOG, "returning tree"; "layer" => format!("{}", layer));
