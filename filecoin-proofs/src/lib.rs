@@ -1,5 +1,4 @@
 #![deny(clippy::all, clippy::perf, clippy::correctness)]
-#![allow(clippy::unreadable_literal)]
 
 #[macro_use]
 extern crate lazy_static;

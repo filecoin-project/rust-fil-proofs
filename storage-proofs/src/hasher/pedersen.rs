@@ -213,6 +213,10 @@ impl Element for PedersenDomain {
             Err(err) => panic!(err),
         }
     }
+
+    fn copy_to_slice(&self, bytes: &mut [u8]) {
+        bytes.copy_from_slice(&self.into_bytes());
+    }
 }
 
 impl StdHasher for PedersenFunction {
