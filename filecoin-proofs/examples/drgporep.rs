@@ -1,11 +1,3 @@
-extern crate bellperson;
-extern crate fil_sapling_crypto;
-extern crate paired;
-extern crate pbr;
-extern crate rand;
-
-extern crate storage_proofs;
-
 use bellperson::groth16::*;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use fil_sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};

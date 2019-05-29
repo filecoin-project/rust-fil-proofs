@@ -1,6 +1,5 @@
 #[macro_use]
 extern crate criterion;
-extern crate storage_proofs;
 
 use criterion::{black_box, Criterion, ParameterizedBenchmark};
 use paired::bls12_381::Bls12;

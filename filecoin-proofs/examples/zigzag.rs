@@ -1,20 +1,9 @@
-extern crate bellperson;
-extern crate chrono;
-extern crate fil_sapling_crypto;
-extern crate paired;
-extern crate rand;
 #[macro_use]
 extern crate clap;
 #[cfg(any(feature = "cpu-profile", feature = "heap-profile"))]
 extern crate gperftools;
-extern crate memmap;
-extern crate serde_json;
-extern crate tempfile;
 #[macro_use]
 extern crate slog;
-
-extern crate filecoin_proofs;
-extern crate storage_proofs;
 
 use chrono::Utc;
 use clap::{App, Arg};

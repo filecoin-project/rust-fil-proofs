@@ -1,9 +1,3 @@
-extern crate filecoin_proofs;
-extern crate phase21;
-extern crate rand;
-extern crate sector_base;
-extern crate storage_proofs;
-
 use rand::OsRng;
 use std::env;
 use std::fs::File;

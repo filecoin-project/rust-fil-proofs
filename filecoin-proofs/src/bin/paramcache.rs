@@ -1,8 +1,3 @@
-extern crate filecoin_proofs;
-extern crate rand;
-extern crate sector_base;
-extern crate storage_proofs;
-
 use clap::{App, Arg};
 use slog::*;
 
