@@ -128,6 +128,15 @@ Developers can control `rust-fil-proofs` logging through environment variables:
     | debug!        	| 5          	| A debug message, useful for debugging but too verbose to be turned on normally.                                                                                                                 |
     | trace!        	| 6          	| A message that will be printed a lot, useful for debugging program flow and will probably impact performance.                                                                                   |
 
+-
+  `FIL_PROOFS_LOG_FILE`
+
+    Default: `/dev/stdout`
+
+    Options: `/dev/stdout`, `/dev/stderr`, any filename
+
+    This is used to redirect the log output. If a filename is specified the output is redirected to that file. The log output is appended to the file. In case the file doesn't exist, it is created. If the file cannot be opened it falls back to the default and prints the output to stdout.
+
 ## Memory Leak Detection
 
 To run the leak detector against the FFI-exposed portion of libfilecoin_proofs,
