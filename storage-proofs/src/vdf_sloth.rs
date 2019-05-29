@@ -10,9 +10,6 @@ use crate::vdf::Vdf;
 #[derive(Debug, Clone)]
 pub struct Sloth {}
 
-unsafe impl Sync for Sloth {}
-unsafe impl Send for Sloth {}
-
 #[derive(Debug, Clone)]
 pub struct SetupParams {
     pub key: PedersenDomain,
