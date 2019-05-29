@@ -11,7 +11,7 @@ logging-toolkit = { path = "../logging-toolkit" }
 bitvec = "0.10"
 rand = "0.4"
 libc = "0.2"
-merkletree = "=0.4.0"
+merkletree = { git = "https://github.com/filecoin-project/merkle_light", branch = "merkletree-0.4.2"}
 failure = "0.1"
 byteorder = "1"
 config = "0.9.3"
@@ -45,6 +45,7 @@ fil-sapling-crypto = "0.1"
 default = []
 simd = []
 asm = ["sha2/sha2-asm"]
+disk-trees = []
 
 [dev-dependencies]
 proptest = "0.7"

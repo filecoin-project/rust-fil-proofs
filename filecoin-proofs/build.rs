@@ -63,7 +63,7 @@ fn main() {
     let libs = if cfg!(target_os = "linux") {
         "-lutil -lutil -ldl -lrt -lpthread -lgcc_s -lc -lm -lrt -lpthread -lutil -lutil"
     } else if cfg!(target_os = "macos") {
-        "-framework Security -lSystem -lresolv -lc -lm"
+        "-framework Security -framework CoreFoundation -framework Security -lSystem -lresolv -lc -lm"
     } else {
         ""
     };
