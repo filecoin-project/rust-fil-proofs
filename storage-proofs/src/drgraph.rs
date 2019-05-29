@@ -10,6 +10,16 @@ use crate::hasher::{Domain, Hasher};
 use crate::merkle::MerkleTree;
 use crate::parameter_cache::ParameterSetIdentifier;
 use crate::util::{data_at_node, NODE_SIZE};
+
+#[cfg(feature = "disk-trees")]
+use crate::merkle::DiskMmapStore;
+#[cfg(feature = "disk-trees")]
+use crate::SP_LOG;
+#[cfg(feature = "disk-trees")]
+use merkletree::merkle::next_pow2;
+#[cfg(feature = "disk-trees")]
+use std::path::Path;
+
 /// The default hasher currently in use.
 pub type DefaultTreeHasher = PedersenHasher;
 
@@ -52,6 +62,77 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
         };
 
         if parallel {
+            Ok(MerkleTree::from_par_iter(
+                (0..self.size()).into_par_iter().map(f),
+            ))
+        } else {
+            Ok(MerkleTree::new((0..self.size()).map(f)))
+        }
+    }
+
+    /// Builds a merkle tree based on the given data and stores it in `path`
+    /// (if set).
+    #[cfg(feature = "disk-trees")]
+    fn merkle_tree_path<'a>(
+        &self,
+        data: &'a [u8],
+        path: Option<&Path>,
+    ) -> Result<MerkleTree<H::Domain, H::Function>> {
+        self.merkle_tree_aux_path(data, PARALLEL_MERKLE, path)
+    }
+
+    #[cfg(feature = "disk-trees")]
+    fn merkle_tree_aux_path<'a>(
+        &self,
+        data: &'a [u8],
+        parallel: bool,
+        path: Option<&Path>,
+    ) -> Result<MerkleTree<H::Domain, H::Function>> {
+        if data.len() != (NODE_SIZE * self.size()) as usize {
+            return Err(Error::InvalidMerkleTreeArgs(
+                data.len(),
+                NODE_SIZE,
+                self.size(),
+            ));
+        }
+
+        let f = |i| {
+            let d = data_at_node(&data, i).expect("data_at_node math failed");
+            // TODO/FIXME: This can panic. FOR NOW, let's leave this since we're experimenting with
+            // optimization paths. However, we need to ensure that bad input will not lead to a panic
+            // that isn't caught by the FPS API.
+            // Unfortunately, it's not clear how to perform this error-handling in the parallel
+            // iterator case.
+            H::Domain::try_from_bytes(d).unwrap()
+        };
+
+        if let Some(path) = path {
+            info!(SP_LOG, "creating tree mmap-file"; "path" => &path.to_str());
+
+            // FIXME: CROSSING API BOUNDARIES HERE.
+            // The `Store` created here has an assigned size of *only* the
+            // leaves, not the *entire* tree, which is expected since the
+            // consumer shouldn't need to know how big the final `Store` is
+            // going to be. To *temporarily* accommodate this we *mangle* the
+            // received `size` (in a similar way to `MerkleTree::from_iter`) to
+            // expand it to the entire tree.
+            let pow = next_pow2(self.size());
+            let size = 2 * pow - 1;
+
+            let disk_mmap = DiskMmapStore::new_with_path(size, path);
+            // FIXME: `new_with_path` is using the `from_iter` implementation,
+            //  instead the `parallel` flag should be passed also as argument
+            //  and decide *there* which code to use (merging this into the
+            //  `if` logic below).
+
+            Ok(MerkleTree::from_data_with_store(
+                (0..self.size()).map(f),
+                disk_mmap,
+            ))
+        // If path is `None` use the existing code that will eventually
+        // call the default `DiskMmapStore::new` creating a temporary
+        // file.
+        } else if parallel {
             Ok(MerkleTree::from_par_iter(
                 (0..self.size()).into_par_iter().map(f),
             ))
