@@ -190,6 +190,10 @@ impl Element for DigestDomain {
             Err(err) => panic!(err),
         }
     }
+
+    fn copy_to_slice(&self, bytes: &mut [u8]) {
+        bytes.copy_from_slice(&self.0);
+    }
 }
 
 impl<D: Digester> HashFunction<DigestDomain> for DigestFunction<D> {
