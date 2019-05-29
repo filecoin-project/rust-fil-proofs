@@ -5,7 +5,7 @@ use crate::api::errors::SectorManagerErr;
 use crate::api::porep_config::PoRepConfig;
 use crate::api::post_config::PoStConfig;
 
-pub trait SectorConfig {
+pub trait SectorConfig: Sync + Send {
     /// returns the number of user-provided bytes that will fit into a sector managed by this store
     fn max_unsealed_bytes_per_sector(&self) -> UnpaddedBytesAmount;
 
@@ -13,7 +13,7 @@ pub trait SectorConfig {
     fn sector_bytes(&self) -> PaddedBytesAmount;
 }
 
-pub trait ProofsConfig {
+pub trait ProofsConfig: Sync + Send {
     /// returns the configuration used when verifying and generating PoReps
     fn post_config(&self) -> PoStConfig;
 
@@ -21,7 +21,7 @@ pub trait ProofsConfig {
     fn porep_config(&self) -> PoRepConfig;
 }
 
-pub trait SectorManager {
+pub trait SectorManager: Sync + Send {
     /// provisions a new sealed sector and reports the corresponding access
     fn new_sealed_sector_access(&self) -> Result<String, SectorManagerErr>;
 
@@ -51,7 +51,7 @@ pub trait SectorManager {
     ) -> Result<Vec<u8>, SectorManagerErr>;
 }
 
-pub trait SectorStore {
+pub trait SectorStore: Sync + Send {
     fn sector_config(&self) -> &SectorConfig;
     fn proofs_config(&self) -> &ProofsConfig;
     fn manager(&self) -> &SectorManager;
