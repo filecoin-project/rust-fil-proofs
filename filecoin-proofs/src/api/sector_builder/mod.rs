@@ -222,15 +222,9 @@ pub struct WrappedSectorStore {
     inner: Box<SectorStore>,
 }
 
-unsafe impl Sync for WrappedSectorStore {}
-unsafe impl Send for WrappedSectorStore {}
-
 pub struct WrappedKeyValueStore<T: KeyValueStore> {
     inner: Box<T>,
 }
-
-unsafe impl<T: KeyValueStore> Sync for WrappedKeyValueStore<T> {}
-unsafe impl<T: KeyValueStore> Send for WrappedKeyValueStore<T> {}
 
 fn log_unrecov<T>(result: Result<T>) -> Result<T> {
     if let Err(err) = &result {
