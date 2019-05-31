@@ -16,6 +16,9 @@ pub struct Settings {
     pub merkle_tree_path: String,
     pub num_proving_threads: usize,
     pub replicated_trees_dir: String,
+    pub generate_merkle_trees_in_parallel: bool,
+    // Generating MTs in parallel optimizes for speed while generating them
+    // in sequence (`false`) optimizes for memory.
 }
 
 impl Default for Settings {
@@ -25,6 +28,7 @@ impl Default for Settings {
             merkle_tree_path: "/tmp/merkle-trees".into(),
             num_proving_threads: 1,
             replicated_trees_dir: "".into(),
+            generate_merkle_trees_in_parallel: true,
         }
     }
 }
@@ -36,6 +40,17 @@ impl Settings {
         s.merge(File::with_name(SETTINGS_PATH).required(false))?;
         s.merge(Environment::with_prefix("FIL_PROOFS"))?;
 
-        s.try_into()
+        let settings: Result<Settings, ConfigError> = s.try_into();
+
+        #[cfg(feature = "disk-trees")]
+        {
+            if settings.is_ok()
+                && settings.as_ref().unwrap().generate_merkle_trees_in_parallel == false
+            {
+                return Err(ConfigError::Message("Setting GENERATE_MERKLE_TREES_IN_PARALLEL to false (sequiental generation) \ndoesn't add any value if the `disk-trees` feature is not set (no offload possible)".to_string()));
+            }
+        }
+
+        settings
     }
 }

@@ -19,11 +19,10 @@ use crate::merkle::MerkleTree;
 use crate::parameter_cache::ParameterSetIdentifier;
 use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
+use crate::settings;
 use crate::vde;
 use crate::SP_LOG;
 
-#[cfg(feature = "disk-trees")]
-use crate::settings;
 #[cfg(feature = "disk-trees")]
 use rand;
 #[cfg(feature = "disk-trees")]
@@ -385,37 +384,46 @@ pub trait Layers {
         let mut taus = Vec::with_capacity(layers);
         let mut auxs: Vec<Tree<Self::Hasher>> = Vec::with_capacity(layers);
 
-        let generate_merkle_trees_in_parallel = true;
-        if !generate_merkle_trees_in_parallel {
-            // This branch serializes encoding and merkle tree generation.
-            // However, it makes clear the underlying algorithm we reproduce
-            // in the parallel case. We should keep this code for documentation and to help
-            // alert us if drgporep's implementation changes (and breaks type-checking).
-            // It would not be a bad idea to add tests ensuring the parallel and serial cases
-            // generate the same results.
-            (0..layers).fold(graph.clone(), |current_graph, layer| {
-                let previous_replica_tree = if !auxs.is_empty() {
-                    auxs.last().cloned()
-                } else {
-                    None
-                };
+        if !&settings::SETTINGS
+            .lock()
+            .unwrap()
+            .generate_merkle_trees_in_parallel
+        {
+            let mut sorted_trees: Vec<_> = Vec::new();
 
-                let next_graph = Self::transform(&current_graph);
+            (0..=layers).fold(graph.clone(), |current_graph, layer| {
+                let tree_d = Self::generate_data_tree(&current_graph, &data, layer);
 
-                let pp = drgporep::PublicParams::new(
-                    current_graph,
-                    sloth_iter,
-                    true,
-                    layer_challenges.challenges_for_layer(layer),
-                );
+                info!(SP_LOG, "returning tree"; "layer" => format!("{}", layer));
 
-                let (tau, aux) =
-                    DrgPoRep::replicate(&pp, replica_id, data, previous_replica_tree).unwrap();
+                sorted_trees.push(tree_d);
 
-                taus.push(tau);
-                auxs.push(aux.tree_r);
-                next_graph
+                if layer < layers {
+                    info!(SP_LOG, "encoding"; "layer {}" => format!("{}", layer));
+                    vde::encode(&current_graph, sloth_iter, replica_id, data)
+                        .expect("encoding failed in thread");
+                }
+
+                Self::transform(&current_graph)
             });
+
+            sorted_trees
+                .into_iter()
+                .fold(None, |previous_comm_r: Option<_>, replica_tree| {
+                    let comm_r = replica_tree.root();
+                    // Each iteration's replica_tree becomes the next iteration's previous_tree (data_tree).
+                    // The first iteration has no previous_tree.
+                    if let Some(comm_d) = previous_comm_r {
+                        let tau = porep::Tau { comm_r, comm_d };
+                        //                        info!(SP_LOG, "setting tau/aux"; "layer" => format!("{}", i - 1));
+                        // FIXME: Use `enumerate` if this log is worth it.
+                        taus.push(tau);
+                    };
+
+                    auxs.push(replica_tree);
+
+                    Some(comm_r)
+                });
         } else {
             // The parallel case is more complicated but should produce the same results as the
             // serial case. Note that to make lifetimes work out, we have to inline and tease apart
@@ -453,50 +461,7 @@ pub trait Layers {
                             // so it is safe to unwrap.
                             let graph = transfer_rx.recv().unwrap();
 
-                            #[cfg(feature = "disk-trees")]
-                            let tree_d = {
-                                let tree_dir =
-                                    &settings::SETTINGS.lock().unwrap().replicated_trees_dir;
-                                // We should always be able to get this configuration
-                                // variable (at least as an empty string).
-
-                                if tree_dir.is_empty() {
-                                    // Signal `merkle_tree_path` to create a temporary file.
-                                    // FIXME: duplicating `merkle_tree_path` to avoid the
-                                    //  "temporary value dropped while borrowed" (because we
-                                    //  were creating a temporary `PathBuf` below).
-                                    graph.merkle_tree_path(&data_copy, None).unwrap()
-                                } else {
-                                    // Try to create `tree_dir`, ignore the error if `AlreadyExists`.
-                                    if let Some(create_error) = fs::create_dir(&tree_dir).err() {
-                                        if create_error.kind() != io::ErrorKind::AlreadyExists {
-                                            panic!(create_error);
-                                        }
-                                    }
-
-                                    let tree_d = graph
-                                        .merkle_tree_path(
-                                            &data_copy,
-                                            Some(&PathBuf::from(tree_dir).join(format!(
-                                                "tree-{}-{}",
-                                                layer,
-                                                rand::random::<u32>()
-                                            ))),
-                                        )
-                                        .unwrap();
-                                    // FIXME: The user of `REPLICATED_TREES_DIR` should figure out
-                                    // how to manage this directory, for now we create every file with
-                                    // a different random number; the problem being that tests now do
-                                    // replications many times in the same run so they may end up
-                                    // reusing the same files with invalid (old) data and failing.
-
-                                    tree_d.try_offload_store();
-                                    tree_d
-                                }
-                            };
-
-                            #[cfg(not(feature = "disk-trees"))]
-                            let tree_d = graph.merkle_tree(&data_copy).unwrap();
+                            let tree_d = Self::generate_data_tree(&graph, &data_copy, layer);
 
                             info!(SP_LOG, "returning tree"; "layer" => format!("{}", layer));
                             return_channel.send((layer, tree_d)).unwrap();
@@ -545,6 +510,54 @@ pub trait Layers {
         }
 
         Ok((taus, auxs))
+    }
+
+    fn generate_data_tree(
+        graph: &Self::Graph,
+        data: &[u8],
+        _layer: usize,
+    ) -> MerkleTree<<Self::Hasher as Hasher>::Domain, <Self::Hasher as Hasher>::Function> {
+        #[cfg(not(feature = "disk-trees"))]
+        return graph.merkle_tree(&data).unwrap();
+
+        #[cfg(feature = "disk-trees")]
+        {
+            let tree_dir = &settings::SETTINGS.lock().unwrap().replicated_trees_dir;
+            // We should always be able to get this configuration
+            // variable (at least as an empty string).
+
+            if tree_dir.is_empty() {
+                // Signal `merkle_tree_path` to create a temporary file.
+                return graph.merkle_tree_path(&data, None).unwrap();
+            } else {
+                // Try to create `tree_dir`, ignore the error if `AlreadyExists`.
+                if let Some(create_error) = fs::create_dir(&tree_dir).err() {
+                    if create_error.kind() != io::ErrorKind::AlreadyExists {
+                        panic!(create_error);
+                    }
+                }
+
+                let tree_d = graph
+                    .merkle_tree_path(
+                        &data,
+                        Some(&PathBuf::from(tree_dir).join(format!(
+                            "tree-{}-{}",
+                            _layer,
+                            // FIXME: This argument is used only with `disk-trees`.
+                            rand::random::<u32>()
+                        ))),
+                    )
+                    .unwrap();
+                // FIXME: The user of `REPLICATED_TREES_DIR` should figure out
+                // how to manage this directory, for now we create every file with
+                // a different random number; the problem being that tests now do
+                // replications many times in the same run so they may end up
+                // reusing the same files with invalid (old) data and failing.
+
+                tree_d.try_offload_store();
+                return tree_d;
+            }
+        }
     }
 }
 
