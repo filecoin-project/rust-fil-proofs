@@ -2,7 +2,6 @@ use std::hash::Hasher as StdHasher;
 
 use bellperson::{ConstraintSystem, SynthesisError};
 use bitvec::{self, BitVec};
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use ff::{PrimeField, PrimeFieldRepr};
 use fil_sapling_crypto::circuit::{boolean, num, pedersen_hash as pedersen_hash_circuit};
 use fil_sapling_crypto::jubjub::JubjubEngine;
@@ -11,8 +10,6 @@ use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 use rand::{Rand, Rng};
-use serde::de::{Deserialize, Deserializer};
-use serde::ser::Serializer;
 
 use crate::circuit::pedersen::pedersen_md_no_padding;
 use crate::crypto::{kdf, pedersen, sloth};
@@ -76,51 +73,7 @@ impl Hashable<PedersenFunction> for PedersenDomain {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
-pub struct PedersenDomain(#[serde(with = "FrReprDef")] pub FrRepr);
-
-pub struct FrReprDef(pub [u64; 4]);
-
-impl FrReprDef {
-    fn serialize<S>(__self: &FrRepr, serializer: S) -> ::std::result::Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut writer = Vec::with_capacity(32);
-
-        for digit in __self.0.as_ref().iter() {
-            writer.write_u64::<LittleEndian>(*digit).unwrap();
-        }
-
-        if serializer.is_human_readable() {
-            serializer.collect_str(&base64::display::Base64Display::with_config(
-                &writer,
-                base64::STANDARD,
-            ))
-        } else {
-            serializer.serialize_bytes(&writer)
-        }
-    }
-
-    fn deserialize<'de, D>(deserializer: D) -> ::std::result::Result<FrRepr, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let arr: Vec<u8> = if deserializer.is_human_readable() {
-            let raw = String::deserialize(deserializer)?;
-            base64::decode(&raw).unwrap()
-        } else {
-            Vec::deserialize(deserializer)?
-        };
-
-        let mut digits = [0u64; 4];
-        let mut source = ::std::io::Cursor::new(arr);
-        for digit in digits.iter_mut() {
-            *digit = source.read_u64::<LittleEndian>().unwrap();
-        }
-
-        Ok(FrRepr(digits))
-    }
-}
+pub struct PedersenDomain(pub FrRepr);
 
 impl Default for PedersenDomain {
     fn default() -> PedersenDomain {

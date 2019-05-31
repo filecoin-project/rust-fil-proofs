@@ -1,48 +1,22 @@
 #![deny(clippy::all, clippy::perf, clippy::correctness)]
 #![allow(clippy::unreadable_literal)]
 
-extern crate logging_toolkit;
-
 #[macro_use]
 extern crate failure;
 #[macro_use]
 extern crate lazy_static;
-extern crate aes;
-extern crate bellperson;
 #[cfg(test)]
 #[macro_use]
 extern crate bitvec;
-#[cfg(not(test))]
-extern crate bitvec;
-extern crate block_modes;
-extern crate byteorder;
-extern crate crossbeam_utils;
-extern crate fil_sapling_crypto;
-extern crate fs2;
-extern crate itertools;
-extern crate libc;
-extern crate memmap;
-extern crate merkletree;
-extern crate num_bigint;
-extern crate num_traits;
-extern crate paired;
-extern crate rand;
-extern crate sha2;
-extern crate tempfile;
 #[cfg(test)]
 #[macro_use]
 extern crate proptest;
 #[macro_use]
 extern crate clap;
-extern crate colored;
-extern crate pbr;
-extern crate rayon;
 #[macro_use]
 extern crate slog;
 #[macro_use]
 extern crate serde;
-extern crate config;
-extern crate toml;
 
 #[cfg(test)]
 #[macro_use]

@@ -2,7 +2,6 @@
 extern crate criterion;
 #[cfg(feature = "cpu-profile")]
 extern crate gperftools;
-extern crate storage_proofs;
 
 use criterion::{black_box, Criterion, ParameterizedBenchmark};
 use storage_proofs::drgraph::Graph;

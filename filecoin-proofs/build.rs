@@ -1,6 +1,3 @@
-extern crate bindgen;
-extern crate cbindgen;
-
 use std::env;
 use std::fs::File;
 use std::io::Write;

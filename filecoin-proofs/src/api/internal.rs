@@ -366,7 +366,7 @@ pub fn generate_post_fixed_sectors_count(
     let safe_challenge_seed = {
         let mut cs = vec![0; 32];
         cs.copy_from_slice(&fixed.challenge_seed);
-        cs[31] &= 0b00111111;
+        cs[31] &= 0b0011_1111;
         cs
     };
 
@@ -416,7 +416,7 @@ fn verify_post_fixed_sectors_count(
     let safe_challenge_seed = {
         let mut cs = vec![0; 32];
         cs.copy_from_slice(&fixed.challenge_seed);
-        cs[31] &= 0b00111111;
+        cs[31] &= 0b0011_1111;
         cs
     };
 

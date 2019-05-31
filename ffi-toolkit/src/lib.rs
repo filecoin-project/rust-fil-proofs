@@ -1,5 +1,3 @@
-extern crate libc;
-
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 use std::path::PathBuf;
