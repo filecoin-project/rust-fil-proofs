@@ -36,6 +36,7 @@ pub fn seal(
         comm_r_star,
         proof,
         comm_ps,
+        piece_inclusion_proofs,
     } = seal_internal(
         (*sector_store.inner).proofs_config().porep_config(),
         &PathBuf::from(staged_sector.sector_access.clone()),
@@ -49,10 +50,12 @@ pub fn seal(
         .pieces
         .into_iter()
         .zip(comm_ps.iter())
-        .map(|(piece, &comm_p)| PieceMetadata {
+        .zip(piece_inclusion_proofs.into_iter())
+        .map(|((piece, &comm_p), piece_inclusion_proof)| PieceMetadata {
             piece_key: piece.piece_key,
             num_bytes: piece.num_bytes,
             comm_p: Some(comm_p),
+            piece_inclusion_proof: Some(piece_inclusion_proof.into()),
         })
         .collect();
 

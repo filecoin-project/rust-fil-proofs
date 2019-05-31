@@ -67,6 +67,7 @@ pub fn add_piece(
                     piece_key,
                     num_bytes: piece_bytes_len,
                     comm_p: None,
+                    piece_inclusion_proof: None,
                 });
 
                 sector_id

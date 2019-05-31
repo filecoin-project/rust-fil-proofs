@@ -5,6 +5,7 @@ use byteorder::WriteBytesExt;
 use sector_base::api::bytes_amount::UnpaddedBytesAmount;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use storage_proofs::piece_inclusion_proof::PackedPieceInclusionProof;
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub struct StagedSectorMetadata {
@@ -30,6 +31,7 @@ pub struct PieceMetadata {
     pub piece_key: String,
     pub num_bytes: UnpaddedBytesAmount,
     pub comm_p: Option<[u8; 32]>,
+    pub piece_inclusion_proof: Option<PackedPieceInclusionProof>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
