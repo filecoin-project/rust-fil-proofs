@@ -21,6 +21,7 @@ pub fn derive_challenges<D: Domain>(
             let j = ((n * k as usize) + i) as u32;
             bytes.extend(commitment.into_bytes());
             bytes.push(layer);
+            // Unwraping here is safe, all hash domains are larger than 4 bytes (the size of a `u32`).
             bytes.write_u32::<LittleEndian>(j).unwrap();
 
             let hash = blake2s(bytes.as_slice());
@@ -28,7 +29,10 @@ pub fn derive_challenges<D: Domain>(
 
             // For now, we cannot try to prove the first or last node, so make sure the challenge can never be 0 or leaves - 1.
             let big_mod_challenge = big_challenge % (leaves - 2);
-            big_mod_challenge.to_usize().unwrap() + 1
+            let big_mod_challenge = big_mod_challenge
+                .to_usize()
+                .expect("`big_mod_challenge` exceeds size of `usize`");
+            big_mod_challenge + 1
         })
         .collect()
 }

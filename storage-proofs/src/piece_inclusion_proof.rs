@@ -381,8 +381,9 @@ mod tests {
         for (start, length) in &sections {
             let piece = &data[*start * NODE_SIZE..(*start + *length) * NODE_SIZE];
             pieces.push(piece);
-            let comm_p = generate_piece_commitment_bytes::<H>(piece);
-            comm_ps.push(comm_p.unwrap());
+            let comm_p = generate_piece_commitment_bytes::<H>(piece)
+                .expect("failed to generate piece commitment");
+            comm_ps.push(comm_p);
         }
 
         let piece_tree = create_piece_tree::<H>(
@@ -407,9 +408,11 @@ mod tests {
         if expect_alignment_error {
             assert!(proofs.is_err());
         } else {
-            let proofs = proofs.unwrap();
+            let proofs = proofs.expect("failed to create piece inclusion proofs");
             for (proof, piece_spec) in proofs.iter().zip(piece_specs.clone()) {
-                let (_, proof_length) = piece_spec.compute_packing(nodes).unwrap();
+                let (_, proof_length) = piece_spec
+                    .compute_packing(nodes)
+                    .expect("faild to compute packing");
                 assert_eq!(proof.proof_elements.len(), proof_length);
             }
 
@@ -422,7 +425,7 @@ mod tests {
                     &node_lengths,
                     nodes,
                 )
-                .unwrap()
+                .expect("failed to verify proofs")
             );
         }
 
@@ -443,19 +446,22 @@ mod tests {
             for (start, length) in &sections {
                 let wrong_piece = &wrong_data[*start * NODE_SIZE..(*start + *length) * NODE_SIZE];
                 wrong_pieces.push(wrong_piece);
-                wrong_comm_ps.push(generate_piece_commitment_bytes::<H>(wrong_piece).unwrap());
+                wrong_comm_ps.push(
+                    generate_piece_commitment_bytes::<H>(wrong_piece)
+                        .expect("failed to generate piece commitment"),
+                );
             }
 
             assert_eq!(
                 false,
                 PieceInclusionProof::verify_all(
                     &tree.root().into_bytes(),
-                    &proofs.unwrap(),
+                    &proofs.expect("failed to generate inclusion proofs"),
                     &wrong_comm_ps,
                     &node_lengths,
                     nodes
                 )
-                .unwrap(),
+                .expect("failed to verify proofs")
             )
         }
     }

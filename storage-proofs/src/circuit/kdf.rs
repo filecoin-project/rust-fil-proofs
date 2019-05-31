@@ -83,7 +83,7 @@ mod tests {
             parents_bits.clone(),
             m,
         )
-        .unwrap();
+        .expect("key derivation function failed");
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
         assert_eq!(cs.num_constraints(), 240282);

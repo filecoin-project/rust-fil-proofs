@@ -420,10 +420,10 @@ mod tests {
             layer_challenges: layer_challenges.clone(),
         };
 
-        let pp = ZigZagDrgPoRep::setup(&sp).unwrap();
+        let pp = ZigZagDrgPoRep::setup(&sp).expect("setup failed");
         let (tau, aux) =
             ZigZagDrgPoRep::replicate(&pp, &replica_id.into(), data_copy.as_mut_slice(), None)
-                .unwrap();
+                .expect("replication failed");
         assert_ne!(data, data_copy);
 
         let simplified_tau = tau.clone().simplify();
@@ -440,9 +440,13 @@ mod tests {
             tau: tau.layer_taus.into(),
         };
 
-        let proofs =
-            ZigZagDrgPoRep::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, 1).unwrap();
-        assert!(ZigZagDrgPoRep::verify_all_partitions(&pp, &pub_inputs, &proofs).unwrap());
+        let proofs = ZigZagDrgPoRep::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, 1)
+            .expect("failed to generate partition proofs");
+
+        let proofs_are_valid = ZigZagDrgPoRep::verify_all_partitions(&pp, &pub_inputs, &proofs)
+            .expect("failed to verify partition proofs");
+
+        assert!(proofs_are_valid);
 
         // End copied section.
 
@@ -619,14 +623,15 @@ mod tests {
             partitions: Some(partition_count),
         };
 
-        let public_params = ZigZagCompound::setup(&setup_params).unwrap();
+        let public_params = ZigZagCompound::setup(&setup_params).expect("setup failed");
         let (tau, aux) = ZigZagDrgPoRep::replicate(
             &public_params.vanilla_params,
             &replica_id.into(),
             data_copy.as_mut_slice(),
             None,
         )
-        .unwrap();
+        .expect("replication failed");
+
         assert_ne!(data, data_copy);
 
         let public_inputs = layered_drgporep::PublicInputs::<H::Domain> {
@@ -688,7 +693,8 @@ mod tests {
         // }
 
         let blank_groth_params =
-            ZigZagCompound::groth_params(&public_params.vanilla_params, params).unwrap();
+            ZigZagCompound::groth_params(&public_params.vanilla_params, params)
+                .expect("failed to generate groth params");
 
         let proof = ZigZagCompound::prove(
             &public_params,

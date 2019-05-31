@@ -96,7 +96,7 @@ mod tests {
         let mut b = &bytes[..];
         let fr_result = bytes_into_fr::<E>(&mut b);
         if expect_success {
-            let f = fr_result.unwrap();
+            let f = fr_result.expect("Failed to convert bytes to `Fr`");
             let b2 = fr_into_bytes::<E>(&f);
 
             assert_eq!(bytes.to_vec(), b2);
@@ -149,7 +149,8 @@ mod tests {
 
     fn bytes_into_frs_into_bytes_test<E: Engine>(bytes: &Fr32) {
         let mut bytes = bytes.clone();
-        let frs = bytes_into_frs::<E>(&mut bytes).unwrap();
+        let frs =
+            bytes_into_frs::<E>(&mut bytes).expect("Failed to convert bytes into a `Vec<Fr>`");
         assert!(frs.len() == 3);
         let bytes_back = frs_into_bytes::<E>(&frs);
         assert!(bytes.to_vec() == bytes_back);

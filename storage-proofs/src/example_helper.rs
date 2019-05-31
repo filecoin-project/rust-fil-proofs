@@ -31,7 +31,7 @@ pub fn prettyb(num: usize) -> String {
     );
     let pretty_bytes = format!("{:.2}", num / delimiter.powi(exponent))
         .parse::<f64>()
-        .unwrap()
+        .expect("Failed to parse `number` as `u64`")
         * 1_f64;
     let unit = units[exponent as usize];
     format!("{}{} {}", negative, pretty_bytes, unit)
@@ -337,10 +337,14 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
         let (data_size, challenge_count, m, sloth_iter, typ) = {
             let matches = instance.clap();
 
-            let data_size = value_t!(matches, "size", usize).unwrap() * 1024;
-            let challenge_count = value_t!(matches, "challenges", usize).unwrap();
-            let m = value_t!(matches, "m", usize).unwrap();
-            let sloth_iter = value_t!(matches, "sloth", usize).unwrap();
+            let data_size = value_t!(matches, "size", usize)
+                .map(|size| size * 1024)
+                .expect("Failed to parse `size` CLI arg as `usize`");
+            let challenge_count = value_t!(matches, "challenges", usize)
+                .expect("Failed to parse `challenges` CLI arg as `usize`");
+            let m = value_t!(matches, "m", usize).expect("Failed to parse `m` CLI arg as `usize`");
+            let sloth_iter = value_t!(matches, "sloth", usize)
+                .expect("Failed to parse `sloth` CLI arg as `usize`");
 
             let typ = match matches.subcommand_name() {
                 Some("groth") => CSType::Groth,

@@ -60,7 +60,7 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
             // that isn't caught by the FPS API.
             // Unfortunately, it's not clear how to perform this error-handling in the parallel
             // iterator case.
-            H::Domain::try_from_bytes(d).unwrap()
+            H::Domain::try_from_bytes(d).expect("failed to convert node data to domain element")
         };
 
         if parallel {
@@ -274,7 +274,7 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
 }
 
 pub fn new_seed() -> [u32; 7] {
-    OsRng::new().unwrap().gen()
+    OsRng::new().expect("Failed to create `OsRng`").gen()
 }
 
 #[cfg(test)]
@@ -289,7 +289,10 @@ mod tests {
 
     // Create and return an object of MmapMut backed by in-memory copy of data.
     pub fn mmap_from(data: &[u8]) -> MmapMut {
-        let mut mm = MmapOptions::new().len(data.len()).map_anon().unwrap();
+        let mut mm = MmapOptions::new()
+            .len(data.len())
+            .map_anon()
+            .expect("Failed to create memory map");
         mm.copy_from_slice(data);
         mm
     }

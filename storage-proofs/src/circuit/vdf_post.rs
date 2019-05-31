@@ -405,7 +405,8 @@ mod tests {
             sectors_count: 2,
         };
 
-        let pub_params = vdf_post::VDFPoSt::<PedersenHasher, vdf_sloth::Sloth>::setup(&sp).unwrap();
+        let pub_params = vdf_post::VDFPoSt::<PedersenHasher, vdf_sloth::Sloth>::setup(&sp)
+            .expect("setup failed");
 
         let data0: Vec<u8> = (0..1024)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
@@ -433,16 +434,16 @@ mod tests {
             &pub_inputs,
             &priv_inputs,
         )
-        .unwrap();
+        .expect("proving failed");
 
-        assert!(
-            vdf_post::VDFPoSt::<PedersenHasher, vdf_sloth::Sloth>::verify(
-                &pub_params,
-                &pub_inputs,
-                &proof
-            )
-            .unwrap()
-        );
+        let is_valid = vdf_post::VDFPoSt::<PedersenHasher, vdf_sloth::Sloth>::verify(
+            &pub_params,
+            &pub_inputs,
+            &proof,
+        )
+        .expect("verification failed");
+
+        assert!(is_valid);
 
         // actual circuit test
 
@@ -588,7 +589,7 @@ mod tests {
                 VDFPoSt<PedersenHasher, _>,
                 VDFPoStCircuit<_>,
             >>::groth_params(&pub_params.vanilla_params, &params)
-            .unwrap();
+            .expect("failed to create groth params");
 
         let proof = VDFPostCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &gparams)
             .expect("failed while proving");

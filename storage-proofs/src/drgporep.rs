@@ -116,6 +116,7 @@ impl<H: Hasher> DataProof<H> {
         let mut out = self.proof.serialize();
         let len = out.len();
         out.resize(len + 32, 0u8);
+        // Unwrapping here is safe, all hash domain elements are 32 bytes long.
         self.data.write_bytes(&mut out[len..]).unwrap();
 
         out
@@ -498,10 +499,16 @@ mod tests {
     use crate::util::data_at_node;
 
     pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
-        let mut tmpfile: File = tempfile::tempfile().unwrap();
-        tmpfile.write_all(data).unwrap();
+        let mut tmpfile: File = tempfile::tempfile().expect("Failed to create tempfile");
+        tmpfile
+            .write_all(data)
+            .expect("Failed to write data to tempfile");
 
-        unsafe { MmapOptions::new().map_mut(&tmpfile).unwrap() }
+        unsafe {
+            MmapOptions::new()
+                .map_mut(&tmpfile)
+                .expect("Failed to back memory map with tempfile")
+        }
     }
 
     fn test_extract_all<H: Hasher>() {
@@ -525,15 +532,19 @@ mod tests {
             challenges_count: 1,
         };
 
-        let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).unwrap();
+        let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).expect("setup failed");
 
-        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None).unwrap();
+        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
+            .expect("replication failed");
 
         let mut copied = vec![0; data.len()];
         copied.copy_from_slice(&mmapped_data_copy);
         assert_ne!(data, copied, "replication did not change data");
 
-        let decoded_data = DrgPoRep::extract_all(&pp, &replica_id, &mut mmapped_data_copy).unwrap();
+        let decoded_data = DrgPoRep::extract_all(&pp, &replica_id, &mut mmapped_data_copy)
+            .unwrap_or_else(|e| {
+                panic!("Failed to extract data from `DrgPoRep`: {}", e);
+            });
 
         assert_eq!(data, decoded_data.as_slice(), "failed to extract data");
     }
@@ -576,16 +587,18 @@ mod tests {
             challenges_count: 1,
         };
 
-        let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).unwrap();
+        let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).expect("setup failed");
 
-        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None).unwrap();
+        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
+            .expect("replication failed");
 
         let mut copied = vec![0; data.len()];
         copied.copy_from_slice(&mmapped_data_copy);
         assert_ne!(data, copied, "replication did not change data");
 
         for i in 0..nodes {
-            let decoded_data = DrgPoRep::extract(&pp, &replica_id, &mmapped_data_copy, i).unwrap();
+            let decoded_data = DrgPoRep::extract(&pp, &replica_id, &mmapped_data_copy, i)
+                .expect("failed to extract node data from PoRep");
 
             let original_data = data_at_node(&data, i).unwrap();
 
@@ -650,11 +663,11 @@ mod tests {
                 challenges_count: 2,
             };
 
-            let pp = DrgPoRep::<H, BucketGraph<_>>::setup(&sp).unwrap();
+            let pp = DrgPoRep::<H, BucketGraph<_>>::setup(&sp).expect("setup failed");
 
             let (tau, aux) =
                 DrgPoRep::<H, _>::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
-                    .unwrap();
+                    .expect("replication failed");
 
             let mut copied = vec![0; data.len()];
             copied.copy_from_slice(&mmapped_data_copy);
@@ -672,7 +685,8 @@ mod tests {
                 tree_r: &aux.tree_r,
             };
 
-            let real_proof = DrgPoRep::<H, _>::prove(&pp, &pub_inputs, &priv_inputs).unwrap();
+            let real_proof =
+                DrgPoRep::<H, _>::prove(&pp, &pub_inputs, &priv_inputs).expect("proving failed");
 
             if use_wrong_parents {
                 // Only one 'wrong' option will be tested at a time.
@@ -693,10 +707,10 @@ mod tests {
                     real_proof.nodes.clone().into(),
                 );
 
-                assert!(
-                    !DrgPoRep::verify(&pp, &pub_inputs, &proof).unwrap(),
-                    "verified in error -- with wrong parents"
-                );
+                let is_valid =
+                    DrgPoRep::verify(&pp, &pub_inputs, &proof).expect("verification failed");
+
+                assert!(!is_valid, "verified in error -- with wrong parents");
 
                 let mut all_same = true;
                 for (p, _) in &real_parents[0] {
@@ -733,7 +747,9 @@ mod tests {
                 );
 
                 assert!(
-                    !DrgPoRep::<H, _>::verify(&pp, &pub_inputs, &proof2).unwrap(),
+                    !DrgPoRep::<H, _>::verify(&pp, &pub_inputs, &proof2).unwrap_or_else(|e| {
+                        panic!("Verification failed: {}", e);
+                    }),
                     "verified in error -- with wrong parent proofs"
                 );
 
@@ -753,14 +769,15 @@ mod tests {
                     &pub_inputs_with_wrong_challenge_for_proof,
                     &proof,
                 )
-                .unwrap();
+                .expect("Verification failed");
                 assert!(
                     !verified,
                     "wrongly verified proof which does not match challenge in public input"
                 );
             } else {
                 assert!(
-                    DrgPoRep::<H, _>::verify(&pp, &pub_inputs, &proof).unwrap(),
+                    DrgPoRep::<H, _>::verify(&pp, &pub_inputs, &proof)
+                        .expect("verification failed"),
                     "failed to verify"
                 );
             }

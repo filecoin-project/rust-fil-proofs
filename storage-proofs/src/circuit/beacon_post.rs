@@ -158,8 +158,8 @@ mod tests {
             post_periods_count: 3,
         };
 
-        let pub_params =
-            beacon_post::BeaconPoSt::<PedersenHasher, vdf_sloth::Sloth>::setup(&sp).unwrap();
+        let pub_params = beacon_post::BeaconPoSt::<PedersenHasher, vdf_sloth::Sloth>::setup(&sp)
+            .expect("setup failed");
 
         let data0: Vec<u8> = (0..256)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
@@ -180,9 +180,12 @@ mod tests {
         let trees = [&tree0, &tree1];
         let priv_inputs = beacon_post::PrivateInputs::new(&replicas[..], &trees[..]);
 
-        let proof = BeaconPoSt::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+        let proof =
+            BeaconPoSt::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
 
-        assert!(BeaconPoSt::verify(&pub_params, &pub_inputs, &proof).unwrap());
+        let is_valid =
+            BeaconPoSt::verify(&pub_params, &pub_inputs, &proof).expect("verification failed");
+        assert!(is_valid);
 
         // actual circuit test
 

@@ -186,15 +186,13 @@ mod tests {
 
             for i in 0..leaves {
                 // make sure it verifies
-                assert!(
-                    merklepor::MerklePoR::<PedersenHasher>::verify(
-                        &pub_params,
-                        &pub_inputs[i],
-                        &proofs[i]
-                    )
-                    .unwrap(),
-                    "failed to verify merklepor proof"
-                );
+                let is_valid = merklepor::MerklePoR::<PedersenHasher>::verify(
+                    &pub_params,
+                    &pub_inputs[i],
+                    &proofs[i],
+                )
+                .expect("verification failed");
+                assert!(is_valid, "failed to verify merklepor proof");
             }
 
             let auth_paths: Vec<_> = proofs.iter().map(|p| p.proof.as_options()).collect();

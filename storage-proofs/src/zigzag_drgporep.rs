@@ -98,14 +98,15 @@ mod tests {
             layer_challenges: challenges.clone(),
         };
 
-        let mut pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
+        let mut pp = ZigZagDrgPoRep::<H>::setup(&sp).expect("setup failed");
         // Get the graph for the last layer.
         // In reality, this is a no-op with an even number of layers.
         for _ in 0..pp.layer_challenges.layers() {
             pp.graph = zigzag(&pp.graph);
         }
 
-        ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None).unwrap();
+        ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None)
+            .expect("replication failed");
 
         let transformed_params = PublicParams::new(pp.graph, pp.sloth_iter, challenges.clone());
 
@@ -116,7 +117,7 @@ mod tests {
             &replica_id,
             data_copy.as_mut_slice(),
         )
-        .unwrap();
+        .expect("failed to extract data");
 
         assert_eq!(data, decoded_data);
     }
@@ -162,10 +163,10 @@ mod tests {
             layer_challenges: challenges.clone(),
         };
 
-        let pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
+        let pp = ZigZagDrgPoRep::<H>::setup(&sp).expect("setup failed");
         let (tau, aux) =
             ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None)
-                .unwrap();
+                .expect("replication failed");
         assert_ne!(data, data_copy);
 
         let pub_inputs = PublicInputs::<H::Domain> {
@@ -182,12 +183,13 @@ mod tests {
 
         let all_partition_proofs =
             &ZigZagDrgPoRep::<H>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, partitions)
-                .unwrap();
+                .expect("failed to generate partition proofs");
 
-        assert!(
+        let proofs_are_valid =
             ZigZagDrgPoRep::<H>::verify_all_partitions(&pp, &pub_inputs, all_partition_proofs)
-                .unwrap()
-        );
+                .expect("failed to verify partition proofs");
+
+        assert!(proofs_are_valid);
     }
 
     table_tests! {
@@ -235,6 +237,6 @@ mod tests {
 
         // When this fails, the call to setup should panic, but seems to actually hang (i.e. neither return nor panic) for some reason.
         // When working as designed, the call to setup returns without error.
-        let _pp = ZigZagDrgPoRep::<PedersenHasher>::setup(&sp).unwrap();
+        let _pp = ZigZagDrgPoRep::<PedersenHasher>::setup(&sp).expect("setup failed");
     }
 }

@@ -246,21 +246,23 @@ mod tests {
 
         let priv_inputs = PrivateInputs::<H>::new(data.as_slice(), &tree);
 
-        let proof = BatchPoST::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+        let proof = BatchPoST::<H>::prove(&pub_params, &pub_inputs, &priv_inputs)
+            .expect("failed to create proof");
 
-        assert!(
-            BatchPoST::<H>::verify(&pub_params, &pub_inputs, &proof).unwrap(),
-            "failed to verify"
-        );
+        let proof_is_valid = BatchPoST::<H>::verify(&pub_params, &pub_inputs, &proof)
+            .expect("failed to verify proof");
+
+        assert!(proof_is_valid, "failed to verify");
 
         // mess with a single part of the proof
         {
             let mut proof = proof;
             proof.challenges[0] = proof.challenges[0] + 1;
-            assert!(
-                !BatchPoST::<H>::verify(&pub_params, &pub_inputs, &proof).unwrap(),
-                "verified invalid proof"
-            );
+
+            let proof_is_valid = BatchPoST::<H>::verify(&pub_params, &pub_inputs, &proof)
+                .expect("failed to verify proof");
+
+            assert!(!proof_is_valid, "verified invalid proof");
         }
     }
 

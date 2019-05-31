@@ -33,6 +33,7 @@ impl Hasher for PedersenHasher {
 
     #[inline]
     fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain, rounds: usize) -> Self::Domain {
+        // Unrapping here is safe; `Fr` elements and hash domain elements are the same byte length.
         let key = Fr::from_repr(key.0).unwrap();
         let ciphertext = Fr::from_repr(ciphertext.0).unwrap();
         sloth::encode::<Bls12>(&key, &ciphertext, rounds).into()
@@ -40,6 +41,7 @@ impl Hasher for PedersenHasher {
 
     #[inline]
     fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain, rounds: usize) -> Self::Domain {
+        // Unrapping here is safe; `Fr` elements and hash domain elements are the same byte length.
         let key = Fr::from_repr(key.0).unwrap();
         let ciphertext = Fr::from_repr(ciphertext.0).unwrap();
 
@@ -67,7 +69,9 @@ impl Hashable<PedersenFunction> for Fr {
 impl Hashable<PedersenFunction> for PedersenDomain {
     fn hash(&self, state: &mut PedersenFunction) {
         let mut bytes = Vec::with_capacity(32);
-        self.0.write_le(&mut bytes).unwrap();
+        self.0
+            .write_le(&mut bytes)
+            .expect("Failed to write `FrRepr`");
         state.write(&bytes);
     }
 }
@@ -395,8 +399,10 @@ mod tests {
         let repr = FrRepr([1, 2, 3, 4]);
         let val = PedersenDomain(repr);
 
-        let ser = serde_json::to_string(&val).unwrap();
-        let val_back = serde_json::from_str(&ser).unwrap();
+        let ser = serde_json::to_string(&val)
+            .expect("Failed to serialize `PedersenDomain` element to JSON string");
+        let val_back = serde_json::from_str(&ser)
+            .expect("Failed to deserialize JSON string to `PedersenDomain`");
 
         assert_eq!(val, val_back);
     }

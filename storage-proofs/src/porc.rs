@@ -228,9 +228,13 @@ mod tests {
 
         let priv_inputs = PrivateInputs::<H> { trees: &[&tree] };
 
-        let proof = PoRC::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+        let proof =
+            PoRC::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
 
-        assert!(PoRC::<H>::verify(&pub_params, &pub_inputs, &proof).unwrap());
+        let is_valid =
+            PoRC::<H>::verify(&pub_params, &pub_inputs, &proof).expect("verification failed");
+
+        assert!(is_valid);
     }
 
     #[test]
@@ -294,7 +298,8 @@ mod tests {
             make_bogus_proof::<H>(&pub_inputs, rng),
         ]);
 
-        let verified = PoRC::verify(&pub_params, &pub_inputs, &bad_proof).unwrap();
+        let verified =
+            PoRC::verify(&pub_params, &pub_inputs, &bad_proof).expect("verification failed");
 
         // A bad proof should not be verified!
         assert!(!verified);
@@ -341,7 +346,8 @@ mod tests {
 
         let priv_inputs = PrivateInputs::<H> { trees: &[&tree] };
 
-        let proof = PoRC::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+        let proof =
+            PoRC::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
 
         let different_pub_inputs = PublicInputs {
             challenges: &vec![rng.gen_range(0, leaves), rng.gen_range(0, leaves)],
@@ -349,7 +355,8 @@ mod tests {
             commitments: &[tree.root()],
         };
 
-        let verified = PoRC::<H>::verify(&pub_params, &different_pub_inputs, &proof).unwrap();
+        let verified = PoRC::<H>::verify(&pub_params, &different_pub_inputs, &proof)
+            .expect("verification failed");
 
         // A proof created with a the wrong challenge not be verified!
         assert!(!verified);

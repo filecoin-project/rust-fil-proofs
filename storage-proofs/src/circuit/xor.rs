@@ -58,7 +58,8 @@ mod tests {
                 bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).unwrap()
             };
 
-            let out_bits = xor(&mut cs, key_bits.as_slice(), data_bits.as_slice()).unwrap();
+            let out_bits =
+                xor(&mut cs, key_bits.as_slice(), data_bits.as_slice()).expect("xor failed");
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
             assert_eq!(out_bits.len(), data_bits.len(), "invalid output length");
@@ -79,7 +80,7 @@ mod tests {
             // -- roundtrip
             let roundtrip_bits = {
                 let mut cs = cs.namespace(|| "roundtrip");
-                xor(&mut cs, key_bits.as_slice(), out_bits.as_slice()).unwrap()
+                xor(&mut cs, key_bits.as_slice(), out_bits.as_slice()).expect("xor faield")
             };
 
             let roundtrip = bits_to_bytes(
