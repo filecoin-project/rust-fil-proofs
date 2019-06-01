@@ -12,7 +12,6 @@ use crate::merkle::MerkleTree;
 #[derive(Clone, Debug)]
 pub struct PieceInclusionProof<H: Hasher> {
     position: usize,
-    piece_leaves: usize,
     proof_elements: Vec<H::Domain>,
 }
 
@@ -150,7 +149,6 @@ impl<H: Hasher> PieceInclusionProof<H> {
                 let piece_inclusion_proof = PieceInclusionProof {
                     proof_elements,
                     position: first_leaf,
-                    piece_leaves: leaf_count,
                 };
 
                 if piece_inclusion_proof.verify(
@@ -206,11 +204,9 @@ impl<H: Hasher> PieceInclusionProof<H> {
         // This is an important check. Without it, a fake proof could have a longer path and prove less data.
         // In the most extreme case, this would mean storing `comm_p` itself as a leaf node.
         // This check ensures `comm_p` appears at the right height in the tree.
+        // The need for this check also explains why both `piece_leaves` and `sector_leaves` must
+        // be included as public inputs to `verify`.
         if (proof_path.len() != proof_length) || self.proof_elements.len() != proof_length {
-            return false;
-        }
-
-        if piece_leaves != self.piece_leaves {
             return false;
         }
 
