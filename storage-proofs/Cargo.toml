@@ -85,3 +85,7 @@ harness = false
 [[bench]]
 name = "parents"
 harness = false
+
+[[bench]]
+name = "xor"
+harness = false
