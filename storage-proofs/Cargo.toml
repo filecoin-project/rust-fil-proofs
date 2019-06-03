@@ -93,3 +93,8 @@ harness = false
 [[bench]]
 name = "fr"
 harness = false
+
+
+[[bench]]
+name = "merkle"
+harness = false
