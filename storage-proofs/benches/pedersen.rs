@@ -45,12 +45,31 @@ impl<'a, E: JubjubEngine> Circuit<E> for PedersenExample<'a, E> {
 }
 
 fn pedersen_benchmark(c: &mut Criterion) {
-    // FIXME: We're duplicating these params because of compiler errors, presumably related to
-    // the move closures. There must be a better way.
+    let params = vec![32, 64, 10 * 32];
+
+    c.bench(
+        "hash-pedersen",
+        ParameterizedBenchmark::new(
+            "non-circuit",
+            |b, bytes| {
+                let mut rng = thread_rng();
+                let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
+
+                if *bytes > 64 {
+                    b.iter(|| black_box(pedersen::pedersen_md_no_padding(&data)))
+                } else {
+                    b.iter(|| black_box(pedersen::pedersen(&data)))
+                }
+            },
+            params,
+        ),
+    );
+}
+
+fn pedersen_circuit_benchmark(c: &mut Criterion) {
     let jubjub_params = JubjubBls12::new();
     let jubjub_params2 = JubjubBls12::new();
     let mut rng1 = thread_rng();
-    let rng2 = thread_rng();
     let groth_params = generate_random_parameters::<Bls12, _, _>(
         PedersenExample {
             params: &jubjub_params,
@@ -63,42 +82,35 @@ fn pedersen_benchmark(c: &mut Criterion) {
     let params = vec![32];
 
     c.bench(
-        "pedersen",
+        "hash-pedersen-circuit",
         ParameterizedBenchmark::new(
-            "non-circuit-32bytes",
-            |b, bytes| {
+            "create-proof",
+            move |b, bytes| {
                 let mut rng = thread_rng();
-                let mut data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
+                let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
 
-                b.iter(|| black_box(pedersen::pedersen_compression(&mut data)))
+                b.iter(|| {
+                    let proof = create_random_proof(
+                        PedersenExample {
+                            params: &jubjub_params,
+                            data: data.as_slice(),
+                        },
+                        &groth_params,
+                        &mut rng,
+                    )
+                    .unwrap();
+
+                    black_box(proof)
+                });
             },
             params,
         )
-        .with_function("circuit-32bytes-create_proof", move |b, bytes| {
-            b.iter(|| {
-                let mut rng = rng1.clone();
-                let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
+        .with_function("synthesize", move |b, bytes| {
+            let mut rng = thread_rng();
+            let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
 
-                let proof = create_random_proof(
-                    PedersenExample {
-                        params: &jubjub_params,
-                        data: data.as_slice(),
-                    },
-                    &groth_params,
-                    &mut rng,
-                )
-                .unwrap();
-
-                black_box(proof)
-            });
-        })
-        .with_function("circuit-32bytes-synthesize_circuit", move |b, bytes| {
             b.iter(|| {
                 let mut cs = BenchCS::<Bls12>::new();
-
-                let mut rng = rng2.clone();
-                let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
-
                 PedersenExample {
                     params: &jubjub_params2,
                     data: data.as_slice(),
@@ -113,5 +125,5 @@ fn pedersen_benchmark(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benches, pedersen_benchmark);
+criterion_group!(benches, pedersen_benchmark, pedersen_circuit_benchmark);
 criterion_main!(benches);
