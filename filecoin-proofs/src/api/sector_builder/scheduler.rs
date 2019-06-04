@@ -186,11 +186,11 @@ impl<T: KeyValueStore> SectorMetadataManager<T> {
         let mut seed = [0; 32];
         seed.copy_from_slice(challenge_seed);
 
-        let output = internal::generate_post(GeneratePoStDynamicSectorsCountInput {
-            post_config: self.sector_store.inner.proofs_config().post_config(),
-            challenge_seed: seed,
+        let output = internal::generate_post(
+            self.sector_store.inner.proofs_config().post_config(),
+            seed,
             input_parts,
-        });
+        );
 
         // TODO: Where should this work be scheduled? New worker type?
         return_channel.send(output).expects(FATAL_HUNGUP);

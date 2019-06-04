@@ -1,8 +1,10 @@
-use rand::OsRng;
 use std::env;
 use std::fs::File;
 
-use filecoin_proofs::api::internal;
+use rand::OsRng;
+
+use filecoin_proofs::api::parameters::public_params;
+use filecoin_proofs::api::singletons::ENGINE_PARAMS;
 use sector_base::api::bytes_amount::PaddedBytesAmount;
 use sector_base::api::disk_backed_storage::TEST_SECTOR_SIZE;
 use sector_base::api::porep_proof_partitions::PoRepProofPartitions;
@@ -15,19 +17,19 @@ pub fn main() {
     let args: Vec<String> = env::args().collect();
     let out_file = &args[1];
 
-    let public_params = internal::public_params(
+    let public_params = public_params(
         PaddedBytesAmount::from(SectorSize(TEST_SECTOR_SIZE)),
         usize::from(PoRepProofPartitions(2)),
     );
 
-    let circuit = ZigZagCompound::blank_circuit(&public_params, &internal::ENGINE_PARAMS);
+    let circuit = ZigZagCompound::blank_circuit(&public_params, &ENGINE_PARAMS);
     let mut params = phase21::MPCParameters::new(circuit).unwrap();
 
     let rng = &mut OsRng::new().unwrap();
     let hash = params.contribute(rng);
 
     {
-        let circuit = ZigZagCompound::blank_circuit(&public_params, &internal::ENGINE_PARAMS);
+        let circuit = ZigZagCompound::blank_circuit(&public_params, &ENGINE_PARAMS);
         let contributions = params.verify(circuit).expect("parameters should be valid!");
 
         // We need to check the `contributions` to see if our `hash`

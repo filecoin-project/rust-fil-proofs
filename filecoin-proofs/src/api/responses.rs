@@ -50,7 +50,6 @@ impl Default for VerifySealResponse {
     }
 }
 
-#[allow(dead_code)]
 #[no_mangle]
 pub unsafe extern "C" fn destroy_verify_seal_response(ptr: *mut VerifySealResponse) {
     let _ = Box::from_raw(ptr);
@@ -86,7 +85,6 @@ impl Default for GeneratePoStResponse {
     }
 }
 
-#[allow(dead_code)]
 #[no_mangle]
 pub unsafe extern "C" fn destroy_generate_post_response(ptr: *mut GeneratePoStResponse) {
     let _ = Box::from_raw(ptr);
@@ -114,7 +112,6 @@ impl Default for VerifyPoSTResponse {
     }
 }
 
-#[allow(dead_code)]
 #[no_mangle]
 pub unsafe extern "C" fn destroy_verify_post_response(ptr: *mut VerifyPoSTResponse) {
     let _ = Box::from_raw(ptr);
@@ -170,7 +167,6 @@ impl Default for InitSectorBuilderResponse {
     }
 }
 
-#[allow(dead_code)]
 #[no_mangle]
 pub unsafe extern "C" fn destroy_init_sector_builder_response(ptr: *mut InitSectorBuilderResponse) {
     let _ = Box::from_raw(ptr);
@@ -198,7 +194,6 @@ impl Default for AddPieceResponse {
     }
 }
 
-#[allow(dead_code)]
 #[no_mangle]
 pub unsafe extern "C" fn destroy_add_piece_response(ptr: *mut AddPieceResponse) {
     let _ = Box::from_raw(ptr);
@@ -228,7 +223,6 @@ impl Default for ReadPieceFromSealedSectorResponse {
     }
 }
 
-#[allow(dead_code)]
 #[no_mangle]
 pub unsafe extern "C" fn destroy_read_piece_from_sealed_sector_response(
     ptr: *mut ReadPieceFromSealedSectorResponse,
@@ -256,7 +250,6 @@ impl Default for SealAllStagedSectorsResponse {
     }
 }
 
-#[allow(dead_code)]
 #[no_mangle]
 pub unsafe extern "C" fn destroy_seal_all_staged_sectors_response(
     ptr: *mut SealAllStagedSectorsResponse,
@@ -318,7 +311,6 @@ impl Default for GetSealStatusResponse {
     }
 }
 
-#[allow(dead_code)]
 #[no_mangle]
 pub unsafe extern "C" fn destroy_get_seal_status_response(ptr: *mut GetSealStatusResponse) {
     let _ = Box::from_raw(ptr);
@@ -386,7 +378,6 @@ impl Default for GetSealedSectorsResponse {
     }
 }
 
-#[allow(dead_code)]
 #[no_mangle]
 pub unsafe extern "C" fn destroy_get_sealed_sectors_response(ptr: *mut GetSealedSectorsResponse) {
     let _ = Box::from_raw(ptr);
@@ -417,7 +408,6 @@ impl Default for GetStagedSectorsResponse {
     }
 }
 
-#[allow(dead_code)]
 #[no_mangle]
 pub unsafe extern "C" fn destroy_get_staged_sectors_response(ptr: *mut GetStagedSectorsResponse) {
     let _ = Box::from_raw(ptr);

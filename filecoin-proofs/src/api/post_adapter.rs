@@ -1,11 +1,12 @@
 use std::iter::repeat;
 use std::iter::repeat_with;
 
+use sector_base::api::post_config::PoStConfig;
+
+use crate::api::constants::POST_SECTORS_COUNT;
 use crate::api::internal::ChallengeSeed;
 use crate::api::internal::Commitment;
-use crate::api::internal::POST_SECTORS_COUNT;
 use crate::error;
-use sector_base::api::post_config::PoStConfig;
 
 pub struct GeneratePoStDynamicSectorsCountInput {
     pub post_config: PoStConfig,
@@ -318,10 +319,11 @@ pub fn verify_post_collect_output(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use sector_base::api::disk_backed_storage::TEST_SECTOR_SIZE;
     use sector_base::api::post_proof_partitions::PoStProofPartitions;
     use sector_base::api::sector_size::SectorSize;
+
+    use super::*;
 
     const TEST_CONFIG: PoStConfig =
         PoStConfig(SectorSize(TEST_SECTOR_SIZE), PoStProofPartitions(1));
