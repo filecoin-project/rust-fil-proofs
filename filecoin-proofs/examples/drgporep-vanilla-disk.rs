@@ -21,7 +21,7 @@ use memmap::MmapOptions;
 use std::fs::File;
 use std::io::Write;
 
-use filecoin_proofs::FCP_LOG;
+use filecoin_proofs::singletons::FCP_LOG;
 
 fn file_backed_mmap_from_random_bytes(n: usize) -> MmapMut {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);

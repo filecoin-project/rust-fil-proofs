@@ -12,7 +12,7 @@ use paired::bls12_381::Bls12;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::time::{Duration, Instant};
 
-use filecoin_proofs::FCP_LOG;
+use filecoin_proofs::singletons::FCP_LOG;
 use storage_proofs::beacon_post::*;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;

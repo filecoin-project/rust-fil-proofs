@@ -1,5 +1,5 @@
-use crate::api::sector_builder::metadata::{SealedSectorMetadata, StagedSectorMetadata};
-use crate::api::sector_builder::SectorId;
+use crate::sector_builder::metadata::{SealedSectorMetadata, StagedSectorMetadata};
+use crate::sector_builder::SectorId;
 use std::collections::HashMap;
 
 #[derive(Default, Serialize, Deserialize, Debug, PartialEq)]

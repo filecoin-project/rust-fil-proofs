@@ -1,24 +1,24 @@
-use crate::api::internal;
-use crate::api::post_adapter::*;
-use crate::api::sector_builder::errors::err_piecenotfound;
-use crate::api::sector_builder::errors::err_unrecov;
-use crate::api::sector_builder::helpers::add_piece::add_piece;
-use crate::api::sector_builder::helpers::get_seal_status::get_seal_status;
-use crate::api::sector_builder::helpers::get_sectors_ready_for_sealing::get_sectors_ready_for_sealing;
-use crate::api::sector_builder::helpers::snapshots::load_snapshot;
-use crate::api::sector_builder::helpers::snapshots::make_snapshot;
-use crate::api::sector_builder::helpers::snapshots::persist_snapshot;
-use crate::api::sector_builder::kv_store::KeyValueStore;
-use crate::api::sector_builder::metadata::SealStatus;
-use crate::api::sector_builder::metadata::SealedSectorMetadata;
-use crate::api::sector_builder::metadata::StagedSectorMetadata;
-use crate::api::sector_builder::sealer::SealerInput;
-use crate::api::sector_builder::state::SectorBuilderState;
-use crate::api::sector_builder::state::StagedState;
-use crate::api::sector_builder::SectorId;
-use crate::api::sector_builder::{WrappedKeyValueStore, WrappedSectorStore};
 use crate::error::ExpectWithBacktrace;
 use crate::error::Result;
+use crate::post_adapter::*;
+use crate::safe;
+use crate::sector_builder::errors::err_piecenotfound;
+use crate::sector_builder::errors::err_unrecov;
+use crate::sector_builder::helpers::add_piece::add_piece;
+use crate::sector_builder::helpers::get_seal_status::get_seal_status;
+use crate::sector_builder::helpers::get_sectors_ready_for_sealing::get_sectors_ready_for_sealing;
+use crate::sector_builder::helpers::snapshots::load_snapshot;
+use crate::sector_builder::helpers::snapshots::make_snapshot;
+use crate::sector_builder::helpers::snapshots::persist_snapshot;
+use crate::sector_builder::kv_store::KeyValueStore;
+use crate::sector_builder::metadata::SealStatus;
+use crate::sector_builder::metadata::SealedSectorMetadata;
+use crate::sector_builder::metadata::StagedSectorMetadata;
+use crate::sector_builder::sealer::SealerInput;
+use crate::sector_builder::state::SectorBuilderState;
+use crate::sector_builder::state::StagedState;
+use crate::sector_builder::SectorId;
+use crate::sector_builder::{WrappedKeyValueStore, WrappedSectorStore};
 use sector_base::api::bytes_amount::UnpaddedBytesAmount;
 
 use std::collections::HashMap;
@@ -186,11 +186,11 @@ impl<T: KeyValueStore> SectorMetadataManager<T> {
         let mut seed = [0; 32];
         seed.copy_from_slice(challenge_seed);
 
-        let output = internal::generate_post(GeneratePoStDynamicSectorsCountInput {
-            post_config: self.sector_store.inner.proofs_config().post_config(),
-            challenge_seed: seed,
+        let output = safe::generate_post(
+            self.sector_store.inner.proofs_config().post_config(),
+            seed,
             input_parts,
-        });
+        );
 
         // TODO: Where should this work be scheduled? New worker type?
         return_channel.send(output).expects(FATAL_HUNGUP);

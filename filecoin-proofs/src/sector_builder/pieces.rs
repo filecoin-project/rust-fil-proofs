@@ -1,4 +1,4 @@
-use crate::api::sector_builder::metadata::PieceMetadata;
+use crate::sector_builder::metadata::PieceMetadata;
 use sector_base::api::bytes_amount::{UnpaddedByteIndex, UnpaddedBytesAmount};
 use std::io::Cursor;
 use std::io::Read;

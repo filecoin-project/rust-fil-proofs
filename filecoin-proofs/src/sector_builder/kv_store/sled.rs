@@ -2,8 +2,8 @@ use std::path::Path;
 
 use sled::Db;
 
-use crate::api::sector_builder::kv_store::KeyValueStore;
 use crate::error::Result;
+use crate::sector_builder::kv_store::KeyValueStore;
 
 pub struct SledKvs {
     db: Db,

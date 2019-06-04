@@ -36,7 +36,7 @@ use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::zigzag_drgporep::*;
 
-use filecoin_proofs::FCP_LOG;
+use filecoin_proofs::singletons::FCP_LOG;
 
 // We can only one of the profilers at a time, either CPU (`profile`)
 // or memory (`heap-profile`), duplicating the function so they won't

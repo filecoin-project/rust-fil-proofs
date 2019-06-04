@@ -1,9 +1,10 @@
 use clap::{App, Arg};
+use paired::bls12_381::Bls12;
 use slog::*;
 
-use filecoin_proofs::api::internal;
-use filecoin_proofs::FCP_LOG;
-use paired::bls12_381::Bls12;
+use filecoin_proofs::parameters::{post_public_params, public_params};
+use filecoin_proofs::singletons::ENGINE_PARAMS;
+use filecoin_proofs::singletons::FCP_LOG;
 use sector_base::api::bytes_amount::PaddedBytesAmount;
 use sector_base::api::disk_backed_storage::LIVE_SECTOR_SIZE;
 use sector_base::api::disk_backed_storage::TEST_SECTOR_SIZE;
@@ -26,17 +27,17 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     let n = u64::from(PaddedBytesAmount::from(porep_config));
     info!(FCP_LOG, "begin PoRep parameter-cache check/populate routine for {}-byte sectors", n; "target" => "paramcache");
 
-    let public_params = internal::public_params(
+    let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
     );
     {
-        let circuit = ZigZagCompound::blank_circuit(&public_params, &internal::ENGINE_PARAMS);
+        let circuit = ZigZagCompound::blank_circuit(&public_params, &ENGINE_PARAMS);
 
         let _ = ZigZagCompound::get_groth_params(circuit, &public_params);
     }
     {
-        let circuit = ZigZagCompound::blank_circuit(&public_params, &internal::ENGINE_PARAMS);
+        let circuit = ZigZagCompound::blank_circuit(&public_params, &ENGINE_PARAMS);
         let _ = ZigZagCompound::get_verifying_key(circuit, &public_params);
     }
 }
@@ -45,14 +46,14 @@ fn cache_post_params(post_config: PoStConfig) {
     let n = u64::from(PaddedBytesAmount::from(post_config));
     info!(FCP_LOG, "begin PoSt parameter-cache check/populate routine for {}-byte sectors", n; "target" => "paramcache");
 
-    let post_public_params = internal::post_public_params(post_config);
+    let post_public_params = post_public_params(post_config);
     {
         let post_circuit: VDFPoStCircuit<Bls12> =
             <VDFPostCompound as CompoundProof<
                 Bls12,
                 VDFPoSt<PedersenHasher, Sloth>,
                 VDFPoStCircuit<Bls12>,
-            >>::blank_circuit(&post_public_params, &internal::ENGINE_PARAMS);
+            >>::blank_circuit(&post_public_params, &ENGINE_PARAMS);
         let _ = VDFPostCompound::get_groth_params(post_circuit, &post_public_params);
     }
     {
@@ -61,7 +62,7 @@ fn cache_post_params(post_config: PoStConfig) {
                 Bls12,
                 VDFPoSt<PedersenHasher, Sloth>,
                 VDFPoStCircuit<Bls12>,
-            >>::blank_circuit(&post_public_params, &internal::ENGINE_PARAMS);
+            >>::blank_circuit(&post_public_params, &ENGINE_PARAMS);
 
         let _ = VDFPostCompound::get_verifying_key(post_circuit, &post_public_params);
     }

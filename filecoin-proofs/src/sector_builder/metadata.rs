@@ -1,5 +1,5 @@
-use crate::api::sector_builder::SectorId;
 use crate::error;
+use crate::sector_builder::SectorId;
 use byteorder::LittleEndian;
 use byteorder::WriteBytesExt;
 use sector_base::api::bytes_amount::UnpaddedBytesAmount;

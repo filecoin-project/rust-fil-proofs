@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use crate::api::sector_builder::kv_store::KeyValueStore;
-use crate::api::sector_builder::state::*;
-use crate::api::sector_builder::WrappedKeyValueStore;
 use crate::error::Result;
+use crate::sector_builder::kv_store::KeyValueStore;
+use crate::sector_builder::state::*;
+use crate::sector_builder::WrappedKeyValueStore;
 
 pub fn load_snapshot<T: KeyValueStore>(
     kv_store: &Arc<WrappedKeyValueStore<T>>,
@@ -48,13 +48,13 @@ pub fn make_snapshot(
 
 #[cfg(test)]
 mod tests {
-    use crate::api::sector_builder::helpers::snapshots::*;
-    use crate::api::sector_builder::kv_store::SledKvs;
-    use crate::api::sector_builder::metadata::StagedSectorMetadata;
-    use crate::api::sector_builder::state::SealedState;
-    use crate::api::sector_builder::state::StagedState;
-    use crate::api::sector_builder::SectorId;
-    use crate::api::sector_builder::WrappedKeyValueStore;
+    use crate::sector_builder::helpers::snapshots::*;
+    use crate::sector_builder::kv_store::SledKvs;
+    use crate::sector_builder::metadata::StagedSectorMetadata;
+    use crate::sector_builder::state::SealedState;
+    use crate::sector_builder::state::StagedState;
+    use crate::sector_builder::SectorId;
+    use crate::sector_builder::WrappedKeyValueStore;
     use std::collections::HashMap;
     use std::sync::Arc;
     use std::sync::Mutex;

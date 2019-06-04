@@ -1,16 +1,16 @@
 use slog::*;
 use std::sync::{mpsc, Arc, Mutex};
 
-use crate::api::post_adapter::*;
-use crate::api::sector_builder::errors::SectorBuilderErr;
-use crate::api::sector_builder::kv_store::{KeyValueStore, SledKvs};
-use crate::api::sector_builder::metadata::*;
-use crate::api::sector_builder::scheduler::Request;
-use crate::api::sector_builder::scheduler::Scheduler;
-use crate::api::sector_builder::sealer::*;
 use crate::error::ExpectWithBacktrace;
 use crate::error::Result;
-use crate::FCP_LOG;
+use crate::post_adapter::*;
+use crate::sector_builder::errors::SectorBuilderErr;
+use crate::sector_builder::kv_store::{KeyValueStore, SledKvs};
+use crate::sector_builder::metadata::*;
+use crate::sector_builder::scheduler::Request;
+use crate::sector_builder::scheduler::Scheduler;
+use crate::sector_builder::sealer::*;
+use crate::singletons::FCP_LOG;
 use sector_base::api::disk_backed_storage::new_sector_store;
 use sector_base::api::sector_class::SectorClass;
 use sector_base::api::sector_store::SectorStore;

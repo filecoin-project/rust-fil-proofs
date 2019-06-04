@@ -2,14 +2,14 @@ use std::fs::File;
 use std::iter::Iterator;
 use std::sync::Arc;
 
-use crate::api::sector_builder::errors::*;
-use crate::api::sector_builder::metadata::StagedSectorMetadata;
-use crate::api::sector_builder::pieces::{
+use crate::error;
+use crate::sector_builder::errors::*;
+use crate::sector_builder::metadata::StagedSectorMetadata;
+use crate::sector_builder::pieces::{
     get_aligned_source, get_piece_alignment, sum_piece_bytes_with_alignment, PieceAlignment,
 };
-use crate::api::sector_builder::state::StagedState;
-use crate::api::sector_builder::*;
-use crate::error;
+use crate::sector_builder::state::StagedState;
+use crate::sector_builder::*;
 use sector_base::api::bytes_amount::UnpaddedBytesAmount;
 use sector_base::api::sector_store::SectorManager;
 
@@ -133,7 +133,7 @@ fn provision_new_staged_sector(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::sector_builder::metadata::PieceMetadata;
+    use crate::sector_builder::metadata::PieceMetadata;
 
     #[test]
     fn test_alpha() {

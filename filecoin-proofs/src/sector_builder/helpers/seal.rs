@@ -1,10 +1,10 @@
-use crate::api::internal::seal as seal_internal;
-use crate::api::internal::SealOutput;
-use crate::api::sector_builder::metadata::sector_id_as_bytes;
-use crate::api::sector_builder::metadata::SealedSectorMetadata;
-use crate::api::sector_builder::metadata::StagedSectorMetadata;
-use crate::api::sector_builder::WrappedSectorStore;
 use crate::error;
+use crate::safe::seal as seal_internal;
+use crate::safe::SealOutput;
+use crate::sector_builder::metadata::sector_id_as_bytes;
+use crate::sector_builder::metadata::SealedSectorMetadata;
+use crate::sector_builder::metadata::StagedSectorMetadata;
+use crate::sector_builder::WrappedSectorStore;
 use std::path::PathBuf;
 use std::sync::Arc;
 
