@@ -23,7 +23,7 @@ paired = "0.15"
 
 
 [dev-dependencies]
-tempfile = "*"
+tempfile = "3"
 criterion = "0.2"
 
 [[bench]]
