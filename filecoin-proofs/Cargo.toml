@@ -14,7 +14,7 @@ crate-type = ["rlib", "staticlib", "cdylib"]
 [dependencies]
 sector-base = { version = "0.1", path = "../sector-base" }
 storage-proofs = { version = "0.1", path = "../storage-proofs" }
-ffi-toolkit = { version = "0.1", path = "../ffi-toolkit" }
+ffi-toolkit = { version = "^0.2", path = "../ffi-toolkit" }
 logging-toolkit = { version = "0.1", path = "../logging-toolkit" }
 bitvec = "0.11"
 chrono = "0.4"
