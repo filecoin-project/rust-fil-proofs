@@ -1,4 +1,4 @@
-use bitvec::{self, BitVec};
+use bitvec::prelude::*;
 use ff::PrimeFieldRepr;
 use fil_sapling_crypto::jubjub::JubjubBls12;
 use fil_sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
@@ -16,7 +16,7 @@ pub const PEDERSEN_BLOCK_BYTES: usize = PEDERSEN_BLOCK_SIZE / 8;
 pub fn pedersen(data: &[u8]) -> Fr {
     pedersen_hash::<Bls12, _>(
         Personalization::NoteCommitment,
-        BitVec::<bitvec::LittleEndian, u8>::from(data)
+        BitVec::<LittleEndian, u8>::from(data)
             .iter()
             .take(data.len() * 8),
         &JJ_PARAMS,
@@ -55,7 +55,7 @@ pub fn pedersen_md_no_padding(data: &[u8]) -> Fr {
 }
 
 pub fn pedersen_compression(bytes: &mut Vec<u8>) {
-    let bits = BitVec::<bitvec::LittleEndian, u8>::from(&bytes[..]);
+    let bits = BitVec::<LittleEndian, u8>::from(&bytes[..]);
     let (x, _) = pedersen_hash::<Bls12, _>(
         Personalization::NoteCommitment,
         bits.iter().take(bytes.len() * 8),
@@ -81,7 +81,7 @@ mod tests {
         let bytes = b"ABC";
         let bits = bytes_into_bits(bytes);
 
-        let mut bits2 = bitvec![bitvec::LittleEndian, u8; 0; bits.len()];
+        let mut bits2 = bitvec![LittleEndian, u8; 0; bits.len()];
         bits2.as_mut_slice()[0..bytes.len()].copy_from_slice(&bytes[..]);
 
         assert_eq!(bits, bits2.iter().collect::<Vec<bool>>());

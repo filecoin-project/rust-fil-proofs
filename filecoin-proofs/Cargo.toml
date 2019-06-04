@@ -14,7 +14,7 @@ sector-base = { path = "../sector-base" }
 storage-proofs = { path = "../storage-proofs" }
 ffi-toolkit = { path = "../ffi-toolkit" }
 logging-toolkit = { path = "../logging-toolkit" }
-bitvec = "0.10"
+bitvec = "0.11"
 chrono = "0.4"
 rand = "0.4"
 libc = "0.2"
@@ -41,11 +41,11 @@ paired = "0.15"
 fil-sapling-crypto = "0.1"
 
 [dependencies.sled]
-version = "0.23.0"
+version = "0.24"
 optional = true
 
 [dependencies.reqwest]
-version = "0.9.16"
+version = "0.9"
 default-features = false
 features = ["default-tls-vendored"]
 
@@ -54,7 +54,7 @@ gperftools = "0.2"
 scopeguard = "1.0"
 
 [build-dependencies]
-bindgen = "0.47"
+bindgen = "0.49"
 cbindgen = "0.8"
 
 [features]

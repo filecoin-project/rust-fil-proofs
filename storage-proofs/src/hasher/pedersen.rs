@@ -1,7 +1,7 @@
 use std::hash::Hasher as StdHasher;
 
 use bellperson::{ConstraintSystem, SynthesisError};
-use bitvec::{self, BitVec};
+use bitvec::prelude::*;
 use ff::{PrimeField, PrimeFieldRepr};
 use fil_sapling_crypto::circuit::{boolean, num, pedersen_hash as pedersen_hash_circuit};
 use fil_sapling_crypto::jubjub::JubjubEngine;
@@ -244,8 +244,8 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
         right: PedersenDomain,
         height: usize,
     ) -> PedersenDomain {
-        let lhs = BitVec::<bitvec::LittleEndian, u64>::from(&(left.0).0[..]);
-        let rhs = BitVec::<bitvec::LittleEndian, u64>::from(&(right.0).0[..]);
+        let lhs = BitVec::<LittleEndian, u64>::from(&(left.0).0[..]);
+        let rhs = BitVec::<LittleEndian, u64>::from(&(right.0).0[..]);
 
         let bits = lhs
             .iter()

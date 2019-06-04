@@ -1,0 +1,19 @@
+[package]
+name = "fil-proofs-tools"
+version = "0.1.0"
+authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
+license = "MIT OR Apache-2.0"
+publish = false
+edition = "2018"
+
+[dependencies]
+clap = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.5"
+failure = "0.1"
+permutate = "0.3"
+lazy_static = "1.2"
+glob = "0.3"
+human-size = "0.4"
+prettytable-rs = "0.8"
