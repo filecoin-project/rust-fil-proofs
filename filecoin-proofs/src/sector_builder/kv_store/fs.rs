@@ -1,5 +1,5 @@
-use crate::api::sector_builder::kv_store::KeyValueStore;
 use crate::error::Result;
+use crate::sector_builder::kv_store::KeyValueStore;
 use blake2b_simd::State as Blake2b;
 use std::fs::{self, File, OpenOptions};
 use std::io::{ErrorKind, Read, Write};

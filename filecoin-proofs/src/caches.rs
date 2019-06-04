@@ -17,10 +17,10 @@ use storage_proofs::hasher::PedersenHasher;
 use storage_proofs::vdf_post::VDFPoSt;
 use storage_proofs::vdf_sloth::Sloth;
 
-use crate::api::parameters::{post_public_params, public_params};
-use crate::api::singletons::ENGINE_PARAMS;
 use crate::error;
-use crate::FCP_LOG;
+use crate::parameters::{post_public_params, public_params};
+use crate::singletons::ENGINE_PARAMS;
+use crate::singletons::FCP_LOG;
 
 type Bls12GrothParams = groth16::Parameters<Bls12>;
 pub type Bls12VerifyingKey = groth16::VerifyingKey<Bls12>;

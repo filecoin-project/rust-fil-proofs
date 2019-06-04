@@ -1,5 +1,5 @@
-use crate::api::sector_builder::errors::SectorBuilderErr;
-use crate::api::sector_builder::SectorBuilder;
+use crate::sector_builder::errors::SectorBuilderErr;
+use crate::sector_builder::SectorBuilder;
 use drop_struct_macro_derive::DropStructMacro;
 use failure::Error;
 use ffi_toolkit::free_c_str;
@@ -121,7 +121,7 @@ pub unsafe extern "C" fn destroy_verify_post_response(ptr: *mut VerifyPoSTRespon
 // status code and a pointer to a C string, both of which can be used to set
 // fields in a response struct to be returned from an FFI call.
 pub fn err_code_and_msg(err: &Error) -> (FCPResponseStatus, *const libc::c_char) {
-    use crate::api::responses::FCPResponseStatus::*;
+    use crate::responses::FCPResponseStatus::*;
 
     let msg = CString::new(format!("{}", err)).unwrap();
     let ptr = msg.as_ptr();

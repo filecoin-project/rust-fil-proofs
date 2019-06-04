@@ -2,9 +2,9 @@ use clap::{App, Arg};
 use paired::bls12_381::Bls12;
 use slog::*;
 
-use filecoin_proofs::api::parameters::{post_public_params, public_params};
-use filecoin_proofs::api::singletons::ENGINE_PARAMS;
-use filecoin_proofs::FCP_LOG;
+use filecoin_proofs::parameters::{post_public_params, public_params};
+use filecoin_proofs::singletons::ENGINE_PARAMS;
+use filecoin_proofs::singletons::FCP_LOG;
 use sector_base::api::bytes_amount::PaddedBytesAmount;
 use sector_base::api::disk_backed_storage::LIVE_SECTOR_SIZE;
 use sector_base::api::disk_backed_storage::TEST_SECTOR_SIZE;

@@ -3,8 +3,8 @@ use std::fs::File;
 
 use rand::OsRng;
 
-use filecoin_proofs::api::parameters::public_params;
-use filecoin_proofs::api::singletons::ENGINE_PARAMS;
+use filecoin_proofs::parameters::public_params;
+use filecoin_proofs::singletons::ENGINE_PARAMS;
 use sector_base::api::bytes_amount::PaddedBytesAmount;
 use sector_base::api::disk_backed_storage::TEST_SECTOR_SIZE;
 use sector_base::api::porep_proof_partitions::PoRepProofPartitions;

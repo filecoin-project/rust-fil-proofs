@@ -30,17 +30,17 @@ use storage_proofs::vdf_post;
 use storage_proofs::vdf_sloth;
 use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
 
-use crate::api::caches::{
+use crate::caches::{
     get_post_params, get_post_verifying_key, get_zigzag_params, get_zigzag_verifying_key,
 };
-use crate::api::constants::POREP_MINIMUM_CHALLENGES;
-use crate::api::file_cleanup::FileCleanup;
-use crate::api::parameters::{post_setup_params, public_params, setup_params};
-use crate::api::post_adapter::*;
-use crate::api::singletons::ENGINE_PARAMS;
+use crate::constants::POREP_MINIMUM_CHALLENGES;
 use crate::error;
 use crate::error::ExpectWithBacktrace;
-use crate::FCP_LOG;
+use crate::file_cleanup::FileCleanup;
+use crate::parameters::{post_setup_params, public_params, setup_params};
+use crate::post_adapter::*;
+use crate::singletons::ENGINE_PARAMS;
+use crate::singletons::FCP_LOG;
 
 /// FrSafe is an array of the largest whole number of bytes guaranteed not to overflow the field.
 type FrSafe = [u8; 31];

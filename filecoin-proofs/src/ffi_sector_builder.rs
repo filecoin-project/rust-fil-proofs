@@ -13,15 +13,15 @@ use sector_base::api::post_proof_partitions::PoStProofPartitions;
 use sector_base::api::sector_class::SectorClass;
 use sector_base::api::sector_size::SectorSize;
 
-use crate::api::post_adapter::*;
-use crate::api::responses;
-use crate::api::responses::err_code_and_msg;
-use crate::api::responses::FCPResponseStatus;
-use crate::api::responses::FFIPieceMetadata;
-use crate::api::responses::FFISealStatus;
-use crate::api::sector_builder::metadata::SealStatus;
-use crate::api::sector_builder::SectorBuilder;
-use crate::FCP_LOG;
+use crate::post_adapter::*;
+use crate::responses;
+use crate::responses::err_code_and_msg;
+use crate::responses::FCPResponseStatus;
+use crate::responses::FFIPieceMetadata;
+use crate::responses::FFISealStatus;
+use crate::sector_builder::metadata::SealStatus;
+use crate::sector_builder::SectorBuilder;
+use crate::singletons::FCP_LOG;
 
 /// Generates a proof-of-spacetime for the given replica commitments.
 ///

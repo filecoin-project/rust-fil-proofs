@@ -3,10 +3,10 @@ use std::iter::repeat_with;
 
 use sector_base::api::post_config::PoStConfig;
 
-use crate::api::constants::POST_SECTORS_COUNT;
-use crate::api::safe::ChallengeSeed;
-use crate::api::safe::Commitment;
+use crate::constants::POST_SECTORS_COUNT;
 use crate::error;
+use crate::safe::ChallengeSeed;
+use crate::safe::Commitment;
 
 pub struct GeneratePoStDynamicSectorsCountInput {
     pub post_config: PoStConfig,

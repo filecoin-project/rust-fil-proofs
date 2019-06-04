@@ -13,9 +13,9 @@ use storage_proofs::vdf_sloth;
 use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
 use storage_proofs::zigzag_graph::ZigZagBucketGraph;
 
-use crate::api::constants::POREP_MINIMUM_CHALLENGES;
-use crate::api::constants::POST_SECTORS_COUNT;
-use crate::api::singletons::POST_VDF_KEY;
+use crate::constants::POREP_MINIMUM_CHALLENGES;
+use crate::constants::POST_SECTORS_COUNT;
+use crate::singletons::POST_VDF_KEY;
 
 const POST_CHALLENGE_COUNT: usize = 30;
 const POST_EPOCHS: usize = 3;
@@ -121,8 +121,8 @@ fn select_challenges(
 mod tests {
     use sector_base::api::porep_proof_partitions::PoRepProofPartitions;
 
-    use crate::api::constants::POREP_MINIMUM_CHALLENGES;
-    use crate::api::parameters::*;
+    use crate::constants::POREP_MINIMUM_CHALLENGES;
+    use crate::parameters::*;
 
     #[test]
     fn partition_layer_challenges_test() {

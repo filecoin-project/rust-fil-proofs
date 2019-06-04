@@ -50,9 +50,9 @@ $ cargo expand --lib api::responses
     Finished dev [unoptimized + debuginfo] target(s) in 0.70s
 
 pub mod responses {
-    use crate::api::sector_builder::errors::SectorBuilderErr;
-    use crate::api::sector_builder::SectorBuilder;
-    use crate::api::API_POREP_PROOF_BYTES;
+    use crate::sector_builder::errors::SectorBuilderErr;
+    use crate::sector_builder::SectorBuilder;
+    use crate::API_POREP_PROOF_BYTES;
     use drop_struct_macro_derive::DropStructMacro;
     use failure::Error;
 …

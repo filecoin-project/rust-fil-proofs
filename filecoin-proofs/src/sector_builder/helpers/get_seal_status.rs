@@ -1,9 +1,9 @@
-use crate::api::sector_builder::errors::err_unrecov;
-use crate::api::sector_builder::metadata::SealStatus;
-use crate::api::sector_builder::state::SealedState;
-use crate::api::sector_builder::state::StagedState;
-use crate::api::sector_builder::SectorId;
 use crate::error;
+use crate::sector_builder::errors::err_unrecov;
+use crate::sector_builder::metadata::SealStatus;
+use crate::sector_builder::state::SealedState;
+use crate::sector_builder::state::StagedState;
+use crate::sector_builder::SectorId;
 
 pub fn get_seal_status(
     staged_state: &StagedState,
@@ -26,10 +26,10 @@ pub fn get_seal_status(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::sector_builder::metadata::{SealedSectorMetadata, StagedSectorMetadata};
-    use crate::api::sector_builder::state::SealedState;
-    use crate::api::sector_builder::state::SectorBuilderState;
-    use crate::api::sector_builder::state::StagedState;
+    use crate::sector_builder::metadata::{SealedSectorMetadata, StagedSectorMetadata};
+    use crate::sector_builder::state::SealedState;
+    use crate::sector_builder::state::SectorBuilderState;
+    use crate::sector_builder::state::StagedState;
     use std::collections::HashMap;
 
     fn setup() -> SectorBuilderState {

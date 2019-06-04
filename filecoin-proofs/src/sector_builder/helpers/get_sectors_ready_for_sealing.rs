@@ -1,8 +1,8 @@
-use crate::api::sector_builder::metadata::SealStatus;
-use crate::api::sector_builder::metadata::StagedSectorMetadata;
-use crate::api::sector_builder::pieces::sum_piece_bytes_with_alignment;
-use crate::api::sector_builder::state::StagedState;
-use crate::api::sector_builder::SectorId;
+use crate::sector_builder::metadata::SealStatus;
+use crate::sector_builder::metadata::StagedSectorMetadata;
+use crate::sector_builder::pieces::sum_piece_bytes_with_alignment;
+use crate::sector_builder::state::StagedState;
+use crate::sector_builder::SectorId;
 use itertools::chain;
 use sector_base::api::bytes_amount::UnpaddedBytesAmount;
 use std::cmp::Reverse;
@@ -38,10 +38,10 @@ pub fn get_sectors_ready_for_sealing(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::sector_builder::metadata::PieceMetadata;
-    use crate::api::sector_builder::metadata::StagedSectorMetadata;
-    use crate::api::sector_builder::state::StagedState;
-    use crate::api::sector_builder::SectorId;
+    use crate::sector_builder::metadata::PieceMetadata;
+    use crate::sector_builder::metadata::StagedSectorMetadata;
+    use crate::sector_builder::state::StagedState;
+    use crate::sector_builder::SectorId;
     use std::collections::HashMap;
 
     fn make_meta(

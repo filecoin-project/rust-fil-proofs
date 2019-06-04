@@ -1,4 +1,4 @@
-use crate::FCP_LOG;
+use crate::singletons::FCP_LOG;
 use failure::{Backtrace, Error};
 use slog::*;
 

@@ -26,7 +26,7 @@ use storage_proofs::proof::ProofScheme;
 use storage_proofs::vde;
 use storage_proofs::zigzag_drgporep::*;
 
-use filecoin_proofs::FCP_LOG;
+use filecoin_proofs::singletons::FCP_LOG;
 
 #[cfg(feature = "cpu-profile")]
 #[inline(always)]

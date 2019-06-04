@@ -9,14 +9,18 @@ extern crate serde;
 #[macro_use]
 extern crate slog;
 
-pub mod api;
+mod caches;
+mod constants;
+mod file_cleanup;
+mod post_adapter;
+mod responses;
+mod safe;
+mod sector_builder;
+
 pub mod error;
+pub mod ffi_sector_builder;
+pub mod ffi_stateless;
 pub mod param;
+pub mod parameters;
 pub mod serde_big_array;
-
-use logging_toolkit::make_logger;
-use slog::Logger;
-
-lazy_static! {
-    pub static ref FCP_LOG: Logger = make_logger("filecoin-proofs");
-}
+pub mod singletons;
