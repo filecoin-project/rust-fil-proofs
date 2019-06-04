@@ -28,6 +28,27 @@ Please start by reviewing this file.
   - Rust improvements
   - Optimizations
   - Documentation (expertise would require careful reading of the code)
+  
+## PR Merge Policy (Git topology)
+
+### Allowed (white list)
+ - Single fast-forward merge commit, with all internal commits squashed.
+ - Non-fast-forward merge commit, with all internal commits squashed -- rebased to branch from the previous commit to master.
+ - Non-fast-forward merge commit, with curated (as appropriate), linear, internal commits preserved -- rebased to branch from the previous commit to master.
+
+### Disallowed (black list)
+ - Non-rebased merge commits which branch from anywhere but the previous commit to master.
+ - Merge commits whose internal history contains merge commits (except in rare circumstances).
+ - Multiple fast-forward merge commits for a single PR.
+ - Internal junk commits — (e.g. strings of WIP).
+ 
+### In Practice
+ - In general, please rebase PRs before merging.
+ - To avoid having approvals dismissed by rebasing, authors may instead choose to:
+   - First use GitHub's 'resolve conflicts' button;
+   - Then merge with GitHub's 'squash and merge' button.
+
+If automated conflict resolution is not possible, you will need to rebase and seek re-approval. In any event, please note the guidelines and prefer either a single commit or a usefully curated set of commits.
 
 ## Resources for learning Rust
 
