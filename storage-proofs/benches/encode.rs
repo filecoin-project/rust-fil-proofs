@@ -47,13 +47,13 @@ fn encode_single_node<H: Hasher>(
     encoded.write_bytes(&mut data[start..end]).unwrap();
 }
 
-fn encode_single_node_benchmark(cc: &mut Criterion) {
+fn kdf_benchmark(c: &mut Criterion) {
     let degrees = vec![3, 5, 10];
 
-    cc.bench(
-        "encode single node",
+    c.bench(
+        "kdf",
         ParameterizedBenchmark::new(
-            "Blake2s",
+            "blake2s",
             |b, degree| {
                 let Pregenerated {
                     mut data,
@@ -61,32 +61,32 @@ fn encode_single_node_benchmark(cc: &mut Criterion) {
                     replica_id,
                 } = pregenerate_data::<Blake2sHasher>(*degree);
                 b.iter(|| {
-                    black_box(encode_single_node::<Blake2sHasher>(
-                        &mut data,
-                        &parents,
+                    black_box(vde::create_key::<Blake2sHasher>(
                         &replica_id,
                         *degree,
+                        &parents,
+                        &mut data,
                     ))
                 })
             },
             degrees,
         )
-        .with_function("Pedersen", |b, degree| {
+        .with_function("pedersen", |b, degree| {
             let Pregenerated {
                 mut data,
                 parents,
                 replica_id,
             } = pregenerate_data::<PedersenHasher>(*degree);
             b.iter(|| {
-                black_box(encode_single_node::<PedersenHasher>(
-                    &mut data,
-                    &parents,
+                black_box(vde::create_key::<PedersenHasher>(
                     &replica_id,
                     *degree,
+                    &parents,
+                    &mut data,
                 ))
             })
         })
-        .with_function("Sha256", |b, degree| {
+        .with_function("sha256", |b, degree| {
             let Pregenerated {
                 mut data,
                 parents,
@@ -104,5 +104,62 @@ fn encode_single_node_benchmark(cc: &mut Criterion) {
     );
 }
 
-criterion_group!(benches, encode_single_node_benchmark);
+fn encode_single_node_benchmark(c: &mut Criterion) {
+    let degrees = vec![3, 5, 10];
+
+    c.bench(
+        "encode-node",
+        ParameterizedBenchmark::new(
+            "blake2s",
+            |b, degree| {
+                let Pregenerated {
+                    mut data,
+                    parents,
+                    replica_id,
+                } = pregenerate_data::<Blake2sHasher>(*degree);
+                b.iter(|| {
+                    black_box(encode_single_node::<Blake2sHasher>(
+                        &mut data,
+                        &parents,
+                        &replica_id,
+                        *degree,
+                    ))
+                })
+            },
+            degrees,
+        )
+        .with_function("pedersen", |b, degree| {
+            let Pregenerated {
+                mut data,
+                parents,
+                replica_id,
+            } = pregenerate_data::<PedersenHasher>(*degree);
+            b.iter(|| {
+                black_box(encode_single_node::<PedersenHasher>(
+                    &mut data,
+                    &parents,
+                    &replica_id,
+                    *degree,
+                ))
+            })
+        })
+        .with_function("sha256", |b, degree| {
+            let Pregenerated {
+                mut data,
+                parents,
+                replica_id,
+            } = pregenerate_data::<Sha256Hasher>(*degree);
+            b.iter(|| {
+                black_box(encode_single_node::<Sha256Hasher>(
+                    &mut data,
+                    &parents,
+                    &replica_id,
+                    *degree,
+                ))
+            })
+        }),
+    );
+}
+
+criterion_group!(benches, encode_single_node_benchmark, kdf_benchmark);
 criterion_main!(benches);

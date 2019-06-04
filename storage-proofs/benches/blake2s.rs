@@ -40,9 +40,25 @@ where
 }
 
 fn blake2s_benchmark(c: &mut Criterion) {
-    let mut rng1 = thread_rng();
-    let rng2 = thread_rng();
+    let params = vec![32, 64, 10 * 32];
 
+    c.bench(
+        "hash-blake2s",
+        ParameterizedBenchmark::new(
+            "non-circuit",
+            |b, bytes| {
+                let mut rng = thread_rng();
+                let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
+
+                b.iter(|| black_box(blake2s_simd::blake2s(&data)))
+            },
+            params,
+        ),
+    );
+}
+
+fn blake2s_circuit_benchmark(c: &mut Criterion) {
+    let mut rng1 = thread_rng();
     let groth_params = generate_random_parameters::<Bls12, _, _>(
         Blake2sExample {
             data: &vec![None; 256],
@@ -54,40 +70,33 @@ fn blake2s_benchmark(c: &mut Criterion) {
     let params = vec![32];
 
     c.bench(
-        "blake2s",
+        "hash-blake2s-circuit",
         ParameterizedBenchmark::new(
-            "non-circuit-32bytes",
-            |b, bytes| {
+            "create-proof",
+            move |b, bytes| {
                 let mut rng = thread_rng();
-                let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
+                let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
 
-                b.iter(|| blake2s_simd::blake2s(&data))
+                b.iter(|| {
+                    let proof = create_random_proof(
+                        Blake2sExample {
+                            data: data.as_slice(),
+                        },
+                        &groth_params,
+                        &mut rng,
+                    )
+                    .unwrap();
+
+                    black_box(proof)
+                });
             },
             params,
         )
-        .with_function("circuit-32bytes-create_proof", move |b, bytes| {
-            b.iter(|| {
-                let mut rng = rng1.clone();
-                let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
-
-                let proof = create_random_proof(
-                    Blake2sExample {
-                        data: data.as_slice(),
-                    },
-                    &groth_params,
-                    &mut rng,
-                )
-                .unwrap();
-
-                black_box(proof)
-            });
-        })
-        .with_function("circuit-32bytes-synthesize_circuit", move |b, bytes| {
+        .with_function("synthesize", move |b, bytes| {
+            let mut rng = thread_rng();
+            let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
             b.iter(|| {
                 let mut cs = BenchCS::<Bls12>::new();
-
-                let mut rng = rng2.clone();
-                let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
 
                 Blake2sExample {
                     data: data.as_slice(),
@@ -102,5 +111,5 @@ fn blake2s_benchmark(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benches, blake2s_benchmark);
+criterion_group!(benches, blake2s_benchmark, blake2s_circuit_benchmark);
 criterion_main!(benches);

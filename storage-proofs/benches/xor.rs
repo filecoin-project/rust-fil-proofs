@@ -4,66 +4,76 @@ extern crate criterion;
 use bellperson::groth16::*;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use criterion::{black_box, Criterion, ParameterizedBenchmark};
-use fil_sapling_crypto::circuit as scircuit;
 use fil_sapling_crypto::circuit::boolean::{self, Boolean};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
 use storage_proofs::circuit::bench::BenchCS;
 
-use sha2::{Digest, Sha256};
+use storage_proofs::circuit;
+use storage_proofs::crypto::xor;
 
-struct Sha256Example<'a> {
+struct XorExample<'a> {
+    key: &'a [Option<bool>],
     data: &'a [Option<bool>],
 }
 
-impl<'a, E> Circuit<E> for Sha256Example<'a>
-where
-    E: JubjubEngine,
-{
+impl<'a, E: JubjubEngine> Circuit<E> for XorExample<'a> {
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+        let key: Vec<Boolean> = self
+            .key
+            .into_iter()
+            .enumerate()
+            .map(|(i, b)| {
+                Ok(Boolean::from(boolean::AllocatedBit::alloc(
+                    cs.namespace(|| format!("key_bit {}", i)),
+                    *b,
+                )?))
+            })
+            .collect::<Result<Vec<_>, SynthesisError>>()?;
         let data: Vec<Boolean> = self
             .data
             .into_iter()
             .enumerate()
             .map(|(i, b)| {
                 Ok(Boolean::from(boolean::AllocatedBit::alloc(
-                    cs.namespace(|| format!("bit {}", i)),
+                    cs.namespace(|| format!("data_bit {}", i)),
                     *b,
                 )?))
             })
             .collect::<Result<Vec<_>, SynthesisError>>()?;
 
-        let cs = cs.namespace(|| "sha256");
+        let mut cs = cs.namespace(|| "xor");
+        let _res = circuit::xor::xor(&mut cs, &key, &data)?;
 
-        let _res = scircuit::sha256::sha256(cs, &data)?;
         Ok(())
     }
 }
 
-fn sha256_benchmark(c: &mut Criterion) {
+fn xor_benchmark(c: &mut Criterion) {
     let params = vec![32, 64, 10 * 32];
 
     c.bench(
-        "hash-sha256",
+        "xor",
         ParameterizedBenchmark::new(
             "non-circuit",
             |b, bytes| {
                 let mut rng = thread_rng();
+                let key: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
                 let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
 
-                b.iter(|| black_box(Sha256::digest(&data)))
+                b.iter(|| black_box(xor::encode(&key, &data)))
             },
             params,
         ),
     );
 }
 
-fn sha256_circuit_benchmark(c: &mut Criterion) {
+fn xor_circuit_benchmark(c: &mut Criterion) {
     let mut rng1 = thread_rng();
-
     let groth_params = generate_random_parameters::<Bls12, _, _>(
-        Sha256Example {
+        XorExample {
+            key: &vec![None; 8 * 32],
             data: &vec![None; 256],
         },
         &mut rng1,
@@ -73,16 +83,18 @@ fn sha256_circuit_benchmark(c: &mut Criterion) {
     let params = vec![32];
 
     c.bench(
-        "hash-sha256-circuit",
+        "xor-circuit",
         ParameterizedBenchmark::new(
             "create-proof",
             move |b, bytes| {
                 let mut rng = thread_rng();
+                let key: Vec<Option<bool>> = (0..32 * 8).map(|_| Some(rng.gen())).collect();
                 let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
 
                 b.iter(|| {
                     let proof = create_random_proof(
-                        Sha256Example {
+                        XorExample {
+                            key: key.as_slice(),
                             data: data.as_slice(),
                         },
                         &groth_params,
@@ -97,11 +109,13 @@ fn sha256_circuit_benchmark(c: &mut Criterion) {
         )
         .with_function("synthesize", move |b, bytes| {
             let mut rng = thread_rng();
+            let key: Vec<Option<bool>> = (0..32 * 8).map(|_| Some(rng.gen())).collect();
             let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
 
             b.iter(|| {
                 let mut cs = BenchCS::<Bls12>::new();
-                Sha256Example {
+                XorExample {
+                    key: key.as_slice(),
                     data: data.as_slice(),
                 }
                 .synthesize(&mut cs)
@@ -114,5 +128,5 @@ fn sha256_circuit_benchmark(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benches, sha256_benchmark, sha256_circuit_benchmark);
+criterion_group!(benches, xor_benchmark, xor_circuit_benchmark);
 criterion_main!(benches);
