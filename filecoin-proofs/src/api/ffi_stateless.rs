@@ -14,10 +14,10 @@ use sector_base::api::sector_class::SectorClass;
 use sector_base::api::sector_size::SectorSize;
 use sector_base::api::SINGLE_PARTITION_PROOF_LEN;
 
-use crate::api::safe;
 use crate::api::responses;
 use crate::api::responses::err_code_and_msg;
 use crate::api::responses::FCPResponseStatus;
+use crate::api::safe;
 use crate::FCP_LOG;
 
 /// Verifies the output of seal.
