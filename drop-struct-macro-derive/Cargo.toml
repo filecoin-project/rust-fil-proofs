@@ -1,8 +1,12 @@
 [package]
 name = "drop_struct_macro_derive"
-version = "0.1.0"
+description = "A derive macro to free (drop) memory for structs that are used in the FFI."
+version = "0.2.0"
 authors = ["Volker Mische <volker.mische@gmail.com>"]
 edition = "2018"
+repository = "https://github.com/filecoin-project/rust-fil-proofs"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
 
 [lib]
 proc-macro = true

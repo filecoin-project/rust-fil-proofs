@@ -1,20 +1,22 @@
 [package]
 name = "filecoin-proofs"
-version = "0.1.0"
-authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
+description = "The Filecoin specific aspects of storage-proofs, including a C based FFI, to generate and verify proofs."
+version = "0.2.0"
+authors = ["dignifiedquire <dignifiedquire@gmail.com>", "laser <l@s3r.com>", "porcuquine <porcuquine@users.noreply.github.com>"]
 license = "MIT OR Apache-2.0"
-
 edition = "2018"
+repository = "https://github.com/filecoin-project/rust-fil-proofs"
+readme = "README.md"
 
 [lib]
 crate-type = ["rlib", "staticlib", "cdylib"]
 
 [dependencies]
-sector-base = { path = "../sector-base" }
-storage-proofs = { path = "../storage-proofs" }
-ffi-toolkit = { path = "../ffi-toolkit" }
-logging-toolkit = { path = "../logging-toolkit" }
-bitvec = "0.10"
+sector-base = { version = "^0.2", path = "../sector-base" }
+storage-proofs = { version = "^0.2", path = "../storage-proofs" }
+ffi-toolkit = { version = "^0.2", path = "../ffi-toolkit" }
+logging-toolkit = { version = "^0.2", path = "../logging-toolkit" }
+bitvec = "0.11"
 chrono = "0.4"
 rand = "0.4"
 libc = "0.2"
@@ -32,7 +34,7 @@ serde = { version = "1", features = ["rc", "derive"] }
 serde_json = "1.0"
 slog = { version = "2.4.1", features = ["max_level_trace", "release_max_level_trace"] }
 regex = "1"
-drop_struct_macro_derive = { path = "../drop-struct-macro-derive" }
+drop_struct_macro_derive = { version = "^0.2", path = "../drop-struct-macro-derive" }
 ff = "0.4.0"
 blake2b_simd = "0.5"
 phase21 = "0.3"
@@ -41,11 +43,11 @@ paired = "0.15"
 fil-sapling-crypto = "0.1"
 
 [dependencies.sled]
-version = "0.23.0"
+version = "0.24"
 optional = true
 
 [dependencies.reqwest]
-version = "0.9.16"
+version = "0.9"
 default-features = false
 features = ["default-tls-vendored"]
 
@@ -54,7 +56,7 @@ gperftools = "0.2"
 scopeguard = "1.0"
 
 [build-dependencies]
-bindgen = "0.47"
+bindgen = "0.49"
 cbindgen = "0.8"
 
 [features]

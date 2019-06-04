@@ -1,0 +1,4 @@
+disable-push = true
+disable-publish = true
+disable-tag = true
+no-dev-version = true

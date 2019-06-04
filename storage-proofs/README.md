@@ -1,6 +1,6 @@
 # Storage Proofs
 
-This crate contains various implementations of proofs of storage.
+> Implementations of Proofs of Storage.
 
 ## License
 

@@ -1,14 +1,16 @@
 [package]
 name = "storage-proofs"
-version = "0.1.0"
-authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
+description = "Implementations of Proofs of Storage."
+version = "0.2.0"
+authors = ["dignifiedquire <dignifiedquire@gmail.com>", "laser <l@s3r.com>", "porcuquine <porcuquine@users.noreply.github.com>"]
 license = "MIT OR Apache-2.0"
-
 edition = "2018"
+repository = "https://github.com/filecoin-project/rust-fil-proofs"
+readme = "README.md"
 
 [dependencies]
-logging-toolkit = { path = "../logging-toolkit" }
-bitvec = "0.10"
+logging-toolkit = { version = "^0.2", path = "../logging-toolkit" }
+bitvec = "0.11"
 rand = "0.4"
 libc = "0.2"
 merkletree = "0.6"
@@ -50,7 +52,6 @@ disk-trees = []
 [dev-dependencies]
 proptest = "0.7"
 criterion = "0.2"
-sector-base = { path = "../sector-base" }
 serde_json = "1.0"
 pretty_assertions = "0.6.1"
 
@@ -68,10 +69,6 @@ harness = false
 
 [[bench]]
 name = "drgraph"
-harness = false
-
-[[bench]]
-name = "preprocessing"
 harness = false
 
 [[bench]]
@@ -93,7 +90,6 @@ harness = false
 [[bench]]
 name = "fr"
 harness = false
-
 
 [[bench]]
 name = "merkle"

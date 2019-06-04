@@ -1,6 +1,6 @@
 # Drop struct macro derive
 
-A derive macro to free (drop) memory for structs that are used in the FFI.
+> A derive macro to free (drop) memory for structs that are used in the FFI.
 
 Currently only c-strings (`libc::c_char`) and arrays (represented as a pointer and a length field) are supported.
 

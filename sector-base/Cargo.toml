@@ -1,19 +1,21 @@
 [package]
 name = "sector-base"
-version = "0.1.0"
-authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
+description = "Provides a database of sectors."
+version = "0.2.0"
+authors = ["dignifiedquire <dignifiedquire@gmail.com>", "laser <l@s3r.com>", "porcuquine <porcuquine@users.noreply.github.com>"]
 license = "MIT OR Apache-2.0"
-
 edition = "2018"
+repository = "https://github.com/filecoin-project/rust-fil-proofs"
+readme = "README.md"
 
 [dependencies]
-bitvec = "0.10"
+bitvec = "0.11"
 failure = "0.1"
 itertools = "0.8"
 libc = "0.2"
 rand = "0.4"
-storage-proofs = { path = "../storage-proofs" }
-ffi-toolkit = { path = "../ffi-toolkit" }
+storage-proofs = { version = "^0.2", path = "../storage-proofs" }
+ffi-toolkit = { version = "^0.2", path = "../ffi-toolkit" }
 serde_cbor = "0.9.0"
 serde = { version = "1", features = ["rc", "derive"] }
 serde_json = "1.0"
@@ -21,4 +23,9 @@ paired = "0.15"
 
 
 [dev-dependencies]
-tempfile = "*"
+tempfile = "3"
+criterion = "0.2"
+
+[[bench]]
+name = "preprocessing"
+harness = false

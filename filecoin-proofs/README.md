@@ -1,7 +1,6 @@
 # Filecoin Proofs
 
-This crate contains the Filecoin specific aspects, including a C based FFI, to generate
-and verify proofs.
+> The Filecoin specific aspects of `storage-proofs`, including a C based FFI, to generate and verify proofs.
 
 
 ## License

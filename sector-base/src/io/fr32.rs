@@ -1,7 +1,7 @@
 use std::cmp::min;
 use std::io::{self, Error, ErrorKind, Read, Seek, SeekFrom, Write};
 
-use bitvec::{self, BitVec, LittleEndian};
+use bitvec::prelude::*;
 
 /** PaddingMap represents a mapping between data and its padded equivalent.
 
@@ -1072,8 +1072,8 @@ mod tests {
     // it for some corner cases, but since largely this implementation
     // has been replaced it seems reasonable.
     fn bit_vec_padding(raw_data: Vec<u8>) -> Box<[u8]> {
-        let mut padded_data: BitVec<bitvec::LittleEndian, u8> = BitVec::new();
-        let raw_data: BitVec<bitvec::LittleEndian, u8> = BitVec::from(raw_data);
+        let mut padded_data: BitVec<LittleEndian, u8> = BitVec::new();
+        let raw_data: BitVec<LittleEndian, u8> = BitVec::from(raw_data);
 
         for data_unit in raw_data
             .into_iter()
