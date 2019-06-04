@@ -24,3 +24,8 @@ paired = "0.15"
 
 [dev-dependencies]
 tempfile = "*"
+criterion = "0.2"
+
+[[bench]]
+name = "preprocessing"
+harness = false
