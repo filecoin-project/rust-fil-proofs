@@ -57,6 +57,10 @@ pub struct SealOutput {
     pub proof: Vec<u8>,
 }
 
+/// Generates a proof-of-spacetime, returning and detected storage faults.
+/// Accepts as input a challenge seed, configuration struct, and a vector of
+/// sealed sector file-path plus CommR tuples.
+///
 pub fn generate_post(
     post_config: PoStConfig,
     challenge_seed: ChallengeSeed,
@@ -69,6 +73,8 @@ pub fn generate_post(
     })
 }
 
+/// Verifies a proof-of-spacetime.
+///
 pub fn verify_post(
     post_config: PoStConfig,
     comm_rs: Vec<Commitment>,
@@ -85,6 +91,9 @@ pub fn verify_post(
     })
 }
 
+/// Seals the staged sector at `in_path` in place, saving the resulting replica
+/// to `out_path`.
+///
 pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     porep_config: PoRepConfig,
     in_path: T,
@@ -189,6 +198,8 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     })
 }
 
+/// Verifies the output of some previously-run seal operation.
+///
 pub fn verify_seal(
     porep_config: PoRepConfig,
     comm_r: Commitment,
@@ -253,6 +264,11 @@ pub fn verify_seal(
     .map_err(Into::into)
 }
 
+/// Unseals the sector at `sealed_path` and returns the bytes for a piece
+/// whose first (unpadded) byte begins at `offset` and ends at `offset` plus
+/// `num_bytes`, inclusive. Note that the entire sector is unsealed each time
+/// this function is called.
+///
 pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     porep_config: PoRepConfig,
     sealed_path: T,
