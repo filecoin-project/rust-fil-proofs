@@ -62,11 +62,11 @@ pub fn generate_post(
     challenge_seed: ChallengeSeed,
     input_parts: Vec<(Option<String>, Commitment)>,
 ) -> error::Result<GeneratePoStDynamicSectorsCountOutput> {
-    return generate_post_dynamic(GeneratePoStDynamicSectorsCountInput {
+    generate_post_dynamic(GeneratePoStDynamicSectorsCountInput {
         post_config,
         challenge_seed,
         input_parts,
-    });
+    })
 }
 
 pub fn verify_post(
@@ -76,13 +76,13 @@ pub fn verify_post(
     proofs: Vec<Vec<u8>>,
     faults: Vec<u64>,
 ) -> error::Result<VerifyPoStDynamicSectorsCountOutput> {
-    return verify_post_dynamic(VerifyPoStDynamicSectorsCountInput {
+    verify_post_dynamic(VerifyPoStDynamicSectorsCountInput {
         post_config,
         comm_rs,
         challenge_seed,
         proofs,
         faults,
-    });
+    })
 }
 
 pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
