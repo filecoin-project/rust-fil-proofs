@@ -12,10 +12,10 @@ readme = "README.md"
 crate-type = ["rlib", "staticlib", "cdylib"]
 
 [dependencies]
-sector-base = { path = "../sector-base" }
-storage-proofs = { path = "../storage-proofs" }
-ffi-toolkit = { path = "../ffi-toolkit" }
-logging-toolkit = { path = "../logging-toolkit" }
+sector-base = { version = "0.1", path = "../sector-base" }
+storage-proofs = { version = "0.1", path = "../storage-proofs" }
+ffi-toolkit = { version = "0.1", path = "../ffi-toolkit" }
+logging-toolkit = { version = "0.1", path = "../logging-toolkit" }
 bitvec = "0.11"
 chrono = "0.4"
 rand = "0.4"
@@ -34,7 +34,7 @@ serde = { version = "1", features = ["rc", "derive"] }
 serde_json = "1.0"
 slog = { version = "2.4.1", features = ["max_level_trace", "release_max_level_trace"] }
 regex = "1"
-drop_struct_macro_derive = { path = "../drop-struct-macro-derive" }
+drop_struct_macro_derive = { version = "0.1", path = "../drop-struct-macro-derive" }
 ff = "0.4.0"
 blake2b_simd = "0.5"
 phase21 = "0.3"
