@@ -34,7 +34,7 @@ serde = { version = "1", features = ["rc", "derive"] }
 serde_json = "1.0"
 slog = { version = "2.4.1", features = ["max_level_trace", "release_max_level_trace"] }
 regex = "1"
-drop_struct_macro_derive = { version = "0.1", path = "../drop-struct-macro-derive" }
+drop_struct_macro_derive = { version = "^0.2", path = "../drop-struct-macro-derive" }
 ff = "0.4.0"
 blake2b_simd = "0.5"
 phase21 = "0.3"
