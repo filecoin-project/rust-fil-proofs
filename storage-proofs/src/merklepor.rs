@@ -168,9 +168,13 @@ mod tests {
 
         let priv_inputs = PrivateInputs::<H>::new(leaf, &tree);
 
-        let proof = MerklePoR::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+        let proof =
+            MerklePoR::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
 
-        assert!(MerklePoR::<H>::verify(&pub_params, &pub_inputs, &proof).unwrap());
+        let is_valid =
+            MerklePoR::<H>::verify(&pub_params, &pub_inputs, &proof).expect("verification failed");
+
+        assert!(is_valid);
     }
 
     #[test]
@@ -232,7 +236,8 @@ mod tests {
 
         let bad_proof = make_bogus_proof::<H>(&pub_inputs, rng);
 
-        let verified = MerklePoR::verify(&pub_params, &pub_inputs, &bad_proof).unwrap();
+        let verified =
+            MerklePoR::verify(&pub_params, &pub_inputs, &bad_proof).expect("verification failed");
 
         // A bad proof should not be verified!
         assert!(!verified);
@@ -279,14 +284,16 @@ mod tests {
 
         let priv_inputs = PrivateInputs::<H>::new(leaf, &tree);
 
-        let proof = MerklePoR::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+        let proof =
+            MerklePoR::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
 
         let different_pub_inputs = PublicInputs {
             challenge: 999,
             commitment: Some(tree.root()),
         };
 
-        let verified = MerklePoR::<H>::verify(&pub_params, &different_pub_inputs, &proof).unwrap();
+        let verified = MerklePoR::<H>::verify(&pub_params, &different_pub_inputs, &proof)
+            .expect("verification failed");
 
         // A proof created with a the wrong challenge not be verified!
         assert!(!verified);

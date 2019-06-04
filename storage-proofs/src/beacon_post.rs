@@ -236,7 +236,8 @@ mod tests {
             post_periods_count: 3,
         };
 
-        let pub_params = BeaconPoSt::<PedersenHasher, vdf_sloth::Sloth>::setup(&sp).unwrap();
+        let pub_params =
+            BeaconPoSt::<PedersenHasher, vdf_sloth::Sloth>::setup(&sp).expect("setup failed");
 
         let data0: Vec<u8> = (0..1024)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
@@ -260,8 +261,12 @@ mod tests {
             _h: PhantomData,
         };
 
-        let proof = BeaconPoSt::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+        let proof = BeaconPoSt::prove(&pub_params, &pub_inputs, &priv_inputs)
+            .expect("failed to create proof");
 
-        assert!(BeaconPoSt::verify(&pub_params, &pub_inputs, &proof).unwrap());
+        let proof_is_valid =
+            BeaconPoSt::verify(&pub_params, &pub_inputs, &proof).expect("failed to verify proof");
+
+        assert!(proof_is_valid);
     }
 }

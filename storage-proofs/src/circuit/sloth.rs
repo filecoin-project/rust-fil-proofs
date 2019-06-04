@@ -170,7 +170,7 @@ mod tests {
             let a = num::AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(rng.gen())).unwrap();
             let b = num::AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(rng.gen())).unwrap();
 
-            let res = sub(cs.namespace(|| "a-b"), &a, &b).unwrap();
+            let res = sub(cs.namespace(|| "a-b"), &a, &b).expect("subtraction failed");
 
             let mut tmp = a.get_value().unwrap().clone();
             tmp.sub_assign(&b.get_value().unwrap());

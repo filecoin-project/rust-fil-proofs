@@ -102,7 +102,10 @@ fn hash_lc<E: Engine>(terms: &[(Variable, E::Fr)], h: &mut Blake2s) {
             }
         }
 
-        coeff.into_repr().write_be(&mut buf[9..]).unwrap();
+        coeff
+            .into_repr()
+            .write_be(&mut buf[9..])
+            .expect("failed to write coeff");
 
         h.update(&buf[..]);
     }

@@ -157,7 +157,7 @@ where
         params: &'a E::Params,
         groth_params: &groth16::Parameters<E>,
     ) -> Result<groth16::Proof<E>> {
-        let rng = &mut OsRng::new().unwrap();
+        let rng = &mut OsRng::new().expect("Failed to create `OsRng`");
 
         // We need to make the circuit repeatedly because we can't clone it.
         // Fortunately, doing so is cheap.
@@ -236,13 +236,15 @@ where
             private_inputs,
             partition_count,
         )
-        .unwrap();
+        .expect("failed to generate partition proofs");
+
         assert_eq!(vanilla_proofs.len(), partition_count);
 
-        assert!(
-            S::verify_all_partitions(vanilla_params, &public_inputs, &vanilla_proofs).unwrap(),
-            "vanilla proof didn't verify"
-        );
+        let partitions_are_verified =
+            S::verify_all_partitions(vanilla_params, &public_inputs, &vanilla_proofs)
+                .expect("failed to verify partition proofs");
+
+        assert!(partitions_are_verified, "vanilla proof didn't verify");
 
         // Some(0) because we only return a circuit and inputs for the first partition.
         // It would be more thorough to return all, though just checking one is probably

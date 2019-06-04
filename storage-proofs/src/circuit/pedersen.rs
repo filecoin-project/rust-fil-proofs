@@ -103,8 +103,8 @@ mod tests {
                 let mut cs = cs.namespace(|| "data");
                 bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).unwrap()
             };
-            let out =
-                pedersen_md_no_padding(cs.namespace(|| "pedersen"), params, &data_bits).unwrap();
+            let out = pedersen_md_no_padding(cs.namespace(|| "pedersen"), params, &data_bits)
+                .expect("pedersen hashing failed");
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
 

@@ -35,7 +35,10 @@ use std::path::PathBuf;
 type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 
 fn anonymous_mmap(len: usize) -> MmapMut {
-    MmapOptions::new().len(len).map_anon().unwrap()
+    MmapOptions::new()
+        .len(len)
+        .map_anon()
+        .expect("Failed to create memory map")
 }
 
 #[derive(Debug, Clone)]
@@ -361,7 +364,8 @@ pub trait Layers {
                 true,
                 layer_challenges.challenges_for_layer(layer),
             );
-            let mut res = DrgPoRep::extract_all(&pp, replica_id, data).unwrap();
+            let mut res = DrgPoRep::extract_all(&pp, replica_id, data)
+                .expect("failed to extract data from PoRep");
 
             for (i, r) in res.iter_mut().enumerate() {
                 data[i] = *r;
@@ -454,17 +458,23 @@ pub trait Layers {
                         let return_channel = tx.clone();
                         let (transfer_tx, transfer_rx) = channel::<Self::Graph>();
 
-                        transfer_tx.send(current_graph.clone()).unwrap();
+                        transfer_tx
+                            .send(current_graph.clone())
+                            .expect("Failed to send value through channel");
 
                         let thread = scope.spawn(move |_| {
                             // If we panic anywhere in this closure, thread.join() below will receive an error —
                             // so it is safe to unwrap.
-                            let graph = transfer_rx.recv().unwrap();
+                            let graph = transfer_rx
+                                .recv()
+                                .expect("Failed to receive value through channel");
 
                             let tree_d = Self::generate_data_tree(&graph, &data_copy, layer);
 
                             info!(SP_LOG, "returning tree"; "layer" => format!("{}", layer));
-                            return_channel.send((layer, tree_d)).unwrap();
+                            return_channel
+                                .send((layer, tree_d))
+                                .expect("Failed to send value through channel");
                         });
 
                         threads.push(thread);

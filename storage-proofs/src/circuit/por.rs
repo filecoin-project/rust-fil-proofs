@@ -301,7 +301,8 @@ mod tests {
                 &public_params.vanilla_params,
                 setup_params.engine_params,
             )
-            .unwrap();
+            .expect("failed to generate groth params");
+
             let proof = PoRCompound::<PedersenHasher>::prove(
                 &public_params,
                 &public_inputs,
@@ -379,14 +380,13 @@ mod tests {
             );
 
             // create a non circuit proof
-            let proof =
-                merklepor::MerklePoR::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+            let proof = merklepor::MerklePoR::<H>::prove(&pub_params, &pub_inputs, &priv_inputs)
+                .expect("proving failed");
 
             // make sure it verifies
-            assert!(
-                merklepor::MerklePoR::<H>::verify(&pub_params, &pub_inputs, &proof).unwrap(),
-                "failed to verify merklepor proof"
-            );
+            let is_valid = merklepor::MerklePoR::<H>::verify(&pub_params, &pub_inputs, &proof)
+                .expect("verification failed");
+            assert!(is_valid, "failed to verify merklepor proof");
 
             // -- Circuit
 
@@ -400,7 +400,7 @@ mod tests {
                 _h: Default::default(),
             };
 
-            por.synthesize(&mut cs).unwrap();
+            por.synthesize(&mut cs).expect("circuit synthesis failed");
             assert!(cs.is_satisfied(), "constraints not satisfied");
 
             assert_eq!(cs.num_inputs(), 3, "wrong number of inputs");
@@ -487,15 +487,19 @@ mod tests {
                 &tree,
             );
 
-            let gparams = PoRCompound::<H>::groth_params(
+            let groth_params = PoRCompound::<H>::groth_params(
                 &public_params.vanilla_params,
                 setup_params.engine_params,
             )
-            .unwrap();
+            .expect("failed to generate groth params");
 
-            let proof =
-                PoRCompound::<H>::prove(&public_params, &public_inputs, &private_inputs, &gparams)
-                    .expect("failed while proving");
+            let proof = PoRCompound::<H>::prove(
+                &public_params,
+                &public_inputs,
+                &private_inputs,
+                &groth_params,
+            )
+            .expect("proving failed");
 
             {
                 let (circuit, inputs) = PoRCompound::<H>::circuit_for_test(
@@ -562,14 +566,13 @@ mod tests {
                 &pub_inputs,
                 &priv_inputs,
             )
-            .unwrap();
+            .expect("proving failed");
 
             // make sure it verifies
-            assert!(
+            let is_valid =
                 merklepor::MerklePoR::<PedersenHasher>::verify(&pub_params, &pub_inputs, &proof)
-                    .unwrap(),
-                "failed to verify merklepor proof"
-            );
+                    .expect("verification failed");
+            assert!(is_valid, "failed to verify merklepor proof");
 
             // -- Circuit
 
@@ -584,7 +587,7 @@ mod tests {
                 _h: Default::default(),
             };
 
-            por.synthesize(&mut cs).unwrap();
+            por.synthesize(&mut cs).expect("circuit synthesis failed");
             assert!(cs.is_satisfied(), "constraints not satisfied");
 
             assert_eq!(cs.num_inputs(), 2, "wrong number of inputs");

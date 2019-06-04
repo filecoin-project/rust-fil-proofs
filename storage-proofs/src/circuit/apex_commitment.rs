@@ -144,16 +144,12 @@ impl<E: JubjubEngine> BinaryApexCommitment<E> {
             BinaryApexCommitment::Branch(left_boxed, right_boxed) => {
                 assert!(length > 0, "Path too short for BinaryCommitment size.");
                 let curr_is_right = &path[0];
-                let cs = &mut cs.namespace(|| {
-                    format!(
-                        "path-{}",
-                        if curr_is_right.get_value().unwrap() {
-                            "1"
-                        } else {
-                            "0"
-                        }
-                    )
-                });
+                let bool_as_char = match curr_is_right.get_value() {
+                    Some(true) => '1',
+                    Some(false) => '0',
+                    None => panic!("Boolean variable was never set"),
+                };
+                let cs = &mut cs.namespace(|| format!("path-{}", bool_as_char));
 
                 let (left, right) = match ((**left_boxed).clone(), (**right_boxed).clone()) {
                     (BinaryApexCommitment::Leaf(left), BinaryApexCommitment::Leaf(right)) => {
@@ -214,16 +210,12 @@ impl<E: JubjubEngine> ApexCommitment<E> for FlatApexCommitment<E> {
             let reduced_size = size / 2; // Must divide evenly because size must be power of 2.
             let mut new_allocated = Vec::with_capacity(reduced_size);
             let curr_is_right = &path[0];
-            let mut cs = &mut cs.namespace(|| {
-                format!(
-                    "path-{}",
-                    if curr_is_right.get_value().unwrap() {
-                        "1"
-                    } else {
-                        "0"
-                    }
-                )
-            });
+            let bool_as_char = match curr_is_right.get_value() {
+                Some(true) => '1',
+                Some(false) => '0',
+                None => panic!("Boolean variable was never set"),
+            };
+            let mut cs = &mut cs.namespace(|| format!("path-{}", bool_as_char));
 
             for i in 0..reduced_size {
                 let left = &self.allocated_nums[i];
@@ -313,8 +305,8 @@ mod tests {
                 })
                 .unwrap();
 
-            let (bc, root) =
-                T::commit(&mut outer_cs.namespace(|| "apex_commit"), &nums, &params).unwrap();
+            let (bc, root) = T::commit(&mut outer_cs.namespace(|| "apex_commit"), &nums, &params)
+                .expect("apex commitment failed");
 
             constraint::equal(
                 &mut outer_cs,
@@ -331,7 +323,7 @@ mod tests {
                     let path = path_from_index(cs, i, n);
 
                     bc.includes(cs, || format!("apex inclusion check {}", i), num, &path)
-                        .unwrap();
+                        .expect("binary commitment `includes` failed");
                 }
                 let num_constraints = outer_cs.num_constraints() - starting_constraints;
                 // length, size: constraints

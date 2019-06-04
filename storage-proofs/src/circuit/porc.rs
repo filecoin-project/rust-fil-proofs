@@ -334,9 +334,12 @@ mod tests {
             trees: &[&tree1, &tree2],
         };
 
-        let proof = PoRC::<PedersenHasher>::prove(&pub_params, &pub_inputs, &priv_inputs).unwrap();
+        let proof = PoRC::<PedersenHasher>::prove(&pub_params, &pub_inputs, &priv_inputs)
+            .expect("proving failed");
 
-        assert!(PoRC::<PedersenHasher>::verify(&pub_params, &pub_inputs, &proof).unwrap());
+        let is_valid = PoRC::<PedersenHasher>::verify(&pub_params, &pub_inputs, &proof)
+            .expect("verification failed");
+        assert!(is_valid);
 
         // actual circuit test
 
@@ -427,11 +430,11 @@ mod tests {
 
         let gparams =
             PoRCCompound::<PedersenHasher>::groth_params(&pub_params.vanilla_params, &params)
-                .unwrap();
+                .expect("failed to create groth params");
 
         let proof =
             PoRCCompound::<PedersenHasher>::prove(&pub_params, &pub_inputs, &priv_inputs, &gparams)
-                .expect("failed while proving");
+                .expect("proving failed");
 
         let (circuit, inputs) = PoRCCompound::<PedersenHasher>::circuit_for_test(
             &pub_params,
