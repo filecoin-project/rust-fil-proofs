@@ -1,7 +1,7 @@
 mod caches;
 mod constants;
 mod file_cleanup;
-mod internal;
+mod safe;
 mod post_adapter;
 mod responses;
 mod sector_builder;

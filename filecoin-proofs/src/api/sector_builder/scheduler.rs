@@ -1,4 +1,4 @@
-use crate::api::internal;
+use crate::api::safe;
 use crate::api::post_adapter::*;
 use crate::api::sector_builder::errors::err_piecenotfound;
 use crate::api::sector_builder::errors::err_unrecov;
@@ -186,7 +186,7 @@ impl<T: KeyValueStore> SectorMetadataManager<T> {
         let mut seed = [0; 32];
         seed.copy_from_slice(challenge_seed);
 
-        let output = internal::generate_post(
+        let output = safe::generate_post(
             self.sector_store.inner.proofs_config().post_config(),
             seed,
             input_parts,

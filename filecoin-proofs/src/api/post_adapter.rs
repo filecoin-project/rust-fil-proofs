@@ -4,8 +4,8 @@ use std::iter::repeat_with;
 use sector_base::api::post_config::PoStConfig;
 
 use crate::api::constants::POST_SECTORS_COUNT;
-use crate::api::internal::ChallengeSeed;
-use crate::api::internal::Commitment;
+use crate::api::safe::ChallengeSeed;
+use crate::api::safe::Commitment;
 use crate::error;
 
 pub struct GeneratePoStDynamicSectorsCountInput {

@@ -14,7 +14,7 @@ use sector_base::api::sector_class::SectorClass;
 use sector_base::api::sector_size::SectorSize;
 use sector_base::api::SINGLE_PARTITION_PROOF_LEN;
 
-use crate::api::internal;
+use crate::api::safe;
 use crate::api::responses;
 use crate::api::responses::err_code_and_msg;
 use crate::api::responses::FCPResponseStatus;
@@ -41,7 +41,7 @@ pub unsafe extern "C" fn verify_seal(
         porep_proof_partitions::try_from_bytes(&bs).and_then(|ppp| {
             let cfg = PoRepConfig(SectorSize(sector_size), ppp);
 
-            internal::verify_seal(
+            safe::verify_seal(
                 cfg,
                 *comm_r,
                 *comm_d,
@@ -101,7 +101,7 @@ pub unsafe extern "C" fn verify_post(
             PoStProofPartitions(proof_partitions),
         );
 
-        internal::verify_post(
+        safe::verify_post(
             cfg,
             into_commitments(flattened_comm_rs_ptr, flattened_comm_rs_len),
             into_safe_challenge_seed(challenge_seed),

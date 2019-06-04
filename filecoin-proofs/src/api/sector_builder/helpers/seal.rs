@@ -1,5 +1,5 @@
-use crate::api::internal::seal as seal_internal;
-use crate::api::internal::SealOutput;
+use crate::api::safe::seal as seal_internal;
+use crate::api::safe::SealOutput;
 use crate::api::sector_builder::metadata::sector_id_as_bytes;
 use crate::api::sector_builder::metadata::SealedSectorMetadata;
 use crate::api::sector_builder::metadata::StagedSectorMetadata;
