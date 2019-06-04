@@ -9,7 +9,7 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-logging-toolkit = { version = "0.1", path = "../logging-toolkit" }
+logging-toolkit = { version = "^0.2", path = "../logging-toolkit" }
 bitvec = "0.11"
 rand = "0.4"
 libc = "0.2"
