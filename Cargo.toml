@@ -1,9 +1,11 @@
 [workspace]
+
 members = [
   "filecoin-proofs",
   "storage-proofs",
   "sector-base",
-  "storage-backend",
   "ffi-toolkit",
   "fil-proofs-tooling",
+  "logging-toolkit",
+  "drop-struct-macro-derive"
 ]

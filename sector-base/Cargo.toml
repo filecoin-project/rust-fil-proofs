@@ -3,8 +3,9 @@ name = "sector-base"
 version = "0.1.0"
 authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
 license = "MIT OR Apache-2.0"
-
 edition = "2018"
+repository = "https://github.com/filecoin-project/rust-fil-proofs"
+readme = "README.md"
 
 [dependencies]
 bitvec = "0.11"

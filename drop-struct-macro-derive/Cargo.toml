@@ -3,6 +3,8 @@ name = "drop_struct_macro_derive"
 version = "0.1.0"
 authors = ["Volker Mische <volker.mische@gmail.com>"]
 edition = "2018"
+repository = "https://github.com/filecoin-project/rust-fil-proofs"
+readme = "README.md"
 
 [lib]
 proc-macro = true

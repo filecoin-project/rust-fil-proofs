@@ -5,6 +5,9 @@ authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
 license = "MIT OR Apache-2.0"
 publish = false
 edition = "2018"
+description = "Tooling for rust-fil-proofs"
+repository = "https://github.com/filecoin-project/rust-fil-proofs"
+readme = "README.md"
 
 [dependencies]
 clap = "2"
