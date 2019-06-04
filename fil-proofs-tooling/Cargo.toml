@@ -1,5 +1,5 @@
 [package]
-name = "fil-proofs-tools"
+name = "fil-proofs-tooling"
 description = "Tooling for rust-fil-proofs"
 version = "0.1.0"
 authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
