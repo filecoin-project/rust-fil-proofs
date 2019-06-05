@@ -31,4 +31,4 @@ rand = "0.6.5"
 
 [build-dependencies]
 bindgen = "0.49"
-cbindgen = "0.8.4"
+cbindgen = "=0.8.4"
