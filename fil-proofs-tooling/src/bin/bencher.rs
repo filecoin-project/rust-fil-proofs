@@ -774,9 +774,10 @@ mod tests {
     fn parse_criterion_out(s: impl AsRef<str>) -> Result<Vec<CriterionResult>> {
         let mut res = Vec::new();
 
-        let start_re = Regex::new(r"^Benchmarking ([^:]+)$").unwrap();
-        let time_re =
-            Regex::new(r"time:\s+\[(\d+\.\d+ \w+) (\d+\.\d+ \w+) (\d+\.\d+ \w+)\]").unwrap();
+        let start_re = Regex::new(r"^Benchmarking ([^:]+)$").expect("invalid regex");
+        let sample_re = Regex::new(r"Collecting (\d+) samples").expect("invalid regex");
+        let time_re = Regex::new(r"time:\s+\[(\d+\.\d+ \w+) (\d+\.\d+ \w+) (\d+\.\d+ \w+)\]")
+            .expect("invalid regex");
 
         let mut current: Option<(
             String,
@@ -823,15 +824,29 @@ mod tests {
                 println!("got start: {:?}", caps);
             }
 
-            if let Some(caps) = time_re.captures(line) {
-                println!("caps: {:?}", caps);
-                if let Some(ref mut current) = current {
+            if let Some(ref mut current) = current {
+                // Samples
+                if let Some(caps) = sample_re.captures(line) {
+                    current.1 = Some(caps[1].parse().unwrap_or_default());
+                }
+
+                // Time
+                if let Some(caps) = time_re.captures(line) {
                     current.2 = Some(time_to_us(&caps[2]));
                     current.3 = Some(Interval {
                         start: time_to_us(&caps[1]),
                         end: time_to_us(&caps[3]),
                     });
                 }
+
+                // Slope
+                // R^2
+
+                // Mean
+                // std.dev
+
+                // median
+                // med.abs.dev
             }
         }
 
