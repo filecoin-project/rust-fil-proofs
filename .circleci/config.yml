@@ -119,8 +119,8 @@ jobs:
           command: |
             cargo run --release --color=always --package filecoin-proofs --bin paramcache -- --test-only
       - run:
-          name: run regression tests (examples) against FFI-exposed filecoin-proofs API
-          command: RUSTFLAGS="-Z sanitizer=leak" cargo run --release --package filecoin-proofs --example ffi --target x86_64-unknown-linux-gnu
+          name: run regression tests (examples) against FFI-exposed sector-builder-ffi API
+          command: RUSTFLAGS="-Z sanitizer=leak" cargo run --release --package sector-builder--fi --example simple --target x86_64-unknown-linux-gnu
       - save_cache:
           key: parameter-cache-{{ .Revision }}
           paths:
