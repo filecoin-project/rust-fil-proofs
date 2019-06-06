@@ -139,9 +139,9 @@ Developers can control `rust-fil-proofs` logging through environment variables:
 
 ## Memory Leak Detection
 
-To run the leak detector against the FFI-exposed portion of libfilecoin_proofs,
-simply run the FFI example with leak detection enabled. On a Linux machine, you
-can run the following command:
+To run the leak detector against the FFI-exposed portion of
+libsector_builder_ffi.a, simply run the FFI example with leak detection enabled.
+On a Linux machine, you can run the following command:
 
 ```shell
 RUSTFLAGS="-Z sanitizer=leak" cargo run --release --package filecoin-proofs --example ffi --target x86_64-unknown-linux-gnu

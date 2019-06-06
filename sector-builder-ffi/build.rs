@@ -27,7 +27,7 @@ fn main() {
     // but rather just tell the rest of the system we can't proceed.
     match c {
         Ok(res) => {
-            res.write_to_file(target_path.join("libsector_builder.h"));
+            res.write_to_file(target_path.join("libsector_builder_ffi.h"));
         }
         Err(err) => {
             eprintln!("unable to generate bindings: {:?}", err);
@@ -36,7 +36,11 @@ fn main() {
     }
 
     let b = bindgen::builder()
-        .header(target_path.join("libsector_builder.h").to_string_lossy())
+        .header(
+            target_path
+                .join("libsector_builder_ffi.h")
+                .to_string_lossy(),
+        )
         // Here, we tell Rust to link libsector_builder so that auto-generated
         // symbols are linked to symbols in the compiled dylib. For reasons
         // unbeknown to me, the link attribute needs to precede an extern block.
@@ -68,7 +72,7 @@ fn main() {
         ""
     };
 
-    let mut pc_file = File::create(target_path.join("libsector_builder.pc"))
+    let mut pc_file = File::create(target_path.join("libsector_builder_ffi.pc"))
         .expect("unable to generate .pc file: {:?}");
 
     write!(
