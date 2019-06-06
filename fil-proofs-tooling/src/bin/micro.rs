@@ -3,9 +3,8 @@ extern crate commandspec;
 #[macro_use]
 extern crate failure;
 
+use prometheus::{Encoder, GaugeVec, Opts, Registry, TextEncoder};
 use regex::Regex;
-// use commandspec::CommandSpec; // .execute() method on Command
-// use std::process::Command;
 
 #[derive(Debug, Default, Clone, PartialEq)]
 struct Interval {
@@ -208,9 +207,36 @@ fn run_benches() -> Result<(), failure::Error> {
 
     let stdout = std::str::from_utf8(&result.stdout)?;
     let parsed_results = parse_criterion_out(stdout)?;
-    println!("{:#?}", parsed_results);
+    process_results(parsed_results);
 
     Ok(())
+}
+
+fn process_results(results: Vec<CriterionResult>) {
+    // Create a prometheus registry
+    let r = Registry::new();
+
+    // Create a Counter.
+    let time_gauge_vec =
+        GaugeVec::new(Opts::new("time_gauge_us", "time gauge help"), &["name"]).unwrap();
+
+    r.register(Box::new(time_gauge_vec.clone())).unwrap();
+
+    for res in &results {
+        println!("setting: {}", res.time_med_us);
+        time_gauge_vec
+            .with_label_values(&[&res.name])
+            .set(res.time_med_us);
+    }
+
+    // Gather the metrics.
+    let mut buffer = vec![];
+    let encoder = TextEncoder::new();
+    let metric_families = r.gather();
+    encoder.encode(&metric_families, &mut buffer).unwrap();
+
+    // Output to the standard output.
+    println!("{}", String::from_utf8(buffer).unwrap());
 }
 
 fn main() {
