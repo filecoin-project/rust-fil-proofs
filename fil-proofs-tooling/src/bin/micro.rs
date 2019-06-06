@@ -191,7 +191,7 @@ fn time_to_us(s: &str) -> f64 {
 fn run_benches(args: Vec<String>, push_prometheus: bool) -> Result<(), failure::Error> {
     let mut cmd = command!(
         r"
-        cargo bench -p storage-proofs {args} -- --verbose --color never
+        cargo bench --all {args} -- --verbose --color never
     ",
         args = args
     )?;
