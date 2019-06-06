@@ -1,5 +1,3 @@
-use sector_base::api::bytes_amount::PaddedBytesAmount;
-use sector_base::api::post_config::PoStConfig;
 use storage_proofs::drgporep::DrgParams;
 use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::hasher::pedersen::PedersenDomain;
@@ -16,6 +14,7 @@ use storage_proofs::zigzag_graph::ZigZagBucketGraph;
 use crate::constants::POREP_MINIMUM_CHALLENGES;
 use crate::constants::POST_SECTORS_COUNT;
 use crate::singletons::POST_VDF_KEY;
+use crate::types::{PaddedBytesAmount, PoStConfig};
 
 const POST_CHALLENGE_COUNT: usize = 30;
 const POST_EPOCHS: usize = 3;
@@ -119,10 +118,10 @@ fn select_challenges(
 
 #[cfg(test)]
 mod tests {
-    use sector_base::api::porep_proof_partitions::PoRepProofPartitions;
+    use super::*;
 
     use crate::constants::POREP_MINIMUM_CHALLENGES;
-    use crate::parameters::*;
+    use crate::types::PoRepProofPartitions;
 
     #[test]
     fn partition_layer_challenges_test() {

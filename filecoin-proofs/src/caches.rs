@@ -5,10 +5,6 @@ use std::sync::Mutex;
 use bellperson::groth16;
 use paired::bls12_381::Bls12;
 
-use sector_base::api::bytes_amount::PaddedBytesAmount;
-use sector_base::api::porep_config::PoRepConfig;
-use sector_base::api::porep_proof_partitions::PoRepProofPartitions;
-use sector_base::api::post_config::PoStConfig;
 use storage_proofs::circuit::vdf_post::VDFPoStCircuit;
 use storage_proofs::circuit::vdf_post::VDFPostCompound;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
@@ -19,8 +15,8 @@ use storage_proofs::vdf_sloth::Sloth;
 
 use crate::error;
 use crate::parameters::{post_public_params, public_params};
-use crate::singletons::ENGINE_PARAMS;
-use crate::singletons::FCP_LOG;
+use crate::singletons::{ENGINE_PARAMS, FCP_LOG};
+use crate::types::*;
 
 type Bls12GrothParams = groth16::Parameters<Bls12>;
 pub type Bls12VerifyingKey = groth16::VerifyingKey<Bls12>;

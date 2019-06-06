@@ -3,12 +3,10 @@ use std::fs::File;
 
 use rand::OsRng;
 
+use filecoin_proofs::constants::*;
 use filecoin_proofs::parameters::public_params;
 use filecoin_proofs::singletons::ENGINE_PARAMS;
-use sector_base::api::bytes_amount::PaddedBytesAmount;
-use sector_base::api::disk_backed_storage::TEST_SECTOR_SIZE;
-use sector_base::api::porep_proof_partitions::PoRepProofPartitions;
-use sector_base::api::sector_size::SectorSize;
+use filecoin_proofs::types::*;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::CompoundProof;
 

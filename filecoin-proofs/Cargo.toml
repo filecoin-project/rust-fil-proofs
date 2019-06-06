@@ -8,22 +8,15 @@ edition = "2018"
 repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
-[lib]
-crate-type = ["rlib", "staticlib", "cdylib"]
-
 [dependencies]
-sector-base = { version = "^0.2", path = "../sector-base" }
 storage-proofs = { version = "^0.2", path = "../storage-proofs" }
-ffi-toolkit = { version = "^0.2", path = "../ffi-toolkit" }
 logging-toolkit = { version = "^0.2", path = "../logging-toolkit" }
 bitvec = "0.11"
 chrono = "0.4"
 rand = "0.4"
-libc = "0.2"
 failure = "0.1"
 lazy_static = "1.2"
 memmap = "0.7"
-clap = "2"
 colored = "1.6"
 pbr = "1.0"
 tempfile = "3"
@@ -34,17 +27,13 @@ serde = { version = "1", features = ["rc", "derive"] }
 serde_json = "1.0"
 slog = { version = "2.4.1", features = ["max_level_trace", "release_max_level_trace"] }
 regex = "1"
-drop_struct_macro_derive = { version = "^0.2", path = "../drop-struct-macro-derive" }
 ff = "0.4.0"
 blake2b_simd = "0.5"
 phase21 = "0.3"
 bellperson = "0.2"
 paired = "0.15"
 fil-sapling-crypto = "0.1"
-
-[dependencies.sled]
-version = "0.24"
-optional = true
+clap = "2"
 
 [dependencies.reqwest]
 version = "0.9"
@@ -53,15 +42,15 @@ features = ["default-tls-vendored"]
 
 [dev-dependencies]
 gperftools = "0.2"
-scopeguard = "1.0"
-
-[build-dependencies]
-bindgen = "0.49"
-cbindgen = "0.8"
+criterion = "0.2"
 
 [features]
-default = ["sled"]
+default = []
 cpu-profile = []
 heap-profile = []
 simd = ["storage-proofs/simd"]
 asm = ["storage-proofs/asm"]
+
+[[bench]]
+name = "preprocessing"
+harness = false
