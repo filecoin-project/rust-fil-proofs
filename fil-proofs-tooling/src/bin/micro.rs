@@ -2,6 +2,8 @@
 extern crate commandspec;
 #[macro_use]
 extern crate failure;
+#[macro_use]
+extern crate prometheus;
 
 use prometheus::{Encoder, GaugeVec, Opts, Registry, TextEncoder};
 use regex::Regex;
@@ -186,12 +188,12 @@ fn time_to_us(s: &str) -> f64 {
     }
 }
 
-fn run_benches() -> Result<(), failure::Error> {
+fn run_benches(args: Vec<String>, push_prometheus: bool) -> Result<(), failure::Error> {
     let mut cmd = command!(
         r"
         cargo bench -p storage-proofs {args} -- --verbose --color never
     ",
-        args = std::env::args().skip(1).collect::<Vec<_>>()
+        args = args
     )?;
 
     println!("{:?}", cmd);
@@ -207,12 +209,12 @@ fn run_benches() -> Result<(), failure::Error> {
 
     let stdout = std::str::from_utf8(&result.stdout)?;
     let parsed_results = parse_criterion_out(stdout)?;
-    process_results(parsed_results);
+    process_results(parsed_results, push_prometheus);
 
     Ok(())
 }
 
-fn process_results(results: Vec<CriterionResult>) {
+fn process_results(results: Vec<CriterionResult>, push: bool) {
     // Create a prometheus registry
     let r = Registry::new();
 
@@ -223,7 +225,6 @@ fn process_results(results: Vec<CriterionResult>) {
     r.register(Box::new(time_gauge_vec.clone())).unwrap();
 
     for res in &results {
-        println!("setting: {}", res.time_med_us);
         time_gauge_vec
             .with_label_values(&[&res.name])
             .set(res.time_med_us);
@@ -237,10 +238,32 @@ fn process_results(results: Vec<CriterionResult>) {
 
     // Output to the standard output.
     println!("{}", String::from_utf8(buffer).unwrap());
+
+    if push {
+        let address = "127.0.0.1:9091";
+        println!("pushing results to gateway {}", address);
+
+        let metric_families = prometheus::gather();
+        prometheus::push_metrics(
+            "micros-fil-proofs",
+            labels! { "why".to_owned() => "are you here?".to_owned(), },
+            &address,
+            metric_families,
+            None,
+        )
+        .expect("failed to push")
+    }
 }
 
 fn main() {
-    match run_benches() {
+    let pass_through = std::env::args()
+        .skip(1)
+        .filter(|arg| arg != "--push-prometheus")
+        .collect();
+    let push_prometheus = std::env::args()
+        .find(|arg| arg == "--push-prometheus")
+        .is_some();
+    match run_benches(pass_through, push_prometheus) {
         Ok(()) => {}
         Err(err) => {
             eprintln!("{}", err);
