@@ -11,7 +11,7 @@ readme = "README.md"
 [dependencies]
 storage-proofs = { version = "^0.2", path = "../storage-proofs" }
 logging-toolkit = { version = "^0.2", path = "../logging-toolkit" }
-bitvec = "0.11"
+bitvec = "= 0.11.1"
 chrono = "0.4"
 rand = "0.4"
 failure = "0.1"

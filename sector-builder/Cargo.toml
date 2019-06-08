@@ -9,7 +9,7 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-bitvec = "0.11"
+bitvec = "= 0.11.1"
 failure = "0.1.5"
 itertools = "0.8"
 rand = "0.4"
