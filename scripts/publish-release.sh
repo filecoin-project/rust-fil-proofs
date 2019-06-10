@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -Eeuo pipefail
+
 RELEASE_NAME="$CIRCLE_PROJECT_REPONAME-`uname`"
 RELEASE_FILE="/tmp/$RELEASE_NAME.tar.gz"
 RELEASE_TAG="${CIRCLE_SHA1:0:16}"

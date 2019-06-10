@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -Eeuo pipefail
+
 if [ -z "$1" ]; then
   TAR_FILE=`mktemp`.tar.gz
 else
