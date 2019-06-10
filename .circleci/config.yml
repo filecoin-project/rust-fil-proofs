@@ -94,10 +94,9 @@ jobs:
             - cargo-v10-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
             - parameter-cache-{{ .Revision }}
       - run:
-          name: Test (stable) in release profile
+          name: Test (nightly) disk-trees feature
           command: |
-            cargo +stable test --verbose --release --all --features disk-trees
-            RUSTFLAGS="-D warnings" cargo +stable build --examples --release --frozen --all --features disk-trees
+            cargo +$(cat rust-toolchain) test --verbose --release -p storage-proofs --features disk-trees -Z package-features
           environment:
             FIL_PROOFS_REPLICATED_TREES_DIR: replicated-disk-trees
 
