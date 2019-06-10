@@ -280,6 +280,12 @@ workflows:
       - build_linux_release:
           requires:
             - cargo_fetch
+          filters:
+            branches:
+              only: master
       - build_darwin_release:
           requires:
             - cargo_fetch
+          filters:
+            branches:
+              only: master
