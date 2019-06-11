@@ -22,3 +22,5 @@ pub mod singletons;
 pub mod types;
 
 pub use api::*;
+pub use constants::SINGLE_PARTITION_PROOF_LEN;
+pub use types::*;
