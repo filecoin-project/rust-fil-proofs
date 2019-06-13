@@ -48,6 +48,7 @@ default = []
 simd = []
 asm = ["sha2/sha2-asm"]
 disk-trees = []
+big-sector-sizes-bench = []
 
 [dev-dependencies]
 proptest = "0.7"
