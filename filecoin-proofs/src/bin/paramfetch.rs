@@ -11,12 +11,15 @@ use storage_proofs::parameter_cache::PARAMETER_CACHE_DIR;
 
 pub fn main() {
     let matches = App::new("paramfetch")
-        .version("1.0")
+        .version("1.1")
         .about(
             &format!(
                 "
 Set $FILECOIN_PARAMETER_CACHE to specify parameter file directory.
 Defaults to '{}'
+
+Use -g,--gateway to specify ipfs gateway.
+Defaults to 'https://ipfs.io'
 ",
                 PARAMETER_CACHE_DIR
             )[..],
@@ -28,6 +31,14 @@ Defaults to '{}'
                 .short("j")
                 .long("json")
                 .help("Use specific json file"),
+        )
+        .arg(
+            Arg::with_name("gateway")
+                .value_name("URL")
+                .takes_value(true)
+                .short("g")
+                .long("gateway")
+                .help("Use specific ipfs gateway"),
         )
         .arg(
             Arg::with_name("retry")
@@ -61,6 +72,7 @@ Defaults to '{}'
 fn fetch(matches: &ArgMatches) -> Result<()> {
     let json_path = PathBuf::from(matches.value_of("json").unwrap_or("./parameters.json"));
     let retry = matches.is_present("retry");
+    let gateway = matches.value_of("gateway").unwrap_or("https://ipfs.io");
 
     if !json_path.exists() {
         return Err(err_msg(format!(
@@ -95,6 +107,7 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
                 matches.is_present("verbose"),
                 &parameter_map,
                 &parameter_id,
+                &gateway,
             ) {
                 Ok(_) => println!("ok\n"),
                 Err(err) => println!("error: {}\n", err),

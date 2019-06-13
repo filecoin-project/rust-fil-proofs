@@ -143,6 +143,7 @@ pub fn spawn_fetch_parameter_file(
     is_verbose: bool,
     parameter_map: &ParameterMap,
     parameter_id: &str,
+    gateway: &str,
 ) -> Result<()> {
     let parameter_data = get_parameter_data(parameter_map, parameter_id)?;
     let path = get_parameter_file_path(parameter_id);
@@ -155,7 +156,7 @@ pub fn spawn_fetch_parameter_file(
     };
 
     let client = Client::new();
-    let url = Url::parse(&format!("https://ipfs.io/ipfs/{}", parameter_data.cid))?;
+    let url = Url::parse(&format!("{}/ipfs/{}", gateway, parameter_data.cid))?;
     let total_size = {
         let res = client.head(url.as_str()).send()?;
         if res.status().is_success() {
