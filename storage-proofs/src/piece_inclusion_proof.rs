@@ -1,9 +1,10 @@
 use itertools::Itertools;
 use merkletree::hash::Algorithm;
 use merkletree::merkle::{self, next_pow2, VecStore};
+use std::io::Read;
 
 use crate::error::*;
-use crate::fr32::Fr32Vec;
+use crate::fr32::Fr32Ary;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::MerkleTree;
 
@@ -15,15 +16,53 @@ pub struct PieceInclusionProof<H: Hasher> {
     proof_elements: Vec<H::Domain>,
 }
 
-/// `position`, `length` are in H::Domain units
-#[derive(Clone, Debug)]
-pub struct PieceSpec<'a> {
-    comm_p: &'a Fr32Vec,
-    position: usize,
-    length: usize,
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PackedPieceInclusionProof {
+    bytes: Vec<u8>,
 }
 
-impl<'a> PieceSpec<'a> {
+impl<H: Hasher> From<PieceInclusionProof<H>> for PackedPieceInclusionProof {
+    fn from(proof: PieceInclusionProof<H>) -> Self {
+        let position = proof.position.to_le_bytes();
+        let proof_elements = proof
+            .proof_elements
+            .iter()
+            .flat_map(H::Domain::into_bytes)
+            .collect::<Vec<u8>>();
+
+        Self {
+            bytes: [&position, proof_elements.as_slice()].concat(),
+        }
+    }
+}
+
+impl<H: Hasher> From<PackedPieceInclusionProof> for PieceInclusionProof<H> {
+    fn from(packed_proof: PackedPieceInclusionProof) -> Self {
+        let mut position_bytes: [u8; 8] = [0; 8];
+        position_bytes.copy_from_slice(&packed_proof.bytes[0..7]);
+        let mut proof_elements = Vec::new();
+
+        for chunk in packed_proof.bytes[8..].chunks(32) {
+            let proof = <H::Domain as Domain>::try_from_bytes(&chunk).expect("foo");
+            proof_elements.push(proof);
+        }
+
+        Self {
+            position: usize::from_le_bytes(position_bytes),
+            proof_elements: Vec::new(),
+        }
+    }
+}
+
+/// `position`, `length` are in H::Domain units
+#[derive(Clone, Debug)]
+pub struct PieceSpec {
+    pub comm_p: Fr32Ary,
+    pub position: usize,
+    pub length: usize,
+}
+
+impl PieceSpec {
     /// `compute_packing` returns a packing list and a proof size.
     /// A packing list is a pair of (start, length) pairs, relative to the beginning of the piece,
     /// in leaf units.
@@ -90,10 +129,36 @@ fn generate_piece_commitment<H: Hasher>(data: &[u8]) -> Result<H::Domain> {
 
 #[allow(dead_code)]
 /// Generate `comm_p` from bytes and return it as bytes.
-fn generate_piece_commitment_bytes<H: Hasher>(data: &[u8]) -> Result<Fr32Vec> {
+fn generate_piece_commitment_bytes<H: Hasher>(data: &[u8]) -> Result<Fr32Ary> {
     let comm_p = generate_piece_commitment::<H>(data)?;
+    let mut comm_p_bytes: Fr32Ary = [0; 32];
 
-    Ok(H::Domain::into_bytes(&comm_p))
+    comm_p.write_bytes(&mut comm_p_bytes)?;
+
+    Ok(comm_p_bytes)
+}
+
+/// Generate `comm_p` from a source and return it as bytes.
+pub fn generate_piece_commitment_bytes_from_source<H: Hasher>(
+    source: &mut Read,
+) -> Result<Fr32Ary> {
+    let mut domain_data = Vec::new();
+
+    loop {
+        let mut buf = [0; 32];
+
+        if source.read(&mut buf)? > 0 {
+            domain_data.push(<H::Domain as Domain>::try_from_bytes(&buf)?);
+        } else {
+            break;
+        }
+    }
+
+    let mut comm_p_bytes = [0; 32];
+    let comm_p = compute_piece_commitment::<H>(&domain_data);
+    comm_p.write_bytes(&mut comm_p_bytes)?;
+
+    Ok(comm_p_bytes)
 }
 
 pub fn piece_inclusion_proofs<H: Hasher>(
@@ -153,7 +218,7 @@ impl<H: Hasher> PieceInclusionProof<H> {
 
                 if piece_inclusion_proof.verify(
                     &tree.root(),
-                    &H::Domain::try_from_bytes(comm_p)?,
+                    &H::Domain::try_from_bytes(&comm_p)?,
                     leaf_count,
                     tree.leafs(),
                 ) {
@@ -250,7 +315,7 @@ impl<H: Hasher> PieceInclusionProof<H> {
     pub fn verify_all(
         root: &[u8],
         proofs: &[PieceInclusionProof<H>],
-        comm_ps: &[Vec<u8>],
+        comm_ps: &[Fr32Ary],
         piece_sizes: &[usize],
         sector_size: usize,
     ) -> Result<bool> {
@@ -395,9 +460,9 @@ mod tests {
         assert_eq!(tree.leafs(), piece_tree.leafs());
 
         let mut piece_specs = Vec::new();
-        for (comm_p, (position, length)) in comm_ps.iter().zip(sections.clone()) {
+        for (&comm_p, (position, length)) in comm_ps.iter().zip(sections.clone()) {
             piece_specs.push(PieceSpec {
-                comm_p: &comm_p,
+                comm_p,
                 position,
                 length,
             })

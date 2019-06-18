@@ -1,5 +1,5 @@
 use std::fs::{copy, File, OpenOptions};
-use std::io::{BufWriter, Read};
+use std::io::{BufWriter, Cursor, Read};
 use std::path::{Path, PathBuf};
 
 use ff::PrimeField;
@@ -17,6 +17,10 @@ use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::layered_drgporep::{self, ChallengeRequirements};
 use storage_proofs::merkle::MerkleTree;
+use storage_proofs::piece_inclusion_proof::{
+    generate_piece_commitment_bytes_from_source, piece_inclusion_proofs, PieceInclusionProof,
+    PieceSpec,
+};
 use storage_proofs::porep::{replica_id, PoRep, Tau};
 use storage_proofs::proof::NoRequirements;
 use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
@@ -31,6 +35,7 @@ use crate::error::ExpectWithBacktrace;
 use crate::file_cleanup::FileCleanup;
 use crate::fr32::write_unpadded;
 use crate::parameters::{post_setup_params, public_params, setup_params};
+use crate::pieces::{get_piece_alignment, PieceAlignment};
 use crate::post_adapter::*;
 use crate::singletons::ENGINE_PARAMS;
 use crate::singletons::FCP_LOG;
@@ -52,6 +57,8 @@ pub struct SealOutput {
     pub comm_r_star: Commitment,
     pub comm_d: Commitment,
     pub proof: Vec<u8>,
+    pub comm_ps: Vec<Commitment>,
+    pub piece_inclusion_proofs: Vec<PieceInclusionProof<PedersenHasher>>,
 }
 
 /// Generates a proof-of-spacetime, returning and detected storage faults.
@@ -97,6 +104,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     out_path: T,
     prover_id_in: &FrSafe,
     sector_id_in: &FrSafe,
+    piece_lengths: &[u64],
 ) -> error::Result<SealOutput> {
     let sector_bytes = usize::from(PaddedBytesAmount::from(porep_config));
 
@@ -134,6 +142,8 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         &mut data,
         None,
     )?;
+
+    let tree = &aux.clone()[0];
 
     // If we succeeded in replicating, flush the data and protect output from being cleaned up.
     data.flush()?;
@@ -175,6 +185,66 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     let comm_d = commitment_from_fr::<Bls12>(public_tau.comm_d.into());
     let comm_r_star = commitment_from_fr::<Bls12>(tau.comm_r_star.into());
 
+    let mut piece_specs = Vec::new();
+    let mut comm_ps = Vec::new();
+    let mut cursor = UnpaddedBytesAmount(0);
+    let mut in_data = OpenOptions::new().read(true).open(&in_path)?;
+
+    for &piece_length in piece_lengths {
+        let unpadded_piece_length = UnpaddedBytesAmount(piece_length);
+        let PieceAlignment {
+            left_bytes,
+            right_bytes,
+        } = get_piece_alignment(cursor, unpadded_piece_length);
+
+        let padded_piece_length = PaddedBytesAmount::from(unpadded_piece_length);
+        let padded_left_bytes = PaddedBytesAmount::from(left_bytes);
+        let padded_right_bytes =
+            PaddedBytesAmount::from(unpadded_piece_length + right_bytes) - padded_piece_length;
+
+        let leaf_position = (usize::from(cursor) / 127) * 4;
+
+        cursor = cursor + left_bytes + unpadded_piece_length + right_bytes;
+
+        let leaf_length = (usize::from(cursor) / 127) * 4 - leaf_position;
+
+        let mut buf = vec![0; usize::from(padded_left_bytes)];
+        in_data.read_exact(&mut buf)?;
+
+        let mut buf = vec![0; usize::from(padded_piece_length)];
+        in_data.read_exact(&mut buf)?;
+        let mut source = Cursor::new(buf);
+        let comm_p = generate_piece_commitment_bytes_from_source::<PedersenHasher>(&mut source)?;
+
+        let mut buf = vec![0; usize::from(padded_right_bytes)];
+        in_data.read_exact(&mut buf)?;
+
+        comm_ps.push(comm_p);
+        piece_specs.push(PieceSpec {
+            comm_p,
+            position: leaf_position,
+            length: leaf_length,
+        });
+    }
+
+    let piece_inclusion_proofs = piece_inclusion_proofs::<PedersenHasher>(&piece_specs, tree)?;
+
+    let valid_pieces = PieceInclusionProof::verify_all(
+        &comm_d,
+        &piece_inclusion_proofs,
+        &comm_ps,
+        &piece_specs
+            .into_iter()
+            .map(|p| p.length)
+            .collect::<Vec<_>>(),
+        (sector_bytes / 127) * 4,
+    )
+    .expect("pip verification sanity check failed");
+
+    if !valid_pieces {
+        return Err(format_err!("pip verification sanity check failed"));
+    }
+
     // Verification is cheap when parameters are cached,
     // and it is never correct to return a proof which does not verify.
     verify_seal(
@@ -193,6 +263,8 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         comm_r_star,
         comm_d,
         proof: buf,
+        comm_ps,
+        piece_inclusion_proofs,
     })
 }
 
