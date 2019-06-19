@@ -59,7 +59,7 @@ impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier, H: Hasher>
     }
 }
 
-// can only implment for Bls12 because merklepor is not generic over the engine.
+// can only implement for Bls12 because merklepor is not generic over the engine.
 impl<'a, H> CompoundProof<'a, Bls12, MerklePoR<H>, PoRCircuit<'a, Bls12, H>> for PoRCompound<H>
 where
     H: 'a + Hasher,

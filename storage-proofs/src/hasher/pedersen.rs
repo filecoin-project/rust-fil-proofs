@@ -33,7 +33,7 @@ impl Hasher for PedersenHasher {
 
     #[inline]
     fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain, rounds: usize) -> Self::Domain {
-        // Unrapping here is safe; `Fr` elements and hash domain elements are the same byte length.
+        // Unwrapping here is safe; `Fr` elements and hash domain elements are the same byte length.
         let key = Fr::from_repr(key.0).unwrap();
         let ciphertext = Fr::from_repr(ciphertext.0).unwrap();
         sloth::encode::<Bls12>(&key, &ciphertext, rounds).into()
@@ -41,7 +41,7 @@ impl Hasher for PedersenHasher {
 
     #[inline]
     fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain, rounds: usize) -> Self::Domain {
-        // Unrapping here is safe; `Fr` elements and hash domain elements are the same byte length.
+        // Unwrapping here is safe; `Fr` elements and hash domain elements are the same byte length.
         let key = Fr::from_repr(key.0).unwrap();
         let ciphertext = Fr::from_repr(ciphertext.0).unwrap();
 
