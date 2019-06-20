@@ -9,6 +9,9 @@ use storage_proofs::hasher::pedersen::PedersenHasher;
 use storage_proofs::zigzag_graph::{ZigZag, ZigZagBucketGraph, DEFAULT_EXPANSION_DEGREE};
 
 fn merkle_benchmark(c: &mut Criterion) {
+    #[cfg(feature = "big-sector-sizes-bench")]
+    let params = vec![128, 1024, 1048576];
+    #[cfg(not(feature = "big-sector-sizes-bench"))]
     let params = vec![128, 1024];
 
     c.bench(
