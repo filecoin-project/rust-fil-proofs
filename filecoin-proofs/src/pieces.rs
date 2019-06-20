@@ -9,49 +9,32 @@ pub struct PieceAlignment {
     pub right_bytes: UnpaddedBytesAmount,
 }
 
-#[derive(Clone)]
-pub struct PieceMetadata {
-    pub piece_key: String,
-    pub num_bytes: UnpaddedBytesAmount,
-}
-
 /**
  * Given a list of pieces, sum the number of bytes taken by those pieces in that order.
  */
-pub fn sum_piece_bytes_with_alignment(pieces: &[PieceMetadata]) -> UnpaddedBytesAmount {
-    pieces.iter().fold(UnpaddedBytesAmount(0), |acc, p| {
-        let PieceAlignment {
-            left_bytes,
-            right_bytes,
-        } = get_piece_alignment(acc, p.num_bytes);
-
-        acc + left_bytes + p.num_bytes + right_bytes
-    })
-}
-
-/**
- * Given a list of pieces, find the piece with a matching piece_key.
- */
-pub fn get_piece_by_key(pieces: &[PieceMetadata], piece_key: &str) -> Option<PieceMetadata> {
+pub fn sum_piece_bytes_with_alignment(pieces: &[UnpaddedBytesAmount]) -> UnpaddedBytesAmount {
     pieces
         .iter()
-        .find(|p| p.piece_key == piece_key)
-        .map(PieceMetadata::clone)
+        .fold(UnpaddedBytesAmount(0), |acc, piece_bytes| {
+            let PieceAlignment {
+                left_bytes,
+                right_bytes,
+            } = get_piece_alignment(acc, *piece_bytes);
+
+            acc + left_bytes + *piece_bytes + right_bytes
+        })
 }
 
 /**
  * Given a list of pieces, find the byte where a given piece does or would start.
  */
-pub fn get_piece_start_byte(pieces: &[PieceMetadata], piece: &PieceMetadata) -> UnpaddedByteIndex {
-    // get pieces up to the target piece, or all of them if the piece doesn't exist
-    let pieces: Vec<PieceMetadata> = pieces
-        .iter()
-        .take_while(|p| p.piece_key != piece.piece_key)
-        .map(PieceMetadata::clone)
-        .collect();
+pub fn get_piece_start_byte(
+    pieces: &[UnpaddedBytesAmount],
+    piece_bytes: UnpaddedBytesAmount,
+) -> UnpaddedByteIndex {
     // sum up all the bytes taken by the ordered pieces
     let last_byte = sum_piece_bytes_with_alignment(&pieces);
-    let alignment = get_piece_alignment(last_byte, piece.num_bytes);
+    let alignment = get_piece_alignment(last_byte, piece_bytes);
 
     // add only the left padding of the target piece to give the start of that piece's data
     UnpaddedByteIndex::from(last_byte + alignment.left_bytes)
@@ -121,7 +104,7 @@ fn with_alignment(source: impl Read, piece_alignment: PieceAlignment) -> impl Re
  */
 pub fn get_aligned_source(
     source: impl Read,
-    pieces: &[PieceMetadata],
+    pieces: &[UnpaddedBytesAmount],
     piece_bytes: UnpaddedBytesAmount,
 ) -> (UnpaddedBytesAmount, impl Read) {
     let written_bytes = sum_piece_bytes_with_alignment(pieces);
@@ -174,37 +157,22 @@ mod tests {
 
     #[test]
     fn test_get_piece_start_byte() {
-        let mut pieces: Vec<PieceMetadata> = Default::default();
-
-        let piece_a = PieceMetadata {
-            piece_key: String::from("a"),
-            num_bytes: UnpaddedBytesAmount(31),
-        };
-
-        let piece_b = PieceMetadata {
-            piece_key: String::from("b"),
-            num_bytes: UnpaddedBytesAmount(32),
-        };
-
-        let piece_c = PieceMetadata {
-            piece_key: String::from("c"),
-            num_bytes: UnpaddedBytesAmount(33),
-        };
-
-        pieces.push(piece_a);
-        pieces.push(piece_b);
-        pieces.push(piece_c);
+        let pieces = [
+            UnpaddedBytesAmount(31),
+            UnpaddedBytesAmount(32),
+            UnpaddedBytesAmount(33),
+        ];
 
         assert_eq!(
-            get_piece_start_byte(&pieces, &pieces[0]),
+            get_piece_start_byte(&pieces[..0], pieces[0]),
             UnpaddedByteIndex(0)
         );
         assert_eq!(
-            get_piece_start_byte(&pieces, &pieces[1]),
+            get_piece_start_byte(&pieces[..1], pieces[1]),
             UnpaddedByteIndex(127)
         );
         assert_eq!(
-            get_piece_start_byte(&pieces, &pieces[2]),
+            get_piece_start_byte(&pieces[..2], pieces[2]),
             UnpaddedByteIndex(254)
         );
     }

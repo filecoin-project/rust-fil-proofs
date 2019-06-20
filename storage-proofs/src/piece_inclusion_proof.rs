@@ -16,12 +16,7 @@ pub struct PieceInclusionProof<H: Hasher> {
     proof_elements: Vec<H::Domain>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct PackedPieceInclusionProof {
-    bytes: Vec<u8>,
-}
-
-impl<H: Hasher> From<PieceInclusionProof<H>> for PackedPieceInclusionProof {
+impl<H: Hasher> From<PieceInclusionProof<H>> for Vec<u8> {
     fn from(proof: PieceInclusionProof<H>) -> Self {
         let position = proof.position.to_le_bytes();
         let proof_elements = proof
@@ -30,19 +25,17 @@ impl<H: Hasher> From<PieceInclusionProof<H>> for PackedPieceInclusionProof {
             .flat_map(H::Domain::into_bytes)
             .collect::<Vec<u8>>();
 
-        Self {
-            bytes: [&position, proof_elements.as_slice()].concat(),
-        }
+        [&position, proof_elements.as_slice()].concat()
     }
 }
 
-impl<H: Hasher> From<PackedPieceInclusionProof> for PieceInclusionProof<H> {
-    fn from(packed_proof: PackedPieceInclusionProof) -> Self {
+impl<H: Hasher> From<Vec<u8>> for PieceInclusionProof<H> {
+    fn from(bytes: Vec<u8>) -> Self {
         let mut position_bytes: [u8; 8] = [0; 8];
-        position_bytes.copy_from_slice(&packed_proof.bytes[0..7]);
+        position_bytes.copy_from_slice(&bytes[0..7]);
         let mut proof_elements = Vec::new();
 
-        for chunk in packed_proof.bytes[8..].chunks(32) {
+        for chunk in bytes[8..].chunks(32) {
             let proof = <H::Domain as Domain>::try_from_bytes(&chunk).expect("foo");
             proof_elements.push(proof);
         }
@@ -312,24 +305,63 @@ impl<H: Hasher> PieceInclusionProof<H> {
 
     /// verify_piece_inclusion_proofs returns true iff each provided piece is proved with respect to root
     /// by the corresponding (by index) proof.
-    pub fn verify_all(
-        root: &[u8],
+    fn verify_all(
+        root: &H::Domain,
+        proofs: &[PieceInclusionProof<H>],
+        comm_ps: &[H::Domain],
+        piece_sizes: &[usize],
+        sector_size: usize,
+    ) -> bool {
+        proofs.iter().zip(comm_ps.iter().zip(piece_sizes)).all(
+            |(proof, (comm_p, piece_size))| {
+                proof.verify(
+                    &root,
+                    &comm_p,
+                    *piece_size,
+                    sector_size,
+                )
+            },
+        )
+    }
+
+    pub fn verify_from_bytes(
+        &self,
+        root: &Fr32Ary,
+        comm_p: &Fr32Ary,
+        piece_leaves: usize,
+        sector_leaves: usize,
+    ) -> Result<bool> {
+        let root_domain = H::Domain::try_from_bytes(root)?;
+        let comm_p_domain = H::Domain::try_from_bytes(comm_p)?;
+
+        Ok(self.verify(
+            &root_domain,
+            &comm_p_domain,
+            piece_leaves,
+            sector_leaves,
+        ))
+    }
+
+    pub fn verify_all_from_bytes(
+        root: &Fr32Ary,
         proofs: &[PieceInclusionProof<H>],
         comm_ps: &[Fr32Ary],
         piece_sizes: &[usize],
         sector_size: usize,
     ) -> Result<bool> {
         let root_domain = H::Domain::try_from_bytes(root)?;
+        let mut comm_ps_domain = vec![];
 
-        Ok(proofs.iter().zip(comm_ps.iter().zip(piece_sizes)).all(
-            |(proof, (comm_p, piece_size))| {
-                proof.verify(
-                    &root_domain,
-                    &H::Domain::try_from_bytes(comm_p).unwrap(),
-                    *piece_size,
-                    sector_size,
-                )
-            },
+        for comm_p in comm_ps {
+            comm_ps_domain.push(H::Domain::try_from_bytes(comm_p)?);
+        }
+
+        Ok(PieceInclusionProof::verify_all(
+            &root_domain,
+            &proofs,
+            &comm_ps_domain,
+            &piece_sizes,
+            sector_size,
         ))
     }
 }

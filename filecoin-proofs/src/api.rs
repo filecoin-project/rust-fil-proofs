@@ -229,7 +229,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
 
     let piece_inclusion_proofs = piece_inclusion_proofs::<PedersenHasher>(&piece_specs, tree)?;
 
-    let valid_pieces = PieceInclusionProof::verify_all(
+    let valid_pieces = PieceInclusionProof::verify_all_from_bytes(
         &comm_d,
         &piece_inclusion_proofs,
         &comm_ps,
