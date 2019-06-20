@@ -2,6 +2,7 @@ use std::sync::Mutex;
 
 use config::{Config, ConfigError, Environment, File};
 
+#[cfg(not(feature = "disk-trees"))]
 use crate::SP_LOG;
 
 lazy_static! {
