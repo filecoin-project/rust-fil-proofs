@@ -1,7 +1,4 @@
-use crate::api::bytes_amount::PaddedBytesAmount;
-use crate::api::bytes_amount::UnpaddedBytesAmount;
-use crate::api::post_proof_partitions::PoStProofPartitions;
-use crate::api::sector_size::SectorSize;
+use crate::types::*;
 
 #[derive(Clone, Copy, Debug)]
 pub struct PoStConfig(pub SectorSize, pub PoStProofPartitions);

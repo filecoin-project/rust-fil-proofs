@@ -1,8 +1,4 @@
-use crate::api::porep_config::PoRepConfig;
-use crate::api::porep_proof_partitions::PoRepProofPartitions;
-use crate::api::post_config::PoStConfig;
-use crate::api::post_proof_partitions::PoStProofPartitions;
-use crate::api::sector_size::SectorSize;
+use crate::types::*;
 
 #[derive(Clone, Copy, Debug)]
 pub struct SectorClass(

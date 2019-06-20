@@ -1,7 +1,9 @@
-use crate::io::fr32::padded_bytes;
-use crate::io::fr32::unpadded_bytes;
-use serde::{Deserialize, Serialize};
 use std::ops::{Add, Sub};
+
+use serde::{Deserialize, Serialize};
+
+use crate::fr32::padded_bytes;
+use crate::fr32::unpadded_bytes;
 
 pub struct PoStProofBytesAmount(pub usize);
 

@@ -13,7 +13,7 @@ jobs:
           command: cargo generate-lockfile
       - restore_cache:
           keys:
-            - cargo-v9-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v10-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run: rustup install $(cat rust-toolchain)
       - run: rustup default $(cat rust-toolchain)
       - run: rustup component add rustfmt-preview
@@ -27,7 +27,7 @@ jobs:
           paths:
             - Cargo.lock
       - save_cache:
-          key: cargo-v9-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+          key: cargo-v10-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
           paths:
             - /root/.cargo
             - /root/.rustup
@@ -42,7 +42,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v9-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v10-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_cache:
           keys:
             - parameter-cache-{{ .Revision }}
@@ -72,7 +72,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v9-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v10-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (stable) in release profile
@@ -91,40 +91,14 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v9-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v10-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
             - parameter-cache-{{ .Revision }}
       - run:
-          name: Test (stable) in release profile
+          name: Test (nightly) disk-trees feature
           command: |
-            cargo +stable test --verbose --release --all --features disk-trees
-            RUSTFLAGS="-D warnings" cargo +stable build --examples --release --frozen --all --features disk-trees
+            cargo +$(cat rust-toolchain) test --verbose --release -p storage-proofs --features disk-trees -Z package-features
           environment:
             FIL_PROOFS_REPLICATED_TREES_DIR: replicated-disk-trees
-
-  ffi_regression:
-    docker:
-      - image: filecoin/rust:latest
-    working_directory: /mnt/crate
-    resource_class: xlarge
-    steps:
-      - checkout
-      - attach_workspace:
-          at: "."
-      - restore_cache:
-          keys:
-            - cargo-v9-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
-            - parameter-cache-{{ .Revision }}
-      - run:
-          name: Ensure cache is hydrated with PoRep and PoSt Groth parameters (for test)
-          command: |
-            cargo run --release --color=always --package filecoin-proofs --bin paramcache -- --test-only
-      - run:
-          name: run regression tests (examples) against FFI-exposed filecoin-proofs API
-          command: RUSTFLAGS="-Z sanitizer=leak" cargo run --release --package filecoin-proofs --example ffi --target x86_64-unknown-linux-gnu
-      - save_cache:
-          key: parameter-cache-{{ .Revision }}
-          paths:
-          - /root/.filecoin-parameter-cache
 
   test_ignored_release:
     docker:
@@ -137,7 +111,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v9-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v10-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (stable) in release profile
@@ -158,7 +132,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v9-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v10-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_cache:
           keys:
             - parameter-cache-{{ .Revision }}
@@ -178,7 +152,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v9-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v10-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_cache:
           keys:
             - parameter-cache-{{ .Revision }}
@@ -198,7 +172,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v9-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v10-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
           name: Run cargo fmt
           command: cargo fmt --all -- --check
@@ -214,7 +188,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v9-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v10-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
           name: Run cargo clippy
           command: cargo clippy --all
@@ -230,10 +204,10 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v9-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v10-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
           name: Build (release)
-          command: RUSTFLAGS="--print native-static-libs" cargo +$(cat rust-toolchain) build --release --verbose --frozen --all
+          command: cargo +$(cat rust-toolchain) build --release --verbose --frozen --all
       - run:
           name: Install jq
           command: apt-get install jq -yqq
@@ -263,7 +237,7 @@ jobs:
       - run: cargo fetch
       - run:
           name: Build (release)
-          command: RUSTFLAGS="--print native-static-libs" cargo +$(cat rust-toolchain) build --release --verbose --frozen --all
+          command: cargo +$(cat rust-toolchain) build --release --verbose --frozen --all
       - run:
           name: Install jq
           command: |
@@ -291,9 +265,6 @@ workflows:
       - test_disk_trees:
           requires:
             - cargo_fetch
-      - ffi_regression:
-          requires:
-            - cargo_fetch
       - test_ignored_release:
           requires:
             - cargo_fetch
@@ -309,6 +280,12 @@ workflows:
       - build_linux_release:
           requires:
             - cargo_fetch
+          filters:
+            branches:
+              only: master
       - build_darwin_release:
           requires:
             - cargo_fetch
+          filters:
+            branches:
+              only: master

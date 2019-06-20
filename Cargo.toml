@@ -3,9 +3,6 @@
 members = [
   "filecoin-proofs",
   "storage-proofs",
-  "sector-base",
-  "ffi-toolkit",
   "fil-proofs-tooling",
   "logging-toolkit",
-  "drop-struct-macro-derive"
 ]

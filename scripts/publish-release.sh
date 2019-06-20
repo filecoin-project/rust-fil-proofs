@@ -1,15 +1,10 @@
 #!/usr/bin/env bash
 
-RELEASE_BRANCH="master"
+set -Eeuo pipefail
+
 RELEASE_NAME="$CIRCLE_PROJECT_REPONAME-`uname`"
 RELEASE_FILE="/tmp/$RELEASE_NAME.tar.gz"
 RELEASE_TAG="${CIRCLE_SHA1:0:16}"
-
-# make sure we're on the sanctioned branch
-if [ "$CIRCLE_BRANCH" != "$RELEASE_BRANCH" ]; then
-  echo "not on branch \"$RELEASE_BRANCH\", skipping publish"
-  exit 0
-fi
 
 # make sure we have a token set, api requests won't work otherwise
 if [ -z $GITHUB_TOKEN ]; then

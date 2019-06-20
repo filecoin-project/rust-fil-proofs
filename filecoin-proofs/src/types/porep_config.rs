@@ -1,7 +1,4 @@
-use crate::api::bytes_amount::PaddedBytesAmount;
-use crate::api::bytes_amount::UnpaddedBytesAmount;
-use crate::api::porep_proof_partitions::PoRepProofPartitions;
-use crate::api::sector_size::SectorSize;
+use crate::types::*;
 
 #[derive(Clone, Copy, Debug)]
 pub struct PoRepConfig(pub SectorSize, pub PoRepProofPartitions);
