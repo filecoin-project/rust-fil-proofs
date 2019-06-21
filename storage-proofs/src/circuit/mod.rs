@@ -6,6 +6,7 @@ pub mod apex_commitment;
 pub mod beacon_post;
 pub mod drgporep;
 pub mod kdf;
+pub mod mimc;
 pub mod multi_proof;
 pub mod pedersen;
 pub mod porc;
