@@ -8,7 +8,7 @@ pub const MIMC_ROUNDS: usize = 322;
 /// See http://eprint.iacr.org/2016/492 for more
 /// information about this construction.
 ///
-/// ```
+/// ```ignore
 /// function LongsightF322p3(xL ⦂ Fp, xR ⦂ Fp) {
 ///     for i from 0 up to 321 {
 ///         xL, xR := xR + (xL + Ci)^3, xL
