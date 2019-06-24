@@ -37,6 +37,14 @@ where
 
         graph.parents(node, &mut parents);
 
+        // The direct parent should be the one hashed first. Otherwise, it's possible
+        // to pre-hash all the parents except the direct parent, minimizing the amount
+        // of required sequential hashing.
+        parents.sort();
+        if graph.forward() {
+            parents.reverse();
+        }
+
         let key = create_key::<H>(replica_id, node, &parents, data)?;
         let start = data_at_node_offset(node);
         let end = start + NODE_SIZE;
@@ -82,6 +90,12 @@ where
 {
     let mut parents = vec![0; graph.degree()];
     graph.parents(v, &mut parents);
+
+    // The direct parent should be the one hashed first, see `encode`.
+    parents.sort();
+    if graph.forward() {
+        parents.reverse();
+    }
     let key = create_key::<H>(replica_id, v, &parents, &data)?;
     let node_data = H::Domain::try_from_bytes(&data_at_node(data, v)?)?;
 
@@ -117,7 +131,7 @@ pub fn create_key<H: Hasher>(
     hasher.update(id.as_ref());
 
     // The hash is about the parents, hence skip if a node doesn't have any parents
-    if node != parents[0] {
+    if node != parents[0] && node != parents[parents.len() - 1] {
         for parent in parents.iter() {
             let offset = data_at_node_offset(*parent);
             hasher.update(&data[offset..offset + NODE_SIZE]);
@@ -141,7 +155,7 @@ pub fn create_key_from_tree<H: Hasher>(
     hasher.update(id.as_ref());
 
     // The hash is about the parents, hence skip if a node doesn't have any parents
-    if node != parents[0] {
+    if node != parents[0] && node != parents[parents.len() - 1] {
         let mut scratch: [u8; NODE_SIZE] = [0; NODE_SIZE];
         for parent in parents.iter() {
             tree.read_into(*parent, &mut scratch);

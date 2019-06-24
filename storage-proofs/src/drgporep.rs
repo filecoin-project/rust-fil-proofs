@@ -325,6 +325,12 @@ where
                 //     challenge,
                 // )?;
 
+                // The direct parent should be the one hashed first, see `vde::encode`.
+                parents.sort();
+                if pub_params.graph.forward() {
+                    parents.reverse();
+                }
+
                 let extracted = decode_domain_block::<H>(
                     pub_params.sloth_iter,
                     &pub_inputs.replica_id.expect("missing replica_id"),
