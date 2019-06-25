@@ -657,7 +657,7 @@ fn main() {
     let config = matches.value_of("config").unwrap();
     let print_table = matches.is_present("table");
 
-    ::std::process::exit(match run(config, print_table) {
+    std::process::exit(match run(config, print_table) {
         Ok(_) => 0,
         Err(err) => {
             eprintln!("error: {:?}", err);
@@ -666,26 +666,29 @@ fn main() {
     });
 }
 
-#[test]
-fn test_combine() {
-    let input = vec![vec!["1", "2", "3"], vec!["4", "5"]];
-    let refs: Vec<&[&str]> = input.iter().map(AsRef::as_ref).collect();
-    assert_eq!(
-        combine(&refs[..]),
-        vec![
-            vec!["1", "4"],
-            vec!["1", "5"],
-            vec!["2", "4"],
-            vec!["2", "5"],
-            vec!["3", "4"],
-            vec!["3", "5"]
-        ],
-    );
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[test]
-fn test_time_result_from_str() {
-    let res = TimeResult::from_str("
+    #[test]
+    fn test_combine() {
+        let input = vec![vec!["1", "2", "3"], vec!["4", "5"]];
+        let refs: Vec<&[&str]> = input.iter().map(AsRef::as_ref).collect();
+        assert_eq!(
+            combine(&refs[..]),
+            vec![
+                vec!["1", "4"],
+                vec!["1", "5"],
+                vec!["2", "4"],
+                vec!["2", "5"],
+                vec!["3", "4"],
+                vec!["3", "5"]
+            ],
+        );
+    }
+    #[test]
+    fn test_time_result_from_str() {
+        let res = TimeResult::from_str("
 	Command being timed: \"/Users/dignifiedquire/work/filecoin/rust-proofs/target/release/examples/drgporep-vanilla --challenges 1 --size 1 --sloth 0 --m 6 --hasher sha256\"
 	User time (seconds): 0.01
 	System time (seconds): 0.01
@@ -711,17 +714,17 @@ fn test_time_result_from_str() {
 	Exit status: 0
 ").unwrap();
 
-    assert_eq!(res.command, "/Users/dignifiedquire/work/filecoin/rust-proofs/target/release/examples/drgporep-vanilla --challenges 1 --size 1 --sloth 0 --m 6 --hasher sha256");
-    assert_eq!(res.user_time, 0.01);
-    assert_eq!(res.swaps, 0);
-    assert_eq!(res.involuntary_context_switches, 889);
-    assert_eq!(res.cpu, 184);
-    assert_eq!(res.elapsed_time, Duration::from_millis(10));
-}
+        assert_eq!(res.command, "/Users/dignifiedquire/work/filecoin/rust-proofs/target/release/examples/drgporep-vanilla --challenges 1 --size 1 --sloth 0 --m 6 --hasher sha256");
+        assert_eq!(res.user_time, 0.01);
+        assert_eq!(res.swaps, 0);
+        assert_eq!(res.involuntary_context_switches, 889);
+        assert_eq!(res.cpu, 184);
+        assert_eq!(res.elapsed_time, Duration::from_millis(10));
+    }
 
-#[test]
-fn test_log_results_str_json() {
-    let res = LogResult::from_str("
+    #[test]
+    fn test_log_results_str_json() {
+        let res = LogResult::from_str("
 {\"msg\":\"constraint system: Groth\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:19.315918-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:86 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"config\"}
 {\"msg\":\"data_size:  1 kB\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:19.316948-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:87 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"config\"}
 {\"msg\":\"challenge_count: 1\",\"level\":\"INFO\",\"ts\":\"2018-12-14T13:57:19.316961-08:00\",\"place\":\"storage-proofs/src/example_helper.rs:88 storage_proofs::example_helper\",\"root\":\"storage-proofs\",\"target\":\"config\"}
@@ -736,10 +739,11 @@ fn test_log_results_str_json() {
 
 ").unwrap();
 
-    assert_eq!(res.config.get("constraint system").unwrap(), "Groth");
-    assert_eq!(res.config.get("data_size").unwrap(), "1 kB",);
-    assert_eq!(
-        res.stats.get("avg_proving_time").unwrap(),
-        "0.213533235 seconds"
-    );
+        assert_eq!(res.config.get("constraint system").unwrap(), "Groth");
+        assert_eq!(res.config.get("data_size").unwrap(), "1 kB",);
+        assert_eq!(
+            res.stats.get("avg_proving_time").unwrap(),
+            "0.213533235 seconds"
+        );
+    }
 }
