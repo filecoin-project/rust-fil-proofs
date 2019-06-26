@@ -146,6 +146,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         tau: Some(public_tau),
         comm_r_star: tau.comm_r_star,
         k: None,
+        seed: None,
     };
 
     let private_inputs = layered_drgporep::PrivateInputs::<DefaultTreeHasher> {
@@ -236,6 +237,7 @@ pub fn verify_seal(
             comm_r: comm_r.into(),
             comm_d: comm_d.into(),
         }),
+        seed: None,
         comm_r_star: comm_r_star.into(),
         k: None,
     };

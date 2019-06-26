@@ -220,6 +220,7 @@ fn do_the_work<H: 'static>(
             tau: Some(tau.simplify().into()),
             comm_r_star: tau.comm_r_star,
             k: Some(0),
+            seed: None,
         };
 
         let priv_inputs = layered_drgporep::PrivateInputs {
