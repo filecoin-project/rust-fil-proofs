@@ -201,6 +201,7 @@ pub type EncodingProof<H> = drgporep::Proof<H>;
 #[derive(Debug, Clone)]
 pub struct PublicInputs<T: Domain> {
     pub replica_id: T,
+    pub seed: Option<T>,
     pub tau: Option<porep::Tau<T>>,
     pub comm_r_star: T,
     pub k: Option<usize>,
@@ -214,14 +215,25 @@ impl<T: Domain> PublicInputs<T> {
         layer: u8,
         partition_k: Option<usize>,
     ) -> Vec<usize> {
-        derive_challenges::<T>(
-            layer_challenges,
-            layer,
-            leaves,
-            &self.replica_id,
-            &self.comm_r_star,
-            partition_k.unwrap_or(0) as u8,
-        )
+        if let Some(ref seed) = self.seed {
+            derive_challenges::<T>(
+                layer_challenges,
+                layer,
+                leaves,
+                &self.replica_id,
+                seed,
+                partition_k.unwrap_or(0) as u8,
+            )
+        } else {
+            derive_challenges::<T>(
+                layer_challenges,
+                layer,
+                leaves,
+                &self.replica_id,
+                &self.comm_r_star,
+                partition_k.unwrap_or(0) as u8,
+            )
+        }
     }
 }
 
@@ -714,6 +726,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
     fn with_partition(pub_in: Self::PublicInputs, k: Option<usize>) -> Self::PublicInputs {
         self::PublicInputs {
             replica_id: pub_in.replica_id,
+            seed: None,
             tau: pub_in.tau,
             comm_r_star: pub_in.comm_r_star,
             k,
