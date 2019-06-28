@@ -99,12 +99,14 @@ pub trait ParameterSetIdentifier: Clone {
     fn parameter_set_identifier(&self) -> String;
 }
 
-pub trait CacheableParameters<E: JubjubEngine, C: Circuit<E>, PP>
+pub trait CacheableParameters<E, C, P>
 where
-    PP: ParameterSetIdentifier,
+    C: Circuit<E>,
+    E: JubjubEngine,
+    P: ParameterSetIdentifier,
 {
     fn cache_prefix() -> String;
-    fn cache_identifier(pub_params: &PP) -> String {
+    fn cache_identifier(pub_params: &P) -> String {
         let param_identifier = pub_params.parameter_set_identifier();
         info!(SP_LOG, "parameter set identifier for cache: {}", param_identifier; "target" => "params");
         let mut hasher = Sha256::default();
@@ -117,7 +119,7 @@ where
         )
     }
 
-    fn get_groth_params(circuit: C, pub_params: &PP) -> Result<groth16::Parameters<E>> {
+    fn get_groth_params(circuit: C, pub_params: &P) -> Result<groth16::Parameters<E>> {
         // Always seed the rng identically so parameter generation will be deterministic.
 
         let id = Self::cache_identifier(pub_params);
@@ -153,7 +155,7 @@ where
         })
     }
 
-    fn get_verifying_key(circuit: C, pub_params: &PP) -> Result<groth16::VerifyingKey<E>> {
+    fn get_verifying_key(circuit: C, pub_params: &P) -> Result<groth16::VerifyingKey<E>> {
         let id = Self::cache_identifier(pub_params);
         let vk_id = format!("{}.vk", id);
 
