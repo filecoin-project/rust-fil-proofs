@@ -1,0 +1,61 @@
+[package]
+name = "storage-proofs-zexe"
+description = "Implementations of Proofs of Storage on Zexe."
+version = "0.2.0"
+authors = ["dignifiedquire <dignifiedquire@gmail.com>", "laser <l@s3r.com>", "porcuquine <porcuquine@users.noreply.github.com>"]
+license = "MIT OR Apache-2.0"
+edition = "2018"
+repository = "https://github.com/filecoin-project/rust-fil-proofs"
+readme = "README.md"
+
+[dependencies]
+logging-toolkit = { version = "^0.2", path = "../logging-toolkit" }
+bitvec = "0.11"
+rand = "0.4"
+libc = "0.2"
+merkletree = "0.6"
+failure = "0.1"
+byteorder = "1"
+config = "0.9.3"
+crossbeam-utils = "0.6"
+itertools = "0.8"
+lazy_static = "1.2"
+memmap = "0.7"
+num-bigint = "0.2"
+num-traits = "0.2"
+clap = "2"
+colored = "1.6"
+aes = "0.3"
+block-modes = "0.3"
+sha2 = "0.8"
+pbr = "1.0"
+tempfile = "3"
+fs2 = "0.4"
+rayon = "1.0.0"
+slog = { version = "2.4.1", features = ["max_level_trace", "release_max_level_trace"] }
+serde = { version = "1.0", features = ["derive"]}
+base64 = "0.10.0"
+blake2b_simd = "0.5"
+blake2s_simd = "0.5"
+toml = "0.5"
+ff = "0.4.0"
+bellperson = "0.2"
+paired = { version = "0.15", features = ["serde"] }
+fil-sapling-crypto = "0.1"
+dpc = { path = "/home/sancho/src/zexe/dpc" }
+snark = { path = "/home/sancho/src/zexe/snark" }
+algebra = { path = "/home/sancho/src/zexe/algebra" }
+snark-gadgets = { path = "/home/sancho/src/zexe/snark-gadgets" }
+
+[features]
+default = []
+simd = []
+asm = ["sha2/sha2-asm"]
+disk-trees = []
+
+[dev-dependencies]
+proptest = "0.7"
+criterion = "0.2"
+serde_json = "1.0"
+pretty_assertions = "0.6.1"
+
