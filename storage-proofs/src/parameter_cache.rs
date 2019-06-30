@@ -207,12 +207,6 @@ where
             let bytes = f.seek(SeekFrom::End(0))?;
             info!(SP_LOG, "verifying_key_bytes: {}", bytes; "target" => "stats", "id" => &vk_id);
 
-            // generate metadata file for verifying key
-            let meta_path = parameter_cache_metadata_path(&id);
-            let meta_file = LockedFile::open_exclusive(&meta_path)?;
-            serde_json::to_writer(meta_file, &Self::cache_meta(pub_params))?;
-            info!(SP_LOG, "wrote verifying key metadata to cache {:?} ", &meta_path; "target" => "verifying_key", "id" => &vk_id);
-
             Ok(p)
         })
     }
