@@ -52,6 +52,17 @@ pub fn get_local_parameter_ids() -> Result<Vec<String>> {
         Ok(read_dir(path)?
             .map(|f| f.unwrap().path())
             .filter(|p| p.is_file())
+            .filter(|f| match f.extension() {
+                // don't publish the .meta files
+                Some(ref s) => {
+                    if s.to_str().expect("can't marshal to &str") == "meta" {
+                        false
+                    } else {
+                        true
+                    }
+                }
+                None => true,
+            })
             .map(|p| {
                 p.as_path()
                     .file_name()
