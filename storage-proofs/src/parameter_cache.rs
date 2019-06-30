@@ -97,6 +97,12 @@ pub fn parameter_cache_path(filename: &str) -> PathBuf {
 
 pub trait ParameterSetIdentifier: Clone {
     fn parameter_set_identifier(&self) -> String;
+pub fn parameter_cache_metadata_path(filename: &str) -> PathBuf {
+    let name = parameter_cache_dir_name();
+    let dir = Path::new(&name);
+    dir.join(format!("v{}-{}.meta", VERSION, filename))
+}
+
 pub trait ParameterSetMetadata: Clone {
     fn identifier(&self) -> String;
     fn sector_size(&self) -> Option<u64>;
@@ -166,6 +172,12 @@ where
             let bytes = f.seek(SeekFrom::End(0))?;
             info!(SP_LOG, "groth_parameter_bytes: {}", bytes; "target" => "stats", "id" => &id);
 
+            // generate metadata file for Groth parameters
+            let meta_path = parameter_cache_metadata_path(&id);
+            let meta_file = LockedFile::open_exclusive(&meta_path)?;
+            serde_json::to_writer(meta_file, &Self::cache_meta(pub_params))?;
+            info!(SP_LOG, "wrote parameter metadata to cache {:?} ", &meta_path; "target" => "params", "id" => &id);
+
             Ok(p)
         })
     }
@@ -196,6 +208,12 @@ where
 
             let bytes = f.seek(SeekFrom::End(0))?;
             info!(SP_LOG, "verifying_key_bytes: {}", bytes; "target" => "stats", "id" => &vk_id);
+
+            // generate metadata file for verifying key
+            let meta_path = parameter_cache_metadata_path(&id);
+            let meta_file = LockedFile::open_exclusive(&meta_path)?;
+            serde_json::to_writer(meta_file, &Self::cache_meta(pub_params))?;
+            info!(SP_LOG, "wrote verifying key metadata to cache {:?} ", &meta_path; "target" => "verifying_key", "id" => &vk_id);
 
             Ok(p)
         })
