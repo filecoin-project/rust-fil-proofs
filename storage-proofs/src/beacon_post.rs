@@ -37,6 +37,10 @@ where
             self.post_periods_count
         )
     }
+
+    fn sector_size(&self) -> Option<u64> {
+        Some(self.vdf_post_pub_params.sector_size as u64)
+    }
 }
 
 #[derive(Clone, Debug)]

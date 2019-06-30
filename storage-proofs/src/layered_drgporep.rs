@@ -180,6 +180,10 @@ where
             self.layer_challenges,
         )
     }
+
+    fn sector_size(&self) -> Option<u64> {
+        self.graph.sector_size()
+    }
 }
 
 impl<'a, H, G> From<&'a PublicParams<H, G>> for PublicParams<H, G>

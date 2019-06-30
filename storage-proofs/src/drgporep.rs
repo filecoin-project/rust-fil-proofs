@@ -92,6 +92,10 @@ where
             self.sloth_iter
         )
     }
+
+    fn sector_size(&self) -> Option<u64> {
+        None
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

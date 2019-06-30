@@ -99,6 +99,7 @@ pub trait ParameterSetIdentifier: Clone {
     fn parameter_set_identifier(&self) -> String;
 pub trait ParameterSetMetadata: Clone {
     fn identifier(&self) -> String;
+    fn sector_size(&self) -> Option<u64>;
 }
 }
 

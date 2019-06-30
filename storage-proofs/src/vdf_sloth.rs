@@ -29,6 +29,10 @@ impl ParameterSetMetadata for PublicParams {
             self.key, self.rounds
         )
     }
+
+    fn sector_size(&self) -> Option<u64> {
+        None
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

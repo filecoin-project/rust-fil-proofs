@@ -198,6 +198,10 @@ impl<H: Hasher> ParameterSetMetadata for BucketGraph<H> {
             H::name(),
         )
     }
+
+    fn sector_size(&self) -> Option<u64> {
+        Some((self.nodes * 32) as u64)
+    }
 }
 
 impl<H: Hasher> Graph<H> for BucketGraph<H> {
