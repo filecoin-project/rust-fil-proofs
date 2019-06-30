@@ -14,7 +14,7 @@ use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::drgraph;
 use crate::fr32::u32_into_fr;
 use crate::hasher::Hasher;
-use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
+use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::porc::PoRC;
 use crate::proof::ProofScheme;
 
@@ -61,7 +61,7 @@ where
     _h: PhantomData<H>,
 }
 
-impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier, H: Hasher>
+impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata, H: Hasher>
     CacheableParameters<E, C, P> for PoRCCompound<H>
 {
     fn cache_prefix() -> String {

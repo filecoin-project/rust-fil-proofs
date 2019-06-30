@@ -8,7 +8,7 @@ use crate::error::*;
 use crate::hasher::pedersen::PedersenHasher;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::MerkleTree;
-use crate::parameter_cache::ParameterSetIdentifier;
+use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::{data_at_node, NODE_SIZE};
 
 #[cfg(feature = "disk-trees")]
@@ -188,8 +188,8 @@ pub struct BucketGraph<H: Hasher> {
     _h: PhantomData<H>,
 }
 
-impl<H: Hasher> ParameterSetIdentifier for BucketGraph<H> {
-    fn parameter_set_identifier(&self) -> String {
+impl<H: Hasher> ParameterSetMetadata for BucketGraph<H> {
+    fn identifier(&self) -> String {
         // NOTE: Seed is not included because it does not influence parameter generation.
         format!(
             "drgraph::BucketGraph{{size: {}; degree: {}; hasher: {}}}",

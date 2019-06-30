@@ -2,7 +2,7 @@ use rayon::prelude::*;
 
 use crate::circuit::multi_proof::MultiProof;
 use crate::error::Result;
-use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
+use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::partitions;
 use crate::proof::ProofScheme;
 use crate::settings;
@@ -43,7 +43,7 @@ pub trait CircuitComponent {
 pub trait CompoundProof<'a, E: JubjubEngine, S: ProofScheme<'a>, C: Circuit<E> + CircuitComponent>
 where
     S::Proof: Sync + Send,
-    S::PublicParams: ParameterSetIdentifier + Sync + Send,
+    S::PublicParams: ParameterSetMetadata + Sync + Send,
     S::PublicInputs: Clone + Sync,
     Self: CacheableParameters<E, C, S::PublicParams>,
 {

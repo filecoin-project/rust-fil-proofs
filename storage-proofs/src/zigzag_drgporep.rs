@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use crate::drgraph::Graph;
 use crate::hasher::Hasher;
 use crate::layered_drgporep::Layers;
-use crate::parameter_cache::ParameterSetIdentifier;
+use crate::parameter_cache::ParameterSetMetadata;
 use crate::zigzag_graph::{ZigZag, ZigZagBucketGraph};
 
 /// ZigZagDrgPorep is a layered PoRep which replicates layer by layer.
@@ -38,7 +38,7 @@ impl<'a, H: 'static + Hasher> Layers for ZigZagDrgPoRep<'a, H> where {
 fn zigzag<H, Z>(graph: &Z) -> Z
 where
     H: Hasher,
-    Z: ZigZag + Graph<H> + ParameterSetIdentifier,
+    Z: ZigZag + Graph<H> + ParameterSetMetadata,
 {
     graph.zigzag()
 }
