@@ -10,7 +10,7 @@ use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
-use crate::parameter_cache::ParameterSetIdentifier;
+use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::{self, PoRep};
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::vde::{self, decode_block, decode_domain_block};
@@ -54,7 +54,7 @@ pub struct DrgParams {
 pub struct PublicParams<H, G>
 where
     H: Hasher,
-    G: Graph<H> + ParameterSetIdentifier,
+    G: Graph<H> + ParameterSetMetadata,
 {
     pub graph: G,
     pub sloth_iter: usize,
@@ -67,7 +67,7 @@ where
 impl<H, G> PublicParams<H, G>
 where
     H: Hasher,
-    G: Graph<H> + ParameterSetIdentifier,
+    G: Graph<H> + ParameterSetMetadata,
 {
     pub fn new(graph: G, sloth_iter: usize, private: bool, challenges_count: usize) -> Self {
         PublicParams {
@@ -80,15 +80,15 @@ where
     }
 }
 
-impl<H, G> ParameterSetIdentifier for PublicParams<H, G>
+impl<H, G> ParameterSetMetadata for PublicParams<H, G>
 where
     H: Hasher,
-    G: Graph<H> + ParameterSetIdentifier,
+    G: Graph<H> + ParameterSetMetadata,
 {
-    fn parameter_set_identifier(&self) -> String {
+    fn identifier(&self) -> String {
         format!(
             "drgporep::PublicParams{{graph: {}; sloth_iter: {}}}",
-            self.graph.parameter_set_identifier(),
+            self.graph.identifier(),
             self.sloth_iter
         )
     }
@@ -242,7 +242,7 @@ where
 impl<'a, H, G> ProofScheme<'a> for DrgPoRep<'a, H, G>
 where
     H: 'a + Hasher,
-    G: 'a + Graph<H> + ParameterSetIdentifier,
+    G: 'a + Graph<H> + ParameterSetMetadata,
 {
     type PublicParams = PublicParams<H, G>;
     type SetupParams = SetupParams;
@@ -435,7 +435,7 @@ where
 impl<'a, H, G> PoRep<'a, H> for DrgPoRep<'a, H, G>
 where
     H: 'a + Hasher,
-    G: 'a + Graph<H> + ParameterSetIdentifier + Sync + Send,
+    G: 'a + Graph<H> + ParameterSetMetadata + Sync + Send,
 {
     type Tau = porep::Tau<H::Domain>;
     type ProverAux = porep::ProverAux<H>;

@@ -11,7 +11,7 @@ use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::drgraph::graph_height;
 use crate::hasher::{HashFunction, Hasher};
 use crate::merklepor::MerklePoR;
-use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
+use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
 
 /// Proof of retrievability.
@@ -51,7 +51,7 @@ pub fn challenge_into_auth_path_bits(challenge: usize, leaves: usize) -> Vec<boo
     bits
 }
 
-impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier, H: Hasher>
+impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata, H: Hasher>
     CacheableParameters<E, C, P> for PoRCompound<H>
 {
     fn cache_prefix() -> String {

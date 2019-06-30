@@ -97,6 +97,9 @@ pub fn parameter_cache_path(filename: &str) -> PathBuf {
 
 pub trait ParameterSetIdentifier: Clone {
     fn parameter_set_identifier(&self) -> String;
+pub trait ParameterSetMetadata: Clone {
+    fn identifier(&self) -> String;
+}
 }
 
 pub trait CacheableParameters<E, C, P>
@@ -107,7 +110,7 @@ where
 {
     fn cache_prefix() -> String;
     fn cache_identifier(pub_params: &P) -> String {
-        let param_identifier = pub_params.parameter_set_identifier();
+        let param_identifier = pub_params.identifier();
         info!(SP_LOG, "parameter set identifier for cache: {}", param_identifier; "target" => "params");
         let mut hasher = Sha256::default();
         hasher.input(&param_identifier.into_bytes());

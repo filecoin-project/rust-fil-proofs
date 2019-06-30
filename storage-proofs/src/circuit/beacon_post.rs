@@ -8,7 +8,7 @@ use crate::beacon_post::BeaconPoSt;
 use crate::circuit::vdf_post;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::hasher::Hasher;
-use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
+use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
 use crate::vdf::Vdf;
 
@@ -79,7 +79,7 @@ where
     }
 }
 
-impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParameters<E, C, P>
+impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata> CacheableParameters<E, C, P>
     for BeaconPoStCompound
 {
     fn cache_prefix() -> String {

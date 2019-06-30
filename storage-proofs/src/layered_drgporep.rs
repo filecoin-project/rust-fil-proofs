@@ -16,7 +16,7 @@ use crate::drgraph::Graph;
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::merkle::MerkleTree;
-use crate::parameter_cache::ParameterSetIdentifier;
+use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
 use crate::settings;
@@ -123,7 +123,7 @@ pub struct SetupParams {
 pub struct PublicParams<H, G>
 where
     H: Hasher,
-    G: Graph<H> + ParameterSetIdentifier,
+    G: Graph<H> + ParameterSetMetadata,
 {
     pub graph: G,
     pub sloth_iter: usize,
@@ -155,7 +155,7 @@ impl<T: Domain> Tau<T> {
 impl<H, G> PublicParams<H, G>
 where
     H: Hasher,
-    G: Graph<H> + ParameterSetIdentifier,
+    G: Graph<H> + ParameterSetMetadata,
 {
     pub fn new(graph: G, sloth_iter: usize, layer_challenges: LayerChallenges) -> Self {
         PublicParams {
@@ -167,15 +167,15 @@ where
     }
 }
 
-impl<H, G> ParameterSetIdentifier for PublicParams<H, G>
+impl<H, G> ParameterSetMetadata for PublicParams<H, G>
 where
     H: Hasher,
-    G: Graph<H> + ParameterSetIdentifier,
+    G: Graph<H> + ParameterSetMetadata,
 {
-    fn parameter_set_identifier(&self) -> String {
+    fn identifier(&self) -> String {
         format!(
             "layered_drgporep::PublicParams{{ graph: {}, sloth: {}, challenges: {:?} }}",
-            self.graph.parameter_set_identifier(),
+            self.graph.identifier(),
             self.sloth_iter,
             self.layer_challenges,
         )
@@ -185,7 +185,7 @@ where
 impl<'a, H, G> From<&'a PublicParams<H, G>> for PublicParams<H, G>
 where
     H: Hasher,
-    G: Graph<H> + ParameterSetIdentifier,
+    G: Graph<H> + ParameterSetMetadata,
 {
     fn from(other: &PublicParams<H, G>) -> PublicParams<H, G> {
         PublicParams::new(
@@ -281,7 +281,7 @@ type TransformedLayers<H> = (Vec<PorepTau<H>>, Vec<Tree<H>>);
 /// of layered proofs of replication. Implementations must provide transform and invert_transform methods.
 pub trait Layers {
     type Hasher: Hasher;
-    type Graph: Layerable<Self::Hasher> + ParameterSetIdentifier + Sync + Send;
+    type Graph: Layerable<Self::Hasher> + ParameterSetMetadata + Sync + Send;
 
     /// Transform a layer's public parameters, returning new public parameters corresponding to the next layer.
     /// Warning: This method will likely need to be extended for other implementations

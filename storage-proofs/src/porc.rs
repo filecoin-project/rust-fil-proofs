@@ -9,7 +9,7 @@ use crate::drgraph::graph_height;
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
-use crate::parameter_cache::ParameterSetIdentifier;
+use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 
 #[derive(Debug, Clone)]
@@ -33,8 +33,8 @@ pub struct PublicParams {
     pub challenges_count: usize,
 }
 
-impl ParameterSetIdentifier for PublicParams {
-    fn parameter_set_identifier(&self) -> String {
+impl ParameterSetMetadata for PublicParams {
+    fn identifier(&self) -> String {
         format!(
             "porc::PublicParams{{leaves: {} sectors_count: {} challenges_count: {}}}",
             self.leaves, self.sectors_count, self.challenges_count,
