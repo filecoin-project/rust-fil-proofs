@@ -40,6 +40,10 @@ impl ParameterSetMetadata for PublicParams {
             self.leaves, self.sectors_count, self.challenges_count,
         )
     }
+
+    fn sector_size(&self) -> Option<u64> {
+        None
+    }
 }
 
 #[derive(Debug, Clone)]

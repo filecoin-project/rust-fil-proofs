@@ -59,6 +59,10 @@ impl<T: Domain, V: Vdf<T>> ParameterSetMetadata for PublicParams<T, V> {
             self.leaves, self.sectors_count
         )
     }
+
+    fn sector_size(&self) -> Option<u64> {
+        Some(self.sector_size as u64)
+    }
 }
 
 #[derive(Clone, Debug)]

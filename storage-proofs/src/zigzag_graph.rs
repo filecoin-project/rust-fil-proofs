@@ -108,6 +108,10 @@ where
             self.base_graph.identifier()
         )
     }
+
+    fn sector_size(&self) -> Option<u64> {
+        self.base_graph.sector_size()
+    }
 }
 
 pub trait ZigZag: ::std::fmt::Debug + Clone + PartialEq + Eq {

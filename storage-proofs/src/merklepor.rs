@@ -23,6 +23,10 @@ impl ParameterSetMetadata for PublicParams {
             self.leaves, self.private
         )
     }
+
+    fn sector_size(&self) -> Option<u64> {
+        None
+    }
 }
 
 /// The inputs that are necessary for the verifier to verify the proof.
