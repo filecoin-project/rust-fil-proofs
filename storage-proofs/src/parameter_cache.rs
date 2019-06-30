@@ -101,6 +101,10 @@ pub trait ParameterSetMetadata: Clone {
     fn identifier(&self) -> String;
     fn sector_size(&self) -> Option<u64>;
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CacheEntryMetadata {
+    pub sector_size: Option<u64>,
 }
 
 pub trait CacheableParameters<E, C, P>
@@ -110,6 +114,13 @@ where
     P: ParameterSetIdentifier,
 {
     fn cache_prefix() -> String;
+
+    fn cache_meta(pub_params: &P) -> CacheEntryMetadata {
+        CacheEntryMetadata {
+            sector_size: pub_params.sector_size(),
+        }
+    }
+
     fn cache_identifier(pub_params: &P) -> String {
         let param_identifier = pub_params.identifier();
         info!(SP_LOG, "parameter set identifier for cache: {}", param_identifier; "target" => "params");
