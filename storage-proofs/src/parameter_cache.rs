@@ -95,8 +95,6 @@ pub fn parameter_cache_path(filename: &str) -> PathBuf {
     dir.join(format!("v{}-{}", VERSION, filename))
 }
 
-pub trait ParameterSetIdentifier: Clone {
-    fn parameter_set_identifier(&self) -> String;
 pub fn parameter_cache_metadata_path(filename: &str) -> PathBuf {
     let name = parameter_cache_dir_name();
     let dir = Path::new(&name);
@@ -117,7 +115,7 @@ pub trait CacheableParameters<E, C, P>
 where
     C: Circuit<E>,
     E: JubjubEngine,
-    P: ParameterSetIdentifier,
+    P: ParameterSetMetadata,
 {
     fn cache_prefix() -> String;
 
