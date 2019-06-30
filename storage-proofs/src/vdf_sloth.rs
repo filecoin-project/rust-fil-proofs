@@ -31,6 +31,7 @@ impl ParameterSetMetadata for PublicParams {
     }
 
     fn sector_size(&self) -> Option<u64> {
+        // TODO: Expose sector size, if available.
         None
     }
 }
