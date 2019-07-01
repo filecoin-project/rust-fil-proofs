@@ -49,15 +49,15 @@ fn preprocessing_benchmark(c: &mut Criterion) {
     );
 }
 
-fn write_padded_bench(file: &mut File, mut data: Vec<u8>) {
-    let _ = write_padded(&mut data[..].as_ref(), file).unwrap();
+fn write_padded_bench(file: &mut File, data: Vec<u8>) {
+    let _ = write_padded(&mut &data[..], file).unwrap();
     let padded_written = file.seek(SeekFrom::End(0)).unwrap() as usize;
 
     assert!(padded_written > data.len());
 }
 
-fn write_padded_unpadded_bench(file: &mut File, mut data: Vec<u8>) {
-    write_padded(&mut data[..].as_ref(), file).unwrap();
+fn write_padded_unpadded_bench(file: &mut File, data: Vec<u8>) {
+    write_padded(&mut &data[..], file).unwrap();
 
     let padded_written = file.seek(SeekFrom::End(0)).unwrap() as usize;
 
