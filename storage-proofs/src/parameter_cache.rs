@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 
 use std::env;
 use std::fs::{self, create_dir_all, File};
-use std::io::{self, Seek, SeekFrom};
+use std::io::{self, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -78,7 +78,7 @@ impl Drop for LockedFile {
     }
 }
 
-pub fn parameter_cache_dir_name() -> String {
+fn parameter_cache_dir_name() -> String {
     match env::var("FILECOIN_PARAMETER_CACHE") {
         Ok(dir) => dir,
         Err(_) => String::from(PARAMETER_CACHE_DIR),
@@ -89,19 +89,32 @@ pub fn parameter_cache_dir() -> PathBuf {
     Path::new(&parameter_cache_dir_name()).to_path_buf()
 }
 
-pub fn parameter_cache_params_path(parameter_set_identifier: &str) -> PathBuf {
+fn parameter_cache_params_path(parameter_set_identifier: &str) -> PathBuf {
     let dir = Path::new(&parameter_cache_dir_name()).to_path_buf();
     dir.join(format!("v{}-{}.params", VERSION, parameter_set_identifier))
 }
 
-pub fn parameter_cache_metadata_path(parameter_set_identifier: &str) -> PathBuf {
+fn parameter_cache_metadata_path(parameter_set_identifier: &str) -> PathBuf {
     let dir = Path::new(&parameter_cache_dir_name()).to_path_buf();
     dir.join(format!("v{}-{}.meta", VERSION, parameter_set_identifier))
 }
 
-pub fn parameter_cache_verifying_key_path(parameter_set_identifier: &str) -> PathBuf {
+fn parameter_cache_verifying_key_path(parameter_set_identifier: &str) -> PathBuf {
     let dir = Path::new(&parameter_cache_dir_name()).to_path_buf();
     dir.join(format!("v{}-{}.vk", VERSION, parameter_set_identifier))
+}
+
+fn ensure_cache_path(cache_entry_path: PathBuf) -> Result<PathBuf> {
+    info!(SP_LOG, "ensuring that all parent directories for: {:?} exist", cache_entry_path; "target" => "cache");
+
+    if let Err(err) = create_dir_all(&cache_entry_path) {
+        match err.kind() {
+            io::ErrorKind::AlreadyExists => {}
+            _ => return Err(From::from(err)),
+        }
+    }
+
+    Ok(cache_entry_path)
 }
 
 pub trait ParameterSetMetadata: Clone {
@@ -144,19 +157,10 @@ where
     fn get_param_metadata(_circuit: C, pub_params: &P) -> Result<CacheEntryMetadata> {
         let id = Self::cache_identifier(pub_params);
 
-        let meta = Self::cache_meta(pub_params);
-        let meta_path = parameter_cache_metadata_path(&id);
-
-        // generate (or load) metadata parameter set metadata
-        read_cached_metadata(&meta_path).or_else(|_| {
-            ensure_parent(&meta_path)?;
-
-            let meta_file = LockedFile::open_exclusive(&meta_path)?;
-            serde_json::to_writer(meta_file, &meta)?;
-            info!(SP_LOG, "wrote parameter metadata to cache {:?} ", &meta_path; "target" => "metadata", "id" => &id);
-
-            Ok(meta)
-        })
+        // generate (or load) metadata
+        let meta_path = ensure_cache_path(parameter_cache_metadata_path(&id))?;
+        read_cached_metadata(&meta_path)
+            .or_else(|_| write_cached_metadata(&meta_path, Self::cache_meta(pub_params)))
     }
 
     fn get_groth_params(circuit: C, pub_params: &P) -> Result<groth16::Parameters<E>> {
@@ -173,26 +177,9 @@ where
             parameters
         };
 
-        let cache_dir = parameter_cache_dir();
-        create_dir_all(cache_dir)?;
-        let cache_path = parameter_cache_params_path(&id);
-        info!(SP_LOG, "checking cache_path: {:?}", cache_path; "target" => "params", "id" => &id);
-
         // generate (or load) Groth parameters
-        read_cached_params(&cache_path).or_else(|_| {
-            ensure_parent(&cache_path)?;
-
-            let mut f = LockedFile::open_exclusive(&cache_path)?;
-            let p = generate()?;
-
-            p.write(&mut f)?;
-            info!(SP_LOG, "wrote parameters to cache {:?} ", f; "target" => "params", "id" => &id);
-
-            let bytes = f.seek(SeekFrom::End(0))?;
-            info!(SP_LOG, "groth_parameter_bytes: {}", bytes; "target" => "stats", "id" => &id);
-
-            Ok(p)
-        })
+        let cache_path = ensure_cache_path(parameter_cache_params_path(&id))?;
+        read_cached_params(&cache_path).or_else(|_| write_cached_params(&cache_path, generate()?))
     }
 
     fn get_verifying_key(circuit: C, pub_params: &P) -> Result<groth16::VerifyingKey<E>> {
@@ -204,25 +191,10 @@ where
             Ok(groth_params.vk)
         };
 
-        let cache_dir = parameter_cache_dir();
-        create_dir_all(cache_dir)?;
-        let cache_path = parameter_cache_verifying_key_path(&id);
-        info!(SP_LOG, "checking cache_path: {:?}", cache_path; "target" => "verifying_key", "id" => &id);
-
-        read_cached_verifying_key(&cache_path).or_else(|_| {
-            ensure_parent(&cache_path)?;
-
-            let mut f = LockedFile::open_exclusive(&cache_path)?;
-            let p = generate()?;
-
-            p.write(&mut f)?;
-            info!(SP_LOG, "wrote verifying key to cache {:?} ", f; "target" => "verifying_key", "id" => &id);
-
-            let bytes = f.seek(SeekFrom::End(0))?;
-            info!(SP_LOG, "verifying_key_bytes: {}", bytes; "target" => "stats", "id" => &id);
-
-            Ok(p)
-        })
+        // generate (or load) verifying key
+        let cache_path = ensure_cache_path(parameter_cache_verifying_key_path(&id))?;
+        read_cached_verifying_key(&cache_path)
+            .or_else(|_| write_cached_verifying_key(&cache_path, generate()?))
     }
 }
 
@@ -236,42 +208,97 @@ fn ensure_parent(path: &PathBuf) -> Result<()> {
     }
 }
 
-pub fn read_cached_params<E: JubjubEngine>(
+fn read_cached_params<E: JubjubEngine>(
     cache_entry_path: &PathBuf,
 ) -> Result<groth16::Parameters<E>> {
-    with_exclusive_read_lock(cache_entry_path, "groth params", |mut f| {
-        Parameters::read(&mut f, false).map_err(Error::from)
+    info!(SP_LOG, "checking cache_path: {:?} for parameters", cache_entry_path; "target" => "params");
+    with_exclusive_read_lock(cache_entry_path, |mut f| {
+        Parameters::read(&mut f, false).map_err(Error::from).map(|value| {
+            info!(SP_LOG, "read parameters from cache {:?} ", cache_entry_path; "target" => "params");
+            value
+        })
     })
 }
 
-pub fn read_cached_verifying_key<E: JubjubEngine>(
+fn read_cached_verifying_key<E: JubjubEngine>(
     cache_entry_path: &PathBuf,
 ) -> Result<groth16::VerifyingKey<E>> {
-    with_exclusive_read_lock(cache_entry_path, "verifying key", |mut f| {
-        groth16::VerifyingKey::read(&mut f).map_err(Error::from)
+    info!(SP_LOG, "checking cache_path: {:?} for verifying key", cache_entry_path; "target" => "verifying_key");
+    with_exclusive_read_lock(cache_entry_path, |mut file| {
+        groth16::VerifyingKey::read(&mut file).map_err(Error::from).map(|value| {
+            info!(SP_LOG, "read verifying key from cache {:?} ", cache_entry_path; "target" => "verifying_key");
+            value
+        })
     })
 }
 
-pub fn read_cached_metadata(cache_entry_path: &PathBuf) -> Result<CacheEntryMetadata> {
-    with_exclusive_read_lock(cache_entry_path, "metadata", |f| {
-        serde_json::from_reader(f).map_err(Error::from)
+fn read_cached_metadata(cache_entry_path: &PathBuf) -> Result<CacheEntryMetadata> {
+    info!(SP_LOG, "checking cache_path: {:?} for metadata", cache_entry_path; "target" => "metadata");
+    with_exclusive_read_lock(cache_entry_path, |file| {
+        serde_json::from_reader(file).map_err(Error::from).map(|value| {
+            info!(SP_LOG, "read metadata from cache {:?} ", cache_entry_path; "target" => "metadata");
+            value
+        })
     })
+}
+
+fn write_cached_metadata(
+    cache_entry_path: &PathBuf,
+    value: CacheEntryMetadata,
+) -> Result<CacheEntryMetadata> {
+    with_exclusive_lock(cache_entry_path, |file| {
+        serde_json::to_writer(file, &value)
+            .map_err(Error::from)
+            .map(|_| {
+                info!(SP_LOG, "wrote metadata to cache {:?} ", cache_entry_path; "target" => "metadata");
+                value
+            })
+    })
+}
+
+fn write_cached_verifying_key<E: JubjubEngine>(
+    cache_entry_path: &PathBuf,
+    value: groth16::VerifyingKey<E>,
+) -> Result<groth16::VerifyingKey<E>> {
+    with_exclusive_lock(cache_entry_path, |file| {
+        value.write(file).map_err(Error::from).map(|_| {
+            info!(SP_LOG, "wrote verifying key to cache {:?} ", cache_entry_path; "target" => "verifying_key");
+            value
+        })
+    })
+}
+
+fn write_cached_params<E: JubjubEngine>(
+    cache_entry_path: &PathBuf,
+    value: groth16::Parameters<E>,
+) -> Result<groth16::Parameters<E>> {
+    with_exclusive_lock(cache_entry_path, |file| {
+        value.write(file).map_err(Error::from).map(|_| {
+            info!(SP_LOG, "wrote groth parameters to cache {:?} ", cache_entry_path; "target" => "params");
+            value
+        })
+    })
+}
+
+fn with_exclusive_lock<T>(
+    file_path: &PathBuf,
+    f: impl FnOnce(&mut LockedFile) -> Result<T>,
+) -> Result<T> {
+    with_open_file(file_path, LockedFile::open_exclusive, f)
 }
 
 fn with_exclusive_read_lock<T>(
-    cache_path: &PathBuf,
-    log_noun: &str,
-    f: impl Fn(&mut LockedFile) -> Result<T>,
+    file_path: &PathBuf,
+    f: impl FnOnce(&mut LockedFile) -> Result<T>,
 ) -> Result<T> {
-    ensure_parent(&cache_path)?;
+    with_open_file(file_path, LockedFile::open_exclusive_read, f)
+}
 
-    let mut file = LockedFile::open_exclusive_read(&cache_path)?;
-    let result = f(&mut file);
-
-    info!(SP_LOG, "read {} from cache {:?} ", log_noun, cache_path; "target" => "params");
-
-    let bytes = file.seek(SeekFrom::End(0))?;
-    info!(SP_LOG, "{} bytes: {} {:?}", log_noun, bytes, cache_path; "target" => "stats");
-
-    result
+fn with_open_file<'a, T>(
+    file_path: &'a PathBuf,
+    open_file: impl FnOnce(&'a PathBuf) -> io::Result<LockedFile>,
+    f: impl FnOnce(&mut LockedFile) -> Result<T>,
+) -> Result<T> {
+    ensure_parent(&file_path)?;
+    f(&mut open_file(&file_path)?)
 }
