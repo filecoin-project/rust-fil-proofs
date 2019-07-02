@@ -36,6 +36,8 @@ pub enum Error {
     UnalignedPiece,
     #[fail(display = "{}", _0)]
     Serde(#[cause] serde_json::error::Error),
+    #[fail(display = "unclassified error: {}", _0)]
+    Unclassified(String),
 }
 
 impl From<SynthesisError> for Error {
