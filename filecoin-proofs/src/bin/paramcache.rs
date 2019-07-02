@@ -24,9 +24,13 @@ fn cache_porep_params(porep_config: PoRepConfig) {
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
     );
+
     {
         let circuit = ZigZagCompound::blank_circuit(&public_params, &ENGINE_PARAMS);
-
+        let _ = ZigZagCompound::get_param_metadata(circuit, &public_params);
+    }
+    {
+        let circuit = ZigZagCompound::blank_circuit(&public_params, &ENGINE_PARAMS);
         let _ = ZigZagCompound::get_groth_params(circuit, &public_params);
     }
     {
@@ -40,6 +44,16 @@ fn cache_post_params(post_config: PoStConfig) {
     info!(FCP_LOG, "begin PoSt parameter-cache check/populate routine for {}-byte sectors", n; "target" => "paramcache");
 
     let post_public_params = post_public_params(post_config);
+
+    {
+        let post_circuit: VDFPoStCircuit<Bls12> =
+            <VDFPostCompound as CompoundProof<
+                Bls12,
+                VDFPoSt<PedersenHasher, Sloth>,
+                VDFPoStCircuit<Bls12>,
+            >>::blank_circuit(&post_public_params, &ENGINE_PARAMS);
+        let _ = VDFPostCompound::get_param_metadata(post_circuit, &post_public_params);
+    }
     {
         let post_circuit: VDFPoStCircuit<Bls12> =
             <VDFPostCompound as CompoundProof<

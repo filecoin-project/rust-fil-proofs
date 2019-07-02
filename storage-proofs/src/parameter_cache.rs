@@ -109,7 +109,7 @@ pub trait ParameterSetMetadata: Clone {
     fn sector_size(&self) -> Option<u64>;
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CacheEntryMetadata {
     pub sector_size: Option<u64>,
 }
@@ -141,9 +141,26 @@ where
         )
     }
 
+    fn get_param_metadata(_circuit: C, pub_params: &P) -> Result<CacheEntryMetadata> {
+        let id = Self::cache_identifier(pub_params);
+
+        let meta = Self::cache_meta(pub_params);
+        let meta_path = parameter_cache_metadata_path(&id);
+
+        // generate (or load) metadata parameter set metadata
+        read_cached_metadata(&meta_path).or_else(|_| {
+            ensure_parent(&meta_path)?;
+
+            let meta_file = LockedFile::open_exclusive(&meta_path)?;
+            serde_json::to_writer(meta_file, &meta)?;
+            info!(SP_LOG, "wrote parameter metadata to cache {:?} ", &meta_path; "target" => "metadata", "id" => &id);
+
+            Ok(meta)
+        })
+    }
+
     fn get_groth_params(circuit: C, pub_params: &P) -> Result<groth16::Parameters<E>> {
         // Always seed the rng identically so parameter generation will be deterministic.
-
         let id = Self::cache_identifier(pub_params);
 
         let generate = || {
@@ -161,6 +178,7 @@ where
         let cache_path = parameter_cache_params_path(&id);
         info!(SP_LOG, "checking cache_path: {:?}", cache_path; "target" => "params", "id" => &id);
 
+        // generate (or load) Groth parameters
         read_cached_params(&cache_path).or_else(|_| {
             ensure_parent(&cache_path)?;
 
@@ -172,12 +190,6 @@ where
 
             let bytes = f.seek(SeekFrom::End(0))?;
             info!(SP_LOG, "groth_parameter_bytes: {}", bytes; "target" => "stats", "id" => &id);
-
-            // generate metadata file for Groth parameters
-            let meta_path = parameter_cache_metadata_path(&id);
-            let meta_file = LockedFile::open_exclusive(&meta_path)?;
-            serde_json::to_writer(meta_file, &Self::cache_meta(pub_params))?;
-            info!(SP_LOG, "wrote parameter metadata to cache {:?} ", &meta_path; "target" => "params", "id" => &id);
 
             Ok(p)
         })
@@ -224,61 +236,42 @@ fn ensure_parent(path: &PathBuf) -> Result<()> {
     }
 }
 
-pub fn read_cached_params<E: JubjubEngine>(cache_path: &PathBuf) -> Result<groth16::Parameters<E>> {
-    with_exclusive_read_lock(cache_path, "groth params", |mut f| {
+pub fn read_cached_params<E: JubjubEngine>(
+    cache_entry_path: &PathBuf,
+) -> Result<groth16::Parameters<E>> {
+    with_exclusive_read_lock(cache_entry_path, "groth params", |mut f| {
         Parameters::read(&mut f, false).map_err(Error::from)
     })
 }
 
 pub fn read_cached_verifying_key<E: JubjubEngine>(
-    cache_path: &PathBuf,
+    cache_entry_path: &PathBuf,
 ) -> Result<groth16::VerifyingKey<E>> {
-    with_exclusive_read_lock(cache_path, "verifying key", |mut f| {
+    with_exclusive_read_lock(cache_entry_path, "verifying key", |mut f| {
         groth16::VerifyingKey::read(&mut f).map_err(Error::from)
     })
 }
 
-pub fn read_cached_metadata(cache_path: &PathBuf) -> Result<CacheEntryMetadata> {
-    with_exclusive_read_lock(cache_path, "metadata", |f| {
+pub fn read_cached_metadata(cache_entry_path: &PathBuf) -> Result<CacheEntryMetadata> {
+    with_exclusive_read_lock(cache_entry_path, "metadata", |f| {
         serde_json::from_reader(f).map_err(Error::from)
     })
 }
 
 fn with_exclusive_read_lock<T>(
     cache_path: &PathBuf,
-    label: &str,
-    op: fn(&mut LockedFile) -> Result<T>,
+    log_noun: &str,
+    f: impl Fn(&mut LockedFile) -> Result<T>,
 ) -> Result<T> {
-    ensure_parent(cache_path)?;
+    ensure_parent(&cache_path)?;
 
-    let mut f = LockedFile::open_exclusive_read(&cache_path)?;
-    info!(SP_LOG, "reading {:?} from cache: {:?}", label, cache_path; "target" => "stats");
+    let mut file = LockedFile::open_exclusive_read(&cache_path)?;
+    let result = f(&mut file);
 
-    // TODO: Should we be passing true, to perform a checked read?
-    let params = op(&mut f)?;
+    info!(SP_LOG, "read {} from cache {:?} ", log_noun, cache_path; "target" => "params");
 
-    let bytes = f.seek(SeekFrom::End(0))?;
-    info!(SP_LOG, "{:?} bytes: {}", label, bytes; "target" => "stats");
+    let bytes = file.seek(SeekFrom::End(0))?;
+    info!(SP_LOG, "{} bytes: {} {:?}", log_noun, bytes, cache_path; "target" => "stats");
 
-    Ok(params)
-}
-
-pub fn write_params_to_cache<E: JubjubEngine>(
-    p: groth16::Parameters<E>,
-    cache_path: &PathBuf,
-) -> Result<groth16::Parameters<E>> {
-    ensure_parent(cache_path)?;
-
-    let mut f = fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .open(&cache_path)?;
-    f.lock_exclusive()?;
-
-    p.write(&mut f)?;
-    f.unlock()?;
-
-    info!(SP_LOG, "wrote parameters to cache {:?} ", f; "target" => "params");
-    Ok(p)
+    result
 }
