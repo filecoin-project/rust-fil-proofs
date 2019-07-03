@@ -1,34 +1,33 @@
 use blake2b_simd::State as Blake2b;
 use failure::{err_msg, Error};
-use regex::Regex;
+use pbr::{ProgressBar, Units};
 use reqwest::{header, Client, Url};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::btree_map::BTreeMap;
+use std::ffi::OsStr;
 use std::fs::{create_dir_all, read_dir, rename, File};
-use std::io::{stdin, stdout, BufReader, BufWriter, Write};
-use std::path::PathBuf;
-use std::process::Command;
-
-use pbr::{ProgressBar, Units};
 use std::io::Stdout;
 use std::io::{self, copy, Read};
+use std::io::{stdin, stdout, BufReader, BufWriter, Write};
+use std::path::{Path, PathBuf};
 use storage_proofs::parameter_cache::parameter_cache_dir;
 
-const ERROR_IPFS_COMMAND: &str = "failed to run ipfs";
-const ERROR_IPFS_OUTPUT: &str = "failed to capture ipfs output";
-const ERROR_IPFS_PARSE: &str = "failed to parse ipfs output";
-const ERROR_IPFS_PUBLISH: &str = "failed to publish via ipfs";
-const ERROR_PARAMETER_FILE: &str = "failed to find parameter file";
-const ERROR_PARAMETER_ID: &str = "failed to find parameter in map";
-const ERROR_STRING: &str = "invalid string";
+pub const ERROR_IPFS_COMMAND: &str = "failed to run ipfs";
+pub const ERROR_IPFS_OUTPUT: &str = "failed to capture ipfs output";
+pub const ERROR_IPFS_PARSE: &str = "failed to parse ipfs output";
+pub const ERROR_IPFS_PUBLISH: &str = "failed to publish via ipfs";
+pub const ERROR_PARAMETER_FILE: &str = "failed to find parameter file";
+pub const ERROR_PARAMETER_ID: &str = "failed to find parameter in map";
+pub const ERROR_STRING: &str = "invalid string";
 
 pub type Result<T> = ::std::result::Result<T, Error>;
-pub type ParameterMap = BTreeMap<String, ParameterData>;
+pub type Manifest = BTreeMap<String, ManifestEntry>;
 
 #[derive(Deserialize, Serialize)]
-pub struct ParameterData {
+pub struct ManifestEntry {
     pub cid: String,
     pub digest: String,
+    pub sector_size: Option<u64>,
 }
 
 struct FetchProgress<R> {
@@ -45,26 +44,13 @@ impl<R: Read> Read for FetchProgress<R> {
     }
 }
 
-pub fn get_local_parameter_ids() -> Result<Vec<String>> {
+pub fn get_files_from_cache() -> Result<Vec<PathBuf>> {
     let path = parameter_cache_dir();
 
     if path.exists() {
         Ok(read_dir(path)?
             .map(|f| f.unwrap().path())
             .filter(|p| p.is_file())
-            .filter(|f| match f.extension() {
-                // don't publish the .meta files
-                Some(ref s) => s.to_str().expect("can't marshal to &str") != "meta",
-                None => true,
-            })
-            .map(|p| {
-                p.as_path()
-                    .file_name()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .to_string()
-            })
             .collect())
     } else {
         println!(
@@ -76,11 +62,11 @@ pub fn get_local_parameter_ids() -> Result<Vec<String>> {
     }
 }
 
-pub fn get_mapped_parameter_ids(parameter_map: &ParameterMap) -> Result<Vec<String>> {
+pub fn get_mapped_parameter_ids(parameter_map: &Manifest) -> Result<Vec<String>> {
     Ok(parameter_map.iter().map(|(k, _)| k.clone()).collect())
 }
 
-pub fn get_parameter_map(path: &PathBuf) -> Result<ParameterMap> {
+pub fn get_parameter_map(path: &PathBuf) -> Result<Manifest> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
     let parameter_map = serde_json::from_reader(reader)?;
@@ -89,9 +75,9 @@ pub fn get_parameter_map(path: &PathBuf) -> Result<ParameterMap> {
 }
 
 pub fn get_parameter_data<'a>(
-    parameter_map: &'a ParameterMap,
+    parameter_map: &'a Manifest,
     parameter_id: &str,
-) -> Result<&'a ParameterData> {
+) -> Result<&'a ManifestEntry> {
     if parameter_map.contains_key(parameter_id) {
         Ok(parameter_map.get(parameter_id).unwrap())
     } else {
@@ -99,7 +85,7 @@ pub fn get_parameter_data<'a>(
     }
 }
 
-pub fn save_parameter_map(parameter_map: &ParameterMap, file_path: &PathBuf) -> Result<()> {
+pub fn write_manifest_json(parameter_map: &Manifest, file_path: &PathBuf) -> Result<()> {
     let file = File::create(file_path)?;
     let writer = BufWriter::new(file);
     serde_json::to_writer_pretty(writer, &parameter_map)?;
@@ -107,14 +93,14 @@ pub fn save_parameter_map(parameter_map: &ParameterMap, file_path: &PathBuf) -> 
     Ok(())
 }
 
-pub fn get_parameter_file_path(parameter_id: &str) -> PathBuf {
+pub fn get_cached_file_path(filename: &str) -> PathBuf {
     let mut path = parameter_cache_dir();
-    path.push(parameter_id);
+    path.push(filename);
     path
 }
 
-pub fn get_parameter_digest(parameter_id: &str) -> Result<String> {
-    let path = get_parameter_file_path(parameter_id);
+pub fn get_cached_file_digest(filename: &str) -> Result<String> {
+    let path = get_cached_file_path(filename);
     let mut file = File::open(path)?;
     let mut hasher = Blake2b::new();
 
@@ -123,35 +109,14 @@ pub fn get_parameter_digest(parameter_id: &str) -> Result<String> {
     Ok(hasher.finalize().to_hex()[..32].into())
 }
 
-pub fn publish_parameter_file(parameter_id: &str) -> Result<String> {
-    let path = get_parameter_file_path(parameter_id);
-
-    let output = Command::new("ipfs")
-        .arg("add")
-        .arg(&path)
-        .output()
-        .expect(ERROR_IPFS_COMMAND);
-
-    if !output.status.success() {
-        Err(err_msg(ERROR_IPFS_PUBLISH))
-    } else {
-        let pattern = Regex::new("added ([^ ]+) ")?;
-        let string = String::from_utf8(output.stdout)?;
-        let captures = pattern.captures(string.as_str()).expect(ERROR_IPFS_OUTPUT);
-        let cid = captures.get(1).expect(ERROR_IPFS_PARSE);
-
-        Ok(cid.as_str().to_string())
-    }
-}
-
 pub fn spawn_fetch_parameter_file(
     is_verbose: bool,
-    parameter_map: &ParameterMap,
+    parameter_map: &Manifest,
     parameter_id: &str,
     gateway: &str,
 ) -> Result<()> {
     let parameter_data = get_parameter_data(parameter_map, parameter_id)?;
-    let path = get_parameter_file_path(parameter_id);
+    let path = get_cached_file_path(parameter_id);
 
     create_dir_all(parameter_cache_dir())?;
 
@@ -194,9 +159,9 @@ pub fn spawn_fetch_parameter_file(
     Ok(())
 }
 
-pub fn validate_parameter_file(parameter_map: &ParameterMap, parameter_id: &str) -> Result<bool> {
+pub fn validate_parameter_file(parameter_map: &Manifest, parameter_id: &str) -> Result<bool> {
     let parameter_data = get_parameter_data(parameter_map, parameter_id)?;
-    let digest = get_parameter_digest(parameter_id)?;
+    let digest = get_cached_file_digest(parameter_id)?;
 
     if parameter_data.digest != digest {
         Ok(false)
@@ -206,7 +171,7 @@ pub fn validate_parameter_file(parameter_map: &ParameterMap, parameter_id: &str)
 }
 
 pub fn invalidate_parameter_file(parameter_id: &str) -> Result<()> {
-    let parameter_file_path = get_parameter_file_path(parameter_id);
+    let parameter_file_path = get_cached_file_path(parameter_id);
     let target_parameter_file_path =
         parameter_file_path.with_file_name(format!("{}-invalid-digest", parameter_id));
 
@@ -234,6 +199,134 @@ pub fn choose(message: &str) -> bool {
     }
 }
 
-pub fn choose_from(vector: Vec<String>) -> Result<Vec<String>> {
-    Ok(vector.into_iter().filter(|i| choose(i)).collect())
+pub fn choose_from(vector: Vec<String>) -> Vec<String> {
+    vector.into_iter().filter(|i| choose(i)).collect()
+}
+
+#[derive(Clone)]
+pub enum CachedFileMetadata {
+    ParameterMetadata {
+        parameter_id: String,
+        filename: String,
+        path: String,
+    },
+    VerifyingKey {
+        parameter_id: String,
+        filename: String,
+        path: String,
+    },
+    GrothParameters {
+        parameter_id: String,
+        filename: String,
+        path: String,
+    },
+}
+
+pub struct PublishableCachedFileMetadata(CachedFileMetadata);
+
+impl PublishableCachedFileMetadata {
+    pub fn filename(&self) -> &str {
+        self.0.filename()
+    }
+
+    pub fn parameter_id(&self) -> &str {
+        self.0.parameter_id()
+    }
+
+    pub fn path(&self) -> &str {
+        self.0.path()
+    }
+}
+
+impl CachedFileMetadata {
+    pub fn filename(&self) -> &str {
+        match &self {
+            CachedFileMetadata::ParameterMetadata { filename, .. } => filename,
+            CachedFileMetadata::VerifyingKey { filename, .. } => filename,
+            CachedFileMetadata::GrothParameters { filename, .. } => filename,
+        }
+    }
+
+    pub fn path(&self) -> &str {
+        match &self {
+            CachedFileMetadata::ParameterMetadata { path, .. } => path,
+            CachedFileMetadata::VerifyingKey { path, .. } => path,
+            CachedFileMetadata::GrothParameters { path, .. } => path,
+        }
+    }
+
+    pub fn parameter_id(&self) -> &str {
+        match &self {
+            CachedFileMetadata::ParameterMetadata { parameter_id, .. } => parameter_id,
+            CachedFileMetadata::VerifyingKey { parameter_id, .. } => parameter_id,
+            CachedFileMetadata::GrothParameters { parameter_id, .. } => parameter_id,
+        }
+    }
+
+    pub fn try_publishable(entry: CachedFileMetadata) -> Option<PublishableCachedFileMetadata> {
+        match entry {
+            CachedFileMetadata::ParameterMetadata { .. } => None,
+            entry => Some(PublishableCachedFileMetadata(entry)),
+        }
+    }
+}
+
+pub fn to_cached_file_metadata<P: AsRef<Path>>(paths: &[P]) -> Vec<CachedFileMetadata> {
+    paths
+        .iter()
+        .flat_map(|p| {
+            match (
+                extension_to_owned_string(p),
+                filename_to_owned_string(p),
+                file_stem_to_owned_string(p),
+                path_to_owned_string(p),
+            ) {
+                (Some(ext), Some(filename), Some(parameter_id), Some(path)) => match ext.as_ref() {
+                    "meta" => Some(CachedFileMetadata::ParameterMetadata {
+                        parameter_id,
+                        filename,
+                        path,
+                    }),
+                    "vk" => Some(CachedFileMetadata::VerifyingKey {
+                        parameter_id,
+                        filename,
+                        path,
+                    }),
+                    "params" => Some(CachedFileMetadata::GrothParameters {
+                        parameter_id,
+                        filename,
+                        path,
+                    }),
+                    _ => None,
+                },
+                _ => None,
+            }
+            .into_iter()
+        })
+        .collect()
+}
+
+fn extension_to_owned_string<P: AsRef<Path>>(path: P) -> Option<String> {
+    path.as_ref()
+        .extension()
+        .and_then(OsStr::to_str)
+        .map(&str::to_string)
+}
+
+fn filename_to_owned_string<P: AsRef<Path>>(path: P) -> Option<String> {
+    path.as_ref()
+        .file_name()
+        .and_then(OsStr::to_str)
+        .map(&str::to_string)
+}
+
+fn file_stem_to_owned_string<P: AsRef<Path>>(path: P) -> Option<String> {
+    path.as_ref()
+        .file_stem()
+        .and_then(OsStr::to_str)
+        .map(&str::to_string)
+}
+
+fn path_to_owned_string<P: AsRef<Path>>(path: P) -> Option<String> {
+    path.as_ref().to_str().map(&str::to_string)
 }

@@ -90,7 +90,7 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
     let mut parameter_ids = get_pending_parameter_ids(&parameter_map, all_parameter_ids.clone())?;
 
     if !matches.is_present("all") && !parameter_ids.is_empty() {
-        parameter_ids = choose_from(parameter_ids)?;
+        parameter_ids = choose_from(parameter_ids);
         println!();
     }
 
@@ -140,7 +140,7 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
 }
 
 fn get_pending_parameter_ids(
-    parameter_map: &ParameterMap,
+    parameter_map: &Manifest,
     parameter_ids: Vec<String>,
 ) -> Result<Vec<String>> {
     Ok(parameter_ids
@@ -149,7 +149,7 @@ fn get_pending_parameter_ids(
             println!("checking: {}", parameter_id);
             print!("does parameter file exist... ");
 
-            if get_parameter_file_path(parameter_id).exists() {
+            if get_cached_file_path(parameter_id).exists() {
                 println!("yes");
                 print!("is parameter file valid... ");
                 io::stdout().flush().unwrap();
