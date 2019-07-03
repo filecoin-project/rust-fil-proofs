@@ -41,7 +41,6 @@ pub mod layered_drgporep;
 pub mod merkle;
 pub mod merklepor;
 pub mod parameter_cache;
-pub mod parameter_cache_zexe;
 pub mod partitions;
 pub mod piece_inclusion_proof;
 pub mod porc;
