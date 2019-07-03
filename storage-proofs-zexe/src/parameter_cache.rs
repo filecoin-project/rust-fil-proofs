@@ -1,6 +1,6 @@
 use crate::error::*;
 use snark::{groth16, groth16::Parameters, Circuit};
-use algebra::PairingEngine as Engine;
+use algebra::{bytes::{FromBytes, ToBytes}, PairingEngine as Engine};
 use fs2::FileExt;
 use itertools::Itertools;
 use rand::{SeedableRng, XorShiftRng};
@@ -201,7 +201,7 @@ pub fn read_cached_params<E: Engine>(cache_path: &PathBuf) -> Result<groth16::Pa
     info!(SP_LOG, "reading groth params from cache: {:?}", cache_path; "target" => "params");
 
     // TODO: Should we be passing true, to perform a checked read?
-    let params = Parameters::read(&mut f, false).map_err(Error::from)?;
+    let params = Parameters::read(&mut f).map_err(Error::from)?;
 
     let bytes = f.seek(SeekFrom::End(0))?;
     info!(SP_LOG, "groth_parameter_bytes: {}", bytes; "target" => "stats");
