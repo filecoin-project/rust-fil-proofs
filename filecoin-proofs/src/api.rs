@@ -1,11 +1,13 @@
 use std::fs::{copy, File, OpenOptions};
-use std::io::{BufWriter, Cursor, Read};
+use std::io::prelude::*;
+use std::io::{BufWriter, Cursor, Read, SeekFrom};
 use std::path::{Path, PathBuf};
 
 use ff::PrimeField;
 use memmap::MmapOptions;
 use paired::bls12_381::Bls12;
 use paired::Engine;
+use tempfile::NamedTempFile;
 
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::vdf_post::VDFPostCompound;
@@ -33,15 +35,15 @@ use crate::constants::{POREP_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN};
 use crate::error;
 use crate::error::ExpectWithBacktrace;
 use crate::file_cleanup::FileCleanup;
-use crate::fr32::write_unpadded;
+use crate::fr32::{write_padded, write_unpadded};
 use crate::parameters::{post_setup_params, public_params, setup_params};
-use crate::pieces::{get_piece_alignment, PieceAlignment};
+use crate::pieces::{get_aligned_source, get_piece_alignment, PieceAlignment};
 use crate::post_adapter::*;
 use crate::singletons::ENGINE_PARAMS;
 use crate::singletons::FCP_LOG;
 use crate::types::{
     PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, PoStProofPartitions,
-    UnpaddedByteIndex, UnpaddedBytesAmount,
+    SectorSize, UnpaddedByteIndex, UnpaddedBytesAmount,
 };
 
 /// FrSafe is an array of the largest whole number of bytes guaranteed not to overflow the field.
@@ -211,13 +213,11 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         let mut buf = vec![0; usize::from(padded_left_bytes)];
         in_data.read_exact(&mut buf)?;
 
-        let mut buf = vec![0; usize::from(padded_piece_length)];
+        let mut buf = vec![0; usize::from(padded_piece_length + padded_right_bytes)];
         in_data.read_exact(&mut buf)?;
-        let mut source = Cursor::new(buf);
-        let comm_p = generate_piece_commitment_bytes_from_source::<PedersenHasher>(&mut source)?;
 
-        let mut buf = vec![0; usize::from(padded_right_bytes)];
-        in_data.read_exact(&mut buf)?;
+        let mut source = Cursor::new(&buf);
+        let comm_p = generate_piece_commitment_bytes_from_source::<PedersenHasher>(&mut source)?;
 
         comm_ps.push(comm_p);
         piece_specs.push(PieceSpec {
@@ -229,7 +229,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
 
     let piece_inclusion_proofs = piece_inclusion_proofs::<PedersenHasher>(&piece_specs, tree)?;
 
-    let valid_pieces = PieceInclusionProof::verify_all_from_bytes(
+    let valid_pieces = PieceInclusionProof::verify_all(
         &comm_d,
         &piece_inclusion_proofs,
         &comm_ps,
@@ -333,6 +333,44 @@ pub fn verify_seal(
         },
     )
     .map_err(Into::into)
+}
+
+pub fn verify_piece_inclusion_proof(
+    bytes: Vec<u8>,
+    comm_d: Commitment,
+    comm_p: Commitment,
+    piece_size: PaddedBytesAmount,
+    sector_size: SectorSize,
+) -> error::Result<bool> {
+    let piece_inclusion_proof: PieceInclusionProof<PedersenHasher> = bytes.into();
+    let comm_d = storage_proofs::hasher::pedersen::PedersenDomain::try_from_bytes(&comm_d)?;
+    let comm_p = storage_proofs::hasher::pedersen::PedersenDomain::try_from_bytes(&comm_p)?;
+    let piece_leaves = u64::from(piece_size) / 32;
+    let sector_leaves = u64::from(PaddedBytesAmount::from(sector_size)) / 32;
+
+    Ok(piece_inclusion_proof.verify(
+        &comm_d,
+        &comm_p,
+        piece_leaves as usize,
+        sector_leaves as usize,
+    ))
+}
+
+pub fn generate_piece_commitment<T: Into<PathBuf> + AsRef<Path>>(
+    unpadded_piece_path: T,
+    unpadded_piece_size: UnpaddedBytesAmount,
+) -> error::Result<(Commitment, PaddedBytesAmount)> {
+    let mut unpadded_piece_file = File::open(unpadded_piece_path)?;
+    let mut padded_piece_file = NamedTempFile::new().expects("could not create named temp file");
+
+    let (_, mut source) = get_aligned_source(&mut unpadded_piece_file, &[], unpadded_piece_size);
+    let padded_piece_size = write_padded(&mut source, &mut padded_piece_file)?;
+
+    let _ = padded_piece_file.seek(SeekFrom::Start(0))?;
+
+    let comm_p =
+        generate_piece_commitment_bytes_from_source::<PedersenHasher>(&mut padded_piece_file)?;
+    Ok((comm_p, PaddedBytesAmount(padded_piece_size as u64)))
 }
 
 /// Unseals the sector at `sealed_path` and returns the bytes for a piece
@@ -552,4 +590,122 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
     let mut res = [0; 32];
     res[0..31].copy_from_slice(unpadded);
     res
+}
+
+#[test]
+fn test_generate_piece_commitment() -> Result<(), failure::Error> {
+    fn blah(data: &[u8]) -> Result<Commitment, failure::Error> {
+        let mut file = NamedTempFile::new().expects("could not create named temp file");
+        file.write_all(data)?;
+        let (comm_p, _) =
+            generate_piece_commitment(file.path(), UnpaddedBytesAmount(data.len() as u64))?;
+        Ok(comm_p)
+    }
+
+    {
+        // this scope tests comm_p generation for all byte lengths up to the minimum piece
+        // alignment when writing a piece to a sector
+        let max = 127;
+
+        for n in 0..=max {
+            let bytes: Vec<u8> = (0..n).map(|_| rand::random::<u8>()).collect();
+            let mut data_a = vec![0; n];
+            let mut data_b = vec![0; max];
+
+            for i in 0..n {
+                data_a[i] = bytes[i];
+                data_b[i] = bytes[i];
+            }
+
+            let comm_p_a = blah(&data_a)?;
+            let comm_p_b = blah(&data_b)?;
+
+            assert_eq!(comm_p_a, comm_p_b);
+        }
+    }
+
+    {
+        // this scope is just a sanity check that larger byte lengths are still zero padded
+        let bytes: Vec<u8> = (0..400).map(|_| rand::random::<u8>()).collect();
+        let mut data_a = vec![0; 400];
+        let mut data_b = vec![0; 508];
+
+        for i in 0..400 {
+            data_a[i] = bytes[i];
+            data_b[i] = bytes[i];
+        }
+
+        let comm_p_a = blah(&data_a)?;
+        let comm_p_b = blah(&data_b)?;
+
+        assert_eq!(comm_p_a, comm_p_b);
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_foo() -> Result<(), failure::Error> {
+    use crate::types::SectorSize;
+
+    fn add_piece<R, W>(
+        mut source: &mut R,
+        target: &mut W,
+        piece_size: UnpaddedBytesAmount,
+    ) -> std::io::Result<usize>
+    where
+        R: Read + ?Sized,
+        W: Read + Write + Seek + ?Sized,
+    {
+        let (_, mut aligned_source) = get_aligned_source(&mut source, &[], piece_size);
+        write_padded(&mut aligned_source, target)
+    }
+
+    let number_of_bytes_in_piece: u64 = 500;
+    let bytes: Vec<u8> = (0..number_of_bytes_in_piece)
+        .map(|_| rand::random::<u8>())
+        .collect();
+    let mut piece_file = NamedTempFile::new().expects("could not create named temp file");
+    piece_file.write_all(&bytes)?;
+    piece_file.seek(SeekFrom::Start(0))?;
+    let (comm_p, foo) = generate_piece_commitment(
+        &piece_file.path(),
+        UnpaddedBytesAmount(number_of_bytes_in_piece),
+    )?;
+
+    let mut unsealed_sector_file = NamedTempFile::new().expects("could not create named temp file");
+
+    add_piece(
+        &mut piece_file,
+        &mut unsealed_sector_file,
+        UnpaddedBytesAmount(number_of_bytes_in_piece),
+    )?;
+
+    let sealed_sector_file = NamedTempFile::new().expects("could not create named temp file");
+
+    let sector_size = SectorSize(1024);
+    let config = PoRepConfig(sector_size, PoRepProofPartitions(2));
+
+    let output = seal(
+        config,
+        &unsealed_sector_file.path(),
+        &sealed_sector_file.path(),
+        &[0; 31],
+        &[0; 31],
+        &[number_of_bytes_in_piece],
+    )?;
+
+    let verified = verify_piece_inclusion_proof(
+        output.piece_inclusion_proofs[0].clone().into(),
+        output.comm_d,
+        output.comm_ps[0],
+        foo,
+        sector_size,
+    )?;
+
+    assert!(verified);
+
+    assert_eq!(output.comm_ps[0], comm_p);
+
+    Ok(())
 }

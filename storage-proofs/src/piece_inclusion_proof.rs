@@ -31,18 +31,29 @@ impl<H: Hasher> From<PieceInclusionProof<H>> for Vec<u8> {
 
 impl<H: Hasher> From<Vec<u8>> for PieceInclusionProof<H> {
     fn from(bytes: Vec<u8>) -> Self {
+        // TODO: maybe option in a function, not a from
+        // also don't use 8 as the magic number from usize
+        if (&bytes.len() - 8) % 32 != 0 {
+            return Self {
+                position: 0,
+                proof_elements: Default::default(),
+            };
+        }
+
         let mut position_bytes: [u8; 8] = [0; 8];
-        position_bytes.copy_from_slice(&bytes[0..7]);
+        position_bytes.copy_from_slice(&bytes[0..8]);
+
         let mut proof_elements = Vec::new();
 
         for chunk in bytes[8..].chunks(32) {
-            let proof = <H::Domain as Domain>::try_from_bytes(&chunk).expect("foo");
+            let proof =
+                <H::Domain as Domain>::try_from_bytes(&chunk).expect("invalid proof element");
             proof_elements.push(proof);
         }
 
         Self {
             position: usize::from_le_bytes(position_bytes),
-            proof_elements: Vec::new(),
+            proof_elements,
         }
     }
 }
@@ -136,15 +147,23 @@ pub fn generate_piece_commitment_bytes_from_source<H: Hasher>(
     source: &mut Read,
 ) -> Result<Fr32Ary> {
     let mut domain_data = Vec::new();
+    let mut total_bytes_read = 0;
 
     loop {
         let mut buf = [0; 32];
 
-        if source.read(&mut buf)? > 0 {
+        let bytes_read = source.read(&mut buf)?;
+        total_bytes_read += bytes_read;
+
+        if bytes_read > 0 {
             domain_data.push(<H::Domain as Domain>::try_from_bytes(&buf)?);
         } else {
             break;
         }
+    }
+
+    if total_bytes_read < 32 {
+        return Err(Error::Unclassified("foo".to_string()));
     }
 
     let mut comm_p_bytes = [0; 32];
@@ -246,13 +265,17 @@ impl<H: Hasher> PieceInclusionProof<H> {
     /// position encoded in the proof.
     /// `piece_leaves` and `sector_leaves` are in units of `Domain` (i.e. `NODE_SIZE` = 32 bytes).
 
-    fn verify(
+    pub fn verify(
         &self,
         root: &H::Domain,
         comm_p: &H::Domain,
         piece_leaves: usize,
         sector_leaves: usize,
     ) -> bool {
+        if sector_leaves == 0 {
+            return false;
+        }
+
         let sector_height = height_for_length(sector_leaves);
         let piece_height = height_for_length(piece_leaves);
         let proof_length = sector_height - piece_height;
@@ -305,63 +328,24 @@ impl<H: Hasher> PieceInclusionProof<H> {
 
     /// verify_piece_inclusion_proofs returns true iff each provided piece is proved with respect to root
     /// by the corresponding (by index) proof.
-    fn verify_all(
-        root: &H::Domain,
-        proofs: &[PieceInclusionProof<H>],
-        comm_ps: &[H::Domain],
-        piece_sizes: &[usize],
-        sector_size: usize,
-    ) -> bool {
-        proofs.iter().zip(comm_ps.iter().zip(piece_sizes)).all(
-            |(proof, (comm_p, piece_size))| {
-                proof.verify(
-                    &root,
-                    &comm_p,
-                    *piece_size,
-                    sector_size,
-                )
-            },
-        )
-    }
-
-    pub fn verify_from_bytes(
-        &self,
-        root: &Fr32Ary,
-        comm_p: &Fr32Ary,
-        piece_leaves: usize,
-        sector_leaves: usize,
-    ) -> Result<bool> {
-        let root_domain = H::Domain::try_from_bytes(root)?;
-        let comm_p_domain = H::Domain::try_from_bytes(comm_p)?;
-
-        Ok(self.verify(
-            &root_domain,
-            &comm_p_domain,
-            piece_leaves,
-            sector_leaves,
-        ))
-    }
-
-    pub fn verify_all_from_bytes(
-        root: &Fr32Ary,
+    pub fn verify_all(
+        root: &[u8],
         proofs: &[PieceInclusionProof<H>],
         comm_ps: &[Fr32Ary],
         piece_sizes: &[usize],
         sector_size: usize,
     ) -> Result<bool> {
         let root_domain = H::Domain::try_from_bytes(root)?;
-        let mut comm_ps_domain = vec![];
 
-        for comm_p in comm_ps {
-            comm_ps_domain.push(H::Domain::try_from_bytes(comm_p)?);
-        }
-
-        Ok(PieceInclusionProof::verify_all(
-            &root_domain,
-            &proofs,
-            &comm_ps_domain,
-            &piece_sizes,
-            sector_size,
+        Ok(proofs.iter().zip(comm_ps.iter().zip(piece_sizes)).all(
+            |(proof, (comm_p, piece_size))| {
+                proof.verify(
+                    &root_domain,
+                    &H::Domain::try_from_bytes(comm_p).unwrap(),
+                    *piece_size,
+                    sector_size,
+                )
+            },
         ))
     }
 }
@@ -581,5 +565,85 @@ mod tests {
         assert_eq!(subtree_capacity(13, 16), 1);
         assert_eq!(subtree_capacity(14, 16), 2);
         assert_eq!(subtree_capacity(15, 16), 1);
+    }
+
+    fn test_pip_casting<H: Hasher>() {
+        let valid_proof_element_bytes = [
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+            0, 1, 2,
+        ];
+        let valid_proof_element = H::Domain::try_from_bytes(&valid_proof_element_bytes).unwrap();
+
+        let empty_pip: PieceInclusionProof<H> = PieceInclusionProof {
+            position: 0,
+            proof_elements: vec![],
+        };
+
+        let empty_pip_bytes: Vec<u8> = empty_pip.into();
+        assert_eq!(empty_pip_bytes, vec![0, 0, 0, 0, 0, 0, 0, 0]);
+
+        let recast_empty_pip: PieceInclusionProof<H> = empty_pip_bytes.into();
+
+        assert_eq!(recast_empty_pip.position, 0);
+        assert_eq!(recast_empty_pip.proof_elements.len(), 0);
+
+        let valid_pip: PieceInclusionProof<H> = PieceInclusionProof {
+            position: 24,
+            proof_elements: vec![valid_proof_element],
+        };
+
+        let valid_pip_bytes: Vec<u8> = valid_pip.into();
+        assert_eq!(
+            valid_pip_bytes,
+            vec![
+                24, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2
+            ]
+        );
+
+        let recast_valid_pip: PieceInclusionProof<H> = valid_pip_bytes.into();
+
+        assert_eq!(recast_valid_pip.position, 24);
+        assert_eq!(recast_valid_pip.proof_elements.len(), 1);
+
+        let invalid_pip_bytes: Vec<u8> = vec![0, 0, 0];
+        let invalid_pip: PieceInclusionProof<H> = invalid_pip_bytes.into();
+
+        assert_eq!(invalid_pip.position, 0);
+        assert_eq!(invalid_pip.proof_elements.len(), 0);
+
+        let invalid_pip_bytes: Vec<u8> = vec![24, 0, 0, 0, 0, 0, 0, 0, 1];
+        let invalid_pip: PieceInclusionProof<H> = invalid_pip_bytes.into();
+
+        assert_eq!(invalid_pip.position, 0);
+        assert_eq!(invalid_pip.proof_elements.len(), 0);
+    }
+
+    #[test]
+    fn test_pip_casting_pedersen() {
+        test_pip_casting::<PedersenHasher>();
+    }
+
+    #[test]
+    fn test_generate_piece_commitment_bytes_from_source() -> Result<()> {
+        let some_bytes: Vec<u8> = vec![0; 33];
+        let mut some_bytes_slice: &[u8] = &some_bytes;
+        assert!(
+            generate_piece_commitment_bytes_from_source::<PedersenHasher>(&mut some_bytes_slice)
+                .is_ok(),
+            "threshold for sufficient bytes is 32"
+        );
+
+        let not_enough_bytes: Vec<u8> = vec![0; 7];
+        let mut not_enough_bytes_slice: &[u8] = &not_enough_bytes;
+        assert!(
+            generate_piece_commitment_bytes_from_source::<PedersenHasher>(
+                &mut not_enough_bytes_slice
+            )
+            .is_err(),
+            "insufficient bytes should error out"
+        );
+
+        Ok(())
     }
 }
