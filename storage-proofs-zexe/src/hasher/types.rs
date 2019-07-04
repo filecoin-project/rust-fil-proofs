@@ -1,10 +1,9 @@
 use algebra::fields::bls12_381::Fr;
 use algebra::PairingEngine as Engine;
-use algebra::groups::Group;
 use algebra::biginteger::BigInteger256 as FrRepr;
+use dpc::crypto_primitives::crh::pedersen::PedersenWindow;
 use snark_gadgets::bits::boolean;
 use snark_gadgets::fields::fp::FpGadget;
-use snark_gadgets::groups::GroupGadget;
 use snark::{ConstraintSystem, SynthesisError};
 
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
@@ -58,14 +57,14 @@ pub trait HashFunction<T: Domain>:
         a.hash()
     }
 
-    fn hash_leaf_circuit<G: Group, E: Engine, GG: GroupGadget<G, E>, CS: ConstraintSystem<E>>(
+    fn hash_leaf_circuit<E: Engine, CS: ConstraintSystem<E>>(
         cs: CS,
         left: &[boolean::Boolean],
         right: &[boolean::Boolean],
         height: usize
     ) -> std::result::Result<FpGadget<E>, SynthesisError>;
 
-    fn hash_circuit<G: Group, E: Engine, GG: GroupGadget<G, E>, CS: ConstraintSystem<E>>(
+    fn hash_circuit<E: Engine, CS: ConstraintSystem<E>>(
         cs: CS,
         bits: &[boolean::Boolean]
     ) -> std::result::Result<FpGadget<E>, SynthesisError>;
@@ -81,3 +80,12 @@ pub trait Hasher: Clone + ::std::fmt::Debug + Eq + Default + Send + Sync {
 
     fn name() -> String;
 }
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct Window;
+
+impl PedersenWindow for Window {
+    const WINDOW_SIZE: usize = 1;
+    const NUM_WINDOWS: usize = 2016;
+}
+

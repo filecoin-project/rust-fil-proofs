@@ -1,20 +1,35 @@
+use rand::{thread_rng, Rand, Rng};
 use std::hash::Hasher as StdHasher;
 
-use bellperson::{ConstraintSystem, SynthesisError};
+use algebra::PairingEngine as Engine;
+use algebra::curves::bls12_381::Bls12_381;
+use algebra::curves::jubjub::JubJubProjective as JubJub;
+use algebra::fields::bls12_381::Fr;
+use algebra::BigInteger256 as FrRepr;
+use dpc::{
+    crypto_primitives::crh::{
+        pedersen::PedersenCRH,
+        FixedLengthCRH,
+    },
+    gadgets::crh::{pedersen::PedersenCRHGadget, pedersen::PedersenCRHGadgetParameters, FixedLengthCRHGadget},
+};
+use snark::{ConstraintSystem, SynthesisError};
+use snark_gadgets::bits::boolean;
+use snark_gadgets::groups::GroupGadget;
+use snark_gadgets::fields::fp::FpGadget;
+use snark_gadgets::bits::uint8::UInt8;
+use snark_gadgets::groups::curves::twisted_edwards::jubjub::JubJubGadget;
+
 use bitvec::prelude::*;
-use ff::{PrimeField, PrimeFieldRepr};
-use fil_sapling_crypto::circuit::{boolean, num, pedersen_hash as pedersen_hash_circuit};
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use fil_sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
-use paired::bls12_381::{Bls12, Fr, FrRepr};
-use rand::{Rand, Rng};
 
 use crate::circuit::pedersen::pedersen_md_no_padding;
 use crate::crypto::{kdf, pedersen, sloth};
 use crate::error::{Error, Result};
-use crate::hasher::{Domain, HashFunction, Hasher};
+use crate::hasher::{Domain, HashFunction, Hasher, Window};
+use crate::util::bits_to_bytes;
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PedersenHasher {}
@@ -36,7 +51,7 @@ impl Hasher for PedersenHasher {
         // Unwrapping here is safe; `Fr` elements and hash domain elements are the same byte length.
         let key = Fr::from_repr(key.0).unwrap();
         let ciphertext = Fr::from_repr(ciphertext.0).unwrap();
-        sloth::encode::<Bls12>(&key, &ciphertext, rounds).into()
+        sloth::encode::<Bls12_381>(&key, &ciphertext, rounds).into()
     }
 
     #[inline]
@@ -45,7 +60,7 @@ impl Hasher for PedersenHasher {
         let key = Fr::from_repr(key.0).unwrap();
         let ciphertext = Fr::from_repr(ciphertext.0).unwrap();
 
-        sloth::decode::<Bls12>(&key, &ciphertext, rounds).into()
+        sloth::decode::<Bls12_381>(&key, &ciphertext, rounds).into()
     }
 }
 
@@ -193,33 +208,50 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         pedersen::pedersen_md_no_padding(data).into()
     }
 
-    fn hash_leaf_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
-        cs: CS,
+    fn hash_leaf_circuit<E: Engine, CS: ConstraintSystem<E>>(
+        mut cs: CS,
         left: &[boolean::Boolean],
         right: &[boolean::Boolean],
-        height: usize,
-        params: &E::Params,
-    ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+        height: usize
+    ) -> std::result::Result<FpGadget<E>, SynthesisError> {
+        // TODO: Add personalization
+
+        // TODO: Used fixed seed for RNG
+        let rng = &mut thread_rng();
         let mut preimage: Vec<boolean::Boolean> = vec![];
         preimage.extend_from_slice(left);
         preimage.extend_from_slice(right);
 
-        Ok(pedersen_hash_circuit::pedersen_hash(
-            cs,
-            Personalization::MerkleTree(height),
-            &preimage,
-            params,
-        )?
-        .get_x()
-        .clone())
+        type CRHGadget = PedersenCRHGadget<JubJub, Bls12_381, JubJubGadget>;
+        type CRH = PedersenCRH<JubJub, Window>;
+
+        let parameters = CRH::setup(rng).unwrap();
+
+        let gadget_parameters =
+            CRHGadget::ParametersGadget::alloc(
+                &mut cs.ns(|| "gadget_parameters"),
+                || Ok(&parameters),
+            )
+                .unwrap();
+
+        let input_bytes = UInt8::alloc_input_vec(&mut cs, bits_to_bytes(preimage).as_slice()).unwrap();
+
+        let gadget_result =
+            CRHGadget::check_evaluation_gadget(
+                &mut cs.ns(|| "gadget_evaluation"),
+                &gadget_parameters,
+                &input_bytes,
+            )
+                .unwrap();
+
+        Ok(gadget_result.x)
     }
 
-    fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+    fn hash_circuit<E: Engine, CS: ConstraintSystem<E>>(
         cs: CS,
-        bits: &[boolean::Boolean],
-        params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
-        pedersen_md_no_padding(cs, params, bits)
+        bits: &[boolean::Boolean]
+    ) -> std::result::Result<FpGadget<E>, SynthesisError> {
+        pedersen_md_no_padding(cs, bits)
     }
 }
 
@@ -252,7 +284,7 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
             .take(Fr::NUM_BITS as usize)
             .chain(rhs.iter().take(Fr::NUM_BITS as usize));
 
-        pedersen_hash::<Bls12, _>(
+        pedersen_hash::<Bls12_381, _>(
             Personalization::MerkleTree(height),
             bits,
             &pedersen::JJ_PARAMS,
