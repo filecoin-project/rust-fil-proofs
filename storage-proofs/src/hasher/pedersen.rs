@@ -1,7 +1,6 @@
 use std::hash::Hasher as StdHasher;
 
 use bellperson::{ConstraintSystem, SynthesisError};
-use bitvec::prelude::*;
 use ff::{PrimeField, PrimeFieldRepr};
 use fil_sapling_crypto::circuit::{boolean, num, pedersen_hash as pedersen_hash_circuit};
 use fil_sapling_crypto::jubjub::JubjubEngine;
@@ -244,22 +243,58 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
         right: PedersenDomain,
         height: usize,
     ) -> PedersenDomain {
-        let lhs = BitVec::<LittleEndian, u64>::from(&(left.0).0[..]);
-        let rhs = BitVec::<LittleEndian, u64>::from(&(right.0).0[..]);
-
-        let bits = lhs
-            .iter()
-            .take(Fr::NUM_BITS as usize)
-            .chain(rhs.iter().take(Fr::NUM_BITS as usize));
+        let node_bits = NodeBits::new(&(left.0).0[..], &(right.0).0[..]);
 
         pedersen_hash::<Bls12, _>(
             Personalization::MerkleTree(height),
-            bits,
+            node_bits,
             &pedersen::JJ_PARAMS,
         )
         .into_xy()
         .0
         .into()
+    }
+}
+
+/// Helper to iterate over a pair of `Fr`.
+struct NodeBits<'a> {
+    // 256 bits
+    lhs: &'a [u64],
+    // 256 bits
+    rhs: &'a [u64],
+    index: usize,
+}
+
+impl<'a> NodeBits<'a> {
+    pub fn new(lhs: &'a [u64], rhs: &'a [u64]) -> Self {
+        NodeBits { lhs, rhs, index: 0 }
+    }
+}
+
+impl<'a> Iterator for NodeBits<'a> {
+    type Item = bool;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < 255 {
+            // return lhs
+            let a = self.index / 64;
+            let b = self.index % 64;
+            let res = (self.lhs[a] & (1 << b)) != 0;
+            self.index += 1;
+            return Some(res);
+        }
+
+        if self.index < 2 * 255 {
+            // return rhs
+            let a = (self.index - 255) / 64;
+            let b = (self.index - 255) % 64;
+            let res = (self.rhs[a] & (1 << b)) != 0;
+            self.index += 1;
+            return Some(res);
+        }
+
+        None
     }
 }
 
