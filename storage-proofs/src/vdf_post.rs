@@ -1,7 +1,7 @@
 use std::cmp;
 use std::marker::PhantomData;
 
-use bitvec::prelude::*;
+use bitvec::{self, BitVec};
 use byteorder::{ByteOrder, LittleEndian};
 use ff::{Field, PrimeField, ScalarEngine};
 use itertools::Itertools;
@@ -437,7 +437,7 @@ fn derive_final_challenges<H: Hasher, E: Engine>(
 where
     <E as ScalarEngine>::Fr: std::convert::From<paired::bls12_381::Fr>,
 {
-    type BV = BitVec<bitvec::cursor::LittleEndian, u8>;
+    type BV = BitVec<bitvec::LittleEndian, u8>;
 
     let mut mixed = partial_challenge.into();
     mixed.sub_assign(&mix.into());
