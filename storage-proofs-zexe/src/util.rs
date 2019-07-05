@@ -1,8 +1,11 @@
-use bellperson::{ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::circuit::boolean::{self, AllocatedBit, Boolean};
-use paired::Engine;
-
+// use bellperson::{ConstraintSystem, SynthesisError};
+use snark::{ConstraintSystem, SynthesisError};
+use snark_gadgets::boolean::{self, AllocatedBit, Boolean};
+// use fil_sapling_crypto::circuit::boolean::{self, AllocatedBit, Boolean};
+use snark_gadgets::utils::AllocGadget;
+// use paired::Engine;
 use crate::error;
+use algebra::PairingEngine as Engine;
 
 pub const NODE_SIZE: usize = 32;
 
@@ -46,8 +49,8 @@ pub fn bytes_into_boolean_vec<E: Engine, CS: ConstraintSystem<E>>(
         .enumerate()
         .map(|(i, b)| {
             Ok(Boolean::from(AllocatedBit::alloc(
-                cs.namespace(|| format!("bit {}", i)),
-                b,
+                cs.ns(|| format!("bit {}", i)),
+                || Ok(b.unwrap()),
             )?))
         })
         .collect::<Result<Vec<_>, SynthesisError>>()?;
@@ -97,7 +100,7 @@ mod tests {
         for i in 0..100 {
             let data: Vec<u8> = (0..i + 10).map(|_| rng.gen()).collect();
             let bools = {
-                let mut cs = cs.namespace(|| format!("round: {}", i));
+                let mut cs = cs.ns(|| format!("round: {}", i));
                 bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), 8).unwrap()
             };
 

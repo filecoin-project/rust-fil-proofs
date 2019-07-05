@@ -1,5 +1,5 @@
-use bellperson::SynthesisError;
-
+// use bellperson::SynthesisError;
+use snark::SynthesisError;
 pub type Result<T> = ::std::result::Result<T, Error>;
 
 /// Custom error types

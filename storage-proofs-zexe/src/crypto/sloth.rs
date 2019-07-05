@@ -1,5 +1,12 @@
-use algebra::fields::Field;
-use algebra::PairingEngine as Engine;
+// use ff::Field;
+// use paired::Engine;
+
+use algebra::{
+    AffineCurve as CurveAffine, Field, PairingEngine as Engine, PrimeField,
+    ProjectiveCurve as CurveProjective,
+};
+use std::ops::AddAssign;
+use std::ops::SubAssign;
 
 pub const DEFAULT_ROUNDS: usize = 1;
 

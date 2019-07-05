@@ -1,6 +1,7 @@
-use algebra::fields::bls12_381::Fr;
-use algebra::PairingEngine as Engine;
 use algebra::biginteger::BigInteger256 as FrRepr;
+use algebra::fields::bls12_381::Fr;
+
+use algebra::PairingEngine as Engine;
 use dpc::crypto_primitives::crh::pedersen::PedersenWindow;
 use snark_gadgets::bits::boolean;
 use snark_gadgets::fields::fp::FpGadget;
@@ -61,12 +62,12 @@ pub trait HashFunction<T: Domain>:
         cs: CS,
         left: &[boolean::Boolean],
         right: &[boolean::Boolean],
-        height: usize
+        height: usize,
     ) -> std::result::Result<FpGadget<E>, SynthesisError>;
 
     fn hash_circuit<E: Engine, CS: ConstraintSystem<E>>(
         cs: CS,
-        bits: &[boolean::Boolean]
+        bits: &[boolean::Boolean],
     ) -> std::result::Result<FpGadget<E>, SynthesisError>;
 }
 

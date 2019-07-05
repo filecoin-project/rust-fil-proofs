@@ -1,10 +1,17 @@
 use crate::error::*;
-
 use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
-use ff::{PrimeField, PrimeFieldRepr, ScalarEngine};
-use paired::bls12_381::FrRepr;
-use paired::Engine;
 
+// use ff::{PrimeField, PrimeFieldRepr, ScalarEngine};
+// use paired::bls12_381::FrRepr;
+// use paired::Engine;
+
+use algebra::biginteger::BigInteger;
+use algebra::biginteger::BigInteger256 as FrRepr;
+use algebra::{
+    AffineCurve as CurveAffine, Field, PairingEngine as Engine, PrimeField,
+    ProjectiveCurve as CurveProjective,
+};
+use std::io::Read;
 // Contains 32 bytes whose little-endian value represents an Fr.
 // Invariants:
 // - Value MUST represent a valid Fr.
@@ -29,10 +36,14 @@ pub fn bytes_into_fr<E: Engine>(bytes: &[u8]) -> Result<E::Fr> {
     if bytes.len() != 32 {
         return Err(Error::BadFrBytes);
     }
-    let mut fr_repr = <<<E as ScalarEngine>::Fr as PrimeField>::Repr as Default>::default();
-    fr_repr.read_le(bytes).map_err(|_| Error::BadFrBytes)?;
+    let mut fr_repr = <<<E as Engine>::Fr as PrimeField>::BigInt as Default>::default();
 
-    E::Fr::from_repr(fr_repr).map_err(|_| Error::BadFrBytes)
+    // create a "by reference" adaptor for this instance of Read.
+    fr_repr
+        .read_le((&bytes[..]).by_ref())
+        .map_err(|_| Error::BadFrBytes)?;
+
+    Ok(E::Fr::from_repr(fr_repr))
 }
 
 #[inline]
@@ -90,7 +101,8 @@ pub fn u32_into_fr<E: Engine>(n: u32) -> E::Fr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use paired::bls12_381::Bls12;
+    // use paired::bls12_381::Bls12;
+    use algebra::curves::bls12_381::Bls12_381 as Bls12;
 
     fn bytes_fr_test<E: Engine>(bytes: Fr32Ary, expect_success: bool) {
         let mut b = &bytes[..];
