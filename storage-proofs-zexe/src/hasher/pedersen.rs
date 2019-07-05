@@ -242,7 +242,7 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         let parameters = CRH::setup(rng).unwrap();
 
         let gadget_parameters =
-            CRHGadget::ParametersGadget::alloc(
+            <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::ParametersGadget::alloc(
                 &mut cs.ns(|| "gadget_parameters"),
                 || Ok(&parameters),
             )
@@ -251,7 +251,7 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         let input_bytes = UInt8::alloc_input_vec(&mut cs, bits_to_bytes(preimage).as_slice()).unwrap();
 
         let gadget_result =
-            CRHGadget::check_evaluation_gadget(
+            <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::check_evaluation_gadget(
                 &mut cs.ns(|| "gadget_evaluation"),
                 &gadget_parameters,
                 &input_bytes,

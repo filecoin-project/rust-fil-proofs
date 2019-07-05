@@ -131,7 +131,7 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for PoRCircuit<'a, E, H> {
     /// This circuit expects the following public inputs.
     ///
     /// * [0] - packed version of the `is_right` components of the auth_path.
-    /// * [1] - the merkle root of the tree.
+    /// * [1] - the Merkle root of the tree.
     ///
     /// This circuit derives the following private inputs from its fields:
     /// * value_num - packed version of `value` as bits. (might be more than one Fr)
