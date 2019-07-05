@@ -2,10 +2,10 @@ use algebra::biginteger::BigInteger256 as FrRepr;
 use algebra::fields::bls12_381::Fr;
 
 use algebra::PairingEngine as Engine;
-use snark::{ConstraintSystem, SynthesisError};
+use dpc::crypto_primitives::crh::pedersen::PedersenWindow;
 use snark_gadgets::bits::boolean;
 use snark_gadgets::fields::fp::FpGadget;
-
+use snark::{ConstraintSystem, SynthesisError};
 
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
 use merkletree::merkle::Element;
@@ -81,3 +81,12 @@ pub trait Hasher: Clone + ::std::fmt::Debug + Eq + Default + Send + Sync {
 
     fn name() -> String;
 }
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct Window;
+
+impl PedersenWindow for Window {
+    const WINDOW_SIZE: usize = 1;
+    const NUM_WINDOWS: usize = 2016;
+}
+

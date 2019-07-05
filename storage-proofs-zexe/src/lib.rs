@@ -33,12 +33,12 @@ pub mod partitions;
 pub mod settings;
 pub mod util;
 pub mod vde;
-// pub mod circuit;
-// pub mod compound_proof;
-// pub mod drgporep;
-// pub mod merklepor;
-// pub mod porep;
-// pub mod proof;
+pub mod circuit;
+pub mod compound_proof;
+pub mod drgporep;
+pub mod merklepor;
+pub mod porep;
+pub mod proof;
 
 use logging_toolkit::make_logger;
 use slog::Logger;
