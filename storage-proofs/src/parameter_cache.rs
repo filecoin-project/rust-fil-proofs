@@ -19,7 +19,7 @@ use crate::SP_LOG;
 /// Bump this when circuits change to invalidate the cache.
 pub const VERSION: usize = 10;
 
-pub const PARAMETER_CACHE_DIR: &str = "/tmp/filecoin-proof-parameters/";
+pub const PARAMETER_CACHE_DIR: &str = "/var/tmp/filecoin-proof-parameters/";
 
 /// If this changes, parameters generated under different conditions may vary. Don't change it.
 pub const PARAMETER_RNG_SEED: [u32; 4] = [0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654];
