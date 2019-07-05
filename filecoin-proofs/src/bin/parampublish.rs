@@ -10,7 +10,8 @@ use std::path::PathBuf;
 use std::process::exit;
 use storage_proofs::error::Error::Unclassified;
 use storage_proofs::parameter_cache::{
-    CacheEntryMetadata, PARAMETER_CACHE_DIR, PARAMETER_METADATA_EXT,
+    CacheEntryMetadata, GROTH_PARAMETER_EXT, PARAMETER_CACHE_DIR, PARAMETER_METADATA_EXT,
+    VERIFYING_KEY_EXT,
 };
 
 pub fn main() {
@@ -51,7 +52,14 @@ Defaults to '{}'
 }
 
 fn publish(matches: &ArgMatches) -> Result<()> {
-    let mut filenames = get_filenames_in_cache_dir()?;
+    let mut filenames = get_filenames_in_cache_dir()?
+        .into_iter()
+        .filter(|f| {
+            has_extension(f, GROTH_PARAMETER_EXT)
+                || has_extension(f, VERIFYING_KEY_EXT)
+                || has_extension(f, PARAMETER_METADATA_EXT)
+        })
+        .collect_vec();
 
     // build an mapping from parameter id to metadata filename
     let parameter_id_to_metadata_filename: BTreeMap<String, String> = filenames
