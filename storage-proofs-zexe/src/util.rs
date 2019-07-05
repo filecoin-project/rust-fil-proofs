@@ -4,8 +4,8 @@ use snark_gadgets::boolean::{self, AllocatedBit, Boolean};
 // use fil_sapling_crypto::circuit::boolean::{self, AllocatedBit, Boolean};
 use snark_gadgets::utils::AllocGadget;
 // use paired::Engine;
-use algebra::PairingEngine as Engine;
 use crate::error;
+use algebra::PairingEngine as Engine;
 
 pub const NODE_SIZE: usize = 32;
 

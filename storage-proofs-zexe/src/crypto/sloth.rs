@@ -68,7 +68,7 @@ pub fn decode<E: Engine>(key: &E::Fr, ciphertext: &E::Fr, rounds: usize) -> E::F
 //     use ff::PrimeField;
 //     use num_bigint::BigUint;
 //     // use paired::bls12_381::{Bls12, Fr, FrRepr};
-    
+
 //     use std::str::FromStr;
 
 //     // the modulus from `bls12_381::Fr`

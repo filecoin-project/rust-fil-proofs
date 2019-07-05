@@ -5,12 +5,12 @@ use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 // use paired::bls12_381::FrRepr;
 // use paired::Engine;
 
+use algebra::biginteger::BigInteger;
+use algebra::biginteger::BigInteger256 as FrRepr;
 use algebra::{
     AffineCurve as CurveAffine, Field, PairingEngine as Engine, PrimeField,
     ProjectiveCurve as CurveProjective,
 };
-use algebra::biginteger::BigInteger;
-use algebra::biginteger::BigInteger256 as FrRepr;
 use std::io::Read;
 // Contains 32 bytes whose little-endian value represents an Fr.
 // Invariants:
@@ -37,11 +37,13 @@ pub fn bytes_into_fr<E: Engine>(bytes: &[u8]) -> Result<E::Fr> {
         return Err(Error::BadFrBytes);
     }
     let mut fr_repr = <<<E as Engine>::Fr as PrimeField>::BigInt as Default>::default();
- 
- // create a "by reference" adaptor for this instance of Read.
-    fr_repr.read_le((&bytes[..]).by_ref()).map_err(|_| Error::BadFrBytes)?;
 
-   Ok(E::Fr::from_repr(fr_repr))
+    // create a "by reference" adaptor for this instance of Read.
+    fr_repr
+        .read_le((&bytes[..]).by_ref())
+        .map_err(|_| Error::BadFrBytes)?;
+
+    Ok(E::Fr::from_repr(fr_repr))
 }
 
 #[inline]
@@ -101,7 +103,7 @@ mod tests {
     use super::*;
     // use paired::bls12_381::Bls12;
     use algebra::curves::bls12_381::Bls12_381 as Bls12;
-    
+
     fn bytes_fr_test<E: Engine>(bytes: Fr32Ary, expect_success: bool) {
         let mut b = &bytes[..];
         let fr_result = bytes_into_fr::<E>(&mut b);

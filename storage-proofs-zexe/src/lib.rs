@@ -23,16 +23,16 @@ extern crate pretty_assertions;
 
 #[macro_use]
 pub mod crypto;
+pub mod drgraph;
 pub mod error;
 pub mod fr32;
+pub mod hasher;
+pub mod merkle;
+pub mod parameter_cache;
+pub mod partitions;
 pub mod settings;
 pub mod util;
-pub mod partitions;
-pub mod merkle;
-pub mod hasher; 
-pub mod parameter_cache;
-pub mod drgraph; 
-pub mod vde; 
+pub mod vde;
 // pub mod circuit;
 // pub mod compound_proof;
 // pub mod drgporep;

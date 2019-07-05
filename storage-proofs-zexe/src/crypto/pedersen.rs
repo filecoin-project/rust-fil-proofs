@@ -5,25 +5,22 @@ use bitvec::prelude::*;
 // use fil_sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 
 // use paired::bls12_381::{Bls12, Fr, FrRepr};
-use algebra::curves::bls12_381::Bls12_381 as Bls12;
-use algebra::fields::bls12_381::Fr;
-use algebra::biginteger::BigInteger256 as FrRepr;
 use crate::fr32::bytes_into_frs;
-use dpc::{
-    crypto_primitives::crh::{
-        pedersen::{PedersenCRH, PedersenWindow},
-        FixedLengthCRH,
-    },
-};
+use algebra::biginteger::BigInteger256 as FrRepr;
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
 use algebra::curves::{jubjub::JubJubProjective as JubJub, ProjectiveCurve};
+use algebra::fields::bls12_381::Fr;
+use dpc::crypto_primitives::crh::{
+    pedersen::{PedersenCRH, PedersenWindow},
+    FixedLengthCRH,
+};
 // lazy_static! {
 //     pub static ref JJ_PARAMS: JubjubBls12 = JubjubBls12::new();
 // }
-use rand::{thread_rng, Rng, XorShiftRng};
-use algebra::fields::PrimeField;
 use algebra::biginteger::BigInteger;
+use algebra::fields::PrimeField;
 use rand::SeedableRng;
-
+use rand::{thread_rng, Rng, XorShiftRng};
 
 type TestCRH = PedersenCRH<JubJub, TestWindow>;
 
@@ -41,7 +38,7 @@ type BigCRH = PedersenCRH<JubJub, BigWindow>;
 pub(super) struct BigWindow;
 
 impl PedersenWindow for BigWindow {
-    const WINDOW_SIZE: usize =  2016;
+    const WINDOW_SIZE: usize = 2016;
     const NUM_WINDOWS: usize = 1;
 }
 
@@ -72,13 +69,18 @@ pub fn pedersen_hash<I>(
     bits: I,
     // params: &E::Params
 ) -> Fr
-    where I: IntoIterator<Item=bool>,
-        //   E: JubjubEngine
+where
+    I: IntoIterator<Item = bool>,
+    //   E: JubjubEngine
 {
-    let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]); 
+    let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
     let parameters = BigCRH::setup(&mut rng).unwrap();
 
-    let bits: Vec<bool> = personalization.get_bits().into_iter().chain(bits.into_iter()).collect();
+    let bits: Vec<bool> = personalization
+        .get_bits()
+        .into_iter()
+        .chain(bits.into_iter())
+        .collect();
 
     let bytes = BitVec::<LittleEndian, _>::from(&bits[..]);
 
@@ -86,15 +88,13 @@ pub fn pedersen_hash<I>(
     point.x
 }
 
-
 pub fn pedersen(data: &[u8]) -> Fr {
     let rng = &mut thread_rng();
     let parameters = TestCRH::setup(rng).unwrap();
 
     let mut bits = BitVec::<LittleEndian, u8>::from(data);
-    let mut personalization = BitVec::<LittleEndian, u8>::from(
-        &Personalization::NoteCommitment.get_bits()[..]
-    );
+    let mut personalization =
+        BitVec::<LittleEndian, u8>::from(&Personalization::NoteCommitment.get_bits()[..]);
 
     bits.append(&mut personalization);
 
@@ -156,7 +156,9 @@ pub fn pedersen_compression(bytes: &mut Vec<u8>) {
     // x.write_le(bytes).expect("failed to write result hash");
     let x = pedersen(&bytes[..]);
     bytes.truncate(0);
-    x.into_repr().write_le(bytes).expect("failed to write result hash") 
+    x.into_repr()
+        .write_le(bytes)
+        .expect("failed to write result hash")
 }
 
 // #[cfg(test)]

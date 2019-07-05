@@ -1,10 +1,13 @@
 use crate::error::*;
-use snark::{groth16, groth16::Parameters, Circuit};
-use algebra::{bytes::{FromBytes, ToBytes}, PairingEngine as Engine};
+use algebra::{
+    bytes::{FromBytes, ToBytes},
+    PairingEngine as Engine,
+};
 use fs2::FileExt;
 use itertools::Itertools;
 use rand::{SeedableRng, XorShiftRng};
 use sha2::{Digest, Sha256};
+use snark::{groth16, groth16::Parameters, Circuit};
 
 use std::env;
 use std::fs::{self, create_dir_all, File};

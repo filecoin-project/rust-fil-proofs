@@ -1,25 +1,25 @@
-use std::hash::Hasher as StdHasher;
 use bitvec::prelude::*;
 use rand::{Rand, Rng};
+use std::hash::Hasher as StdHasher;
 
 use snark::{Circuit, ConstraintSystem, SynthesisError};
 // use bellperson::{ConstraintSystem, SynthesisError};
 // use ff::{PrimeField, PrimeFieldRepr};
 // use paired::bls12_381::{Bls12, Fr, FrRepr};
 
-use algebra::curves::bls12_381::Bls12_381 as Bls12;
-use algebra::fields::bls12_381::Fr;
-use algebra::biginteger::BigInteger256 as FrRepr;
-use algebra::curves::{jubjub::JubJubProjective as JubJub, ProjectiveCurve};
-use algebra::fields::PrimeField;
 use algebra::biginteger::BigInteger;
+use algebra::biginteger::BigInteger256 as FrRepr;
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use algebra::curves::{jubjub::JubJubProjective as JubJub, ProjectiveCurve};
+use algebra::fields::bls12_381::Fr;
+use algebra::fields::FpParameters;
+use algebra::fields::PrimeField;
+use snark_gadgets::boolean::{self, AllocatedBit, Boolean};
 use snark_gadgets::fields::fp::FpGadget;
 use snark_gadgets::groups::GroupGadget;
-use algebra::fields::FpParameters;
+use snark_gadgets::utils::AllocGadget;
 use std::io::Read;
 use std::io::Write;
-use snark_gadgets::boolean::{self, AllocatedBit, Boolean};
-use snark_gadgets::utils::AllocGadget;
 // use fil_sapling_crypto::circuit::{boolean, num, pedersen_hash as pedersen_hash_circuit};
 // use fil_sapling_crypto::jubjub::JubjubEngine;
 
@@ -30,8 +30,8 @@ use algebra::PairingEngine as Engine;
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
 
-use crate::crypto::pedersen::pedersen_md_no_padding;
 use crate::crypto::pedersen::pedersen_hash;
+use crate::crypto::pedersen::pedersen_md_no_padding;
 use crate::crypto::pedersen::Personalization;
 use snark_gadgets::fields::FieldGadget;
 
@@ -171,7 +171,8 @@ impl Domain for PedersenDomain {
             return Err(Error::BadFrBytes);
         }
         let mut res: FrRepr = Default::default();
-        res.read_le((&raw[..]).by_ref()).map_err(|_| Error::BadFrBytes)?;
+        res.read_le((&raw[..]).by_ref())
+            .map_err(|_| Error::BadFrBytes)?;
 
         Ok(PedersenDomain(res))
     }
@@ -276,7 +277,10 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
         let bits = lhs
             .iter()
             .take(<Fr as PrimeField>::Params::MODULUS_BITS as usize)
-            .chain(rhs.iter().take(<Fr as PrimeField>::Params::MODULUS_BITS as usize));
+            .chain(
+                rhs.iter()
+                    .take(<Fr as PrimeField>::Params::MODULUS_BITS as usize),
+            );
 
         pedersen_hash::<_>(
             Personalization::MerkleTree(height),
