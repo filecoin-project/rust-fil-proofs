@@ -42,10 +42,10 @@ ff = "0.4.0"
 bellperson = "0.2"
 paired = { version = "0.15", features = ["serde"] }
 fil-sapling-crypto = "0.1"
-zexe-dpc = { path = "/home/sancho/src/zexe/dpc", package = "dpc" }
-zexe-snark = { path = "/home/sancho/src/zexe/snark", package = "snark" }
-zexe-algebra = { path = "/home/sancho/src/zexe/algebra", package = "algebra" }
-zexe-gadgets = { path = "/home/sancho/src/zexe/snark-gadgets", package = "snark-gadgets"}
+zexe-dpc = { path = "../../zexe/dpc", package = "dpc" }
+zexe-snark = { path = "../../zexe/snark", package = "snark" }
+zexe-algebra = { path = "../../zexe/algebra", package = "algebra" }
+zexe-gadgets = { path = "../../zexe/snark-gadgets", package = "snark-gadgets"}
 
 [features]
 default = []

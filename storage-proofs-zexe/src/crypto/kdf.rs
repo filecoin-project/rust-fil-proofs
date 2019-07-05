@@ -1,6 +1,13 @@
 use blake2s_simd::Params as Blake2s;
-use ff::PrimeField;
-use paired::bls12_381::Fr;
+// use ff::PrimeField;
+// use paired::bls12_381::Fr;
+
+use algebra::{
+    AffineCurve as CurveAffine, Field, PairingEngine as Engine, PrimeField,
+    ProjectiveCurve as CurveProjective,
+};
+
+use algebra::fields::bls12_381::Fr;
 
 use crate::fr32::bytes_into_fr_repr_safe;
 
@@ -22,14 +29,15 @@ pub fn kdf(data: &[u8], m: usize) -> Fr {
         .update(data)
         .finalize();
 
-    Fr::from_repr(bytes_into_fr_repr_safe(hash.as_ref())).unwrap()
+    Fr::from_repr(bytes_into_fr_repr_safe(hash.as_ref()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::kdf;
     use crate::fr32::bytes_into_fr;
-    use paired::bls12_381::Bls12;
+    // use paired::bls12_381::Bls12;
+    use algebra::curves::bls12_381::Bls12_381 as Bls12;
 
     #[test]
     fn kdf_valid_block_len() {

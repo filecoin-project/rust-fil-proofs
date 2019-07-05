@@ -1,8 +1,8 @@
 [workspace]
 
 members = [
-  "filecoin-proofs",
-  "storage-proofs",
+  # "filecoin-proofs",
+  # "storage-proofs",
   "storage-proofs-zexe",
   "fil-proofs-tooling",
   "logging-toolkit",

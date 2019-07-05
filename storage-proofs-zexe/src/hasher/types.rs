@@ -58,14 +58,14 @@ pub trait HashFunction<T: Domain>:
         a.hash()
     }
 
-    fn hash_leaf_circuit<G: Group, E: Engine, GG: GroupGadget<G, E>, CS: ConstraintSystem<E>>(
+    fn hash_leaf_circuit<E: Engine, CS: ConstraintSystem<E>>(
         cs: CS,
         left: &[boolean::Boolean],
         right: &[boolean::Boolean],
         height: usize
     ) -> std::result::Result<FpGadget<E>, SynthesisError>;
 
-    fn hash_circuit<G: Group, E: Engine, GG: GroupGadget<G, E>, CS: ConstraintSystem<E>>(
+    fn hash_circuit<E: Engine, CS: ConstraintSystem<E>>(
         cs: CS,
         bits: &[boolean::Boolean]
     ) -> std::result::Result<FpGadget<E>, SynthesisError>;
