@@ -6,8 +6,6 @@ extern crate failure;
 #[macro_use]
 extern crate lazy_static;
 #[cfg(test)]
-extern crate bitvec;
-#[cfg(test)]
 #[macro_use]
 extern crate proptest;
 #[macro_use]
