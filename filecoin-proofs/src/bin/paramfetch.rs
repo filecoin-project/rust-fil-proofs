@@ -1,13 +1,16 @@
 use std::io;
 use std::io::prelude::*;
+use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::process::exit;
 
-use clap::{App, Arg, ArgMatches};
+use clap::{values_t, App, Arg, ArgMatches};
 use failure::err_msg;
 
 use filecoin_proofs::param::*;
-use storage_proofs::parameter_cache::PARAMETER_CACHE_DIR;
+use itertools::Itertools;
+use std::collections::HashSet;
+use storage_proofs::parameter_cache::{GROTH_PARAMETER_EXT, PARAMETER_CACHE_DIR};
 
 pub fn main() {
     let matches = App::new("paramfetch")
@@ -50,7 +53,18 @@ Defaults to 'https://ipfs.io'
             Arg::with_name("all")
                 .short("a")
                 .long("all")
+                .conflicts_with("params-for-sector-sizes")
                 .help("Download all available parameter files"),
+        )
+        .arg(
+            Arg::with_name("params-for-sector-sizes")
+                .short("z")
+                .long("params-for-sector-sizes")
+                .conflicts_with("all")
+                .require_delimiter(true)
+                .value_delimiter(",")
+                .multiple(true)
+                .help("A comma-separated list of sector sizes, in bytes, for which Groth parameters will be downloaded"),
         )
         .arg(
             Arg::with_name("verbose")
@@ -87,9 +101,35 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
     println!("checking {} parameter files...", all_parameter_ids.len());
     println!();
 
-    let mut parameter_ids = get_pending_parameter_ids(&parameter_map, all_parameter_ids.clone())?;
+    let mut parameter_ids = all_parameter_ids;
 
-    if !matches.is_present("all") && !parameter_ids.is_empty() {
+    if matches.is_present("params-for-sector-sizes") {
+        let whitelisted_sector_sizes: Vec<u64> =
+            values_t!(matches.values_of("params-for-sector-sizes"), u64)?;
+
+        let whitelisted_sector_sizes: HashSet<u64> =
+            HashSet::from_iter(whitelisted_sector_sizes.iter().cloned());
+
+        parameter_ids = parameter_ids
+            .into_iter()
+            .filter(|id| {
+                !has_extension(id, GROTH_PARAMETER_EXT) || {
+                    parameter_map
+                        .get(id)
+                        .and_then(|p| p.sector_size)
+                        .map(|n| whitelisted_sector_sizes.contains(&n))
+                        .unwrap_or(false)
+                }
+            })
+            .collect_vec();
+    }
+
+    parameter_ids = get_pending_parameter_ids(&parameter_map, parameter_ids)?;
+
+    if !matches.is_present("params-for-sector-sizes")
+        && !matches.is_present("all")
+        && !parameter_ids.is_empty()
+    {
         parameter_ids = choose_from(parameter_ids)?;
         println!();
     }

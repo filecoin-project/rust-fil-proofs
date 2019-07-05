@@ -6,10 +6,12 @@ use std::ffi::OsStr;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::exit;
 use storage_proofs::error::Error::Unclassified;
-use storage_proofs::parameter_cache::{CacheEntryMetadata, PARAMETER_CACHE_DIR};
+use storage_proofs::parameter_cache::{
+    CacheEntryMetadata, PARAMETER_CACHE_DIR, PARAMETER_METADATA_EXT,
+};
 
 pub fn main() {
     let matches = App::new("parampublish")
@@ -48,23 +50,6 @@ Defaults to '{}'
     }
 }
 
-fn filename_to_parameter_id<'a, P: AsRef<Path> + 'a>(filename: P) -> Option<String> {
-    filename
-        .as_ref()
-        .file_stem()
-        .and_then(|os_str| os_str.to_str())
-        .map(|s| s.to_string())
-}
-
-fn has_extension<S: AsRef<str>, P: AsRef<Path>>(filename: P, ext: S) -> bool {
-    filename
-        .as_ref()
-        .extension()
-        .and_then(|os_str| os_str.to_str())
-        .map(|s| s == ext.as_ref())
-        .unwrap_or(false)
-}
-
 fn publish(matches: &ArgMatches) -> Result<()> {
     let mut filenames = get_filenames_in_cache_dir()?;
 
@@ -77,7 +62,7 @@ fn publish(matches: &ArgMatches) -> Result<()> {
                 .extension()
                 .and_then(OsStr::to_str)
                 .and_then(|s| match s {
-                    "meta" => filename_to_parameter_id(filename)
+                    PARAMETER_METADATA_EXT => filename_to_parameter_id(filename)
                         .map(|id| (id.to_string(), filename.clone())),
                     _ => None,
                 })
@@ -88,7 +73,7 @@ fn publish(matches: &ArgMatches) -> Result<()> {
     // exclude parameter metadata files, which should not be published
     filenames = filenames
         .into_iter()
-        .filter(|f| !has_extension(f, "meta"))
+        .filter(|f| !has_extension(f, PARAMETER_METADATA_EXT))
         .collect_vec();
 
     if !matches.is_present("all") {

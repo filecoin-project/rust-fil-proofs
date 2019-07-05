@@ -24,6 +24,12 @@ pub const PARAMETER_CACHE_DIR: &str = "/var/tmp/filecoin-proof-parameters/";
 /// If this changes, parameters generated under different conditions may vary. Don't change it.
 pub const PARAMETER_RNG_SEED: [u32; 4] = [0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654];
 
+pub const GROTH_PARAMETER_EXT: &str = "params";
+
+pub const PARAMETER_METADATA_EXT: &str = "meta";
+
+pub const VERIFYING_KEY_EXT: &str = "vk";
+
 #[derive(Debug)]
 struct LockedFile(File);
 
@@ -92,17 +98,26 @@ pub fn parameter_cache_dir() -> PathBuf {
 
 fn parameter_cache_params_path(parameter_set_identifier: &str) -> PathBuf {
     let dir = Path::new(&parameter_cache_dir_name()).to_path_buf();
-    dir.join(format!("v{}-{}.params", VERSION, parameter_set_identifier))
+    dir.join(format!(
+        "v{}-{}.{}",
+        VERSION, parameter_set_identifier, GROTH_PARAMETER_EXT
+    ))
 }
 
 fn parameter_cache_metadata_path(parameter_set_identifier: &str) -> PathBuf {
     let dir = Path::new(&parameter_cache_dir_name()).to_path_buf();
-    dir.join(format!("v{}-{}.meta", VERSION, parameter_set_identifier))
+    dir.join(format!(
+        "v{}-{}.{}",
+        VERSION, parameter_set_identifier, PARAMETER_METADATA_EXT
+    ))
 }
 
 fn parameter_cache_verifying_key_path(parameter_set_identifier: &str) -> PathBuf {
     let dir = Path::new(&parameter_cache_dir_name()).to_path_buf();
-    dir.join(format!("v{}-{}.vk", VERSION, parameter_set_identifier))
+    dir.join(format!(
+        "v{}-{}.{}",
+        VERSION, parameter_set_identifier, VERIFYING_KEY_EXT
+    ))
 }
 
 fn ensure_ancestor_dirs_exist(cache_entry_path: PathBuf) -> Result<PathBuf> {

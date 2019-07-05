@@ -6,10 +6,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs::{create_dir_all, read_dir, rename, File};
 use std::io::{stdin, stdout, BufReader, BufWriter, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use pbr::{ProgressBar, Units};
+use std::ffi::OsStr;
 use std::io::Stdout;
 use std::io::{self, copy, Read};
 use storage_proofs::parameter_cache::parameter_cache_dir;
@@ -232,4 +233,21 @@ pub fn choose(message: &str) -> bool {
 
 pub fn choose_from(vector: Vec<String>) -> Result<Vec<String>> {
     Ok(vector.into_iter().filter(|i| choose(i)).collect())
+}
+
+pub fn filename_to_parameter_id<'a, P: AsRef<Path> + 'a>(filename: P) -> Option<String> {
+    filename
+        .as_ref()
+        .file_stem()
+        .and_then(OsStr::to_str)
+        .map(ToString::to_string)
+}
+
+pub fn has_extension<S: AsRef<str>, P: AsRef<Path>>(filename: P, ext: S) -> bool {
+    filename
+        .as_ref()
+        .extension()
+        .and_then(OsStr::to_str)
+        .map(|s| s == ext.as_ref())
+        .unwrap_or(false)
 }
