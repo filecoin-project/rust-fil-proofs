@@ -71,21 +71,24 @@ pub fn pedersen_compression(bytes: &mut Vec<u8>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    // use crate::util::bytes_into_bits;
+    use crate::util::bytes_into_bits;
     use ff::Field;
     use paired::bls12_381::Fr;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
-    // #[test]
-    // fn test_bit_vec_le() {
-    //     let bytes = b"ABC";
-    //     let bits = bytes_into_bits(bytes);
+    #[test]
+    fn test_bit_vec_le() {
+        let bytes = b"ABC";
+        let bits = bytes_into_bits(bytes);
 
-    //     let mut bits2 = bitvec![LittleEndian, u8; 0; bits.len()];
-    //     bits2.as_mut_slice()[0..bytes.len()].copy_from_slice(&bytes[..]);
+        let mut bits2 = core::iter::repeat(false)
+            .take(bits.len())
+            .collect::<BitVec<bitvec::LittleEndian, u8>>();
 
-    //     assert_eq!(bits, bits2.iter().collect::<Vec<bool>>());
-    // }
+        bits2.as_mut()[0..bytes.len()].copy_from_slice(&bytes[..]);
+
+        assert_eq!(bits, bits2.iter().collect::<Vec<bool>>());
+    }
 
     #[test]
     fn test_pedersen_compression() {
