@@ -1,13 +1,14 @@
 use clap::{App, Arg, ArgMatches};
-use failure::err_msg;
 use filecoin_proofs::param::*;
-use regex::Regex;
-use std::collections::btree_map::BTreeMap;
+use itertools::Itertools;
+use std::collections::BTreeMap;
+use std::ffi::OsStr;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
-use std::path::PathBuf;
-use std::process::{exit, Command};
+use std::path::{Path, PathBuf};
+use std::process::exit;
+use storage_proofs::error::Error::Unclassified;
 use storage_proofs::parameter_cache::{CacheEntryMetadata, PARAMETER_CACHE_DIR};
 
 pub fn main() {
@@ -47,116 +48,106 @@ Defaults to '{}'
     }
 }
 
-fn publish(matches: &ArgMatches) -> Result<()> {
-    let files = get_files_from_cache()?;
-    let file_metadata = to_cached_file_metadata(&files);
+fn filename_to_parameter_id<'a, P: AsRef<Path> + 'a>(filename: P) -> Option<String> {
+    filename
+        .as_ref()
+        .file_stem()
+        .and_then(|os_str| os_str.to_str())
+        .map(|s| s.to_string())
+}
 
-    let parameter_id_to_parameter_metadata: BTreeMap<&str, &CachedFileMetadata> = file_metadata
+fn has_extension<S: AsRef<str>, P: AsRef<Path>>(filename: P, ext: S) -> bool {
+    filename
+        .as_ref()
+        .extension()
+        .and_then(|os_str| os_str.to_str())
+        .map(|s| s == ext.as_ref())
+        .unwrap_or(false)
+}
+
+fn publish(matches: &ArgMatches) -> Result<()> {
+    let mut filenames = get_filenames_in_cache_dir()?;
+
+    // build an mapping from parameter id to metadata filename
+    let parameter_id_to_metadata_filename: BTreeMap<String, String> = filenames
+        .clone()
         .iter()
-        .flat_map(|entry| {
-            match entry {
-                CachedFileMetadata::ParameterMetadata { parameter_id, .. } => {
-                    Some((parameter_id.as_str(), entry))
-                }
-                _ => None,
-            }
-            .into_iter()
+        .flat_map(|filename| {
+            PathBuf::from(filename)
+                .extension()
+                .and_then(OsStr::to_str)
+                .and_then(|s| match s {
+                    "meta" => filename_to_parameter_id(filename)
+                        .map(|id| (id.to_string(), filename.clone())),
+                    _ => None,
+                })
+                .into_iter()
         })
         .collect();
 
-    let mut publishable_file_metadata = file_metadata
-        .iter()
-        .flat_map(|entry| CachedFileMetadata::try_publishable(entry.clone()).into_iter())
-        .collect::<Vec<PublishableCachedFileMetadata>>();
+    // exclude parameter metadata files, which should not be published
+    filenames = filenames
+        .into_iter()
+        .filter(|f| !has_extension(f, "meta"))
+        .collect_vec();
 
     if !matches.is_present("all") {
-        publishable_file_metadata = publishable_file_metadata
-            .into_iter()
-            .filter(|entry| choose(&entry.filename()))
-            .collect();
-
+        filenames = choose_from(filenames)?;
         println!();
     };
 
-    if !publishable_file_metadata.is_empty() {
-        let mut manifest: Manifest = BTreeMap::new();
+    let json = PathBuf::from(matches.value_of("json").unwrap_or("./parameters.json"));
+    let mut parameter_map: ParameterMap = BTreeMap::new();
 
-        println!(
-            "publishing {} parameters...",
-            publishable_file_metadata.len()
-        );
+    if !filenames.is_empty() {
+        println!("publishing {} parameters...", filenames.len());
         println!();
 
-        for publishable in publishable_file_metadata {
-            println!("publishing: {}", publishable.filename());
-            print!("publishing to IPFS... ");
+        for filename in filenames {
+            let id = filename_to_parameter_id(&filename).ok_or_else(|| {
+                Unclassified(format!("failed to parse id from file name {}", filename))
+            })?;
+
+            let name = parameter_id_to_metadata_filename.get(&id).ok_or_else(|| {
+                Unclassified(format!("no metadata file found for parameter id {}", id))
+            })?;
+
+            let parameter_metadata_file = File::open(get_parameter_file_path(name))?;
+
+            let parameter_metadata: CacheEntryMetadata =
+                serde_json::from_reader(parameter_metadata_file)?;
+
+            println!("publishing: {}", filename);
+            print!("publishing to ipfs... ");
             io::stdout().flush().unwrap();
 
-            if let Some(file_metadata) =
-                parameter_id_to_parameter_metadata.get(publishable.parameter_id())
-            {
-                let parameter_metadata_file = File::open(file_metadata.path())?;
+            match publish_parameter_file(&filename) {
+                Ok(cid) => {
+                    println!("ok");
+                    print!("generating digest... ");
+                    io::stdout().flush().unwrap();
 
-                let parameter_metadata: CacheEntryMetadata =
-                    serde_json::from_reader(parameter_metadata_file)?;
+                    let digest = get_parameter_digest(&filename)?;
+                    let data = ParameterData {
+                        cid,
+                        digest,
+                        sector_size: parameter_metadata.sector_size,
+                    };
 
-                match publish_cached_file_to_ipfs(&publishable) {
-                    Ok(cid) => {
-                        println!("ok");
-                        print!("generating digest... ");
-                        io::stdout().flush().unwrap();
+                    parameter_map.insert(filename, data);
 
-                        let key = publishable.filename().to_string();
-
-                        let value = ManifestEntry {
-                            sector_size: parameter_metadata.sector_size,
-                            cid,
-                            digest: get_cached_file_digest(publishable.filename())?,
-                        };
-
-                        manifest.insert(key, value);
-
-                        println!("ok");
-                    }
-                    Err(err) => eprintln!("error: {}", err),
+                    println!("ok");
                 }
-            } else {
-                eprintln!(
-                    "no metadata file found for entry with filename {}",
-                    publishable.filename()
-                );
+                Err(err) => println!("error: {}", err),
             }
 
             println!();
         }
 
-        let manifest_path = PathBuf::from(matches.value_of("json").unwrap_or("./parameters.json"));
-
-        write_manifest_json(&manifest, &manifest_path)?;
+        save_parameter_map(&parameter_map, &json)?;
     } else {
-        eprintln!("no parameters to publish");
+        println!("no parameters to publish");
     }
 
     Ok(())
-}
-
-fn publish_cached_file_to_ipfs(file_meta: &PublishableCachedFileMetadata) -> Result<String> {
-    let path = get_cached_file_path(file_meta.filename());
-
-    let output = Command::new("ipfs")
-        .arg("add")
-        .arg(&path)
-        .output()
-        .expect(ERROR_IPFS_COMMAND);
-
-    if !output.status.success() {
-        Err(err_msg(ERROR_IPFS_PUBLISH))
-    } else {
-        let pattern = Regex::new("added ([^ ]+) ")?;
-        let string = String::from_utf8(output.stdout)?;
-        let captures = pattern.captures(string.as_str()).expect(ERROR_IPFS_OUTPUT);
-        let cid = captures.get(1).expect(ERROR_IPFS_PARSE);
-
-        Ok(cid.as_str().to_string())
-    }
 }
