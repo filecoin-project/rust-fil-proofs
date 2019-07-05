@@ -6,9 +6,9 @@ use bitvec::prelude::*;
 
 // use paired::bls12_381::{Bls12, Fr, FrRepr};
 use crate::fr32::bytes_into_frs;
-use algebra::biginteger::BigInteger256 as FrRepr;
+
 use algebra::curves::bls12_381::Bls12_381 as Bls12;
-use algebra::curves::{jubjub::JubJubProjective as JubJub, ProjectiveCurve};
+use algebra::curves::{jubjub::JubJubProjective as JubJub};
 use algebra::fields::bls12_381::Fr;
 use dpc::crypto_primitives::crh::{
     pedersen::{PedersenCRH, PedersenWindow},
@@ -20,7 +20,7 @@ use dpc::crypto_primitives::crh::{
 use algebra::biginteger::BigInteger;
 use algebra::fields::PrimeField;
 use rand::SeedableRng;
-use rand::{thread_rng, Rng, XorShiftRng};
+use rand::{thread_rng, XorShiftRng};
 
 type TestCRH = PedersenCRH<JubJub, TestWindow>;
 

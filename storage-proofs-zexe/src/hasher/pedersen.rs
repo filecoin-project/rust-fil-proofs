@@ -2,7 +2,7 @@ use bitvec::prelude::*;
 use rand::{Rand, Rng};
 use std::hash::Hasher as StdHasher;
 
-use snark::{Circuit, ConstraintSystem, SynthesisError};
+use snark::{ConstraintSystem, SynthesisError};
 // use bellperson::{ConstraintSystem, SynthesisError};
 // use ff::{PrimeField, PrimeFieldRepr};
 // use paired::bls12_381::{Bls12, Fr, FrRepr};
@@ -10,14 +10,14 @@ use snark::{Circuit, ConstraintSystem, SynthesisError};
 use algebra::biginteger::BigInteger;
 use algebra::biginteger::BigInteger256 as FrRepr;
 use algebra::curves::bls12_381::Bls12_381 as Bls12;
-use algebra::curves::{jubjub::JubJubProjective as JubJub, ProjectiveCurve};
+use algebra::curves::{ProjectiveCurve};
 use algebra::fields::bls12_381::Fr;
 use algebra::fields::FpParameters;
 use algebra::fields::PrimeField;
-use snark_gadgets::boolean::{self, AllocatedBit, Boolean};
+use snark_gadgets::boolean::{self};
 use snark_gadgets::fields::fp::FpGadget;
 use snark_gadgets::groups::GroupGadget;
-use snark_gadgets::utils::AllocGadget;
+
 use std::io::Read;
 use std::io::Write;
 // use fil_sapling_crypto::circuit::{boolean, num, pedersen_hash as pedersen_hash_circuit};
@@ -31,7 +31,7 @@ use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
 
 use crate::crypto::pedersen::pedersen_hash;
-use crate::crypto::pedersen::pedersen_md_no_padding;
+
 use crate::crypto::pedersen::Personalization;
 use snark_gadgets::fields::FieldGadget;
 
@@ -221,7 +221,7 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         cs: CS,
         left: &[boolean::Boolean],
         right: &[boolean::Boolean],
-        height: usize,
+        _height: usize,
         // params: &E::Params,
     ) -> ::std::result::Result<FpGadget<E>, SynthesisError> {
         let mut preimage: Vec<boolean::Boolean> = vec![];
@@ -242,7 +242,7 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
 
     fn hash_circuit<E: Engine, CS: ConstraintSystem<E>>(
         cs: CS,
-        bits: &[boolean::Boolean],
+        _bits: &[boolean::Boolean],
         // params: &E::Params,
     ) -> std::result::Result<FpGadget<E>, SynthesisError> {
         // pedersen_md_no_padding(cs, params, bits)

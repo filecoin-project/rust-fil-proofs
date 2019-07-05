@@ -1,5 +1,5 @@
 // use bellperson::{ConstraintSystem, SynthesisError};
-use snark::{Circuit, ConstraintSystem, SynthesisError};
+use snark::{ConstraintSystem, SynthesisError};
 use snark_gadgets::boolean::{self, AllocatedBit, Boolean};
 // use fil_sapling_crypto::circuit::boolean::{self, AllocatedBit, Boolean};
 use snark_gadgets::utils::AllocGadget;

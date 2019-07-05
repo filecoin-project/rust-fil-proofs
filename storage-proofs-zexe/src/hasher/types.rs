@@ -1,11 +1,11 @@
 use algebra::biginteger::BigInteger256 as FrRepr;
 use algebra::fields::bls12_381::Fr;
-use algebra::groups::Group;
+
 use algebra::PairingEngine as Engine;
 use snark::{ConstraintSystem, SynthesisError};
 use snark_gadgets::bits::boolean;
 use snark_gadgets::fields::fp::FpGadget;
-use snark_gadgets::groups::GroupGadget;
+
 
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
 use merkletree::merkle::Element;
