@@ -1,16 +1,40 @@
+use std::collections::HashSet;
+use std::fs::{create_dir_all, rename, File};
 use std::io;
+use std::io::copy;
 use std::io::prelude::*;
+use std::io::Stdout;
 use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::process::exit;
 
 use clap::{values_t, App, Arg, ArgMatches};
 use failure::err_msg;
+use itertools::Itertools;
+use pbr::{ProgressBar, Units};
+use reqwest::{header, Client, Url};
 
 use filecoin_proofs::param::*;
-use itertools::Itertools;
-use std::collections::HashSet;
-use storage_proofs::parameter_cache::{GROTH_PARAMETER_EXT, PARAMETER_CACHE_DIR};
+use storage_proofs::parameter_cache::{
+    parameter_cache_dir, GROTH_PARAMETER_EXT, PARAMETER_CACHE_DIR,
+};
+
+const ERROR_PARAMETER_FILE: &str = "failed to find parameter file";
+const ERROR_PARAMETER_ID: &str = "failed to find parameter in map";
+
+struct FetchProgress<R> {
+    inner: R,
+    progress_bar: ProgressBar<Stdout>,
+}
+
+impl<R: Read> Read for FetchProgress<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.inner.read(buf).map(|n| {
+            self.progress_bar.add(n as u64);
+            n
+        })
+    }
+}
 
 pub fn main() {
     let matches = App::new("paramfetch")
@@ -183,6 +207,56 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
+fn fetch_parameter_file(
+    is_verbose: bool,
+    parameter_map: &ParameterMap,
+    filename: &str,
+    gateway: &str,
+) -> Result<()> {
+    let parameter_data = parameter_map_lookup(parameter_map, filename)?;
+    let path = get_full_path_for_file_within_cache(filename);
+
+    create_dir_all(parameter_cache_dir())?;
+
+    let mut paramfile = match File::create(&path).map_err(failure::Error::from) {
+        Err(why) => return Err(why),
+        Ok(file) => file,
+    };
+
+    let client = Client::new();
+    let url = Url::parse(&format!("{}/ipfs/{}", gateway, parameter_data.cid))?;
+    let total_size = {
+        let res = client.head(url.as_str()).send()?;
+        if res.status().is_success() {
+            res.headers()
+                .get(header::CONTENT_LENGTH)
+                .and_then(|ct_len| ct_len.to_str().ok())
+                .and_then(|ct_len| ct_len.parse().ok())
+                .unwrap_or(0)
+        } else {
+            return Err(failure::err_msg("failed to download parameter file"));
+        }
+    };
+
+    let req = client.get(url.as_str());
+    if is_verbose {
+        let mut pb = ProgressBar::new(total_size);
+        pb.set_units(Units::Bytes);
+
+        let mut source = FetchProgress {
+            inner: req.send()?,
+            progress_bar: pb,
+        };
+
+        let _ = copy(&mut source, &mut paramfile)?;
+    } else {
+        let mut source = req.send()?;
+        let _ = copy(&mut source, &mut paramfile)?;
+    }
+
+    Ok(())
+}
+
 fn get_filenames_requiring_download(
     parameter_map: &ParameterMap,
     parameter_ids: Vec<String>,
@@ -219,4 +293,43 @@ fn get_filenames_requiring_download(
             }
         })
         .collect())
+}
+
+fn get_filenames_from_parameter_map(parameter_map: &ParameterMap) -> Result<Vec<String>> {
+    Ok(parameter_map.iter().map(|(k, _)| k.clone()).collect())
+}
+
+fn validate_parameter_file(parameter_map: &ParameterMap, filename: &str) -> Result<bool> {
+    let parameter_data = parameter_map_lookup(parameter_map, filename)?;
+    let digest = get_digest_for_file_within_cache(filename)?;
+
+    if parameter_data.digest != digest {
+        Ok(false)
+    } else {
+        Ok(true)
+    }
+}
+
+fn invalidate_parameter_file(filename: &str) -> Result<()> {
+    let parameter_file_path = get_full_path_for_file_within_cache(filename);
+    let target_parameter_file_path =
+        parameter_file_path.with_file_name(format!("{}-invalid-digest", filename));
+
+    if parameter_file_path.exists() {
+        rename(parameter_file_path, target_parameter_file_path)?;
+        Ok(())
+    } else {
+        Err(err_msg(ERROR_PARAMETER_FILE))
+    }
+}
+
+fn parameter_map_lookup<'a>(
+    parameter_map: &'a ParameterMap,
+    filename: &str,
+) -> Result<&'a ParameterData> {
+    if parameter_map.contains_key(filename) {
+        Ok(parameter_map.get(filename).unwrap())
+    } else {
+        Err(err_msg(ERROR_PARAMETER_ID))
+    }
 }

@@ -1,18 +1,28 @@
-use clap::{App, Arg, ArgMatches};
-use filecoin_proofs::param::*;
-use itertools::Itertools;
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
-use std::fs::File;
+use std::fs::{read_dir, File};
 use std::io;
 use std::io::prelude::*;
-use std::path::PathBuf;
-use std::process::exit;
+use std::io::BufWriter;
+use std::path::{Path, PathBuf};
+use std::process::{exit, Command};
+
+use clap::{App, Arg, ArgMatches};
+use failure::err_msg;
+use itertools::Itertools;
+use regex::Regex;
+
+use filecoin_proofs::param::*;
 use storage_proofs::error::Error::Unclassified;
 use storage_proofs::parameter_cache::{
-    CacheEntryMetadata, GROTH_PARAMETER_EXT, PARAMETER_CACHE_DIR, PARAMETER_METADATA_EXT,
-    VERIFYING_KEY_EXT,
+    parameter_cache_dir, CacheEntryMetadata, GROTH_PARAMETER_EXT, PARAMETER_CACHE_DIR,
+    PARAMETER_METADATA_EXT, VERIFYING_KEY_EXT,
 };
+
+const ERROR_IPFS_COMMAND: &str = "failed to run ipfs";
+const ERROR_IPFS_OUTPUT: &str = "failed to capture ipfs output";
+const ERROR_IPFS_PARSE: &str = "failed to parse ipfs output";
+const ERROR_IPFS_PUBLISH: &str = "failed to publish via ipfs";
 
 pub fn main() {
     let matches = App::new("parampublish")
@@ -141,6 +151,72 @@ fn publish(matches: &ArgMatches) -> Result<()> {
     } else {
         println!("no parameters to publish");
     }
+
+    Ok(())
+}
+
+fn get_filenames_in_cache_dir() -> Result<Vec<String>> {
+    let path = parameter_cache_dir();
+
+    if path.exists() {
+        Ok(read_dir(path)?
+            .map(|f| f.unwrap().path())
+            .filter(|p| p.is_file())
+            .map(|p| {
+                p.as_path()
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_string()
+            })
+            .collect())
+    } else {
+        println!(
+            "parameter directory '{}' does not exist",
+            path.as_path().to_str().unwrap()
+        );
+
+        Ok(Vec::new())
+    }
+}
+
+fn filename_to_parameter_id<'a, P: AsRef<Path> + 'a>(filename: P) -> Option<String> {
+    filename
+        .as_ref()
+        .file_stem()
+        .and_then(OsStr::to_str)
+        .map(ToString::to_string)
+}
+
+fn publish_parameter_file(filename: &str) -> Result<String> {
+    let path = get_full_path_for_file_within_cache(filename);
+
+    let output = Command::new("ipfs")
+        .arg("add")
+        .arg(&path)
+        .output()
+        .expect(ERROR_IPFS_COMMAND);
+
+    if !output.status.success() {
+        Err(err_msg(ERROR_IPFS_PUBLISH))
+    } else {
+        let pattern = Regex::new("added ([^ ]+) ")?;
+        let string = String::from_utf8(output.stdout)?;
+        let captures = pattern.captures(string.as_str()).expect(ERROR_IPFS_OUTPUT);
+        let cid = captures.get(1).expect(ERROR_IPFS_PARSE);
+
+        Ok(cid.as_str().to_string())
+    }
+}
+
+fn write_parameter_map_to_disk<P: AsRef<Path>>(
+    parameter_map: &ParameterMap,
+    dest_path: P,
+) -> Result<()> {
+    let file = File::create(dest_path)?;
+    let writer = BufWriter::new(file);
+    serde_json::to_writer_pretty(writer, &parameter_map)?;
 
     Ok(())
 }
