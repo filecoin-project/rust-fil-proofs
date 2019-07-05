@@ -73,45 +73,48 @@ pub fn get_filenames_in_cache_dir() -> Result<Vec<String>> {
     }
 }
 
-pub fn get_mapped_parameter_ids(parameter_map: &ParameterMap) -> Result<Vec<String>> {
+pub fn get_filenames_from_parameter_map(parameter_map: &ParameterMap) -> Result<Vec<String>> {
     Ok(parameter_map.iter().map(|(k, _)| k.clone()).collect())
 }
 
-pub fn get_parameter_map(path: &PathBuf) -> Result<ParameterMap> {
-    let file = File::open(path)?;
+pub fn read_parameter_map_from_disk<P: AsRef<Path>>(source_path: P) -> Result<ParameterMap> {
+    let file = File::open(source_path)?;
     let reader = BufReader::new(file);
     let parameter_map = serde_json::from_reader(reader)?;
 
     Ok(parameter_map)
 }
 
-pub fn get_parameter_data<'a>(
+pub fn parameter_map_lookup<'a>(
     parameter_map: &'a ParameterMap,
-    parameter_id: &str,
+    filename: &str,
 ) -> Result<&'a ParameterData> {
-    if parameter_map.contains_key(parameter_id) {
-        Ok(parameter_map.get(parameter_id).unwrap())
+    if parameter_map.contains_key(filename) {
+        Ok(parameter_map.get(filename).unwrap())
     } else {
         Err(err_msg(ERROR_PARAMETER_ID))
     }
 }
 
-pub fn save_parameter_map(parameter_map: &ParameterMap, file_path: &PathBuf) -> Result<()> {
-    let file = File::create(file_path)?;
+pub fn write_parameter_map_to_disk<P: AsRef<Path>>(
+    parameter_map: &ParameterMap,
+    dest_path: P,
+) -> Result<()> {
+    let file = File::create(dest_path)?;
     let writer = BufWriter::new(file);
     serde_json::to_writer_pretty(writer, &parameter_map)?;
 
     Ok(())
 }
 
-pub fn get_parameter_file_path(parameter_id: &str) -> PathBuf {
+pub fn get_full_path_for_file_within_cache(filename: &str) -> PathBuf {
     let mut path = parameter_cache_dir();
-    path.push(parameter_id);
+    path.push(filename);
     path
 }
 
-pub fn get_parameter_digest(parameter_id: &str) -> Result<String> {
-    let path = get_parameter_file_path(parameter_id);
+pub fn get_digest_for_file_within_cache(filename: &str) -> Result<String> {
+    let path = get_full_path_for_file_within_cache(filename);
     let mut file = File::open(path)?;
     let mut hasher = Blake2b::new();
 
@@ -120,8 +123,8 @@ pub fn get_parameter_digest(parameter_id: &str) -> Result<String> {
     Ok(hasher.finalize().to_hex()[..32].into())
 }
 
-pub fn publish_parameter_file(parameter_id: &str) -> Result<String> {
-    let path = get_parameter_file_path(parameter_id);
+pub fn publish_parameter_file(filename: &str) -> Result<String> {
+    let path = get_full_path_for_file_within_cache(filename);
 
     let output = Command::new("ipfs")
         .arg("add")
@@ -141,14 +144,14 @@ pub fn publish_parameter_file(parameter_id: &str) -> Result<String> {
     }
 }
 
-pub fn spawn_fetch_parameter_file(
+pub fn fetch_parameter_file(
     is_verbose: bool,
     parameter_map: &ParameterMap,
-    parameter_id: &str,
+    filename: &str,
     gateway: &str,
 ) -> Result<()> {
-    let parameter_data = get_parameter_data(parameter_map, parameter_id)?;
-    let path = get_parameter_file_path(parameter_id);
+    let parameter_data = parameter_map_lookup(parameter_map, filename)?;
+    let path = get_full_path_for_file_within_cache(filename);
 
     create_dir_all(parameter_cache_dir())?;
 
@@ -191,9 +194,9 @@ pub fn spawn_fetch_parameter_file(
     Ok(())
 }
 
-pub fn validate_parameter_file(parameter_map: &ParameterMap, parameter_id: &str) -> Result<bool> {
-    let parameter_data = get_parameter_data(parameter_map, parameter_id)?;
-    let digest = get_parameter_digest(parameter_id)?;
+pub fn validate_parameter_file(parameter_map: &ParameterMap, filename: &str) -> Result<bool> {
+    let parameter_data = parameter_map_lookup(parameter_map, filename)?;
+    let digest = get_digest_for_file_within_cache(filename)?;
 
     if parameter_data.digest != digest {
         Ok(false)
@@ -202,10 +205,10 @@ pub fn validate_parameter_file(parameter_map: &ParameterMap, parameter_id: &str)
     }
 }
 
-pub fn invalidate_parameter_file(parameter_id: &str) -> Result<()> {
-    let parameter_file_path = get_parameter_file_path(parameter_id);
+pub fn invalidate_parameter_file(filename: &str) -> Result<()> {
+    let parameter_file_path = get_full_path_for_file_within_cache(filename);
     let target_parameter_file_path =
-        parameter_file_path.with_file_name(format!("{}-invalid-digest", parameter_id));
+        parameter_file_path.with_file_name(format!("{}-invalid-digest", filename));
 
     if parameter_file_path.exists() {
         rename(parameter_file_path, target_parameter_file_path)?;

@@ -61,7 +61,7 @@ fn publish(matches: &ArgMatches) -> Result<()> {
         })
         .collect_vec();
 
-    // build an mapping from parameter id to metadata filename
+    // build a mapping from parameter id to metadata filename
     let parameter_id_to_metadata_filename: BTreeMap<String, String> = filenames
         .clone()
         .iter()
@@ -105,7 +105,7 @@ fn publish(matches: &ArgMatches) -> Result<()> {
                 Unclassified(format!("no metadata file found for parameter id {}", id))
             })?;
 
-            let parameter_metadata_file = File::open(get_parameter_file_path(name))?;
+            let parameter_metadata_file = File::open(get_full_path_for_file_within_cache(name))?;
 
             let parameter_metadata: CacheEntryMetadata =
                 serde_json::from_reader(parameter_metadata_file)?;
@@ -120,7 +120,7 @@ fn publish(matches: &ArgMatches) -> Result<()> {
                     print!("generating digest... ");
                     io::stdout().flush().unwrap();
 
-                    let digest = get_parameter_digest(&filename)?;
+                    let digest = get_digest_for_file_within_cache(&filename)?;
                     let data = ParameterData {
                         cid,
                         digest,
@@ -137,7 +137,7 @@ fn publish(matches: &ArgMatches) -> Result<()> {
             println!();
         }
 
-        save_parameter_map(&parameter_map, &json)?;
+        write_parameter_map_to_disk(&parameter_map, &json)?;
     } else {
         println!("no parameters to publish");
     }

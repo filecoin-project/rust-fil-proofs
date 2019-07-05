@@ -95,14 +95,14 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
         )));
     }
 
-    let parameter_map = get_parameter_map(&json_path)?;
-    let all_parameter_ids = get_mapped_parameter_ids(&parameter_map)?;
+    let parameter_map = read_parameter_map_from_disk(&json_path)?;
+    let mut filenames = get_filenames_from_parameter_map(&parameter_map)?;
 
-    println!("checking {} parameter files...", all_parameter_ids.len());
+    println!("checking {} parameter files...", filenames.len());
     println!();
 
-    let mut parameter_ids = all_parameter_ids;
-
+    // if user has specified sector sizes for which they wish to download Groth
+    // parameters, trim non-matching Groth parameter filenames from the list
     if matches.is_present("params-for-sector-sizes") {
         let whitelisted_sector_sizes: Vec<u64> =
             values_t!(matches.values_of("params-for-sector-sizes"), u64)?;
@@ -110,7 +110,9 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
         let whitelisted_sector_sizes: HashSet<u64> =
             HashSet::from_iter(whitelisted_sector_sizes.iter().cloned());
 
-        parameter_ids = parameter_ids
+        // always download all verifying keys - but conditionally skip Groth
+        // parameters for sector sizes the user doesn't care about
+        filenames = filenames
             .into_iter()
             .filter(|id| {
                 !has_extension(id, GROTH_PARAMETER_EXT) || {
@@ -124,29 +126,32 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
             .collect_vec();
     }
 
-    parameter_ids = get_pending_parameter_ids(&parameter_map, parameter_ids)?;
+    // ensure filename corresponds to asset on disk and that its checksum
+    // matches that which is specified in the manifest
+    filenames = get_filenames_requiring_download(&parameter_map, filenames)?;
 
+    // don't prompt the user to download files if they've used certain flags
     if !matches.is_present("params-for-sector-sizes")
         && !matches.is_present("all")
-        && !parameter_ids.is_empty()
+        && !filenames.is_empty()
     {
-        parameter_ids = choose_from(parameter_ids)?;
+        filenames = choose_from(filenames)?;
         println!();
     }
 
     loop {
-        println!("{} parameter files to fetch...", parameter_ids.len());
+        println!("{} parameter files to fetch...", filenames.len());
         println!();
 
-        for parameter_id in &parameter_ids {
-            println!("fetching: {}", parameter_id);
+        for filename in &filenames {
+            println!("fetching: {}", filename);
             print!("downloading parameter file... ");
             io::stdout().flush().unwrap();
 
-            match spawn_fetch_parameter_file(
+            match fetch_parameter_file(
                 matches.is_present("verbose"),
                 &parameter_map,
-                &parameter_id,
+                &filename,
                 &gateway,
             ) {
                 Ok(_) => println!("ok\n"),
@@ -154,17 +159,16 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
             }
         }
 
-        parameter_ids = get_pending_parameter_ids(&parameter_map, parameter_ids)?;
+        // if we haven't downloaded a valid copy of each asset specified in the
+        // manifest, ask the user if they wish to try again
+        filenames = get_filenames_requiring_download(&parameter_map, filenames)?;
 
-        if parameter_ids.is_empty() {
+        if filenames.is_empty() {
             break;
         } else {
-            println!(
-                "{} parameter files failed to be fetched:",
-                parameter_ids.len()
-            );
+            println!("{} parameter files failed to be fetched:", filenames.len());
 
-            for parameter_id in &parameter_ids {
+            for parameter_id in &filenames {
                 println!("{}", parameter_id);
             }
 
@@ -179,7 +183,7 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-fn get_pending_parameter_ids(
+fn get_filenames_requiring_download(
     parameter_map: &ParameterMap,
     parameter_ids: Vec<String>,
 ) -> Result<Vec<String>> {
@@ -189,7 +193,7 @@ fn get_pending_parameter_ids(
             println!("checking: {}", parameter_id);
             print!("does parameter file exist... ");
 
-            if get_parameter_file_path(parameter_id).exists() {
+            if get_full_path_for_file_within_cache(parameter_id).exists() {
                 println!("yes");
                 print!("is parameter file valid... ");
                 io::stdout().flush().unwrap();
