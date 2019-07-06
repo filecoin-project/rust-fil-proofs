@@ -19,6 +19,8 @@ use crate::SP_LOG;
 /// Bump this when circuits change to invalidate the cache.
 pub const VERSION: usize = 10;
 
+pub const PARAMETER_CACHE_ENV_VAR: &str = "FILECOIN_PARAMETER_CACHE";
+
 pub const PARAMETER_CACHE_DIR: &str = "/var/tmp/filecoin-proof-parameters/";
 
 /// If this changes, parameters generated under different conditions may vary. Don't change it.
@@ -86,7 +88,7 @@ impl Drop for LockedFile {
 }
 
 fn parameter_cache_dir_name() -> String {
-    match env::var("FILECOIN_PARAMETER_CACHE") {
+    match env::var(PARAMETER_CACHE_ENV_VAR) {
         Ok(dir) => dir,
         Err(_) => String::from(PARAMETER_CACHE_DIR),
     }

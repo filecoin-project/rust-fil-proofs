@@ -16,7 +16,7 @@ use reqwest::{header, Client, Url};
 
 use filecoin_proofs::param::*;
 use storage_proofs::parameter_cache::{
-    parameter_cache_dir, GROTH_PARAMETER_EXT, PARAMETER_CACHE_DIR,
+    parameter_cache_dir, GROTH_PARAMETER_EXT, PARAMETER_CACHE_DIR, PARAMETER_CACHE_ENV_VAR,
 };
 
 const ERROR_PARAMETER_FILE: &str = "failed to find parameter file";
@@ -42,12 +42,13 @@ pub fn main() {
         .about(
             &format!(
                 "
-Set $FILECOIN_PARAMETER_CACHE to specify parameter file directory.
+Set {} to specify parameter file directory.
 Defaults to '{}'
 
 Use -g,--gateway to specify ipfs gateway.
 Defaults to 'https://ipfs.io'
-",
+", 
+                PARAMETER_CACHE_ENV_VAR,
                 PARAMETER_CACHE_DIR
             )[..],
         )
