@@ -10,7 +10,6 @@ use std::process::{exit, Command};
 use clap::{App, Arg, ArgMatches};
 use failure::err_msg;
 use itertools::Itertools;
-use regex::Regex;
 
 use filecoin_proofs::param::*;
 use storage_proofs::error::Error::Unclassified;
@@ -20,8 +19,6 @@ use storage_proofs::parameter_cache::{
 };
 
 const ERROR_IPFS_COMMAND: &str = "failed to run ipfs";
-const ERROR_IPFS_OUTPUT: &str = "failed to capture ipfs output";
-const ERROR_IPFS_PARSE: &str = "failed to parse ipfs output";
 const ERROR_IPFS_PUBLISH: &str = "failed to publish via ipfs";
 
 pub fn main() {
@@ -50,6 +47,13 @@ Defaults to '{}'
                 .long("all")
                 .help("Publish all local parameters"),
         )
+        .arg(
+            Arg::with_name("ipfs-bin")
+                .takes_value(true)
+                .short("i")
+                .long("ipfs-bin")
+                .help("Use specific ipfs binary instead of searching for one in $PATH"),
+        )
         .get_matches();
 
     match publish(&matches) {
@@ -62,6 +66,8 @@ Defaults to '{}'
 }
 
 fn publish(matches: &ArgMatches) -> Result<()> {
+    let ipfs_bin_path = matches.value_of("ipfs-bin").unwrap_or("ipfs");
+
     let mut filenames = get_filenames_in_cache_dir()?
         .into_iter()
         .filter(|f| {
@@ -124,7 +130,7 @@ fn publish(matches: &ArgMatches) -> Result<()> {
             print!("publishing to ipfs... ");
             io::stdout().flush().unwrap();
 
-            match publish_parameter_file(&filename) {
+            match publish_parameter_file(&ipfs_bin_path, &filename) {
                 Ok(cid) => {
                     println!("ok");
                     print!("generating digest... ");
@@ -189,10 +195,10 @@ fn filename_to_parameter_id<'a, P: AsRef<Path> + 'a>(filename: P) -> Option<Stri
         .map(ToString::to_string)
 }
 
-fn publish_parameter_file(filename: &str) -> Result<String> {
+fn publish_parameter_file(ipfs_bin_path: &str, filename: &str) -> Result<String> {
     let path = get_full_path_for_file_within_cache(filename);
 
-    let output = Command::new("ipfs")
+    let output = Command::new(ipfs_bin_path)
         .arg("add")
         .arg("-Q")
         .arg(&path)
