@@ -15,7 +15,7 @@ const ERROR_STRING: &str = "invalid string";
 pub type Result<T> = ::std::result::Result<T, Error>;
 pub type ParameterMap = BTreeMap<String, ParameterData>;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ParameterData {
     pub cid: String,
     pub digest: String,
