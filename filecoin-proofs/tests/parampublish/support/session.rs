@@ -3,18 +3,16 @@ extern crate rexpect;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::{env, thread};
 
 use failure::SyncFailure;
+use rand::Rng;
 use rexpect::session::PtyBashSession;
-use rexpect::spawn_bash;
 use tempfile;
 use tempfile::TempDir;
 
-use rand::Rng;
-use std::process::Command;
-use std::time::Duration;
 use storage_proofs::parameter_cache::{CacheEntryMetadata, PARAMETER_CACHE_ENV_VAR};
+
+use crate::support::{cargo_bin, spawn_bash_with_retries, FakeIpfsBin};
 
 pub struct ParamPublishSessionBuilder {
     cache_dir: TempDir,
@@ -46,7 +44,7 @@ impl ParamPublishSessionBuilder {
 
     /// Configure the path used by `parampublish` to add files to IPFS daemon.
     pub fn with_ipfs_bin(mut self, ipfs_bin: &FakeIpfsBin) -> ParamPublishSessionBuilder {
-        let pbuf: PathBuf = PathBuf::from(&ipfs_bin.bin_path);
+        let pbuf: PathBuf = PathBuf::from(&ipfs_bin.bin_path());
         self.ipfs_bin_path = pbuf;
         self
     }
@@ -180,72 +178,5 @@ impl ParamPublishSession {
         self.pty_session
             .exp_string(needle)
             .map_err(SyncFailure::new)
-    }
-}
-
-pub struct FakeIpfsBin {
-    bin_path: PathBuf,
-}
-
-impl FakeIpfsBin {
-    pub fn new() -> FakeIpfsBin {
-        FakeIpfsBin {
-            bin_path: cargo_bin("fakeipfsadd"),
-        }
-    }
-
-    pub fn compute_checksum<P: AsRef<Path>>(&self, path: P) -> Result<String, failure::Error> {
-        let output = Command::new(&self.bin_path)
-            .arg("add")
-            .arg("-Q")
-            .arg(path.as_ref())
-            .output()?;
-
-        if !output.status.success() {
-            Err(format_err!(
-                "{:?} produced non-zero exit code",
-                &self.bin_path
-            ))
-        } else {
-            Ok(String::from_utf8(output.stdout)?.trim().to_string())
-        }
-    }
-}
-
-/// Get the path of the target directory.
-fn target_dir() -> PathBuf {
-    env::current_exe()
-        .ok()
-        .map(|mut path| {
-            path.pop();
-            if path.ends_with("deps") {
-                path.pop();
-            }
-            path
-        })
-        .unwrap()
-}
-
-/// Look up the path to a cargo-built binary within an integration test.
-fn cargo_bin<S: AsRef<str>>(name: S) -> PathBuf {
-    target_dir().join(format!("{}{}", name.as_ref(), env::consts::EXE_SUFFIX))
-}
-
-/// Spawn a pty and, if an error is produced, retry with linear backoff (to 5s).
-fn spawn_bash_with_retries(
-    retries: u8,
-    timeout: Option<u64>,
-) -> Result<PtyBashSession, rexpect::errors::Error> {
-    let result = spawn_bash(timeout);
-    if result.is_ok() || retries == 0 {
-        result
-    } else {
-        let sleep_d = Duration::from_millis(5000 / u64::from(retries));
-        eprintln!(
-            "failed to spawn pty: {} retries remaining - sleeping {:?}",
-            retries, sleep_d
-        );
-        thread::sleep(sleep_d);
-        spawn_bash_with_retries(retries - 1, timeout)
     }
 }

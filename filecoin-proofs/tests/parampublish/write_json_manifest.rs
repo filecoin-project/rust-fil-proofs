@@ -7,8 +7,8 @@ use failure::Error as FailureError;
 use filecoin_proofs::param::ParameterData;
 use storage_proofs::parameter_cache::CacheEntryMetadata;
 
-use crate::parampublish::support::create_tmp_manifest_file;
-use crate::parampublish::support::session::{FakeIpfsBin, ParamPublishSessionBuilder};
+use crate::parampublish::support::session::ParamPublishSessionBuilder;
+use crate::support::{tmp_manifest, FakeIpfsBin};
 
 #[test]
 fn writes_json_manifest() {
@@ -16,7 +16,7 @@ fn writes_json_manifest() {
         .and_then(|_| {
             let filenames = vec!["aaa.vk", "aaa.params"];
 
-            let manifest_path = create_tmp_manifest_file()?;
+            let manifest_path = tmp_manifest(None)?;
 
             let ipfs = FakeIpfsBin::new();
 

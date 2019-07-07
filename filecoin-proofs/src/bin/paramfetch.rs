@@ -123,7 +123,7 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
     let parameter_map = read_parameter_map_from_disk(&json_path)?;
     let mut filenames = get_filenames_from_parameter_map(&parameter_map)?;
 
-    println!("checking {} parameter files...", filenames.len());
+    println!("{} files in manifest...", filenames.len());
     println!();
 
     // if user has specified sector sizes for which they wish to download Groth
@@ -151,9 +151,15 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
             .collect_vec();
     }
 
+    println!("{} files to check for (re)download...", filenames.len());
+    println!();
+
     // ensure filename corresponds to asset on disk and that its checksum
     // matches that which is specified in the manifest
     filenames = get_filenames_requiring_download(&parameter_map, filenames)?;
+
+    println!("{} files to download...", filenames.len());
+    println!();
 
     // don't prompt the user to download files if they've used certain flags
     if !matches.is_present("params-for-sector-sizes")
