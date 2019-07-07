@@ -6,6 +6,7 @@ use std::iter::FromIterator;
 use failure::Error as FailureError;
 
 use crate::parampublish::support::session::ParamPublishSessionBuilder;
+use storage_proofs::parameter_cache::CacheEntryMetadata;
 
 #[test]
 fn prompts_to_publish_assets_in_cache_dir() {
@@ -18,7 +19,7 @@ fn prompts_to_publish_assets_in_cache_dir() {
             let to_prompt: HashSet<&str> =
                 HashSet::from_iter(vec!["aaa.vk", "aaa.params"].iter().cloned());
 
-            let mut session = ParamPublishSessionBuilder::new()
+            let (mut session, _) = ParamPublishSessionBuilder::new()
                 .with_session_timeout_ms(1000)
                 .with_files(&to_create)
                 .build();
@@ -41,15 +42,47 @@ fn prompts_to_publish_assets_in_cache_dir() {
 
 #[test]
 fn displays_sector_size_from_metadata_files_in_prompt() {
-    unimplemented!();
+    //    unimplemented!();
 }
 
 #[test]
 fn all_flag_disables_prompt() {
-    unimplemented!();
+    Ok::<(), FailureError>(())
+        .and_then(|_| {
+            let filenames = vec!["aaa.vk", "aaa.params"];
+
+            let (mut session, _) = ParamPublishSessionBuilder::new()
+                .with_session_timeout_ms(1000)
+                .with_prompt_disabled()
+                .with_files(&filenames)
+                .with_metadata(
+                    "aaa.meta",
+                    &CacheEntryMetadata {
+                        sector_size: Some(1234),
+                    },
+                )
+                .build();
+
+            session.exp_string("publishing 2 parameters")?;
+            session.exp_string("done")?;
+
+            Ok(())
+        })
+        .expect("parampublish test failed");
 }
 
 #[test]
 fn no_assets_no_prompt() {
-    unimplemented!();
+    Ok::<(), FailureError>(())
+        .and_then(|_| {
+            let (mut session, _) = ParamPublishSessionBuilder::new()
+                .with_session_timeout_ms(1000)
+                .build();
+
+            session.exp_string("no parameters to publish")?;
+            session.exp_string("done")?;
+
+            Ok(())
+        })
+        .expect("parampublish test failed");
 }
