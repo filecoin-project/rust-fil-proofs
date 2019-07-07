@@ -1,11 +1,14 @@
-use crate::parampublish::support::create_tmp_manifest_file;
-use crate::parampublish::support::session::{FakeIpfsBin, ParamPublishSessionBuilder};
-use failure::Error as FailureError;
-use filecoin_proofs::param::ParameterData;
 use std::collections::btree_map::BTreeMap;
 use std::fs::File;
 use std::path::Path;
+
+use failure::Error as FailureError;
+
+use filecoin_proofs::param::ParameterData;
 use storage_proofs::parameter_cache::CacheEntryMetadata;
+
+use crate::parampublish::support::create_tmp_manifest_file;
+use crate::parampublish::support::session::{FakeIpfsBin, ParamPublishSessionBuilder};
 
 #[test]
 fn writes_json_manifest() {
@@ -23,17 +26,12 @@ fn writes_json_manifest() {
                 .with_metadata("aaa.meta", &CacheEntryMetadata { sector_size: 1234 })
                 .write_manifest_to(manifest_path.clone())
                 .with_ipfs_bin(&ipfs)
+                .with_prompt_disabled()
                 .build();
 
             // compute checksums from files added to cache to compare with
             // manifest entries after publishing completes
             let cache_checksums = filename_to_checksum(&ipfs, files_in_cache.as_ref());
-
-            // agree to publish both params
-            for _ in 0..2 {
-                session.exp_string(": ")?;
-                session.send_line("y")?;
-            }
 
             // wait for confirmation...
             session.exp_string("publishing 2 parameters")?;

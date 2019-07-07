@@ -1,5 +1,6 @@
-use crate::parampublish::support::session::ParamPublishSessionBuilder;
 use failure::Error as FailureError;
+
+use crate::parampublish::support::session::ParamPublishSessionBuilder;
 
 #[test]
 fn fails_if_missing_metadata_file() {
@@ -11,12 +12,8 @@ fn fails_if_missing_metadata_file() {
             let (mut session, _) = ParamPublishSessionBuilder::new()
                 .with_session_timeout_ms(1000)
                 .with_files(&filenames)
+                .with_prompt_disabled()
                 .build();
-
-            for _ in 0..2 {
-                session.exp_string(": ")?;
-                session.send_line("y")?;
-            }
 
             // error!
             session.exp_string("no metadata found for parameter id aaa")?;
@@ -36,12 +33,8 @@ fn fails_if_malformed_metadata_file() {
                 .with_session_timeout_ms(1000)
                 .with_files(&vec!["aaa.vk", "aaa.params"])
                 .with_file_and_bytes("aaa.meta", &mut malformed)
+                .with_prompt_disabled()
                 .build();
-
-            for _ in 0..2 {
-                session.exp_string(": ")?;
-                session.send_line("y")?;
-            }
 
             // error!
             session.exp_string("fatal error")?;

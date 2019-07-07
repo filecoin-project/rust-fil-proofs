@@ -5,15 +5,16 @@ use std::iter::FromIterator;
 
 use failure::Error as FailureError;
 
-use crate::parampublish::support::session::ParamPublishSessionBuilder;
 use storage_proofs::parameter_cache::CacheEntryMetadata;
+
+use crate::parampublish::support::session::ParamPublishSessionBuilder;
 
 #[test]
 fn prompts_to_publish_assets_in_cache_dir() {
     Ok::<(), FailureError>(())
         .and_then(|_| {
             // create files with these names in the parameter cache
-            let to_create = vec!["aaa.vk", "aaa.meta", "aaa.params", "bbb.txt", "ddd"];
+            let to_create = vec!["aaa.vk", "aaa.params", "bbb.txt", "ddd"];
 
             // parampublish should prompt user to publish these files
             let to_prompt: HashSet<&str> =
@@ -22,10 +23,11 @@ fn prompts_to_publish_assets_in_cache_dir() {
             let (mut session, _) = ParamPublishSessionBuilder::new()
                 .with_session_timeout_ms(1000)
                 .with_files(&to_create)
+                .with_metadata("aaa.meta", &CacheEntryMetadata { sector_size: 1234 })
                 .build();
 
             for _ in 0..to_prompt.len() {
-                session.exp_string("[y/n] ")?;
+                session.exp_string("[y/n] (1234B) ")?;
                 let prompt_filename = session.exp_string(": ")?;
                 let key: &str = &prompt_filename;
                 assert_eq!(true, to_prompt.contains(key), "missing {}", key);
@@ -38,11 +40,6 @@ fn prompts_to_publish_assets_in_cache_dir() {
             Ok(())
         })
         .expect("parampublish test failed");
-}
-
-#[test]
-fn displays_sector_size_from_metadata_files_in_prompt() {
-    //    unimplemented!();
 }
 
 #[test]
