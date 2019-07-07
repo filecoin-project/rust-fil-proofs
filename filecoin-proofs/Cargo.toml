@@ -43,6 +43,7 @@ features = ["default-tls-vendored"]
 [dev-dependencies]
 gperftools = "0.2"
 criterion = "0.2"
+rexpect = "0.3.0"
 
 [features]
 default = []

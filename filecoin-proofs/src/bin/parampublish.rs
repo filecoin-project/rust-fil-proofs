@@ -214,7 +214,8 @@ fn write_parameter_map_to_disk<P: AsRef<Path>>(
     parameter_map: &ParameterMap,
     dest_path: P,
 ) -> Result<()> {
-    let file = File::create(dest_path)?;
+    let p: &Path = dest_path.as_ref();
+    let file = File::create(p)?;
     let writer = BufWriter::new(file);
     serde_json::to_writer_pretty(writer, &parameter_map)?;
 
