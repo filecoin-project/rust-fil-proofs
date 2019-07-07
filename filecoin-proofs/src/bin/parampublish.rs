@@ -100,7 +100,9 @@ fn publish(matches: &ArgMatches) -> Result<()> {
                 .get(&p_id)
                 .ok_or_else(|| format_err!("no metadata found for parameter id {}", &p_id))?;
 
-            if choose(&format!("({}B) {}", meta.sector_size, &filename)) {
+            let msg = format!("(sector size: {}B) {}", meta.sector_size, &filename);
+
+            if choose(&msg) {
                 chosen_filenames.push(filename)
             }
         }
