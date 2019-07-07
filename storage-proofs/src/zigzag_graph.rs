@@ -109,7 +109,7 @@ where
         )
     }
 
-    fn sector_size(&self) -> Option<u64> {
+    fn sector_size(&self) -> u64 {
         self.base_graph.sector_size()
     }
 }

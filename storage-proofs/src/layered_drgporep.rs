@@ -181,7 +181,7 @@ where
         )
     }
 
-    fn sector_size(&self) -> Option<u64> {
+    fn sector_size(&self) -> u64 {
         self.graph.sector_size()
     }
 }

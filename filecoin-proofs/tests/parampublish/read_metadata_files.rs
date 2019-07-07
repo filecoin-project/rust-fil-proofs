@@ -19,7 +19,7 @@ fn fails_if_missing_metadata_file() {
             }
 
             // error!
-            session.exp_string("no metadata file found for parameter id aaa")?;
+            session.exp_string("no metadata found for parameter id aaa")?;
 
             Ok(())
         })

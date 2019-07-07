@@ -143,7 +143,7 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
                 !has_extension(id, GROTH_PARAMETER_EXT) || {
                     parameter_map
                         .get(id)
-                        .and_then(|p| p.sector_size)
+                        .map(|p| p.sector_size)
                         .map(|n| whitelisted_sector_sizes.contains(&n))
                         .unwrap_or(false)
                 }

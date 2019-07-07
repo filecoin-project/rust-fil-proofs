@@ -55,12 +55,7 @@ fn all_flag_disables_prompt() {
                 .with_session_timeout_ms(1000)
                 .with_prompt_disabled()
                 .with_files(&filenames)
-                .with_metadata(
-                    "aaa.meta",
-                    &CacheEntryMetadata {
-                        sector_size: Some(1234),
-                    },
-                )
+                .with_metadata("aaa.meta", &CacheEntryMetadata { sector_size: 1234 })
                 .build();
 
             session.exp_string("publishing 2 parameters")?;

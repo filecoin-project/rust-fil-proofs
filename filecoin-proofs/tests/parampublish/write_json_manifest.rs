@@ -20,12 +20,7 @@ fn writes_json_manifest() {
             let (mut session, files_in_cache) = ParamPublishSessionBuilder::new()
                 .with_session_timeout_ms(1000)
                 .with_files(&filenames)
-                .with_metadata(
-                    "aaa.meta",
-                    &CacheEntryMetadata {
-                        sector_size: Some(1234),
-                    },
-                )
+                .with_metadata("aaa.meta", &CacheEntryMetadata { sector_size: 1234 })
                 .write_manifest_to(manifest_path.clone())
                 .with_ipfs_bin(&ipfs)
                 .build();

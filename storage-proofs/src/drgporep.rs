@@ -93,9 +93,8 @@ where
         )
     }
 
-    fn sector_size(&self) -> Option<u64> {
-        // TODO: Expose sector size, if available.
-        None
+    fn sector_size(&self) -> u64 {
+        self.graph.sector_size()
     }
 }
 

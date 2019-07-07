@@ -38,8 +38,8 @@ where
         )
     }
 
-    fn sector_size(&self) -> Option<u64> {
-        Some(self.vdf_post_pub_params.sector_size as u64)
+    fn sector_size(&self) -> u64 {
+        self.vdf_post_pub_params.sector_size as u64
     }
 }
 

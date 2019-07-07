@@ -144,12 +144,12 @@ fn ensure_ancestor_dirs_exist(cache_entry_path: PathBuf) -> Result<PathBuf> {
 
 pub trait ParameterSetMetadata: Clone {
     fn identifier(&self) -> String;
-    fn sector_size(&self) -> Option<u64>;
+    fn sector_size(&self) -> u64;
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CacheEntryMetadata {
-    pub sector_size: Option<u64>,
+    pub sector_size: u64,
 }
 
 pub trait CacheableParameters<E, C, P>

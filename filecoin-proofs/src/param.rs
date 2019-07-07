@@ -19,7 +19,7 @@ pub type ParameterMap = BTreeMap<String, ParameterData>;
 pub struct ParameterData {
     pub cid: String,
     pub digest: String,
-    pub sector_size: Option<u64>,
+    pub sector_size: u64,
 }
 
 // Deserializes bytes from the provided path into a ParameterMap

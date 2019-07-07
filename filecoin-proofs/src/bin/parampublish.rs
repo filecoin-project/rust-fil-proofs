@@ -1,3 +1,4 @@
+use failure::Error as FailureError;
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fs::{read_dir, File};
@@ -77,22 +78,8 @@ fn publish(matches: &ArgMatches) -> Result<()> {
         })
         .collect_vec();
 
-    // build a mapping from parameter id to metadata filename
-    let parameter_id_to_metadata_filename: BTreeMap<String, String> = filenames
-        .clone()
-        .iter()
-        .flat_map(|filename| {
-            PathBuf::from(filename)
-                .extension()
-                .and_then(OsStr::to_str)
-                .and_then(|s| match s {
-                    PARAMETER_METADATA_EXT => filename_to_parameter_id(filename)
-                        .map(|id| (id.to_string(), filename.clone())),
-                    _ => None,
-                })
-                .into_iter()
-        })
-        .collect();
+    // build a mapping from parameter id to metadata
+    let meta_map: BTreeMap<String, CacheEntryMetadata> = parameter_id_to_metadata_map(&filenames);
 
     // exclude parameter metadata files, which should not be published
     filenames = filenames
@@ -102,7 +89,6 @@ fn publish(matches: &ArgMatches) -> Result<()> {
 
     if !matches.is_present("all") {
         filenames = choose_from(filenames)?;
-        println!();
     };
 
     let json = PathBuf::from(matches.value_of("json").unwrap_or("./parameters.json"));
@@ -117,14 +103,9 @@ fn publish(matches: &ArgMatches) -> Result<()> {
                 Unclassified(format!("failed to parse id from file name {}", filename))
             })?;
 
-            let name = parameter_id_to_metadata_filename.get(&id).ok_or_else(|| {
-                Unclassified(format!("no metadata file found for parameter id {}", id))
+            let meta: &CacheEntryMetadata = meta_map.get(&id).ok_or_else(|| {
+                Unclassified(format!("no metadata found for parameter id {}", id))
             })?;
-
-            let parameter_metadata_file = File::open(get_full_path_for_file_within_cache(name))?;
-
-            let parameter_metadata: CacheEntryMetadata =
-                serde_json::from_reader(parameter_metadata_file)?;
 
             println!("publishing: {}", filename);
             print!("publishing to ipfs... ");
@@ -140,7 +121,7 @@ fn publish(matches: &ArgMatches) -> Result<()> {
                     let data = ParameterData {
                         cid,
                         digest,
-                        sector_size: parameter_metadata.sector_size,
+                        sector_size: meta.sector_size,
                     };
 
                     parameter_map.insert(filename, data);
@@ -159,6 +140,36 @@ fn publish(matches: &ArgMatches) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn parameter_id_to_metadata_map<S: AsRef<str>>(
+    filenames: &[S],
+) -> BTreeMap<String, CacheEntryMetadata> {
+    filenames
+        .iter()
+        .flat_map(|filename| {
+            let is_meta = PathBuf::from(filename.as_ref())
+                .extension()
+                .and_then(OsStr::to_str)
+                .map(|s| s == PARAMETER_METADATA_EXT)
+                .unwrap_or(false);
+
+            if is_meta {
+                if let Some(id) = filename_to_parameter_id(PathBuf::from(filename.as_ref())) {
+                    File::open(get_full_path_for_file_within_cache(filename.as_ref()))
+                        .map_err(FailureError::from)
+                        .and_then(|file| serde_json::from_reader(file).map_err(FailureError::from))
+                        .map(|meta: CacheEntryMetadata| (id.to_string(), meta.clone()))
+                        .ok()
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+            .into_iter()
+        })
+        .collect()
 }
 
 fn get_filenames_in_cache_dir() -> Result<Vec<String>> {

@@ -60,8 +60,8 @@ impl<T: Domain, V: Vdf<T>> ParameterSetMetadata for PublicParams<T, V> {
         )
     }
 
-    fn sector_size(&self) -> Option<u64> {
-        Some(self.sector_size as u64)
+    fn sector_size(&self) -> u64 {
+        self.sector_size as u64
     }
 }
 

@@ -199,8 +199,8 @@ impl<H: Hasher> ParameterSetMetadata for BucketGraph<H> {
         )
     }
 
-    fn sector_size(&self) -> Option<u64> {
-        Some((self.nodes * 32) as u64)
+    fn sector_size(&self) -> u64 {
+        unimplemented!("required for parameter metadata file generation")
     }
 }
 

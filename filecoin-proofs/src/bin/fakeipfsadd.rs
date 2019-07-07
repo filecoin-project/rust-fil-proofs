@@ -26,8 +26,8 @@ checksum to stdout. Note: The real `ipfs add` command computes and emits a CID.
         .value_of("file-path")
         .expect("failed to get file path");
 
-    let mut src_file =
-        File::open(&src_file_path).expect(&format!("failed to open file at {}", &src_file_path));
+    let mut src_file = File::open(&src_file_path)
+        .unwrap_or_else(|_| panic!("failed to open file at {}", &src_file_path));
 
     let mut hasher = Blake2b::new();
 
