@@ -194,6 +194,7 @@ fn publish_parameter_file(filename: &str) -> Result<String> {
 
     let output = Command::new("ipfs")
         .arg("add")
+        .arg("-Q")
         .arg(&path)
         .output()
         .expect(ERROR_IPFS_COMMAND);
@@ -201,12 +202,7 @@ fn publish_parameter_file(filename: &str) -> Result<String> {
     if !output.status.success() {
         Err(err_msg(ERROR_IPFS_PUBLISH))
     } else {
-        let pattern = Regex::new("added ([^ ]+) ")?;
-        let string = String::from_utf8(output.stdout)?;
-        let captures = pattern.captures(string.as_str()).expect(ERROR_IPFS_OUTPUT);
-        let cid = captures.get(1).expect(ERROR_IPFS_PARSE);
-
-        Ok(cid.as_str().to_string())
+        Ok(String::from_utf8(output.stdout)?.trim().to_string())
     }
 }
 
