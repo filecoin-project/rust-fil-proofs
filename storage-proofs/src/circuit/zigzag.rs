@@ -430,6 +430,7 @@ mod tests {
 
         let pub_inputs = layered_drgporep::PublicInputs::<<PedersenHasher as Hasher>::Domain> {
             replica_id: replica_id.into(),
+            seed: None,
             tau: Some(tau.simplify().into()),
             comm_r_star: tau.comm_r_star.into(),
             k: None,
@@ -636,6 +637,7 @@ mod tests {
 
         let public_inputs = layered_drgporep::PublicInputs::<H::Domain> {
             replica_id: replica_id.into(),
+            seed: None,
             tau: Some(tau.simplify()),
             comm_r_star: tau.comm_r_star,
             k: None,
