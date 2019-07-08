@@ -6,9 +6,12 @@ use std::path::{Path, PathBuf};
 
 use blake2b_simd::State as Blake2b;
 use failure::Error;
+use failure::Error as FailureError;
 use serde::{Deserialize, Serialize};
 
-use storage_proofs::parameter_cache::parameter_cache_dir;
+use storage_proofs::parameter_cache::{
+    parameter_cache_dir, CacheEntryMetadata, PARAMETER_METADATA_EXT,
+};
 
 const ERROR_STRING: &str = "invalid string";
 
@@ -66,11 +69,6 @@ pub fn choose(message: &str) -> bool {
     }
 }
 
-// Prompts the user to approve/reject the messages
-pub fn choose_from(messages: Vec<String>) -> Result<Vec<String>> {
-    Ok(messages.into_iter().filter(|i| choose(i)).collect())
-}
-
 // Predicate which matches the provided extension against the given filename
 pub fn has_extension<S: AsRef<str>, P: AsRef<Path>>(filename: P, ext: S) -> bool {
     filename
@@ -79,4 +77,65 @@ pub fn has_extension<S: AsRef<str>, P: AsRef<Path>>(filename: P, ext: S) -> bool
         .and_then(OsStr::to_str)
         .map(|s| s == ext.as_ref())
         .unwrap_or(false)
+}
+
+/// Builds a map from filename (in cache) to metadata.
+pub fn parameter_id_to_metadata_map<S: AsRef<str>>(
+    filenames: &[S],
+) -> Result<BTreeMap<String, CacheEntryMetadata>> {
+    let mut map: BTreeMap<String, CacheEntryMetadata> = Default::default();
+
+    for filename in filenames {
+        let is_meta = PathBuf::from(filename.as_ref())
+            .extension()
+            .and_then(OsStr::to_str)
+            .map(|s| s == PARAMETER_METADATA_EXT)
+            .unwrap_or(false);
+
+        if is_meta {
+            let file = File::open(get_full_path_for_file_within_cache(filename.as_ref()))
+                .map_err(FailureError::from)?;
+
+            let meta = serde_json::from_reader(file).map_err(FailureError::from)?;
+
+            let p_id = filename_to_parameter_id(PathBuf::from(filename.as_ref()))
+                .ok_or_else(|| format_err!("could not map filename to parameter id"))?;
+
+            map.insert(p_id, meta);
+        }
+    }
+
+    Ok(map)
+}
+
+/// Prompts the user to approve/reject the filename
+pub fn choose_from<S: AsRef<str>>(
+    filenames: &[S],
+    lookup: impl Fn(&str) -> Option<u64>,
+) -> Result<Vec<String>> {
+    let mut chosen_filenames: Vec<String> = vec![];
+
+    for filename in filenames.iter() {
+        let sector_size = lookup(filename.as_ref()).ok_or_else(|| {
+            format_err!("no sector size found for filename {}", filename.as_ref())
+        })?;
+
+        let msg = format!("(sector size: {}B) {}", sector_size, filename.as_ref());
+
+        if choose(&msg) {
+            chosen_filenames.push(filename.as_ref().to_string())
+        }
+    }
+
+    Ok(chosen_filenames)
+}
+
+/// Maps the name of a file in the cache to its parameter id. For example,
+/// ABCDEF.vk corresponds to parameter id ABCDEF.
+pub fn filename_to_parameter_id<'a, P: AsRef<Path> + 'a>(filename: P) -> Option<String> {
+    filename
+        .as_ref()
+        .file_stem()
+        .and_then(OsStr::to_str)
+        .map(ToString::to_string)
 }

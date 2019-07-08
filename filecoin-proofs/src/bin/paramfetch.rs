@@ -19,8 +19,8 @@ use storage_proofs::parameter_cache::{
     parameter_cache_dir, GROTH_PARAMETER_EXT, PARAMETER_CACHE_DIR, PARAMETER_CACHE_ENV_VAR,
 };
 
-const ERROR_PARAMETER_FILE: &str = "failed to find parameter file";
-const ERROR_PARAMETER_ID: &str = "failed to find parameter in map";
+const ERROR_PARAMETER_FILE: &str = "failed to find file in cache";
+const ERROR_PARAMETER_ID: &str = "failed to find key in manifest";
 
 struct FetchProgress<R> {
     inner: R,
@@ -42,7 +42,7 @@ pub fn main() {
         .about(
             &format!(
                 "
-Set {} to specify parameter file directory.
+Set {} to specify Groth parameter and verifying key-cache directory.
 Defaults to '{}'
 
 Use -g,--gateway to specify ipfs gateway.
@@ -79,7 +79,7 @@ Defaults to 'https://ipfs.io'
                 .short("a")
                 .long("all")
                 .conflicts_with("params-for-sector-sizes")
-                .help("Download all available parameter files"),
+                .help("Download all available parameters and verifying keys"),
         )
         .arg(
             Arg::with_name("params-for-sector-sizes")
@@ -120,8 +120,8 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
         )));
     }
 
-    let parameter_map = read_parameter_map_from_disk(&json_path)?;
-    let mut filenames = get_filenames_from_parameter_map(&parameter_map)?;
+    let manifest = read_parameter_map_from_disk(&json_path)?;
+    let mut filenames = get_filenames_from_parameter_map(&manifest)?;
 
     println!("{} files in manifest...", filenames.len());
     println!();
@@ -141,7 +141,7 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
             .into_iter()
             .filter(|id| {
                 !has_extension(id, GROTH_PARAMETER_EXT) || {
-                    parameter_map
+                    manifest
                         .get(id)
                         .map(|p| p.sector_size)
                         .map(|n| whitelisted_sector_sizes.contains(&n))
@@ -156,32 +156,31 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
 
     // ensure filename corresponds to asset on disk and that its checksum
     // matches that which is specified in the manifest
-    filenames = get_filenames_requiring_download(&parameter_map, filenames)?;
-
-    println!("{} files to download...", filenames.len());
-    println!();
+    filenames = get_filenames_requiring_download(&manifest, filenames)?;
 
     // don't prompt the user to download files if they've used certain flags
     if !matches.is_present("params-for-sector-sizes")
         && !matches.is_present("all")
         && !filenames.is_empty()
     {
-        filenames = choose_from(filenames)?;
+        filenames = choose_from(&filenames, |filename| {
+            manifest.get(filename).map(|x| x.sector_size)
+        })?;
         println!();
     }
 
     loop {
-        println!("{} parameter files to fetch...", filenames.len());
+        println!("{} files to fetch...", filenames.len());
         println!();
 
         for filename in &filenames {
             println!("fetching: {}", filename);
-            print!("downloading parameter file... ");
+            print!("downloading file... ");
             io::stdout().flush().unwrap();
 
             match fetch_parameter_file(
                 matches.is_present("verbose"),
-                &parameter_map,
+                &manifest,
                 &filename,
                 &gateway,
             ) {
@@ -192,12 +191,12 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
 
         // if we haven't downloaded a valid copy of each asset specified in the
         // manifest, ask the user if they wish to try again
-        filenames = get_filenames_requiring_download(&parameter_map, filenames)?;
+        filenames = get_filenames_requiring_download(&manifest, filenames)?;
 
         if filenames.is_empty() {
             break;
         } else {
-            println!("{} parameter files failed to be fetched:", filenames.len());
+            println!("{} files failed to be fetched:", filenames.len());
 
             for parameter_id in &filenames {
                 println!("{}", parameter_id);
@@ -206,7 +205,7 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
             println!();
 
             if !retry || !choose("try again?") {
-                return Err(err_msg("some parameter files failed to be fetched. try again, or run paramcache to generate locally"));
+                return Err(err_msg("some files failed to be fetched. try again, or run paramcache to generate locally"));
             }
         }
     }
@@ -241,7 +240,7 @@ fn fetch_parameter_file(
                 .and_then(|ct_len| ct_len.parse().ok())
                 .unwrap_or(0)
         } else {
-            return Err(failure::err_msg("failed to download parameter file"));
+            return Err(failure::err_msg("failed to download file"));
         }
     };
 
@@ -272,11 +271,11 @@ fn get_filenames_requiring_download(
         .into_iter()
         .filter(|parameter_id| {
             println!("checking: {}", parameter_id);
-            print!("does parameter file exist... ");
+            print!("does file exist... ");
 
             if get_full_path_for_file_within_cache(parameter_id).exists() {
                 println!("yes");
-                print!("is parameter file valid... ");
+                print!("is file valid... ");
                 io::stdout().flush().unwrap();
 
                 match validate_parameter_file(&parameter_map, &parameter_id) {

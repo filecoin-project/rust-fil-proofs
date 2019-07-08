@@ -51,7 +51,7 @@ fn nothing_to_fetch_if_cache_fully_hydrated() {
                 .build();
 
             session.exp_string("checking: aaa.vk")?;
-            session.exp_string("0 parameter files to fetch")?;
+            session.exp_string("0 files to fetch")?;
             session.exp_string("done")?;
 
             Ok(())
@@ -79,8 +79,8 @@ fn prompts_to_download_if_file_in_manifest_is_missing() {
                 .build();
 
             session.exp_string("checking: aaa.vk")?;
-            session.exp_string("does parameter file exist... no")?;
-            session.exp_string("[y/n] aaa.vk: ")?;
+            session.exp_string("does file exist... no")?;
+            session.exp_string("[y/n] (sector size: 1234B) aaa.vk: ")?;
 
             Ok(())
         })
@@ -101,7 +101,7 @@ fn prompts_to_download_if_file_checksum_does_not_match_manifest() {
                 ParameterData {
                     cid: "".to_string(),
                     digest: "obviouslywrong".to_string(),
-                    sector_size: 1234,
+                    sector_size: 5555,
                 },
             );
 
@@ -115,9 +115,9 @@ fn prompts_to_download_if_file_checksum_does_not_match_manifest() {
                 .build();
 
             session.exp_string("checking: aaa.vk")?;
-            session.exp_string("does parameter file exist... yes")?;
-            session.exp_string("is parameter file valid... no")?;
-            session.exp_string("[y/n] aaa.vk: ")?;
+            session.exp_string("does file exist... yes")?;
+            session.exp_string("is file valid... no")?;
+            session.exp_string("[y/n] (sector size: 5555B) aaa.vk: ")?;
 
             Ok(())
         })
@@ -156,7 +156,7 @@ fn fetches_vk_even_if_sector_size_does_not_match() {
             session.exp_string("2 files in manifest")?;
             session.exp_string("1 files to check for (re)download")?;
             session.exp_string("checking: aaa.vk")?;
-            session.exp_string("does parameter file exist... no")?;
+            session.exp_string("does file exist... no")?;
 
             Ok(())
         })
