@@ -4,7 +4,6 @@ use std::io;
 use std::io::copy;
 use std::io::prelude::*;
 use std::io::Stdout;
-use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::process::exit;
 
@@ -129,11 +128,10 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
     // if user has specified sector sizes for which they wish to download Groth
     // parameters, trim non-matching Groth parameter filenames from the list
     if matches.is_present("params-for-sector-sizes") {
-        let whitelisted_sector_sizes: Vec<u64> =
-            values_t!(matches.values_of("params-for-sector-sizes"), u64)?;
-
         let whitelisted_sector_sizes: HashSet<u64> =
-            HashSet::from_iter(whitelisted_sector_sizes.iter().cloned());
+            values_t!(matches.values_of("params-for-sector-sizes"), u64)?
+                .into_iter()
+                .collect();
 
         // always download all verifying keys - but conditionally skip Groth
         // parameters for sector sizes the user doesn't care about
