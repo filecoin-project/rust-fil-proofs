@@ -86,13 +86,7 @@ pub fn parameter_id_to_metadata_map<S: AsRef<str>>(
     let mut map: BTreeMap<String, CacheEntryMetadata> = Default::default();
 
     for filename in filenames {
-        let is_meta = PathBuf::from(filename.as_ref())
-            .extension()
-            .and_then(OsStr::to_str)
-            .map(|s| s == PARAMETER_METADATA_EXT)
-            .unwrap_or(false);
-
-        if is_meta {
+        if has_extension(PathBuf::from(filename.as_ref()), PARAMETER_METADATA_EXT) {
             let file = File::open(get_full_path_for_file_within_cache(filename.as_ref()))
                 .map_err(FailureError::from)?;
 
