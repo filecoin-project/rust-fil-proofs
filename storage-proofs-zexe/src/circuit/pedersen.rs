@@ -1,6 +1,6 @@
 use rand::thread_rng;
 
-use algebra::curves::bls12_381::Bls12_381;
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
 use algebra::curves::{jubjub::JubJubProjective as JubJub, ProjectiveCurve};
 use dpc::{
     crypto_primitives::crh::{
@@ -15,21 +15,19 @@ use snark_gadgets::bits::uint8::UInt8;
 use snark_gadgets::bits::boolean::Boolean;
 use snark_gadgets::fields::fp::FpGadget;
 use snark_gadgets::groups::curves::twisted_edwards::jubjub::JubJubGadget;
-use snark_gadgets::utils::ToBitsGadget;
+use snark_gadgets::utils::{AllocGadget, ToBitsGadget};
 
 use crate::crypto::pedersen::PEDERSEN_BLOCK_SIZE;
 use crate::util::bits_to_bytes;
 use crate::hasher::Window;
+use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
 
 /// Pedersen hashing for inputs with length multiple of the block size. Based on a Merkle-Damgard construction.
-pub fn pedersen_md_no_padding<E, CS>(
+pub fn pedersen_md_no_padding<CS: ConstraintSystem<Bls12>>(
     mut cs: CS,
     data: &[Boolean],
-) -> Result<FpGadget<E>, SynthesisError>
-where
-    E: Engine,
-    CS: ConstraintSystem<E>,
-{
+    params: PedersenParameters<JubJub>
+) -> Result<FpGadget<Bls12>, SynthesisError> {
     assert!(
         data.len() >= 2 * PEDERSEN_BLOCK_SIZE,
         "must be at least 2 block sizes long"
@@ -54,54 +52,50 @@ where
         if i == chunks_len - 1 {
             // last round, skip
         } else {
-            cur = pedersen_compression(cs.ns(|| "hash"), &cur)?;
+            cur = pedersen_compression(cs.ns(|| "hash"), &cur, &params)?;
         }
     }
 
     // hash and return a num at the end
-    pedersen_compression_num(cs.ns(|| "last hash"), &cur)
+    pedersen_compression_num(cs.ns(|| "last hash"), &cur, &params)
 }
 
-pub fn pedersen_compression_num<E: Engine, CS: ConstraintSystem<E>>(
+pub fn pedersen_compression_num<CS: ConstraintSystem<Bls12>>(
     mut cs: CS,
     bits: &[Boolean],
-) -> Result<FpGadget<E>, SynthesisError> {
+    params: &PedersenParameters<JubJub>
+) -> Result<FpGadget<Bls12>, SynthesisError> {
     // TODO: Add personalization
-    // TODO: Used fixed seed for RNG
-
-    let rng = &mut thread_rng();
-    type CRHGadget = PedersenCRHGadget<JubJub, Bls12_381, JubJubGadget>;
+    type CRHGadget = PedersenCRHGadget<JubJub, Bls12, JubJubGadget>;
     type CRH = PedersenCRH<JubJub, Window>;
 
-    let parameters = CRH::setup(rng).unwrap();
-
-
     let gadget_parameters =
-        <CRHGadget as FixedLengthCRHGadget<CRH, Bls12_381>>::ParametersGadget::alloc(
+        <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::ParametersGadget::alloc(
             &mut cs.ns(|| "gadget_parameters"),
-            || Ok(&parameters),
-        )
-            .unwrap();
+            || Ok(params),
+        ).unwrap();
 
-    let input_bytes =
-        UInt8::alloc_input_vec(&mut cs, UInt8::from_bits_le(bits).unwrap()).unwrap();
+    let input_bytes = bits
+        .chunks(8)
+        .map(|x| UInt8::from_bits_le(x))
+        .collect::<Vec<UInt8>>();
 
     let gadget_result =
-        <CRHGadget as FixedLengthCRHGadget<CRH, Bls12_381>>::check_evaluation_gadget(
+        <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::check_evaluation_gadget(
             &mut cs.ns(|| "gadget_evaluation"),
             &gadget_parameters,
             &input_bytes,
-        )
-            .unwrap();
+        ).unwrap();
 
     Ok(gadget_result.x)
 }
 
-pub fn pedersen_compression<E: Engine, CS: ConstraintSystem<E>>(
+pub fn pedersen_compression<CS: ConstraintSystem<Bls12>>(
     mut cs: CS,
     bits: &[Boolean],
+    params: &PedersenParameters<JubJub>
 ) -> Result<Vec<Boolean>, SynthesisError> {
-    let h = pedersen_compression_num(cs.ns(|| "compression"), bits)?;
+    let h = pedersen_compression_num(cs.ns(|| "compression"), bits, params)?;
 //    let mut out = h.into_bits_le(cs.ns(|| "h into bits"))?;
     let mut out = h.to_bits(cs.ns(|| "h into bits"))?;
 

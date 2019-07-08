@@ -31,6 +31,7 @@ pub mod merkle;
 pub mod parameter_cache;
 pub mod partitions;
 pub mod settings;
+pub mod singletons;
 pub mod util;
 pub mod vde;
 pub mod circuit;

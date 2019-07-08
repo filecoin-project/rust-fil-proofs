@@ -1,31 +1,26 @@
 use bitvec::prelude::*;
 use rand::{Rand, Rng, thread_rng};
 use std::hash::Hasher as StdHasher;
+use std::io::Read;
+use std::io::Write;
 
 use snark::{ConstraintSystem, SynthesisError};
 
 use algebra::biginteger::BigInteger;
 use algebra::biginteger::BigInteger256 as FrRepr;
-use algebra::curves::bls12_381::Bls12_381 as Bls12;
-use algebra::curves::{ProjectiveCurve};
-use algebra::fields::bls12_381::Fr;
-use algebra::fields::FpParameters;
-use algebra::fields::PrimeField;
-use snark_gadgets::boolean::{self, Boolean, AllocatedBit};
-use snark_gadgets::fields::fp::FpGadget;
-use snark_gadgets::groups::GroupGadget;
-use algebra::curves::jubjub::JubJubProjective as JubJub;
-use snark_gadgets::bits::uint8::UInt8;
-use snark_gadgets::groups::curves::twisted_edwards::jubjub::JubJubGadget;
-use crate::circuit::pedersen::pedersen_md_no_padding;
-use std::io::Read;
-use std::io::Write;
-
+use algebra::curves::{bls12_381::Bls12_381 as Bls12, ProjectiveCurve, jubjub::JubJubProjective as JubJub};
+use algebra::fields::{bls12_381::Fr, FpParameters, PrimeField};
 use algebra::PairingEngine as Engine;
+use snark_gadgets::boolean::{self, Boolean, AllocatedBit};
+use snark_gadgets::fields::{fp::FpGadget, FieldGadget};
+use snark_gadgets::groups::GroupGadget;
+use snark_gadgets::groups::curves::twisted_edwards::jubjub::JubJubGadget;
+use snark_gadgets::utils::AllocGadget;
+use snark_gadgets::bits::uint8::UInt8;
 
 use dpc::{
     crypto_primitives::crh::{
-        pedersen::PedersenCRH,
+        pedersen::{PedersenCRH, PedersenParameters},
         FixedLengthCRH,
     },
     gadgets::crh::{pedersen::PedersenCRHGadget, pedersen::PedersenCRHGadgetParameters, FixedLengthCRHGadget},
@@ -34,11 +29,9 @@ use dpc::{
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
 
+use crate::circuit::pedersen::pedersen_md_no_padding;
 use crate::crypto::pedersen::pedersen_hash;
-
 use crate::crypto::pedersen::Personalization;
-use snark_gadgets::fields::FieldGadget;
-
 use crate::crypto::{kdf, pedersen, sloth};
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher, Window};
@@ -222,16 +215,14 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         pedersen::pedersen_md_no_padding(data).into()
     }
 
-    fn hash_leaf_circuit<E: Engine, CS: ConstraintSystem<E>>(
+    fn hash_leaf_circuit<CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
         left: &[Boolean],
         right: &[Boolean],
-        height: usize
-    ) -> std::result::Result<FpGadget<E>, SynthesisError> {
+        height: usize,
+        params: PedersenParameters<JubJub>
+    ) -> std::result::Result<FpGadget<Bls12>, SynthesisError> {
         // TODO: Add personalization
-
-        // TODO: Used fixed seed for RNG
-        let rng = &mut thread_rng();
         let mut preimage: Vec<Boolean> = vec![];
         preimage.extend_from_slice(left);
         preimage.extend_from_slice(right);
@@ -239,33 +230,33 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         type CRHGadget = PedersenCRHGadget<JubJub, Bls12, JubJubGadget>;
         type CRH = PedersenCRH<JubJub, Window>;
 
-        let parameters = CRH::setup(rng).unwrap();
-
         let gadget_parameters =
             <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::ParametersGadget::alloc(
                 &mut cs.ns(|| "gadget_parameters"),
-                || Ok(&parameters),
-            )
-                .unwrap();
+                || Ok(&params),
+            ).unwrap();
 
-        let input_bytes = UInt8::alloc_input_vec(&mut cs, bits_to_bytes(preimage).as_slice()).unwrap();
+        let input_bytes = preimage
+            .chunks(8)
+            .map(|x| UInt8::from_bits_le(x))
+            .collect::<Vec<UInt8>>();
 
         let gadget_result =
             <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::check_evaluation_gadget(
                 &mut cs.ns(|| "gadget_evaluation"),
                 &gadget_parameters,
                 &input_bytes,
-            )
-                .unwrap();
+            ).unwrap();
 
         Ok(gadget_result.x)
     }
 
-    fn hash_circuit<E: Engine, CS: ConstraintSystem<E>>(
+    fn hash_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
-        bits: &[Boolean]
-    ) -> std::result::Result<FpGadget<E>, SynthesisError> {
-        pedersen_md_no_padding(cs, bits)
+        bits: &[Boolean],
+        params: PedersenParameters<JubJub>
+    ) -> std::result::Result<FpGadget<Bls12>, SynthesisError> {
+        pedersen_md_no_padding(cs, bits, params)
     }
 }
 

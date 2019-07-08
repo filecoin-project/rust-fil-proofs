@@ -6,6 +6,7 @@ use bitvec::prelude::*;
 
 // use paired::bls12_381::{Bls12, Fr, FrRepr};
 use crate::fr32::bytes_into_frs;
+use crate::singletons::PEDERSEN_PARAMS;
 
 use algebra::curves::bls12_381::Bls12_381 as Bls12;
 use algebra::curves::{jubjub::JubJubProjective as JubJub};
@@ -17,20 +18,10 @@ use dpc::crypto_primitives::crh::{
 
 use algebra::biginteger::BigInteger;
 use algebra::fields::PrimeField;
-use rand::SeedableRng;
-use rand::{thread_rng, XorShiftRng};
 use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
-use algebra::groups::Group;
-
-lazy_static! {
-    pub static ref PEDERSEN_PARAMS: PedersenParameters<JubJub> = {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-         PedersenCRH::<JubJub, BigWindow>::setup(rng).unwrap()
-};
-}
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub(super) struct BigWindow;
+pub struct BigWindow;
 
 impl PedersenWindow for BigWindow {
     const WINDOW_SIZE: usize = 2016;
