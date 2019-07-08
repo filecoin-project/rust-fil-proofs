@@ -79,11 +79,11 @@ fn cache_post_params(post_config: PoStConfig) {
 pub fn main() {
     let matches = App::new("paramcache")
         .version("0.1")
-        .about("Generate and persist Groth parameters")
+        .about("Generate and persist Groth parameters and verifying keys")
         .arg(
             Arg::with_name("test-only")
                 .long("test-only")
-                .help("generate only parameters useful for testing")
+                .help("generate only Groth parameters and keys useful for testing")
                 .takes_value(false),
         )
         .get_matches();

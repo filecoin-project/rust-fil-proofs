@@ -34,7 +34,7 @@ fn writes_json_manifest() {
             let cache_checksums = filename_to_checksum(&ipfs, files_in_cache.as_ref());
 
             // wait for confirmation...
-            session.exp_string("publishing 2 parameters")?;
+            session.exp_string("publishing 2 files")?;
             session.exp_string("done")?;
 
             // read the manifest file from disk and verify that it is well

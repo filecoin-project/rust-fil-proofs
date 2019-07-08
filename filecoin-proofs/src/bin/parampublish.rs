@@ -46,7 +46,7 @@ Defaults to '{}'
             Arg::with_name("all")
                 .short("a")
                 .long("all")
-                .help("Publish all local parameters"),
+                .help("Publish all local Groth parameters and verifying keys"),
         )
         .arg(
             Arg::with_name("ipfs-bin")
@@ -100,7 +100,7 @@ fn publish(matches: &ArgMatches) -> Result<()> {
     let mut parameter_map: ParameterMap = BTreeMap::new();
 
     if !filenames.is_empty() {
-        println!("publishing {} parameters...", filenames.len());
+        println!("publishing {} files...", filenames.len());
         println!();
 
         for filename in filenames {
@@ -140,7 +140,7 @@ fn publish(matches: &ArgMatches) -> Result<()> {
 
         write_parameter_map_to_disk(&parameter_map, &json)?;
     } else {
-        println!("no parameters to publish");
+        println!("no files to publish");
     }
 
     Ok(())

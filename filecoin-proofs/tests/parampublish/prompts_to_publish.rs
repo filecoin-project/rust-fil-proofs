@@ -35,7 +35,7 @@ fn ignores_files_unrecognized_extensions() {
                 session.send_line("n")?;
             }
 
-            session.exp_string("no parameters to publish")?;
+            session.exp_string("no files to publish")?;
             session.exp_string("done")?;
 
             Ok(())
@@ -88,7 +88,7 @@ fn all_flag_disables_prompt() {
                 .with_metadata("aaa.meta", &CacheEntryMetadata { sector_size: 1234 })
                 .build();
 
-            session.exp_string("publishing 2 parameters")?;
+            session.exp_string("publishing 2 files")?;
             session.exp_string("done")?;
 
             Ok(())
@@ -104,7 +104,7 @@ fn no_assets_no_prompt() {
                 .with_session_timeout_ms(1000)
                 .build();
 
-            session.exp_string("no parameters to publish")?;
+            session.exp_string("no files to publish")?;
             session.exp_string("done")?;
 
             Ok(())
