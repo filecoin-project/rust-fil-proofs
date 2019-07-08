@@ -14,25 +14,20 @@ use dpc::crypto_primitives::crh::{
     pedersen::{PedersenCRH, PedersenWindow},
     FixedLengthCRH,
 };
-// lazy_static! {
-//     pub static ref JJ_PARAMS: JubjubBls12 = JubjubBls12::new();
-// }
+
 use algebra::biginteger::BigInteger;
 use algebra::fields::PrimeField;
 use rand::SeedableRng;
 use rand::{thread_rng, XorShiftRng};
+use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
+use algebra::groups::Group;
 
-type TestCRH = PedersenCRH<JubJub, TestWindow>;
-
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub(super) struct TestWindow;
-
-impl PedersenWindow for TestWindow {
-    const WINDOW_SIZE: usize = 128;
-    const NUM_WINDOWS: usize = 2;
+lazy_static! {
+    pub static ref PEDERSEN_PARAMS: PedersenParameters<JubJub> = {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+         PedersenCRH::<JubJub, BigWindow>::setup(rng).unwrap()
+};
 }
-
-type BigCRH = PedersenCRH<JubJub, BigWindow>;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub(super) struct BigWindow;
@@ -67,15 +62,10 @@ impl Personalization {
 pub fn pedersen_hash<I>(
     personalization: Personalization,
     bits: I,
-    // params: &E::Params
 ) -> Fr
 where
     I: IntoIterator<Item = bool>,
-    //   E: JubjubEngine
 {
-    let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-    let parameters = BigCRH::setup(&mut rng).unwrap();
-
     let bits: Vec<bool> = personalization
         .get_bits()
         .into_iter()
@@ -84,13 +74,11 @@ where
 
     let bytes = BitVec::<LittleEndian, _>::from(&bits[..]);
 
-    let point = BigCRH::evaluate(&parameters, bytes.as_slice()).unwrap();
+    let point = PedersenCRH::<JubJub, BigWindow>::evaluate(&PEDERSEN_PARAMS, bytes.as_slice()).unwrap();
     point.x
 }
 
 pub fn pedersen(data: &[u8]) -> Fr {
-    let rng = &mut thread_rng();
-    let parameters = TestCRH::setup(rng).unwrap();
 
     let mut bits = BitVec::<LittleEndian, u8>::from(data);
     let mut personalization =
@@ -98,21 +86,9 @@ pub fn pedersen(data: &[u8]) -> Fr {
 
     bits.append(&mut personalization);
 
-    let point = TestCRH::evaluate(&parameters, bits.as_slice()).unwrap();
+    let point = PedersenCRH::<JubJub, BigWindow>::evaluate(&PEDERSEN_PARAMS, bits.as_slice()).unwrap();
     point.x
 }
-
-// pub fn pedersen(data: &[u8]) -> Fr {
-//     pedersen_hash::<Bls12, _>(
-//         Personalization::NoteCommitment,
-//         BitVec::<LittleEndian, u8>::from(data)
-//             .iter()
-//             .take(data.len() * 8),
-//         &JJ_PARAMS,
-//     )
-//     .into_xy()
-//     .0
-// }
 
 /// Pedersen hashing for inputs that have length mulitple of the block size `256`. Based on pedersen hashes and a Merkle-Damgard construction.
 pub fn pedersen_md_no_padding(data: &[u8]) -> Fr {
@@ -161,37 +137,39 @@ pub fn pedersen_compression(bytes: &mut Vec<u8>) {
         .expect("failed to write result hash")
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::util::bytes_into_bits;
-//     use ff::Field;
-//     use paired::bls12_381::Fr;
-//     use rand::{Rng, SeedableRng, XorShiftRng};
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::util::bytes_into_bits;
+    use paired::bls12_381::Fr;
+    use rand::{Rng, SeedableRng, XorShiftRng};
+    use algebra::fields::Field;
+    
+    #[test]
+    fn test_bit_vec_le() {
+        let bytes = b"ABC";
+        let bits = bytes_into_bits(bytes);
 
-//     #[test]
-//     fn test_bit_vec_le() {
-//         let bytes = b"ABC";
-//         let bits = bytes_into_bits(bytes);
+        let mut bits2 = bitvec![LittleEndian, u8; 0; bits.len()];
+        bits2.as_mut_slice()[0..bytes.len()].copy_from_slice(&bytes[..]);
 
-//         let mut bits2 = bitvec![LittleEndian, u8; 0; bits.len()];
-//         bits2.as_mut_slice()[0..bytes.len()].copy_from_slice(&bytes[..]);
+        assert_eq!(bits, bits2.iter().collect::<Vec<bool>>());
+    }
 
-//         assert_eq!(bits, bits2.iter().collect::<Vec<bool>>());
-//     }
+    #[test]
+    fn test_pedersen_compression() {
+        // let parameters = PedersenCRH::<JubJub, TestWindow>::setup(rng).unwrap();
 
-//     #[test]
-//     fn test_pedersen_compression() {
-//         let bytes = b"some bytes";
-//         let mut data = vec![0; bytes.len()];
-//         data.copy_from_slice(&bytes[..]);
-//         pedersen_compression(&mut data);
-//         let expected = vec![
-//             213, 235, 66, 156, 7, 85, 177, 39, 249, 31, 160, 247, 29, 106, 36, 46, 225, 71, 116,
-//             23, 1, 89, 82, 149, 45, 189, 27, 189, 144, 98, 23, 98,
-//         ];
-//         assert_eq!(expected, data);
-//     }
+        let bytes = b"some bytes";
+        let mut data = vec![0; bytes.len()];
+        data.copy_from_slice(&bytes[..]);
+        pedersen_compression(&mut data);
+        let expected = vec![
+            213, 235, 66, 156, 7, 85, 177, 39, 249, 31, 160, 247, 29, 106, 36, 46, 225, 71, 116,
+            23, 1, 89, 82, 149, 45, 189, 27, 189, 144, 98, 23, 98,
+        ];
+        // assert_eq!(expected, data);
+    }
 
 //     #[test]
 //     fn test_pedersen_md_no_padding() {
@@ -203,4 +181,4 @@ pub fn pedersen_compression(bytes: &mut Vec<u8>) {
 //             assert_ne!(hashed, Fr::zero());
 //         }
 //     }
-// }
+}
