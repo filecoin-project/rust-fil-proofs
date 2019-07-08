@@ -34,6 +34,10 @@ pub enum Error {
     MerkleTreeGenerationError(String),
     #[fail(display = "Cannot (yet) generate inclusion proof for unaligned piece.")]
     UnalignedPiece,
+    #[fail(display = "{}", _0)]
+    Serde(#[cause] serde_json::error::Error),
+    #[fail(display = "unclassified error: {}", _0)]
+    Unclassified(String),
 }
 
 impl From<SynthesisError> for Error {
@@ -45,5 +49,11 @@ impl From<SynthesisError> for Error {
 impl From<::std::io::Error> for Error {
     fn from(inner: ::std::io::Error) -> Error {
         Error::Io(inner)
+    }
+}
+
+impl From<serde_json::error::Error> for Error {
+    fn from(inner: serde_json::error::Error) -> Error {
+        Error::Serde(inner)
     }
 }

@@ -3,7 +3,7 @@ use paired::bls12_381::{Bls12, Fr};
 use crate::crypto::sloth;
 use crate::error::Result;
 use crate::hasher::pedersen::PedersenDomain;
-use crate::parameter_cache::ParameterSetIdentifier;
+use crate::parameter_cache::ParameterSetMetadata;
 use crate::vdf::Vdf;
 
 /// VDF construction using sloth.
@@ -22,12 +22,16 @@ pub struct PublicParams {
     pub rounds: usize,
 }
 
-impl ParameterSetIdentifier for PublicParams {
-    fn parameter_set_identifier(&self) -> String {
+impl ParameterSetMetadata for PublicParams {
+    fn identifier(&self) -> String {
         format!(
             "vdf_sloth::PublicParams{{key: {:?}; rounds: {}}}",
             self.key, self.rounds
         )
+    }
+
+    fn sector_size(&self) -> u64 {
+        unimplemented!("required for parameter metadata file generation")
     }
 }
 

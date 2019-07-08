@@ -14,7 +14,7 @@ use crate::error::{Error, Result};
 use crate::fr32::fr_into_bytes;
 use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::merkle::MerkleTree;
-use crate::parameter_cache::ParameterSetIdentifier;
+use crate::parameter_cache::ParameterSetMetadata;
 use crate::porc::{self, PoRC};
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::vdf::Vdf;
@@ -50,14 +50,18 @@ pub struct PublicParams<T: Domain, V: Vdf<T>> {
     pub seed_bits: usize,
 }
 
-impl<T: Domain, V: Vdf<T>> ParameterSetIdentifier for PublicParams<T, V> {
-    fn parameter_set_identifier(&self) -> String {
+impl<T: Domain, V: Vdf<T>> ParameterSetMetadata for PublicParams<T, V> {
+    fn identifier(&self) -> String {
         format!(
             "vdf_post::PublicParams{{challenge_count: {}, sector_size: {}, post_epochs: {}, pub_params_vdf: FIXME, leaves: {}, sectors_count: {}}}",
             self.challenge_count, self.sector_size, self.post_epochs,
             //self.pub_params_vdf.parameter_set_identifier(), // FIXME: implement
             self.leaves, self.sectors_count
         )
+    }
+
+    fn sector_size(&self) -> u64 {
+        self.sector_size as u64
     }
 }
 

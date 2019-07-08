@@ -14,7 +14,7 @@ use crate::drgporep::DrgPoRep;
 use crate::drgraph::Graph;
 use crate::fr32::fr_into_bytes;
 use crate::merklepor;
-use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
+use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
 use crate::util::{bytes_into_bits, bytes_into_boolean_vec};
 use std::marker::PhantomData;
@@ -142,7 +142,7 @@ where
     _g: PhantomData<G>,
 }
 
-impl<E: JubjubEngine, C: Circuit<E>, H: Hasher, G: Graph<H>, P: ParameterSetIdentifier>
+impl<E: JubjubEngine, C: Circuit<E>, H: Hasher, G: Graph<H>, P: ParameterSetMetadata>
     CacheableParameters<E, C, P> for DrgPoRepCompound<H, G>
 {
     fn cache_prefix() -> String {
@@ -154,7 +154,7 @@ impl<'a, H, G> CompoundProof<'a, Bls12, DrgPoRep<'a, H, G>, DrgPoRepCircuit<'a, 
     for DrgPoRepCompound<H, G>
 where
     H: 'a + Hasher,
-    G: 'a + Graph<H> + ParameterSetIdentifier + Sync + Send,
+    G: 'a + Graph<H> + ParameterSetMetadata + Sync + Send,
 {
     fn generate_public_inputs(
         pub_in: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicInputs,

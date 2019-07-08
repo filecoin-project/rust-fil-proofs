@@ -10,7 +10,7 @@ use crate::circuit::sloth;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::fr32::u32_into_fr;
 use crate::hasher::Hasher;
-use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
+use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
 use crate::vdf::Vdf;
 use crate::vdf_post::{self, compute_root_commitment, VDFPoSt};
@@ -42,7 +42,7 @@ pub struct VDFPoStCircuit<'a, E: JubjubEngine> {
 #[derive(Debug)]
 pub struct VDFPostCompound {}
 
-impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetIdentifier> CacheableParameters<E, C, P>
+impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata> CacheableParameters<E, C, P>
     for VDFPostCompound
 {
     fn cache_prefix() -> String {

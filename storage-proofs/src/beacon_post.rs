@@ -8,7 +8,7 @@ use serde::ser::Serialize;
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::MerkleTree;
-use crate::parameter_cache::ParameterSetIdentifier;
+use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::vdf::Vdf;
 use crate::vdf_post;
@@ -25,13 +25,21 @@ pub struct PublicParams<T: Domain, V: Vdf<T>> {
     pub post_periods_count: usize,
 }
 
-impl<T: Domain, V: Vdf<T>> ParameterSetIdentifier for PublicParams<T, V> {
-    fn parameter_set_identifier(&self) -> String {
+impl<T, V> ParameterSetMetadata for PublicParams<T, V>
+where
+    T: Domain,
+    V: Vdf<T>,
+{
+    fn identifier(&self) -> String {
         format!(
             "beacon_post::PublicParams{{vdf_post_pub_params: {}, post_periods_count: {}",
-            self.vdf_post_pub_params.parameter_set_identifier(),
+            self.vdf_post_pub_params.identifier(),
             self.post_periods_count
         )
+    }
+
+    fn sector_size(&self) -> u64 {
+        self.vdf_post_pub_params.sector_size as u64
     }
 }
 

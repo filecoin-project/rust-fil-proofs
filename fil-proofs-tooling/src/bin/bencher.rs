@@ -199,7 +199,7 @@ const TIME_CMD: &str = "gtime";
 const BINARY_DIR: &str = "target/release/examples";
 
 /// The glob of which files to clear out before starting the run.
-const CACHE_DIR: &str = "/tmp/filecoin-proofs-cache-*";
+const CACHE_DIR: &str = "/var/tmp/filecoin-proofs-cache-*";
 
 /// The directory in which the benchmark results will be stored.
 const RESULT_DIR: &str = ".bencher";

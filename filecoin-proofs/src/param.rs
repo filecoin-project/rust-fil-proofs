@@ -1,115 +1,49 @@
-use blake2b_simd::State as Blake2b;
-use failure::{err_msg, Error};
-use regex::Regex;
-use reqwest::{header, Client, Url};
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::fs::{create_dir_all, read_dir, rename, File};
-use std::io::{stdin, stdout, BufReader, BufWriter, Write};
-use std::path::PathBuf;
-use std::process::Command;
+use std::ffi::OsStr;
+use std::fs::File;
+use std::io::{stdin, stdout, BufReader, Write};
+use std::path::{Path, PathBuf};
 
-use pbr::{ProgressBar, Units};
-use std::io::Stdout;
-use std::io::{self, copy, Read};
-use storage_proofs::parameter_cache::parameter_cache_dir;
+use blake2b_simd::State as Blake2b;
+use failure::Error;
+use failure::Error as FailureError;
+use serde::{Deserialize, Serialize};
 
-const ERROR_IPFS_COMMAND: &str = "failed to run ipfs";
-const ERROR_IPFS_OUTPUT: &str = "failed to capture ipfs output";
-const ERROR_IPFS_PARSE: &str = "failed to parse ipfs output";
-const ERROR_IPFS_PUBLISH: &str = "failed to publish via ipfs";
-const ERROR_PARAMETER_FILE: &str = "failed to find parameter file";
-const ERROR_PARAMETER_ID: &str = "failed to find parameter in map";
+use storage_proofs::parameter_cache::{
+    parameter_cache_dir, CacheEntryMetadata, PARAMETER_METADATA_EXT,
+};
+
 const ERROR_STRING: &str = "invalid string";
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 pub type ParameterMap = BTreeMap<String, ParameterData>;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ParameterData {
     pub cid: String,
     pub digest: String,
+    pub sector_size: u64,
 }
 
-struct FetchProgress<R> {
-    inner: R,
-    progress_bar: ProgressBar<Stdout>,
-}
-
-impl<R: Read> Read for FetchProgress<R> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.inner.read(buf).map(|n| {
-            self.progress_bar.add(n as u64);
-            n
-        })
-    }
-}
-
-pub fn get_local_parameter_ids() -> Result<Vec<String>> {
-    let path = parameter_cache_dir();
-
-    if path.exists() {
-        Ok(read_dir(path)?
-            .map(|f| f.unwrap().path())
-            .filter(|p| p.is_file())
-            .map(|p| {
-                p.as_path()
-                    .file_name()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .to_string()
-            })
-            .collect())
-    } else {
-        println!(
-            "parameter directory '{}' does not exist",
-            path.as_path().to_str().unwrap()
-        );
-
-        Ok(Vec::new())
-    }
-}
-
-pub fn get_mapped_parameter_ids(parameter_map: &ParameterMap) -> Result<Vec<String>> {
-    Ok(parameter_map.iter().map(|(k, _)| k.clone()).collect())
-}
-
-pub fn get_parameter_map(path: &PathBuf) -> Result<ParameterMap> {
-    let file = File::open(path)?;
+// Deserializes bytes from the provided path into a ParameterMap
+pub fn read_parameter_map_from_disk<P: AsRef<Path>>(source_path: P) -> Result<ParameterMap> {
+    let file = File::open(source_path)?;
     let reader = BufReader::new(file);
     let parameter_map = serde_json::from_reader(reader)?;
 
     Ok(parameter_map)
 }
 
-pub fn get_parameter_data<'a>(
-    parameter_map: &'a ParameterMap,
-    parameter_id: &str,
-) -> Result<&'a ParameterData> {
-    if parameter_map.contains_key(parameter_id) {
-        Ok(parameter_map.get(parameter_id).unwrap())
-    } else {
-        Err(err_msg(ERROR_PARAMETER_ID))
-    }
-}
-
-pub fn save_parameter_map(parameter_map: &ParameterMap, file_path: &PathBuf) -> Result<()> {
-    let file = File::create(file_path)?;
-    let writer = BufWriter::new(file);
-    serde_json::to_writer_pretty(writer, &parameter_map)?;
-
-    Ok(())
-}
-
-pub fn get_parameter_file_path(parameter_id: &str) -> PathBuf {
+// Produces an absolute path to a file within the cache
+pub fn get_full_path_for_file_within_cache(filename: &str) -> PathBuf {
     let mut path = parameter_cache_dir();
-    path.push(parameter_id);
+    path.push(filename);
     path
 }
 
-pub fn get_parameter_digest(parameter_id: &str) -> Result<String> {
-    let path = get_parameter_file_path(parameter_id);
+// Produces a BLAKE2b checksum for a file within the cache
+pub fn get_digest_for_file_within_cache(filename: &str) -> Result<String> {
+    let path = get_full_path_for_file_within_cache(filename);
     let mut file = File::open(path)?;
     let mut hasher = Blake2b::new();
 
@@ -118,101 +52,7 @@ pub fn get_parameter_digest(parameter_id: &str) -> Result<String> {
     Ok(hasher.finalize().to_hex()[..32].into())
 }
 
-pub fn publish_parameter_file(parameter_id: &str) -> Result<String> {
-    let path = get_parameter_file_path(parameter_id);
-
-    let output = Command::new("ipfs")
-        .arg("add")
-        .arg(&path)
-        .output()
-        .expect(ERROR_IPFS_COMMAND);
-
-    if !output.status.success() {
-        Err(err_msg(ERROR_IPFS_PUBLISH))
-    } else {
-        let pattern = Regex::new("added ([^ ]+) ")?;
-        let string = String::from_utf8(output.stdout)?;
-        let captures = pattern.captures(string.as_str()).expect(ERROR_IPFS_OUTPUT);
-        let cid = captures.get(1).expect(ERROR_IPFS_PARSE);
-
-        Ok(cid.as_str().to_string())
-    }
-}
-
-pub fn spawn_fetch_parameter_file(
-    is_verbose: bool,
-    parameter_map: &ParameterMap,
-    parameter_id: &str,
-    gateway: &str,
-) -> Result<()> {
-    let parameter_data = get_parameter_data(parameter_map, parameter_id)?;
-    let path = get_parameter_file_path(parameter_id);
-
-    create_dir_all(parameter_cache_dir())?;
-
-    let mut paramfile = match File::create(&path).map_err(failure::Error::from) {
-        Err(why) => return Err(why),
-        Ok(file) => file,
-    };
-
-    let client = Client::new();
-    let url = Url::parse(&format!("{}/ipfs/{}", gateway, parameter_data.cid))?;
-    let total_size = {
-        let res = client.head(url.as_str()).send()?;
-        if res.status().is_success() {
-            res.headers()
-                .get(header::CONTENT_LENGTH)
-                .and_then(|ct_len| ct_len.to_str().ok())
-                .and_then(|ct_len| ct_len.parse().ok())
-                .unwrap_or(0)
-        } else {
-            return Err(failure::err_msg("failed to download parameter file"));
-        }
-    };
-
-    let req = client.get(url.as_str());
-    if is_verbose {
-        let mut pb = ProgressBar::new(total_size);
-        pb.set_units(Units::Bytes);
-
-        let mut source = FetchProgress {
-            inner: req.send()?,
-            progress_bar: pb,
-        };
-
-        let _ = copy(&mut source, &mut paramfile)?;
-    } else {
-        let mut source = req.send()?;
-        let _ = copy(&mut source, &mut paramfile)?;
-    }
-
-    Ok(())
-}
-
-pub fn validate_parameter_file(parameter_map: &ParameterMap, parameter_id: &str) -> Result<bool> {
-    let parameter_data = get_parameter_data(parameter_map, parameter_id)?;
-    let digest = get_parameter_digest(parameter_id)?;
-
-    if parameter_data.digest != digest {
-        Ok(false)
-    } else {
-        Ok(true)
-    }
-}
-
-pub fn invalidate_parameter_file(parameter_id: &str) -> Result<()> {
-    let parameter_file_path = get_parameter_file_path(parameter_id);
-    let target_parameter_file_path =
-        parameter_file_path.with_file_name(format!("{}-invalid-digest", parameter_id));
-
-    if parameter_file_path.exists() {
-        rename(parameter_file_path, target_parameter_file_path)?;
-        Ok(())
-    } else {
-        Err(err_msg(ERROR_PARAMETER_FILE))
-    }
-}
-
+// Prompts the user to approve/reject the message
 pub fn choose(message: &str) -> bool {
     loop {
         print!("[y/n] {}: ", message);
@@ -229,6 +69,67 @@ pub fn choose(message: &str) -> bool {
     }
 }
 
-pub fn choose_from(vector: Vec<String>) -> Result<Vec<String>> {
-    Ok(vector.into_iter().filter(|i| choose(i)).collect())
+// Predicate which matches the provided extension against the given filename
+pub fn has_extension<S: AsRef<str>, P: AsRef<Path>>(filename: P, ext: S) -> bool {
+    filename
+        .as_ref()
+        .extension()
+        .and_then(OsStr::to_str)
+        .map(|s| s == ext.as_ref())
+        .unwrap_or(false)
+}
+
+/// Builds a map from filename (in cache) to metadata.
+pub fn parameter_id_to_metadata_map<S: AsRef<str>>(
+    filenames: &[S],
+) -> Result<BTreeMap<String, CacheEntryMetadata>> {
+    let mut map: BTreeMap<String, CacheEntryMetadata> = Default::default();
+
+    for filename in filenames {
+        if has_extension(PathBuf::from(filename.as_ref()), PARAMETER_METADATA_EXT) {
+            let file = File::open(get_full_path_for_file_within_cache(filename.as_ref()))
+                .map_err(FailureError::from)?;
+
+            let meta = serde_json::from_reader(file).map_err(FailureError::from)?;
+
+            let p_id = filename_to_parameter_id(PathBuf::from(filename.as_ref()))
+                .ok_or_else(|| format_err!("could not map filename to parameter id"))?;
+
+            map.insert(p_id, meta);
+        }
+    }
+
+    Ok(map)
+}
+
+/// Prompts the user to approve/reject the filename
+pub fn choose_from<S: AsRef<str>>(
+    filenames: &[S],
+    lookup: impl Fn(&str) -> Option<u64>,
+) -> Result<Vec<String>> {
+    let mut chosen_filenames: Vec<String> = vec![];
+
+    for filename in filenames.iter() {
+        let sector_size = lookup(filename.as_ref()).ok_or_else(|| {
+            format_err!("no sector size found for filename {}", filename.as_ref())
+        })?;
+
+        let msg = format!("(sector size: {}B) {}", sector_size, filename.as_ref());
+
+        if choose(&msg) {
+            chosen_filenames.push(filename.as_ref().to_string())
+        }
+    }
+
+    Ok(chosen_filenames)
+}
+
+/// Maps the name of a file in the cache to its parameter id. For example,
+/// ABCDEF.vk corresponds to parameter id ABCDEF.
+pub fn filename_to_parameter_id<'a, P: AsRef<Path> + 'a>(filename: P) -> Option<String> {
+    filename
+        .as_ref()
+        .file_stem()
+        .and_then(OsStr::to_str)
+        .map(ToString::to_string)
 }
