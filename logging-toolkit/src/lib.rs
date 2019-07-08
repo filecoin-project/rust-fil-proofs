@@ -25,7 +25,7 @@ pub fn make_root_logger(
     log_file_env_name: &str,
 ) -> Logger {
     let log_file_name = env::var(log_file_env_name).unwrap_or_else(|_| "/dev/stdout".to_string());
-    let log_file: Box<std::io::Write + Send> = match log_file_name.as_ref() {
+    let log_file: Box<dyn std::io::Write + Send> = match log_file_name.as_ref() {
         "/dev/stdout" => Box::new(std::io::stdout()),
         "/dev/stderr" => Box::new(std::io::stderr()),
         filename => {
