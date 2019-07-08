@@ -48,7 +48,7 @@ jobs:
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (stable)
-          command: cargo +stable test --verbose --frozen --all
+          command: cargo +stable test --verbose --all
           no_output_timeout: 15m
       - run:
           name: Prune the output files
@@ -77,8 +77,8 @@ jobs:
       - run:
           name: Test (stable) in release profile
           command: |
-            cargo +stable test --verbose --release --frozen --all
-            RUSTFLAGS="-D warnings" cargo +stable build --examples --release --frozen --all
+            cargo +stable test --verbose --release --all
+            RUSTFLAGS="-D warnings" cargo +stable build --examples --release --all
 
   test_disk_trees:
     docker:
@@ -115,7 +115,7 @@ jobs:
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (stable) in release profile
-          command: cargo +stable test --verbose --release --frozen --all -- --ignored
+          command: cargo +stable test --verbose --release --all -- --ignored
       - save_cache:
           key: parameter-cache-{{ .Revision }}
           paths:
@@ -138,7 +138,7 @@ jobs:
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (nightly)
-          command: cargo +$(cat rust-toolchain) test --verbose --frozen --all
+          command: cargo +$(cat rust-toolchain) test --verbose --all
           no_output_timeout: 15m
 
   bench_nightly:
@@ -158,7 +158,7 @@ jobs:
             - parameter-cache-{{ .Revision }}
       - run:
           name: Benchmarks (nightly)
-          command: cargo +$(cat rust-toolchain) build --benches --verbose --frozen --all
+          command: cargo +$(cat rust-toolchain) build --benches --verbose --all
           no_output_timeout: 15m
 
   rustfmt:
@@ -207,7 +207,7 @@ jobs:
             - cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
           name: Build (release)
-          command: cargo +$(cat rust-toolchain) build --release --verbose --frozen --all
+          command: cargo +$(cat rust-toolchain) build --release --verbose --all
       - run:
           name: Install jq
           command: apt-get install jq -yqq
@@ -237,7 +237,7 @@ jobs:
       - run: cargo fetch
       - run:
           name: Build (release)
-          command: cargo +$(cat rust-toolchain) build --release --verbose --frozen --all
+          command: cargo +$(cat rust-toolchain) build --release --verbose --all
       - run:
           name: Install jq
           command: |
