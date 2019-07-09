@@ -130,9 +130,10 @@ pub fn pedersen_compression(bytes: &mut Vec<u8>) {
 mod tests {
     use super::*;
     use crate::util::bytes_into_bits;
-    
-    
-    
+    use rand::{XorShiftRng};  
+    use rand::SeedableRng;
+    use rand::Rng;
+    use algebra::fields::Field;
 
     #[test]
     fn test_bit_vec_le() {
@@ -153,21 +154,21 @@ mod tests {
         let mut data = vec![0; bytes.len()];
         data.copy_from_slice(&bytes[..]);
         pedersen_compression(&mut data);
-        let _expected = vec![
+        let expected = vec![
             213, 235, 66, 156, 7, 85, 177, 39, 249, 31, 160, 247, 29, 106, 36, 46, 225, 71, 116,
             23, 1, 89, 82, 149, 45, 189, 27, 189, 144, 98, 23, 98,
         ];
-        // assert_eq!(expected, data);
+        assert_eq!(expected, data);
     }
 
-    //     #[test]
-    //     fn test_pedersen_md_no_padding() {
-    //         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        #[test]
+        fn test_pedersen_md_no_padding() {
+            let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-    //         for i in 2..5 {
-    //             let x: Vec<u8> = (0..i * 32).map(|_| rng.gen()).collect();
-    //             let hashed = pedersen_md_no_padding(x.as_slice());
-    //             assert_ne!(hashed, Fr::zero());
-    //         }
-    //     }
+            for i in 2..5 {
+                let x: Vec<u8> = (0..i * 32).map(|_| rng.gen()).collect();
+                let hashed = pedersen_md_no_padding(x.as_slice());
+                assert_ne!(hashed, Fr::zero());
+            }
+        }
 }

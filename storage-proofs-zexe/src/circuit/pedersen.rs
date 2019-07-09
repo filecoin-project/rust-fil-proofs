@@ -1,5 +1,3 @@
-
-
 use algebra::curves::bls12_381::Bls12_381 as Bls12;
 use algebra::curves::{jubjub::JubJubProjective as JubJub};
 
@@ -107,8 +105,8 @@ pub fn pedersen_compression<CS: ConstraintSystem<Bls12>>(
     Ok(out)
 }
 
-//#[cfg(test)]
-//mod tests {
+// #[cfg(test)]
+// mod tests {
 //    use super::pedersen_md_no_padding;
 //    use crate::circuit::test::TestConstraintSystem;
 //    use crate::crypto;
@@ -118,27 +116,33 @@ pub fn pedersen_compression<CS: ConstraintSystem<Bls12>>(
 //    use fil_sapling_crypto::jubjub::JubjubBls12;
 //    use paired::bls12_381::Bls12;
 //    use rand::{Rng, SeedableRng, XorShiftRng};
-//
+
+//     // use snark_gadgets::{
+//     //     groups::curves::twisted_edwards::jubjub::JubJubGadget,
+//     //     test_constraint_system::TestConstraintSystem, uint8::UInt8, utils::AllocGadget,
+//     // }; 
+
+
 //    #[test]
 //    fn test_pedersen_input_circut() {
 //        let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-//
+
 //        for i in 2..6 {
 //            let mut cs = TestConstraintSystem::<Bls12>::new();
 //            let data: Vec<u8> = (0..i * 32).map(|_| rng.gen()).collect();
 //            let params = &JubjubBls12::new();
-//
+
 //            let data_bits: Vec<Boolean> = {
 //                let mut cs = cs.ns(|| "data");
 //                bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).unwrap()
 //            };
 //            let out = pedersen_md_no_padding(cs.ns(|| "pedersen"), data_bits.as_slice())
 //                .expect("pedersen hashing failed");
-//
+
 //            assert!(cs.is_satisfied(), "constraints not satisfied");
-//
+
 //            let expected = crypto::pedersen::pedersen_md_no_padding(data.as_slice());
-//
+
 //            assert_eq!(
 //                expected,
 //                out.get_value().unwrap(),
@@ -146,4 +150,4 @@ pub fn pedersen_compression<CS: ConstraintSystem<Bls12>>(
 //            );
 //        }
 //    }
-//}
+// }

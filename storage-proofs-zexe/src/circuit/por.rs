@@ -3,8 +3,6 @@ use crate::compound_proof::{CircuitComponent};
 use crate::drgraph::graph_height;
 use crate::hasher::{Hasher};
 
-
-
 use algebra::PairingEngine as Engine;
 
 use std::marker::PhantomData;
