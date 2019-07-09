@@ -35,6 +35,8 @@ pub mod drgraph;
 pub mod error;
 pub mod fr32;
 pub mod hasher;
+pub mod hybrid_merkle;
+pub mod hybrid_merklepor;
 pub mod layered_drgporep;
 pub mod merkle;
 pub mod merklepor;

@@ -18,27 +18,38 @@ use crate::zigzag_graph::{ZigZag, ZigZagBucketGraph};
 /// However, it is fortunately not necessary that the base DRG components also have this property.
 
 #[derive(Debug)]
-pub struct ZigZagDrgPoRep<'a, H: 'a + Hasher> {
-    _a: PhantomData<&'a H>,
+pub struct ZigZagDrgPoRep<'a, AH, BH>
+where
+    AH: 'a + Hasher,
+    BH: 'a + Hasher,
+{
+    _ah: PhantomData<&'a AH>,
+    _bh: PhantomData<&'a BH>,
 }
 
-impl<'a, H: 'static + Hasher> Layers for ZigZagDrgPoRep<'a, H> where {
-    type Hasher = <ZigZagBucketGraph<H> as ZigZag>::BaseHasher;
-    type Graph = ZigZagBucketGraph<Self::Hasher>;
+impl<'a, AH, BH> Layers for ZigZagDrgPoRep<'a, AH, BH>
+where
+    AH: 'static + Hasher,
+    BH: 'static + Hasher,
+{
+    type AlphaHasher = <ZigZagBucketGraph<AH, BH> as ZigZag>::BaseAlphaHasher;
+    type BetaHasher = <ZigZagBucketGraph<AH, BH> as ZigZag>::BaseBetaHasher;
+    type Graph = ZigZagBucketGraph<Self::AlphaHasher, Self::BetaHasher>;
 
     fn transform(graph: &Self::Graph) -> Self::Graph {
-        zigzag::<Self::Hasher, Self::Graph>(graph)
+        zigzag::<Self::AlphaHasher, Self::BetaHasher, Self::Graph>(graph)
     }
 
     fn invert_transform(graph: &Self::Graph) -> Self::Graph {
-        zigzag::<Self::Hasher, Self::Graph>(graph)
+        zigzag::<Self::AlphaHasher, Self::BetaHasher, Self::Graph>(graph)
     }
 }
 
-fn zigzag<H, Z>(graph: &Z) -> Z
+fn zigzag<AH, BH, Z>(graph: &Z) -> Z
 where
-    H: Hasher,
-    Z: ZigZag + Graph<H> + ParameterSetMetadata,
+    AH: Hasher,
+    BH: Hasher,
+    Z: ZigZag + Graph<AH, BH> + ParameterSetMetadata,
 {
     graph.zigzag()
 }
@@ -54,6 +65,7 @@ mod tests {
     use crate::drgraph::new_seed;
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::hybrid_merkle::MIN_N_LEAVES;
     use crate::layered_drgporep::{
         LayerChallenges, PrivateInputs, PublicInputs, PublicParams, SetupParams,
     };
@@ -64,24 +76,33 @@ mod tests {
 
     #[test]
     fn extract_all_pedersen() {
-        test_extract_all::<PedersenHasher>();
+        test_extract_all::<PedersenHasher, PedersenHasher>();
     }
 
     #[test]
     fn extract_all_sha256() {
-        test_extract_all::<Sha256Hasher>();
+        test_extract_all::<Sha256Hasher, Sha256Hasher>();
     }
 
     #[test]
     fn extract_all_blake2s() {
-        test_extract_all::<Blake2sHasher>();
+        test_extract_all::<Blake2sHasher, Blake2sHasher>();
     }
 
-    fn test_extract_all<H: 'static + Hasher>() {
+    #[test]
+    fn extract_all_pedersen_blake2s() {
+        test_extract_all::<PedersenHasher, Blake2sHasher>();
+    }
+
+    fn test_extract_all<AH, BH>()
+    where
+        AH: 'static + Hasher,
+        BH: 'static + Hasher,
+    {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let sloth_iter = 1;
-        let replica_id: H::Domain = rng.gen();
-        let data = vec![2u8; 32 * 3];
+        let replica_id: BH::Domain = rng.gen();
+        let data = vec![2u8; 32 * MIN_N_LEAVES];
         let challenges = LayerChallenges::new_fixed(DEFAULT_ZIGZAG_LAYERS, 5);
 
         // create a copy, so we can compare roundtrips
@@ -98,21 +119,21 @@ mod tests {
             layer_challenges: challenges.clone(),
         };
 
-        let mut pp = ZigZagDrgPoRep::<H>::setup(&sp).expect("setup failed");
+        let mut pp = ZigZagDrgPoRep::<AH, BH>::setup(&sp).expect("setup failed");
         // Get the graph for the last layer.
         // In reality, this is a no-op with an even number of layers.
         for _ in 0..pp.layer_challenges.layers() {
             pp.graph = zigzag(&pp.graph);
         }
 
-        ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None)
+        ZigZagDrgPoRep::<AH, BH>::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None)
             .expect("replication failed");
 
         let transformed_params = PublicParams::new(pp.graph, pp.sloth_iter, challenges.clone());
 
         assert_ne!(data, data_copy);
 
-        let decoded_data = ZigZagDrgPoRep::<H>::extract_all(
+        let decoded_data = ZigZagDrgPoRep::<AH, BH>::extract_all(
             &transformed_params,
             &replica_id,
             data_copy.as_mut_slice(),
@@ -125,26 +146,32 @@ mod tests {
     fn prove_verify_fixed(n: usize, i: usize) {
         let challenges = LayerChallenges::new_fixed(DEFAULT_ZIGZAG_LAYERS, 5);
 
-        test_prove_verify::<PedersenHasher>(n, i, challenges.clone());
-        test_prove_verify::<Sha256Hasher>(n, i, challenges.clone());
-        test_prove_verify::<Blake2sHasher>(n, i, challenges.clone());
+        test_prove_verify::<PedersenHasher, PedersenHasher>(n, i, challenges.clone());
+        test_prove_verify::<Sha256Hasher, Sha256Hasher>(n, i, challenges.clone());
+        test_prove_verify::<Blake2sHasher, Blake2sHasher>(n, i, challenges.clone());
+        test_prove_verify::<PedersenHasher, Blake2sHasher>(n, i, challenges.clone());
     }
 
     fn prove_verify_tapered(n: usize, i: usize) {
         let challenges = LayerChallenges::new_tapered(5, 10, 5, 0.9);
 
-        test_prove_verify::<PedersenHasher>(n, i, challenges.clone());
-        test_prove_verify::<Sha256Hasher>(n, i, challenges.clone());
-        test_prove_verify::<Blake2sHasher>(n, i, challenges.clone());
+        test_prove_verify::<PedersenHasher, PedersenHasher>(n, i, challenges.clone());
+        test_prove_verify::<Sha256Hasher, Sha256Hasher>(n, i, challenges.clone());
+        test_prove_verify::<Blake2sHasher, Blake2sHasher>(n, i, challenges.clone());
+        test_prove_verify::<PedersenHasher, Blake2sHasher>(n, i, challenges.clone());
     }
 
-    fn test_prove_verify<H: 'static + Hasher>(n: usize, i: usize, challenges: LayerChallenges) {
+    fn test_prove_verify<AH, BH>(n: usize, i: usize, challenges: LayerChallenges)
+    where
+        AH: 'static + Hasher,
+        BH: 'static + Hasher,
+    {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let degree = 1 + i;
         let expansion_degree = i;
         let sloth_iter = 1;
-        let replica_id: H::Domain = rng.gen();
+        let replica_id: BH::Domain = rng.gen();
         let data: Vec<u8> = (0..n)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
@@ -163,13 +190,13 @@ mod tests {
             layer_challenges: challenges.clone(),
         };
 
-        let pp = ZigZagDrgPoRep::<H>::setup(&sp).expect("setup failed");
+        let pp = ZigZagDrgPoRep::<AH, BH>::setup(&sp).expect("setup failed");
         let (tau, aux) =
-            ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None)
+            ZigZagDrgPoRep::<AH, BH>::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None)
                 .expect("replication failed");
         assert_ne!(data, data_copy);
 
-        let pub_inputs = PublicInputs::<H::Domain> {
+        let pub_inputs = PublicInputs::<AH::Domain, BH::Domain> {
             replica_id,
             seed: None,
             tau: Some(tau.simplify().into()),
@@ -182,37 +209,36 @@ mod tests {
             tau: tau.layer_taus,
         };
 
-        let all_partition_proofs =
-            &ZigZagDrgPoRep::<H>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, partitions)
-                .expect("failed to generate partition proofs");
+        let all_partition_proofs = ZigZagDrgPoRep::<AH, BH>::prove_all_partitions(
+            &pp,
+            &pub_inputs,
+            &priv_inputs,
+            partitions,
+        )
+        .expect("failed to generate partition proofs");
 
-        let proofs_are_valid =
-            ZigZagDrgPoRep::<H>::verify_all_partitions(&pp, &pub_inputs, all_partition_proofs)
-                .expect("failed to verify partition proofs");
+        let proofs_are_valid = ZigZagDrgPoRep::<AH, BH>::verify_all_partitions(
+            &pp,
+            &pub_inputs,
+            &all_partition_proofs,
+        )
+        .expect("failed to verify partition proofs");
 
         assert!(proofs_are_valid);
     }
 
     table_tests! {
         prove_verify_fixed{
-            // TODO: figure out why this was failing
-            // prove_verify_32_2_1(32, 2, 1);
-            // prove_verify_32_2_2(32, 2, 2);
-
-            // TODO: why u fail???
-            // prove_verify_32_3_1(32, 3, 1);
-            // prove_verify_32_3_2(32, 3, 2);
-
-           prove_verify_fixed_32_5_1(5, 1);
-           prove_verify_fixed_32_5_2(5, 2);
-           prove_verify_fixed_32_5_3(5, 3);
+           prove_verify_fixed_32_16_1(16, 1);
+           prove_verify_fixed_32_16_2(16, 2);
+           prove_verify_fixed_32_16_3(16, 3);
         }
     }
     table_tests! {
         prove_verify_tapered{
-            prove_verify_tapered_32_5_1(5, 1);
-            prove_verify_tapered_32_5_2(5, 2);
-            prove_verify_tapered_32_5_3(5, 3);
+            prove_verify_tapered_32_16_1(16, 1);
+            prove_verify_tapered_32_16_2(16, 2);
+            prove_verify_tapered_32_16_3(16, 3);
         }
     }
 
@@ -238,6 +264,7 @@ mod tests {
 
         // When this fails, the call to setup should panic, but seems to actually hang (i.e. neither return nor panic) for some reason.
         // When working as designed, the call to setup returns without error.
-        let _pp = ZigZagDrgPoRep::<PedersenHasher>::setup(&sp).expect("setup failed");
+        let _pp =
+            ZigZagDrgPoRep::<PedersenHasher, Blake2sHasher>::setup(&sp).expect("setup failed");
     }
 }

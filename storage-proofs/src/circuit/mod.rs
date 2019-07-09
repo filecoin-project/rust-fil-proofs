@@ -1,6 +1,5 @@
+mod alloc;
 mod constraint;
-
-pub mod por;
 
 pub mod apex_commitment;
 pub mod beacon_post;
@@ -8,6 +7,7 @@ pub mod drgporep;
 pub mod kdf;
 pub mod multi_proof;
 pub mod pedersen;
+pub mod por;
 pub mod porc;
 pub mod ppor;
 pub mod sloth;

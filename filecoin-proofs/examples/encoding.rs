@@ -20,7 +20,7 @@ use storage_proofs::drgporep;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
-use storage_proofs::hasher::{Hasher, PedersenHasher};
+use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher};
 use storage_proofs::layered_drgporep::{self, LayerChallenges};
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::vde;
@@ -72,9 +72,10 @@ pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
     unsafe { MmapOptions::new().map_mut(&tmpfile).unwrap() }
 }
 
-fn do_the_work<H: 'static>(data_size: usize, m: usize, expansion_degree: usize, sloth_iter: usize)
+fn do_the_work<AH, BH>(data_size: usize, m: usize, expansion_degree: usize, sloth_iter: usize)
 where
-    H: Hasher,
+    AH: 'static + Hasher,
+    BH: 'static + Hasher,
 {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
@@ -88,7 +89,7 @@ where
 
     let mut data = file_backed_mmap_from_random_bytes(nodes);
 
-    let replica_id: H::Domain = rng.gen();
+    let replica_id: BH::Domain = rng.gen();
 
     let sp = layered_drgporep::SetupParams {
         drg: drgporep::DrgParams {
@@ -103,7 +104,7 @@ where
 
     info!(FCP_LOG, "running setup");
     start_profile("setup");
-    let pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
+    let pp = ZigZagDrgPoRep::<AH, BH>::setup(&sp).unwrap();
     stop_profile();
 
     let start = Instant::now();
@@ -174,5 +175,5 @@ fn main() {
     let expansion_degree = value_t!(matches, "exp", usize).unwrap();
     let sloth_iter = value_t!(matches, "sloth", usize).unwrap();
 
-    do_the_work::<PedersenHasher>(data_size, m, expansion_degree, sloth_iter);
+    do_the_work::<PedersenHasher, Blake2sHasher>(data_size, m, expansion_degree, sloth_iter);
 }

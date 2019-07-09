@@ -1,23 +1,27 @@
+use std::marker::PhantomData;
+
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
-use fil_sapling_crypto::circuit::boolean::{self, Boolean};
-use fil_sapling_crypto::circuit::{multipack, num};
+use fil_sapling_crypto::circuit::boolean::{field_into_boolean_vec_le, Boolean};
+use fil_sapling_crypto::circuit::multipack;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
+use crate::circuit::alloc::alloc_priv_num;
 use crate::circuit::constraint;
 use crate::circuit::kdf::kdf;
+use crate::circuit::por::{PoRCircuit, PoRCompound};
 use crate::circuit::sloth;
 use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::drgporep::DrgPoRep;
 use crate::drgraph::Graph;
 use crate::fr32::fr_into_bytes;
+use crate::hasher::{Domain, Hasher};
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
 use crate::util::{bytes_into_bits, bytes_into_boolean_vec};
-use std::marker::PhantomData;
 
 /// DRG based Proof of Replication.
 ///
@@ -42,16 +46,12 @@ use std::marker::PhantomData;
 /// * `replica_id` - The id of the replica.
 /// * `degree` - The degree of the graph.
 ///
-//implement_drgporep!(
-//    DrgPoRepCircuit,
-//    DrgPoRepCompound,
-//    "drg-proof-of-replication",
-//    false
-//);
-use crate::circuit::por::{PoRCircuit, PoRCompound};
-use crate::hasher::{Domain, Hasher};
-
-pub struct DrgPoRepCircuit<'a, E: JubjubEngine, H: Hasher> {
+pub struct DrgPoRepCircuit<'a, E, AH, BH>
+where
+    E: JubjubEngine,
+    AH: Hasher,
+    BH: Hasher,
+{
     params: &'a E::Params,
     sloth_iter: usize,
     replica_nodes: Vec<Option<E::Fr>>,
@@ -68,10 +68,16 @@ pub struct DrgPoRepCircuit<'a, E: JubjubEngine, H: Hasher> {
     replica_id: Option<E::Fr>,
     degree: usize,
     private: bool,
-    _h: PhantomData<H>,
+    _ah: PhantomData<AH>,
+    _bh: PhantomData<BH>,
 }
 
-impl<'a, E: JubjubEngine, H: Hasher> DrgPoRepCircuit<'a, E, H> {
+impl<'a, E, AH, BH> DrgPoRepCircuit<'a, E, AH, BH>
+where
+    E: JubjubEngine,
+    AH: Hasher,
+    BH: Hasher,
+{
     #[allow(clippy::type_complexity, clippy::too_many_arguments)]
     pub fn synthesize<CS>(
         mut cs: CS,
@@ -93,7 +99,7 @@ impl<'a, E: JubjubEngine, H: Hasher> DrgPoRepCircuit<'a, E, H> {
         E: JubjubEngine,
         CS: ConstraintSystem<E>,
     {
-        DrgPoRepCircuit::<_, H> {
+        DrgPoRepCircuit::<E, AH, BH> {
             params,
             sloth_iter,
             replica_nodes,
@@ -107,7 +113,8 @@ impl<'a, E: JubjubEngine, H: Hasher> DrgPoRepCircuit<'a, E, H> {
             replica_id,
             degree,
             private,
-            _h: Default::default(),
+            _ah: PhantomData,
+            _bh: PhantomData,
         }
         .synthesize(&mut cs)
     }
@@ -128,37 +135,51 @@ impl<E: JubjubEngine> Default for ComponentPrivateInputs<E> {
     }
 }
 
-impl<'a, E: JubjubEngine, H: Hasher> CircuitComponent for DrgPoRepCircuit<'a, E, H> {
+impl<'a, E, AH, BH> CircuitComponent for DrgPoRepCircuit<'a, E, AH, BH>
+where
+    E: JubjubEngine,
+    AH: Hasher,
+    BH: Hasher,
+{
     type ComponentPrivateInputs = ComponentPrivateInputs<E>;
 }
 
-pub struct DrgPoRepCompound<H, G>
+pub struct DrgPoRepCompound<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H>,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH>,
 {
-    // Sad phantom is sad
-    _h: PhantomData<H>,
+    _ah: PhantomData<AH>,
+    _bh: PhantomData<BH>,
     _g: PhantomData<G>,
 }
 
-impl<E: JubjubEngine, C: Circuit<E>, H: Hasher, G: Graph<H>, P: ParameterSetMetadata>
-    CacheableParameters<E, C, P> for DrgPoRepCompound<H, G>
+impl<E, C, AH, BH, G, P> CacheableParameters<E, C, P> for DrgPoRepCompound<AH, BH, G>
+where
+    E: JubjubEngine,
+    C: Circuit<E>,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH>,
+    P: ParameterSetMetadata,
 {
     fn cache_prefix() -> String {
-        format!("drg-proof-of-replication-{}", H::name())
+        format!("drg-proof-of-replication-{}-{}", AH::name(), BH::name())
     }
 }
 
-impl<'a, H, G> CompoundProof<'a, Bls12, DrgPoRep<'a, H, G>, DrgPoRepCircuit<'a, Bls12, H>>
-    for DrgPoRepCompound<H, G>
+impl<'a, AH, BH, G>
+    CompoundProof<'a, Bls12, DrgPoRep<'a, AH, BH, G>, DrgPoRepCircuit<'a, Bls12, AH, BH>>
+    for DrgPoRepCompound<AH, BH, G>
 where
-    H: 'a + Hasher,
-    G: 'a + Graph<H> + ParameterSetMetadata + Sync + Send,
+    AH: 'static + Hasher,
+    BH: 'static + Hasher,
+    G: 'a + Graph<AH, BH> + ParameterSetMetadata + Sync + Send,
 {
     fn generate_public_inputs(
-        pub_in: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicInputs,
-        pub_params: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
+        pub_in: &<DrgPoRep<'a, AH, BH, G> as ProofScheme<'a>>::PublicInputs,
+        pub_params: &<DrgPoRep<'a, AH, BH, G> as ProofScheme<'a>>::PublicParams,
         // We can ignore k because challenges are generated by caller and included
         // in PublicInputs.
         _k: Option<usize>,
@@ -199,7 +220,7 @@ where
                     commitment: comm_r,
                     challenge: node,
                 };
-                let por_inputs = PoRCompound::<H>::generate_public_inputs(
+                let por_inputs = PoRCompound::<AH, BH>::generate_public_inputs(
                     &por_pub_inputs,
                     &por_pub_params,
                     None,
@@ -213,20 +234,24 @@ where
                 challenge: *challenge,
             };
 
-            let por_inputs =
-                PoRCompound::<H>::generate_public_inputs(&por_pub_inputs, &por_pub_params, None);
+            let por_inputs = PoRCompound::<AH, BH>::generate_public_inputs(
+                &por_pub_inputs,
+                &por_pub_params,
+                None,
+            );
+
             input.extend(por_inputs);
         }
         input
     }
 
     fn circuit<'b>(
-        public_inputs: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicInputs,
-        component_private_inputs: <DrgPoRepCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
-        proof: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::Proof,
-        public_params: &'b <DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
+        public_inputs: &'b <DrgPoRep<'a, AH, BH, G> as ProofScheme<'a>>::PublicInputs,
+        component_private_inputs: <DrgPoRepCircuit<'a, Bls12, AH, BH> as CircuitComponent>::ComponentPrivateInputs,
+        proof: &'b <DrgPoRep<'a, AH, BH, G> as ProofScheme<'a>>::Proof,
+        public_params: &'b <DrgPoRep<'a, AH, BH, G> as ProofScheme<'a>>::PublicParams,
         engine_params: &'a <Bls12 as JubjubEngine>::Params,
-    ) -> DrgPoRepCircuit<'a, Bls12, H> {
+    ) -> DrgPoRepCircuit<'a, Bls12, AH, BH> {
         let challenges = public_params.challenges_count;
         let len = proof.nodes.len();
 
@@ -243,7 +268,7 @@ where
         let replica_nodes_paths: Vec<_> = proof
             .replica_nodes
             .iter()
-            .map(|node| node.proof.as_options())
+            .map(|node| node.proof.as_circuit_auth_path())
             .collect();
 
         let is_private = public_params.private;
@@ -279,7 +304,7 @@ where
             .map(|parents| {
                 let p: Vec<_> = parents
                     .iter()
-                    .map(|(_, parent)| parent.proof.as_options())
+                    .map(|(_, parent)| parent.proof.as_circuit_auth_path())
                     .collect();
                 p
             })
@@ -294,7 +319,7 @@ where
         let data_nodes_paths: Vec<_> = proof
             .nodes
             .iter()
-            .map(|node| node.proof.as_options())
+            .map(|node| node.proof.as_circuit_auth_path())
             .collect();
 
         assert_eq!(
@@ -317,14 +342,15 @@ where
             replica_id: replica_id.map(Into::into),
             degree: public_params.graph.degree(),
             private: public_params.private,
-            _h: Default::default(),
+            _ah: PhantomData,
+            _bh: PhantomData,
         }
     }
 
     fn blank_circuit(
-        public_params: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
+        public_params: &<DrgPoRep<'a, AH, BH, G> as ProofScheme<'a>>::PublicParams,
         params: &'a <Bls12 as JubjubEngine>::Params,
-    ) -> DrgPoRepCircuit<'a, Bls12, H> {
+    ) -> DrgPoRepCircuit<'a, Bls12, AH, BH> {
         let depth = public_params.graph.merkle_tree_depth() as usize;
         let degree = public_params.graph.degree();
         let challenges_count = public_params.challenges_count;
@@ -353,7 +379,8 @@ where
             replica_id: None,
             degree: public_params.graph.degree(),
             private: public_params.private,
-            _h: Default::default(),
+            _ah: PhantomData,
+            _bh: PhantomData,
         }
     }
 }
@@ -381,57 +408,67 @@ where
 ///
 /// Total = 2 + replica_parents.len()
 ///
-impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for DrgPoRepCircuit<'a, E, H> {
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError>
+impl<'a, E, AH, BH> Circuit<E> for DrgPoRepCircuit<'a, E, AH, BH>
+where
+    E: JubjubEngine,
+    AH: Hasher,
+    BH: Hasher,
+{
+    fn synthesize<CS>(self, cs: &mut CS) -> Result<(), SynthesisError>
     where
-        E: JubjubEngine,
+        CS: ConstraintSystem<E>,
     {
         let params = self.params;
-
-        let replica_id = self.replica_id;
+        let sloth_iter = self.sloth_iter;
+        let replica_id = self
+            .replica_id
+            .as_ref()
+            .ok_or(SynthesisError::AssignmentMissing)?;
         let replica_root = self.replica_root;
         let data_root = self.data_root;
-
         let degree = self.degree;
-        let nodes = self.data_nodes.len();
+        let n_challenges = self.data_nodes.len();
 
-        assert_eq!(self.replica_nodes.len(), nodes);
-        assert_eq!(self.replica_nodes_paths.len(), nodes);
-        assert_eq!(self.replica_parents.len(), nodes);
-        assert_eq!(self.replica_parents_paths.len(), nodes);
+        assert_eq!(self.replica_nodes.len(), n_challenges);
+        assert_eq!(self.replica_nodes_paths.len(), n_challenges);
+        assert_eq!(self.replica_parents.len(), n_challenges);
+        assert_eq!(self.replica_parents_paths.len(), n_challenges);
+        assert_eq!(self.data_nodes_paths.len(), n_challenges);
 
-        assert_eq!(self.data_nodes_paths.len(), nodes);
+        let replica_id_bytes = fr_into_bytes::<E>(replica_id);
 
-        let raw_bytes; // Need let here so borrow in match lives long enough.
-        let replica_id_bytes = match replica_id {
-            Some(replica_id) => {
-                raw_bytes = fr_into_bytes::<E>(&replica_id);
-                Some(raw_bytes.as_slice())
-            }
-            // Used in parameter generation or when circuit is created only for
-            // structure and input count.
-            None => None,
-        };
-
-        // get the replica_id in bits
-        let replica_id_bits =
-            bytes_into_boolean_vec(cs.namespace(|| "replica_id_bits"), replica_id_bytes, 256)?;
-
-        multipack::pack_into_inputs(
-            cs.namespace(|| "replica_id"),
-            &replica_id_bits[0..Fr::CAPACITY as usize],
+        // Note that while the size of the replica-id is 256 bits (32 bytes), the `256` argument
+        // value is not being used in `bytes_into_boolean_vec`.
+        let replica_id_bits = bytes_into_boolean_vec(
+            cs.namespace(|| "replica_id_bits"),
+            Some(replica_id_bytes.as_slice()),
+            256,
         )?;
 
-        let replica_root_var = Root::Var(replica_root.allocated(cs.namespace(|| "replica_root"))?);
-        let data_root_var = Root::Var(data_root.allocated(cs.namespace(|| "data_root"))?);
+        // Compactly allocate `replica_id_bits` as a single public input (each bit is not allocated
+        // individually, many bits are allocated using a single `Fr` allocation).
+        multipack::pack_into_inputs(
+            cs.namespace(|| "replica_id"),
+            &replica_id_bits[..Fr::CAPACITY as usize],
+        )?;
 
-        for i in 0..self.data_nodes.len() {
-            let mut cs = cs.namespace(|| format!("challenge_{}", i));
-            // ensure that all inputs are well formed
+        // Allocate the replica tree's root if it has not already been allocated.
+        let replica_root = replica_root
+            .allocated(cs.namespace(|| "replica_root"))
+            .map(Root::Var)?;
+
+        // Allocate the data tree's root if it has not already been allocated.
+        let data_root = data_root
+            .allocated(cs.namespace(|| "data_root"))
+            .map(Root::Var)?;
+
+        for i in 0..n_challenges {
+            let mut cs_challenge = cs.namespace(|| format!("challenge_{}", i));
+
+            // Ensure that all inputs are well formed.
             let replica_node_path = &self.replica_nodes_paths[i];
             let replica_parents_paths = &self.replica_parents_paths[i];
             let data_node_path = &self.data_nodes_paths[i];
-
             let replica_node = &self.replica_nodes[i];
             let replica_parents = &self.replica_parents[i];
             let data_node = &self.data_nodes[i];
@@ -439,90 +476,96 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for DrgPoRepCircuit<'a, E, H> {
             assert_eq!(data_node_path.len(), replica_node_path.len());
             assert_eq!(replica_node.is_some(), data_node.is_some());
 
-            // Inclusion checks
+            // Inclusion checks. We isolate the below code into its own code block so that our
+            // mutable borrow to `cs_challenge` via `cs_inclusion` is dropped when we are done using
+            // it (when `cs_inclusion` goes out of scope). If we don't isolate this mutable borrow
+            // lexigraphically, then the subsequent mutable borrow to `cs_challenge` (via
+            // `cs_encoding`) in the encoding checks would not compile.
             {
-                let mut cs = cs.namespace(|| "inclusion_checks");
-                PoRCircuit::<_, H>::synthesize(
-                    cs.namespace(|| "replica_inclusion"),
+                let mut cs_inclusion = cs_challenge.namespace(|| "inclusion_checks");
+
+                // Validate the challenge's replica tree Merkle proof.
+                PoRCircuit::<E, AH, BH>::synthesize(
+                    cs_inclusion.namespace(|| "replica_inclusion"),
                     &params,
                     *replica_node,
                     replica_node_path.clone(),
-                    replica_root_var.clone(),
+                    replica_root.clone(),
                     self.private,
                 )?;
 
-                // validate each replica_parents merkle proof
+                // Validate the Merkle proof for each of the challenge's parents.
                 for j in 0..replica_parents.len() {
-                    PoRCircuit::<_, H>::synthesize(
-                        cs.namespace(|| format!("parents_inclusion_{}", j)),
+                    PoRCircuit::<E, AH, BH>::synthesize(
+                        cs_inclusion.namespace(|| format!("parents_inclusion_{}", j)),
                         &params,
                         replica_parents[j],
                         replica_parents_paths[j].clone(),
-                        replica_root_var.clone(),
+                        replica_root.clone(),
                         self.private,
                     )?;
                 }
 
-                // validate data node commitment
-                PoRCircuit::<_, H>::synthesize(
-                    cs.namespace(|| "data_inclusion"),
+                // Validate the challenge's data tree Merkle proof.
+                PoRCircuit::<E, AH, BH>::synthesize(
+                    cs_inclusion.namespace(|| "data_inclusion"),
                     &params,
                     *data_node,
                     data_node_path.clone(),
-                    data_root_var.clone(),
+                    data_root.clone(),
                     self.private,
                 )?;
             }
 
-            // Encoding checks
-            {
-                let mut cs = cs.namespace(|| "encoding_checks");
-                // get the parents into bits
-                let parents_bits: Vec<Vec<Boolean>> = {
-                    replica_parents
-                        .iter()
-                        .enumerate()
-                        .map(|(i, val)| -> Result<Vec<Boolean>, SynthesisError> {
-                            let mut v = boolean::field_into_boolean_vec_le(
-                                cs.namespace(|| format!("parents_{}_bits", i)),
-                                *val,
-                            )?;
-                            // sad padding is sad
-                            while v.len() < 256 {
-                                v.push(boolean::Boolean::Constant(false));
-                            }
+            // Encoding checks.
+            let mut cs_encoding = cs_challenge.namespace(|| "encoding_checks");
 
-                            Ok(v)
-                        })
-                        .collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?
-                };
+            // Convert (and allocate) each parent's value into bits.
+            let parents_bits = replica_parents
+                .iter()
+                .enumerate()
+                .map(|(i, val)| {
+                    let mut bits = field_into_boolean_vec_le(
+                        cs_encoding.namespace(|| format!("parents_{}_bits", i)),
+                        *val,
+                    )?;
 
-                // generate the encryption key
-                let key = kdf(
-                    cs.namespace(|| "kdf"),
-                    replica_id_bits.clone(),
-                    parents_bits,
-                    degree,
-                )?;
+                    // Add padding if necessary.
+                    let len = bits.len();
+                    let pad_len = 256 - len % 256;
+                    let new_len = len + pad_len;
+                    bits.resize(new_len, Boolean::Constant(false));
 
-                let decoded = sloth::decode(
-                    cs.namespace(|| "sloth_decode"),
-                    &key,
-                    *replica_node,
-                    self.sloth_iter,
-                )?;
+                    Ok(bits)
+                })
+                .collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?;
 
-                // TODO this should not be here, instead, this should be the leaf Fr in the data_auth_path
-                // TODO also note that we need to change/makesurethat the leaves are the data, instead of hashes of the data
-                let expected = num::AllocatedNum::alloc(cs.namespace(|| "data node"), || {
-                    data_node.ok_or_else(|| SynthesisError::AssignmentMissing)
-                })?;
+            // Generate the encryption key.
+            let key = kdf(
+                cs_encoding.namespace(|| "kdf"),
+                replica_id_bits.clone(),
+                parents_bits,
+                degree,
+            )?;
 
-                // ensure the encrypted data and data_node match
-                constraint::equal(&mut cs, || "equality", &expected, &decoded);
-            }
+            let decoded = sloth::decode(
+                cs_encoding.namespace(|| "sloth_decode"),
+                &key,
+                *replica_node,
+                sloth_iter,
+            )?;
+
+            // TODO: this should not be here, instead, this should be the leaf Fr in
+            // the data_auth_path.
+            // TODO: also note that we need to change/makesure that the leaves are the data,
+            // instead of hashes of the data.
+
+            let expected = alloc_priv_num(&mut cs_encoding, "data node", data_node.unwrap());
+
+            // Ensure that the encrypted data and `data_node` match.
+            constraint::equal(&mut cs_encoding, || "equality", &expected, &decoded);
         }
-        // profit!
+
         Ok(())
     }
 }
@@ -536,6 +579,7 @@ mod tests {
     use crate::drgraph::{graph_height, new_seed, BucketGraph};
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
     use crate::hasher::{Blake2sHasher, Hasher, PedersenHasher};
+    use crate::hybrid_merkle::MIN_N_LEAVES;
     use crate::porep::PoRep;
     use crate::proof::{NoRequirements, ProofScheme};
     use crate::util::data_at_node;
@@ -546,10 +590,17 @@ mod tests {
 
     #[test]
     fn drgporep_input_circuit_with_bls12_381() {
+        type DrgPoRep<'a> = drgporep::DrgPoRep<
+            'a,
+            PedersenHasher,
+            Blake2sHasher,
+            BucketGraph<PedersenHasher, Blake2sHasher>,
+        >;
+
         let params = &JubjubBls12::new();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let nodes = 12;
+        let nodes = MIN_N_LEAVES;
         let degree = 6;
         let challenge = 2;
         let sloth_iter = 1;
@@ -581,40 +632,31 @@ mod tests {
             challenges_count: 1,
         };
 
-        let pp = drgporep::DrgPoRep::<PedersenHasher, BucketGraph<_>>::setup(&sp)
-            .expect("failed to create drgporep setup");
-        let (tau, aux) = drgporep::DrgPoRep::<PedersenHasher, _>::replicate(
-            &pp,
-            &replica_id.into(),
-            data.as_mut_slice(),
-            None,
-        )
-        .expect("failed to replicate");
+        let pp = DrgPoRep::setup(&sp).expect("failed to create drgporep setup");
+
+        let (tau, aux) = DrgPoRep::replicate(&pp, &replica_id.into(), data.as_mut_slice(), None)
+            .expect("failed to replicate");
 
         let pub_inputs = drgporep::PublicInputs {
             replica_id: Some(replica_id.into()),
             challenges: vec![challenge],
             tau: Some(tau.into()),
         };
-        let priv_inputs = drgporep::PrivateInputs::<PedersenHasher> {
+
+        let priv_inputs = drgporep::PrivateInputs::<PedersenHasher, Blake2sHasher> {
             tree_d: &aux.tree_d,
             tree_r: &aux.tree_r,
         };
 
-        let proof_nc =
-            drgporep::DrgPoRep::<PedersenHasher, _>::prove(&pp, &pub_inputs, &priv_inputs)
-                .expect("failed to prove");
+        let proof_nc = DrgPoRep::prove(&pp, &pub_inputs, &priv_inputs).expect("failed to prove");
 
-        assert!(
-            drgporep::DrgPoRep::<PedersenHasher, _>::verify(&pp, &pub_inputs, &proof_nc)
-                .expect("failed to verify"),
-            "failed to verify (non circuit)"
-        );
+        let is_valid = DrgPoRep::verify(&pp, &pub_inputs, &proof_nc).expect("failed to verify");
+        assert!(is_valid, "failed to verify (non circuit)");
 
         let replica_node: Option<Fr> = Some(proof_nc.replica_nodes[0].data.into());
-
-        let replica_node_path = proof_nc.replica_nodes[0].proof.as_options();
+        let replica_node_path = proof_nc.replica_nodes[0].proof.as_circuit_auth_path();
         let replica_root = Root::Val(Some(proof_nc.replica_root.into()));
+
         let replica_parents = proof_nc
             .replica_parents
             .iter()
@@ -624,17 +666,18 @@ mod tests {
                     .collect()
             })
             .collect();
+
         let replica_parents_paths: Vec<_> = proof_nc
             .replica_parents
             .iter()
             .map(|v| {
                 v.iter()
-                    .map(|(_, parent)| parent.proof.as_options())
+                    .map(|(_, parent)| parent.proof.as_circuit_auth_path())
                     .collect()
             })
             .collect();
 
-        let data_node_path = proof_nc.nodes[0].proof.as_options();
+        let data_node_path = proof_nc.nodes[0].proof.as_circuit_auth_path();
         let data_root = Root::Val(Some(proof_nc.data_root.into()));
         let replica_id = Some(replica_id);
 
@@ -645,12 +688,12 @@ mod tests {
         assert!(
             proof_nc.nodes[0]
                 .proof
-                .validate_data(&fr_into_bytes::<Bls12>(&data_node.unwrap())),
+                .validate_challenge_value_as_bytes(&fr_into_bytes::<Bls12>(&data_node.unwrap())),
             "failed to verify data commitment with data"
         );
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        DrgPoRepCircuit::<_, PedersenHasher>::synthesize(
+        DrgPoRepCircuit::<Bls12, PedersenHasher, Blake2sHasher>::synthesize(
             cs.namespace(|| "drgporep"),
             params,
             sloth_iter,
@@ -677,7 +720,7 @@ mod tests {
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
         assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 131216, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 463960, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
@@ -699,7 +742,7 @@ mod tests {
         let sloth_iter = 1;
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        DrgPoRepCircuit::<_, PedersenHasher>::synthesize(
+        DrgPoRepCircuit::<Bls12, PedersenHasher, Blake2sHasher>::synthesize(
             cs.namespace(|| "drgporep"),
             params,
             sloth_iter,
@@ -718,26 +761,36 @@ mod tests {
         .expect("failed to synthesize circuit");
 
         assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 363392, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 7683760, "wrong number of constraints");
     }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn test_drgporep_compound_pedersen() {
-        drgporep_test_compound::<PedersenHasher>();
+        drgporep_test_compound::<PedersenHasher, PedersenHasher>();
     }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn test_drgporep_compound_blake2s() {
-        drgporep_test_compound::<Blake2sHasher>();
+        drgporep_test_compound::<Blake2sHasher, Blake2sHasher>();
     }
 
-    fn drgporep_test_compound<H: Hasher>() {
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn test_drgporep_compound_pedersen_blake2s() {
+        drgporep_test_compound::<PedersenHasher, Blake2sHasher>();
+    }
+
+    fn drgporep_test_compound<AH, BH>()
+    where
+        AH: 'static + Hasher,
+        BH: 'static + Hasher,
+    {
         let params = &JubjubBls12::new();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let nodes = 5;
+        let nodes = MIN_N_LEAVES;
         let degree = 2;
         let challenges = vec![1, 3];
         let sloth_iter = 1;
@@ -766,10 +819,10 @@ mod tests {
             partitions: None,
         };
 
-        let public_params =
-            DrgPoRepCompound::<H, BucketGraph<_>>::setup(&setup_params).expect("setup failed");
+        let public_params = DrgPoRepCompound::<AH, BH, BucketGraph<AH, BH>>::setup(&setup_params)
+            .expect("setup failed");
 
-        let (tau, aux) = drgporep::DrgPoRep::<H, _>::replicate(
+        let (tau, aux) = drgporep::DrgPoRep::<AH, BH, BucketGraph<AH, BH>>::replicate(
             &public_params.vanilla_params,
             &replica_id.into(),
             data.as_mut_slice(),
@@ -777,7 +830,7 @@ mod tests {
         )
         .expect("failed to replicate");
 
-        let public_inputs = drgporep::PublicInputs::<H::Domain> {
+        let public_inputs = drgporep::PublicInputs::<AH::Domain, BH::Domain> {
             replica_id: Some(replica_id.into()),
             challenges,
             tau: Some(tau),
@@ -787,7 +840,8 @@ mod tests {
             tree_r: &aux.tree_r,
         };
 
-        // This duplication is necessary so public_params don't outlive public_inputs and private_inputs.
+        // This duplication is necessary so public_params don't outlive public_inputs and
+        // private_inputs.
         let setup_params = compound_proof::SetupParams {
             vanilla_params: &drgporep::SetupParams {
                 drg: drgporep::DrgParams {
@@ -804,15 +858,16 @@ mod tests {
             partitions: None,
         };
 
-        let public_params =
-            DrgPoRepCompound::<H, BucketGraph<_>>::setup(&setup_params).expect("setup failed");
+        let public_params = DrgPoRepCompound::<AH, BH, BucketGraph<AH, BH>>::setup(&setup_params)
+            .expect("setup failed");
 
         {
-            let (circuit, inputs) = DrgPoRepCompound::<H, _>::circuit_for_test(
-                &public_params,
-                &public_inputs,
-                &private_inputs,
-            );
+            let (circuit, inputs) =
+                DrgPoRepCompound::<AH, BH, BucketGraph<AH, BH>>::circuit_for_test(
+                    &public_params,
+                    &public_inputs,
+                    &private_inputs,
+                );
 
             let mut cs = TestConstraintSystem::new();
 
@@ -822,11 +877,13 @@ mod tests {
         }
 
         {
-            let gparams =
-                DrgPoRepCompound::<H, _>::groth_params(&public_params.vanilla_params, &params)
-                    .expect("failed to get groth params");
+            let gparams = DrgPoRepCompound::<AH, BH, BucketGraph<AH, BH>>::groth_params(
+                &public_params.vanilla_params,
+                &params,
+            )
+            .expect("failed to get groth params");
 
-            let proof = DrgPoRepCompound::<H, _>::prove(
+            let proof = DrgPoRepCompound::<AH, BH, BucketGraph<AH, BH>>::prove(
                 &public_params,
                 &public_inputs,
                 &private_inputs,
@@ -834,7 +891,7 @@ mod tests {
             )
             .expect("failed while proving");
 
-            let verified = DrgPoRepCompound::<H, _>::verify(
+            let verified = DrgPoRepCompound::<AH, BH, BucketGraph<AH, BH>>::verify(
                 &public_params,
                 &public_inputs,
                 &proof,

@@ -11,7 +11,7 @@ use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::vdf_post::VDFPostCompound;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
+use storage_proofs::drgraph::{DefaultAlphaHasher, DefaultBetaHasher, Graph};
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
 use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::hasher::{Domain, Hasher};
@@ -115,7 +115,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
     let prover_id = pad_safe_fr(prover_id_in);
     // Zero-pad the sector_id to 32 bytes (and therefore Fr32).
     let sector_id = pad_safe_fr(sector_id_in);
-    let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
+    let replica_id = replica_id::<DefaultBetaHasher>(prover_id, sector_id);
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: &setup_params(
@@ -149,7 +149,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         seed: None,
     };
 
-    let private_inputs = layered_drgporep::PrivateInputs::<DefaultTreeHasher> {
+    let private_inputs = layered_drgporep::PrivateInputs::<DefaultAlphaHasher, DefaultBetaHasher> {
         aux,
         tau: tau.layer_taus,
     };
@@ -210,7 +210,7 @@ pub fn verify_seal(
     let sector_bytes = PaddedBytesAmount::from(porep_config);
     let prover_id = pad_safe_fr(prover_id_in);
     let sector_id = pad_safe_fr(sector_id_in);
-    let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
+    let replica_id = replica_id::<DefaultBetaHasher>(prover_id, sector_id);
 
     let comm_r = bytes_into_fr::<Bls12>(&comm_r)?;
     let comm_d = bytes_into_fr::<Bls12>(&comm_d)?;
@@ -228,10 +228,13 @@ pub fn verify_seal(
     let compound_public_params: compound_proof::PublicParams<
         '_,
         Bls12,
-        ZigZagDrgPoRep<'_, DefaultTreeHasher>,
+        ZigZagDrgPoRep<'_, DefaultAlphaHasher, DefaultBetaHasher>,
     > = ZigZagCompound::setup(&compound_setup_params)?;
 
-    let public_inputs = layered_drgporep::PublicInputs::<<DefaultTreeHasher as Hasher>::Domain> {
+    let public_inputs = layered_drgporep::PublicInputs::<
+        <DefaultAlphaHasher as Hasher>::Domain,
+        <DefaultBetaHasher as Hasher>::Domain,
+    > {
         replica_id,
         tau: Some(Tau {
             comm_r: comm_r.into(),
@@ -279,7 +282,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
 ) -> error::Result<(UnpaddedBytesAmount)> {
     let prover_id = pad_safe_fr(prover_id_in);
     let sector_id = pad_safe_fr(sector_id_in);
-    let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
+    let replica_id = replica_id::<DefaultBetaHasher>(prover_id, sector_id);
 
     let f_in = File::open(sealed_path)?;
     let mut data = Vec::new();

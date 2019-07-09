@@ -21,7 +21,7 @@ fn merkle_benchmark(c: &mut Criterion) {
             move |b, nodes| {
                 let mut rng = thread_rng();
                 let data: Vec<u8> = (0..32 * *nodes).map(|_| rng.gen()).collect();
-                let graph = ZigZagBucketGraph::<Blake2sHasher>::new_zigzag(
+                let graph = ZigZagBucketGraph::<Blake2sHasher, Blake2sHasher>::new_zigzag(
                     *nodes,                   // #nodes
                     8,                        // degree
                     DEFAULT_EXPANSION_DEGREE, // expansion degree,
@@ -35,7 +35,7 @@ fn merkle_benchmark(c: &mut Criterion) {
         .with_function("pedersen", move |b, nodes| {
             let mut rng = thread_rng();
             let data: Vec<u8> = (0..32 * *nodes).map(|_| rng.gen()).collect();
-            let graph = ZigZagBucketGraph::<PedersenHasher>::new_zigzag(
+            let graph = ZigZagBucketGraph::<PedersenHasher, PedersenHasher>::new_zigzag(
                 *nodes,                   // #nodes
                 8,                        // degree
                 DEFAULT_EXPANSION_DEGREE, // expansion degree,

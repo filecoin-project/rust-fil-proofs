@@ -168,9 +168,9 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph0 = BucketGraph::<PedersenHasher>::new(256, 5, 0, new_seed());
+        let graph0 = BucketGraph::<PedersenHasher, PedersenHasher>::new(256, 5, 0, new_seed());
         let tree0 = graph0.merkle_tree(data0.as_slice()).unwrap();
-        let graph1 = BucketGraph::<PedersenHasher>::new(256, 5, 0, new_seed());
+        let graph1 = BucketGraph::<PedersenHasher, PedersenHasher>::new(256, 5, 0, new_seed());
         let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
 
         let pub_inputs = beacon_post::PublicInputs {

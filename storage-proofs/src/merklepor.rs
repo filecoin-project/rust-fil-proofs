@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
-use crate::drgporep::DataProof;
+use serde::{Deserialize, Serialize};
+
 use crate::drgraph::graph_height;
 use crate::error::*;
 use crate::hasher::{Domain, Hasher};
@@ -59,7 +60,32 @@ impl<'a, H: Hasher> PrivateInputs<'a, H> {
 }
 
 /// The proof that is returned from `prove`.
-pub type Proof<H> = DataProof<H>;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Proof<H>
+where
+    H: Hasher,
+{
+    #[serde(bound(
+        serialize = "MerkleProof<H>: Serialize",
+        deserialize = "MerkleProof<H>: Deserialize<'de>"
+    ))]
+    pub proof: MerkleProof<H>,
+    pub data: H::Domain,
+}
+
+impl<H> Proof<H>
+where
+    H: Hasher,
+{
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut out = self.proof.serialize();
+        let len = out.len();
+        out.resize(len + 32, 0u8);
+        // Unwrapping here is safe, all hash domain elements are 32 bytes long.
+        self.data.write_bytes(&mut out[len..]).unwrap();
+        out
+    }
+}
 
 #[derive(Debug)]
 pub struct SetupParams {
@@ -204,11 +230,11 @@ mod tests {
     fn make_bogus_proof<H: Hasher>(
         pub_inputs: &PublicInputs<H::Domain>,
         rng: &mut XorShiftRng,
-    ) -> DataProof<H> {
+    ) -> Proof<H> {
         let bogus_leaf: H::Domain = rng.gen();
         let hashed_leaf = H::Function::hash_leaf(&bogus_leaf);
 
-        DataProof {
+        Proof {
             data: bogus_leaf,
             proof: make_proof_for_test(
                 pub_inputs.commitment.unwrap(),

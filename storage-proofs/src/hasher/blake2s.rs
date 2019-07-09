@@ -1,4 +1,4 @@
-use std::fmt;
+use std::fmt::{self, Debug, Formatter};
 use std::hash::Hasher as StdHasher;
 
 use bellperson::{ConstraintSystem, SynthesisError};
@@ -15,6 +15,7 @@ use rand::{Rand, Rng};
 use super::{Domain, HashFunction, Hasher};
 use crate::crypto::sloth;
 use crate::error::*;
+use crate::hasher::pedersen::PedersenDomain;
 
 #[derive(Default, Copy, Clone, PartialEq, Eq, Debug)]
 pub struct Blake2sHasher {}
@@ -88,13 +89,24 @@ impl StdHasher for Blake2sFunction {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, PartialOrd, Ord, Default, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]
 pub struct Blake2sDomain(pub [u8; 32]);
 
 impl Blake2sDomain {
     fn trim_to_fr32(&mut self) {
         // strip last two bits, to ensure result is in Fr.
         self.0[31] &= 0b0011_1111;
+    }
+}
+
+impl Debug for Blake2sDomain {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let hex_str: String = self.0.iter().fold("0x".to_string(), |mut acc, byte| {
+            acc.push_str(&format!("{:02x}", byte));
+            acc
+        });
+
+        f.debug_tuple("Blake2sDomain").field(&hex_str).finish()
     }
 }
 
@@ -132,6 +144,12 @@ impl From<FrRepr> for Blake2sDomain {
         val.write_le(&mut res.0[0..32]).unwrap();
 
         res
+    }
+}
+
+impl From<PedersenDomain> for Blake2sDomain {
+    fn from(pedersen: PedersenDomain) -> Self {
+        Blake2sDomain::from(pedersen.0)
     }
 }
 

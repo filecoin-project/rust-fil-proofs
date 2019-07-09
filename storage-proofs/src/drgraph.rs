@@ -1,12 +1,15 @@
 use std::cmp;
+use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use rand::{ChaChaRng, OsRng, Rng, SeedableRng};
-use rayon::prelude::*;
+use rayon::iter::{FromParallelIterator, IntoParallelIterator, ParallelIterator};
 
 use crate::error::*;
+use crate::hasher::blake2s::Blake2sHasher;
 use crate::hasher::pedersen::PedersenHasher;
 use crate::hasher::{Domain, Hasher};
+use crate::hybrid_merkle::HybridMerkleTree;
 use crate::merkle::MerkleTree;
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::{data_at_node, NODE_SIZE};
@@ -22,20 +25,28 @@ use std::path::Path;
 #[cfg(feature = "disk-trees")]
 use std::path::PathBuf;
 
+// (jake) TODO - remove
 /// The default hasher currently in use.
 pub type DefaultTreeHasher = PedersenHasher;
+
+pub type DefaultAlphaHasher = PedersenHasher;
+pub type DefaultBetaHasher = Blake2sHasher;
 
 pub const PARALLEL_MERKLE: bool = true;
 
 /// A depth robust graph.
-pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
-    /// Returns the expected size of all nodes in the graph.
+pub trait Graph<AH, BH>: Clone + Debug + Eq + PartialEq
+where
+    AH: Hasher,
+    BH: Hasher,
+{
+    /// Returns the expected size in bytes of all nodes in the graph.
     fn expected_size(&self) -> usize {
         self.size() * NODE_SIZE
     }
 
     /// Builds a merkle tree based on the given data.
-    fn merkle_tree<'a>(&self, data: &'a [u8]) -> Result<MerkleTree<H::Domain, H::Function>> {
+    fn merkle_tree<'a>(&self, data: &'a [u8]) -> Result<MerkleTree<AH::Domain, AH::Function>> {
         self.merkle_tree_aux(data, PARALLEL_MERKLE)
     }
 
@@ -44,7 +55,7 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
         &self,
         data: &'a [u8],
         parallel: bool,
-    ) -> Result<MerkleTree<H::Domain, H::Function>> {
+    ) -> Result<MerkleTree<AH::Domain, AH::Function>> {
         if data.len() != (NODE_SIZE * self.size()) as usize {
             return Err(Error::InvalidMerkleTreeArgs(
                 data.len(),
@@ -56,11 +67,10 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
         let f = |i| {
             let d = data_at_node(&data, i).expect("data_at_node math failed");
             // TODO/FIXME: This can panic. FOR NOW, let's leave this since we're experimenting with
-            // optimization paths. However, we need to ensure that bad input will not lead to a panic
-            // that isn't caught by the FPS API.
-            // Unfortunately, it's not clear how to perform this error-handling in the parallel
-            // iterator case.
-            H::Domain::try_from_bytes(d).expect("failed to convert node data to domain element")
+            // optimization paths. However, we need to ensure that bad input will not lead to a
+            // panic that isn't caught by the FPS API. Unfortunately, it's not clear how to perform
+            // this error-handling in the parallel iterator case.
+            AH::Domain::try_from_bytes(d).expect("failed to convert node data to domain element")
         };
 
         if parallel {
@@ -72,14 +82,13 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
         }
     }
 
-    /// Builds a merkle tree based on the given data and stores it in `path`
-    /// (if set).
+    /// Builds a merkle tree based on the given data and stores it in `path` (if set).
     #[cfg(feature = "disk-trees")]
     fn merkle_tree_path<'a>(
         &self,
         data: &'a [u8],
         path: Option<&Path>,
-    ) -> Result<MerkleTree<H::Domain, H::Function>> {
+    ) -> Result<MerkleTree<AH::Domain, AH::Function>> {
         self.merkle_tree_aux_path(data, PARALLEL_MERKLE, path)
     }
 
@@ -89,7 +98,7 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
         data: &'a [u8],
         parallel: bool,
         path: Option<&Path>,
-    ) -> Result<MerkleTree<H::Domain, H::Function>> {
+    ) -> Result<MerkleTree<AH::Domain, AH::Function>> {
         if data.len() != (NODE_SIZE * self.size()) as usize {
             return Err(Error::InvalidMerkleTreeArgs(
                 data.len(),
@@ -100,20 +109,21 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
 
         let f = |i| {
             let d = data_at_node(&data, i).expect("data_at_node math failed");
+
             // TODO/FIXME: This can panic. FOR NOW, let's leave this since we're experimenting with
-            // optimization paths. However, we need to ensure that bad input will not lead to a panic
-            // that isn't caught by the FPS API.
-            // Unfortunately, it's not clear how to perform this error-handling in the parallel
-            // iterator case.
-            H::Domain::try_from_bytes(d).unwrap()
+            // optimization paths. However, we need to ensure that bad input will not lead to a
+            // panic that isn't caught by the FPS API. Unfortunately, it's not clear how to perform
+            // this error-handling in the parallel iterator case.
+            AH::Domain::try_from_bytes(d).expect("failed to convert node data to domain element")
         };
 
         if let Some(path) = path {
             let path_prefix = path.to_str().expect("couldn't convert path to string");
             let leaves_path = &PathBuf::from([path_prefix, "leaves"].join("-"));
             let top_half_path = &PathBuf::from([path_prefix, "top-half"].join("-"));
-            // FIXME: There is probably a more direct way of doing this without
-            //  reconverting to string.
+
+            // FIXME: There is probably a more direct way of doing this without reconverting to
+            // string.
 
             info!(SP_LOG, "creating leaves tree mmap-file"; "path-prefix" => leaves_path.to_str());
             info!(SP_LOG, "creating top half tree mmap-file"; "path-prefix" => top_half_path.to_str());
@@ -123,19 +133,15 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
             let top_half_disk_mmap =
                 DiskMmapStore::new_with_path(next_pow2(self.size()), top_half_path);
 
-            // FIXME: `new_with_path` is using the `from_iter` implementation,
-            //  instead the `parallel` flag should be passed also as argument
-            //  and decide *there* which code to use (merging this into the
-            //  `if` logic below).
+            // FIXME: `new_with_path` is using the `from_iter` implementation, instead the
+            // `parallel` flag should be passed also as argument and decide *there* which code to
+            // use (merging this into the `if` logic below).
 
             Ok(MerkleTree::from_data_with_store(
                 (0..self.size()).map(f),
                 leaves_disk_mmap,
                 top_half_disk_mmap,
             ))
-        // If path is `None` use the existing code that will eventually
-        // call the default `DiskMmapStore::new` creating a temporary
-        // file.
         } else if parallel {
             Ok(MerkleTree::from_par_iter(
                 (0..self.size()).into_par_iter().map(f),
@@ -145,7 +151,94 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
         }
     }
 
-    /// Returns the merkle tree depth.
+    /// Builds a Hybrid Merkle Tree based on the given data.
+    fn hybrid_merkle_tree<'a>(&self, data: &'a [u8]) -> Result<HybridMerkleTree<AH, BH>> {
+        self.hybrid_merkle_tree_aux(data, PARALLEL_MERKLE)
+    }
+
+    /// Builds a Hybrid Merkle Tree based on the given data. Optionally constructs the Hybrid
+    /// Merkle Tree's leaf trees in parallel if the `parallel` argument is set.
+    fn hybrid_merkle_tree_aux<'a>(
+        &self,
+        data: &'a [u8],
+        parallel: bool,
+    ) -> Result<HybridMerkleTree<AH, BH>> {
+        if data.len() != self.expected_size() {
+            return Err(Error::InvalidMerkleTreeArgs(
+                data.len(),
+                NODE_SIZE,
+                self.size(),
+            ));
+        }
+
+        let leaves = (0..self.size()).map(|i| {
+            let d = data_at_node(&data, i).expect("data_at_node math failed");
+            // TODO/FIXME: This can panic. FOR NOW, let's leave this since we're experimenting with
+            // optimization paths. However, we need to ensure that bad input will not lead to a
+            // panic that isn't caught by the FPS API.
+            BH::Domain::try_from_bytes(d).expect("failed to convert node data to domain element")
+        });
+
+        let tree = if parallel {
+            HybridMerkleTree::from_leaves_par(leaves)
+        } else {
+            HybridMerkleTree::from_leaves(leaves)
+        };
+
+        Ok(tree)
+    }
+
+    /// Builds a merkle tree based on the given data and stores it in `path` (if set).
+    #[cfg(feature = "disk-trees")]
+    fn hybrid_merkle_tree_path<'a>(
+        &self,
+        data: &'a [u8],
+        path: Option<&Path>,
+    ) -> Result<HybridMerkleTree<AH, BH>> {
+        self.hybrid_merkle_tree_aux_path(data, PARALLEL_MERKLE, path)
+    }
+
+    #[cfg(feature = "disk-trees")]
+    fn hybrid_merkle_tree_aux_path<'a>(
+        &self,
+        data: &'a [u8],
+        parallel: bool,
+        path: Option<&Path>,
+    ) -> Result<HybridMerkleTree<AH, BH>> {
+        if data.len() != self.expected_size() {
+            return Err(Error::InvalidMerkleTreeArgs(
+                data.len(),
+                NODE_SIZE,
+                self.size(),
+            ));
+        }
+
+        let leaves = (0..self.size()).map(|i| {
+            let d = data_at_node(&data, i).expect("data_at_node math failed");
+            // TODO/FIXME: This can panic. FOR NOW, let's leave this since we're experimenting with
+            // optimization paths. However, we need to ensure that bad input will not lead to a
+            // panic that isn't caught by the FPS API.
+            BH::Domain::try_from_bytes(d).expect("failed to convert node data to domain element")
+        });
+
+        let tree = if let Some(path) = path {
+            let path_prefix = path.to_str().expect("couldn't convert path to string");
+            // FIXME: `DiskMmapStore::new_with_path` is using the `from_iter` implementation,
+            // instead the `parallel` flag should be passed also as argument and decide *there*
+            // which code to use (merging this into the `if` logic below).
+            HybridMerkleTree::from_leaves_with_path(leaves, path_prefix)
+        } else if parallel {
+            // If path is `None` use the existing code that will eventually call the default
+            // `DiskMmapStore::new` creating a temporary file.
+            HybridMerkleTree::from_leaves_par(leaves)
+        } else {
+            HybridMerkleTree::from_leaves(leaves)
+        };
+
+        Ok(tree)
+    }
+
+    /// Returns the merkle tree depth/height (the number of layers - 1).
     fn merkle_tree_depth(&self) -> u64 {
         graph_height(self.size()) as u64
     }
@@ -156,7 +249,7 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
     /// the first element is the requested node. This will be used as indicator for nodes
     /// without parents.
     ///
-    /// The `parents` parameter is used to store the result. This is done fore performance
+    /// The `parents` parameter is used to store the result. This is done for performance
     /// reasons, so that the vector can be allocated outside this call.
     fn parents(&self, node: usize, parents: &mut [usize]);
 
@@ -180,22 +273,38 @@ pub fn graph_height(size: usize) -> usize {
 }
 
 /// Bucket sampling algorithm.
+///
+/// `BucketGraph` is generic over two type parameters `AH` and `BH` which stand for "Alpha Hasher"
+/// and "Beta Hasher" respectively. If the beta hasher `BH` is not specified, its type will default
+/// to the alpha hasher's type. This is meant to accomidate the use case where a user only needs to
+/// generate a Merkle Tree using the `BucketGraph` (Merkle Tree's use a single hasher) rather than a
+/// Hybrid Merkle Tree (which use two hashers).
 #[derive(Clone, Debug, PartialEq, Eq, Copy)]
-pub struct BucketGraph<H: Hasher> {
+pub struct BucketGraph<AH, BH = AH>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
     nodes: usize,
     base_degree: usize,
     seed: [u32; 7],
-    _h: PhantomData<H>,
+    _ah: PhantomData<AH>,
+    _bh: PhantomData<BH>,
 }
 
-impl<H: Hasher> ParameterSetMetadata for BucketGraph<H> {
+impl<AH, BH> ParameterSetMetadata for BucketGraph<AH, BH>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
     fn identifier(&self) -> String {
         // NOTE: Seed is not included because it does not influence parameter generation.
         format!(
-            "drgraph::BucketGraph{{size: {}; degree: {}; hasher: {}}}",
+            "drgraph::BucketGraph{{size: {}; degree: {}; alpha_hasher: {}, beta_hasher: {}}}",
             self.nodes,
             self.base_degree,
-            H::name(),
+            AH::name(),
+            BH::name(),
         )
     }
 
@@ -204,7 +313,11 @@ impl<H: Hasher> ParameterSetMetadata for BucketGraph<H> {
     }
 }
 
-impl<H: Hasher> Graph<H> for BucketGraph<H> {
+impl<AH, BH> Graph<AH, BH> for BucketGraph<AH, BH>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
     #[inline]
     fn parents(&self, node: usize, parents: &mut [usize]) {
         let m = self.base_degree;
@@ -272,7 +385,8 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
             nodes,
             base_degree,
             seed,
-            _h: PhantomData,
+            _ah: PhantomData,
+            _bh: PhantomData,
         }
     }
 }
@@ -290,6 +404,7 @@ mod tests {
 
     use crate::drgraph::new_seed;
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::hybrid_merkle::MIN_N_LEAVES;
 
     // Create and return an object of MmapMut backed by in-memory copy of data.
     pub fn mmap_from(data: &[u8]) -> MmapMut {
@@ -301,7 +416,11 @@ mod tests {
         mm
     }
 
-    fn graph_bucket<H: Hasher>() {
+    // Checks that a bucket graph is generating correct parents.
+    fn test_parents<H>()
+    where
+        H: Hasher,
+    {
         for size in vec![3, 10, 200, 2000] {
             for degree in 2..12 {
                 let g = BucketGraph::<H>::new(size, degree, 0, new_seed());
@@ -344,45 +463,67 @@ mod tests {
 
     #[test]
     fn graph_bucket_sha256() {
-        graph_bucket::<Sha256Hasher>();
+        test_parents::<Sha256Hasher>();
     }
 
     #[test]
     fn graph_bucket_blake2s() {
-        graph_bucket::<Blake2sHasher>();
+        test_parents::<Blake2sHasher>();
     }
 
     #[test]
     fn graph_bucket_pedersen() {
-        graph_bucket::<PedersenHasher>();
+        test_parents::<PedersenHasher>();
     }
 
-    fn gen_proof<H: Hasher>(parallel: bool) {
-        let g = BucketGraph::<H>::new(5, 3, 0, new_seed());
+    fn test_gen_merkle_proof_from_graph<H>(parallel: bool)
+    where
+        H: Hasher,
+    {
         let data = vec![2u8; NODE_SIZE * 5];
-
         let mmapped = &mmap_from(&data);
+        let g = BucketGraph::<H>::new(5, 3, 0, new_seed());
         let tree = g.merkle_tree_aux(mmapped, parallel).unwrap();
         let proof = tree.gen_proof(2);
-
         assert!(proof.validate::<H::Function>());
+    }
+
+    fn test_gen_hybrid_merkle_proof_from_graph<AH, BH>(parallel: bool)
+    where
+        AH: Hasher,
+        BH: Hasher,
+    {
+        const CHALLENGE_NODE_INDEX: usize = 2;
+
+        let data = vec![2u8; NODE_SIZE * MIN_N_LEAVES];
+        let mmapped = &mmap_from(&data);
+        let g = BucketGraph::<AH, BH>::new(MIN_N_LEAVES, 3, 0, new_seed());
+        let tree = g.hybrid_merkle_tree_aux(mmapped, parallel).unwrap();
+        let proof = tree.gen_proof(CHALLENGE_NODE_INDEX);
+        assert!(proof.validate(CHALLENGE_NODE_INDEX));
     }
 
     #[test]
     fn gen_proof_pedersen() {
-        gen_proof::<PedersenHasher>(true);
-        gen_proof::<PedersenHasher>(false);
+        test_gen_merkle_proof_from_graph::<PedersenHasher>(true);
+        test_gen_merkle_proof_from_graph::<PedersenHasher>(false);
     }
 
     #[test]
     fn gen_proof_sha256() {
-        gen_proof::<Sha256Hasher>(true);
-        gen_proof::<Sha256Hasher>(false);
+        test_gen_merkle_proof_from_graph::<Sha256Hasher>(true);
+        test_gen_merkle_proof_from_graph::<Sha256Hasher>(false);
     }
 
     #[test]
     fn gen_proof_blake2s() {
-        gen_proof::<Blake2sHasher>(true);
-        gen_proof::<Blake2sHasher>(false);
+        test_gen_merkle_proof_from_graph::<Blake2sHasher>(true);
+        test_gen_merkle_proof_from_graph::<Blake2sHasher>(false);
+    }
+
+    #[test]
+    fn gen_hybrid_proof_pedersen_blake2s() {
+        test_gen_hybrid_merkle_proof_from_graph::<PedersenHasher, Blake2sHasher>(true);
+        test_gen_hybrid_merkle_proof_from_graph::<PedersenHasher, Blake2sHasher>(false);
     }
 }

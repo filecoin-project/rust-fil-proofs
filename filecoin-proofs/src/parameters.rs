@@ -1,5 +1,5 @@
 use storage_proofs::drgporep::DrgParams;
-use storage_proofs::drgraph::DefaultTreeHasher;
+use storage_proofs::drgraph::{DefaultAlphaHasher, DefaultBetaHasher};
 use storage_proofs::hasher::pedersen::PedersenDomain;
 use storage_proofs::hasher::PedersenHasher;
 use storage_proofs::layered_drgporep;
@@ -35,8 +35,13 @@ pub type PostPublicParams = vdf_post::PublicParams<PedersenDomain, vdf_sloth::Sl
 pub fn public_params(
     sector_bytes: PaddedBytesAmount,
     partitions: usize,
-) -> layered_drgporep::PublicParams<DefaultTreeHasher, ZigZagBucketGraph<DefaultTreeHasher>> {
-    ZigZagDrgPoRep::<DefaultTreeHasher>::setup(&setup_params(sector_bytes, partitions)).unwrap()
+) -> layered_drgporep::PublicParams<
+    DefaultAlphaHasher,
+    DefaultBetaHasher,
+    ZigZagBucketGraph<DefaultAlphaHasher, DefaultBetaHasher>,
+> {
+    let sp = setup_params(sector_bytes, partitions);
+    ZigZagDrgPoRep::<DefaultAlphaHasher, DefaultBetaHasher>::setup(&sp).unwrap()
 }
 
 pub fn post_public_params(post_config: PoStConfig) -> PostPublicParams {

@@ -127,7 +127,11 @@ pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
     unsafe { MmapOptions::new().map_mut(&tmpfile).unwrap() }
 }
 
-fn dump_proof_bytes<H: Hasher>(all_partition_proofs: &[layered_drgporep::Proof<H>]) {
+fn dump_proof_bytes<AH, BH>(all_partition_proofs: &[layered_drgporep::Proof<AH, BH>])
+where
+    AH: Hasher,
+    BH: Hasher,
+{
     let file = OpenOptions::new()
         .write(true)
         .create(true)
@@ -147,7 +151,7 @@ fn dump_proof_bytes<H: Hasher>(all_partition_proofs: &[layered_drgporep::Proof<H
     }
 }
 
-fn do_the_work<H: 'static>(
+fn do_the_work<AH, BH>(
     data_size: usize,
     m: usize,
     expansion_degree: usize,
@@ -162,7 +166,8 @@ fn do_the_work<H: 'static>(
     dump_proofs: bool,
     bench_only: bool,
 ) where
-    H: Hasher,
+    AH: 'static + Hasher,
+    BH: 'static + Hasher,
 {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
@@ -181,7 +186,7 @@ fn do_the_work<H: 'static>(
 
     let nodes = data_size / 32;
 
-    let replica_id: H::Domain = rng.gen();
+    let replica_id: BH::Domain = rng.gen();
     let sp = layered_drgporep::SetupParams {
         drg: drgporep::DrgParams {
             nodes,
@@ -195,7 +200,7 @@ fn do_the_work<H: 'static>(
 
     info!(FCP_LOG, "running setup");
     start_profile("setup");
-    let pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
+    let pp = ZigZagDrgPoRep::<AH, BH>::setup(&sp).unwrap();
     info!(FCP_LOG, "setup complete");
     stop_profile();
 
@@ -213,9 +218,10 @@ fn do_the_work<H: 'static>(
         info!(FCP_LOG, "running replicate");
 
         start_profile("replicate");
-        let (tau, aux) = ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, &mut data, None).unwrap();
+        let (tau, aux) =
+            ZigZagDrgPoRep::<AH, BH>::replicate(&pp, &replica_id, &mut data, None).unwrap();
         stop_profile();
-        let pub_inputs = layered_drgporep::PublicInputs::<H::Domain> {
+        let pub_inputs = layered_drgporep::PublicInputs::<AH::Domain, BH::Domain> {
             replica_id,
             tau: Some(tau.simplify().into()),
             comm_r_star: tau.comm_r_star,
@@ -259,9 +265,13 @@ fn do_the_work<H: 'static>(
 
         let start = Instant::now();
         start_profile("prove");
-        let all_partition_proofs =
-            ZigZagDrgPoRep::<H>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, partitions)
-                .expect("failed to prove");
+        let all_partition_proofs = ZigZagDrgPoRep::<AH, BH>::prove_all_partitions(
+            &pp,
+            &pub_inputs,
+            &priv_inputs,
+            partitions,
+        )
+        .expect("failed to prove");
         stop_profile();
         let vanilla_proving = start.elapsed();
         total_proving += vanilla_proving;
@@ -277,9 +287,12 @@ fn do_the_work<H: 'static>(
         start_profile("verify");
         for _ in 0..samples {
             let start = Instant::now();
-            let verified =
-                ZigZagDrgPoRep::<H>::verify_all_partitions(&pp, &pub_inputs, &all_partition_proofs)
-                    .expect("failed during verification");
+            let verified = ZigZagDrgPoRep::<AH, BH>::verify_all_partitions(
+                &pp,
+                &pub_inputs,
+                &all_partition_proofs,
+            )
+            .expect("failed during verification");
             if !verified {
                 info!(FCP_LOG, "Verification failed."; "target" => "results");
             };
@@ -388,7 +401,8 @@ fn do_the_work<H: 'static>(
             let start = Instant::now();
             info!(FCP_LOG, "Extracting.");
             start_profile("extract");
-            let decoded_data = ZigZagDrgPoRep::<H>::extract_all(&pp, &replica_id, &data).unwrap();
+            let decoded_data =
+                ZigZagDrgPoRep::<AH, BH>::extract_all(&pp, &replica_id, &data).unwrap();
             stop_profile();
             let extracting = start.elapsed();
             info!(FCP_LOG, "extracting_time: {:?}", extracting; "target" => "stats");
@@ -437,10 +451,17 @@ fn main() {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("hasher")
-                .long("hasher")
-                .help("Which hasher should be used.Available: \"pedersen\", \"sha256\", \"blake2s\" (default \"pedersen\")")
+            Arg::with_name("alpha-hasher")
+                .long("alpha-hasher")
+                .help("Which alpha hasher should be used.Available: \"pedersen\", \"sha256\", \"blake2s\" (default \"pedersen\")")
                 .default_value("pedersen")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("beta-hasher")
+                .long("beta-hasher")
+                .help("Which beta hasher should be used.Available: \"pedersen\", \"sha256\", \"blake2s\" (default \"blake2s\")")
+                .default_value("blake2s")
                 .takes_value(true),
         )
        .arg(
@@ -514,7 +535,8 @@ fn main() {
     let expansion_degree = value_t!(matches, "exp", usize).unwrap();
     let sloth_iter = value_t!(matches, "sloth", usize).unwrap();
     let challenge_count = value_t!(matches, "challenges", usize).unwrap();
-    let hasher = value_t!(matches, "hasher", String).unwrap();
+    let alpha_hasher = value_t!(matches, "alpha-hasher", String).unwrap();
+    let beta_hasher = value_t!(matches, "beta-hasher", String).unwrap();
     let layers = value_t!(matches, "layers", usize).unwrap();
     let partitions = value_t!(matches, "partitions", usize).unwrap();
     let taper = value_t!(matches, "taper", f64).unwrap();
@@ -533,10 +555,11 @@ fn main() {
         LayerChallenges::new_tapered(layers, challenge_count, taper_layers, taper)
     };
 
-    info!(FCP_LOG, "hasher: {}", hasher; "target" => "config");
-    match hasher.as_ref() {
-        "pedersen" => {
-            do_the_work::<PedersenHasher>(
+    info!(FCP_LOG, "alpha-hasher: {}", alpha_hasher; "target" => "config");
+    info!(FCP_LOG, "beta-hasher: {}", beta_hasher; "target" => "config");
+    match (alpha_hasher.as_ref(), beta_hasher.as_ref()) {
+        ("blake2s", "blake2s") => {
+            do_the_work::<Blake2sHasher, Blake2sHasher>(
                 data_size,
                 m,
                 expansion_degree,
@@ -552,8 +575,8 @@ fn main() {
                 bench_only,
             );
         }
-        "sha256" => {
-            do_the_work::<Sha256Hasher>(
+        ("blake2s", "pedersen") => {
+            do_the_work::<Blake2sHasher, PedersenHasher>(
                 data_size,
                 m,
                 expansion_degree,
@@ -569,8 +592,8 @@ fn main() {
                 bench_only,
             );
         }
-        "blake2s" => {
-            do_the_work::<Blake2sHasher>(
+        ("blake2s", "sha256") => {
+            do_the_work::<Blake2sHasher, Sha256Hasher>(
                 data_size,
                 m,
                 expansion_degree,
@@ -586,6 +609,111 @@ fn main() {
                 bench_only,
             );
         }
-        _ => panic!(format!("invalid hasher: {}", hasher)),
+        ("pedersen", "blake2s") => {
+            do_the_work::<PedersenHasher, Blake2sHasher>(
+                data_size,
+                m,
+                expansion_degree,
+                sloth_iter,
+                challenges,
+                partitions,
+                circuit,
+                groth,
+                bench,
+                extract,
+                use_tmp,
+                dump_proofs,
+                bench_only,
+            );
+        }
+        ("pedersen", "pedersen") => {
+            do_the_work::<PedersenHasher, PedersenHasher>(
+                data_size,
+                m,
+                expansion_degree,
+                sloth_iter,
+                challenges,
+                partitions,
+                circuit,
+                groth,
+                bench,
+                extract,
+                use_tmp,
+                dump_proofs,
+                bench_only,
+            );
+        }
+        ("pedersen", "sha256") => {
+            do_the_work::<PedersenHasher, Sha256Hasher>(
+                data_size,
+                m,
+                expansion_degree,
+                sloth_iter,
+                challenges,
+                partitions,
+                circuit,
+                groth,
+                bench,
+                extract,
+                use_tmp,
+                dump_proofs,
+                bench_only,
+            );
+        }
+        ("sha256", "blake2s") => {
+            do_the_work::<Sha256Hasher, Blake2sHasher>(
+                data_size,
+                m,
+                expansion_degree,
+                sloth_iter,
+                challenges,
+                partitions,
+                circuit,
+                groth,
+                bench,
+                extract,
+                use_tmp,
+                dump_proofs,
+                bench_only,
+            );
+        }
+        ("sha256", "pedersen") => {
+            do_the_work::<Sha256Hasher, PedersenHasher>(
+                data_size,
+                m,
+                expansion_degree,
+                sloth_iter,
+                challenges,
+                partitions,
+                circuit,
+                groth,
+                bench,
+                extract,
+                use_tmp,
+                dump_proofs,
+                bench_only,
+            );
+        }
+        ("sha256", "sha256") => {
+            do_the_work::<Sha256Hasher, Sha256Hasher>(
+                data_size,
+                m,
+                expansion_degree,
+                sloth_iter,
+                challenges,
+                partitions,
+                circuit,
+                groth,
+                bench,
+                extract,
+                use_tmp,
+                dump_proofs,
+                bench_only,
+            );
+        }
+        _ => panic!(format!(
+            "at least one of the hasher arguments is invalid: {}, {}",
+            alpha_hasher, beta_hasher
+        )),
     }
 }

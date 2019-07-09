@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
@@ -20,16 +21,19 @@ pub type ParentCache = HashMap<usize, Vec<usize>>;
 // for the `reversed`.
 pub type TwoWayParentCache = [ParentCache; 2];
 
-// The cache is hold in an `Arc` to make it available across different
+// The cache is held in an `Arc` to make it available across different
 // threads. It is accessed through a `RwLock` to distinguish between
 // read an write operations.
 pub type ShareableParentCache = Arc<RwLock<TwoWayParentCache>>;
 
-#[derive(Debug, Clone)]
-pub struct ZigZagGraph<H, G>
+pub type ZigZagBucketGraph<AH, BH> = ZigZagGraph<AH, BH, BucketGraph<AH, BH>>;
+
+#[derive(Clone, Debug)]
+pub struct ZigZagGraph<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H> + 'static,
+    AH: Hasher,
+    BH: Hasher,
+    G: 'static + Graph<AH, BH>,
 {
     expansion_degree: usize,
     base_graph: G,
@@ -45,24 +49,69 @@ where
     // or verifying, but there's no locality to take advantage of so keep the logic
     // as simple as possible).
     parents_cache: ShareableParentCache,
+
     // Keep the size of the cache outside the lock to be easily accessible.
     cache_entries: usize,
-    _h: PhantomData<H>,
+
+    _ah: PhantomData<AH>,
+    _bh: PhantomData<BH>,
 }
 
-pub type ZigZagBucketGraph<H> = ZigZagGraph<H, BucketGraph<H>>;
-
-impl<'a, H, G> Layerable<H> for ZigZagGraph<H, G>
+impl<AH, BH, G> PartialEq for ZigZagGraph<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H> + 'static,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH>,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.base_graph == other.base_graph
+            && self.expansion_degree == other.expansion_degree
+            && self.reversed == other.reversed
+    }
+}
+
+// We are unable to derive `Eq` because `ZigZagGraph` contains a field of type
+// `ShareableParentCache` which is not `Eq`.
+impl<AH, BH, G> Eq for ZigZagGraph<AH, BH, G>
+where
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH>,
 {
 }
 
-impl<H, G> ZigZagGraph<H, G>
+impl<AH, BH, G> ParameterSetMetadata for ZigZagGraph<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H>,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH> + ParameterSetMetadata,
+{
+    fn identifier(&self) -> String {
+        format!(
+            "zigzag_graph::ZigZagGraph{{expansion_degree: {} base_graph: {} }}",
+            self.expansion_degree,
+            self.base_graph.identifier()
+        )
+    }
+
+    fn sector_size(&self) -> u64 {
+        self.base_graph.sector_size()
+    }
+}
+
+impl<'a, AH, BH, G> Layerable<AH, BH> for ZigZagGraph<AH, BH, G>
+where
+    AH: Hasher,
+    BH: Hasher,
+    G: 'static + Graph<AH, BH>,
+{
+}
+
+impl<AH, BH, G> ZigZagGraph<AH, BH, G>
+where
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH>,
 {
     pub fn new(
         base_graph: Option<G>,
@@ -91,116 +140,11 @@ where
                 HashMap::with_capacity(cache_entries),
             ])),
             cache_entries,
-            _h: PhantomData,
+            _ah: PhantomData,
+            _bh: PhantomData,
         }
     }
-}
 
-impl<H, G> ParameterSetMetadata for ZigZagGraph<H, G>
-where
-    H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
-{
-    fn identifier(&self) -> String {
-        format!(
-            "zigzag_graph::ZigZagGraph{{expansion_degree: {} base_graph: {} }}",
-            self.expansion_degree,
-            self.base_graph.identifier()
-        )
-    }
-
-    fn sector_size(&self) -> u64 {
-        self.base_graph.sector_size()
-    }
-}
-
-pub trait ZigZag: ::std::fmt::Debug + Clone + PartialEq + Eq {
-    type BaseHasher: Hasher;
-    type BaseGraph: Graph<Self::BaseHasher>;
-
-    /// zigzag returns a new graph with expansion component inverted and a distinct
-    /// base DRG graph -- with the direction of drg connections reversed. (i.e. from high-to-low nodes).
-    /// The name is 'weird', but so is the operation -- hence the choice.
-    fn zigzag(&self) -> Self;
-    /// Constructs a new graph.
-    fn base_graph(&self) -> Self::BaseGraph;
-    fn expansion_degree(&self) -> usize;
-    fn reversed(&self) -> bool;
-    fn expanded_parents(&self, node: usize) -> Vec<usize>;
-    fn real_index(&self, i: usize) -> usize;
-    fn new_zigzag(
-        nodes: usize,
-        base_degree: usize,
-        expansion_degree: usize,
-        seed: [u32; 7],
-    ) -> Self;
-}
-
-impl<Z: ZigZag> Graph<Z::BaseHasher> for Z {
-    fn size(&self) -> usize {
-        self.base_graph().size()
-    }
-
-    fn degree(&self) -> usize {
-        self.base_graph().degree() + self.expansion_degree()
-    }
-
-    #[inline]
-    fn parents(&self, raw_node: usize, parents: &mut [usize]) {
-        // If graph is reversed, use real_index to convert index to reversed index.
-        // So we convert a raw reversed node to an unreversed node, calculate its parents,
-        // then convert the parents to reversed.
-
-        self.base_graph()
-            .parents(self.real_index(raw_node), parents);
-        for parent in parents.iter_mut().take(self.base_graph().degree()) {
-            *parent = self.real_index(*parent);
-        }
-
-        // expanded_parents takes raw_node
-        let expanded_parents = self.expanded_parents(raw_node);
-
-        for (ii, value) in expanded_parents.iter().enumerate() {
-            parents[ii + self.base_graph().degree()] = *value
-        }
-
-        // Pad so all nodes have correct degree.
-        let current_length = self.base_graph().degree() + expanded_parents.len();
-        for ii in 0..(self.degree() - current_length) {
-            if self.reversed() {
-                parents[ii + current_length] = self.size() - 1
-            } else {
-                parents[ii + current_length] = 0
-            }
-        }
-        assert!(parents.len() == self.degree());
-        parents.sort();
-
-        assert!(parents.iter().all(|p| if self.forward() {
-            *p <= raw_node
-        } else {
-            *p >= raw_node
-        }));
-    }
-
-    fn seed(&self) -> [u32; 7] {
-        self.base_graph().seed()
-    }
-
-    fn new(nodes: usize, base_degree: usize, expansion_degree: usize, seed: [u32; 7]) -> Self {
-        Z::new_zigzag(nodes, base_degree, expansion_degree, seed)
-    }
-
-    fn forward(&self) -> bool {
-        !self.reversed()
-    }
-}
-
-impl<'a, H, G> ZigZagGraph<H, G>
-where
-    H: Hasher,
-    G: Graph<H>,
-{
     // Assign `expansion_degree` parents to `node` using an invertible function. That
     // means we can't just generate random values between `[0, size())`, we need to
     // expand the search space (domain) to accommodate every unique parent assignment
@@ -310,12 +254,102 @@ where
     }
 }
 
-impl<'a, H, G> ZigZag for ZigZagGraph<H, G>
+pub trait ZigZag: Clone + Debug + Eq + PartialEq {
+    type BaseAlphaHasher: Hasher;
+    type BaseBetaHasher: Hasher;
+    type BaseGraph: Graph<Self::BaseAlphaHasher, Self::BaseBetaHasher>;
+
+    /// zigzag returns a new graph with expansion component inverted and a distinct
+    /// base DRG graph -- with the direction of drg connections reversed. (i.e. from high-to-low nodes).
+    /// The name is 'weird', but so is the operation -- hence the choice.
+    fn zigzag(&self) -> Self;
+
+    /// Constructs a new graph.
+    fn base_graph(&self) -> Self::BaseGraph;
+
+    fn expansion_degree(&self) -> usize;
+    fn reversed(&self) -> bool;
+    fn expanded_parents(&self, node: usize) -> Vec<usize>;
+    fn real_index(&self, i: usize) -> usize;
+    fn new_zigzag(
+        nodes: usize,
+        base_degree: usize,
+        expansion_degree: usize,
+        seed: [u32; 7],
+    ) -> Self;
+}
+
+impl<Z> Graph<Z::BaseAlphaHasher, Z::BaseBetaHasher> for Z
 where
-    H: Hasher,
-    G: Graph<H>,
+    Z: ZigZag,
 {
-    type BaseHasher = H;
+    fn size(&self) -> usize {
+        self.base_graph().size()
+    }
+
+    fn degree(&self) -> usize {
+        self.base_graph().degree() + self.expansion_degree()
+    }
+
+    #[inline]
+    fn parents(&self, raw_node: usize, parents: &mut [usize]) {
+        // If graph is reversed, use real_index to convert index to reversed index.
+        // So we convert a raw reversed node to an unreversed node, calculate its parents,
+        // then convert the parents to reversed.
+
+        self.base_graph()
+            .parents(self.real_index(raw_node), parents);
+        for parent in parents.iter_mut().take(self.base_graph().degree()) {
+            *parent = self.real_index(*parent);
+        }
+
+        // expanded_parents takes raw_node
+        let expanded_parents = self.expanded_parents(raw_node);
+
+        for (ii, value) in expanded_parents.iter().enumerate() {
+            parents[ii + self.base_graph().degree()] = *value
+        }
+
+        // Pad so all nodes have correct degree.
+        let current_length = self.base_graph().degree() + expanded_parents.len();
+        for ii in 0..(self.degree() - current_length) {
+            if self.reversed() {
+                parents[ii + current_length] = self.size() - 1
+            } else {
+                parents[ii + current_length] = 0
+            }
+        }
+        assert!(parents.len() == self.degree());
+        parents.sort();
+
+        assert!(parents.iter().all(|p| if self.forward() {
+            *p <= raw_node
+        } else {
+            *p >= raw_node
+        }));
+    }
+
+    fn seed(&self) -> [u32; 7] {
+        self.base_graph().seed()
+    }
+
+    fn new(nodes: usize, base_degree: usize, expansion_degree: usize, seed: [u32; 7]) -> Self {
+        Z::new_zigzag(nodes, base_degree, expansion_degree, seed)
+    }
+
+    fn forward(&self) -> bool {
+        !self.reversed()
+    }
+}
+
+impl<'a, AH, BH, G> ZigZag for ZigZagGraph<AH, BH, G>
+where
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH>,
+{
+    type BaseAlphaHasher = AH;
+    type BaseBetaHasher = BH;
     type BaseGraph = G;
 
     fn new_zigzag(
@@ -397,25 +431,6 @@ where
     }
 }
 
-impl<H, G> PartialEq for ZigZagGraph<H, G>
-where
-    H: Hasher,
-    G: Graph<H>,
-{
-    fn eq(&self, other: &ZigZagGraph<H, G>) -> bool {
-        self.base_graph == other.base_graph
-            && self.expansion_degree == other.expansion_degree
-            && self.reversed == other.reversed
-    }
-}
-
-impl<H, G> Eq for ZigZagGraph<H, G>
-where
-    H: Hasher,
-    G: Graph<H>,
-{
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -425,7 +440,12 @@ mod tests {
     use crate::drgraph::new_seed;
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
 
-    fn assert_graph_ascending<H: Hasher, G: Graph<H>>(g: G) {
+    fn assert_graph_ascending<AH, BH, G>(g: G)
+    where
+        AH: Hasher,
+        BH: Hasher,
+        G: Graph<AH, BH>,
+    {
         for i in 0..g.size() {
             let mut parents = vec![0; g.degree()];
             g.parents(i, &mut parents);
@@ -439,7 +459,12 @@ mod tests {
         }
     }
 
-    fn assert_graph_descending<H: Hasher, G: Graph<H>>(g: G) {
+    fn assert_graph_descending<AH, BH, G>(g: G)
+    where
+        AH: Hasher,
+        BH: Hasher,
+        G: Graph<AH, BH>,
+    {
         for i in 0..g.size() {
             let mut parents = vec![0; g.degree()];
             g.parents(i, &mut parents);
@@ -455,21 +480,27 @@ mod tests {
 
     #[test]
     fn zigzag_graph_zigzags_pedersen() {
-        test_zigzag_graph_zigzags::<PedersenHasher>();
+        test_zigzag_graph_zigzags::<PedersenHasher, PedersenHasher>();
     }
 
     #[test]
     fn zigzag_graph_zigzags_sha256() {
-        test_zigzag_graph_zigzags::<Sha256Hasher>();
+        test_zigzag_graph_zigzags::<Sha256Hasher, Sha256Hasher>();
     }
 
     #[test]
     fn zigzag_graph_zigzags_blake2s() {
-        test_zigzag_graph_zigzags::<Blake2sHasher>();
+        test_zigzag_graph_zigzags::<Blake2sHasher, Blake2sHasher>();
     }
 
-    fn test_zigzag_graph_zigzags<H: 'static + Hasher>() {
-        let g = ZigZagBucketGraph::<H>::new_zigzag(50, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
+    fn test_zigzag_graph_zigzags<AH, BH>()
+    where
+        AH: 'static + Hasher,
+        BH: 'static + Hasher,
+    {
+        let g: ZigZagBucketGraph<AH, BH> =
+            ZigZagBucketGraph::new_zigzag(50, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
+
         let gz = g.zigzag();
 
         assert_graph_ascending(g);
@@ -478,22 +509,31 @@ mod tests {
 
     #[test]
     fn expansion_pedersen() {
-        test_expansion::<PedersenHasher>();
+        test_expansion::<PedersenHasher, PedersenHasher>();
     }
 
     #[test]
     fn expansion_sha256() {
-        test_expansion::<Sha256Hasher>();
+        test_expansion::<Sha256Hasher, Sha256Hasher>();
     }
 
     #[test]
     fn expansion_blake2s() {
-        test_expansion::<Blake2sHasher>();
+        test_expansion::<Blake2sHasher, Blake2sHasher>();
     }
 
-    fn test_expansion<H: 'static + Hasher>() {
-        // We need a graph.
-        let g = ZigZagBucketGraph::<H>::new_zigzag(25, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
+    #[test]
+    fn expansion_pedersen_blake2s() {
+        test_expansion::<PedersenHasher, Blake2sHasher>();
+    }
+
+    fn test_expansion<AH, BH>()
+    where
+        AH: 'static + Hasher,
+        BH: 'static + Hasher,
+    {
+        let g =
+            ZigZagBucketGraph::<AH, BH>::new_zigzag(25, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
 
         // We're going to fully realize the expansion-graph component, in a HashMap.
         let gcache = get_all_expanded_parents(&g);
@@ -526,9 +566,13 @@ mod tests {
         // which are each other's inverses. It's important that this be true.
     }
 
-    fn get_all_expanded_parents<H: 'static + Hasher>(
-        zigzag_graph: &ZigZagBucketGraph<H>,
-    ) -> HashMap<usize, Vec<usize>> {
+    fn get_all_expanded_parents<AH, BH>(
+        zigzag_graph: &ZigZagBucketGraph<AH, BH>,
+    ) -> HashMap<usize, Vec<usize>>
+    where
+        AH: 'static + Hasher,
+        BH: 'static + Hasher,
+    {
         let mut parents_map: HashMap<usize, Vec<usize>> = HashMap::new();
         for i in 0..zigzag_graph.size() {
             parents_map.insert(i, zigzag_graph.expanded_parents(i));
@@ -539,7 +583,11 @@ mod tests {
         parents_map
     }
 
-    fn get_cache_size<H: 'static + Hasher>(zigzag_graph: &ZigZagBucketGraph<H>) -> usize {
+    fn get_cache_size<AH, BH>(zigzag_graph: &ZigZagBucketGraph<AH, BH>) -> usize
+    where
+        AH: 'static + Hasher,
+        BH: 'static + Hasher,
+    {
         let parents_cache_lock = zigzag_graph.parents_cache.read().unwrap();
         (*parents_cache_lock)[zigzag_graph.get_cache_index()].len()
     }

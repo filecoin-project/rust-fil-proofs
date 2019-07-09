@@ -1,6 +1,6 @@
 use crate::error::Result;
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::MerkleTree;
+use crate::hybrid_merkle::HybridMerkleTree;
 use crate::proof::ProofScheme;
 
 #[derive(Debug)]
@@ -32,40 +32,50 @@ pub struct PrivateInputs<'a> {
     pub replica: &'a [u8],
 }
 
-#[derive(Debug, Clone)]
-pub struct ProverAux<H: Hasher> {
-    pub tree_d: MerkleTree<H::Domain, H::Function>,
-    pub tree_r: MerkleTree<H::Domain, H::Function>,
+#[derive(Clone, Debug)]
+pub struct ProverAux<AH, BH>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
+    pub tree_d: HybridMerkleTree<AH, BH>,
+    pub tree_r: HybridMerkleTree<AH, BH>,
 }
 
-impl<H: Hasher> ProverAux<H> {
-    pub fn new(
-        tree_d: MerkleTree<H::Domain, H::Function>,
-        tree_r: MerkleTree<H::Domain, H::Function>,
-    ) -> Self {
+impl<AH, BH> ProverAux<AH, BH>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
+    pub fn new(tree_d: HybridMerkleTree<AH, BH>, tree_r: HybridMerkleTree<AH, BH>) -> Self {
         ProverAux { tree_d, tree_r }
     }
 }
 
-pub trait PoRep<'a, H: Hasher>: ProofScheme<'a> {
+pub trait PoRep<'a, AH, BH>: ProofScheme<'a>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
     type Tau;
     type ProverAux;
 
     fn replicate(
         pub_params: &'a Self::PublicParams,
-        replica_id: &H::Domain,
+        replica_id: &BH::Domain,
         data: &mut [u8],
-        data_tree: Option<MerkleTree<H::Domain, H::Function>>,
+        data_tree: Option<HybridMerkleTree<AH, BH>>,
     ) -> Result<(Self::Tau, Self::ProverAux)>;
 
     fn extract_all(
         pub_params: &'a Self::PublicParams,
-        replica_id: &H::Domain,
+        replica_id: &BH::Domain,
         replica: &[u8],
     ) -> Result<Vec<u8>>;
+
     fn extract(
         pub_params: &'a Self::PublicParams,
-        replica_id: &H::Domain,
+        replica_id: &BH::Domain,
         replica: &[u8],
         node: usize,
     ) -> Result<Vec<u8>>;

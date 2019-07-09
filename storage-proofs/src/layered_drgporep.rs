@@ -15,7 +15,7 @@ use crate::drgporep::{self, DrgPoRep};
 use crate::drgraph::Graph;
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::MerkleTree;
+use crate::hybrid_merkle::HybridMerkleTree;
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
@@ -31,8 +31,6 @@ use std::fs;
 use std::io;
 #[cfg(feature = "disk-trees")]
 use std::path::PathBuf;
-
-type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 
 fn anonymous_mmap(len: usize) -> MmapMut {
     MmapOptions::new()
@@ -120,15 +118,17 @@ pub struct SetupParams {
 }
 
 #[derive(Debug, Clone)]
-pub struct PublicParams<H, G>
+pub struct PublicParams<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH> + ParameterSetMetadata,
 {
     pub graph: G,
     pub sloth_iter: usize,
     pub layer_challenges: LayerChallenges,
-    _h: PhantomData<H>,
+    _ah: PhantomData<AH>,
+    _bh: PhantomData<BH>,
 }
 
 #[derive(Debug, Clone)]
@@ -152,25 +152,28 @@ impl<T: Domain> Tau<T> {
     }
 }
 
-impl<H, G> PublicParams<H, G>
+impl<AH, BH, G> PublicParams<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH> + ParameterSetMetadata,
 {
     pub fn new(graph: G, sloth_iter: usize, layer_challenges: LayerChallenges) -> Self {
         PublicParams {
             graph,
             sloth_iter,
             layer_challenges,
-            _h: PhantomData,
+            _ah: PhantomData,
+            _bh: PhantomData,
         }
     }
 }
 
-impl<H, G> ParameterSetMetadata for PublicParams<H, G>
+impl<AH, BH, G> ParameterSetMetadata for PublicParams<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH> + ParameterSetMetadata,
 {
     fn identifier(&self) -> String {
         format!(
@@ -186,12 +189,13 @@ where
     }
 }
 
-impl<'a, H, G> From<&'a PublicParams<H, G>> for PublicParams<H, G>
+impl<'a, AH, BH, G> From<&'a PublicParams<AH, BH, G>> for PublicParams<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH> + ParameterSetMetadata,
 {
-    fn from(other: &PublicParams<H, G>) -> PublicParams<H, G> {
+    fn from(other: &'a PublicParams<AH, BH, G>) -> Self {
         PublicParams::new(
             other.graph.clone(),
             other.sloth_iter,
@@ -200,18 +204,29 @@ where
     }
 }
 
-pub type EncodingProof<H> = drgporep::Proof<H>;
+pub type EncodingProof<AH, BH> = drgporep::Proof<AH, BH>;
 
+// The type parameters `A` and `B` are abbreviations for "Alpha Hasher Domain" and "Beta Hasher
+// Domain" respectively. Hybrid Merkle Tree commitments/roots/taus are from the alpha domain,
+// replica-ids are from the beta hasher's domain.
 #[derive(Debug, Clone)]
-pub struct PublicInputs<T: Domain> {
-    pub replica_id: T,
-    pub seed: Option<T>,
-    pub tau: Option<porep::Tau<T>>,
-    pub comm_r_star: T,
+pub struct PublicInputs<A, B>
+where
+    A: Domain,
+    B: Domain,
+{
+    pub replica_id: B,
+    pub tau: Option<porep::Tau<A>>,
+    pub comm_r_star: A,
+    pub seed: Option<A>,
     pub k: Option<usize>,
 }
 
-impl<T: Domain> PublicInputs<T> {
+impl<A, B> PublicInputs<A, B>
+where
+    A: Domain,
+    B: Domain,
+{
     pub fn challenges(
         &self,
         layer_challenges: &LayerChallenges,
@@ -220,7 +235,7 @@ impl<T: Domain> PublicInputs<T> {
         partition_k: Option<usize>,
     ) -> Vec<usize> {
         if let Some(ref seed) = self.seed {
-            derive_challenges::<T>(
+            derive_challenges::<A, B>(
                 layer_challenges,
                 layer,
                 leaves,
@@ -229,7 +244,7 @@ impl<T: Domain> PublicInputs<T> {
                 partition_k.unwrap_or(0) as u8,
             )
         } else {
-            derive_challenges::<T>(
+            derive_challenges::<A, B>(
                 layer_challenges,
                 layer,
                 leaves,
@@ -241,51 +256,67 @@ impl<T: Domain> PublicInputs<T> {
     }
 }
 
-pub struct PrivateInputs<H: Hasher> {
-    pub aux: Vec<Tree<H>>,
-    pub tau: Vec<porep::Tau<H::Domain>>,
+pub struct PrivateInputs<AH, BH>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
+    pub aux: Vec<HybridMerkleTree<AH, BH>>,
+    pub tau: Vec<porep::Tau<AH::Domain>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Proof<H: Hasher> {
+pub struct Proof<AH, BH>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
     #[serde(bound(
-        serialize = "EncodingProof<H>: Serialize",
-        deserialize = "EncodingProof<H>: Deserialize<'de>"
+        serialize = "EncodingProof<AH, BH>: Serialize",
+        deserialize = "EncodingProof<AH, BH>: Deserialize<'de>"
     ))]
-    pub encoding_proofs: Vec<EncodingProof<H>>,
-    pub tau: Vec<porep::Tau<H::Domain>>,
+    pub encoding_proofs: Vec<EncodingProof<AH, BH>>,
+    pub tau: Vec<porep::Tau<AH::Domain>>,
 }
 
-impl<H: Hasher> Proof<H> {
-    pub fn serialize(&self) -> Vec<u8> {
-        unimplemented!();
-    }
-}
-
-pub type PartitionProofs<H> = Vec<Proof<H>>;
-
-impl<H: Hasher> Proof<H> {
+impl<AH, BH> Proof<AH, BH>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
     pub fn new(
-        encoding_proofs: Vec<EncodingProof<H>>,
-        tau: Vec<porep::Tau<H::Domain>>,
-    ) -> Proof<H> {
+        encoding_proofs: Vec<EncodingProof<AH, BH>>,
+        tau: Vec<porep::Tau<AH::Domain>>,
+    ) -> Self {
         Proof {
             encoding_proofs,
             tau,
         }
     }
+
+    pub fn serialize(&self) -> Vec<u8> {
+        unimplemented!();
+    }
 }
 
-pub trait Layerable<H: Hasher>: Graph<H> {}
+pub type PartitionProofs<AH, BH> = Vec<Proof<AH, BH>>;
+
+pub trait Layerable<AH, BH>: Graph<AH, BH>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
+}
 
 type PorepTau<H> = porep::Tau<<H as Hasher>::Domain>;
-type TransformedLayers<H> = (Vec<PorepTau<H>>, Vec<Tree<H>>);
+type TransformedLayers<AH, BH> = (Vec<PorepTau<AH>>, Vec<HybridMerkleTree<AH, BH>>);
 
 /// Layers provides default implementations of methods required to handle proof and verification
 /// of layered proofs of replication. Implementations must provide transform and invert_transform methods.
 pub trait Layers {
-    type Hasher: Hasher;
-    type Graph: Layerable<Self::Hasher> + ParameterSetMetadata + Sync + Send;
+    type AlphaHasher: Hasher;
+    type BetaHasher: Hasher;
+    type Graph: Layerable<Self::AlphaHasher, Self::BetaHasher> + ParameterSetMetadata + Sync + Send;
 
     /// Transform a layer's public parameters, returning new public parameters corresponding to the next layer.
     /// Warning: This method will likely need to be extended for other implementations
@@ -296,18 +327,21 @@ pub trait Layers {
     /// Transform a layer's public parameters, returning new public parameters corresponding to the previous layer.
     fn invert_transform(graph: &Self::Graph) -> Self::Graph;
 
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     fn prove_layers<'a>(
         graph: &Self::Graph,
         sloth_iter: usize,
-        pub_inputs: &PublicInputs<<Self::Hasher as Hasher>::Domain>,
-        tau: &[PorepTau<Self::Hasher>],
-        aux: &'a [Tree<Self::Hasher>],
+        pub_inputs: &PublicInputs<
+            <Self::AlphaHasher as Hasher>::Domain,
+            <Self::BetaHasher as Hasher>::Domain,
+        >,
+        tau: &[PorepTau<Self::AlphaHasher>],
+        aux: &'a [HybridMerkleTree<Self::AlphaHasher, Self::BetaHasher>],
         layer_challenges: &LayerChallenges,
         layers: usize,
         total_layers: usize,
         partition_count: usize,
-    ) -> Result<Vec<Vec<EncodingProof<Self::Hasher>>>> {
+    ) -> Result<Vec<Vec<EncodingProof<Self::AlphaHasher, Self::BetaHasher>>>> {
         assert!(layers > 0);
 
         let mut new_graph = Some(graph.clone());
@@ -366,7 +400,7 @@ pub trait Layers {
         graph: &Self::Graph,
         sloth_iter: usize,
         layer_challenges: &LayerChallenges,
-        replica_id: &<Self::Hasher as Hasher>::Domain,
+        replica_id: &<Self::BetaHasher as Hasher>::Domain,
         data: &'a mut [u8],
     ) -> Result<()> {
         let layers = layer_challenges.layers();
@@ -396,13 +430,14 @@ pub trait Layers {
         graph: &Self::Graph,
         sloth_iter: usize,
         layer_challenges: &LayerChallenges,
-        replica_id: &<Self::Hasher as Hasher>::Domain,
+        replica_id: &<Self::BetaHasher as Hasher>::Domain,
         data: &mut [u8],
-    ) -> Result<TransformedLayers<Self::Hasher>> {
+    ) -> Result<TransformedLayers<Self::AlphaHasher, Self::BetaHasher>> {
         let layers = layer_challenges.layers();
         assert!(layers > 0);
         let mut taus = Vec::with_capacity(layers);
-        let mut auxs: Vec<Tree<Self::Hasher>> = Vec::with_capacity(layers);
+        let mut auxs: Vec<HybridMerkleTree<Self::AlphaHasher, Self::BetaHasher>> =
+            Vec::with_capacity(layers);
 
         if !&settings::SETTINGS
             .lock()
@@ -542,9 +577,9 @@ pub trait Layers {
         graph: &Self::Graph,
         data: &[u8],
         _layer: usize,
-    ) -> MerkleTree<<Self::Hasher as Hasher>::Domain, <Self::Hasher as Hasher>::Function> {
+    ) -> HybridMerkleTree<Self::AlphaHasher, Self::BetaHasher> {
         #[cfg(not(feature = "disk-trees"))]
-        return graph.merkle_tree(&data).unwrap();
+        return graph.hybrid_merkle_tree(&data).unwrap();
 
         #[cfg(feature = "disk-trees")]
         {
@@ -554,7 +589,7 @@ pub trait Layers {
 
             if tree_dir.is_empty() {
                 // Signal `merkle_tree_path` to create a temporary file.
-                return graph.merkle_tree_path(&data, None).unwrap();
+                return graph.hybrid_merkle_tree_path(&data, None).unwrap();
             } else {
                 // Try to create `tree_dir`, ignore the error if `AlreadyExists`.
                 if let Some(create_error) = fs::create_dir(&tree_dir).err() {
@@ -564,7 +599,7 @@ pub trait Layers {
                 }
 
                 let tree_d = graph
-                    .merkle_tree_path(
+                    .hybrid_merkle_tree_path(
                         &data,
                         Some(&PathBuf::from(tree_dir).join(format!(
                             "tree-{}-{}",
@@ -587,12 +622,16 @@ pub trait Layers {
     }
 }
 
-impl<'a, L: Layers> ProofScheme<'a> for L {
-    type PublicParams = PublicParams<L::Hasher, L::Graph>;
+impl<'a, L> ProofScheme<'a> for L
+where
+    L: Layers,
+{
+    type PublicParams = PublicParams<L::AlphaHasher, L::BetaHasher, L::Graph>;
     type SetupParams = SetupParams;
-    type PublicInputs = PublicInputs<<L::Hasher as Hasher>::Domain>;
-    type PrivateInputs = PrivateInputs<L::Hasher>;
-    type Proof = Proof<L::Hasher>;
+    type PublicInputs =
+        PublicInputs<<L::AlphaHasher as Hasher>::Domain, <L::BetaHasher as Hasher>::Domain>;
+    type PrivateInputs = PrivateInputs<L::AlphaHasher, L::BetaHasher>;
+    type Proof = Proof<L::AlphaHasher, L::BetaHasher>;
     type Requirements = ChallengeRequirements;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
@@ -718,7 +757,8 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
                     return Ok(false);
                 }
             }
-            let crs = comm_r_star::<L::Hasher>(&pub_inputs.replica_id, &comm_rs)?;
+            let crs =
+                comm_r_star::<L::AlphaHasher, L::BetaHasher>(&pub_inputs.replica_id, &comm_rs)?;
 
             if crs != pub_inputs.comm_r_star {
                 return Ok(false);
@@ -738,7 +778,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
     }
 
     fn satisfies_requirements(
-        public_params: &PublicParams<L::Hasher, L::Graph>,
+        public_params: &Self::PublicParams,
         requirements: &ChallengeRequirements,
         partitions: usize,
     ) -> bool {
@@ -749,7 +789,11 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
 }
 
 // We need to calculate CommR* -- which is: H(replica_id|comm_r[0]|comm_r[1]|…comm_r[n])
-fn comm_r_star<H: Hasher>(replica_id: &H::Domain, comm_rs: &[H::Domain]) -> Result<H::Domain> {
+fn comm_r_star<AH, BH>(replica_id: &BH::Domain, comm_rs: &[AH::Domain]) -> Result<AH::Domain>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
     let l = (comm_rs.len() + 1) * 32;
     let mut bytes = vec![0; l];
 
@@ -759,18 +803,21 @@ fn comm_r_star<H: Hasher>(replica_id: &H::Domain, comm_rs: &[H::Domain]) -> Resu
         comm_r.write_bytes(&mut bytes[(i + 1) * 32..(i + 2) * 32])?;
     }
 
-    Ok(H::Function::hash(&bytes))
+    Ok(AH::Function::hash(&bytes))
 }
 
-impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
-    type Tau = Tau<<L::Hasher as Hasher>::Domain>;
-    type ProverAux = Vec<Tree<L::Hasher>>;
+impl<'a, 'c, L> PoRep<'a, L::AlphaHasher, L::BetaHasher> for L
+where
+    L: Layers,
+{
+    type Tau = Tau<<L::AlphaHasher as Hasher>::Domain>;
+    type ProverAux = Vec<HybridMerkleTree<L::AlphaHasher, L::BetaHasher>>;
 
     fn replicate(
-        pp: &'a PublicParams<L::Hasher, L::Graph>,
-        replica_id: &<L::Hasher as Hasher>::Domain,
+        pp: &'a PublicParams<L::AlphaHasher, L::BetaHasher, L::Graph>,
+        replica_id: &<L::BetaHasher as Hasher>::Domain,
         data: &mut [u8],
-        _data_tree: Option<Tree<L::Hasher>>,
+        _data_tree: Option<HybridMerkleTree<L::AlphaHasher, L::BetaHasher>>,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let (taus, auxs) = Self::transform_and_replicate_layers(
             &pp.graph,
@@ -781,7 +828,7 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
         )?;
 
         let comm_rs: Vec<_> = taus.iter().map(|tau| tau.comm_r).collect();
-        let crs = comm_r_star::<L::Hasher>(replica_id, &comm_rs)?;
+        let crs = comm_r_star::<L::AlphaHasher, L::BetaHasher>(replica_id, &comm_rs)?;
         let tau = Tau {
             layer_taus: taus,
             comm_r_star: crs,
@@ -790,8 +837,8 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
     }
 
     fn extract_all<'b>(
-        pp: &'b PublicParams<L::Hasher, L::Graph>,
-        replica_id: &'b <L::Hasher as Hasher>::Domain,
+        pp: &'a PublicParams<L::AlphaHasher, L::BetaHasher, L::Graph>,
+        replica_id: &'b <L::BetaHasher as Hasher>::Domain,
         data: &'b [u8],
     ) -> Result<Vec<u8>> {
         let mut data = data.to_vec();
@@ -808,8 +855,8 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
     }
 
     fn extract(
-        _pp: &PublicParams<L::Hasher, L::Graph>,
-        _replica_id: &<L::Hasher as Hasher>::Domain,
+        _pp: &'a PublicParams<L::AlphaHasher, L::BetaHasher, L::Graph>,
+        _replica_id: &<L::BetaHasher as Hasher>::Domain,
         _data: &[u8],
         _node: usize,
     ) -> Result<Vec<u8>> {

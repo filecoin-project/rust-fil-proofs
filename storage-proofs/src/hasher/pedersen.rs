@@ -13,6 +13,7 @@ use rand::{Rand, Rng};
 use crate::circuit::pedersen::pedersen_md_no_padding;
 use crate::crypto::{kdf, pedersen, sloth};
 use crate::error::{Error, Result};
+use crate::hasher::blake2s::Blake2sDomain;
 use crate::hasher::{Domain, HashFunction, Hasher};
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
@@ -316,6 +317,14 @@ impl From<PedersenDomain> for Fr {
     #[inline]
     fn from(val: PedersenDomain) -> Self {
         Fr::from_repr(val.0).unwrap()
+    }
+}
+
+impl From<Blake2sDomain> for PedersenDomain {
+    fn from(val: Blake2sDomain) -> Self {
+        let mut fr_repr = FrRepr::default();
+        fr_repr.read_le(&val.0[0..32]).unwrap();
+        PedersenDomain::from(fr_repr)
     }
 }
 

@@ -47,7 +47,11 @@ fn stop_profile() {
 #[inline(always)]
 fn stop_profile() {}
 
-fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challenge_count: usize) {
+fn do_the_work<AH, BH>(data_size: usize, m: usize, sloth_iter: usize, challenge_count: usize)
+where
+    AH: Hasher,
+    BH: Hasher,
+{
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
     let challenges = vec![2; challenge_count];
 
@@ -60,7 +64,7 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
 
     let nodes = data_size / 32;
 
-    let replica_id: H::Domain = rng.gen();
+    let replica_id: BH::Domain = rng.gen();
     let mut data: Vec<u8> = (0..nodes)
         .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
         .collect();
@@ -79,7 +83,7 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
 
     info!(FCP_LOG, "running setup");
     start_profile("setup");
-    let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).unwrap();
+    let pp = DrgPoRep::<AH, BH, BucketGraph<AH, BH>>::setup(&sp).unwrap();
     stop_profile();
 
     let start = Instant::now();
@@ -89,7 +93,7 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
 
     start_profile("replicate");
     let (tau, aux) =
-        DrgPoRep::<H, _>::replicate(&pp, &replica_id, data.as_mut_slice(), None).unwrap();
+        DrgPoRep::<AH, BH, _>::replicate(&pp, &replica_id, data.as_mut_slice(), None).unwrap();
     stop_profile();
     let pub_inputs = PublicInputs {
         replica_id: Some(replica_id),
@@ -97,7 +101,7 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
         tau: Some(tau),
     };
 
-    let priv_inputs = PrivateInputs::<H> {
+    let priv_inputs = PrivateInputs::<AH, BH> {
         tree_d: &aux.tree_d,
         tree_r: &aux.tree_r,
     };
@@ -117,13 +121,13 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
         let start = Instant::now();
         start_profile("prove");
         let proof =
-            DrgPoRep::<H, _>::prove(&pp, &pub_inputs, &priv_inputs).expect("failed to prove");
+            DrgPoRep::<AH, BH, _>::prove(&pp, &pub_inputs, &priv_inputs).expect("failed to prove");
         stop_profile();
         total_proving += start.elapsed();
 
         let start = Instant::now();
         start_profile("verify");
-        DrgPoRep::<H, _>::verify(&pp, &pub_inputs, &proof).expect("failed to verify");
+        DrgPoRep::<AH, BH, _>::verify(&pp, &pub_inputs, &proof).expect("failed to verify");
         stop_profile();
         total_verifying += start.elapsed();
         proofs.push(proof);
@@ -183,10 +187,17 @@ fn main() {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("hasher")
-                .long("hasher")
-                .help("Which hasher should be used.Available: \"pedersen\", \"sha256\", \"blake2s\" (default \"pedersen\")")
+            Arg::with_name("alpha-hasher")
+                .long("alpha-hasher")
+                .help("Which alpha hasher should be used.Available: \"pedersen\", \"sha256\", \"blake2s\" (default \"pedersen\")")
                 .default_value("pedersen")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("beta-hasher")
+                .long("beta-hasher")
+                .help("Which beta hasher should be used.Available: \"pedersen\", \"sha256\", \"blake2s\" (default \"blake2s\")")
+                .default_value("blake2s")
                 .takes_value(true),
         )
         .get_matches();
@@ -195,18 +206,47 @@ fn main() {
     let m = value_t!(matches, "m", usize).unwrap();
     let sloth_iter = value_t!(matches, "sloth", usize).unwrap();
     let challenge_count = value_t!(matches, "challenges", usize).unwrap();
-    let hasher = value_t!(matches, "hasher", String).unwrap();
-    info!(FCP_LOG, "hasher: {}", hasher; "target" => "config");
-    match hasher.as_ref() {
-        "pedersen" => {
-            do_the_work::<PedersenHasher>(data_size, m, sloth_iter, challenge_count);
+    let alpha_hasher = value_t!(matches, "alpha-hasher", String).unwrap();
+    let beta_hasher = value_t!(matches, "beta-hasher", String).unwrap();
+    info!(FCP_LOG, "alpha-hasher: {}", alpha_hasher; "target" => "config");
+    info!(FCP_LOG, "beta-hasher: {}", beta_hasher; "target" => "config");
+
+    match (alpha_hasher.as_ref(), beta_hasher.as_ref()) {
+        ("blake2s", "blake2s") => {
+            do_the_work::<Blake2sHasher, Blake2sHasher>(data_size, m, sloth_iter, challenge_count);
         }
-        "sha256" => {
-            do_the_work::<Sha256Hasher>(data_size, m, sloth_iter, challenge_count);
+        ("blake2s", "pedersen") => {
+            do_the_work::<Blake2sHasher, PedersenHasher>(data_size, m, sloth_iter, challenge_count);
         }
-        "blake2s" => {
-            do_the_work::<Blake2sHasher>(data_size, m, sloth_iter, challenge_count);
+        ("blake2s", "sha256") => {
+            do_the_work::<Blake2sHasher, Sha256Hasher>(data_size, m, sloth_iter, challenge_count);
         }
-        _ => panic!(format!("invalid hasher: {}", hasher)),
+        ("pedersen", "blake2s") => {
+            do_the_work::<PedersenHasher, Blake2sHasher>(data_size, m, sloth_iter, challenge_count);
+        }
+        ("pedersen", "pedersen") => {
+            do_the_work::<PedersenHasher, PedersenHasher>(
+                data_size,
+                m,
+                sloth_iter,
+                challenge_count,
+            );
+        }
+        ("pedersen", "sha256") => {
+            do_the_work::<PedersenHasher, Sha256Hasher>(data_size, m, sloth_iter, challenge_count);
+        }
+        ("sha256", "blake2s") => {
+            do_the_work::<Sha256Hasher, Blake2sHasher>(data_size, m, sloth_iter, challenge_count);
+        }
+        ("sha256", "pedersen") => {
+            do_the_work::<Sha256Hasher, PedersenHasher>(data_size, m, sloth_iter, challenge_count);
+        }
+        ("sha256", "sha256") => {
+            do_the_work::<Sha256Hasher, Sha256Hasher>(data_size, m, sloth_iter, challenge_count);
+        }
+        _ => panic!(format!(
+            "at least one of the hasher arguments is invalid: {}, {}",
+            alpha_hasher, beta_hasher
+        )),
     }
 }

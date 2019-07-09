@@ -6,14 +6,21 @@ use num_traits::cast::ToPrimitive;
 use crate::hasher::Domain;
 use crate::layered_drgporep::LayerChallenges;
 
-pub fn derive_challenges<D: Domain>(
+// The type parameters `A` and `B` are abbreviations for "Alpha Hasher Domain" and "Beta Hasher
+// Domain" respectively. Hybrid Merkle Tree commitments/roots/taus are from the alpha domain,
+// replica-ids are from the beta hasher's domain.
+pub fn derive_challenges<A, B>(
     challenges: &LayerChallenges,
     layer: u8,
     leaves: usize,
-    replica_id: &D,
-    commitment: &D,
+    replica_id: &B,
+    commitment: &A,
     k: u8,
-) -> Vec<usize> {
+) -> Vec<usize>
+where
+    A: Domain,
+    B: Domain,
+{
     let n = challenges.challenges_for_layer(layer as usize);
     (0..n)
         .map(|i| {

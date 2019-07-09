@@ -57,6 +57,7 @@ impl<H: Hasher> MerkleProof<H> {
         m
     }
 
+    /// Converts a `merkle_light::proof::Proof` into a `MerkleProof`.
     pub fn new_from_proof(p: &proof::Proof<H::Domain>) -> MerkleProof<H> {
         MerkleProof {
             path: p
