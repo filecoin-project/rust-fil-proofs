@@ -9,7 +9,7 @@ use crate::fr32::bytes_into_frs;
 use crate::singletons::PEDERSEN_PARAMS;
 
 use algebra::curves::bls12_381::Bls12_381 as Bls12;
-use algebra::curves::{jubjub::JubJubProjective as JubJub};
+use algebra::curves::jubjub::JubJubProjective as JubJub;
 use algebra::fields::bls12_381::Fr;
 use dpc::crypto_primitives::crh::{
     pedersen::{PedersenCRH, PedersenWindow},
@@ -50,10 +50,7 @@ impl Personalization {
     }
 }
 
-pub fn pedersen_hash<I>(
-    personalization: Personalization,
-    bits: I,
-) -> Fr
+pub fn pedersen_hash<I>(personalization: Personalization, bits: I) -> Fr
 where
     I: IntoIterator<Item = bool>,
 {
@@ -65,19 +62,20 @@ where
 
     let bytes = BitVec::<LittleEndian, _>::from(&bits[..]);
 
-    let point = PedersenCRH::<JubJub, BigWindow>::evaluate(&PEDERSEN_PARAMS, bytes.as_slice()).unwrap();
+    let point =
+        PedersenCRH::<JubJub, BigWindow>::evaluate(&PEDERSEN_PARAMS, bytes.as_slice()).unwrap();
     point.x
 }
 
 pub fn pedersen(data: &[u8]) -> Fr {
-
     let mut bits = BitVec::<LittleEndian, u8>::from(data);
     let mut personalization =
         BitVec::<LittleEndian, u8>::from(&Personalization::NoteCommitment.get_bits()[..]);
 
     bits.append(&mut personalization);
 
-    let point = PedersenCRH::<JubJub, BigWindow>::evaluate(&PEDERSEN_PARAMS, bits.as_slice()).unwrap();
+    let point =
+        PedersenCRH::<JubJub, BigWindow>::evaluate(&PEDERSEN_PARAMS, bits.as_slice()).unwrap();
     point.x
 }
 
@@ -132,10 +130,10 @@ pub fn pedersen_compression(bytes: &mut Vec<u8>) {
 mod tests {
     use super::*;
     use crate::util::bytes_into_bits;
+    use algebra::fields::Field;
     use paired::bls12_381::Fr;
     use rand::{Rng, SeedableRng, XorShiftRng};
-    use algebra::fields::Field;
-    
+
     #[test]
     fn test_bit_vec_le() {
         let bytes = b"ABC";
@@ -162,14 +160,14 @@ mod tests {
         // assert_eq!(expected, data);
     }
 
-//     #[test]
-//     fn test_pedersen_md_no_padding() {
-//         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    //     #[test]
+    //     fn test_pedersen_md_no_padding() {
+    //         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-//         for i in 2..5 {
-//             let x: Vec<u8> = (0..i * 32).map(|_| rng.gen()).collect();
-//             let hashed = pedersen_md_no_padding(x.as_slice());
-//             assert_ne!(hashed, Fr::zero());
-//         }
-//     }
+    //         for i in 2..5 {
+    //             let x: Vec<u8> = (0..i * 32).map(|_| rng.gen()).collect();
+    //             let hashed = pedersen_md_no_padding(x.as_slice());
+    //             assert_ne!(hashed, Fr::zero());
+    //         }
+    //     }
 }

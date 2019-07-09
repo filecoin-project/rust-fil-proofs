@@ -1,7 +1,7 @@
 use std::fmt;
 
-use snark::{ConstraintSystem, SynthesisError};
 use algebra::PairingEngine as Engine;
+use snark::{ConstraintSystem, SynthesisError};
 use snark_gadgets::fields::fp::FpGadget;
 use snark_gadgets::utils::AllocGadget;
 

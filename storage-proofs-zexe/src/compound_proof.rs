@@ -6,7 +6,10 @@ use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use crate::partitions;
 use crate::proof::ProofScheme;
 use crate::settings;
-use algebra::{bytes::{FromBytes, ToBytes}, PairingEngine as Engine};
+use algebra::{
+    bytes::{FromBytes, ToBytes},
+    PairingEngine as Engine,
+};
 use snark::{groth16, Circuit};
 //use bellperson::{groth16, Circuit};
 //use fil_sapling_crypto::jubjub::JubjubEngine;
@@ -15,11 +18,10 @@ use rand::OsRng;
 //pub struct SetupParams<'a, 'b: 'a, E: Engine, S: ProofScheme<'a>>
 pub struct SetupParams<'a, 'b: 'a, S: ProofScheme<'a>>
 where
-    <S as ProofScheme<'a>>::SetupParams: 'b
-//    E::Params: Sync,
+    <S as ProofScheme<'a>>::SetupParams: 'b, //    E::Params: Sync
 {
     pub vanilla_params: &'b <S as ProofScheme<'a>>::SetupParams,
-//    pub engine_params: &'a E::Params,
+    //    pub engine_params: &'a E::Params,
     pub partitions: Option<usize>,
 }
 
@@ -27,7 +29,7 @@ where
 //pub struct PublicParams<'a, E: Engine, S: ProofScheme<'a>> {
 pub struct PublicParams<'a, S: ProofScheme<'a>> {
     pub vanilla_params: S::PublicParams,
-//    pub engine_params: &'a E::Params,
+    //    pub engine_params: &'a E::Params,
     pub partitions: Option<usize>,
 }
 
@@ -58,7 +60,7 @@ where
     {
         Ok(PublicParams {
             vanilla_params: S::setup(sp.vanilla_params)?,
-//            engine_params: sp.engine_params,
+            //            engine_params: sp.engine_params,
             partitions: sp.partitions,
         })
     }
@@ -108,8 +110,8 @@ where
                         pub_in,
                         &vanilla_proof,
                         &pub_params.vanilla_params,
-//                        &pub_params.engine_params,
-                        groth_params
+                        //                        &pub_params.engine_params,
+                        groth_params,
                     )
                 })
                 .collect()
@@ -158,7 +160,7 @@ where
         pub_in: &S::PublicInputs,
         vanilla_proof: &S::Proof,
         pub_params: &'b S::PublicParams,
-//        params: &'a E::Params,
+        //        params: &'a E::Params,
         groth_params: &groth16::Parameters<E>,
     ) -> Result<groth16::Proof<E>> {
         let rng = &mut OsRng::new().expect("Failed to create `OsRng`");
@@ -201,32 +203,26 @@ where
         public_inputs: &S::PublicInputs,
         component_private_inputs: C::ComponentPrivateInputs,
         vanilla_proof: &S::Proof,
-        public_param: &S::PublicParams
-//        engine_params: &'a E::Params,
+        public_param: &S::PublicParams, //        engine_params: &'a E::Params
     ) -> C;
 
-//    fn blank_circuit(public_params: &S::PublicParams, engine_params: &'a E::Params) -> C;
+    //    fn blank_circuit(public_params: &S::PublicParams, engine_params: &'a E::Params) -> C;
     fn blank_circuit(public_params: &S::PublicParams) -> C;
 
     fn groth_params(
-        public_params: &S::PublicParams
-//        engine_params: &'a E::Params,
+        public_params: &S::PublicParams, //        engine_params: &'a E::Params
     ) -> Result<groth16::Parameters<E>> {
         Self::get_groth_params(
-//            Self::blank_circuit(public_params, engine_params),
+            //            Self::blank_circuit(public_params, engine_params),
             Self::blank_circuit(public_params),
             public_params,
         )
     }
 
     fn verifying_key(
-        public_params: &S::PublicParams
-//        engine_params: &'a E::Params,
+        public_params: &S::PublicParams, //        engine_params: &'a E::Params
     ) -> Result<groth16::VerifyingKey<E>> {
-        Self::get_verifying_key(
-            Self::blank_circuit(public_params),
-            public_params,
-        )
+        Self::get_verifying_key(Self::blank_circuit(public_params), public_params)
     }
 
     fn circuit_for_test(

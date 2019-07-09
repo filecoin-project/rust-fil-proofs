@@ -2,31 +2,30 @@ use rand::thread_rng;
 
 use algebra::curves::bls12_381::Bls12_381 as Bls12;
 use algebra::curves::{jubjub::JubJubProjective as JubJub, ProjectiveCurve};
-use dpc::{
-    crypto_primitives::crh::{
-        pedersen::PedersenCRH,
-        FixedLengthCRH,
-    },
-    gadgets::crh::{pedersen::PedersenCRHGadget, pedersen::PedersenCRHGadgetParameters, FixedLengthCRHGadget},
-};
 use algebra::PairingEngine as Engine;
+use dpc::{
+    crypto_primitives::crh::{pedersen::PedersenCRH, FixedLengthCRH},
+    gadgets::crh::{
+        pedersen::PedersenCRHGadget, pedersen::PedersenCRHGadgetParameters, FixedLengthCRHGadget,
+    },
+};
 use snark::{ConstraintSystem, SynthesisError};
-use snark_gadgets::bits::uint8::UInt8;
 use snark_gadgets::bits::boolean::Boolean;
+use snark_gadgets::bits::uint8::UInt8;
 use snark_gadgets::fields::fp::FpGadget;
 use snark_gadgets::groups::curves::twisted_edwards::jubjub::JubJubGadget;
 use snark_gadgets::utils::{AllocGadget, ToBitsGadget};
 
 use crate::crypto::pedersen::PEDERSEN_BLOCK_SIZE;
-use crate::util::bits_to_bytes;
 use crate::hasher::Window;
+use crate::util::bits_to_bytes;
 use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
 
 /// Pedersen hashing for inputs with length multiple of the block size. Based on a Merkle-Damgard construction.
 pub fn pedersen_md_no_padding<CS: ConstraintSystem<Bls12>>(
     mut cs: CS,
     data: &[Boolean],
-    params: PedersenParameters<JubJub>
+    params: PedersenParameters<JubJub>,
 ) -> Result<FpGadget<Bls12>, SynthesisError> {
     assert!(
         data.len() >= 2 * PEDERSEN_BLOCK_SIZE,
@@ -63,7 +62,7 @@ pub fn pedersen_md_no_padding<CS: ConstraintSystem<Bls12>>(
 pub fn pedersen_compression_num<CS: ConstraintSystem<Bls12>>(
     mut cs: CS,
     bits: &[Boolean],
-    params: &PedersenParameters<JubJub>
+    params: &PedersenParameters<JubJub>,
 ) -> Result<FpGadget<Bls12>, SynthesisError> {
     // TODO: Add personalization
     type CRHGadget = PedersenCRHGadget<JubJub, Bls12, JubJubGadget>;
@@ -73,19 +72,20 @@ pub fn pedersen_compression_num<CS: ConstraintSystem<Bls12>>(
         <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::ParametersGadget::alloc(
             &mut cs.ns(|| "gadget_parameters"),
             || Ok(params),
-        ).unwrap();
+        )
+        .unwrap();
 
     let input_bytes = bits
         .chunks(8)
         .map(|x| UInt8::from_bits_le(x))
         .collect::<Vec<UInt8>>();
 
-    let gadget_result =
-        <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::check_evaluation_gadget(
-            &mut cs.ns(|| "gadget_evaluation"),
-            &gadget_parameters,
-            &input_bytes,
-        ).unwrap();
+    let gadget_result = <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::check_evaluation_gadget(
+        &mut cs.ns(|| "gadget_evaluation"),
+        &gadget_parameters,
+        &input_bytes,
+    )
+    .unwrap();
 
     Ok(gadget_result.x)
 }
@@ -93,10 +93,10 @@ pub fn pedersen_compression_num<CS: ConstraintSystem<Bls12>>(
 pub fn pedersen_compression<CS: ConstraintSystem<Bls12>>(
     mut cs: CS,
     bits: &[Boolean],
-    params: &PedersenParameters<JubJub>
+    params: &PedersenParameters<JubJub>,
 ) -> Result<Vec<Boolean>, SynthesisError> {
     let h = pedersen_compression_num(cs.ns(|| "compression"), bits, params)?;
-//    let mut out = h.into_bits_le(cs.ns(|| "h into bits"))?;
+    //    let mut out = h.into_bits_le(cs.ns(|| "h into bits"))?;
     let mut out = h.to_bits(cs.ns(|| "h into bits"))?;
 
     // needs padding, because x does not always translate to exactly 256 bits
