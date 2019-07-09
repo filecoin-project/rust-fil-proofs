@@ -1,5 +1,5 @@
 use algebra::curves::bls12_381::Bls12_381 as Bls12;
-use algebra::curves::{jubjub::JubJubProjective as JubJub};
+use algebra::curves::jubjub::JubJubProjective as JubJub;
 
 use dpc::{
     crypto_primitives::crh::{pedersen::PedersenCRH, FixedLengthCRH},
@@ -120,8 +120,7 @@ pub fn pedersen_compression<CS: ConstraintSystem<Bls12>>(
 //     // use snark_gadgets::{
 //     //     groups::curves::twisted_edwards::jubjub::JubJubGadget,
 //     //     test_constraint_system::TestConstraintSystem, uint8::UInt8, utils::AllocGadget,
-//     // }; 
-
+//     // };
 
 //    #[test]
 //    fn test_pedersen_input_circut() {
