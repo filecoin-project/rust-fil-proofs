@@ -131,7 +131,7 @@ mod tests {
     use super::*;
     use crate::util::bytes_into_bits;
     use algebra::fields::Field;
-    use paired::bls12_381::Fr;
+    use algebra::fields::{bls12_381::Fr};
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]
