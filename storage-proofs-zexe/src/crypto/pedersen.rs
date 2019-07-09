@@ -18,7 +18,7 @@ use dpc::crypto_primitives::crh::{
 
 use algebra::biginteger::BigInteger;
 use algebra::fields::PrimeField;
-use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
+
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct BigWindow;
@@ -130,9 +130,9 @@ pub fn pedersen_compression(bytes: &mut Vec<u8>) {
 mod tests {
     use super::*;
     use crate::util::bytes_into_bits;
-    use algebra::fields::Field;
-    use algebra::fields::{bls12_381::Fr};
-    use rand::{Rng, SeedableRng, XorShiftRng};
+    
+    
+    
 
     #[test]
     fn test_bit_vec_le() {
@@ -153,7 +153,7 @@ mod tests {
         let mut data = vec![0; bytes.len()];
         data.copy_from_slice(&bytes[..]);
         pedersen_compression(&mut data);
-        let expected = vec![
+        let _expected = vec![
             213, 235, 66, 156, 7, 85, 177, 39, 249, 31, 160, 247, 29, 106, 36, 46, 225, 71, 116,
             23, 1, 89, 82, 149, 45, 189, 27, 189, 144, 98, 23, 98,
         ];

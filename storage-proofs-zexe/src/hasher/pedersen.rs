@@ -1,5 +1,5 @@
 use bitvec::prelude::*;
-use rand::{thread_rng, Rand, Rng};
+use rand::{Rand, Rng};
 use std::hash::Hasher as StdHasher;
 use std::io::Read;
 use std::io::Write;
@@ -9,15 +9,15 @@ use snark::{ConstraintSystem, SynthesisError};
 use algebra::biginteger::BigInteger;
 use algebra::biginteger::BigInteger256 as FrRepr;
 use algebra::curves::{
-    bls12_381::Bls12_381 as Bls12, jubjub::JubJubProjective as JubJub, ProjectiveCurve,
+    bls12_381::Bls12_381 as Bls12, jubjub::JubJubProjective as JubJub,
 };
 use algebra::fields::{bls12_381::Fr, FpParameters, PrimeField};
-use algebra::PairingEngine as Engine;
+
 use snark_gadgets::bits::uint8::UInt8;
-use snark_gadgets::boolean::{self, AllocatedBit, Boolean};
-use snark_gadgets::fields::{fp::FpGadget, FieldGadget};
+use snark_gadgets::boolean::{Boolean};
+use snark_gadgets::fields::{fp::FpGadget};
 use snark_gadgets::groups::curves::twisted_edwards::jubjub::JubJubGadget;
-use snark_gadgets::groups::GroupGadget;
+
 use snark_gadgets::utils::AllocGadget;
 
 use dpc::{
@@ -39,7 +39,7 @@ use crate::crypto::pedersen::Personalization;
 use crate::crypto::{kdf, pedersen, sloth};
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher, Window};
-use crate::util::bits_to_bytes;
+
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PedersenHasher {}
@@ -223,7 +223,7 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         mut cs: CS,
         left: &[Boolean],
         right: &[Boolean],
-        height: usize,
+        _height: usize,
         params: PedersenParameters<JubJub>,
     ) -> std::result::Result<FpGadget<Bls12>, SynthesisError> {
         // TODO: Add personalization

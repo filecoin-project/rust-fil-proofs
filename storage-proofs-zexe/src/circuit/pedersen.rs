@@ -1,8 +1,8 @@
-use rand::thread_rng;
+
 
 use algebra::curves::bls12_381::Bls12_381 as Bls12;
-use algebra::curves::{jubjub::JubJubProjective as JubJub, ProjectiveCurve};
-use algebra::PairingEngine as Engine;
+use algebra::curves::{jubjub::JubJubProjective as JubJub};
+
 use dpc::{
     crypto_primitives::crh::{pedersen::PedersenCRH, FixedLengthCRH},
     gadgets::crh::{
@@ -18,7 +18,7 @@ use snark_gadgets::utils::{AllocGadget, ToBitsGadget};
 
 use crate::crypto::pedersen::PEDERSEN_BLOCK_SIZE;
 use crate::hasher::Window;
-use crate::util::bits_to_bytes;
+
 use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
 
 /// Pedersen hashing for inputs with length multiple of the block size. Based on a Merkle-Damgard construction.

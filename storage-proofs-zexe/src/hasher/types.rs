@@ -2,7 +2,7 @@ use algebra::biginteger::BigInteger256 as FrRepr;
 use algebra::curves::bls12_381::Bls12_381;
 use algebra::curves::jubjub::JubJubProjective as JubJub;
 use algebra::fields::bls12_381::Fr;
-use algebra::PairingEngine as Engine;
+
 use dpc::crypto_primitives::crh::pedersen::PedersenWindow;
 use snark::{ConstraintSystem, SynthesisError};
 use snark_gadgets::bits::boolean;
@@ -16,7 +16,7 @@ use serde::ser::Serialize;
 
 use crate::error::Result;
 use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
-use snark_gadgets::groups::curves::twisted_edwards::jubjub::JubJubGadget;
+
 
 pub trait Domain:
     Ord

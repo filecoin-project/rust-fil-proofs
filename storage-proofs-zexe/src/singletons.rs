@@ -1,10 +1,10 @@
 use rand::SeedableRng;
-use rand::{thread_rng, XorShiftRng};
+use rand::{XorShiftRng};
 
 use algebra::curves::jubjub::JubJubProjective as JubJub;
 use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
 use dpc::crypto_primitives::crh::{
-    pedersen::{PedersenCRH, PedersenWindow},
+    pedersen::{PedersenCRH},
     FixedLengthCRH,
 };
 

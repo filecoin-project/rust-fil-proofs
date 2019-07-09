@@ -1,12 +1,12 @@
 use crate::circuit::variables::Root;
-use crate::compound_proof::{CircuitComponent, CompoundProof};
+use crate::compound_proof::{CircuitComponent};
 use crate::drgraph::graph_height;
-use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
-use algebra::curves::bls12_381::{Bls12_381, Bls12_381Parameters};
-use algebra::curves::jubjub::JubJubProjective as JubJub;
+use crate::hasher::{Hasher};
+
+
+
 use algebra::PairingEngine as Engine;
-use snark::{Circuit, ConstraintSystem, SynthesisError};
+
 use std::marker::PhantomData;
 
 pub struct PoRCircuit<E: Engine, H: Hasher> {
