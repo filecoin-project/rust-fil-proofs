@@ -85,71 +85,71 @@ pub fn bits_to_bytes(bits: &[bool]) -> Vec<u8> {
         .collect()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::circuit::test::*;
-    use paired::bls12_381::*;
-    use rand::{Rng, SeedableRng, XorShiftRng};
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use crate::circuit::test::*;
+//     use paired::bls12_381::*;
+//     use rand::{Rng, SeedableRng, XorShiftRng};
 
-    #[test]
-    fn test_bytes_into_boolean_vec() {
-        let mut cs = TestConstraintSystem::<Bls12>::new();
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+//     #[test]
+//     fn test_bytes_into_boolean_vec() {
+//         let mut cs = TestConstraintSystem::<Bls12>::new();
+//         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        for i in 0..100 {
-            let data: Vec<u8> = (0..i + 10).map(|_| rng.gen()).collect();
-            let bools = {
-                let mut cs = cs.ns(|| format!("round: {}", i));
-                bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), 8).unwrap()
-            };
+//         for i in 0..100 {
+//             let data: Vec<u8> = (0..i + 10).map(|_| rng.gen()).collect();
+//             let bools = {
+//                 let mut cs = cs.ns(|| format!("round: {}", i));
+//                 bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), 8).unwrap()
+//             };
 
-            let bytes_actual: Vec<u8> = bits_to_bytes(
-                bools
-                    .iter()
-                    .map(|b| b.get_value().unwrap())
-                    .collect::<Vec<bool>>()
-                    .as_slice(),
-            );
+//             let bytes_actual: Vec<u8> = bits_to_bytes(
+//                 bools
+//                     .iter()
+//                     .map(|b| b.get_value().unwrap())
+//                     .collect::<Vec<bool>>()
+//                     .as_slice(),
+//             );
 
-            assert_eq!(data, bytes_actual);
-        }
-    }
+//             assert_eq!(data, bytes_actual);
+//         }
+//     }
 
-    #[test]
-    fn test_bool_to_u8() {
-        assert_eq!(bool_to_u8(false, 2), 0b0000_0000);
-        assert_eq!(bool_to_u8(true, 0), 0b0000_0001);
-        assert_eq!(bool_to_u8(true, 1), 0b0000_0010);
-        assert_eq!(bool_to_u8(true, 7), 0b1000_0000);
-    }
+//     #[test]
+//     fn test_bool_to_u8() {
+//         assert_eq!(bool_to_u8(false, 2), 0b0000_0000);
+//         assert_eq!(bool_to_u8(true, 0), 0b0000_0001);
+//         assert_eq!(bool_to_u8(true, 1), 0b0000_0010);
+//         assert_eq!(bool_to_u8(true, 7), 0b1000_0000);
+//     }
 
-    #[test]
-    fn test_bits_into_bytes() {
-        assert_eq!(
-            bits_to_bytes(&[true, false, false, false, false, false, false, false]),
-            vec![1]
-        );
-        assert_eq!(
-            bits_to_bytes(&[true, true, true, true, true, true, true, true]),
-            vec![255]
-        );
-    }
+//     #[test]
+//     fn test_bits_into_bytes() {
+//         assert_eq!(
+//             bits_to_bytes(&[true, false, false, false, false, false, false, false]),
+//             vec![1]
+//         );
+//         assert_eq!(
+//             bits_to_bytes(&[true, true, true, true, true, true, true, true]),
+//             vec![255]
+//         );
+//     }
 
-    #[test]
-    fn test_bytes_into_bits() {
-        assert_eq!(
-            bytes_into_bits(&[1u8]),
-            vec![true, false, false, false, false, false, false, false]
-        );
+//     #[test]
+//     fn test_bytes_into_bits() {
+//         assert_eq!(
+//             bytes_into_bits(&[1u8]),
+//             vec![true, false, false, false, false, false, false, false]
+//         );
 
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+//         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        for i in 10..100 {
-            let bytes: Vec<u8> = (0..i).map(|_| rng.gen()).collect();
+//         for i in 10..100 {
+//             let bytes: Vec<u8> = (0..i).map(|_| rng.gen()).collect();
 
-            let bits = bytes_into_bits(bytes.as_slice());
-            assert_eq!(bits_to_bytes(bits.as_slice()), bytes);
-        }
-    }
-}
+//             let bits = bytes_into_bits(bytes.as_slice());
+//             assert_eq!(bits_to_bytes(bits.as_slice()), bytes);
+//         }
+//     }
+// }

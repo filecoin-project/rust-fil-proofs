@@ -1,7 +1,10 @@
 use std::io::{self, Read, Write};
 
 use crate::error::Result;
-use algebra::{bytes::{FromBytes, ToBytes}, PairingEngine as Engine};
+use algebra::{
+    bytes::{FromBytes, ToBytes},
+    PairingEngine as Engine,
+};
 use snark::groth16;
 
 pub struct MultiProof<'a, E: Engine> {

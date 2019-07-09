@@ -2,11 +2,11 @@ use algebra::biginteger::BigInteger256 as FrRepr;
 use algebra::curves::bls12_381::Bls12_381;
 use algebra::curves::jubjub::JubJubProjective as JubJub;
 use algebra::fields::bls12_381::Fr;
-use algebra::PairingEngine as Engine;
+
 use dpc::crypto_primitives::crh::pedersen::PedersenWindow;
+use snark::{ConstraintSystem, SynthesisError};
 use snark_gadgets::bits::boolean;
 use snark_gadgets::fields::fp::FpGadget;
-use snark::{ConstraintSystem, SynthesisError};
 
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
 use merkletree::merkle::Element;
@@ -16,7 +16,7 @@ use serde::ser::Serialize;
 
 use crate::error::Result;
 use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
-use snark_gadgets::groups::curves::twisted_edwards::jubjub::JubJubGadget;
+
 
 pub trait Domain:
     Ord
@@ -66,13 +66,13 @@ pub trait HashFunction<T: Domain>:
         left: &[boolean::Boolean],
         right: &[boolean::Boolean],
         height: usize,
-        params: PedersenParameters<JubJub>
+        params: PedersenParameters<JubJub>,
     ) -> std::result::Result<FpGadget<Bls12_381>, SynthesisError>;
 
     fn hash_circuit<CS: ConstraintSystem<Bls12_381>>(
         cs: CS,
         bits: &[boolean::Boolean],
-        params: PedersenParameters<JubJub>
+        params: PedersenParameters<JubJub>,
     ) -> std::result::Result<FpGadget<Bls12_381>, SynthesisError>;
 }
 
@@ -94,4 +94,3 @@ impl PedersenWindow for Window {
     const WINDOW_SIZE: usize = 1;
     const NUM_WINDOWS: usize = 2016;
 }
-
