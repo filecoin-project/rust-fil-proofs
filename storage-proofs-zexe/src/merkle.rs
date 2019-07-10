@@ -168,7 +168,7 @@ mod tests {
 
     use crate::drgraph::new_seed;
     use crate::drgraph::{BucketGraph, Graph};
-    use crate::hasher::{PedersenHasher};
+    use crate::hasher::PedersenHasher;
 
     fn merklepath<H: Hasher>() {
         let g = BucketGraph::<H>::new(10, 5, 0, new_seed());

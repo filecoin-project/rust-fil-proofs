@@ -44,7 +44,6 @@ pub mod singletons;
 pub mod util;
 pub mod vde;
 
-
 use logging_toolkit::make_logger;
 use slog::Logger;
 

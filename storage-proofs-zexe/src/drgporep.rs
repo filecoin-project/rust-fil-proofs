@@ -500,7 +500,7 @@ mod tests {
     use crate::drgraph::{new_seed, BucketGraph};
     use crate::fr32::fr_into_bytes;
     // use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
-    use crate::hasher::{PedersenHasher};
+    use crate::hasher::PedersenHasher;
     use crate::util::data_at_node;
 
     pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
