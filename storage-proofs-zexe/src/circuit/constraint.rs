@@ -51,7 +51,7 @@ pub fn difference<E: Engine, A, AR, CS: ConstraintSystem<E>>(
     AR: Into<String>,
 {
 
-    let sum = b.add(cs.ns(|| "difference"), difference).unwrap();
+    let sum = b.add(cs.ns(|| "sum"), difference).unwrap();
     a.enforce_equal(cs, &sum);
 
     //    difference = a-b
