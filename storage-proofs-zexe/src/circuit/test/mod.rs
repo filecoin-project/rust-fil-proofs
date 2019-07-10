@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt::Write;
 
-use snark::{Circuit, ConstraintSystem, SynthesisError, LinearCombination, Index, Variable};
+use snark::{ConstraintSystem, SynthesisError, LinearCombination, Index, Variable};
 
 use blake2s_simd::State as Blake2s;
 use byteorder::{BigEndian, ByteOrder};
@@ -13,7 +13,7 @@ use algebra::biginteger::BigInteger;
 use algebra::PairingEngine as Engine;
 
 use std::ops::MulAssign;
-use std::str::FromStr;
+
 use std::ops::AddAssign;
 use algebra::fields::FpParameters;
 use std::io::Write as ioWrite;
@@ -114,7 +114,7 @@ fn hash_lc<E: Engine>(terms: &[(Variable, E::Fr)], h: &mut Blake2s) {
         coeff
             .into_repr()
             // FIXME: not using big endianess any more!!
-            .write_le(( (&mut buf[9..]).by_ref()))
+            .write_le( (&mut buf[9..]).by_ref())
             .expect("failed to write coeff");
 
         h.update(&buf[..]);
@@ -193,13 +193,13 @@ impl<E: Engine> TestConstraintSystem<E> {
         write!(s, "\n\n").unwrap();
 
         let negone = {
-            let mut tmp = E::Fr::one();
+            let tmp = E::Fr::one();
             // tmp.negate();
             -tmp
         };
 
         let powers_of_two = (0..  <E::Fr as PrimeField>::Params::MODULUS_BITS)
-            .map(|i| (E::Fr::from_repr_raw(<E::Fr as PrimeField>::BigInt::from(2 as u64))))
+            .map(|_| (E::Fr::from_repr_raw(<E::Fr as PrimeField>::BigInt::from(2 as u64))))
             // TODO: use `from_str` here, like below:
             // .map(|i| ((E::Fr::from_str("2"))))
             .collect::<Vec<_>>();

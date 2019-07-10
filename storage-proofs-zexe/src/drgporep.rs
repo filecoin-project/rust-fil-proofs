@@ -494,9 +494,6 @@ mod tests {
     use std::io::Write;
     use tempfile;
 
-    #[macro_use]
-    use crate::test_helper;
-
     use crate::drgraph::{new_seed, BucketGraph};
     use crate::fr32::fr_into_bytes;
     // use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
