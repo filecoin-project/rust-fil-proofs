@@ -474,6 +474,7 @@ fn test_cs() {
     // use paired::bls12_381::{Bls12, Fr};
     use algebra::curves::bls12_381::Bls12_381 as Bls12;
     use algebra::fields::bls12_381::Fr;
+    use std::str::FromStr;
     
     let mut cs = TestConstraintSystem::<Bls12>::new();
     assert!(cs.is_satisfied());
