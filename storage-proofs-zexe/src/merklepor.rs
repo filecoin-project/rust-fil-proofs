@@ -129,188 +129,189 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for MerklePoR<H> {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-//     use paired::bls12_381::Bls12;
-//     use rand::{Rng, SeedableRng, XorShiftRng};
+    // use paired::bls12_381::Bls12;
+    use algebra::curves::bls12_381::Bls12_381 as Bls12;
+    use rand::{Rng, SeedableRng, XorShiftRng};
 
-//     use crate::drgraph::{new_seed, BucketGraph, Graph};
-//     use crate::fr32::fr_into_bytes;
-//     use crate::hasher::{Blake2sHasher, HashFunction, PedersenHasher, Sha256Hasher};
-//     use crate::merkle::make_proof_for_test;
-//     use crate::util::data_at_node;
+    use crate::drgraph::{new_seed, BucketGraph, Graph};
+    use crate::fr32::fr_into_bytes;
+    use crate::hasher::{HashFunction, PedersenHasher};
+    use crate::merkle::make_proof_for_test;
+    use crate::util::data_at_node;
 
-//     fn test_merklepor<H: Hasher>() {
-//         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    fn test_merklepor<H: Hasher>() {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-//         let pub_params = PublicParams {
-//             leaves: 32,
-//             private: false,
-//         };
+        let pub_params = PublicParams {
+            leaves: 32,
+            private: false,
+        };
 
-//         let data: Vec<u8> = (0..32)
-//             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
-//             .collect();
+        let data: Vec<u8> = (0..32)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
 
-//         let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
-//         let tree = graph.merkle_tree(data.as_slice()).unwrap();
+        let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
+        let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
-//         let pub_inputs = PublicInputs {
-//             challenge: 3,
-//             commitment: Some(tree.root()),
-//         };
+        let pub_inputs = PublicInputs {
+            challenge: 3,
+            commitment: Some(tree.root()),
+        };
 
-//         let leaf =
-//             H::Domain::try_from_bytes(data_at_node(data.as_slice(), pub_inputs.challenge).unwrap())
-//                 .unwrap();
+        let leaf =
+            H::Domain::try_from_bytes(data_at_node(data.as_slice(), pub_inputs.challenge).unwrap())
+                .unwrap();
 
-//         let priv_inputs = PrivateInputs::<H>::new(leaf, &tree);
+        let priv_inputs = PrivateInputs::<H>::new(leaf, &tree);
 
-//         let proof =
-//             MerklePoR::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
+        let proof =
+            MerklePoR::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
 
-//         let is_valid =
-//             MerklePoR::<H>::verify(&pub_params, &pub_inputs, &proof).expect("verification failed");
+        let is_valid =
+            MerklePoR::<H>::verify(&pub_params, &pub_inputs, &proof).expect("verification failed");
 
-//         assert!(is_valid);
-//     }
+        assert!(is_valid);
+    }
 
-//     #[test]
-//     fn merklepor_pedersen() {
-//         test_merklepor::<PedersenHasher>();
-//     }
+    #[test]
+    fn merklepor_pedersen() {
+        test_merklepor::<PedersenHasher>();
+    }
 
-//     #[test]
-//     fn merklepor_sha256() {
-//         test_merklepor::<Sha256Hasher>();
-//     }
+    // #[test]
+    // fn merklepor_sha256() {
+    //     test_merklepor::<Sha256Hasher>();
+    // }
 
-//     #[test]
-//     fn merklepor_blake2s() {
-//         test_merklepor::<Blake2sHasher>();
-//     }
+    // #[test]
+    // fn merklepor_blake2s() {
+    //     test_merklepor::<Blake2sHasher>();
+    // }
 
-//     // Construct a proof that satisfies a cursory validation:
-//     // Data and proof are minimally consistent.
-//     // Proof root matches that requested in public inputs.
-//     // However, note that data has no relationship to anything,
-//     // and proof path does not actually prove that data was in the tree corresponding to expected root.
-//     fn make_bogus_proof<H: Hasher>(
-//         pub_inputs: &PublicInputs<H::Domain>,
-//         rng: &mut XorShiftRng,
-//     ) -> DataProof<H> {
-//         let bogus_leaf: H::Domain = rng.gen();
-//         let hashed_leaf = H::Function::hash_leaf(&bogus_leaf);
+    // Construct a proof that satisfies a cursory validation:
+    // Data and proof are minimally consistent.
+    // Proof root matches that requested in public inputs.
+    // However, note that data has no relationship to anything,
+    // and proof path does not actually prove that data was in the tree corresponding to expected root.
+    fn make_bogus_proof<H: Hasher>(
+        pub_inputs: &PublicInputs<H::Domain>,
+        rng: &mut XorShiftRng,
+    ) -> DataProof<H> {
+        let bogus_leaf: H::Domain = rng.gen();
+        let hashed_leaf = H::Function::hash_leaf(&bogus_leaf);
 
-//         DataProof {
-//             data: bogus_leaf,
-//             proof: make_proof_for_test(
-//                 pub_inputs.commitment.unwrap(),
-//                 hashed_leaf,
-//                 vec![(hashed_leaf, true)],
-//             ),
-//         }
-//     }
+        DataProof {
+            data: bogus_leaf,
+            proof: make_proof_for_test(
+                pub_inputs.commitment.unwrap(),
+                hashed_leaf,
+                vec![(hashed_leaf, true)],
+            ),
+        }
+    }
 
-//     fn test_merklepor_validates<H: Hasher>() {
-//         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    fn test_merklepor_validates<H: Hasher>() {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-//         let pub_params = PublicParams {
-//             leaves: 32,
-//             private: false,
-//         };
+        let pub_params = PublicParams {
+            leaves: 32,
+            private: false,
+        };
 
-//         let data: Vec<u8> = (0..32)
-//             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
-//             .collect();
+        let data: Vec<u8> = (0..32)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
 
-//         let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
-//         let tree = graph.merkle_tree(data.as_slice()).unwrap();
+        let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
+        let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
-//         let pub_inputs = PublicInputs {
-//             challenge: 3,
-//             commitment: Some(tree.root()),
-//         };
+        let pub_inputs = PublicInputs {
+            challenge: 3,
+            commitment: Some(tree.root()),
+        };
 
-//         let bad_proof = make_bogus_proof::<H>(&pub_inputs, rng);
+        let bad_proof = make_bogus_proof::<H>(&pub_inputs, rng);
 
-//         let verified =
-//             MerklePoR::verify(&pub_params, &pub_inputs, &bad_proof).expect("verification failed");
+        let verified =
+            MerklePoR::verify(&pub_params, &pub_inputs, &bad_proof).expect("verification failed");
 
-//         // A bad proof should not be verified!
-//         assert!(!verified);
-//     }
+        // A bad proof should not be verified!
+        assert!(!verified);
+    }
 
-//     #[test]
-//     fn merklepor_actually_validates_sha256() {
-//         test_merklepor_validates::<Sha256Hasher>();
-//     }
+    // #[test]
+    // fn merklepor_actually_validates_sha256() {
+    //     test_merklepor_validates::<Sha256Hasher>();
+    // }
 
-//     #[test]
-//     fn merklepor_actually_validates_blake2s() {
-//         test_merklepor_validates::<Blake2sHasher>();
-//     }
+    // #[test]
+    // fn merklepor_actually_validates_blake2s() {
+    //     test_merklepor_validates::<Blake2sHasher>();
+    // }
 
-//     #[test]
-//     fn merklepor_actually_validates_pedersen() {
-//         test_merklepor_validates::<PedersenHasher>();
-//     }
+    #[test]
+    fn merklepor_actually_validates_pedersen() {
+        test_merklepor_validates::<PedersenHasher>();
+    }
 
-//     fn test_merklepor_validates_challenge_identity<H: Hasher>() {
-//         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    fn test_merklepor_validates_challenge_identity<H: Hasher>() {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-//         let pub_params = PublicParams {
-//             leaves: 32,
-//             private: false,
-//         };
+        let pub_params = PublicParams {
+            leaves: 32,
+            private: false,
+        };
 
-//         let data: Vec<u8> = (0..32)
-//             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
-//             .collect();
+        let data: Vec<u8> = (0..32)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
 
-//         let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
-//         let tree = graph.merkle_tree(data.as_slice()).unwrap();
+        let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
+        let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
-//         let pub_inputs = PublicInputs {
-//             challenge: 3,
-//             commitment: Some(tree.root()),
-//         };
+        let pub_inputs = PublicInputs {
+            challenge: 3,
+            commitment: Some(tree.root()),
+        };
 
-//         let leaf =
-//             H::Domain::try_from_bytes(data_at_node(data.as_slice(), pub_inputs.challenge).unwrap())
-//                 .unwrap();
+        let leaf =
+            H::Domain::try_from_bytes(data_at_node(data.as_slice(), pub_inputs.challenge).unwrap())
+                .unwrap();
 
-//         let priv_inputs = PrivateInputs::<H>::new(leaf, &tree);
+        let priv_inputs = PrivateInputs::<H>::new(leaf, &tree);
 
-//         let proof =
-//             MerklePoR::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
+        let proof =
+            MerklePoR::<H>::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
 
-//         let different_pub_inputs = PublicInputs {
-//             challenge: 999,
-//             commitment: Some(tree.root()),
-//         };
+        let different_pub_inputs = PublicInputs {
+            challenge: 999,
+            commitment: Some(tree.root()),
+        };
 
-//         let verified = MerklePoR::<H>::verify(&pub_params, &different_pub_inputs, &proof)
-//             .expect("verification failed");
+        let verified = MerklePoR::<H>::verify(&pub_params, &different_pub_inputs, &proof)
+            .expect("verification failed");
 
-//         // A proof created with a the wrong challenge not be verified!
-//         assert!(!verified);
-//     }
+        // A proof created with a the wrong challenge not be verified!
+        assert!(!verified);
+    }
 
-//     #[test]
-//     fn merklepor_actually_validates_challenge_identity_sha256() {
-//         test_merklepor_validates_challenge_identity::<Sha256Hasher>();
-//     }
+    // #[test]
+    // fn merklepor_actually_validates_challenge_identity_sha256() {
+    //     test_merklepor_validates_challenge_identity::<Sha256Hasher>();
+    // }
 
-//     #[test]
-//     fn merklepor_actually_validates_challenge_identity_blake2s() {
-//         test_merklepor_validates_challenge_identity::<Blake2sHasher>();
-//     }
+    // #[test]
+    // fn merklepor_actually_validates_challenge_identity_blake2s() {
+    //     test_merklepor_validates_challenge_identity::<Blake2sHasher>();
+    // }
 
-//     #[test]
-//     fn merklepor_actually_validates_challenge_identity_pedersen() {
-//         test_merklepor_validates_challenge_identity::<PedersenHasher>();
-//     }
-// }
+    #[test]
+    fn merklepor_actually_validates_challenge_identity_pedersen() {
+        test_merklepor_validates_challenge_identity::<PedersenHasher>();
+    }
+}

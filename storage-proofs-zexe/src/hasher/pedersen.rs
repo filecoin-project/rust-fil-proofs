@@ -8,14 +8,12 @@ use snark::{ConstraintSystem, SynthesisError};
 
 use algebra::biginteger::BigInteger;
 use algebra::biginteger::BigInteger256 as FrRepr;
-use algebra::curves::{
-    bls12_381::Bls12_381 as Bls12, jubjub::JubJubProjective as JubJub,
-};
+use algebra::curves::{bls12_381::Bls12_381 as Bls12, jubjub::JubJubProjective as JubJub};
 use algebra::fields::{bls12_381::Fr, FpParameters, PrimeField};
 
 use snark_gadgets::bits::uint8::UInt8;
-use snark_gadgets::boolean::{Boolean};
-use snark_gadgets::fields::{fp::FpGadget};
+use snark_gadgets::boolean::Boolean;
+use snark_gadgets::fields::fp::FpGadget;
 use snark_gadgets::groups::curves::twisted_edwards::jubjub::JubJubGadget;
 
 use snark_gadgets::utils::AllocGadget;
@@ -39,7 +37,6 @@ use crate::crypto::pedersen::Personalization;
 use crate::crypto::{kdf, pedersen, sloth};
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher, Window};
-
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PedersenHasher {}
@@ -378,9 +375,9 @@ mod tests {
         let root = a.node(i1, i2, 1);
         a.reset();
 
-        // Note: this test fails as we use different generator points and zexe used a slightly different approch 
+        // Note: this test fails as we use different generator points and zexe used a slightly different approch
         // for Pedersen hashing (no windowing). Hence the expected output should be updated.
-        
+
         // assert_eq!(
         //     t.read_at(0).0,
         //     FrRepr([

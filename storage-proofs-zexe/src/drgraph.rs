@@ -277,108 +277,108 @@ pub fn new_seed() -> [u32; 7] {
     OsRng::new().expect("Failed to create `OsRng`").gen()
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-//     use memmap::MmapMut;
-//     use memmap::MmapOptions;
+    use memmap::MmapMut;
+    use memmap::MmapOptions;
 
-//     use crate::drgraph::new_seed;
-//     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::drgraph::new_seed;
+    // use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::hasher::PedersenHasher;
 
-//     // Create and return an object of MmapMut backed by in-memory copy of data.
-//     pub fn mmap_from(data: &[u8]) -> MmapMut {
-//         let mut mm = MmapOptions::new()
-//             .len(data.len())
-//             .map_anon()
-//             .expect("Failed to create memory map");
-//         mm.copy_from_slice(data);
-//         mm
-//     }
+    // Create and return an object of MmapMut backed by in-memory copy of data.
+    pub fn mmap_from(data: &[u8]) -> MmapMut {
+        let mut mm = MmapOptions::new()
+            .len(data.len())
+            .map_anon()
+            .expect("Failed to create memory map");
+        mm.copy_from_slice(data);
+        mm
+    }
 
-//     fn graph_bucket<H: Hasher>() {
-//         for size in vec![3, 10, 200, 2000] {
-//             for degree in 2..12 {
-//                 let g = BucketGraph::<H>::new(size, degree, 0, new_seed());
+    fn graph_bucket<H: Hasher>() {
+        for size in vec![3, 10, 200, 2000] {
+            for degree in 2..12 {
+                let g = BucketGraph::<H>::new(size, degree, 0, new_seed());
 
-//                 assert_eq!(g.size(), size, "wrong nodes count");
+                assert_eq!(g.size(), size, "wrong nodes count");
 
-//                 let mut parents = vec![0; degree];
-//                 g.parents(0, &mut parents);
-//                 assert_eq!(parents, vec![0; degree as usize]);
-//                 parents = vec![0; degree];
-//                 g.parents(1, &mut parents);
-//                 assert_eq!(parents, vec![0; degree as usize]);
+                let mut parents = vec![0; degree];
+                g.parents(0, &mut parents);
+                assert_eq!(parents, vec![0; degree as usize]);
+                parents = vec![0; degree];
+                g.parents(1, &mut parents);
+                assert_eq!(parents, vec![0; degree as usize]);
 
-//                 for i in 2..size {
-//                     let mut pa1 = vec![0; degree];
-//                     g.parents(i, &mut pa1);
-//                     let mut pa2 = vec![0; degree];
-//                     g.parents(i, &mut pa2);
+                for i in 2..size {
+                    let mut pa1 = vec![0; degree];
+                    g.parents(i, &mut pa1);
+                    let mut pa2 = vec![0; degree];
+                    g.parents(i, &mut pa2);
 
-//                     assert_eq!(pa1.len(), degree);
-//                     assert_eq!(pa1, pa2, "different parents on the same node");
+                    assert_eq!(pa1.len(), degree);
+                    assert_eq!(pa1, pa2, "different parents on the same node");
 
-//                     let mut p1 = vec![0; degree];
-//                     g.parents(i, &mut p1);
-//                     let mut p2 = vec![0; degree];
-//                     g.parents(i, &mut p2);
+                    let mut p1 = vec![0; degree];
+                    g.parents(i, &mut p1);
+                    let mut p2 = vec![0; degree];
+                    g.parents(i, &mut p2);
 
-//                     for parent in p1 {
-//                         // TODO: fix me
-//                         assert_ne!(i, parent, "self reference found");
-//                     }
+                    for parent in p1 {
+                        // TODO: fix me
+                        assert_ne!(i, parent, "self reference found");
+                    }
 
-//                     let mut p1 = p2.clone();
-//                     p1.sort();
-//                     assert_eq!(p1, p2, "not sorted");
-//                 }
-//             }
-//         }
-//     }
+                    let mut p1 = p2.clone();
+                    p1.sort();
+                    assert_eq!(p1, p2, "not sorted");
+                }
+            }
+        }
+    }
 
-//     #[test]
-//     fn graph_bucket_sha256() {
-//         graph_bucket::<Sha256Hasher>();
-//     }
+    #[test]
+    // fn graph_bucket_sha256() {
+    //     graph_bucket::<Sha256Hasher>();
+    // }
 
-//     #[test]
-//     fn graph_bucket_blake2s() {
-//         graph_bucket::<Blake2sHasher>();
-//     }
+    // #[test]
+    // fn graph_bucket_blake2s() {
+    //     graph_bucket::<Blake2sHasher>();
+    // }
+    #[test]
+    fn graph_bucket_pedersen() {
+        graph_bucket::<PedersenHasher>();
+    }
 
-//     #[test]
-//     fn graph_bucket_pedersen() {
-//         graph_bucket::<PedersenHasher>();
-//     }
+    fn gen_proof<H: Hasher>(parallel: bool) {
+        let g = BucketGraph::<H>::new(5, 3, 0, new_seed());
+        let data = vec![2u8; NODE_SIZE * 5];
 
-//     fn gen_proof<H: Hasher>(parallel: bool) {
-//         let g = BucketGraph::<H>::new(5, 3, 0, new_seed());
-//         let data = vec![2u8; NODE_SIZE * 5];
+        let mmapped = &mmap_from(&data);
+        let tree = g.merkle_tree_aux(mmapped, parallel).unwrap();
+        let proof = tree.gen_proof(2);
 
-//         let mmapped = &mmap_from(&data);
-//         let tree = g.merkle_tree_aux(mmapped, parallel).unwrap();
-//         let proof = tree.gen_proof(2);
+        assert!(proof.validate::<H::Function>());
+    }
 
-//         assert!(proof.validate::<H::Function>());
-//     }
+    #[test]
+    fn gen_proof_pedersen() {
+        gen_proof::<PedersenHasher>(true);
+        gen_proof::<PedersenHasher>(false);
+    }
 
-//     #[test]
-//     fn gen_proof_pedersen() {
-//         gen_proof::<PedersenHasher>(true);
-//         gen_proof::<PedersenHasher>(false);
-//     }
+    // #[test]
+    //     fn gen_proof_sha256() {
+    //         gen_proof::<Sha256Hasher>(true);
+    //         gen_proof::<Sha256Hasher>(false);
+    //     }
 
-//     #[test]
-//     fn gen_proof_sha256() {
-//         gen_proof::<Sha256Hasher>(true);
-//         gen_proof::<Sha256Hasher>(false);
-//     }
-
-//     #[test]
-//     fn gen_proof_blake2s() {
-//         gen_proof::<Blake2sHasher>(true);
-//         gen_proof::<Blake2sHasher>(false);
-//     }
-// }
+    //     #[test]
+    //     fn gen_proof_blake2s() {
+    //         gen_proof::<Blake2sHasher>(true);
+    //         gen_proof::<Blake2sHasher>(false);
+    //     }
+}

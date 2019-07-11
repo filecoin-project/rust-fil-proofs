@@ -22,6 +22,9 @@ extern crate serde;
 extern crate pretty_assertions;
 
 #[macro_use]
+pub mod test_helper;
+
+#[macro_use]
 pub mod crypto;
 pub mod circuit;
 pub mod compound_proof;
