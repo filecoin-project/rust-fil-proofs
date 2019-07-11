@@ -4,10 +4,10 @@ use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
 use fil_sapling_crypto::circuit::boolean::{field_into_boolean_vec_le, Boolean};
 use fil_sapling_crypto::circuit::multipack;
+use fil_sapling_crypto::circuit::num::AllocatedNum;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
-use crate::circuit::alloc::alloc_priv_num;
 use crate::circuit::constraint;
 use crate::circuit::kdf::kdf;
 use crate::circuit::por::{PoRCircuit, PoRCompound};
@@ -22,6 +22,8 @@ use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
 use crate::util::{bytes_into_bits, bytes_into_boolean_vec};
+
+const REPLICA_ID_LENGTH_BITS: usize = 256;
 
 /// DRG based Proof of Replication.
 ///
@@ -420,30 +422,33 @@ where
     {
         let params = self.params;
         let sloth_iter = self.sloth_iter;
-        let replica_id = self
-            .replica_id
-            .as_ref()
-            .ok_or(SynthesisError::AssignmentMissing)?;
         let replica_root = self.replica_root;
         let data_root = self.data_root;
         let degree = self.degree;
         let n_challenges = self.data_nodes.len();
+
+        // A replica-id of `None` is used in Groth parameter generation or when the
+        // `DrgPoRepCircuit` is being created only for structure and input count.
+        let replica_id_bytes = self
+            .replica_id
+            .as_ref()
+            .map(|replica_id_fr| fr_into_bytes::<E>(replica_id_fr));
+
+        let replica_id_bytes_slice = replica_id_bytes
+            .as_ref()
+            .map(|replica_id_bytes| replica_id_bytes.as_slice());
+
+        let replica_id_bits = bytes_into_boolean_vec(
+            cs.namespace(|| "replica_id_bits"),
+            replica_id_bytes_slice,
+            REPLICA_ID_LENGTH_BITS,
+        )?;
 
         assert_eq!(self.replica_nodes.len(), n_challenges);
         assert_eq!(self.replica_nodes_paths.len(), n_challenges);
         assert_eq!(self.replica_parents.len(), n_challenges);
         assert_eq!(self.replica_parents_paths.len(), n_challenges);
         assert_eq!(self.data_nodes_paths.len(), n_challenges);
-
-        let replica_id_bytes = fr_into_bytes::<E>(replica_id);
-
-        // Note that while the size of the replica-id is 256 bits (32 bytes), the `256` argument
-        // value is not being used in `bytes_into_boolean_vec`.
-        let replica_id_bits = bytes_into_boolean_vec(
-            cs.namespace(|| "replica_id_bits"),
-            Some(replica_id_bytes.as_slice()),
-            256,
-        )?;
 
         // Compactly allocate `replica_id_bits` as a single public input (each bit is not allocated
         // individually, many bits are allocated using a single `Fr` allocation).
@@ -474,6 +479,10 @@ where
             let data_node = &self.data_nodes[i];
 
             assert_eq!(data_node_path.len(), replica_node_path.len());
+
+            // If `replica_node` and `data_node` are both `None` we are using this circuit for Groth
+            // parameter generation, otherwise both should be `Some`. It is never the case that one
+            // is `None` and the other is `Some`.
             assert_eq!(replica_node.is_some(), data_node.is_some());
 
             // Inclusion checks. We isolate the below code into its own code block so that our
@@ -557,10 +566,12 @@ where
 
             // TODO: this should not be here, instead, this should be the leaf Fr in
             // the data_auth_path.
+            //
             // TODO: also note that we need to change/makesure that the leaves are the data,
             // instead of hashes of the data.
-
-            let expected = alloc_priv_num(&mut cs_encoding, "data node", data_node.unwrap());
+            let expected = AllocatedNum::alloc(cs_encoding.namespace(|| "data node"), || {
+                data_node.ok_or_else(|| SynthesisError::AssignmentMissing)
+            })?;
 
             // Ensure that the encrypted data and `data_node` match.
             constraint::equal(&mut cs_encoding, || "equality", &expected, &decoded);

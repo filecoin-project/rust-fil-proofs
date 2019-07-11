@@ -6,7 +6,6 @@ use fil_sapling_crypto::circuit::num::AllocatedNum;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
-use crate::circuit::alloc::alloc_priv_num;
 use crate::circuit::constraint;
 use crate::circuit::drgporep::{ComponentPrivateInputs, DrgPoRepCompound};
 use crate::circuit::variables::Root;
@@ -19,6 +18,8 @@ use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::porep;
 use crate::proof::ProofScheme;
 use crate::zigzag_drgporep::ZigZagDrgPoRep;
+
+const FR_SIZE_BITS: usize = 256;
 
 type Layers<'a, AH, BH, G> = Vec<
     Option<(
@@ -119,33 +120,45 @@ where
 
         assert_eq!(layer_challenges.layers(), n_layers);
 
-        // Stores each layer's comm_r to be used as the next layer's comm_d and for calculating
+        // Stores each layer's comm_r to be used as the next layer's comm_d and when calculating
         // comm_r_star.
         let mut comm_rs: Vec<AllocatedNum<Bls12>> = Vec::with_capacity(n_layers);
 
-        // Allocate the replica-id.
-        let replica_id = self.layers[0]
+        // Allocate the replica-id. A replica-id of `None` is used during Groth parameter
+        // generation.
+        let replica_id_opt: Option<Fr> = self.layers[0]
             .as_ref()
             .and_then(|layer_info| layer_info.0.replica_id)
-            .map(|replica_id| alloc_priv_num(cs, "replica_id", replica_id))
-            .ok_or(SynthesisError::AssignmentMissing)?;
+            .map(|replica_id| replica_id.into());
 
-        // Allocate comm_d and comm_r_last.
-        let (comm_d, comm_r_last) = match self.tau {
-            Some(tau) => {
-                let comm_d = alloc_priv_num(cs, "public_comm_d", tau.comm_d);
-                let comm_r_last = alloc_priv_num(cs, "public_comm_r", tau.comm_r);
-                (comm_d, comm_r_last)
-            }
-            None => return Err(SynthesisError::AssignmentMissing),
-        };
+        let replica_id = AllocatedNum::alloc(cs.namespace(|| "replica_id"), || {
+            replica_id_opt.ok_or(SynthesisError::AssignmentMissing)
+        })?;
+
+        // Allocate comm_d and comm_r_last. When synthesizing this circuit during Groth parameter
+        // generation, both comm_d and comm_r_last are `None`.
+        let comm_d_opt: Option<Fr> = self.tau.as_ref().map(|tau| tau.comm_d.into());
+        let comm_r_last_opt: Option<Fr> = self.tau.as_ref().map(|tau| tau.comm_r.into());
+
+        let comm_d = AllocatedNum::alloc(cs.namespace(|| "public_comm_d"), || {
+            comm_d_opt.ok_or(SynthesisError::AssignmentMissing)
+        })?;
+
+        let comm_r_last = AllocatedNum::alloc(cs.namespace(|| "public_comm_r"), || {
+            comm_r_last_opt.ok_or(SynthesisError::AssignmentMissing)
+        })?;
 
         // Make comm_d and comm_r_last public inputs.
         comm_d.inputize(cs.namespace(|| "zigzag_comm_d"))?;
         comm_r_last.inputize(cs.namespace(|| "zigzag_comm_r"))?;
 
+        let height = graph.merkle_tree_depth() as usize;
+
         for (layer_index, opt) in self.layers.iter().enumerate() {
-            let (pub_inputs, proof) = opt.as_ref().ok_or(SynthesisError::AssignmentMissing)?;
+            // During Groth parameter generation both the layer proof and public inputs are `None`,
+            // otherwise both should be `Some`.
+            let pub_inputs_opt = opt.as_ref().map(|layer_info| &layer_info.0);
+            let layer_proof_opt = opt.as_ref().map(|layer_info| &layer_info.1);
 
             let is_first_layer = layer_index == 0;
             let is_last_layer = layer_index == n_layers - 1;
@@ -159,12 +172,18 @@ where
             };
 
             // Get this layer's comm_r. For the last layer this is comm_r_last, for every other
-            // layer it is the replica tree's root found in the layer's proof.
+            // layer it is the replica tree's root (found in the layer's proof).
             let comm_r_layer = if is_last_layer {
                 comm_r_last.clone()
             } else {
-                let annotation = format!("layer {} comm_r", layer_index);
-                alloc_priv_num(cs, &annotation, proof.replica_root)
+                AllocatedNum::alloc(
+                    &mut cs.namespace(|| format!("layer {} comm_r", layer_index)),
+                    || {
+                        layer_proof_opt
+                            .map(|layer_proof| layer_proof.replica_root.into())
+                            .ok_or(SynthesisError::AssignmentMissing)
+                    },
+                )?
             };
 
             comm_rs.push(comm_r_layer.clone());
@@ -172,25 +191,58 @@ where
             // TODO: As an optimization, we may be able to skip proving the original data on some
             // (50%?) of challenges.
 
+            let n_challenges_for_layer = layer_challenges.challenges_for_layer(layer_index);
+
             // Construct the public parameters for `DrgPoRep`.
-            let drgporep_pub_params = drgporep::PublicParams::new(
-                graph.clone(), // TODO: avoid
+            // TODO: avoid cloning the graph below.
+            let pub_params = drgporep::PublicParams::new(
+                graph.clone(),
                 sloth_iter,
                 true,
-                layer_challenges.challenges_for_layer(layer_index),
+                n_challenges_for_layer,
             );
 
             // Construct the `DrgPoRep` circut.
-            let circuit = DrgPoRepCompound::circuit(
-                &pub_inputs,
-                ComponentPrivateInputs {
-                    comm_d: Some(Root::Var(comm_d_layer)),
-                    comm_r: Some(Root::Var(comm_r_layer)),
-                },
-                &proof,
-                &drgporep_pub_params,
-                self.params,
-            );
+            let circuit = match pub_inputs_opt {
+                Some(pub_inputs) => {
+                    // Unwrapping here is safe because `pub_inputs_opt` and `layer_proof_opt` must
+                    // both be `Some`.
+                    let layer_proof = layer_proof_opt.unwrap();
+
+                    DrgPoRepCompound::circuit(
+                        pub_inputs,
+                        ComponentPrivateInputs {
+                            comm_d: Some(Root::Var(comm_d_layer)),
+                            comm_r: Some(Root::Var(comm_r_layer)),
+                        },
+                        layer_proof,
+                        &pub_params,
+                        self.params,
+                    )
+                }
+                None => {
+                    let layer_proof_empty =
+                        drgporep::Proof::new_empty(height, graph.degree(), n_challenges_for_layer);
+
+                    // The `challenges` will be ignored so it's fine to pass in `0`s.
+                    let pub_inputs_empty = drgporep::PublicInputs {
+                        replica_id: None,
+                        challenges: vec![0; n_challenges_for_layer],
+                        tau: None,
+                    };
+
+                    DrgPoRepCompound::circuit(
+                        &pub_inputs_empty,
+                        ComponentPrivateInputs {
+                            comm_d: Some(Root::Var(comm_d_layer)),
+                            comm_r: Some(Root::Var(comm_r_layer)),
+                        },
+                        &layer_proof_empty,
+                        &pub_params,
+                        self.params,
+                    )
+                }
+            };
 
             // Synthesize the DrgPoRep circuit.
             circuit.synthesize(&mut cs.namespace(|| format!("zigzag_layer_#{}", layer_index)))?;
@@ -198,7 +250,7 @@ where
 
         let add_padding = |bits: &mut Vec<Boolean>| {
             let len = bits.len();
-            let pad_len = 256 - len % 256;
+            let pad_len = FR_SIZE_BITS - len % FR_SIZE_BITS;
             let new_len = len + pad_len;
             bits.resize(new_len, Boolean::Constant(false));
         };
@@ -212,6 +264,7 @@ where
         for (layer_index, comm_r_layer) in comm_rs.iter().enumerate() {
             let comm_r_layer_bits = comm_r_layer
                 .into_bits_le(cs.namespace(|| format!("comm_r-bits-{}", layer_index)))?;
+
             comm_r_star_bits.extend(comm_r_layer_bits);
             add_padding(&mut comm_r_star_bits);
         }
@@ -223,10 +276,11 @@ where
         )?;
 
         // Allocate the passed in comm_r_star.
-        let comm_r_star = match self.comm_r_star {
-            Some(comm_r_star) => alloc_priv_num(cs, "public comm_r_star value", comm_r_star),
-            None => return Err(SynthesisError::AssignmentMissing),
-        };
+        let comm_r_star = AllocatedNum::alloc(cs.namespace(|| "public comm_r_star value"), || {
+            self.comm_r_star
+                .map(|comm_r_star| comm_r_star.into())
+                .ok_or(SynthesisError::AssignmentMissing)
+        })?;
 
         // Enforce that the passed in comm_r_star is equal to the computed comm_r_star.
         constraint::equal(

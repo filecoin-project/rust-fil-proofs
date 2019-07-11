@@ -1,13 +1,12 @@
 use std::marker::PhantomData;
 
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::circuit::boolean::Boolean;
+use fil_sapling_crypto::circuit::boolean::{AllocatedBit, Boolean};
 use fil_sapling_crypto::circuit::multipack;
 use fil_sapling_crypto::circuit::num::AllocatedNum;
 use fil_sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 use paired::bls12_381::{Bls12, Fr};
 
-use crate::circuit::alloc::{alloc_priv_bit, alloc_priv_num};
 use crate::circuit::constraint;
 use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
@@ -179,13 +178,14 @@ where
         E: JubjubEngine,
         CS: ConstraintSystem<E>,
     {
+        // Allocate the leaf value.
+        let value = AllocatedNum::alloc(cs.namespace(|| "value"), || {
+            self.value.ok_or_else(|| SynthesisError::AssignmentMissing)
+        })?;
+
         let params = self.params;
-        let value = self.value.ok_or(SynthesisError::AssignmentMissing)?;
         let auth_path = self.auth_path;
         let root = self.root;
-
-        // Allocate the leaf value.
-        let value = alloc_priv_num(cs, "value", value);
 
         let auth_path_len = auth_path.len();
         let beta_path_len = auth_path_len - ALPHA_TREE_HEIGHT;
@@ -194,17 +194,20 @@ where
         let mut auth_path_bits: Vec<Boolean> = Vec::with_capacity(auth_path_len);
 
         for (i, opt) in auth_path.into_iter().enumerate() {
-            let (path_elem, path_elem_is_left) = opt.ok_or(SynthesisError::AssignmentMissing)?;
-
             let cs = &mut cs.namespace(|| format!("merkle tree hash {}", i));
 
             // Allocate a bit which describes if `cur` is a right input to the Merkle hash (if
             // `cur` is the right input then `path_elem` is the left input).
-            let cur_is_right: Boolean =
-                alloc_priv_bit(cs, "position bit", path_elem_is_left).into();
+            let cur_is_right = Boolean::from(AllocatedBit::alloc(
+                cs.namespace(|| "position bit"),
+                opt.map(|(_path_elem, path_elem_is_left)| path_elem_is_left),
+            )?);
 
             // Allocate the path element.
-            let path_elem = alloc_priv_num(cs, "path element", path_elem);
+            let path_elem = AllocatedNum::alloc(cs.namespace(|| "path element"), || {
+                opt.map(|(path_elem, _path_elem_is_left)| path_elem)
+                    .ok_or(SynthesisError::AssignmentMissing)
+            })?;
 
             // Determine the left and right Merkle hash inputs. Swap `cur` with `path_elem` if `cur`
             // is the right Merkle hash input.

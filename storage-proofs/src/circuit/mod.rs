@@ -1,4 +1,3 @@
-mod alloc;
 mod constraint;
 
 pub mod apex_commitment;
