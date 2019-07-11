@@ -145,48 +145,6 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         None,
     )?;
 
-    let tree = &aux.clone()[0];
-
-    // If we succeeded in replicating, flush the data and protect output from being cleaned up.
-    data.flush()?;
-    cleanup.success = true;
-
-    let public_tau = tau.simplify();
-
-    let public_inputs = layered_drgporep::PublicInputs {
-        replica_id,
-        tau: Some(public_tau),
-        comm_r_star: tau.comm_r_star,
-        k: None,
-        seed: None,
-    };
-
-    let private_inputs = layered_drgporep::PrivateInputs::<DefaultTreeHasher> {
-        aux,
-        tau: tau.layer_taus,
-    };
-
-    let groth_params = get_zigzag_params(porep_config)?;
-
-    info!(FCP_LOG, "got groth params ({}) while sealing", u64::from(PaddedBytesAmount::from(porep_config)); "target" => "params");
-
-    let proof = ZigZagCompound::prove(
-        &compound_public_params,
-        &public_inputs,
-        &private_inputs,
-        &groth_params,
-    )?;
-
-    let mut buf = Vec::with_capacity(
-        SINGLE_PARTITION_PROOF_LEN * usize::from(PoRepProofPartitions::from(porep_config)),
-    );
-
-    proof.write(&mut buf)?;
-
-    let comm_r = commitment_from_fr::<Bls12>(public_tau.comm_r.into());
-    let comm_d = commitment_from_fr::<Bls12>(public_tau.comm_d.into());
-    let comm_r_star = commitment_from_fr::<Bls12>(tau.comm_r_star.into());
-
     let mut piece_specs = Vec::new();
     let mut comm_ps = Vec::new();
     let mut cursor = UnpaddedBytesAmount(0);
@@ -227,7 +185,47 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         });
     }
 
-    let piece_inclusion_proofs = piece_inclusion_proofs::<PedersenHasher>(&piece_specs, tree)?;
+    let piece_inclusion_proofs = piece_inclusion_proofs::<PedersenHasher>(&piece_specs, &aux[0])?;
+
+    // If we succeeded in replicating, flush the data and protect output from being cleaned up.
+    data.flush()?;
+    cleanup.success = true;
+
+    let public_tau = tau.simplify();
+
+    let public_inputs = layered_drgporep::PublicInputs {
+        replica_id,
+        tau: Some(public_tau),
+        comm_r_star: tau.comm_r_star,
+        k: None,
+        seed: None,
+    };
+
+    let private_inputs = layered_drgporep::PrivateInputs::<DefaultTreeHasher> {
+        aux,
+        tau: tau.layer_taus,
+    };
+
+    let groth_params = get_zigzag_params(porep_config)?;
+
+    info!(FCP_LOG, "got groth params ({}) while sealing", u64::from(PaddedBytesAmount::from(porep_config)); "target" => "params");
+
+    let proof = ZigZagCompound::prove(
+        &compound_public_params,
+        &public_inputs,
+        &private_inputs,
+        &groth_params,
+    )?;
+
+    let mut buf = Vec::with_capacity(
+        SINGLE_PARTITION_PROOF_LEN * usize::from(PoRepProofPartitions::from(porep_config)),
+    );
+
+    proof.write(&mut buf)?;
+
+    let comm_r = commitment_from_fr::<Bls12>(public_tau.comm_r.into());
+    let comm_d = commitment_from_fr::<Bls12>(public_tau.comm_d.into());
+    let comm_r_star = commitment_from_fr::<Bls12>(tau.comm_r_star.into());
 
     let valid_pieces = PieceInclusionProof::verify_all(
         &comm_d,
@@ -645,7 +643,7 @@ fn test_generate_piece_commitment() -> Result<(), failure::Error> {
 }
 
 #[test]
-fn test_foo() -> Result<(), failure::Error> {
+fn test_pip_lifecycle() -> Result<(), failure::Error> {
     use crate::types::SectorSize;
 
     fn add_piece<R, W>(

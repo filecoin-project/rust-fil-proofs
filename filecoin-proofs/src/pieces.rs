@@ -9,9 +9,8 @@ pub struct PieceAlignment {
     pub right_bytes: UnpaddedBytesAmount,
 }
 
-/**
- * Given a list of pieces, sum the number of bytes taken by those pieces in that order.
- */
+/// Given a list of pieces, sum the number of bytes taken by those pieces in that order.
+/// 
 pub fn sum_piece_bytes_with_alignment(pieces: &[UnpaddedBytesAmount]) -> UnpaddedBytesAmount {
     pieces
         .iter()
@@ -25,9 +24,8 @@ pub fn sum_piece_bytes_with_alignment(pieces: &[UnpaddedBytesAmount]) -> Unpadde
         })
 }
 
-/**
- * Given a list of pieces, find the byte where a given piece does or would start.
- */
+/// Given a list of pieces, find the byte where a given piece does or would start.
+/// 
 pub fn get_piece_start_byte(
     pieces: &[UnpaddedBytesAmount],
     piece_bytes: UnpaddedBytesAmount,
@@ -40,12 +38,11 @@ pub fn get_piece_start_byte(
     UnpaddedByteIndex::from(last_byte + alignment.left_bytes)
 }
 
-/**
- * Given a number of bytes already written to a staged sector (ignoring bit padding) and a number
- * of bytes (before bit padding) to be added, return the alignment required to create a piece where
- * len(piece) == len(sector size)/(2^n) and sufficient left padding to ensure simple merkle proof
- * construction.
- */
+/// Given a number of bytes already written to a staged sector (ignoring bit padding) and a number
+/// of bytes (before bit padding) to be added, return the alignment required to create a piece where
+/// len(piece) == len(sector size)/(2^n) and sufficient left padding to ensure simple merkle proof
+/// construction.
+///
 pub fn get_piece_alignment(
     written_bytes: UnpaddedBytesAmount,
     piece_bytes: UnpaddedBytesAmount,
@@ -81,9 +78,8 @@ pub fn get_piece_alignment(
     }
 }
 
-/**
- * Wraps a Readable source with null bytes on either end according to a provided PieceAlignment.
- */
+/// Wraps a Readable source with null bytes on either end according to a provided PieceAlignment.
+/// 
 fn with_alignment(source: impl Read, piece_alignment: PieceAlignment) -> impl Read {
     let PieceAlignment {
         left_bytes,
@@ -96,12 +92,11 @@ fn with_alignment(source: impl Read, piece_alignment: PieceAlignment) -> impl Re
     left_padding.chain(source).chain(right_padding)
 }
 
-/**
- * Given an enumeration of pieces in a staged sector and a piece to be added (represented by a Read
- * and corresponding length, in UnpaddedBytesAmount) to the staged sector, produce a new Read and
- * UnpaddedBytesAmount pair which includes the appropriate amount of alignment bytes for the piece
- * to be written to the target staged sector.
- */
+/// Given an enumeration of pieces in a staged sector and a piece to be added (represented by a Read
+/// and corresponding length, in UnpaddedBytesAmount) to the staged sector, produce a new Read and
+/// UnpaddedBytesAmount pair which includes the appropriate amount of alignment bytes for the piece
+/// to be written to the target staged sector.
+/// 
 pub fn get_aligned_source(
     source: impl Read,
     pieces: &[UnpaddedBytesAmount],
