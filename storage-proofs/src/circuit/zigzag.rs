@@ -129,7 +129,7 @@ where
         let replica_id_opt: Option<Fr> = self.layers[0]
             .as_ref()
             .and_then(|layer_info| layer_info.0.replica_id)
-            .map(|replica_id| replica_id.into());
+            .map(Into::into);
 
         let replica_id = AllocatedNum::alloc(cs.namespace(|| "replica_id"), || {
             replica_id_opt.ok_or(SynthesisError::AssignmentMissing)
@@ -278,7 +278,7 @@ where
         // Allocate the passed in comm_r_star.
         let comm_r_star = AllocatedNum::alloc(cs.namespace(|| "public comm_r_star value"), || {
             self.comm_r_star
-                .map(|comm_r_star| comm_r_star.into())
+                .map(Into::into)
                 .ok_or(SynthesisError::AssignmentMissing)
         })?;
 

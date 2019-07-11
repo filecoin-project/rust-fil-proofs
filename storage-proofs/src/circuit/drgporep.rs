@@ -434,9 +434,7 @@ where
             .as_ref()
             .map(|replica_id_fr| fr_into_bytes::<E>(replica_id_fr));
 
-        let replica_id_bytes_slice = replica_id_bytes
-            .as_ref()
-            .map(|replica_id_bytes| replica_id_bytes.as_slice());
+        let replica_id_bytes_slice = replica_id_bytes.as_ref().map(Vec::as_slice);
 
         let replica_id_bits = bytes_into_boolean_vec(
             cs.namespace(|| "replica_id_bits"),
