@@ -481,353 +481,355 @@ where
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-
-//     use memmap::MmapMut;
-//     use memmap::MmapOptions;
-//     use paired::bls12_381::Bls12;
-//     use rand::{Rng, SeedableRng, XorShiftRng};
-//     use std::fs::File;
-//     use std::io::Write;
-//     use tempfile;
-
-//     use crate::drgraph::{new_seed, BucketGraph};
-//     use crate::fr32::fr_into_bytes;
-//     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
-//     use crate::util::data_at_node;
-
-//     pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
-//         let mut tmpfile: File = tempfile::tempfile().expect("Failed to create tempfile");
-//         tmpfile
-//             .write_all(data)
-//             .expect("Failed to write data to tempfile");
-
-//         unsafe {
-//             MmapOptions::new()
-//                 .map_mut(&tmpfile)
-//                 .expect("Failed to back memory map with tempfile")
-//         }
-//     }
-
-//     fn test_extract_all<H: Hasher>() {
-//         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-
-//         let sloth_iter = 1;
-//         let replica_id: H::Domain = rng.gen();
-//         let data = vec![2u8; 32 * 3];
-//         // create a copy, so we can compare roundtrips
-//         let mut mmapped_data_copy = file_backed_mmap_from(&data);
-
-//         let sp = SetupParams {
-//             drg: DrgParams {
-//                 nodes: data.len() / 32,
-//                 degree: 5,
-//                 expansion_degree: 0,
-//                 seed: new_seed(),
-//             },
-//             sloth_iter,
-//             private: false,
-//             challenges_count: 1,
-//         };
-
-//         let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).expect("setup failed");
-
-//         DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
-//             .expect("replication failed");
-
-//         let mut copied = vec![0; data.len()];
-//         copied.copy_from_slice(&mmapped_data_copy);
-//         assert_ne!(data, copied, "replication did not change data");
-
-//         let decoded_data = DrgPoRep::extract_all(&pp, &replica_id, &mut mmapped_data_copy)
-//             .unwrap_or_else(|e| {
-//                 panic!("Failed to extract data from `DrgPoRep`: {}", e);
-//             });
-
-//         assert_eq!(data, decoded_data.as_slice(), "failed to extract data");
-//     }
-
-//     #[test]
-//     fn extract_all_pedersen() {
-//         test_extract_all::<PedersenHasher>();
-//     }
-
-//     #[test]
-//     fn extract_all_sha256() {
-//         test_extract_all::<Sha256Hasher>();
-//     }
-
-//     #[test]
-//     fn extract_all_blake2s() {
-//         test_extract_all::<Blake2sHasher>();
-//     }
-
-//     fn test_extract<H: Hasher>() {
-//         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-
-//         let sloth_iter = 1;
-//         let replica_id: H::Domain = rng.gen();
-//         let nodes = 3;
-//         let data = vec![2u8; 32 * nodes];
-
-//         // create a copy, so we can compare roundtrips
-//         let mut mmapped_data_copy = file_backed_mmap_from(&data);
-
-//         let sp = SetupParams {
-//             drg: DrgParams {
-//                 nodes: data.len() / 32,
-//                 degree: 5,
-//                 expansion_degree: 0,
-//                 seed: new_seed(),
-//             },
-//             sloth_iter,
-//             private: false,
-//             challenges_count: 1,
-//         };
-
-//         let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).expect("setup failed");
-
-//         DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
-//             .expect("replication failed");
-
-//         let mut copied = vec![0; data.len()];
-//         copied.copy_from_slice(&mmapped_data_copy);
-//         assert_ne!(data, copied, "replication did not change data");
-
-//         for i in 0..nodes {
-//             let decoded_data = DrgPoRep::extract(&pp, &replica_id, &mmapped_data_copy, i)
-//                 .expect("failed to extract node data from PoRep");
-
-//             let original_data = data_at_node(&data, i).unwrap();
-
-//             assert_eq!(
-//                 original_data,
-//                 decoded_data.as_slice(),
-//                 "failed to extract data"
-//             );
-//         }
-//     }
-
-//     #[test]
-//     fn extract_pedersen() {
-//         test_extract::<PedersenHasher>();
-//     }
-
-//     #[test]
-//     fn extract_sha256() {
-//         test_extract::<Sha256Hasher>();
-//     }
-
-//     #[test]
-//     fn extract_blake2s() {
-//         test_extract::<Blake2sHasher>();
-//     }
-
-//     fn prove_verify_aux<H: Hasher>(
-//         nodes: usize,
-//         i: usize,
-//         use_wrong_challenge: bool,
-//         use_wrong_parents: bool,
-//     ) {
-//         assert!(i < nodes);
-
-//         // The loop is here in case we need to retry because of an edge case in the test design.
-//         loop {
-//             let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-//             let sloth_iter = 1;
-//             let degree = 10;
-//             let expansion_degree = 0;
-//             let seed = new_seed();
-
-//             let replica_id: H::Domain = rng.gen();
-//             let data: Vec<u8> = (0..nodes)
-//                 .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
-//                 .collect();
-
-//             // create a copy, so we can comare roundtrips
-//             let mut mmapped_data_copy = file_backed_mmap_from(&data);
-
-//             let challenge = i;
-
-//             let sp = SetupParams {
-//                 drg: DrgParams {
-//                     nodes,
-//                     degree,
-//                     expansion_degree,
-//                     seed,
-//                 },
-//                 sloth_iter,
-//                 private: false,
-//                 challenges_count: 2,
-//             };
-
-//             let pp = DrgPoRep::<H, BucketGraph<_>>::setup(&sp).expect("setup failed");
-
-//             let (tau, aux) =
-//                 DrgPoRep::<H, _>::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
-//                     .expect("replication failed");
-
-//             let mut copied = vec![0; data.len()];
-//             copied.copy_from_slice(&mmapped_data_copy);
-
-//             assert_ne!(data, copied, "replication did not change data");
-
-//             let pub_inputs = PublicInputs::<H::Domain> {
-//                 replica_id: Some(replica_id),
-//                 challenges: vec![challenge, challenge],
-//                 tau: Some(tau.clone().into()),
-//             };
-
-//             let priv_inputs = PrivateInputs::<H> {
-//                 tree_d: &aux.tree_d,
-//                 tree_r: &aux.tree_r,
-//             };
-
-//             let real_proof =
-//                 DrgPoRep::<H, _>::prove(&pp, &pub_inputs, &priv_inputs).expect("proving failed");
-
-//             if use_wrong_parents {
-//                 // Only one 'wrong' option will be tested at a time.
-//                 assert!(!use_wrong_challenge);
-//                 let real_parents = real_proof.replica_parents;
-
-//                 // Parent vector claiming the wrong parents.
-//                 let fake_parents = vec![real_parents[0]
-//                     .iter()
-//                     // Incrementing each parent node will give us a different parent set.
-//                     // It's fine to be out of range, since this only needs to fail.
-//                     .map(|(i, data_proof)| (i + 1, data_proof.clone()))
-//                     .collect::<Vec<_>>()];
-
-//                 let proof = Proof::new(
-//                     real_proof.replica_nodes.clone(),
-//                     fake_parents,
-//                     real_proof.nodes.clone().into(),
-//                 );
-
-//                 let is_valid =
-//                     DrgPoRep::verify(&pp, &pub_inputs, &proof).expect("verification failed");
-
-//                 assert!(!is_valid, "verified in error -- with wrong parents");
-
-//                 let mut all_same = true;
-//                 for (p, _) in &real_parents[0] {
-//                     if *p != real_parents[0][0].0 {
-//                         all_same = false;
-//                     }
-//                 }
-
-//                 if all_same {
-//                     println!("invalid test data can't scramble proofs with all same parents.");
-
-//                     // If for some reason, we hit this condition because of the data passeed in,
-//                     // try again.
-//                     continue;
-//                 }
-
-//                 // Parent vector claiming the right parents but providing valid proofs for different
-//                 // parents.
-//                 let fake_proof_parents = vec![real_parents[0]
-//                     .iter()
-//                     .enumerate()
-//                     .map(|(i, (p, _))| {
-//                         // Rotate the real parent proofs.
-//                         let x = (i + 1) % real_parents[0].len();
-//                         let j = real_parents[0][x].0;
-//                         (*p, real_parents[0][j].1.clone())
-//                     })
-//                     .collect::<Vec<_>>()];
-
-//                 let proof2 = Proof::new(
-//                     real_proof.replica_nodes,
-//                     fake_proof_parents,
-//                     real_proof.nodes.into(),
-//                 );
-
-//                 assert!(
-//                     !DrgPoRep::<H, _>::verify(&pp, &pub_inputs, &proof2).unwrap_or_else(|e| {
-//                         panic!("Verification failed: {}", e);
-//                     }),
-//                     "verified in error -- with wrong parent proofs"
-//                 );
-
-//                 return ();
-//             }
-
-//             let proof = real_proof;
-
-//             if use_wrong_challenge {
-//                 let pub_inputs_with_wrong_challenge_for_proof = PublicInputs::<H::Domain> {
-//                     replica_id: Some(replica_id),
-//                     challenges: vec![if challenge == 1 { 2 } else { 1 }],
-//                     tau: Some(tau.into()),
-//                 };
-//                 let verified = DrgPoRep::<H, _>::verify(
-//                     &pp,
-//                     &pub_inputs_with_wrong_challenge_for_proof,
-//                     &proof,
-//                 )
-//                 .expect("Verification failed");
-//                 assert!(
-//                     !verified,
-//                     "wrongly verified proof which does not match challenge in public input"
-//                 );
-//             } else {
-//                 assert!(
-//                     DrgPoRep::<H, _>::verify(&pp, &pub_inputs, &proof)
-//                         .expect("verification failed"),
-//                     "failed to verify"
-//                 );
-//             }
-
-//             // Normally, just run once.
-//             break;
-//         }
-//     }
-
-//     fn prove_verify(n: usize, i: usize) {
-//         prove_verify_aux::<PedersenHasher>(n, i, false, false);
-//         prove_verify_aux::<Sha256Hasher>(n, i, false, false);
-//         prove_verify_aux::<Blake2sHasher>(n, i, false, false);
-//     }
-
-//     fn prove_verify_wrong_challenge(n: usize, i: usize) {
-//         prove_verify_aux::<PedersenHasher>(n, i, true, false);
-//         prove_verify_aux::<Sha256Hasher>(n, i, true, false);
-//         prove_verify_aux::<Blake2sHasher>(n, i, true, false);
-//     }
-
-//     fn prove_verify_wrong_parents(n: usize, i: usize) {
-//         prove_verify_aux::<PedersenHasher>(n, i, false, true);
-//         prove_verify_aux::<Sha256Hasher>(n, i, false, true);
-//         prove_verify_aux::<Blake2sHasher>(n, i, false, true);
-//     }
-
-//     table_tests! {
-//         prove_verify {
-//             prove_verify_32_2_1(2, 1);
-
-//             prove_verify_32_3_1(3, 1);
-//             prove_verify_32_3_2(3, 2);
-
-//             prove_verify_32_10_1(10, 1);
-//             prove_verify_32_10_2(10, 2);
-//             prove_verify_32_10_3(10, 3);
-//             prove_verify_32_10_4(10, 4);
-//             prove_verify_32_10_5(10, 5);
-//         }
-//     }
-
-//     #[test]
-//     fn test_drgporep_verifies_using_challenge() {
-//         prove_verify_wrong_challenge(5, 1);
-//     }
-
-//     #[test]
-//     fn test_drgporep_verifies_parents() {
-//         // Challenge a node (3) that doesn't have all the same parents.
-//         prove_verify_wrong_parents(7, 4);
-//     }
-// }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use memmap::MmapMut;
+    use memmap::MmapOptions;
+    // use paired::bls12_381::Bls12;
+    use algebra::curves::bls12_381::Bls12_381 as Bls12;
+    use rand::{Rng, SeedableRng, XorShiftRng};
+    use std::fs::File;
+    use std::io::Write;
+    use tempfile;
+
+    use crate::drgraph::{new_seed, BucketGraph};
+    use crate::fr32::fr_into_bytes;
+    // use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::hasher::PedersenHasher;
+    use crate::util::data_at_node;
+
+    pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
+        let mut tmpfile: File = tempfile::tempfile().expect("Failed to create tempfile");
+        tmpfile
+            .write_all(data)
+            .expect("Failed to write data to tempfile");
+
+        unsafe {
+            MmapOptions::new()
+                .map_mut(&tmpfile)
+                .expect("Failed to back memory map with tempfile")
+        }
+    }
+
+    fn test_extract_all<H: Hasher>() {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let sloth_iter = 1;
+        let replica_id: H::Domain = rng.gen();
+        let data = vec![2u8; 32 * 3];
+        // create a copy, so we can compare roundtrips
+        let mut mmapped_data_copy = file_backed_mmap_from(&data);
+
+        let sp = SetupParams {
+            drg: DrgParams {
+                nodes: data.len() / 32,
+                degree: 5,
+                expansion_degree: 0,
+                seed: new_seed(),
+            },
+            sloth_iter,
+            private: false,
+            challenges_count: 1,
+        };
+
+        let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).expect("setup failed");
+
+        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
+            .expect("replication failed");
+
+        let mut copied = vec![0; data.len()];
+        copied.copy_from_slice(&mmapped_data_copy);
+        assert_ne!(data, copied, "replication did not change data");
+
+        let decoded_data = DrgPoRep::extract_all(&pp, &replica_id, &mut mmapped_data_copy)
+            .unwrap_or_else(|e| {
+                panic!("Failed to extract data from `DrgPoRep`: {}", e);
+            });
+
+        assert_eq!(data, decoded_data.as_slice(), "failed to extract data");
+    }
+
+    #[test]
+    fn extract_all_pedersen() {
+        test_extract_all::<PedersenHasher>();
+    }
+
+    // #[test]
+    // fn extract_all_sha256() {
+    //     test_extract_all::<Sha256Hasher>();
+    // }
+
+    // #[test]
+    // fn extract_all_blake2s() {
+    //     test_extract_all::<Blake2sHasher>();
+    // }
+
+    fn test_extract<H: Hasher>() {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let sloth_iter = 1;
+        let replica_id: H::Domain = rng.gen();
+        let nodes = 3;
+        let data = vec![2u8; 32 * nodes];
+
+        // create a copy, so we can compare roundtrips
+        let mut mmapped_data_copy = file_backed_mmap_from(&data);
+
+        let sp = SetupParams {
+            drg: DrgParams {
+                nodes: data.len() / 32,
+                degree: 5,
+                expansion_degree: 0,
+                seed: new_seed(),
+            },
+            sloth_iter,
+            private: false,
+            challenges_count: 1,
+        };
+
+        let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).expect("setup failed");
+
+        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
+            .expect("replication failed");
+
+        let mut copied = vec![0; data.len()];
+        copied.copy_from_slice(&mmapped_data_copy);
+        assert_ne!(data, copied, "replication did not change data");
+
+        for i in 0..nodes {
+            let decoded_data = DrgPoRep::extract(&pp, &replica_id, &mmapped_data_copy, i)
+                .expect("failed to extract node data from PoRep");
+
+            let original_data = data_at_node(&data, i).unwrap();
+
+            assert_eq!(
+                original_data,
+                decoded_data.as_slice(),
+                "failed to extract data"
+            );
+        }
+    }
+
+    #[test]
+    fn extract_pedersen() {
+        test_extract::<PedersenHasher>();
+    }
+
+    // #[test]
+    // fn extract_sha256() {
+    //     test_extract::<Sha256Hasher>();
+    // }
+
+    // #[test]
+    // fn extract_blake2s() {
+    //     test_extract::<Blake2sHasher>();
+    // }
+
+    fn prove_verify_aux<H: Hasher>(
+        nodes: usize,
+        i: usize,
+        use_wrong_challenge: bool,
+        use_wrong_parents: bool,
+    ) {
+        assert!(i < nodes);
+
+        // The loop is here in case we need to retry because of an edge case in the test design.
+        loop {
+            let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+            let sloth_iter = 1;
+            let degree = 10;
+            let expansion_degree = 0;
+            let seed = new_seed();
+
+            let replica_id: H::Domain = rng.gen();
+            let data: Vec<u8> = (0..nodes)
+                .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+                .collect();
+
+            // create a copy, so we can comare roundtrips
+            let mut mmapped_data_copy = file_backed_mmap_from(&data);
+
+            let challenge = i;
+
+            let sp = SetupParams {
+                drg: DrgParams {
+                    nodes,
+                    degree,
+                    expansion_degree,
+                    seed,
+                },
+                sloth_iter,
+                private: false,
+                challenges_count: 2,
+            };
+
+            let pp = DrgPoRep::<H, BucketGraph<_>>::setup(&sp).expect("setup failed");
+
+            let (tau, aux) =
+                DrgPoRep::<H, _>::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
+                    .expect("replication failed");
+
+            let mut copied = vec![0; data.len()];
+            copied.copy_from_slice(&mmapped_data_copy);
+
+            assert_ne!(data, copied, "replication did not change data");
+
+            let pub_inputs = PublicInputs::<H::Domain> {
+                replica_id: Some(replica_id),
+                challenges: vec![challenge, challenge],
+                tau: Some(tau.clone().into()),
+            };
+
+            let priv_inputs = PrivateInputs::<H> {
+                tree_d: &aux.tree_d,
+                tree_r: &aux.tree_r,
+            };
+
+            let real_proof =
+                DrgPoRep::<H, _>::prove(&pp, &pub_inputs, &priv_inputs).expect("proving failed");
+
+            if use_wrong_parents {
+                // Only one 'wrong' option will be tested at a time.
+                assert!(!use_wrong_challenge);
+                let real_parents = real_proof.replica_parents;
+
+                // Parent vector claiming the wrong parents.
+                let fake_parents = vec![real_parents[0]
+                    .iter()
+                    // Incrementing each parent node will give us a different parent set.
+                    // It's fine to be out of range, since this only needs to fail.
+                    .map(|(i, data_proof)| (i + 1, data_proof.clone()))
+                    .collect::<Vec<_>>()];
+
+                let proof = Proof::new(
+                    real_proof.replica_nodes.clone(),
+                    fake_parents,
+                    real_proof.nodes.clone().into(),
+                );
+
+                let is_valid =
+                    DrgPoRep::verify(&pp, &pub_inputs, &proof).expect("verification failed");
+
+                assert!(!is_valid, "verified in error -- with wrong parents");
+
+                let mut all_same = true;
+                for (p, _) in &real_parents[0] {
+                    if *p != real_parents[0][0].0 {
+                        all_same = false;
+                    }
+                }
+
+                if all_same {
+                    println!("invalid test data can't scramble proofs with all same parents.");
+
+                    // If for some reason, we hit this condition because of the data passeed in,
+                    // try again.
+                    continue;
+                }
+
+                // Parent vector claiming the right parents but providing valid proofs for different
+                // parents.
+                let fake_proof_parents = vec![real_parents[0]
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (p, _))| {
+                        // Rotate the real parent proofs.
+                        let x = (i + 1) % real_parents[0].len();
+                        let j = real_parents[0][x].0;
+                        (*p, real_parents[0][j].1.clone())
+                    })
+                    .collect::<Vec<_>>()];
+
+                let proof2 = Proof::new(
+                    real_proof.replica_nodes,
+                    fake_proof_parents,
+                    real_proof.nodes.into(),
+                );
+
+                assert!(
+                    !DrgPoRep::<H, _>::verify(&pp, &pub_inputs, &proof2).unwrap_or_else(|e| {
+                        panic!("Verification failed: {}", e);
+                    }),
+                    "verified in error -- with wrong parent proofs"
+                );
+
+                return ();
+            }
+
+            let proof = real_proof;
+
+            if use_wrong_challenge {
+                let pub_inputs_with_wrong_challenge_for_proof = PublicInputs::<H::Domain> {
+                    replica_id: Some(replica_id),
+                    challenges: vec![if challenge == 1 { 2 } else { 1 }],
+                    tau: Some(tau.into()),
+                };
+                let verified = DrgPoRep::<H, _>::verify(
+                    &pp,
+                    &pub_inputs_with_wrong_challenge_for_proof,
+                    &proof,
+                )
+                .expect("Verification failed");
+                assert!(
+                    !verified,
+                    "wrongly verified proof which does not match challenge in public input"
+                );
+            } else {
+                assert!(
+                    DrgPoRep::<H, _>::verify(&pp, &pub_inputs, &proof)
+                        .expect("verification failed"),
+                    "failed to verify"
+                );
+            }
+
+            // Normally, just run once.
+            break;
+        }
+    }
+
+    fn prove_verify(n: usize, i: usize) {
+        prove_verify_aux::<PedersenHasher>(n, i, false, false);
+        // prove_verify_aux::<Sha256Hasher>(n, i, false, false);
+        // prove_verify_aux::<Blake2sHasher>(n, i, false, false);
+    }
+
+    fn prove_verify_wrong_challenge(n: usize, i: usize) {
+        prove_verify_aux::<PedersenHasher>(n, i, true, false);
+        // prove_verify_aux::<Sha256Hasher>(n, i, true, false);
+        // prove_verify_aux::<Blake2sHasher>(n, i, true, false);
+    }
+
+    fn prove_verify_wrong_parents(n: usize, i: usize) {
+        prove_verify_aux::<PedersenHasher>(n, i, false, true);
+        // prove_verify_aux::<Sha256Hasher>(n, i, false, true);
+        // prove_verify_aux::<Blake2sHasher>(n, i, false, true);
+    }
+
+    table_tests! {
+        prove_verify {
+            prove_verify_32_2_1(2, 1);
+
+            prove_verify_32_3_1(3, 1);
+            prove_verify_32_3_2(3, 2);
+
+            prove_verify_32_10_1(10, 1);
+            prove_verify_32_10_2(10, 2);
+            prove_verify_32_10_3(10, 3);
+            prove_verify_32_10_4(10, 4);
+            prove_verify_32_10_5(10, 5);
+        }
+    }
+
+    #[test]
+    fn test_drgporep_verifies_using_challenge() {
+        prove_verify_wrong_challenge(5, 1);
+    }
+
+    #[test]
+    fn test_drgporep_verifies_parents() {
+        // Challenge a node (3) that doesn't have all the same parents.
+        prove_verify_wrong_parents(7, 4);
+    }
+}

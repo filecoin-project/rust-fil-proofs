@@ -8,14 +8,12 @@ use snark::{ConstraintSystem, SynthesisError};
 
 use algebra::biginteger::BigInteger;
 use algebra::biginteger::BigInteger256 as FrRepr;
-use algebra::curves::{
-    bls12_381::Bls12_381 as Bls12, jubjub::JubJubProjective as JubJub,
-};
+use algebra::curves::{bls12_381::Bls12_381 as Bls12, jubjub::JubJubProjective as JubJub};
 use algebra::fields::{bls12_381::Fr, FpParameters, PrimeField};
 
 use snark_gadgets::bits::uint8::UInt8;
-use snark_gadgets::boolean::{Boolean};
-use snark_gadgets::fields::{fp::FpGadget};
+use snark_gadgets::boolean::Boolean;
+use snark_gadgets::fields::fp::FpGadget;
 use snark_gadgets::groups::curves::twisted_edwards::jubjub::JubJubGadget;
 
 use snark_gadgets::utils::AllocGadget;
@@ -39,7 +37,6 @@ use crate::crypto::pedersen::Personalization;
 use crate::crypto::{kdf, pedersen, sloth};
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher, Window};
-
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PedersenHasher {}
@@ -323,126 +320,129 @@ impl From<PedersenDomain> for Fr {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use std::mem;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::mem;
 
-//     use merkletree::hash::Hashable;
+    use merkletree::hash::Hashable;
 
-//     use crate::merkle::{MerkleTree, VecMerkleTree};
+    use crate::merkle::{MerkleTree, VecMerkleTree};
 
-//     #[test]
-//     fn test_path() {
-//         let values = ["hello", "world", "you", "two"];
-//         let t = MerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter());
+    #[test]
+    fn test_path() {
+        let values = ["hello", "world", "you", "two"];
+        let t = MerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter());
 
-//         let p = t.gen_proof(0); // create a proof for the first value = "hello"
-//         assert_eq!(*p.path(), vec![true, true]);
-//         assert_eq!(p.validate::<PedersenFunction>(), true);
-//     }
+        let p = t.gen_proof(0); // create a proof for the first value = "hello"
+        assert_eq!(*p.path(), vec![true, true]);
+        assert_eq!(p.validate::<PedersenFunction>(), true);
+    }
 
-//     #[test]
-//     fn test_pedersen_hasher() {
-//         let values = ["hello", "world", "you", "two"];
+    #[test]
+    fn test_pedersen_hasher() {
+        let values = ["hello", "world", "you", "two"];
 
-//         let t = VecMerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter());
-//         // Using `VecMerkleTree` since the `MmapStore` of `MerkleTree` doesn't support `Deref` (`as_slice`).
+        let t = VecMerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter());
+        // Using `VecMerkleTree` since the `MmapStore` of `MerkleTree` doesn't support `Deref` (`as_slice`).
 
-//         assert_eq!(t.leafs(), 4);
+        assert_eq!(t.leafs(), 4);
 
-//         let mut a = PedersenFunction::default();
-//         let leaves: Vec<PedersenDomain> = values
-//             .iter()
-//             .map(|v| {
-//                 v.hash(&mut a);
-//                 let h = a.hash();
-//                 a.reset();
-//                 h
-//             })
-//             .collect();
+        let mut a = PedersenFunction::default();
+        let leaves: Vec<PedersenDomain> = values
+            .iter()
+            .map(|v| {
+                v.hash(&mut a);
+                let h = a.hash();
+                a.reset();
+                h
+            })
+            .collect();
 
-//         assert_eq!(t.read_at(0), leaves[0]);
-//         assert_eq!(t.read_at(1), leaves[1]);
-//         assert_eq!(t.read_at(2), leaves[2]);
-//         assert_eq!(t.read_at(3), leaves[3]);
+        assert_eq!(t.read_at(0), leaves[0]);
+        assert_eq!(t.read_at(1), leaves[1]);
+        assert_eq!(t.read_at(2), leaves[2]);
+        assert_eq!(t.read_at(3), leaves[3]);
 
-//         let i1 = a.node(leaves[0], leaves[1], 0);
-//         a.reset();
-//         let i2 = a.node(leaves[2], leaves[3], 0);
-//         a.reset();
+        let i1 = a.node(leaves[0], leaves[1], 0);
+        a.reset();
+        let i2 = a.node(leaves[2], leaves[3], 0);
+        a.reset();
 
-//         assert_eq!(t.read_at(4), i1);
-//         assert_eq!(t.read_at(5), i2);
+        assert_eq!(t.read_at(4), i1);
+        assert_eq!(t.read_at(5), i2);
 
-//         let root = a.node(i1, i2, 1);
-//         a.reset();
+        let root = a.node(i1, i2, 1);
+        a.reset();
 
-//         assert_eq!(
-//             t.read_at(0).0,
-//             FrRepr([
-//                 5516429847681692214,
-//                 1363403528947283679,
-//                 5429691745410183571,
-//                 7730413689037971367
-//             ])
-//         );
+        // Note: this test fails as we use different generator points and zexe used a slightly different approch
+        // for Pedersen hashing (no windowing). Hence the expected output should be updated.
 
-//         let expected = FrRepr([
-//             14963070332212552755,
-//             2414807501862983188,
-//             16116531553419129213,
-//             6357427774790868134,
-//         ]);
-//         let actual = t.read_at(6).0;
+        // assert_eq!(
+        //     t.read_at(0).0,
+        //     FrRepr([
+        //         5516429847681692214,
+        //         1363403528947283679,
+        //         5429691745410183571,
+        //         7730413689037971367
+        //     ])
+        // );
 
-//         assert_eq!(actual, expected);
+        // let expected = FrRepr([
+        //     14963070332212552755,
+        //     2414807501862983188,
+        //     16116531553419129213,
+        //     6357427774790868134,
+        // ]);
+        // let actual = t.read_at(6).0;
 
-//         assert_eq!(t.read_at(6), root);
-//     }
+        // assert_eq!(actual, expected);
 
-//     #[test]
-//     fn test_as_ref() {
-//         let cases: Vec<[u64; 4]> = vec![
-//             [0, 0, 0, 0],
-//             [
-//                 14963070332212552755,
-//                 2414807501862983188,
-//                 16116531553419129213,
-//                 6357427774790868134,
-//             ],
-//         ];
+        assert_eq!(t.read_at(6), root);
+    }
 
-//         for case in cases.into_iter() {
-//             let repr = FrRepr(case);
-//             let val = PedersenDomain(repr);
+    #[test]
+    fn test_as_ref() {
+        let cases: Vec<[u64; 4]> = vec![
+            [0, 0, 0, 0],
+            [
+                14963070332212552755,
+                2414807501862983188,
+                16116531553419129213,
+                6357427774790868134,
+            ],
+        ];
 
-//             for _ in 0..100 {
-//                 assert_eq!(val.as_ref().to_vec(), val.as_ref().to_vec());
-//             }
+        for case in cases.into_iter() {
+            let repr = FrRepr(case);
+            let val = PedersenDomain(repr);
 
-//             let raw: &[u8] = val.as_ref();
+            for _ in 0..100 {
+                assert_eq!(val.as_ref().to_vec(), val.as_ref().to_vec());
+            }
 
-//             for i in 0..4 {
-//                 assert_eq!(case[i], unsafe {
-//                     let mut val = [0u8; 8];
-//                     val.clone_from_slice(&raw[i * 8..(i + 1) * 8]);
-//                     mem::transmute::<[u8; 8], u64>(val)
-//                 });
-//             }
-//         }
-//     }
+            let raw: &[u8] = val.as_ref();
 
-//     #[test]
-//     fn test_serialize() {
-//         let repr = FrRepr([1, 2, 3, 4]);
-//         let val = PedersenDomain(repr);
+            for i in 0..4 {
+                assert_eq!(case[i], unsafe {
+                    let mut val = [0u8; 8];
+                    val.clone_from_slice(&raw[i * 8..(i + 1) * 8]);
+                    mem::transmute::<[u8; 8], u64>(val)
+                });
+            }
+        }
+    }
 
-//         let ser = serde_json::to_string(&val)
-//             .expect("Failed to serialize `PedersenDomain` element to JSON string");
-//         let val_back = serde_json::from_str(&ser)
-//             .expect("Failed to deserialize JSON string to `PedersenDomain`");
+    #[test]
+    fn test_serialize() {
+        let repr = FrRepr([1, 2, 3, 4]);
+        let val = PedersenDomain(repr);
 
-//         assert_eq!(val, val_back);
-//     }
-// }
+        let ser = serde_json::to_string(&val)
+            .expect("Failed to serialize `PedersenDomain` element to JSON string");
+        let val_back = serde_json::from_str(&ser)
+            .expect("Failed to deserialize JSON string to `PedersenDomain`");
+
+        assert_eq!(val, val_back);
+    }
+}
