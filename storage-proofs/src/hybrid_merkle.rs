@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use merkletree::hash::{Algorithm, Hashable};
 use paired::bls12_381::Fr;
-use rayon::prelude::{ParallelIterator, ParallelSlice};
+// use rayon::prelude::{ParallelIterator, ParallelSlice};
 
 use crate::hasher::{Domain, Hasher};
 #[cfg(feature = "disk-trees")]
@@ -420,6 +420,9 @@ where
     where
         I: IntoIterator<Item = BH::Domain>,
     {
+        HybridMerkleTree::from_leaves(leaves)
+
+        /*
         let leaves: Vec<BH::Domain> = leaves.into_iter().collect();
         let n_leaves = leaves.len();
 
@@ -480,6 +483,7 @@ where
             _ah: PhantomData,
             _bh: PhantomData,
         }
+        */
     }
 
     /// Creates a `HybridMerkleTree` given an iterator of `Hashable` items. Each item from the
