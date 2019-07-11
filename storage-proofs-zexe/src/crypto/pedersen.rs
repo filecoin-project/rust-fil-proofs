@@ -67,15 +67,8 @@ where
 }
 
 pub fn pedersen(data: &[u8]) -> Fr {
-    let mut bits = BitVec::<LittleEndian, u8>::from(data);
-    let mut personalization =
-        BitVec::<LittleEndian, u8>::from(&Personalization::NoteCommitment.get_bits()[..]);
-
-    bits.append(&mut personalization);
-
-    let point =
-        PedersenCRH::<JubJub, BigWindow>::evaluate(&PEDERSEN_PARAMS, bits.as_slice()).unwrap();
-    point.x
+    let bits = BitVec::<LittleEndian, u8>::from(data);
+    pedersen_hash(Personalization::NoteCommitment, bits)
 }
 
 /// Pedersen hashing for inputs that have length mulitple of the block size `256`. Based on pedersen hashes and a Merkle-Damgard construction.
