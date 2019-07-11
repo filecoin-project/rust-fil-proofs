@@ -199,7 +199,8 @@ impl<E: Engine> TestConstraintSystem<E> {
         };
 
         let powers_of_two = (0..  <E::Fr as PrimeField>::Params::MODULUS_BITS)
-            .map(|_| (E::Fr::from_repr_raw(<E::Fr as PrimeField>::BigInt::from(2 as u64))))
+            .map(|i| (E::Fr::from_repr_raw(<E::Fr as PrimeField>::BigInt::from(2 as u64))
+            .pow(&[u64::from(i)])))
             // TODO: use `from_str` here, like below:
             // .map(|i| ((E::Fr::from_str("2"))))
             .collect::<Vec<_>>();
