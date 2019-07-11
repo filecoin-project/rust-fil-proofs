@@ -32,11 +32,10 @@ use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
 
 use crate::circuit::pedersen::pedersen_md_no_padding;
-use crate::crypto::pedersen::pedersen_hash;
-use crate::crypto::pedersen::Personalization;
+use crate::crypto::pedersen::{pedersen_hash, Personalization, BigWindow};
 use crate::crypto::{kdf, pedersen, sloth};
 use crate::error::{Error, Result};
-use crate::hasher::{Domain, HashFunction, Hasher, Window};
+use crate::hasher::{Domain, HashFunction, Hasher};
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PedersenHasher {}
@@ -221,7 +220,7 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         left: &[Boolean],
         right: &[Boolean],
         _height: usize,
-        params: PedersenParameters<JubJub>,
+        params: &PedersenParameters<JubJub>,
     ) -> std::result::Result<FpGadget<Bls12>, SynthesisError> {
         // TODO: Add personalization
         let mut preimage: Vec<Boolean> = vec![];
@@ -229,12 +228,12 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         preimage.extend_from_slice(right);
 
         type CRHGadget = PedersenCRHGadget<JubJub, Bls12, JubJubGadget>;
-        type CRH = PedersenCRH<JubJub, Window>;
+        type CRH = PedersenCRH<JubJub, BigWindow>;
 
         let gadget_parameters =
             <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::ParametersGadget::alloc(
                 &mut cs.ns(|| "gadget_parameters"),
-                || Ok(&params),
+                || Ok(params),
             )
             .unwrap();
 
@@ -257,7 +256,7 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
     fn hash_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
         bits: &[Boolean],
-        params: PedersenParameters<JubJub>,
+        params: &PedersenParameters<JubJub>,
     ) -> std::result::Result<FpGadget<Bls12>, SynthesisError> {
         pedersen_md_no_padding(cs, bits, params)
     }

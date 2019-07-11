@@ -66,13 +66,13 @@ pub trait HashFunction<T: Domain>:
         left: &[boolean::Boolean],
         right: &[boolean::Boolean],
         height: usize,
-        params: PedersenParameters<JubJub>,
+        params: &PedersenParameters<JubJub>,
     ) -> std::result::Result<FpGadget<Bls12_381>, SynthesisError>;
 
     fn hash_circuit<CS: ConstraintSystem<Bls12_381>>(
         cs: CS,
         bits: &[boolean::Boolean],
-        params: PedersenParameters<JubJub>,
+        params: &PedersenParameters<JubJub>,
     ) -> std::result::Result<FpGadget<Bls12_381>, SynthesisError>;
 }
 
@@ -85,12 +85,4 @@ pub trait Hasher: Clone + ::std::fmt::Debug + Eq + Default + Send + Sync {
     fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain, rounds: usize) -> Self::Domain;
 
     fn name() -> String;
-}
-
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct Window;
-
-impl PedersenWindow for Window {
-    const WINDOW_SIZE: usize = 1;
-    const NUM_WINDOWS: usize = 2016;
 }
