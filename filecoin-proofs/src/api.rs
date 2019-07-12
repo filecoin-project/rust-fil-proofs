@@ -692,12 +692,12 @@ mod tests {
         let (comm_p, padded_number_of_bytes_in_piece) =
             generate_piece_commitment(&piece_file.path(), unpadded_number_of_bytes_in_piece)?;
 
-        let mut unsealed_sector_file =
+        let mut staged_sector_file =
             NamedTempFile::new().expects("could not create named temp file");
 
         add_piece(
             &mut piece_file,
-            &mut unsealed_sector_file,
+            &mut staged_sector_file,
             unpadded_number_of_bytes_in_piece,
         )?;
 
@@ -708,7 +708,7 @@ mod tests {
 
         let output = seal(
             config,
-            &unsealed_sector_file.path(),
+            &staged_sector_file.path(),
             &sealed_sector_file.path(),
             &[0; 31],
             &[0; 31],
