@@ -608,7 +608,7 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
 fn test_generate_piece_commitment() -> Result<(), failure::Error> {
     use tempfile::NamedTempFile;
 
-    fn blah(data: &[u8]) -> Result<Commitment, failure::Error> {
+    fn generate_comm_p(data: &[u8]) -> Result<Commitment, failure::Error> {
         let mut file = NamedTempFile::new().expects("could not create named temp file");
         file.write_all(data)?;
         let (comm_p, _) =
@@ -631,8 +631,8 @@ fn test_generate_piece_commitment() -> Result<(), failure::Error> {
                 data_b[i] = bytes[i];
             }
 
-            let comm_p_a = blah(&data_a)?;
-            let comm_p_b = blah(&data_b)?;
+            let comm_p_a = generate_comm_p(&data_a)?;
+            let comm_p_b = generate_comm_p(&data_b)?;
 
             assert_eq!(comm_p_a, comm_p_b);
         }
@@ -649,8 +649,8 @@ fn test_generate_piece_commitment() -> Result<(), failure::Error> {
             data_b[i] = bytes[i];
         }
 
-        let comm_p_a = blah(&data_a)?;
-        let comm_p_b = blah(&data_b)?;
+        let comm_p_a = generate_comm_p(&data_a)?;
+        let comm_p_b = generate_comm_p(&data_b)?;
 
         assert_eq!(comm_p_a, comm_p_b);
     }
