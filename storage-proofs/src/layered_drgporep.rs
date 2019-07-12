@@ -419,7 +419,7 @@ pub trait Layers {
                 sorted_trees.push(tree_d);
 
                 if layer < layers {
-                    info!(SP_LOG, "encoding"; "layer {}" => format!("{}", layer));
+                    info!(SP_LOG, "encoding"; "layer" => format!("{}", layer));
                     vde::encode(&current_graph, sloth_iter, replica_id, data)
                         .expect("encoding failed in thread");
                 }
@@ -496,7 +496,7 @@ pub trait Layers {
                         threads.push(thread);
 
                         if layer < layers {
-                            info!(SP_LOG, "encoding"; "layer {}" => format!("{}", layer));
+                            info!(SP_LOG, "encoding"; "layer" => format!("{}", layer));
                             vde::encode(&current_graph, sloth_iter, replica_id, data)
                                 .expect("encoding failed in thread");
                         }
