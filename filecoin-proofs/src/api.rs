@@ -689,7 +689,7 @@ mod tests {
         let mut piece_file = NamedTempFile::new().expects("could not create named temp file");
         piece_file.write_all(&bytes)?;
         piece_file.seek(SeekFrom::Start(0))?;
-        let (comm_p, foo) =
+        let (comm_p, padded_number_of_bytes_in_piece) =
             generate_piece_commitment(&piece_file.path(), unpadded_number_of_bytes_in_piece)?;
 
         let mut unsealed_sector_file =
@@ -721,7 +721,7 @@ mod tests {
             &piece_inclusion_proof_bytes,
             &output.comm_d,
             &output.comm_ps[0],
-            foo,
+            padded_number_of_bytes_in_piece,
             sector_size,
         )?;
 
