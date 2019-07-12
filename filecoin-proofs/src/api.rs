@@ -252,8 +252,7 @@ pub fn seal<T: AsRef<Path>>(
             .map(|p| p.number_of_leaves)
             .collect::<Vec<_>>(),
         (sector_bytes / 127) * 4,
-    )
-    .expect("pip verification sanity check failed");
+    )?;
 
     if !valid_pieces {
         return Err(format_err!("pip verification sanity check failed"));
