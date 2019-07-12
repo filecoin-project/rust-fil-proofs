@@ -4,11 +4,13 @@ use merkletree::merkle::{self, next_pow2, VecStore};
 use std::io::Read;
 
 use crate::error::*;
-use crate::fr32::Fr32Ary;
+use crate::fr32::{Fr32Ary, NUM_FR32_BYTES};
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::MerkleTree;
 
 use std::convert::TryFrom;
+
+const NUM_PIP_HEADER_BYTES: usize = 8;
 
 /// Based on the alignment information (and sector size, provided during verification),
 /// the algorithm deterministically consumes the elements.
@@ -37,7 +39,7 @@ impl<H: Hasher> TryFrom<&[u8]> for PieceInclusionProof<H> {
     fn try_from(bytes: &[u8]) -> std::result::Result<Self, Self::Error> {
         // TODO: maybe option in a function, not a from
         // also don't use 8 as the magic number from usize
-        if bytes.len() < 8 || (bytes.len() - 8) % 32 != 0 {
+        if bytes.len() < NUM_PIP_HEADER_BYTES || (bytes.len() - NUM_PIP_HEADER_BYTES) % NUM_FR32_BYTES != 0 {
             return Err(format_err!("malformed piece inclusion proof"));
         }
 
@@ -46,7 +48,7 @@ impl<H: Hasher> TryFrom<&[u8]> for PieceInclusionProof<H> {
 
         let mut proof_elements = Vec::new();
 
-        for chunk in bytes[8..].chunks(32) {
+        for chunk in bytes[NUM_PIP_HEADER_BYTES..].chunks(NUM_FR32_BYTES) {
             let proof = <H::Domain as Domain>::try_from_bytes(&chunk)?;
             proof_elements.push(proof);
         }
@@ -124,7 +126,7 @@ fn compute_piece_commitment<H: Hasher>(data: &[H::Domain]) -> H::Domain {
 /// Generate `comm_p` from bytes
 fn generate_piece_commitment<H: Hasher>(data: &[u8]) -> Result<H::Domain> {
     let mut domain_data = Vec::new();
-    for d in data.chunks(32) {
+    for d in data.chunks(NUM_FR32_BYTES) {
         domain_data.push(<H::Domain as Domain>::try_from_bytes(d)?)
     }
 
@@ -135,7 +137,7 @@ fn generate_piece_commitment<H: Hasher>(data: &[u8]) -> Result<H::Domain> {
 /// Generate `comm_p` from bytes and return it as bytes.
 fn generate_piece_commitment_bytes<H: Hasher>(data: &[u8]) -> Result<Fr32Ary> {
     let comm_p = generate_piece_commitment::<H>(data)?;
-    let mut comm_p_bytes: Fr32Ary = [0; 32];
+    let mut comm_p_bytes: Fr32Ary = [0; NUM_FR32_BYTES];
 
     comm_p.write_bytes(&mut comm_p_bytes)?;
 
@@ -150,7 +152,7 @@ pub fn generate_piece_commitment_bytes_from_source<H: Hasher>(
     let mut total_bytes_read = 0;
 
     loop {
-        let mut buf = [0; 32];
+        let mut buf = [0; NUM_FR32_BYTES];
 
         let bytes_read = source.read(&mut buf)?;
         total_bytes_read += bytes_read;
@@ -162,13 +164,13 @@ pub fn generate_piece_commitment_bytes_from_source<H: Hasher>(
         }
     }
 
-    if total_bytes_read < 32 {
+    if total_bytes_read < NUM_FR32_BYTES {
         return Err(Error::Unclassified(
             "insufficient data to generate piece commitment".to_string(),
         ));
     }
 
-    let mut comm_p_bytes = [0; 32];
+    let mut comm_p_bytes = [0; NUM_FR32_BYTES];
     let comm_p = compute_piece_commitment::<H>(&domain_data);
     comm_p.write_bytes(&mut comm_p_bytes)?;
 
@@ -409,9 +411,9 @@ mod tests {
     }
 
     fn test_piece_inclusion_proof<H: Hasher>() {
-        let mut size = 32;
+        let mut size = NUM_FR32_BYTES;
 
-        test_piece_inclusion_proof_aux::<H>(32, &[32], &[0], false);
+        test_piece_inclusion_proof_aux::<H>(NUM_FR32_BYTES, &[NUM_FR32_BYTES], &[0], false);
 
         //        // Aligned proofs
         while size > 2 {
@@ -423,11 +425,11 @@ mod tests {
         }
 
         //        // Unaligned proof (should fail)
-        test_piece_inclusion_proof_aux::<H>(32, &[16usize], &[8usize], true);
+        test_piece_inclusion_proof_aux::<H>(NUM_FR32_BYTES, &[16usize], &[8usize], true);
 
         //        // Mixed aligned and unaligned
         for i in 0..16 {
-            test_piece_inclusion_proof_aux::<H>(32, &[8usize], &[i], i % 8 != 0);
+            test_piece_inclusion_proof_aux::<H>(NUM_FR32_BYTES, &[8usize], &[i], i % 8 != 0);
         }
 
         // TODO: when unaligned proofs are supported, test more exhaustively.
@@ -473,7 +475,7 @@ mod tests {
 
         let piece_tree = create_piece_tree::<H>(
             &data
-                .chunks(32)
+                .chunks(NUM_FR32_BYTES)
                 .map(|x| H::Domain::try_from_bytes(x).unwrap())
                 .collect::<Vec<_>>(),
         );
@@ -577,7 +579,7 @@ mod tests {
 
         for _ in 0..1000 {
             let x = rng.gen_range(0, 1000) as usize;
-            let in_bytes: Vec<u8> = (0..(8 + x * 32)).map(|_| rand::random::<u8>()).collect();
+            let in_bytes: Vec<u8> = (0..(NUM_PIP_HEADER_BYTES + x * NUM_FR32_BYTES)).map(|_| rand::random::<u8>()).collect();
             let piece_inclusion_proof: PieceInclusionProof<PedersenHasher> =
                 in_bytes.as_slice().try_into()?;
             let out_bytes: Vec<u8> = piece_inclusion_proof.into();
@@ -596,7 +598,7 @@ mod tests {
             let mut x;
             while {
                 x = rng.gen_range(0, 1000) as usize;
-                x % 32 == 8
+                x % NUM_FR32_BYTES == NUM_PIP_HEADER_BYTES
             } {}
 
             let in_bytes: Vec<u8> = (0..x).map(|_| rand::random::<u8>()).collect();
