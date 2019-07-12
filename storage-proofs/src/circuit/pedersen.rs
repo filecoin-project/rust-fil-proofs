@@ -121,18 +121,17 @@ mod tests {
     fn test_pedersen_md_input_circut() {
         let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let constraints = [
-            0,    // not used
-            0,    // not used
-            1384, // 64 bytes
-            2767, // 96 bytes
-            4150, // 128 bytes
-            5533, // 160 bytes
+        let cases = [
+            (64, 1384),   // 64 bytes
+            (96, 2767),   // 96 bytes
+            (128, 4150),  // 128 bytes
+            (160, 5533),  // 160 bytes
+            (512, 20746), // 512 bytes
         ];
 
-        for i in 2..6 {
+        for (bytes, constraints) in &cases {
             let mut cs = TestConstraintSystem::<Bls12>::new();
-            let data: Vec<u8> = (0..i * 32).map(|_| rng.gen()).collect();
+            let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
             let params = &JubjubBls12::new();
 
             let data_bits: Vec<Boolean> = {
@@ -145,9 +144,9 @@ mod tests {
             assert!(cs.is_satisfied(), "constraints not satisfied");
             assert_eq!(
                 cs.num_constraints(),
-                constraints[i],
+                *constraints,
                 "constraint size changed {}",
-                i
+                bytes
             );
 
             let expected = crypto::pedersen::pedersen_md_no_padding(data.as_slice());
