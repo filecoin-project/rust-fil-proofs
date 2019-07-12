@@ -612,45 +612,27 @@ mod tests {
 
     use super::*;
 
+    fn generate_comm_p(data: &[u8]) -> Result<Commitment, failure::Error> {
+        let mut file = NamedTempFile::new().expects("could not create named temp file");
+        file.write_all(data)?;
+        let (comm_p, _) =
+            generate_piece_commitment(file.path(), UnpaddedBytesAmount(data.len() as u64))?;
+        Ok(comm_p)
+    }
+
+
     #[test]
-    fn test_generate_piece_commitment() -> Result<(), failure::Error> {
-        fn generate_comm_p(data: &[u8]) -> Result<Commitment, failure::Error> {
-            let mut file = NamedTempFile::new().expects("could not create named temp file");
-            file.write_all(data)?;
-            let (comm_p, _) =
-                generate_piece_commitment(file.path(), UnpaddedBytesAmount(data.len() as u64))?;
-            Ok(comm_p)
-        }
+    fn test_generate_piece_commitment_up_to_minimum() -> Result<(), failure::Error> {
+        // test comm_p generation for all byte lengths up to the minimum piece alignment when
+        // writing a piece to a sector
+        let max = MINIMUM_PIECE_SIZE as usize;
 
-        {
-            // this scope tests comm_p generation for all byte lengths up to the minimum piece
-            // alignment when writing a piece to a sector
-            let max = MINIMUM_PIECE_SIZE as usize;
+        for n in 0..=max {
+            let bytes: Vec<u8> = (0..n).map(|_| rand::random::<u8>()).collect();
+            let mut data_a = vec![0; n];
+            let mut data_b = vec![0; max];
 
-            for n in 0..=max {
-                let bytes: Vec<u8> = (0..n).map(|_| rand::random::<u8>()).collect();
-                let mut data_a = vec![0; n];
-                let mut data_b = vec![0; max];
-
-                for i in 0..n {
-                    data_a[i] = bytes[i];
-                    data_b[i] = bytes[i];
-                }
-
-                let comm_p_a = generate_comm_p(&data_a)?;
-                let comm_p_b = generate_comm_p(&data_b)?;
-
-                assert_eq!(comm_p_a, comm_p_b);
-            }
-        }
-
-        {
-            // this scope is just a sanity check that larger byte lengths are still zero padded
-            let bytes: Vec<u8> = (0..400).map(|_| rand::random::<u8>()).collect();
-            let mut data_a = vec![0; 400];
-            let mut data_b = vec![0; 508];
-
-            for i in 0..400 {
+            for i in 0..n {
                 data_a[i] = bytes[i];
                 data_b[i] = bytes[i];
             }
@@ -660,6 +642,26 @@ mod tests {
 
             assert_eq!(comm_p_a, comm_p_b);
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_generate_piece_commitment_over_minimum() -> Result<(), failure::Error> {
+        // sanity check that larger byte lengths are still zero padded
+        let bytes: Vec<u8> = (0..400).map(|_| rand::random::<u8>()).collect();
+        let mut data_a = vec![0; 400];
+        let mut data_b = vec![0; 508];
+
+        for i in 0..400 {
+            data_a[i] = bytes[i];
+            data_b[i] = bytes[i];
+        }
+
+        let comm_p_a = generate_comm_p(&data_a)?;
+        let comm_p_b = generate_comm_p(&data_b)?;
+
+        assert_eq!(comm_p_a, comm_p_b);
 
         Ok(())
     }
