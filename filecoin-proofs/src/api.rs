@@ -343,14 +343,16 @@ pub fn verify_seal(
     .map_err(Into::into)
 }
 
+/// Verify the provided piece inclusion proof demonstrates the piece commitment exists in a
+/// merkle tree of a specific size with root hash comm_d
 pub fn verify_piece_inclusion_proof(
-    bytes: &[u8],
+    piece_inclusion_proof: &[u8],
     comm_d: &Commitment,
     comm_p: &Commitment,
     piece_size: PaddedBytesAmount,
     sector_size: SectorSize,
 ) -> error::Result<bool> {
-    let piece_inclusion_proof: PieceInclusionProof<PedersenHasher> = bytes.into();
+    let piece_inclusion_proof: PieceInclusionProof<PedersenHasher> = piece_inclusion_proof.into();
     let comm_d = storage_proofs::hasher::pedersen::PedersenDomain::try_from_bytes(comm_d)?;
     let comm_p = storage_proofs::hasher::pedersen::PedersenDomain::try_from_bytes(comm_p)?;
     let piece_leaves = u64::from(piece_size) / 32;
