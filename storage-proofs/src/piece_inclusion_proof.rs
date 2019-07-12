@@ -254,10 +254,6 @@ impl<H: Hasher> PieceInclusionProof<H> {
         piece_leaves: usize,
         sector_leaves: usize,
     ) -> bool {
-        if sector_leaves == 0 {
-            return false;
-        }
-
         let sector_height = height_for_length(sector_leaves);
         let piece_height = height_for_length(piece_leaves);
         let proof_length = sector_height - piece_height;
@@ -342,7 +338,11 @@ pub fn piece_is_aligned(position: usize, length: usize, tree_len: usize) -> bool
 }
 
 fn height_for_length(n: usize) -> usize {
-    (n as f64).log2().ceil() as usize
+    if n == 0 {
+        0
+    } else {
+        (n as f64).log2().ceil() as usize
+    }
 }
 
 fn is_pow2(n: usize) -> bool {
