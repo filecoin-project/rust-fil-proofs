@@ -32,7 +32,11 @@ use storage_proofs::{vdf_post, vdf_sloth};
 use crate::caches::{
     get_post_params, get_post_verifying_key, get_zigzag_params, get_zigzag_verifying_key,
 };
-use crate::constants::{POREP_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN};
+use crate::constants::{
+    MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
+    MINIMUM_RESERVED_LEAVES_FOR_PIECE_IN_SECTOR as MIN_NUM_LEAVES, POREP_MINIMUM_CHALLENGES,
+    SINGLE_PARTITION_PROOF_LEN,
+};
 use crate::error;
 use crate::error::ExpectWithBacktrace;
 use crate::file_cleanup::FileCleanup;
@@ -118,11 +122,12 @@ fn generate_piece_specs<T: AsRef<Path>>(
         let padded_right_bytes =
             PaddedBytesAmount::from(unpadded_piece_length + right_bytes) - padded_piece_length;
 
-        let leaf_position = (usize::from(cursor) / 127) * 4;
+        let leaf_position = (usize::from(cursor) / MINIMUM_PIECE_SIZE as usize) * MIN_NUM_LEAVES;
 
         cursor = cursor + left_bytes + unpadded_piece_length + right_bytes;
 
-        let number_of_leaves = (usize::from(cursor) / 127) * 4 - leaf_position;
+        let number_of_leaves =
+            (usize::from(cursor) / MINIMUM_PIECE_SIZE as usize) * MIN_NUM_LEAVES - leaf_position;
 
         let mut buf = vec![0; usize::from(padded_left_bytes)];
         in_data.read_exact(&mut buf)?;
@@ -610,10 +615,7 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
 
 #[cfg(test)]
 mod tests {
-    use crate::constants::{
-        MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
-        TEST_SECTOR_SIZE,
-    };
+    use crate::constants::TEST_SECTOR_SIZE;
     use crate::types::SectorSize;
     use tempfile::NamedTempFile;
 
