@@ -94,27 +94,36 @@ mod tests {
     fn test_pedersen_single_input_circut() {
         let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let mut cs = TestConstraintSystem::<Bls12>::new();
-        let data: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
-        let params = &JubjubBls12::new();
+        let cases = [(32, 697), (64, 1384)];
 
-        let data_bits: Vec<Boolean> = {
-            let mut cs = cs.namespace(|| "data");
-            bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).unwrap()
-        };
-        let out =
-            pedersen_compression_num(&mut cs, params, &data_bits).expect("pedersen hashing failed");
+        for (bytes, constraints) in &cases {
+            let mut cs = TestConstraintSystem::<Bls12>::new();
+            let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
+            let params = &JubjubBls12::new();
 
-        assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_constraints(), 697, "constraint size changed");
+            let data_bits: Vec<Boolean> = {
+                let mut cs = cs.namespace(|| "data");
+                bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).unwrap()
+            };
+            let out = pedersen_compression_num(&mut cs, params, &data_bits)
+                .expect("pedersen hashing failed");
 
-        let expected = crypto::pedersen::pedersen(data.as_slice());
+            assert!(cs.is_satisfied(), "constraints not satisfied");
+            assert_eq!(
+                cs.num_constraints(),
+                *constraints,
+                "constraint size changed for {} bytes",
+                *bytes
+            );
 
-        assert_eq!(
-            expected,
-            out.get_value().unwrap(),
-            "circuit and non circuit do not match"
-        );
+            let expected = crypto::pedersen::pedersen(data.as_slice());
+
+            assert_eq!(
+                expected,
+                out.get_value().unwrap(),
+                "circuit and non circuit do not match"
+            );
+        }
     }
 
     #[test]
