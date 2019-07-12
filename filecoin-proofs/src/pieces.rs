@@ -3,6 +3,7 @@ use std::io::Read;
 use std::iter::Iterator;
 
 use crate::types::{UnpaddedByteIndex, UnpaddedBytesAmount};
+use crate::constants::MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE;
 
 pub struct PieceAlignment {
     pub left_bytes: UnpaddedBytesAmount,
@@ -47,11 +48,7 @@ pub fn get_piece_alignment(
     written_bytes: UnpaddedBytesAmount,
     piece_bytes: UnpaddedBytesAmount,
 ) -> PieceAlignment {
-    // Bit padding causes bytes to only be aligned at every 127 bytes (for 31.75 bytes).
-    // @TODO change this away from magic numbers.
-    let minimum_piece_bytes = (4 * 32) - 1;
-
-    let mut piece_bytes_needed = minimum_piece_bytes;
+    let mut piece_bytes_needed = MINIMUM_PIECE_SIZE;
 
     // Calculate the next power of two multiple that will fully contain the piece's data.
     // This is required to ensure a clean piece merkle root, without being affected by

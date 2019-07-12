@@ -607,6 +607,7 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
 #[test]
 fn test_generate_piece_commitment() -> Result<(), failure::Error> {
     use tempfile::NamedTempFile;
+    use crate::constants::MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE;
 
     fn generate_comm_p(data: &[u8]) -> Result<Commitment, failure::Error> {
         let mut file = NamedTempFile::new().expects("could not create named temp file");
@@ -619,7 +620,7 @@ fn test_generate_piece_commitment() -> Result<(), failure::Error> {
     {
         // this scope tests comm_p generation for all byte lengths up to the minimum piece
         // alignment when writing a piece to a sector
-        let max = 127;
+        let max = MINIMUM_PIECE_SIZE as usize;
 
         for n in 0..=max {
             let bytes: Vec<u8> = (0..n).map(|_| rand::random::<u8>()).collect();
