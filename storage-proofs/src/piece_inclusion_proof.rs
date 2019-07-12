@@ -96,7 +96,6 @@ impl PieceSpec {
     }
 }
 
-#[allow(dead_code)]
 fn create_piece_tree<H: Hasher>(
     data: &[H::Domain],
 ) -> merkle::MerkleTree<H::Domain, H::Function, VecStore<H::Domain>> {
@@ -115,33 +114,10 @@ fn create_piece_tree<H: Hasher>(
     )
 }
 
-#[allow(dead_code)]
 /// Compute `comm_p` from a slice of Domain elements.
 /// `comm_p` is the merkle root of a piece, zero-padded to fill a complete binary sub-tree.
 fn compute_piece_commitment<H: Hasher>(data: &[H::Domain]) -> H::Domain {
     create_piece_tree::<H>(data).root()
-}
-
-#[allow(dead_code)]
-/// Generate `comm_p` from bytes
-fn generate_piece_commitment<H: Hasher>(data: &[u8]) -> Result<H::Domain> {
-    let mut domain_data = Vec::new();
-    for d in data.chunks(NUM_FR32_BYTES) {
-        domain_data.push(<H::Domain as Domain>::try_from_bytes(d)?)
-    }
-
-    Ok(compute_piece_commitment::<H>(&domain_data))
-}
-
-#[allow(dead_code)]
-/// Generate `comm_p` from bytes and return it as bytes.
-fn generate_piece_commitment_bytes<H: Hasher>(data: &[u8]) -> Result<Fr32Ary> {
-    let comm_p = generate_piece_commitment::<H>(data)?;
-    let mut comm_p_bytes: Fr32Ary = [0; NUM_FR32_BYTES];
-
-    comm_p.write_bytes(&mut comm_p_bytes)?;
-
-    Ok(comm_p_bytes)
 }
 
 /// Generate `comm_p` from a source and return it as bytes.
@@ -394,6 +370,26 @@ mod tests {
     use crate::util::NODE_SIZE;
     use rand::Rng;
     use std::convert::TryInto;
+
+    /// Generate `comm_p` from bytes
+    fn generate_piece_commitment<H: Hasher>(data: &[u8]) -> Result<H::Domain> {
+        let mut domain_data = Vec::new();
+        for d in data.chunks(NUM_FR32_BYTES) {
+            domain_data.push(<H::Domain as Domain>::try_from_bytes(d)?)
+        }
+
+        Ok(compute_piece_commitment::<H>(&domain_data))
+    }
+
+    /// Generate `comm_p` from bytes and return it as bytes.
+    fn generate_piece_commitment_bytes<H: Hasher>(data: &[u8]) -> Result<Fr32Ary> {
+        let comm_p = generate_piece_commitment::<H>(data)?;
+        let mut comm_p_bytes: Fr32Ary = [0; NUM_FR32_BYTES];
+
+        comm_p.write_bytes(&mut comm_p_bytes)?;
+
+        Ok(comm_p_bytes)
+    }
 
     #[test]
     fn piece_inclusion_proof_pedersen() {
