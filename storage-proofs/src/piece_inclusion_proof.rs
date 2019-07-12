@@ -8,6 +8,8 @@ use crate::fr32::Fr32Ary;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::MerkleTree;
 
+use std::convert::TryFrom;
+
 /// Based on the alignment information (and sector size, provided during verification),
 /// the algorithm deterministically consumes the elements.
 #[derive(Clone, Debug)]
@@ -29,15 +31,14 @@ impl<H: Hasher> From<PieceInclusionProof<H>> for Vec<u8> {
     }
 }
 
-impl<H: Hasher> From<&[u8]> for PieceInclusionProof<H> {
-    fn from(bytes: &[u8]) -> Self {
+impl<H: Hasher> TryFrom<&[u8]> for PieceInclusionProof<H> {
+    type Error = failure::Error;
+
+    fn try_from(bytes: &[u8]) -> std::result::Result<Self, Self::Error> {
         // TODO: maybe option in a function, not a from
         // also don't use 8 as the magic number from usize
-        if (&bytes.len() - 8) % 32 != 0 {
-            return Self {
-                position: 0,
-                proof_elements: Default::default(),
-            };
+        if bytes.len() < 8 || (bytes.len() - 8) % 32 != 0 {
+            return Err(format_err!("malformed piece inclusion proof"));
         }
 
         let mut position_bytes: [u8; 8] = [0; 8];
@@ -46,15 +47,14 @@ impl<H: Hasher> From<&[u8]> for PieceInclusionProof<H> {
         let mut proof_elements = Vec::new();
 
         for chunk in bytes[8..].chunks(32) {
-            let proof =
-                <H::Domain as Domain>::try_from_bytes(&chunk).expect("invalid proof element");
+            let proof = <H::Domain as Domain>::try_from_bytes(&chunk)?;
             proof_elements.push(proof);
         }
 
-        Self {
+        Ok(Self {
             position: usize::from_le_bytes(position_bytes),
             proof_elements,
-        }
+        })
     }
 }
 
@@ -163,7 +163,9 @@ pub fn generate_piece_commitment_bytes_from_source<H: Hasher>(
     }
 
     if total_bytes_read < 32 {
-        return Err(Error::Unclassified("foo".to_string()));
+        return Err(Error::Unclassified(
+            "insufficient data to generate piece commitment".to_string(),
+        ));
     }
 
     let mut comm_p_bytes = [0; 32];
@@ -388,6 +390,8 @@ mod tests {
     use crate::drgraph::{new_seed, BucketGraph, Graph};
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
     use crate::util::NODE_SIZE;
+    use rand::Rng;
+    use std::convert::TryInto;
 
     #[test]
     fn piece_inclusion_proof_pedersen() {
@@ -567,61 +571,42 @@ mod tests {
         assert_eq!(subtree_capacity(15, 16), 1);
     }
 
-    fn test_pip_casting<H: Hasher>() {
-        let valid_proof_element_bytes = [
-            1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
-            0, 1, 2,
-        ];
-        let valid_proof_element = H::Domain::try_from_bytes(&valid_proof_element_bytes).unwrap();
+    #[test]
+    fn test_well_formed_pip_serialization() -> std::result::Result<(), failure::Error> {
+        let mut rng = rand::thread_rng();
 
-        let empty_pip: PieceInclusionProof<H> = PieceInclusionProof {
-            position: 0,
-            proof_elements: vec![],
-        };
+        for _ in 0..1000 {
+            let x = rng.gen_range(0, 1000) as usize;
+            let in_bytes: Vec<u8> = (0..(8 + x * 32)).map(|_| rand::random::<u8>()).collect();
+            let piece_inclusion_proof: PieceInclusionProof<PedersenHasher> =
+                in_bytes.as_slice().try_into()?;
+            let out_bytes: Vec<u8> = piece_inclusion_proof.into();
 
-        let empty_pip_bytes: Vec<u8> = empty_pip.into();
-        assert_eq!(empty_pip_bytes, vec![0, 0, 0, 0, 0, 0, 0, 0]);
+            assert_eq!(in_bytes, out_bytes);
+        }
 
-        let recast_empty_pip: PieceInclusionProof<H> = empty_pip_bytes.as_slice().into();
-
-        assert_eq!(recast_empty_pip.position, 0);
-        assert_eq!(recast_empty_pip.proof_elements.len(), 0);
-
-        let valid_pip: PieceInclusionProof<H> = PieceInclusionProof {
-            position: 24,
-            proof_elements: vec![valid_proof_element],
-        };
-
-        let valid_pip_bytes: Vec<u8> = valid_pip.into();
-        assert_eq!(
-            valid_pip_bytes,
-            vec![
-                24, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
-                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2
-            ]
-        );
-
-        let recast_valid_pip: PieceInclusionProof<H> = valid_pip_bytes.as_slice().into();
-
-        assert_eq!(recast_valid_pip.position, 24);
-        assert_eq!(recast_valid_pip.proof_elements.len(), 1);
-
-        let invalid_pip_bytes: Vec<u8> = vec![0, 0, 0];
-        let invalid_pip: PieceInclusionProof<H> = invalid_pip_bytes.as_slice().into();
-
-        assert_eq!(invalid_pip.position, 0);
-        assert_eq!(invalid_pip.proof_elements.len(), 0);
-
-        let invalid_pip_bytes: Vec<u8> = vec![24, 0, 0, 0, 0, 0, 0, 0, 1];
-        let invalid_pip: PieceInclusionProof<H> = invalid_pip_bytes.as_slice().into();
-
-        assert_eq!(invalid_pip.position, 0);
-        assert_eq!(invalid_pip.proof_elements.len(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_pip_casting_pedersen() {
-        test_pip_casting::<PedersenHasher>();
+    fn test_malformed_pip_deserialization() -> std::result::Result<(), failure::Error> {
+        let mut rng = rand::thread_rng();
+
+        for _ in 0..1000 {
+            let mut x;
+            while {
+                x = rng.gen_range(0, 1000) as usize;
+                x % 32 == 8
+            } {}
+
+            let in_bytes: Vec<u8> = (0..x).map(|_| rand::random::<u8>()).collect();
+            assert!(
+                TryInto::<PieceInclusionProof<PedersenHasher>>::try_into(in_bytes.as_slice())
+                    .is_err()
+            );
+        }
+
+        Ok(())
     }
 
     #[test]

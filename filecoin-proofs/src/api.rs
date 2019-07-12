@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use std::fs::{copy, File, OpenOptions};
 use std::io::prelude::*;
 use std::io::{BufWriter, Cursor, Read, SeekFrom};
@@ -352,7 +353,8 @@ pub fn verify_piece_inclusion_proof(
     piece_size: PaddedBytesAmount,
     sector_size: SectorSize,
 ) -> error::Result<bool> {
-    let piece_inclusion_proof: PieceInclusionProof<PedersenHasher> = piece_inclusion_proof.into();
+    let piece_inclusion_proof: PieceInclusionProof<PedersenHasher> =
+        piece_inclusion_proof.try_into()?;
     let comm_d = storage_proofs::hasher::pedersen::PedersenDomain::try_from_bytes(comm_d)?;
     let comm_p = storage_proofs::hasher::pedersen::PedersenDomain::try_from_bytes(comm_p)?;
     let piece_leaves = u64::from(piece_size) / 32;
