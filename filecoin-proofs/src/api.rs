@@ -620,6 +620,18 @@ mod tests {
         Ok(comm_p)
     }
 
+    fn add_piece<R, W>(
+        mut source: &mut R,
+        target: &mut W,
+        piece_size: UnpaddedBytesAmount,
+    ) -> std::io::Result<usize>
+    where
+        R: Read + ?Sized,
+        W: Read + Write + Seek + ?Sized,
+    {
+        let (_, mut aligned_source) = get_aligned_source(&mut source, &[], piece_size);
+        write_padded(&mut aligned_source, target)
+    }
 
     #[test]
     fn test_generate_piece_commitment_up_to_minimum() -> Result<(), failure::Error> {
@@ -669,19 +681,6 @@ mod tests {
     #[test]
     #[ignore]
     fn test_pip_lifecycle() -> Result<(), failure::Error> {
-        fn add_piece<R, W>(
-            mut source: &mut R,
-            target: &mut W,
-            piece_size: UnpaddedBytesAmount,
-        ) -> std::io::Result<usize>
-        where
-            R: Read + ?Sized,
-            W: Read + Write + Seek + ?Sized,
-        {
-            let (_, mut aligned_source) = get_aligned_source(&mut source, &[], piece_size);
-            write_padded(&mut aligned_source, target)
-        }
-
         let number_of_bytes_in_piece: u64 = 500;
         let unpadded_number_of_bytes_in_piece = UnpaddedBytesAmount(number_of_bytes_in_piece);
         let bytes: Vec<u8> = (0..number_of_bytes_in_piece)
