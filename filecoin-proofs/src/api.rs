@@ -7,7 +7,7 @@ use ff::PrimeField;
 use memmap::MmapOptions;
 use paired::bls12_381::Bls12;
 use paired::Engine;
-use tempfile::NamedTempFile;
+use tempfile::tempfile;
 
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::vdf_post::VDFPostCompound;
@@ -373,7 +373,7 @@ pub fn generate_piece_commitment<T: Into<PathBuf> + AsRef<Path>>(
     unpadded_piece_size: UnpaddedBytesAmount,
 ) -> error::Result<(Commitment, PaddedBytesAmount)> {
     let mut unpadded_piece_file = File::open(unpadded_piece_path)?;
-    let mut padded_piece_file = NamedTempFile::new().expects("could not create named temp file");
+    let mut padded_piece_file = tempfile()?;
 
     let (_, mut source) = get_aligned_source(&mut unpadded_piece_file, &[], unpadded_piece_size);
     let padded_piece_size = write_padded(&mut source, &mut padded_piece_file)?;
@@ -606,6 +606,8 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
 
 #[test]
 fn test_generate_piece_commitment() -> Result<(), failure::Error> {
+    use tempfile::NamedTempFile;
+
     fn blah(data: &[u8]) -> Result<Commitment, failure::Error> {
         let mut file = NamedTempFile::new().expects("could not create named temp file");
         file.write_all(data)?;
@@ -660,6 +662,7 @@ fn test_generate_piece_commitment() -> Result<(), failure::Error> {
 #[ignore]
 fn test_pip_lifecycle() -> Result<(), failure::Error> {
     use crate::types::SectorSize;
+    use tempfile::NamedTempFile;
 
     fn add_piece<R, W>(
         mut source: &mut R,
