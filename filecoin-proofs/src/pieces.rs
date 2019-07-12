@@ -2,8 +2,8 @@ use std::io::Cursor;
 use std::io::Read;
 use std::iter::Iterator;
 
-use crate::types::{UnpaddedByteIndex, UnpaddedBytesAmount};
 use crate::constants::MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE;
+use crate::types::{UnpaddedByteIndex, UnpaddedBytesAmount};
 
 pub struct PieceAlignment {
     pub left_bytes: UnpaddedBytesAmount,

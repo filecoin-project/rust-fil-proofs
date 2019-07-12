@@ -604,30 +604,53 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
     res
 }
 
-#[test]
-fn test_generate_piece_commitment() -> Result<(), failure::Error> {
-    use tempfile::NamedTempFile;
+#[cfg(test)]
+mod tests {
     use crate::constants::MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE;
+    use crate::types::SectorSize;
+    use tempfile::NamedTempFile;
 
-    fn generate_comm_p(data: &[u8]) -> Result<Commitment, failure::Error> {
-        let mut file = NamedTempFile::new().expects("could not create named temp file");
-        file.write_all(data)?;
-        let (comm_p, _) =
-            generate_piece_commitment(file.path(), UnpaddedBytesAmount(data.len() as u64))?;
-        Ok(comm_p)
-    }
+    use super::*;
 
-    {
-        // this scope tests comm_p generation for all byte lengths up to the minimum piece
-        // alignment when writing a piece to a sector
-        let max = MINIMUM_PIECE_SIZE as usize;
+    #[test]
+    fn test_generate_piece_commitment() -> Result<(), failure::Error> {
+        fn generate_comm_p(data: &[u8]) -> Result<Commitment, failure::Error> {
+            let mut file = NamedTempFile::new().expects("could not create named temp file");
+            file.write_all(data)?;
+            let (comm_p, _) =
+                generate_piece_commitment(file.path(), UnpaddedBytesAmount(data.len() as u64))?;
+            Ok(comm_p)
+        }
 
-        for n in 0..=max {
-            let bytes: Vec<u8> = (0..n).map(|_| rand::random::<u8>()).collect();
-            let mut data_a = vec![0; n];
-            let mut data_b = vec![0; max];
+        {
+            // this scope tests comm_p generation for all byte lengths up to the minimum piece
+            // alignment when writing a piece to a sector
+            let max = MINIMUM_PIECE_SIZE as usize;
 
-            for i in 0..n {
+            for n in 0..=max {
+                let bytes: Vec<u8> = (0..n).map(|_| rand::random::<u8>()).collect();
+                let mut data_a = vec![0; n];
+                let mut data_b = vec![0; max];
+
+                for i in 0..n {
+                    data_a[i] = bytes[i];
+                    data_b[i] = bytes[i];
+                }
+
+                let comm_p_a = generate_comm_p(&data_a)?;
+                let comm_p_b = generate_comm_p(&data_b)?;
+
+                assert_eq!(comm_p_a, comm_p_b);
+            }
+        }
+
+        {
+            // this scope is just a sanity check that larger byte lengths are still zero padded
+            let bytes: Vec<u8> = (0..400).map(|_| rand::random::<u8>()).collect();
+            let mut data_a = vec![0; 400];
+            let mut data_b = vec![0; 508];
+
+            for i in 0..400 {
                 data_a[i] = bytes[i];
                 data_b[i] = bytes[i];
             }
@@ -637,93 +660,74 @@ fn test_generate_piece_commitment() -> Result<(), failure::Error> {
 
             assert_eq!(comm_p_a, comm_p_b);
         }
+
+        Ok(())
     }
 
-    {
-        // this scope is just a sanity check that larger byte lengths are still zero padded
-        let bytes: Vec<u8> = (0..400).map(|_| rand::random::<u8>()).collect();
-        let mut data_a = vec![0; 400];
-        let mut data_b = vec![0; 508];
-
-        for i in 0..400 {
-            data_a[i] = bytes[i];
-            data_b[i] = bytes[i];
+    #[test]
+    #[ignore]
+    fn test_pip_lifecycle() -> Result<(), failure::Error> {
+        fn add_piece<R, W>(
+            mut source: &mut R,
+            target: &mut W,
+            piece_size: UnpaddedBytesAmount,
+        ) -> std::io::Result<usize>
+        where
+            R: Read + ?Sized,
+            W: Read + Write + Seek + ?Sized,
+        {
+            let (_, mut aligned_source) = get_aligned_source(&mut source, &[], piece_size);
+            write_padded(&mut aligned_source, target)
         }
 
-        let comm_p_a = generate_comm_p(&data_a)?;
-        let comm_p_b = generate_comm_p(&data_b)?;
+        let number_of_bytes_in_piece: u64 = 500;
+        let unpadded_number_of_bytes_in_piece = UnpaddedBytesAmount(number_of_bytes_in_piece);
+        let bytes: Vec<u8> = (0..number_of_bytes_in_piece)
+            .map(|_| rand::random::<u8>())
+            .collect();
+        let mut piece_file = NamedTempFile::new().expects("could not create named temp file");
+        piece_file.write_all(&bytes)?;
+        piece_file.seek(SeekFrom::Start(0))?;
+        let (comm_p, foo) =
+            generate_piece_commitment(&piece_file.path(), unpadded_number_of_bytes_in_piece)?;
 
-        assert_eq!(comm_p_a, comm_p_b);
+        let mut unsealed_sector_file =
+            NamedTempFile::new().expects("could not create named temp file");
+
+        add_piece(
+            &mut piece_file,
+            &mut unsealed_sector_file,
+            unpadded_number_of_bytes_in_piece,
+        )?;
+
+        let sealed_sector_file = NamedTempFile::new().expects("could not create named temp file");
+
+        let sector_size = SectorSize(1024);
+        let config = PoRepConfig(sector_size, PoRepProofPartitions(2));
+
+        let output = seal(
+            config,
+            &unsealed_sector_file.path(),
+            &sealed_sector_file.path(),
+            &[0; 31],
+            &[0; 31],
+            &[unpadded_number_of_bytes_in_piece],
+        )?;
+
+        let piece_inclusion_proof_bytes: Vec<u8> = output.piece_inclusion_proofs[0].clone().into();
+
+        let verified = verify_piece_inclusion_proof(
+            &piece_inclusion_proof_bytes,
+            &output.comm_d,
+            &output.comm_ps[0],
+            foo,
+            sector_size,
+        )?;
+
+        assert!(verified);
+
+        assert_eq!(output.comm_ps[0], comm_p);
+
+        Ok(())
     }
-
-    Ok(())
-}
-
-#[test]
-#[ignore]
-fn test_pip_lifecycle() -> Result<(), failure::Error> {
-    use crate::types::SectorSize;
-    use tempfile::NamedTempFile;
-
-    fn add_piece<R, W>(
-        mut source: &mut R,
-        target: &mut W,
-        piece_size: UnpaddedBytesAmount,
-    ) -> std::io::Result<usize>
-    where
-        R: Read + ?Sized,
-        W: Read + Write + Seek + ?Sized,
-    {
-        let (_, mut aligned_source) = get_aligned_source(&mut source, &[], piece_size);
-        write_padded(&mut aligned_source, target)
-    }
-
-    let number_of_bytes_in_piece: u64 = 500;
-    let unpadded_number_of_bytes_in_piece = UnpaddedBytesAmount(number_of_bytes_in_piece);
-    let bytes: Vec<u8> = (0..number_of_bytes_in_piece)
-        .map(|_| rand::random::<u8>())
-        .collect();
-    let mut piece_file = NamedTempFile::new().expects("could not create named temp file");
-    piece_file.write_all(&bytes)?;
-    piece_file.seek(SeekFrom::Start(0))?;
-    let (comm_p, foo) =
-        generate_piece_commitment(&piece_file.path(), unpadded_number_of_bytes_in_piece)?;
-
-    let mut unsealed_sector_file = NamedTempFile::new().expects("could not create named temp file");
-
-    add_piece(
-        &mut piece_file,
-        &mut unsealed_sector_file,
-        unpadded_number_of_bytes_in_piece,
-    )?;
-
-    let sealed_sector_file = NamedTempFile::new().expects("could not create named temp file");
-
-    let sector_size = SectorSize(1024);
-    let config = PoRepConfig(sector_size, PoRepProofPartitions(2));
-
-    let output = seal(
-        config,
-        &unsealed_sector_file.path(),
-        &sealed_sector_file.path(),
-        &[0; 31],
-        &[0; 31],
-        &[unpadded_number_of_bytes_in_piece],
-    )?;
-
-    let piece_inclusion_proof_bytes: Vec<u8> = output.piece_inclusion_proofs[0].clone().into();
-
-    let verified = verify_piece_inclusion_proof(
-        &piece_inclusion_proof_bytes,
-        &output.comm_d,
-        &output.comm_ps[0],
-        foo,
-        sector_size,
-    )?;
-
-    assert!(verified);
-
-    assert_eq!(output.comm_ps[0], comm_p);
-
-    Ok(())
 }
