@@ -5,8 +5,6 @@ use ff::{PrimeField, PrimeFieldRepr, ScalarEngine};
 use paired::bls12_381::FrRepr;
 use paired::Engine;
 
-pub const NUM_FR32_BYTES: usize = 32;
-
 // Contains 32 bytes whose little-endian value represents an Fr.
 // Invariants:
 // - Value MUST represent a valid Fr.
