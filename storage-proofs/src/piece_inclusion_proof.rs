@@ -49,8 +49,8 @@ impl<H: Hasher> TryFrom<&[u8]> for PieceInclusionProof<H> {
         let mut proof_elements = Vec::new();
 
         for chunk in bytes[NUM_PIP_HEADER_BYTES..].chunks(NUM_FR32_BYTES) {
-            let proof = <H::Domain as Domain>::try_from_bytes(&chunk)?;
-            proof_elements.push(proof);
+            let element = <H::Domain as Domain>::try_from_bytes(&chunk)?;
+            proof_elements.push(element);
         }
 
         Ok(Self {
