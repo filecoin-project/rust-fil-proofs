@@ -606,7 +606,10 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
 
 #[cfg(test)]
 mod tests {
-    use crate::constants::MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE;
+    use crate::constants::{
+        MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
+        TEST_SECTOR_SIZE,
+    };
     use crate::types::SectorSize;
     use tempfile::NamedTempFile;
 
@@ -703,7 +706,7 @@ mod tests {
 
         let sealed_sector_file = NamedTempFile::new().expects("could not create named temp file");
 
-        let sector_size = SectorSize(1024);
+        let sector_size = SectorSize(TEST_SECTOR_SIZE);
         let config = PoRepConfig(sector_size, PoRepProofPartitions(2));
 
         let output = seal(
