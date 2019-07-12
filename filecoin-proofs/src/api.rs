@@ -730,6 +730,7 @@ mod tests {
 
         assert!(verified);
 
+        assert_eq!(output.comm_ps.len(), 1);
         assert_eq!(output.comm_ps[0], comm_p);
 
         Ok(())
