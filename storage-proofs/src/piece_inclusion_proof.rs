@@ -29,8 +29,8 @@ impl<H: Hasher> From<PieceInclusionProof<H>> for Vec<u8> {
     }
 }
 
-impl<H: Hasher> From<Vec<u8>> for PieceInclusionProof<H> {
-    fn from(bytes: Vec<u8>) -> Self {
+impl<H: Hasher> From<&[u8]> for PieceInclusionProof<H> {
+    fn from(bytes: &[u8]) -> Self {
         // TODO: maybe option in a function, not a from
         // also don't use 8 as the magic number from usize
         if (&bytes.len() - 8) % 32 != 0 {
@@ -63,7 +63,7 @@ impl<H: Hasher> From<Vec<u8>> for PieceInclusionProof<H> {
 pub struct PieceSpec {
     pub comm_p: Fr32Ary,
     pub position: usize,
-    pub length: usize,
+    pub number_of_leaves: usize,
 }
 
 impl PieceSpec {
@@ -75,17 +75,17 @@ impl PieceSpec {
         if !self.is_aligned(tree_len) {
             Err(Error::UnalignedPiece)
         } else {
-            let packing_list = vec![(0, self.length)];
+            let packing_list = vec![(0, self.number_of_leaves)];
             Ok((packing_list, self.proof_length(tree_len)))
         }
     }
 
     pub fn is_aligned(&self, tree_len: usize) -> bool {
-        piece_is_aligned(self.position, self.length, tree_len)
+        piece_is_aligned(self.position, self.number_of_leaves, tree_len)
     }
 
     fn height(&self) -> usize {
-        height_for_length(self.length)
+        height_for_length(self.number_of_leaves)
     }
 
     // `proof_length` is length of proof that comm_p is in the containing root, excluding comm_p and root, which aren't needed for the proof itself.
@@ -191,7 +191,7 @@ impl<H: Hasher> PieceInclusionProof<H> {
         let PieceSpec {
             comm_p,
             position: first_leaf,
-            length: leaf_count,
+            number_of_leaves: leaf_count,
         } = piece_spec;
 
         let last_leaf = first_leaf + (leaf_count - 1);
@@ -476,11 +476,11 @@ mod tests {
         assert_eq!(tree.leafs(), piece_tree.leafs());
 
         let mut piece_specs = Vec::new();
-        for (&comm_p, (position, length)) in comm_ps.iter().zip(sections.clone()) {
+        for (&comm_p, (position, number_of_leaves)) in comm_ps.iter().zip(sections.clone()) {
             piece_specs.push(PieceSpec {
                 comm_p,
                 position,
-                length,
+                number_of_leaves,
             })
         }
 
@@ -582,7 +582,7 @@ mod tests {
         let empty_pip_bytes: Vec<u8> = empty_pip.into();
         assert_eq!(empty_pip_bytes, vec![0, 0, 0, 0, 0, 0, 0, 0]);
 
-        let recast_empty_pip: PieceInclusionProof<H> = empty_pip_bytes.into();
+        let recast_empty_pip: PieceInclusionProof<H> = empty_pip_bytes.as_slice().into();
 
         assert_eq!(recast_empty_pip.position, 0);
         assert_eq!(recast_empty_pip.proof_elements.len(), 0);
@@ -601,19 +601,19 @@ mod tests {
             ]
         );
 
-        let recast_valid_pip: PieceInclusionProof<H> = valid_pip_bytes.into();
+        let recast_valid_pip: PieceInclusionProof<H> = valid_pip_bytes.as_slice().into();
 
         assert_eq!(recast_valid_pip.position, 24);
         assert_eq!(recast_valid_pip.proof_elements.len(), 1);
 
         let invalid_pip_bytes: Vec<u8> = vec![0, 0, 0];
-        let invalid_pip: PieceInclusionProof<H> = invalid_pip_bytes.into();
+        let invalid_pip: PieceInclusionProof<H> = invalid_pip_bytes.as_slice().into();
 
         assert_eq!(invalid_pip.position, 0);
         assert_eq!(invalid_pip.proof_elements.len(), 0);
 
         let invalid_pip_bytes: Vec<u8> = vec![24, 0, 0, 0, 0, 0, 0, 0, 1];
-        let invalid_pip: PieceInclusionProof<H> = invalid_pip_bytes.into();
+        let invalid_pip: PieceInclusionProof<H> = invalid_pip_bytes.as_slice().into();
 
         assert_eq!(invalid_pip.position, 0);
         assert_eq!(invalid_pip.proof_elements.len(), 0);

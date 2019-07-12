@@ -10,7 +10,7 @@ pub struct PieceAlignment {
 }
 
 /// Given a list of pieces, sum the number of bytes taken by those pieces in that order.
-/// 
+///
 pub fn sum_piece_bytes_with_alignment(pieces: &[UnpaddedBytesAmount]) -> UnpaddedBytesAmount {
     pieces
         .iter()
@@ -25,7 +25,7 @@ pub fn sum_piece_bytes_with_alignment(pieces: &[UnpaddedBytesAmount]) -> Unpadde
 }
 
 /// Given a list of pieces, find the byte where a given piece does or would start.
-/// 
+///
 pub fn get_piece_start_byte(
     pieces: &[UnpaddedBytesAmount],
     piece_bytes: UnpaddedBytesAmount,
@@ -79,7 +79,7 @@ pub fn get_piece_alignment(
 }
 
 /// Wraps a Readable source with null bytes on either end according to a provided PieceAlignment.
-/// 
+///
 fn with_alignment(source: impl Read, piece_alignment: PieceAlignment) -> impl Read {
     let PieceAlignment {
         left_bytes,
@@ -96,7 +96,7 @@ fn with_alignment(source: impl Read, piece_alignment: PieceAlignment) -> impl Re
 /// and corresponding length, in UnpaddedBytesAmount) to the staged sector, produce a new Read and
 /// UnpaddedBytesAmount pair which includes the appropriate amount of alignment bytes for the piece
 /// to be written to the target staged sector.
-/// 
+///
 pub fn get_aligned_source(
     source: impl Read,
     pieces: &[UnpaddedBytesAmount],

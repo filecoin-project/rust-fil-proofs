@@ -97,16 +97,60 @@ pub fn verify_post(
     })
 }
 
+fn foo<T: AsRef<Path>>(
+    piece_lengths: &[UnpaddedBytesAmount],
+    in_path: T,
+) -> error::Result<Vec<PieceSpec>> {
+    let mut piece_specs = Vec::new();
+    let mut cursor = UnpaddedBytesAmount(0);
+    let mut in_data = OpenOptions::new().read(true).open(&in_path)?;
+
+    for &unpadded_piece_length in piece_lengths {
+        let PieceAlignment {
+            left_bytes,
+            right_bytes,
+        } = get_piece_alignment(cursor, unpadded_piece_length);
+
+        let padded_piece_length = PaddedBytesAmount::from(unpadded_piece_length);
+        let padded_left_bytes = PaddedBytesAmount::from(left_bytes);
+        let padded_right_bytes =
+            PaddedBytesAmount::from(unpadded_piece_length + right_bytes) - padded_piece_length;
+
+        let leaf_position = (usize::from(cursor) / 127) * 4;
+
+        cursor = cursor + left_bytes + unpadded_piece_length + right_bytes;
+
+        let number_of_leaves = (usize::from(cursor) / 127) * 4 - leaf_position;
+
+        let mut buf = vec![0; usize::from(padded_left_bytes)];
+        in_data.read_exact(&mut buf)?;
+
+        let mut buf = vec![0; usize::from(padded_piece_length + padded_right_bytes)];
+        in_data.read_exact(&mut buf)?;
+
+        let mut source = Cursor::new(&buf);
+        let comm_p = generate_piece_commitment_bytes_from_source::<PedersenHasher>(&mut source)?;
+
+        piece_specs.push(PieceSpec {
+            comm_p,
+            position: leaf_position,
+            number_of_leaves,
+        });
+    }
+
+    Ok(piece_specs)
+}
+
 /// Seals the staged sector at `in_path` in place, saving the resulting replica
 /// to `out_path`.
 ///
-pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
+pub fn seal<T: AsRef<Path>>(
     porep_config: PoRepConfig,
     in_path: T,
     out_path: T,
     prover_id_in: &FrSafe,
     sector_id_in: &FrSafe,
-    piece_lengths: &[u64],
+    piece_lengths: &[UnpaddedBytesAmount],
 ) -> error::Result<SealOutput> {
     let sector_bytes = usize::from(PaddedBytesAmount::from(porep_config));
 
@@ -145,47 +189,12 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         None,
     )?;
 
-    let mut piece_specs = Vec::new();
-    let mut comm_ps = Vec::new();
-    let mut cursor = UnpaddedBytesAmount(0);
-    let mut in_data = OpenOptions::new().read(true).open(&in_path)?;
-
-    for &piece_length in piece_lengths {
-        let unpadded_piece_length = UnpaddedBytesAmount(piece_length);
-        let PieceAlignment {
-            left_bytes,
-            right_bytes,
-        } = get_piece_alignment(cursor, unpadded_piece_length);
-
-        let padded_piece_length = PaddedBytesAmount::from(unpadded_piece_length);
-        let padded_left_bytes = PaddedBytesAmount::from(left_bytes);
-        let padded_right_bytes =
-            PaddedBytesAmount::from(unpadded_piece_length + right_bytes) - padded_piece_length;
-
-        let leaf_position = (usize::from(cursor) / 127) * 4;
-
-        cursor = cursor + left_bytes + unpadded_piece_length + right_bytes;
-
-        let leaf_length = (usize::from(cursor) / 127) * 4 - leaf_position;
-
-        let mut buf = vec![0; usize::from(padded_left_bytes)];
-        in_data.read_exact(&mut buf)?;
-
-        let mut buf = vec![0; usize::from(padded_piece_length + padded_right_bytes)];
-        in_data.read_exact(&mut buf)?;
-
-        let mut source = Cursor::new(&buf);
-        let comm_p = generate_piece_commitment_bytes_from_source::<PedersenHasher>(&mut source)?;
-
-        comm_ps.push(comm_p);
-        piece_specs.push(PieceSpec {
-            comm_p,
-            position: leaf_position,
-            length: leaf_length,
-        });
-    }
-
+    let piece_specs = foo(&piece_lengths, &in_path)?;
     let piece_inclusion_proofs = piece_inclusion_proofs::<PedersenHasher>(&piece_specs, &aux[0])?;
+    let comm_ps: Vec<Commitment> = piece_specs
+        .iter()
+        .map(|piece_spec| piece_spec.comm_p)
+        .collect();
 
     // If we succeeded in replicating, flush the data and protect output from being cleaned up.
     data.flush()?;
@@ -233,7 +242,7 @@ pub fn seal<T: Into<PathBuf> + AsRef<Path>>(
         &comm_ps,
         &piece_specs
             .into_iter()
-            .map(|p| p.length)
+            .map(|p| p.number_of_leaves)
             .collect::<Vec<_>>(),
         (sector_bytes / 127) * 4,
     )
@@ -334,15 +343,15 @@ pub fn verify_seal(
 }
 
 pub fn verify_piece_inclusion_proof(
-    bytes: Vec<u8>,
-    comm_d: Commitment,
-    comm_p: Commitment,
+    bytes: &[u8],
+    comm_d: &Commitment,
+    comm_p: &Commitment,
     piece_size: PaddedBytesAmount,
     sector_size: SectorSize,
 ) -> error::Result<bool> {
     let piece_inclusion_proof: PieceInclusionProof<PedersenHasher> = bytes.into();
-    let comm_d = storage_proofs::hasher::pedersen::PedersenDomain::try_from_bytes(&comm_d)?;
-    let comm_p = storage_proofs::hasher::pedersen::PedersenDomain::try_from_bytes(&comm_p)?;
+    let comm_d = storage_proofs::hasher::pedersen::PedersenDomain::try_from_bytes(comm_d)?;
+    let comm_p = storage_proofs::hasher::pedersen::PedersenDomain::try_from_bytes(comm_p)?;
     let piece_leaves = u64::from(piece_size) / 32;
     let sector_leaves = u64::from(PaddedBytesAmount::from(sector_size)) / 32;
 
@@ -660,23 +669,22 @@ fn test_pip_lifecycle() -> Result<(), failure::Error> {
     }
 
     let number_of_bytes_in_piece: u64 = 500;
+    let unpadded_number_of_bytes_in_piece = UnpaddedBytesAmount(number_of_bytes_in_piece);
     let bytes: Vec<u8> = (0..number_of_bytes_in_piece)
         .map(|_| rand::random::<u8>())
         .collect();
     let mut piece_file = NamedTempFile::new().expects("could not create named temp file");
     piece_file.write_all(&bytes)?;
     piece_file.seek(SeekFrom::Start(0))?;
-    let (comm_p, foo) = generate_piece_commitment(
-        &piece_file.path(),
-        UnpaddedBytesAmount(number_of_bytes_in_piece),
-    )?;
+    let (comm_p, foo) =
+        generate_piece_commitment(&piece_file.path(), unpadded_number_of_bytes_in_piece)?;
 
     let mut unsealed_sector_file = NamedTempFile::new().expects("could not create named temp file");
 
     add_piece(
         &mut piece_file,
         &mut unsealed_sector_file,
-        UnpaddedBytesAmount(number_of_bytes_in_piece),
+        unpadded_number_of_bytes_in_piece,
     )?;
 
     let sealed_sector_file = NamedTempFile::new().expects("could not create named temp file");
@@ -690,13 +698,15 @@ fn test_pip_lifecycle() -> Result<(), failure::Error> {
         &sealed_sector_file.path(),
         &[0; 31],
         &[0; 31],
-        &[number_of_bytes_in_piece],
+        &[unpadded_number_of_bytes_in_piece],
     )?;
 
+    let piece_inclusion_proof_bytes: Vec<u8> = output.piece_inclusion_proofs[0].clone().into();
+
     let verified = verify_piece_inclusion_proof(
-        output.piece_inclusion_proofs[0].clone().into(),
-        output.comm_d,
-        output.comm_ps[0],
+        &piece_inclusion_proof_bytes,
+        &output.comm_d,
+        &output.comm_ps[0],
         foo,
         sector_size,
     )?;
