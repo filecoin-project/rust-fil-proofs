@@ -97,7 +97,8 @@ pub fn verify_post(
     })
 }
 
-fn foo<T: AsRef<Path>>(
+/// @SIDTODO: write tests for this complicated block
+fn generate_piece_specs<T: AsRef<Path>>(
     piece_lengths: &[UnpaddedBytesAmount],
     in_path: T,
 ) -> error::Result<Vec<PieceSpec>> {
@@ -189,7 +190,7 @@ pub fn seal<T: AsRef<Path>>(
         None,
     )?;
 
-    let piece_specs = foo(&piece_lengths, &in_path)?;
+    let piece_specs = generate_piece_specs(&piece_lengths, &in_path)?;
     let piece_inclusion_proofs = piece_inclusion_proofs::<PedersenHasher>(&piece_specs, &aux[0])?;
     let comm_ps: Vec<Commitment> = piece_specs
         .iter()
@@ -363,6 +364,10 @@ pub fn verify_piece_inclusion_proof(
     ))
 }
 
+/// Takes a piece file at `unpadded_piece_path` and the size of the piece and returns the comm_p
+/// alongside the number of padded bytes (both bit padded and piece aligned) that are used to
+/// generate the comm_p.
+///
 pub fn generate_piece_commitment<T: Into<PathBuf> + AsRef<Path>>(
     unpadded_piece_path: T,
     unpadded_piece_size: UnpaddedBytesAmount,
