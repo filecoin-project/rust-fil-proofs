@@ -102,46 +102,70 @@ pub fn verify_post(
     })
 }
 
-/// @SIDTODO: write tests for this complicated block
-fn generate_piece_specs<T: AsRef<Path>>(
+struct PseudoPieceSpec {
+    position: usize,
+    number_of_leaves: usize,
+    left_bytes: PaddedBytesAmount,
+    rest_bytes: PaddedBytesAmount,
+}
+
+fn generate_pseudo_piece_specs(piece_lengths: &[UnpaddedBytesAmount]) -> Vec<PseudoPieceSpec> {
+    let mut byte_index = UnpaddedBytesAmount(0);
+
+    piece_lengths
+        .iter()
+        .map(|&unpadded_piece_length| {
+            let PieceAlignment {
+                left_bytes,
+                right_bytes,
+            } = get_piece_alignment(byte_index, unpadded_piece_length);
+
+            let padded_piece_length = PaddedBytesAmount::from(unpadded_piece_length);
+            let padded_left_bytes = PaddedBytesAmount::from(left_bytes);
+            let padded_right_bytes =
+                PaddedBytesAmount::from(unpadded_piece_length + right_bytes) - padded_piece_length;
+
+            let leaf_position =
+                (usize::from(byte_index) / MINIMUM_PIECE_SIZE as usize) * MIN_NUM_LEAVES;
+
+            byte_index = byte_index + left_bytes + unpadded_piece_length + right_bytes;
+
+            let number_of_leaves = (usize::from(byte_index) / MINIMUM_PIECE_SIZE as usize)
+                * MIN_NUM_LEAVES
+                - leaf_position;
+
+            PseudoPieceSpec {
+                position: leaf_position,
+                number_of_leaves,
+                left_bytes: padded_left_bytes,
+                rest_bytes: padded_piece_length + padded_right_bytes,
+            }
+        })
+        .collect()
+}
+
+fn generate_piece_specs_from_source(
+    source: &mut impl Read,
     piece_lengths: &[UnpaddedBytesAmount],
-    in_path: T,
 ) -> error::Result<Vec<PieceSpec>> {
-    let mut piece_specs = Vec::new();
-    let mut cursor = UnpaddedBytesAmount(0);
-    let mut in_data = OpenOptions::new().read(true).open(&in_path)?;
+    let pseudo_piece_specs = generate_pseudo_piece_specs(piece_lengths);
 
-    for &unpadded_piece_length in piece_lengths {
-        let PieceAlignment {
-            left_bytes,
-            right_bytes,
-        } = get_piece_alignment(cursor, unpadded_piece_length);
+    let mut piece_specs: Vec<PieceSpec> = vec![];
 
-        let padded_piece_length = PaddedBytesAmount::from(unpadded_piece_length);
-        let padded_left_bytes = PaddedBytesAmount::from(left_bytes);
-        let padded_right_bytes =
-            PaddedBytesAmount::from(unpadded_piece_length + right_bytes) - padded_piece_length;
+    for pseudo_piece_spec in pseudo_piece_specs {
+        let mut buf = vec![0; usize::from(pseudo_piece_spec.left_bytes)];
+        source.read_exact(&mut buf)?;
 
-        let leaf_position = (usize::from(cursor) / MINIMUM_PIECE_SIZE as usize) * MIN_NUM_LEAVES;
-
-        cursor = cursor + left_bytes + unpadded_piece_length + right_bytes;
-
-        let number_of_leaves =
-            (usize::from(cursor) / MINIMUM_PIECE_SIZE as usize) * MIN_NUM_LEAVES - leaf_position;
-
-        let mut buf = vec![0; usize::from(padded_left_bytes)];
-        in_data.read_exact(&mut buf)?;
-
-        let mut buf = vec![0; usize::from(padded_piece_length + padded_right_bytes)];
-        in_data.read_exact(&mut buf)?;
+        let mut buf = vec![0; usize::from(pseudo_piece_spec.rest_bytes)];
+        source.read_exact(&mut buf)?;
 
         let mut source = Cursor::new(&buf);
         let comm_p = generate_piece_commitment_bytes_from_source::<PedersenHasher>(&mut source)?;
 
         piece_specs.push(PieceSpec {
             comm_p,
-            position: leaf_position,
-            number_of_leaves,
+            position: pseudo_piece_spec.position,
+            number_of_leaves: pseudo_piece_spec.number_of_leaves,
         });
     }
 
@@ -196,7 +220,8 @@ pub fn seal<T: AsRef<Path>>(
         None,
     )?;
 
-    let piece_specs = generate_piece_specs(&piece_lengths, &in_path)?;
+    let mut in_data = OpenOptions::new().read(true).open(&in_path)?;
+    let piece_specs = generate_piece_specs_from_source(&mut in_data, &piece_lengths)?;
     let piece_inclusion_proofs = piece_inclusion_proofs::<PedersenHasher>(&piece_specs, &aux[0])?;
     let comm_ps: Vec<Commitment> = piece_specs
         .iter()
@@ -616,6 +641,8 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
 mod tests {
     use crate::constants::TEST_SECTOR_SIZE;
     use crate::types::SectorSize;
+    use rand::Rng;
+    use storage_proofs::util::NODE_SIZE;
     use tempfile::NamedTempFile;
 
     use super::*;
@@ -632,12 +659,13 @@ mod tests {
         mut source: &mut R,
         target: &mut W,
         piece_size: UnpaddedBytesAmount,
+        piece_lengths: &[UnpaddedBytesAmount],
     ) -> std::io::Result<usize>
     where
         R: Read + ?Sized,
         W: Read + Write + Seek + ?Sized,
     {
-        let (_, mut aligned_source) = get_aligned_source(&mut source, &[], piece_size);
+        let (_, mut aligned_source) = get_aligned_source(&mut source, &piece_lengths, piece_size);
         write_padded(&mut aligned_source, target)
     }
 
@@ -687,6 +715,48 @@ mod tests {
     }
 
     #[test]
+    fn test_generate_pseudo_piece_specs() -> Result<(), failure::Error> {
+        let mut rng = rand::thread_rng();
+
+        for _ in 0..20 {
+            let number_of_pieces = rng.gen_range(1, 20);
+            let mut piece_lengths: Vec<UnpaddedBytesAmount> = vec![];
+
+            for _ in 0..number_of_pieces {
+                piece_lengths.push(UnpaddedBytesAmount(rng.gen_range(1, 1666)));
+            }
+
+            let pseudo_piece_specs = generate_pseudo_piece_specs(&piece_lengths);
+
+            assert_eq!(pseudo_piece_specs.len(), number_of_pieces);
+
+            let sum_piece_lengths: usize = piece_lengths
+                .iter()
+                .fold(UnpaddedBytesAmount(0), |a, &b| a + b)
+                .into();
+            let sum_piece_leaves = pseudo_piece_specs
+                .iter()
+                .fold(0, |acc, s| acc + s.number_of_leaves);
+
+            assert!(sum_piece_lengths < sum_piece_leaves * NODE_SIZE);
+
+            for (&piece_length, piece_spec) in piece_lengths.iter().zip(pseudo_piece_specs.iter()) {
+                let usize_piece_length = u64::from(piece_length) as usize;
+                let expected_piece_leaves = if usize_piece_length <= 127 {
+                    4
+                } else {
+                    let padded_piece_length: PaddedBytesAmount = piece_length.into();
+                    (u64::from(padded_piece_length).next_power_of_two() as usize) / NODE_SIZE
+                };
+                assert!(piece_spec.number_of_leaves >= expected_piece_leaves);
+                assert!(piece_spec.number_of_leaves < expected_piece_leaves * 2);
+            }
+        }
+
+        Ok(())
+    }
+
+    #[test]
     #[ignore]
     fn test_pip_lifecycle() -> Result<(), failure::Error> {
         let number_of_bytes_in_piece: u64 = 500;
@@ -694,22 +764,22 @@ mod tests {
         let bytes: Vec<u8> = (0..number_of_bytes_in_piece)
             .map(|_| rand::random::<u8>())
             .collect();
-        let mut piece_file = NamedTempFile::new().expects("could not create named temp file");
+        let mut piece_file = NamedTempFile::new()?;
         piece_file.write_all(&bytes)?;
         piece_file.seek(SeekFrom::Start(0))?;
         let (comm_p, padded_number_of_bytes_in_piece) =
             generate_piece_commitment(&piece_file.path(), unpadded_number_of_bytes_in_piece)?;
 
-        let mut staged_sector_file =
-            NamedTempFile::new().expects("could not create named temp file");
+        let mut staged_sector_file = NamedTempFile::new()?;
 
         add_piece(
             &mut piece_file,
             &mut staged_sector_file,
             unpadded_number_of_bytes_in_piece,
+            &[],
         )?;
 
-        let sealed_sector_file = NamedTempFile::new().expects("could not create named temp file");
+        let sealed_sector_file = NamedTempFile::new()?;
 
         let sector_size = SectorSize(TEST_SECTOR_SIZE);
         let config = PoRepConfig(sector_size, PoRepProofPartitions(2));
