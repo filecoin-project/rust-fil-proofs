@@ -473,15 +473,15 @@ fn main() {
                 .help("Generate and verify a groth circuit proof.")
         )
         .arg(
-            Arg::with_name("no-bench")
-                .long("no-bench")
-                .help("Don't synthesize and report inputs/constraints for a circuit.")
+            Arg::with_name("bench")
+                .long("bench")
+                .help("Synthesize and report inputs/constraints for a circuit.")
         )
         .arg(
             Arg::with_name("bench-only")
                 .long("bench-only")
                 .help("Don't replicate or perform Groth proving.")
-                .conflicts_with_all(&["no-bench", "groth", "extract"])
+                .conflicts_with_all(&["groth", "extract"])
         )
 
         .arg(
@@ -522,7 +522,7 @@ fn main() {
     let use_tmp = !matches.is_present("no-tmp");
     let dump_proofs = matches.is_present("dump");
     let groth = matches.is_present("groth");
-    let bench = !matches.is_present("no-bench");
+    let bench = matches.is_present("bench");
     let bench_only = matches.is_present("bench-only");
     let circuit = matches.is_present("circuit");
     let extract = matches.is_present("extract");
