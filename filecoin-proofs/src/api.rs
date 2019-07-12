@@ -652,6 +652,7 @@ fn test_generate_piece_commitment() -> Result<(), failure::Error> {
 }
 
 #[test]
+#[ignore]
 fn test_pip_lifecycle() -> Result<(), failure::Error> {
     use crate::types::SectorSize;
 
