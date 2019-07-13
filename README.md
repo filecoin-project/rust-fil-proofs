@@ -158,6 +158,54 @@ docker build -t foo -f ./Dockerfile-ci . && \
     cargo run --release --package filecoin-proofs --example ffi --target x86_64-unknown-linux-gnu
 ```
 
+## Optimizing for either speed or memory during replication
+
+While replicating and generating the Merkle Trees (MT) for the proof at the same time there will always be a time-memory trade-off to consider, we present here strategies to optimize one at the cost of the other.
+
+### Speed
+
+One of the most computational expensive operations during replication (besides the encoding itself) is the generation of the indexes of the (expansion) parents in the ZigZag graph, implemented through a Feistel cipher (used as a pseudorandom permutation). To reduce that time we provide a caching mechanism to generate them only once and reuse them throughout replication (across the different layers). Already built into the system it can be activated with the environmental variable
+
+```
+FIL_PROOFS_MAXIMIZE_CACHING=1
+```
+
+To check that it's working you can inspect the replication log to find `using parents cache of unlimited size`. As the log indicates, we don't have a fine grain control at the moment so it either stores all parents or none. This cache can add almost an entire sector size to the memory used during replication, if you can spare it though this setting is _very recommended_ as it has a considerable impact on replication time.
+
+(You can also verify if the cache is working by inspecting the time each layer takes to encode, `encoding, layer:` in the log, where the first two layers, forward and reverse, will take more time than the rest to populate the cache while the remaining 8 should see a considerable time drop.)
+
+### Memory
+
+We try to generate the MTs in parallel to speed up the process but that takes 2 sector sizes per each layer (e.g., a 1 GiB sector may require, in the worst case scenario, up to 20 GiB of memory to hold the MTs alone). To reduce that (at the cost of speed) we have the (experimental) `disk-trees` feature to offload the MTs to disk when we don't use them. For example, to run the `zigzag` example with this feature you'd need to indicate so to `cargo` *and* then indicate to the example (or any other code doing the replication) where they should be stored using the `FIL_PROOFS_REPLICATED_TREES_DIR` environmental variable,
+
+```
+# From inside the `storage-proofs` directory, where this feature
+# needs to be activated:
+cargo build                                                                   \
+  -p filecoin-proofs                                                          \
+  --release                                                                   \
+  --example zigzag                                                            \
+  --features                                                                  \
+    disk-trees                                                               &&
+FIL_PROOFS_REPLICATED_TREES_DIR="<tree-dir>"                                  \
+../target/release/examples/zigzag                                             \
+    --size 1048576
+```
+
+To check if the feature is indeed working you can inspect the replication log to find the text `creating leaves tree mmap-file` indicating the path where each MT file is saved.
+
+Note that at the moment we do *not* clean up `<tree-dir>` so you'll need to **remove old MT files** yourself (otherwise the disk will start to fill up pretty fast). To avoid collisions in the directory we append a random hexadecimal value to each file, to check which files belong to the latest replication run you can (besides checking modification times) inspect the replication log to find out the actual file names generated.
+
+To optimize even more for memory there's another option (used in addition to the `disk-trees` feature) to generate all MTs in sequential order, to make sure we can offload them to disk before we start buildding the next one,
+
+```
+FIL_PROOFS_GENERATE_MERKLE_TREES_IN_PARALLEL=0
+```
+
+You can inspect that it's working also in the replication log, where you'll see that the MTs are all generated in order without any layer index out of place.
+
+All these optimizations (`disk-trees` with a directory to offload MTs plus sequential generation) should reduce the maximum RSS, in the `zigzag` example, to 3 times the sector size used (so in the above command that tested ZigZag with a 1 GiB sector the maximum RSS reported by commands like `/usr/bin/time -v` should not exceed 3 GiB, please submit an issue if you observe otherwise).
+
 ## Generate Documentation
 
 First, navigate to the `rust-fil-proofs` directory.
