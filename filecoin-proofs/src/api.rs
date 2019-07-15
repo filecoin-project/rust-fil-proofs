@@ -380,13 +380,17 @@ pub fn verify_piece_inclusion_proof(
     piece_inclusion_proof: &[u8],
     comm_d: &Commitment,
     comm_p: &Commitment,
-    piece_size_with_alignment: PaddedBytesAmount,
+    piece_size: UnpaddedBytesAmount,
     sector_size: SectorSize,
 ) -> error::Result<bool> {
     let piece_inclusion_proof: PieceInclusionProof<PedersenHasher> =
         piece_inclusion_proof.try_into()?;
     let comm_d = storage_proofs::hasher::pedersen::PedersenDomain::try_from_bytes(comm_d)?;
     let comm_p = storage_proofs::hasher::pedersen::PedersenDomain::try_from_bytes(comm_p)?;
+    let piece_alignment = get_piece_alignment(UnpaddedBytesAmount(0), piece_size);
+    let piece_size_with_alignment =
+        PaddedBytesAmount::from(piece_size + piece_alignment.right_bytes);
+
     let piece_leaves = u64::from(piece_size_with_alignment) / 32;
     let sector_leaves = u64::from(PaddedBytesAmount::from(sector_size)) / 32;
 
@@ -398,25 +402,23 @@ pub fn verify_piece_inclusion_proof(
     ))
 }
 
-/// Takes a piece file at `unpadded_piece_path` and the size of the piece and returns the comm_p
-/// alongside the number of padded bytes (both bit padded and piece aligned) that are used to
-/// generate the comm_p.
+/// Takes a piece file at `unpadded_piece_path` and the size of the piece and returns the comm_p.
 ///
 pub fn generate_piece_commitment<T: Into<PathBuf> + AsRef<Path>>(
     unpadded_piece_path: T,
     unpadded_piece_size: UnpaddedBytesAmount,
-) -> error::Result<(Commitment, PaddedBytesAmount)> {
+) -> error::Result<Commitment> {
     let mut unpadded_piece_file = File::open(unpadded_piece_path)?;
     let mut padded_piece_file = tempfile()?;
 
     let (_, mut source) = get_aligned_source(&mut unpadded_piece_file, &[], unpadded_piece_size);
-    let padded_piece_size = write_padded(&mut source, &mut padded_piece_file)?;
+    write_padded(&mut source, &mut padded_piece_file)?;
 
     let _ = padded_piece_file.seek(SeekFrom::Start(0))?;
 
     let comm_p =
         generate_piece_commitment_bytes_from_source::<PedersenHasher>(&mut padded_piece_file)?;
-    Ok((comm_p, PaddedBytesAmount(padded_piece_size as u64)))
+    Ok(comm_p)
 }
 
 /// Unseals the sector at `sealed_path` and returns the bytes for a piece
@@ -651,7 +653,7 @@ mod tests {
     fn generate_comm_p(data: &[u8]) -> Result<Commitment, failure::Error> {
         let mut file = NamedTempFile::new().expects("could not create named temp file");
         file.write_all(data)?;
-        let (comm_p, _) =
+        let comm_p =
             generate_piece_commitment(file.path(), UnpaddedBytesAmount(data.len() as u64))?;
         Ok(comm_p)
     }
@@ -768,7 +770,7 @@ mod tests {
         let mut piece_file = NamedTempFile::new()?;
         piece_file.write_all(&bytes)?;
         piece_file.seek(SeekFrom::Start(0))?;
-        let (comm_p, padded_number_of_bytes_in_piece) =
+        let comm_p =
             generate_piece_commitment(&piece_file.path(), unpadded_number_of_bytes_in_piece)?;
 
         let mut staged_sector_file = NamedTempFile::new()?;
@@ -800,7 +802,7 @@ mod tests {
             &piece_inclusion_proof_bytes,
             &output.comm_d,
             &output.comm_ps[0],
-            padded_number_of_bytes_in_piece,
+            unpadded_number_of_bytes_in_piece,
             sector_size,
         )?;
 
