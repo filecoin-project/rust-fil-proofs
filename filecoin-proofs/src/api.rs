@@ -145,7 +145,7 @@ fn generate_pseudo_piece_specs(piece_lengths: &[UnpaddedBytesAmount]) -> Vec<Pse
 }
 
 fn generate_piece_specs_from_source(
-    source: &mut impl Read,
+    source: &mut (impl Read + Seek),
     piece_lengths: &[UnpaddedBytesAmount],
 ) -> error::Result<Vec<PieceSpec>> {
     let pseudo_piece_specs = generate_pseudo_piece_specs(piece_lengths);
@@ -153,8 +153,7 @@ fn generate_piece_specs_from_source(
     let mut piece_specs: Vec<PieceSpec> = vec![];
 
     for pseudo_piece_spec in pseudo_piece_specs {
-        let mut buf = vec![0; usize::from(pseudo_piece_spec.left_bytes)];
-        source.read_exact(&mut buf)?;
+        source.seek(SeekFrom::Current(usize::from(pseudo_piece_spec.left_bytes) as i64))?;
 
         let mut buf = vec![0; usize::from(pseudo_piece_spec.rest_bytes)];
         source.read_exact(&mut buf)?;
@@ -373,20 +372,20 @@ pub fn verify_seal(
     .map_err(Into::into)
 }
 
-/// Verify the provided piece inclusion proof demonstrates the piece commitment exists in a
-/// merkle tree of a specific size with root hash comm_d
+/// Verify that the provided PIP demonstrates that the piece at a given position whose commitment
+/// is `comm_p` is included in the data whose commitment is `comm_d`.
 pub fn verify_piece_inclusion_proof(
     piece_inclusion_proof: &[u8],
     comm_d: &Commitment,
     comm_p: &Commitment,
-    piece_size: PaddedBytesAmount,
+    piece_size_with_alignment: PaddedBytesAmount,
     sector_size: SectorSize,
 ) -> error::Result<bool> {
     let piece_inclusion_proof: PieceInclusionProof<PedersenHasher> =
         piece_inclusion_proof.try_into()?;
     let comm_d = storage_proofs::hasher::pedersen::PedersenDomain::try_from_bytes(comm_d)?;
     let comm_p = storage_proofs::hasher::pedersen::PedersenDomain::try_from_bytes(comm_p)?;
-    let piece_leaves = u64::from(piece_size) / 32;
+    let piece_leaves = u64::from(piece_size_with_alignment) / 32;
     let sector_leaves = u64::from(PaddedBytesAmount::from(sector_size)) / 32;
 
     Ok(piece_inclusion_proof.verify(
