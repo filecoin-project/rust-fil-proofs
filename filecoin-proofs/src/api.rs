@@ -153,7 +153,9 @@ fn generate_piece_specs_from_source(
     let mut piece_specs: Vec<PieceSpec> = vec![];
 
     for pseudo_piece_spec in pseudo_piece_specs {
-        source.seek(SeekFrom::Current(usize::from(pseudo_piece_spec.left_bytes) as i64))?;
+        source.seek(SeekFrom::Current(
+            usize::from(pseudo_piece_spec.left_bytes) as i64
+        ))?;
 
         let mut buf = vec![0; usize::from(pseudo_piece_spec.rest_bytes)];
         source.read_exact(&mut buf)?;
@@ -372,8 +374,8 @@ pub fn verify_seal(
     .map_err(Into::into)
 }
 
-/// Verify that the provided PIP demonstrates that the piece at a given position whose commitment
-/// is `comm_p` is included in the data whose commitment is `comm_d`.
+/// Verify that the provided PIP proves the piece is included in the sector.
+///
 pub fn verify_piece_inclusion_proof(
     piece_inclusion_proof: &[u8],
     comm_d: &Commitment,
