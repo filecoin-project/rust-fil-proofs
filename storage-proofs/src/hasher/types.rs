@@ -40,14 +40,14 @@ pub trait HashFunction<T: Domain>:
 {
     fn hash(data: &[u8]) -> T;
 
-    fn hash_leaf(data: &LightHashable<Self>) -> T {
+    fn hash_leaf(data: &dyn LightHashable<Self>) -> T {
         let mut a = Self::default();
         data.hash(&mut a);
         let item_hash = a.hash();
         a.leaf(item_hash)
     }
 
-    fn hash_single_node(data: &LightHashable<Self>) -> T {
+    fn hash_single_node(data: &dyn LightHashable<Self>) -> T {
         let mut a = Self::default();
         data.hash(&mut a);
         a.hash()
