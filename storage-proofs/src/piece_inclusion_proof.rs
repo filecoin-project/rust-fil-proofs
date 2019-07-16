@@ -1,11 +1,17 @@
 use itertools::Itertools;
 use merkletree::hash::Algorithm;
 use merkletree::merkle::{self, next_pow2, VecStore};
+use std::io::Read;
 
 use crate::error::*;
-use crate::fr32::Fr32Vec;
+use crate::fr32::Fr32Ary;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::MerkleTree;
+use crate::util::NODE_SIZE;
+
+use std::convert::TryFrom;
+
+const NUM_PIP_HEADER_BYTES: usize = 8;
 
 /// Based on the alignment information (and sector size, provided during verification),
 /// the algorithm deterministically consumes the elements.
@@ -15,15 +21,57 @@ pub struct PieceInclusionProof<H: Hasher> {
     proof_elements: Vec<H::Domain>,
 }
 
-/// `position`, `length` are in H::Domain units
-#[derive(Clone, Debug)]
-pub struct PieceSpec<'a> {
-    comm_p: &'a Fr32Vec,
-    position: usize,
-    length: usize,
+impl<H: Hasher> From<PieceInclusionProof<H>> for Vec<u8> {
+    fn from(proof: PieceInclusionProof<H>) -> Self {
+        let position = proof.position.to_le_bytes();
+        let proof_elements = proof
+            .proof_elements
+            .iter()
+            .flat_map(H::Domain::into_bytes)
+            .collect::<Vec<u8>>();
+
+        [&position, proof_elements.as_slice()].concat()
+    }
 }
 
-impl<'a> PieceSpec<'a> {
+impl<H: Hasher> TryFrom<&[u8]> for PieceInclusionProof<H> {
+    type Error = failure::Error;
+
+    fn try_from(bytes: &[u8]) -> std::result::Result<Self, Self::Error> {
+        // TODO: maybe option in a function, not a from
+        // also don't use 8 as the magic number from usize
+        if bytes.len() < NUM_PIP_HEADER_BYTES
+            || (bytes.len() - NUM_PIP_HEADER_BYTES) % NODE_SIZE != 0
+        {
+            return Err(format_err!("malformed piece inclusion proof"));
+        }
+
+        let mut position_bytes: [u8; 8] = [0; 8];
+        position_bytes.copy_from_slice(&bytes[0..8]);
+
+        let mut proof_elements = Vec::new();
+
+        for chunk in bytes[NUM_PIP_HEADER_BYTES..].chunks(NODE_SIZE) {
+            let element = <H::Domain as Domain>::try_from_bytes(&chunk)?;
+            proof_elements.push(element);
+        }
+
+        Ok(Self {
+            position: usize::from_le_bytes(position_bytes),
+            proof_elements,
+        })
+    }
+}
+
+/// `position`, `length` are in H::Domain units
+#[derive(Clone, Debug)]
+pub struct PieceSpec {
+    pub comm_p: Fr32Ary,
+    pub position: usize,
+    pub number_of_leaves: usize,
+}
+
+impl PieceSpec {
     /// `compute_packing` returns a packing list and a proof size.
     /// A packing list is a pair of (start, length) pairs, relative to the beginning of the piece,
     /// in leaf units.
@@ -32,17 +80,17 @@ impl<'a> PieceSpec<'a> {
         if !self.is_aligned(tree_len) {
             Err(Error::UnalignedPiece)
         } else {
-            let packing_list = vec![(0, self.length)];
+            let packing_list = vec![(0, self.number_of_leaves)];
             Ok((packing_list, self.proof_length(tree_len)))
         }
     }
 
     pub fn is_aligned(&self, tree_len: usize) -> bool {
-        piece_is_aligned(self.position, self.length, tree_len)
+        piece_is_aligned(self.position, self.number_of_leaves, tree_len)
     }
 
     fn height(&self) -> usize {
-        height_for_length(self.length)
+        height_for_length(self.number_of_leaves)
     }
 
     // `proof_length` is length of proof that comm_p is in the containing root, excluding comm_p and root, which aren't needed for the proof itself.
@@ -51,7 +99,6 @@ impl<'a> PieceSpec<'a> {
     }
 }
 
-#[allow(dead_code)]
 fn create_piece_tree<H: Hasher>(
     data: &[H::Domain],
 ) -> merkle::MerkleTree<H::Domain, H::Function, VecStore<H::Domain>> {
@@ -70,30 +117,43 @@ fn create_piece_tree<H: Hasher>(
     )
 }
 
-#[allow(dead_code)]
 /// Compute `comm_p` from a slice of Domain elements.
 /// `comm_p` is the merkle root of a piece, zero-padded to fill a complete binary sub-tree.
 fn compute_piece_commitment<H: Hasher>(data: &[H::Domain]) -> H::Domain {
     create_piece_tree::<H>(data).root()
 }
 
-#[allow(dead_code)]
-/// Generate `comm_p` from bytes
-fn generate_piece_commitment<H: Hasher>(data: &[u8]) -> Result<H::Domain> {
+/// Generate `comm_p` from a source and return it as bytes.
+pub fn generate_piece_commitment_bytes_from_source<H: Hasher>(
+    source: &mut Read,
+) -> Result<Fr32Ary> {
     let mut domain_data = Vec::new();
-    for d in data.chunks(32) {
-        domain_data.push(<H::Domain as Domain>::try_from_bytes(d)?)
+    let mut total_bytes_read = 0;
+
+    loop {
+        let mut buf = [0; NODE_SIZE];
+
+        let bytes_read = source.read(&mut buf)?;
+        total_bytes_read += bytes_read;
+
+        if bytes_read > 0 {
+            domain_data.push(<H::Domain as Domain>::try_from_bytes(&buf)?);
+        } else {
+            break;
+        }
     }
 
-    Ok(compute_piece_commitment::<H>(&domain_data))
-}
+    if total_bytes_read < NODE_SIZE {
+        return Err(Error::Unclassified(
+            "insufficient data to generate piece commitment".to_string(),
+        ));
+    }
 
-#[allow(dead_code)]
-/// Generate `comm_p` from bytes and return it as bytes.
-fn generate_piece_commitment_bytes<H: Hasher>(data: &[u8]) -> Result<Fr32Vec> {
-    let comm_p = generate_piece_commitment::<H>(data)?;
+    let mut comm_p_bytes = [0; NODE_SIZE];
+    let comm_p = compute_piece_commitment::<H>(&domain_data);
+    comm_p.write_bytes(&mut comm_p_bytes)?;
 
-    Ok(H::Domain::into_bytes(&comm_p))
+    Ok(comm_p_bytes)
 }
 
 pub fn piece_inclusion_proofs<H: Hasher>(
@@ -114,7 +174,7 @@ impl<H: Hasher> PieceInclusionProof<H> {
         let PieceSpec {
             comm_p,
             position: first_leaf,
-            length: leaf_count,
+            number_of_leaves: leaf_count,
         } = piece_spec;
 
         let last_leaf = first_leaf + (leaf_count - 1);
@@ -153,7 +213,7 @@ impl<H: Hasher> PieceInclusionProof<H> {
 
                 if piece_inclusion_proof.verify(
                     &tree.root(),
-                    &H::Domain::try_from_bytes(comm_p)?,
+                    &H::Domain::try_from_bytes(&comm_p)?,
                     leaf_count,
                     tree.leafs(),
                 ) {
@@ -187,8 +247,7 @@ impl<H: Hasher> PieceInclusionProof<H> {
     /// bytes were included in the merkle tree corresponding to root -- and at the
     /// position encoded in the proof.
     /// `piece_leaves` and `sector_leaves` are in units of `Domain` (i.e. `NODE_SIZE` = 32 bytes).
-
-    fn verify(
+    pub fn verify(
         &self,
         root: &H::Domain,
         comm_p: &H::Domain,
@@ -250,7 +309,7 @@ impl<H: Hasher> PieceInclusionProof<H> {
     pub fn verify_all(
         root: &[u8],
         proofs: &[PieceInclusionProof<H>],
-        comm_ps: &[Vec<u8>],
+        comm_ps: &[Fr32Ary],
         piece_sizes: &[usize],
         sector_size: usize,
     ) -> Result<bool> {
@@ -279,7 +338,11 @@ pub fn piece_is_aligned(position: usize, length: usize, tree_len: usize) -> bool
 }
 
 fn height_for_length(n: usize) -> usize {
-    (n as f64).log2().ceil() as usize
+    if n == 0 {
+        0
+    } else {
+        (n as f64).log2().ceil() as usize
+    }
 }
 
 fn is_pow2(n: usize) -> bool {
@@ -307,6 +370,28 @@ mod tests {
     use crate::drgraph::{new_seed, BucketGraph, Graph};
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
     use crate::util::NODE_SIZE;
+    use rand::Rng;
+    use std::convert::TryInto;
+
+    /// Generate `comm_p` from bytes
+    fn generate_piece_commitment<H: Hasher>(data: &[u8]) -> Result<H::Domain> {
+        let mut domain_data = Vec::new();
+        for d in data.chunks(NODE_SIZE) {
+            domain_data.push(<H::Domain as Domain>::try_from_bytes(d)?)
+        }
+
+        Ok(compute_piece_commitment::<H>(&domain_data))
+    }
+
+    /// Generate `comm_p` from bytes and return it as bytes.
+    fn generate_piece_commitment_bytes<H: Hasher>(data: &[u8]) -> Result<Fr32Ary> {
+        let comm_p = generate_piece_commitment::<H>(data)?;
+        let mut comm_p_bytes: Fr32Ary = [0; NODE_SIZE];
+
+        comm_p.write_bytes(&mut comm_p_bytes)?;
+
+        Ok(comm_p_bytes)
+    }
 
     #[test]
     fn piece_inclusion_proof_pedersen() {
@@ -324,9 +409,9 @@ mod tests {
     }
 
     fn test_piece_inclusion_proof<H: Hasher>() {
-        let mut size = 32;
+        let mut size = NODE_SIZE;
 
-        test_piece_inclusion_proof_aux::<H>(32, &[32], &[0], false);
+        test_piece_inclusion_proof_aux::<H>(NODE_SIZE, &[NODE_SIZE], &[0], false);
 
         //        // Aligned proofs
         while size > 2 {
@@ -338,11 +423,11 @@ mod tests {
         }
 
         //        // Unaligned proof (should fail)
-        test_piece_inclusion_proof_aux::<H>(32, &[16usize], &[8usize], true);
+        test_piece_inclusion_proof_aux::<H>(NODE_SIZE, &[16usize], &[8usize], true);
 
         //        // Mixed aligned and unaligned
         for i in 0..16 {
-            test_piece_inclusion_proof_aux::<H>(32, &[8usize], &[i], i % 8 != 0);
+            test_piece_inclusion_proof_aux::<H>(NODE_SIZE, &[8usize], &[i], i % 8 != 0);
         }
 
         // TODO: when unaligned proofs are supported, test more exhaustively.
@@ -388,18 +473,18 @@ mod tests {
 
         let piece_tree = create_piece_tree::<H>(
             &data
-                .chunks(32)
+                .chunks(NODE_SIZE)
                 .map(|x| H::Domain::try_from_bytes(x).unwrap())
                 .collect::<Vec<_>>(),
         );
         assert_eq!(tree.leafs(), piece_tree.leafs());
 
         let mut piece_specs = Vec::new();
-        for (comm_p, (position, length)) in comm_ps.iter().zip(sections.clone()) {
+        for (&comm_p, (position, number_of_leaves)) in comm_ps.iter().zip(sections.clone()) {
             piece_specs.push(PieceSpec {
-                comm_p: &comm_p,
+                comm_p,
                 position,
-                length,
+                number_of_leaves,
             })
         }
 
@@ -484,5 +569,68 @@ mod tests {
         assert_eq!(subtree_capacity(13, 16), 1);
         assert_eq!(subtree_capacity(14, 16), 2);
         assert_eq!(subtree_capacity(15, 16), 1);
+    }
+
+    #[test]
+    fn test_well_formed_pip_serialization() -> std::result::Result<(), failure::Error> {
+        let mut rng = rand::thread_rng();
+
+        for _ in 0..1000 {
+            let x = rng.gen_range(0, 1000) as usize;
+            let in_bytes: Vec<u8> = (0..(NUM_PIP_HEADER_BYTES + x * NODE_SIZE))
+                .map(|_| rand::random::<u8>())
+                .collect();
+            let piece_inclusion_proof: PieceInclusionProof<PedersenHasher> =
+                in_bytes.as_slice().try_into()?;
+            let out_bytes: Vec<u8> = piece_inclusion_proof.into();
+
+            assert_eq!(in_bytes, out_bytes);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_malformed_pip_deserialization() -> std::result::Result<(), failure::Error> {
+        let mut rng = rand::thread_rng();
+
+        for _ in 0..1000 {
+            let mut x;
+            while {
+                x = rng.gen_range(0, 1000) as usize;
+                x % NODE_SIZE == NUM_PIP_HEADER_BYTES
+            } {}
+
+            let in_bytes: Vec<u8> = (0..x).map(|_| rand::random::<u8>()).collect();
+            assert!(
+                TryInto::<PieceInclusionProof<PedersenHasher>>::try_into(in_bytes.as_slice())
+                    .is_err()
+            );
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_generate_piece_commitment_bytes_from_source() -> Result<()> {
+        let some_bytes: Vec<u8> = vec![0; 33];
+        let mut some_bytes_slice: &[u8] = &some_bytes;
+        assert!(
+            generate_piece_commitment_bytes_from_source::<PedersenHasher>(&mut some_bytes_slice)
+                .is_ok(),
+            "threshold for sufficient bytes is 32"
+        );
+
+        let not_enough_bytes: Vec<u8> = vec![0; 7];
+        let mut not_enough_bytes_slice: &[u8] = &not_enough_bytes;
+        assert!(
+            generate_piece_commitment_bytes_from_source::<PedersenHasher>(
+                &mut not_enough_bytes_slice
+            )
+            .is_err(),
+            "insufficient bytes should error out"
+        );
+
+        Ok(())
     }
 }
