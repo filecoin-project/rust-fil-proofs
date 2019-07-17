@@ -17,7 +17,6 @@ use serde::ser::Serialize;
 use crate::error::Result;
 use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
 
-
 pub trait Domain:
     Ord
     + Copy

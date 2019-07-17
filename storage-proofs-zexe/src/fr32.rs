@@ -110,11 +110,8 @@ mod tests {
         let mut b = &bytes[..];
         let fr_result = bytes_into_fr::<E>(&mut b);
         if expect_zero {
-
             assert_eq!(fr_result.unwrap(), E::Fr::zero())
-
         } else {
-
             let f = fr_result.expect("Failed to convert bytes to `Fr`");
             let b2 = fr_into_bytes::<E>(&f);
 
