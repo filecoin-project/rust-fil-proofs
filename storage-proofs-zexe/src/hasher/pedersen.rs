@@ -221,7 +221,7 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         left: &[Boolean],
         right: &[Boolean],
         _height: usize,
-        params: PedersenParameters<JubJub>,
+        params: &PedersenParameters<JubJub>,
     ) -> std::result::Result<FpGadget<Bls12>, SynthesisError> {
         // TODO: Add personalization
         let mut preimage: Vec<Boolean> = vec![];
@@ -234,7 +234,7 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         let gadget_parameters =
             <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::ParametersGadget::alloc(
                 &mut cs.ns(|| "gadget_parameters"),
-                || Ok(&params),
+                || Ok(params),
             )
             .unwrap();
 
