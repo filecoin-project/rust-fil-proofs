@@ -23,11 +23,11 @@ use crate::merklepor::MerklePoR;
 use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use crate::proof::ProofScheme;
 use algebra::PairingEngine as Engine;
-use std::marker::PhantomData;
 use snark_gadgets::utils::CondReverseGadget;
 use snark_gadgets::utils::AllocGadget;
 use snark_gadgets::utils::ToBitsGadget;
 use crate::singletons::PEDERSEN_PARAMS;
+use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
 
 
 /// Proof of retrievability.
