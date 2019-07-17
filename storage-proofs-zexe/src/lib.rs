@@ -37,6 +37,7 @@ pub mod merkle;
 pub mod merklepor;
 pub mod parameter_cache;
 pub mod partitions;
+pub mod porc;
 pub mod porep;
 pub mod proof;
 pub mod settings;
