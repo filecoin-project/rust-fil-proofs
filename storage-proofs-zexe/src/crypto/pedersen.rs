@@ -39,7 +39,7 @@ pub enum Personalization {
 impl Personalization {
     pub fn get_bits(&self) -> Vec<bool> {
         match *self {
-            Personalization::NoteCommitment => vec![true, true, true, true, true, true],
+            Personalization::NoteCommitment => vec![true, true, true, true, true, true, false, false],
             Personalization::MerkleTree(num) => {
                 assert!(num < 63);
 
@@ -71,7 +71,7 @@ pub fn pedersen(data: &[u8]) -> Fr {
     pedersen_hash(Personalization::NoteCommitment, bits)
 }
 
-/// Pedersen hashing for inputs that have length mulitple of the block size `256`. Based on pedersen hashes and a Merkle-Damgard construction.
+/// Pedersen hashing for inputs that have length multiple of the block size `256`. Based on pedersen hashes and a Merkle-Damgard construction.
 pub fn pedersen_md_no_padding(data: &[u8]) -> Fr {
     assert!(
         data.len() >= 2 * PEDERSEN_BLOCK_BYTES,
@@ -148,7 +148,7 @@ mod tests {
             213, 235, 66, 156, 7, 85, 177, 39, 249, 31, 160, 247, 29, 106, 36, 46, 225, 71, 116,
             23, 1, 89, 82, 149, 45, 189, 27, 189, 144, 98, 23, 98,
         ];
-        // Note: this test fails as we use different generator points and zexe used a slightly different approch
+        // Note: this test fails as we use different generator points and zexe used a slightly different approach
         // for Pedersen hashing (no windowing). Hence the expected output should be updated.
         // assert_eq!(expected, data);
     }

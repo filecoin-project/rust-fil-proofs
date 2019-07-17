@@ -22,6 +22,9 @@ use crate::crypto::pedersen::Personalization;
 use crate::util::bits_to_bytes;
 
 
+type CRHGadget = PedersenCRHGadget<JubJub, Bls12, JubJubGadget>;
+type CRH = PedersenCRH<JubJub, BigWindow>;
+
 /// Pedersen hashing for inputs with length multiple of the block size. Based on a Merkle-Damgard construction.
 pub fn pedersen_md_no_padding<CS: ConstraintSystem<Bls12>>(
     mut cs: CS,
@@ -65,8 +68,6 @@ pub fn pedersen_compression_num<CS: ConstraintSystem<Bls12>>(
     bits: &[Boolean],
     params: &PedersenParameters<JubJub>,
 ) -> Result<FpGadget<Bls12>, SynthesisError> {
-    type CRHGadget = PedersenCRHGadget<JubJub, Bls12, JubJubGadget>;
-    type CRH = PedersenCRH<JubJub, BigWindow>;
 
     let gadget_parameters =
         <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::ParametersGadget::alloc(
@@ -75,15 +76,25 @@ pub fn pedersen_compression_num<CS: ConstraintSystem<Bls12>>(
         )
         .unwrap();
 
-//    let input_bits = bits_to_bytes(&Personalization::NoteCommitment
-//        .get_bits()
-//        .into_iter()
-//        .chain(bits.into_iter().map(|b| b.get_value().unwrap()))
-//        .collect::<Vec<bool>>());
+    let mut personalization = Personalization::NoteCommitment
+        .get_bits()
+        .into_iter()
+        .map(|v| Boolean::Constant(v))
+        .collect::<Vec<Boolean>>();
 
-    let input_bytes = bits
+    let mut bits_with_personalization = personalization
+        .into_iter()
+        .chain(bits.to_vec().into_iter())
+        .collect::<Vec<_>>();
+
+    while bits_with_personalization.len() % 8 != 0 {
+        bits_with_personalization.push(Boolean::Constant(false));
+    }
+
+    let input_bytes = bits_with_personalization
         .chunks(8)
-        .map(|x| UInt8::from_bits_le(x))
+        .into_iter()
+        .map(|v| UInt8::from_bits_le(v))
         .collect::<Vec<UInt8>>();
 
     let gadget_result = <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::check_evaluation_gadget(
@@ -104,10 +115,9 @@ pub fn pedersen_compression<CS: ConstraintSystem<Bls12>>(
     params: &PedersenParameters<JubJub>,
 ) -> Result<Vec<Boolean>, SynthesisError> {
     let h = pedersen_compression_num(cs.ns(|| "compression"), bits, params)?;
-    //    let mut out = h.into_bits_le(cs.ns(|| "h into bits"))?;
     let mut out = h.to_bits(cs.ns(|| "h into bits"))?;
 
-    // needs padding, because x does not always translate to exactly 256 bits
+    // Needs padding, because x does not always translate to exactly 256 bits
     while out.len() < PEDERSEN_BLOCK_SIZE {
         out.push(Boolean::Constant(false));
     }
@@ -118,18 +128,16 @@ pub fn pedersen_compression<CS: ConstraintSystem<Bls12>>(
 #[cfg(test)]
 mod tests {
 
+    use super::*;
+
+    use algebra::curves::ProjectiveCurve;
+    use bitvec::prelude::*;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
-    use super::pedersen_md_no_padding;
     use crate::circuit::test::TestConstraintSystem;
     use crate::crypto;
     use crate::util::bytes_into_boolean_vec;
     use crate::singletons::PEDERSEN_PARAMS;
-
-    use snark::ConstraintSystem;
-    use snark_gadgets::bits::boolean::Boolean;
-    use algebra::curves::bls12_381::Bls12_381 as Bls12;
-    use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
 
     #[test]
     fn test_pedersen_input_circuit() {
@@ -146,9 +154,9 @@ mod tests {
 
             let out =
                 pedersen_md_no_padding(cs.ns(|| "pedersen"),
-                                       data_bits.as_slice(),
-                                       &PEDERSEN_PARAMS)
-                .expect("pedersen hashing failed");
+                                         data_bits.as_slice(),
+                                         &PEDERSEN_PARAMS)
+                    .expect("pedersen hashing failed");
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
 

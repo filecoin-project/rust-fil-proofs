@@ -36,6 +36,7 @@ use crate::crypto::pedersen::{pedersen_hash, Personalization, BigWindow};
 use crate::crypto::{kdf, pedersen, sloth};
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
+use crate::circuit::pedersen::pedersen_compression_num;
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PedersenHasher {}
@@ -222,35 +223,35 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         _height: usize,
         params: &PedersenParameters<JubJub>,
     ) -> std::result::Result<FpGadget<Bls12>, SynthesisError> {
-        // TODO: Add personalization
         let mut preimage: Vec<Boolean> = vec![];
         preimage.extend_from_slice(left);
         preimage.extend_from_slice(right);
 
-        type CRHGadget = PedersenCRHGadget<JubJub, Bls12, JubJubGadget>;
-        type CRH = PedersenCRH<JubJub, BigWindow>;
-
-        let gadget_parameters =
-            <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::ParametersGadget::alloc(
-                &mut cs.ns(|| "gadget_parameters"),
-                || Ok(params),
-            )
-            .unwrap();
-
-        let input_bytes = preimage
-            .chunks(8)
-            .map(|x| UInt8::from_bits_le(x))
-            .collect::<Vec<UInt8>>();
-
-        let gadget_result =
-            <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::check_evaluation_gadget(
-                &mut cs.ns(|| "gadget_evaluation"),
-                &gadget_parameters,
-                &input_bytes,
-            )
-            .unwrap();
-
-        Ok(gadget_result.x)
+        pedersen_compression_num(cs, &preimage, params)
+//        type CRHGadget = PedersenCRHGadget<JubJub, Bls12, JubJubGadget>;
+//        type CRH = PedersenCRH<JubJub, BigWindow>;
+//
+//        let gadget_parameters =
+//            <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::ParametersGadget::alloc(
+//                &mut cs.ns(|| "gadget_parameters"),
+//                || Ok(params),
+//            )
+//            .unwrap();
+//
+//        let input_bytes = preimage
+//            .chunks(8)
+//            .map(|x| UInt8::from_bits_le(x))
+//            .collect::<Vec<UInt8>>();
+//
+//        let gadget_result =
+//            <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::check_evaluation_gadget(
+//                &mut cs.ns(|| "gadget_evaluation"),
+//                &gadget_parameters,
+//                &input_bytes,
+//            )
+//            .unwrap();
+//
+//        Ok(gadget_result.x)
     }
 
     fn hash_circuit<CS: ConstraintSystem<Bls12>>(
@@ -374,7 +375,7 @@ mod tests {
         let root = a.node(i1, i2, 1);
         a.reset();
 
-        // Note: this test fails as we use different generator points and zexe used a slightly different approch
+        // Note: this test fails as we use different generator points and zexe used a slightly different approach
         // for Pedersen hashing (no windowing). Hence the expected output should be updated.
 
         // assert_eq!(

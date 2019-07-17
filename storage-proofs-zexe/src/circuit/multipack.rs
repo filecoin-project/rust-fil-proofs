@@ -30,7 +30,7 @@ where
         for b in bits {
             let value = b.get_value();
             let fr: E::Fr = {
-                if *value.get().unwrap() {
+                if *value.get()? {
                     E::Fr::one()
                 } else {
                     E::Fr::zero()
