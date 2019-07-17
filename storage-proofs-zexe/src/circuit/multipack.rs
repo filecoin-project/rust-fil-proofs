@@ -94,10 +94,10 @@ pub fn compute_multipacking<E: Engine>(bits: &[bool]) -> Vec<E::Fr> {
 
 #[test]
 fn test_multipacking() {
+    use super::test::*;
+    use algebra::curves::bls12_381::Bls12_381 as Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use snark::ConstraintSystem;
-    use algebra::curves::bls12_381::Bls12_381 as Bls12;
-    use super::test::*;
     use snark_gadgets::bits::boolean::{AllocatedBit, Boolean};
 
     let mut rng = XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);

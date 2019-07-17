@@ -37,12 +37,17 @@ pub mod merkle;
 pub mod merklepor;
 pub mod parameter_cache;
 pub mod partitions;
+pub mod porc;
 pub mod porep;
 pub mod proof;
 pub mod settings;
 pub mod singletons;
 pub mod util;
 pub mod vde;
+pub mod layered_drgporep;
+pub mod challenge_derivation;
+pub mod zigzag_graph;
+pub mod zigzag_drgporep;
 
 use logging_toolkit::make_logger;
 use slog::Logger;
