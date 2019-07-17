@@ -65,7 +65,7 @@ pub trait HashFunction<T: Domain>:
         left: &[boolean::Boolean],
         right: &[boolean::Boolean],
         height: usize,
-        params: PedersenParameters<JubJub>,
+        params: &PedersenParameters<JubJub>,
     ) -> std::result::Result<FpGadget<Bls12_381>, SynthesisError>;
 
     fn hash_circuit<CS: ConstraintSystem<Bls12_381>>(
