@@ -26,20 +26,26 @@ where
         let mut coeff = E::Fr::one();
         let mut acc = E::Fr::zero();
         let one = CS::one();
-
+            println!("1");
         for b in bits {
             let value = b.get_value();
-            let fr: E::Fr = {
-                if *value.get()? {
-                    E::Fr::one()
-                } else {
-                    E::Fr::zero()
-                }
+            let fr = match value.get() {
+                Ok(v) => {
+                    if *v {
+                        Some(E::Fr::one())
+                    } else {
+                        Some(E::Fr::zero())
+                    }
+                },
+                Err(e) => None,
             };
 
             lc = lc + b.lc(one, coeff);
+            
+            if let Some(x) = &fr.map(|v| v.mul(&coeff)) {
+                acc += x;
+            }
 
-            acc += &fr.mul(&coeff);
             coeff.double_in_place();
         }
 
