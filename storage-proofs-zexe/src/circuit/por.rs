@@ -180,15 +180,15 @@ impl<'a, H: Hasher> Circuit<Bls12> for PoRCircuit<'a, H> {
                 // depth of the tree.
                 let cur_is_right = boolean::Boolean::from(boolean::AllocatedBit::alloc(
                     cs.ns(|| "position bit"),
-                    || Ok(e.map(|e| e.1).unwrap()),
+                    || e.map(|e| e.1).ok_or(SynthesisError::AssignmentMissing),
                 )?);
 
                 // Witness the authentication path element adjacent
                 // at this depth.
                 let path_element =
-                    FpGadget::alloc(cs.ns(|| "path element"), || {
-                        Ok(e.ok_or(SynthesisError::AssignmentMissing)?.0)
-                    })?;
+                    FpGadget::alloc(cs.ns(|| "path element"), 
+                        || e.map(|e| e.0).ok_or(SynthesisError::AssignmentMissing)
+                    )?;
 
                 // Swap the two if the current subtree is on the right
                 let (xl, xr) = FpGadget::conditionally_reverse(
@@ -282,7 +282,7 @@ mod tests {
     use crate::util::data_at_node;
 
     #[test]
-    #[ignore] // Slow test – run only when compiled for release.
+    // #[ignore] // Slow test – run only when compiled for release.
     fn por_test_compound() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let leaves = 6;
