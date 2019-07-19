@@ -34,6 +34,7 @@ bellperson = "0.2"
 paired = "0.15"
 fil-sapling-crypto = "0.1"
 clap = "2"
+env_proxy = "0.3"
 
 [dependencies.reqwest]
 version = "0.9"
