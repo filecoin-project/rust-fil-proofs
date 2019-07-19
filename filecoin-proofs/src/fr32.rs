@@ -996,10 +996,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{PaddedBytesAmount, UnpaddedBytesAmount};
     use itertools::Itertools;
     use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use std::io::Cursor;
+    use std::time::Instant;
     use storage_proofs::fr32::bytes_into_fr;
 
     #[test]
@@ -1122,6 +1124,55 @@ mod tests {
         assert_eq!(&padded[33..63], vec![255u8; 30].as_slice());
         assert_eq!(padded[63], 0b0011_1111);
         assert_eq!(padded.into_boxed_slice(), bit_vec_padding(data));
+    }
+
+    #[test]
+    fn test_write_padded_experiment() {
+        let start = Instant::now();
+
+        // 1KiB
+        // let sector_size = 1024;
+
+        // 256MiB
+        let sector_size = 1 << 28;
+
+        // 1GiB
+        // let sector_size = 1 << 30;
+
+        let num_bytes_to_generate = UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size));
+
+        println!(
+            "{:?} START generate {:?}B vector of random data",
+            start.elapsed(),
+            num_bytes_to_generate.0
+        );
+
+        let mut bytes: Vec<u8> = (0..num_bytes_to_generate.0)
+            .map(|_| rand::random::<u8>())
+            .collect();
+
+        println!(
+            "{:?} FINISH generate {:?}B vector of random data",
+            start.elapsed(),
+            num_bytes_to_generate.0
+        );
+
+        let mut cursor = Cursor::new(Vec::with_capacity(sector_size.clone() as usize));
+
+        println!(
+            "{:?} START write_padded {:?}B vector of random data",
+            start.elapsed(),
+            num_bytes_to_generate.0
+        );
+
+        let n = write_padded(&mut bytes[..].as_ref(), &mut cursor).unwrap();
+
+        println!(
+            "{:?} FINISH write_padded {:?}B vector of random data (wrote {:?}B) ",
+            start.elapsed(),
+            num_bytes_to_generate.0,
+            n
+        );
     }
 
     // `write_padded` for 256 bytes of 1s, splitting it in two calls of 127 bytes,
