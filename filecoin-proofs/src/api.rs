@@ -277,7 +277,7 @@ pub fn seal<T: AsRef<Path>>(
             .into_iter()
             .map(|p| p.number_of_leaves)
             .collect::<Vec<_>>(),
-        (sector_bytes / 127) * 4,
+        sector_bytes >> 5,
     )?;
 
     if !valid_pieces {
@@ -762,8 +762,8 @@ mod tests {
     #[test]
     #[ignore]
     fn test_pip_lifecycle() -> Result<(), failure::Error> {
-        //        let sector_size = TEST_SECTOR_SIZE;
-        let sector_size = LIVE_SECTOR_SIZE;
+        // This size is a minimal repro for the P0 API sanity check failure.
+        let sector_size = 1 << 14;
 
         let number_of_bytes_in_piece =
             UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size.clone()));
