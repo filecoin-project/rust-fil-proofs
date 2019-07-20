@@ -277,7 +277,7 @@ pub fn seal<T: AsRef<Path>>(
             .into_iter()
             .map(|p| p.number_of_leaves)
             .collect::<Vec<_>>(),
-        (sector_bytes / 127) * 4,
+        sector_bytes >> 5,
     )?;
 
     if !valid_pieces {
@@ -762,30 +762,31 @@ mod tests {
     #[test]
     #[ignore]
     fn test_pip_lifecycle() -> Result<(), failure::Error> {
-        let number_of_bytes_in_piece: u64 = 500;
-        let unpadded_number_of_bytes_in_piece = UnpaddedBytesAmount(number_of_bytes_in_piece);
-        let bytes: Vec<u8> = (0..number_of_bytes_in_piece)
+        let sector_size = TEST_SECTOR_SIZE;
+
+        let number_of_bytes_in_piece =
+            UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size.clone()));
+
+        let piece_bytes: Vec<u8> = (0..number_of_bytes_in_piece.0)
             .map(|_| rand::random::<u8>())
             .collect();
+
         let mut piece_file = NamedTempFile::new()?;
-        piece_file.write_all(&bytes)?;
+        piece_file.write_all(&piece_bytes)?;
         piece_file.seek(SeekFrom::Start(0))?;
-        let comm_p =
-            generate_piece_commitment(&piece_file.path(), unpadded_number_of_bytes_in_piece)?;
+
+        let comm_p = generate_piece_commitment(&piece_file.path(), number_of_bytes_in_piece)?;
 
         let mut staged_sector_file = NamedTempFile::new()?;
-
         add_piece(
             &mut piece_file,
             &mut staged_sector_file,
-            unpadded_number_of_bytes_in_piece,
+            number_of_bytes_in_piece,
             &[],
         )?;
 
         let sealed_sector_file = NamedTempFile::new()?;
-
-        let sector_size = SectorSize(TEST_SECTOR_SIZE);
-        let config = PoRepConfig(sector_size, PoRepProofPartitions(2));
+        let config = PoRepConfig(SectorSize(sector_size.clone()), PoRepProofPartitions(2));
 
         let output = seal(
             config,
@@ -793,7 +794,7 @@ mod tests {
             &sealed_sector_file.path(),
             &[0; 31],
             &[0; 31],
-            &[unpadded_number_of_bytes_in_piece],
+            &[number_of_bytes_in_piece],
         )?;
 
         let piece_inclusion_proof_bytes: Vec<u8> = output.piece_inclusion_proofs[0].clone().into();
@@ -802,8 +803,8 @@ mod tests {
             &piece_inclusion_proof_bytes,
             &output.comm_d,
             &output.comm_ps[0],
-            unpadded_number_of_bytes_in_piece,
-            sector_size,
+            number_of_bytes_in_piece,
+            SectorSize(sector_size),
         )?;
 
         assert!(verified);

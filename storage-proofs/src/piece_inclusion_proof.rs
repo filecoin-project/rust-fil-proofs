@@ -310,18 +310,18 @@ impl<H: Hasher> PieceInclusionProof<H> {
         root: &[u8],
         proofs: &[PieceInclusionProof<H>],
         comm_ps: &[Fr32Ary],
-        piece_sizes: &[usize],
-        sector_size: usize,
+        piece_nodes: &[usize],
+        total_nodes: usize,
     ) -> Result<bool> {
         let root_domain = H::Domain::try_from_bytes(root)?;
 
-        Ok(proofs.iter().zip(comm_ps.iter().zip(piece_sizes)).all(
+        Ok(proofs.iter().zip(comm_ps.iter().zip(piece_nodes)).all(
             |(proof, (comm_p, piece_size))| {
                 proof.verify(
                     &root_domain,
                     &H::Domain::try_from_bytes(comm_p).unwrap(),
                     *piece_size,
-                    sector_size,
+                    total_nodes,
                 )
             },
         ))
