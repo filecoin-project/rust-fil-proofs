@@ -642,7 +642,7 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
 
 #[cfg(test)]
 mod tests {
-    use crate::constants::{LIVE_SECTOR_SIZE, TEST_SECTOR_SIZE};
+    use crate::constants::TEST_SECTOR_SIZE;
     use crate::types::SectorSize;
     use rand::Rng;
     use storage_proofs::util::NODE_SIZE;
@@ -762,8 +762,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_pip_lifecycle() -> Result<(), failure::Error> {
-        // This size is a minimal repro for the P0 API sanity check failure.
-        let sector_size = 1 << 14;
+        let sector_size = TEST_SECTOR_SIZE;
 
         let number_of_bytes_in_piece =
             UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size.clone()));
