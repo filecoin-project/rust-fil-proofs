@@ -646,16 +646,14 @@ where
     let mut buffer = [0; CHUNK_SIZE];
     let mut written = 0;
 
-    use std::io::BufReader;
-    // ensure we use buffered readers and writers to minimize sys calls.
-    let mut source_buf = BufReader::new(source);
-    let mut target_buf = bufstream::BufStream::new(target);
+    // use a buffered reader for reads
+    let mut source_buf = std::io::BufReader::new(source);
 
     while let Ok(bytes_read) = source_buf.read(&mut buffer) {
         if bytes_read == 0 {
             break;
         }
-        written += write_padded_aux(&FR32_PADDING_MAP, &buffer[..bytes_read], &mut target_buf)?;
+        written += write_padded_aux(&FR32_PADDING_MAP, &buffer[..bytes_read], target)?;
     }
 
     Ok(written)
@@ -739,6 +737,9 @@ where
             .into_iter()
             .take(data_bits_to_write),
     );
+
+    // Use buffered writer for the following operations.
+    let mut target = std::io::BufWriter::new(target);
 
     target.write_all(last_bits.as_ref())?;
     // The `as_slice` conversion will byte-align the bit stream and implicitly
