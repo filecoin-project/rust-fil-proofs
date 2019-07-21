@@ -650,11 +650,16 @@ where
     let mut buffer = [0; CHUNK_SIZE];
     let mut written = 0;
 
-    while let Ok(bytes_read) = source.read(&mut buffer) {
+    use std::io::BufReader;
+    // ensure we use buffered readers and writers to minimize sys calls.
+    let mut source_buf = BufReader::new(source);
+    let mut target_buf = bufstream::BufStream::new(target);
+
+    while let Ok(bytes_read) = source_buf.read(&mut buffer) {
         if bytes_read == 0 {
             break;
         }
-        written += write_padded_aux(&FR32_PADDING_MAP, &buffer[..bytes_read], target)?;
+        written += write_padded_aux(&FR32_PADDING_MAP, &buffer[..bytes_read], &mut target_buf)?;
     }
 
     Ok(written)
