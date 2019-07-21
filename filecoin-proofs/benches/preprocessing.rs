@@ -9,6 +9,34 @@ use criterion::{Criterion, ParameterizedBenchmark, Throughput};
 use filecoin_proofs::fr32::{write_padded, write_unpadded};
 use rand::{thread_rng, Rng};
 
+#[cfg(feature = "cpu-profile")]
+#[inline(always)]
+fn start_profile(stage: &str) {
+    gperftools::profiler::PROFILER
+        .lock()
+        .unwrap()
+        .start(format!("./{}.profile", stage))
+        .unwrap();
+}
+
+#[cfg(not(feature = "cpu-profile"))]
+#[inline(always)]
+fn start_profile(_stage: &str) {}
+
+#[cfg(feature = "cpu-profile")]
+#[inline(always)]
+fn stop_profile() {
+    gperftools::profiler::PROFILER
+        .lock()
+        .unwrap()
+        .stop()
+        .unwrap();
+}
+
+#[cfg(not(feature = "cpu-profile"))]
+#[inline(always)]
+fn stop_profile() {}
+
 fn random_data(size: usize) -> Vec<u8> {
     let mut rng = thread_rng();
     let mut data = vec![0u8; size as usize];
@@ -26,14 +54,27 @@ fn preprocessing_benchmark(c: &mut Criterion) {
             |b, size| {
                 let data = random_data(*size);
 
+                start_profile(&format!("padded-{}", size));
                 b.iter(|| {
                     let mut tmpfile: File = tempfile::tempfile().unwrap();
 
                     write_padded_bench(&mut tmpfile, data.clone());
-                })
+                });
+                stop_profile();
             },
             vec![128, 256, 512, 256_000, 512_000, 1024_000, 2048_000],
         )
+        .with_function("write_padded-memory", |b, size| {
+            let data = random_data(*size);
+
+            start_profile(&format!("padded-memory{}", size));
+            let buf = vec![0u8; *size];
+            let mut c = std::io::Cursor::new(buf);
+            b.iter(|| {
+                write_padded(&mut &data[..], &mut c).unwrap();
+            });
+            stop_profile();
+        })
         .with_function("write_padded + unpadded", |b, size| {
             let data = random_data(*size);
 
