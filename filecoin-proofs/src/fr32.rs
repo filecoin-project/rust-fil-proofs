@@ -766,7 +766,7 @@ where
         // after the `data_bits_to_write` taken to complete the previous element.
         let mut read_pos = data_bits_to_write;
         // TODO: Rename `data_bits_to_write` (it's confusing outside of its context).
-        let mut shift_buf = Vec::new();
+        let mut shift_buf = Vec::with_capacity(source.len());
 
         while read_pos < source_bits {
             // TODO: Optimization: We can determine how many full data units are and
@@ -924,7 +924,7 @@ where
     // that may not be byte-aligned.
     let mut write_bit_offset = 0;
 
-    let mut recovered = Vec::new();
+    let mut recovered = Vec::with_capacity(source.len());
 
     // If there is no more data to read or no more space to write stop.
     while read_pos.bytes < source.len() && written_bits < max_write_size_bits {
