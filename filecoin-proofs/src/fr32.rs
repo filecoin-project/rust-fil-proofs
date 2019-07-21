@@ -441,19 +441,17 @@ the unique bit `0`, that just *started* at that position but doesn't
 necessarily carry that value.)
 
 **/
-pub fn shift_bits(input: &[u8], amount: usize, is_left: bool) -> (Vec<u8>) {
+pub fn shift_bits(input: &[u8], amount: usize, is_left: bool, output: &mut Vec<u8>) {
     debug_assert!(amount >= 1);
     debug_assert!(amount <= 7);
 
     // Create the `output` vector from the original input values, extending
     // its size by one if shifting left.
-    let mut output = Vec::with_capacity(input.len() + if is_left { 1 } else { 0 });
-    output.extend_from_slice(input);
+    output.resize(input.len() + if is_left { 1 } else { 0 }, 0);
+    output[..input.len()].copy_from_slice(input);
     if is_left {
-        output.push(0);
+        output[input.len()] = 0;
     }
-    // TODO: Is there a cleaner way to do this? Is the extra byte worth the initial
-    // `with_capacity` call?
 
     // Split the shift in two parts. First, do a simple bit shift (losing the
     // overflow) for each byte, then, in a second pass, recover the lost overflow
@@ -522,8 +520,6 @@ pub fn shift_bits(input: &[u8], amount: usize, is_left: bool) -> (Vec<u8>) {
     // efficiency (do everything we need to do in the same address once).
     // (This is low priority since we normally shift small arrays -32 byte
     // elements- per call.)
-
-    output
 }
 
 /** Extract bits and relocate them.
@@ -567,7 +563,8 @@ pub fn extract_bits_and_shift(
     pos: usize,
     num_bits: usize,
     new_offset: usize,
-) -> Vec<u8> {
+    output: &mut Vec<u8>,
+) {
     debug_assert!(input.len() * 8 >= pos + num_bits);
     debug_assert!(new_offset <= 7);
 
@@ -589,15 +586,16 @@ pub fn extract_bits_and_shift(
     let input = &input[..BitByte::from_bits(extraction_offset + num_bits).bytes_needed()];
 
     // (2).
-    let mut output = if new_offset < extraction_offset {
+    if new_offset < extraction_offset {
         // Shift right.
-        shift_bits(input, extraction_offset - new_offset, false)
+        shift_bits(input, extraction_offset - new_offset, false, output)
     } else if new_offset > extraction_offset {
         // Shift left.
-        shift_bits(input, new_offset - extraction_offset, true)
+        shift_bits(input, new_offset - extraction_offset, true, output)
     } else {
         // No shift needed, take the `input` as is.
-        input.to_vec()
+        output.resize(input.len(), 0);
+        output[..input.len()].copy_from_slice(input);
     };
 
     // After the shift we may not need the last byte of the `output` (either
@@ -617,8 +615,6 @@ pub fn extract_bits_and_shift(
     if end_offset != 0 {
         clear_left_bits(output.last_mut().unwrap(), end_offset);
     }
-
-    output
 }
 
 // Set to zero all the bits to the "left" of the `offset` including
@@ -770,6 +766,7 @@ where
         // after the `data_bits_to_write` taken to complete the previous element.
         let mut read_pos = data_bits_to_write;
         // TODO: Rename `data_bits_to_write` (it's confusing outside of its context).
+        let mut shift_buf = Vec::new();
 
         while read_pos < source_bits {
             // TODO: Optimization: We can determine how many full data units are and
@@ -783,12 +780,14 @@ where
             // `extract_bits_and_shift`: since this function returns the extracted data
             // in a byte stream, filling the remaining bits with zeros, those bits will
             // effectively become the padding bits.
-            padded_output.append(&mut extract_bits_and_shift(
+            extract_bits_and_shift(
                 source,
                 read_pos,
                 min(padding_map.data_bits, source_bits - read_pos),
                 0,
-            ));
+                &mut shift_buf,
+            );
+            padded_output.append(&mut shift_buf);
 
             read_pos += padding_map.data_bits;
             // Position at the data that would start filling the next element (if this
@@ -925,6 +924,8 @@ where
     // that may not be byte-aligned.
     let mut write_bit_offset = 0;
 
+    let mut recovered = Vec::new();
+
     // If there is no more data to read or no more space to write stop.
     while read_pos.bytes < source.len() && written_bits < max_write_size_bits {
         // (1): Find the element boundary and, assuming that there is a full
@@ -946,11 +947,12 @@ where
         // N.B., the bit offset of the data in the original raw data byte
         // stream and the same data in the padded layout are not necessarily
         // the same (since the added padding bits shift it).
-        let mut recovered = extract_bits_and_shift(
+        extract_bits_and_shift(
             &source,
             read_pos.total_bits(),
             bits_to_extract,
             write_bit_offset,
+            &mut recovered,
         );
 
         if write_bit_offset != 0 {
@@ -1024,6 +1026,7 @@ mod tests {
 
         // TODO: Evaluate designing a scattered pattered of `pos` and `num_bits`
         // instead of repeating too many iterations with any number.
+        let mut shift_buf = Vec::new();
         for _ in 0..100 {
             let pos = rng.gen_range(0, data.len() / 2);
             let num_bits = rng.gen_range(1, data.len() * 8 - pos);
@@ -1038,10 +1041,8 @@ mod tests {
             );
             let shifted_bv: BitVecLEu8 = bv >> new_offset;
 
-            assert_eq!(
-                shifted_bv.as_ref(),
-                &extract_bits_and_shift(&data, pos, num_bits, new_offset)[..],
-            );
+            extract_bits_and_shift(&data, pos, num_bits, new_offset, &mut shift_buf);
+            assert_eq!(shifted_bv.as_ref(), &shift_buf[..]);
         }
     }
 
@@ -1052,11 +1053,12 @@ mod tests {
         let len = 5;
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
+        let mut shifted_bits = Vec::new();
         for amount in 1..8 {
             for left in [true, false].iter() {
                 let data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
 
-                let shifted_bits = shift_bits(&data, amount, *left);
+                shift_bits(&data, amount, *left, &mut shifted_bits);
 
                 let mut bv: BitVec<LittleEndian, u8> = data.into();
                 if *left {
