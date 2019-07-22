@@ -34,6 +34,7 @@ bellperson = "0.2"
 paired = "0.15"
 fil-sapling-crypto = "0.1"
 clap = "2"
+bufstream = { git = "https://github.com/alexcrichton/bufstream" }
 
 [dependencies.reqwest]
 version = "0.9"

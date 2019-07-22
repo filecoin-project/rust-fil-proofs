@@ -348,6 +348,20 @@ impl PaddingMap {
         (next_element_position_bits / 8, remaining_data_unit_bits)
     }
 
+    pub fn target_offsets_from_bytes(&self, len: u64) -> io::Result<(u64, BitByte)> {
+        // Deduce the number of input raw bytes that generated that padded byte size.
+        let raw_data_bytes = self.transform_byte_offset(len as usize, false);
+
+        // With the number of raw data bytes elucidated it can now be specified the
+        // number of padding bits in the generated bit stream (before it was converted
+        // to a byte-aligned stream), that is, `raw_data_bytes * 8` is not necessarily
+        // `padded_bits`).
+        let padded_bits = self.transform_bit_offset(raw_data_bytes * 8, true);
+
+        Ok((raw_data_bytes as u64, BitByte::from_bits(padded_bits)))
+        // TODO: Why do we use `usize` internally and `u64` externally?
+    }
+
     // For a `Seek`able `target` of a byte-aligned padded layout, return:
     // - the size in bytes
     // - the size in bytes of raw data which corresponds to the `target` size
@@ -361,21 +375,8 @@ impl PaddingMap {
         // to the byte-aligned stream.
         let padded_bytes = target.seek(SeekFrom::End(0))?;
 
-        // Deduce the number of input raw bytes that generated that padded byte size.
-        let raw_data_bytes = self.transform_byte_offset(padded_bytes as usize, false);
-
-        // With the number of raw data bytes elucidated it can now be specified the
-        // number of padding bits in the generated bit stream (before it was converted
-        // to a byte-aligned stream), that is, `raw_data_bytes * 8` is not necessarily
-        // `padded_bits`).
-        let padded_bits = self.transform_bit_offset(raw_data_bytes * 8, true);
-
-        Ok((
-            padded_bytes,
-            raw_data_bytes as u64,
-            BitByte::from_bits(padded_bits),
-        ))
-        // TODO: Why do we use `usize` internally and `u64` externally?
+        let (a, b) = self.target_offsets_from_bytes(padded_bytes)?;
+        Ok((padded_bytes, a, b))
     }
 }
 
@@ -638,25 +639,79 @@ pub fn clear_right_bits(byte: &mut u8, offset: usize) {
 const N: usize = 1000;
 const CHUNK_SIZE: usize = 127 * N;
 
+pub trait IoLen {
+    fn len(&mut self) -> io::Result<u64>;
+
+    fn is_empty(&mut self) -> io::Result<bool> {
+        Ok(self.len()? == 0)
+    }
+}
+
 pub fn write_padded<R, W>(source: &mut R, target: &mut W) -> io::Result<usize>
 where
     R: Read + ?Sized,
     W: Read + Write + Seek + ?Sized,
 {
-    let mut buffer = [0; CHUNK_SIZE];
+    let mut buffer = vec![0u8; CHUNK_SIZE];
     let mut written = 0;
 
     // use a buffered reader for reads
     let mut source_buf = std::io::BufReader::new(source);
+    let mut target_buf = bufstream::BufStream::new(target);
+
+    let (mut last_bits, mut padded_bits) = read_last_bits(&FR32_PADDING_MAP, &mut target_buf)?;
 
     while let Ok(bytes_read) = source_buf.read(&mut buffer) {
+        println!("read {:?}", &buffer[..bytes_read]);
         if bytes_read == 0 {
             break;
         }
-        written += write_padded_aux(&FR32_PADDING_MAP, &buffer[..bytes_read], target)?;
+        let (last_written, last_last_bits) = write_padded_aux(
+            &FR32_PADDING_MAP,
+            &buffer[..bytes_read],
+            last_bits,
+            &padded_bits,
+            &mut target_buf,
+        )?;
+        written += last_written;
+        last_bits = last_last_bits;
+        let (_, new_padded_bits) =
+            FR32_PADDING_MAP.target_offsets_from_bytes(last_written as u64)?;
+        padded_bits = new_padded_bits;
     }
 
     Ok(written)
+}
+
+fn read_last_bits<W>(padding_map: &PaddingMap, target: &mut W) -> io::Result<(BitVecLEu8, BitByte)>
+where
+    W: Read + Seek,
+{
+    let (padded_bytes, _, padded_bits) = padding_map.target_offsets(target)?;
+
+    // (1): Overwrite the extra bits (if any): we actually don't write in-place, we
+    // remove the last byte and extract its valid bits to `last_bits` to be later
+    // rewritten with new data taken from the `source`.
+    let last_bits = if !padded_bits.is_byte_aligned() {
+        // Read the last incomplete byte and left the `target` positioned to overwrite
+        // it in the next `write_all`.
+        let last_byte = &mut [0u8; 1];
+        target.seek(SeekFrom::Start(padded_bytes - 1))?;
+        target.read_exact(last_byte)?;
+        target.seek(SeekFrom::Start(padded_bytes - 1))?;
+        // TODO: Can we use a relative `SeekFrom::End` seek to avoid
+        // setting our absolute `padded_bytes` position?
+
+        // Extract the valid bit from the last byte (the `bits` fraction
+        // of the `padded_bits` bit stream that doesn't complete a byte).
+        let mut last_byte_as_bitvec = BitVecLEu8::from(&last_byte[..]);
+        last_byte_as_bitvec.truncate(padded_bits.bits);
+        last_byte_as_bitvec
+    } else {
+        BitVecLEu8::new()
+    };
+
+    Ok((last_bits, padded_bits))
 }
 
 /** Padding process.
@@ -684,41 +739,20 @@ need to handle the potential bit-level misalignments:
 fn write_padded_aux<W: ?Sized>(
     padding_map: &PaddingMap,
     source: &[u8],
+    mut last_bits: BitVecLEu8,
+    padded_bits: &BitByte,
     target: &mut W,
-) -> io::Result<usize>
+) -> io::Result<(usize, BitVecLEu8)>
 where
     W: Read + Write + Seek,
 {
-    // TODO: Check `source` length, if it's zero we should return here and avoid all
-    // the alignment calculations that will be worthless (because we wont' have any
-    // data with which to align).
-
-    let (padded_bytes, _, padded_bits) = padding_map.target_offsets(target)?;
-
-    // (1): Overwrite the extra bits (if any): we actually don't write in-place, we
-    // remove the last byte and extract its valid bits to `last_bits` to be later
-    // rewritten with new data taken from the `source`.
-    let mut last_bits = BitVecLEu8::new();
-    if !padded_bits.is_byte_aligned() {
-        // Read the last incomplete byte and left the `target` positioned to overwrite
-        // it in the next `write_all`.
-        let last_byte = &mut [0u8; 1];
-        target.seek(SeekFrom::Start(padded_bytes - 1))?;
-        target.read_exact(last_byte)?;
-        target.seek(SeekFrom::Start(padded_bytes - 1))?;
-        // TODO: Can we use a relative `SeekFrom::End` seek to avoid
-        // setting our absolute `padded_bytes` position?
-
-        // Extract the valid bit from the last byte (the `bits` fraction
-        // of the `padded_bits` bit stream that doesn't complete a byte).
-        let mut last_byte_as_bitvec = BitVecLEu8::from(&last_byte[..]);
-        last_byte_as_bitvec.truncate(padded_bits.bits);
-        last_bits.extend(last_byte_as_bitvec);
-    };
+    if source.is_empty() {
+        return Ok((0, BitVecLEu8::new()));
+    }
 
     // (2): Fill the current data unit adding `missing_data_bits` from the
     // `source` (if available, or as many bits as we have).
-    let (_, missing_data_bits) = padding_map.next_boundary(&padded_bits);
+    let (_, missing_data_bits) = padding_map.next_boundary(padded_bits);
 
     // Check if we have enough `source_bits` to complete the data unit (and hence
     // add the padding and complete the element) or if we'll use all the `source_bits`
@@ -729,6 +763,7 @@ where
     } else {
         (source_bits, false)
     };
+
     // TODO: What happens if we were already at the element boundary?
     // Would this code write 0 (`data_bits_to_write`) bits and then
     // add an extra padding?
@@ -737,9 +772,6 @@ where
             .into_iter()
             .take(data_bits_to_write),
     );
-
-    // Use buffered writer for the following operations.
-    let mut target = std::io::BufWriter::new(target);
 
     target.write_all(last_bits.as_ref())?;
     // The `as_slice` conversion will byte-align the bit stream and implicitly
@@ -803,7 +835,10 @@ where
     target.write_all(&padded_output)?;
 
     // Always return the expected number of bytes, since this function will fail if write_all does.
-    Ok(source.len())
+    Ok((
+        source.len(),
+        BitVecLEu8::from(&padded_output[padded_output.len() - 1..]),
+    ))
 }
 
 // offset and num_bytes are based on the unpadded data, so
