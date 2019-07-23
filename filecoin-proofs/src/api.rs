@@ -580,17 +580,11 @@ fn verify_post_fixed_sectors_count(
         vdf_post::VDFPoSt<PedersenHasher, vdf_sloth::Sloth>,
     > = VDFPostCompound::setup(&compound_setup_params).expect("setup failed");
 
-    let commitments = fixed
-        .comm_rs
-        .iter()
-        .map(|comm_r| {
-            PedersenDomain(
-                bytes_into_fr::<Bls12>(comm_r)
-                    .expects("could not could not map comm_r to Fr")
-                    .into_repr(),
-            )
-        })
-        .collect::<Vec<PedersenDomain>>();
+    let mut commitments: Vec<PedersenDomain> = vec![];
+
+    for comm_r in fixed.comm_rs.iter() {
+        commitments.push(PedersenDomain(bytes_into_fr::<Bls12>(comm_r)?.into_repr()));
+    }
 
     let public_inputs = vdf_post::PublicInputs::<PedersenDomain> {
         commitments,
@@ -647,7 +641,7 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
 
 #[cfg(test)]
 mod tests {
-    use crate::constants::TEST_SECTOR_SIZE;
+    use crate::constants::{POST_SECTORS_COUNT, TEST_SECTOR_SIZE};
     use crate::types::SectorSize;
     use rand::Rng;
     use storage_proofs::util::NODE_SIZE;
@@ -760,6 +754,49 @@ mod tests {
                 assert!(piece_spec.number_of_leaves < expected_piece_leaves * 2);
             }
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_verify_post_fixed_sectors_count() -> Result<(), failure::Error> {
+        // TODO: test out a happy path
+
+        let post_config = PoStConfig(
+            SectorSize(TEST_SECTOR_SIZE),
+            PoStProofPartitions(POST_SECTORS_COUNT as u8),
+        );
+        let challenge_seed = [0; 32];
+
+        let comm_r = [
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 115,
+        ];
+
+        let result = verify_post_fixed_sectors_count(&VerifyPoStFixedSectorsCountInput {
+            proof: vec![0; SINGLE_PARTITION_PROOF_LEN * POST_SECTORS_COUNT],
+            challenge_seed,
+            comm_rs: [comm_r, [0; 32]],
+            faults: vec![],
+            post_config,
+        });
+
+        assert!(result.is_err(), "expected a BadFrBytes error");
+
+        let comm_r = [
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 237, 115,
+        ];
+
+        let result = verify_post_fixed_sectors_count(&VerifyPoStFixedSectorsCountInput {
+            proof: vec![0; SINGLE_PARTITION_PROOF_LEN * POST_SECTORS_COUNT],
+            challenge_seed,
+            comm_rs: [comm_r, [0; 32]],
+            faults: vec![],
+            post_config,
+        });
+
+        assert!(result.is_err(), "expected a BadFrBytes error");
 
         Ok(())
     }
