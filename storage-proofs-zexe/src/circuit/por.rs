@@ -426,9 +426,7 @@ mod tests {
 
             por.synthesize(&mut cs).expect("circuit synthesis failed");
 
-            println!("{:#?}", cs.which_is_unsatisfied());
             assert!(cs.is_satisfied(), "constraints not satisfied");
-
             assert_eq!(cs.num_inputs(), 3, "wrong number of inputs");
 //          Number of constraints is different in Zexe
 //            assert_eq!(
