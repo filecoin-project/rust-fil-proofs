@@ -198,8 +198,11 @@ impl<'a, H: Hasher> Circuit<Bls12> for PoRCircuit<'a, H> {
                     &path_element,
                 )?;
 
-                let xl_bits = xl.to_bits(cs.ns(|| "xl into bits"))?;
-                let xr_bits = xr.to_bits(cs.ns(|| "xr into bits"))?;
+                let mut xl_bits = xl.to_bits(cs.ns(|| "xl into bits"))?;
+                let mut xr_bits = xr.to_bits(cs.ns(|| "xr into bits"))?;
+
+                xl_bits.reverse();
+                xr_bits.reverse();
 
                 // Compute the new subtree value
                 cur = H::Function::hash_leaf_circuit(
@@ -282,7 +285,7 @@ mod tests {
     use crate::util::data_at_node;
 
     #[test]
-    // #[ignore] // Slow test – run only when compiled for release.
+    #[ignore] // Slow test – run only when compiled for release.
     fn por_test_compound() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let leaves = 6;
@@ -422,14 +425,17 @@ mod tests {
             };
 
             por.synthesize(&mut cs).expect("circuit synthesis failed");
+
+            println!("{:#?}", cs.which_is_unsatisfied());
             assert!(cs.is_satisfied(), "constraints not satisfied");
 
             assert_eq!(cs.num_inputs(), 3, "wrong number of inputs");
-            assert_eq!(
-                cs.num_constraints(),
-                num_constraints,
-                "wrong number of constraints"
-            );
+//          Number of constraints is different in Zexe
+//            assert_eq!(
+//                cs.num_constraints(),
+//                num_constraints,
+//                "wrong number of constraints"
+//            );
 
             let auth_path_bits: Vec<bool> = proof
                 .proof
@@ -446,7 +452,7 @@ mod tests {
             assert_eq!(cs.get_input(0, "ONE"), Fr::one(), "wrong input 0");
 
             assert_eq!(
-                cs.get_input(1, "path/input 0"),
+                cs.get_input(1, "path/input 0/alloc"),
                 expected_inputs[0],
                 "wrong packed_auth_path"
             );
@@ -462,11 +468,11 @@ mod tests {
         }
     }
 
-    // #[ignore] // Slow test – run only when compiled for release.
-    // #[test]
-    // fn test_private_por_compound_pedersen() {
-    //     private_por_test_compound::<PedersenHasher>();
-    // }
+//     #[ignore] // Slow test – run only when compiled for release.
+     #[test]
+     fn test_private_por_compound_pedersen() {
+         private_por_test_compound::<PedersenHasher>();
+     }
 
     // #[ignore] // Slow test – run only when compiled for release.
     // #[test]
@@ -474,167 +480,167 @@ mod tests {
     //     private_por_test_compound::<Blake2sHasher>();
     // }
 
-    // fn private_por_test_compound<H: Hasher>() {
-    //     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-    //     let leaves = 6;
-    //     let data: Vec<u8> = (0..leaves)
-    //         .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
-    //         .collect();
-    //     let graph = BucketGraph::<H>::new(leaves, 16, 0, new_seed());
-    //     let tree = graph.merkle_tree(data.as_slice()).unwrap();
+     fn private_por_test_compound<H: Hasher>() {
+         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+         let leaves = 6;
+         let data: Vec<u8> = (0..leaves)
+             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+             .collect();
+         let graph = BucketGraph::<H>::new(leaves, 16, 0, new_seed());
+         let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
-    //     for i in 0..3 {
-    //         let public_inputs = merklepor::PublicInputs {
-    //             challenge: i,
-    //             commitment: None,
-    //         };
+         for i in 0..3 {
+             let public_inputs = merklepor::PublicInputs {
+                 challenge: i,
+                 commitment: None,
+             };
 
-    //         let setup_params = compound_proof::SetupParams {
-    //             vanilla_params: &merklepor::SetupParams {
-    //                 leaves,
-    //                 private: true,
-    //             },
-    //             engine_params: &JubjubBls12::new(),
-    //             partitions: None,
-    //         };
-    //         let public_params = PoRCompound::<H>::setup(&setup_params).expect("setup failed");
+             let setup_params = compound_proof::SetupParams {
+                 vanilla_params: &merklepor::SetupParams {
+                     leaves,
+                     private: true,
+                 },
+//                 engine_params: &JubjubBls12::new(),
+                 partitions: None,
+             };
+             let public_params = PoRCompound::<H>::setup(&setup_params).expect("setup failed");
 
-    //         let private_inputs = merklepor::PrivateInputs::<H>::new(
-    //             bytes_into_fr::<Bls12>(
-    //                 data_at_node(data.as_slice(), public_inputs.challenge).unwrap(),
-    //             )
-    //             .expect("failed to create Fr from node data")
-    //             .into(),
-    //             &tree,
-    //         );
+             let private_inputs = merklepor::PrivateInputs::<H>::new(
+                 bytes_into_fr::<Bls12>(
+                     data_at_node(data.as_slice(), public_inputs.challenge).unwrap(),
+                 )
+                 .expect("failed to create Fr from node data")
+                 .into(),
+                 &tree,
+             );
 
-    //         let groth_params = PoRCompound::<H>::groth_params(
-    //             &public_params.vanilla_params,
-    //             setup_params.engine_params,
-    //         )
-    //         .expect("failed to generate groth params");
+             let groth_params = PoRCompound::<H>::groth_params(
+                 &public_params.vanilla_params,
+//                 setup_params.engine_params,
+             ).expect("failed to generate groth params");
 
-    //         let proof = PoRCompound::<H>::prove(
-    //             &public_params,
-    //             &public_inputs,
-    //             &private_inputs,
-    //             &groth_params,
-    //         )
-    //         .expect("proving failed");
+             let proof = PoRCompound::<H>::prove(
+                 &public_params,
+                 &public_inputs,
+                 &private_inputs,
+                 &groth_params,
+             ).expect("proving failed");
 
-    //         {
-    //             let (circuit, inputs) = PoRCompound::<H>::circuit_for_test(
-    //                 &public_params,
-    //                 &public_inputs,
-    //                 &private_inputs,
-    //             );
+             {
+                 let (circuit, inputs) = PoRCompound::<H>::circuit_for_test(
+                     &public_params,
+                     &public_inputs,
+                     &private_inputs,
+                 );
 
-    //             let mut cs = TestConstraintSystem::new();
+                 let mut cs = TestConstraintSystem::new();
 
-    //             circuit.synthesize(&mut cs).expect("failed to synthesize");
+                 circuit.synthesize(&mut cs).expect("failed to synthesize");
 
-    //             assert!(cs.is_satisfied());
-    //             assert!(cs.verify(&inputs));
-    //         }
+                 assert!(cs.is_satisfied());
+                 assert!(cs.verify(&inputs));
+             }
 
-    //         let verified =
-    //             PoRCompound::<H>::verify(&public_params, &public_inputs, &proof, &NoRequirements)
-    //                 .expect("failed while verifying");
-    //         assert!(verified);
-    //     }
-    // }
+             let verified =
+                 PoRCompound::<H>::verify(&public_params, &public_inputs, &proof, &NoRequirements)
+                     .expect("failed while verifying");
+             assert!(verified);
+         }
+     }
 
-    // #[test]
-    // fn test_private_por_input_circuit_with_bls12_381() {
-    //     let params = &JubjubBls12::new();
-    //     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+     #[test]
+     fn test_private_por_input_circuit_with_bls12_381() {
+        test_private_por_input_circuit::<PedersenHasher>();
+     }
 
-    //     let leaves = 6;
+     fn test_private_por_input_circuit<H: Hasher>() {
+         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+         let leaves = 6;
 
-    //     for i in 0..6 {
-    //         // -- Basic Setup
+         for i in 0..6 {
+             // -- Basic Setup
 
-    //         let data: Vec<u8> = (0..leaves)
-    //             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
-    //             .collect();
+             let data: Vec<u8> = (0..leaves)
+                 .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+                 .collect();
 
-    //         let graph = BucketGraph::<PedersenHasher>::new(leaves, 16, 0, new_seed());
-    //         let tree = graph.merkle_tree(data.as_slice()).unwrap();
+             let graph = BucketGraph::<H>::new(leaves, 16, 0, new_seed());
+             let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
-    //         // -- MerklePoR
+             // -- MerklePoR
 
-    //         let pub_params = merklepor::PublicParams {
-    //             leaves,
-    //             private: true,
-    //         };
-    //         let pub_inputs = merklepor::PublicInputs {
-    //             challenge: i,
-    //             commitment: None,
-    //         };
+             let pub_params = merklepor::PublicParams {
+                 leaves,
+                 private: true,
+             };
+             let pub_inputs = merklepor::PublicInputs {
+                 challenge: i,
+                 commitment: None,
+             };
 
-    //         let priv_inputs = merklepor::PrivateInputs::<PedersenHasher>::new(
-    //             bytes_into_fr::<Bls12>(
-    //                 data_at_node(data.as_slice(), pub_inputs.challenge).unwrap(),
-    //             )
-    //             .unwrap()
-    //             .into(),
-    //             &tree,
-    //         );
+             let priv_inputs = merklepor::PrivateInputs::<H>::new(
+                 bytes_into_fr::<Bls12>(
+                     data_at_node(data.as_slice(), pub_inputs.challenge).unwrap(),
+                 )
+                 .unwrap()
+                 .into(),
+                 &tree,
+             );
 
-    //         // create a non circuit proof
-    //         let proof = merklepor::MerklePoR::<PedersenHasher>::prove(
-    //             &pub_params,
-    //             &pub_inputs,
-    //             &priv_inputs,
-    //         )
-    //         .expect("proving failed");
+             // create a non circuit proof
+             let proof = merklepor::MerklePoR::<H>::prove(
+                 &pub_params,
+                 &pub_inputs,
+                 &priv_inputs,
+             )
+             .expect("proving failed");
 
-    //         // make sure it verifies
-    //         let is_valid =
-    //             merklepor::MerklePoR::<PedersenHasher>::verify(&pub_params, &pub_inputs, &proof)
-    //                 .expect("verification failed");
-    //         assert!(is_valid, "failed to verify merklepor proof");
+             // make sure it verifies
+             let is_valid =
+                 merklepor::MerklePoR::<H>::verify(&pub_params, &pub_inputs, &proof)
+                     .expect("verification failed");
+             assert!(is_valid, "failed to verify merklepor proof");
 
-    //         // -- Circuit
+             // -- Circuit
 
-    //         let mut cs = TestConstraintSystem::<Bls12>::new();
+             let mut cs = TestConstraintSystem::<Bls12>::new();
+             let por = PoRCircuit::<H> {
+                 params: &PEDERSEN_PARAMS,
+                 value: Some(proof.data.into()),
+                 auth_path: proof.proof.as_options(),
+                 root: Root::Val(Some(tree.root().into())),
+                 private: true,
+                 _h: Default::default(),
+             };
 
-    //         let por = PoRCircuit::<Bls12, PedersenHasher> {
-    //             params,
-    //             value: Some(proof.data.into()),
-    //             auth_path: proof.proof.as_options(),
-    //             root: Root::Val(Some(tree.root().into())),
-    //             private: true,
-    //             _h: Default::default(),
-    //         };
+             por.synthesize(&mut cs).expect("circuit synthesis failed");
+             assert!(cs.is_satisfied(), "constraints not satisfied");
 
-    //         por.synthesize(&mut cs).expect("circuit synthesis failed");
-    //         assert!(cs.is_satisfied(), "constraints not satisfied");
+             assert_eq!(cs.num_inputs(), 2, "wrong number of inputs");
+             // Number of constraints in Zexe is different
+//             assert_eq!(cs.num_constraints(), 4148, "wrong number of constraints");
 
-    //         assert_eq!(cs.num_inputs(), 2, "wrong number of inputs");
-    //         assert_eq!(cs.num_constraints(), 4148, "wrong number of constraints");
+             let auth_path_bits: Vec<bool> = proof
+                 .proof
+                 .path()
+                 .iter()
+                 .map(|(_, is_right)| *is_right)
+                 .collect();
+             let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
 
-    //         let auth_path_bits: Vec<bool> = proof
-    //             .proof
-    //             .path()
-    //             .iter()
-    //             .map(|(_, is_right)| *is_right)
-    //             .collect();
-    //         let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
+             let mut expected_inputs = Vec::new();
+             expected_inputs.extend(packed_auth_path);
 
-    //         let mut expected_inputs = Vec::new();
-    //         expected_inputs.extend(packed_auth_path);
+             assert_eq!(cs.get_input(0, "ONE"), Fr::one(), "wrong input 0");
 
-    //         assert_eq!(cs.get_input(0, "ONE"), Fr::one(), "wrong input 0");
+             assert_eq!(
+                 cs.get_input(1, "path/input 0/alloc"),
+                 expected_inputs[0],
+                 "wrong packed_auth_path"
+             );
 
-    //         assert_eq!(
-    //             cs.get_input(1, "path/input 0"),
-    //             expected_inputs[0],
-    //             "wrong packed_auth_path"
-    //         );
-
-    //         assert!(cs.is_satisfied(), "constraints are not all satisfied");
-    //         assert!(cs.verify(&expected_inputs), "failed to verify inputs");
-    //     }
-    // }
+             assert!(cs.is_satisfied(), "constraints are not all satisfied");
+             assert!(cs.verify(&expected_inputs), "failed to verify inputs");
+         }
+     }
 }

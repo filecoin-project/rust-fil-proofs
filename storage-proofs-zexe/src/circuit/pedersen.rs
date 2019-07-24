@@ -117,6 +117,9 @@ pub fn pedersen_compression<CS: ConstraintSystem<Bls12>>(
     let h = pedersen_compression_num(cs.ns(|| "compression"), bits, params)?;
     let mut out = h.to_bits(cs.ns(|| "h into bits"))?;
 
+    // to_bits convert the value to a big-endian number, we need it to be little-endian
+    out.reverse();
+
     // Needs padding, because x does not always translate to exactly 256 bits
     while out.len() < PEDERSEN_BLOCK_SIZE {
         out.push(Boolean::Constant(false));

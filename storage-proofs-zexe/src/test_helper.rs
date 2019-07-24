@@ -173,7 +173,7 @@ pub fn random_merkle_path_with_value<R: Rng>(
                     rhs.into_iter()
                         .take(<Fr as PrimeField>::Params::MODULUS_BITS as usize),
                 ),
-        )
+        ).x
     }
 
     (auth_path, cur)
