@@ -8,13 +8,13 @@ use ff::PrimeField;
 use memmap::MmapOptions;
 use paired::bls12_381::Bls12;
 use paired::Engine;
-use tempfile::tempfile;
 
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::vdf_post::VDFPostCompound;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
+use storage_proofs::error::Error;
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
 use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::hasher::{Domain, Hasher};
@@ -28,6 +28,7 @@ use storage_proofs::porep::{replica_id, PoRep, Tau};
 use storage_proofs::proof::NoRequirements;
 use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
 use storage_proofs::{vdf_post, vdf_sloth};
+use tempfile::tempfile;
 
 use crate::caches::{
     get_post_params, get_post_verifying_key, get_zigzag_params, get_zigzag_verifying_key,
@@ -38,7 +39,6 @@ use crate::constants::{
     SINGLE_PARTITION_PROOF_LEN,
 };
 use crate::error;
-use crate::error::ExpectWithBacktrace;
 use crate::file_cleanup::FileCleanup;
 use crate::fr32::{write_padded, write_unpadded};
 use crate::parameters::{post_setup_params, public_params, setup_params};
@@ -325,9 +325,20 @@ pub fn verify_seal(
     let sector_id = pad_safe_fr(sector_id_in);
     let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
 
-    let comm_r = bytes_into_fr::<Bls12>(&comm_r)?;
-    let comm_d = bytes_into_fr::<Bls12>(&comm_d)?;
-    let comm_r_star = bytes_into_fr::<Bls12>(&comm_r_star)?;
+    let comm_r = bytes_into_fr::<Bls12>(&comm_r).map_err(|err| match err {
+        Error::BadFrBytes => format_err!("could not transform comm_r into Fr32: {:?}", err),
+        _ => err.into(),
+    })?;
+
+    let comm_d = bytes_into_fr::<Bls12>(&comm_d).map_err(|err| match err {
+        Error::BadFrBytes => format_err!("could not transform comm_d into Fr32: {:?}", err),
+        _ => err.into(),
+    })?;
+
+    let comm_r_star = bytes_into_fr::<Bls12>(&comm_r_star).map_err(|err| match err {
+        Error::BadFrBytes => format_err!("could not transform comm_r_star into Fr32: {:?}", err),
+        _ => err.into(),
+    })?;
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: &setup_params(
@@ -583,7 +594,14 @@ fn verify_post_fixed_sectors_count(
     let mut commitments: Vec<PedersenDomain> = vec![];
 
     for comm_r in fixed.comm_rs.iter() {
-        commitments.push(PedersenDomain(bytes_into_fr::<Bls12>(comm_r)?.into_repr()));
+        let commitment = bytes_into_fr::<Bls12>(comm_r).map_err(|err| match err {
+            Error::BadFrBytes => {
+                format_err!("{}: could not transform comm_r={:?} into Fr32", err, comm_r)
+            }
+            _ => err.into(),
+        })?;
+
+        commitments.push(PedersenDomain(commitment.into_repr()));
     }
 
     let public_inputs = vdf_post::PublicInputs::<PedersenDomain> {
@@ -641,11 +659,14 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
 
 #[cfg(test)]
 mod tests {
-    use crate::constants::{POST_SECTORS_COUNT, TEST_SECTOR_SIZE};
-    use crate::types::SectorSize;
     use rand::Rng;
-    use storage_proofs::util::NODE_SIZE;
     use tempfile::NamedTempFile;
+
+    use storage_proofs::util::NODE_SIZE;
+
+    use crate::constants::{POST_SECTORS_COUNT, TEST_SECTOR_SIZE};
+    use crate::error::ExpectWithBacktrace;
+    use crate::types::SectorSize;
 
     use super::*;
 
@@ -759,46 +780,58 @@ mod tests {
     }
 
     #[test]
-    fn test_verify_post_fixed_sectors_count() -> Result<(), failure::Error> {
-        // TODO: test out a happy path
+    fn test_verify_seal_fr32_validation() {
+        //        verify_seal() // comm_r, comm_d, comm_r_star
+        //        let not_convertable_to_fr_bytes = [255; 32];
+        //        let out = bytes_into_fr::<Bls12>(&not_convertable_to_fr_bytes);
+        //        assert!(out.is_err(), "tripwire");
+        //
+        //        let result = verify_post(
+        //            PoStConfig(SectorSize(TEST_SECTOR_SIZE), PoStProofPartitions(2)),
+        //            vec![not_convertable_to_fr_bytes],
+        //            [0; 32],
+        //            vec![[0; POST_SECTORS_COUNT * SINGLE_PARTITION_PROOF_LEN].to_vec()],
+        //            vec![],
+        //        );
+        //
+        //        if let Err(err) = result {
+        //            let needle = "could not transform comm_r into Fr32";
+        //            let haystack = format!("{}", err);
+        //
+        //            assert!(
+        //                haystack.contains("comm_r"),
+        //                format!("\"{}\" did not contain \"{}\"", haystack, needle)
+        //            );
+        //        } else {
+        //            panic!("should have failed comm_r to Fr32 conversion");
+        //        }
+    }
 
-        let post_config = PoStConfig(
-            SectorSize(TEST_SECTOR_SIZE),
-            PoStProofPartitions(POST_SECTORS_COUNT as u8),
+    #[test]
+    fn test_verify_post_fr32_validation() {
+        let not_convertable_to_fr_bytes = [255; 32];
+        let out = bytes_into_fr::<Bls12>(&not_convertable_to_fr_bytes);
+        assert!(out.is_err(), "tripwire");
+
+        let result = verify_post(
+            PoStConfig(SectorSize(TEST_SECTOR_SIZE), PoStProofPartitions(2)),
+            vec![not_convertable_to_fr_bytes],
+            [0; 32],
+            vec![[0; POST_SECTORS_COUNT * SINGLE_PARTITION_PROOF_LEN].to_vec()],
+            vec![],
         );
-        let challenge_seed = [0; 32];
 
-        let comm_r = [
-            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 115,
-        ];
+        if let Err(err) = result {
+            let needle = "could not transform comm_r into Fr32";
+            let haystack = format!("{}", err);
 
-        let result = verify_post_fixed_sectors_count(&VerifyPoStFixedSectorsCountInput {
-            proof: vec![0; SINGLE_PARTITION_PROOF_LEN * POST_SECTORS_COUNT],
-            challenge_seed,
-            comm_rs: [comm_r, [0; 32]],
-            faults: vec![],
-            post_config,
-        });
-
-        assert!(result.is_err(), "expected a BadFrBytes error");
-
-        let comm_r = [
-            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 237, 115,
-        ];
-
-        let result = verify_post_fixed_sectors_count(&VerifyPoStFixedSectorsCountInput {
-            proof: vec![0; SINGLE_PARTITION_PROOF_LEN * POST_SECTORS_COUNT],
-            challenge_seed,
-            comm_rs: [comm_r, [0; 32]],
-            faults: vec![],
-            post_config,
-        });
-
-        assert!(result.is_err(), "expected a BadFrBytes error");
-
-        Ok(())
+            assert!(
+                haystack.contains("comm_r"),
+                format!("\"{}\" did not contain \"{}\"", haystack, needle)
+            );
+        } else {
+            panic!("should have failed comm_r to Fr32 conversion");
+        }
     }
 
     #[test]
