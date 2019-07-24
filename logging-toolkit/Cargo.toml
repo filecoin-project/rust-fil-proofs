@@ -1,7 +1,7 @@
 [package]
 name = "logging-toolkit"
 description = "Logging utilities"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["laser <l@s3r.com>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/filecoin-project/rust-fil-proofs"
