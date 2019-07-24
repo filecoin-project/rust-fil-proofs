@@ -468,7 +468,7 @@ mod tests {
         }
     }
 
-//     #[ignore] // Slow test – run only when compiled for release.
+     #[ignore] // Slow test – run only when compiled for release.
      #[test]
      fn test_private_por_compound_pedersen() {
          private_por_test_compound::<PedersenHasher>();
