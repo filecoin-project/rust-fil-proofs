@@ -83,7 +83,6 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let graph = &self.public_params.graph;
         let layer_challenges = &self.public_params.layer_challenges;
-        let sloth_iter = self.public_params.sloth_iter;
 
         assert_eq!(layer_challenges.layers(), self.layers.len());
 
@@ -172,7 +171,6 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
             // Construct the public parameters for DrgPoRep.
             let porep_params = drgporep::PublicParams::new(
                 graph.clone(), // TODO: avoid
-                sloth_iter,
                 true,
                 layer_challenges.challenges_for_layer(l),
             );
@@ -290,7 +288,6 @@ impl<'a, H: 'static + Hasher>
         for layer in 0..layers {
             let drgporep_pub_params = drgporep::PublicParams::new(
                 current_graph.take().unwrap(),
-                pub_params.sloth_iter,
                 true,
                 pub_params.layer_challenges.challenges_for_layer(layer),
             );
@@ -394,7 +391,6 @@ mod tests {
         let expansion_degree = 2;
         let num_layers = 2;
         let layer_challenges = LayerChallenges::new_fixed(num_layers, 1);
-        let sloth_iter = 1;
 
         let n = nodes; // FIXME: Consolidate variable names.
 
@@ -416,7 +412,6 @@ mod tests {
                 expansion_degree,
                 seed: new_seed(),
             },
-            sloth_iter,
             layer_challenges: layer_challenges.clone(),
         };
 
@@ -528,7 +523,6 @@ mod tests {
     //     let base_degree = 2;
     //     let expansion_degree = 2;
     //     let layer_challenges = LayerChallenges::new_fixed(num_layers, 1);
-    //     let sloth_iter = 2;
     //     let challenge = 1;
     //     let replica_id: Fr = rng.gen();
 
@@ -553,7 +547,7 @@ mod tests {
     //         })
     //         .collect();
     //     let public_params =
-    //         layered_drgporep::PublicParams::new(graph, sloth_iter, layer_challenges);
+    //         layered_drgporep::PublicParams::new(graph, layer_challenges);
 
     //     ZigZagCircuit::<Bls12, PedersenHasher>::synthesize(
     //         cs.namespace(|| "zigzag_drgporep"),
@@ -592,7 +586,6 @@ mod tests {
         let expansion_degree = 1;
         let num_layers = 2;
         let layer_challenges = LayerChallenges::new_tapered(num_layers, 3, num_layers, 1.0 / 3.0);
-        let sloth_iter = 1;
         let partition_count = 1;
 
         let n = nodes; // FIXME: Consolidate variable names.
@@ -618,7 +611,6 @@ mod tests {
                     expansion_degree,
                     seed: new_seed(),
                 },
-                sloth_iter,
                 layer_challenges: layer_challenges.clone(),
             },
             partitions: Some(partition_count),

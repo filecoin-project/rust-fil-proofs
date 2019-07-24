@@ -12,7 +12,6 @@ use storage_proofs::test_helper::fake_drgpoprep_proof;
 
 struct DrgPoRepExample<'a, E: JubjubEngine> {
     params: &'a E::Params,
-    sloth_iter: usize,
     replica_nodes: Vec<Option<E::Fr>>,
     replica_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
     replica_root: Root<E>,
@@ -30,7 +29,6 @@ impl<'a> Circuit<Bls12> for DrgPoRepExample<'a, Bls12> {
         circuit::drgporep::DrgPoRepCircuit::<_, PedersenHasher>::synthesize(
             cs.namespace(|| "drgporep"),
             self.params,
-            self.sloth_iter,
             self.replica_nodes,
             self.replica_nodes_paths,
             self.replica_root,
@@ -49,8 +47,6 @@ impl<'a> Circuit<Bls12> for DrgPoRepExample<'a, Bls12> {
 #[derive(Default)]
 struct DrgPoRepApp {}
 
-const SLOTH_ROUNDS: usize = 1;
-
 impl<'a> Example<'a, DrgPoRepExample<'a, Bls12>> for DrgPoRepApp {
     fn name() -> String {
         "DrgPoRep".to_string()
@@ -63,12 +59,10 @@ impl<'a> Example<'a, DrgPoRepExample<'a, Bls12>> for DrgPoRepApp {
         tree_depth: usize,
         challenge_count: usize,
         m: usize,
-        sloth_iter: usize,
     ) -> Parameters<Bls12> {
         generate_random_parameters::<Bls12, _, _>(
             DrgPoRepExample {
                 params: jubjub_params,
-                sloth_iter,
                 replica_nodes: vec![None; challenge_count],
                 replica_nodes_paths: vec![vec![None; tree_depth]; challenge_count],
                 replica_root: Root::Val(None),
@@ -97,14 +91,12 @@ impl<'a> Example<'a, DrgPoRepExample<'a, Bls12>> for DrgPoRepApp {
         challenge_count: usize,
         _leaves: usize,
         m: usize,
-        sloth_iter: usize,
     ) -> DrgPoRepExample<'a, Bls12> {
-        let f = fake_drgpoprep_proof(rng, tree_depth, m, SLOTH_ROUNDS, challenge_count);
+        let f = fake_drgpoprep_proof(rng, tree_depth, m, challenge_count);
 
         // create an instance of our circut (with the witness)
         DrgPoRepExample {
             params: engine_params,
-            sloth_iter,
             replica_nodes: f.replica_nodes.into_iter().map(|r| Some(r)).collect(),
             replica_nodes_paths: f.replica_nodes_paths,
             replica_root: Root::Val(Some(f.replica_root)),

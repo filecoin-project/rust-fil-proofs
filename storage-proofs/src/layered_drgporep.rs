@@ -113,7 +113,6 @@ impl LayerChallenges {
 #[derive(Debug)]
 pub struct SetupParams {
     pub drg: drgporep::DrgParams,
-    pub sloth_iter: usize,
     pub layer_challenges: LayerChallenges,
 }
 
@@ -124,7 +123,6 @@ where
     G: Graph<H> + ParameterSetMetadata,
 {
     pub graph: G,
-    pub sloth_iter: usize,
     pub layer_challenges: LayerChallenges,
     _h: PhantomData<H>,
 }
@@ -155,10 +153,9 @@ where
     H: Hasher,
     G: Graph<H> + ParameterSetMetadata,
 {
-    pub fn new(graph: G, sloth_iter: usize, layer_challenges: LayerChallenges) -> Self {
+    pub fn new(graph: G, layer_challenges: LayerChallenges) -> Self {
         PublicParams {
             graph,
-            sloth_iter,
             layer_challenges,
             _h: PhantomData,
         }
@@ -172,9 +169,8 @@ where
 {
     fn identifier(&self) -> String {
         format!(
-            "layered_drgporep::PublicParams{{ graph: {}, sloth: {}, challenges: {:?} }}",
+            "layered_drgporep::PublicParams{{ graph: {}, challenges: {:?} }}",
             self.graph.identifier(),
-            self.sloth_iter,
             self.layer_challenges,
         )
     }
@@ -190,11 +186,7 @@ where
     G: Graph<H> + ParameterSetMetadata,
 {
     fn from(other: &PublicParams<H, G>) -> PublicParams<H, G> {
-        PublicParams::new(
-            other.graph.clone(),
-            other.sloth_iter,
-            other.layer_challenges.clone(),
-        )
+        PublicParams::new(other.graph.clone(), other.layer_challenges.clone())
     }
 }
 
@@ -297,7 +289,6 @@ pub trait Layers {
     #[allow(clippy::too_many_arguments)]
     fn prove_layers<'a>(
         graph: &Self::Graph,
-        sloth_iter: usize,
         pub_inputs: &PublicInputs<<Self::Hasher as Hasher>::Domain>,
         tau: &[PorepTau<Self::Hasher>],
         aux: &'a [Tree<Self::Hasher>],
@@ -325,7 +316,6 @@ pub trait Layers {
 
                 let pp = drgporep::PublicParams::new(
                     current_graph,
-                    sloth_iter,
                     true,
                     layer_challenges.challenges_for_layer(layer),
                 );
@@ -362,7 +352,6 @@ pub trait Layers {
 
     fn extract_and_invert_transform_layers<'a>(
         graph: &Self::Graph,
-        sloth_iter: usize,
         layer_challenges: &LayerChallenges,
         replica_id: &<Self::Hasher as Hasher>::Domain,
         data: &'a mut [u8],
@@ -374,7 +363,6 @@ pub trait Layers {
             let inverted = Self::invert_transform(&current_graph);
             let pp = drgporep::PublicParams::new(
                 inverted.clone(),
-                sloth_iter,
                 true,
                 layer_challenges.challenges_for_layer(layer),
             );
@@ -392,7 +380,6 @@ pub trait Layers {
 
     fn transform_and_replicate_layers(
         graph: &Self::Graph,
-        sloth_iter: usize,
         layer_challenges: &LayerChallenges,
         replica_id: &<Self::Hasher as Hasher>::Domain,
         data: &mut [u8],
@@ -418,7 +405,7 @@ pub trait Layers {
 
                 if layer < layers {
                     info!("encoding (layer: {})", layer);
-                    vde::encode(&current_graph, sloth_iter, replica_id, data)
+                    vde::encode(&current_graph, replica_id, data)
                         .expect("encoding failed in thread");
                 }
 
@@ -499,7 +486,7 @@ pub trait Layers {
 
                         if layer < layers {
                             info!("encoding (layer: {})", layer);
-                            vde::encode(&current_graph, sloth_iter, replica_id, data)
+                            vde::encode(&current_graph, replica_id, data)
                                 .expect("encoding failed in thread");
                         }
                         Self::transform(&current_graph)
@@ -605,11 +592,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
             sp.drg.seed,
         );
 
-        Ok(PublicParams::new(
-            graph,
-            sp.sloth_iter,
-            sp.layer_challenges.clone(),
-        ))
+        Ok(PublicParams::new(graph, sp.layer_challenges.clone()))
     }
 
     fn prove<'b>(
@@ -636,7 +619,6 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
 
         let proofs = Self::prove_layers(
             &pub_params.graph,
-            pub_params.sloth_iter,
             pub_inputs,
             &priv_inputs.tau,
             &priv_inputs.aux,
@@ -687,7 +669,6 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
 
                 let pp = drgporep::PublicParams::new(
                     current_graph,
-                    pub_params.sloth_iter,
                     true,
                     pub_params.layer_challenges.challenges_for_layer(layer),
                 );
@@ -776,7 +757,6 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let (taus, auxs) = Self::transform_and_replicate_layers(
             &pp.graph,
-            pp.sloth_iter,
             &pp.layer_challenges,
             replica_id,
             data,
@@ -800,7 +780,6 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
 
         Self::extract_and_invert_transform_layers(
             &pp.graph,
-            pp.sloth_iter,
             &pp.layer_challenges,
             replica_id,
             &mut data,

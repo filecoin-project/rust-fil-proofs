@@ -79,7 +79,6 @@ mod tests {
 
     fn test_extract_all<H: 'static + Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-        let sloth_iter = 1;
         let replica_id: H::Domain = rng.gen();
         let data = vec![2u8; 32 * 3];
         let challenges = LayerChallenges::new_fixed(DEFAULT_ZIGZAG_LAYERS, 5);
@@ -94,7 +93,6 @@ mod tests {
                 expansion_degree: 8,
                 seed: new_seed(),
             },
-            sloth_iter,
             layer_challenges: challenges.clone(),
         };
 
@@ -108,7 +106,7 @@ mod tests {
         ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None)
             .expect("replication failed");
 
-        let transformed_params = PublicParams::new(pp.graph, pp.sloth_iter, challenges.clone());
+        let transformed_params = PublicParams::new(pp.graph, challenges.clone());
 
         assert_ne!(data, data_copy);
 
@@ -143,7 +141,6 @@ mod tests {
 
         let degree = 1 + i;
         let expansion_degree = i;
-        let sloth_iter = 1;
         let replica_id: H::Domain = rng.gen();
         let data: Vec<u8> = (0..n)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
@@ -159,7 +156,6 @@ mod tests {
                 expansion_degree,
                 seed: new_seed(),
             },
-            sloth_iter,
             layer_challenges: challenges.clone(),
         };
 
@@ -223,7 +219,6 @@ mod tests {
         let degree = 5;
         let expansion_degree = 8;
         let nodes = 1024 * 1024 * 32 * 8; // This corresponds to 8GiB sectors (32-byte nodes)
-        let sloth_iter = 0;
         let layer_challenges = LayerChallenges::new_tapered(10, 333, 7, 0.3);
         let sp = SetupParams {
             drg: drgporep::DrgParams {
@@ -232,7 +227,6 @@ mod tests {
                 expansion_degree,
                 seed: new_seed(),
             },
-            sloth_iter,
             layer_challenges: layer_challenges.clone(),
         };
 

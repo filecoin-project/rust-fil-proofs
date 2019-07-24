@@ -41,7 +41,6 @@ pub fn fake_drgpoprep_proof<R: Rng>(
     rng: &mut R,
     tree_depth: usize,
     m: usize,
-    sloth_rounds: usize,
     challenge_count: usize,
 ) -> FakeDrgParams {
     let replica_id: Fr = rng.gen();
@@ -71,7 +70,8 @@ pub fn fake_drgpoprep_proof<R: Rng>(
 
     let key = crypto::kdf::kdf(ciphertexts.as_slice(), m);
     // run sloth(key, node)
-    let replica_node: Fr = crypto::sloth::encode::<Bls12>(&key, &data_node, sloth_rounds);
+
+    let replica_node: Fr = crypto::sloth::encode::<Bls12>(&key, &data_node);
     // run fake merkle with only the first 1+m real leaves
 
     let mut leaves = replica_parents.clone();

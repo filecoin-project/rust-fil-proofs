@@ -70,7 +70,7 @@ pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
     unsafe { MmapOptions::new().map_mut(&tmpfile).unwrap() }
 }
 
-fn do_the_work<H: 'static>(data_size: usize, m: usize, expansion_degree: usize, sloth_iter: usize)
+fn do_the_work<H: 'static>(data_size: usize, m: usize, expansion_degree: usize)
 where
     H: Hasher,
 {
@@ -79,7 +79,6 @@ where
     info!("data size: {}", prettyb(data_size));
     info!("m: {}", m);
     info!("expansion_degree: {}", expansion_degree);
-    info!("sloth: {}", sloth_iter);
     info!("generating fake data");
 
     let nodes = data_size / 32;
@@ -95,7 +94,6 @@ where
             expansion_degree,
             seed: new_seed(),
         },
-        sloth_iter,
         layer_challenges: LayerChallenges::new_fixed(1, 1),
     };
 
@@ -109,7 +107,7 @@ where
     info!("encoding");
 
     start_profile("encode");
-    vde::encode(&pp.graph, pp.sloth_iter, &replica_id, &mut data).unwrap();
+    vde::encode(&pp.graph, &replica_id, &mut data).unwrap();
     stop_profile();
 
     let encoding_time = start.elapsed();
@@ -149,13 +147,6 @@ fn main() {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("sloth")
-                .help("The number of sloth iterations")
-                .long("sloth")
-                .default_value("0")
-                .takes_value(true),
-        )
-        .arg(
             Arg::with_name("layers")
                 .long("layers")
                 .help("How many layers to use")
@@ -167,7 +158,6 @@ fn main() {
     let data_size = value_t!(matches, "size", usize).unwrap() * 1024;
     let m = value_t!(matches, "m", usize).unwrap();
     let expansion_degree = value_t!(matches, "exp", usize).unwrap();
-    let sloth_iter = value_t!(matches, "sloth", usize).unwrap();
 
-    do_the_work::<PedersenHasher>(data_size, m, expansion_degree, sloth_iter);
+    do_the_work::<PedersenHasher>(data_size, m, expansion_degree);
 }

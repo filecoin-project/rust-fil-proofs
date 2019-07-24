@@ -142,7 +142,6 @@ fn do_the_work<H: 'static>(
     data_size: usize,
     m: usize,
     expansion_degree: usize,
-    sloth_iter: usize,
     layer_challenges: LayerChallenges,
     partitions: usize,
     circuit: bool,
@@ -160,7 +159,6 @@ fn do_the_work<H: 'static>(
     info!("data size: {}", prettyb(data_size));
     info!("m: {}", m);
     info!("expansion_degree: {}", expansion_degree);
-    info!("sloth: {}", sloth_iter);
     info!("layer_challenges: {:?}", layer_challenges);
     info!("all_challenges: {:?}", layer_challenges.all_challenges());
     info!(
@@ -183,7 +181,6 @@ fn do_the_work<H: 'static>(
             expansion_degree,
             seed: new_seed(),
         },
-        sloth_iter,
         layer_challenges: layer_challenges.clone(),
     };
 
@@ -417,13 +414,6 @@ fn main() {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("sloth")
-                .help("The number of sloth iterations")
-                .long("sloth")
-                .default_value("0")
-                .takes_value(true),
-        )
-        .arg(
             Arg::with_name("challenges")
                 .long("challenges")
                 .help("How many challenges to execute")
@@ -506,7 +496,6 @@ fn main() {
     let data_size = value_t!(matches, "size", usize).unwrap() * 1024;
     let m = value_t!(matches, "m", usize).unwrap();
     let expansion_degree = value_t!(matches, "exp", usize).unwrap();
-    let sloth_iter = value_t!(matches, "sloth", usize).unwrap();
     let challenge_count = value_t!(matches, "challenges", usize).unwrap();
     let hasher = value_t!(matches, "hasher", String).unwrap();
     let layers = value_t!(matches, "layers", usize).unwrap();
@@ -534,7 +523,6 @@ fn main() {
                 data_size,
                 m,
                 expansion_degree,
-                sloth_iter,
                 challenges,
                 partitions,
                 circuit,
@@ -551,7 +539,6 @@ fn main() {
                 data_size,
                 m,
                 expansion_degree,
-                sloth_iter,
                 challenges,
                 partitions,
                 circuit,
@@ -568,7 +555,6 @@ fn main() {
                 data_size,
                 m,
                 expansion_degree,
-                sloth_iter,
                 challenges,
                 partitions,
                 circuit,

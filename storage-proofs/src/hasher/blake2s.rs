@@ -38,17 +38,17 @@ impl Hasher for Blake2sHasher {
         <Self::Function as HashFunction<Self::Domain>>::hash(data)
     }
 
-    fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain, rounds: usize) -> Self::Domain {
+    fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain) -> Self::Domain {
         // TODO: validate this is how sloth should work in this case
         let k = (*key).into();
         let c = (*ciphertext).into();
 
-        sloth::encode::<Bls12>(&k, &c, rounds).into()
+        sloth::encode::<Bls12>(&k, &c).into()
     }
 
-    fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain, rounds: usize) -> Self::Domain {
+    fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain) -> Self::Domain {
         // TODO: validate this is how sloth should work in this case
-        sloth::decode::<Bls12>(&(*key).into(), &(*ciphertext).into(), rounds).into()
+        sloth::decode::<Bls12>(&(*key).into(), &(*ciphertext).into()).into()
     }
 }
 
