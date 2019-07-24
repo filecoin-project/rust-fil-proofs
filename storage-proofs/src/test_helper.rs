@@ -146,7 +146,7 @@ pub fn random_merkle_path_with_value<R: Rng>(
         *value
     };
 
-    for (i, p) in auth_path.clone().into_iter().enumerate() {
+    for p in auth_path.clone().into_iter() {
         let (uncle, is_right) = p.unwrap();
         let mut lhs = cur;
         let mut rhs = uncle;
@@ -162,7 +162,7 @@ pub fn random_merkle_path_with_value<R: Rng>(
         rhs.reverse();
 
         cur = pedersen_hash::pedersen_hash::<Bls12, _>(
-            pedersen_hash::Personalization::MerkleTree(i + offset),
+            pedersen_hash::Personalization::None,
             lhs.into_iter()
                 .take(Fr::NUM_BITS as usize)
                 .chain(rhs.into_iter().take(Fr::NUM_BITS as usize)),

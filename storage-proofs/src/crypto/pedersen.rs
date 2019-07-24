@@ -15,7 +15,7 @@ pub const PEDERSEN_BLOCK_BYTES: usize = PEDERSEN_BLOCK_SIZE / 8;
 
 pub fn pedersen(data: &[u8]) -> Fr {
     pedersen_hash::<Bls12, _>(
-        Personalization::NoteCommitment,
+        Personalization::None,
         BitVec::<bitvec::LittleEndian, u8>::from(data)
             .iter()
             .take(data.len() * 8),
@@ -57,7 +57,7 @@ pub fn pedersen_md_no_padding(data: &[u8]) -> Fr {
 pub fn pedersen_compression(bytes: &mut Vec<u8>) {
     let bits = BitVec::<bitvec::LittleEndian, u8>::from(&bytes[..]);
     let (x, _) = pedersen_hash::<Bls12, _>(
-        Personalization::NoteCommitment,
+        Personalization::None,
         bits.iter().take(bytes.len() * 8),
         &JJ_PARAMS,
     )

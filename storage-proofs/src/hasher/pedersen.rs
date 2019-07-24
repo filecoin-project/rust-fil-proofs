@@ -196,21 +196,18 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         cs: CS,
         left: &[boolean::Boolean],
         right: &[boolean::Boolean],
-        height: usize,
+        _height: usize,
         params: &E::Params,
     ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError> {
         let mut preimage: Vec<boolean::Boolean> = vec![];
         preimage.extend_from_slice(left);
         preimage.extend_from_slice(right);
 
-        Ok(pedersen_hash_circuit::pedersen_hash(
-            cs,
-            Personalization::MerkleTree(height),
-            &preimage,
-            params,
-        )?
-        .get_x()
-        .clone())
+        Ok(
+            pedersen_hash_circuit::pedersen_hash(cs, Personalization::None, &preimage, params)?
+                .get_x()
+                .clone(),
+        )
     }
 
     fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
@@ -241,18 +238,14 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
         &mut self,
         left: PedersenDomain,
         right: PedersenDomain,
-        height: usize,
+        _height: usize,
     ) -> PedersenDomain {
         let node_bits = NodeBits::new(&(left.0).0[..], &(right.0).0[..]);
 
-        pedersen_hash::<Bls12, _>(
-            Personalization::MerkleTree(height),
-            node_bits,
-            &pedersen::JJ_PARAMS,
-        )
-        .into_xy()
-        .0
-        .into()
+        pedersen_hash::<Bls12, _>(Personalization::None, node_bits, &pedersen::JJ_PARAMS)
+            .into_xy()
+            .0
+            .into()
     }
 }
 

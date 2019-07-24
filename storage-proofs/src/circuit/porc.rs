@@ -223,7 +223,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoRCCircuit<'a, E> {
                 // Compute the new subtree value
                 cur = pedersen_hash::pedersen_hash(
                     cs.namespace(|| "computation of pedersen hash"),
-                    pedersen_hash::Personalization::MerkleTree(i),
+                    pedersen_hash::Personalization::None,
                     &preimage,
                     params,
                 )?
@@ -380,7 +380,7 @@ mod tests {
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
         assert_eq!(cs.num_inputs(), 1, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 13824, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 13744, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
     }
 
