@@ -1,6 +1,6 @@
 [package]
-name = "storage-proofs"
-description = "Implementations of Proofs of Storage."
+name = "storage-proofs-zexe"
+description = "Implementations of Proofs of Storage on Zexe."
 version = "0.2.0"
 authors = ["dignifiedquire <dignifiedquire@gmail.com>", "laser <l@s3r.com>", "porcuquine <porcuquine@users.noreply.github.com>"]
 license = "MIT OR Apache-2.0"
@@ -38,14 +38,10 @@ base64 = "0.10.0"
 blake2b_simd = "0.5"
 blake2s_simd = "0.5"
 toml = "0.5"
-ff = "0.4.0"
-bellperson = "0.2"
-paired = { version = "0.15", features = ["serde"] }
-fil-sapling-crypto = "0.1"
-zexe-dpc = { path = "../../zexe/dpc", package = "dpc" }
-zexe-snark = { path = "../../zexe/snark", package = "snark" }
-zexe-algebra = { path = "../../zexe/algebra", package = "algebra" }
-zexe-gadgets = { path = "../../zexe/snark-gadgets", package = "snark-gadgets"}
+dpc = { path = "../../zexe/dpc" }
+snark = { path = "../../zexe/snark" }
+algebra = { path = "../../zexe/algebra" }
+snark-gadgets = { path = "../../zexe/snark-gadgets" }
 
 [features]
 default = []
@@ -59,42 +55,3 @@ criterion = "0.2"
 serde_json = "1.0"
 pretty_assertions = "0.6.1"
 
-[[bench]]
-name = "pedersen"
-harness = false
-
-[[bench]]
-name = "sha256"
-harness = false
-
-[[bench]]
-name = "blake2s"
-harness = false
-
-[[bench]]
-name = "drgraph"
-harness = false
-
-[[bench]]
-name = "sloth"
-harness = false
-
-[[bench]]
-name = "encode"
-harness = false
-
-[[bench]]
-name = "parents"
-harness = false
-
-[[bench]]
-name = "xor"
-harness = false
-
-[[bench]]
-name = "fr"
-harness = false
-
-[[bench]]
-name = "merkle"
-harness = false
