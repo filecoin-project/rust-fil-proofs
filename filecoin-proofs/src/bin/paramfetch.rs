@@ -36,6 +36,8 @@ impl<R: Read> Read for FetchProgress<R> {
 }
 
 pub fn main() {
+    pretty_env_logger::init();
+
     let matches = App::new("paramfetch")
         .version("1.1")
         .about(
@@ -46,7 +48,7 @@ Defaults to '{}'
 
 Use -g,--gateway to specify ipfs gateway.
 Defaults to 'https://ipfs.io'
-", 
+",
                 PARAMETER_CACHE_ENV_VAR,
                 PARAMETER_CACHE_DIR
             )[..],

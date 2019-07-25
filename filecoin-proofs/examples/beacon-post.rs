@@ -3,7 +3,7 @@ extern crate clap;
 #[cfg(feature = "cpu-profile")]
 extern crate gperftools;
 #[macro_use]
-extern crate slog;
+extern crate log;
 
 use clap::{App, Arg};
 #[cfg(feature = "cpu-profile")]
@@ -12,7 +12,6 @@ use paired::bls12_381::Bls12;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::time::{Duration, Instant};
 
-use filecoin_proofs::singletons::FCP_LOG;
 use storage_proofs::beacon_post::*;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
@@ -56,14 +55,14 @@ fn do_the_work(
 ) {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-    info!(FCP_LOG, "sector size: {}", prettyb(size); "target" => "config");
-    info!(FCP_LOG, "vdf: {}", vdf; "target" => "config");
-    info!(FCP_LOG, "challenge_count: {}", challenge_count; "target" => "config");
-    info!(FCP_LOG, "post_epochs: {}", post_epochs; "target" => "config");
-    info!(FCP_LOG, "post_periods_count: {:?}", post_periods_count; "target" => "config");
-    info!(FCP_LOG, "sectors_count: {:?}", sectors_count; "target" => "config");
+    info!("sector size: {}", prettyb(size));
+    info!("vdf: {}", vdf);
+    info!("challenge_count: {}", challenge_count);
+    info!("post_epochs: {}", post_epochs);
+    info!("post_periods_count: {:?}", post_periods_count);
+    info!("sectors_count: {:?}", sectors_count);
 
-    info!(FCP_LOG, "generating fake data"; "target" => "status");
+    info!("generating fake data");
 
     let nodes_size = size / 32;
 
@@ -99,7 +98,7 @@ fn do_the_work(
         post_periods_count,
     };
 
-    info!(FCP_LOG, "running setup");
+    info!("running setup");
     start_profile("setup");
     let pub_params = BeaconPoSt::<PedersenHasher, vdf_sloth::Sloth>::setup(&sp).unwrap();
     stop_profile();
@@ -114,7 +113,7 @@ fn do_the_work(
     let priv_inputs = PrivateInputs::<PedersenHasher>::new(&replicas, &trees_ref[..]);
 
     let mut total_proving = Duration::new(0, 0);
-    info!(FCP_LOG, "generating proofs");
+    info!("generating proofs");
 
     let start = Instant::now();
     start_profile("prove");
@@ -127,10 +126,10 @@ fn do_the_work(
     let proving_avg =
         f64::from(proving_avg.subsec_nanos()) / 1_000_000_000f64 + (proving_avg.as_secs() as f64);
 
-    info!(FCP_LOG, "proving_time: {:?} seconds", proving_avg; "target" => "stats");
+    info!("proving_time: {:?} seconds", proving_avg);
 
     let samples: u32 = 5;
-    info!(FCP_LOG, "sampling verifying (samples: {})", samples);
+    info!("sampling verifying (samples: {})", samples);
     let mut total_verifying = Duration::new(0, 0);
 
     start_profile("verify");
@@ -139,20 +138,21 @@ fn do_the_work(
         let verified = BeaconPoSt::verify(&pub_params, &pub_inputs, &proof).unwrap();
 
         if !verified {
-            info!(FCP_LOG, "Verification failed."; "target" => "results");
+            info!("Verification failed.");
         };
         total_verifying += start.elapsed();
     }
-    info!(FCP_LOG, "Verification complete"; "target" => "status");
+    info!("Verification complete");
     stop_profile();
 
     let verifying_avg = total_verifying / samples;
     let verifying_avg = f64::from(verifying_avg.subsec_nanos()) / 1_000_000_000f64
         + (verifying_avg.as_secs() as f64);
-    info!(FCP_LOG, "average_verifying_time: {:?} seconds", verifying_avg; "target" => "stats");
+    info!("average_verifying_time: {:?} seconds", verifying_avg);
 }
 
 fn main() {
+    pretty_env_logger::init();
     let matches = App::new(stringify!("DrgPoRep Vanilla Bench"))
         .version("1.0")
         .arg(

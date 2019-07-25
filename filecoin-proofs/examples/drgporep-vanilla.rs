@@ -3,7 +3,7 @@ extern crate clap;
 #[cfg(feature = "cpu-profile")]
 extern crate gperftools;
 #[macro_use]
-extern crate slog;
+extern crate log;
 
 use clap::{App, Arg};
 use paired::bls12_381::Bls12;
@@ -20,8 +20,6 @@ use storage_proofs::fr32::fr_into_bytes;
 use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
-
-use filecoin_proofs::singletons::FCP_LOG;
 
 #[cfg(feature = "cpu-profile")]
 #[inline(always)]
@@ -51,12 +49,12 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
     let challenges = vec![2; challenge_count];
 
-    info!(FCP_LOG, "data_size:  {}", prettyb(data_size); "target" => "stats");
-    info!(FCP_LOG, "challenge_count: {}", challenge_count; "target" => "stats");
-    info!(FCP_LOG, "m: {}", m; "target" => "stats");
-    info!(FCP_LOG, "sloth: {}", sloth_iter; "target" => "stats");
+    info!("data_size:  {}", prettyb(data_size));
+    info!("challenge_count: {}", challenge_count);
+    info!("m: {}", m);
+    info!("sloth: {}", sloth_iter);
 
-    info!(FCP_LOG, "generating fake data");
+    info!("generating fake data");
 
     let nodes = data_size / 32;
 
@@ -77,7 +75,7 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
         challenges_count: challenge_count,
     };
 
-    info!(FCP_LOG, "running setup");
+    info!("running setup");
     start_profile("setup");
     let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).unwrap();
     stop_profile();
@@ -85,7 +83,7 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     let start = Instant::now();
     let mut param_duration = Duration::new(0, 0);
 
-    info!(FCP_LOG, "running replicate");
+    info!("running replicate");
 
     start_profile("replicate");
     let (tau, aux) =
@@ -109,10 +107,7 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     let mut total_verifying = Duration::new(0, 0);
 
     let mut proofs = Vec::with_capacity(samples as usize);
-    info!(
-        FCP_LOG,
-        "sampling proving & verifying (samples: {})", samples
-    );
+    info!("sampling proving & verifying (samples: {})", samples);
     for _ in 0..samples {
         let start = Instant::now();
         start_profile("prove");
@@ -145,13 +140,15 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, sloth_iter: usize, challen
     let verifying_avg = f64::from(verifying_avg.subsec_nanos()) / 1_000_000_000f64
         + (verifying_avg.as_secs() as f64);
 
-    info!(FCP_LOG, "avg_proving_time: {:?} seconds", proving_avg; "target" => "stats");
-    info!(FCP_LOG, "avg_verifying_time: {:?} seconds", verifying_avg; "target" => "stats");
-    info!(FCP_LOG, "replication_time: {:?}", param_duration; "target" => "stats");
-    info!(FCP_LOG, "avg_proof_size: {}", prettyb(avg_proof_size); "target" => "stats");
+    info!("avg_proving_time: {:?} seconds", proving_avg);
+    info!("avg_verifying_time: {:?} seconds", verifying_avg);
+    info!("replication_time: {:?}", param_duration);
+    info!("avg_proof_size: {}", prettyb(avg_proof_size));
 }
 
 fn main() {
+    pretty_env_logger::init();
+
     let matches = App::new(stringify!("DrgPoRep Vanilla Bench"))
         .version("1.0")
         .arg(
@@ -196,7 +193,7 @@ fn main() {
     let sloth_iter = value_t!(matches, "sloth", usize).unwrap();
     let challenge_count = value_t!(matches, "challenges", usize).unwrap();
     let hasher = value_t!(matches, "hasher", String).unwrap();
-    info!(FCP_LOG, "hasher: {}", hasher; "target" => "config");
+    info!("hasher: {}", hasher);
     match hasher.as_ref() {
         "pedersen" => {
             do_the_work::<PedersenHasher>(data_size, m, sloth_iter, challenge_count);

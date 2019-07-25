@@ -15,7 +15,7 @@ use storage_proofs::vdf_sloth::Sloth;
 
 use crate::error;
 use crate::parameters::{post_public_params, public_params};
-use crate::singletons::{ENGINE_PARAMS, FCP_LOG};
+use crate::singletons::ENGINE_PARAMS;
 use crate::types::*;
 
 type Bls12GrothParams = groth16::Parameters<Bls12>;
@@ -39,17 +39,17 @@ where
     F: FnOnce() -> error::Result<G>,
     G: Send + Sync,
 {
-    info!(FCP_LOG, "trying parameters memory cache for: {}", &identifier; "target" => "params");
+    info!("trying parameters memory cache for: {}", &identifier);
     {
         let cache = (*cache_ref).lock().unwrap();
 
         if let Some(entry) = cache.get(&identifier) {
-            info!(FCP_LOG, "found params in memory cache for {}", &identifier; "target" => "params");
+            info!("found params in memory cache for {}", &identifier);
             return Ok(entry.clone());
         }
     }
 
-    info!(FCP_LOG, "no params in memory cache for {}", &identifier; "target" => "params");
+    info!("no params in memory cache for {}", &identifier);
 
     let new_entry = Arc::new(generator()?);
     let res = new_entry.clone();
