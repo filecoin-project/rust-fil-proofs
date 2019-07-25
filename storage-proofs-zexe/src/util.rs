@@ -1,9 +1,6 @@
-// use bellperson::{ConstraintSystem, SynthesisError};
 use snark::{ConstraintSystem, SynthesisError};
 use snark_gadgets::boolean::{self, AllocatedBit, Boolean};
-// use fil_sapling_crypto::circuit::boolean::{self, AllocatedBit, Boolean};
 use snark_gadgets::utils::AllocGadget;
-// use paired::Engine;
 use crate::error;
 use algebra::PairingEngine as Engine;
 
@@ -89,7 +86,6 @@ pub fn bits_to_bytes(bits: &[bool]) -> Vec<u8> {
 mod tests {
     use super::*;
     use crate::circuit::test::*;
-    // use paired::bls12_381::*;
     use algebra::curves::bls12_381::Bls12_381 as Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 

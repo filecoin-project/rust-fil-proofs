@@ -9,7 +9,6 @@ use merkletree::merkle;
 use merkletree::merkle::MmapStore;
 use merkletree::merkle::VecStore;
 use merkletree::proof;
-// use paired::bls12_381::Fr;
 use algebra::fields::bls12_381::Fr;
 
 use crate::hasher::{Domain, Hasher};

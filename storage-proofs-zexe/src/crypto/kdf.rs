@@ -1,6 +1,4 @@
 use blake2s_simd::Params as Blake2s;
-// use ff::PrimeField;
-// use paired::bls12_381::Fr;
 
 use algebra::{
     AffineCurve as CurveAffine, Field, PairingEngine as Engine, PrimeField,
@@ -13,8 +11,6 @@ use crate::fr32::bytes_into_fr_repr_safe;
 
 /// Key derivation function, based on pedersen hashing.
 pub fn kdf(data: &[u8], m: usize) -> Fr {
-    // Blake2sHasher::kdf(&data, m).into()
-
     assert_eq!(
         data.len(),
         32 * (1 + m),
@@ -36,7 +32,6 @@ pub fn kdf(data: &[u8], m: usize) -> Fr {
 mod tests {
     use super::kdf;
     use crate::fr32::bytes_into_fr;
-    // use paired::bls12_381::Bls12;
     use algebra::curves::bls12_381::Bls12_381 as Bls12;
 
     #[test]

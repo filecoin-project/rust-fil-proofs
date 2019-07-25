@@ -195,13 +195,11 @@ pub fn slice_mod(challenge: impl AsRef<[u8]>, count: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    // use paired::bls12_381::Bls12;
     use algebra::curves::bls12_381::Bls12_381 as Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     use crate::drgraph::{new_seed, BucketGraph, Graph};
     use crate::fr32::fr_into_bytes;
-    // use crate::hasher::{Blake2sHasher, HashFunction, PedersenHasher, Sha256Hasher};
     use crate::hasher::{HashFunction, PedersenHasher};
     use crate::merkle::make_proof_for_test;
 

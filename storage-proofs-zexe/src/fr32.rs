@@ -1,10 +1,6 @@
 use crate::error::*;
 use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 
-// use ff::{PrimeField, PrimeFieldRepr, ScalarEngine};
-// use paired::bls12_381::FrRepr;
-// use paired::Engine;
-
 use algebra::biginteger::BigInteger;
 use algebra::biginteger::BigInteger256 as FrRepr;
 use algebra::{
@@ -12,6 +8,7 @@ use algebra::{
     ProjectiveCurve as CurveProjective,
 };
 use std::io::Read;
+
 // Contains 32 bytes whose little-endian value represents an Fr.
 // Invariants:
 // - Value MUST represent a valid Fr.

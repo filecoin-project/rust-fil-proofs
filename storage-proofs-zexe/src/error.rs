@@ -1,4 +1,3 @@
-// use bellperson::SynthesisError;
 use snark::SynthesisError;
 pub type Result<T> = ::std::result::Result<T, Error>;
 

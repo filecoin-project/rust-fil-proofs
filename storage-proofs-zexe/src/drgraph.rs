@@ -285,7 +285,6 @@ mod tests {
     use memmap::MmapOptions;
 
     use crate::drgraph::new_seed;
-    // use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
     use crate::hasher::PedersenHasher;
 
     // Create and return an object of MmapMut backed by in-memory copy of data.

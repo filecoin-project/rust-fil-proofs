@@ -1,33 +1,20 @@
 use std::marker::PhantomData;
 
-// use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use snark::{Circuit, ConstraintSystem, SynthesisError, LinearCombination, Index, Variable};
-
-// use fil_sapling_crypto::circuit::{boolean, multipack, num};
-use crate::circuit::multipack;
-use snark_gadgets::boolean;
-use snark_gadgets::fields::fp::FpGadget;
-// use fil_sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
-use algebra::PairingEngine as JubjubEngine;
-
-// use paired::bls12_381::{Bls12, Fr};
+use algebra::PairingEngine as Engine;
 use algebra::fields::bls12_381::Fr;
 use algebra::curves::{bls12_381::Bls12_381 as Bls12, jubjub::JubJubProjective as JubJub};
+use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
+use snark::{Circuit, ConstraintSystem, SynthesisError, LinearCombination, Index, Variable};
+use snark_gadgets::{boolean, fields::fp::FpGadget, utils::{AllocGadget, CondReverseGadget, ToBitsGadget}};
 
-use crate::circuit::constraint;
-use crate::circuit::variables::Root;
+use crate::circuit::{constraint, multipack, variables::Root};
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::drgraph::graph_height;
 use crate::hasher::{HashFunction, Hasher};
 use crate::merklepor::MerklePoR;
 use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use crate::proof::ProofScheme;
-use algebra::PairingEngine as Engine;
-use snark_gadgets::utils::CondReverseGadget;
-use snark_gadgets::utils::AllocGadget;
-use snark_gadgets::utils::ToBitsGadget;
 use crate::singletons::PEDERSEN_PARAMS;
-use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
 
 
 /// Proof of retrievability.
@@ -85,7 +72,6 @@ where
         _component_private_inputs: <PoRCircuit<'a, H> as CircuitComponent>::ComponentPrivateInputs,
         proof: &'b <MerklePoR<H> as ProofScheme<'a>>::Proof,
         public_params: &'b <MerklePoR<H> as ProofScheme<'a>>::PublicParams,
-        // engine_params: &'a JubjubBls12,
     ) -> PoRCircuit<'a, H> {
         let (root, private) = match (*public_inputs).commitment {
             None => (Root::Val(Some(proof.proof.root.into())), true),
@@ -96,7 +82,6 @@ where
         assert_eq!(private, public_params.private);
 
         PoRCircuit::<H> {
-            // params: engine_params,
             params: &PEDERSEN_PARAMS,
             value: Some(proof.data.into()),
             auth_path: proof.proof.as_options(),
@@ -108,7 +93,6 @@ where
 
     fn blank_circuit(
         public_params: &<MerklePoR<H> as ProofScheme<'a>>::PublicParams,
-        // params: &'a JubjubBls12,
     ) -> PoRCircuit<'a, H> {
         PoRCircuit::<H> {
             params: &PEDERSEN_PARAMS,
@@ -155,8 +139,6 @@ impl<'a, H: Hasher> Circuit<Bls12> for PoRCircuit<'a, H> {
     ///
     /// Note: All public inputs must be provided as `E::Fr`.
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError>
-    // where
-        // E: JubjubEngine,
     {
         let params = self.params;
         let value = self.value;
@@ -265,23 +247,17 @@ impl<'a, H: Hasher> PoRCircuit<'a,  H> {
 mod tests {
     use super::*;
 
-    use crate::proof::NoRequirements;
-    // use ff::Field;
     use algebra::fields::Field;
-    // use fil_sapling_crypto::circuit::multipack;
-    use crate::circuit::multipack;
-
-    // use fil_sapling_crypto::jubjub::JubjubBls12;
-
     use rand::{Rng, SeedableRng, XorShiftRng};
 
+    use crate::circuit::multipack;
     use crate::circuit::test::*;
     use crate::compound_proof;
     use crate::drgraph::{new_seed, BucketGraph, Graph};
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
     use crate::hasher::{Domain, Hasher, PedersenHasher};
     use crate::merklepor;
-    use crate::proof::ProofScheme;
+    use crate::proof::{NoRequirements, ProofScheme};
     use crate::util::data_at_node;
 
     #[test]
@@ -306,7 +282,6 @@ mod tests {
                     leaves,
                     private: false,
                 },
-                // engine_params: &JubjubBls12::new(),
                 partitions: None,
             };
             let public_params =
@@ -323,7 +298,6 @@ mod tests {
 
             let gparams = PoRCompound::<PedersenHasher>::groth_params(
                 &public_params.vanilla_params,
-                // setup_params.engine_params,
             )
             .expect("failed to generate groth params");
 
@@ -498,7 +472,6 @@ mod tests {
                      leaves,
                      private: true,
                  },
-//                 engine_params: &JubjubBls12::new(),
                  partitions: None,
              };
              let public_params = PoRCompound::<H>::setup(&setup_params).expect("setup failed");
@@ -514,7 +487,6 @@ mod tests {
 
              let groth_params = PoRCompound::<H>::groth_params(
                  &public_params.vanilla_params,
-//                 setup_params.engine_params,
              ).expect("failed to generate groth params");
 
              let proof = PoRCompound::<H>::prove(
@@ -590,8 +562,7 @@ mod tests {
                  &pub_params,
                  &pub_inputs,
                  &priv_inputs,
-             )
-             .expect("proving failed");
+             ).expect("proving failed");
 
              // make sure it verifies
              let is_valid =

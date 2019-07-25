@@ -1,6 +1,3 @@
-// use ff::Field;
-// use paired::Engine;
-
 use algebra::{
     AffineCurve as CurveAffine, Field, PairingEngine as Engine, PrimeField,
     ProjectiveCurve as CurveProjective,

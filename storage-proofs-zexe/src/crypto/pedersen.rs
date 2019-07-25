@@ -1,26 +1,16 @@
 use bitvec::prelude::*;
-// use ff::PrimeFieldRepr;
-
-// use fil_sapling_crypto::jubjub::JubjubBls12;
-// use fil_sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
-
-// use paired::bls12_381::{Bls12, Fr, FrRepr};
 use crate::fr32::bytes_into_frs;
 use crate::singletons::PEDERSEN_PARAMS;
 
-use algebra::curves::bls12_381::Bls12_381 as Bls12;
-use algebra::curves::jubjub::JubJubProjective as JubJub;
-use algebra::curves::ProjectiveCurve;
-use algebra::fields::bls12_381::Fr;
+use algebra::biginteger::BigInteger;
+use algebra::curves::{bls12_381::Bls12_381 as Bls12, jubjub::JubJubProjective as JubJub,
+    ProjectiveCurve, models::twisted_edwards_extended::GroupProjective, jubjub::JubJubParameters};
+use algebra::fields::{bls12_381::Fr, PrimeField};
 use dpc::crypto_primitives::crh::{
     pedersen::{PedersenCRH, PedersenWindow},
     FixedLengthCRH,
 };
 
-use algebra::biginteger::BigInteger;
-use algebra::fields::PrimeField;
-use algebra::curves::models::twisted_edwards_extended::GroupProjective;
-use algebra::curves::jubjub::JubJubParameters;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct BigWindow;
@@ -106,16 +96,6 @@ pub fn pedersen_md_no_padding(data: &[u8]) -> Fr {
 }
 
 pub fn pedersen_compression(bytes: &mut Vec<u8>) {
-    // let bits = BitVec::<LittleEndian, u8>::from(&bytes[..]);
-    // let (x, _) = pedersen_hash::<Bls12, _>(
-    //     Personalization::NoteCommitment,
-    //     bits.iter().take(bytes.len() * 8),
-    //     &JJ_PARAMS,
-    // )
-    // .into_xy();
-    // let x: FrRepr = x.into();
-    // bytes.truncate(0);
-    // x.write_le(bytes).expect("failed to write result hash");
     let point = pedersen(&bytes[..]);
     bytes.truncate(0);
     point.into_affine().x.into_repr()

@@ -471,8 +471,6 @@ impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
 
 #[test]
 fn test_cs() {
-    // use ff::PrimeField;
-    // use paired::bls12_381::{Bls12, Fr};
     use algebra::curves::bls12_381::Bls12_381 as Bls12;
     use algebra::fields::bls12_381::Fr;
     use std::str::FromStr;

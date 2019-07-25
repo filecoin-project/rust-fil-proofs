@@ -105,8 +105,6 @@ pub fn pedersen_compression_num<CS: ConstraintSystem<Bls12>>(
     .unwrap();
 
     Ok(gadget_result.x)
-
-//    FpGadget::zero(cs)
 }
 
 pub fn pedersen_compression<CS: ConstraintSystem<Bls12>>(

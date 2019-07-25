@@ -487,7 +487,6 @@ mod tests {
 
     use memmap::MmapMut;
     use memmap::MmapOptions;
-    // use paired::bls12_381::Bls12;
     use algebra::curves::bls12_381::Bls12_381 as Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use std::fs::File;
@@ -496,7 +495,6 @@ mod tests {
 
     use crate::drgraph::{new_seed, BucketGraph};
     use crate::fr32::fr_into_bytes;
-    // use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
     use crate::hasher::PedersenHasher;
     use crate::util::data_at_node;
 
