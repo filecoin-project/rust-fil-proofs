@@ -8,7 +8,6 @@ use memmap::MmapOptions;
 use rayon::prelude::*;
 use serde::de::Deserialize;
 use serde::ser::Serialize;
-use slog::*;
 
 use crate::challenge_derivation::derive_challenges;
 use crate::drgporep::{self, DrgPoRep};
@@ -21,7 +20,6 @@ use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
 use crate::settings;
 use crate::vde;
-use crate::SP_LOG;
 
 #[cfg(feature = "disk-trees")]
 use rand;
@@ -414,12 +412,12 @@ pub trait Layers {
             (0..=layers).fold(graph.clone(), |current_graph, layer| {
                 let tree_d = Self::generate_data_tree(&current_graph, &data, layer);
 
-                info!(SP_LOG, "returning tree"; "layer" => format!("{}", layer));
+                info!("returning tree (layer: {})", layer);
 
                 sorted_trees.push(tree_d);
 
                 if layer < layers {
-                    info!(SP_LOG, "encoding"; "layer" => format!("{}", layer));
+                    info!("encoding (layer: {})", layer);
                     vde::encode(&current_graph, sloth_iter, replica_id, data)
                         .expect("encoding failed in thread");
                 }
@@ -435,7 +433,7 @@ pub trait Layers {
                     // The first iteration has no previous_tree.
                     if let Some(comm_d) = previous_comm_r {
                         let tau = porep::Tau { comm_r, comm_d };
-                        //                        info!(SP_LOG, "setting tau/aux"; "layer" => format!("{}", i - 1));
+                        // info!("setting tau/aux (layer: {})", i - 1);
                         // FIXME: Use `enumerate` if this log is worth it.
                         taus.push(tau);
                     };
@@ -461,7 +459,11 @@ pub trait Layers {
 
                 let errf = |e| {
                     let err_string = format!("{:?}", e);
-                    error!(SP_LOG, "MerkleTreeGenerationError"; "err" => &err_string, "backtrace" => format!("{:?}", failure::Backtrace::new()));
+                    error!(
+                        "MerkleTreeGenerationError: {} - {:?}",
+                        &err_string,
+                        failure::Backtrace::new()
+                    );
                     Error::MerkleTreeGenerationError(err_string)
                 };
 
@@ -487,7 +489,7 @@ pub trait Layers {
 
                             let tree_d = Self::generate_data_tree(&graph, &data_copy, layer);
 
-                            info!(SP_LOG, "returning tree"; "layer" => format!("{}", layer));
+                            info!("returning tree (layer: {})", layer);
                             return_channel
                                 .send((layer, tree_d))
                                 .expect("Failed to send value through channel");
@@ -496,7 +498,7 @@ pub trait Layers {
                         threads.push(thread);
 
                         if layer < layers {
-                            info!(SP_LOG, "encoding"; "layer" => format!("{}", layer));
+                            info!("encoding (layer: {})", layer);
                             vde::encode(&current_graph, sloth_iter, replica_id, data)
                                 .expect("encoding failed in thread");
                         }
@@ -525,7 +527,7 @@ pub trait Layers {
                     // The first iteration has no previous_tree.
                     if let Some(comm_d) = previous_comm_r {
                         let tau = porep::Tau { comm_r, comm_d };
-                        info!(SP_LOG, "setting tau/aux"; "layer" => format!("{}", i - 1));
+                        info!("setting tau/aux (layer: {})", i - 1);
                         taus.push(tau);
                     };
 

@@ -14,8 +14,6 @@ use crate::util::{data_at_node, NODE_SIZE};
 #[cfg(feature = "disk-trees")]
 use crate::merkle::DiskMmapStore;
 #[cfg(feature = "disk-trees")]
-use crate::SP_LOG;
-#[cfg(feature = "disk-trees")]
 use merkletree::merkle::next_pow2;
 #[cfg(feature = "disk-trees")]
 use std::path::Path;
@@ -115,8 +113,14 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
             // FIXME: There is probably a more direct way of doing this without
             //  reconverting to string.
 
-            info!(SP_LOG, "creating leaves tree mmap-file"; "path-prefix" => leaves_path.to_str());
-            info!(SP_LOG, "creating top half tree mmap-file"; "path-prefix" => top_half_path.to_str());
+            info!(
+                "creating leaves tree mmap-file (path-prefix: {})",
+                leaves_path.to_str()
+            );
+            info!(
+                "creating top half tree mmap-file (path-prefix: {})",
+                top_half_path.to_str()
+            );
 
             let leaves_disk_mmap =
                 DiskMmapStore::new_with_path(next_pow2(self.size()), leaves_path);
