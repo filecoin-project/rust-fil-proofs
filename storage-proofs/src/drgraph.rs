@@ -114,11 +114,11 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
             //  reconverting to string.
 
             info!(
-                "creating leaves tree mmap-file (path-prefix: {})",
+                "creating leaves tree mmap-file (path-prefix: {:?})",
                 leaves_path.to_str()
             );
             info!(
-                "creating top half tree mmap-file (path-prefix: {})",
+                "creating top half tree mmap-file (path-prefix: {:?})",
                 top_half_path.to_str()
             );
 
