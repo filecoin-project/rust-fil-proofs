@@ -10,6 +10,7 @@ use crate::singletons::PEDERSEN_PARAMS;
 
 use algebra::curves::bls12_381::Bls12_381 as Bls12;
 use algebra::curves::jubjub::JubJubProjective as JubJub;
+use algebra::curves::ProjectiveCurve;
 use algebra::fields::bls12_381::Fr;
 use dpc::crypto_primitives::crh::{
     pedersen::{PedersenCRH, PedersenWindow},
@@ -18,6 +19,8 @@ use dpc::crypto_primitives::crh::{
 
 use algebra::biginteger::BigInteger;
 use algebra::fields::PrimeField;
+use algebra::curves::models::twisted_edwards_extended::GroupProjective;
+use algebra::curves::jubjub::JubJubParameters;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct BigWindow;
@@ -49,24 +52,26 @@ impl Personalization {
     }
 }
 
-pub fn pedersen_hash<I>(personalization: Personalization, bits: I) -> Fr
+pub fn pedersen_hash<I>(personalization: Personalization, bits: I) -> GroupProjective<JubJubParameters>
 where
     I: IntoIterator<Item = bool>,
 {
-    let bits: Vec<bool> = personalization
+    let mut bits: Vec<bool> = personalization
         .get_bits()
         .into_iter()
         .chain(bits.into_iter())
         .collect();
 
+    while bits.len() % 8 != 0 {
+        bits.push(false);
+    }
+
     let bytes = BitVec::<LittleEndian, _>::from(&bits[..]);
 
-    let point =
-        PedersenCRH::<JubJub, BigWindow>::evaluate(&PEDERSEN_PARAMS, bytes.as_slice()).unwrap();
-    point.x
+    PedersenCRH::<JubJub, BigWindow>::evaluate(&PEDERSEN_PARAMS, bytes.as_slice()).unwrap()
 }
 
-pub fn pedersen(data: &[u8]) -> Fr {
+pub fn pedersen(data: &[u8]) -> GroupProjective<JubJubParameters> {
     let bits = BitVec::<LittleEndian, u8>::from(data);
     pedersen_hash(Personalization::NoteCommitment, bits)
 }
@@ -111,9 +116,9 @@ pub fn pedersen_compression(bytes: &mut Vec<u8>) {
     // let x: FrRepr = x.into();
     // bytes.truncate(0);
     // x.write_le(bytes).expect("failed to write result hash");
-    let x = pedersen(&bytes[..]);
+    let point = pedersen(&bytes[..]);
     bytes.truncate(0);
-    x.into_repr()
+    point.into_affine().x.into_repr()
         .write_le(bytes)
         .expect("failed to write result hash")
 }

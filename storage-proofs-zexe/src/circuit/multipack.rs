@@ -26,7 +26,7 @@ where
         let mut coeff = E::Fr::one();
         let mut acc = E::Fr::zero();
         let one = CS::one();
-            println!("1");
+
         for b in bits {
             let value = b.get_value();
             let fr = match value.get() {

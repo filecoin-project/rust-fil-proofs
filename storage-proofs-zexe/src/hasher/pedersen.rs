@@ -8,6 +8,7 @@ use snark::{ConstraintSystem, SynthesisError};
 
 use algebra::biginteger::BigInteger;
 use algebra::biginteger::BigInteger256 as FrRepr;
+use algebra::curves::ProjectiveCurve;
 use algebra::curves::{bls12_381::Bls12_381 as Bls12, jubjub::JubJubProjective as JubJub};
 use algebra::fields::{bls12_381::Fr, FpParameters, PrimeField};
 
@@ -202,7 +203,7 @@ impl Element for PedersenDomain {
 impl StdHasher for PedersenFunction {
     #[inline]
     fn write(&mut self, msg: &[u8]) {
-        self.0 = pedersen::pedersen(msg);
+        self.0 = pedersen::pedersen(msg).x;
     }
 
     #[inline]
@@ -220,38 +221,51 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         mut cs: CS,
         left: &[Boolean],
         right: &[Boolean],
-        _height: usize,
+        height: usize,
         params: &PedersenParameters<JubJub>,
     ) -> std::result::Result<FpGadget<Bls12>, SynthesisError> {
         let mut preimage: Vec<Boolean> = vec![];
         preimage.extend_from_slice(left);
         preimage.extend_from_slice(right);
 
-        pedersen_compression_num(cs, &preimage, params)
-//        type CRHGadget = PedersenCRHGadget<JubJub, Bls12, JubJubGadget>;
-//        type CRH = PedersenCRH<JubJub, BigWindow>;
-//
-//        let gadget_parameters =
-//            <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::ParametersGadget::alloc(
-//                &mut cs.ns(|| "gadget_parameters"),
-//                || Ok(params),
-//            )
-//            .unwrap();
-//
-//        let input_bytes = preimage
-//            .chunks(8)
-//            .map(|x| UInt8::from_bits_le(x))
-//            .collect::<Vec<UInt8>>();
-//
-//        let gadget_result =
-//            <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::check_evaluation_gadget(
-//                &mut cs.ns(|| "gadget_evaluation"),
-//                &gadget_parameters,
-//                &input_bytes,
-//            )
-//            .unwrap();
-//
-//        Ok(gadget_result.x)
+        type CRHGadget = PedersenCRHGadget<JubJub, Bls12, JubJubGadget>;
+        type CRH = PedersenCRH<JubJub, BigWindow>;
+
+        let gadget_parameters =
+            <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::ParametersGadget::alloc(
+                &mut cs.ns(|| "gadget_parameters"),
+                || Ok(params),
+            )
+                .unwrap();
+
+        let mut personalization = Personalization::MerkleTree(height)
+            .get_bits()
+            .into_iter()
+            .map(|v| Boolean::Constant(v))
+            .collect::<Vec<Boolean>>();
+
+        let mut bits_with_personalization = personalization
+            .into_iter()
+            .chain(preimage.to_vec().into_iter())
+            .collect::<Vec<_>>();
+
+        while bits_with_personalization.len() % 8 != 0 {
+            bits_with_personalization.push(Boolean::Constant(false));
+        }
+
+        let input_bytes = bits_with_personalization
+            .chunks(8)
+            .into_iter()
+            .map(|v| UInt8::from_bits_le(v))
+            .collect::<Vec<UInt8>>();
+
+        let gadget_result = <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::check_evaluation_gadget(
+            &mut cs.ns(|| "gadget_evaluation"),
+            &gadget_parameters,
+            &input_bytes,
+        ).unwrap();
+
+        Ok(gadget_result.x)
     }
 
     fn hash_circuit<CS: ConstraintSystem<Bls12>>(
@@ -295,7 +309,7 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
                     .take(<Fr as PrimeField>::Params::MODULUS_BITS as usize),
             );
 
-        pedersen_hash::<_>(Personalization::MerkleTree(height), bits).into()
+        pedersen_hash::<_>(Personalization::MerkleTree(height), bits).into_affine().x.into()
     }
 }
 
