@@ -220,14 +220,12 @@ impl<'a, H: Hasher> Circuit<Bls12> for PoRCircuit<'a, H> {
 impl<'a, H: Hasher> PoRCircuit<'a,  H> {
     pub fn synthesize<CS>(
         mut cs: CS,
-        // params: &E::Params,
         value: Option<Fr>,
         auth_path: Vec<Option<(Fr, bool)>>,
         root: Root<Bls12>,
         private: bool,
     ) -> Result<(), SynthesisError>
     where
-        // E: JubjubEngine,
         CS: ConstraintSystem<Bls12>,
     {
         let por = PoRCircuit::<H> {
