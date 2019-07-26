@@ -111,7 +111,7 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
             let leaves_path = &PathBuf::from([path_prefix, "leaves"].join("-"));
             let top_half_path = &PathBuf::from([path_prefix, "top-half"].join("-"));
             // FIXME: There is probably a more direct way of doing this without
-            //  reconverting to string.
+            // reconverting to string.
 
             info!(
                 "creating leaves tree mmap-file (path-prefix: {:?})",
