@@ -1,4 +1,6 @@
 pub mod constraint;
+pub mod drgporep;
+pub mod kdf;
 pub mod multi_proof;
 pub mod multipack;
 pub mod pedersen;
