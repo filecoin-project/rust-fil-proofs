@@ -125,7 +125,7 @@ fn compute_piece_commitment<H: Hasher>(data: &[H::Domain]) -> H::Domain {
 
 /// Generate `comm_p` from a source and return it as bytes.
 pub fn generate_piece_commitment_bytes_from_source<H: Hasher>(
-    source: &mut Read,
+    source: &mut dyn Read,
 ) -> Result<Fr32Ary> {
     let mut domain_data = Vec::new();
     let mut total_bytes_read = 0;

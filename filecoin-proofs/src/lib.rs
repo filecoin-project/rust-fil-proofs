@@ -17,7 +17,6 @@ pub mod fr32;
 pub mod param;
 pub mod parameters;
 pub mod pieces;
-pub mod post_adapter;
 pub mod serde_big_array;
 pub mod singletons;
 pub mod types;

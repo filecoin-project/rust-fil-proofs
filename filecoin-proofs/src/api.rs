@@ -35,7 +35,7 @@ use crate::caches::{
 use crate::constants::{
     MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
     MINIMUM_RESERVED_LEAVES_FOR_PIECE_IN_SECTOR as MIN_NUM_LEAVES, POREP_MINIMUM_CHALLENGES,
-    SINGLE_PARTITION_PROOF_LEN,
+    POST_SECTORS_COUNT, SINGLE_PARTITION_PROOF_LEN,
 };
 use crate::error;
 use crate::error::ExpectWithBacktrace;
@@ -43,7 +43,6 @@ use crate::file_cleanup::FileCleanup;
 use crate::fr32::{write_padded, write_unpadded};
 use crate::parameters::{post_setup_params, public_params, setup_params};
 use crate::pieces::{get_aligned_source, get_piece_alignment, PieceAlignment};
-use crate::post_adapter::*;
 use crate::singletons::ENGINE_PARAMS;
 use crate::singletons::FCP_LOG;
 use crate::types::{
@@ -68,38 +67,13 @@ pub struct SealOutput {
     pub piece_inclusion_proofs: Vec<PieceInclusionProof<PedersenHasher>>,
 }
 
-/// Generates a proof-of-spacetime, returning and detected storage faults.
-/// Accepts as input a challenge seed, configuration struct, and a vector of
-/// sealed sector file-path plus CommR tuples.
-///
-pub fn generate_post(
-    post_config: PoStConfig,
-    challenge_seed: ChallengeSeed,
-    input_parts: Vec<(Option<String>, Commitment)>,
-) -> error::Result<GeneratePoStDynamicSectorsCountOutput> {
-    generate_post_dynamic(GeneratePoStDynamicSectorsCountInput {
-        post_config,
-        challenge_seed,
-        input_parts,
-    })
+pub struct GeneratePoStOutput {
+    pub proof: Vec<u8>,
+    pub faults: Vec<u64>,
 }
 
-/// Verifies a proof-of-spacetime.
-///
-pub fn verify_post(
-    post_config: PoStConfig,
-    comm_rs: Vec<Commitment>,
-    challenge_seed: ChallengeSeed,
-    proofs: Vec<Vec<u8>>,
-    faults: Vec<u64>,
-) -> error::Result<VerifyPoStDynamicSectorsCountOutput> {
-    verify_post_dynamic(VerifyPoStDynamicSectorsCountInput {
-        post_config,
-        comm_rs,
-        challenge_seed,
-        proofs,
-        faults,
-    })
+pub struct VerifyPoStOutput {
+    pub is_valid: bool,
 }
 
 struct PseudoPieceSpec {
@@ -461,37 +435,21 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     Ok(UnpaddedBytesAmount(written as u64))
 }
 
-fn verify_post_dynamic(
-    dynamic: VerifyPoStDynamicSectorsCountInput,
-) -> error::Result<VerifyPoStDynamicSectorsCountOutput> {
-    let fixed = verify_post_spread_input(dynamic)?
-        .iter()
-        .map(verify_post_fixed_sectors_count)
-        .collect();
-
-    verify_post_collect_output(fixed)
-}
-
-fn generate_post_dynamic(
-    dynamic: GeneratePoStDynamicSectorsCountInput,
-) -> error::Result<GeneratePoStDynamicSectorsCountOutput> {
-    let n = { dynamic.input_parts.len() };
-
-    let fixed_output = generate_post_spread_input(dynamic)
-        .iter()
-        .map(generate_post_fixed_sectors_count)
-        .collect();
-
-    generate_post_collect_output(n, fixed_output)
-}
-
-fn generate_post_fixed_sectors_count(
-    fixed: &GeneratePoStFixedSectorsCountInput,
-) -> error::Result<GeneratePoStFixedSectorsCountOutput> {
-    let faults: Vec<u64> = Vec::new();
+/// Generates a proof-of-spacetime, returning and detected storage faults.
+/// Accepts as input a challenge seed, configuration struct, and a vector of
+/// sealed sector file-path plus CommR tuples.
+///
+pub fn generate_post(
+    post_config: PoStConfig,
+    challenge_seed: ChallengeSeed,
+    input_parts: Vec<(Option<String>, Commitment)>,
+) -> error::Result<GeneratePoStOutput> {
+    let input_parts = ensure_post_sectors_count(input_parts, |head| {
+        (head.0.as_ref().map(|s| (&s).to_string()), head.1.clone())
+    })?;
 
     let setup_params = compound_proof::SetupParams {
-        vanilla_params: &post_setup_params(fixed.post_config),
+        vanilla_params: &post_setup_params(post_config),
         engine_params: &(*ENGINE_PARAMS),
         partitions: None,
     };
@@ -501,15 +459,14 @@ fn generate_post_fixed_sectors_count(
         vdf_post::VDFPoSt<PedersenHasher, vdf_sloth::Sloth>,
     > = VDFPostCompound::setup(&setup_params).expect("setup failed");
 
-    let commitments = fixed
-        .input_parts
+    let commitments = input_parts
         .iter()
         .map(|(_, comm_r)| PedersenDomain::try_from_bytes(&comm_r[..]).unwrap()) // FIXME: don't unwrap
         .collect();
 
     let safe_challenge_seed = {
         let mut cs = vec![0; 32];
-        cs.copy_from_slice(&fixed.challenge_seed);
+        cs.copy_from_slice(&challenge_seed);
         cs[31] &= 0b0011_1111;
         cs
     };
@@ -520,8 +477,7 @@ fn generate_post_fixed_sectors_count(
         faults: Vec::new(),
     };
 
-    let trees: Vec<Tree> = fixed
-        .input_parts
+    let trees: Vec<Tree> = input_parts
         .iter()
         .map(|(access, _)| {
             if let Some(s) = &access {
@@ -540,32 +496,43 @@ fn generate_post_fixed_sectors_count(
 
     let priv_inputs = vdf_post::PrivateInputs::<PedersenHasher>::new(&borrowed_trees[..]);
 
-    let groth_params = get_post_params(fixed.post_config)?;
+    let groth_params = get_post_params(post_config)?;
 
     let proof = VDFPostCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)
         .expect("failed while proving");
 
     let mut buf = Vec::with_capacity(
-        SINGLE_PARTITION_PROOF_LEN * usize::from(PoStProofPartitions::from(fixed.post_config)),
+        SINGLE_PARTITION_PROOF_LEN * usize::from(PoStProofPartitions::from(post_config)),
     );
 
     proof.write(&mut buf)?;
 
-    Ok(GeneratePoStFixedSectorsCountOutput { proof: buf, faults })
+    Ok(GeneratePoStOutput {
+        proof: buf,
+        faults: vec![],
+    })
 }
 
-fn verify_post_fixed_sectors_count(
-    fixed: &VerifyPoStFixedSectorsCountInput,
-) -> error::Result<VerifyPoStFixedSectorsCountOutput> {
+/// Verifies a proof-of-spacetime.
+///
+pub fn verify_post(
+    post_config: PoStConfig,
+    comm_rs: Vec<Commitment>,
+    challenge_seed: ChallengeSeed,
+    proof: Vec<u8>,
+    faults: Vec<u64>,
+) -> error::Result<VerifyPoStOutput> {
+    let comm_rs = ensure_post_sectors_count(comm_rs, |head| head.clone())?;
+
     let safe_challenge_seed = {
         let mut cs = vec![0; 32];
-        cs.copy_from_slice(&fixed.challenge_seed);
+        cs.copy_from_slice(&challenge_seed);
         cs[31] &= 0b0011_1111;
         cs
     };
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: &post_setup_params(fixed.post_config),
+        vanilla_params: &post_setup_params(post_config),
         engine_params: &(*ENGINE_PARAMS),
         partitions: None,
     };
@@ -575,8 +542,7 @@ fn verify_post_fixed_sectors_count(
         vdf_post::VDFPoSt<PedersenHasher, vdf_sloth::Sloth>,
     > = VDFPostCompound::setup(&compound_setup_params).expect("setup failed");
 
-    let commitments = fixed
-        .comm_rs
+    let commitments = comm_rs
         .iter()
         .map(|comm_r| {
             PedersenDomain(
@@ -590,17 +556,17 @@ fn verify_post_fixed_sectors_count(
     let public_inputs = vdf_post::PublicInputs::<PedersenDomain> {
         commitments,
         challenge_seed: PedersenDomain::try_from_bytes(&safe_challenge_seed)?,
-        faults: fixed.faults.clone(),
+        faults: faults.clone(),
     };
 
-    let verifying_key = get_post_verifying_key(fixed.post_config)?;
+    let verifying_key = get_post_verifying_key(post_config)?;
 
     let num_post_proof_bytes =
-        SINGLE_PARTITION_PROOF_LEN * usize::from(PoStProofPartitions::from(fixed.post_config));
+        SINGLE_PARTITION_PROOF_LEN * usize::from(PoStProofPartitions::from(post_config));
 
     let proof = MultiProof::new_from_reader(
-        Some(usize::from(PoStProofPartitions::from(fixed.post_config))),
-        &fixed.proof[0..num_post_proof_bytes],
+        Some(usize::from(PoStProofPartitions::from(post_config))),
+        &proof[0..num_post_proof_bytes],
         &verifying_key,
     )?;
 
@@ -611,8 +577,7 @@ fn verify_post_fixed_sectors_count(
         &NoRequirements,
     )?;
 
-    // Since callers may rely on previous mocked success, just pretend verification succeeded, for now.
-    Ok(VerifyPoStFixedSectorsCountOutput { is_valid })
+    Ok(VerifyPoStOutput { is_valid })
 }
 
 fn make_merkle_tree<T: Into<PathBuf> + AsRef<Path>>(
@@ -638,6 +603,42 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
     let mut res = [0; 32];
     res[0..31].copy_from_slice(unpadded);
     res
+}
+
+/// Produces a new vector of length `POST_SECTORS_COUNT` by running a generator
+/// function applied to the head of the input vector, if one exists. If the
+/// input vector has no head, this function produces an error. We use a custom
+/// generator function instead of the `T::clone` method to ensure compatibility
+/// with non-Copy choices of `T`.
+///
+/// Note that this code will go away once we've implement Rational PoSt.
+///
+fn ensure_post_sectors_count<T, F>(xs: Vec<T>, generator: F) -> error::Result<Vec<T>>
+where
+    F: Fn(&T) -> T,
+{
+    let mut to_pad = xs;
+
+    let n = to_pad.len();
+
+    if n < 1 {
+        return Err(format_err!("must provide non-empty input vector"));
+    }
+
+    if n > POST_SECTORS_COUNT {
+        return Err(format_err!(
+            "length of input vector must not exceed {}",
+            POST_SECTORS_COUNT,
+        ));
+    }
+
+    if n < POST_SECTORS_COUNT {
+        for _ in 0..(POST_SECTORS_COUNT - n) {
+            to_pad.push(generator(&to_pad[0]));
+        }
+    }
+
+    Ok(to_pad)
 }
 
 #[cfg(test)]
@@ -761,7 +762,7 @@ mod tests {
 
     #[test]
     #[ignore]
-    fn test_pip_lifecycle() -> Result<(), failure::Error> {
+    fn test_proving_lifecycle() -> Result<(), failure::Error> {
         let sector_size = TEST_SECTOR_SIZE;
 
         let number_of_bytes_in_piece =
@@ -811,6 +812,27 @@ mod tests {
 
         assert_eq!(output.comm_ps.len(), 1);
         assert_eq!(output.comm_ps[0], comm_p);
+
+        let post_config = PoStConfig(SectorSize(sector_size), PoStProofPartitions(1));
+
+        let generate_post_output = generate_post(
+            post_config,
+            [0; 32],
+            vec![(
+                Some(sealed_sector_file.path().to_str().unwrap().to_string()),
+                output.comm_r.clone(),
+            )],
+        )?;
+
+        let verify_post_output = verify_post(
+            post_config,
+            vec![output.comm_r],
+            [0; 32],
+            generate_post_output.proof,
+            generate_post_output.faults,
+        )?;
+
+        assert!(verify_post_output.is_valid);
 
         Ok(())
     }
