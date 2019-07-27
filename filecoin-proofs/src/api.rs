@@ -444,9 +444,11 @@ pub fn generate_post(
     challenge_seed: ChallengeSeed,
     input_parts: Vec<(Option<String>, Commitment)>,
 ) -> error::Result<GeneratePoStOutput> {
+    println!("START ensure_post_sectors_count");
     let input_parts = ensure_post_sectors_count(input_parts, |head| {
         (head.0.as_ref().map(|s| (&s).to_string()), head.1.clone())
     })?;
+    println!("STOP ensure_post_sectors_count");
 
     let setup_params = compound_proof::SetupParams {
         vanilla_params: &post_setup_params(post_config),
@@ -459,10 +461,12 @@ pub fn generate_post(
         vdf_post::VDFPoSt<PedersenHasher, vdf_sloth::Sloth>,
     > = VDFPostCompound::setup(&setup_params).expect("setup failed");
 
+    println!("START map(xs, PedersenDomain::try_from_bytes)");
     let commitments = input_parts
         .iter()
         .map(|(_, comm_r)| PedersenDomain::try_from_bytes(&comm_r[..]).unwrap()) // FIXME: don't unwrap
         .collect();
+    println!("STOP map(xs, PedersenDomain::try_from_bytes)");
 
     let safe_challenge_seed = {
         let mut cs = vec![0; 32];
@@ -471,12 +475,15 @@ pub fn generate_post(
         cs
     };
 
+    println!("START vdf_post::PublicInputs");
     let pub_inputs = vdf_post::PublicInputs {
         challenge_seed: PedersenDomain::try_from_bytes(&safe_challenge_seed).unwrap(),
         commitments,
         faults: Vec::new(),
     };
+    println!("STOP vdf_post::PublicInputs");
 
+    println!("START map(xs, make_merkle_tree)");
     let trees: Vec<Tree> = input_parts
         .iter()
         .map(|(access, _)| {
@@ -491,15 +498,20 @@ pub fn generate_post(
             }
         })
         .collect();
+    println!("STOP map(xs, make_merkle_tree)");
 
     let borrowed_trees: Vec<&Tree> = trees.iter().map(|t| t).collect();
 
+    println!("START vdf_post::PrivateInputs");
     let priv_inputs = vdf_post::PrivateInputs::<PedersenHasher>::new(&borrowed_trees[..]);
+    println!("STOP vdf_post::PrivateInputs");
 
     let groth_params = get_post_params(post_config)?;
 
+    println!("START VDFPostCompound::prove");
     let proof = VDFPostCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)
         .expect("failed while proving");
+    println!("STOP VDFPostCompound::prove");
 
     let mut buf = Vec::with_capacity(
         SINGLE_PARTITION_PROOF_LEN * usize::from(PoStProofPartitions::from(post_config)),
@@ -776,19 +788,24 @@ mod tests {
         piece_file.write_all(&piece_bytes)?;
         piece_file.seek(SeekFrom::Start(0))?;
 
+        println!("START generating piece commitment");
         let comm_p = generate_piece_commitment(&piece_file.path(), number_of_bytes_in_piece)?;
+        println!("STOP generating piece commitment");
 
         let mut staged_sector_file = NamedTempFile::new()?;
+        println!("START write_padded");
         add_piece(
             &mut piece_file,
             &mut staged_sector_file,
             number_of_bytes_in_piece,
             &[],
         )?;
+        println!("STOP write_padded");
 
         let sealed_sector_file = NamedTempFile::new()?;
         let config = PoRepConfig(SectorSize(sector_size.clone()), PoRepProofPartitions(2));
 
+        println!("START seal");
         let output = seal(
             config,
             &staged_sector_file.path(),
@@ -797,9 +814,11 @@ mod tests {
             &[0; 31],
             &[number_of_bytes_in_piece],
         )?;
+        println!("STOP seal");
 
         let piece_inclusion_proof_bytes: Vec<u8> = output.piece_inclusion_proofs[0].clone().into();
 
+        println!("START verify piece inclusion proof");
         let verified = verify_piece_inclusion_proof(
             &piece_inclusion_proof_bytes,
             &output.comm_d,
@@ -807,6 +826,7 @@ mod tests {
             number_of_bytes_in_piece,
             SectorSize(sector_size),
         )?;
+        println!("STOP verify piece inclusion proof");
 
         assert!(verified);
 
@@ -815,6 +835,7 @@ mod tests {
 
         let post_config = PoStConfig(SectorSize(sector_size), PoStProofPartitions(1));
 
+        println!("START generate PoSt");
         let generate_post_output = generate_post(
             post_config,
             [0; 32],
@@ -823,7 +844,9 @@ mod tests {
                 output.comm_r.clone(),
             )],
         )?;
+        println!("STOP generate PoSt");
 
+        println!("START verify PoSt");
         let verify_post_output = verify_post(
             post_config,
             vec![output.comm_r],
@@ -831,6 +854,7 @@ mod tests {
             generate_post_output.proof,
             generate_post_output.faults,
         )?;
+        println!("STOP verify PoSt");
 
         assert!(verify_post_output.is_valid);
 

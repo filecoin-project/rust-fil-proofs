@@ -115,7 +115,7 @@ jobs:
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (stable) in release profile
-          command: cargo +stable test --verbose --release --all -- --ignored
+          command: cargo +stable test --verbose --release --all -- --ignored --nocapture
       - save_cache:
           key: parameter-cache-{{ .Revision }}
           paths:
