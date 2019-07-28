@@ -638,7 +638,10 @@ where
         }
     }
 
-    Ok(to_pad)
+    // Holding POST_SECTORS_COUNT merkle trees in memory takes upwards of ~2GiB
+    // of RAM, so prove on the first POST_SECTORS_COUNT/4 replica commitments
+    // for now. This function will be deleted once we implement Rational PoSt.
+    Ok(to_pad.into_iter().take(POST_SECTORS_COUNT / 4).collect())
 }
 
 #[cfg(test)]
