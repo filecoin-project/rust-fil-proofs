@@ -446,7 +446,7 @@ pub fn generate_post(
 ) -> error::Result<GeneratePoStOutput> {
     println!("START ensure_post_sectors_count");
     let input_parts = ensure_post_sectors_count(input_parts, |head| {
-        (head.0.as_ref().map(|s| (&s).to_string()), head.1.clone())
+        (head.0.as_ref().map(|s| (&s).to_string()), head.1)
     })?;
     println!("STOP ensure_post_sectors_count");
 
@@ -534,7 +534,7 @@ pub fn verify_post(
     proof: Vec<u8>,
     faults: Vec<u64>,
 ) -> error::Result<VerifyPoStOutput> {
-    let comm_rs = ensure_post_sectors_count(comm_rs, |head| head.clone())?;
+    let comm_rs = ensure_post_sectors_count(comm_rs, |head| *head)?;
 
     let safe_challenge_seed = {
         let mut cs = vec![0; 32];
