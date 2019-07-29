@@ -11,6 +11,7 @@ use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
+use crate::util::NODE_SIZE;
 
 #[derive(Debug, Clone)]
 pub struct SetupParams {
@@ -123,7 +124,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
         assert_eq!(
             pub_inputs.challenges.len(),
             pub_inputs.commitments.len(),
-            "missmatching challenges and commitments"
+            "mismatched challenges and commitments"
         );
         let challenges = pub_inputs.challenges;
 
@@ -131,8 +132,8 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
             .iter()
             .zip(pub_inputs.commitments.iter())
             .map(|(challenge, commitment)| {
-                let challenged_sector = *challenge % sector_count;
-                let challenged_leaf = *challenge % (sector_size / 32);
+                let challenged_sector = challenge_to_sector(*challenge, sector_count);
+                let challenged_leaf = challenge_to_leaf(*challenge, sector_size);
 
                 let tree = priv_inputs.trees[challenged_sector as usize];
                 if commitment != &tree.root() {
@@ -174,7 +175,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
             .zip(challenges.iter())
             .zip(pub_inputs.commitments.iter())
         {
-            let challenged_leaf = *challenge % (sector_size / 32);
+            let challenged_leaf = challenge_to_leaf(*challenge, sector_size);
 
             // validate the commitment
             if merkle_proof.root() != commitment {
@@ -182,7 +183,9 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
             }
 
             // validate the path length
-            if graph_height(pub_params.sector_size as usize / 32) != merkle_proof.path().len() {
+            if graph_height(pub_params.sector_size as usize / NODE_SIZE)
+                != merkle_proof.path().len()
+            {
                 return Ok(false);
             }
 
@@ -193,6 +196,14 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
 
         Ok(true)
     }
+}
+
+pub fn challenge_to_sector(challenge: u64, sector_count: u64) -> u64 {
+    challenge % sector_count
+}
+
+pub fn challenge_to_leaf(challenge: u64, sector_size: u64) -> u64 {
+    challenge % (sector_size / NODE_SIZE as u64)
 }
 
 /// Rational PoSt specific challenge derivation.

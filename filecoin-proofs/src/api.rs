@@ -104,8 +104,8 @@ pub fn generate_post(
     let commitments: Vec<_> = challenges
         .iter()
         .map(|c| {
-            let sector = *c as usize % sector_count;
-            commitments_all[sector]
+            let sector = rational_post::challenge_to_sector(*c, commitments_all.len() as u64);
+            commitments_all[sector as usize]
         })
         .collect();
 
@@ -182,8 +182,8 @@ pub fn verify_post(
     let commitments: Vec<_> = challenges
         .iter()
         .map(|c| {
-            let sector = *c as usize % sector_count;
-            commitments_all[sector]
+            let sector = rational_post::challenge_to_sector(*c, commitments_all.len() as u64);
+            commitments_all[sector as usize]
         })
         .collect();
 
