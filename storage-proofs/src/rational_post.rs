@@ -57,25 +57,30 @@ pub struct PrivateInputs<'a, H: 'a + Hasher> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Proof<H: Hasher>(
+pub struct Proof<H: Hasher> {
     #[serde(bound(
         serialize = "MerkleProof<H>: Serialize",
         deserialize = "MerkleProof<H>: Deserialize<'de>"
     ))]
-    Vec<MerkleProof<H>>,
-);
+    inclusion_proofs: Vec<MerkleProof<H>>,
+    challenges: Vec<u64>,
+}
 
 impl<H: Hasher> Proof<H> {
     pub fn leafs(&self) -> Vec<&H::Domain> {
-        self.0.iter().map(MerkleProof::leaf).collect()
+        self.inclusion_proofs.iter().map(MerkleProof::leaf).collect()
     }
 
     pub fn commitments(&self) -> Vec<&H::Domain> {
-        self.0.iter().map(MerkleProof::root).collect()
+        self.inclusion_proofs.iter().map(MerkleProof::root).collect()
     }
 
     pub fn paths(&self) -> Vec<&Vec<(H::Domain, bool)>> {
-        self.0.iter().map(MerkleProof::path).collect()
+        self.inclusion_proofs.iter().map(MerkleProof::path).collect()
+    }
+
+    pub fn challenges(&self) -> &Vec<u64> {
+        &self.challenges
     }
 }
 
@@ -132,7 +137,10 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        Ok(Proof(proofs))
+        Ok(Proof {
+            inclusion_proofs: proofs,
+            challenges,
+        })
     }
 
     fn verify(
@@ -148,12 +156,16 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
         let seed = pub_inputs.challenge_seed;
         let challenges = derive_challenges(challenges_count, sector_size, seed, faults);
 
-        if challenges.len() != proof.0.len() {
+        if challenges.len() != proof.inclusion_proofs.len() {
             return Err(Error::MalformedInput);
         }
 
+        if challenges != proof.challenges {
+            return Ok(false);
+        }
+
         // validate each proof
-        for (merkle_proof, challenge) in proof.0.iter().zip(challenges.iter()) {
+        for (merkle_proof, challenge) in proof.inclusion_proofs.iter().zip(challenges.iter()) {
             let challenged_sector = *challenge % sector_count;
             let challenged_leaf = *challenge % (sector_size / 32);
 
@@ -320,10 +332,13 @@ mod tests {
             commitments: &[tree.root()],
         };
 
-        let bad_proof = Proof(vec![
-            make_bogus_proof::<H>(&pub_inputs, rng),
-            make_bogus_proof::<H>(&pub_inputs, rng),
-        ]);
+        let bad_proof = Proof {
+            inclusion_proofs: vec![
+                make_bogus_proof::<H>(&pub_inputs, rng),
+                make_bogus_proof::<H>(&pub_inputs, rng),
+            ],
+            challenges: vec![0, 0],
+        };
 
         let verified = RationalPoSt::verify(&pub_params, &pub_inputs, &bad_proof)
             .expect("verification failed");
