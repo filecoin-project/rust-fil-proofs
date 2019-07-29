@@ -15,6 +15,7 @@ pub mod variables;
 pub mod vdf_post;
 pub mod xor;
 pub mod zigzag;
+pub mod rational_post;
 
 // FIXME: Can we make a config like for test?
 pub mod bench;
