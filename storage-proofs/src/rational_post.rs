@@ -280,12 +280,12 @@ mod tests {
     }
 
     #[test]
-    fn rationalPoSt_sha256() {
+    fn rational_post_sha256() {
         test_rational_post::<Sha256Hasher>();
     }
 
     #[test]
-    fn rationalPoSt_blake2s() {
+    fn rational_post_blake2s() {
         test_rational_post::<Blake2sHasher>();
     }
 
