@@ -13,6 +13,7 @@ use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
 use crate::rational_post::RationalPoSt;
+use crate::util::NODE_SIZE;
 
 /// This is the `RationalPoSt` circuit.
 pub struct RationalPoStCircuit<'a, E: JubjubEngine, H: Hasher> {
@@ -60,7 +61,7 @@ where
         let mut inputs = Vec::new();
 
         let por_pub_params = merklepor::PublicParams {
-            leaves: (pub_params.sector_size / 32) as usize,
+            leaves: (pub_params.sector_size as usize / NODE_SIZE),
             private: false,
         };
 
@@ -117,7 +118,7 @@ where
         params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> RationalPoStCircuit<'a, Bls12, H> {
         let challenges_count = pub_params.challenges_count;
-        let height = drgraph::graph_height(pub_params.sector_size as usize / 32);
+        let height = drgraph::graph_height(pub_params.sector_size as usize / NODE_SIZE);
 
         let commitments = vec![None; challenges_count];
         let leafs = vec![None; challenges_count];
@@ -228,8 +229,8 @@ mod tests {
         let commitments: Vec<_> = challenges
             .iter()
             .map(|c| {
-                let sector = *c as usize % commitments_raw.len();
-                commitments_raw[sector]
+                let sector = rational_post::challenge_to_sector(*c, commitments_raw.len() as u64);
+                commitments_raw[sector as usize]
             })
             .collect();
 
@@ -326,8 +327,8 @@ mod tests {
         let commitments: Vec<_> = challenges
             .iter()
             .map(|c| {
-                let sector = *c as usize % commitments_raw.len();
-                commitments_raw[sector].into()
+                let sector = rational_post::challenge_to_sector(*c, commitments_raw.len() as u64);
+                commitments_raw[sector as usize].into()
             })
             .collect();
 
