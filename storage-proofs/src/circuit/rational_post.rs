@@ -223,7 +223,7 @@ mod tests {
 
         let faults = vec![];
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
-        let challenges = derive_challenges(challenges_count, sector_size, &seed, &faults);
+        let challenges = derive_challenges(challenges_count, 2, &seed, &faults);
         let commitments_raw = vec![tree1.root(), tree2.root()];
         let commitments: Vec<_> = challenges
             .iter()
@@ -321,7 +321,7 @@ mod tests {
 
         let faults = vec![];
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
-        let challenges = derive_challenges(challenges_count, sector_size, &seed, &faults);
+        let challenges = derive_challenges(challenges_count, 2, &seed, &faults);
         let commitments_raw = vec![tree1.root(), tree2.root()];
         let commitments: Vec<_> = challenges
             .iter()
