@@ -196,7 +196,12 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
 }
 
 /// Rational PoSt specific challenge derivation.
-pub fn derive_challenges(challenge_count: usize, sector_count: usize, seed: &[u8], faults: &[u64]) -> Vec<u64> {
+pub fn derive_challenges(
+    challenge_count: usize,
+    sector_count: usize,
+    seed: &[u8],
+    faults: &[u64],
+) -> Vec<u64> {
     // TODO: ensure sorting of faults
     (0..challenge_count)
         .map(|n| {
