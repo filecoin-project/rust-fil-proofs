@@ -13,21 +13,16 @@ pub struct Sloth {}
 #[derive(Debug, Clone)]
 pub struct SetupParams {
     pub key: PedersenDomain,
-    pub rounds: usize,
 }
 
 #[derive(Debug, Clone)]
 pub struct PublicParams {
     pub key: PedersenDomain,
-    pub rounds: usize,
 }
 
 impl ParameterSetMetadata for PublicParams {
     fn identifier(&self) -> String {
-        format!(
-            "vdf_sloth::PublicParams{{key: {:?}; rounds: {}}}",
-            self.key, self.rounds
-        )
+        format!("vdf_sloth::PublicParams{{key: {:?}; rounds: 0}}", self.key,)
     }
 
     fn sector_size(&self) -> u64 {
@@ -46,16 +41,13 @@ impl Vdf<PedersenDomain> for Sloth {
     type Proof = Proof;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
-        Ok(PublicParams {
-            key: sp.key,
-            rounds: sp.rounds,
-        })
+        Ok(PublicParams { key: sp.key })
     }
 
     fn eval(pp: &Self::PublicParams, x: &PedersenDomain) -> Result<(PedersenDomain, Self::Proof)> {
         let key: Fr = pp.key.into();
         let x: Fr = (*x).into();
-        let y = sloth::encode::<Bls12>(&key, &x, pp.rounds);
+        let y = sloth::encode::<Bls12>(&key, &x);
 
         Ok((y.into(), Proof { y: y.into() }))
     }
@@ -63,7 +55,7 @@ impl Vdf<PedersenDomain> for Sloth {
     fn verify(pp: &Self::PublicParams, x: &PedersenDomain, proof: &Self::Proof) -> Result<bool> {
         let y: Fr = Self::extract_output(proof).into();
         let key: Fr = pp.key.into();
-        let decoded: PedersenDomain = sloth::decode::<Bls12>(&key, &y, pp.rounds).into();
+        let decoded: PedersenDomain = sloth::decode::<Bls12>(&key, &y).into();
 
         Ok(&decoded == x)
     }
@@ -71,9 +63,7 @@ impl Vdf<PedersenDomain> for Sloth {
     fn key(pp: &self::PublicParams) -> PedersenDomain {
         pp.key
     }
-    fn rounds(pp: &self::PublicParams) -> usize {
-        pp.rounds
-    }
+
     fn extract_output(proof: &Proof) -> PedersenDomain {
         proof.y
     }

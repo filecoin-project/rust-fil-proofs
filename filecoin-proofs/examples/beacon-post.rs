@@ -89,10 +89,7 @@ fn do_the_work(
             challenge_count,
             sector_size: size,
             post_epochs,
-            setup_params_vdf: vdf_sloth::SetupParams {
-                key: rng.gen(),
-                rounds: vdf,
-            },
+            setup_params_vdf: vdf_sloth::SetupParams { key: rng.gen() },
             sectors_count,
         },
         post_periods_count,

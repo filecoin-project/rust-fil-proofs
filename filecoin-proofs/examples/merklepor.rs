@@ -45,7 +45,6 @@ impl<'a> Example<'a, circuit::ppor::ParallelProofOfRetrievability<'a, Bls12>> fo
         challenge_count: usize,
         _leaves: usize,
         _m: usize,
-        _sloth_iter: usize,
     ) -> circuit::ppor::ParallelProofOfRetrievability<'a, Bls12> {
         let (auth_path, leaf, root) = random_merkle_path(rng, tree_depth);
         self.root = root;
@@ -69,7 +68,6 @@ impl<'a> Example<'a, circuit::ppor::ParallelProofOfRetrievability<'a, Bls12>> fo
         tree_depth: usize,
         challenge_count: usize,
         _m: usize,
-        _sloth_iter: usize,
     ) -> Parameters<Bls12> {
         generate_random_parameters::<Bls12, _, _>(
             circuit::ppor::ParallelProofOfRetrievability {
@@ -96,7 +94,6 @@ impl<'a> Example<'a, circuit::ppor::ParallelProofOfRetrievability<'a, Bls12>> fo
         challenge_count: usize,
         _leaves: usize,
         _m: usize,
-        _sloth_iter: usize,
     ) -> Proof<Bls12> {
         let (auth_path, leaf, root) = random_merkle_path(rng, tree_depth);
         self.root = root;
