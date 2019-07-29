@@ -25,6 +25,7 @@ pub mod test_helper;
 
 pub mod example_helper;
 
+pub mod rational_post;
 pub mod batchpost;
 pub mod beacon_post;
 pub mod challenge_derivation;
