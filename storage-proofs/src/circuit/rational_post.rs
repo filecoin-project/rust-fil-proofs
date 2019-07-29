@@ -149,7 +149,7 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for RationalPoStCircuit<'a, E, H
                 &params,
                 leafs[i],
                 paths[i].clone(),
-                Root::Val(commitment.clone()),
+                Root::Val(*commitment),
                 false,
             )?;
         }
