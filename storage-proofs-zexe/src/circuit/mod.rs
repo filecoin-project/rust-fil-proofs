@@ -1,6 +1,7 @@
 pub mod constraint;
 pub mod drgporep;
 pub mod kdf;
+pub mod metric;
 pub mod multi_proof;
 pub mod multipack;
 pub mod pedersen;
@@ -8,3 +9,4 @@ pub mod por;
 pub mod sloth;
 pub mod test;
 pub mod variables;
+pub mod zigzag;
