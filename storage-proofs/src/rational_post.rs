@@ -16,6 +16,7 @@ use crate::proof::{NoRequirements, ProofScheme};
 pub struct SetupParams {
     /// The size of a sector.
     pub sector_size: u64,
+    // TODO: can we drop this?
     /// How many challenges there are in total.
     pub challenges_count: usize,
 }
@@ -45,7 +46,7 @@ impl ParameterSetMetadata for PublicParams {
 #[derive(Debug, Clone)]
 pub struct PublicInputs<'a, T: 'a + Domain> {
     /// The challenges, which leafs to prove.
-    pub challenge_seed: &'a [u8],
+    pub challenges: &'a [u64],
     pub faults: &'a [u64],
     /// The root hashes of the underlying merkle trees.
     pub commitments: &'a [T],
@@ -63,24 +64,28 @@ pub struct Proof<H: Hasher> {
         deserialize = "MerkleProof<H>: Deserialize<'de>"
     ))]
     inclusion_proofs: Vec<MerkleProof<H>>,
-    challenges: Vec<u64>,
 }
 
 impl<H: Hasher> Proof<H> {
     pub fn leafs(&self) -> Vec<&H::Domain> {
-        self.inclusion_proofs.iter().map(MerkleProof::leaf).collect()
+        self.inclusion_proofs
+            .iter()
+            .map(MerkleProof::leaf)
+            .collect()
     }
 
     pub fn commitments(&self) -> Vec<&H::Domain> {
-        self.inclusion_proofs.iter().map(MerkleProof::root).collect()
+        self.inclusion_proofs
+            .iter()
+            .map(MerkleProof::root)
+            .collect()
     }
 
     pub fn paths(&self) -> Vec<&Vec<(H::Domain, bool)>> {
-        self.inclusion_proofs.iter().map(MerkleProof::path).collect()
-    }
-
-    pub fn challenges(&self) -> &Vec<u64> {
-        &self.challenges
+        self.inclusion_proofs
+            .iter()
+            .map(MerkleProof::path)
+            .collect()
     }
 }
 
@@ -113,21 +118,24 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
         priv_inputs: &'b Self::PrivateInputs,
     ) -> Result<Self::Proof> {
         let sector_size = pub_params.sector_size;
-        let challenges_count = pub_params.challenges_count;
-        let sector_count = pub_inputs.commitments.len() as u64;
+        let sector_count = priv_inputs.trees.len() as u64;
 
-        let faults = pub_inputs.faults;
-        let seed = pub_inputs.challenge_seed;
-        let challenges = derive_challenges(challenges_count, sector_size, seed, faults);
+        assert_eq!(
+            pub_inputs.challenges.len(),
+            pub_inputs.commitments.len(),
+            "missmatching challenges and commitments"
+        );
+        let challenges = pub_inputs.challenges;
 
         let proofs = challenges
             .iter()
-            .map(|challenge| {
+            .zip(pub_inputs.commitments.iter())
+            .map(|(challenge, commitment)| {
                 let challenged_sector = *challenge % sector_count;
                 let challenged_leaf = *challenge % (sector_size / 32);
 
                 let tree = priv_inputs.trees[challenged_sector as usize];
-                if pub_inputs.commitments[challenged_sector as usize] != tree.root() {
+                if commitment != &tree.root() {
                     return Err(Error::InvalidCommitment);
                 }
 
@@ -139,7 +147,6 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
 
         Ok(Proof {
             inclusion_proofs: proofs,
-            challenges,
         })
     }
 
@@ -149,28 +156,28 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
         proof: &Self::Proof,
     ) -> Result<bool> {
         let sector_size = pub_params.sector_size;
-        let challenges_count = pub_params.challenges_count;
-        let sector_count = pub_inputs.commitments.len() as u64;
 
-        let faults = pub_inputs.faults;
-        let seed = pub_inputs.challenge_seed;
-        let challenges = derive_challenges(challenges_count, sector_size, seed, faults);
+        let challenges = pub_inputs.challenges;
+
+        if challenges.len() != pub_inputs.commitments.len() as usize {
+            return Err(Error::MalformedInput);
+        }
 
         if challenges.len() != proof.inclusion_proofs.len() {
             return Err(Error::MalformedInput);
         }
 
-        if challenges != proof.challenges {
-            return Ok(false);
-        }
-
         // validate each proof
-        for (merkle_proof, challenge) in proof.inclusion_proofs.iter().zip(challenges.iter()) {
-            let challenged_sector = *challenge % sector_count;
+        for ((merkle_proof, challenge), commitment) in proof
+            .inclusion_proofs
+            .iter()
+            .zip(challenges.iter())
+            .zip(pub_inputs.commitments.iter())
+        {
             let challenged_leaf = *challenge % (sector_size / 32);
 
             // validate the commitment
-            if merkle_proof.root() != &pub_inputs.commitments[challenged_sector as usize] {
+            if merkle_proof.root() != commitment {
                 return Ok(false);
             }
 
@@ -237,9 +244,12 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 32;
+        let sector_size = leaves * 32;
+        let challenges_count = 8;
+
         let pub_params = PublicParams {
-            sector_size: leaves * 32,
-            challenges_count: 8,
+            sector_size,
+            challenges_count,
         };
 
         let data1: Vec<u8> = (0..leaves)
@@ -252,18 +262,31 @@ mod tests {
         let graph1 = BucketGraph::<H>::new(32, 5, 0, new_seed());
         let graph2 = BucketGraph::<H>::new(32, 5, 0, new_seed());
         let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
-        let tree2= graph2.merkle_tree(data2.as_slice()).unwrap();
+        let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
 
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
         let faults = vec![1];
+        let challenges = derive_challenges(challenges_count, sector_size, &seed, &faults);
+        let commitments = challenges
+            .iter()
+            .map(|c| {
+                if c % 2 == 0 {
+                    tree1.root()
+                } else {
+                    tree2.root()
+                }
+            })
+            .collect::<Vec<_>>();
 
         let pub_inputs = PublicInputs {
-            challenge_seed: &seed,
-            commitments: &[tree1.root(), tree2.root()],
+            challenges: &challenges,
+            commitments: &commitments,
             faults: &faults,
         };
 
-        let priv_inputs = PrivateInputs::<H> { trees: &[&tree1, &tree2] };
+        let priv_inputs = PrivateInputs::<H> {
+            trees: &[&tree1, &tree2],
+        };
 
         let proof = RationalPoSt::<H>::prove(&pub_params, &pub_inputs, &priv_inputs)
             .expect("proving failed");
@@ -312,9 +335,11 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 32;
+        let sector_size = leaves * 32;
+        let challenges_count = 2;
         let pub_params = PublicParams {
-            sector_size: leaves * 32,
-            challenges_count: 2,
+            sector_size,
+            challenges_count,
         };
 
         let data: Vec<u8> = (0..leaves)
@@ -325,11 +350,13 @@ mod tests {
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
         let faults = vec![];
+        let challenges = derive_challenges(challenges_count, sector_size, &seed, &faults);
+        let commitments = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();
 
         let pub_inputs = PublicInputs::<H::Domain> {
-            challenge_seed: &seed,
+            challenges: &challenges,
             faults: &faults,
-            commitments: &[tree.root()],
+            commitments: &commitments,
         };
 
         let bad_proof = Proof {
@@ -337,7 +364,6 @@ mod tests {
                 make_bogus_proof::<H>(&pub_inputs, rng),
                 make_bogus_proof::<H>(&pub_inputs, rng),
             ],
-            challenges: vec![0, 0],
         };
 
         let verified = RationalPoSt::verify(&pub_params, &pub_inputs, &bad_proof)
@@ -366,10 +392,12 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 32;
+        let sector_size = leaves * 32;
+        let challenges_count = 2;
 
         let pub_params = PublicParams {
-            sector_size: leaves * 32,
-            challenges_count: 2,
+            sector_size,
+            challenges_count,
         };
 
         let data: Vec<u8> = (0..leaves)
@@ -379,12 +407,14 @@ mod tests {
         let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
-        let faults = vec![];
+        let faults = vec![1];
+        let challenges = derive_challenges(challenges_count, sector_size, &seed, &faults);
+        let commitments = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();
 
         let pub_inputs = PublicInputs {
-            challenge_seed: &seed,
+            challenges: &challenges,
             faults: &faults,
-            commitments: &[tree.root()],
+            commitments: &commitments,
         };
 
         let priv_inputs = PrivateInputs::<H> { trees: &[&tree] };
@@ -393,10 +423,13 @@ mod tests {
             .expect("proving failed");
 
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
+        let challenges = derive_challenges(challenges_count, sector_size, &seed, &faults);
+        let commitments = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();
+
         let different_pub_inputs = PublicInputs {
-            challenge_seed: &seed,
+            challenges: &challenges,
             faults: &faults,
-            commitments: &[tree.root()],
+            commitments: &commitments,
         };
 
         let verified = RationalPoSt::<H>::verify(&pub_params, &different_pub_inputs, &proof)
