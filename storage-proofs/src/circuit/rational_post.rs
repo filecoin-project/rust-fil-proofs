@@ -1,24 +1,17 @@
 use std::marker::PhantomData;
 
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use ff::Field;
-use fil_sapling_crypto::circuit::boolean::Boolean;
-use fil_sapling_crypto::circuit::num::{AllocatedNum, Num};
 use fil_sapling_crypto::circuit::{boolean, num, pedersen_hash};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
-use paired::Engine;
 
 use crate::circuit::constraint;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::drgraph;
-use crate::fr32::u32_into_fr;
 use crate::hasher::Hasher;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::rational_post::RationalPoSt;
 use crate::proof::ProofScheme;
-use crate::circuit::porc::pack_into_allocated_num;
-
 
 /// This is the `RationalPoSt` circuit.
 pub struct RationalPoStCircuit<'a, E: JubjubEngine> {
@@ -71,10 +64,12 @@ where
         _pub_params: &<RationalPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
         engine_params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> RationalPoStCircuit<'a, Bls12> {
-        let commitments: Vec<_> = pub_in
-            .commitments
+        let commitments: Vec<_> = vanilla_proof.challenges()
             .iter()
-            .map(|c| Some((*c).into()))
+            .map(|c| {
+                let sector = *c as usize % pub_in.commitments.len();
+                Some(pub_in.commitments[sector].into())
+            })
             .collect();
 
         let leafs: Vec<_> = vanilla_proof.leafs()
@@ -317,78 +312,80 @@ mod tests {
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
     }
 
-    // #[ignore] // Slow test – run only when compiled for release.
-    // #[test]
-    // fn rational_post_test_compound() {
-    //     let params = &JubjubBls12::new();
-    //     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    #[ignore] // Slow test – run only when compiled for release.
+    #[test]
+    fn rational_post_test_compound() {
+        let params = &JubjubBls12::new();
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-    //     let leaves = 32;
+        let leaves = 32;
 
-    //     let setup_params = compound_proof::SetupParams {
-    //         vanilla_params: &rational_post::SetupParams {
-    //             leaves,
-    //             sectors_count: 2,
-    //             challenges_count: 2,
-    //         },
-    //         engine_params: params,
-    //         partitions: None,
-    //     };
+        let setup_params = compound_proof::SetupParams {
+            vanilla_params: &rational_post::SetupParams {
+                sector_size: leaves * 32,
+                challenges_count: 2,
+            },
+            engine_params: params,
+            partitions: None,
+        };
 
-    //     let pub_params =
-    //         RationalPoStCompound::<PedersenHasher>::setup(&setup_params).expect("setup failed");
+        let pub_params =
+            RationalPoStCompound::<PedersenHasher>::setup(&setup_params).expect("setup failed");
 
-    //     let data1: Vec<u8> = (0..32)
-    //         .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
-    //         .collect();
-    //     let data2: Vec<u8> = (0..32)
-    //         .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
-    //         .collect();
+        let data1: Vec<u8> = (0..leaves)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
+        let data2: Vec<u8> = (0..leaves)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
 
-    //     let graph1 = BucketGraph::<PedersenHasher>::new(32, 5, 0, new_seed());
-    //     let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
+        let graph1 = BucketGraph::<PedersenHasher>::new(32, 5, 0, new_seed());
+        let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
 
-    //     let graph2 = BucketGraph::<PedersenHasher>::new(32, 5, 0, new_seed());
-    //     let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
+        let graph2 = BucketGraph::<PedersenHasher>::new(32, 5, 0, new_seed());
+        let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
 
-    //     let pub_inputs = rational_post::PublicInputs {
-    //         challenges: &vec![rng.gen_range(0, leaves), rng.gen_range(0, leaves)],
-    //         challenged_sectors: &[0, 1],
-    //         commitments: &[tree1.root(), tree2.root()],
-    //     };
+        let faults = vec![];
+        let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
 
-    //     let priv_inputs = rational_post::PrivateInputs::<PedersenHasher> {
-    //         trees: &[&tree1, &tree2],
-    //     };
+        let pub_inputs = rational_post::PublicInputs {
+            challenge_seed: &seed,
+            faults: &faults,
+            commitments: &[tree1.root(), tree2.root()],
+        };
 
-    //     let gparams =
-    //         RationalPoStCompound::<PedersenHasher>::groth_params(&pub_params.vanilla_params, &params)
-    //             .expect("failed to create groth params");
+        let priv_inputs = rational_post::PrivateInputs::<PedersenHasher> {
+            trees: &[&tree1, &tree2],
+        };
 
-    //     let proof =
-    //         RationalPoStCompound::<PedersenHasher>::prove(&pub_params, &pub_inputs, &priv_inputs, &gparams)
-    //             .expect("proving failed");
+        let gparams =
+            RationalPoStCompound::<PedersenHasher>::groth_params(&pub_params.vanilla_params, &params)
+                .expect("failed to create groth params");
 
-    //     let (circuit, inputs) = RationalPoStCompound::<PedersenHasher>::circuit_for_test(
-    //         &pub_params,
-    //         &pub_inputs,
-    //         &priv_inputs,
-    //     );
+        let proof =
+            RationalPoStCompound::<PedersenHasher>::prove(&pub_params, &pub_inputs, &priv_inputs, &gparams)
+                .expect("proving failed");
 
-    //     let mut cs = TestConstraintSystem::new();
+        let (circuit, inputs) = RationalPoStCompound::<PedersenHasher>::circuit_for_test(
+            &pub_params,
+            &pub_inputs,
+            &priv_inputs,
+        );
 
-    //     circuit.synthesize(&mut cs).expect("failed to synthesize");
-    //     assert!(cs.is_satisfied());
-    //     assert!(cs.verify(&inputs));
+        let mut cs = TestConstraintSystem::new();
 
-    //     let verified = RationalPoStCompound::<PedersenHasher>::verify(
-    //         &pub_params,
-    //         &pub_inputs,
-    //         &proof,
-    //         &NoRequirements,
-    //     )
-    //     .expect("failed while verifying");
+        circuit.synthesize(&mut cs).expect("failed to synthesize");
+        assert!(cs.is_satisfied());
+        assert!(cs.verify(&inputs));
 
-    //     assert!(verified);
-    // }
+        let verified = RationalPoStCompound::<PedersenHasher>::verify(
+            &pub_params,
+            &pub_inputs,
+            &proof,
+            &NoRequirements,
+        )
+        .expect("failed while verifying");
+
+        assert!(verified);
+    }
 }
