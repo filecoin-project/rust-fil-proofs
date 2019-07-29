@@ -32,7 +32,7 @@ pub struct PublicParams {
 impl ParameterSetMetadata for PublicParams {
     fn identifier(&self) -> String {
         format!(
-            "rationalPoSt::PublicParams{{sector_size: {} challenges_count: {}}}",
+            "RationalPoSt::PublicParams{{sector_size: {} challenges_count: {}}}",
             self.sector_size(),
             self.challenges_count,
         )
