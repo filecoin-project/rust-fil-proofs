@@ -595,9 +595,7 @@ fn verify_post_fixed_sectors_count(
 
     for comm_r in fixed.comm_rs.iter() {
         let commitment = bytes_into_fr::<Bls12>(comm_r).map_err(|err| match err {
-            Error::BadFrBytes => {
-                format_err!("{}: could not transform comm_r={:?} into Fr32", err, comm_r)
-            }
+            Error::BadFrBytes => format_err!("could not transform comm_r into Fr32: {:?}", err),
             _ => err.into(),
         })?;
 
@@ -781,41 +779,96 @@ mod tests {
 
     #[test]
     fn test_verify_seal_fr32_validation() {
-        //        verify_seal() // comm_r, comm_d, comm_r_star
-        //        let not_convertable_to_fr_bytes = [255; 32];
-        //        let out = bytes_into_fr::<Bls12>(&not_convertable_to_fr_bytes);
-        //        assert!(out.is_err(), "tripwire");
-        //
-        //        let result = verify_post(
-        //            PoStConfig(SectorSize(TEST_SECTOR_SIZE), PoStProofPartitions(2)),
-        //            vec![not_convertable_to_fr_bytes],
-        //            [0; 32],
-        //            vec![[0; POST_SECTORS_COUNT * SINGLE_PARTITION_PROOF_LEN].to_vec()],
-        //            vec![],
-        //        );
-        //
-        //        if let Err(err) = result {
-        //            let needle = "could not transform comm_r into Fr32";
-        //            let haystack = format!("{}", err);
-        //
-        //            assert!(
-        //                haystack.contains("comm_r"),
-        //                format!("\"{}\" did not contain \"{}\"", haystack, needle)
-        //            );
-        //        } else {
-        //            panic!("should have failed comm_r to Fr32 conversion");
-        //        }
+        let convertible_to_fr_bytes = [0; 32];
+        let out = bytes_into_fr::<Bls12>(&convertible_to_fr_bytes);
+        assert!(out.is_ok(), "tripwire");
+
+        let not_convertible_to_fr_bytes = [255; 32];
+        let out = bytes_into_fr::<Bls12>(&not_convertible_to_fr_bytes);
+        assert!(out.is_err(), "tripwire");
+
+        {
+            let result = verify_seal(
+                PoRepConfig(SectorSize(TEST_SECTOR_SIZE), PoRepProofPartitions(2)),
+                not_convertible_to_fr_bytes,
+                convertible_to_fr_bytes,
+                convertible_to_fr_bytes,
+                &[0; 31],
+                &[0; 31],
+                &[],
+            );
+
+            if let Err(err) = result {
+                let needle = "could not transform comm_r into Fr32";
+                let haystack = format!("{}", err);
+
+                assert!(
+                    haystack.contains(needle),
+                    format!("\"{}\" did not contain \"{}\"", haystack, needle)
+                );
+            } else {
+                panic!("should have failed comm_r to Fr32 conversion");
+            }
+        }
+
+        {
+            let result = verify_seal(
+                PoRepConfig(SectorSize(TEST_SECTOR_SIZE), PoRepProofPartitions(2)),
+                convertible_to_fr_bytes,
+                not_convertible_to_fr_bytes,
+                convertible_to_fr_bytes,
+                &[0; 31],
+                &[0; 31],
+                &[],
+            );
+
+            if let Err(err) = result {
+                let needle = "could not transform comm_d into Fr32";
+                let haystack = format!("{}", err);
+
+                assert!(
+                    haystack.contains(needle),
+                    format!("\"{}\" did not contain \"{}\"", haystack, needle)
+                );
+            } else {
+                panic!("should have failed comm_d to Fr32 conversion");
+            }
+        }
+
+        {
+            let result = verify_seal(
+                PoRepConfig(SectorSize(TEST_SECTOR_SIZE), PoRepProofPartitions(2)),
+                convertible_to_fr_bytes,
+                convertible_to_fr_bytes,
+                not_convertible_to_fr_bytes,
+                &[0; 31],
+                &[0; 31],
+                &[],
+            );
+
+            if let Err(err) = result {
+                let needle = "could not transform comm_r_star into Fr32";
+                let haystack = format!("{}", err);
+
+                assert!(
+                    haystack.contains(needle),
+                    format!("\"{}\" did not contain \"{}\"", haystack, needle)
+                );
+            } else {
+                panic!("should have failed comm_r_star to Fr32 conversion");
+            }
+        }
     }
 
     #[test]
     fn test_verify_post_fr32_validation() {
-        let not_convertable_to_fr_bytes = [255; 32];
-        let out = bytes_into_fr::<Bls12>(&not_convertable_to_fr_bytes);
+        let not_convertible_to_fr_bytes = [255; 32];
+        let out = bytes_into_fr::<Bls12>(&not_convertible_to_fr_bytes);
         assert!(out.is_err(), "tripwire");
 
         let result = verify_post(
             PoStConfig(SectorSize(TEST_SECTOR_SIZE), PoStProofPartitions(2)),
-            vec![not_convertable_to_fr_bytes],
+            vec![not_convertible_to_fr_bytes],
             [0; 32],
             vec![[0; POST_SECTORS_COUNT * SINGLE_PARTITION_PROOF_LEN].to_vec()],
             vec![],
@@ -826,7 +879,7 @@ mod tests {
             let haystack = format!("{}", err);
 
             assert!(
-                haystack.contains("comm_r"),
+                haystack.contains(needle),
                 format!("\"{}\" did not contain \"{}\"", haystack, needle)
             );
         } else {
