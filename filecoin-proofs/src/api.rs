@@ -4,7 +4,6 @@ use std::io::prelude::*;
 use std::io::{BufWriter, Cursor, Read, SeekFrom};
 use std::path::{Path, PathBuf};
 
-use ff::PrimeField;
 use memmap::MmapOptions;
 use paired::bls12_381::Bls12;
 use paired::Engine;
@@ -27,8 +26,9 @@ use crate::types::{
     PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, PoStProofPartitions,
     SectorSize, UnpaddedByteIndex, UnpaddedBytesAmount,
 };
+
 use storage_proofs::circuit::multi_proof::MultiProof;
-use storage_proofs::circuit::vdf_post::VDFPostCompound;
+use storage_proofs::circuit::rational_post::RationalPoStCompound;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
@@ -43,8 +43,8 @@ use storage_proofs::piece_inclusion_proof::{
 };
 use storage_proofs::porep::{replica_id, PoRep, Tau};
 use storage_proofs::proof::NoRequirements;
+use storage_proofs::rational_post;
 use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
-use storage_proofs::{vdf_post, vdf_sloth};
 
 /// FrSafe is an array of the largest whole number of bytes guaranteed not to overflow the field.
 pub type FrSafe = [u8; 31];
@@ -76,36 +76,43 @@ pub fn generate_post(
     post_config: PoStConfig,
     challenge_seed: ChallengeSeed,
     input_parts: Vec<(Option<String>, Commitment)>,
+    faults: Vec<u64>,
 ) -> error::Result<GeneratePoStOutput> {
-    let faults: Vec<u64> = Vec::new();
-
+    let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
-        vanilla_params: &post_setup_params(post_config),
+        vanilla_params: &vanilla_params,
         engine_params: &(*ENGINE_PARAMS),
         partitions: None,
     };
-
-    let pub_params: compound_proof::PublicParams<
-        _,
-        vdf_post::VDFPoSt<PedersenHasher, vdf_sloth::Sloth>,
-    > = VDFPostCompound::setup(&setup_params).expect("setup failed");
-
-    let commitments = input_parts
+    let commitments_all: Vec<PedersenDomain> = input_parts
         .iter()
         .map(|(_, comm_r)| PedersenDomain::try_from_bytes(&comm_r[..]).unwrap()) // FIXME: don't unwrap
         .collect();
 
-    let safe_challenge_seed = {
-        let mut cs = vec![0; 32];
-        cs.copy_from_slice(&challenge_seed);
-        cs[31] &= 0b0011_1111;
-        cs
-    };
+    let sector_count = commitments_all.len();
 
-    let pub_inputs = vdf_post::PublicInputs {
-        challenge_seed: PedersenDomain::try_from_bytes(&safe_challenge_seed).unwrap(),
-        commitments,
-        faults: Vec::new(),
+    let pub_params: compound_proof::PublicParams<_, rational_post::RationalPoSt<PedersenHasher>> =
+        RationalPoStCompound::setup(&setup_params).expect("setup failed");
+
+    let challenges = rational_post::derive_challenges(
+        vanilla_params.challenges_count,
+        sector_count,
+        &challenge_seed,
+        &faults,
+    );
+
+    let commitments: Vec<_> = challenges
+        .iter()
+        .map(|c| {
+            let sector = *c as usize % sector_count;
+            commitments_all[sector]
+        })
+        .collect();
+
+    let pub_inputs = rational_post::PublicInputs {
+        challenges: &challenges,
+        commitments: &commitments,
+        faults: &faults,
     };
 
     let trees: Vec<Tree> = input_parts
@@ -125,11 +132,13 @@ pub fn generate_post(
 
     let borrowed_trees: Vec<&Tree> = trees.iter().map(|t| t).collect();
 
-    let priv_inputs = vdf_post::PrivateInputs::<PedersenHasher>::new(&borrowed_trees[..]);
+    let priv_inputs = rational_post::PrivateInputs::<PedersenHasher> {
+        trees: &borrowed_trees[..],
+    };
 
     let groth_params = get_post_params(post_config)?;
 
-    let proof = VDFPostCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)
+    let proof = RationalPoStCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)
         .expect("failed while proving");
 
     let mut buf = Vec::with_capacity(
@@ -150,39 +159,43 @@ pub fn verify_post(
     proof: Vec<u8>,
     faults: Vec<u64>,
 ) -> error::Result<bool> {
-    let safe_challenge_seed = {
-        let mut cs = vec![0; 32];
-        cs.copy_from_slice(&challenge_seed);
-        cs[31] &= 0b0011_1111;
-        cs
-    };
-
-    let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: &post_setup_params(post_config),
+    let vanilla_params = post_setup_params(post_config);
+    let setup_params = compound_proof::SetupParams {
+        vanilla_params: &vanilla_params,
         engine_params: &(*ENGINE_PARAMS),
         partitions: None,
     };
-
-    let compound_public_params: compound_proof::PublicParams<
-        _,
-        vdf_post::VDFPoSt<PedersenHasher, vdf_sloth::Sloth>,
-    > = VDFPostCompound::setup(&compound_setup_params).expect("setup failed");
-
-    let commitments = comm_rs
+    let commitments_all: Vec<PedersenDomain> = comm_rs
         .iter()
-        .map(|comm_r| {
-            PedersenDomain(
-                bytes_into_fr::<Bls12>(comm_r)
-                    .expects("could not could not map comm_r to Fr")
-                    .into_repr(),
-            )
-        })
-        .collect::<Vec<PedersenDomain>>();
+        .map(|comm_r| PedersenDomain::try_from_bytes(&comm_r[..]).unwrap()) // FIXME: don't unwrap
+        .collect();
 
-    let public_inputs = vdf_post::PublicInputs::<PedersenDomain> {
-        commitments,
-        challenge_seed: PedersenDomain::try_from_bytes(&safe_challenge_seed)?,
-        faults: faults.clone(),
+    let sector_count = commitments_all.len();
+
+    let challenges = rational_post::derive_challenges(
+        vanilla_params.challenges_count,
+        sector_count,
+        &challenge_seed,
+        &faults,
+    );
+
+    let commitments: Vec<_> = challenges
+        .iter()
+        .map(|c| {
+            let sector = *c as usize % sector_count;
+            commitments_all[sector]
+        })
+        .collect();
+
+    let public_params: compound_proof::PublicParams<
+        _,
+        rational_post::RationalPoSt<PedersenHasher>,
+    > = RationalPoStCompound::setup(&setup_params).expect("setup failed");
+
+    let public_inputs = rational_post::PublicInputs::<PedersenDomain> {
+        challenges: &challenges,
+        commitments: &commitments,
+        faults: &faults,
     };
 
     let verifying_key = get_post_verifying_key(post_config)?;
@@ -196,12 +209,8 @@ pub fn verify_post(
         &verifying_key,
     )?;
 
-    let is_valid = VDFPostCompound::verify(
-        &compound_public_params,
-        &public_inputs,
-        &proof,
-        &NoRequirements,
-    )?;
+    let is_valid =
+        RationalPoStCompound::verify(&public_params, &public_inputs, &proof, &NoRequirements)?;
 
     // Since callers may rely on previous mocked success, just pretend verification succeeded, for now.
     Ok(is_valid)
@@ -610,14 +619,14 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
 
 #[cfg(test)]
 mod tests {
+    use crate::constants::TEST_SECTOR_SIZE;
+    use crate::error::ExpectWithBacktrace;
+    use crate::types::SectorSize;
+
     use rand::Rng;
     use tempfile::NamedTempFile;
 
     use storage_proofs::util::NODE_SIZE;
-
-    use crate::constants::{POST_SECTORS_COUNT, TEST_SECTOR_SIZE};
-    use crate::error::ExpectWithBacktrace;
-    use crate::types::SectorSize;
 
     use super::*;
 
