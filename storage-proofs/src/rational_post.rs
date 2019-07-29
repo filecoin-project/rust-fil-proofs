@@ -196,15 +196,15 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
 }
 
 /// Rational PoSt specific challenge derivation.
-pub fn derive_challenges(count: usize, sector_size: u64, seed: &[u8], faults: &[u64]) -> Vec<u64> {
+pub fn derive_challenges(challenge_count: usize, sector_count: usize, seed: &[u8], faults: &[u64]) -> Vec<u64> {
     // TODO: ensure sorting of faults
-    (0..count)
+    (0..challenge_count)
         .map(|n| {
             let mut attempt = 0;
             loop {
                 let c = derive_challenge(seed, n as u64, attempt);
 
-                let challenged_sector = c % sector_size;
+                let challenged_sector = c % sector_count as u64;
 
                 // check for faulty sector
                 if faults.binary_search(&challenged_sector).is_err() {
@@ -266,7 +266,7 @@ mod tests {
 
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
         let faults = vec![1];
-        let challenges = derive_challenges(challenges_count, sector_size, &seed, &faults);
+        let challenges = derive_challenges(challenges_count, 2, &seed, &faults);
         let commitments = challenges
             .iter()
             .map(|c| {
@@ -350,7 +350,7 @@ mod tests {
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
         let faults = vec![];
-        let challenges = derive_challenges(challenges_count, sector_size, &seed, &faults);
+        let challenges = derive_challenges(challenges_count, 2, &seed, &faults);
         let commitments = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();
 
         let pub_inputs = PublicInputs::<H::Domain> {
@@ -408,7 +408,7 @@ mod tests {
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
         let faults = vec![1];
-        let challenges = derive_challenges(challenges_count, sector_size, &seed, &faults);
+        let challenges = derive_challenges(challenges_count, 2, &seed, &faults);
         let commitments = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();
 
         let pub_inputs = PublicInputs {
@@ -423,7 +423,7 @@ mod tests {
             .expect("proving failed");
 
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
-        let challenges = derive_challenges(challenges_count, sector_size, &seed, &faults);
+        let challenges = derive_challenges(challenges_count, 2, &seed, &faults);
         let commitments = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();
 
         let different_pub_inputs = PublicInputs {
