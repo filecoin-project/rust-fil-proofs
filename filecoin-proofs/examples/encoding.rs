@@ -3,7 +3,7 @@ extern crate clap;
 #[cfg(feature = "cpu-profile")]
 extern crate gperftools;
 #[macro_use]
-extern crate slog;
+extern crate log;
 
 use clap::{App, Arg};
 #[cfg(feature = "cpu-profile")]
@@ -25,8 +25,6 @@ use storage_proofs::layered_drgporep::{self, LayerChallenges};
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::vde;
 use storage_proofs::zigzag_drgporep::*;
-
-use filecoin_proofs::singletons::FCP_LOG;
 
 #[cfg(feature = "cpu-profile")]
 #[inline(always)]
@@ -78,11 +76,11 @@ where
 {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-    info!(FCP_LOG, "data size: {}", prettyb(data_size); "target" => "config");
-    info!(FCP_LOG, "m: {}", m; "target" => "config");
-    info!(FCP_LOG, "expansion_degree: {}", expansion_degree; "target" => "config");
-    info!(FCP_LOG, "sloth: {}", sloth_iter; "target" => "config");
-    info!(FCP_LOG, "generating fake data"; "target" => "status");
+    info!("data size: {}", prettyb(data_size));
+    info!("m: {}", m);
+    info!("expansion_degree: {}", expansion_degree);
+    info!("sloth: {}", sloth_iter);
+    info!("generating fake data");
 
     let nodes = data_size / 32;
 
@@ -101,35 +99,32 @@ where
         layer_challenges: LayerChallenges::new_fixed(1, 1),
     };
 
-    info!(FCP_LOG, "running setup");
+    info!("running setup");
     start_profile("setup");
     let pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
     stop_profile();
 
     let start = Instant::now();
 
-    info!(FCP_LOG, "encoding");
+    info!("encoding");
 
     start_profile("encode");
     vde::encode(&pp.graph, pp.sloth_iter, &replica_id, &mut data).unwrap();
     stop_profile();
 
     let encoding_time = start.elapsed();
-    info!(FCP_LOG, "encoding_time: {:?}", encoding_time; "target" => "stats");
+    info!("encoding_time: {:?}", encoding_time);
 
+    info!("encoding time/byte: {:?}", encoding_time / data_size as u32);
     info!(
-        FCP_LOG,
-        "encoding time/byte: {:?}",
-        encoding_time / data_size as u32; "target" => "stats"
-    );
-    info!(
-        FCP_LOG,
         "encoding time/GiB: {:?}",
-        (1 << 30) * encoding_time / data_size as u32; "target" => "stats"
+        (1 << 30) * encoding_time / data_size as u32
     );
 }
 
 fn main() {
+    pretty_env_logger::init();
+
     let matches = App::new(stringify!("DrgPoRep Vanilla Bench"))
         .version("1.0")
         .arg(

@@ -1,10 +1,12 @@
+#[macro_use]
+extern crate log;
+
 use clap::{App, Arg};
 use paired::bls12_381::Bls12;
-use slog::*;
 
 use filecoin_proofs::constants::*;
 use filecoin_proofs::parameters::{post_public_params, public_params};
-use filecoin_proofs::singletons::{ENGINE_PARAMS, FCP_LOG};
+use filecoin_proofs::singletons::ENGINE_PARAMS;
 use filecoin_proofs::types::*;
 use storage_proofs::circuit::vdf_post::{VDFPoStCircuit, VDFPostCompound};
 use storage_proofs::circuit::zigzag::ZigZagCompound;
@@ -18,7 +20,10 @@ const POREP_PROOF_PARTITION_CHOICES: [PoRepProofPartitions; 1] = [PoRepProofPart
 
 fn cache_porep_params(porep_config: PoRepConfig) {
     let n = u64::from(PaddedBytesAmount::from(porep_config));
-    info!(FCP_LOG, "begin PoRep parameter-cache check/populate routine for {}-byte sectors", n; "target" => "paramcache");
+    info!(
+        "begin PoRep parameter-cache check/populate routine for {}-byte sectors",
+        n
+    );
 
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
@@ -41,7 +46,10 @@ fn cache_porep_params(porep_config: PoRepConfig) {
 
 fn cache_post_params(post_config: PoStConfig) {
     let n = u64::from(PaddedBytesAmount::from(post_config));
-    info!(FCP_LOG, "begin PoSt parameter-cache check/populate routine for {}-byte sectors", n; "target" => "paramcache");
+    info!(
+        "begin PoSt parameter-cache check/populate routine for {}-byte sectors",
+        n
+    );
 
     let post_public_params = post_public_params(post_config);
 
@@ -77,6 +85,8 @@ fn cache_post_params(post_config: PoStConfig) {
 
 // Run this from the command-line to pre-generate the groth parameters used by the API.
 pub fn main() {
+    pretty_env_logger::init();
+
     let matches = App::new("paramcache")
         .version("0.1")
         .about("Generate and persist Groth parameters and verifying keys")

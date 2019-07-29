@@ -45,7 +45,6 @@ use crate::parameters::{post_setup_params, public_params, setup_params};
 use crate::pieces::{get_aligned_source, get_piece_alignment, PieceAlignment};
 use crate::post_adapter::*;
 use crate::singletons::ENGINE_PARAMS;
-use crate::singletons::FCP_LOG;
 use crate::types::{
     PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, PoStProofPartitions,
     SectorSize, UnpaddedByteIndex, UnpaddedBytesAmount,
@@ -250,7 +249,10 @@ pub fn seal<T: AsRef<Path>>(
 
     let groth_params = get_zigzag_params(porep_config)?;
 
-    info!(FCP_LOG, "got groth params ({}) while sealing", u64::from(PaddedBytesAmount::from(porep_config)); "target" => "params");
+    info!(
+        "got groth params ({}) while sealing",
+        u64::from(PaddedBytesAmount::from(porep_config))
+    );
 
     let proof = ZigZagCompound::prove(
         &compound_public_params,
@@ -355,7 +357,10 @@ pub fn verify_seal(
 
     let verifying_key = get_zigzag_verifying_key(porep_config)?;
 
-    info!(FCP_LOG, "got verifying key ({}) while verifying seal", u64::from(sector_bytes); "target" => "params");
+    info!(
+        "got verifying key ({}) while verifying seal",
+        u64::from(sector_bytes)
+    );
 
     let proof = MultiProof::new_from_reader(
         Some(usize::from(PoRepProofPartitions::from(porep_config))),
