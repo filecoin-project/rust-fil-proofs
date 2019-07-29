@@ -3,7 +3,6 @@ use std::hash::Hasher as StdHasher;
 
 use bellperson::{ConstraintSystem, SynthesisError};
 use blake2s_simd::{Hash as Blake2sHash, Params as Blake2s, State};
-use byteorder::{LittleEndian, WriteBytesExt};
 use ff::{PrimeField, PrimeFieldRepr};
 use fil_sapling_crypto::circuit::{blake2s as blake2s_circuit, boolean, multipack, num};
 use fil_sapling_crypto::jubjub::JubjubEngine;
@@ -209,31 +208,14 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
     }
 
     fn hash_leaf_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
-        mut cs: CS,
+        cs: CS,
         left: &[boolean::Boolean],
         right: &[boolean::Boolean],
-        height: usize,
+        _height: usize,
         params: &E::Params,
     ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
         let mut preimage: Vec<boolean::Boolean> = vec![];
-        let mut height_bytes = vec![];
-        height_bytes
-            .write_u64::<LittleEndian>(height as u64)
-            .expect("failed to write height");
 
-        preimage.extend(
-            multipack::bytes_to_bits_le(&height_bytes)
-                .iter()
-                .enumerate()
-                .map(|(i, b)| {
-                    boolean::AllocatedBit::alloc(
-                        cs.namespace(|| format!("height_bit {}", i)),
-                        Some(*b),
-                    )
-                    .map(boolean::Boolean::Is)
-                })
-                .collect::<::std::result::Result<Vec<boolean::Boolean>, _>>()?,
-        );
         preimage.extend_from_slice(left);
         while preimage.len() % 8 != 0 {
             preimage.push(boolean::Boolean::Constant(false));
@@ -287,9 +269,7 @@ impl Algorithm<Blake2sDomain> for Blake2sFunction {
         leaf
     }
 
-    fn node(&mut self, left: Blake2sDomain, right: Blake2sDomain, height: usize) -> Blake2sDomain {
-        height.hash(self);
-
+    fn node(&mut self, left: Blake2sDomain, right: Blake2sDomain, _height: usize) -> Blake2sDomain {
         left.hash(self);
         right.hash(self);
         self.hash()

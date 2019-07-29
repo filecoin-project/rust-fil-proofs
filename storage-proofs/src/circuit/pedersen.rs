@@ -54,7 +54,7 @@ pub fn pedersen_compression_num<E: JubjubEngine, CS: ConstraintSystem<E>>(
 ) -> Result<num::AllocatedNum<E>, SynthesisError> {
     Ok(pedersen_hash::pedersen_hash(
         cs.namespace(|| "inner hash"),
-        pedersen_hash::Personalization::NoteCommitment,
+        pedersen_hash::Personalization::None,
         &bits,
         params,
     )?
@@ -94,7 +94,7 @@ mod tests {
     fn test_pedersen_single_input_circut() {
         let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let cases = [(32, 697), (64, 1384)];
+        let cases = [(32, 689), (64, 1376)];
 
         for (bytes, constraints) in &cases {
             let mut cs = TestConstraintSystem::<Bls12>::new();
@@ -131,11 +131,11 @@ mod tests {
         let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let cases = [
-            (64, 1384),   // 64 bytes
-            (96, 2767),   // 96 bytes
-            (128, 4150),  // 128 bytes
-            (160, 5533),  // 160 bytes
-            (512, 20746), // 512 bytes
+            (64, 1376),   // 64 bytes
+            (96, 2751),   // 96 bytes
+            (128, 4126),  // 128 bytes
+            (160, 5501),  // 160 bytes
+            (512, 20626), // 512 bytes
         ];
 
         for (bytes, constraints) in &cases {

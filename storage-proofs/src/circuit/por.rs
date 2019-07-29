@@ -336,12 +336,12 @@ mod tests {
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_pedersen() {
-        test_por_input_circuit_with_bls12_381::<PedersenHasher>(4149);
+        test_por_input_circuit_with_bls12_381::<PedersenHasher>(4125);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_blake2s() {
-        test_por_input_circuit_with_bls12_381::<Blake2sHasher>(128928);
+        test_por_input_circuit_with_bls12_381::<Blake2sHasher>(64566);
     }
 
     fn test_por_input_circuit_with_bls12_381<H: Hasher>(num_constraints: usize) {
@@ -591,7 +591,7 @@ mod tests {
             assert!(cs.is_satisfied(), "constraints not satisfied");
 
             assert_eq!(cs.num_inputs(), 2, "wrong number of inputs");
-            assert_eq!(cs.num_constraints(), 4148, "wrong number of constraints");
+            assert_eq!(cs.num_constraints(), 4124, "wrong number of constraints");
 
             let auth_path_bits: Vec<bool> = proof
                 .proof

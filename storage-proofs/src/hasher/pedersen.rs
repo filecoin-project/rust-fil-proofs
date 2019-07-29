@@ -196,21 +196,18 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         cs: CS,
         left: &[boolean::Boolean],
         right: &[boolean::Boolean],
-        height: usize,
+        _height: usize,
         params: &E::Params,
     ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError> {
         let mut preimage: Vec<boolean::Boolean> = vec![];
         preimage.extend_from_slice(left);
         preimage.extend_from_slice(right);
 
-        Ok(pedersen_hash_circuit::pedersen_hash(
-            cs,
-            Personalization::MerkleTree(height),
-            &preimage,
-            params,
-        )?
-        .get_x()
-        .clone())
+        Ok(
+            pedersen_hash_circuit::pedersen_hash(cs, Personalization::None, &preimage, params)?
+                .get_x()
+                .clone(),
+        )
     }
 
     fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
@@ -241,18 +238,14 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
         &mut self,
         left: PedersenDomain,
         right: PedersenDomain,
-        height: usize,
+        _height: usize,
     ) -> PedersenDomain {
         let node_bits = NodeBits::new(&(left.0).0[..], &(right.0).0[..]);
 
-        pedersen_hash::<Bls12, _>(
-            Personalization::MerkleTree(height),
-            node_bits,
-            &pedersen::JJ_PARAMS,
-        )
-        .into_xy()
-        .0
-        .into()
+        pedersen_hash::<Bls12, _>(Personalization::None, node_bits, &pedersen::JJ_PARAMS)
+            .into_xy()
+            .0
+            .into()
     }
 }
 
@@ -377,23 +370,22 @@ mod tests {
         assert_eq!(
             t.read_at(0).0,
             FrRepr([
-                5516429847681692214,
-                1363403528947283679,
-                5429691745410183571,
-                7730413689037971367
+                8141980337328041169,
+                4041086031096096197,
+                4135265344031344584,
+                7650472305044950055
             ])
         );
 
         let expected = FrRepr([
-            14963070332212552755,
-            2414807501862983188,
-            16116531553419129213,
-            6357427774790868134,
+            11371136130239400769,
+            4290566175630177573,
+            11576422143286805197,
+            2687080719931344767,
         ]);
         let actual = t.read_at(6).0;
 
         assert_eq!(actual, expected);
-
         assert_eq!(t.read_at(6), root);
     }
 
