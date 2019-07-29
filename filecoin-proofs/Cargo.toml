@@ -1,7 +1,7 @@
 [package]
 name = "filecoin-proofs"
 description = "The Filecoin specific aspects of storage-proofs, including a C based FFI, to generate and verify proofs."
-version = "0.4.0"
+version = "0.5.0"
 authors = ["dignifiedquire <dignifiedquire@gmail.com>", "laser <l@s3r.com>", "porcuquine <porcuquine@users.noreply.github.com>"]
 license = "MIT OR Apache-2.0"
 edition = "2018"
@@ -9,9 +9,8 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-storage-proofs = { version = "^0.4", path = "../storage-proofs" }
-logging-toolkit = { version = "^0.4", path = "../logging-toolkit" }
-bitvec = "0.11"
+storage-proofs = { version = "^0.5", path = "../storage-proofs" }
+bitvec = "0.5"
 chrono = "0.4"
 rand = "0.4"
 failure = "0.1"
@@ -25,15 +24,16 @@ itertools = "0.8"
 serde_cbor = "0.9.0"
 serde = { version = "1", features = ["rc", "derive"] }
 serde_json = "1.0"
-slog = { version = "2.4.1", features = ["max_level_trace", "release_max_level_trace"] }
 regex = "1"
 ff = "0.4.0"
 blake2b_simd = "0.5"
 phase21 = "0.3"
 bellperson = "0.2"
 paired = "0.15"
-fil-sapling-crypto = "0.1"
+fil-sapling-crypto = "0.1.1"
 clap = "2"
+log = "0.4.7"
+pretty_env_logger = "0.3.0"
 env_proxy = "0.3"
 
 [dependencies.reqwest]

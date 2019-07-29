@@ -127,7 +127,6 @@ The following is the list of supported scopes:
 * **ffi-toolkit**
 * **fil-proofs-tooling**
 * **filecoin-proofs**
-* **logging-toolkit**
 * **sector-base**
 * **storage-proofs**
 

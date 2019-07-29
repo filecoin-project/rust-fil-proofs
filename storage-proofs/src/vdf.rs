@@ -14,6 +14,5 @@ pub trait Vdf<T: Domain>: Clone + ::std::fmt::Debug {
     fn verify(public_params: &Self::PublicParams, input: &T, proof: &Self::Proof) -> Result<bool>;
 
     fn key(pp: &Self::PublicParams) -> T;
-    fn rounds(pp: &Self::PublicParams) -> usize;
     fn extract_output(proof: &Self::Proof) -> T;
 }

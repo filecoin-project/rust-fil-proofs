@@ -18,11 +18,9 @@ use crate::types::{PaddedBytesAmount, PoStConfig};
 
 const POST_CHALLENGE_COUNT: usize = 30;
 const POST_EPOCHS: usize = 3;
-const POST_VDF_ROUNDS: usize = 1;
 
 const DEGREE: usize = 5;
 const EXPANSION_DEGREE: usize = 8;
-const SLOTH_ITER: usize = 0;
 const LAYERS: usize = 4; // TODO: 10;
 const TAPER_LAYERS: usize = 2; // TODO: 7
 const TAPER: f64 = 1.0 / 3.0;
@@ -50,10 +48,7 @@ pub fn post_setup_params(post_config: PoStConfig) -> PostSetupParams {
         challenge_count: POST_CHALLENGE_COUNT,
         sector_size: size.into(),
         post_epochs: POST_EPOCHS,
-        setup_params_vdf: vdf_sloth::SetupParams {
-            key: *POST_VDF_KEY,
-            rounds: POST_VDF_ROUNDS,
-        },
+        setup_params_vdf: vdf_sloth::SetupParams { key: *POST_VDF_KEY },
         sectors_count: POST_SECTORS_COUNT,
     }
 }
@@ -85,7 +80,6 @@ pub fn setup_params(
             expansion_degree: EXPANSION_DEGREE,
             seed: DRG_SEED,
         },
-        sloth_iter: SLOTH_ITER,
         layer_challenges: challenges,
     }
 }

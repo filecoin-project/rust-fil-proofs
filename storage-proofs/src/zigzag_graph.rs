@@ -8,7 +8,6 @@ use crate::hasher::Hasher;
 use crate::layered_drgporep::Layerable;
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::settings;
-use crate::SP_LOG;
 
 pub const DEFAULT_EXPANSION_DEGREE: usize = 8;
 
@@ -72,7 +71,7 @@ where
         seed: [u32; 7],
     ) -> Self {
         let cache_entries = if settings::SETTINGS.lock().unwrap().maximize_caching {
-            info!(SP_LOG, "using parents cache of unlimited size",);
+            info!("using parents cache of unlimited size",);
             nodes
         } else {
             0

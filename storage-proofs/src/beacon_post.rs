@@ -235,10 +235,7 @@ mod tests {
                 challenge_count: 10,
                 sector_size: 1024 * 32,
                 post_epochs: 3,
-                setup_params_vdf: vdf_sloth::SetupParams {
-                    key: rng.gen(),
-                    rounds: 1,
-                },
+                setup_params_vdf: vdf_sloth::SetupParams { key: rng.gen() },
                 sectors_count: 2,
             },
             post_periods_count: 3,

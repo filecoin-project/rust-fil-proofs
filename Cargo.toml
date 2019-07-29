@@ -4,5 +4,4 @@ members = [
   "filecoin-proofs",
   "storage-proofs",
   "fil-proofs-tooling",
-  "logging-toolkit",
 ]

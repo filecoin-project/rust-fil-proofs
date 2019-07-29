@@ -22,7 +22,6 @@ pub struct BeaconPoStCircuit<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> 
     pub vdf_key: Option<E::Fr>,
     pub vdf_ys_vec: Vec<Vec<Option<E::Fr>>>,
     pub vdf_xs_vec: Vec<Vec<Option<E::Fr>>>,
-    pub vdf_sloth_rounds: usize,
     pub challenges_vec_vec: Vec<Vec<Vec<Option<usize>>>>,
     pub challenged_sectors_vec_vec: Vec<Vec<Vec<Option<usize>>>>,
     pub challenged_leafs_vec_vec: Vec<Vec<Vec<Option<E::Fr>>>>,
@@ -107,7 +106,6 @@ impl<'a, E: JubjubEngine, H: Hasher, V: Vdf<H::Domain>> Circuit<E>
                 self.vdf_key,
                 self.vdf_ys_vec[t].clone(),
                 self.vdf_xs_vec[t].clone(),
-                self.vdf_sloth_rounds,
                 self.challenges_vec_vec[t].clone(),
                 self.challenged_sectors_vec_vec[t].clone(),
                 self.challenged_leafs_vec_vec[t].clone(),
@@ -149,10 +147,7 @@ mod tests {
                 challenge_count: 4,
                 sector_size: 256 * lambda,
                 post_epochs: 3,
-                setup_params_vdf: vdf_sloth::SetupParams {
-                    key: rng.gen(),
-                    rounds: 1,
-                },
+                setup_params_vdf: vdf_sloth::SetupParams { key: rng.gen() },
                 sectors_count: 2,
             },
             post_periods_count: 3,
@@ -287,7 +282,6 @@ mod tests {
             vdf_key: Some(pub_params.vdf_post_pub_params.pub_params_vdf.key.into()),
             vdf_xs_vec,
             vdf_ys_vec,
-            vdf_sloth_rounds: pub_params.vdf_post_pub_params.pub_params_vdf.rounds,
             challenged_leafs_vec_vec,
             paths_vec_vec,
             root_commitment: Some(compute_root_commitment(&pub_inputs.commitments).into()),
@@ -303,7 +297,7 @@ mod tests {
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
         assert_eq!(cs.num_inputs(), 7, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 398118, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 395796, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
     }
 }
