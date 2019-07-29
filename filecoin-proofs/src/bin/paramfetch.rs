@@ -47,6 +47,8 @@ Defaults to '{}'
 
 Use -g,--gateway to specify ipfs gateway.
 Defaults to 'https://ipfs.io'
+
+Set http_proxy/https_proxy environment variables to specify proxy for ipfs gateway.
 ",
                 PARAMETER_CACHE_ENV_VAR,
                 PARAMETER_CACHE_DIR
