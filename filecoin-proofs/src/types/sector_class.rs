@@ -10,7 +10,7 @@ pub struct SectorClass(
 impl From<SectorClass> for PoStConfig {
     fn from(x: SectorClass) -> Self {
         match x {
-            SectorClass(ss, _, ppp) => PoStConfig(ss, ppp),
+            SectorClass(ss, _, _) => PoStConfig(ss),
         }
     }
 }

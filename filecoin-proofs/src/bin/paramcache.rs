@@ -115,19 +115,13 @@ pub fn main() {
         SectorSize(TEST_SECTOR_SIZE),
         PoRepProofPartitions(2),
     ));
-    cache_post_params(PoStConfig(
-        SectorSize(TEST_SECTOR_SIZE),
-        PoStProofPartitions(1),
-    ));
+    cache_post_params(PoStConfig(SectorSize(TEST_SECTOR_SIZE)));
 
     if !test_only {
         for p in &POREP_PROOF_PARTITION_CHOICES {
             cache_porep_params(PoRepConfig(SectorSize(LIVE_SECTOR_SIZE), *p));
         }
 
-        cache_post_params(PoStConfig(
-            SectorSize(LIVE_SECTOR_SIZE),
-            PoStProofPartitions(1),
-        ));
+        cache_post_params(PoStConfig(SectorSize(LIVE_SECTOR_SIZE)));
     }
 }

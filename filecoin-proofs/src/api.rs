@@ -23,8 +23,8 @@ use crate::parameters::{post_setup_params, public_params, setup_params};
 use crate::pieces::{get_aligned_source, get_piece_alignment, PieceAlignment};
 use crate::singletons::ENGINE_PARAMS;
 use crate::types::{
-    PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, PoStProofPartitions,
-    SectorSize, UnpaddedByteIndex, UnpaddedBytesAmount,
+    PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, SectorSize,
+    UnpaddedByteIndex, UnpaddedBytesAmount,
 };
 
 use storage_proofs::circuit::multi_proof::MultiProof;
@@ -66,7 +66,6 @@ pub struct SealOutput {
 #[derive(Clone, Debug)]
 pub struct GeneratePoStOutput {
     pub proof: Vec<u8>,
-    pub faults: Vec<u64>,
 }
 
 /// Generates a proof-of-spacetime, returning and detected storage faults.
@@ -74,9 +73,9 @@ pub struct GeneratePoStOutput {
 /// sealed sector file-path plus CommR tuples.
 pub fn generate_post(
     post_config: PoStConfig,
-    challenge_seed: ChallengeSeed,
+    challenge_seed: &ChallengeSeed,
     input_parts: Vec<(Option<String>, Commitment)>,
-    faults: Vec<u64>,
+    faults: &[u64],
 ) -> error::Result<GeneratePoStOutput> {
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
@@ -97,7 +96,7 @@ pub fn generate_post(
     let challenges = rational_post::derive_challenges(
         vanilla_params.challenges_count,
         sector_count,
-        &challenge_seed,
+        challenge_seed,
         &faults,
     );
 
@@ -112,7 +111,7 @@ pub fn generate_post(
     let pub_inputs = rational_post::PublicInputs {
         challenges: &challenges,
         commitments: &commitments,
-        faults: &faults,
+        faults,
     };
 
     let trees: Vec<Tree> = input_parts
@@ -141,13 +140,9 @@ pub fn generate_post(
     let proof = RationalPoStCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)
         .expect("failed while proving");
 
-    let mut buf = Vec::with_capacity(
-        SINGLE_PARTITION_PROOF_LEN * usize::from(PoStProofPartitions::from(post_config)),
-    );
-
-    proof.write(&mut buf)?;
-
-    Ok(GeneratePoStOutput { proof: buf, faults })
+    Ok(GeneratePoStOutput {
+        proof: proof.to_vec(),
+    })
 }
 
 /// Verifies a proof-of-spacetime.
@@ -155,9 +150,9 @@ pub fn generate_post(
 pub fn verify_post(
     post_config: PoStConfig,
     comm_rs: Vec<Commitment>,
-    challenge_seed: ChallengeSeed,
-    proof: Vec<u8>,
-    faults: Vec<u64>,
+    challenge_seed: &ChallengeSeed,
+    proof: &[u8],
+    faults: &[u64],
 ) -> error::Result<bool> {
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
@@ -175,8 +170,8 @@ pub fn verify_post(
     let challenges = rational_post::derive_challenges(
         vanilla_params.challenges_count,
         sector_count,
-        &challenge_seed,
-        &faults,
+        challenge_seed,
+        faults,
     );
 
     let commitments: Vec<_> = challenges
@@ -200,14 +195,7 @@ pub fn verify_post(
 
     let verifying_key = get_post_verifying_key(post_config)?;
 
-    let num_post_proof_bytes =
-        SINGLE_PARTITION_PROOF_LEN * usize::from(PoStProofPartitions::from(post_config));
-
-    let proof = MultiProof::new_from_reader(
-        Some(usize::from(PoStProofPartitions::from(post_config))),
-        &proof[0..num_post_proof_bytes],
-        &verifying_key,
-    )?;
+    let proof = MultiProof::new_from_reader(None, &proof[..], &verifying_key)?;
 
     let is_valid =
         RationalPoStCompound::verify(&public_params, &public_inputs, &proof, &NoRequirements)?;
