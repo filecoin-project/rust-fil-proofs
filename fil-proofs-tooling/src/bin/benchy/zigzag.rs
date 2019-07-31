@@ -1,18 +1,16 @@
-use rand::{Rng, SeedableRng, XorShiftRng};
 use std::fs::{File, OpenOptions};
 use std::time::{Duration, Instant};
-use std::u32;
-
-use failure::bail;
-use prometheus::{Encoder, IntGaugeVec, TextEncoder};
+use std::{io, u32};
 
 use bellperson::Circuit;
 use chrono::Utc;
+use failure::bail;
 use fil_sapling_crypto::jubjub::JubjubBls12;
-use lazy_static::lazy_static;
 use memmap::MmapMut;
 use memmap::MmapOptions;
 use paired::bls12_381::Bls12;
+use rand::{Rng, SeedableRng, XorShiftRng};
+
 use storage_proofs::circuit::metric::MetricCS;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
@@ -23,49 +21,6 @@ use storage_proofs::layered_drgporep::{self, ChallengeRequirements, LayerChallen
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::zigzag_drgporep::*;
-
-const LABELS: [&str; 8] = [
-    "data_size_bytes",
-    "m",
-    "expansion_degree",
-    "sloth_iter",
-    "partitions",
-    "hasher",
-    "samples",
-    "layers",
-];
-
-lazy_static! {
-    static ref REPLICATION_TIME_MS_GAUGE: IntGaugeVec =
-        register_int_gauge_vec!("replication_time_ms", "Total replication timea", &LABELS).unwrap();
-    static ref REPLICATION_TIME_NS_PER_BYTE_GAUGE: IntGaugeVec = register_int_gauge_vec!(
-        "replication_time_ns_per_byte",
-        "Replication time per byte",
-        &LABELS
-    )
-    .unwrap();
-    static ref VANILLA_PROVING_TIME_US_GAUGE: IntGaugeVec =
-        register_int_gauge_vec!("vanilla_proving_time_us", "Vanilla proving time", &LABELS)
-            .unwrap();
-    static ref VANILLA_VERIFICATION_TIME_US_GAUGE: IntGaugeVec = register_int_gauge_vec!(
-        "vanilla_verification_time_us",
-        "Vanilla verification time",
-        &LABELS
-    )
-    .unwrap();
-    static ref CIRCUIT_NUM_INPUTS_GAUGE: IntGaugeVec = register_int_gauge_vec!(
-        "circuit_num_inputs",
-        "Number of inputs to the circuit",
-        &LABELS
-    )
-    .unwrap();
-    static ref CIRCUIT_NUM_CONSTRAINTS_GAUGE: IntGaugeVec = register_int_gauge_vec!(
-        "circuit_num_constraints",
-        "Number of constraints of the circuit",
-        &LABELS
-    )
-    .unwrap();
-}
 
 fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> Result<MmapMut, failure::Error> {
     let file: File = if use_tmp {
@@ -100,7 +55,7 @@ fn dump_proof_bytes<H: Hasher>(
     Ok(())
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct Params {
     samples: usize,
     data_size: usize,
@@ -119,11 +74,29 @@ struct Params {
     hasher: String,
 }
 
-fn do_the_work<H: 'static>(params: Params, recorder: &Recorder) -> Result<(), failure::Error>
+impl From<Params> for Inputs {
+    fn from(p: Params) -> Self {
+        Inputs {
+            data_size: p.data_size,
+            m: p.m,
+            expansion_degree: p.expansion_degree,
+            sloth_iter: p.sloth_iter,
+            partitions: p.partitions,
+            hasher: p.hasher.clone(),
+            samples: p.samples,
+            layers: p.layer_challenges.layers(),
+        }
+    }
+}
+
+fn generate_report<H: 'static>(params: Params) -> Result<Report, failure::Error>
 where
     H: Hasher,
 {
-    println!("zigzag: {:#?}", &params);
+    let mut report = Report {
+        inputs: Inputs::from(params.clone()),
+        outputs: Default::default(),
+    };
 
     let Params {
         samples,
@@ -195,21 +168,8 @@ where
             replication_duration / (*data_size as u32)
         };
 
-        recorder
-            .replication_time_ms
-            .set(replication_duration.as_millis() as i64);
-        recorder
-            .replication_time_ns_per_byte
-            .set(time_per_byte.as_nanos() as i64);
-
-        println!(
-            "Replication: total time: {:.04}s",
-            replication_duration.as_millis() as f32 / 1000.
-        );
-        println!(
-            "Replication: time per byte: {:.04}us",
-            time_per_byte.as_nanos() as f32 / 1000.
-        );
+        report.outputs.replication_time_ms = Some(replication_duration.as_millis() as u64);
+        report.outputs.replication_time_ns_per_byte = Some(time_per_byte.as_nanos() as u64);
 
         let start = Instant::now();
         let all_partition_proofs =
@@ -217,14 +177,7 @@ where
         let vanilla_proving = start.elapsed();
         total_proving += vanilla_proving;
 
-        println!(
-            "Vanilla proving: {:.04}us",
-            vanilla_proving.as_nanos() as f32 / 1000.
-        );
-
-        recorder
-            .vanilla_proving_time_us
-            .set(vanilla_proving.as_micros() as i64);
+        report.outputs.vanilla_proving_time_us = Some(vanilla_proving.as_micros() as u64);
 
         if *dump_proofs {
             dump_proof_bytes(&all_partition_proofs)?;
@@ -243,9 +196,7 @@ where
             }
 
             let elapsed = start.elapsed();
-            recorder
-                .vanilla_verification_time_us
-                .set(elapsed.as_micros() as i64);
+            report.outputs.vanilla_verification_time_us = Some(elapsed.as_micros() as u64);
             total_verifying += elapsed;
         }
 
@@ -253,13 +204,13 @@ where
         let verifying_avg = f64::from(verifying_avg.subsec_nanos()) / 1_000_000_000f64
             + (verifying_avg.as_secs() as f64);
 
-        println!("Avg verifying: {:.04}s", verifying_avg);
+        report.outputs.verify_avg_ms = Some((verifying_avg * 1000.0) as u64);
 
         (Some(pub_inputs), Some(priv_inputs), Some(data))
     };
 
     if *circuit || *groth || *bench {
-        total_proving += do_circuit_work(&pp, pub_in, priv_in, &params, recorder)?;
+        total_proving += do_circuit_work(&pp, pub_in, priv_in, &params, &mut report)?;
     }
 
     if let Some(data) = d {
@@ -268,17 +219,13 @@ where
             let decoded_data = ZigZagDrgPoRep::<H>::extract_all(&pp, &replica_id, &data)?;
             let extracting = start.elapsed();
             assert_eq!(&(*data), decoded_data.as_slice());
-
-            println!("Extracting: {:.04}s", extracting.as_millis() as f32 / 1000.);
+            report.outputs.extracting = Some(extracting.as_millis() as u64);
         }
     }
 
-    println!(
-        "Total proving: {:.04}s",
-        total_proving.as_millis() as f32 / 1000.
-    );
+    report.outputs.total_proving_ms = total_proving.as_millis() as u64;
 
-    Ok(())
+    Ok(report)
 }
 
 fn do_circuit_work<H: 'static + Hasher>(
@@ -286,7 +233,7 @@ fn do_circuit_work<H: 'static + Hasher>(
     pub_in: Option<<ZigZagDrgPoRep<H> as ProofScheme>::PublicInputs>,
     priv_in: Option<<ZigZagDrgPoRep<H> as ProofScheme>::PrivateInputs>,
     params: &Params,
-    recorder: &Recorder,
+    mut report: &mut Report,
 ) -> Result<Duration, failure::Error> {
     let mut proving_time = Duration::new(0, 0);
     let Params {
@@ -313,10 +260,8 @@ fn do_circuit_work<H: 'static + Hasher>(
         println!("circuit_num_inputs: {}", cs.num_inputs());
         println!("circuit_num_constraints: {}", cs.num_constraints());
 
-        recorder.circuit_num_inputs.set(cs.num_inputs() as i64);
-        recorder
-            .circuit_num_constraints
-            .set(cs.num_constraints() as i64);
+        report.outputs.circuit_num_inputs = Some(cs.num_inputs() as u64);
+        report.outputs.circuit_num_constraints = Some(cs.num_constraints() as u64);
         if *circuit {
             println!("{}", cs.pretty_print());
         }
@@ -367,10 +312,9 @@ fn do_circuit_work<H: 'static + Hasher>(
                 total_groth_verifying += start.elapsed();
             }
             let avg_groth_verifying = total_groth_verifying / *samples as u32;
-            println!(
-                "Avg groth verifying: {:.04}s",
-                avg_groth_verifying.as_millis() as f32 / 1000.
-            );
+
+            report.outputs.avg_groth_verifying_ms = Some(avg_groth_verifying.as_millis() as u64);
+
             result
         };
         assert!(verified);
@@ -379,76 +323,42 @@ fn do_circuit_work<H: 'static + Hasher>(
     Ok(proving_time)
 }
 
-type IntGauge = prometheus::core::GenericGauge<prometheus::core::AtomicI64>;
-
-struct Recorder {
-    pub replication_time_ms: IntGauge,
-    pub replication_time_ns_per_byte: IntGauge,
-    pub vanilla_proving_time_us: IntGauge,
-    pub vanilla_verification_time_us: IntGauge,
-    pub circuit_num_inputs: IntGauge,
-    pub circuit_num_constraints: IntGauge,
+#[derive(Serialize)]
+struct Inputs {
+    data_size: usize,
+    m: usize,
+    expansion_degree: usize,
+    sloth_iter: usize,
+    partitions: usize,
+    hasher: String,
+    samples: usize,
+    layers: usize,
 }
 
-impl Recorder {
-    pub fn from_params(params: &Params) -> Self {
-        let l0 = format!("{}", params.data_size);
-        let l1 = format!("{}", params.m);
-        let l2 = format!("{}", params.expansion_degree);
-        let l3 = format!("{}", params.sloth_iter);
-        let l4 = format!("{}", params.partitions);
-        let l5 = params.hasher.clone();
-        let l6 = format!("{}", params.samples);
-        let l7 = format!("{}", params.layer_challenges.layers());
+#[derive(Serialize, Default)]
+struct Outputs {
+    avg_groth_verifying_ms: Option<u64>,
+    circuit_num_constraints: Option<u64>,
+    circuit_num_inputs: Option<u64>,
+    extracting: Option<u64>,
+    replication_time_ms: Option<u64>,
+    replication_time_ns_per_byte: Option<u64>,
+    total_proving_ms: u64,
+    vanilla_proving_time_us: Option<u64>,
+    vanilla_verification_time_us: Option<u64>,
+    verify_avg_ms: Option<u64>,
+}
 
-        let labels = [
-            l0.as_str(),
-            l1.as_str(),
-            l2.as_str(),
-            l3.as_str(),
-            l4.as_str(),
-            l5.as_str(),
-            l6.as_str(),
-            l7.as_str(),
-        ];
+#[derive(Serialize)]
+struct Report {
+    inputs: Inputs,
+    outputs: Outputs,
+}
 
-        Recorder {
-            replication_time_ms: REPLICATION_TIME_MS_GAUGE.with_label_values(&labels[..]),
-            replication_time_ns_per_byte: REPLICATION_TIME_NS_PER_BYTE_GAUGE
-                .with_label_values(&labels[..]),
-            vanilla_proving_time_us: VANILLA_PROVING_TIME_US_GAUGE.with_label_values(&labels[..]),
-            vanilla_verification_time_us: VANILLA_VERIFICATION_TIME_US_GAUGE
-                .with_label_values(&labels[..]),
-            circuit_num_inputs: CIRCUIT_NUM_INPUTS_GAUGE.with_label_values(&labels[..]),
-            circuit_num_constraints: CIRCUIT_NUM_CONSTRAINTS_GAUGE.with_label_values(&labels[..]),
-        }
-    }
-
+impl Report {
     /// Print all results to stdout
     pub fn print(&self) {
-        // Gather the metrics.
-        let mut buffer = vec![];
-        let encoder = TextEncoder::new();
-        let metric_families = prometheus::gather();
-        encoder.encode(&metric_families, &mut buffer).unwrap();
-
-        // Output to the standard output.
-        println!("{}", String::from_utf8(buffer).unwrap());
-    }
-
-    /// Pushes the data to the prometheus push server.
-    pub fn push(&self) {
-        let address = "127.0.0.1:9091";
-
-        let metric_families = prometheus::gather();
-        prometheus::push_metrics(
-            "filbase-zigzag-bench",
-            labels! { "why".to_owned() => "are you here?".to_owned(), },
-            &address,
-            metric_families,
-            None,
-        )
-        .expect("failed to push")
+        serde_json::to_writer(io::stdout(), &self).expect("cannot write report-JSON to stdout");
     }
 }
 
@@ -467,7 +377,6 @@ pub struct RunOpts {
     pub no_bench: bool,
     pub no_tmp: bool,
     pub partitions: usize,
-    pub push_prometheus: bool,
     pub size: usize,
     pub sloth: usize,
     pub taper: f64,
@@ -499,20 +408,14 @@ pub fn run(opts: RunOpts) -> Result<(), failure::Error> {
         samples: 5,
     };
 
-    let recorder = Recorder::from_params(&params);
-
-    match params.hasher.as_ref() {
-        "pedersen" => do_the_work::<PedersenHasher>(params, &recorder)?,
-        "sha256" => do_the_work::<Sha256Hasher>(params, &recorder)?,
-        "blake2s" => do_the_work::<Blake2sHasher>(params, &recorder)?,
+    let report = match params.hasher.as_ref() {
+        "pedersen" => generate_report::<PedersenHasher>(params)?,
+        "sha256" => generate_report::<Sha256Hasher>(params)?,
+        "blake2s" => generate_report::<Blake2sHasher>(params)?,
         _ => bail!("invalid hasher: {}", params.hasher),
-    }
+    };
 
-    recorder.print();
-
-    if opts.push_prometheus {
-        recorder.push();
-    }
+    report.print();
 
     Ok(())
 }
