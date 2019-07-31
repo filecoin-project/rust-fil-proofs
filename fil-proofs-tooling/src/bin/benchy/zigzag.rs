@@ -253,18 +253,11 @@ fn do_circuit_work<H: 'static + Hasher>(
     };
 
     if *bench || *circuit {
-        println!("generating blank metric circuit");
         let mut cs = MetricCS::<Bls12>::new();
         ZigZagCompound::blank_circuit(&pp, &engine_params).synthesize(&mut cs)?;
 
-        println!("circuit_num_inputs: {}", cs.num_inputs());
-        println!("circuit_num_constraints: {}", cs.num_constraints());
-
         report.outputs.circuit_num_inputs = Some(cs.num_inputs() as u64);
         report.outputs.circuit_num_constraints = Some(cs.num_constraints() as u64);
-        if *circuit {
-            println!("{}", cs.pretty_print());
-        }
     }
 
     if *groth {
