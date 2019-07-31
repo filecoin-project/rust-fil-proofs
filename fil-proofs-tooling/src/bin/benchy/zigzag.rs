@@ -324,6 +324,7 @@ fn do_circuit_work<H: 'static + Hasher>(
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct Inputs {
     data_size: usize,
     m: usize,
@@ -336,6 +337,7 @@ struct Inputs {
 }
 
 #[derive(Serialize, Default)]
+#[serde(rename_all = "camelCase")]
 struct Outputs {
     avg_groth_verifying_ms: Option<u64>,
     circuit_num_constraints: Option<u64>,
@@ -350,6 +352,7 @@ struct Outputs {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct Report {
     inputs: Inputs,
     outputs: Outputs,
