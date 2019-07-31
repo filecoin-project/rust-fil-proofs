@@ -8,13 +8,13 @@ use ff::PrimeField;
 use memmap::MmapOptions;
 use paired::bls12_381::Bls12;
 use paired::Engine;
-use tempfile::tempfile;
 
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::vdf_post::VDFPostCompound;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
+use storage_proofs::error::Error;
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
 use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::hasher::{Domain, Hasher};
@@ -28,6 +28,7 @@ use storage_proofs::porep::{replica_id, PoRep, Tau};
 use storage_proofs::proof::NoRequirements;
 use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
 use storage_proofs::{vdf_post, vdf_sloth};
+use tempfile::tempfile;
 
 use crate::caches::{
     get_post_params, get_post_verifying_key, get_zigzag_params, get_zigzag_verifying_key,
@@ -38,7 +39,6 @@ use crate::constants::{
     SINGLE_PARTITION_PROOF_LEN,
 };
 use crate::error;
-use crate::error::ExpectWithBacktrace;
 use crate::file_cleanup::FileCleanup;
 use crate::fr32::{write_padded, write_unpadded};
 use crate::parameters::{post_setup_params, public_params, setup_params};
@@ -325,9 +325,20 @@ pub fn verify_seal(
     let sector_id = pad_safe_fr(sector_id_in);
     let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
 
-    let comm_r = bytes_into_fr::<Bls12>(&comm_r)?;
-    let comm_d = bytes_into_fr::<Bls12>(&comm_d)?;
-    let comm_r_star = bytes_into_fr::<Bls12>(&comm_r_star)?;
+    let comm_r = bytes_into_fr::<Bls12>(&comm_r).map_err(|err| match err {
+        Error::BadFrBytes => format_err!("could not transform comm_r into Fr32: {:?}", err),
+        _ => err.into(),
+    })?;
+
+    let comm_d = bytes_into_fr::<Bls12>(&comm_d).map_err(|err| match err {
+        Error::BadFrBytes => format_err!("could not transform comm_d into Fr32: {:?}", err),
+        _ => err.into(),
+    })?;
+
+    let comm_r_star = bytes_into_fr::<Bls12>(&comm_r_star).map_err(|err| match err {
+        Error::BadFrBytes => format_err!("could not transform comm_r_star into Fr32: {:?}", err),
+        _ => err.into(),
+    })?;
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: &setup_params(
@@ -580,17 +591,16 @@ fn verify_post_fixed_sectors_count(
         vdf_post::VDFPoSt<PedersenHasher, vdf_sloth::Sloth>,
     > = VDFPostCompound::setup(&compound_setup_params).expect("setup failed");
 
-    let commitments = fixed
-        .comm_rs
-        .iter()
-        .map(|comm_r| {
-            PedersenDomain(
-                bytes_into_fr::<Bls12>(comm_r)
-                    .expects("could not could not map comm_r to Fr")
-                    .into_repr(),
-            )
-        })
-        .collect::<Vec<PedersenDomain>>();
+    let mut commitments: Vec<PedersenDomain> = vec![];
+
+    for comm_r in fixed.comm_rs.iter() {
+        let commitment = bytes_into_fr::<Bls12>(comm_r).map_err(|err| match err {
+            Error::BadFrBytes => format_err!("could not transform comm_r into Fr32: {:?}", err),
+            _ => err.into(),
+        })?;
+
+        commitments.push(PedersenDomain(commitment.into_repr()));
+    }
 
     let public_inputs = vdf_post::PublicInputs::<PedersenDomain> {
         commitments,
@@ -647,11 +657,14 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
 
 #[cfg(test)]
 mod tests {
-    use crate::constants::TEST_SECTOR_SIZE;
-    use crate::types::SectorSize;
     use rand::Rng;
-    use storage_proofs::util::NODE_SIZE;
     use tempfile::NamedTempFile;
+
+    use storage_proofs::util::NODE_SIZE;
+
+    use crate::constants::{POST_SECTORS_COUNT, TEST_SECTOR_SIZE};
+    use crate::error::ExpectWithBacktrace;
+    use crate::types::SectorSize;
 
     use super::*;
 
@@ -762,6 +775,116 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    #[test]
+    fn test_verify_seal_fr32_validation() {
+        let convertible_to_fr_bytes = [0; 32];
+        let out = bytes_into_fr::<Bls12>(&convertible_to_fr_bytes);
+        assert!(out.is_ok(), "tripwire");
+
+        let not_convertible_to_fr_bytes = [255; 32];
+        let out = bytes_into_fr::<Bls12>(&not_convertible_to_fr_bytes);
+        assert!(out.is_err(), "tripwire");
+
+        {
+            let result = verify_seal(
+                PoRepConfig(SectorSize(TEST_SECTOR_SIZE), PoRepProofPartitions(2)),
+                not_convertible_to_fr_bytes,
+                convertible_to_fr_bytes,
+                convertible_to_fr_bytes,
+                &[0; 31],
+                &[0; 31],
+                &[],
+            );
+
+            if let Err(err) = result {
+                let needle = "could not transform comm_r into Fr32";
+                let haystack = format!("{}", err);
+
+                assert!(
+                    haystack.contains(needle),
+                    format!("\"{}\" did not contain \"{}\"", haystack, needle)
+                );
+            } else {
+                panic!("should have failed comm_r to Fr32 conversion");
+            }
+        }
+
+        {
+            let result = verify_seal(
+                PoRepConfig(SectorSize(TEST_SECTOR_SIZE), PoRepProofPartitions(2)),
+                convertible_to_fr_bytes,
+                not_convertible_to_fr_bytes,
+                convertible_to_fr_bytes,
+                &[0; 31],
+                &[0; 31],
+                &[],
+            );
+
+            if let Err(err) = result {
+                let needle = "could not transform comm_d into Fr32";
+                let haystack = format!("{}", err);
+
+                assert!(
+                    haystack.contains(needle),
+                    format!("\"{}\" did not contain \"{}\"", haystack, needle)
+                );
+            } else {
+                panic!("should have failed comm_d to Fr32 conversion");
+            }
+        }
+
+        {
+            let result = verify_seal(
+                PoRepConfig(SectorSize(TEST_SECTOR_SIZE), PoRepProofPartitions(2)),
+                convertible_to_fr_bytes,
+                convertible_to_fr_bytes,
+                not_convertible_to_fr_bytes,
+                &[0; 31],
+                &[0; 31],
+                &[],
+            );
+
+            if let Err(err) = result {
+                let needle = "could not transform comm_r_star into Fr32";
+                let haystack = format!("{}", err);
+
+                assert!(
+                    haystack.contains(needle),
+                    format!("\"{}\" did not contain \"{}\"", haystack, needle)
+                );
+            } else {
+                panic!("should have failed comm_r_star to Fr32 conversion");
+            }
+        }
+    }
+
+    #[test]
+    fn test_verify_post_fr32_validation() {
+        let not_convertible_to_fr_bytes = [255; 32];
+        let out = bytes_into_fr::<Bls12>(&not_convertible_to_fr_bytes);
+        assert!(out.is_err(), "tripwire");
+
+        let result = verify_post(
+            PoStConfig(SectorSize(TEST_SECTOR_SIZE), PoStProofPartitions(2)),
+            vec![not_convertible_to_fr_bytes],
+            [0; 32],
+            vec![[0; POST_SECTORS_COUNT * SINGLE_PARTITION_PROOF_LEN].to_vec()],
+            vec![],
+        );
+
+        if let Err(err) = result {
+            let needle = "could not transform comm_r into Fr32";
+            let haystack = format!("{}", err);
+
+            assert!(
+                haystack.contains(needle),
+                format!("\"{}\" did not contain \"{}\"", haystack, needle)
+            );
+        } else {
+            panic!("should have failed comm_r to Fr32 conversion");
+        }
     }
 
     #[test]
