@@ -585,11 +585,11 @@ mod tests {
     //     assert_eq!(cs.num_constraints(), 547539, "wrong number of constraints");
     // }
 
-//    #[test]
+    #[test]
 //    #[ignore] // Slow test – run only when compiled for release.
-//    fn test_zigzag_compound_pedersen() {
-//        zigzag_test_compound::<PedersenHasher>();
-//    }
+    fn test_zigzag_compound_pedersen() {
+        zigzag_test_compound::<PedersenHasher>();
+    }
 //
 //    #[test]
 //    #[ignore] // Slow test – run only when compiled for release.
@@ -597,136 +597,137 @@ mod tests {
 //        zigzag_test_compound::<Blake2sHasher>();
 //    }
 //
-//    fn zigzag_test_compound<H: 'static + Hasher>() {
+    fn zigzag_test_compound<H: 'static + Hasher>() {
 //        let params = &JubjubBls12::new();
-//        let nodes = 5;
-//        let degree = 2;
-//        let expansion_degree = 1;
-//        let num_layers = 2;
-//        let layer_challenges = LayerChallenges::new_tapered(num_layers, 3, num_layers, 1.0 / 3.0);
-//        let sloth_iter = 1;
-//        let partition_count = 1;
-//
-//        let n = nodes; // FIXME: Consolidate variable names.
-//
-//        // TODO: The code in this section was copied directly from zizag_drgporep::tests::prove_verify.
-//        // We should refactor to share the code – ideally in such a way that we can just add
-//        // methods and get the assembled tests for free.
-//        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-//
-//        let replica_id: Fr = rng.gen();
-//        let data: Vec<u8> = (0..n)
-//            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
-//            .collect();
-//        // create a copy, so we can compare roundtrips
-//        let mut data_copy = data.clone();
-//
-//        let setup_params = compound_proof::SetupParams {
+        let nodes = 5;
+        let degree = 2;
+        let expansion_degree = 1;
+        let num_layers = 2;
+        let layer_challenges = LayerChallenges::new_tapered(num_layers, 3, num_layers, 1.0 / 3.0);
+        let sloth_iter = 1;
+        let partition_count = 1;
+
+        let n = nodes; // FIXME: Consolidate variable names.
+
+        // TODO: The code in this section was copied directly from zizag_drgporep::tests::prove_verify.
+        // We should refactor to share the code – ideally in such a way that we can just add
+        // methods and get the assembled tests for free.
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let replica_id: Fr = rng.gen();
+        let data: Vec<u8> = (0..n)
+            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .collect();
+        // create a copy, so we can compare roundtrips
+        let mut data_copy = data.clone();
+
+        let setup_params = compound_proof::SetupParams {
 //            engine_params: params,
-//            vanilla_params: &layered_drgporep::SetupParams {
-//                drg: drgporep::DrgParams {
-//                    nodes: n,
-//                    degree,
-//                    expansion_degree,
-//                    seed: new_seed(),
-//                },
-//                sloth_iter,
-//                layer_challenges: layer_challenges.clone(),
-//            },
-//            partitions: Some(partition_count),
-//        };
-//
-//        let public_params = ZigZagCompound::setup(&setup_params).expect("setup failed");
-//        let (tau, aux) = ZigZagDrgPoRep::replicate(
-//            &public_params.vanilla_params,
-//            &replica_id.into(),
-//            data_copy.as_mut_slice(),
-//            None,
-//        )
-//        .expect("replication failed");
-//
-//        assert_ne!(data, data_copy);
-//
-//        let public_inputs = layered_drgporep::PublicInputs::<H::Domain> {
-//            replica_id: replica_id.into(),
-//            tau: Some(tau.simplify()),
-//            comm_r_star: tau.comm_r_star,
-//            k: None,
-//        };
-//        let private_inputs = layered_drgporep::PrivateInputs::<H> {
-//            aux,
-//            tau: tau.layer_taus,
-//        };
-//
-//        // TOOD: Move this to e.g. circuit::test::compound_helper and share between all compound proofs.
-//        {
-//            let (circuit, inputs) =
-//                ZigZagCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);
-//
-//            let mut cs = TestConstraintSystem::new();
-//
-//            circuit.synthesize(&mut cs).expect("failed to synthesize");
-//
-//            if !cs.is_satisfied() {
-//                panic!(
-//                    "failed to satisfy: {:?}",
-//                    cs.which_is_unsatisfied().unwrap()
-//                );
-//            }
-//            assert!(
-//                cs.verify(&inputs),
-//                "verification failed with TestContraintSystem and generated inputs"
-//            );
-//        }
-//
-//        // Use this to debug differences between blank and regular circuit generation.
-//        // let blank_circuit = ZigZagCompound::blank_circuit(&public_params.vanilla_params, params);
-//        // let (circuit1, _inputs) =
-//        // ZigZagCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);
-//
-//        // {
-//        //     let mut cs_blank = TestConstraintSystem::new();
-//        //     blank_circuit
-//        //         .synthesize(&mut cs_blank)
-//        //         .expect("failed to synthesize");
-//
-//        //     let a = cs_blank.pretty_print();
-//
-//        //     let mut cs1 = TestConstraintSystem::new();
-//        //     circuit1.synthesize(&mut cs1).expect("failed to synthesize");
-//        //     let b = cs1.pretty_print();
-//
-//        //     let a_vec = a.split("\n").collect::<Vec<_>>();
-//        //     let b_vec = b.split("\n").collect::<Vec<_>>();
-//
-//        //     for (i, (a, b)) in a_vec.chunks(100).zip(b_vec.chunks(100)).enumerate() {
-//        //         println!("chunk {}", i);
-//        //         assert_eq!(a, b);
-//        //     }
-//        // }
-//
-//        let blank_groth_params =
+            vanilla_params: &layered_drgporep::SetupParams {
+                drg: drgporep::DrgParams {
+                    nodes: n,
+                    degree,
+                    expansion_degree,
+                    seed: new_seed(),
+                },
+                sloth_iter,
+                layer_challenges: layer_challenges.clone(),
+            },
+            partitions: Some(partition_count),
+        };
+
+        let public_params = ZigZagCompound::setup(&setup_params).expect("setup failed");
+        let (tau, aux) = ZigZagDrgPoRep::replicate(
+            &public_params.vanilla_params,
+            &replica_id.into(),
+            data_copy.as_mut_slice(),
+            None,
+        )
+        .expect("replication failed");
+
+        assert_ne!(data, data_copy);
+
+        let public_inputs = layered_drgporep::PublicInputs::<H::Domain> {
+            replica_id: replica_id.into(),
+            tau: Some(tau.simplify()),
+            comm_r_star: tau.comm_r_star,
+            k: None,
+        };
+        let private_inputs = layered_drgporep::PrivateInputs::<H> {
+            aux,
+            tau: tau.layer_taus,
+        };
+
+        // TOOD: Move this to e.g. circuit::test::compound_helper and share between all compound proofs.
+        {
+            let (circuit, inputs) =
+                ZigZagCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);
+
+            let mut cs = TestConstraintSystem::new();
+
+            circuit.synthesize(&mut cs).expect("failed to synthesize");
+
+            if !cs.is_satisfied() {
+                panic!(
+                    "failed to satisfy: {:?}",
+                    cs.which_is_unsatisfied().unwrap()
+                );
+            }
+            assert!(
+                cs.verify(&inputs),
+                "verification failed with TestContraintSystem and generated inputs"
+            );
+        }
+
+        // Use this to debug differences between blank and regular circuit generation.
+        // let blank_circuit = ZigZagCompound::blank_circuit(&public_params.vanilla_params, params);
+        // let (circuit1, _inputs) =
+        // ZigZagCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);
+
+        // {
+        //     let mut cs_blank = TestConstraintSystem::new();
+        //     blank_circuit
+        //         .synthesize(&mut cs_blank)
+        //         .expect("failed to synthesize");
+
+        //     let a = cs_blank.pretty_print();
+
+        //     let mut cs1 = TestConstraintSystem::new();
+        //     circuit1.synthesize(&mut cs1).expect("failed to synthesize");
+        //     let b = cs1.pretty_print();
+
+        //     let a_vec = a.split("\n").collect::<Vec<_>>();
+        //     let b_vec = b.split("\n").collect::<Vec<_>>();
+
+        //     for (i, (a, b)) in a_vec.chunks(100).zip(b_vec.chunks(100)).enumerate() {
+        //         println!("chunk {}", i);
+        //         assert_eq!(a, b);
+        //     }
+        // }
+
+        let blank_groth_params =
 //            ZigZagCompound::groth_params(&public_params.vanilla_params, params)
-//                .expect("failed to generate groth params");
-//
-//        let proof = ZigZagCompound::prove(
-//            &public_params,
-//            &public_inputs,
-//            &private_inputs,
-//            &blank_groth_params,
-//        )
-//        .expect("failed while proving");
-//
-//        let verified = ZigZagCompound::verify(
-//            &public_params,
-//            &public_inputs,
-//            &proof,
-//            &ChallengeRequirements {
-//                minimum_challenges: 1,
-//            },
-//        )
-//        .expect("failed while verifying");
-//
-//        assert!(verified);
-//    }
+            ZigZagCompound::groth_params(&public_params.vanilla_params)
+                .expect("failed to generate groth params");
+
+        let proof = ZigZagCompound::prove(
+            &public_params,
+            &public_inputs,
+            &private_inputs,
+            &blank_groth_params,
+        )
+        .expect("failed while proving");
+
+        let verified = ZigZagCompound::verify(
+            &public_params,
+            &public_inputs,
+            &proof,
+            &ChallengeRequirements {
+                minimum_challenges: 1,
+            },
+        )
+        .expect("failed while verifying");
+
+        assert!(verified);
+    }
 }
