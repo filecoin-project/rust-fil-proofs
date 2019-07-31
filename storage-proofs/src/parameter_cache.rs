@@ -97,7 +97,7 @@ pub fn parameter_cache_dir() -> PathBuf {
     Path::new(&parameter_cache_dir_name()).to_path_buf()
 }
 
-fn parameter_cache_params_path(parameter_set_identifier: &str) -> PathBuf {
+pub fn parameter_cache_params_path(parameter_set_identifier: &str) -> PathBuf {
     let dir = Path::new(&parameter_cache_dir_name()).to_path_buf();
     dir.join(format!(
         "v{}-{}.{}",

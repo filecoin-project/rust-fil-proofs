@@ -52,4 +52,9 @@ impl PoStConfig {
         let id = self.get_cache_identifier();
         parameter_cache::parameter_cache_verifying_key_path(&id)
     }
+
+    pub fn get_cache_params_path(&self) -> PathBuf {
+        let id = self.get_cache_identifier();
+        parameter_cache::parameter_cache_params_path(&id)
+    }
 }
