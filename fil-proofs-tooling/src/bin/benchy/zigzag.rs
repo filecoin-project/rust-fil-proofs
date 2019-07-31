@@ -233,7 +233,7 @@ fn do_circuit_work<H: 'static + Hasher>(
     pub_in: Option<<ZigZagDrgPoRep<H> as ProofScheme>::PublicInputs>,
     priv_in: Option<<ZigZagDrgPoRep<H> as ProofScheme>::PrivateInputs>,
     params: &Params,
-    mut report: &mut Report,
+    report: &mut Report,
 ) -> Result<Duration, failure::Error> {
     let mut proving_time = Duration::new(0, 0);
     let Params {
