@@ -1,5 +1,5 @@
 #[macro_use]
-extern crate prometheus;
+extern crate serde;
 
 use clap::{value_t, App, Arg, SubCommand};
 
@@ -119,11 +119,6 @@ fn main() {
                         .long("taper-layers")
                         .help("number of layers to taper")
                         .takes_value(true)
-                )
-                .arg(
-                    Arg::with_name("push-prometheus")
-                        .long("push-prometheus")
-                        .help("When enabled pushes the collected stats to a prometheus pushgateway")
                 )).get_matches();
 
     match matches.subcommand() {
@@ -147,7 +142,6 @@ fn main() {
                         no_bench: m.is_present("no-bench"),
                         no_tmp: m.is_present("no-tmp"),
                         partitions: value_t!(m, "partitions", usize)?,
-                        push_prometheus: m.is_present("push-prometheus"),
                         size: value_t!(m, "size", usize)?,
                         sloth: value_t!(m, "sloth", usize)?,
                         taper: value_t!(m, "taper", f64)?,
