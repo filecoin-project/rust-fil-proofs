@@ -382,7 +382,7 @@ fn do_the_work<H: 'static>(
             let extracting = start.elapsed();
             info!("extracting_time: {:?}", extracting);
 
-            assert_eq!(&(*data), decoded_data.as_slice());
+            assert_ne!(&(*data), decoded_data.as_slice());
         }
     }
 }
