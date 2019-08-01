@@ -2,8 +2,89 @@
 
 This crate contains the following binaries
 
-- `bencher` - Can be used to run the examples and time them
+- `benchy` - Can be used to capture ZigZag performance metrics
 - `micro` - Runs the micro benchmarks written with criterion, parses the output and pushes the information into prometheus.
+
+## `benchy`
+
+The `benchy` program can (currently) be used to capture ZigZag performance
+metrics. Metrics are printed to stdout.
+
+```
+$ ./target/release/benchy zigzag --size=1024 | jq '.'
+{
+  "inputs": {
+    "dataSize": 1048576,
+    "m": 5,
+    "expansionDegree": 8,
+    "slothIter": 0,
+    "partitions": 1,
+    "hasher": "pedersen",
+    "samples": 5,
+    "layers": 10
+  },
+  "outputs": {
+    "avgGrothVerifyingCpuTimeMs": null,
+    "avgGrothVerifyingWallTimeMs": null,
+    "circuitNumConstraints": null,
+    "circuitNumInputs": null,
+    "extractingCpuTimeMs": null,
+    "extractingWallTimeMs": null,
+    "replicationWallTimeMs": 4318,
+    "replicationCpuTimeMs": 32232,
+    "replicationWallTimeNsPerByte": 4117,
+    "replicationCpuTimeNsPerByte": 30739,
+    "totalProvingCpuTimeMs": 0,
+    "totalProvingWallTimeMs": 0,
+    "vanillaProvingCpuTimeUs": 378,
+    "vanillaProvingWallTimeUs": 377,
+    "vanillaVerificationWallTimeUs": 98435,
+    "vanillaVerificationCpuTimeUs": 98393,
+    "verifyingWallTimeAvg": 97,
+    "verifyingCpuTimeAvg": 97
+  }
+}
+```
+
+To include information about RAM utilization during ZigZag benchmarking, run
+`benchy` via its wrapper script:
+
+```
+$ ./scripts/benchy.sh zigzag --size=1024 | jq '.'
+{
+  "inputs": {
+    "dataSize": 1048576,
+    "m": 5,
+    "expansionDegree": 8,
+    "slothIter": 0,
+    "partitions": 1,
+    "hasher": "pedersen",
+    "samples": 5,
+    "layers": 10
+  },
+  "outputs": {
+    "avgGrothVerifyingCpuTimeMs": null,
+    "avgGrothVerifyingWallTimeMs": null,
+    "circuitNumConstraints": null,
+    "circuitNumInputs": null,
+    "extractingCpuTimeMs": null,
+    "extractingWallTimeMs": null,
+    "replicationWallTimeMs": 4318,
+    "replicationCpuTimeMs": 32232,
+    "replicationWallTimeNsPerByte": 4117,
+    "replicationCpuTimeNsPerByte": 30739,
+    "totalProvingCpuTimeMs": 0,
+    "totalProvingWallTimeMs": 0,
+    "vanillaProvingCpuTimeUs": 378,
+    "vanillaProvingWallTimeUs": 377,
+    "vanillaVerificationWallTimeUs": 98435,
+    "vanillaVerificationCpuTimeUs": 98393,
+    "verifyingWallTimeAvg": 97,
+    "verifyingCpuTimeAvg": 97,
+    "maxResidentSetSizeKb": 45644
+  }
+}
+```
 
 ## `micro`
 
