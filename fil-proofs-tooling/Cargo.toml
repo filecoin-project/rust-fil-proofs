@@ -32,3 +32,4 @@ paired = "0.15.0"
 rand = "0.4"
 storage-proofs = { path = "../storage-proofs"}
 tempfile = "3.0.8"
+cpu-time = "0.1.0"

@@ -1,3 +1,4 @@
+use cpu_time::ProcessTime;
 use std::fs::{File, OpenOptions};
 use std::time::{Duration, Instant};
 use std::{io, u32};
@@ -89,6 +90,27 @@ impl From<Params> for Inputs {
     }
 }
 
+struct FuncMeasurement<T> {
+    cpu_time: Duration,
+    wall_time: Duration,
+    return_value: T,
+}
+
+fn measure<T, F: FnOnce() -> Result<T, failure::Error>>(
+    f: F,
+) -> Result<FuncMeasurement<T>, failure::Error> {
+    let cpu_time_start = ProcessTime::now();
+    let wall_start_time = Instant::now();
+
+    let x = f()?;
+
+    Ok(FuncMeasurement {
+        cpu_time: cpu_time_start.elapsed(),
+        wall_time: wall_start_time.elapsed(),
+        return_value: x,
+    })
+}
+
 fn generate_report<H: 'static>(params: Params) -> Result<Report, failure::Error>
 where
     H: Hasher,
@@ -129,103 +151,178 @@ where
     };
 
     let pp = ZigZagDrgPoRep::<H>::setup(&sp)?;
-    let mut total_proving = Duration::new(0, 0);
+    let mut total_proving_wall_time = Duration::new(0, 0);
+    let mut total_proving_cpu_time = Duration::new(0, 0);
 
     let (pub_in, priv_in, d) = if *bench_only {
         (None, None, None)
     } else {
         let mut data = file_backed_mmap_from_zeroes(nodes, *use_tmp)?;
 
-        let start = Instant::now();
-        let mut replication_duration = Duration::new(0, 0);
+        let FuncMeasurement {
+            cpu_time: replication_cpu_time,
+            wall_time: replication_wall_time,
+            return_value: (pub_inputs, priv_inputs),
+        } = measure(|| {
+            let (tau, aux) = ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, &mut data, None)?;
 
-        let (tau, aux) = ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, &mut data, None)?;
-        let pub_inputs = layered_drgporep::PublicInputs::<H::Domain> {
-            replica_id,
-            seed: None,
-            tau: Some(tau.simplify()),
-            comm_r_star: tau.comm_r_star,
-            k: Some(0),
-        };
+            let pb = layered_drgporep::PublicInputs::<H::Domain> {
+                replica_id,
+                seed: None,
+                tau: Some(tau.simplify()),
+                comm_r_star: tau.comm_r_star,
+                k: Some(0),
+            };
 
-        let priv_inputs = layered_drgporep::PrivateInputs {
-            aux,
-            tau: tau.layer_taus,
-        };
+            let pv = layered_drgporep::PrivateInputs {
+                aux,
+                tau: tau.layer_taus,
+            };
 
-        replication_duration += start.elapsed();
+            Ok((pb, pv))
+        })?;
 
-        let time_per_byte = if *data_size > (u32::MAX as usize) {
-            // Duration only supports division by u32, so if data_size (of type usize) is larger,
-            // we have to jump through some hoops to get the value we want, which is duration / size.
-            // Consider: x = size / max
-            //           y = duration / x = duration * max / size
-            //           y / max = duration * max / size * max = duration / size
-            let x = *data_size as f64 / f64::from(u32::MAX);
-            let y = replication_duration / x as u32;
-            y / u32::MAX
-        } else {
-            replication_duration / (*data_size as u32)
-        };
-
-        report.outputs.replication_time_ms = Some(replication_duration.as_millis() as u64);
-        report.outputs.replication_time_ns_per_byte = Some(time_per_byte.as_nanos() as u64);
-
-        let start = Instant::now();
-        let all_partition_proofs =
-            ZigZagDrgPoRep::<H>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, *partitions)?;
-        let vanilla_proving = start.elapsed();
-        total_proving += vanilla_proving;
-
-        report.outputs.vanilla_proving_time_us = Some(vanilla_proving.as_micros() as u64);
+        let FuncMeasurement {
+            cpu_time: vanilla_proving_cpu_time,
+            wall_time: vanilla_proving_wall_time,
+            return_value: all_partition_proofs,
+        } = measure(|| {
+            ZigZagDrgPoRep::<H>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, *partitions)
+                .map_err(|err| err.into())
+        })?;
 
         if *dump_proofs {
             dump_proof_bytes(&all_partition_proofs)?;
         }
 
-        let mut total_verifying = Duration::new(0, 0);
-        for _ in 0..*samples {
-            let start = Instant::now();
-            let verified = ZigZagDrgPoRep::<H>::verify_all_partitions(
-                &pp,
-                &pub_inputs,
-                &all_partition_proofs,
-            )?;
-            if !verified {
-                panic!("verification failed");
+        let (verification_sample, verification_total) = {
+            let mut sample = FuncMeasurement {
+                cpu_time: Duration::new(0, 0),
+                wall_time: Duration::new(0, 0),
+                return_value: (),
+            };
+
+            let mut total = FuncMeasurement {
+                cpu_time: Duration::new(0, 0),
+                wall_time: Duration::new(0, 0),
+                return_value: (),
+            };
+
+            for _ in 0..*samples {
+                let m = measure(|| {
+                    let verified = ZigZagDrgPoRep::<H>::verify_all_partitions(
+                        &pp,
+                        &pub_inputs,
+                        &all_partition_proofs,
+                    )?;
+
+                    if !verified {
+                        panic!("verification failed");
+                    }
+
+                    Ok(())
+                })?;
+
+                total.cpu_time += m.cpu_time;
+                total.wall_time += m.wall_time;
+
+                sample = m;
             }
 
-            let elapsed = start.elapsed();
-            report.outputs.vanilla_verification_time_us = Some(elapsed.as_micros() as u64);
-            total_verifying += elapsed;
-        }
+            (sample, total)
+        };
 
-        let verifying_avg = total_verifying / *samples as u32;
-        let verifying_avg = f64::from(verifying_avg.subsec_nanos()) / 1_000_000_000f64
-            + (verifying_avg.as_secs() as f64);
+        let verifying_wall_time_avg = {
+            let n = verification_total.wall_time / *samples as u32;
+            f64::from(n.subsec_nanos()) / 1_000_000_000f64 + (n.as_secs() as f64)
+        };
 
-        report.outputs.verify_avg_ms = Some((verifying_avg * 1000.0) as u64);
+        let verifying_cpu_time_avg = {
+            let n = verification_total.cpu_time / *samples as u32;
+            f64::from(n.subsec_nanos()) / 1_000_000_000f64 + (n.as_secs() as f64)
+        };
+
+        let wall_time_per_byte = {
+            if *data_size > (u32::MAX as usize) {
+                // Duration only supports division by u32, so if data_size (of type usize) is larger,
+                // we have to jump through some hoops to get the value we want, which is duration / size.
+                // Consider: x = size / max
+                //           y = duration / x = duration * max / size
+                //           y / max = duration * max / size * max = duration / size
+                let x = *data_size as f64 / f64::from(u32::MAX);
+                let y = replication_wall_time / x as u32;
+                y / u32::MAX
+            } else {
+                replication_wall_time / (*data_size as u32)
+            }
+        };
+
+        let cpu_time_per_byte = {
+            if *data_size > (u32::MAX as usize) {
+                let x = *data_size as f64 / f64::from(u32::MAX);
+                let y = replication_cpu_time / x as u32;
+                y / u32::MAX
+            } else {
+                replication_cpu_time / (*data_size as u32)
+            }
+        };
+
+        total_proving_wall_time += vanilla_proving_wall_time;
+        total_proving_cpu_time += vanilla_proving_cpu_time;
+
+        report.outputs.vanilla_verification_wall_time_us =
+            Some(verification_sample.wall_time.as_micros() as u64);
+        report.outputs.vanilla_verification_cpu_time_us =
+            Some(verification_sample.cpu_time.as_micros() as u64);
+
+        report.outputs.replication_wall_time_ns_per_byte =
+            Some(wall_time_per_byte.as_nanos() as u64);
+        report.outputs.replication_cpu_time_ns_per_byte = Some(cpu_time_per_byte.as_nanos() as u64);
+
+        report.outputs.replication_wall_time_ms = Some(replication_wall_time.as_millis() as u64);
+        report.outputs.replication_cpu_time_ms = Some(replication_cpu_time.as_millis() as u64);
+
+        report.outputs.vanilla_proving_wall_time_us =
+            Some(vanilla_proving_wall_time.as_micros() as u64);
+        report.outputs.vanilla_proving_cpu_time_us =
+            Some(vanilla_proving_cpu_time.as_micros() as u64);
+
+        report.outputs.verifying_wall_time_avg = Some((verifying_wall_time_avg * 1000.0) as u64);
+        report.outputs.verifying_cpu_time_avg = Some((verifying_cpu_time_avg * 1000.0) as u64);
 
         (Some(pub_inputs), Some(priv_inputs), Some(data))
     };
 
     if *circuit || *groth || *bench {
-        total_proving += do_circuit_work(&pp, pub_in, priv_in, &params, &mut report)?;
+        let CircuitWorkMeasurement {
+            cpu_time,
+            wall_time,
+        } = do_circuit_work(&pp, pub_in, priv_in, &params, &mut report)?;
+        total_proving_wall_time += wall_time;
+        total_proving_cpu_time += cpu_time;
     }
 
     if let Some(data) = d {
         if *extract {
-            let start = Instant::now();
-            let decoded_data = ZigZagDrgPoRep::<H>::extract_all(&pp, &replica_id, &data)?;
-            let extracting = start.elapsed();
-            report.outputs.extracting = Some(extracting.as_millis() as u64);
-            assert_ne!(&(*data), decoded_data.as_slice());
+            let m = measure(|| {
+                ZigZagDrgPoRep::<H>::extract_all(&pp, &replica_id, &data).map_err(|err| err.into())
+            })?;
+
+            assert_ne!(&(*data), m.return_value.as_slice());
+            report.outputs.extracting_wall_time_ms = Some(m.wall_time.as_millis() as u64);
+            report.outputs.extracting_cpu_time_ms = Some(m.cpu_time.as_millis() as u64);
         }
     }
 
-    report.outputs.total_proving_ms = total_proving.as_millis() as u64;
+    report.outputs.total_proving_wall_time_ms = total_proving_wall_time.as_millis() as u64;
+    report.outputs.total_proving_cpu_time_ms = total_proving_cpu_time.as_millis() as u64;
 
     Ok(report)
+}
+
+struct CircuitWorkMeasurement {
+    cpu_time: Duration,
+    wall_time: Duration,
 }
 
 fn do_circuit_work<H: 'static + Hasher>(
@@ -234,8 +331,10 @@ fn do_circuit_work<H: 'static + Hasher>(
     priv_in: Option<<ZigZagDrgPoRep<H> as ProofScheme>::PrivateInputs>,
     params: &Params,
     report: &mut Report,
-) -> Result<Duration, failure::Error> {
-    let mut proving_time = Duration::new(0, 0);
+) -> Result<CircuitWorkMeasurement, failure::Error> {
+    let mut proving_wall_time = Duration::new(0, 0);
+    let mut proving_cpu_time = Duration::new(0, 0);
+
     let Params {
         samples,
         partitions,
@@ -274,46 +373,60 @@ fn do_circuit_work<H: 'static + Hasher>(
             ZigZagCompound::groth_params(&compound_public_params.vanilla_params, &engine_params)?;
 
         let multi_proof = {
-            let start = Instant::now();
-            let result = ZigZagCompound::prove(
-                &compound_public_params,
-                &pub_inputs,
-                &priv_inputs,
-                &gparams,
-            )?;
-            let groth_proving = start.elapsed();
-            proving_time += groth_proving;
-            result
+            let FuncMeasurement {
+                wall_time,
+                cpu_time,
+                return_value,
+            } = measure(|| {
+                ZigZagCompound::prove(&compound_public_params, &pub_inputs, &priv_inputs, &gparams)
+                    .map_err(|err| err.into())
+            })?;
+            proving_wall_time += wall_time;
+            proving_cpu_time += cpu_time;
+            return_value
         };
 
         let verified = {
-            let mut total_groth_verifying = Duration::new(0, 0);
+            let mut total_groth_verifying_wall_time = Duration::new(0, 0);
+            let mut total_groth_verifying_cpu_time = Duration::new(0, 0);
+
             let mut result = true;
             for _ in 0..*samples {
-                let start = Instant::now();
                 let cur_result = result;
-                ZigZagCompound::verify(
-                    &compound_public_params,
-                    &pub_inputs,
-                    &multi_proof,
-                    &ChallengeRequirements {
-                        minimum_challenges: 1,
-                    },
-                )?;
+                let m = measure(|| {
+                    ZigZagCompound::verify(
+                        &compound_public_params,
+                        &pub_inputs,
+                        &multi_proof,
+                        &ChallengeRequirements {
+                            minimum_challenges: 1,
+                        },
+                    )
+                    .map_err(|err| err.into())
+                })?;
+
                 // If one verification fails, result becomes permanently false.
                 result = result && cur_result;
-                total_groth_verifying += start.elapsed();
+                total_groth_verifying_wall_time += m.wall_time;
+                total_groth_verifying_cpu_time += m.cpu_time;
             }
-            let avg_groth_verifying = total_groth_verifying / *samples as u32;
+            let avg_groth_verifying_wall_time = total_groth_verifying_wall_time / *samples as u32;
+            let avg_groth_verifying_cpu_time = total_groth_verifying_cpu_time / *samples as u32;
 
-            report.outputs.avg_groth_verifying_ms = Some(avg_groth_verifying.as_millis() as u64);
+            report.outputs.avg_groth_verifying_wall_time_ms =
+                Some(avg_groth_verifying_wall_time.as_millis() as u64);
+            report.outputs.avg_groth_verifying_cpu_time_ms =
+                Some(avg_groth_verifying_cpu_time.as_millis() as u64);
 
             result
         };
         assert!(verified);
     }
 
-    Ok(proving_time)
+    Ok(CircuitWorkMeasurement {
+        cpu_time: proving_cpu_time,
+        wall_time: proving_wall_time,
+    })
 }
 
 #[derive(Serialize)]
@@ -332,16 +445,24 @@ struct Inputs {
 #[derive(Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct Outputs {
-    avg_groth_verifying_ms: Option<u64>,
+    avg_groth_verifying_cpu_time_ms: Option<u64>,
+    avg_groth_verifying_wall_time_ms: Option<u64>,
     circuit_num_constraints: Option<u64>,
     circuit_num_inputs: Option<u64>,
-    extracting: Option<u64>,
-    replication_time_ms: Option<u64>,
-    replication_time_ns_per_byte: Option<u64>,
-    total_proving_ms: u64,
-    vanilla_proving_time_us: Option<u64>,
-    vanilla_verification_time_us: Option<u64>,
-    verify_avg_ms: Option<u64>,
+    extracting_cpu_time_ms: Option<u64>,
+    extracting_wall_time_ms: Option<u64>,
+    replication_wall_time_ms: Option<u64>,
+    replication_cpu_time_ms: Option<u64>,
+    replication_wall_time_ns_per_byte: Option<u64>,
+    replication_cpu_time_ns_per_byte: Option<u64>,
+    total_proving_cpu_time_ms: u64,
+    total_proving_wall_time_ms: u64,
+    vanilla_proving_cpu_time_us: Option<u64>,
+    vanilla_proving_wall_time_us: Option<u64>,
+    vanilla_verification_wall_time_us: Option<u64>,
+    vanilla_verification_cpu_time_us: Option<u64>,
+    verifying_wall_time_avg: Option<u64>,
+    verifying_cpu_time_avg: Option<u64>,
 }
 
 #[derive(Serialize)]
