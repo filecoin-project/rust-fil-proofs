@@ -142,9 +142,6 @@ where
             ..
         } = &params;
 
-        let start_cpu_time = ProcessTime::now();
-        let start_wall_time = Instant::now();
-
         let mut total_proving_wall_time = Duration::new(0, 0);
         let mut total_proving_cpu_time = Duration::new(0, 0);
 
@@ -215,24 +212,6 @@ where
                 Some(avg_duration(replication_wall_time, data_size).as_nanos() as u64);
             report.outputs.replication_cpu_time_ns_per_byte =
                 Some(avg_duration(replication_cpu_time, data_size).as_nanos() as u64);
-
-            let up_to_vanilla_proof_cpu_time = start_cpu_time.elapsed();
-            let up_to_vanilla_proof_wall_time = start_wall_time.elapsed();
-
-            // report start-time to beginning of vanilla proof generation
-            report.outputs.report_start_to_vanilla_proof_gen_cpu_time_ms =
-                Some(up_to_vanilla_proof_cpu_time.as_millis() as u64);
-            report
-                .outputs
-                .report_start_to_vanilla_proof_gen_wall_time_ms =
-                Some(up_to_vanilla_proof_wall_time.as_millis() as u64);
-
-            // report start-time to beginning of vanilla proof generation minus
-            // replication time
-            report.outputs.total_merkle_tree_cpu_time_ms =
-                Some((up_to_vanilla_proof_cpu_time - replication_cpu_time).as_millis() as u64);
-            report.outputs.total_merkle_tree_wall_time_ms =
-                Some((up_to_vanilla_proof_wall_time - replication_wall_time).as_millis() as u64);
 
             let FuncMeasurement {
                 cpu_time: vanilla_proving_cpu_time,
@@ -479,10 +458,6 @@ struct Outputs {
     total_report_wall_time_ms: u64,
     total_proving_cpu_time_ms: Option<u64>,
     total_proving_wall_time_ms: Option<u64>,
-    report_start_to_vanilla_proof_gen_cpu_time_ms: Option<u64>,
-    report_start_to_vanilla_proof_gen_wall_time_ms: Option<u64>,
-    total_merkle_tree_cpu_time_ms: Option<u64>,
-    total_merkle_tree_wall_time_ms: Option<u64>,
     vanilla_proving_cpu_time_us: Option<u64>,
     vanilla_proving_wall_time_us: Option<u64>,
     vanilla_verification_wall_time_us: Option<u64>,
