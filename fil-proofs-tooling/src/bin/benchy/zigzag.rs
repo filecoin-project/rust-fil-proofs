@@ -78,7 +78,7 @@ struct Params {
 impl From<Params> for Inputs {
     fn from(p: Params) -> Self {
         Inputs {
-            data_size: p.data_size,
+            sector_size: p.data_size,
             m: p.m,
             expansion_degree: p.expansion_degree,
             sloth_iter: p.sloth_iter,
@@ -86,6 +86,8 @@ impl From<Params> for Inputs {
             hasher: p.hasher.clone(),
             samples: p.samples,
             layers: p.layer_challenges.layers(),
+            partition_challenges: p.layer_challenges.total_challenges(),
+            total_challenges: p.layer_challenges.total_challenges() * p.partitions,
         }
     }
 }
@@ -431,7 +433,7 @@ fn do_circuit_work<H: 'static + Hasher>(
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Inputs {
-    data_size: usize,
+    sector_size: usize,
     m: usize,
     expansion_degree: usize,
     sloth_iter: usize,
@@ -439,6 +441,8 @@ struct Inputs {
     hasher: String,
     samples: usize,
     layers: usize,
+    partition_challenges: usize,
+    total_challenges: usize,
 }
 
 #[derive(Serialize, Default)]
