@@ -60,7 +60,7 @@ fn dump_proof_bytes<H: Hasher>(
 struct Params {
     samples: usize,
     data_size: usize,
-    m: usize,
+    base_degree: usize,
     expansion_degree: usize,
     layer_challenges: LayerChallenges,
     partitions: usize,
@@ -78,7 +78,7 @@ impl From<Params> for Inputs {
     fn from(p: Params) -> Self {
         Inputs {
             sector_size: p.data_size,
-            m: p.m,
+            base_degree: p.base_degree,
             expansion_degree: p.expansion_degree,
             partitions: p.partitions,
             hasher: p.hasher.clone(),
@@ -128,7 +128,7 @@ where
         let Params {
             samples,
             data_size,
-            m,
+            base_degree,
             expansion_degree,
             layer_challenges,
             partitions,
@@ -152,7 +152,7 @@ where
         let sp = layered_drgporep::SetupParams {
             drg: drgporep::DrgParams {
                 nodes,
-                degree: *m,
+                degree: *base_degree,
                 expansion_degree: *expansion_degree,
                 seed: new_seed(),
             },
@@ -432,7 +432,7 @@ fn do_circuit_work<H: 'static + Hasher>(
 #[serde(rename_all = "camelCase")]
 struct Inputs {
     sector_size: usize,
-    m: usize,
+    base_degree: usize,
     expansion_degree: usize,
     partitions: usize,
     hasher: String,
@@ -511,7 +511,7 @@ pub fn run(opts: RunOpts) -> Result<(), failure::Error> {
     let params = Params {
         layer_challenges,
         data_size: opts.size * 1024,
-        m: opts.m,
+        base_degree: opts.m,
         expansion_degree: opts.exp,
         partitions: opts.partitions,
         use_tmp: !opts.no_tmp,
