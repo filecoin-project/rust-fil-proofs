@@ -115,16 +115,16 @@ fn generate_report<H: 'static>(params: Params) -> Result<Report, failure::Error>
 where
     H: Hasher,
 {
-    let mut report = Report {
-        inputs: Inputs::from(params.clone()),
-        outputs: Default::default(),
-    };
-
     let FuncMeasurement {
         cpu_time: total_cpu_time,
         wall_time: total_wall_time,
-        ..
+        return_value: mut report,
     } = measure(|| {
+        let mut report = Report {
+            inputs: Inputs::from(params.clone()),
+            outputs: Default::default(),
+        };
+
         let Params {
             samples,
             data_size,
@@ -141,6 +141,13 @@ where
             bench_only,
             ..
         } = &params;
+
+        let merkle_tree_cpu_time_start = ProcessTime::now();
+        let merkle_tree_wall_time_start = Instant::now();
+
+        let mut total_proving_wall_time = Duration::new(0, 0);
+        let mut total_proving_cpu_time = Duration::new(0, 0);
+
         let rng = &mut XorShiftRng::from_seed([0x3dbe_6259, 0x8d31_3d76, 0x3237_db17, 0xe5bc_0654]);
         let nodes = data_size / 32;
 
@@ -156,8 +163,6 @@ where
         };
 
         let pp = ZigZagDrgPoRep::<H>::setup(&sp)?;
-        let mut total_proving_wall_time = Duration::new(0, 0);
-        let mut total_proving_cpu_time = Duration::new(0, 0);
 
         let (pub_in, priv_in, d) = if *bench_only {
             (None, None, None)
@@ -187,6 +192,36 @@ where
                 Ok((pb, pv))
             })?;
 
+            report.outputs.total_merkle_tree_cpu_time_ms =
+                (merkle_tree_cpu_time_start.elapsed() - replication_cpu_time).as_millis() as u64;
+
+            report.outputs.total_merkle_tree_wall_time_ms =
+                (merkle_tree_wall_time_start.elapsed() - replication_wall_time).as_millis() as u64;
+
+            let avg_duration = |duration: Duration, data_size: &usize| {
+                if *data_size > (u32::MAX as usize) {
+                    // Duration only supports division by u32, so if data_size (of type usize) is larger,
+                    // we have to jump through some hoops to get the value we want, which is duration / size.
+                    // Consider: x = size / max
+                    //           y = duration / x = duration * max / size
+                    //           y / max = duration * max / size * max = duration / size
+                    let x = *data_size as f64 / f64::from(u32::MAX);
+                    let y = duration / x as u32;
+                    y / u32::MAX
+                } else {
+                    duration / (*data_size as u32)
+                }
+            };
+
+            report.outputs.replication_wall_time_ms =
+                Some(replication_wall_time.as_millis() as u64);
+            report.outputs.replication_cpu_time_ms = Some(replication_cpu_time.as_millis() as u64);
+
+            report.outputs.replication_wall_time_ns_per_byte =
+                Some(avg_duration(replication_wall_time, data_size).as_nanos() as u64);
+            report.outputs.replication_cpu_time_ns_per_byte =
+                Some(avg_duration(replication_cpu_time, data_size).as_nanos() as u64);
+
             let FuncMeasurement {
                 cpu_time: vanilla_proving_cpu_time,
                 wall_time: vanilla_proving_wall_time,
@@ -201,107 +236,57 @@ where
                 .map_err(|err| err.into())
             })?;
 
-            if *dump_proofs {
-                dump_proof_bytes(&all_partition_proofs)?;
-            }
-
-            let (verification_sample, verification_total) = {
-                let mut sample = FuncMeasurement {
-                    cpu_time: Duration::new(0, 0),
-                    wall_time: Duration::new(0, 0),
-                    return_value: (),
-                };
-
-                let mut total = FuncMeasurement {
-                    cpu_time: Duration::new(0, 0),
-                    wall_time: Duration::new(0, 0),
-                    return_value: (),
-                };
-
-                for _ in 0..*samples {
-                    let m = measure(|| {
-                        let verified = ZigZagDrgPoRep::<H>::verify_all_partitions(
-                            &pp,
-                            &pub_inputs,
-                            &all_partition_proofs,
-                        )?;
-
-                        if !verified {
-                            panic!("verification failed");
-                        }
-
-                        Ok(())
-                    })?;
-
-                    total.cpu_time += m.cpu_time;
-                    total.wall_time += m.wall_time;
-
-                    sample = m;
-                }
-
-                (sample, total)
-            };
-
-            let verifying_wall_time_avg = {
-                let n = verification_total.wall_time / *samples as u32;
-                f64::from(n.subsec_nanos()) / 1_000_000_000f64 + (n.as_secs() as f64)
-            };
-
-            let verifying_cpu_time_avg = {
-                let n = verification_total.cpu_time / *samples as u32;
-                f64::from(n.subsec_nanos()) / 1_000_000_000f64 + (n.as_secs() as f64)
-            };
-
-            let wall_time_per_byte = {
-                if *data_size > (u32::MAX as usize) {
-                    // Duration only supports division by u32, so if data_size (of type usize) is larger,
-                    // we have to jump through some hoops to get the value we want, which is duration / size.
-                    // Consider: x = size / max
-                    //           y = duration / x = duration * max / size
-                    //           y / max = duration * max / size * max = duration / size
-                    let x = *data_size as f64 / f64::from(u32::MAX);
-                    let y = replication_wall_time / x as u32;
-                    y / u32::MAX
-                } else {
-                    replication_wall_time / (*data_size as u32)
-                }
-            };
-
-            let cpu_time_per_byte = {
-                if *data_size > (u32::MAX as usize) {
-                    let x = *data_size as f64 / f64::from(u32::MAX);
-                    let y = replication_cpu_time / x as u32;
-                    y / u32::MAX
-                } else {
-                    replication_cpu_time / (*data_size as u32)
-                }
-            };
-
-            total_proving_wall_time += vanilla_proving_wall_time;
-            total_proving_cpu_time += vanilla_proving_cpu_time;
-
-            report.outputs.vanilla_verification_wall_time_us =
-                Some(verification_sample.wall_time.as_micros() as u64);
-            report.outputs.vanilla_verification_cpu_time_us =
-                Some(verification_sample.cpu_time.as_micros() as u64);
-
-            report.outputs.replication_wall_time_ns_per_byte =
-                Some(wall_time_per_byte.as_nanos() as u64);
-            report.outputs.replication_cpu_time_ns_per_byte =
-                Some(cpu_time_per_byte.as_nanos() as u64);
-
-            report.outputs.replication_wall_time_ms =
-                Some(replication_wall_time.as_millis() as u64);
-            report.outputs.replication_cpu_time_ms = Some(replication_cpu_time.as_millis() as u64);
-
             report.outputs.vanilla_proving_wall_time_us =
                 Some(vanilla_proving_wall_time.as_micros() as u64);
             report.outputs.vanilla_proving_cpu_time_us =
                 Some(vanilla_proving_cpu_time.as_micros() as u64);
 
-            report.outputs.verifying_wall_time_avg =
-                Some((verifying_wall_time_avg * 1000.0) as u64);
-            report.outputs.verifying_cpu_time_avg = Some((verifying_cpu_time_avg * 1000.0) as u64);
+            total_proving_wall_time += vanilla_proving_wall_time;
+            total_proving_cpu_time += vanilla_proving_cpu_time;
+
+            if *dump_proofs {
+                dump_proof_bytes(&all_partition_proofs)?;
+            }
+
+            let mut total_verification_time = FuncMeasurement {
+                cpu_time: Duration::new(0, 0),
+                wall_time: Duration::new(0, 0),
+                return_value: (),
+            };
+
+            for _ in 0..*samples {
+                let m = measure(|| {
+                    let verified = ZigZagDrgPoRep::<H>::verify_all_partitions(
+                        &pp,
+                        &pub_inputs,
+                        &all_partition_proofs,
+                    )?;
+
+                    if !verified {
+                        panic!("verification failed");
+                    }
+
+                    Ok(())
+                })?;
+
+                total_verification_time.cpu_time += m.cpu_time;
+                total_verification_time.wall_time += m.wall_time;
+
+                report.outputs.vanilla_verification_wall_time_us =
+                    Some(m.wall_time.as_micros() as u64);
+                report.outputs.vanilla_verification_cpu_time_us =
+                    Some(m.cpu_time.as_micros() as u64);
+            }
+
+            let avg_milliseconds = |duration: Duration, samples: &usize| {
+                let n = duration / *samples as u32;
+                f64::from(n.subsec_nanos()) / 1_000_000_000f64 + (n.as_secs() as f64) * 1000.0
+            };
+
+            report.outputs.verifying_wall_time_avg_ms =
+                Some((avg_milliseconds(total_verification_time.wall_time, samples)) as u64);
+            report.outputs.verifying_cpu_time_avg_ms =
+                Some((avg_milliseconds(total_verification_time.cpu_time, samples)) as u64);
 
             (Some(pub_inputs), Some(priv_inputs), Some(data))
         };
@@ -331,11 +316,11 @@ where
         report.outputs.total_proving_wall_time_ms = total_proving_wall_time.as_millis() as u64;
         report.outputs.total_proving_cpu_time_ms = total_proving_cpu_time.as_millis() as u64;
 
-        Ok(())
+        Ok(report)
     })?;
 
-    report.outputs.total_wall_time_ms = total_wall_time.as_millis() as u64;
-    report.outputs.total_cpu_time_ms = total_cpu_time.as_millis() as u64;
+    report.outputs.total_report_wall_time_ms = total_wall_time.as_millis() as u64;
+    report.outputs.total_report_cpu_time_ms = total_cpu_time.as_millis() as u64;
 
     Ok(report)
 }
@@ -475,16 +460,18 @@ struct Outputs {
     replication_cpu_time_ms: Option<u64>,
     replication_wall_time_ns_per_byte: Option<u64>,
     replication_cpu_time_ns_per_byte: Option<u64>,
-    total_cpu_time_ms: u64,
-    total_wall_time_ms: u64,
+    total_report_cpu_time_ms: u64,
+    total_report_wall_time_ms: u64,
     total_proving_cpu_time_ms: u64,
     total_proving_wall_time_ms: u64,
+    total_merkle_tree_cpu_time_ms: u64,
+    total_merkle_tree_wall_time_ms: u64,
     vanilla_proving_cpu_time_us: Option<u64>,
     vanilla_proving_wall_time_us: Option<u64>,
     vanilla_verification_wall_time_us: Option<u64>,
     vanilla_verification_cpu_time_us: Option<u64>,
-    verifying_wall_time_avg: Option<u64>,
-    verifying_cpu_time_avg: Option<u64>,
+    verifying_wall_time_avg_ms: Option<u64>,
+    verifying_cpu_time_avg_ms: Option<u64>,
 }
 
 #[derive(Serialize)]
