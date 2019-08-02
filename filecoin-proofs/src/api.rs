@@ -13,9 +13,10 @@ use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::vdf_post::VDFPostCompound;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
+use storage_proofs::drgraph::{DefaultAlphaHasher, DefaultBetaHasher, Graph};
 use storage_proofs::error::Error;
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
+use storage_proofs::hasher::hybrid::HybridDomain;
 use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::layered_drgporep::{self, ChallengeRequirements};
@@ -41,7 +42,7 @@ use crate::constants::{
 use crate::error;
 use crate::file_cleanup::FileCleanup;
 use crate::fr32::{write_padded, write_unpadded};
-use crate::parameters::{post_setup_params, public_params, setup_params};
+use crate::parameters::{post_setup_params, public_params, setup_params, BETA_HEIGHTS};
 use crate::pieces::{get_aligned_source, get_piece_alignment, PieceAlignment};
 use crate::post_adapter::*;
 use crate::singletons::ENGINE_PARAMS;
@@ -64,7 +65,7 @@ pub struct SealOutput {
     pub comm_d: Commitment,
     pub proof: Vec<u8>,
     pub comm_ps: Vec<Commitment>,
-    pub piece_inclusion_proofs: Vec<PieceInclusionProof<PedersenHasher>>,
+    pub piece_inclusion_proofs: Vec<PieceInclusionProof<DefaultAlphaHasher, DefaultBetaHasher>>,
 }
 
 /// Generates a proof-of-spacetime, returning and detected storage faults.
@@ -160,7 +161,10 @@ fn generate_piece_specs_from_source(
         source.read_exact(&mut buf)?;
 
         let mut source = Cursor::new(&buf);
-        let comm_p = generate_piece_commitment_bytes_from_source::<PedersenHasher>(&mut source)?;
+        let comm_p = generate_piece_commitment_bytes_from_source::<
+            DefaultAlphaHasher,
+            DefaultBetaHasher,
+        >(&mut source)?;
 
         piece_specs.push(PieceSpec {
             comm_p,
@@ -200,7 +204,12 @@ pub fn seal<T: AsRef<Path>>(
     let prover_id = pad_safe_fr(prover_id_in);
     // Zero-pad the sector_id to 32 bytes (and therefore Fr32).
     let sector_id = pad_safe_fr(sector_id_in);
-    let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
+
+    // The replica-id for the data layer is always `HybridDomain::Beta`.
+    let replica_id = {
+        let replica_id_beta = replica_id::<DefaultBetaHasher>(prover_id, sector_id);
+        HybridDomain::Beta(replica_id_beta)
+    };
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: &setup_params(
@@ -222,7 +231,8 @@ pub fn seal<T: AsRef<Path>>(
 
     let mut in_data = OpenOptions::new().read(true).open(&in_path)?;
     let piece_specs = generate_piece_specs_from_source(&mut in_data, &piece_lengths)?;
-    let piece_inclusion_proofs = piece_inclusion_proofs::<PedersenHasher>(&piece_specs, &aux[0])?;
+    let piece_inclusion_proofs =
+        piece_inclusion_proofs::<DefaultAlphaHasher, DefaultBetaHasher>(&piece_specs, &aux[0])?;
     let comm_ps: Vec<Commitment> = piece_specs
         .iter()
         .map(|piece_spec| piece_spec.comm_p)
@@ -234,7 +244,10 @@ pub fn seal<T: AsRef<Path>>(
 
     let public_tau = tau.simplify();
 
-    let public_inputs = layered_drgporep::PublicInputs {
+    let public_inputs = layered_drgporep::PublicInputs::<
+        <DefaultAlphaHasher as Hasher>::Domain,
+        <DefaultBetaHasher as Hasher>::Domain,
+    > {
         replica_id,
         tau: Some(public_tau),
         comm_r_star: tau.comm_r_star,
@@ -242,7 +255,7 @@ pub fn seal<T: AsRef<Path>>(
         seed: None,
     };
 
-    let private_inputs = layered_drgporep::PrivateInputs::<DefaultTreeHasher> {
+    let private_inputs = layered_drgporep::PrivateInputs::<DefaultAlphaHasher, DefaultBetaHasher> {
         aux,
         tau: tau.layer_taus,
     };
@@ -271,6 +284,8 @@ pub fn seal<T: AsRef<Path>>(
     let comm_d = commitment_from_fr::<Bls12>(public_tau.comm_d.into());
     let comm_r_star = commitment_from_fr::<Bls12>(tau.comm_r_star.into());
 
+    // We get the total number of leaves for the sector using `sector_bytes >> 5`, which divides the
+    // total number of bytes in the sector by 32 (i.e. `NODE_SIZE`).
     let valid_pieces = PieceInclusionProof::verify_all(
         &comm_d,
         &piece_inclusion_proofs,
@@ -311,6 +326,7 @@ pub fn seal<T: AsRef<Path>>(
 
 /// Verifies the output of some previously-run seal operation.
 ///
+#[allow(clippy::absurd_extreme_comparisons)]
 pub fn verify_seal(
     porep_config: PoRepConfig,
     comm_r: Commitment,
@@ -323,7 +339,12 @@ pub fn verify_seal(
     let sector_bytes = PaddedBytesAmount::from(porep_config);
     let prover_id = pad_safe_fr(prover_id_in);
     let sector_id = pad_safe_fr(sector_id_in);
-    let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
+
+    // The data layer has a `HybridDomain::Beta` replica-id.
+    let replica_id = {
+        let replica_id_beta = replica_id::<DefaultBetaHasher>(prover_id, sector_id);
+        HybridDomain::Beta(replica_id_beta)
+    };
 
     let comm_r = bytes_into_fr::<Bls12>(&comm_r).map_err(|err| match err {
         Error::BadFrBytes => format_err!("could not transform comm_r into Fr32: {:?}", err),
@@ -352,17 +373,46 @@ pub fn verify_seal(
     let compound_public_params: compound_proof::PublicParams<
         '_,
         Bls12,
-        ZigZagDrgPoRep<'_, DefaultTreeHasher>,
+        ZigZagDrgPoRep<'_, DefaultAlphaHasher, DefaultBetaHasher>,
     > = ZigZagCompound::setup(&compound_setup_params)?;
 
-    let public_inputs = layered_drgporep::PublicInputs::<<DefaultTreeHasher as Hasher>::Domain> {
+    // Convert comm_d, comm_r, and comm_r_star from `Fr` into the correct `HybridDomain` variants.
+    let n_sector_leaves = u64::from(sector_bytes) / 32;
+    let tree_height = (n_sector_leaves as f64).log2().ceil() as usize;
+
+    // Every node in the data layer's tree is a `HyrbidDomain::Beta`.
+    let comm_d: HybridDomain<
+        <DefaultAlphaHasher as Hasher>::Domain,
+        <DefaultBetaHasher as Hasher>::Domain,
+    > = HybridDomain::Beta(comm_d.into());
+
+    let comm_r: HybridDomain<
+        <DefaultAlphaHasher as Hasher>::Domain,
+        <DefaultBetaHasher as Hasher>::Domain,
+    > = if *BETA_HEIGHTS.last().unwrap() > tree_height {
+        HybridDomain::Beta(comm_r.into())
+    } else {
+        HybridDomain::Alpha(comm_r.into())
+    };
+
+    // comm_r_star is always the same `HybridDomain` variant as the last encoding layer's comm_r.
+    let comm_r_star: HybridDomain<
+        <DefaultAlphaHasher as Hasher>::Domain,
+        <DefaultBetaHasher as Hasher>::Domain,
+    > = if comm_r.is_beta() {
+        HybridDomain::Beta(comm_r_star.into())
+    } else {
+        HybridDomain::Alpha(comm_r_star.into())
+    };
+
+    let public_inputs = layered_drgporep::PublicInputs::<
+        <DefaultAlphaHasher as Hasher>::Domain,
+        <DefaultBetaHasher as Hasher>::Domain,
+    > {
         replica_id,
-        tau: Some(Tau {
-            comm_r: comm_r.into(),
-            comm_d: comm_d.into(),
-        }),
+        tau: Some(Tau { comm_r, comm_d }),
         seed: None,
-        comm_r_star: comm_r_star.into(),
+        comm_r_star,
         k: None,
     };
 
@@ -392,6 +442,7 @@ pub fn verify_seal(
 
 /// Verify that the provided PIP proves the piece is included in the sector.
 ///
+#[allow(clippy::absurd_extreme_comparisons)]
 pub fn verify_piece_inclusion_proof(
     piece_inclusion_proof: &[u8],
     comm_d: &Commitment,
@@ -399,10 +450,19 @@ pub fn verify_piece_inclusion_proof(
     piece_size: UnpaddedBytesAmount,
     sector_size: SectorSize,
 ) -> error::Result<bool> {
-    let piece_inclusion_proof: PieceInclusionProof<PedersenHasher> =
+    let piece_inclusion_proof: PieceInclusionProof<DefaultAlphaHasher, DefaultBetaHasher> =
         piece_inclusion_proof.try_into()?;
-    let comm_d = storage_proofs::hasher::pedersen::PedersenDomain::try_from_bytes(comm_d)?;
-    let comm_p = storage_proofs::hasher::pedersen::PedersenDomain::try_from_bytes(comm_p)?;
+
+    let comm_d = {
+        let comm_d_beta = <DefaultBetaHasher as Hasher>::Domain::try_from_bytes(comm_d)?;
+        HybridDomain::Beta(comm_d_beta)
+    };
+
+    let comm_p = {
+        let comm_p_beta = <DefaultBetaHasher as Hasher>::Domain::try_from_bytes(comm_p)?;
+        HybridDomain::Beta(comm_p_beta)
+    };
+
     let piece_alignment = get_piece_alignment(UnpaddedBytesAmount(0), piece_size);
     let piece_size_with_alignment =
         PaddedBytesAmount::from(piece_size + piece_alignment.right_bytes);
@@ -432,8 +492,10 @@ pub fn generate_piece_commitment<T: Into<PathBuf> + AsRef<Path>>(
 
     let _ = padded_piece_file.seek(SeekFrom::Start(0))?;
 
-    let comm_p =
-        generate_piece_commitment_bytes_from_source::<PedersenHasher>(&mut padded_piece_file)?;
+    let comm_p = generate_piece_commitment_bytes_from_source::<
+        DefaultAlphaHasher,
+        DefaultBetaHasher,
+    >(&mut padded_piece_file)?;
     Ok(comm_p)
 }
 
@@ -453,7 +515,12 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
 ) -> error::Result<(UnpaddedBytesAmount)> {
     let prover_id = pad_safe_fr(prover_id_in);
     let sector_id = pad_safe_fr(sector_id_in);
-    let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
+
+    // The data layer's replica-id is always a `HyrbidDomain::Beta`.
+    let replica_id = {
+        let replica_id_beta = replica_id::<DefaultBetaHasher>(prover_id, sector_id);
+        HybridDomain::Beta(replica_id_beta)
+    };
 
     let f_in = File::open(sealed_path)?;
     let mut data = Vec::new();

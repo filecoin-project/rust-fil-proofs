@@ -17,9 +17,12 @@ use storage_proofs::drgporep::*;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
+use storage_proofs::hasher::hybrid::HybridDomain;
 use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
+
+const BETA_HEIGHT: usize = 0;
 
 #[cfg(feature = "cpu-profile")]
 #[inline(always)]
@@ -57,7 +60,11 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, challenge_count: usize) {
 
     let nodes = data_size / 32;
 
-    let replica_id: H::Domain = rng.gen();
+    let prev_layer_beta_height = (nodes as f32).log2().ceil() as usize + 1;
+
+    // If beta height is set to 0, then the replica-id will be `HybridDomain::Alpha`.
+    let replica_id: HybridDomain<H::Domain, H::Domain> = HybridDomain::Alpha(rng.gen());
+
     let mut data: Vec<u8> = (0..nodes)
         .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
         .collect();
@@ -71,11 +78,13 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, challenge_count: usize) {
         },
         private: true,
         challenges_count: challenge_count,
+        beta_height: BETA_HEIGHT,
+        prev_layer_beta_height,
     };
 
     info!("running setup");
     start_profile("setup");
-    let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).unwrap();
+    let pp = DrgPoRep::<H, H, BucketGraph<H, H>>::setup(&sp).unwrap();
     stop_profile();
 
     let start = Instant::now();
@@ -85,7 +94,7 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, challenge_count: usize) {
 
     start_profile("replicate");
     let (tau, aux) =
-        DrgPoRep::<H, _>::replicate(&pp, &replica_id, data.as_mut_slice(), None).unwrap();
+        DrgPoRep::<H, H, _>::replicate(&pp, &replica_id, data.as_mut_slice(), None).unwrap();
     stop_profile();
     let pub_inputs = PublicInputs {
         replica_id: Some(replica_id),
@@ -93,7 +102,7 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, challenge_count: usize) {
         tau: Some(tau),
     };
 
-    let priv_inputs = PrivateInputs::<H> {
+    let priv_inputs = PrivateInputs::<H, H> {
         tree_d: &aux.tree_d,
         tree_r: &aux.tree_r,
     };
@@ -110,13 +119,13 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, challenge_count: usize) {
         let start = Instant::now();
         start_profile("prove");
         let proof =
-            DrgPoRep::<H, _>::prove(&pp, &pub_inputs, &priv_inputs).expect("failed to prove");
+            DrgPoRep::<H, H, _>::prove(&pp, &pub_inputs, &priv_inputs).expect("failed to prove");
         stop_profile();
         total_proving += start.elapsed();
 
         let start = Instant::now();
         start_profile("verify");
-        DrgPoRep::<H, _>::verify(&pp, &pub_inputs, &proof).expect("failed to verify");
+        DrgPoRep::<H, H, _>::verify(&pp, &pub_inputs, &proof).expect("failed to verify");
         stop_profile();
         total_verifying += start.elapsed();
         proofs.push(proof);

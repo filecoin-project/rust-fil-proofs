@@ -39,12 +39,12 @@ fn stop_profile() {
 #[inline(always)]
 fn stop_profile() {}
 
-fn pregenerate_graph<H: Hasher>(size: usize) -> ZigZagBucketGraph<H> {
+fn pregenerate_graph<H: Hasher>(size: usize) -> ZigZagBucketGraph<H, H> {
     let seed = [1, 2, 3, 4, 5, 6, 7];
-    ZigZagBucketGraph::<H>::new_zigzag(size, 5, 8, seed)
+    ZigZagBucketGraph::<H, H>::new_zigzag(size, 5, 8, seed)
 }
 
-fn parents_loop<H: Hasher, G: Graph<H>>(graph: &G, parents: &mut [usize]) {
+fn parents_loop<H: Hasher, G: Graph<H, H>>(graph: &G, parents: &mut [usize]) {
     (0..graph.size())
         .map(|node| graph.parents(node, parents))
         .collect()

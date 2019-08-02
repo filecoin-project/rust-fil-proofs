@@ -8,24 +8,33 @@ use serde::ser::Serialize;
 use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
+use crate::hasher::hybrid::HybridDomain;
 use crate::hasher::{Domain, Hasher};
-use crate::merkle::{MerkleProof, MerkleTree};
+use crate::hybrid_merkle::{HybridMerkleProof, HybridMerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::{self, PoRep};
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::vde::{self, decode_block, decode_domain_block};
 
 #[derive(Debug, Clone)]
-pub struct PublicInputs<T: Domain> {
-    pub replica_id: Option<T>,
+pub struct PublicInputs<AD, BD>
+where
+    AD: Domain,
+    BD: Domain,
+{
+    pub replica_id: Option<HybridDomain<AD, BD>>,
     pub challenges: Vec<usize>,
-    pub tau: Option<porep::Tau<T>>,
+    pub tau: Option<porep::Tau<AD, BD>>,
 }
 
 #[derive(Debug)]
-pub struct PrivateInputs<'a, H: 'a + Hasher> {
-    pub tree_d: &'a MerkleTree<H::Domain, H::Function>,
-    pub tree_r: &'a MerkleTree<H::Domain, H::Function>,
+pub struct PrivateInputs<'a, AH, BH>
+where
+    AH: 'a + Hasher,
+    BH: 'a + Hasher,
+{
+    pub tree_d: &'a HybridMerkleTree<AH, BH>,
+    pub tree_r: &'a HybridMerkleTree<AH, BH>,
 }
 
 #[derive(Debug)]
@@ -33,6 +42,8 @@ pub struct SetupParams {
     pub drg: DrgParams,
     pub private: bool,
     pub challenges_count: usize,
+    pub beta_height: usize,
+    pub prev_layer_beta_height: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -50,37 +61,51 @@ pub struct DrgParams {
 }
 
 #[derive(Debug, Clone)]
-pub struct PublicParams<H, G>
+pub struct PublicParams<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH> + ParameterSetMetadata,
 {
     pub graph: G,
     pub private: bool,
     pub challenges_count: usize,
-
-    _h: PhantomData<H>,
+    pub beta_height: usize,
+    pub prev_layer_beta_height: usize,
+    _bh: PhantomData<BH>,
+    _ah: PhantomData<AH>,
 }
 
-impl<H, G> PublicParams<H, G>
+impl<AH, BH, G> PublicParams<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH> + ParameterSetMetadata,
 {
-    pub fn new(graph: G, private: bool, challenges_count: usize) -> Self {
+    pub fn new(
+        graph: G,
+        private: bool,
+        challenges_count: usize,
+        beta_height: usize,
+        prev_layer_beta_height: usize,
+    ) -> Self {
         PublicParams {
             graph,
             private,
             challenges_count,
-            _h: PhantomData,
+            beta_height,
+            prev_layer_beta_height,
+            _bh: PhantomData,
+            _ah: PhantomData,
         }
     }
 }
 
-impl<H, G> ParameterSetMetadata for PublicParams<H, G>
+impl<AH, BH, G> ParameterSetMetadata for PublicParams<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH> + ParameterSetMetadata,
 {
     fn identifier(&self) -> String {
         format!(
@@ -95,20 +120,28 @@ where
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DataProof<H: Hasher> {
+pub struct DataProof<AH, BH>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
     #[serde(bound(
-        serialize = "MerkleProof<H>: Serialize",
-        deserialize = "MerkleProof<H>: Deserialize<'de>"
+        serialize = "HybridMerkleProof<AH, BH>: Serialize",
+        deserialize = "HybridMerkleProof<AH, BH>: Deserialize<'de>"
     ))]
-    pub proof: MerkleProof<H>,
-    pub data: H::Domain,
+    pub proof: HybridMerkleProof<AH, BH>,
+    pub data: HybridDomain<AH::Domain, BH::Domain>,
 }
 
-impl<H: Hasher> DataProof<H> {
-    pub fn new(n: usize) -> Self {
+impl<AH, BH> DataProof<AH, BH>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
+    pub fn new_empty(tree_height: usize) -> Self {
         DataProof {
-            proof: MerkleProof::new(n),
-            data: Default::default(),
+            proof: HybridMerkleProof::new_empty(tree_height),
+            data: HybridDomain::default(),
         }
     }
 
@@ -122,59 +155,82 @@ impl<H: Hasher> DataProof<H> {
         out
     }
 
-    /// proves_challenge returns true if this self.proof corresponds to challenge.
-    /// This is useful for verifying that a supplied proof is actually relevant to a given challenge.
+    /// Returns `true` if this proof corresponds to `challenge` by checking the challenge against
+    /// its "is_right" bits (`self.proof.path`). This is useful for verifying that a supplied proof
+    /// is actually relevant to a given challenge.
     pub fn proves_challenge(&self, challenge: usize) -> bool {
-        let mut c = challenge;
-        for (_, is_right) in self.proof.path().iter() {
-            if ((c & 1) == 1) ^ is_right {
+        let mut index_in_layer = challenge;
+
+        for (_, is_right_proof) in self.proof.path() {
+            let is_right_calculated = (index_in_layer & 1) == 1;
+            let bits_are_different = is_right_calculated ^ is_right_proof;
+            if bits_are_different {
                 return false;
             };
-            c >>= 1;
+            // The child's index in the next layer (i.e. how many nodes to the right in the tree
+            // layer the child node is) can be calculated by dividing the current node's index in
+            // the current layer by 2.
+            index_in_layer >>= 1;
         }
+
         true
     }
 }
 
-pub type ReplicaParents<H> = Vec<(usize, DataProof<H>)>;
+pub type ReplicaParents<AH, BH> = Vec<(usize, DataProof<AH, BH>)>;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct Proof<H: Hasher> {
+pub struct Proof<AH, BH>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
     #[serde(bound(
-        serialize = "H::Domain: Serialize",
-        deserialize = "H::Domain: Deserialize<'de>"
+        serialize = "HybridDomain<AH::Domain, BH::Domain>: Serialize",
+        deserialize = "HybridDomain<AH::Domain, BH::Domain>: Deserialize<'de>"
     ))]
-    pub data_root: H::Domain,
+    pub data_root: HybridDomain<AH::Domain, BH::Domain>,
+
     #[serde(bound(
-        serialize = "H::Domain: Serialize",
-        deserialize = "H::Domain: Deserialize<'de>"
+        serialize = "HybridDomain<AH::Domain, BH::Domain>: Serialize",
+        deserialize = "HybridDomain<AH::Domain, BH::Domain>: Deserialize<'de>"
     ))]
-    pub replica_root: H::Domain,
+    pub replica_root: HybridDomain<AH::Domain, BH::Domain>,
+
     #[serde(bound(
-        serialize = "DataProof<H>: Serialize",
-        deserialize = "DataProof<H>: Deserialize<'de>"
+        serialize = "DataProof<AH, BH>: Serialize",
+        deserialize = "DataProof<AH, BH>: Deserialize<'de>"
     ))]
-    pub replica_nodes: Vec<DataProof<H>>,
+    pub replica_nodes: Vec<DataProof<AH, BH>>,
+
     #[serde(bound(
-        serialize = "H::Domain: Serialize",
-        deserialize = "H::Domain: Deserialize<'de>"
+        serialize = "ReplicaParents<AH, BH>: Serialize",
+        deserialize = "ReplicaParents<AH, BH>: Deserialize<'de>"
     ))]
-    pub replica_parents: Vec<ReplicaParents<H>>,
+    pub replica_parents: Vec<ReplicaParents<AH, BH>>,
+
     #[serde(bound(
-        serialize = "H::Domain: Serialize",
-        deserialize = "H::Domain: Deserialize<'de>"
+        serialize = "DataProof<AH, BH>: Serialize",
+        deserialize = "DataProof<AH, BH>: Deserialize<'de>"
     ))]
-    pub nodes: Vec<DataProof<H>>,
+    pub nodes: Vec<DataProof<AH, BH>>,
 }
 
-impl<H: Hasher> Proof<H> {
-    pub fn new_empty(height: usize, degree: usize, challenges: usize) -> Proof<H> {
+impl<AH, BH> Proof<AH, BH>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
+    pub fn new_empty(height: usize, degree: usize, n_challenges: usize) -> Self {
+        let replica_nodes = vec![DataProof::new_empty(height); n_challenges];
+        let replica_parents = vec![vec![(0, DataProof::new_empty(height)); degree]; n_challenges];
+        let nodes = vec![DataProof::new_empty(height); n_challenges];
+
         Proof {
-            data_root: Default::default(),
-            replica_root: Default::default(),
-            replica_nodes: vec![DataProof::new(height); challenges],
-            replica_parents: vec![vec![(0, DataProof::new(height)); degree]; challenges],
-            nodes: vec![DataProof::new(height); challenges],
+            replica_nodes,
+            replica_parents,
+            nodes,
+            ..Default::default()
         }
     }
 
@@ -203,10 +259,10 @@ impl<H: Hasher> Proof<H> {
     }
 
     pub fn new(
-        replica_nodes: Vec<DataProof<H>>,
-        replica_parents: Vec<ReplicaParents<H>>,
-        nodes: Vec<DataProof<H>>,
-    ) -> Proof<H> {
+        replica_nodes: Vec<DataProof<AH, BH>>,
+        replica_parents: Vec<ReplicaParents<AH, BH>>,
+        nodes: Vec<DataProof<AH, BH>>,
+    ) -> Self {
         Proof {
             data_root: *nodes[0].proof.root(),
             replica_root: *replica_nodes[0].proof.root(),
@@ -217,38 +273,29 @@ impl<H: Hasher> Proof<H> {
     }
 }
 
-impl<'a, H: Hasher> From<&'a Proof<H>> for Proof<H> {
-    fn from(p: &Proof<H>) -> Proof<H> {
-        Proof {
-            data_root: *p.nodes[0].proof.root(),
-            replica_root: *p.replica_nodes[0].proof.root(),
-            replica_nodes: p.replica_nodes.clone(),
-            replica_parents: p.replica_parents.clone(),
-            nodes: p.nodes.clone(),
-        }
-    }
-}
-
 #[derive(Default)]
-pub struct DrgPoRep<'a, H, G>
+pub struct DrgPoRep<'a, AH, BH, G>
 where
-    H: 'a + Hasher,
-    G: 'a + Graph<H>,
+    AH: 'a + Hasher,
+    BH: 'a + Hasher,
+    G: 'a + Graph<AH, BH>,
 {
-    _h: PhantomData<&'a H>,
+    _ah: PhantomData<&'a AH>,
+    _bh: PhantomData<&'a BH>,
     _g: PhantomData<G>,
 }
 
-impl<'a, H, G> ProofScheme<'a> for DrgPoRep<'a, H, G>
+impl<'a, AH, BH, G> ProofScheme<'a> for DrgPoRep<'a, AH, BH, G>
 where
-    H: 'a + Hasher,
-    G: 'a + Graph<H> + ParameterSetMetadata,
+    AH: 'a + Hasher,
+    BH: 'a + Hasher,
+    G: 'a + Graph<AH, BH> + ParameterSetMetadata,
 {
-    type PublicParams = PublicParams<H, G>;
+    type PublicParams = PublicParams<AH, BH, G>;
     type SetupParams = SetupParams;
-    type PublicInputs = PublicInputs<H::Domain>;
-    type PrivateInputs = PrivateInputs<'a, H>;
-    type Proof = Proof<H>;
+    type PublicInputs = PublicInputs<AH::Domain, BH::Domain>;
+    type PrivateInputs = PrivateInputs<'a, AH, BH>;
+    type Proof = Proof<AH, BH>;
     type Requirements = NoRequirements;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
@@ -259,7 +306,13 @@ where
             sp.drg.seed,
         );
 
-        Ok(PublicParams::new(graph, sp.private, sp.challenges_count))
+        Ok(PublicParams::new(
+            graph,
+            sp.private,
+            sp.challenges_count,
+            sp.beta_height,
+            sp.prev_layer_beta_height,
+        ))
     }
 
     fn prove<'b>(
@@ -275,9 +328,11 @@ where
             pub_params.challenges_count
         );
 
+        let tree_d_has_alpha_leaves = pub_params.prev_layer_beta_height == 0;
+
         let mut replica_nodes = Vec::with_capacity(len);
         let mut replica_parents = Vec::with_capacity(len);
-        let mut data_nodes: Vec<DataProof<H>> = Vec::with_capacity(len);
+        let mut data_nodes: Vec<DataProof<AH, BH>> = Vec::with_capacity(len);
 
         for i in 0..len {
             let challenge = pub_inputs.challenges[i] % pub_params.graph.size();
@@ -289,8 +344,8 @@ where
             let data = tree_r.read_at(challenge);
 
             replica_nodes.push(DataProof {
-                proof: MerkleProof::new_from_proof(&tree_r.gen_proof(challenge)),
                 data,
+                proof: tree_r.gen_proof(challenge),
             });
 
             let mut parents = vec![0; pub_params.graph.degree()];
@@ -299,9 +354,8 @@ where
 
             for p in &parents {
                 replica_parentsi.push((*p, {
-                    let proof = tree_r.gen_proof(*p);
                     DataProof {
-                        proof: MerkleProof::new_from_proof(&proof),
+                        proof: tree_r.gen_proof(*p),
                         data: tree_r.read_at(*p),
                     }
                 }));
@@ -311,32 +365,32 @@ where
 
             let node_proof = tree_d.gen_proof(challenge);
 
-            {
-                // TODO: use this again, I can't make lifetimes work though atm and I do not know why
-                // let extracted = Self::extract(
-                //     pub_params,
-                //     &pub_inputs.replica_id.into_bytes(),
-                //     &replica,
-                //     challenge,
-                // )?;
-
-                let extracted = decode_domain_block::<H>(
+            // When we decode, we are returned the `HybridDomain` variant corresponding to this
+            // encoding layer's beta height, we must convert it to the `HybridDomain` variant
+            // corresponding to the previous layer's beta height (i.e. `tree_d`'s beta height).
+            let extracted = {
+                let decoded = decode_domain_block::<AH, BH>(
                     &pub_inputs.replica_id.expect("missing replica_id"),
                     tree_r,
                     challenge,
-                    tree_r.read_at(challenge),
+                    data,
                     &parents,
                 )?;
-                data_nodes.push(DataProof {
-                    data: extracted,
-                    proof: MerkleProof::new_from_proof(&node_proof),
-                });
-            }
+
+                if tree_d_has_alpha_leaves {
+                    decoded.into_alpha()
+                } else {
+                    decoded.into_beta()
+                }
+            };
+
+            data_nodes.push(DataProof {
+                data: extracted,
+                proof: node_proof,
+            });
         }
 
-        let proof = Proof::new(replica_nodes, replica_parents, data_nodes);
-
-        Ok(proof)
+        Ok(Proof::new(replica_nodes, replica_parents, data_nodes))
     }
 
     fn verify(
@@ -396,7 +450,7 @@ where
                 }
             }
 
-            let key = {
+            let key_fr_repr = {
                 let mut hasher = Blake2s::new().hash_length(32).to_state();
                 let prover_bytes = pub_inputs.replica_id.expect("missing replica_id");
                 hasher.update(prover_bytes.as_ref());
@@ -406,16 +460,40 @@ where
                 }
 
                 let hash = hasher.finalize();
-                bytes_into_fr_repr_safe(hash.as_ref()).into()
+                bytes_into_fr_repr_safe(hash.as_ref())
             };
 
-            let unsealed = H::sloth_decode(&key, &proof.replica_nodes[i].data);
+            let curr_layer_is_alpha = pub_params.beta_height == 0;
+            let prev_layer_is_alpha = pub_params.prev_layer_beta_height == 0;
+
+            let unsealed = if curr_layer_is_alpha {
+                let key: AH::Domain = key_fr_repr.into();
+                let alpha = AH::sloth_decode(&key, proof.replica_nodes[i].data.alpha_value());
+                let decoded = HybridDomain::Alpha(alpha);
+                if !prev_layer_is_alpha {
+                    decoded.into_beta()
+                } else {
+                    decoded
+                }
+            } else {
+                let key: BH::Domain = key_fr_repr.into();
+                let beta = BH::sloth_decode(&key, proof.replica_nodes[i].data.beta_value());
+                let decoded = HybridDomain::Beta(beta);
+                if prev_layer_is_alpha {
+                    decoded.into_alpha()
+                } else {
+                    decoded
+                }
+            };
 
             if unsealed != proof.nodes[i].data {
                 return Ok(false);
             }
 
-            if !proof.nodes[i].proof.validate_data(&unsealed.into_bytes()) {
+            if !proof.nodes[i]
+                .proof
+                .challenge_value_matches_bytes(unsealed.as_ref())
+            {
                 println!("invalid data for merkle path {:?}", unsealed);
                 return Ok(false);
             }
@@ -425,29 +503,33 @@ where
     }
 }
 
-impl<'a, H, G> PoRep<'a, H> for DrgPoRep<'a, H, G>
+impl<'a, AH, BH, G> PoRep<'a, AH, BH> for DrgPoRep<'a, AH, BH, G>
 where
-    H: 'a + Hasher,
-    G: 'a + Graph<H> + ParameterSetMetadata + Sync + Send,
+    AH: 'a + Hasher,
+    BH: 'a + Hasher,
+    G: 'a + Graph<AH, BH> + ParameterSetMetadata + Sync + Send,
 {
-    type Tau = porep::Tau<H::Domain>;
-    type ProverAux = porep::ProverAux<H>;
+    type Tau = porep::Tau<AH::Domain, BH::Domain>;
+    type ProverAux = porep::ProverAux<AH, BH>;
 
+    #[allow(clippy::type_complexity)]
     fn replicate(
         pp: &Self::PublicParams,
-        replica_id: &H::Domain,
+        replica_id: &HybridDomain<AH::Domain, BH::Domain>,
         data: &mut [u8],
-        data_tree: Option<MerkleTree<H::Domain, H::Function>>,
-    ) -> Result<(porep::Tau<H::Domain>, porep::ProverAux<H>)> {
+        data_tree: Option<HybridMerkleTree<AH, BH>>,
+    ) -> Result<(porep::Tau<AH::Domain, BH::Domain>, porep::ProverAux<AH, BH>)> {
         let tree_d = match data_tree {
             Some(tree) => tree,
-            None => pp.graph.merkle_tree(data)?,
+            None => pp
+                .graph
+                .hybrid_merkle_tree(data, pp.prev_layer_beta_height)?,
         };
 
         vde::encode(&pp.graph, replica_id, data)?;
 
         let comm_d = tree_d.root();
-        let tree_r = pp.graph.merkle_tree(data)?;
+        let tree_r = pp.graph.hybrid_merkle_tree(data, pp.beta_height)?;
         let comm_r = tree_r.root();
 
         Ok((
@@ -458,7 +540,7 @@ where
 
     fn extract_all<'b>(
         pp: &'b Self::PublicParams,
-        replica_id: &'b H::Domain,
+        replica_id: &'b HybridDomain<AH::Domain, BH::Domain>,
         data: &'b [u8],
     ) -> Result<Vec<u8>> {
         vde::decode(&pp.graph, replica_id, data)
@@ -466,7 +548,7 @@ where
 
     fn extract(
         pp: &Self::PublicParams,
-        replica_id: &H::Domain,
+        replica_id: &HybridDomain<AH::Domain, BH::Domain>,
         data: &[u8],
         node: usize,
     ) -> Result<Vec<u8>> {
@@ -489,7 +571,7 @@ mod tests {
     use crate::drgraph::{new_seed, BucketGraph};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
-    use crate::util::data_at_node;
+    use crate::util::{data_at_node, NODE_SIZE};
 
     pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
         let mut tmpfile: File = tempfile::tempfile().expect("Failed to create tempfile");
@@ -504,26 +586,38 @@ mod tests {
         }
     }
 
-    fn test_extract_all<H: Hasher>() {
+    fn test_extract_all<AH, BH>()
+    where
+        AH: Hasher,
+        BH: Hasher,
+    {
+        const N_NODES: usize = 4;
+        const BETA_HEIGHT: usize = 1;
+
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let replica_id: H::Domain = rng.gen();
-        let data = vec![2u8; 32 * 3];
+        let replica_id: HybridDomain<AH::Domain, BH::Domain> = HybridDomain::Beta(rng.gen());
+
+        let data = vec![2u8; N_NODES * NODE_SIZE];
         // create a copy, so we can compare roundtrips
         let mut mmapped_data_copy = file_backed_mmap_from(&data);
 
+        let prev_layer_beta_height = (N_NODES as f32).log2().ceil() as usize + 1;
+
         let sp = SetupParams {
             drg: DrgParams {
-                nodes: data.len() / 32,
+                nodes: N_NODES,
                 degree: 5,
                 expansion_degree: 0,
                 seed: new_seed(),
             },
             private: false,
             challenges_count: 1,
+            beta_height: BETA_HEIGHT,
+            prev_layer_beta_height,
         };
 
-        let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).expect("setup failed");
+        let pp = DrgPoRep::<AH, BH, BucketGraph<AH, BH>>::setup(&sp).expect("setup failed");
 
         DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
             .expect("replication failed");
@@ -542,41 +636,57 @@ mod tests {
 
     #[test]
     fn extract_all_pedersen() {
-        test_extract_all::<PedersenHasher>();
+        test_extract_all::<PedersenHasher, PedersenHasher>();
     }
 
     #[test]
     fn extract_all_sha256() {
-        test_extract_all::<Sha256Hasher>();
+        test_extract_all::<Sha256Hasher, Sha256Hasher>();
     }
 
     #[test]
     fn extract_all_blake2s() {
-        test_extract_all::<Blake2sHasher>();
+        test_extract_all::<Blake2sHasher, Blake2sHasher>();
     }
 
-    fn test_extract<H: Hasher>() {
+    #[test]
+    fn extract_all_pedersen_blake2s() {
+        test_extract_all::<PedersenHasher, Blake2sHasher>();
+    }
+
+    fn test_extract<AH, BH>()
+    where
+        AH: Hasher,
+        BH: Hasher,
+    {
+        const N_NODES: usize = 4;
+        const BETA_HEIGHT: usize = 1;
+
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let replica_id: H::Domain = rng.gen();
-        let nodes = 3;
-        let data = vec![2u8; 32 * nodes];
+        let replica_id: HybridDomain<AH::Domain, BH::Domain> = HybridDomain::Beta(rng.gen());
+
+        let data = vec![2u8; N_NODES * NODE_SIZE];
+
+        let prev_layer_beta_height = (N_NODES as f32).log2().ceil() as usize + 1;
 
         // create a copy, so we can compare roundtrips
         let mut mmapped_data_copy = file_backed_mmap_from(&data);
 
         let sp = SetupParams {
             drg: DrgParams {
-                nodes: data.len() / 32,
+                nodes: N_NODES,
                 degree: 5,
                 expansion_degree: 0,
                 seed: new_seed(),
             },
             private: false,
             challenges_count: 1,
+            beta_height: BETA_HEIGHT,
+            prev_layer_beta_height,
         };
 
-        let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).expect("setup failed");
+        let pp = DrgPoRep::<AH, BH, BucketGraph<AH, BH>>::setup(&sp).expect("setup failed");
 
         DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
             .expect("replication failed");
@@ -585,7 +695,7 @@ mod tests {
         copied.copy_from_slice(&mmapped_data_copy);
         assert_ne!(data, copied, "replication did not change data");
 
-        for i in 0..nodes {
+        for i in 0..N_NODES {
             let decoded_data = DrgPoRep::extract(&pp, &replica_id, &mmapped_data_copy, i)
                 .expect("failed to extract node data from PoRep");
 
@@ -601,26 +711,38 @@ mod tests {
 
     #[test]
     fn extract_pedersen() {
-        test_extract::<PedersenHasher>();
+        test_extract::<PedersenHasher, PedersenHasher>();
     }
 
     #[test]
     fn extract_sha256() {
-        test_extract::<Sha256Hasher>();
+        test_extract::<Sha256Hasher, Sha256Hasher>();
     }
 
     #[test]
     fn extract_blake2s() {
-        test_extract::<Blake2sHasher>();
+        test_extract::<Blake2sHasher, Blake2sHasher>();
     }
 
-    fn prove_verify_aux<H: Hasher>(
+    #[test]
+    fn extract_pedersen_blake2s() {
+        test_extract::<PedersenHasher, Blake2sHasher>();
+    }
+
+    fn prove_verify_aux<AH, BH>(
         nodes: usize,
         i: usize,
         use_wrong_challenge: bool,
         use_wrong_parents: bool,
-    ) {
+    ) where
+        AH: Hasher,
+        BH: Hasher,
+    {
+        const BETA_HEIGHT: usize = 1;
+
         assert!(i < nodes);
+
+        let prev_layer_beta_height = (nodes as f32).log2().ceil() as usize + 1;
 
         // The loop is here in case we need to retry because of an edge case in the test design.
         loop {
@@ -629,7 +751,8 @@ mod tests {
             let expansion_degree = 0;
             let seed = new_seed();
 
-            let replica_id: H::Domain = rng.gen();
+            let replica_id: HybridDomain<AH::Domain, BH::Domain> = HybridDomain::Beta(rng.gen());
+
             let data: Vec<u8> = (0..nodes)
                 .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
                 .collect();
@@ -648,32 +771,39 @@ mod tests {
                 },
                 private: false,
                 challenges_count: 2,
+                beta_height: BETA_HEIGHT,
+                prev_layer_beta_height,
             };
 
-            let pp = DrgPoRep::<H, BucketGraph<_>>::setup(&sp).expect("setup failed");
+            let pp = DrgPoRep::<AH, BH, BucketGraph<AH, BH>>::setup(&sp).expect("setup failed");
 
-            let (tau, aux) =
-                DrgPoRep::<H, _>::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
-                    .expect("replication failed");
+            let (tau, aux) = DrgPoRep::<AH, BH, BucketGraph<AH, BH>>::replicate(
+                &pp,
+                &replica_id,
+                &mut mmapped_data_copy,
+                None,
+            )
+            .expect("replication failed");
 
             let mut copied = vec![0; data.len()];
             copied.copy_from_slice(&mmapped_data_copy);
 
             assert_ne!(data, copied, "replication did not change data");
 
-            let pub_inputs = PublicInputs::<H::Domain> {
+            let pub_inputs = PublicInputs::<AH::Domain, BH::Domain> {
                 replica_id: Some(replica_id),
                 challenges: vec![challenge, challenge],
                 tau: Some(tau.clone().into()),
             };
 
-            let priv_inputs = PrivateInputs::<H> {
+            let priv_inputs = PrivateInputs::<AH, BH> {
                 tree_d: &aux.tree_d,
                 tree_r: &aux.tree_r,
             };
 
             let real_proof =
-                DrgPoRep::<H, _>::prove(&pp, &pub_inputs, &priv_inputs).expect("proving failed");
+                DrgPoRep::<AH, BH, BucketGraph<AH, BH>>::prove(&pp, &pub_inputs, &priv_inputs)
+                    .expect("proving failed");
 
             if use_wrong_parents {
                 // Only one 'wrong' option will be tested at a time.
@@ -733,12 +863,11 @@ mod tests {
                     real_proof.nodes.into(),
                 );
 
-                assert!(
-                    !DrgPoRep::<H, _>::verify(&pp, &pub_inputs, &proof2).unwrap_or_else(|e| {
-                        panic!("Verification failed: {}", e);
-                    }),
-                    "verified in error -- with wrong parent proofs"
-                );
+                let is_valid =
+                    DrgPoRep::<AH, BH, BucketGraph<AH, BH>>::verify(&pp, &pub_inputs, &proof2)
+                        .unwrap_or_else(|e| panic!("Verification failed: {}", e));
+
+                assert!(!is_valid, "verified in error -- with wrong parent proofs");
 
                 return ();
             }
@@ -746,12 +875,13 @@ mod tests {
             let proof = real_proof;
 
             if use_wrong_challenge {
-                let pub_inputs_with_wrong_challenge_for_proof = PublicInputs::<H::Domain> {
-                    replica_id: Some(replica_id),
-                    challenges: vec![if challenge == 1 { 2 } else { 1 }],
-                    tau: Some(tau.into()),
-                };
-                let verified = DrgPoRep::<H, _>::verify(
+                let pub_inputs_with_wrong_challenge_for_proof =
+                    PublicInputs::<AH::Domain, BH::Domain> {
+                        replica_id: Some(replica_id),
+                        challenges: vec![if challenge == 1 { 2 } else { 1 }],
+                        tau: Some(tau.into()),
+                    };
+                let verified = DrgPoRep::<AH, BH, BucketGraph<AH, BH>>::verify(
                     &pp,
                     &pub_inputs_with_wrong_challenge_for_proof,
                     &proof,
@@ -763,7 +893,7 @@ mod tests {
                 );
             } else {
                 assert!(
-                    DrgPoRep::<H, _>::verify(&pp, &pub_inputs, &proof)
+                    DrgPoRep::<AH, BH, BucketGraph<AH, BH>>::verify(&pp, &pub_inputs, &proof)
                         .expect("verification failed"),
                     "failed to verify"
                 );
@@ -775,46 +905,44 @@ mod tests {
     }
 
     fn prove_verify(n: usize, i: usize) {
-        prove_verify_aux::<PedersenHasher>(n, i, false, false);
-        prove_verify_aux::<Sha256Hasher>(n, i, false, false);
-        prove_verify_aux::<Blake2sHasher>(n, i, false, false);
+        prove_verify_aux::<PedersenHasher, PedersenHasher>(n, i, false, false);
+        prove_verify_aux::<Sha256Hasher, Sha256Hasher>(n, i, false, false);
+        prove_verify_aux::<Blake2sHasher, Blake2sHasher>(n, i, false, false);
+        prove_verify_aux::<PedersenHasher, Blake2sHasher>(n, i, false, false);
     }
 
     fn prove_verify_wrong_challenge(n: usize, i: usize) {
-        prove_verify_aux::<PedersenHasher>(n, i, true, false);
-        prove_verify_aux::<Sha256Hasher>(n, i, true, false);
-        prove_verify_aux::<Blake2sHasher>(n, i, true, false);
+        prove_verify_aux::<PedersenHasher, PedersenHasher>(n, i, true, false);
+        prove_verify_aux::<Sha256Hasher, Sha256Hasher>(n, i, true, false);
+        prove_verify_aux::<Blake2sHasher, Blake2sHasher>(n, i, true, false);
+        prove_verify_aux::<PedersenHasher, Blake2sHasher>(n, i, true, false);
     }
 
     fn prove_verify_wrong_parents(n: usize, i: usize) {
-        prove_verify_aux::<PedersenHasher>(n, i, false, true);
-        prove_verify_aux::<Sha256Hasher>(n, i, false, true);
-        prove_verify_aux::<Blake2sHasher>(n, i, false, true);
+        prove_verify_aux::<PedersenHasher, PedersenHasher>(n, i, false, true);
+        prove_verify_aux::<Sha256Hasher, Sha256Hasher>(n, i, false, true);
+        prove_verify_aux::<Blake2sHasher, Blake2sHasher>(n, i, false, true);
+        prove_verify_aux::<PedersenHasher, Blake2sHasher>(n, i, false, true);
     }
 
     table_tests! {
         prove_verify {
             prove_verify_32_2_1(2, 1);
-
-            prove_verify_32_3_1(3, 1);
-            prove_verify_32_3_2(3, 2);
-
-            prove_verify_32_10_1(10, 1);
-            prove_verify_32_10_2(10, 2);
-            prove_verify_32_10_3(10, 3);
-            prove_verify_32_10_4(10, 4);
-            prove_verify_32_10_5(10, 5);
+            prove_verify_32_8_1(8, 1);
+            prove_verify_32_8_2(8, 2);
+            prove_verify_32_8_3(8, 3);
+            prove_verify_32_8_4(8, 4);
+            prove_verify_32_8_5(8, 5);
         }
     }
 
     #[test]
     fn test_drgporep_verifies_using_challenge() {
-        prove_verify_wrong_challenge(5, 1);
+        prove_verify_wrong_challenge(8, 1);
     }
 
     #[test]
     fn test_drgporep_verifies_parents() {
-        // Challenge a node (3) that doesn't have all the same parents.
-        prove_verify_wrong_parents(7, 4);
+        prove_verify_wrong_parents(8, 4);
     }
 }

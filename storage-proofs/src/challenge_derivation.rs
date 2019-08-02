@@ -3,17 +3,22 @@ use byteorder::{LittleEndian, WriteBytesExt};
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
 
+use crate::hasher::hybrid::HybridDomain;
 use crate::hasher::Domain;
 use crate::layered_drgporep::LayerChallenges;
 
-pub fn derive_challenges<D: Domain>(
+pub fn derive_challenges<AD, BD>(
     challenges: &LayerChallenges,
     layer: u8,
     leaves: usize,
-    replica_id: &D,
-    commitment: &D,
+    replica_id: &HybridDomain<AD, BD>,
+    commitment: &HybridDomain<AD, BD>,
     k: u8,
-) -> Vec<usize> {
+) -> Vec<usize>
+where
+    AD: Domain,
+    BD: Domain,
+{
     let n = challenges.challenges_for_layer(layer as usize);
     (0..n)
         .map(|i| {
@@ -40,6 +45,7 @@ pub fn derive_challenges<D: Domain>(
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::hasher::hybrid::HybridDomain;
     use crate::hasher::pedersen::PedersenDomain;
     use rand::{thread_rng, Rng};
     use std::collections::HashMap;
@@ -52,8 +58,10 @@ mod test {
         let challenges = LayerChallenges::new_fixed(layers, n);
         let leaves = 1 << 30;
         let mut rng = thread_rng();
-        let replica_id: PedersenDomain = rng.gen();
-        let commitment: PedersenDomain = rng.gen();
+        let replica_id: HybridDomain<PedersenDomain, PedersenDomain> =
+            HybridDomain::Alpha(rng.gen());
+        let commitment: HybridDomain<PedersenDomain, PedersenDomain> =
+            HybridDomain::Alpha(rng.gen());
         let partitions = 5;
         let total_challenges = partitions * n;
 
@@ -94,8 +102,10 @@ mod test {
         let n = 40;
         let leaves = 1 << 30;
         let mut rng = thread_rng();
-        let replica_id: PedersenDomain = rng.gen();
-        let commitment: PedersenDomain = rng.gen();
+        let replica_id: HybridDomain<PedersenDomain, PedersenDomain> =
+            HybridDomain::Alpha(rng.gen());
+        let commitment: HybridDomain<PedersenDomain, PedersenDomain> =
+            HybridDomain::Alpha(rng.gen());
         let partitions = 5;
         let layers = 100;
         let total_challenges = n * partitions;

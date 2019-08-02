@@ -20,6 +20,7 @@ use storage_proofs::drgporep;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
+use storage_proofs::hasher::hybrid::HybridDomain;
 use storage_proofs::hasher::{Hasher, PedersenHasher};
 use storage_proofs::layered_drgporep::{self, LayerChallenges};
 use storage_proofs::proof::ProofScheme;
@@ -74,6 +75,9 @@ fn do_the_work<H: 'static>(data_size: usize, m: usize, expansion_degree: usize)
 where
     H: Hasher,
 {
+    const N_LAYERS: usize = 1;
+    const BETA_HEIGHTS: [usize; N_LAYERS] = [0; N_LAYERS];
+
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
     info!("data size: {}", prettyb(data_size));
@@ -85,7 +89,8 @@ where
 
     let mut data = file_backed_mmap_from_random_bytes(nodes);
 
-    let replica_id: H::Domain = rng.gen();
+    // If beta height is set to 0, then replica-ids will be alpha domain elements.
+    let replica_id: HybridDomain<H::Domain, H::Domain> = HybridDomain::Alpha(rng.gen());
 
     let sp = layered_drgporep::SetupParams {
         drg: drgporep::DrgParams {
@@ -94,12 +99,13 @@ where
             expansion_degree,
             seed: new_seed(),
         },
-        layer_challenges: LayerChallenges::new_fixed(1, 1),
+        layer_challenges: LayerChallenges::new_fixed(N_LAYERS, 1),
+        beta_heights: BETA_HEIGHTS.to_vec(),
     };
 
     info!("running setup");
     start_profile("setup");
-    let pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
+    let pp = ZigZagDrgPoRep::<H, H>::setup(&sp).unwrap();
     stop_profile();
 
     let start = Instant::now();

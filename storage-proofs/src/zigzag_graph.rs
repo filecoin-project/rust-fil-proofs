@@ -24,11 +24,12 @@ pub type TwoWayParentCache = [ParentCache; 2];
 // read an write operations.
 pub type ShareableParentCache = Arc<RwLock<TwoWayParentCache>>;
 
-#[derive(Debug, Clone)]
-pub struct ZigZagGraph<H, G>
+#[derive(Clone, Debug)]
+pub struct ZigZagGraph<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H> + 'static,
+    AH: Hasher,
+    BH: Hasher,
+    G: 'static + Graph<AH, BH>,
 {
     expansion_degree: usize,
     base_graph: G,
@@ -46,22 +47,25 @@ where
     parents_cache: ShareableParentCache,
     // Keep the size of the cache outside the lock to be easily accessible.
     cache_entries: usize,
-    _h: PhantomData<H>,
+    _ah: PhantomData<AH>,
+    _bh: PhantomData<BH>,
 }
 
-pub type ZigZagBucketGraph<H> = ZigZagGraph<H, BucketGraph<H>>;
+pub type ZigZagBucketGraph<AH, BH> = ZigZagGraph<AH, BH, BucketGraph<AH, BH>>;
 
-impl<'a, H, G> Layerable<H> for ZigZagGraph<H, G>
+impl<'a, AH, BH, G> Layerable<AH, BH> for ZigZagGraph<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H> + 'static,
+    AH: Hasher,
+    BH: Hasher,
+    G: 'static + Graph<AH, BH>,
 {
 }
 
-impl<H, G> ZigZagGraph<H, G>
+impl<AH, BH, G> ZigZagGraph<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H>,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH>,
 {
     pub fn new(
         base_graph: Option<G>,
@@ -90,15 +94,17 @@ where
                 HashMap::with_capacity(cache_entries),
             ])),
             cache_entries,
-            _h: PhantomData,
+            _ah: PhantomData,
+            _bh: PhantomData,
         }
     }
 }
 
-impl<H, G> ParameterSetMetadata for ZigZagGraph<H, G>
+impl<AH, BH, G> ParameterSetMetadata for ZigZagGraph<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH> + ParameterSetMetadata,
 {
     fn identifier(&self) -> String {
         format!(
@@ -114,8 +120,9 @@ where
 }
 
 pub trait ZigZag: ::std::fmt::Debug + Clone + PartialEq + Eq {
-    type BaseHasher: Hasher;
-    type BaseGraph: Graph<Self::BaseHasher>;
+    type BaseAlphaHasher: Hasher;
+    type BaseBetaHasher: Hasher;
+    type BaseGraph: Graph<Self::BaseAlphaHasher, Self::BaseBetaHasher>;
 
     /// zigzag returns a new graph with expansion component inverted and a distinct
     /// base DRG graph -- with the direction of drg connections reversed. (i.e. from high-to-low nodes).
@@ -135,7 +142,10 @@ pub trait ZigZag: ::std::fmt::Debug + Clone + PartialEq + Eq {
     ) -> Self;
 }
 
-impl<Z: ZigZag> Graph<Z::BaseHasher> for Z {
+impl<Z> Graph<Z::BaseAlphaHasher, Z::BaseBetaHasher> for Z
+where
+    Z: ZigZag,
+{
     fn size(&self) -> usize {
         self.base_graph().size()
     }
@@ -195,10 +205,11 @@ impl<Z: ZigZag> Graph<Z::BaseHasher> for Z {
     }
 }
 
-impl<'a, H, G> ZigZagGraph<H, G>
+impl<AH, BH, G> ZigZagGraph<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H>,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH>,
 {
     // Assign `expansion_degree` parents to `node` using an invertible function. That
     // means we can't just generate random values between `[0, size())`, we need to
@@ -309,12 +320,14 @@ where
     }
 }
 
-impl<'a, H, G> ZigZag for ZigZagGraph<H, G>
+impl<'a, AH, BH, G> ZigZag for ZigZagGraph<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H>,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH>,
 {
-    type BaseHasher = H;
+    type BaseAlphaHasher = AH;
+    type BaseBetaHasher = BH;
     type BaseGraph = G;
 
     fn new_zigzag(
@@ -396,22 +409,26 @@ where
     }
 }
 
-impl<H, G> PartialEq for ZigZagGraph<H, G>
+impl<AH, BH, G> PartialEq for ZigZagGraph<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H>,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH>,
 {
-    fn eq(&self, other: &ZigZagGraph<H, G>) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         self.base_graph == other.base_graph
             && self.expansion_degree == other.expansion_degree
             && self.reversed == other.reversed
     }
 }
 
-impl<H, G> Eq for ZigZagGraph<H, G>
+// We are unable to derive `Eq` because `ZigZagGraph` contains a field of type
+// `ShareableParentCache` which is not `Eq`.
+impl<AH, BH, G> Eq for ZigZagGraph<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H>,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH>,
 {
 }
 
@@ -424,7 +441,12 @@ mod tests {
     use crate::drgraph::new_seed;
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
 
-    fn assert_graph_ascending<H: Hasher, G: Graph<H>>(g: G) {
+    fn assert_graph_ascending<AH, BH, G>(g: G)
+    where
+        AH: Hasher,
+        BH: Hasher,
+        G: Graph<AH, BH>,
+    {
         for i in 0..g.size() {
             let mut parents = vec![0; g.degree()];
             g.parents(i, &mut parents);
@@ -438,7 +460,12 @@ mod tests {
         }
     }
 
-    fn assert_graph_descending<H: Hasher, G: Graph<H>>(g: G) {
+    fn assert_graph_descending<AH, BH, G>(g: G)
+    where
+        AH: Hasher,
+        BH: Hasher,
+        G: Graph<AH, BH>,
+    {
         for i in 0..g.size() {
             let mut parents = vec![0; g.degree()];
             g.parents(i, &mut parents);
@@ -454,21 +481,27 @@ mod tests {
 
     #[test]
     fn zigzag_graph_zigzags_pedersen() {
-        test_zigzag_graph_zigzags::<PedersenHasher>();
+        test_zigzag_graph_zigzags::<PedersenHasher, PedersenHasher>();
     }
 
     #[test]
     fn zigzag_graph_zigzags_sha256() {
-        test_zigzag_graph_zigzags::<Sha256Hasher>();
+        test_zigzag_graph_zigzags::<Sha256Hasher, Sha256Hasher>();
     }
 
     #[test]
     fn zigzag_graph_zigzags_blake2s() {
-        test_zigzag_graph_zigzags::<Blake2sHasher>();
+        test_zigzag_graph_zigzags::<Blake2sHasher, Blake2sHasher>();
     }
 
-    fn test_zigzag_graph_zigzags<H: 'static + Hasher>() {
-        let g = ZigZagBucketGraph::<H>::new_zigzag(50, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
+    fn test_zigzag_graph_zigzags<AH, BH>()
+    where
+        AH: 'static + Hasher,
+        BH: 'static + Hasher,
+    {
+        let g: ZigZagBucketGraph<AH, BH> =
+            ZigZagBucketGraph::new_zigzag(50, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
+
         let gz = g.zigzag();
 
         assert_graph_ascending(g);
@@ -477,22 +510,27 @@ mod tests {
 
     #[test]
     fn expansion_pedersen() {
-        test_expansion::<PedersenHasher>();
+        test_expansion::<PedersenHasher, PedersenHasher>();
     }
 
     #[test]
     fn expansion_sha256() {
-        test_expansion::<Sha256Hasher>();
+        test_expansion::<Sha256Hasher, Sha256Hasher>();
     }
 
     #[test]
     fn expansion_blake2s() {
-        test_expansion::<Blake2sHasher>();
+        test_expansion::<Blake2sHasher, Blake2sHasher>();
     }
 
-    fn test_expansion<H: 'static + Hasher>() {
+    fn test_expansion<AH, BH>()
+    where
+        AH: 'static + Hasher,
+        BH: 'static + Hasher,
+    {
         // We need a graph.
-        let g = ZigZagBucketGraph::<H>::new_zigzag(25, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
+        let g =
+            ZigZagBucketGraph::<AH, BH>::new_zigzag(25, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
 
         // We're going to fully realize the expansion-graph component, in a HashMap.
         let gcache = get_all_expanded_parents(&g);
@@ -525,9 +563,13 @@ mod tests {
         // which are each other's inverses. It's important that this be true.
     }
 
-    fn get_all_expanded_parents<H: 'static + Hasher>(
-        zigzag_graph: &ZigZagBucketGraph<H>,
-    ) -> HashMap<usize, Vec<usize>> {
+    fn get_all_expanded_parents<AH, BH>(
+        zigzag_graph: &ZigZagBucketGraph<AH, BH>,
+    ) -> HashMap<usize, Vec<usize>>
+    where
+        AH: 'static + Hasher,
+        BH: 'static + Hasher,
+    {
         let mut parents_map: HashMap<usize, Vec<usize>> = HashMap::new();
         for i in 0..zigzag_graph.size() {
             parents_map.insert(i, zigzag_graph.expanded_parents(i));
@@ -538,7 +580,11 @@ mod tests {
         parents_map
     }
 
-    fn get_cache_size<H: 'static + Hasher>(zigzag_graph: &ZigZagBucketGraph<H>) -> usize {
+    fn get_cache_size<AH, BH>(zigzag_graph: &ZigZagBucketGraph<AH, BH>) -> usize
+    where
+        AH: 'static + Hasher,
+        BH: 'static + Hasher,
+    {
         let parents_cache_lock = zigzag_graph.parents_cache.read().unwrap();
         (*parents_cache_lock)[zigzag_graph.get_cache_index()].len()
     }

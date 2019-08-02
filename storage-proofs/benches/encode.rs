@@ -38,70 +38,15 @@ fn encode_single_node<H: Hasher>(
     replica_id: &H::Domain,
     node: usize,
 ) {
-    let key = vde::create_key::<H>(replica_id, node, parents, data).unwrap();
+    let key: H::Domain = vde::create_key(replica_id.as_ref(), node, parents, data)
+        .unwrap()
+        .into();
     let start = data_at_node_offset(node);
     let end = start + NODE_SIZE;
 
     let node_data = H::Domain::try_from_bytes(&data[start..end]).unwrap();
     let encoded = H::sloth_encode(&key, &node_data);
     encoded.write_bytes(&mut data[start..end]).unwrap();
-}
-
-fn kdf_benchmark(c: &mut Criterion) {
-    let degrees = vec![3, 5, 10];
-
-    c.bench(
-        "kdf",
-        ParameterizedBenchmark::new(
-            "blake2s",
-            |b, degree| {
-                let Pregenerated {
-                    mut data,
-                    parents,
-                    replica_id,
-                } = pregenerate_data::<Blake2sHasher>(*degree);
-                b.iter(|| {
-                    black_box(vde::create_key::<Blake2sHasher>(
-                        &replica_id,
-                        *degree,
-                        &parents,
-                        &mut data,
-                    ))
-                })
-            },
-            degrees,
-        )
-        .with_function("pedersen", |b, degree| {
-            let Pregenerated {
-                mut data,
-                parents,
-                replica_id,
-            } = pregenerate_data::<PedersenHasher>(*degree);
-            b.iter(|| {
-                black_box(vde::create_key::<PedersenHasher>(
-                    &replica_id,
-                    *degree,
-                    &parents,
-                    &mut data,
-                ))
-            })
-        })
-        .with_function("sha256", |b, degree| {
-            let Pregenerated {
-                mut data,
-                parents,
-                replica_id,
-            } = pregenerate_data::<Sha256Hasher>(*degree);
-            b.iter(|| {
-                black_box(encode_single_node::<Sha256Hasher>(
-                    &mut data,
-                    &parents,
-                    &replica_id,
-                    *degree,
-                ))
-            })
-        }),
-    );
 }
 
 fn encode_single_node_benchmark(c: &mut Criterion) {
@@ -161,5 +106,5 @@ fn encode_single_node_benchmark(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benches, encode_single_node_benchmark, kdf_benchmark);
+criterion_group!(benches, encode_single_node_benchmark);
 criterion_main!(benches);

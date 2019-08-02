@@ -1,7 +1,8 @@
 use std::marker::PhantomData;
 
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::circuit::{boolean, num};
+use fil_sapling_crypto::circuit::boolean::Boolean;
+use fil_sapling_crypto::circuit::num::AllocatedNum;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
@@ -11,6 +12,7 @@ use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::drgporep::{self, DrgPoRep};
 use crate::drgraph::Graph;
+use crate::hasher::hybrid::HybridDomain;
 use crate::hasher::{HashFunction, Hasher};
 use crate::layered_drgporep::{self, Layers as LayersTrait};
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
@@ -18,12 +20,23 @@ use crate::porep;
 use crate::proof::ProofScheme;
 use crate::zigzag_drgporep::ZigZagDrgPoRep;
 
-type Layers<'a, H, G> = Vec<
+type Layers<'a, AH, BH, G> = Vec<
     Option<(
-        <DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicInputs,
-        <DrgPoRep<'a, H, G> as ProofScheme<'a>>::Proof,
+        <DrgPoRep<'a, AH, BH, G> as ProofScheme<'a>>::PublicInputs,
+        <DrgPoRep<'a, AH, BH, G> as ProofScheme<'a>>::Proof,
     )>,
 >;
+
+// Ensures that `bits` has a length that is a multiple of 256.
+fn pad_to_256_bits(bits: &mut Vec<Boolean>) {
+    let n_bits = bits.len();
+    let rem = n_bits % 256;
+    if rem != 0 {
+        let pad_len = 256 - rem;
+        let new_len = n_bits + pad_len;
+        bits.resize(new_len, Boolean::Constant(false));
+    }
+}
 
 /// ZigZag DRG based Proof of Replication.
 ///
@@ -32,41 +45,68 @@ type Layers<'a, H, G> = Vec<
 /// * `params` - parameters for the curve
 /// * `public_params` - ZigZagDrgPoRep public parameters.
 /// * 'layers' - A vector of Layers – each representing a DrgPoRep proof (see Layers type definition).
-///
-pub struct ZigZagCircuit<'a, E: JubjubEngine, H: 'static + Hasher> {
+#[allow(clippy::type_complexity)]
+pub struct ZigZagCircuit<'a, E, AH, BH>
+where
+    E: JubjubEngine,
+    AH: 'static + Hasher,
+    BH: 'static + Hasher,
+{
     params: &'a E::Params,
-    public_params: <ZigZagDrgPoRep<'a, H> as ProofScheme<'a>>::PublicParams,
+    public_params: <ZigZagDrgPoRep<'a, AH, BH> as ProofScheme<'a>>::PublicParams,
     layers: Layers<
         'a,
-        <ZigZagDrgPoRep<'a, H> as LayersTrait>::Hasher,
-        <ZigZagDrgPoRep<'a, H> as LayersTrait>::Graph,
+        <ZigZagDrgPoRep<'a, AH, BH> as LayersTrait>::AlphaHasher,
+        <ZigZagDrgPoRep<'a, AH, BH> as LayersTrait>::BetaHasher,
+        <ZigZagDrgPoRep<'a, AH, BH> as LayersTrait>::Graph,
     >,
-    tau: Option<porep::Tau<<<ZigZagDrgPoRep<'a, H> as LayersTrait>::Hasher as Hasher>::Domain>>,
-    comm_r_star: Option<H::Domain>,
+    tau: Option<
+        porep::Tau<
+            <<ZigZagDrgPoRep<'a, AH, BH> as LayersTrait>::AlphaHasher as Hasher>::Domain,
+            <<ZigZagDrgPoRep<'a, AH, BH> as LayersTrait>::BetaHasher as Hasher>::Domain,
+        >,
+    >,
+    comm_r_star: Option<HybridDomain<AH::Domain, BH::Domain>>,
     _e: PhantomData<E>,
 }
 
-impl<'a, E: JubjubEngine, H: Hasher> CircuitComponent for ZigZagCircuit<'a, E, H> {
+impl<'a, E, AH, BH> CircuitComponent for ZigZagCircuit<'a, E, AH, BH>
+where
+    E: JubjubEngine,
+    AH: Hasher,
+    BH: Hasher,
+{
     type ComponentPrivateInputs = ();
 }
 
-impl<'a, H: Hasher> ZigZagCircuit<'a, Bls12, H> {
+impl<'a, AH, BH> ZigZagCircuit<'a, Bls12, AH, BH>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
+    #[allow(clippy::type_complexity)]
     pub fn synthesize<CS>(
         mut cs: CS,
         params: &'a <Bls12 as JubjubEngine>::Params,
-        public_params: <ZigZagDrgPoRep<'a, H> as ProofScheme<'a>>::PublicParams,
+        public_params: <ZigZagDrgPoRep<'a, AH, BH> as ProofScheme<'a>>::PublicParams,
         layers: Layers<
             'a,
-            <ZigZagDrgPoRep<H> as LayersTrait>::Hasher,
-            <ZigZagDrgPoRep<H> as LayersTrait>::Graph,
+            <ZigZagDrgPoRep<AH, BH> as LayersTrait>::AlphaHasher,
+            <ZigZagDrgPoRep<AH, BH> as LayersTrait>::BetaHasher,
+            <ZigZagDrgPoRep<AH, BH> as LayersTrait>::Graph,
         >,
-        tau: Option<porep::Tau<<<ZigZagDrgPoRep<H> as LayersTrait>::Hasher as Hasher>::Domain>>,
-        comm_r_star: Option<H::Domain>,
+        tau: Option<
+            porep::Tau<
+                <<ZigZagDrgPoRep<'a, AH, BH> as LayersTrait>::AlphaHasher as Hasher>::Domain,
+                <<ZigZagDrgPoRep<'a, AH, BH> as LayersTrait>::BetaHasher as Hasher>::Domain,
+            >,
+        >,
+        comm_r_star: Option<HybridDomain<AH::Domain, BH::Domain>>,
     ) -> Result<(), SynthesisError>
     where
         CS: ConstraintSystem<Bls12>,
     {
-        let circuit = ZigZagCircuit::<'a, Bls12, H> {
+        let circuit = ZigZagCircuit::<'a, Bls12, AH, BH> {
             params,
             public_params,
             layers,
@@ -79,175 +119,211 @@ impl<'a, H: Hasher> ZigZagCircuit<'a, Bls12, H> {
     }
 }
 
-impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
-    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+impl<'a, AH, BH> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, AH, BH>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
+    fn synthesize<CS>(self, cs: &mut CS) -> Result<(), SynthesisError>
+    where
+        CS: ConstraintSystem<Bls12>,
+    {
         let graph = &self.public_params.graph;
         let layer_challenges = &self.public_params.layer_challenges;
+        let n_layers = self.layers.len();
 
-        assert_eq!(layer_challenges.layers(), self.layers.len());
+        assert_eq!(layer_challenges.layers(), n_layers);
 
-        let mut comm_rs: Vec<num::AllocatedNum<_>> = Vec::with_capacity(self.layers.len());
+        // Store each layer's comm_r to be used as the next layer's comm_d and when calculating
+        // comm_r_star.
+        let mut comm_rs: Vec<AllocatedNum<Bls12>> = Vec::with_capacity(n_layers);
 
-        // allocate replica id
-        let replica_id = self.layers[0].as_ref().and_then(|l| l.0.replica_id);
-        let replica_id_num = num::AllocatedNum::alloc(cs.namespace(|| "replica_id"), || {
-            replica_id
-                .map(Into::into)
-                .ok_or_else(|| SynthesisError::AssignmentMissing)
+        // Allocate the replica-id. A replica-id of `None` is used during Groth parameter
+        // generation.
+        let replica_id_opt: Option<Fr> = self.layers[0]
+            .as_ref()
+            .and_then(|layer_info| layer_info.0.replica_id)
+            .map(Into::into);
+
+        let replica_id = AllocatedNum::alloc(cs.namespace(|| "replica_id"), || {
+            replica_id_opt.ok_or(SynthesisError::AssignmentMissing)
         })?;
 
-        // allocate comm_d
-        let public_comm_d = num::AllocatedNum::alloc(cs.namespace(|| "public_comm_d"), || {
-            let opt: Option<_> = self.tau.map(|t| t.comm_d.into());
-            opt.ok_or_else(|| SynthesisError::AssignmentMissing)
+        // Allocate comm_d and comm_r_last. When synthesizing this circuit during Groth parameter
+        // generation both comm_d and comm_r_last will be `None`, otherwise both will be `Some`.
+        let comm_d_opt: Option<Fr> = self.tau.as_ref().map(|tau| tau.comm_d.into());
+        let comm_r_last_opt: Option<Fr> = self.tau.as_ref().map(|tau| tau.comm_r.into());
+
+        let comm_d = AllocatedNum::alloc(cs.namespace(|| "public_comm_d"), || {
+            comm_d_opt.ok_or(SynthesisError::AssignmentMissing)
         })?;
 
-        // make comm_d a public input
-        public_comm_d.inputize(cs.namespace(|| "zigzag_comm_d"))?;
-
-        // allocate comm_r
-        let public_comm_r = num::AllocatedNum::alloc(cs.namespace(|| "public_comm_r"), || {
-            let opt: Option<_> = self.tau.map(|t| t.comm_r.into());
-            opt.ok_or_else(|| SynthesisError::AssignmentMissing)
+        let comm_r_last = AllocatedNum::alloc(cs.namespace(|| "public_comm_r"), || {
+            comm_r_last_opt.ok_or(SynthesisError::AssignmentMissing)
         })?;
 
-        // make comm_r a public input
-        public_comm_r.inputize(cs.namespace(|| "zigzag_comm_r"))?;
+        // Make comm_d and comm_r_last public inputs.
+        comm_d.inputize(cs.namespace(|| "zigzag_comm_d"))?;
+        comm_r_last.inputize(cs.namespace(|| "zigzag_comm_r"))?;
 
         let height = graph.merkle_tree_depth() as usize;
 
-        for (l, v) in self.layers.iter().enumerate() {
-            let public_inputs = v.as_ref().map(|v| &v.0);
-            let layer_proof = v.as_ref().map(|v| &v.1);
+        for (layer_index, opt) in self.layers.iter().enumerate() {
+            // During Groth parameter generation both the layer proof and public inputs are `None`,
+            // otherwise both should be `Some`.
+            let pub_inputs_opt = opt.as_ref().map(|layer_info| &layer_info.0);
+            let layer_proof_opt = opt.as_ref().map(|layer_info| &layer_info.1);
 
-            let is_first_layer = l == 0;
-            let is_last_layer = l == self.layers.len() - 1;
+            let is_first_layer = layer_index == 0;
+            let is_last_layer = layer_index == n_layers - 1;
 
-            // Get the matching proof for this layer.
-            let proof = match layer_proof {
-                Some(wrapped_proof) => {
-                    let typed_proof: drgporep::Proof<<ZigZagDrgPoRep<H> as LayersTrait>::Hasher> =
-                        wrapped_proof.into();
-                    typed_proof
-                }
-                None => drgporep::Proof::new_empty(
-                    height,
-                    graph.degree(),
-                    layer_challenges.challenges_for_layer(l),
-                ),
+            // Get this layer's comm_d. The first layer's comm_d is the public input comm_d, for all
+            // other layers this is the previous layer's comm_r.
+            let comm_d_layer = if is_first_layer {
+                comm_d.clone()
+            } else {
+                comm_rs[layer_index - 1].clone()
             };
 
-            // Get the comm_d for this layer.
-            let comm_d = if is_first_layer {
-                // On the first layer this is the publicly input comm_d.
-                public_comm_d.clone()
+            // Get this layer's comm_r. For the last layer this is the public input comm_r_last, for
+            // every other layer it is the replica tree's root (found in this layer's proof).
+            let comm_r_layer = if is_last_layer {
+                comm_r_last.clone()
             } else {
-                // On all other layers this is the comm_r from the previous layer.
-                comm_rs[l - 1].clone()
-            };
-
-            // Get the comm_r for this layer.
-            let comm_r = if is_last_layer {
-                // On the last layer this is the publicly input comm_r.
-                public_comm_r.clone()
-            } else {
-                // On all other layers this is the replica root from current layer proof.
-                num::AllocatedNum::alloc(
-                    &mut cs.namespace(|| format!("layer {} comm_r", l)),
+                AllocatedNum::alloc(
+                    &mut cs.namespace(|| format!("layer {} comm_r", layer_index)),
                     || {
-                        layer_proof
-                            .map(|proof| proof.replica_root.into())
-                            .ok_or_else(|| SynthesisError::AssignmentMissing)
+                        layer_proof_opt
+                            .map(|layer_proof| layer_proof.replica_root.into())
+                            .ok_or(SynthesisError::AssignmentMissing)
                     },
                 )?
             };
 
-            // Store the comm_r so we can use it in for the next layer, as well as when calculating comm_r_star.
-            comm_rs.push(comm_r.clone());
+            comm_rs.push(comm_r_layer.clone());
 
-            // TODO: As an optimization, we may be able to skip proving the original data
-            // on some (50%?) of challenges.
+            // TODO: As an optimization, we may be able to skip proving the original data on some
+            // (50%?) of challenges.
 
-            // Construct the public parameters for DrgPoRep.
-            let porep_params = drgporep::PublicParams::new(
-                graph.clone(), // TODO: avoid
-                true,
-                layer_challenges.challenges_for_layer(l),
-            );
+            let n_challenges_for_layer = layer_challenges.challenges_for_layer(layer_index);
 
-            assert_eq!(layer_proof.is_none(), public_inputs.is_none());
-
-            // Construct the DrgPoRep circut.
-            let public_inputs = match public_inputs {
-                Some(inputs) => inputs.clone(), // FIXME: avoid cloning
-                None => drgporep::PublicInputs {
-                    replica_id: None,
-                    // These are ignored, so fine to pass `0` through.
-                    challenges: vec![0; layer_challenges.challenges_for_layer(l)],
-                    tau: None,
-                },
+            let prev_layer_beta_height = if layer_index == 0 {
+                usize::max_value()
+            } else {
+                self.public_params.beta_heights[layer_index - 1]
             };
-            let circuit = DrgPoRepCompound::circuit(
-                &public_inputs,
-                ComponentPrivateInputs {
-                    comm_d: Some(Root::Var(comm_d)),
-                    comm_r: Some(Root::Var(comm_r)),
-                },
-                &proof,
-                &porep_params,
-                self.params,
+
+            // Construct the public parameters for `DrgPoRep`.
+            // TODO: avoid cloning the graph.
+            let pub_params = drgporep::PublicParams::new(
+                graph.clone(),
+                true,
+                n_challenges_for_layer,
+                self.public_params.beta_heights[layer_index],
+                prev_layer_beta_height,
             );
 
-            // Synthesize the constructed DrgPoRep circuit.
-            circuit.synthesize(&mut cs.namespace(|| format!("zigzag_layer_#{}", l)))?;
-        }
+            // Construct the `DrgPoRep` circuit.
+            let circuit = match pub_inputs_opt {
+                Some(pub_inputs) => {
+                    // Unwrapping here is safe because `pub_inputs_opt` and `layer_proof_opt` must
+                    // both be `Some`.
+                    let layer_proof = layer_proof_opt.unwrap();
 
-        // Compute CommRStar = Hash(replica_id | comm_r_0 | ... | comm_r_l).
-        {
-            // Collect the bits to be hashed into crs_boolean.
-            let mut crs_boolean =
-                replica_id_num.into_bits_le(cs.namespace(|| "replica_id_bits"))?;
-
-            // sad padding is sad
-            while crs_boolean.len() % 256 != 0 {
-                crs_boolean.push(boolean::Boolean::Constant(false));
-            }
-
-            for (i, comm_r) in comm_rs.into_iter().enumerate() {
-                crs_boolean
-                    .extend(comm_r.into_bits_le(cs.namespace(|| format!("comm_r-bits-{}", i)))?);
-                // sad padding is sad
-                while crs_boolean.len() % 256 != 0 {
-                    crs_boolean.push(boolean::Boolean::Constant(false));
+                    DrgPoRepCompound::circuit(
+                        pub_inputs,
+                        ComponentPrivateInputs {
+                            comm_d: Some(Root::Var(comm_d_layer)),
+                            comm_r: Some(Root::Var(comm_r_layer)),
+                        },
+                        layer_proof,
+                        &pub_params,
+                        self.params,
+                    )
                 }
-            }
+                None => {
+                    let layer_proof_empty =
+                        drgporep::Proof::new_empty(height, graph.degree(), n_challenges_for_layer);
 
-            // Calculate the pedersen hash.
-            let computed_comm_r_star = H::Function::hash_circuit(
-                cs.namespace(|| "comm_r_star"),
-                &crs_boolean[..],
-                self.params,
-            )?;
+                    // The `challenges` will be ignored so it's fine to pass in `0`s.
+                    let pub_inputs_empty = drgporep::PublicInputs {
+                        replica_id: None,
+                        challenges: vec![0; n_challenges_for_layer],
+                        tau: None,
+                    };
 
-            // Allocate the resulting hash.
-            let public_comm_r_star =
-                num::AllocatedNum::alloc(cs.namespace(|| "public comm_r_star value"), || {
-                    self.comm_r_star
-                        .ok_or_else(|| SynthesisError::AssignmentMissing)
-                        .map(Into::into)
-                })?;
+                    DrgPoRepCompound::circuit(
+                        &pub_inputs_empty,
+                        ComponentPrivateInputs {
+                            comm_d: Some(Root::Var(comm_d_layer)),
+                            comm_r: Some(Root::Var(comm_r_layer)),
+                        },
+                        &layer_proof_empty,
+                        &pub_params,
+                        self.params,
+                    )
+                }
+            };
 
-            // Enforce that the passed in comm_r_star is equal to the computed one.
-            constraint::equal(
-                cs,
-                || "enforce comm_r_star is correct",
-                &computed_comm_r_star,
-                &public_comm_r_star,
-            );
-
-            // Make it a public input.
-            public_comm_r_star.inputize(cs.namespace(|| "zigzag comm_r_star"))?;
+            // Synthesize the DrgPoRep circuit.
+            circuit.synthesize(&mut cs.namespace(|| format!("zigzag_layer_#{}", layer_index)))?;
         }
+
+        // Compute comm_r_star := Hash(replica_id | comm_r_0 | ... | comm_r_l), where replica_id,
+        // comm_r_0, .., comm_r_l are allocated as bits in the constraint system. These bit vectors
+        // are concatenated together into a single preimage `comm_r_star_preimage` then hashed to
+        // yield comm_r_star.
+        let mut comm_r_star_preimage =
+            replica_id.into_bits_le(cs.namespace(|| "replica_id_bits"))?;
+        pad_to_256_bits(&mut comm_r_star_preimage);
+
+        for (layer_index, comm_r_layer) in comm_rs.iter().enumerate() {
+            let comm_r_layer_bits = comm_r_layer
+                .into_bits_le(cs.namespace(|| format!("comm_r-bits-{}", layer_index)))?;
+
+            comm_r_star_preimage.extend(comm_r_layer_bits);
+            pad_to_256_bits(&mut comm_r_star_preimage);
+        }
+
+        // The `HybridDomain` variant of comm_r_star is determined by comm_r_last's variant. If
+        // comm_r_last is a beta domain, then hash comm_r_star's preimage using the beta hasher.
+        // Otherwise use the alpha hasher.
+        let comm_r_last_opt = self
+            .layers
+            .last()
+            .and_then(|layer_opt| layer_opt.as_ref())
+            .map(|(_, layer_proof)| layer_proof.replica_root);
+
+        let computed_comm_r_star = match comm_r_last_opt {
+            Some(comm_r_last) if comm_r_last.is_beta() => BH::Function::hash_circuit(
+                cs.namespace(|| "comm_r_star"),
+                &comm_r_star_preimage,
+                self.params,
+            )?,
+            _ => AH::Function::hash_circuit(
+                cs.namespace(|| "comm_r_star"),
+                &comm_r_star_preimage,
+                self.params,
+            )?,
+        };
+
+        // Allocate the passed in comm_r_star.
+        let comm_r_star = AllocatedNum::alloc(cs.namespace(|| "public comm_r_star value"), || {
+            self.comm_r_star
+                .map(Into::into)
+                .ok_or(SynthesisError::AssignmentMissing)
+        })?;
+
+        // Enforce that the passed in comm_r_star is equal to the computed comm_r_star.
+        constraint::equal(
+            cs,
+            || "enforce comm_r_star is correct",
+            &computed_comm_r_star,
+            &comm_r_star,
+        );
+
+        // Make comm_r_star a public input.
+        comm_r_star.inputize(cs.namespace(|| "zigzag comm_r_star"))?;
 
         Ok(())
     }
@@ -266,13 +342,16 @@ impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata> CacheableParameter
     }
 }
 
-impl<'a, H: 'static + Hasher>
-    CompoundProof<'a, Bls12, ZigZagDrgPoRep<'a, H>, ZigZagCircuit<'a, Bls12, H>>
+impl<'a, AH, BH>
+    CompoundProof<'a, Bls12, ZigZagDrgPoRep<'a, AH, BH>, ZigZagCircuit<'a, Bls12, AH, BH>>
     for ZigZagCompound
+where
+    AH: 'static + Hasher,
+    BH: 'static + Hasher,
 {
     fn generate_public_inputs(
-        pub_in: &<ZigZagDrgPoRep<H> as ProofScheme>::PublicInputs,
-        pub_params: &<ZigZagDrgPoRep<H> as ProofScheme>::PublicParams,
+        pub_in: &<ZigZagDrgPoRep<AH, BH> as ProofScheme>::PublicInputs,
+        pub_params: &<ZigZagDrgPoRep<AH, BH> as ProofScheme>::PublicParams,
         k: Option<usize>,
     ) -> Vec<Fr> {
         let mut inputs = Vec::new();
@@ -286,10 +365,18 @@ impl<'a, H: 'static + Hasher>
         let mut current_graph = Some(pub_params.graph.clone());
         let layers = pub_params.layer_challenges.layers();
         for layer in 0..layers {
+            let prev_layer_beta_height = if layer == 0 {
+                usize::max_value()
+            } else {
+                pub_params.beta_heights[layer - 1]
+            };
+
             let drgporep_pub_params = drgporep::PublicParams::new(
                 current_graph.take().unwrap(),
                 true,
                 pub_params.layer_challenges.challenges_for_layer(layer),
+                pub_params.beta_heights[layer],
+                prev_layer_beta_height,
             );
 
             let drgporep_pub_inputs = drgporep::PublicInputs {
@@ -310,21 +397,23 @@ impl<'a, H: 'static + Hasher>
             );
             inputs.extend(drgporep_inputs);
 
-            current_graph = Some(<ZigZagDrgPoRep<H> as layered_drgporep::Layers>::transform(
-                &drgporep_pub_params.graph,
-            ));
+            current_graph = Some(
+                <ZigZagDrgPoRep<AH, BH> as layered_drgporep::Layers>::transform(
+                    &drgporep_pub_params.graph,
+                ),
+            );
         }
         inputs.push(pub_in.comm_r_star.into());
         inputs
     }
 
     fn circuit<'b>(
-        public_inputs: &'b <ZigZagDrgPoRep<H> as ProofScheme>::PublicInputs,
-        _component_private_inputs: <ZigZagCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
-        vanilla_proof: &'b <ZigZagDrgPoRep<H> as ProofScheme>::Proof,
-        public_params: &'b <ZigZagDrgPoRep<H> as ProofScheme>::PublicParams,
+        public_inputs: &'b <ZigZagDrgPoRep<AH, BH> as ProofScheme>::PublicInputs,
+        _component_private_inputs: <ZigZagCircuit<'a, Bls12, AH, BH> as CircuitComponent>::ComponentPrivateInputs,
+        vanilla_proof: &'b <ZigZagDrgPoRep<AH, BH> as ProofScheme>::Proof,
+        public_params: &'b <ZigZagDrgPoRep<AH, BH> as ProofScheme>::PublicParams,
         engine_params: &'a <Bls12 as JubjubEngine>::Params,
-    ) -> ZigZagCircuit<'a, Bls12, H> {
+    ) -> ZigZagCircuit<'a, Bls12, AH, BH> {
         let layers = (0..(vanilla_proof.encoding_proofs.len()))
             .map(|l| {
                 let layer_public_inputs = drgporep::PublicInputs {
@@ -338,7 +427,7 @@ impl<'a, H: 'static + Hasher>
             })
             .collect();
 
-        let pp: <ZigZagDrgPoRep<H> as ProofScheme>::PublicParams = public_params.into();
+        let pp: <ZigZagDrgPoRep<AH, BH> as ProofScheme>::PublicParams = public_params.into();
 
         ZigZagCircuit {
             params: engine_params,
@@ -351,9 +440,9 @@ impl<'a, H: 'static + Hasher>
     }
 
     fn blank_circuit(
-        public_params: &<ZigZagDrgPoRep<H> as ProofScheme>::PublicParams,
+        public_params: &<ZigZagDrgPoRep<AH, BH> as ProofScheme>::PublicParams,
         params: &'a <Bls12 as JubjubEngine>::Params,
-    ) -> ZigZagCircuit<'a, Bls12, H> {
+    ) -> ZigZagCircuit<'a, Bls12, AH, BH> {
         ZigZagCircuit {
             params,
             public_params: public_params.clone(),
@@ -374,6 +463,8 @@ mod tests {
     use crate::drgporep;
     use crate::drgraph::new_seed;
     use crate::fr32::fr_into_bytes;
+    use crate::hasher::blake2s::Blake2sDomain;
+    use crate::hasher::pedersen::PedersenDomain;
     use crate::hasher::{Blake2sHasher, Hasher, PedersenHasher};
     use crate::layered_drgporep::{self, ChallengeRequirements, LayerChallenges};
     use crate::porep::PoRep;
@@ -391,54 +482,57 @@ mod tests {
             .unwrap()
             .pedersen_hash_exp_window_size;
         let params = &JubjubBls12::new_with_window_size(window_size);
-        let nodes = 5;
+
+        let n_nodes = 8;
         let degree = 1;
         let expansion_degree = 2;
         let num_layers = 2;
         let layer_challenges = LayerChallenges::new_fixed(num_layers, 1);
-
-        let n = nodes; // FIXME: Consolidate variable names.
+        let beta_heights = vec![0, 1];
 
         // TODO: The code in this section was copied directly from zizag_drgporep::tests::prove_verify.
         // We should refactor to share the code – ideally in such a way that we can just add
         // methods and get the assembled tests for free.
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let replica_id: Fr = rng.gen();
-        let data: Vec<u8> = (0..n)
+        let replica_id: HybridDomain<PedersenDomain, Blake2sDomain> = HybridDomain::Beta(rng.gen());
+
+        let data: Vec<u8> = (0..n_nodes)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
+
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
         let sp = layered_drgporep::SetupParams {
             drg: drgporep::DrgParams {
-                nodes: n,
+                nodes: n_nodes,
                 degree,
                 expansion_degree,
                 seed: new_seed(),
             },
             layer_challenges: layer_challenges.clone(),
+            beta_heights,
         };
 
         let pp = ZigZagDrgPoRep::setup(&sp).expect("setup failed");
         let (tau, aux) =
-            ZigZagDrgPoRep::replicate(&pp, &replica_id.into(), data_copy.as_mut_slice(), None)
+            ZigZagDrgPoRep::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None)
                 .expect("replication failed");
         assert_ne!(data, data_copy);
 
-        let simplified_tau = tau.clone().simplify();
+        let simplified_tau = tau.simplify();
 
-        let pub_inputs = layered_drgporep::PublicInputs::<<PedersenHasher as Hasher>::Domain> {
-            replica_id: replica_id.into(),
+        let pub_inputs = layered_drgporep::PublicInputs::<PedersenDomain, Blake2sDomain> {
+            replica_id,
             seed: None,
-            tau: Some(tau.simplify().into()),
-            comm_r_star: tau.comm_r_star.into(),
+            tau: Some(simplified_tau),
+            comm_r_star: tau.comm_r_star.clone(),
             k: None,
         };
 
-        let priv_inputs = layered_drgporep::PrivateInputs::<PedersenHasher> {
-            aux: aux.into(),
-            tau: tau.layer_taus.into(),
+        let priv_inputs = layered_drgporep::PrivateInputs::<PedersenHasher, Blake2sHasher> {
+            aux,
+            tau: tau.layer_taus,
         };
 
         let proofs = ZigZagDrgPoRep::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, 1)
@@ -452,18 +546,18 @@ mod tests {
         // End copied section.
 
         let expected_inputs = 16;
-        let expected_constraints = 130832;
+        let expected_constraints = 271861;
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.
             let mut cs = MetricCS::<Bls12>::new();
 
             ZigZagCompound::circuit(
-            &pub_inputs,
-            <ZigZagCircuit<Bls12, PedersenHasher> as CircuitComponent>::ComponentPrivateInputs::default(),
-            &proofs[0],
-            &pp,
-            params,
-        )
+                &pub_inputs,
+                <ZigZagCircuit<Bls12, PedersenHasher, Blake2sHasher> as CircuitComponent>::ComponentPrivateInputs::default(),
+                &proofs[0],
+                &pp,
+                params,
+            )
             .synthesize(&mut cs.namespace(|| "zigzag drgporep"))
             .expect("failed to synthesize circuit");
 
@@ -478,7 +572,7 @@ mod tests {
 
         ZigZagCompound::circuit(
             &pub_inputs,
-            <ZigZagCircuit<Bls12, PedersenHasher> as CircuitComponent>::ComponentPrivateInputs::default(),
+            <ZigZagCircuit<Bls12, PedersenHasher, Blake2sHasher> as CircuitComponent>::ComponentPrivateInputs::default(),
             &proofs[0],
             &pp,
             params,
@@ -576,39 +670,52 @@ mod tests {
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn test_zigzag_compound_pedersen() {
-        zigzag_test_compound::<PedersenHasher>();
+        zigzag_test_compound::<PedersenHasher, PedersenHasher>();
     }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn test_zigzag_compound_blake2s() {
-        zigzag_test_compound::<Blake2sHasher>();
+        zigzag_test_compound::<Blake2sHasher, Blake2sHasher>();
     }
 
-    fn zigzag_test_compound<H: 'static + Hasher>() {
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn test_zigzag_compound_pedersen_blake2s() {
+        zigzag_test_compound::<PedersenHasher, Blake2sHasher>();
+    }
+
+    fn zigzag_test_compound<AH, BH>()
+    where
+        AH: 'static + Hasher,
+        BH: 'static + Hasher,
+    {
         let window_size = settings::SETTINGS
             .lock()
             .unwrap()
             .pedersen_hash_exp_window_size;
         let params = &JubjubBls12::new_with_window_size(window_size);
-        let nodes = 5;
+
+        let n_nodes = 8;
         let degree = 2;
         let expansion_degree = 1;
         let num_layers = 2;
         let layer_challenges = LayerChallenges::new_tapered(num_layers, 3, num_layers, 1.0 / 3.0);
         let partition_count = 1;
-
-        let n = nodes; // FIXME: Consolidate variable names.
+        let beta_heights = vec![1usize; num_layers];
 
         // TODO: The code in this section was copied directly from zizag_drgporep::tests::prove_verify.
         // We should refactor to share the code – ideally in such a way that we can just add
         // methods and get the assembled tests for free.
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let replica_id: Fr = rng.gen();
-        let data: Vec<u8> = (0..n)
+        // If beta height is set to `1` then the replica-id will be from the beta domain.
+        let replica_id: HybridDomain<AH::Domain, BH::Domain> = HybridDomain::Beta(rng.gen());
+
+        let data: Vec<u8> = (0..n_nodes)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
+
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
 
@@ -616,12 +723,13 @@ mod tests {
             engine_params: params,
             vanilla_params: &layered_drgporep::SetupParams {
                 drg: drgporep::DrgParams {
-                    nodes: n,
+                    nodes: n_nodes,
                     degree,
                     expansion_degree,
                     seed: new_seed(),
                 },
                 layer_challenges: layer_challenges.clone(),
+                beta_heights,
             },
             partitions: Some(partition_count),
         };
@@ -629,7 +737,7 @@ mod tests {
         let public_params = ZigZagCompound::setup(&setup_params).expect("setup failed");
         let (tau, aux) = ZigZagDrgPoRep::replicate(
             &public_params.vanilla_params,
-            &replica_id.into(),
+            &replica_id,
             data_copy.as_mut_slice(),
             None,
         )
@@ -637,14 +745,14 @@ mod tests {
 
         assert_ne!(data, data_copy);
 
-        let public_inputs = layered_drgporep::PublicInputs::<H::Domain> {
-            replica_id: replica_id.into(),
+        let public_inputs = layered_drgporep::PublicInputs::<AH::Domain, BH::Domain> {
+            replica_id,
             seed: None,
             tau: Some(tau.simplify()),
             comm_r_star: tau.comm_r_star,
             k: None,
         };
-        let private_inputs = layered_drgporep::PrivateInputs::<H> {
+        let private_inputs = layered_drgporep::PrivateInputs::<AH, BH> {
             aux,
             tau: tau.layer_taus,
         };

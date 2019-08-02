@@ -1,4 +1,5 @@
 pub mod blake2s;
+pub mod hybrid;
 pub mod pedersen;
 pub mod sha256;
 

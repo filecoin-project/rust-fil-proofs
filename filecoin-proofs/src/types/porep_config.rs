@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use paired::bls12_381::Bls12;
 use storage_proofs::circuit::zigzag::{ZigZagCircuit, ZigZagCompound};
-use storage_proofs::drgraph::DefaultTreeHasher;
+use storage_proofs::drgraph::{DefaultAlphaHasher, DefaultBetaHasher};
 use storage_proofs::parameter_cache::{self, CacheableParameters};
 
 use crate::types::*;
@@ -39,9 +39,11 @@ impl PoRepConfig {
     pub fn get_cache_identifier(&self) -> String {
         let params = crate::parameters::public_params(self.0.into(), self.1.into());
 
-        <ZigZagCompound as CacheableParameters<Bls12, ZigZagCircuit<_, DefaultTreeHasher>, _>>::cache_identifier(
-            &params,
-        )
+        <ZigZagCompound as CacheableParameters<
+            Bls12,
+            ZigZagCircuit<_, DefaultAlphaHasher, DefaultBetaHasher>,
+            _,
+        >>::cache_identifier(&params)
     }
 
     pub fn get_cache_metadata_path(&self) -> PathBuf {

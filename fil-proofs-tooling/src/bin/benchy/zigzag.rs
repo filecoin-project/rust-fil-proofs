@@ -18,6 +18,7 @@ use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgporep;
 use storage_proofs::drgraph::*;
+use storage_proofs::hasher::hybrid::HybridDomain;
 use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
 use storage_proofs::layered_drgporep::{self, ChallengeRequirements, LayerChallenges};
 use storage_proofs::porep::PoRep;
@@ -45,7 +46,7 @@ fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> Result<MmapMut, fail
 }
 
 fn dump_proof_bytes<H: Hasher>(
-    all_partition_proofs: &[layered_drgporep::Proof<H>],
+    all_partition_proofs: &[layered_drgporep::Proof<H, H>],
 ) -> Result<(), failure::Error> {
     let file = OpenOptions::new()
         .write(true)
@@ -74,6 +75,7 @@ struct Params {
     dump_proofs: bool,
     bench_only: bool,
     hasher: String,
+    beta_heights: Vec<usize>,
 }
 
 impl From<Params> for Inputs {
@@ -150,7 +152,8 @@ where
         let rng = &mut XorShiftRng::from_seed([0x3dbe_6259, 0x8d31_3d76, 0x3237_db17, 0xe5bc_0654]);
         let nodes = data_size / 32;
 
-        let replica_id: H::Domain = rng.gen();
+        let replica_id: HybridDomain<H::Domain, H::Domain> = HybridDomain::Beta(rng.gen());
+
         let sp = layered_drgporep::SetupParams {
             drg: drgporep::DrgParams {
                 nodes,
@@ -159,9 +162,10 @@ where
                 seed: new_seed(),
             },
             layer_challenges: layer_challenges.clone(),
+            beta_heights: vec![0; layer_challenges.layers()],
         };
 
-        let pp = ZigZagDrgPoRep::<H>::setup(&sp)?;
+        let pp = ZigZagDrgPoRep::<H, H>::setup(&sp)?;
 
         let (pub_in, priv_in, d) = if *bench_only {
             (None, None, None)
@@ -173,9 +177,10 @@ where
                 wall_time: replication_wall_time,
                 return_value: (pub_inputs, priv_inputs),
             } = measure(|| {
-                let (tau, aux) = ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, &mut data, None)?;
+                let (tau, aux) =
+                    ZigZagDrgPoRep::<H, H>::replicate(&pp, &replica_id, &mut data, None)?;
 
-                let pb = layered_drgporep::PublicInputs::<H::Domain> {
+                let pb = layered_drgporep::PublicInputs::<H::Domain, H::Domain> {
                     replica_id,
                     seed: None,
                     tau: Some(tau.simplify()),
@@ -220,7 +225,7 @@ where
                 wall_time: vanilla_proving_wall_time,
                 return_value: all_partition_proofs,
             } = measure(|| {
-                ZigZagDrgPoRep::<H>::prove_all_partitions(
+                ZigZagDrgPoRep::<H, H>::prove_all_partitions(
                     &pp,
                     &pub_inputs,
                     &priv_inputs,
@@ -249,7 +254,7 @@ where
 
             for _ in 0..*samples {
                 let m = measure(|| {
-                    let verified = ZigZagDrgPoRep::<H>::verify_all_partitions(
+                    let verified = ZigZagDrgPoRep::<H, H>::verify_all_partitions(
                         &pp,
                         &pub_inputs,
                         &all_partition_proofs,
@@ -296,7 +301,7 @@ where
         if let Some(data) = d {
             if *extract {
                 let m = measure(|| {
-                    ZigZagDrgPoRep::<H>::extract_all(&pp, &replica_id, &data)
+                    ZigZagDrgPoRep::<H, H>::extract_all(&pp, &replica_id, &data)
                         .map_err(|err| err.into())
                 })?;
 
@@ -327,9 +332,9 @@ struct CircuitWorkMeasurement {
 }
 
 fn do_circuit_work<H: 'static + Hasher>(
-    pp: &<ZigZagDrgPoRep<H> as ProofScheme>::PublicParams,
-    pub_in: Option<<ZigZagDrgPoRep<H> as ProofScheme>::PublicInputs>,
-    priv_in: Option<<ZigZagDrgPoRep<H> as ProofScheme>::PrivateInputs>,
+    pp: &<ZigZagDrgPoRep<H, H> as ProofScheme>::PublicParams,
+    pub_in: Option<<ZigZagDrgPoRep<H, H> as ProofScheme>::PublicInputs>,
+    priv_in: Option<<ZigZagDrgPoRep<H, H> as ProofScheme>::PrivateInputs>,
     params: &Params,
     report: &mut Report,
 ) -> Result<CircuitWorkMeasurement, failure::Error> {
@@ -530,6 +535,7 @@ pub fn run(opts: RunOpts) -> Result<(), failure::Error> {
         extract: opts.extract,
         hasher: opts.hasher,
         samples: 5,
+        beta_heights: vec![0; opts.layers],
     };
 
     let report = match params.hasher.as_ref() {

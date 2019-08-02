@@ -13,8 +13,9 @@ use crate::challenge_derivation::derive_challenges;
 use crate::drgporep::{self, DrgPoRep};
 use crate::drgraph::Graph;
 use crate::error::{Error, Result};
+use crate::hasher::hybrid::HybridDomain;
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::MerkleTree;
+use crate::hybrid_merkle::HybridMerkleTree;
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
@@ -29,8 +30,6 @@ use std::fs;
 use std::io;
 #[cfg(feature = "disk-trees")]
 use std::path::PathBuf;
-
-type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 
 fn anonymous_mmap(len: usize) -> MmapMut {
     MmapOptions::new()
@@ -114,23 +113,31 @@ impl LayerChallenges {
 pub struct SetupParams {
     pub drg: drgporep::DrgParams,
     pub layer_challenges: LayerChallenges,
+    pub beta_heights: Vec<usize>,
 }
 
 #[derive(Debug, Clone)]
-pub struct PublicParams<H, G>
+pub struct PublicParams<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH> + ParameterSetMetadata,
 {
     pub graph: G,
     pub layer_challenges: LayerChallenges,
-    _h: PhantomData<H>,
+    pub beta_heights: Vec<usize>,
+    _ah: PhantomData<AH>,
+    _bh: PhantomData<BH>,
 }
 
 #[derive(Debug, Clone)]
-pub struct Tau<T: Domain> {
-    pub layer_taus: Vec<porep::Tau<T>>,
-    pub comm_r_star: T,
+pub struct Tau<AD, BD>
+where
+    AD: Domain,
+    BD: Domain,
+{
+    pub layer_taus: Vec<porep::Tau<AD, BD>>,
+    pub comm_r_star: HybridDomain<AD, BD>,
 }
 
 #[derive(Default)]
@@ -138,9 +145,13 @@ pub struct ChallengeRequirements {
     pub minimum_challenges: usize,
 }
 
-impl<T: Domain> Tau<T> {
+impl<AD, BD> Tau<AD, BD>
+where
+    AD: Domain,
+    BD: Domain,
+{
     /// Return a single porep::Tau with the initial data and final replica commitments of layer_taus.
-    pub fn simplify(&self) -> porep::Tau<T> {
+    pub fn simplify(&self) -> porep::Tau<AD, BD> {
         porep::Tau {
             comm_r: self.layer_taus[self.layer_taus.len() - 1].comm_r,
             comm_d: self.layer_taus[0].comm_d,
@@ -148,30 +159,35 @@ impl<T: Domain> Tau<T> {
     }
 }
 
-impl<H, G> PublicParams<H, G>
+impl<AH, BH, G> PublicParams<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH> + ParameterSetMetadata,
 {
-    pub fn new(graph: G, layer_challenges: LayerChallenges) -> Self {
+    pub fn new(graph: G, layer_challenges: LayerChallenges, beta_heights: Vec<usize>) -> Self {
         PublicParams {
             graph,
             layer_challenges,
-            _h: PhantomData,
+            beta_heights,
+            _ah: PhantomData,
+            _bh: PhantomData,
         }
     }
 }
 
-impl<H, G> ParameterSetMetadata for PublicParams<H, G>
+impl<AH, BH, G> ParameterSetMetadata for PublicParams<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH> + ParameterSetMetadata,
 {
     fn identifier(&self) -> String {
         format!(
-            "layered_drgporep::PublicParams{{ graph: {}, challenges: {:?} }}",
+            "layered_drgporep::PublicParams{{ graph: {}, challenges: {:?}, beta_heights: {:?} }}",
             self.graph.identifier(),
             self.layer_challenges,
+            self.beta_heights,
         )
     }
 
@@ -180,28 +196,41 @@ where
     }
 }
 
-impl<'a, H, G> From<&'a PublicParams<H, G>> for PublicParams<H, G>
+impl<'a, AH, BH, G> From<&'a PublicParams<AH, BH, G>> for PublicParams<AH, BH, G>
 where
-    H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH> + ParameterSetMetadata,
 {
-    fn from(other: &PublicParams<H, G>) -> PublicParams<H, G> {
-        PublicParams::new(other.graph.clone(), other.layer_challenges.clone())
+    fn from(other: &'a PublicParams<AH, BH, G>) -> Self {
+        PublicParams::new(
+            other.graph.clone(),
+            other.layer_challenges.clone(),
+            other.beta_heights.clone(),
+        )
     }
 }
 
-pub type EncodingProof<H> = drgporep::Proof<H>;
+pub type EncodingProof<AH, BH> = drgporep::Proof<AH, BH>;
 
 #[derive(Debug, Clone)]
-pub struct PublicInputs<T: Domain> {
-    pub replica_id: T,
-    pub seed: Option<T>,
-    pub tau: Option<porep::Tau<T>>,
-    pub comm_r_star: T,
+pub struct PublicInputs<AD, BD>
+where
+    AD: Domain,
+    BD: Domain,
+{
+    pub replica_id: HybridDomain<AD, BD>,
+    pub seed: Option<HybridDomain<AD, BD>>,
+    pub tau: Option<porep::Tau<AD, BD>>,
+    pub comm_r_star: HybridDomain<AD, BD>,
     pub k: Option<usize>,
 }
 
-impl<T: Domain> PublicInputs<T> {
+impl<AD, BD> PublicInputs<AD, BD>
+where
+    AD: Domain,
+    BD: Domain,
+{
     pub fn challenges(
         &self,
         layer_challenges: &LayerChallenges,
@@ -210,7 +239,7 @@ impl<T: Domain> PublicInputs<T> {
         partition_k: Option<usize>,
     ) -> Vec<usize> {
         if let Some(ref seed) = self.seed {
-            derive_challenges::<T>(
+            derive_challenges::<AD, BD>(
                 layer_challenges,
                 layer,
                 leaves,
@@ -219,7 +248,7 @@ impl<T: Domain> PublicInputs<T> {
                 partition_k.unwrap_or(0) as u8,
             )
         } else {
-            derive_challenges::<T>(
+            derive_challenges::<AD, BD>(
                 layer_challenges,
                 layer,
                 leaves,
@@ -231,51 +260,67 @@ impl<T: Domain> PublicInputs<T> {
     }
 }
 
-pub struct PrivateInputs<H: Hasher> {
-    pub aux: Vec<Tree<H>>,
-    pub tau: Vec<porep::Tau<H::Domain>>,
+pub struct PrivateInputs<AH, BH>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
+    pub aux: Vec<HybridMerkleTree<AH, BH>>,
+    pub tau: Vec<porep::Tau<AH::Domain, BH::Domain>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Proof<H: Hasher> {
+pub struct Proof<AH, BH>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
     #[serde(bound(
-        serialize = "EncodingProof<H>: Serialize",
-        deserialize = "EncodingProof<H>: Deserialize<'de>"
+        serialize = "EncodingProof<AH, BH>: Serialize",
+        deserialize = "EncodingProof<AH, BH>: Deserialize<'de>"
     ))]
-    pub encoding_proofs: Vec<EncodingProof<H>>,
-    pub tau: Vec<porep::Tau<H::Domain>>,
+    pub encoding_proofs: Vec<EncodingProof<AH, BH>>,
+    pub tau: Vec<porep::Tau<AH::Domain, BH::Domain>>,
 }
 
-impl<H: Hasher> Proof<H> {
-    pub fn serialize(&self) -> Vec<u8> {
-        unimplemented!();
-    }
-}
-
-pub type PartitionProofs<H> = Vec<Proof<H>>;
-
-impl<H: Hasher> Proof<H> {
+impl<AH, BH> Proof<AH, BH>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
     pub fn new(
-        encoding_proofs: Vec<EncodingProof<H>>,
-        tau: Vec<porep::Tau<H::Domain>>,
-    ) -> Proof<H> {
+        encoding_proofs: Vec<EncodingProof<AH, BH>>,
+        tau: Vec<porep::Tau<AH::Domain, BH::Domain>>,
+    ) -> Self {
         Proof {
             encoding_proofs,
             tau,
         }
     }
+
+    pub fn serialize(&self) -> Vec<u8> {
+        unimplemented!();
+    }
 }
 
-pub trait Layerable<H: Hasher>: Graph<H> {}
+pub type PartitionProofs<AH, BH> = Vec<Proof<AH, BH>>;
 
-type PorepTau<H> = porep::Tau<<H as Hasher>::Domain>;
-type TransformedLayers<H> = (Vec<PorepTau<H>>, Vec<Tree<H>>);
+pub trait Layerable<AH, BH>: Graph<AH, BH>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
+}
+
+type PorepTau<AH, BH> = porep::Tau<<AH as Hasher>::Domain, <BH as Hasher>::Domain>;
+type TransformedLayers<AH, BH> = (Vec<PorepTau<AH, BH>>, Vec<HybridMerkleTree<AH, BH>>);
 
 /// Layers provides default implementations of methods required to handle proof and verification
 /// of layered proofs of replication. Implementations must provide transform and invert_transform methods.
 pub trait Layers {
-    type Hasher: Hasher;
-    type Graph: Layerable<Self::Hasher> + ParameterSetMetadata + Sync + Send;
+    type AlphaHasher: Hasher;
+    type BetaHasher: Hasher;
+    type Graph: Layerable<Self::AlphaHasher, Self::BetaHasher> + ParameterSetMetadata + Sync + Send;
 
     /// Transform a layer's public parameters, returning new public parameters corresponding to the next layer.
     /// Warning: This method will likely need to be extended for other implementations
@@ -286,23 +331,35 @@ pub trait Layers {
     /// Transform a layer's public parameters, returning new public parameters corresponding to the previous layer.
     fn invert_transform(graph: &Self::Graph) -> Self::Graph;
 
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     fn prove_layers<'a>(
         graph: &Self::Graph,
-        pub_inputs: &PublicInputs<<Self::Hasher as Hasher>::Domain>,
-        tau: &[PorepTau<Self::Hasher>],
-        aux: &'a [Tree<Self::Hasher>],
+        pub_inputs: &PublicInputs<
+            <Self::AlphaHasher as Hasher>::Domain,
+            <Self::BetaHasher as Hasher>::Domain,
+        >,
+        tau: &[PorepTau<Self::AlphaHasher, Self::BetaHasher>],
+        aux: &'a [HybridMerkleTree<Self::AlphaHasher, Self::BetaHasher>],
         layer_challenges: &LayerChallenges,
         layers: usize,
         total_layers: usize,
         partition_count: usize,
-    ) -> Result<Vec<Vec<EncodingProof<Self::Hasher>>>> {
+        beta_heights: &[usize],
+    ) -> Result<Vec<Vec<EncodingProof<Self::AlphaHasher, Self::BetaHasher>>>> {
         assert!(layers > 0);
 
         let mut new_graph = Some(graph.clone());
 
         (0..layers)
             .map(|layer| {
+                // Convert the replica-id to the correct `HyrbidDomain` variant for this encoding
+                // layer's beta height.
+                let replica_id = if beta_heights[layer] == 0 {
+                    pub_inputs.replica_id.into_alpha()
+                } else {
+                    pub_inputs.replica_id.into_beta()
+                };
+
                 let current_graph = new_graph.take().unwrap();
                 let inner_layers = layers - layer;
 
@@ -314,16 +371,24 @@ pub trait Layers {
                 let graph_size = current_graph.size();
                 new_graph = Some(Self::transform(&current_graph));
 
+                let prev_layer_beta_height = if layer == 0 {
+                    usize::max_value()
+                } else {
+                    beta_heights[layer - 1]
+                };
+
                 let pp = drgporep::PublicParams::new(
                     current_graph,
                     true,
                     layer_challenges.challenges_for_layer(layer),
+                    beta_heights[layer],
+                    prev_layer_beta_height,
                 );
                 let partition_proofs: Vec<_> = (0..partition_count)
                     .into_par_iter()
                     .map(|k| {
                         let drgporep_pub_inputs = drgporep::PublicInputs {
-                            replica_id: Some(pub_inputs.replica_id),
+                            replica_id: Some(replica_id),
                             challenges: pub_inputs.challenges(
                                 layer_challenges,
                                 graph_size,
@@ -353,7 +418,11 @@ pub trait Layers {
     fn extract_and_invert_transform_layers<'a>(
         graph: &Self::Graph,
         layer_challenges: &LayerChallenges,
-        replica_id: &<Self::Hasher as Hasher>::Domain,
+        beta_heights: &[usize],
+        replica_id: &HybridDomain<
+            <Self::AlphaHasher as Hasher>::Domain,
+            <Self::BetaHasher as Hasher>::Domain,
+        >,
         data: &'a mut [u8],
     ) -> Result<()> {
         let layers = layer_challenges.layers();
@@ -361,12 +430,24 @@ pub trait Layers {
 
         (0..layers).fold(graph.clone(), |current_graph, layer| {
             let inverted = Self::invert_transform(&current_graph);
+
+            // We pass in a `0`'s for beta height and the previous layer's beta height because those
+            // public parameters are not used by `DrgPoRep::extract_all()`.
             let pp = drgporep::PublicParams::new(
                 inverted.clone(),
                 true,
                 layer_challenges.challenges_for_layer(layer),
+                0,
+                0,
             );
-            let mut res = DrgPoRep::extract_all(&pp, replica_id, data)
+
+            let replica_id = if beta_heights[layer] == 0 {
+                replica_id.into_alpha()
+            } else {
+                replica_id.into_beta()
+            };
+
+            let mut res = DrgPoRep::extract_all(&pp, &replica_id, data)
                 .expect("failed to extract data from PoRep");
 
             for (i, r) in res.iter_mut().enumerate() {
@@ -381,13 +462,18 @@ pub trait Layers {
     fn transform_and_replicate_layers(
         graph: &Self::Graph,
         layer_challenges: &LayerChallenges,
-        replica_id: &<Self::Hasher as Hasher>::Domain,
+        replica_id: &HybridDomain<
+            <Self::AlphaHasher as Hasher>::Domain,
+            <Self::BetaHasher as Hasher>::Domain,
+        >,
         data: &mut [u8],
-    ) -> Result<TransformedLayers<Self::Hasher>> {
+        beta_heights: &[usize],
+    ) -> Result<TransformedLayers<Self::AlphaHasher, Self::BetaHasher>> {
         let layers = layer_challenges.layers();
         assert!(layers > 0);
         let mut taus = Vec::with_capacity(layers);
-        let mut auxs: Vec<Tree<Self::Hasher>> = Vec::with_capacity(layers);
+        let mut auxs: Vec<HybridMerkleTree<Self::AlphaHasher, Self::BetaHasher>> =
+            Vec::with_capacity(layers + 1);
 
         if !&settings::SETTINGS
             .lock()
@@ -396,8 +482,21 @@ pub trait Layers {
         {
             let mut sorted_trees: Vec<_> = Vec::new();
 
+            // We iterate over the number of encoding layers + 1 (`0..=layers`) to include the data
+            // layer (the first iteration when `layer` is 0).
             (0..=layers).fold(graph.clone(), |current_graph, layer| {
-                let tree_d = Self::generate_data_tree(&current_graph, &data, layer);
+                let is_data_layer = layer == 0;
+
+                // We always use a beta height equal to Merkle tree height for the data layer to
+                // ensure that only the beta hasher is used.
+                let beta_height = if is_data_layer {
+                    let n_leaves = graph.size();
+                    (n_leaves as f32).log2().ceil() as usize + 1
+                } else {
+                    beta_heights[layer - 1]
+                };
+
+                let tree_d = Self::generate_data_tree(&current_graph, &data, beta_height, layer);
 
                 info!("returning tree (layer: {})", layer);
 
@@ -405,8 +504,19 @@ pub trait Layers {
 
                 if layer < layers {
                     info!("encoding (layer: {})", layer);
-                    vde::encode(&current_graph, replica_id, data)
-                        .expect("encoding failed in thread");
+
+                    // Change the replica-id variant for this encoding layer. The `replica_id`
+                    // argument passed into this function is the data layer's replica-id.
+                    if is_data_layer {
+                        vde::encode(&current_graph, replica_id, data)
+                            .expect("encoding failed in thread");
+                    } else if beta_height == 0 {
+                        vde::encode(&current_graph, &replica_id.into_alpha(), data)
+                            .expect("encoding failed in thread");
+                    } else {
+                        vde::encode(&current_graph, &replica_id.into_beta(), data)
+                            .expect("encoding failed in thread");
+                    };
                 }
 
                 Self::transform(&current_graph)
@@ -457,6 +567,17 @@ pub trait Layers {
                 let _ = thread::scope(|scope| -> Result<()> {
                     let mut threads = Vec::with_capacity(layers + 1);
                     (0..=layers).fold(graph.clone(), |current_graph, layer| {
+                        let is_data_layer = layer == 0;
+
+                        // We always use a beta height equal to Merkle tree height for the data
+                        // layer to ensure that only the beta hasher is used.
+                        let beta_height = if is_data_layer {
+                            let n_leaves = graph.size();
+                            (n_leaves as f32).log2().ceil() as usize + 1
+                        } else {
+                            beta_heights[layer - 1]
+                        };
+
                         let mut data_copy = anonymous_mmap(data.len());
                         data_copy[0..data.len()].clone_from_slice(data);
 
@@ -474,7 +595,8 @@ pub trait Layers {
                                 .recv()
                                 .expect("Failed to receive value through channel");
 
-                            let tree_d = Self::generate_data_tree(&graph, &data_copy, layer);
+                            let tree_d =
+                                Self::generate_data_tree(&graph, &data_copy, beta_height, layer);
 
                             info!("returning tree (layer: {})", layer);
                             return_channel
@@ -486,8 +608,20 @@ pub trait Layers {
 
                         if layer < layers {
                             info!("encoding (layer: {})", layer);
-                            vde::encode(&current_graph, replica_id, data)
-                                .expect("encoding failed in thread");
+
+                            // Change the replica-id variant for this encoding layer. The
+                            // `replica_id` argument passed into this function is the data layer's
+                            // replica-id.
+                            if is_data_layer {
+                                vde::encode(&current_graph, replica_id, data)
+                                    .expect("encoding failed in thread");
+                            } else if beta_height == 0 {
+                                vde::encode(&current_graph, &replica_id.into_alpha(), data)
+                                    .expect("encoding failed in thread");
+                            } else {
+                                vde::encode(&current_graph, &replica_id.into_beta(), data)
+                                    .expect("encoding failed in thread");
+                            };
                         }
                         Self::transform(&current_graph)
                     });
@@ -530,10 +664,11 @@ pub trait Layers {
     fn generate_data_tree(
         graph: &Self::Graph,
         data: &[u8],
+        beta_height: usize,
         _layer: usize,
-    ) -> MerkleTree<<Self::Hasher as Hasher>::Domain, <Self::Hasher as Hasher>::Function> {
+    ) -> HybridMerkleTree<Self::AlphaHasher, Self::BetaHasher> {
         #[cfg(not(feature = "disk-trees"))]
-        return graph.merkle_tree(&data).unwrap();
+        return graph.hybrid_merkle_tree(&data, beta_height).unwrap();
 
         #[cfg(feature = "disk-trees")]
         {
@@ -543,7 +678,9 @@ pub trait Layers {
 
             if tree_dir.is_empty() {
                 // Signal `merkle_tree_path` to create a temporary file.
-                return graph.merkle_tree_path(&data, None).unwrap();
+                return graph
+                    .hybrid_merkle_tree_path(&data, beta_height, None)
+                    .unwrap();
             } else {
                 // Try to create `tree_dir`, ignore the error if `AlreadyExists`.
                 if let Some(create_error) = fs::create_dir(&tree_dir).err() {
@@ -553,8 +690,9 @@ pub trait Layers {
                 }
 
                 let tree_d = graph
-                    .merkle_tree_path(
+                    .hybrid_merkle_tree_path(
                         &data,
+                        beta_height,
                         Some(&PathBuf::from(tree_dir).join(format!(
                             "tree-{}-{}",
                             _layer,
@@ -576,12 +714,16 @@ pub trait Layers {
     }
 }
 
-impl<'a, L: Layers> ProofScheme<'a> for L {
-    type PublicParams = PublicParams<L::Hasher, L::Graph>;
+impl<'a, L> ProofScheme<'a> for L
+where
+    L: Layers,
+{
+    type PublicParams = PublicParams<L::AlphaHasher, L::BetaHasher, L::Graph>;
     type SetupParams = SetupParams;
-    type PublicInputs = PublicInputs<<L::Hasher as Hasher>::Domain>;
-    type PrivateInputs = PrivateInputs<L::Hasher>;
-    type Proof = Proof<L::Hasher>;
+    type PublicInputs =
+        PublicInputs<<L::AlphaHasher as Hasher>::Domain, <L::BetaHasher as Hasher>::Domain>;
+    type PrivateInputs = PrivateInputs<L::AlphaHasher, L::BetaHasher>;
+    type Proof = Proof<L::AlphaHasher, L::BetaHasher>;
     type Requirements = ChallengeRequirements;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
@@ -592,7 +734,11 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
             sp.drg.seed,
         );
 
-        Ok(PublicParams::new(graph, sp.layer_challenges.clone()))
+        Ok(PublicParams::new(
+            graph,
+            sp.layer_challenges.clone(),
+            sp.beta_heights.clone(),
+        ))
     }
 
     fn prove<'b>(
@@ -626,6 +772,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
             pub_params.layer_challenges.layers(),
             pub_params.layer_challenges.layers(),
             partition_count,
+            &pub_params.beta_heights,
         )?;
 
         let mut proof_columns = vec![Vec::new(); partition_count];
@@ -667,13 +814,32 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
                 let graph_size = current_graph.size();
                 graph = Some(Self::transform(&current_graph));
 
+                let beta_height = pub_params.beta_heights[layer];
+
+                // If this is the first encoding layer (i.e if `layer` is 0), we don't have access to
+                // the height of the data layer's tree, so we can just max out `usize`.
+                let previous_layer_beta_height = if layer == 0 {
+                    usize::max_value()
+                } else {
+                    pub_params.beta_heights[layer - 1]
+                };
+
                 let pp = drgporep::PublicParams::new(
                     current_graph,
                     true,
                     pub_params.layer_challenges.challenges_for_layer(layer),
+                    pub_params.beta_heights[layer],
+                    previous_layer_beta_height,
                 );
+
+                let replica_id = if beta_height == 0 {
+                    pub_inputs.replica_id.into_alpha()
+                } else {
+                    pub_inputs.replica_id.into_beta()
+                };
+
                 let new_pub_inputs = drgporep::PublicInputs {
-                    replica_id: Some(pub_inputs.replica_id),
+                    replica_id: Some(replica_id),
                     challenges: pub_inputs.challenges(
                         &pub_params.layer_challenges,
                         graph_size,
@@ -701,7 +867,15 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
                     return Ok(false);
                 }
             }
-            let crs = comm_r_star::<L::Hasher>(&pub_inputs.replica_id, &comm_rs)?;
+
+            let last_layer_replica_id = if *pub_params.beta_heights.last().unwrap() == 0 {
+                pub_inputs.replica_id.into_alpha()
+            } else {
+                pub_inputs.replica_id.into_beta()
+            };
+
+            let crs =
+                comm_r_star::<L::AlphaHasher, L::BetaHasher>(&last_layer_replica_id, &comm_rs)?;
 
             if crs != pub_inputs.comm_r_star {
                 return Ok(false);
@@ -721,7 +895,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
     }
 
     fn satisfies_requirements(
-        public_params: &PublicParams<L::Hasher, L::Graph>,
+        public_params: &Self::PublicParams,
         requirements: &ChallengeRequirements,
         partitions: usize,
     ) -> bool {
@@ -732,7 +906,14 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
 }
 
 // We need to calculate CommR* -- which is: H(replica_id|comm_r[0]|comm_r[1]|…comm_r[n])
-fn comm_r_star<H: Hasher>(replica_id: &H::Domain, comm_rs: &[H::Domain]) -> Result<H::Domain> {
+fn comm_r_star<AH, BH>(
+    replica_id: &HybridDomain<AH::Domain, BH::Domain>,
+    comm_rs: &[HybridDomain<AH::Domain, BH::Domain>],
+) -> Result<HybridDomain<AH::Domain, BH::Domain>>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
     let l = (comm_rs.len() + 1) * 32;
     let mut bytes = vec![0; l];
 
@@ -742,28 +923,52 @@ fn comm_r_star<H: Hasher>(replica_id: &H::Domain, comm_rs: &[H::Domain]) -> Resu
         comm_r.write_bytes(&mut bytes[(i + 1) * 32..(i + 2) * 32])?;
     }
 
-    Ok(H::Function::hash(&bytes))
+    // `comm_r_star` will be the same variant of `HybridDomain` as the last `comm_r`.
+    if comm_rs.last().unwrap().is_alpha() {
+        let comm_r_star_alpha = AH::Function::hash(&bytes);
+        Ok(HybridDomain::Alpha(comm_r_star_alpha))
+    } else {
+        let comm_r_star_beta = BH::Function::hash(&bytes);
+        Ok(HybridDomain::Beta(comm_r_star_beta))
+    }
 }
 
-impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
-    type Tau = Tau<<L::Hasher as Hasher>::Domain>;
-    type ProverAux = Vec<Tree<L::Hasher>>;
+impl<'a, 'c, L> PoRep<'a, L::AlphaHasher, L::BetaHasher> for L
+where
+    L: Layers,
+{
+    type Tau = Tau<<L::AlphaHasher as Hasher>::Domain, <L::BetaHasher as Hasher>::Domain>;
+    type ProverAux = Vec<HybridMerkleTree<L::AlphaHasher, L::BetaHasher>>;
 
     fn replicate(
-        pp: &'a PublicParams<L::Hasher, L::Graph>,
-        replica_id: &<L::Hasher as Hasher>::Domain,
+        pp: &'a PublicParams<L::AlphaHasher, L::BetaHasher, L::Graph>,
+        replica_id: &HybridDomain<
+            <L::AlphaHasher as Hasher>::Domain,
+            <L::BetaHasher as Hasher>::Domain,
+        >,
         data: &mut [u8],
-        _data_tree: Option<Tree<L::Hasher>>,
+        _data_tree: Option<HybridMerkleTree<L::AlphaHasher, L::BetaHasher>>,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let (taus, auxs) = Self::transform_and_replicate_layers(
             &pp.graph,
             &pp.layer_challenges,
             replica_id,
             data,
+            &pp.beta_heights,
         )?;
 
         let comm_rs: Vec<_> = taus.iter().map(|tau| tau.comm_r).collect();
-        let crs = comm_r_star::<L::Hasher>(replica_id, &comm_rs)?;
+
+        // The `replica_id` argument has a `HybridDomain` variant passed corresponding to the data
+        // layer's beta height, to compute comm-r-star we need the last layer's replica-id.
+        let last_layer_replica_id = if *pp.beta_heights.last().unwrap() == 0 {
+            replica_id.into_alpha()
+        } else {
+            replica_id.into_beta()
+        };
+
+        let crs = comm_r_star::<L::AlphaHasher, L::BetaHasher>(&last_layer_replica_id, &comm_rs)?;
+
         let tau = Tau {
             layer_taus: taus,
             comm_r_star: crs,
@@ -772,8 +977,11 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
     }
 
     fn extract_all<'b>(
-        pp: &'b PublicParams<L::Hasher, L::Graph>,
-        replica_id: &'b <L::Hasher as Hasher>::Domain,
+        pp: &'a PublicParams<L::AlphaHasher, L::BetaHasher, L::Graph>,
+        replica_id: &HybridDomain<
+            <L::AlphaHasher as Hasher>::Domain,
+            <L::BetaHasher as Hasher>::Domain,
+        >,
         data: &'b [u8],
     ) -> Result<Vec<u8>> {
         let mut data = data.to_vec();
@@ -781,6 +989,7 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
         Self::extract_and_invert_transform_layers(
             &pp.graph,
             &pp.layer_challenges,
+            &pp.beta_heights,
             replica_id,
             &mut data,
         )?;
@@ -789,8 +998,11 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
     }
 
     fn extract(
-        _pp: &PublicParams<L::Hasher, L::Graph>,
-        _replica_id: &<L::Hasher as Hasher>::Domain,
+        _pp: &'a PublicParams<L::AlphaHasher, L::BetaHasher, L::Graph>,
+        _replica_id: &HybridDomain<
+            <L::AlphaHasher as Hasher>::Domain,
+            <L::BetaHasher as Hasher>::Domain,
+        >,
         _data: &[u8],
         _node: usize,
     ) -> Result<Vec<u8>> {

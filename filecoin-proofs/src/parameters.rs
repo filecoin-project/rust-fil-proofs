@@ -1,5 +1,5 @@
 use storage_proofs::drgporep::DrgParams;
-use storage_proofs::drgraph::DefaultTreeHasher;
+use storage_proofs::drgraph::{DefaultAlphaHasher, DefaultBetaHasher};
 use storage_proofs::hasher::pedersen::PedersenDomain;
 use storage_proofs::hasher::PedersenHasher;
 use storage_proofs::layered_drgporep;
@@ -27,14 +27,26 @@ const TAPER: f64 = 1.0 / 3.0;
 
 const DRG_SEED: [u32; 7] = [1, 2, 3, 4, 5, 6, 7]; // Arbitrary, need a theory for how to vary this over time.
 
+// The Hyrbid Merkle Tree beta height at each encoding layer, the data layer's beta height is not
+// included in this array.
+pub const BETA_HEIGHTS: [usize; LAYERS] = [0, 0, 0, 0];
+
 type PostSetupParams = vdf_post::SetupParams<PedersenDomain, vdf_sloth::Sloth>;
 pub type PostPublicParams = vdf_post::PublicParams<PedersenDomain, vdf_sloth::Sloth>;
 
 pub fn public_params(
     sector_bytes: PaddedBytesAmount,
     partitions: usize,
-) -> layered_drgporep::PublicParams<DefaultTreeHasher, ZigZagBucketGraph<DefaultTreeHasher>> {
-    ZigZagDrgPoRep::<DefaultTreeHasher>::setup(&setup_params(sector_bytes, partitions)).unwrap()
+) -> layered_drgporep::PublicParams<
+    DefaultAlphaHasher,
+    DefaultBetaHasher,
+    ZigZagBucketGraph<DefaultAlphaHasher, DefaultBetaHasher>,
+> {
+    ZigZagDrgPoRep::<DefaultAlphaHasher, DefaultBetaHasher>::setup(&setup_params(
+        sector_bytes,
+        partitions,
+    ))
+    .unwrap()
 }
 
 pub fn post_public_params(post_config: PoStConfig) -> PostPublicParams {
@@ -81,6 +93,7 @@ pub fn setup_params(
             seed: DRG_SEED,
         },
         layer_challenges: challenges,
+        beta_heights: BETA_HEIGHTS.to_vec(),
     }
 }
 

@@ -21,6 +21,8 @@ use memmap::MmapOptions;
 use std::fs::File;
 use std::io::Write;
 
+const BETA_HEIGHT: usize = 0;
+
 fn file_backed_mmap_from_random_bytes(n: usize) -> MmapMut {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
     let mut tmpfile: File = tempfile::tempfile().unwrap();
@@ -46,6 +48,8 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, challenge_count: usize) {
 
     let nodes = data_size / 32;
 
+    let prev_layer_beta_height = (nodes as f32).log2().ceil() as usize + 1;
+
     let replica_id: Fr = rng.gen();
 
     let mut mmapped = file_backed_mmap_from_random_bytes(nodes);
@@ -59,25 +63,27 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, challenge_count: usize) {
         },
         private: true,
         challenges_count: challenge_count,
+        beta_height: BETA_HEIGHT,
+        prev_layer_beta_height,
     };
 
     info!("running setup");
-    let pp = DrgPoRep::<H, BucketGraph<_>>::setup(&sp).unwrap();
+    let pp = DrgPoRep::<H, H, BucketGraph<H, H>>::setup(&sp).unwrap();
 
     let start = Instant::now();
     let mut param_duration = Duration::new(0, 0);
 
     info!("running replicate");
     let (tau, aux) =
-        DrgPoRep::<H, _>::replicate(&pp, &replica_id.into(), &mut mmapped, None).unwrap();
+        DrgPoRep::<H, H, _>::replicate(&pp, &replica_id.into(), &mut mmapped, None).unwrap();
 
-    let pub_inputs = PublicInputs::<H::Domain> {
+    let pub_inputs = PublicInputs::<H::Domain, H::Domain> {
         replica_id: Some(replica_id.into()),
         challenges,
         tau: Some(tau),
     };
 
-    let priv_inputs = PrivateInputs::<H> {
+    let priv_inputs = PrivateInputs::<H, H> {
         tree_d: &aux.tree_d,
         tree_r: &aux.tree_r,
     };
@@ -93,11 +99,11 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, challenge_count: usize) {
     for _ in 0..samples {
         let start = Instant::now();
         let proof =
-            DrgPoRep::<H, _>::prove(&pp, &pub_inputs, &priv_inputs).expect("failed to prove");
+            DrgPoRep::<H, H, _>::prove(&pp, &pub_inputs, &priv_inputs).expect("failed to prove");
         total_proving += start.elapsed();
 
         let start = Instant::now();
-        DrgPoRep::<H, _>::verify(&pp, &pub_inputs, &proof).expect("failed to verify");
+        DrgPoRep::<H, H, _>::verify(&pp, &pub_inputs, &proof).expect("failed to verify");
         total_verifying += start.elapsed();
         proofs.push(proof);
     }

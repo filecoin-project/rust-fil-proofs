@@ -1,54 +1,73 @@
 use blake2s_simd::Params as Blake2s;
+use paired::bls12_381::FrRepr;
 
 use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
+use crate::hasher::hybrid::HybridDomain;
 use crate::hasher::{Domain, Hasher};
-use crate::merkle::MerkleTree;
+use crate::hybrid_merkle::HybridMerkleTree;
 use crate::util::{data_at_node, data_at_node_offset, NODE_SIZE};
 
 /// encodes the data and overwrites the original data slice.
-pub fn encode<'a, H, G>(graph: &'a G, replica_id: &'a H::Domain, data: &'a mut [u8]) -> Result<()>
+pub fn encode<'a, AH, BH, G>(
+    graph: &'a G,
+    replica_id: &'a HybridDomain<AH::Domain, BH::Domain>,
+    data: &'a mut [u8],
+) -> Result<()>
 where
-    H: Hasher,
-    G: Graph<H>,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH>,
 {
-    // Because a node always follows all of its parents in the data,
-    // the nodes are by definition already topologically sorted.
-    // Therefore, if we simply traverse the data in order, encoding each node in place,
-    // we can always get each parent's encodings with a simple lookup --
-    // since we will already have encoded the parent earlier in the traversal.
-    // The only subtlety is that a ZigZag graph may be reversed, so the direction
-    // of the traversal must also be.
+    // Because a node always follows all of its parents in the data, the nodes are by definition
+    // already topologically sorted.  Therefore, if we simply traverse the data in order, encoding
+    // each node in place, we can always get each parent's encodings with a simple lookup -- since
+    // we will already have encoded the parent earlier in the traversal.  The only subtlety is that
+    // a ZigZag graph may be reversed, so the direction of the traversal must also be.
 
     let mut parents = vec![0; graph.degree()];
-    for n in 0..graph.size() {
-        let node = if graph.forward() {
-            n
+
+    for node_index in 0..graph.size() {
+        let node_index = if graph.forward() {
+            node_index
         } else {
             // If the graph is reversed, traverse in reverse order.
-            (graph.size() - n) - 1
+            (graph.size() - node_index) - 1
         };
 
-        graph.parents(node, &mut parents);
+        graph.parents(node_index, &mut parents);
 
-        let key = create_key::<H>(replica_id, node, &parents, data)?;
-        let start = data_at_node_offset(node);
-        let end = start + NODE_SIZE;
+        let key_fr = create_key(replica_id.as_ref(), node_index, &parents, data)?;
+        let start = data_at_node_offset(node_index);
+        let stop = start + NODE_SIZE;
 
-        let node_data = H::Domain::try_from_bytes(&data[start..end])?;
-        let encoded = H::sloth_encode(&key, &node_data);
-
-        encoded.write_bytes(&mut data[start..end])?;
+        // Nodes and encoding keys are always the same variant of `HybridDomain` as the replica-id.
+        if replica_id.is_alpha() {
+            let key: AH::Domain = key_fr.into();
+            let node_alpha = AH::Domain::try_from_bytes(&data[start..stop])?;
+            let encoded = AH::sloth_encode(&key, &node_alpha);
+            encoded.write_bytes(&mut data[start..stop])?;
+        } else {
+            let key: BH::Domain = key_fr.into();
+            let node_beta = BH::Domain::try_from_bytes(&data[start..stop])?;
+            let encoded = BH::sloth_encode(&key, &node_beta);
+            encoded.write_bytes(&mut data[start..stop])?;
+        };
     }
 
     Ok(())
 }
 
-pub fn decode<'a, H, G>(graph: &'a G, replica_id: &'a H::Domain, data: &'a [u8]) -> Result<Vec<u8>>
+pub fn decode<'a, AH, BH, G>(
+    graph: &'a G,
+    replica_id: &'a HybridDomain<AH::Domain, BH::Domain>,
+    data: &'a [u8],
+) -> Result<Vec<u8>>
 where
-    H: Hasher,
-    G: Graph<H>,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH>,
 {
     // TODO: parallelize
     (0..graph.size()).fold(Ok(Vec::with_capacity(data.len())), |acc, i| {
@@ -59,53 +78,80 @@ where
     })
 }
 
-pub fn decode_block<'a, H, G>(
+pub fn decode_block<'a, AH, BH, G>(
     graph: &'a G,
-    replica_id: &'a H::Domain,
+    replica_id: &'a HybridDomain<AH::Domain, BH::Domain>,
     data: &'a [u8],
     v: usize,
-) -> Result<H::Domain>
+) -> Result<HybridDomain<AH::Domain, BH::Domain>>
 where
-    H: Hasher,
-    G: Graph<H>,
+    AH: Hasher,
+    BH: Hasher,
+    G: Graph<AH, BH>,
 {
     let mut parents = vec![0; graph.degree()];
     graph.parents(v, &mut parents);
-    let key = create_key::<H>(replica_id, v, &parents, &data)?;
-    let node_data = H::Domain::try_from_bytes(&data_at_node(data, v)?)?;
 
-    Ok(H::sloth_decode(&key, &node_data))
+    let key_fr = create_key(replica_id.as_ref(), v, &parents, &data)?;
+    let node_data = data_at_node(data, v)?;
+
+    // Nodes and encoding keys have the same variant of `HybridDomain` as the replica-id.
+    let decoded = if replica_id.is_alpha() {
+        let key: AH::Domain = key_fr.into();
+        let node_alpha = AH::Domain::try_from_bytes(node_data)?;
+        let decoded_alpha = AH::sloth_decode(&key, &node_alpha);
+        HybridDomain::Alpha(decoded_alpha)
+    } else {
+        let key: BH::Domain = key_fr.into();
+        let node_beta = BH::Domain::try_from_bytes(node_data)?;
+        let decoded_beta = BH::sloth_decode(&key, &node_beta);
+        HybridDomain::Beta(decoded_beta)
+    };
+
+    Ok(decoded)
 }
 
-pub fn decode_domain_block<H>(
-    replica_id: &H::Domain,
-    tree: &MerkleTree<H::Domain, H::Function>,
-    node: usize,
-    node_data: <H as Hasher>::Domain,
+pub fn decode_domain_block<AH, BH>(
+    replica_id: &HybridDomain<AH::Domain, BH::Domain>,
+    tree: &HybridMerkleTree<AH, BH>,
+    node_index: usize,
+    node_data: HybridDomain<AH::Domain, BH::Domain>,
     parents: &[usize],
-) -> Result<H::Domain>
+) -> Result<HybridDomain<AH::Domain, BH::Domain>>
 where
-    H: Hasher,
+    AH: Hasher,
+    BH: Hasher,
 {
-    let key = create_key_from_tree::<H>(replica_id, node, parents, tree)?;
+    let key_fr = create_key_from_tree(replica_id.as_ref(), node_index, parents, tree)?;
 
-    Ok(H::sloth_decode(&key, &node_data))
+    // Nodes and encoding keys have the same variant of `HybridDomain` as the replica-id.
+    let decoded = if replica_id.is_alpha() {
+        let key: AH::Domain = key_fr.into();
+        let decoded_alpha = AH::sloth_decode(&key, node_data.alpha_value());
+        HybridDomain::Alpha(decoded_alpha)
+    } else {
+        let key: BH::Domain = key_fr.into();
+        let decoded_beta = BH::sloth_decode(&key, node_data.beta_value());
+        HybridDomain::Beta(decoded_beta)
+    };
+
+    Ok(decoded)
 }
 
 /// Creates the encoding key.
 /// The algorithm for that is `Blake2s(id | encodedParentNode1 | encodedParentNode1 | ...)`.
 /// It is only public so that it can be used for benchmarking
-pub fn create_key<H: Hasher>(
-    id: &H::Domain,
-    node: usize,
+pub fn create_key(
+    replica_id_bytes: &[u8],
+    node_index: usize,
     parents: &[usize],
     data: &[u8],
-) -> Result<H::Domain> {
+) -> Result<FrRepr> {
     let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
-    hasher.update(id.as_ref());
+    hasher.update(replica_id_bytes);
 
-    // The hash is about the parents, hence skip if a node doesn't have any parents
-    if node != parents[0] {
+    // The hash is about the parents, hence skip if a node_index doesn't have any parents
+    if node_index != parents[0] {
         for parent in parents.iter() {
             let offset = data_at_node_offset(*parent);
             hasher.update(&data[offset..offset + NODE_SIZE]);
@@ -113,20 +159,24 @@ pub fn create_key<H: Hasher>(
     }
 
     let hash = hasher.finalize();
-    Ok(bytes_into_fr_repr_safe(hash.as_ref()).into())
+    Ok(bytes_into_fr_repr_safe(hash.as_ref()))
 }
 
 /// Creates the encoding key from a `MerkleTree`.
 /// The algorithm for that is `Blake2s(id | encodedParentNode1 | encodedParentNode1 | ...)`.
 /// It is only public so that it can be used for benchmarking
-pub fn create_key_from_tree<H: Hasher>(
-    id: &H::Domain,
+pub fn create_key_from_tree<AH, BH>(
+    replica_id_bytes: &[u8],
     node: usize,
     parents: &[usize],
-    tree: &MerkleTree<H::Domain, H::Function>,
-) -> Result<H::Domain> {
+    tree: &HybridMerkleTree<AH, BH>,
+) -> Result<FrRepr>
+where
+    AH: Hasher,
+    BH: Hasher,
+{
     let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
-    hasher.update(id.as_ref());
+    hasher.update(replica_id_bytes);
 
     // The hash is about the parents, hence skip if a node doesn't have any parents
     if node != parents[0] {
@@ -138,5 +188,5 @@ pub fn create_key_from_tree<H: Hasher>(
     }
 
     let hash = hasher.finalize();
-    Ok(bytes_into_fr_repr_safe(hash.as_ref()).into())
+    Ok(bytes_into_fr_repr_safe(hash.as_ref()))
 }

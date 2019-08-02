@@ -30,6 +30,7 @@ use storage_proofs::drgporep;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
+use storage_proofs::hasher::hybrid::HybridDomain;
 use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
 use storage_proofs::layered_drgporep::{self, ChallengeRequirements, LayerChallenges};
 use storage_proofs::porep::PoRep;
@@ -126,7 +127,7 @@ pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
     unsafe { MmapOptions::new().map_mut(&tmpfile).unwrap() }
 }
 
-fn dump_proof_bytes<H: Hasher>(all_partition_proofs: &[layered_drgporep::Proof<H>]) {
+fn dump_proof_bytes<H: Hasher>(all_partition_proofs: &[layered_drgporep::Proof<H, H>]) {
     let file = OpenOptions::new()
         .write(true)
         .create(true)
@@ -174,7 +175,12 @@ fn do_the_work<H: 'static>(
 
     let nodes = data_size / 32;
 
-    let replica_id: H::Domain = rng.gen();
+    // For this example, we will just use a beta height of 0 for each encoding layer.
+    let beta_heights = vec![0usize, layer_challenges.layers()];
+
+    // If the beta height is 0 for each layer, then the replica-id will be `HybridDomain::Alpha`.
+    let replica_id: HybridDomain<H::Domain, H::Domain> = HybridDomain::Alpha(rng.gen());
+
     let sp = layered_drgporep::SetupParams {
         drg: drgporep::DrgParams {
             nodes,
@@ -183,11 +189,12 @@ fn do_the_work<H: 'static>(
             seed: new_seed(),
         },
         layer_challenges: layer_challenges.clone(),
+        beta_heights,
     };
 
     info!("running setup");
     start_profile("setup");
-    let pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
+    let pp = ZigZagDrgPoRep::<H, H>::setup(&sp).unwrap();
     info!("setup complete");
     stop_profile();
 
@@ -205,9 +212,10 @@ fn do_the_work<H: 'static>(
         info!("running replicate");
 
         start_profile("replicate");
-        let (tau, aux) = ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, &mut data, None).unwrap();
+        let (tau, aux) =
+            ZigZagDrgPoRep::<H, H>::replicate(&pp, &replica_id, &mut data, None).unwrap();
         stop_profile();
-        let pub_inputs = layered_drgporep::PublicInputs::<H::Domain> {
+        let pub_inputs = layered_drgporep::PublicInputs::<H::Domain, H::Domain> {
             replica_id,
             tau: Some(tau.simplify().into()),
             comm_r_star: tau.comm_r_star,
@@ -243,9 +251,13 @@ fn do_the_work<H: 'static>(
 
         let start = Instant::now();
         start_profile("prove");
-        let all_partition_proofs =
-            ZigZagDrgPoRep::<H>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, partitions)
-                .expect("failed to prove");
+        let all_partition_proofs = ZigZagDrgPoRep::<H, H>::prove_all_partitions(
+            &pp,
+            &pub_inputs,
+            &priv_inputs,
+            partitions,
+        )
+        .expect("failed to prove");
         stop_profile();
         let vanilla_proving = start.elapsed();
         total_proving += vanilla_proving;
@@ -261,9 +273,12 @@ fn do_the_work<H: 'static>(
         start_profile("verify");
         for _ in 0..samples {
             let start = Instant::now();
-            let verified =
-                ZigZagDrgPoRep::<H>::verify_all_partitions(&pp, &pub_inputs, &all_partition_proofs)
-                    .expect("failed during verification");
+            let verified = ZigZagDrgPoRep::<H, H>::verify_all_partitions(
+                &pp,
+                &pub_inputs,
+                &all_partition_proofs,
+            )
+            .expect("failed during verification");
             if !verified {
                 info!("Verification failed.");
             };
@@ -382,7 +397,8 @@ fn do_the_work<H: 'static>(
             let start = Instant::now();
             info!("Extracting.");
             start_profile("extract");
-            let decoded_data = ZigZagDrgPoRep::<H>::extract_all(&pp, &replica_id, &data).unwrap();
+            let decoded_data =
+                ZigZagDrgPoRep::<H, H>::extract_all(&pp, &replica_id, &data).unwrap();
             stop_profile();
             let extracting = start.elapsed();
             info!("extracting_time: {:?}", extracting);
