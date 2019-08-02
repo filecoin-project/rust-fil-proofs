@@ -33,13 +33,6 @@ fn main() {
                         .takes_value(true),
                 )
                 .arg(
-                    Arg::with_name("sloth")
-                        .help("The number of sloth iterations")
-                        .long("sloth")
-                        .default_value("0")
-                        .takes_value(true),
-                )
-                .arg(
                     Arg::with_name("challenges")
                         .long("challenges")
                         .help("How many challenges to execute")
@@ -143,7 +136,6 @@ fn main() {
                         no_tmp: m.is_present("no-tmp"),
                         partitions: value_t!(m, "partitions", usize)?,
                         size: value_t!(m, "size", usize)?,
-                        sloth: value_t!(m, "sloth", usize)?,
                         taper: value_t!(m, "taper", f64)?,
                         taper_layers: value_t!(m, "taper-layers", usize).unwrap_or(layers),
                     })
