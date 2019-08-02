@@ -32,6 +32,7 @@ use storage_proofs::circuit::rational_post::RationalPoStCompound;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
+use storage_proofs::error::Error;
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
 use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::hasher::{Domain, Hasher};
@@ -45,6 +46,7 @@ use storage_proofs::porep::{replica_id, PoRep, Tau};
 use storage_proofs::proof::NoRequirements;
 use storage_proofs::rational_post;
 use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
+use tempfile::tempfile;
 
 /// FrSafe is an array of the largest whole number of bytes guaranteed not to overflow the field.
 pub type FrSafe = [u8; 31];
@@ -85,8 +87,17 @@ pub fn generate_post(
     };
     let commitments_all: Vec<PedersenDomain> = input_parts
         .iter()
-        .map(|(_, comm_r)| PedersenDomain::try_from_bytes(&comm_r[..]).unwrap()) // FIXME: don't unwrap
-        .collect();
+        .map(|(_, comm_r)| {
+            bytes_into_fr::<Bls12>(comm_r)
+                .map(Into::into)
+                .map_err(|err| match err {
+                    Error::BadFrBytes => {
+                        format_err!("could not transform comm_r into Fr32: {:?}", err)
+                    }
+                    _ => err.into(),
+                })
+        })
+        .collect::<error::Result<_>>()?;
 
     let sector_count = commitments_all.len();
 
@@ -162,8 +173,17 @@ pub fn verify_post(
     };
     let commitments_all: Vec<PedersenDomain> = comm_rs
         .iter()
-        .map(|comm_r| PedersenDomain::try_from_bytes(&comm_r[..]).unwrap()) // FIXME: don't unwrap
-        .collect();
+        .map(|comm_r| {
+            bytes_into_fr::<Bls12>(comm_r)
+                .map(Into::into)
+                .map_err(|err| match err {
+                    Error::BadFrBytes => {
+                        format_err!("could not transform comm_r into Fr32: {:?}", err)
+                    }
+                    _ => err.into(),
+                })
+        })
+        .collect::<error::Result<_>>()?;
 
     let sector_count = commitments_all.len();
 
@@ -817,11 +837,11 @@ mod tests {
         assert!(out.is_err(), "tripwire");
 
         let result = verify_post(
-            PoStConfig(SectorSize(TEST_SECTOR_SIZE), PoStProofPartitions(2)),
+            PoStConfig(SectorSize(TEST_SECTOR_SIZE)),
             vec![not_convertible_to_fr_bytes],
-            [0; 32],
-            vec![[0; POST_SECTORS_COUNT * SINGLE_PARTITION_PROOF_LEN].to_vec()],
-            vec![],
+            &[0; 32],
+            &vec![0; SINGLE_PARTITION_PROOF_LEN],
+            &vec![],
         );
 
         if let Err(err) = result {
