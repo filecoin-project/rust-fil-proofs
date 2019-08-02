@@ -7,10 +7,6 @@ use snark_gadgets::boolean;
 use snark_gadgets::fields::fp::FpGadget;
 use snark_gadgets::fields::FieldGadget;
 use snark_gadgets::utils::{AllocGadget, ToBitsGadget};
-//use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-//use fil_sapling_crypto::circuit::{boolean, num};
-//use fil_sapling_crypto::jubjub::JubjubEngine;
-//use paired::bls12_381::{Bls12, Fr};
 
 use crate::circuit::constraint;
 use crate::circuit::drgporep::{ComponentPrivateInputs, DrgPoRepCompound};
@@ -42,7 +38,6 @@ type Layers<'a, H, G> = Vec<
 /// * 'layers' - A vector of Layers – each representing a DrgPoRep proof (see Layers type definition).
 ///
 pub struct ZigZagCircuit<'a, H: 'static + Hasher> {
-//    params: &'a E::Params,
     public_params: <ZigZagDrgPoRep<'a, H> as ProofScheme<'a>>::PublicParams,
     layers: Layers<
         'a,
@@ -61,7 +56,6 @@ impl<'a, H: Hasher> CircuitComponent for ZigZagCircuit<'a, H> {
 impl<'a, H: Hasher> ZigZagCircuit<'a, H> {
     pub fn synthesize<CS>(
         mut cs: CS,
-//        params: &'a <Bls12 as JubjubEngine>::Params,
         public_params: <ZigZagDrgPoRep<'a, H> as ProofScheme<'a>>::PublicParams,
         layers: Layers<
             'a,
@@ -204,7 +198,6 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, H> {
                 },
                 &proof,
                 &porep_params,
-//                self.params,
             );
 
             // Synthesize the constructed DrgPoRep circuit.
@@ -239,7 +232,6 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, H> {
                 cs.ns(|| "comm_r_star"),
                 &crs_boolean[..],
                 &PEDERSEN_PARAMS,
-//                self.params,
             )?;
 
             // Allocate the resulting hash.
@@ -337,7 +329,6 @@ impl<'a, H: 'static + Hasher>
         _component_private_inputs: <ZigZagCircuit<'a, H> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &'b <ZigZagDrgPoRep<H> as ProofScheme>::Proof,
         public_params: &'b <ZigZagDrgPoRep<H> as ProofScheme>::PublicParams,
-//        engine_params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> ZigZagCircuit<'a, H> {
         let layers = (0..(vanilla_proof.encoding_proofs.len()))
             .map(|l| {
@@ -355,7 +346,6 @@ impl<'a, H: 'static + Hasher>
         let pp: <ZigZagDrgPoRep<H> as ProofScheme>::PublicParams = public_params.into();
 
         ZigZagCircuit {
-//            params: engine_params,
             public_params: pp,
             tau: public_inputs.tau,
             comm_r_star: Some(public_inputs.comm_r_star),
@@ -366,10 +356,8 @@ impl<'a, H: 'static + Hasher>
 
     fn blank_circuit(
         public_params: &<ZigZagDrgPoRep<H> as ProofScheme>::PublicParams,
-//        params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> ZigZagCircuit<'a, H> {
         ZigZagCircuit {
-//            params,
             public_params: public_params.clone(),
             tau: None,
             comm_r_star: None,
@@ -395,13 +383,10 @@ mod tests {
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
 
-//    use ff::Field;
-//    use fil_sapling_crypto::jubjub::JubjubBls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]
     fn zigzag_drgporep_input_circuit_with_bls12_381() {
-//        let params = &JubjubBls12::new();
         let nodes = 5;
         let degree = 1;
         let expansion_degree = 2;
@@ -474,7 +459,6 @@ mod tests {
             <ZigZagCircuit<PedersenHasher> as CircuitComponent>::ComponentPrivateInputs::default(),
             &proofs[0],
             &pp,
-//            params,
         )
             .synthesize(&mut cs.ns(|| "zigzag drgporep"))
             .expect("failed to synthesize circuit");
@@ -486,6 +470,7 @@ mod tests {
                 "wrong number of constraints"
             );
         }
+
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
         ZigZagCompound::circuit(
@@ -493,7 +478,6 @@ mod tests {
             <ZigZagCircuit<PedersenHasher> as CircuitComponent>::ComponentPrivateInputs::default(),
             &proofs[0],
             &pp,
-//            params,
         )
         .synthesize(&mut cs.ns(|| "zigzag drgporep"))
         .expect("failed to synthesize circuit");
@@ -527,7 +511,7 @@ mod tests {
         // TODO: add add assertions about other inputs.
     }
 
-    // Thist test is broken. empty proofs do not validate
+    // This test is broken. empty proofs do not validate
     //
     // #[test]
     // fn zigzag_input_circuit_num_constraints_fixed() {
@@ -586,7 +570,7 @@ mod tests {
     // }
 
     #[test]
-//    #[ignore] // Slow test – run only when compiled for release.
+    #[ignore] // Slow test – run only when compiled for release.
     fn test_zigzag_compound_pedersen() {
         zigzag_test_compound::<PedersenHasher>();
     }
@@ -598,7 +582,6 @@ mod tests {
 //    }
 //
     fn zigzag_test_compound<H: 'static + Hasher>() {
-//        let params = &JubjubBls12::new();
         let nodes = 5;
         let degree = 2;
         let expansion_degree = 1;
@@ -622,7 +605,6 @@ mod tests {
         let mut data_copy = data.clone();
 
         let setup_params = compound_proof::SetupParams {
-//            engine_params: params,
             vanilla_params: &layered_drgporep::SetupParams {
                 drg: drgporep::DrgParams {
                     nodes: n,
@@ -706,7 +688,6 @@ mod tests {
         // }
 
         let blank_groth_params =
-//            ZigZagCompound::groth_params(&public_params.vanilla_params, params)
             ZigZagCompound::groth_params(&public_params.vanilla_params)
                 .expect("failed to generate groth params");
 
