@@ -74,18 +74,32 @@ impl SystemMetadata {
             .unwrap_or_default();
 
         let cpuid = raw_cpuid::CpuId::new();
-        let cpu_info = cpuid.get_extended_function_info().unwrap();
-        let cpu_freq = cpuid.get_processor_frequency_info().unwrap();
+        let processor = cpuid
+            .get_extended_function_info()
+            .and_then(|info| info.processor_brand_string().map(|s| s.to_string()))
+            .unwrap_or_default();
+        let (base, max) = cpuid
+            .get_processor_frequency_info()
+            .map(|info| {
+                (
+                    info.processor_base_frequency(),
+                    info.processor_max_frequency(),
+                )
+            })
+            .unwrap_or_default();
 
         Ok(SystemMetadata {
             system: host.system().into(),
             release: host.release().into(),
             version: host.version().into(),
             architecture: host.architecture().as_str().into(),
-            processor: cpu_info.processor_brand_string().unwrap().into(),
-            processor_base_frequency_hz: cpu_freq.processor_base_frequency(),
-            processor_max_frequency_hz: cpu_freq.processor_max_frequency(),
-            processor_features: format!("{:?}", cpuid.get_feature_info().unwrap()),
+            processor,
+            processor_base_frequency_hz: base,
+            processor_max_frequency_hz: max,
+            processor_features: cpuid
+                .get_feature_info()
+                .map(|info| format!("{:?}", info))
+                .unwrap_or_default(),
             processor_cores_logical: cpu_logical,
             processor_cores_physical: cpu_physical,
             memory_total_bytes: memory.total().get(),
