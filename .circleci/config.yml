@@ -180,7 +180,7 @@ jobs:
             - parameter-cache-{{ .Revision }}
       - run:
           name: Install jq
-          command: apt-get install jq -yqq
+          command: apt-get install time jq -yqq
       - run:
           name: Build micro and benchy binaries
           command: cargo build --release --all

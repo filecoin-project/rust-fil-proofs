@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 
-stat ./target/release/benchy >/dev/null || { printf '%s\n' "error: missing ./target/release/benchy" >&2; exit 1; }
 which jq >/dev/null || { printf '%s\n' "error: jq" >&2; exit 1; }
 
 BENCHY_OUT=$(mktemp)
 TIME_OUT=$(mktemp)
 
 BIN="env time"
-CMD="-f '{ \"outputs\": { \"maxResidentSetSizeKb\": %M } }' ./target/release/benchy ${@} > ${BENCHY_OUT} 2> ${TIME_OUT}"
+CMD="-f '{ \"outputs\": { \"maxResidentSetSizeKb\": %M } }' cargo run --bin benchy --release -- ${@} > ${BENCHY_OUT} 2> ${TIME_OUT}"
 
 if [[ $(env time --version 2>&1) != *"GNU"* ]]; then
     if [[ $(/usr/bin/time --version 2>&1) != *"GNU"* ]]; then
