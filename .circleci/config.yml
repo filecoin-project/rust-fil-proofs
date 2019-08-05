@@ -161,6 +161,34 @@ jobs:
           command: cargo +$(cat rust-toolchain) build --benches --verbose --all
           no_output_timeout: 15m
 
+  metrics_capture:
+    docker:
+      - image: filecoin/rust:latest
+    working_directory: /mnt/crate
+    resource_class: xlarge
+    steps:
+      - checkout
+      - attach_workspace:
+          at: "."
+      - restore_cache:
+          keys:
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - restore_cache:
+          keys:
+            - parameter-cache-{{ .Revision }}
+      - run:
+          name: Install jq
+          command: apt-get install jq -yqq
+      - run:
+          name: Build micro and benchy binaries
+          command: RUSTFLAGS="-C target-cpu=native" cargo build --release --all
+      - run:
+          name: Capture minimal ZigZag outputs with benchy
+          command: ./fil-proofs-tooling/scripts/benchy.sh zigzag --size=1 | jq '.'
+      - run:
+          name: Run a single micro benchmark to ensure sane output
+          command: RUSTFLAGS="-C target-cpu=native" cargo run --bin micro --release -- hash-blake2s/non-circuit | jq '.'
+
   rustfmt:
     docker:
       - image: filecoin/rust:latest
@@ -275,6 +303,9 @@ workflows:
           requires:
             - cargo_fetch
       - bench_nightly:
+          requires:
+            - cargo_fetch
+      - metrics_capture:
           requires:
             - cargo_fetch
       - build_linux_release:
