@@ -16,18 +16,25 @@ struct Interval {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
+struct Point {
+    value: f64,
+    unit: Option<String>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Serialize)]
 struct CriterionResult {
     name: String,
     samples: u32,
-    time_med: f64,
+    time_med: Point,
     time: Interval,
     throughput: Option<Interval>,
-    slope: Interval,
-    mean: Interval,
-    median: Interval,
-    r_2: Interval,
-    std_dev: Interval,
-    med_abs_dev: Interval,
+    throughput_med: Option<Point>,
+    slope: Option<Interval>,
+    mean: Option<Interval>,
+    median: Option<Interval>,
+    r_2: Option<Interval>,
+    std_dev: Option<Interval>,
+    med_abs_dev: Option<Interval>,
 }
 
 fn make_detail_re(name: &str) -> Regex {
@@ -57,9 +64,10 @@ fn parse_criterion_out(s: impl AsRef<str>) -> Result<Vec<CriterionResult>, failu
     let mut current: Option<(
         String,
         Option<u32>,
-        Option<f64>,
+        Option<Point>,
         Option<Interval>,
         Option<Interval>,
+        Option<Point>,
         Option<Interval>,
         Option<Interval>,
         Option<Interval>,
@@ -78,16 +86,18 @@ fn parse_criterion_out(s: impl AsRef<str>) -> Result<Vec<CriterionResult>, failu
                     time_med: r.2.unwrap_or_default(),
                     time: r.3.unwrap_or_default(),
                     throughput: r.4,
-                    slope: r.5.unwrap_or_default(),
-                    mean: r.6.unwrap_or_default(),
-                    median: r.7.unwrap_or_default(),
-                    r_2: r.8.unwrap_or_default(),
-                    std_dev: r.9.unwrap_or_default(),
-                    med_abs_dev: r.10.unwrap_or_default(),
+                    throughput_med: r.5,
+                    slope: r.6,
+                    mean: r.7,
+                    median: r.8,
+                    r_2: r.9,
+                    std_dev: r.10,
+                    med_abs_dev: r.11,
                 });
             }
             current = Some((
                 caps[1].to_string(),
+                None,
                 None,
                 None,
                 None,
@@ -109,7 +119,10 @@ fn parse_criterion_out(s: impl AsRef<str>) -> Result<Vec<CriterionResult>, failu
 
             // Time
             if let Some(caps) = time_re.captures(line) {
-                current.2 = Some(time_to_us(&caps[2]));
+                current.2 = Some(Point {
+                    value: time_to_us(&caps[2]),
+                    unit: Some("us".to_string()),
+                });
                 current.3 = Some(Interval {
                     start: time_to_us(&caps[1]),
                     end: time_to_us(&caps[3]),
@@ -124,11 +137,15 @@ fn parse_criterion_out(s: impl AsRef<str>) -> Result<Vec<CriterionResult>, failu
                     end: throughput_val(&caps[3]),
                     unit: Some(throughput_to_uom(&caps[1])),
                 });
+                current.5 = Some(Point {
+                    value: throughput_val(&caps[2]),
+                    unit: Some(throughput_to_uom(&caps[2])),
+                });
             }
 
             // Slope
             if let Some(caps) = slope_re.captures(line) {
-                current.5 = Some(Interval {
+                current.6 = Some(Interval {
                     start: time_to_us(&caps[1]),
                     end: time_to_us(&caps[2]),
                     unit: Some("us".to_string()),
@@ -137,7 +154,7 @@ fn parse_criterion_out(s: impl AsRef<str>) -> Result<Vec<CriterionResult>, failu
 
             // Mean
             if let Some(caps) = mean_re.captures(line) {
-                current.6 = Some(Interval {
+                current.7 = Some(Interval {
                     start: time_to_us(&caps[1]),
                     end: time_to_us(&caps[2]),
                     unit: Some("us".to_string()),
@@ -146,7 +163,7 @@ fn parse_criterion_out(s: impl AsRef<str>) -> Result<Vec<CriterionResult>, failu
 
             // median
             if let Some(caps) = median_re.captures(line) {
-                current.7 = Some(Interval {
+                current.8 = Some(Interval {
                     start: time_to_us(&caps[1]),
                     end: time_to_us(&caps[2]),
                     unit: Some("us".to_string()),
@@ -155,7 +172,7 @@ fn parse_criterion_out(s: impl AsRef<str>) -> Result<Vec<CriterionResult>, failu
 
             // R^2
             if let Some(caps) = r_2_re.captures(line) {
-                current.8 = Some(Interval {
+                current.9 = Some(Interval {
                     start: caps[1].parse().unwrap(),
                     end: caps[2].parse().unwrap(),
                     unit: None,
@@ -164,7 +181,7 @@ fn parse_criterion_out(s: impl AsRef<str>) -> Result<Vec<CriterionResult>, failu
 
             // std.dev
             if let Some(caps) = std_dev_re.captures(line) {
-                current.9 = Some(Interval {
+                current.10 = Some(Interval {
                     start: time_to_us(&caps[1]),
                     end: time_to_us(&caps[2]),
                     unit: Some("us".to_string()),
@@ -173,7 +190,7 @@ fn parse_criterion_out(s: impl AsRef<str>) -> Result<Vec<CriterionResult>, failu
 
             // med.abs.dev
             if let Some(caps) = med_abs_dev_re.captures(line) {
-                current.10 = Some(Interval {
+                current.11 = Some(Interval {
                     start: time_to_us(&caps[1]),
                     end: time_to_us(&caps[2]),
                     unit: Some("us".to_string()),
@@ -190,12 +207,13 @@ fn parse_criterion_out(s: impl AsRef<str>) -> Result<Vec<CriterionResult>, failu
             time_med: r.2.unwrap_or_default(),
             time: r.3.unwrap_or_default(),
             throughput: r.4,
-            slope: r.5.unwrap_or_default(),
-            mean: r.6.unwrap_or_default(),
-            median: r.7.unwrap_or_default(),
-            r_2: r.8.unwrap_or_default(),
-            std_dev: r.9.unwrap_or_default(),
-            med_abs_dev: r.10.unwrap_or_default(),
+            throughput_med: r.5,
+            slope: r.6,
+            mean: r.7,
+            median: r.8,
+            r_2: r.9,
+            std_dev: r.10,
+            med_abs_dev: r.11,
         });
     }
     Ok(res)
@@ -233,7 +251,7 @@ fn time_to_us(s: &str) -> f64 {
     (normalized * 10000.0).round() / 10000.0
 }
 
-fn run_benches(args: Vec<String>, _push_prometheus: bool) -> Result<(), failure::Error> {
+fn run_benches(args: Vec<String>) -> Result<(), failure::Error> {
     let mut cmd = command!(
         r"
         cargo bench --all --verbose --color never {args} --
@@ -241,7 +259,6 @@ fn run_benches(args: Vec<String>, _push_prometheus: bool) -> Result<(), failure:
         args = args
     )?;
 
-    println!("{:?}", cmd);
     let result = cmd.output()?;
 
     if !result.status.success() {
@@ -261,14 +278,9 @@ fn run_benches(args: Vec<String>, _push_prometheus: bool) -> Result<(), failure:
 }
 
 fn main() {
-    let pass_through = std::env::args()
-        .skip(1)
-        .filter(|arg| arg != "--push-prometheus")
-        .collect();
-    let push_prometheus = std::env::args()
-        .find(|arg| arg == "--push-prometheus")
-        .is_some();
-    match run_benches(pass_through, push_prometheus) {
+    let pass_through = std::env::args().skip(1).collect();
+
+    match run_benches(pass_through) {
         Ok(()) => {}
         Err(err) => {
             eprintln!("{}", err);
@@ -285,6 +297,12 @@ mod tests {
     fn test_time_to_us() {
         assert_eq!(time_to_us("123.12 us"), 123.12);
         assert_eq!(time_to_us("1.0 s"), 1_000_000.);
+    }
+
+    #[test]
+    fn test_throughput_uom() {
+        assert_eq!(throughput_to_uom("521.80 KiB/s"), "KiB/s");
+        assert_eq!(throughput_to_uom("521.80 MiB/hr"), "MiB/hr");
     }
 
     #[test]
@@ -309,43 +327,47 @@ median [138.33 us 143.23 us] med. abs. dev. [1.7507 ms 8.4109 ms]";
             vec![CriterionResult {
                 name: "merkletree/blake2s/128".into(),
                 samples: 20,
-                time_med: 151.42,
+                time_med: Point {
+                    unit: Some("us".to_string()),
+                    value: 151.42,
+                },
                 time: Interval {
                     start: 141.11,
                     end: 159.66,
                     unit: Some("us".to_string())
                 },
                 throughput: None,
-                slope: Interval {
+                throughput_med: None,
+                slope: Some(Interval {
                     start: 141.11,
                     end: 159.66,
                     unit: Some("us".to_string())
-                },
-                mean: Interval {
+                }),
+                mean: Some(Interval {
                     start: 140.55,
                     end: 150.62,
                     unit: Some("us".to_string())
-                },
-                median: Interval {
+                }),
+                median: Some(Interval {
                     start: 138.33,
                     end: 143.23,
                     unit: Some("us".to_string())
-                },
-                r_2: Interval {
+                }),
+                r_2: Some(Interval {
                     start: 0.8124914,
                     end: 0.8320154,
                     unit: None
-                },
-                std_dev: Interval {
+                }),
+                std_dev: Some(Interval {
                     start: 5.6028,
                     end: 15.213,
                     unit: Some("us".to_string())
-                },
-                med_abs_dev: Interval {
+                }),
+                med_abs_dev: Some(Interval {
                     start: 1750.7,
                     end: 8410.9,
                     unit: Some("us".to_string())
-                },
+                }),
             }]
         );
     }
@@ -376,7 +398,10 @@ median [138.33 us 143.23 us] med. abs. dev. [1.7507 ms 8.4109 ms]";
             vec![CriterionResult {
                 name: "merkletree/blake2s/128".into(),
                 samples: 20,
-                time_med: 151.42,
+                time_med: Point {
+                    unit: Some("us".to_string()),
+                    value: 151.42,
+                },
                 time: Interval {
                     start: 141.11,
                     end: 159.66,
@@ -387,36 +412,40 @@ median [138.33 us 143.23 us] med. abs. dev. [1.7507 ms 8.4109 ms]";
                     end: 68.644,
                     unit: Some("MiB/s".to_string())
                 }),
-                slope: Interval {
+                throughput_med: Some(Point {
+                    value: 68.172,
+                    unit: Some("MiB/s".to_string())
+                }),
+                slope: Some(Interval {
                     start: 141.11,
                     end: 159.66,
                     unit: Some("us".to_string())
-                },
-                mean: Interval {
+                }),
+                mean: Some(Interval {
                     start: 140.55,
                     end: 150.62,
                     unit: Some("us".to_string())
-                },
-                median: Interval {
+                }),
+                median: Some(Interval {
                     start: 138.33,
                     end: 143.23,
                     unit: Some("us".to_string())
-                },
-                r_2: Interval {
+                }),
+                r_2: Some(Interval {
                     start: 0.8124914,
                     end: 0.8320154,
                     unit: None
-                },
-                std_dev: Interval {
+                }),
+                std_dev: Some(Interval {
                     start: 5.6028,
                     end: 15.213,
                     unit: Some("us".to_string())
-                },
-                med_abs_dev: Interval {
+                }),
+                med_abs_dev: Some(Interval {
                     start: 1750.7,
                     end: 8410.9,
                     unit: Some("us".to_string())
-                },
+                }),
             }]
         );
     }
