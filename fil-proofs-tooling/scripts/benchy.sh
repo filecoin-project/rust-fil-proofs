@@ -6,7 +6,7 @@ which jq >/dev/null || { printf '%s\n' "error: jq" >&2; exit 1; }
 BENCHY_OUT=$(mktemp)
 TIME_OUT=$(mktemp)
 
-BIN="time"
+BIN="env time"
 CMD="-f '{ \"outputs\": { \"maxResidentSetSizeKb\": %M } }' ./target/release/benchy ${@} > ${BENCHY_OUT} 2> ${TIME_OUT}"
 
 if [[ $(env time --version 2>&1) != *"GNU"* ]]; then
