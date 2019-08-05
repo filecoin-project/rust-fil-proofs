@@ -8,4 +8,3 @@ heaptrack*
 *.profile
 *.heap
 rust-fil-proofs.config.toml
-benchy*.json
