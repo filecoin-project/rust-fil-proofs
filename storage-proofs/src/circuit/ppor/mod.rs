@@ -129,6 +129,7 @@ mod tests {
     use crate::hasher::pedersen::*;
     use crate::merklepor;
     use crate::proof::ProofScheme;
+    use crate::settings;
     use crate::util::data_at_node;
     use ff::Field;
     use fil_sapling_crypto::jubjub::JubjubBls12;
@@ -137,7 +138,11 @@ mod tests {
 
     #[test]
     fn test_parallel_por_input_circuit_with_bls12_381() {
-        let params = &JubjubBls12::new();
+        let window_size = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size;
+        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 16;

@@ -378,6 +378,7 @@ mod tests {
     use crate::layered_drgporep::{self, ChallengeRequirements, LayerChallenges};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
+    use crate::settings;
 
     use ff::Field;
     use fil_sapling_crypto::jubjub::JubjubBls12;
@@ -385,7 +386,11 @@ mod tests {
 
     #[test]
     fn zigzag_drgporep_input_circuit_with_bls12_381() {
-        let params = &JubjubBls12::new();
+        let window_size = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size;
+        let params = &JubjubBls12::new_with_window_size(window_size);
         let nodes = 5;
         let degree = 1;
         let expansion_degree = 2;
@@ -514,7 +519,8 @@ mod tests {
     //
     // #[test]
     // fn zigzag_input_circuit_num_constraints_fixed() {
-    //     let params = &JubjubBls12::new();
+    //     let window_size = settings::SETTINGS.lock().unwrap().pedersen_hash_exp_window_size;
+    //     let params = &JubjubBls12::new_with_window_size(window_size);
     //     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
     //     // 1 GB
@@ -580,7 +586,11 @@ mod tests {
     }
 
     fn zigzag_test_compound<H: 'static + Hasher>() {
-        let params = &JubjubBls12::new();
+        let window_size = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size;
+        let params = &JubjubBls12::new_with_window_size(window_size);
         let nodes = 5;
         let degree = 2;
         let expansion_degree = 1;
