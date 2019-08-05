@@ -164,6 +164,8 @@ jobs:
   metrics_capture:
     docker:
       - image: filecoin/rust:latest
+    environment:
+      RUSTFLAGS: -C target-cpu=native
     working_directory: /mnt/crate
     resource_class: xlarge
     steps:
@@ -181,13 +183,13 @@ jobs:
           command: apt-get install jq -yqq
       - run:
           name: Build micro and benchy binaries
-          command: RUSTFLAGS="-C target-cpu=native" cargo build --release --all
+          command: cargo build --release --all
       - run:
           name: Capture minimal ZigZag outputs with benchy
           command: ./fil-proofs-tooling/scripts/benchy.sh zigzag --size=1 | jq '.'
       - run:
           name: Run a single micro benchmark to ensure sane output
-          command: RUSTFLAGS="-C target-cpu=native" cargo run --bin micro --release -- hash-blake2s/non-circuit | jq '.'
+          command: cargo run --bin micro --release -- hash-blake2s/non-circuit | jq '.'
 
   rustfmt:
     docker:
