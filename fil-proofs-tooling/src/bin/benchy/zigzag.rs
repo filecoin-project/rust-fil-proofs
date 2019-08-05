@@ -12,6 +12,7 @@ use memmap::MmapOptions;
 use paired::bls12_381::Bls12;
 use rand::{Rng, SeedableRng, XorShiftRng};
 
+use fil_proofs_tooling::metadata::Metadata;
 use storage_proofs::circuit::metric::MetricCS;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
@@ -477,7 +478,8 @@ struct Report {
 impl Report {
     /// Print all results to stdout
     pub fn print(&self) {
-        serde_json::to_writer(io::stdout(), &self).expect("cannot write report-JSON to stdout");
+        let wrapped = Metadata::wrap(&self).expect("failed to retrieve metadata");
+        serde_json::to_writer(io::stdout(), &wrapped).expect("cannot write report-JSON to stdout");
     }
 }
 

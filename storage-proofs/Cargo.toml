@@ -8,6 +8,9 @@ edition = "2018"
 repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
+[lib]
+bench = false
+
 [dependencies]
 bitvec = "0.5"
 rand = "0.4"
