@@ -21,6 +21,6 @@ if [[ $(env time --version 2>&1) != *"GNU"* ]]; then
     fi
 fi
 
-eval "${BIN} ${CMD}"
+eval "RUSTFLAGS=\"-Awarnings\" ${BIN} ${CMD}"
 
 jq -s '.[0] * .[1]' "${BENCHY_OUT}" "${TIME_OUT}"

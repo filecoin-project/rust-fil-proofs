@@ -7,7 +7,7 @@ cd \$(mktemp -d)
 git clone -q https://github.com/filecoin-project/rust-fil-proofs.git
 cd rust-fil-proofs
 git checkout -q master
-RUSTFLAGS="-C target-cpu=native" /root/.cargo/bin/cargo run --bin benchy --release ${@:2} 2>/dev/null
+RUSTFLAGS="-C target-cpu=native" ./fil-proofs-tooling/scripts/benchy.sh ${@:2}
 EOF
 )
 
