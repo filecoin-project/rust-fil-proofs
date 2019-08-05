@@ -21,7 +21,7 @@ struct CriterionResult {
     samples: u32,
     time_med: f64,
     time: Interval,
-    throughput: Interval,
+    throughput: Option<Interval>,
     slope: Interval,
     mean: Interval,
     median: Interval,
@@ -77,7 +77,7 @@ fn parse_criterion_out(s: impl AsRef<str>) -> Result<Vec<CriterionResult>, failu
                     samples: r.1.unwrap_or_default(),
                     time_med: r.2.unwrap_or_default(),
                     time: r.3.unwrap_or_default(),
-                    throughput: r.4.unwrap_or_default(),
+                    throughput: r.4,
                     slope: r.5.unwrap_or_default(),
                     mean: r.6.unwrap_or_default(),
                     median: r.7.unwrap_or_default(),
@@ -189,7 +189,7 @@ fn parse_criterion_out(s: impl AsRef<str>) -> Result<Vec<CriterionResult>, failu
             samples: r.1.unwrap_or_default(),
             time_med: r.2.unwrap_or_default(),
             time: r.3.unwrap_or_default(),
-            throughput: r.4.unwrap_or_default(),
+            throughput: r.4,
             slope: r.5.unwrap_or_default(),
             mean: r.6.unwrap_or_default(),
             median: r.7.unwrap_or_default(),
@@ -315,11 +315,7 @@ median [138.33 us 143.23 us] med. abs. dev. [1.7507 ms 8.4109 ms]";
                     end: 159.66,
                     unit: Some("us".to_string())
                 },
-                throughput: Interval {
-                    start: 0.0,
-                    end: 0.0,
-                    unit: None
-                },
+                throughput: None,
                 slope: Interval {
                     start: 141.11,
                     end: 159.66,
@@ -386,11 +382,11 @@ median [138.33 us 143.23 us] med. abs. dev. [1.7507 ms 8.4109 ms]";
                     end: 159.66,
                     unit: Some("us".to_string())
                 },
-                throughput: Interval {
+                throughput: Some(Interval {
                     start: 68.055,
                     end: 68.644,
                     unit: Some("MiB/s".to_string())
-                },
+                }),
                 slope: Interval {
                     start: 141.11,
                     end: 159.66,
