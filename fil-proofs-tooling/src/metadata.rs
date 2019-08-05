@@ -117,7 +117,5 @@ mod tests {
         println!("{:#?}", m);
 
         assert!(m.system.memory_total_bytes > 0);
-        assert!(m.system.processor_base_frequency_hz > 0);
-        assert!(m.system.processor_max_frequency_hz > 0);
     }
 }
