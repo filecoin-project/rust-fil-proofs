@@ -6,7 +6,9 @@ extern crate failure;
 extern crate serde;
 
 use regex::Regex;
-use std::io;
+use std::io::{self, BufRead};
+
+use fil_proofs_tooling::metadata::Metadata;
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
 struct Interval {
@@ -251,28 +253,43 @@ fn time_to_us(s: &str) -> f64 {
     (normalized * 10000.0).round() / 10000.0
 }
 
-fn run_benches(args: Vec<String>) -> Result<(), failure::Error> {
+fn run_benches(mut args: Vec<String>) -> Result<(), failure::Error> {
+    let is_verbose = if let Some(index) = args.iter().position(|a| a.as_str() == "--verbose") {
+        args.remove(index);
+        true
+    } else {
+        false
+    };
+
     let mut cmd = command!(
         r"
-        cargo bench --all --verbose --color never {args} --
+        cargo bench -p storage-proofs {args} -- --verbose --color never
     ",
         args = args
     )?;
 
-    let result = cmd.output()?;
+    let process = cmd.stdout(std::process::Stdio::piped()).spawn()?;
 
-    if !result.status.success() {
-        bail!(
-            "Exit: {} - {}",
-            result.status,
-            std::str::from_utf8(&result.stderr)?
-        );
-    }
+    let stdout = process
+        .stdout
+        .ok_or_else(|| format_err!("Failed to capture stdout"))?;
 
-    let stdout = std::str::from_utf8(&result.stdout)?;
+    let reader = std::io::BufReader::new(stdout);
+    let mut stdout = String::new();
+    reader.lines().for_each(|line| {
+        let line = line.unwrap();
+        if is_verbose {
+            println!("{}", &line);
+        }
+        stdout += &line;
+        stdout += "\n";
+    });
+
     let parsed_results = parse_criterion_out(stdout)?;
-    serde_json::to_writer(io::stdout(), &parsed_results)
-        .expect("cannot write report-JSON to stdout");
+
+    let wrapped = Metadata::wrap(parsed_results)?;
+
+    serde_json::to_writer(io::stdout(), &wrapped).expect("cannot write report-JSON to stdout");
 
     Ok(())
 }
@@ -378,10 +395,10 @@ median [138.33 us 143.23 us] med. abs. dev. [1.7507 ms 8.4109 ms]";
 Benchmarking merkletree/blake2s/128: Warming up for 3.0000 s
 Benchmarking merkletree/blake2s/128: Collecting 20 samples in estimated 5.0192 s (39060 iterations)
 Benchmarking merkletree/blake2s/128: Analyzing
-merkletree/blake2s/128  
+merkletree/blake2s/128
                     time:   [141.11 us 151.42 us 159.66 us]
                     thrpt:  [68.055 MiB/s 68.172 MiB/s 68.644 MiB/s]
-             change: 
+             change:
                     time:   [-25.163% -21.490% -17.475%] (p = 0.00 < 0.05)
                     thrpt:  [-25.163% -21.490% -17.475%] (p = 0.00 < 0.05)
                     Performance has improved.
