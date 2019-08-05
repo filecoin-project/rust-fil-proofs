@@ -22,6 +22,7 @@ use storage_proofs::parameter_cache::{
 const ERROR_PARAMETER_FILE: &str = "failed to find file in cache";
 const ERROR_PARAMETER_ID: &str = "failed to find key in manifest";
 
+const IPGET_BIN: &'static str = "/var/tmp/ipget";
 const DEFAULT_PARAMETERS: &str = include_str!("../../../parameters.json");
 
 struct FetchProgress<R> {
@@ -191,6 +192,10 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
         println!();
     }
 
+    let is_verbose = matches.is_present("verbose");
+    // Make sure we have ipget available
+    download_ipget(is_verbose)?;
+
     loop {
         println!("{} files to fetch...", filenames.len());
         println!();
@@ -200,12 +205,7 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
             print!("downloading file... ");
             io::stdout().flush().unwrap();
 
-            match fetch_parameter_file(
-                matches.is_present("verbose"),
-                &manifest,
-                &filename,
-                &gateway,
-            ) {
+            match fetch_parameter_file(is_verbose, &manifest, &filename, &gateway) {
                 Ok(_) => println!("ok\n"),
                 Err(err) => println!("error: {}\n", err),
             }
@@ -235,26 +235,34 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-fn fetch_parameter_file(
-    is_verbose: bool,
-    parameter_map: &ParameterMap,
-    filename: &str,
-    gateway: &str,
-) -> Result<()> {
-    let parameter_data = parameter_map_lookup(parameter_map, filename)?;
-    let path = get_full_path_for_file_within_cache(filename);
-
-    create_dir_all(parameter_cache_dir())?;
-
-    let mut paramfile = match File::create(&path).map_err(failure::Error::from) {
-        Err(why) => return Err(why),
-        Ok(file) => file,
+/// Download a version of ipget.
+fn download_ipget(is_verbose: bool) -> Result<()> {
+    if is_verbose {
+        println!("Downloading ipget...");
+    }
+    let version = "v0.3.1";
+    let os = if cfg!(target_os = "macos") {
+        "darwin"
+    } else if cfg!(target_os = "windows") {
+        "windows"
+    } else {
+        "linux"
     };
+    let url = Url::parse(&format!(
+        "https://dist.ipfs.io/ipget/{}/ipget_{}_{}-amd64.tar.gz",
+        version, version, os
+    ))?;
+
+    download_file(url, IPGET_BIN, is_verbose)
+}
+
+/// Download the given file.
+fn download_file(url: Url, target: impl AsRef<Path>, is_verbose: bool) -> Result<()> {
+    let mut file = File::create(target)?;
 
     let client = Client::builder()
         .proxy(Proxy::custom(move |url| env_proxy::for_url(&url).to_url()))
         .build()?;
-    let url = Url::parse(&format!("{}/ipfs/{}", gateway, parameter_data.cid))?;
     let total_size = {
         let res = client.head(url.as_str()).send()?;
         if res.status().is_success() {
@@ -278,11 +286,43 @@ fn fetch_parameter_file(
             progress_bar: pb,
         };
 
-        let _ = copy(&mut source, &mut paramfile)?;
+        let _ = copy(&mut source, &mut file)?;
     } else {
         let mut source = req.send()?;
-        let _ = copy(&mut source, &mut paramfile)?;
+        let _ = copy(&mut source, &mut file)?;
     }
+
+    Ok(())
+}
+
+fn fetch_parameter_file(
+    is_verbose: bool,
+    parameter_map: &ParameterMap,
+    filename: &str,
+    gateway: &str,
+) -> Result<()> {
+    let parameter_data = parameter_map_lookup(parameter_map, filename)?;
+    let path = get_full_path_for_file_within_cache(filename);
+
+    create_dir_all(parameter_cache_dir())?;
+
+    // let url = Url::parse(&format!("{}/ipfs/{}", gateway, parameter_data.cid))?;
+
+    download_file_with_ipget(&parameter_data.cid, path, is_verbose)
+}
+
+fn download_file_with_ipget(
+    cid: impl AsRef<str>,
+    target: impl AsRef<Path>,
+    is_verbose: bool,
+) -> Result<()> {
+    use std::process::Command;
+
+    Command::new(IPGET_BIN)
+        .arg("-o")
+        .arg(target.as_ref().to_str().unwrap())
+        .arg(cid.as_ref())
+        .spawn()?;
 
     Ok(())
 }
