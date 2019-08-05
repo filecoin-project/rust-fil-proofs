@@ -243,6 +243,7 @@ fn time_to_us(s: &str) -> f64 {
     assert_eq!(parts.len(), 2, "invalid val: {:?}", parts);
     let ts: f64 = parts[0].parse().expect("invalid number");
     let normalized = match parts[1] {
+        "ps" => ts / 1_000_000.,
         "ns" => ts / 1000.,
         "us" => ts,
         "ms" => ts * 1000.,
