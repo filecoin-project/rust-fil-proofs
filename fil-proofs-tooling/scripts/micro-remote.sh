@@ -7,7 +7,7 @@ cd \$(mktemp -d)
 git clone -q https://github.com/filecoin-project/rust-fil-proofs.git
 cd rust-fil-proofs
 git checkout -q master
-RUSTFLAGS="-Awarnings -C target-cpu=native" /root/.cargo/bin/cargo run --quiet --bin micro --release ${@:2}
+./fil-proofs-tooling/scripts/micro.sh ${@:2}
 EOF
 )
 
