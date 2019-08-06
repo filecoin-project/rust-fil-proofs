@@ -165,7 +165,7 @@ jobs:
     docker:
       - image: filecoin/rust:latest
     environment:
-      RUSTFLAGS: -C target-cpu=native
+      RUSTFLAGS: -Awarnings -C target-cpu=native
     working_directory: /mnt/crate
     resource_class: xlarge
     steps:
