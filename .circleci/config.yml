@@ -13,7 +13,7 @@ jobs:
           command: cargo generate-lockfile
       - restore_cache:
           keys:
-            - cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run: rustup install $(cat rust-toolchain)
       - run: rustup default $(cat rust-toolchain)
       - run: rustup component add rustfmt-preview
@@ -27,7 +27,7 @@ jobs:
           paths:
             - Cargo.lock
       - save_cache:
-          key: cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+          key: cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
           paths:
             - /root/.cargo
             - /root/.rustup
@@ -42,7 +42,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_cache:
           keys:
             - parameter-cache-{{ .Revision }}
@@ -72,7 +72,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (stable) in release profile
@@ -91,7 +91,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (nightly) disk-trees feature
@@ -111,7 +111,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (stable) in release profile
@@ -132,7 +132,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_cache:
           keys:
             - parameter-cache-{{ .Revision }}
@@ -152,7 +152,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_cache:
           keys:
             - parameter-cache-{{ .Revision }}
@@ -160,6 +160,36 @@ jobs:
           name: Benchmarks (nightly)
           command: cargo +$(cat rust-toolchain) build --benches --verbose --all
           no_output_timeout: 15m
+
+  metrics_capture:
+    docker:
+      - image: filecoin/rust:latest
+    environment:
+      RUSTFLAGS: -Awarnings -C target-cpu=native
+    working_directory: /mnt/crate
+    resource_class: xlarge
+    steps:
+      - checkout
+      - attach_workspace:
+          at: "."
+      - restore_cache:
+          keys:
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - restore_cache:
+          keys:
+            - parameter-cache-{{ .Revision }}
+      - run:
+          name: Install jq
+          command: apt-get install time jq -yqq
+      - run:
+          name: Build micro and benchy binaries
+          command: cargo build --release --all
+      - run:
+          name: Capture minimal ZigZag outputs with benchy
+          command: ./fil-proofs-tooling/scripts/benchy.sh zigzag --size=1 | jq '.'
+      - run:
+          name: Run a single micro benchmark to ensure sane output
+          command: cargo run --bin micro --release -- hash-blake2s/non-circuit | jq '.'
 
   rustfmt:
     docker:
@@ -172,7 +202,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
           name: Run cargo fmt
           command: cargo fmt --all -- --check
@@ -188,7 +218,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
           name: Run cargo clippy
           command: cargo clippy --all
@@ -204,7 +234,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
           name: Build (release)
           command: cargo +$(cat rust-toolchain) build --release --verbose --all
@@ -275,6 +305,9 @@ workflows:
           requires:
             - cargo_fetch
       - bench_nightly:
+          requires:
+            - cargo_fetch
+      - metrics_capture:
           requires:
             - cargo_fetch
       - build_linux_release:

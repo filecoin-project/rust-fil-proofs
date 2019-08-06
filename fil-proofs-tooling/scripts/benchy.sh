@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 
-stat ./target/release/benchy >/dev/null || { printf '%s\n' "error: missing ./target/release/benchy" >&2; exit 1; }
 which jq >/dev/null || { printf '%s\n' "error: jq" >&2; exit 1; }
 
 BENCHY_OUT=$(mktemp)
 TIME_OUT=$(mktemp)
 
-BIN="time"
-CMD="-f '{ \"outputs\": { \"maxResidentSetSizeKb\": %M } }' ./target/release/benchy ${@} > ${BENCHY_OUT} 2> ${TIME_OUT}"
+BIN="env time"
+CMD="-f '{ \"outputs\": { \"maxResidentSetSizeKb\": %M } }' cargo run --quiet --bin benchy --release -- ${@} > ${BENCHY_OUT} 2> ${TIME_OUT}"
 
 if [[ $(env time --version 2>&1) != *"GNU"* ]]; then
     if [[ $(/usr/bin/time --version 2>&1) != *"GNU"* ]]; then
@@ -22,6 +21,7 @@ if [[ $(env time --version 2>&1) != *"GNU"* ]]; then
     fi
 fi
 
-eval "${BIN} ${CMD}"
+
+eval "RUSTFLAGS=\"-Awarnings -C target-cpu=native\" ${BIN} ${CMD}"
 
 jq -s '.[0] * .[1]' "${BENCHY_OUT}" "${TIME_OUT}"

@@ -86,6 +86,21 @@ $ ./scripts/benchy.sh zigzag --size=1024 | jq '.'
 }
 ```
 
+To run benchy on a remote server, provide SSH connection information to the
+benchy-remote.sh script:
+
+```shell
+10:13 $ ./fil-proofs-tooling/scripts/benchy-remote.sh foo@16.16.16.16 zigzag --size=1 | jq '.'
+{
+  "inputs": {
+    // ...
+  },
+  "outputs": {
+    // ...
+  }
+}
+```
+
 ## `micro`
 
 All arguments passed to `micro` will be passed to `cargo bench --all <your arguments> -- --verbose --color never`.
