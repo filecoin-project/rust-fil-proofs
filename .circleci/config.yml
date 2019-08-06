@@ -169,6 +169,18 @@ jobs:
     working_directory: /mnt/crate
     resource_class: xlarge
     steps:
+      - add_ssh_keys:
+          fingerprints:
+            - "f8:db:3c:6d:f9:74:2c:9e:07:42:3f:3f:23:07:f7:6d"
+      - run:
+          name: Add benchmark server's public key to known hosts
+          command: |
+            mkdir -p ~/.ssh/
+            if [[ ! -f ~/.ssh/known_hosts ]] || ! grep "${BENCHMARK_SERVER_IP_ADDR}" ~/.ssh/known_hosts; then
+              echo "
+            ${BENCHMARK_SERVER_IP_ADDR} ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCg70UlnE+PZr/HMzK85SDSYRJrj9DfedUNaFmt4InUthB2ykANt941sVUZq3ieYGl8h2BFxXqqQu1m4Y442ohIXzEPdeu6klomCFrUeF5+X6WeDNL+VqTHNFbn10kimnw4G+sXeRk62UaxQpI7bY8oFjaohLaNalyVbD9u1eIo/X4V/8snKDY9QFJcUyWHv3HIEoxImEKGk9p0sLhdInFU44hyPbeT/I6TubHwHBSvEN3HxvxZJE4/COk9MqoIPhnu7WjZ/z35aHgroChXy69xqZ6GO3seK9xBPgoplRGIJyBgaJY35eQ84Wg+WqAq7MGuyuhsWUXT+2NTr9F4DgJ/
+              " >> ~/.ssh/known_hosts
+            fi
       - checkout
       - attach_workspace:
           at: "."
@@ -185,11 +197,13 @@ jobs:
           name: Build micro and benchy binaries
           command: cargo build --release --all
       - run:
-          name: Capture minimal ZigZag outputs with benchy
-          command: ./fil-proofs-tooling/scripts/benchy.sh zigzag --size=1 | jq '.'
+          name: Run ZigZag benchmarks on remote host with 1GiB sector size
+          command: ./fil-proofs-tooling/scripts/benchy-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" zigzag --size=$((1024*1024)) | jq '.'
+          no_output_timeout: 60m
       - run:
-          name: Run a single micro benchmark to ensure sane output
-          command: cargo run --bin micro --release -- hash-blake2s/non-circuit | jq '.'
+          name: Run micro benchmarks on remote box
+          command: ./fil-proofs-tooling/scripts/micro-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" | jq '.'
+          no_output_timeout: 60m
 
   rustfmt:
     docker:
@@ -310,6 +324,9 @@ workflows:
       - metrics_capture:
           requires:
             - cargo_fetch
+          filters:
+            branches:
+              only: master
       - build_linux_release:
           requires:
             - cargo_fetch
