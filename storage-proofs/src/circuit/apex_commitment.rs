@@ -254,6 +254,7 @@ mod tests {
     use crate::circuit::test::TestConstraintSystem;
     use crate::crypto;
     use crate::fr32::fr_into_bytes;
+    use crate::settings;
 
     fn path_from_index<E: JubjubEngine, CS: ConstraintSystem<E>>(
         cs: &mut CS,
@@ -281,7 +282,11 @@ mod tests {
     fn test_apex_commitment_circuit<T: ApexCommitment<Bls12>>() {
         let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let max_len = 8;
-        let params = JubjubBls12::new();
+        let window_size = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size;
+        let params = JubjubBls12::new_with_window_size(window_size);
 
         for n in 1..max_len {
             let size = 1 << n;

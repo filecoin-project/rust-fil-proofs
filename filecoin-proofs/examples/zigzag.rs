@@ -34,6 +34,7 @@ use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher
 use storage_proofs::layered_drgporep::{self, ChallengeRequirements, LayerChallenges};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
+use storage_proofs::settings;
 use storage_proofs::zigzag_drgporep::*;
 
 // We can only one of the profilers at a time, either CPU (`profile`)
@@ -283,7 +284,11 @@ fn do_the_work<H: 'static>(
     };
 
     if circuit || groth || bench {
-        let engine_params = JubjubBls12::new();
+        let window_size = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size;
+        let engine_params = JubjubBls12::new_with_window_size(window_size);
         let compound_public_params = compound_proof::PublicParams {
             vanilla_params: pp.clone(),
             engine_params: &engine_params,
