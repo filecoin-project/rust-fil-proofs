@@ -194,9 +194,6 @@ jobs:
           name: Install jq
           command: apt-get install time jq -yqq
       - run:
-          name: Build micro and benchy binaries
-          command: cargo build --release --all
-      - run:
           name: Run micro benchmarks on remote box
           command: ./fil-proofs-tooling/scripts/micro-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" | jq '.'
           no_output_timeout: 60m
