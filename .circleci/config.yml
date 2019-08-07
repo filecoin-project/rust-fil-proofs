@@ -194,11 +194,15 @@ jobs:
           name: Install jq
           command: apt-get install time jq -yqq
       - run:
-          name: Run micro benchmarks on remote box
+          name: Run hash-constraints benchmarks on remote host
+          command: ./fil-proofs-tooling/scripts/benchy-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" hash-circuits | jq '.'
+          no_output_timeout: 60m
+      - run:
+          name: Run micro benchmarks
           command: ./fil-proofs-tooling/scripts/micro-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" | jq '.'
           no_output_timeout: 60m
       - run:
-          name: Run ZigZag benchmarks on remote host with 1GiB sector size
+          name: Run ZigZag benchmarks using 1GiB sectors
           command: ./fil-proofs-tooling/scripts/benchy-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" zigzag --size=$((1024*1024)) | jq '.'
           no_output_timeout: 60m
 
