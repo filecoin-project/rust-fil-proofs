@@ -9,7 +9,7 @@ then
     echo >&2 "successfully acquired lock (${lockdir})"
 
     # Unlock (by removing dir) when the script finishes
-    trap 'rm -rf "$lockdir"' 0
+    trap 'rm -rf "$lockdir"' EXIT
 
     eval "${@:3}"
 else
