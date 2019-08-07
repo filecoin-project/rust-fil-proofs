@@ -13,4 +13,4 @@ git checkout -q master
 EOF
 )
 
-ssh -q $1 "$CMDS"
+ssh -t -q $1 "$CMDS"
