@@ -178,7 +178,7 @@ jobs:
             mkdir -p ~/.ssh/
             if [[ ! -f ~/.ssh/known_hosts ]] || ! grep "${BENCHMARK_SERVER_IP_ADDR}" ~/.ssh/known_hosts; then
               echo "
-            ${BENCHMARK_SERVER_IP_ADDR} ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDEP/RGRFukUX+dinqUMNdBQmLXJW14ix5tJOrGrT2bzT2nlkh3NcoSmAElA3yWIKXfzYuNa9pTcXWSbLA+y5AxEMGvYmOA6n23ZG0xL9qKMIeUb4ww6zNGcXQuj76n8mpkl9uzEUAesxgk8rMDhPr+lRmG5nPZjmJSgo2G1FnQDnPyRKoLOg6IpnqYIrf86e277DOVGzmHR/HTuWV3Y1FxzgGSWA/vL1PbaJVzrv/GEFQIsWL8PzqJjXQVy0U+MqklP/J9u84Cro7jnKizXLvNF5fvPI3G7RU/B/IZlUsrqy5reRlk837/kUrZwtOc8E+ys8lBmn9qzWn3jOykhSy/
+            ${BENCHMARK_SERVER_RSA_FINGERPRINT}
               " >> ~/.ssh/known_hosts
             fi
       - checkout
@@ -197,12 +197,12 @@ jobs:
           name: Build micro and benchy binaries
           command: cargo build --release --all
       - run:
-          name: Run ZigZag benchmarks on remote host with 1GiB sector size
-          command: ./fil-proofs-tooling/scripts/benchy-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" zigzag --size=$((1024*1024)) | jq '.'
-          no_output_timeout: 60m
-      - run:
           name: Run micro benchmarks on remote box
           command: ./fil-proofs-tooling/scripts/micro-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" | jq '.'
+          no_output_timeout: 60m
+      - run:
+          name: Run ZigZag benchmarks on remote host with 1GiB sector size
+          command: ./fil-proofs-tooling/scripts/benchy-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" zigzag --size=$((1024*1024)) | jq '.'
           no_output_timeout: 60m
 
   rustfmt:
