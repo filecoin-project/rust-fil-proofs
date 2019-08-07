@@ -3,13 +3,14 @@ use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
 use crate::crypto::feistel::{self, FeistelPrecomputed};
-use crate::drgraph::{BucketGraph, Graph};
+use crate::drgraph::{BucketGraph, Graph, BASE_DEGREE};
 use crate::hasher::Hasher;
 use crate::layered_drgporep::Layerable;
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::settings;
 
-pub const DEFAULT_EXPANSION_DEGREE: usize = 8;
+/// The expansion degree used for ZigZag Graphs.
+pub const EXP_DEGREE: usize = 8;
 
 // Cache of node's parents.
 pub type ParentCache = HashMap<usize, Vec<usize>>;
@@ -70,6 +71,11 @@ where
         expansion_degree: usize,
         seed: [u32; 7],
     ) -> Self {
+        if !cfg!(feature = "unchecked-degrees") {
+            assert_eq!(base_degree, BASE_DEGREE);
+            assert_eq!(expansion_degree, EXP_DEGREE);
+        }
+
         let cache_entries = if settings::SETTINGS.lock().unwrap().maximize_caching {
             info!("using parents cache of unlimited size",);
             nodes
@@ -421,7 +427,7 @@ mod tests {
 
     use std::collections::{HashMap, HashSet};
 
-    use crate::drgraph::new_seed;
+    use crate::drgraph::{new_seed, BASE_DEGREE};
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
 
     fn assert_graph_ascending<H: Hasher, G: Graph<H>>(g: G) {
@@ -468,7 +474,7 @@ mod tests {
     }
 
     fn test_zigzag_graph_zigzags<H: 'static + Hasher>() {
-        let g = ZigZagBucketGraph::<H>::new_zigzag(50, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
+        let g = ZigZagBucketGraph::<H>::new_zigzag(50, BASE_DEGREE, EXP_DEGREE, new_seed());
         let gz = g.zigzag();
 
         assert_graph_ascending(g);
@@ -492,7 +498,7 @@ mod tests {
 
     fn test_expansion<H: 'static + Hasher>() {
         // We need a graph.
-        let g = ZigZagBucketGraph::<H>::new_zigzag(25, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
+        let g = ZigZagBucketGraph::<H>::new_zigzag(25, BASE_DEGREE, EXP_DEGREE, new_seed());
 
         // We're going to fully realize the expansion-graph component, in a HashMap.
         let gcache = get_all_expanded_parents(&g);
@@ -552,7 +558,7 @@ mod tests {
     #[test]
     fn test_shuffle() {
         let n = 2_u64.pow(10);
-        let d = DEFAULT_EXPANSION_DEGREE as u64;
+        let d = EXP_DEGREE as u64;
         // Use a relatively small value of `n` as Feistel is expensive (but big
         // enough that `n >> d`).
 

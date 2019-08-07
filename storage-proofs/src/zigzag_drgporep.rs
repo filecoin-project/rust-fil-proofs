@@ -51,7 +51,7 @@ mod tests {
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     use crate::drgporep;
-    use crate::drgraph::new_seed;
+    use crate::drgraph::{new_seed, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
     use crate::layered_drgporep::{
@@ -59,6 +59,7 @@ mod tests {
     };
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
+    use crate::zigzag_graph::EXP_DEGREE;
 
     const DEFAULT_ZIGZAG_LAYERS: usize = 10;
 
@@ -89,8 +90,8 @@ mod tests {
         let sp = SetupParams {
             drg: drgporep::DrgParams {
                 nodes: data.len() / 32,
-                degree: 5,
-                expansion_degree: 8,
+                degree: BASE_DEGREE,
+                expansion_degree: EXP_DEGREE,
                 seed: new_seed(),
             },
             layer_challenges: challenges.clone(),
@@ -120,27 +121,27 @@ mod tests {
         assert_eq!(data, decoded_data);
     }
 
-    fn prove_verify_fixed(n: usize, i: usize) {
+    fn prove_verify_fixed(n: usize) {
         let challenges = LayerChallenges::new_fixed(DEFAULT_ZIGZAG_LAYERS, 5);
 
-        test_prove_verify::<PedersenHasher>(n, i, challenges.clone());
-        test_prove_verify::<Sha256Hasher>(n, i, challenges.clone());
-        test_prove_verify::<Blake2sHasher>(n, i, challenges.clone());
+        test_prove_verify::<PedersenHasher>(n, challenges.clone());
+        test_prove_verify::<Sha256Hasher>(n, challenges.clone());
+        test_prove_verify::<Blake2sHasher>(n, challenges.clone());
     }
 
-    fn prove_verify_tapered(n: usize, i: usize) {
+    fn prove_verify_tapered(n: usize) {
         let challenges = LayerChallenges::new_tapered(5, 10, 5, 0.9);
 
-        test_prove_verify::<PedersenHasher>(n, i, challenges.clone());
-        test_prove_verify::<Sha256Hasher>(n, i, challenges.clone());
-        test_prove_verify::<Blake2sHasher>(n, i, challenges.clone());
+        test_prove_verify::<PedersenHasher>(n, challenges.clone());
+        test_prove_verify::<Sha256Hasher>(n, challenges.clone());
+        test_prove_verify::<Blake2sHasher>(n, challenges.clone());
     }
 
-    fn test_prove_verify<H: 'static + Hasher>(n: usize, i: usize, challenges: LayerChallenges) {
+    fn test_prove_verify<H: 'static + Hasher>(n: usize, challenges: LayerChallenges) {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let degree = 1 + i;
-        let expansion_degree = i;
+        let degree = BASE_DEGREE;
+        let expansion_degree = EXP_DEGREE;
         let replica_id: H::Domain = rng.gen();
         let data: Vec<u8> = (0..n)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
@@ -199,16 +200,12 @@ mod tests {
             // prove_verify_32_3_1(32, 3, 1);
             // prove_verify_32_3_2(32, 3, 2);
 
-           prove_verify_fixed_32_5_1(5, 1);
-           prove_verify_fixed_32_5_2(5, 2);
-           prove_verify_fixed_32_5_3(5, 3);
+           prove_verify_fixed_32_5(5);
         }
     }
     table_tests! {
         prove_verify_tapered{
-            prove_verify_tapered_32_5_1(5, 1);
-            prove_verify_tapered_32_5_2(5, 2);
-            prove_verify_tapered_32_5_3(5, 3);
+            prove_verify_tapered_32_5(5);
         }
     }
 
@@ -216,8 +213,8 @@ mod tests {
     // We are seeing a bug, in which setup never terminates for some sector sizes.
     // This test is to debug that and should remain as a regression teset.
     fn setup_terminates() {
-        let degree = 5;
-        let expansion_degree = 8;
+        let degree = BASE_DEGREE;
+        let expansion_degree = EXP_DEGREE;
         let nodes = 1024 * 1024 * 32 * 8; // This corresponds to 8GiB sectors (32-byte nodes)
         let layer_challenges = LayerChallenges::new_tapered(10, 333, 7, 0.3);
         let sp = SetupParams {
