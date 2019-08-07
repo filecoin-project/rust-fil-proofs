@@ -6,7 +6,7 @@ BENCHY_OUT=$(mktemp)
 TIME_OUT=$(mktemp)
 
 BIN="env time"
-CMD="-f '{ \"outputs\": { \"maxResidentSetSizeKb\": %M } }' cargo run --quiet --bin benchy --release -- ${@} > ${BENCHY_OUT} 2> ${TIME_OUT}"
+CMD="-f '{ \"outputs\": { \"max-resident-set-size-kb\": %M } }' cargo run --quiet --bin benchy --release -- ${@} > ${BENCHY_OUT} 2> ${TIME_OUT}"
 
 if [[ $(env time --version 2>&1) != *"GNU"* ]]; then
     if [[ $(/usr/bin/time --version 2>&1) != *"GNU"* ]]; then
