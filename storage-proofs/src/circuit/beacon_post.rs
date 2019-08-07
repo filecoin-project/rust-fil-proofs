@@ -132,12 +132,17 @@ mod tests {
     use crate::drgraph::{new_seed, BucketGraph, Graph};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::pedersen::*;
+    use crate::settings;
     use crate::vdf_post::{self, compute_root_commitment};
     use crate::vdf_sloth;
 
     #[test]
     fn test_beacon_post_circuit_with_bls12_381() {
-        let params = &JubjubBls12::new();
+        let window_size = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size;
+        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let lambda = 32;

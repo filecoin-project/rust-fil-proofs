@@ -17,6 +17,7 @@ pub struct Settings {
     pub num_proving_threads: usize,
     pub replicated_trees_dir: String,
     pub generate_merkle_trees_in_parallel: bool,
+    pub pedersen_hash_exp_window_size: u32,
     // Generating MTs in parallel optimizes for speed while generating them
     // in sequence (`false`) optimizes for memory.
 }
@@ -29,6 +30,7 @@ impl Default for Settings {
             num_proving_threads: 1,
             replicated_trees_dir: "".into(),
             generate_merkle_trees_in_parallel: true,
+            pedersen_hash_exp_window_size: 16,
         }
     }
 }

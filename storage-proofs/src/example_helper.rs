@@ -13,6 +13,7 @@ use rand::{Rng, SeedableRng, XorShiftRng};
 
 use crate::circuit::bench::BenchCS;
 use crate::circuit::test::TestConstraintSystem;
+use crate::settings;
 
 pub fn prettyb(num: usize) -> String {
     let num = num as f64;
@@ -55,7 +56,12 @@ pub enum CSType {
 }
 
 lazy_static! {
-    static ref JUBJUB_BLS_PARAMS: JubjubBls12 = JubjubBls12::new();
+    static ref JUBJUB_BLS_PARAMS: JubjubBls12 = JubjubBls12::new_with_window_size(
+        settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size
+    );
 }
 
 /// A trait that makes it easy to implement "Examples". These are really tunable benchmarking CLI tools.

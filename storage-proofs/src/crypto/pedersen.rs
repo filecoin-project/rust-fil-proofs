@@ -5,9 +5,15 @@ use fil_sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 
 use crate::fr32::bytes_into_frs;
+use crate::settings;
 
 lazy_static! {
-    pub static ref JJ_PARAMS: JubjubBls12 = JubjubBls12::new();
+    pub static ref JJ_PARAMS: JubjubBls12 = JubjubBls12::new_with_window_size(
+        settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size
+    );
 }
 
 pub const PEDERSEN_BLOCK_SIZE: usize = 256;
