@@ -4,6 +4,8 @@
 
 failure_code=$1
 lockdir=$2
+shift 2
+
 if mkdir "$lockdir" > /dev/null 2>&1
 then
     echo >&2 "successfully acquired lock (${lockdir})"
@@ -11,7 +13,8 @@ then
     # Unlock (by removing dir) when the script finishes
     trap 'echo >&2 "relinquishing lock (${lockdir})"; rm -rf "$lockdir"' EXIT
 
-    eval "${@:3}"
+    # Execute command
+    "$@"
 else
     echo >&2 "failed to acquire lock (${lockdir})"
     exit $failure_code

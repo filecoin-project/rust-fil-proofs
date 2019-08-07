@@ -23,6 +23,7 @@ exit_code=$1
 attempts=$2
 sleep_millis=$3
 shift 3
+
 for attempt in `seq 1 $attempts`; do
     # This weird construction lets us capture return codes under -o errexit
     "$@" && rc=$? || rc=$?
