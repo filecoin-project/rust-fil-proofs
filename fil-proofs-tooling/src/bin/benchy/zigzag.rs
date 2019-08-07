@@ -430,7 +430,7 @@ fn do_circuit_work<H: 'static + Hasher>(
 }
 
 #[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "kebab-case")]
 struct Inputs {
     sector_size: usize,
     base_degree: usize,
@@ -444,7 +444,7 @@ struct Inputs {
 }
 
 #[derive(Serialize, Default)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "kebab-case")]
 struct Outputs {
     avg_groth_verifying_cpu_time_ms: Option<u64>,
     avg_groth_verifying_wall_time_ms: Option<u64>,
@@ -469,7 +469,7 @@ struct Outputs {
 }
 
 #[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "kebab-case")]
 struct Report {
     inputs: Inputs,
     outputs: Outputs,

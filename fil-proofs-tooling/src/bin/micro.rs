@@ -11,6 +11,7 @@ use std::io::{self, BufRead};
 use fil_proofs_tooling::metadata::Metadata;
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
 struct Interval {
     start: f64,
     end: f64,
@@ -18,12 +19,14 @@ struct Interval {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
 struct Point {
     value: f64,
     unit: Option<String>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
 struct CriterionResult {
     name: String,
     samples: u32,

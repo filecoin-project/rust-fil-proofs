@@ -5,6 +5,7 @@ use serde::Serialize;
 
 /// Captures metadata about the current setup.
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct Metadata<T> {
     git: GitMetadata,
     system: SystemMetadata,
@@ -23,6 +24,7 @@ impl<T> Metadata<T> {
 
 /// Captures git specific metadata about the current repo.
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct GitMetadata {
     hash: String,
     date: DateTime<Utc>,
@@ -44,6 +46,7 @@ impl GitMetadata {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct SystemMetadata {
     system: String,
     release: String,
