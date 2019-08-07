@@ -178,7 +178,7 @@ jobs:
             mkdir -p ~/.ssh/
             if [[ ! -f ~/.ssh/known_hosts ]] || ! grep "${BENCHMARK_SERVER_IP_ADDR}" ~/.ssh/known_hosts; then
               echo "
-            ${BENCHMARK_SERVER_IP_ADDR} ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCg70UlnE+PZr/HMzK85SDSYRJrj9DfedUNaFmt4InUthB2ykANt941sVUZq3ieYGl8h2BFxXqqQu1m4Y442ohIXzEPdeu6klomCFrUeF5+X6WeDNL+VqTHNFbn10kimnw4G+sXeRk62UaxQpI7bY8oFjaohLaNalyVbD9u1eIo/X4V/8snKDY9QFJcUyWHv3HIEoxImEKGk9p0sLhdInFU44hyPbeT/I6TubHwHBSvEN3HxvxZJE4/COk9MqoIPhnu7WjZ/z35aHgroChXy69xqZ6GO3seK9xBPgoplRGIJyBgaJY35eQ84Wg+WqAq7MGuyuhsWUXT+2NTr9F4DgJ/
+            ${BENCHMARK_SERVER_IP_ADDR} ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDEP/RGRFukUX+dinqUMNdBQmLXJW14ix5tJOrGrT2bzT2nlkh3NcoSmAElA3yWIKXfzYuNa9pTcXWSbLA+y5AxEMGvYmOA6n23ZG0xL9qKMIeUb4ww6zNGcXQuj76n8mpkl9uzEUAesxgk8rMDhPr+lRmG5nPZjmJSgo2G1FnQDnPyRKoLOg6IpnqYIrf86e277DOVGzmHR/HTuWV3Y1FxzgGSWA/vL1PbaJVzrv/GEFQIsWL8PzqJjXQVy0U+MqklP/J9u84Cro7jnKizXLvNF5fvPI3G7RU/B/IZlUsrqy5reRlk837/kUrZwtOc8E+ys8lBmn9qzWn3jOykhSy/
               " >> ~/.ssh/known_hosts
             fi
       - checkout
