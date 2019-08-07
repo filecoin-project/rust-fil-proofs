@@ -323,7 +323,7 @@ workflows:
             - cargo_fetch
           filters:
             branches:
-              only: feat/786-run-benchmarks-on-master-build
+              only: master
       - build_linux_release:
           requires:
             - cargo_fetch
