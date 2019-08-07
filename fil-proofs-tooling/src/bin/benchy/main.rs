@@ -3,13 +3,11 @@ extern crate serde;
 
 use clap::{value_t, App, Arg, SubCommand};
 
+mod hash_fns;
 mod zigzag;
 
 fn main() {
-    let matches = App::new("benchy")
-        .version("0.1")
-        .subcommand(
-            SubCommand::with_name("zigzag")
+    let zigzag_cmd = SubCommand::with_name("zigzag")
                 .about("Run zigzag sealing")
                 .arg(
                     Arg::with_name("size")
@@ -112,7 +110,16 @@ fn main() {
                         .long("taper-layers")
                         .help("number of layers to taper")
                         .takes_value(true)
-                )).get_matches();
+                );
+
+    let hash_cmd =
+        SubCommand::with_name("hash-circuits").about("Benchmark hash function inside of a circuit");
+
+    let matches = App::new("benchy")
+        .version("0.1")
+        .subcommand(zigzag_cmd)
+        .subcommand(hash_cmd)
+        .get_matches();
 
     match matches.subcommand() {
         ("zigzag", Some(m)) => {
@@ -141,6 +148,9 @@ fn main() {
                     })
                 })
                 .expect("zigzag failed");
+        }
+        ("hash-circuits", Some(_m)) => {
+            hash_fns::run().expect("hash-circuits failed");
         }
         _ => panic!("carnation"),
     }
