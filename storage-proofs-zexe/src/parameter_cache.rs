@@ -18,7 +18,8 @@ use std::time::Instant;
 use crate::SP_LOG;
 
 /// Bump this when circuits change to invalidate the cache.
-pub const VERSION: usize = 10;
+/// Using cache versions starting at 100 for zexe cache.
+pub const VERSION: usize = 100;
 
 pub const PARAMETER_CACHE_DIR: &str = "/tmp/filecoin-proof-parameters/";
 
