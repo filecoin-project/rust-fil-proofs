@@ -9,11 +9,9 @@ use snark_gadgets::fields::FieldGadget;
 /// a == b
 pub fn equal<E: Engine, A, AR, CS: ConstraintSystem<E>>(
     cs: &mut CS,
-    annotation: A,
+    _annotation: A,
     a: &FpGadget<E>,
     b: &FpGadget<E>
-//    a: &num::AllocatedNum<E>,
-//    b: &num::AllocatedNum<E>,
 ) where
     A: FnOnce() -> AR,
     AR: Into<String>,
@@ -28,7 +26,7 @@ pub fn equal<E: Engine, A, AR, CS: ConstraintSystem<E>>(
 /// a - b = difference
 pub fn difference<E: Engine, A, AR, CS: ConstraintSystem<E>>(
     cs: &mut CS,
-    annotation: A,
+    _annotation: A,
     a: &FpGadget<E>,
     b: &FpGadget<E>,
     difference: &FpGadget<E>

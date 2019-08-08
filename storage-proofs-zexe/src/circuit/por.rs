@@ -1,10 +1,9 @@
 use std::marker::PhantomData;
 
-use algebra::PairingEngine as Engine;
 use algebra::fields::bls12_381::Fr;
 use algebra::curves::{bls12_381::Bls12_381 as Bls12, jubjub::JubJubProjective as JubJub};
 use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
-use snark::{Circuit, ConstraintSystem, SynthesisError, LinearCombination, Index, Variable};
+use snark::{Circuit, ConstraintSystem, SynthesisError};
 use snark_gadgets::{boolean, fields::fp::FpGadget, utils::{AllocGadget, CondReverseGadget, ToBitsGadget}};
 
 use crate::circuit::{constraint, multipack, variables::Root};

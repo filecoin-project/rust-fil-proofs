@@ -1,10 +1,6 @@
 use blake2s_simd::Params as Blake2s;
 
-use algebra::{
-    AffineCurve as CurveAffine, Field, PairingEngine as Engine, PrimeField,
-    ProjectiveCurve as CurveProjective,
-};
-
+use algebra::PrimeField;
 use algebra::fields::bls12_381::Fr;
 
 use crate::fr32::bytes_into_fr_repr_safe;

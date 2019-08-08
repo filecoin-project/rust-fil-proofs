@@ -2,10 +2,8 @@ use std::ops::SubAssign;
 
 use algebra::curves::bls12_381::Bls12_381 as Bls12;
 use algebra::fields::bls12_381::Fr;
-use algebra::PairingEngine as Engine;
 use snark::{ConstraintSystem, SynthesisError};
-use snark_gadgets::fields::fp::FpGadget;
-use snark_gadgets::fields::FieldGadget;
+use snark_gadgets::fields::{fp::FpGadget, FieldGadget};
 use snark_gadgets::utils::AllocGadget;
 
 use crate::circuit::constraint;

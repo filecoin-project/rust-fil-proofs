@@ -1,13 +1,11 @@
 use algebra::curves::bls12_381::Bls12_381 as Bls12;
-use algebra::PairingEngine as Engine;
+use dpc::gadgets::prf::blake2s::blake2s_gadget;
 use snark::{ConstraintSystem, SynthesisError};
 use snark_gadgets::boolean::Boolean;
 use snark_gadgets::fields::fp::FpGadget;
-use snark_gadgets::fields::FieldGadget;
 use snark_gadgets::utils::AllocGadget;
 
 use crate::circuit::multipack;
-use dpc::gadgets::prf::blake2s::blake2s_gadget;
 
 /// Key derivation function, using pedersen hashes as the underlying primitive.
 pub fn kdf<CS>(

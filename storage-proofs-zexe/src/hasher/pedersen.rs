@@ -22,10 +22,9 @@ use snark_gadgets::utils::AllocGadget;
 use dpc::{
     crypto_primitives::crh::{
         pedersen::{PedersenCRH, PedersenParameters},
-        FixedLengthCRH,
     },
     gadgets::crh::{
-        pedersen::PedersenCRHGadget, pedersen::PedersenCRHGadgetParameters, FixedLengthCRHGadget,
+        pedersen::PedersenCRHGadget, FixedLengthCRHGadget,
     },
 };
 
@@ -37,7 +36,6 @@ use crate::crypto::pedersen::{pedersen_hash, Personalization, BigWindow};
 use crate::crypto::{kdf, pedersen, sloth};
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::circuit::pedersen::pedersen_compression_num;
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PedersenHasher {}
@@ -238,7 +236,7 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
             )
                 .unwrap();
 
-        let mut personalization = Personalization::MerkleTree(height)
+        let personalization = Personalization::MerkleTree(height)
             .get_bits()
             .into_iter()
             .map(|v| Boolean::Constant(v))

@@ -1,23 +1,19 @@
 use algebra::PairingEngine as Engine;
-use algebra::fields::bls12_381::Fr;
-use algebra::fields::FpParameters;
 use algebra::curves::{bls12_381::Bls12_381 as Bls12};
+use algebra::fields::{bls12_381::Fr, FpParameters, PrimeField};
 use snark::{Circuit, ConstraintSystem, SynthesisError};
-use snark_gadgets::boolean::{self, Boolean};
+use snark_gadgets::boolean::Boolean;
 use snark_gadgets::{fields::fp::FpGadget, utils::{AllocGadget, ToBitsGadget}};
 
-use crate::circuit::{constraint, multipack};
-use crate::circuit::kdf::kdf;
-use crate::circuit::sloth;
-use crate::circuit::variables::Root;
+use crate::circuit::{constraint, multipack, kdf::kdf, por::{PoRCircuit, PoRCompound}, sloth, variables::Root};
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::drgporep::DrgPoRep;
 use crate::drgraph::Graph;
 use crate::fr32::fr_into_bytes;
+use crate::hasher::{Domain, Hasher};
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
 use crate::proof::ProofScheme;
-use crate::singletons::PEDERSEN_PARAMS;
 use crate::util::{bytes_into_bits, bytes_into_boolean_vec};
 use std::marker::PhantomData;
 
@@ -50,10 +46,6 @@ use std::marker::PhantomData;
 //    "drg-proof-of-replication",
 //    false
 //);
-use crate::circuit::por::{PoRCircuit, PoRCompound};
-use crate::hasher::{Domain, Hasher};
-use algebra::fields::PrimeField;
-use snark_gadgets::bits::boolean::AllocatedBit;
 
 pub struct DrgPoRepCircuit<H: Hasher> {
     sloth_iter: usize,
