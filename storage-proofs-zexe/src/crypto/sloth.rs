@@ -1,4 +1,4 @@
-use algebra::{ Field, PairingEngine as Engine };
+use algebra::{Field, PairingEngine as Engine};
 use std::ops::AddAssign;
 use std::ops::SubAssign;
 
@@ -64,6 +64,7 @@ mod tests {
     use algebra::biginteger::BigInteger256 as FrRepr;
     use algebra::curves::bls12_381::Bls12_381 as Bls12;
     use algebra::fields::bls12_381::Fr;
+    use algebra::fields::{Field, PrimeField};
     use std::str::FromStr;
 
     // the modulus from `bls12_381::Fr`

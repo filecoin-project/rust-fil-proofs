@@ -10,8 +10,8 @@ use algebra::{
     bytes::{FromBytes, ToBytes},
     PairingEngine as Engine,
 };
-use snark::{groth16, Circuit};
 use rand::OsRng;
+use snark::{groth16, Circuit};
 
 pub struct SetupParams<'a, 'b: 'a, S: ProofScheme<'a>>
 where
@@ -48,8 +48,7 @@ where
     Self: CacheableParameters<E, C, S::PublicParams>,
 {
     // setup is equivalent to ProofScheme::setup.
-    fn setup<'b>(sp: &SetupParams<'a, 'b, S>) -> Result<PublicParams<'a, S>>
-    {
+    fn setup<'b>(sp: &SetupParams<'a, 'b, S>) -> Result<PublicParams<'a, S>> {
         Ok(PublicParams {
             vanilla_params: S::setup(sp.vanilla_params)?,
             partitions: sp.partitions,
@@ -70,8 +69,7 @@ where
         pub_in: &'b S::PublicInputs,
         priv_in: &'b S::PrivateInputs,
         groth_params: &'b groth16::Parameters<E>,
-    ) -> Result<MultiProof<'b, E>>
-    {
+    ) -> Result<MultiProof<'b, E>> {
         let partitions = Self::partition_count(pub_params);
         let partition_count = Self::partition_count(pub_params);
 
@@ -159,7 +157,7 @@ where
                 &pub_in,
                 C::ComponentPrivateInputs::default(),
                 &vanilla_proof,
-                &pub_params
+                &pub_params,
             )
         };
 
@@ -194,18 +192,11 @@ where
 
     fn blank_circuit(public_params: &S::PublicParams) -> C;
 
-    fn groth_params(
-        public_params: &S::PublicParams,
-    ) -> Result<groth16::Parameters<E>> {
-        Self::get_groth_params(
-            Self::blank_circuit(public_params),
-            public_params,
-        )
+    fn groth_params(public_params: &S::PublicParams) -> Result<groth16::Parameters<E>> {
+        Self::get_groth_params(Self::blank_circuit(public_params), public_params)
     }
 
-    fn verifying_key(
-        public_params: &S::PublicParams,
-    ) -> Result<groth16::VerifyingKey<E>> {
+    fn verifying_key(public_params: &S::PublicParams) -> Result<groth16::VerifyingKey<E>> {
         Self::get_verifying_key(Self::blank_circuit(public_params), public_params)
     }
 
@@ -242,7 +233,7 @@ where
             &partition_pub_in,
             C::ComponentPrivateInputs::default(),
             &vanilla_proofs[0],
-            vanilla_params
+            vanilla_params,
         );
 
         (circuit, inputs)

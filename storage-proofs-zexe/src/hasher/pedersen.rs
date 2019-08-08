@@ -20,19 +20,15 @@ use snark_gadgets::groups::curves::twisted_edwards::jubjub::JubJubGadget;
 use snark_gadgets::utils::AllocGadget;
 
 use dpc::{
-    crypto_primitives::crh::{
-        pedersen::{PedersenCRH, PedersenParameters},
-    },
-    gadgets::crh::{
-        pedersen::PedersenCRHGadget, FixedLengthCRHGadget,
-    },
+    crypto_primitives::crh::pedersen::{PedersenCRH, PedersenParameters},
+    gadgets::crh::{pedersen::PedersenCRHGadget, FixedLengthCRHGadget},
 };
 
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
 
 use crate::circuit::pedersen::pedersen_md_no_padding;
-use crate::crypto::pedersen::{pedersen_hash, Personalization, BigWindow};
+use crate::crypto::pedersen::{pedersen_hash, BigWindow, Personalization};
 use crate::crypto::{kdf, pedersen, sloth};
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
@@ -234,7 +230,7 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
                 &mut cs.ns(|| "gadget_parameters"),
                 || Ok(params),
             )
-                .unwrap();
+            .unwrap();
 
         let personalization = Personalization::MerkleTree(height)
             .get_bits()
@@ -257,11 +253,13 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
             .map(|v| UInt8::from_bits_le(v))
             .collect::<Vec<UInt8>>();
 
-        let gadget_result = <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::check_evaluation_gadget(
-            &mut cs.ns(|| "gadget_evaluation"),
-            &gadget_parameters,
-            &input_bytes,
-        ).unwrap();
+        let gadget_result =
+            <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::check_evaluation_gadget(
+                &mut cs.ns(|| "gadget_evaluation"),
+                &gadget_parameters,
+                &input_bytes,
+            )
+            .unwrap();
 
         Ok(gadget_result.x)
     }
@@ -307,7 +305,10 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
                     .take(<Fr as PrimeField>::Params::MODULUS_BITS as usize),
             );
 
-        pedersen_hash::<_>(Personalization::MerkleTree(height), bits).into_affine().x.into()
+        pedersen_hash::<_>(Personalization::MerkleTree(height), bits)
+            .into_affine()
+            .x
+            .into()
     }
 }
 

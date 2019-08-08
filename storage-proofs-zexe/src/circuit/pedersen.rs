@@ -3,9 +3,7 @@ use algebra::curves::jubjub::JubJubProjective as JubJub;
 
 use dpc::{
     crypto_primitives::crh::{pedersen::PedersenCRH, pedersen::PedersenParameters},
-    gadgets::crh::{
-        pedersen::PedersenCRHGadget, FixedLengthCRHGadget,
-    },
+    gadgets::crh::{pedersen::PedersenCRHGadget, FixedLengthCRHGadget},
 };
 use snark::{ConstraintSystem, SynthesisError};
 use snark_gadgets::bits::{boolean::Boolean, uint8::UInt8};
@@ -13,10 +11,8 @@ use snark_gadgets::fields::fp::FpGadget;
 use snark_gadgets::groups::curves::twisted_edwards::jubjub::JubJubGadget;
 use snark_gadgets::utils::{AllocGadget, ToBitsGadget};
 
-
-use crate::crypto::pedersen::{BigWindow, PEDERSEN_BLOCK_SIZE};
 use crate::crypto::pedersen::Personalization;
-
+use crate::crypto::pedersen::{BigWindow, PEDERSEN_BLOCK_SIZE};
 
 type CRHGadget = PedersenCRHGadget<JubJub, Bls12, JubJubGadget>;
 type CRH = PedersenCRH<JubJub, BigWindow>;
@@ -64,7 +60,6 @@ pub fn pedersen_compression_num<CS: ConstraintSystem<Bls12>>(
     bits: &[Boolean],
     params: &PedersenParameters<JubJub>,
 ) -> Result<FpGadget<Bls12>, SynthesisError> {
-
     let gadget_parameters =
         <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::ParametersGadget::alloc(
             &mut cs.ns(|| "gadget_parameters"),
@@ -133,8 +128,8 @@ mod tests {
 
     use crate::circuit::test::TestConstraintSystem;
     use crate::crypto;
-    use crate::util::bytes_into_boolean_vec;
     use crate::singletons::PEDERSEN_PARAMS;
+    use crate::util::bytes_into_boolean_vec;
 
     #[test]
     fn test_pedersen_input_circuit() {
@@ -149,11 +144,12 @@ mod tests {
                 bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).unwrap()
             };
 
-            let out =
-                pedersen_md_no_padding(cs.ns(|| "pedersen"),
-                                         data_bits.as_slice(),
-                                         &PEDERSEN_PARAMS)
-                    .expect("pedersen hashing failed");
+            let out = pedersen_md_no_padding(
+                cs.ns(|| "pedersen"),
+                data_bits.as_slice(),
+                &PEDERSEN_PARAMS,
+            )
+            .expect("pedersen hashing failed");
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
 
