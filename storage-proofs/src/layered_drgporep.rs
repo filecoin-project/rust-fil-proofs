@@ -337,14 +337,6 @@ pub trait Layers {
                     })
                     .collect::<Result<Vec<_>>>()?;
 
-                // Offload the data tree, we won't use it in the next iteration,
-                // only `tree_r` is reused (as the new `tree_d`).
-                aux[layer].try_offload_store();
-                // Only if this is the last iteration also offload `tree_r`.
-                if layer == layers - 1 {
-                    aux[layer + 1].try_offload_store();
-                }
-
                 Ok(partition_proofs)
             })
             .collect::<Result<Vec<_>>>()
@@ -569,7 +561,6 @@ pub trait Layers {
                 // replications many times in the same run so they may end up
                 // reusing the same files with invalid (old) data and failing.
 
-                tree_d.try_offload_store();
                 return tree_d;
             }
         }
