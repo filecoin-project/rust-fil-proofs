@@ -420,7 +420,7 @@ where
 mod tests {
     use super::*;
 
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
     use crate::drgraph::new_seed;
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
@@ -542,5 +542,27 @@ mod tests {
     fn get_cache_size<H: 'static + Hasher>(zigzag_graph: &ZigZagBucketGraph<H>) -> usize {
         let parents_cache_lock = zigzag_graph.parents_cache.read().unwrap();
         (*parents_cache_lock)[zigzag_graph.get_cache_index()].len()
+    }
+
+    #[test]
+    fn test_shuffle() {
+        let n = 2_u64.pow(10);
+        let d = DEFAULT_EXPANSION_DEGREE as u64;
+        // Use a relatively small value of `n` as Feistel is expensive (but big
+        // enough that `n >> d`).
+
+        let mut shuffled: HashSet<u64> = HashSet::with_capacity((n * d) as usize);
+
+        let feistel_keys = &[1, 2, 3, 4];
+        let feistel_precomputed = feistel::precompute((n * d) as feistel::Index);
+
+        for i in 0..n {
+            for k in 0..d {
+                let permuted =
+                    feistel::permute(n * d, i * d + k, feistel_keys, feistel_precomputed);
+                assert!(shuffled.insert(permuted));
+            }
+        }
+        assert_eq!(shuffled.len(), (n * d) as usize);
     }
 }
