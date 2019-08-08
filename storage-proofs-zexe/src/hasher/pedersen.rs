@@ -235,7 +235,7 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         let personalization = Personalization::MerkleTree(height)
             .get_bits()
             .into_iter()
-            .map(|v| Boolean::Constant(v))
+            .map(Boolean::Constant)
             .collect::<Vec<Boolean>>();
 
         let mut bits_with_personalization = personalization
@@ -249,7 +249,6 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
 
         let input_bytes = bits_with_personalization
             .chunks(8)
-            .into_iter()
             .map(|v| UInt8::from_bits_le(v))
             .collect::<Vec<UInt8>>();
 
