@@ -1,21 +1,19 @@
-use algebra::biginteger::BigInteger256 as FrRepr;
-use algebra::curves::bls12_381::Bls12_381;
-use algebra::curves::jubjub::JubJubProjective as JubJub;
-use algebra::fields::bls12_381::Fr;
-
-use dpc::crypto_primitives::crh::pedersen::PedersenWindow;
-use snark::{ConstraintSystem, SynthesisError};
-use snark_gadgets::bits::boolean;
-use snark_gadgets::fields::fp::FpGadget;
-
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
 use merkletree::merkle::Element;
 use rand::Rand;
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 
-use crate::error::Result;
+use algebra::biginteger::BigInteger256 as FrRepr;
+use algebra::curves::bls12_381::Bls12_381;
+use algebra::curves::jubjub::JubJubProjective as JubJub;
+use algebra::fields::bls12_381::Fr;
 use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
+use snark::{ConstraintSystem, SynthesisError};
+use snark_gadgets::bits::boolean;
+use snark_gadgets::fields::fp::FpGadget;
+
+use crate::error::Result;
 
 pub trait Domain:
     Ord
