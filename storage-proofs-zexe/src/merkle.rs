@@ -3,13 +3,13 @@
 use std::marker::PhantomData;
 
 // Reexport here, so we don't depend on merkletree directly in other places.
+use algebra::fields::bls12_381::Fr;
 use merkletree::hash::Algorithm;
 use merkletree::merkle;
 #[cfg(not(feature = "disk-trees"))]
 use merkletree::merkle::MmapStore;
 use merkletree::merkle::VecStore;
 use merkletree::proof;
-use algebra::fields::bls12_381::Fr;
 
 use crate::hasher::{Domain, Hasher};
 

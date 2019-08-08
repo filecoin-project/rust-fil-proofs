@@ -1,12 +1,12 @@
-use algebra::biginteger::BigInteger;
-use algebra::curves::bls12_381::Bls12_381 as Bls12;
-use algebra::fields::{bls12_381::Fr, BitIterator, FpParameters, PrimeField};
 use crate::crypto;
 use crate::crypto::pedersen::{pedersen_hash, Personalization};
 use crate::error;
 use crate::fr32::{bytes_into_fr, fr_into_bytes};
 use crate::hasher::pedersen::{PedersenDomain, PedersenFunction, PedersenHasher};
 use crate::merkle::{MerkleProof, MerkleTree};
+use algebra::biginteger::BigInteger;
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use algebra::fields::{bls12_381::Fr, BitIterator, FpParameters, PrimeField};
 use rand::Rng;
 #[macro_export]
 macro_rules! table_tests {
@@ -168,7 +168,8 @@ pub fn random_merkle_path_with_value<R: Rng>(
                     rhs.into_iter()
                         .take(<Fr as PrimeField>::Params::MODULUS_BITS as usize),
                 ),
-        ).x
+        )
+        .x
     }
 
     (auth_path, cur)

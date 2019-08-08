@@ -1,8 +1,8 @@
+use crate::error;
+use algebra::PairingEngine as Engine;
 use snark::{ConstraintSystem, SynthesisError};
 use snark_gadgets::boolean::{self, AllocatedBit, Boolean};
 use snark_gadgets::utils::AllocGadget;
-use crate::error;
-use algebra::PairingEngine as Engine;
 
 pub const NODE_SIZE: usize = 32;
 

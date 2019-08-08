@@ -10,7 +10,7 @@ extern crate bitvec;
 #[cfg(test)]
 #[macro_use]
 extern crate proptest;
-#[macro_use]
+// #[macro_use]
 extern crate clap;
 #[macro_use]
 extern crate slog;
@@ -26,6 +26,7 @@ pub mod test_helper;
 
 #[macro_use]
 pub mod crypto;
+pub mod challenge_derivation;
 pub mod circuit;
 pub mod compound_proof;
 pub mod drgporep;
@@ -33,6 +34,7 @@ pub mod drgraph;
 pub mod error;
 pub mod fr32;
 pub mod hasher;
+pub mod layered_drgporep;
 pub mod merkle;
 pub mod merklepor;
 pub mod parameter_cache;
@@ -44,10 +46,8 @@ pub mod settings;
 pub mod singletons;
 pub mod util;
 pub mod vde;
-pub mod layered_drgporep;
-pub mod challenge_derivation;
-pub mod zigzag_graph;
 pub mod zigzag_drgporep;
+pub mod zigzag_graph;
 
 use logging_toolkit::make_logger;
 use slog::Logger;

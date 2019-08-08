@@ -485,9 +485,9 @@ where
 mod tests {
     use super::*;
 
+    use algebra::curves::bls12_381::Bls12_381 as Bls12;
     use memmap::MmapMut;
     use memmap::MmapOptions;
-    use algebra::curves::bls12_381::Bls12_381 as Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use std::fs::File;
     use std::io::Write;

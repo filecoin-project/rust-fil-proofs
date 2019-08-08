@@ -58,7 +58,7 @@ fn sub<CS: ConstraintSystem<Bls12>>(
     })?;
 
     // a - b = res
-    constraint::difference(&mut cs, || "subtraction constraint", &a, &b, &res);
+    constraint::difference(&mut cs, || "subtraction constraint", &a, &b, &res)?;
 
     Ok(res)
 }
@@ -107,8 +107,7 @@ mod tests {
 
             let decrypted = sloth::decode::<Bls12>(&key, &ciphertext, 10);
             let mut cs = TestConstraintSystem::<Bls12>::new();
-            let key_bad_num =
-                FpGadget::alloc(cs.ns(|| "key bad"), || Ok(key_bad)).unwrap();
+            let key_bad_num = FpGadget::alloc(cs.ns(|| "key bad"), || Ok(key_bad)).unwrap();
 
             let out = decode(cs.ns(|| "sloth"), &key_bad_num, Some(ciphertext), 10).unwrap();
 
@@ -132,8 +131,7 @@ mod tests {
                 let mut cs = TestConstraintSystem::<Bls12>::new();
                 let key_num = FpGadget::alloc(cs.ns(|| "key"), || Ok(key)).unwrap();
 
-                let out9 =
-                    decode(cs.ns(|| "sloth 9"), &key_num, Some(ciphertext), 9).unwrap();
+                let out9 = decode(cs.ns(|| "sloth 9"), &key_num, Some(ciphertext), 9).unwrap();
 
                 assert!(cs.is_satisfied());
                 assert_ne!(out9.get_value().unwrap(), decrypted);
@@ -142,8 +140,7 @@ mod tests {
             {
                 let mut cs = TestConstraintSystem::<Bls12>::new();
                 let key_num = FpGadget::alloc(cs.ns(|| "key"), || Ok(key)).unwrap();
-                let out10 =
-                    decode(cs.ns(|| "sloth 10"), &key_num, Some(ciphertext), 10).unwrap();
+                let out10 = decode(cs.ns(|| "sloth 10"), &key_num, Some(ciphertext), 10).unwrap();
 
                 assert!(cs.is_satisfied());
                 assert_eq!(out10.get_value().unwrap(), decrypted);
@@ -152,8 +149,7 @@ mod tests {
             {
                 let mut cs = TestConstraintSystem::<Bls12>::new();
                 let key_num = FpGadget::alloc(cs.ns(|| "key"), || Ok(key)).unwrap();
-                let out11 =
-                    decode(cs.ns(|| "sloth 11"), &key_num, Some(ciphertext), 11).unwrap();
+                let out11 = decode(cs.ns(|| "sloth 11"), &key_num, Some(ciphertext), 11).unwrap();
 
                 assert!(cs.is_satisfied());
                 assert_ne!(out11.get_value().unwrap(), decrypted);
