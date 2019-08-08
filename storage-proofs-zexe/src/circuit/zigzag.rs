@@ -5,7 +5,6 @@ use algebra::fields::bls12_381::Fr;
 use snark::{Circuit, ConstraintSystem, SynthesisError};
 use snark_gadgets::boolean;
 use snark_gadgets::fields::fp::FpGadget;
-use snark_gadgets::fields::FieldGadget;
 use snark_gadgets::utils::{AllocGadget, ToBitsGadget};
 
 use crate::circuit::constraint;

@@ -1,13 +1,11 @@
-use algebra::fields::{Field, PrimeField};
+use algebra::fields::{Field, FpParameters, PrimeField};
 use algebra::PairingEngine as Engine;
 use dpc::gadgets::Assignment;
 use snark::{ConstraintSystem, LinearCombination, SynthesisError};
 use snark_gadgets::boolean::Boolean;
 use snark_gadgets::fields::fp::FpGadget;
-
-use algebra::fields::FpParameters;
-use snark_gadgets::fields::FieldGadget;
 use snark_gadgets::utils::AllocGadget;
+
 use std::ops::AddAssign;
 use std::ops::Mul;
 
@@ -37,7 +35,7 @@ where
                         Some(E::Fr::zero())
                     }
                 },
-                Err(e) => None,
+                Err(_) => None,
             };
 
             lc = lc + b.lc(one, coeff);

@@ -1,15 +1,11 @@
 use algebra::PairingEngine as Engine;
 use algebra::fields::{Field, FpParameters, PrimeField};
 use snark::{ConstraintSystem, LinearCombination, Index, SynthesisError, Variable};
-//use bellperson::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
-//use ff::{Field, PrimeField};
-//use paired::Engine;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::ops::AddAssign;
-use std::str::FromStr;
 
 #[derive(Clone, Copy)]
 struct OrderedVariable(Variable);
@@ -87,8 +83,7 @@ impl<E: Engine> MetricCS<E> {
         write!(s, "\n\n").unwrap();
 
         let negone = {
-            let mut tmp = E::Fr::one();
-//            tmp.negate();
+            let tmp = E::Fr::one();
             -tmp
         };
 
