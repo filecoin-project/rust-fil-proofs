@@ -27,7 +27,6 @@ pub struct VDFPoStCircuit<'a, E: JubjubEngine> {
     pub vdf_key: Option<E::Fr>,
     pub vdf_ys: Vec<Option<E::Fr>>,
     pub vdf_xs: Vec<Option<E::Fr>>,
-    pub vdf_sloth_rounds: usize,
 
     // PoRCs
     pub challenges_vec: Vec<Vec<Option<usize>>>,
@@ -160,7 +159,6 @@ where
             vdf_key: Some(V::key(&pub_params.pub_params_vdf).into()),
             vdf_ys,
             vdf_xs,
-            vdf_sloth_rounds: V::rounds(&pub_params.pub_params_vdf),
             challenged_leafs_vec,
             root_commitment: Some(compute_root_commitment(&pub_in.commitments).into()),
             commitments_vec,
@@ -192,7 +190,6 @@ where
             vdf_key: None,
             vdf_xs,
             vdf_ys,
-            vdf_sloth_rounds: V::rounds(&pub_params.pub_params_vdf),
             challenged_leafs_vec,
             paths_vec,
             root_commitment: None,
@@ -207,7 +204,6 @@ impl<'a, E: JubjubEngine> Circuit<E> for VDFPoStCircuit<'a, E> {
         let vdf_key = self.vdf_key;
         let vdf_ys = self.vdf_ys.clone();
         let vdf_xs = self.vdf_xs.clone();
-        let vdf_sloth_rounds = self.vdf_sloth_rounds;
         let challenges_vec = self.challenges_vec.clone();
         let challenged_sectors_vec = self.challenged_sectors_vec.clone();
         let challenged_leafs_vec = self.challenged_leafs_vec.clone();
@@ -247,12 +243,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for VDFPoStCircuit<'a, E> {
                 let mut cs = cs.namespace(|| format!("vdf_verification_round_{}", i));
                 //
                 //                // FIXME: make this a generic call to Vdf proof circuit function.
-                let decoded = sloth::decode(
-                    cs.namespace(|| "sloth_decode"),
-                    &vdf_key,
-                    *y,
-                    vdf_sloth_rounds,
-                )?;
+                let decoded = sloth::decode(cs.namespace(|| "sloth_decode"), &vdf_key, *y)?;
 
                 let x_alloc = num::AllocatedNum::alloc(cs.namespace(|| "x"), || {
                     x.ok_or_else(|| SynthesisError::AssignmentMissing)
@@ -343,7 +334,6 @@ impl<'a, E: JubjubEngine> VDFPoStCircuit<'a, E> {
         vdf_key: Option<E::Fr>,
         vdf_ys: Vec<Option<E::Fr>>,
         vdf_xs: Vec<Option<E::Fr>>,
-        vdf_sloth_rounds: usize,
         challenges_vec: Vec<Vec<Option<usize>>>,
         challenged_sectors_vec: Vec<Vec<Option<usize>>>,
         challenged_leafs_vec: Vec<Vec<Option<E::Fr>>>,
@@ -359,7 +349,6 @@ impl<'a, E: JubjubEngine> VDFPoStCircuit<'a, E> {
             vdf_key,
             vdf_ys,
             vdf_xs,
-            vdf_sloth_rounds,
             challenged_leafs_vec,
             root_commitment,
             commitments_vec,
@@ -384,12 +373,17 @@ mod tests {
     use crate::fr32::fr_into_bytes;
     use crate::hasher::pedersen::*;
     use crate::proof::{NoRequirements, ProofScheme};
+    use crate::settings;
     use crate::vdf_post;
     use crate::vdf_sloth;
 
     #[test]
     fn test_vdf_post_circuit_with_bls12_381() {
-        let params = &JubjubBls12::new();
+        let window_size = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size;
+        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let lambda = 32;
@@ -398,10 +392,7 @@ mod tests {
             challenge_count: 10,
             sector_size: 1024 * lambda,
             post_epochs: 3,
-            setup_params_vdf: vdf_sloth::SetupParams {
-                key: rng.gen(),
-                rounds: 1,
-            },
+            setup_params_vdf: vdf_sloth::SetupParams { key: rng.gen() },
             sectors_count: 2,
         };
 
@@ -514,7 +505,6 @@ mod tests {
             vdf_key: Some(pub_params.pub_params_vdf.key.into()),
             vdf_xs,
             vdf_ys,
-            vdf_sloth_rounds: pub_params.pub_params_vdf.rounds,
             challenged_leafs_vec,
             paths_vec,
             root_commitment: Some(compute_root_commitment(&pub_inputs.commitments).into()),
@@ -528,14 +518,18 @@ mod tests {
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
         assert_eq!(cs.num_inputs(), 3, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 414670, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 412264, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
     }
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn test_vdf_post_compound() {
-        let params = &JubjubBls12::new();
+        let window_size = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size;
+        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let lambda = 32;
@@ -545,10 +539,7 @@ mod tests {
                 challenge_count: 3,
                 sector_size: 1024 * lambda,
                 post_epochs: 3,
-                setup_params_vdf: vdf_sloth::SetupParams {
-                    key: rng.gen(),
-                    rounds: 1,
-                },
+                setup_params_vdf: vdf_sloth::SetupParams { key: rng.gen() },
                 sectors_count: 2,
             },
             engine_params: params,

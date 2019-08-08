@@ -2,9 +2,6 @@ use std::sync::Mutex;
 
 use config::{Config, ConfigError, Environment, File};
 
-#[cfg(not(feature = "disk-trees"))]
-use crate::SP_LOG;
-
 lazy_static! {
     pub static ref SETTINGS: Mutex<Settings> =
         Mutex::new(Settings::new().expect("invalid configuration"));
@@ -20,6 +17,7 @@ pub struct Settings {
     pub num_proving_threads: usize,
     pub replicated_trees_dir: String,
     pub generate_merkle_trees_in_parallel: bool,
+    pub pedersen_hash_exp_window_size: u32,
     // Generating MTs in parallel optimizes for speed while generating them
     // in sequence (`false`) optimizes for memory.
 }
@@ -32,6 +30,7 @@ impl Default for Settings {
             num_proving_threads: 1,
             replicated_trees_dir: "".into(),
             generate_merkle_trees_in_parallel: true,
+            pedersen_hash_exp_window_size: 16,
         }
     }
 }
@@ -48,7 +47,7 @@ impl Settings {
         #[cfg(not(feature = "disk-trees"))]
         {
             if settings.is_ok() && !settings.as_ref().unwrap().generate_merkle_trees_in_parallel {
-                warn!(SP_LOG, "{}", "Setting GENERATE_MERKLE_TREES_IN_PARALLEL to false (sequiental generation) \ndoesn't add any value if the `disk-trees` feature is not set (no offload possible)".to_string());
+                warn!("Setting GENERATE_MERKLE_TREES_IN_PARALLEL to false (sequiental generation) doesn't add any value if the `disk-trees` feature is not set (no offload possible)");
             }
         }
 

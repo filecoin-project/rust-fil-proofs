@@ -12,6 +12,7 @@ use storage_proofs::circuit::bench::BenchCS;
 
 use storage_proofs::circuit;
 use storage_proofs::crypto::pedersen;
+use storage_proofs::settings;
 
 struct PedersenExample<'a, E: JubjubEngine> {
     params: &'a E::Params,
@@ -67,8 +68,12 @@ fn pedersen_benchmark(c: &mut Criterion) {
 }
 
 fn pedersen_circuit_benchmark(c: &mut Criterion) {
-    let jubjub_params = JubjubBls12::new();
-    let jubjub_params2 = JubjubBls12::new();
+    let window_size = settings::SETTINGS
+        .lock()
+        .unwrap()
+        .pedersen_hash_exp_window_size;
+    let jubjub_params = JubjubBls12::new_with_window_size(window_size);
+    let jubjub_params2 = JubjubBls12::new_with_window_size(window_size);
     let mut rng1 = thread_rng();
     let groth_params = generate_random_parameters::<Bls12, _, _>(
         PedersenExample {

@@ -13,7 +13,7 @@ jobs:
           command: cargo generate-lockfile
       - restore_cache:
           keys:
-            - cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run: rustup install $(cat rust-toolchain)
       - run: rustup default $(cat rust-toolchain)
       - run: rustup component add rustfmt-preview
@@ -27,7 +27,7 @@ jobs:
           paths:
             - Cargo.lock
       - save_cache:
-          key: cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+          key: cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
           paths:
             - /root/.cargo
             - /root/.rustup
@@ -42,7 +42,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_cache:
           keys:
             - parameter-cache-{{ .Revision }}
@@ -72,7 +72,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (stable) in release profile
@@ -91,7 +91,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (nightly) disk-trees feature
@@ -111,7 +111,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (stable) in release profile
@@ -132,7 +132,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_cache:
           keys:
             - parameter-cache-{{ .Revision }}
@@ -152,7 +152,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_cache:
           keys:
             - parameter-cache-{{ .Revision }}
@@ -160,6 +160,51 @@ jobs:
           name: Benchmarks (nightly)
           command: cargo +$(cat rust-toolchain) build --benches --verbose --all
           no_output_timeout: 15m
+
+  metrics_capture:
+    docker:
+      - image: filecoin/rust:latest
+    environment:
+      RUSTFLAGS: -Awarnings -C target-cpu=native
+    working_directory: /mnt/crate
+    resource_class: xlarge
+    steps:
+      - add_ssh_keys:
+          fingerprints:
+            - "f8:db:3c:6d:f9:74:2c:9e:07:42:3f:3f:23:07:f7:6d"
+      - run:
+          name: Add benchmark server's public key to known hosts
+          command: |
+            mkdir -p ~/.ssh/
+            if [[ ! -f ~/.ssh/known_hosts ]] || ! grep "${BENCHMARK_SERVER_IP_ADDR}" ~/.ssh/known_hosts; then
+              echo "
+            ${BENCHMARK_SERVER_RSA_FINGERPRINT}
+              " >> ~/.ssh/known_hosts
+            fi
+      - checkout
+      - attach_workspace:
+          at: "."
+      - restore_cache:
+          keys:
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - restore_cache:
+          keys:
+            - parameter-cache-{{ .Revision }}
+      - run:
+          name: Install jq
+          command: apt-get install time jq -yqq
+      - run:
+          name: Run hash-constraints benchmarks on remote host
+          command: ./fil-proofs-tooling/scripts/benchy-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" hash-circuits | jq '.'
+          no_output_timeout: 60m
+      - run:
+          name: Run micro benchmarks
+          command: ./fil-proofs-tooling/scripts/micro-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" | jq '.'
+          no_output_timeout: 60m
+      - run:
+          name: Run ZigZag benchmarks using 1GiB sectors
+          command: ./fil-proofs-tooling/scripts/benchy-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" zigzag --size=$((1024*1024)) | jq '.'
+          no_output_timeout: 60m
 
   rustfmt:
     docker:
@@ -172,7 +217,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
           name: Run cargo fmt
           command: cargo fmt --all -- --check
@@ -188,7 +233,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
           name: Run cargo clippy
           command: cargo clippy --all
@@ -204,7 +249,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v11-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
           name: Build (release)
           command: cargo +$(cat rust-toolchain) build --release --verbose --all
@@ -277,6 +322,12 @@ workflows:
       - bench_nightly:
           requires:
             - cargo_fetch
+      - metrics_capture:
+          requires:
+            - cargo_fetch
+          filters:
+            branches:
+              only: master
       - build_linux_release:
           requires:
             - cargo_fetch

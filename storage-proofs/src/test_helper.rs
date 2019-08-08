@@ -41,7 +41,6 @@ pub fn fake_drgpoprep_proof<R: Rng>(
     rng: &mut R,
     tree_depth: usize,
     m: usize,
-    sloth_rounds: usize,
     challenge_count: usize,
 ) -> FakeDrgParams {
     let replica_id: Fr = rng.gen();
@@ -71,7 +70,8 @@ pub fn fake_drgpoprep_proof<R: Rng>(
 
     let key = crypto::kdf::kdf(ciphertexts.as_slice(), m);
     // run sloth(key, node)
-    let replica_node: Fr = crypto::sloth::encode::<Bls12>(&key, &data_node, sloth_rounds);
+
+    let replica_node: Fr = crypto::sloth::encode::<Bls12>(&key, &data_node);
     // run fake merkle with only the first 1+m real leaves
 
     let mut leaves = replica_parents.clone();
@@ -146,7 +146,7 @@ pub fn random_merkle_path_with_value<R: Rng>(
         *value
     };
 
-    for (i, p) in auth_path.clone().into_iter().enumerate() {
+    for p in auth_path.clone().into_iter() {
         let (uncle, is_right) = p.unwrap();
         let mut lhs = cur;
         let mut rhs = uncle;
@@ -162,7 +162,7 @@ pub fn random_merkle_path_with_value<R: Rng>(
         rhs.reverse();
 
         cur = pedersen_hash::pedersen_hash::<Bls12, _>(
-            pedersen_hash::Personalization::MerkleTree(i + offset),
+            pedersen_hash::Personalization::None,
             lhs.into_iter()
                 .take(Fr::NUM_BITS as usize)
                 .chain(rhs.into_iter().take(Fr::NUM_BITS as usize)),

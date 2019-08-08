@@ -8,10 +8,11 @@ use std::path::PathBuf;
 use std::process::exit;
 
 use clap::{values_t, App, Arg, ArgMatches};
+use env_proxy;
 use failure::err_msg;
 use itertools::Itertools;
 use pbr::{ProgressBar, Units};
-use reqwest::{header, Client, Url};
+use reqwest::{header, Client, Proxy, Url};
 
 use filecoin_proofs::param::*;
 use storage_proofs::parameter_cache::{
@@ -36,6 +37,8 @@ impl<R: Read> Read for FetchProgress<R> {
 }
 
 pub fn main() {
+    pretty_env_logger::init();
+
     let matches = App::new("paramfetch")
         .version("1.1")
         .about(
@@ -46,7 +49,9 @@ Defaults to '{}'
 
 Use -g,--gateway to specify ipfs gateway.
 Defaults to 'https://ipfs.io'
-", 
+
+Set http_proxy/https_proxy environment variables to specify proxy for ipfs gateway.
+",
                 PARAMETER_CACHE_ENV_VAR,
                 PARAMETER_CACHE_DIR
             )[..],
@@ -227,7 +232,9 @@ fn fetch_parameter_file(
         Ok(file) => file,
     };
 
-    let client = Client::new();
+    let client = Client::builder()
+        .proxy(Proxy::custom(move |url| env_proxy::for_url(&url).to_url()))
+        .build()?;
     let url = Url::parse(&format!("{}/ipfs/{}", gateway, parameter_data.cid))?;
     let total_size = {
         let res = client.head(url.as_str()).send()?;

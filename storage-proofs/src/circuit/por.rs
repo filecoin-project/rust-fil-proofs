@@ -258,11 +258,16 @@ mod tests {
     use crate::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher};
     use crate::merklepor;
     use crate::proof::ProofScheme;
+    use crate::settings;
     use crate::util::data_at_node;
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn por_test_compound() {
+        let window_size = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size;
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let leaves = 6;
         let data: Vec<u8> = (0..leaves)
@@ -282,7 +287,7 @@ mod tests {
                     leaves,
                     private: false,
                 },
-                engine_params: &JubjubBls12::new(),
+                engine_params: &JubjubBls12::new_with_window_size(window_size),
                 partitions: None,
             };
             let public_params =
@@ -336,16 +341,20 @@ mod tests {
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_pedersen() {
-        test_por_input_circuit_with_bls12_381::<PedersenHasher>(4149);
+        test_por_input_circuit_with_bls12_381::<PedersenHasher>(4125);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_blake2s() {
-        test_por_input_circuit_with_bls12_381::<Blake2sHasher>(128928);
+        test_por_input_circuit_with_bls12_381::<Blake2sHasher>(64566);
     }
 
     fn test_por_input_circuit_with_bls12_381<H: Hasher>(num_constraints: usize) {
-        let params = &JubjubBls12::new();
+        let window_size = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size;
+        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 6;
@@ -454,6 +463,10 @@ mod tests {
     }
 
     fn private_por_test_compound<H: Hasher>() {
+        let window_size = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size;
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let leaves = 6;
         let data: Vec<u8> = (0..leaves)
@@ -473,7 +486,7 @@ mod tests {
                     leaves,
                     private: true,
                 },
-                engine_params: &JubjubBls12::new(),
+                engine_params: &JubjubBls12::new_with_window_size(window_size),
                 partitions: None,
             };
             let public_params = PoRCompound::<H>::setup(&setup_params).expect("setup failed");
@@ -525,7 +538,11 @@ mod tests {
 
     #[test]
     fn test_private_por_input_circuit_with_bls12_381() {
-        let params = &JubjubBls12::new();
+        let window_size = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size;
+        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 6;
@@ -591,7 +608,7 @@ mod tests {
             assert!(cs.is_satisfied(), "constraints not satisfied");
 
             assert_eq!(cs.num_inputs(), 2, "wrong number of inputs");
-            assert_eq!(cs.num_constraints(), 4148, "wrong number of constraints");
+            assert_eq!(cs.num_constraints(), 4124, "wrong number of constraints");
 
             let auth_path_bits: Vec<bool> = proof
                 .proof

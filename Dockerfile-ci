@@ -1,6 +1,7 @@
 # Dockerfile for CircleCI
 # build with
 # `docker build -t filecoin/rust:latest -f ./Dockerfile-ci .`
+# rebuild: `docker build --pull --no-cache -t filecoin/rust:latest -f ./Dockerfile-ci .`
 
 FROM debian:stretch
 

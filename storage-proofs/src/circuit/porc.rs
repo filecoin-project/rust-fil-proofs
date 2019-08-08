@@ -223,7 +223,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoRCCircuit<'a, E> {
                 // Compute the new subtree value
                 cur = pedersen_hash::pedersen_hash(
                     cs.namespace(|| "computation of pedersen hash"),
-                    pedersen_hash::Personalization::MerkleTree(i),
+                    pedersen_hash::Personalization::None,
                     &preimage,
                     params,
                 )?
@@ -294,10 +294,15 @@ mod tests {
     use crate::hasher::pedersen::*;
     use crate::porc::{self, PoRC};
     use crate::proof::{NoRequirements, ProofScheme};
+    use crate::settings;
 
     #[test]
     fn test_porc_circuit_with_bls12_381() {
-        let params = &JubjubBls12::new();
+        let window_size = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size;
+        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 32;
@@ -380,14 +385,18 @@ mod tests {
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
         assert_eq!(cs.num_inputs(), 1, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 13824, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 13744, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
     }
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn porc_test_compound() {
-        let params = &JubjubBls12::new();
+        let window_size = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size;
+        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 32;

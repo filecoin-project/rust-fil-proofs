@@ -94,7 +94,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for ParallelProofOfRetrievability<'a, E> {
                 // Compute the new subtree value
                 cur = pedersen_hash::pedersen_hash(
                     cs.namespace(|| "computation of pedersen hash"),
-                    pedersen_hash::Personalization::MerkleTree(i),
+                    pedersen_hash::Personalization::None,
                     &preimage,
                     params,
                 )?
@@ -129,6 +129,7 @@ mod tests {
     use crate::hasher::pedersen::*;
     use crate::merklepor;
     use crate::proof::ProofScheme;
+    use crate::settings;
     use crate::util::data_at_node;
     use ff::Field;
     use fil_sapling_crypto::jubjub::JubjubBls12;
@@ -137,7 +138,11 @@ mod tests {
 
     #[test]
     fn test_parallel_por_input_circuit_with_bls12_381() {
-        let params = &JubjubBls12::new();
+        let window_size = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size;
+        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 16;
@@ -214,7 +219,7 @@ mod tests {
             assert!(cs.is_satisfied(), "constraints not satisfied");
 
             assert_eq!(cs.num_inputs(), 34, "wrong number of inputs");
-            assert_eq!(cs.num_constraints(), 88497, "wrong number of constraints");
+            assert_eq!(cs.num_constraints(), 87985, "wrong number of constraints");
             assert_eq!(cs.get_input(0, "ONE"), Fr::one());
         }
     }

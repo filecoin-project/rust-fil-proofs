@@ -94,43 +94,24 @@ Note: On macOS you need `gtime` (`brew install gnu-time`), as the built in `time
 
 For better logging with backtraces on errors, developers should use `expects` rather than `expect` on `Result<T, E>` and `Option<T>`.
 
-Developers can control `rust-fil-proofs` logging through environment variables:
+The crate use [`log`](https://crates.io/crates/log) for logging, which by default does not log at all. In order to log output crates like [`pretty_env_logger`](https://crates.io/crates/pretty_env_logger) can be used.
 
--
-  `FIL_PROOFS_LOG_JSON`
+For example
 
-    Default: `false`
+```rust
+fn main() {
+    pretty_env_logger::init();
+}
+```
 
-    Options: `true`, `false`
+and then when running the code setting
 
-    This is used to enable or disable logging as JSON. If it is `true`, log entries will be sent to stdout as JSON. Otherwise, log entries will be sent to stdout as plain text.
+```sh
+> RUST_LOG=filecoin_proofs=info
+```
 
--
-  `FIL_PROOFS_MIN_LOG_LEVEL`
+will enable all logging.
 
-    Default: `4`
-
-    Options: `1`, `2`, `3`, `4`, `5`, `6`
-
-    This is used to filter log entries. All log entries at the specified level or below will be sent to stdout.
-
-    | Logging Macro 	| Level Code 	| Description                                                                                                                                                                                     |
-    |---------------	|------------	|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-    | crit!         	| 1          	| An error that should force shutdown of the application to prevent data loss (or further data loss). Reserved for situations in which there is guaranteed to have been data corruption or loss.  |
-    | error!        	| 2          	| An error occurred, generally something you would consider asserting in a debug build.                                                                                                           |
-    | warning!      	| 3          	| A warning often indicates an unexpected (but not fatal) state.                                                                                                                                  |
-    | info!         	| 4          	| An informational message, often indicates the current program state.                                                                                                                            |
-    | debug!        	| 5          	| A debug message, useful for debugging but too verbose to be turned on normally.                                                                                                                 |
-    | trace!        	| 6          	| A message that will be printed a lot, useful for debugging program flow and will probably impact performance.                                                                                   |
-
--
-  `FIL_PROOFS_LOG_FILE`
-
-    Default: `/dev/stdout`
-
-    Options: `/dev/stdout`, `/dev/stderr`, any filename
-
-    This is used to redirect the log output. If a filename is specified the output is redirected to that file. The log output is appended to the file. In case the file doesn't exist, it is created. If the file cannot be opened it falls back to the default and prints the output to stdout.
 
 ## Memory Leak Detection
 
@@ -176,7 +157,7 @@ To check that it's working you can inspect the replication log to find `using pa
 
 ### Memory
 
-We try to generate the MTs in parallel to speed up the process but that takes 2 sector sizes per each layer (e.g., a 1 GiB sector may require, in the worst case scenario, up to 20 GiB of memory to hold the MTs alone). To reduce that (at the cost of speed) we have the (experimental) `disk-trees` feature to offload the MTs to disk when we don't use them. For example, to run the `zigzag` example with this feature you'd need to indicate so to `cargo` *and* then indicate to the example (or any other code doing the replication) where they should be stored using the `FIL_PROOFS_REPLICATED_TREES_DIR` environmental variable,
+We try to generate the MTs in parallel to speed up the process but that takes 2 sector sizes per each layer (e.g., a 1 GiB sector may require, in the worst case scenario, up to 20 GiB of memory to hold the MTs alone). To reduce that (at the cost of speed) we have the (experimental) `disk-trees` feature to offload the MTs to disk when we don't use them. For example, to run the `zigzag` example with this feature you'd need to indicate so to `cargo` *and* then indicate to the example (or any other code doing the replication) where they should be stored using the `FIL_PROOFS_REPLICATED_TREES_DIR` environmental variable (if set to a relative path, it will be relative  to the current working directory of the process in which the replication happens, see [`create_dir`](https://doc.rust-lang.org/std/fs/fn.create_dir.html#platform-specific-behavior)),
 
 ```
 # From inside the `storage-proofs` directory, where this feature

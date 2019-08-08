@@ -24,7 +24,6 @@ use std::marker::PhantomData;
 /// # Fields
 ///
 /// * `params` - parameters for the curve
-/// * `sloth_iter` - How many rounds sloth should run for.
 ///
 /// ----> Private `replica_node` - The replica node being proven.
 ///
@@ -53,7 +52,6 @@ use crate::hasher::{Domain, Hasher};
 
 pub struct DrgPoRepCircuit<'a, E: JubjubEngine, H: Hasher> {
     params: &'a E::Params,
-    sloth_iter: usize,
     replica_nodes: Vec<Option<E::Fr>>,
     #[allow(clippy::type_complexity)]
     replica_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
@@ -76,7 +74,6 @@ impl<'a, E: JubjubEngine, H: Hasher> DrgPoRepCircuit<'a, E, H> {
     pub fn synthesize<CS>(
         mut cs: CS,
         params: &E::Params,
-        sloth_iter: usize,
         replica_nodes: Vec<Option<E::Fr>>,
         replica_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
         replica_root: Root<E>,
@@ -95,7 +92,6 @@ impl<'a, E: JubjubEngine, H: Hasher> DrgPoRepCircuit<'a, E, H> {
     {
         DrgPoRepCircuit::<_, H> {
             params,
-            sloth_iter,
             replica_nodes,
             replica_nodes_paths,
             replica_root,
@@ -305,7 +301,6 @@ where
 
         DrgPoRepCircuit {
             params: engine_params,
-            sloth_iter: public_params.sloth_iter,
             replica_nodes,
             replica_nodes_paths,
             replica_root,
@@ -341,7 +336,6 @@ where
 
         DrgPoRepCircuit {
             params,
-            sloth_iter: public_params.sloth_iter,
             replica_nodes,
             replica_nodes_paths,
             replica_root,
@@ -505,12 +499,7 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for DrgPoRepCircuit<'a, E, H> {
                     degree,
                 )?;
 
-                let decoded = sloth::decode(
-                    cs.namespace(|| "sloth_decode"),
-                    &key,
-                    *replica_node,
-                    self.sloth_iter,
-                )?;
+                let decoded = sloth::decode(cs.namespace(|| "sloth_decode"), &key, *replica_node)?;
 
                 // TODO this should not be here, instead, this should be the leaf Fr in the data_auth_path
                 // TODO also note that we need to change/makesurethat the leaves are the data, instead of hashes of the data
@@ -538,6 +527,7 @@ mod tests {
     use crate::hasher::{Blake2sHasher, Hasher, PedersenHasher};
     use crate::porep::PoRep;
     use crate::proof::{NoRequirements, ProofScheme};
+    use crate::settings;
     use crate::util::data_at_node;
 
     use ff::Field;
@@ -546,13 +536,16 @@ mod tests {
 
     #[test]
     fn drgporep_input_circuit_with_bls12_381() {
-        let params = &JubjubBls12::new();
+        let window_size = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size;
+        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let nodes = 12;
         let degree = 6;
         let challenge = 2;
-        let sloth_iter = 1;
 
         let replica_id: Fr = rng.gen();
 
@@ -576,7 +569,6 @@ mod tests {
                 expansion_degree: 0,
                 seed: new_seed(),
             },
-            sloth_iter,
             private: false,
             challenges_count: 1,
         };
@@ -653,7 +645,6 @@ mod tests {
         DrgPoRepCircuit::<_, PedersenHasher>::synthesize(
             cs.namespace(|| "drgporep"),
             params,
-            sloth_iter,
             vec![replica_node],
             vec![replica_node_path],
             replica_root,
@@ -677,7 +668,7 @@ mod tests {
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
         assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 131216, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 130957, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
@@ -689,20 +680,22 @@ mod tests {
 
     #[test]
     fn drgporep_input_circuit_num_constraints() {
-        let params = &JubjubBls12::new();
+        let window_size = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size;
+        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         // 1 GB
         let n = (1 << 30) / 32;
         let m = 6;
         let tree_depth = graph_height(n);
-        let sloth_iter = 1;
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
         DrgPoRepCircuit::<_, PedersenHasher>::synthesize(
             cs.namespace(|| "drgporep"),
             params,
-            sloth_iter,
             vec![Some(Fr::rand(rng)); 1],
             vec![vec![Some((Fr::rand(rng), false)); tree_depth]; 1],
             Root::Val(Some(Fr::rand(rng))),
@@ -718,7 +711,7 @@ mod tests {
         .expect("failed to synthesize circuit");
 
         assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 363392, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 361789, "wrong number of constraints");
     }
 
     #[test]
@@ -734,13 +727,16 @@ mod tests {
     }
 
     fn drgporep_test_compound<H: Hasher>() {
-        let params = &JubjubBls12::new();
+        let window_size = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size;
+        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let nodes = 5;
         let degree = 2;
         let challenges = vec![1, 3];
-        let sloth_iter = 1;
 
         let replica_id: Fr = rng.gen();
         let mut data: Vec<u8> = (0..nodes)
@@ -758,7 +754,6 @@ mod tests {
                     expansion_degree: 0,
                     seed,
                 },
-                sloth_iter,
                 private: false,
                 challenges_count: 2,
             },
@@ -796,7 +791,6 @@ mod tests {
                     expansion_degree: 0,
                     seed,
                 },
-                sloth_iter,
                 private: false,
                 challenges_count: 2,
             },

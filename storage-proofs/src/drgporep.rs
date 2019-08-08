@@ -31,7 +31,6 @@ pub struct PrivateInputs<'a, H: 'a + Hasher> {
 #[derive(Debug)]
 pub struct SetupParams {
     pub drg: DrgParams,
-    pub sloth_iter: usize,
     pub private: bool,
     pub challenges_count: usize,
 }
@@ -57,7 +56,6 @@ where
     G: Graph<H> + ParameterSetMetadata,
 {
     pub graph: G,
-    pub sloth_iter: usize,
     pub private: bool,
     pub challenges_count: usize,
 
@@ -69,10 +67,9 @@ where
     H: Hasher,
     G: Graph<H> + ParameterSetMetadata,
 {
-    pub fn new(graph: G, sloth_iter: usize, private: bool, challenges_count: usize) -> Self {
+    pub fn new(graph: G, private: bool, challenges_count: usize) -> Self {
         PublicParams {
             graph,
-            sloth_iter,
             private,
             challenges_count,
             _h: PhantomData,
@@ -87,9 +84,8 @@ where
 {
     fn identifier(&self) -> String {
         format!(
-            "drgporep::PublicParams{{graph: {}; sloth_iter: {}}}",
+            "drgporep::PublicParams{{graph: {}}}",
             self.graph.identifier(),
-            self.sloth_iter
         )
     }
 
@@ -263,12 +259,7 @@ where
             sp.drg.seed,
         );
 
-        Ok(PublicParams::new(
-            graph,
-            sp.sloth_iter,
-            sp.private,
-            sp.challenges_count,
-        ))
+        Ok(PublicParams::new(graph, sp.private, sp.challenges_count))
     }
 
     fn prove<'b>(
@@ -330,7 +321,6 @@ where
                 // )?;
 
                 let extracted = decode_domain_block::<H>(
-                    pub_params.sloth_iter,
                     &pub_inputs.replica_id.expect("missing replica_id"),
                     tree_r,
                     challenge,
@@ -419,8 +409,7 @@ where
                 bytes_into_fr_repr_safe(hash.as_ref()).into()
             };
 
-            let unsealed =
-                H::sloth_decode(&key, &proof.replica_nodes[i].data, pub_params.sloth_iter);
+            let unsealed = H::sloth_decode(&key, &proof.replica_nodes[i].data);
 
             if unsealed != proof.nodes[i].data {
                 return Ok(false);
@@ -455,7 +444,7 @@ where
             None => pp.graph.merkle_tree(data)?,
         };
 
-        vde::encode(&pp.graph, pp.sloth_iter, replica_id, data)?;
+        vde::encode(&pp.graph, replica_id, data)?;
 
         let comm_d = tree_d.root();
         let tree_r = pp.graph.merkle_tree(data)?;
@@ -472,7 +461,7 @@ where
         replica_id: &'b H::Domain,
         data: &'b [u8],
     ) -> Result<Vec<u8>> {
-        vde::decode(&pp.graph, pp.sloth_iter, replica_id, data)
+        vde::decode(&pp.graph, replica_id, data)
     }
 
     fn extract(
@@ -481,7 +470,7 @@ where
         data: &[u8],
         node: usize,
     ) -> Result<Vec<u8>> {
-        Ok(decode_block(&pp.graph, pp.sloth_iter, replica_id, data, node)?.into_bytes())
+        Ok(decode_block(&pp.graph, replica_id, data, node)?.into_bytes())
     }
 }
 
@@ -518,7 +507,6 @@ mod tests {
     fn test_extract_all<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let sloth_iter = 1;
         let replica_id: H::Domain = rng.gen();
         let data = vec![2u8; 32 * 3];
         // create a copy, so we can compare roundtrips
@@ -531,7 +519,6 @@ mod tests {
                 expansion_degree: 0,
                 seed: new_seed(),
             },
-            sloth_iter,
             private: false,
             challenges_count: 1,
         };
@@ -571,7 +558,6 @@ mod tests {
     fn test_extract<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-        let sloth_iter = 1;
         let replica_id: H::Domain = rng.gen();
         let nodes = 3;
         let data = vec![2u8; 32 * nodes];
@@ -586,7 +572,6 @@ mod tests {
                 expansion_degree: 0,
                 seed: new_seed(),
             },
-            sloth_iter,
             private: false,
             challenges_count: 1,
         };
@@ -640,7 +625,6 @@ mod tests {
         // The loop is here in case we need to retry because of an edge case in the test design.
         loop {
             let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-            let sloth_iter = 1;
             let degree = 10;
             let expansion_degree = 0;
             let seed = new_seed();
@@ -662,7 +646,6 @@ mod tests {
                     expansion_degree,
                     seed,
                 },
-                sloth_iter,
                 private: false,
                 challenges_count: 2,
             };

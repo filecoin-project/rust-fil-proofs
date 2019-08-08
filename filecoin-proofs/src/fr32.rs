@@ -1,7 +1,7 @@
 use std::cmp::min;
 use std::io::{self, Error, ErrorKind, Read, Seek, SeekFrom, Write};
 
-use bitvec::prelude::*;
+use bitvec::{BitVec, LittleEndian};
 
 /** PaddingMap represents a mapping between data and its padded equivalent.
 
@@ -739,7 +739,7 @@ where
             .take(data_bits_to_write),
     );
 
-    target.write_all(last_bits.as_slice())?;
+    target.write_all(last_bits.as_ref())?;
     // The `as_slice` conversion will byte-align the bit stream and implicitly
     // add the padding bits (that by definition are the bits necessary to reach the byte
     // boundary).
@@ -1034,7 +1034,7 @@ mod tests {
             let shifted_bv: BitVecLEu8 = bv >> new_offset;
 
             assert_eq!(
-                shifted_bv.as_slice(),
+                shifted_bv.as_ref(),
                 &extract_bits_and_shift(&data, pos, num_bits, new_offset)[..],
             );
         }
@@ -1061,7 +1061,7 @@ mod tests {
                 }
                 // We use the opposite shift notation (see `shift_bits`).
 
-                assert_eq!(bv.as_slice(), shifted_bits.as_slice());
+                assert_eq!(bv.as_ref(), shifted_bits.as_slice());
             }
         }
     }
@@ -1092,7 +1092,7 @@ mod tests {
             }
         }
 
-        padded_data.into()
+        padded_data.into_boxed_slice()
     }
 
     // `write_padded` for 151 bytes of 1s, check padding.

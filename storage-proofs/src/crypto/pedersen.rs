@@ -5,9 +5,15 @@ use fil_sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 
 use crate::fr32::bytes_into_frs;
+use crate::settings;
 
 lazy_static! {
-    pub static ref JJ_PARAMS: JubjubBls12 = JubjubBls12::new();
+    pub static ref JJ_PARAMS: JubjubBls12 = JubjubBls12::new_with_window_size(
+        settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size
+    );
 }
 
 pub const PEDERSEN_BLOCK_SIZE: usize = 256;
@@ -15,7 +21,7 @@ pub const PEDERSEN_BLOCK_BYTES: usize = PEDERSEN_BLOCK_SIZE / 8;
 
 pub fn pedersen(data: &[u8]) -> Fr {
     pedersen_hash::<Bls12, _>(
-        Personalization::NoteCommitment,
+        Personalization::None,
         BitVec::<bitvec::LittleEndian, u8>::from(data)
             .iter()
             .take(data.len() * 8),
@@ -57,7 +63,7 @@ pub fn pedersen_md_no_padding(data: &[u8]) -> Fr {
 pub fn pedersen_compression(bytes: &mut Vec<u8>) {
     let bits = BitVec::<bitvec::LittleEndian, u8>::from(&bytes[..]);
     let (x, _) = pedersen_hash::<Bls12, _>(
-        Personalization::NoteCommitment,
+        Personalization::None,
         bits.iter().take(bytes.len() * 8),
         &JJ_PARAMS,
     )
@@ -97,8 +103,8 @@ mod tests {
         data.copy_from_slice(&bytes[..]);
         pedersen_compression(&mut data);
         let expected = vec![
-            213, 235, 66, 156, 7, 85, 177, 39, 249, 31, 160, 247, 29, 106, 36, 46, 225, 71, 116,
-            23, 1, 89, 82, 149, 45, 189, 27, 189, 144, 98, 23, 98,
+            237, 70, 41, 231, 39, 180, 131, 120, 36, 36, 119, 199, 200, 225, 153, 242, 106, 116,
+            70, 9, 12, 249, 169, 84, 105, 38, 225, 115, 165, 188, 98, 25,
         ];
         assert_eq!(expected, data);
     }

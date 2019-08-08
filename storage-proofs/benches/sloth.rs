@@ -3,7 +3,7 @@ extern crate criterion;
 
 use bellperson::groth16::*;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use criterion::{black_box, Criterion, ParameterizedBenchmark};
+use criterion::{black_box, Benchmark, Criterion};
 use fil_sapling_crypto::circuit::num;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
@@ -16,7 +16,6 @@ use storage_proofs::crypto::sloth;
 struct SlothExample<E: JubjubEngine> {
     key: Option<E::Fr>,
     ciphertext: Option<E::Fr>,
-    rounds: usize,
 }
 
 impl<E: JubjubEngine> Circuit<E> for SlothExample<E> {
@@ -24,12 +23,7 @@ impl<E: JubjubEngine> Circuit<E> for SlothExample<E> {
         let key_num = num::AllocatedNum::alloc(cs.namespace(|| "sloth-key"), || {
             Ok(self.key.ok_or_else(|| SynthesisError::AssignmentMissing)?)
         })?;
-        let res = circuit::sloth::decode(
-            cs.namespace(|| "sloth"),
-            &key_num,
-            self.ciphertext,
-            self.rounds,
-        )?;
+        let res = circuit::sloth::decode(cs.namespace(|| "sloth"), &key_num, self.ciphertext)?;
         // please compiler don't optimize the result away
         // only check if we actually have input data
         if self.ciphertext.is_some() {
@@ -41,29 +35,22 @@ impl<E: JubjubEngine> Circuit<E> for SlothExample<E> {
 }
 
 fn sloth_benchmark(c: &mut Criterion) {
-    let params = vec![1, 4, 8];
-
     c.bench(
         "sloth",
-        ParameterizedBenchmark::new(
-            "decode-non-circuit",
-            |b, rounds| {
-                let mut rng = thread_rng();
-                let key: Fr = rng.gen();
-                let plaintext: Fr = rng.gen();
-                let ciphertext = sloth::encode::<Bls12>(&key, &plaintext, *rounds);
+        Benchmark::new("decode-non-circuit", |b| {
+            let mut rng = thread_rng();
+            let key: Fr = rng.gen();
+            let plaintext: Fr = rng.gen();
+            let ciphertext = sloth::encode::<Bls12>(&key, &plaintext);
 
-                b.iter(|| black_box(sloth::decode::<Bls12>(&key, &ciphertext, *rounds)))
-            },
-            params,
-        )
-        .with_function("decode-circuit-create_proof", move |b, rounds| {
+            b.iter(|| black_box(sloth::decode::<Bls12>(&key, &ciphertext)))
+        })
+        .with_function("decode-circuit-create_proof", move |b| {
             let mut rng = thread_rng();
             let groth_params = generate_random_parameters::<Bls12, _, _>(
                 SlothExample {
                     key: None,
                     ciphertext: None,
-                    rounds: *rounds,
                 },
                 &mut rng,
             )
@@ -71,14 +58,13 @@ fn sloth_benchmark(c: &mut Criterion) {
 
             let key: Fr = rng.gen();
             let plaintext: Fr = rng.gen();
-            let ciphertext = sloth::encode::<Bls12>(&key, &plaintext, *rounds);
+            let ciphertext = sloth::encode::<Bls12>(&key, &plaintext);
 
             b.iter(|| {
                 let proof = create_random_proof(
                     SlothExample {
                         key: Some(key),
                         ciphertext: Some(ciphertext),
-                        rounds: *rounds,
                     },
                     &groth_params,
                     &mut rng,
@@ -88,11 +74,11 @@ fn sloth_benchmark(c: &mut Criterion) {
                 black_box(proof)
             });
         })
-        .with_function("decode-circuit-synthesize_circuit", move |b, rounds| {
+        .with_function("decode-circuit-synthesize_circuit", move |b| {
             let mut rng = thread_rng();
             let key: Fr = rng.gen();
             let plaintext: Fr = rng.gen();
-            let ciphertext = sloth::encode::<Bls12>(&key, &plaintext, *rounds);
+            let ciphertext = sloth::encode::<Bls12>(&key, &plaintext);
 
             b.iter(|| {
                 let mut cs = BenchCS::<Bls12>::new();
@@ -100,7 +86,6 @@ fn sloth_benchmark(c: &mut Criterion) {
                 SlothExample {
                     key: Some(key),
                     ciphertext: Some(ciphertext),
-                    rounds: *rounds,
                 }
                 .synthesize(&mut cs)
                 .unwrap();
@@ -108,12 +93,12 @@ fn sloth_benchmark(c: &mut Criterion) {
                 black_box(cs)
             });
         })
-        .with_function("encode-non-circuit", move |b, rounds| {
+        .with_function("encode-non-circuit", move |b| {
             let mut rng = thread_rng();
             let key: Fr = rng.gen();
             let plaintext: Fr = rng.gen();
 
-            b.iter(|| black_box(sloth::encode::<Bls12>(&key, &plaintext, *rounds)))
+            b.iter(|| black_box(sloth::encode::<Bls12>(&key, &plaintext)))
         })
         .sample_size(20),
     );

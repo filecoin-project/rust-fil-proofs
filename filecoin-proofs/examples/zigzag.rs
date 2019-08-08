@@ -3,7 +3,7 @@ extern crate clap;
 #[cfg(any(feature = "cpu-profile", feature = "heap-profile"))]
 extern crate gperftools;
 #[macro_use]
-extern crate slog;
+extern crate log;
 
 use chrono::Utc;
 use clap::{App, Arg};
@@ -34,9 +34,8 @@ use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher
 use storage_proofs::layered_drgporep::{self, ChallengeRequirements, LayerChallenges};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
+use storage_proofs::settings;
 use storage_proofs::zigzag_drgporep::*;
-
-use filecoin_proofs::singletons::FCP_LOG;
 
 // We can only one of the profilers at a time, either CPU (`profile`)
 // or memory (`heap-profile`), duplicating the function so they won't
@@ -93,7 +92,7 @@ fn _file_backed_mmap_from_random_bytes(n: usize, use_tmp: bool) -> MmapMut {
             .open(format!("./random-zigzag-data-{:?}", Utc::now()))
             .unwrap()
     };
-    info!(FCP_LOG, "generating fake data"; "target" => "status");
+    info!("generating fake data");
 
     for _ in 0..n {
         file.write_all(&fr_into_bytes::<Bls12>(&rng.gen())).unwrap();
@@ -114,7 +113,7 @@ fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> MmapMut {
             .unwrap()
     };
 
-    info!(FCP_LOG, "generating zeroed data"; "target" => "status");
+    info!("generating zeroed data");
     file.set_len(32 * n as u64).unwrap();
 
     unsafe { MmapOptions::new().map_mut(&file).unwrap() }
@@ -133,17 +132,10 @@ fn dump_proof_bytes<H: Hasher>(all_partition_proofs: &[layered_drgporep::Proof<H
         .create(true)
         .open(format!("./proofs-{:?}", Utc::now()))
         .unwrap();
-    info!(
-        FCP_LOG,
-        "dumping {} proofs",
-        all_partition_proofs.len(); "target" => "status"
-    );
+    info!("dumping {} proofs", all_partition_proofs.len());
 
     if let Err(e) = serde_json::to_writer(file, all_partition_proofs) {
-        warn!(
-            FCP_LOG,
-            "Encountered error while writing serialized proofs: {}", e
-        );
+        warn!("Encountered error while writing serialized proofs: {}", e);
     }
 }
 
@@ -151,7 +143,6 @@ fn do_the_work<H: 'static>(
     data_size: usize,
     m: usize,
     expansion_degree: usize,
-    sloth_iter: usize,
     layer_challenges: LayerChallenges,
     partitions: usize,
     circuit: bool,
@@ -166,18 +157,20 @@ fn do_the_work<H: 'static>(
 {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-    info!(FCP_LOG, "data size: {}", prettyb(data_size); "target" => "config");
-    info!(FCP_LOG, "m: {}", m; "target" => "config");
-    info!(FCP_LOG, "expansion_degree: {}", expansion_degree; "target" => "config");
-    info!(FCP_LOG, "sloth: {}", sloth_iter; "target" => "config");
-    info!(FCP_LOG, "layer_challenges: {:?}", layer_challenges; "target" => "config");
-    info!(FCP_LOG, "all_challenges: {:?}", layer_challenges.all_challenges(); "target" => "config");
-    info!(FCP_LOG, "total_challenges: {:?}", layer_challenges.total_challenges(); "target" => "config");
-    info!(FCP_LOG, "layers: {}", layer_challenges.layers(); "target" => "config");
-    info!(FCP_LOG, "partitions: {}", partitions; "target" => "config");
-    info!(FCP_LOG, "circuit: {:?}", circuit; "target" => "config");
-    info!(FCP_LOG, "groth: {:?}", groth; "target" => "config");
-    info!(FCP_LOG, "bench: {:?}", bench; "target" => "config");
+    info!("data size: {}", prettyb(data_size));
+    info!("m: {}", m);
+    info!("expansion_degree: {}", expansion_degree);
+    info!("layer_challenges: {:?}", layer_challenges);
+    info!("all_challenges: {:?}", layer_challenges.all_challenges());
+    info!(
+        "total_challenges: {:?}",
+        layer_challenges.total_challenges()
+    );
+    info!("layers: {}", layer_challenges.layers());
+    info!("partitions: {}", partitions);
+    info!("circuit: {:?}", circuit);
+    info!("groth: {:?}", groth);
+    info!("bench: {:?}", bench);
 
     let nodes = data_size / 32;
 
@@ -189,14 +182,13 @@ fn do_the_work<H: 'static>(
             expansion_degree,
             seed: new_seed(),
         },
-        sloth_iter,
         layer_challenges: layer_challenges.clone(),
     };
 
-    info!(FCP_LOG, "running setup");
+    info!("running setup");
     start_profile("setup");
     let pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
-    info!(FCP_LOG, "setup complete");
+    info!("setup complete");
     stop_profile();
 
     let samples: u32 = 5;
@@ -210,7 +202,7 @@ fn do_the_work<H: 'static>(
         let start = Instant::now();
         let mut replication_duration = Duration::new(0, 0);
 
-        info!(FCP_LOG, "running replicate");
+        info!("running replicate");
 
         start_profile("replicate");
         let (tau, aux) = ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, &mut data, None).unwrap();
@@ -230,7 +222,7 @@ fn do_the_work<H: 'static>(
 
         replication_duration += start.elapsed();
 
-        info!(FCP_LOG, "replication_time: {:?}", replication_duration; "target" => "stats");
+        info!("replication_time: {:?}", replication_duration);
 
         let time_per_byte = if data_size > (u32::MAX as usize) {
             // Duration only supports division by u32, so if data_size (of type usize) is larger,
@@ -244,18 +236,10 @@ fn do_the_work<H: 'static>(
         } else {
             replication_duration / (data_size as u32)
         };
-        info!(
-            FCP_LOG,
-            "replication_time/byte: {:?}",
-            time_per_byte; "target" => "stats"
-        );
-        info!(
-            FCP_LOG,
-            "replication_time/GiB: {:?}",
-            (1 << 30) * time_per_byte; "target" => "stats"
-        );
+        info!("replication_time/byte: {:?}", time_per_byte);
+        info!("replication_time/GiB: {:?}", (1 << 30) * time_per_byte);
 
-        info!(FCP_LOG, "generating {} partition proofs", partitions);
+        info!("generating {} partition proofs", partitions);
 
         let start = Instant::now();
         start_profile("prove");
@@ -266,12 +250,12 @@ fn do_the_work<H: 'static>(
         let vanilla_proving = start.elapsed();
         total_proving += vanilla_proving;
 
-        info!(FCP_LOG, "vanilla_proving_time: {:?}", vanilla_proving; "target" => "stats");
+        info!("vanilla_proving_time: {:?}", vanilla_proving);
         if dump_proofs {
             dump_proof_bytes(&all_partition_proofs);
         }
 
-        info!(FCP_LOG, "sampling verifying (samples: {})", samples);
+        info!("sampling verifying (samples: {})", samples);
         let mut total_verifying = Duration::new(0, 0);
 
         start_profile("verify");
@@ -281,38 +265,45 @@ fn do_the_work<H: 'static>(
                 ZigZagDrgPoRep::<H>::verify_all_partitions(&pp, &pub_inputs, &all_partition_proofs)
                     .expect("failed during verification");
             if !verified {
-                info!(FCP_LOG, "Verification failed."; "target" => "results");
+                info!("Verification failed.");
             };
             total_verifying += start.elapsed();
         }
-        info!(FCP_LOG, "Verification complete"; "target" => "status");
+        info!("Verification complete");
         stop_profile();
 
         let verifying_avg = total_verifying / samples;
         let verifying_avg = f64::from(verifying_avg.subsec_nanos()) / 1_000_000_000f64
             + (verifying_avg.as_secs() as f64);
-        info!(FCP_LOG, "average_vanilla_verifying_time: {:?} seconds", verifying_avg; "target" => "stats");
+        info!(
+            "average_vanilla_verifying_time: {:?} seconds",
+            verifying_avg
+        );
 
         (Some(pub_inputs), Some(priv_inputs), Some(data))
     };
 
     if circuit || groth || bench {
-        let engine_params = JubjubBls12::new();
+        let window_size = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size;
+        let engine_params = JubjubBls12::new_with_window_size(window_size);
         let compound_public_params = compound_proof::PublicParams {
             vanilla_params: pp.clone(),
             engine_params: &engine_params,
             partitions: Some(partitions),
         };
         if circuit || bench {
-            info!(FCP_LOG, "Performing circuit bench."; "target" => "status");
+            info!("Performing circuit bench.");
             let mut cs = MetricCS::<Bls12>::new();
 
             ZigZagCompound::blank_circuit(&pp, &engine_params)
                 .synthesize(&mut cs)
                 .expect("failed to synthesize circuit");
 
-            info!(FCP_LOG, "circuit_num_inputs: {}", cs.num_inputs(); "target" => "stats");
-            info!(FCP_LOG, "circuit_num_constraints: {}", cs.num_constraints(); "target" => "stats");
+            info!("circuit_num_inputs: {}", cs.num_inputs());
+            info!("circuit_num_constraints: {}", cs.num_constraints());
 
             if circuit {
                 println!("{}", cs.pretty_print());
@@ -329,7 +320,7 @@ fn do_the_work<H: 'static>(
             // We should implement a method of CompoundProof, which will skip vanilla proving.
             // We should also allow the serialized vanilla proofs to be passed (as a file) to the example
             // and skip replication/vanilla-proving entirely.
-            info!(FCP_LOG, "Performing circuit groth."; "target" => "status");
+            info!("Performing circuit groth.");
             let gparams = ZigZagCompound::groth_params(
                 &compound_public_params.vanilla_params,
                 &engine_params,
@@ -348,12 +339,12 @@ fn do_the_work<H: 'static>(
                 .unwrap();
                 stop_profile();
                 let groth_proving = start.elapsed();
-                info!(FCP_LOG, "groth_proving_time: {:?} seconds", groth_proving; "target" => "stats");
+                info!("groth_proving_time: {:?} seconds", groth_proving);
                 total_proving += groth_proving;
-                info!(FCP_LOG, "combined_proving_time: {:?} seconds", total_proving; "target" => "stats");
+                info!("combined_proving_time: {:?} seconds", total_proving);
                 result
             };
-            info!(FCP_LOG, "sampling groth verifying (samples: {})", samples);
+            info!("sampling groth verifying (samples: {})", samples);
             let verified = {
                 let mut total_groth_verifying = Duration::new(0, 0);
                 let mut result = true;
@@ -376,7 +367,10 @@ fn do_the_work<H: 'static>(
                 }
                 stop_profile();
                 let avg_groth_verifying = total_groth_verifying / samples;
-                info!(FCP_LOG, "average_groth_verifying_time: {:?} seconds", avg_groth_verifying; "target" => "stats");
+                info!(
+                    "average_groth_verifying_time: {:?} seconds",
+                    avg_groth_verifying
+                );
                 result
             };
             assert!(verified);
@@ -386,19 +380,21 @@ fn do_the_work<H: 'static>(
     if let Some(data) = d {
         if extract {
             let start = Instant::now();
-            info!(FCP_LOG, "Extracting.");
+            info!("Extracting.");
             start_profile("extract");
             let decoded_data = ZigZagDrgPoRep::<H>::extract_all(&pp, &replica_id, &data).unwrap();
             stop_profile();
             let extracting = start.elapsed();
-            info!(FCP_LOG, "extracting_time: {:?}", extracting; "target" => "stats");
+            info!("extracting_time: {:?}", extracting);
 
-            assert_eq!(&(*data), decoded_data.as_slice());
+            assert_ne!(&(*data), decoded_data.as_slice());
         }
     }
 }
 
 fn main() {
+    pretty_env_logger::init();
+
     let matches = App::new(stringify!("DrgPoRep Vanilla Bench"))
         .version("1.0")
         .arg(
@@ -420,13 +416,6 @@ fn main() {
                 .help("Expansion degree")
                 .long("expansion")
                 .default_value("8")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("sloth")
-                .help("The number of sloth iterations")
-                .long("sloth")
-                .default_value("0")
                 .takes_value(true),
         )
         .arg(
@@ -512,7 +501,6 @@ fn main() {
     let data_size = value_t!(matches, "size", usize).unwrap() * 1024;
     let m = value_t!(matches, "m", usize).unwrap();
     let expansion_degree = value_t!(matches, "exp", usize).unwrap();
-    let sloth_iter = value_t!(matches, "sloth", usize).unwrap();
     let challenge_count = value_t!(matches, "challenges", usize).unwrap();
     let hasher = value_t!(matches, "hasher", String).unwrap();
     let layers = value_t!(matches, "layers", usize).unwrap();
@@ -533,14 +521,13 @@ fn main() {
         LayerChallenges::new_tapered(layers, challenge_count, taper_layers, taper)
     };
 
-    info!(FCP_LOG, "hasher: {}", hasher; "target" => "config");
+    info!("hasher: {}", hasher);
     match hasher.as_ref() {
         "pedersen" => {
             do_the_work::<PedersenHasher>(
                 data_size,
                 m,
                 expansion_degree,
-                sloth_iter,
                 challenges,
                 partitions,
                 circuit,
@@ -557,7 +544,6 @@ fn main() {
                 data_size,
                 m,
                 expansion_degree,
-                sloth_iter,
                 challenges,
                 partitions,
                 circuit,
@@ -574,7 +560,6 @@ fn main() {
                 data_size,
                 m,
                 expansion_degree,
-                sloth_iter,
                 challenges,
                 partitions,
                 circuit,
