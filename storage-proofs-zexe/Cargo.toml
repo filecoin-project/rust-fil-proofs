@@ -38,10 +38,10 @@ base64 = "0.10.0"
 blake2b_simd = "0.5"
 blake2s_simd = "0.5"
 toml = "0.5"
-dpc = { git = "https://github.com/stefandeml/zexe", rev = "9ae6a8e" }
-snark = { git = "https://github.com/stefandeml/zexe", rev = "9ae6a8e" }
-algebra = { git = "https://github.com/stefandeml/zexe", rev = "9ae6a8e" }
-snark-gadgets = { git = "https://github.com/stefandeml/zexe", rev = "9ae6a8e" }
+dpc = { git = "https://github.com/filecoin-project/zexe", rev = "533a799" }
+snark = { git = "https://github.com/filecoin-project/zexe", rev = "533a799" }
+algebra = { git = "https://github.com/filecoin-project/zexe", rev = "533a799" }
+snark-gadgets = { git = "https://github.com/filecoin-project/zexe", rev = "533a799" }
 
 [features]
 default = []
