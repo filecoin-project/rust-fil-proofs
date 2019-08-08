@@ -1,6 +1,6 @@
-use algebra::PairingEngine as Engine;
 use algebra::fields::{Field, FpParameters, PrimeField};
-use snark::{ConstraintSystem, LinearCombination, Index, SynthesisError, Variable};
+use algebra::PairingEngine as Engine;
+use snark::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -87,7 +87,7 @@ impl<E: Engine> MetricCS<E> {
             -tmp
         };
 
-        let powers_of_two =  (0..<E::Fr as PrimeField>::Params::MODULUS_BITS)
+        let powers_of_two = (0..<E::Fr as PrimeField>::Params::MODULUS_BITS)
             // TODO: use `from_str` here
             // .map(|i| ((E::Fr::from_str("2"))))
             .map(|i| {
@@ -262,7 +262,9 @@ impl<E: Engine> ConstraintSystem<E> for MetricCS<E> {
         self
     }
 
-    fn num_constraints(&self) -> usize { self.constraints.len() }
+    fn num_constraints(&self) -> usize {
+        self.constraints.len()
+    }
 }
 
 fn compute_path(ns: &[String], this: &str) -> String {

@@ -1,7 +1,7 @@
 use blake2s_simd::Params as Blake2s;
 
-use algebra::PrimeField;
 use algebra::fields::bls12_381::Fr;
+use algebra::PrimeField;
 
 use crate::fr32::bytes_into_fr_repr_safe;
 

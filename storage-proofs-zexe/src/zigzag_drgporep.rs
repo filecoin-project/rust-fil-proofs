@@ -53,7 +53,7 @@ mod tests {
     use crate::drgporep;
     use crate::drgraph::new_seed;
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{PedersenHasher};
+    use crate::hasher::PedersenHasher;
     use crate::layered_drgporep::{
         LayerChallenges, PrivateInputs, PublicInputs, PublicParams, SetupParams,
     };

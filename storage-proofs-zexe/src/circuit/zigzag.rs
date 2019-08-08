@@ -153,14 +153,11 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, H> {
                 public_comm_r.clone()
             } else {
                 // On all other layers this is the replica root from current layer proof.
-                FpGadget::alloc(
-                    &mut cs.ns(|| format!("layer {} comm_r", l)),
-                    || {
-                        layer_proof
-                            .map(|proof| proof.replica_root.into())
-                            .ok_or_else(|| SynthesisError::AssignmentMissing)
-                    },
-                )?
+                FpGadget::alloc(&mut cs.ns(|| format!("layer {} comm_r", l)), || {
+                    layer_proof
+                        .map(|proof| proof.replica_root.into())
+                        .ok_or_else(|| SynthesisError::AssignmentMissing)
+                })?
             };
 
             // Store the comm_r so we can use it in for the next layer, as well as when calculating comm_r_star.
@@ -206,8 +203,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, H> {
         // Compute CommRStar = Hash(replica_id | comm_r_0 | ... | comm_r_l).
         {
             // Collect the bits to be hashed into crs_boolean.
-            let mut crs_boolean =
-                replica_id_num.to_bits(cs.ns(|| "replica_id_bits"))?;
+            let mut crs_boolean = replica_id_num.to_bits(cs.ns(|| "replica_id_bits"))?;
 
             crs_boolean.reverse();
 
@@ -234,12 +230,11 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, H> {
             )?;
 
             // Allocate the resulting hash.
-            let public_comm_r_star =
-                FpGadget::alloc(cs.ns(|| "public comm_r_star value"), || {
-                    self.comm_r_star
-                        .ok_or_else(|| SynthesisError::AssignmentMissing)
-                        .map(Into::into)
-                })?;
+            let public_comm_r_star = FpGadget::alloc(cs.ns(|| "public comm_r_star value"), || {
+                self.comm_r_star
+                    .ok_or_else(|| SynthesisError::AssignmentMissing)
+                    .map(Into::into)
+            })?;
 
             // Enforce that the passed in comm_r_star is equal to the computed one.
             constraint::equal(
@@ -247,7 +242,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, H> {
                 || "enforce comm_r_star is correct",
                 &computed_comm_r_star,
                 &public_comm_r_star,
-            );
+            )?;
 
             // Make it a public input.
             public_comm_r_star.inputize(cs.ns(|| "zigzag comm_r_star"))?;
@@ -270,8 +265,7 @@ impl<C: Circuit<Bls12>, P: ParameterSetIdentifier> CacheableParameters<Bls12, C,
     }
 }
 
-impl<'a, H: 'static + Hasher>
-    CompoundProof<'a, Bls12, ZigZagDrgPoRep<'a, H>, ZigZagCircuit<'a, H>>
+impl<'a, H: 'static + Hasher> CompoundProof<'a, Bls12, ZigZagDrgPoRep<'a, H>, ZigZagCircuit<'a, H>>
     for ZigZagCompound
 {
     fn generate_public_inputs(
@@ -502,7 +496,10 @@ mod tests {
         );
 
         assert_eq!(
-            cs.get_input(3, "zigzag drgporep/zigzag_layer_#0/replica_id/input 0/alloc"),
+            cs.get_input(
+                3,
+                "zigzag drgporep/zigzag_layer_#0/replica_id/input 0/alloc"
+            ),
             replica_id.into(),
         );
 
@@ -573,13 +570,13 @@ mod tests {
     fn test_zigzag_compound_pedersen() {
         zigzag_test_compound::<PedersenHasher>();
     }
-//
-//    #[test]
-//    #[ignore] // Slow test – run only when compiled for release.
-//    fn test_zigzag_compound_blake2s() {
-//        zigzag_test_compound::<Blake2sHasher>();
-//    }
-//
+    //
+    //    #[test]
+    //    #[ignore] // Slow test – run only when compiled for release.
+    //    fn test_zigzag_compound_blake2s() {
+    //        zigzag_test_compound::<Blake2sHasher>();
+    //    }
+    //
     fn zigzag_test_compound<H: 'static + Hasher>() {
         let nodes = 5;
         let degree = 2;
@@ -686,9 +683,8 @@ mod tests {
         //     }
         // }
 
-        let blank_groth_params =
-            ZigZagCompound::groth_params(&public_params.vanilla_params)
-                .expect("failed to generate groth params");
+        let blank_groth_params = ZigZagCompound::groth_params(&public_params.vanilla_params)
+            .expect("failed to generate groth params");
 
         let proof = ZigZagCompound::prove(
             &public_params,

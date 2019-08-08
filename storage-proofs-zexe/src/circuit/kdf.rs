@@ -84,13 +84,8 @@ mod tests {
                 bytes_into_boolean_vec(&mut cs, Some(p.as_slice()), p.len()).unwrap()
             })
             .collect();
-        let out = kdf(
-            cs.ns(|| "kdf"),
-            id_bits.clone(),
-            parents_bits.clone(),
-            m,
-        )
-        .expect("key derivation function failed");
+        let out = kdf(cs.ns(|| "kdf"), id_bits.clone(), parents_bits.clone(), m)
+            .expect("key derivation function failed");
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
         assert_eq!(cs.num_constraints(), 243296);

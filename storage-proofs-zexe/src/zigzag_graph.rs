@@ -420,7 +420,7 @@ mod tests {
 
     use crate::drgraph::new_seed;
     // use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
-    use crate::hasher::{PedersenHasher};
+    use crate::hasher::PedersenHasher;
 
     fn assert_graph_ascending<H: Hasher, G: Graph<H>>(g: G) {
         for i in 0..g.size() {

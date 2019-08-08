@@ -34,12 +34,12 @@ where
                     } else {
                         Some(E::Fr::zero())
                     }
-                },
+                }
                 Err(_) => None,
             };
 
             lc = lc + b.lc(one, coeff);
-            
+
             if let Some(x) = &fr.map(|v| v.mul(&coeff)) {
                 acc += x;
             }

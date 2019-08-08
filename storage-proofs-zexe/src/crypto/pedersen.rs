@@ -1,16 +1,17 @@
-use bitvec::prelude::*;
 use crate::fr32::bytes_into_frs;
 use crate::singletons::PEDERSEN_PARAMS;
+use bitvec::prelude::*;
 
 use algebra::biginteger::BigInteger;
-use algebra::curves::{bls12_381::Bls12_381 as Bls12, jubjub::JubJubProjective as JubJub,
-    ProjectiveCurve, models::twisted_edwards_extended::GroupProjective, jubjub::JubJubParameters};
+use algebra::curves::{
+    bls12_381::Bls12_381 as Bls12, jubjub::JubJubParameters, jubjub::JubJubProjective as JubJub,
+    models::twisted_edwards_extended::GroupProjective, ProjectiveCurve,
+};
 use algebra::fields::{bls12_381::Fr, PrimeField};
 use dpc::crypto_primitives::crh::{
     pedersen::{PedersenCRH, PedersenWindow},
     FixedLengthCRH,
 };
-
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct BigWindow;
@@ -32,7 +33,9 @@ pub enum Personalization {
 impl Personalization {
     pub fn get_bits(&self) -> Vec<bool> {
         match *self {
-            Personalization::NoteCommitment => vec![true, true, true, true, true, true, false, false],
+            Personalization::NoteCommitment => {
+                vec![true, true, true, true, true, true, false, false]
+            }
             Personalization::MerkleTree(num) => {
                 assert!(num < 63);
 
@@ -42,7 +45,10 @@ impl Personalization {
     }
 }
 
-pub fn pedersen_hash<I>(personalization: Personalization, bits: I) -> GroupProjective<JubJubParameters>
+pub fn pedersen_hash<I>(
+    personalization: Personalization,
+    bits: I,
+) -> GroupProjective<JubJubParameters>
 where
     I: IntoIterator<Item = bool>,
 {
@@ -98,7 +104,10 @@ pub fn pedersen_md_no_padding(data: &[u8]) -> Fr {
 pub fn pedersen_compression(bytes: &mut Vec<u8>) {
     let point = pedersen(&bytes[..]);
     bytes.truncate(0);
-    point.into_affine().x.into_repr()
+    point
+        .into_affine()
+        .x
+        .into_repr()
         .write_le(bytes)
         .expect("failed to write result hash")
 }
