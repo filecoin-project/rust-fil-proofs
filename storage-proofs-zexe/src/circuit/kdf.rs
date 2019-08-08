@@ -1,6 +1,7 @@
 use algebra::curves::bls12_381::Bls12_381 as Bls12;
 use dpc::gadgets::prf::blake2s::blake2s_gadget;
 use snark::{ConstraintSystem, SynthesisError};
+use snark_gadgets::bits::uint32::UInt32;
 use snark_gadgets::boolean::Boolean;
 use snark_gadgets::fields::fp::FpGadget;
 use snark_gadgets::utils::AllocGadget;
@@ -32,7 +33,7 @@ where
         Some(_) => {
             let bits = alloc_uint32
                 .iter()
-                .map(|v| v.to_bits_le())
+                .map(UInt32::to_bits_le)
                 .flatten()
                 .map(|v| v.get_value().unwrap())
                 .collect::<Vec<bool>>();

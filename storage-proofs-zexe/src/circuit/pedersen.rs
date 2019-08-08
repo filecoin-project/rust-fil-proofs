@@ -70,7 +70,7 @@ pub fn pedersen_compression_num<CS: ConstraintSystem<Bls12>>(
     let personalization = Personalization::NoteCommitment
         .get_bits()
         .into_iter()
-        .map(|v| Boolean::Constant(v))
+        .map(Boolean::Constant)
         .collect::<Vec<Boolean>>();
 
     let mut bits_with_personalization = personalization
@@ -84,7 +84,6 @@ pub fn pedersen_compression_num<CS: ConstraintSystem<Bls12>>(
 
     let input_bytes = bits_with_personalization
         .chunks(8)
-        .into_iter()
         .map(|v| UInt8::from_bits_le(v))
         .collect::<Vec<UInt8>>();
 
