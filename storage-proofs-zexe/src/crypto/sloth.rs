@@ -1,7 +1,4 @@
-use algebra::{
-    AffineCurve as CurveAffine, Field, PairingEngine as Engine, PrimeField,
-    ProjectiveCurve as CurveProjective,
-};
+use algebra::{ Field, PairingEngine as Engine };
 use std::ops::AddAssign;
 use std::ops::SubAssign;
 

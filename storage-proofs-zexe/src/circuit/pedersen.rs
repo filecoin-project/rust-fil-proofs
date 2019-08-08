@@ -1,25 +1,21 @@
-use snark_gadgets::fields::FieldGadget;
-
-use bitvec::prelude::*;
 use algebra::curves::bls12_381::Bls12_381 as Bls12;
 use algebra::curves::jubjub::JubJubProjective as JubJub;
 
 use dpc::{
-    crypto_primitives::crh::{pedersen::PedersenCRH, pedersen::PedersenParameters, FixedLengthCRH},
+    crypto_primitives::crh::{pedersen::PedersenCRH, pedersen::PedersenParameters},
     gadgets::crh::{
-        pedersen::PedersenCRHGadget, pedersen::PedersenCRHGadgetParameters, FixedLengthCRHGadget,
+        pedersen::PedersenCRHGadget, FixedLengthCRHGadget,
     },
 };
 use snark::{ConstraintSystem, SynthesisError};
-use snark_gadgets::bits::boolean::Boolean;
-use snark_gadgets::bits::uint8::UInt8;
+use snark_gadgets::bits::{boolean::Boolean, uint8::UInt8};
 use snark_gadgets::fields::fp::FpGadget;
 use snark_gadgets::groups::curves::twisted_edwards::jubjub::JubJubGadget;
 use snark_gadgets::utils::{AllocGadget, ToBitsGadget};
 
+
 use crate::crypto::pedersen::{BigWindow, PEDERSEN_BLOCK_SIZE};
 use crate::crypto::pedersen::Personalization;
-use crate::util::bits_to_bytes;
 
 
 type CRHGadget = PedersenCRHGadget<JubJub, Bls12, JubJubGadget>;
@@ -76,7 +72,7 @@ pub fn pedersen_compression_num<CS: ConstraintSystem<Bls12>>(
         )
         .unwrap();
 
-    let mut personalization = Personalization::NoteCommitment
+    let personalization = Personalization::NoteCommitment
         .get_bits()
         .into_iter()
         .map(|v| Boolean::Constant(v))

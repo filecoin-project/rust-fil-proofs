@@ -3,10 +3,7 @@ use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 
 use algebra::biginteger::BigInteger;
 use algebra::biginteger::BigInteger256 as FrRepr;
-use algebra::{
-    AffineCurve as CurveAffine, Field, PairingEngine as Engine, PrimeField,
-    ProjectiveCurve as CurveProjective,
-};
+use algebra::{PairingEngine as Engine, PrimeField};
 use std::io::Read;
 
 // Contains 32 bytes whose little-endian value represents an Fr.
