@@ -46,6 +46,10 @@ fil-sapling-crypto = "0.1.1"
 serde_json = "1.0"
 log = "0.4.7"
 pretty_env_logger = "0.3.0"
+zexe-dpc = { path = "../../zexe/dpc", package = "dpc" }
+zexe-snark = { path = "../../zexe/snark", package = "snark" }
+zexe-algebra = { path = "../../zexe/algebra", package = "algebra" }
+zexe-gadgets = { path = "../../zexe/snark-gadgets", package = "snark-gadgets"}
 
 [features]
 default = []
