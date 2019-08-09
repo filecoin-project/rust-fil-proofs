@@ -1,8 +1,8 @@
-use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::circuit::num;
-use fil_sapling_crypto::jubjub::JubjubEngine;
-use paired::bls12_381::{Bls12, Fr};
-use paired::Engine;
+use algebra::curves::{bls12_381::Bls12_381 as Bls12, jubjub::JubJubProjective as JubJub};
+use algebra::fields::bls12_381::Fr;
+use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
+use snark::{Circuit, ConstraintSystem, SynthesisError};
+use snark_gadgets::{fields::fp::FpGadget, utils::AllocGadget};
 
 use crate::circuit::constraint;
 use crate::circuit::porc;
@@ -12,36 +12,37 @@ use crate::fr32::u32_into_fr;
 use crate::hasher::Hasher;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
+use crate::singletons::PEDERSEN_PARAMS;
 use crate::vdf::Vdf;
 use crate::vdf_post::{self, compute_root_commitment, VDFPoSt};
 
 /// This is the `VDF-PoSt` circuit.
 #[derive(Debug)]
-pub struct VDFPoStCircuit<'a, E: JubjubEngine> {
+pub struct VDFPoStCircuit<'a> {
     /// Paramters for the engine.
-    pub params: &'a E::Params,
+    pub params: &'a PedersenParameters<JubJub>,
 
-    pub challenge_seed: Option<E::Fr>,
+    pub challenge_seed: Option<Fr>,
 
     // VDF
-    pub vdf_key: Option<E::Fr>,
-    pub vdf_ys: Vec<Option<E::Fr>>,
-    pub vdf_xs: Vec<Option<E::Fr>>,
+    pub vdf_key: Option<Fr>,
+    pub vdf_ys: Vec<Option<Fr>>,
+    pub vdf_xs: Vec<Option<Fr>>,
 
     // PoRCs
     pub challenges_vec: Vec<Vec<Option<usize>>>,
     pub challenged_sectors_vec: Vec<Vec<Option<usize>>>,
-    pub challenged_leafs_vec: Vec<Vec<Option<E::Fr>>>,
-    pub commitments_vec: Vec<Vec<Option<E::Fr>>>,
-    pub root_commitment: Option<E::Fr>,
+    pub challenged_leafs_vec: Vec<Vec<Option<Fr>>>,
+    pub commitments_vec: Vec<Vec<Option<Fr>>>,
+    pub root_commitment: Option<Fr>,
     #[allow(clippy::type_complexity)]
-    pub paths_vec: Vec<Vec<Vec<Option<(E::Fr, bool)>>>>,
+    pub paths_vec: Vec<Vec<Vec<Option<(Fr, bool)>>>>,
 }
 
 #[derive(Debug)]
 pub struct VDFPostCompound {}
 
-impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata> CacheableParameters<E, C, P>
+impl<C: Circuit<Bls12>, P: ParameterSetMetadata> CacheableParameters<Bls12, C, P>
     for VDFPostCompound
 {
     fn cache_prefix() -> String {
@@ -52,12 +53,11 @@ impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata> CacheableParameter
 #[derive(Debug, Clone, Default)]
 pub struct ComponentPrivateInputs {}
 
-impl<'a, E: JubjubEngine> CircuitComponent for VDFPoStCircuit<'a, E> {
+impl<'a> CircuitComponent for VDFPoStCircuit<'a> {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
-impl<'a, H, V> CompoundProof<'a, Bls12, VDFPoSt<H, V>, VDFPoStCircuit<'a, Bls12>>
-    for VDFPostCompound
+impl<'a, H, V> CompoundProof<'a, Bls12, VDFPoSt<H, V>, VDFPoStCircuit<'a>> for VDFPostCompound
 where
     H: 'static + Hasher,
     V: Vdf<H::Domain> + Sync + Send,
@@ -77,11 +77,10 @@ where
 
     fn circuit(
         pub_in: &<VDFPoSt<H, V> as ProofScheme<'a>>::PublicInputs,
-        _component_private_inputs:<VDFPoStCircuit<'a, Bls12> as CircuitComponent>::ComponentPrivateInputs,
+        _component_private_inputs: <VDFPoStCircuit<'a> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &<VDFPoSt<H, V> as ProofScheme<'a>>::Proof,
         pub_params: &<VDFPoSt<H, V> as ProofScheme<'a>>::PublicParams,
-        engine_params: &'a <Bls12 as JubjubEngine>::Params,
-    ) -> VDFPoStCircuit<'a, Bls12> {
+    ) -> VDFPoStCircuit<'a> {
         let post_epochs = pub_params.post_epochs;
         let challenge_count = pub_params.challenge_count;
 
@@ -143,7 +142,7 @@ where
         }
 
         VDFPoStCircuit {
-            params: engine_params,
+            params: &PEDERSEN_PARAMS,
             challenges_vec: vanilla_proof
                 .challenges
                 .iter()
@@ -167,8 +166,7 @@ where
 
     fn blank_circuit(
         pub_params: &<VDFPoSt<H, V> as ProofScheme>::PublicParams,
-        engine_params: &'a <Bls12 as JubjubEngine>::Params,
-    ) -> VDFPoStCircuit<'a, Bls12> {
+    ) -> VDFPoStCircuit<'a> {
         let post_epochs = pub_params.post_epochs;
         let challenge_bits = pub_params.challenge_bits;
         let challenge_count = pub_params.challenge_count;
@@ -182,7 +180,7 @@ where
         let paths_vec = vec![vec![vec![None; challenge_bits]; challenge_count]; post_epochs];
 
         VDFPoStCircuit {
-            params: engine_params,
+            params: &PEDERSEN_PARAMS,
             challenges_vec,
             challenged_sectors_vec,
             challenge_seed: None,
@@ -197,9 +195,8 @@ where
     }
 }
 
-impl<'a, E: JubjubEngine> Circuit<E> for VDFPoStCircuit<'a, E> {
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        let params = self.params;
+impl<'a> Circuit<Bls12> for VDFPoStCircuit<'a> {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let vdf_key = self.vdf_key;
         let vdf_ys = self.vdf_ys.clone();
         let vdf_xs = self.vdf_xs.clone();
@@ -232,23 +229,23 @@ impl<'a, E: JubjubEngine> Circuit<E> for VDFPoStCircuit<'a, E> {
         // VDF Output Verification
         assert_eq!(vdf_xs.len(), vdf_ys.len());
 
-        let vdf_key = num::AllocatedNum::alloc(cs.namespace(|| "vdf_key"), || {
+        let vdf_key = FpGadget::alloc(cs.ns(|| "vdf_key"), || {
             vdf_key.ok_or_else(|| SynthesisError::AssignmentMissing)
         })?;
 
         for (i, (y, x)) in vdf_ys.iter().zip(vdf_xs.iter()).enumerate() {
             {
                 // VDF Verification
-                let mut cs = cs.namespace(|| format!("vdf_verification_round_{}", i));
+                let mut cs = cs.ns(|| format!("vdf_verification_round_{}", i));
                 //
                 //                // FIXME: make this a generic call to Vdf proof circuit function.
-                let decoded = sloth::decode(cs.namespace(|| "sloth_decode"), &vdf_key, *y)?;
+                let decoded = sloth::decode(cs.ns(|| "sloth_decode"), &vdf_key, *y)?;
 
-                let x_alloc = num::AllocatedNum::alloc(cs.namespace(|| "x"), || {
+                let x_alloc = FpGadget::alloc(cs.ns(|| "x"), || {
                     x.ok_or_else(|| SynthesisError::AssignmentMissing)
                 })?;
 
-                constraint::equal(&mut cs, || "equality", &x_alloc, &decoded);
+                constraint::equal(cs.ns(|| "equality"), &x_alloc, &decoded)?;
 
                 let partial_challenge = x;
 
@@ -289,13 +286,12 @@ impl<'a, E: JubjubEngine> Circuit<E> for VDFPoStCircuit<'a, E> {
             .zip(commitments_vec.iter().zip(paths_vec.iter()))
             .enumerate()
         {
-            let mut cs = cs.namespace(|| format!("porc_verification_round_{}", i));
+            let mut cs = cs.ns(|| format!("porc_verification_round_{}", i));
             porc::PoRCCircuit::synthesize(
                 &mut cs,
-                params,
                 challenges_vec[i]
                     .iter()
-                    .map(|c| c.map(|c| u32_into_fr::<E>(c as u32)))
+                    .map(|c| c.map(|c| u32_into_fr::<Bls12>(c as u32)))
                     .collect(),
                 challenged_sectors_vec[i].clone(),
                 challenged_leafs.to_vec(),
@@ -307,10 +303,10 @@ impl<'a, E: JubjubEngine> Circuit<E> for VDFPoStCircuit<'a, E> {
     }
 }
 
-fn verify_challenges<E: Engine, CS: ConstraintSystem<E>, T>(
+fn verify_challenges<CS: ConstraintSystem<Bls12>, T>(
     _cs: &mut CS,
-    _challenges: Vec<&Option<E::Fr>>,
-    _partial_challenge: &Option<E::Fr>,
+    _challenges: Vec<&Option<Fr>>,
+    _partial_challenge: &Option<Fr>,
     // This is generic because it needs to work with a public input (challenge seed) on first iteration
     // then an allocated number subsequently.
     _mix: T,
@@ -324,21 +320,21 @@ fn verify_challenges<E: Engine, CS: ConstraintSystem<E>, T>(
     true
 }
 
-impl<'a, E: JubjubEngine> VDFPoStCircuit<'a, E> {
+impl<'a> VDFPoStCircuit<'a> {
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
-    pub fn synthesize<CS: ConstraintSystem<E>>(
+    pub fn synthesize<CS: ConstraintSystem<Bls12>>(
         cs: &mut CS,
-        params: &E::Params,
-        challenge_seed: Option<E::Fr>,
-        vdf_key: Option<E::Fr>,
-        vdf_ys: Vec<Option<E::Fr>>,
-        vdf_xs: Vec<Option<E::Fr>>,
+        params: &PedersenParameters<JubJub>,
+        challenge_seed: Option<Fr>,
+        vdf_key: Option<Fr>,
+        vdf_ys: Vec<Option<Fr>>,
+        vdf_xs: Vec<Option<Fr>>,
         challenges_vec: Vec<Vec<Option<usize>>>,
         challenged_sectors_vec: Vec<Vec<Option<usize>>>,
-        challenged_leafs_vec: Vec<Vec<Option<E::Fr>>>,
-        root_commitment: Option<E::Fr>,
-        commitments_vec: Vec<Vec<Option<E::Fr>>>,
-        paths_vec: Vec<Vec<Vec<Option<(E::Fr, bool)>>>>,
+        challenged_leafs_vec: Vec<Vec<Option<Fr>>>,
+        root_commitment: Option<Fr>,
+        commitments_vec: Vec<Vec<Option<Fr>>>,
+        paths_vec: Vec<Vec<Vec<Option<(Fr, bool)>>>>,
     ) -> Result<(), SynthesisError> {
         VDFPoStCircuit {
             params,
@@ -361,10 +357,9 @@ impl<'a, E: JubjubEngine> VDFPoStCircuit<'a, E> {
 mod tests {
     use super::*;
 
-    use bellperson::groth16;
-    use ff::Field;
-    use fil_sapling_crypto::jubjub::JubjubBls12;
+    use algebra::fields::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
+    use snark::groth16;
 
     use crate::circuit::test::*;
     use crate::compound_proof;
@@ -372,24 +367,18 @@ mod tests {
     use crate::fr32::fr_into_bytes;
     use crate::hasher::pedersen::*;
     use crate::proof::{NoRequirements, ProofScheme};
-    use crate::settings;
     use crate::vdf_post;
     use crate::vdf_sloth;
 
     #[test]
     fn test_vdf_post_circuit_with_bls12_381() {
-        let window_size = settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size;
-        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let lambda = 32;
 
         let sp = vdf_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
             challenge_count: 10,
-            sector_size: 1024 * lambda,
+            sector_size: 128 * lambda,
             post_epochs: 3,
             setup_params_vdf: vdf_sloth::SetupParams { key: rng.gen() },
             sectors_count: 2,
@@ -398,16 +387,16 @@ mod tests {
         let pub_params = vdf_post::VDFPoSt::<PedersenHasher, vdf_sloth::Sloth>::setup(&sp)
             .expect("setup failed");
 
-        let data0: Vec<u8> = (0..1024)
+        let data0: Vec<u8> = (0..128)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
-        let data1: Vec<u8> = (0..1024)
+        let data1: Vec<u8> = (0..128)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph0 = BucketGraph::<PedersenHasher>::new(1024, 5, 0, new_seed());
+        let graph0 = BucketGraph::<PedersenHasher>::new(128, 5, 0, new_seed());
         let tree0 = graph0.merkle_tree(data0.as_slice()).unwrap();
-        let graph1 = BucketGraph::<PedersenHasher>::new(1024, 5, 0, new_seed());
+        let graph1 = BucketGraph::<PedersenHasher>::new(128, 5, 0, new_seed());
         let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
 
         let pub_inputs = vdf_post::PublicInputs {
@@ -489,7 +478,7 @@ mod tests {
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
         let instance = VDFPoStCircuit {
-            params,
+            params: &PEDERSEN_PARAMS,
             challenges_vec: proof
                 .challenges
                 .iter()
@@ -517,18 +506,13 @@ mod tests {
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
         assert_eq!(cs.num_inputs(), 3, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 412264, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 1801684, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
     }
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn test_vdf_post_compound() {
-        let window_size = settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size;
-        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let lambda = 32;
@@ -541,12 +525,10 @@ mod tests {
                 setup_params_vdf: vdf_sloth::SetupParams { key: rng.gen() },
                 sectors_count: 2,
             },
-            engine_params: params,
             partitions: None,
         };
 
         let pub_params: compound_proof::PublicParams<
-            _,
             vdf_post::VDFPoSt<PedersenHasher, vdf_sloth::Sloth>,
         > = VDFPostCompound::setup(&setup_params).expect("setup failed");
 
@@ -572,14 +554,13 @@ mod tests {
         let priv_inputs = //: vdf_post::PrivateInputs<PedersenHasher> =
             vdf_post::PrivateInputs::<PedersenHasher>::new(&trees[..]);
 
-        let gparams: groth16::Parameters<_> =
-            <VDFPostCompound as CompoundProof<
-                '_,
-                Bls12,
-                VDFPoSt<PedersenHasher, _>,
-                VDFPoStCircuit<_>,
-            >>::groth_params(&pub_params.vanilla_params, &params)
-            .expect("failed to create groth params");
+        let gparams: groth16::Parameters<_> = <VDFPostCompound as CompoundProof<
+            '_,
+            Bls12,
+            VDFPoSt<PedersenHasher, _>,
+            VDFPoStCircuit,
+        >>::groth_params(&pub_params.vanilla_params)
+        .expect("failed to create groth params");
 
         let proof = VDFPostCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &gparams)
             .expect("failed while proving");
