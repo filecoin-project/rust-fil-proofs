@@ -1,14 +1,13 @@
-use ff::{BitIterator, PrimeField, PrimeFieldRepr};
-use fil_sapling_crypto::pedersen_hash;
-use paired::bls12_381::{Bls12, Fr};
-use rand::Rng;
-
 use crate::crypto;
+use crate::crypto::pedersen::{pedersen_hash, Personalization};
 use crate::error;
 use crate::fr32::{bytes_into_fr, fr_into_bytes};
 use crate::hasher::pedersen::{PedersenDomain, PedersenFunction, PedersenHasher};
 use crate::merkle::{MerkleProof, MerkleTree};
-
+use algebra::biginteger::BigInteger;
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use algebra::fields::{bls12_381::Fr, BitIterator, FpParameters, PrimeField};
+use rand::Rng;
 #[macro_export]
 macro_rules! table_tests {
     ($property_test_func:ident {
@@ -70,7 +69,6 @@ pub fn fake_drgpoprep_proof<R: Rng>(
 
     let key = crypto::kdf::kdf(ciphertexts.as_slice(), m);
     // run sloth(key, node)
-
     let replica_node: Fr = crypto::sloth::encode::<Bls12>(&key, &data_node);
     // run fake merkle with only the first 1+m real leaves
 
@@ -152,7 +150,7 @@ pub fn random_merkle_path_with_value<R: Rng>(
         let mut rhs = uncle;
 
         if is_right {
-            ::std::mem::swap(&mut lhs, &mut rhs);
+            std::mem::swap(&mut lhs, &mut rhs);
         }
 
         let mut lhs: Vec<bool> = BitIterator::new(lhs.into_repr()).collect();
@@ -161,15 +159,16 @@ pub fn random_merkle_path_with_value<R: Rng>(
         lhs.reverse();
         rhs.reverse();
 
-        cur = pedersen_hash::pedersen_hash::<Bls12, _>(
-            pedersen_hash::Personalization::None,
+        cur = pedersen_hash(
+            Personalization::None,
             lhs.into_iter()
-                .take(Fr::NUM_BITS as usize)
-                .chain(rhs.into_iter().take(Fr::NUM_BITS as usize)),
-            &crypto::pedersen::JJ_PARAMS,
+                .take(<Fr as PrimeField>::Params::MODULUS_BITS as usize)
+                .chain(
+                    rhs.into_iter()
+                        .take(<Fr as PrimeField>::Params::MODULUS_BITS as usize),
+                ),
         )
-        .into_xy()
-        .0;
+        .x
     }
 
     (auth_path, cur)

@@ -111,14 +111,11 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
             let leaves_path = &PathBuf::from([path_prefix, "leaves"].join("-"));
             let top_half_path = &PathBuf::from([path_prefix, "top-half"].join("-"));
             // FIXME: There is probably a more direct way of doing this without
-            // reconverting to string.
+            //  reconverting to string.
 
+            info!("creating leaves tree mmap-file {:?}", leaves_path.to_str());
             info!(
-                "creating leaves tree mmap-file (path-prefix: {:?})",
-                leaves_path.to_str()
-            );
-            info!(
-                "creating top half tree mmap-file (path-prefix: {:?})",
+                "creating top half tree mmap-file {:?}",
                 top_half_path.to_str()
             );
 
@@ -293,7 +290,7 @@ mod tests {
     use memmap::MmapOptions;
 
     use crate::drgraph::new_seed;
-    use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::hasher::{Blake2sHasher, PedersenHasher};
 
     // Create and return an object of MmapMut backed by in-memory copy of data.
     pub fn mmap_from(data: &[u8]) -> MmapMut {
@@ -347,10 +344,9 @@ mod tests {
     }
 
     #[test]
-    fn graph_bucket_sha256() {
-        graph_bucket::<Sha256Hasher>();
-    }
-
+    // fn graph_bucket_sha256() {
+    //     graph_bucket::<Sha256Hasher>();
+    // }
     #[test]
     fn graph_bucket_blake2s() {
         graph_bucket::<Blake2sHasher>();
@@ -378,11 +374,11 @@ mod tests {
         gen_proof::<PedersenHasher>(false);
     }
 
-    #[test]
-    fn gen_proof_sha256() {
-        gen_proof::<Sha256Hasher>(true);
-        gen_proof::<Sha256Hasher>(false);
-    }
+    // #[test]
+    //     fn gen_proof_sha256() {
+    //         gen_proof::<Sha256Hasher>(true);
+    //         gen_proof::<Sha256Hasher>(false);
+    //     }
 
     #[test]
     fn gen_proof_blake2s() {

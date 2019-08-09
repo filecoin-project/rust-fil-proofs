@@ -1,19 +1,22 @@
-use bellperson::{ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::circuit::blake2s::blake2s as blake2s_circuit;
-use fil_sapling_crypto::circuit::boolean::Boolean;
-use fil_sapling_crypto::circuit::{multipack, num};
-use fil_sapling_crypto::jubjub::JubjubEngine;
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use dpc::gadgets::prf::blake2s::blake2s_gadget;
+use snark::{ConstraintSystem, SynthesisError};
+use snark_gadgets::bits::uint32::UInt32;
+use snark_gadgets::boolean::Boolean;
+use snark_gadgets::fields::fp::FpGadget;
+use snark_gadgets::utils::AllocGadget;
+
+use crate::circuit::multipack;
 
 /// Key derivation function, using pedersen hashes as the underlying primitive.
-pub fn kdf<E, CS>(
+pub fn kdf<CS>(
     mut cs: CS,
     id: Vec<Boolean>,
     parents: Vec<Vec<Boolean>>,
     m: usize,
-) -> Result<num::AllocatedNum<E>, SynthesisError>
+) -> Result<FpGadget<Bls12>, SynthesisError>
 where
-    E: JubjubEngine,
-    CS: ConstraintSystem<E>,
+    CS: ConstraintSystem<Bls12>,
 {
     // ciphertexts will become a buffer of the layout
     // id | encodedParentNode1 | encodedParentNode1 | ...
@@ -24,34 +27,39 @@ where
 
     assert_eq!(ciphertexts.len(), 8 * 32 * (1 + m), "invalid input length");
 
-    let personalization = vec![0u8; 8];
-    let alloc_bits = blake2s_circuit(cs.namespace(|| "hash"), &ciphertexts[..], &personalization)?;
-    let fr = match alloc_bits[0].get_value() {
+    let alloc_uint32 = blake2s_gadget(cs.ns(|| "hash"), &ciphertexts[..])?;
+
+    let fr = match alloc_uint32[0].get_value() {
         Some(_) => {
-            let bits = alloc_bits
+            let bits = alloc_uint32
                 .iter()
+                .map(UInt32::to_bits_le)
+                .flatten()
                 .map(|v| v.get_value().unwrap())
                 .collect::<Vec<bool>>();
             // TODO: figure out if we can avoid this
-            let frs = multipack::compute_multipacking::<E>(&bits);
+            let frs = multipack::compute_multipacking::<Bls12>(&bits);
             Ok(frs[0])
         }
         None => Err(SynthesisError::AssignmentMissing),
     };
 
-    num::AllocatedNum::<E>::alloc(cs.namespace(|| "num"), || fr)
+    FpGadget::alloc(cs.ns(|| "num"), || fr)
 }
 
 #[cfg(test)]
 mod tests {
     use super::kdf;
+
+    use algebra::curves::bls12_381::Bls12_381 as Bls12;
+    use snark::ConstraintSystem;
+    use snark_gadgets::boolean::Boolean;
+    use snark_gadgets::fields::FieldGadget;
+
     use crate::circuit::test::TestConstraintSystem;
     use crate::crypto;
     use crate::fr32::fr_into_bytes;
     use crate::util::bytes_into_boolean_vec;
-    use bellperson::ConstraintSystem;
-    use fil_sapling_crypto::circuit::boolean::Boolean;
-    use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]
@@ -65,7 +73,7 @@ mod tests {
         let parents: Vec<Vec<u8>> = (0..m).map(|_| fr_into_bytes::<Bls12>(&rng.gen())).collect();
 
         let id_bits: Vec<Boolean> = {
-            let mut cs = cs.namespace(|| "id");
+            let mut cs = cs.ns(|| "id");
             bytes_into_boolean_vec(&mut cs, Some(id.as_slice()), id.len()).unwrap()
         };
         let parents_bits: Vec<Vec<Boolean>> = parents
@@ -73,20 +81,15 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(i, p)| {
-                let mut cs = cs.namespace(|| format!("parents {}", i));
+                let mut cs = cs.ns(|| format!("parents {}", i));
                 bytes_into_boolean_vec(&mut cs, Some(p.as_slice()), p.len()).unwrap()
             })
             .collect();
-        let out = kdf(
-            cs.namespace(|| "kdf"),
-            id_bits.clone(),
-            parents_bits.clone(),
-            m,
-        )
-        .expect("key derivation function failed");
+        let out = kdf(cs.ns(|| "kdf"), id_bits.clone(), parents_bits.clone(), m)
+            .expect("key derivation function failed");
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_constraints(), 240282);
+        assert_eq!(cs.num_constraints(), 243296);
 
         let input_bytes = parents.iter().fold(id, |mut acc, parent| {
             acc.extend(parent);

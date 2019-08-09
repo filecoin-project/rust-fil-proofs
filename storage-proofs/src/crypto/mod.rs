@@ -1,4 +1,3 @@
-pub mod aes;
 pub mod feistel;
 pub mod kdf;
 pub mod pedersen;

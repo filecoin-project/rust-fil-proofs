@@ -3,7 +3,7 @@ extern crate criterion;
 
 use criterion::{black_box, Criterion, ParameterizedBenchmark};
 use storage_proofs::drgraph::*;
-use storage_proofs::hasher::pedersen::*;
+use storage_proofs::hasher::PedersenHasher;
 
 fn drgraph(c: &mut Criterion) {
     let params: Vec<_> = vec![12, 24, 128, 1024]

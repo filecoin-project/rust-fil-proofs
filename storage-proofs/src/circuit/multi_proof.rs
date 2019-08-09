@@ -1,8 +1,11 @@
-use bellperson::groth16;
+use std::io::{self, Read, Write};
 
 use crate::error::Result;
-use paired::Engine;
-use std::io::{self, Read, Write};
+use algebra::{
+    bytes::{FromBytes, ToBytes},
+    PairingEngine as Engine,
+};
+use snark::groth16;
 
 pub struct MultiProof<'a, E: Engine> {
     pub circuit_proofs: Vec<groth16::Proof<E>>,

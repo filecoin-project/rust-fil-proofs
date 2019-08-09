@@ -1,15 +1,14 @@
-use bellperson::{ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::circuit::boolean::Boolean;
-use fil_sapling_crypto::jubjub::JubjubEngine;
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use snark::{ConstraintSystem, SynthesisError};
+use snark_gadgets::boolean::Boolean;
 
-pub fn xor<E, CS>(
+pub fn xor<CS>(
     cs: &mut CS,
     key: &[Boolean],
     input: &[Boolean],
 ) -> Result<Vec<Boolean>, SynthesisError>
 where
-    E: JubjubEngine,
-    CS: ConstraintSystem<E>,
+    CS: ConstraintSystem<Bls12>,
 {
     let key_len = key.len();
     assert_eq!(key_len, 32 * 8);
@@ -17,25 +16,17 @@ where
     input
         .iter()
         .enumerate()
-        .map(|(i, byte)| {
-            Boolean::xor(
-                cs.namespace(|| format!("xor bit: {}", i)),
-                byte,
-                &key[i % key_len],
-            )
-        })
+        .map(|(i, byte)| Boolean::xor(cs.ns(|| format!("xor bit: {}", i)), byte, &key[i % key_len]))
         .collect::<Result<Vec<_>, SynthesisError>>()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::xor;
+    use super::*;
     use crate::circuit::test::TestConstraintSystem;
     use crate::crypto;
     use crate::util::{bits_to_bytes, bytes_into_boolean_vec};
-    use bellperson::ConstraintSystem;
-    use fil_sapling_crypto::circuit::boolean::Boolean;
-    use paired::bls12_381::Bls12;
+
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]
@@ -49,12 +40,12 @@ mod tests {
             let data: Vec<u8> = (0..(i + 1) * 32).map(|_| rng.gen()).collect();
 
             let key_bits: Vec<Boolean> = {
-                let mut cs = cs.namespace(|| "key");
+                let mut cs = cs.ns(|| "key");
                 bytes_into_boolean_vec(&mut cs, Some(key.as_slice()), key.len()).unwrap()
             };
 
             let data_bits: Vec<Boolean> = {
-                let mut cs = cs.namespace(|| "data bits");
+                let mut cs = cs.ns(|| "data bits");
                 bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).unwrap()
             };
 
@@ -79,8 +70,8 @@ mod tests {
 
             // -- roundtrip
             let roundtrip_bits = {
-                let mut cs = cs.namespace(|| "roundtrip");
-                xor(&mut cs, key_bits.as_slice(), out_bits.as_slice()).expect("xor faield")
+                let mut cs = cs.ns(|| "roundtrip");
+                xor(&mut cs, key_bits.as_slice(), out_bits.as_slice()).expect("xor failed")
             };
 
             let roundtrip = bits_to_bytes(

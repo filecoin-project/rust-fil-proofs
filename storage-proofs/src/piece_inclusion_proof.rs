@@ -368,7 +368,7 @@ fn subtree_capacity(pos: usize, total: usize) -> usize {
 mod tests {
     use super::*;
     use crate::drgraph::{new_seed, BucketGraph, Graph};
-    use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::hasher::{Blake2sHasher, PedersenHasher};
     use crate::util::NODE_SIZE;
     use rand::Rng;
     use std::convert::TryInto;
@@ -398,10 +398,10 @@ mod tests {
         test_piece_inclusion_proof::<PedersenHasher>();
     }
 
-    #[test]
-    fn piece_inclusion_proof_sha256() {
-        test_piece_inclusion_proof::<Sha256Hasher>();
-    }
+    // #[test]
+    // fn piece_inclusion_proof_sha256() {
+    //     test_piece_inclusion_proof::<Sha256Hasher>();
+    // }
 
     #[test]
     fn piece_inclusion_proof_blake2s() {

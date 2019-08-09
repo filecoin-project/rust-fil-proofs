@@ -1,6 +1,6 @@
 [package]
 name = "storage-proofs"
-description = "Implementations of Proofs of Storage."
+description = "Implementations of Proofs of Storage on Zexe."
 version = "0.5.0"
 authors = ["dignifiedquire <dignifiedquire@gmail.com>", "laser <l@s3r.com>", "porcuquine <porcuquine@users.noreply.github.com>"]
 license = "MIT OR Apache-2.0"
@@ -39,13 +39,9 @@ base64 = "0.10.0"
 blake2b_simd = "0.5"
 blake2s_simd = "0.5"
 toml = "0.5"
-ff = "0.4.0"
-bellperson = "0.2"
-paired = { version = "0.15", features = ["serde"] }
-fil-sapling-crypto = "0.1.1"
-serde_json = "1.0"
 log = "0.4.7"
 pretty_env_logger = "0.3.0"
+serde_json = "1.0"
 dpc = { git = "https://github.com/filecoin-project/zexe", rev = "533a799" }
 snark = { git = "https://github.com/filecoin-project/zexe", rev = "533a799" }
 algebra = { git = "https://github.com/filecoin-project/zexe", rev = "533a799" }

@@ -6,9 +6,11 @@ extern crate failure;
 #[macro_use]
 extern crate lazy_static;
 #[cfg(test)]
+extern crate bitvec;
+#[cfg(test)]
 #[macro_use]
 extern crate proptest;
-#[macro_use]
+// #[macro_use]
 extern crate clap;
 #[macro_use]
 extern crate log;
@@ -22,14 +24,11 @@ extern crate pretty_assertions;
 #[macro_use]
 pub mod test_helper;
 
-pub mod example_helper;
-
-pub mod batchpost;
-pub mod beacon_post;
+#[macro_use]
+pub mod crypto;
 pub mod challenge_derivation;
 pub mod circuit;
 pub mod compound_proof;
-pub mod crypto;
 pub mod drgporep;
 pub mod drgraph;
 pub mod error;
@@ -45,11 +44,8 @@ pub mod porc;
 pub mod porep;
 pub mod proof;
 pub mod settings;
+pub mod singletons;
 pub mod util;
-pub mod vdf;
-pub mod vdf_post;
-pub mod vdf_sloth;
+pub mod vde;
 pub mod zigzag_drgporep;
 pub mod zigzag_graph;
-
-pub mod vde;

@@ -1,13 +1,11 @@
 #[macro_use]
 extern crate criterion;
 
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
 use criterion::{black_box, Criterion, ParameterizedBenchmark};
-use paired::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
 use storage_proofs::fr32::fr_into_bytes;
-use storage_proofs::hasher::blake2s::Blake2sHasher;
-use storage_proofs::hasher::pedersen::PedersenHasher;
-use storage_proofs::hasher::sha256::Sha256Hasher;
+use storage_proofs::hasher::{Blake2sHasher, PedersenHasher};
 use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::util::{data_at_node_offset, NODE_SIZE};
 use storage_proofs::vde;
@@ -85,22 +83,21 @@ fn kdf_benchmark(c: &mut Criterion) {
                     &mut data,
                 ))
             })
-        })
-        .with_function("sha256", |b, degree| {
-            let Pregenerated {
-                mut data,
-                parents,
-                replica_id,
-            } = pregenerate_data::<Sha256Hasher>(*degree);
-            b.iter(|| {
-                black_box(encode_single_node::<Sha256Hasher>(
-                    &mut data,
-                    &parents,
-                    &replica_id,
-                    *degree,
-                ))
-            })
-        }),
+        }), // .with_function("sha256", |b, degree| {
+            //     let Pregenerated {
+            //         mut data,
+            //         parents,
+            //         replica_id,
+            //     } = pregenerate_data::<Sha256Hasher>(*degree);
+            //     b.iter(|| {
+            //         black_box(encode_single_node::<Sha256Hasher>(
+            //             &mut data,
+            //             &parents,
+            //             &replica_id,
+            //             *degree,
+            //         ))
+            //     })
+            // }),
     );
 }
 
@@ -142,22 +139,21 @@ fn encode_single_node_benchmark(c: &mut Criterion) {
                     *degree,
                 ))
             })
-        })
-        .with_function("sha256", |b, degree| {
-            let Pregenerated {
-                mut data,
-                parents,
-                replica_id,
-            } = pregenerate_data::<Sha256Hasher>(*degree);
-            b.iter(|| {
-                black_box(encode_single_node::<Sha256Hasher>(
-                    &mut data,
-                    &parents,
-                    &replica_id,
-                    *degree,
-                ))
-            })
-        }),
+        }), // .with_function("sha256", |b, degree| {
+            //     let Pregenerated {
+            //         mut data,
+            //         parents,
+            //         replica_id,
+            //     } = pregenerate_data::<Sha256Hasher>(*degree);
+            //     b.iter(|| {
+            //         black_box(encode_single_node::<Sha256Hasher>(
+            //             &mut data,
+            //             &parents,
+            //             &replica_id,
+            //             *degree,
+            //         ))
+            //     })
+            // }),
     );
 }
 

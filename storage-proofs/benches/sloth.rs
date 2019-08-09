@@ -1,29 +1,30 @@
 #[macro_use]
 extern crate criterion;
 
-use bellperson::groth16::*;
-use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use algebra::fields::bls12_381::Fr;
 use criterion::{black_box, Benchmark, Criterion};
-use fil_sapling_crypto::circuit::num;
-use fil_sapling_crypto::jubjub::JubjubEngine;
-use paired::bls12_381::{Bls12, Fr};
 use rand::{thread_rng, Rng};
-use storage_proofs::circuit::bench::BenchCS;
-
+use snark::groth16::{create_random_proof, generate_random_parameters};
+use snark::{Circuit, ConstraintSystem, SynthesisError};
+use snark_gadgets::fields::fp::FpGadget;
+use snark_gadgets::fields::FieldGadget;
+use snark_gadgets::utils::AllocGadget;
 use storage_proofs::circuit;
+use storage_proofs::circuit::bench::BenchCS;
 use storage_proofs::crypto::sloth;
 
-struct SlothExample<E: JubjubEngine> {
-    key: Option<E::Fr>,
-    ciphertext: Option<E::Fr>,
+struct SlothExample {
+    key: Option<Fr>,
+    ciphertext: Option<Fr>,
 }
 
-impl<E: JubjubEngine> Circuit<E> for SlothExample<E> {
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        let key_num = num::AllocatedNum::alloc(cs.namespace(|| "sloth-key"), || {
-            Ok(self.key.ok_or_else(|| SynthesisError::AssignmentMissing)?)
+impl Circuit<Bls12> for SlothExample {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+        let key_num = FpGadget::alloc(cs.ns(|| "sloth-key"), || {
+            self.key.ok_or_else(|| SynthesisError::AssignmentMissing)
         })?;
-        let res = circuit::sloth::decode(cs.namespace(|| "sloth"), &key_num, self.ciphertext)?;
+        let res = circuit::sloth::decode(cs.ns(|| "sloth"), &key_num, self.ciphertext)?;
         // please compiler don't optimize the result away
         // only check if we actually have input data
         if self.ciphertext.is_some() {

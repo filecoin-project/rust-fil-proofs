@@ -96,7 +96,7 @@ jobs:
       - run:
           name: Test (nightly) disk-trees feature
           command: |
-            cargo +$(cat rust-toolchain) test --verbose --release -p storage-proofs-zexe --features disk-trees -Z package-features
+            cargo +$(cat rust-toolchain) test --verbose --release -p storage-proofs --features disk-trees -Z package-features
           environment:
             FIL_PROOFS_REPLICATED_TREES_DIR: replicated-disk-trees
 
