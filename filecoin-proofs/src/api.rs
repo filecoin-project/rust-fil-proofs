@@ -879,59 +879,61 @@ mod tests {
         }
     }
 
-    #[test]
-    #[ignore]
-    fn test_pip_lifecycle() -> Result<(), failure::Error> {
-        let sector_size = TEST_SECTOR_SIZE;
+    // FIXME: Bring back as soon as sealing doesnt take ages anymore. Likely after implementing
+    // improved Pedersen hashes
+    // #[test]
+    // #[ignore]
+    // fn test_pip_lifecycle() -> Result<(), failure::Error> {
+    //     let sector_size = TEST_SECTOR_SIZE;
 
-        let number_of_bytes_in_piece =
-            UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size.clone()));
+    //     let number_of_bytes_in_piece =
+    //         UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size.clone()));
 
-        let piece_bytes: Vec<u8> = (0..number_of_bytes_in_piece.0)
-            .map(|_| rand::random::<u8>())
-            .collect();
+    //     let piece_bytes: Vec<u8> = (0..number_of_bytes_in_piece.0)
+    //         .map(|_| rand::random::<u8>())
+    //         .collect();
 
-        let mut piece_file = NamedTempFile::new()?;
-        piece_file.write_all(&piece_bytes)?;
-        piece_file.seek(SeekFrom::Start(0))?;
+    //     let mut piece_file = NamedTempFile::new()?;
+    //     piece_file.write_all(&piece_bytes)?;
+    //     piece_file.seek(SeekFrom::Start(0))?;
 
-        let comm_p = generate_piece_commitment(&piece_file.path(), number_of_bytes_in_piece)?;
+    //     let comm_p = generate_piece_commitment(&piece_file.path(), number_of_bytes_in_piece)?;
 
-        let mut staged_sector_file = NamedTempFile::new()?;
-        add_piece(
-            &mut piece_file,
-            &mut staged_sector_file,
-            number_of_bytes_in_piece,
-            &[],
-        )?;
+    //     let mut staged_sector_file = NamedTempFile::new()?;
+    //     add_piece(
+    //         &mut piece_file,
+    //         &mut staged_sector_file,
+    //         number_of_bytes_in_piece,
+    //         &[],
+    //     )?;
 
-        let sealed_sector_file = NamedTempFile::new()?;
-        let config = PoRepConfig(SectorSize(sector_size.clone()), PoRepProofPartitions(2));
+    //     let sealed_sector_file = NamedTempFile::new()?;
+    //     let config = PoRepConfig(SectorSize(sector_size.clone()), PoRepProofPartitions(2));
 
-        let output = seal(
-            config,
-            &staged_sector_file.path(),
-            &sealed_sector_file.path(),
-            &[0; 31],
-            &[0; 31],
-            &[number_of_bytes_in_piece],
-        )?;
+    //     let output = seal(
+    //         config,
+    //         &staged_sector_file.path(),
+    //         &sealed_sector_file.path(),
+    //         &[0; 31],
+    //         &[0; 31],
+    //         &[number_of_bytes_in_piece],
+    //     )?;
 
-        let piece_inclusion_proof_bytes: Vec<u8> = output.piece_inclusion_proofs[0].clone().into();
+    //     let piece_inclusion_proof_bytes: Vec<u8> = output.piece_inclusion_proofs[0].clone().into();
 
-        let verified = verify_piece_inclusion_proof(
-            &piece_inclusion_proof_bytes,
-            &output.comm_d,
-            &output.comm_ps[0],
-            number_of_bytes_in_piece,
-            SectorSize(sector_size),
-        )?;
+    //     let verified = verify_piece_inclusion_proof(
+    //         &piece_inclusion_proof_bytes,
+    //         &output.comm_d,
+    //         &output.comm_ps[0],
+    //         number_of_bytes_in_piece,
+    //         SectorSize(sector_size),
+    //     )?;
 
-        assert!(verified);
+    //     assert!(verified);
 
-        assert_eq!(output.comm_ps.len(), 1);
-        assert_eq!(output.comm_ps[0], comm_p);
+    //     assert_eq!(output.comm_ps.len(), 1);
+    //     assert_eq!(output.comm_ps[0], comm_p);
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 }
