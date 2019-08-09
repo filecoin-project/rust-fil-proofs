@@ -5,10 +5,7 @@ extern crate gperftools;
 
 use criterion::{black_box, Criterion, ParameterizedBenchmark};
 use storage_proofs::drgraph::Graph;
-use storage_proofs::hasher::blake2s::Blake2sHasher;
-use storage_proofs::hasher::pedersen::PedersenHasher;
-use storage_proofs::hasher::sha256::Sha256Hasher;
-use storage_proofs::hasher::Hasher;
+use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher};
 use storage_proofs::zigzag_graph::{ZigZag, ZigZagBucketGraph};
 
 #[cfg(feature = "cpu-profile")]
@@ -70,12 +67,11 @@ fn parents_loop_benchmark(cc: &mut Criterion) {
             let graph = pregenerate_graph::<PedersenHasher>(*degree);
             let mut parents = vec![0; graph.degree()];
             b.iter(|| black_box(parents_loop::<PedersenHasher, _>(&graph, &mut parents)))
-        })
-        .with_function("Sha256", |b, degree| {
-            let graph = pregenerate_graph::<Sha256Hasher>(*degree);
-            let mut parents = vec![0; graph.degree()];
-            b.iter(|| black_box(parents_loop::<Sha256Hasher, _>(&graph, &mut parents)))
-        }),
+        }), // .with_function("Sha256", |b, degree| {
+            //     let graph = pregenerate_graph::<Sha256Hasher>(*degree);
+            //     let mut parents = vec![0; graph.degree()];
+            //     b.iter(|| black_box(parents_loop::<Sha256Hasher, _>(&graph, &mut parents)))
+            // }),
     );
 }
 

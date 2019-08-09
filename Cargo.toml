@@ -2,7 +2,6 @@
 
 members = [
   # "filecoin-proofs",
-  # "storage-proofs",
-  "storage-proofs-zexe",
+  "storage-proofs",
   "fil-proofs-tooling",
 ]

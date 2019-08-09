@@ -1,5 +1,6 @@
-use ff::Field;
-use paired::Engine;
+use algebra::PairingEngine as Engine;
+use std::ops::AddAssign;
+use std::ops::SubAssign;
 
 /// Sloth based encoding.
 #[inline]
@@ -7,6 +8,7 @@ pub fn encode<E: Engine>(key: &E::Fr, plaintext: &E::Fr) -> E::Fr {
     let mut ciphertext = *plaintext;
 
     ciphertext.add_assign(key); // c + k
+
     ciphertext
 }
 
@@ -15,7 +17,7 @@ pub fn encode<E: Engine>(key: &E::Fr, plaintext: &E::Fr) -> E::Fr {
 pub fn decode<E: Engine>(key: &E::Fr, ciphertext: &E::Fr) -> E::Fr {
     let mut plaintext = *ciphertext;
 
-    plaintext.sub_assign(key); // c - k
+    plaintext.sub_assign(key); // c^5 - k
 
     plaintext
 }
@@ -23,8 +25,12 @@ pub fn decode<E: Engine>(key: &E::Fr, ciphertext: &E::Fr) -> E::Fr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ff::PrimeField;
-    use paired::bls12_381::{Bls12, Fr, FrRepr};
+
+    use algebra::biginteger::BigInteger256 as FrRepr;
+    use algebra::curves::bls12_381::Bls12_381 as Bls12;
+    use algebra::fields::bls12_381::Fr;
+    use algebra::fields::PrimeField;
+    use std::str::FromStr;
 
     // the modulus from `bls12_381::Fr`
     // The definition of MODULUS and comment defining r come from paired/src/bls_12_381/fr.rs.
@@ -58,7 +64,7 @@ mod tests {
 
     prop_compose! {
         fn arb_fr()(a in 0..MODULUS[0], b in 0..MODULUS[1], c in 0..MODULUS[2], d in 0..MODULUS[3]) -> Fr {
-            Fr::from_repr(FrRepr([a, b, c, d])).unwrap()
+            Fr::from_repr(FrRepr([a, b, c, d]))
         }
     }
     proptest! {

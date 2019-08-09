@@ -1,35 +1,37 @@
-use bellperson::{ConstraintSystem, SynthesisError};
-use ff::Field;
-use fil_sapling_crypto::circuit::num;
-use paired::Engine;
+use std::ops::SubAssign;
+
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use algebra::fields::bls12_381::Fr;
+use snark::{ConstraintSystem, SynthesisError};
+use snark_gadgets::fields::{fp::FpGadget, FieldGadget};
+use snark_gadgets::utils::AllocGadget;
 
 use crate::circuit::constraint;
 
 /// Circuit version of sloth decoding.
-pub fn decode<E, CS>(
+pub fn decode<CS>(
     mut cs: CS,
-    key: &num::AllocatedNum<E>,
-    ciphertext: Option<E::Fr>,
-) -> Result<num::AllocatedNum<E>, SynthesisError>
+    key: &FpGadget<Bls12>,
+    ciphertext: Option<Fr>,
+) -> Result<FpGadget<Bls12>, SynthesisError>
 where
-    E: Engine,
-    CS: ConstraintSystem<E>,
+    CS: ConstraintSystem<Bls12>,
 {
-    let mut plaintext = num::AllocatedNum::alloc(cs.namespace(|| "decoded"), || {
+    let mut plaintext = FpGadget::alloc(cs.ns(|| "decoded"), || {
         Ok(ciphertext.ok_or_else(|| SynthesisError::AssignmentMissing)?)
     })?;
 
-    plaintext = sub(cs.namespace(|| "plaintext - k"), &plaintext, key)?;
+    plaintext = sub(cs.ns(|| "plaintext - k"), &plaintext, key)?;
 
     Ok(plaintext)
 }
 
-fn sub<E: Engine, CS: ConstraintSystem<E>>(
+fn sub<CS: ConstraintSystem<Bls12>>(
     mut cs: CS,
-    a: &num::AllocatedNum<E>,
-    b: &num::AllocatedNum<E>,
-) -> Result<num::AllocatedNum<E>, SynthesisError> {
-    let res = num::AllocatedNum::alloc(cs.namespace(|| "sub num"), || {
+    a: &FpGadget<Bls12>,
+    b: &FpGadget<Bls12>,
+) -> Result<FpGadget<Bls12>, SynthesisError> {
+    let res = FpGadget::alloc(cs.ns(|| "sub num"), || {
         let mut tmp = a
             .get_value()
             .ok_or_else(|| SynthesisError::AssignmentMissing)?;
@@ -42,7 +44,7 @@ fn sub<E: Engine, CS: ConstraintSystem<E>>(
     })?;
 
     // a - b = res
-    constraint::difference(&mut cs, || "subtraction constraint", &a, &b, &res);
+    constraint::difference(&mut cs, || "subtraction constraint", &a, &b, &res)?;
 
     Ok(res)
 }
@@ -52,7 +54,7 @@ mod tests {
     use super::*;
     use crate::circuit::test::TestConstraintSystem;
     use crate::crypto::sloth;
-    use paired::bls12_381::{Bls12, Fr};
+    use algebra::fields::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]
@@ -71,8 +73,8 @@ mod tests {
 
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            let key_num = num::AllocatedNum::alloc(cs.namespace(|| "key"), || Ok(key)).unwrap();
-            let out = decode(cs.namespace(|| "sloth"), &key_num, Some(ciphertext)).unwrap();
+            let key_num = FpGadget::alloc(cs.ns(|| "key"), || Ok(key)).unwrap();
+            let out = decode(cs.ns(|| "sloth"), &key_num, Some(ciphertext)).unwrap();
 
             assert!(cs.is_satisfied());
             assert_eq!(out.get_value().unwrap(), decrypted, "no interop");
@@ -92,10 +94,9 @@ mod tests {
 
             let decrypted = sloth::decode::<Bls12>(&key, &ciphertext);
             let mut cs = TestConstraintSystem::<Bls12>::new();
-            let key_bad_num =
-                num::AllocatedNum::alloc(cs.namespace(|| "key bad"), || Ok(key_bad)).unwrap();
+            let key_bad_num = FpGadget::alloc(cs.ns(|| "key bad"), || Ok(key_bad)).unwrap();
 
-            let out = decode(cs.namespace(|| "sloth"), &key_bad_num, Some(ciphertext)).unwrap();
+            let out = decode(cs.ns(|| "sloth"), &key_bad_num, Some(ciphertext)).unwrap();
 
             assert!(cs.is_satisfied());
             assert_ne!(out.get_value().unwrap(), decrypted);
@@ -113,17 +114,13 @@ mod tests {
             let ciphertext = sloth::encode::<Bls12>(&key, &plaintext);
             let decrypted = sloth::decode::<Bls12>(&key, &ciphertext);
 
-            {
-                let mut cs = TestConstraintSystem::<Bls12>::new();
-                key.add_assign(&Fr::one());
-                let key_num = num::AllocatedNum::alloc(cs.namespace(|| "key"), || Ok(key)).unwrap();
+            key += &Fr::one();
+            let mut cs = TestConstraintSystem::<Bls12>::new();
+            let key_num = FpGadget::alloc(cs.ns(|| "key"), || Ok(key)).unwrap();
+            let out_other = decode(cs.ns(|| "sloth other"), &key_num, Some(ciphertext)).unwrap();
 
-                let out_other =
-                    decode(cs.namespace(|| "sloth other"), &key_num, Some(ciphertext)).unwrap();
-
-                assert!(cs.is_satisfied());
-                assert_ne!(out_other.get_value().unwrap(), decrypted);
-            }
+            assert!(cs.is_satisfied());
+            assert_ne!(out_other.get_value().unwrap(), decrypted);
         }
     }
 
@@ -134,10 +131,13 @@ mod tests {
         for _ in 0..100 {
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            let a = num::AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(rng.gen())).unwrap();
-            let b = num::AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(rng.gen())).unwrap();
+            let a_val: Fr = rng.gen();
+            let b_val: Fr = rng.gen();
 
-            let res = sub(cs.namespace(|| "a-b"), &a, &b).expect("subtraction failed");
+            let a = FpGadget::alloc(cs.ns(|| "a"), || Ok(a_val)).unwrap();
+            let b = FpGadget::alloc(cs.ns(|| "b"), || Ok(b_val)).unwrap();
+
+            let res = sub(cs.ns(|| "a-b"), &a, &b).expect("subtraction failed");
 
             let mut tmp = a.get_value().unwrap().clone();
             tmp.sub_assign(&b.get_value().unwrap());

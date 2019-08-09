@@ -1,16 +1,16 @@
 #[macro_use]
 extern crate criterion;
 
-use bellperson::groth16::*;
-use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
 use criterion::{black_box, Criterion, ParameterizedBenchmark};
-use fil_sapling_crypto::circuit::boolean::{self, Boolean};
-use fil_sapling_crypto::jubjub::JubjubEngine;
-use paired::bls12_381::Bls12;
+use dpc::gadgets::Assignment;
 use rand::{thread_rng, Rng};
-use storage_proofs::circuit::bench::BenchCS;
-
+use snark::groth16::{create_random_proof, generate_random_parameters};
+use snark::{Circuit, ConstraintSystem, SynthesisError};
+use snark_gadgets::boolean::{AllocatedBit, Boolean};
+use snark_gadgets::utils::AllocGadget;
 use storage_proofs::circuit;
+use storage_proofs::circuit::bench::BenchCS;
 use storage_proofs::crypto::xor;
 
 struct XorExample<'a> {
@@ -18,16 +18,16 @@ struct XorExample<'a> {
     data: &'a [Option<bool>],
 }
 
-impl<'a, E: JubjubEngine> Circuit<E> for XorExample<'a> {
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+impl<'a> Circuit<Bls12> for XorExample<'a> {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let key: Vec<Boolean> = self
             .key
             .into_iter()
             .enumerate()
             .map(|(i, b)| {
-                Ok(Boolean::from(boolean::AllocatedBit::alloc(
-                    cs.namespace(|| format!("key_bit {}", i)),
-                    *b,
+                Ok(Boolean::from(AllocatedBit::alloc(
+                    cs.ns(|| format!("key_bit {}", i)),
+                    || b.get(),
                 )?))
             })
             .collect::<Result<Vec<_>, SynthesisError>>()?;
@@ -36,14 +36,14 @@ impl<'a, E: JubjubEngine> Circuit<E> for XorExample<'a> {
             .into_iter()
             .enumerate()
             .map(|(i, b)| {
-                Ok(Boolean::from(boolean::AllocatedBit::alloc(
-                    cs.namespace(|| format!("data_bit {}", i)),
-                    *b,
+                Ok(Boolean::from(AllocatedBit::alloc(
+                    cs.ns(|| format!("data_bit {}", i)),
+                    || b.get(),
                 )?))
             })
             .collect::<Result<Vec<_>, SynthesisError>>()?;
 
-        let mut cs = cs.namespace(|| "xor");
+        let mut cs = cs.ns(|| "xor");
         let _res = circuit::xor::xor(&mut cs, &key, &data)?;
 
         Ok(())

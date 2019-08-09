@@ -123,6 +123,7 @@ where
     G: Graph<H> + ParameterSetMetadata,
 {
     pub graph: G,
+
     pub layer_challenges: LayerChallenges,
     _h: PhantomData<H>,
 }
@@ -391,12 +392,12 @@ pub trait Layers {
             (0..=layers).fold(graph.clone(), |current_graph, layer| {
                 let tree_d = Self::generate_data_tree(&current_graph, &data, layer);
 
-                info!("returning tree (layer: {})", layer);
+                info!("returning tree {}", layer);
 
                 sorted_trees.push(tree_d);
 
                 if layer < layers {
-                    info!("encoding (layer: {})", layer);
+                    info!("encoding {}", layer);
                     vde::encode(&current_graph, replica_id, data)
                         .expect("encoding failed in thread");
                 }
@@ -412,7 +413,7 @@ pub trait Layers {
                     // The first iteration has no previous_tree.
                     if let Some(comm_d) = previous_comm_r {
                         let tau = porep::Tau { comm_r, comm_d };
-                        // info!("setting tau/aux (layer: {})", i - 1);
+                        //                        info!("setting tau/aux {}", i - 1);
                         // FIXME: Use `enumerate` if this log is worth it.
                         taus.push(tau);
                     };
@@ -439,8 +440,8 @@ pub trait Layers {
                 let errf = |e| {
                     let err_string = format!("{:?}", e);
                     error!(
-                        "MerkleTreeGenerationError: {} - {:?}",
-                        &err_string,
+                        "MerkleTreeGenerationError {:?}: {:?}",
+                        err_string,
                         failure::Backtrace::new()
                     );
                     Error::MerkleTreeGenerationError(err_string)
@@ -468,7 +469,7 @@ pub trait Layers {
 
                             let tree_d = Self::generate_data_tree(&graph, &data_copy, layer);
 
-                            info!("returning tree (layer: {})", layer);
+                            info!("returning tree {}", layer);
                             return_channel
                                 .send((layer, tree_d))
                                 .expect("Failed to send value through channel");
@@ -477,7 +478,7 @@ pub trait Layers {
                         threads.push(thread);
 
                         if layer < layers {
-                            info!("encoding (layer: {})", layer);
+                            info!("encoding {}", layer);
                             vde::encode(&current_graph, replica_id, data)
                                 .expect("encoding failed in thread");
                         }
@@ -506,7 +507,7 @@ pub trait Layers {
                     // The first iteration has no previous_tree.
                     if let Some(comm_d) = previous_comm_r {
                         let tau = porep::Tau { comm_r, comm_d };
-                        info!("setting tau/aux (layer: {})", i - 1);
+                        info!("setting tau/aux {}", i - 1);
                         taus.push(tau);
                     };
 
