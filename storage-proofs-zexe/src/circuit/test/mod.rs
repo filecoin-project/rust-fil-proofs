@@ -180,6 +180,16 @@ impl<E: Engine> TestConstraintSystem<E> {
         Default::default()
     }
 
+    pub fn pretty_print_inputs(&self) -> String {
+        let mut s = String::new();
+        // skip the first one which is all zeros, we don't pass it
+        for input in self.inputs.iter().skip(1) {
+            writeln!(s, "INPUT {}", input.0).unwrap();
+        }
+
+        s
+    }
+
     pub fn pretty_print(&self) -> String {
         let mut s = String::new();
 
@@ -296,6 +306,7 @@ impl<E: Engine> TestConstraintSystem<E> {
             a.mul_assign(&b);
 
             if a != c {
+                println!("{}: {} != {}", path, a, c);
                 return Some(&*path);
             }
         }
@@ -304,7 +315,12 @@ impl<E: Engine> TestConstraintSystem<E> {
     }
 
     pub fn is_satisfied(&self) -> bool {
-        self.which_is_unsatisfied().is_none()
+        if let Some(u) = self.which_is_unsatisfied() {
+            println!("unsatisfied: {}", u);
+            false
+        } else {
+            true
+        }
     }
 
     pub fn num_constraints(&self) -> usize {
@@ -402,7 +418,14 @@ impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
     {
         let index = self.aux.len();
         let path = compute_path(&self.current_namespace, &annotation().into());
-        self.aux.push((f()?, path.clone()));
+        let r = match f() {
+            Ok(r) => r,
+            Err(SynthesisError::AssignmentMissing) => E::Fr::zero(),
+            Err(err) => {
+                return Err(err);
+            }
+        };
+        self.aux.push((r, path.clone()));
         // self.aux.push((E::Fr::zero(), path.clone()));
         let var = Variable::new_unchecked(Index::Aux(index));
         self.set_named_obj(path, NamedObject::Var(var));
@@ -418,7 +441,14 @@ impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
     {
         let index = self.inputs.len();
         let path = compute_path(&self.current_namespace, &annotation().into());
-        self.inputs.push((f()?, path.clone()));
+        let r = match f() {
+            Ok(r) => r,
+            Err(SynthesisError::AssignmentMissing) => E::Fr::zero(),
+            Err(err) => {
+                return Err(err);
+            }
+        };
+        self.inputs.push((r, path.clone()));
         // self.inputs.push((E::Fr::zero(), path.clone()));
         let var = Variable::new_unchecked(Index::Input(index));
         self.set_named_obj(path, NamedObject::Var(var));
