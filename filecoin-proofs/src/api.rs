@@ -4,10 +4,10 @@ use std::io::prelude::*;
 use std::io::{BufWriter, Cursor, Read, SeekFrom};
 use std::path::{Path, PathBuf};
 
-use ff::PrimeField;
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use algebra::fields::PrimeField;
+use algebra::PairingEngine as Engine;
 use memmap::MmapOptions;
-use paired::bls12_381::Bls12;
-use paired::Engine;
 
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::vdf_post::VDFPostCompound;
@@ -44,7 +44,6 @@ use crate::fr32::{write_padded, write_unpadded};
 use crate::parameters::{post_setup_params, public_params, setup_params};
 use crate::pieces::{get_aligned_source, get_piece_alignment, PieceAlignment};
 use crate::post_adapter::*;
-use crate::singletons::ENGINE_PARAMS;
 use crate::types::{
     PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, PoStProofPartitions,
     SectorSize, UnpaddedByteIndex, UnpaddedBytesAmount,
@@ -207,7 +206,6 @@ pub fn seal<T: AsRef<Path>>(
             PaddedBytesAmount::from(porep_config),
             usize::from(PoRepProofPartitions::from(porep_config)),
         ),
-        engine_params: &(*ENGINE_PARAMS),
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };
 
@@ -345,13 +343,11 @@ pub fn verify_seal(
             PaddedBytesAmount::from(porep_config),
             usize::from(PoRepProofPartitions::from(porep_config)),
         ),
-        engine_params: &(*ENGINE_PARAMS),
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };
 
     let compound_public_params: compound_proof::PublicParams<
         '_,
-        Bls12,
         ZigZagDrgPoRep<'_, DefaultTreeHasher>,
     > = ZigZagCompound::setup(&compound_setup_params)?;
 
@@ -508,12 +504,10 @@ fn generate_post_fixed_sectors_count(
 
     let setup_params = compound_proof::SetupParams {
         vanilla_params: &post_setup_params(fixed.post_config),
-        engine_params: &(*ENGINE_PARAMS),
         partitions: None,
     };
 
     let pub_params: compound_proof::PublicParams<
-        _,
         vdf_post::VDFPoSt<PedersenHasher, vdf_sloth::Sloth>,
     > = VDFPostCompound::setup(&setup_params).expect("setup failed");
 
@@ -582,12 +576,10 @@ fn verify_post_fixed_sectors_count(
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: &post_setup_params(fixed.post_config),
-        engine_params: &(*ENGINE_PARAMS),
         partitions: None,
     };
 
     let compound_public_params: compound_proof::PublicParams<
-        _,
         vdf_post::VDFPoSt<PedersenHasher, vdf_sloth::Sloth>,
     > = VDFPostCompound::setup(&compound_setup_params).expect("setup failed");
 

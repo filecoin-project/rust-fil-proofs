@@ -1,34 +1,34 @@
-use bellperson::groth16::*;
-use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
-use paired::bls12_381::Bls12;
-use rand::Rng;
+use std::marker::PhantomData;
 
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use algebra::fields::bls12_381::Fr;
+use rand::Rng;
+use snark::groth16::*;
+use snark::{Circuit, ConstraintSystem, SynthesisError};
 use storage_proofs::circuit;
 use storage_proofs::circuit::variables::Root;
 use storage_proofs::example_helper::Example;
 use storage_proofs::hasher::PedersenHasher;
 use storage_proofs::test_helper::fake_drgpoprep_proof;
 
-struct DrgPoRepExample<'a, E: JubjubEngine> {
-    params: &'a E::Params,
-    replica_nodes: Vec<Option<E::Fr>>,
-    replica_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
-    replica_root: Root<E>,
-    replica_parents: Vec<Vec<Option<E::Fr>>>,
-    replica_parents_paths: Vec<Vec<Vec<Option<(E::Fr, bool)>>>>,
-    data_nodes: Vec<Option<E::Fr>>,
-    data_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
-    data_root: Root<E>,
-    replica_id: Option<E::Fr>,
+struct DrgPoRepExample<'a> {
+    replica_nodes: Vec<Option<Fr>>,
+    replica_nodes_paths: Vec<Vec<Option<(Fr, bool)>>>,
+    replica_root: Root<Bls12>,
+    replica_parents: Vec<Vec<Option<Fr>>>,
+    replica_parents_paths: Vec<Vec<Vec<Option<(Fr, bool)>>>>,
+    data_nodes: Vec<Option<Fr>>,
+    data_nodes_paths: Vec<Vec<Option<(Fr, bool)>>>,
+    data_root: Root<Bls12>,
+    replica_id: Option<Fr>,
     m: usize,
+    _a: PhantomData<&'a usize>,
 }
 
-impl<'a> Circuit<Bls12> for DrgPoRepExample<'a, Bls12> {
+impl<'a> Circuit<Bls12> for DrgPoRepExample<'a> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        circuit::drgporep::DrgPoRepCircuit::<_, PedersenHasher>::synthesize(
-            cs.namespace(|| "drgporep"),
-            self.params,
+        circuit::drgporep::DrgPoRepCircuit::<PedersenHasher>::synthesize(
+            cs.ns(|| "drgporep"),
             self.replica_nodes,
             self.replica_nodes_paths,
             self.replica_root,
@@ -47,7 +47,7 @@ impl<'a> Circuit<Bls12> for DrgPoRepExample<'a, Bls12> {
 #[derive(Default)]
 struct DrgPoRepApp {}
 
-impl<'a> Example<'a, DrgPoRepExample<'a, Bls12>> for DrgPoRepApp {
+impl<'a> Example<'a, DrgPoRepExample<'a>> for DrgPoRepApp {
     fn name() -> String {
         "DrgPoRep".to_string()
     }
@@ -55,14 +55,12 @@ impl<'a> Example<'a, DrgPoRepExample<'a, Bls12>> for DrgPoRepApp {
     fn generate_groth_params<R: Rng>(
         &mut self,
         rng: &mut R,
-        jubjub_params: &'a JubjubBls12,
         tree_depth: usize,
         challenge_count: usize,
         m: usize,
     ) -> Parameters<Bls12> {
         generate_random_parameters::<Bls12, _, _>(
             DrgPoRepExample {
-                params: jubjub_params,
                 replica_nodes: vec![None; challenge_count],
                 replica_nodes_paths: vec![vec![None; tree_depth]; challenge_count],
                 replica_root: Root::Val(None),
@@ -73,6 +71,7 @@ impl<'a> Example<'a, DrgPoRepExample<'a, Bls12>> for DrgPoRepApp {
                 data_root: Root::Val(None),
                 replica_id: None,
                 m,
+                _a: Default::default(),
             },
             rng,
         )
@@ -86,17 +85,15 @@ impl<'a> Example<'a, DrgPoRepExample<'a, Bls12>> for DrgPoRepApp {
     fn create_circuit<R: Rng>(
         &mut self,
         rng: &mut R,
-        engine_params: &'a JubjubBls12,
         tree_depth: usize,
         challenge_count: usize,
         _leaves: usize,
         m: usize,
-    ) -> DrgPoRepExample<'a, Bls12> {
+    ) -> DrgPoRepExample<'a> {
         let f = fake_drgpoprep_proof(rng, tree_depth, m, challenge_count);
 
         // create an instance of our circut (with the witness)
         DrgPoRepExample {
-            params: engine_params,
             replica_nodes: f.replica_nodes.into_iter().map(|r| Some(r)).collect(),
             replica_nodes_paths: f.replica_nodes_paths,
             replica_root: Root::Val(Some(f.replica_root)),
@@ -111,6 +108,7 @@ impl<'a> Example<'a, DrgPoRepExample<'a, Bls12>> for DrgPoRepApp {
             data_root: Root::Val(Some(f.data_root)),
             replica_id: Some(f.replica_id),
             m,
+            _a: Default::default(),
         }
     }
 

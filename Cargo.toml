@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-  # "filecoin-proofs",
+  "filecoin-proofs",
   "storage-proofs",
   "fil-proofs-tooling",
 ]

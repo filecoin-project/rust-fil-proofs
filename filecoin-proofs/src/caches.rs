@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use bellperson::groth16;
-use paired::bls12_381::Bls12;
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use snark::groth16;
 
 use storage_proofs::circuit::vdf_post::VDFPoStCircuit;
 use storage_proofs::circuit::vdf_post::VDFPostCompound;
@@ -15,7 +15,6 @@ use storage_proofs::vdf_sloth::Sloth;
 
 use crate::error;
 use crate::parameters::{post_public_params, public_params};
-use crate::singletons::ENGINE_PARAMS;
 use crate::types::*;
 
 type Bls12GrothParams = groth16::Parameters<Bls12>;
@@ -92,8 +91,7 @@ pub fn get_zigzag_params(
         usize::from(PoRepProofPartitions::from(porep_config)),
     );
 
-    let parameters_generator =
-        || ZigZagCompound::groth_params(&public_params, &ENGINE_PARAMS).map_err(Into::into);
+    let parameters_generator = || ZigZagCompound::groth_params(&public_params).map_err(Into::into);
 
     Ok(lookup_groth_params(
         format!(
@@ -111,8 +109,8 @@ pub fn get_post_params(post_config: PoStConfig) -> error::Result<Arc<groth16::Pa
         <VDFPostCompound as CompoundProof<
             Bls12,
             VDFPoSt<PedersenHasher, Sloth>,
-            VDFPoStCircuit<Bls12>,
-        >>::groth_params(&post_public_params, &ENGINE_PARAMS)
+            VDFPoStCircuit,
+        >>::groth_params(&post_public_params)
         .map_err(Into::into)
     };
 
@@ -133,8 +131,7 @@ pub fn get_zigzag_verifying_key(
         usize::from(PoRepProofPartitions::from(porep_config)),
     );
 
-    let vk_generator =
-        || ZigZagCompound::verifying_key(&public_params, &ENGINE_PARAMS).map_err(Into::into);
+    let vk_generator = || ZigZagCompound::verifying_key(&public_params).map_err(Into::into);
 
     Ok(lookup_verifying_key(
         format!(
@@ -152,8 +149,8 @@ pub fn get_post_verifying_key(post_config: PoStConfig) -> error::Result<Arc<Bls1
         <VDFPostCompound as CompoundProof<
             Bls12,
             VDFPoSt<PedersenHasher, Sloth>,
-            VDFPoStCircuit<Bls12>,
-        >>::verifying_key(&post_public_params, &ENGINE_PARAMS)
+            VDFPoStCircuit,
+        >>::verifying_key(&post_public_params)
         .map_err(Into::into)
     };
 
