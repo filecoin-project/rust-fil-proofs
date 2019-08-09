@@ -476,28 +476,20 @@ impl<H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<H> {
                         .iter()
                         .enumerate()
                         .map(|(i, val)| -> Result<Vec<Boolean>, SynthesisError> {
-                            //                            let mut v = boolean::field_into_boolean_vec_le(
-                            //                                cs.ns(|| format!("parents_{}_bits", i)),
-                            //                                *val,
-                            //                            )?;
-                            let mut v = match val {
-                                Some(v) => {
-                                    let mut bits = FpGadget::from(
-                                        cs.ns(|| format!("allocation of element {}", i)),
-                                        v,
-                                    )
-                                    .to_bits(cs.ns(|| format!("conversion to bits {}", i)))?;
-                                    bits.reverse();
-                                    bits
-                                }
-                                None => vec![Boolean::Constant(false); 256],
-                            };
+                            let mut bits =
+                                FpGadget::alloc(cs.ns(|| format!("alloc_el_{}", i)), || {
+                                    val.ok_or_else(|| SynthesisError::AssignmentMissing)
+                                })?
+                                .to_bits(cs.ns(|| format!("convert_el_to_bits_{}", i)))?;
+
+                            bits.reverse();
+
                             // sad padding is sad
-                            while v.len() < 256 {
-                                v.push(Boolean::Constant(false));
+                            while bits.len() < 256 {
+                                bits.push(Boolean::Constant(false));
                             }
 
-                            Ok(v)
+                            Ok(bits)
                         })
                         .collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?
                 };
@@ -556,7 +548,7 @@ mod tests {
         let nodes = 12;
         let degree = 6;
         let challenge = 2;
-        let sloth_iter = 1;
+        let sloth_iter = 0;
 
         let replica_id: Fr = rng.gen();
 
@@ -700,7 +692,7 @@ mod tests {
         let n = (1 << 30) / 32;
         let m = 6;
         let tree_depth = graph_height(n);
-        let sloth_iter = 1;
+        let sloth_iter = 0;
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
         DrgPoRepCircuit::<PedersenHasher>::synthesize(
@@ -743,7 +735,7 @@ mod tests {
         let nodes = 5;
         let degree = 2;
         let challenges = vec![1, 3];
-        let sloth_iter = 1;
+        let sloth_iter = 0;
 
         let replica_id: Fr = rng.gen();
         let mut data: Vec<u8> = (0..nodes)
@@ -809,20 +801,44 @@ mod tests {
         let public_params =
             DrgPoRepCompound::<H, BucketGraph<_>>::setup(&setup_params).expect("setup failed");
 
-        {
-            let (circuit, inputs) = DrgPoRepCompound::<H, _>::circuit_for_test(
-                &public_params,
-                &public_inputs,
-                &private_inputs,
-            );
+        let (circuit, inputs) = DrgPoRepCompound::<H, _>::circuit_for_test(
+            &public_params,
+            &public_inputs,
+            &private_inputs,
+        );
 
-            let mut cs = TestConstraintSystem::new();
+        let mut cs = TestConstraintSystem::new();
 
-            circuit.synthesize(&mut cs).expect("failed to synthesize");
+        circuit.synthesize(&mut cs).expect("failed to synthesize");
 
-            assert!(cs.is_satisfied());
-            assert!(cs.verify(&inputs));
-        }
+        assert!(cs.is_satisfied());
+        assert!(cs.verify(&inputs));
+
+        // Use this to debug differences between blank and regular circuit generation.
+        // {
+        //     let (circuit1, _inputs) =
+        //         DrgPoRepCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);
+        //     let blank_circuit = DrgPoRepCompound::blank_circuit(&public_params.vanilla_params);
+
+        //     let mut cs_blank = TestConstraintSystem::new();
+        //     blank_circuit
+        //         .synthesize(&mut cs_blank)
+        //         .expect("failed blank circuit");
+
+        //     let a = cs_blank.pretty_print();
+
+        //     let mut cs1 = TestConstraintSystem::new();
+        //     circuit1.synthesize(&mut cs1).expect("failed to synthesize");
+        //     let b = cs1.pretty_print();
+
+        //     let a_vec = a.split("\n").collect::<Vec<_>>();
+        //     let b_vec = b.split("\n").collect::<Vec<_>>();
+
+        //     for (i, (a, b)) in a_vec.chunks(100).zip(b_vec.chunks(100)).enumerate() {
+        //         println!("chunk {}", i);
+        //         assert_eq!(a, b);
+        //     }
+        // }
 
         {
             let gparams = DrgPoRepCompound::<H, _>::groth_params(&public_params.vanilla_params)
@@ -835,6 +851,15 @@ mod tests {
                 &gparams,
             )
             .expect("failed while proving");
+
+            let expected_inputs = cs.pretty_print_inputs();
+            let generated_inputs = DrgPoRepCompound::<H, _>::print_public_inputs(
+                &public_params,
+                &public_inputs,
+                &proof,
+            );
+
+            assert_eq!(expected_inputs, generated_inputs);
 
             let verified = DrgPoRepCompound::<H, _>::verify(
                 &public_params,
