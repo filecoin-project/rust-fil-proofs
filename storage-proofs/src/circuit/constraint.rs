@@ -7,16 +7,11 @@ use snark_gadgets::utils::EqGadget;
 /// Adds a constraint to CS, enforcing an equality relationship between the allocated numbers a and b.
 ///
 /// a == b
-pub fn equal<E: Engine, A, AR, CS: ConstraintSystem<E>>(
-    cs: &mut CS,
-    _annotation: A,
+pub fn equal<E: Engine, CS: ConstraintSystem<E>>(
+    cs: CS,
     a: &FpGadget<E>,
     b: &FpGadget<E>,
-) -> Result<(), SynthesisError>
-where
-    A: FnOnce() -> AR,
-    AR: Into<String>,
-{
+) -> Result<(), SynthesisError> {
     // a * 1 = b
 
     a.enforce_equal(cs, b)
@@ -25,17 +20,12 @@ where
 /// Adds a constraint to CS, enforcing a difference relationship between the allocated numbers a, b, and difference.
 ///
 /// a - b = difference
-pub fn difference<E: Engine, A, AR, CS: ConstraintSystem<E>>(
-    cs: &mut CS,
-    _annotation: A,
+pub fn difference<E: Engine, CS: ConstraintSystem<E>>(
+    mut cs: CS,
     a: &FpGadget<E>,
     b: &FpGadget<E>,
     difference: &FpGadget<E>,
-) -> Result<(), SynthesisError>
-where
-    A: FnOnce() -> AR,
-    AR: Into<String>,
-{
+) -> Result<(), SynthesisError> {
     //    difference = a-b
     // => difference + b = a
     // => (difference + b) * 1 = a

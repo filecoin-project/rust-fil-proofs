@@ -236,8 +236,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, H> {
 
             // Enforce that the passed in comm_r_star is equal to the computed one.
             constraint::equal(
-                cs,
-                || "enforce comm_r_star is correct",
+                cs.ns(|| "enforce comm_r_star is correct"),
                 &computed_comm_r_star,
                 &public_comm_r_star,
             )?;

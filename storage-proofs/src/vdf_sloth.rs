@@ -1,4 +1,5 @@
-use paired::bls12_381::{Bls12, Fr};
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use algebra::fields::bls12_381::Fr;
 
 use crate::crypto::sloth;
 use crate::error::Result;

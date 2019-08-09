@@ -1,12 +1,15 @@
 use std::cmp;
 use std::marker::PhantomData;
+use std::ops::SubAssign;
 
+use algebra::biginteger::BigInteger256 as FrRepr;
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use algebra::fields::bls12_381::Fr;
+use algebra::fields::{Field, PrimeField};
+use algebra::PairingEngine as Engine;
 use bitvec::{self, BitVec};
 use byteorder::{ByteOrder, LittleEndian};
-use ff::{Field, PrimeField, ScalarEngine};
 use itertools::Itertools;
-use paired::bls12_381::{Bls12, Fr, FrRepr};
-use paired::Engine;
 use serde::de::Deserialize;
 use serde::ser::Serialize;
 
@@ -439,7 +442,7 @@ fn derive_final_challenges<H: Hasher, E: Engine>(
     challenge_bits: usize,
 ) -> (Vec<usize>, Vec<usize>)
 where
-    <E as ScalarEngine>::Fr: std::convert::From<paired::bls12_381::Fr>,
+    <E as Engine>::Fr: std::convert::From<Fr>,
 {
     type BV = BitVec<bitvec::LittleEndian, u8>;
 
@@ -488,19 +491,19 @@ fn verify_final_challenge_derivation<H: Hasher>(
 ) -> bool {
     assert!(challenge_bits > 0 && challenge_bits < 64);
     // Computing shift_factor will overflow if challenge_bits >= 64. No need to work around: 63 bits is plenty.
-    let shift_factor = Fr::from_repr(FrRepr::from(1u64 << challenge_bits)).unwrap();
+    let shift_factor = Fr::from_repr(FrRepr::from(1u64 << challenge_bits));
     let packed = challenges.iter().fold(Fr::zero(), |mut acc, challenge| {
-        let fr_challenge = Fr::from_repr(FrRepr::from(*challenge as u64)).unwrap();
+        let fr_challenge = Fr::from_repr(FrRepr::from(*challenge as u64));
 
-        acc.mul_assign(&shift_factor);
-        acc.add_assign(&fr_challenge);
+        acc *= &shift_factor;
+        acc += &fr_challenge;
 
         acc
     });
 
     let mut fr_mixed: Fr = mix.into();
     let fr_partial: Fr = partial_challenge.into();
-    fr_mixed.add_assign(&packed);
+    fr_mixed += &packed;
 
     fr_partial == fr_mixed
 }
@@ -509,7 +512,6 @@ fn verify_final_challenge_derivation<H: Hasher>(
 mod tests {
     use super::*;
 
-    use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     use crate::drgraph::{new_seed, BucketGraph, Graph};
