@@ -673,7 +673,7 @@ mod tests {
         assert!(cs.is_satisfied(), "constraints not satisfied");
         assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
         //        assert_eq!(cs.num_constraints(), 131216, "wrong number of constraints");
-        assert_eq!(cs.num_constraints(), 362622, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 362619, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
@@ -714,15 +714,15 @@ mod tests {
 
         assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
         //        assert_eq!(cs.num_constraints(), 363392, "wrong number of constraints");
-        assert_eq!(cs.num_constraints(), 1803894, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 1803891, "wrong number of constraints");
     }
 
     #[test]
-    //    #[ignore] // Slow test – run only when compiled for release.
+    #[ignore] // Slow test – run only when compiled for release.
     fn test_drgporep_compound_pedersen() {
         drgporep_test_compound::<PedersenHasher>();
     }
-    //
+
     //    #[test]
     //    #[ignore] // Slow test – run only when compiled for release.
     //    fn test_drgporep_compound_blake2s() {
