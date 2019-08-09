@@ -1,4 +1,3 @@
-use bitvec::prelude::*;
 use rand::{Rand, Rng};
 use std::hash::Hasher as StdHasher;
 use std::io::Read;
@@ -10,7 +9,7 @@ use algebra::biginteger::BigInteger;
 use algebra::biginteger::BigInteger256 as FrRepr;
 use algebra::curves::ProjectiveCurve;
 use algebra::curves::{bls12_381::Bls12_381 as Bls12, jubjub::JubJubProjective as JubJub};
-use algebra::fields::{bls12_381::Fr, FpParameters, PrimeField};
+use algebra::fields::{bls12_381::Fr, PrimeField};
 
 use snark_gadgets::bits::uint8::UInt8;
 use snark_gadgets::boolean::Boolean;
@@ -49,20 +48,20 @@ impl Hasher for PedersenHasher {
     }
 
     #[inline]
-    fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain, rounds: usize) -> Self::Domain {
+    fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain) -> Self::Domain {
         // Unwrapping here is safe; `Fr` elements and hash domain elements are the same byte length.
         let key = Fr::from_repr(key.0);
         let ciphertext = Fr::from_repr(ciphertext.0);
-        sloth::encode::<Bls12>(&key, &ciphertext, rounds).into()
+        sloth::encode::<Bls12>(&key, &ciphertext).into()
     }
 
     #[inline]
-    fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain, rounds: usize) -> Self::Domain {
+    fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain) -> Self::Domain {
         // Unwrapping here is safe; `Fr` elements and hash domain elements are the same byte length.
         let key = Fr::from_repr(key.0);
         let ciphertext = Fr::from_repr(ciphertext.0);
 
-        sloth::decode::<Bls12>(&key, &ciphertext, rounds).into()
+        sloth::decode::<Bls12>(&key, &ciphertext).into()
     }
 }
 
@@ -215,7 +214,7 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         mut cs: CS,
         left: &[Boolean],
         right: &[Boolean],
-        height: usize,
+        _height: usize,
         params: &PedersenParameters<JubJub>,
     ) -> std::result::Result<FpGadget<Bls12>, SynthesisError> {
         let mut preimage: Vec<Boolean> = vec![];
@@ -232,22 +231,11 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
             )
             .unwrap();
 
-        let personalization = Personalization::MerkleTree(height)
-            .get_bits()
-            .into_iter()
-            .map(Boolean::Constant)
-            .collect::<Vec<Boolean>>();
-
-        let mut bits_with_personalization = personalization
-            .into_iter()
-            .chain(preimage.to_vec().into_iter())
-            .collect::<Vec<_>>();
-
-        while bits_with_personalization.len() % 8 != 0 {
-            bits_with_personalization.push(Boolean::Constant(false));
+        while preimage.len() % 8 != 0 {
+            preimage.push(Boolean::Constant(false));
         }
 
-        let input_bytes = bits_with_personalization
+        let input_bytes = preimage
             .chunks(8)
             .map(|v| UInt8::from_bits_le(v))
             .collect::<Vec<UInt8>>();
@@ -291,23 +279,56 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
         &mut self,
         left: PedersenDomain,
         right: PedersenDomain,
-        height: usize,
+        _height: usize,
     ) -> PedersenDomain {
-        let lhs = BitVec::<LittleEndian, u64>::from(&(left.0).0[..]);
-        let rhs = BitVec::<LittleEndian, u64>::from(&(right.0).0[..]);
+        let node_bits = NodeBits::new(&(left.0).0[..], &(right.0).0[..]);
 
-        let bits = lhs
-            .iter()
-            .take(<Fr as PrimeField>::Params::MODULUS_BITS as usize)
-            .chain(
-                rhs.iter()
-                    .take(<Fr as PrimeField>::Params::MODULUS_BITS as usize),
-            );
-
-        pedersen_hash::<_>(Personalization::MerkleTree(height), bits)
+        pedersen_hash::<_>(Personalization::None, node_bits)
             .into_affine()
             .x
             .into()
+    }
+}
+
+/// Helper to iterate over a pair of `Fr`.
+struct NodeBits<'a> {
+    // 256 bits
+    lhs: &'a [u64],
+    // 256 bits
+    rhs: &'a [u64],
+    index: usize,
+}
+
+impl<'a> NodeBits<'a> {
+    pub fn new(lhs: &'a [u64], rhs: &'a [u64]) -> Self {
+        NodeBits { lhs, rhs, index: 0 }
+    }
+}
+
+impl<'a> Iterator for NodeBits<'a> {
+    type Item = bool;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < 255 {
+            // return lhs
+            let a = self.index / 64;
+            let b = self.index % 64;
+            let res = (self.lhs[a] & (1 << b)) != 0;
+            self.index += 1;
+            return Some(res);
+        }
+
+        if self.index < 2 * 255 {
+            // return rhs
+            let a = (self.index - 255) / 64;
+            let b = (self.index - 255) % 64;
+            let res = (self.rhs[a] & (1 << b)) != 0;
+            self.index += 1;
+            return Some(res);
+        }
+
+        None
     }
 }
 
@@ -393,18 +414,18 @@ mod tests {
         // assert_eq!(
         //     t.read_at(0).0,
         //     FrRepr([
-        //         5516429847681692214,
-        //         1363403528947283679,
-        //         5429691745410183571,
-        //         7730413689037971367
+        //         8141980337328041169,
+        //         4041086031096096197,
+        //         4135265344031344584,
+        //         7650472305044950055,
         //     ])
         // );
 
         // let expected = FrRepr([
-        //     14963070332212552755,
-        //     2414807501862983188,
-        //     16116531553419129213,
-        //     6357427774790868134,
+        //     11371136130239400769,
+        //     4290566175630177573,
+        //     11576422143286805197,
+        //     2687080719931344767,
         // ]);
         // let actual = t.read_at(6).0;
 

@@ -15,7 +15,7 @@ use crate::drgporep::{self, DrgPoRep};
 use crate::drgraph::Graph;
 use crate::hasher::{HashFunction, Hasher};
 use crate::layered_drgporep::{self, Layers as LayersTrait};
-use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
+use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::porep;
 use crate::proof::ProofScheme;
 use crate::singletons::PEDERSEN_PARAMS;
@@ -83,7 +83,6 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, H> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let graph = &self.public_params.graph;
         let layer_challenges = &self.public_params.layer_challenges;
-        let sloth_iter = self.public_params.sloth_iter;
 
         assert_eq!(layer_challenges.layers(), self.layers.len());
 
@@ -169,7 +168,6 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, H> {
             // Construct the public parameters for DrgPoRep.
             let porep_params = drgporep::PublicParams::new(
                 graph.clone(), // TODO: avoid
-                sloth_iter,
                 true,
                 layer_challenges.challenges_for_layer(l),
             );
@@ -257,7 +255,7 @@ pub struct ZigZagCompound {
     partitions: Option<usize>,
 }
 
-impl<C: Circuit<Bls12>, P: ParameterSetIdentifier> CacheableParameters<Bls12, C, P>
+impl<C: Circuit<Bls12>, P: ParameterSetMetadata> CacheableParameters<Bls12, C, P>
     for ZigZagCompound
 {
     fn cache_prefix() -> String {
@@ -286,7 +284,6 @@ impl<'a, H: 'static + Hasher> CompoundProof<'a, Bls12, ZigZagDrgPoRep<'a, H>, Zi
         for layer in 0..layers {
             let drgporep_pub_params = drgporep::PublicParams::new(
                 current_graph.take().unwrap(),
-                pub_params.sloth_iter,
                 true,
                 pub_params.layer_challenges.challenges_for_layer(layer),
             );
@@ -385,7 +382,6 @@ mod tests {
         let expansion_degree = 2;
         let num_layers = 2;
         let layer_challenges = LayerChallenges::new_fixed(num_layers, 1);
-        let sloth_iter = 1;
 
         let n = nodes; // FIXME: Consolidate variable names.
 
@@ -407,7 +403,6 @@ mod tests {
                 expansion_degree,
                 seed: new_seed(),
             },
-            sloth_iter,
             layer_challenges: layer_challenges.clone(),
         };
 
@@ -421,6 +416,7 @@ mod tests {
 
         let pub_inputs = layered_drgporep::PublicInputs::<<PedersenHasher as Hasher>::Domain> {
             replica_id: replica_id.into(),
+            seed: None,
             tau: Some(tau.simplify().into()),
             comm_r_star: tau.comm_r_star.into(),
             k: None,
@@ -442,7 +438,7 @@ mod tests {
         // End copied section.
 
         let expected_inputs = 16;
-        let expected_constraints = 362494;
+        let expected_constraints = 362488;
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.
             let mut cs = MetricCS::<Bls12>::new();
@@ -520,7 +516,6 @@ mod tests {
     //     let base_degree = 2;
     //     let expansion_degree = 2;
     //     let layer_challenges = LayerChallenges::new_fixed(num_layers, 1);
-    //     let sloth_iter = 2;
     //     let challenge = 1;
     //     let replica_id: Fr = rng.gen();
 
@@ -545,7 +540,7 @@ mod tests {
     //         })
     //         .collect();
     //     let public_params =
-    //         layered_drgporep::PublicParams::new(graph, sloth_iter, layer_challenges);
+    //         layered_drgporep::PublicParams::new(graph, layer_challenges);
 
     //     ZigZagCircuit::<Bls12, PedersenHasher>::synthesize(
     //         cs.ns(|| "zigzag_drgporep"),
@@ -583,7 +578,6 @@ mod tests {
         let expansion_degree = 1;
         let num_layers = 2;
         let layer_challenges = LayerChallenges::new_tapered(num_layers, 3, num_layers, 1.0 / 3.0);
-        let sloth_iter = 1;
         let partition_count = 1;
 
         let n = nodes; // FIXME: Consolidate variable names.
@@ -608,7 +602,6 @@ mod tests {
                     expansion_degree,
                     seed: new_seed(),
                 },
-                sloth_iter,
                 layer_challenges: layer_challenges.clone(),
             },
             partitions: Some(partition_count),
@@ -627,6 +620,7 @@ mod tests {
 
         let public_inputs = layered_drgporep::PublicInputs::<H::Domain> {
             replica_id: replica_id.into(),
+            seed: None,
             tau: Some(tau.simplify()),
             comm_r_star: tau.comm_r_star,
             k: None,

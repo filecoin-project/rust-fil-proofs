@@ -11,7 +11,6 @@ use snark_gadgets::fields::fp::FpGadget;
 use snark_gadgets::groups::curves::twisted_edwards::jubjub::JubJubGadget;
 use snark_gadgets::utils::{AllocGadget, ToBitsGadget};
 
-use crate::crypto::pedersen::Personalization;
 use crate::crypto::pedersen::{BigWindow, PEDERSEN_BLOCK_SIZE};
 
 type CRHGadget = PedersenCRHGadget<JubJub, Bls12, JubJubGadget>;
@@ -67,22 +66,12 @@ pub fn pedersen_compression_num<CS: ConstraintSystem<Bls12>>(
         )
         .unwrap();
 
-    let personalization = Personalization::NoteCommitment
-        .get_bits()
-        .into_iter()
-        .map(Boolean::Constant)
-        .collect::<Vec<Boolean>>();
-
-    let mut bits_with_personalization = personalization
-        .into_iter()
-        .chain(bits.to_vec().into_iter())
-        .collect::<Vec<_>>();
-
-    while bits_with_personalization.len() % 8 != 0 {
-        bits_with_personalization.push(Boolean::Constant(false));
+    let mut bits = bits.to_vec();
+    while bits.len() % 8 != 0 {
+        bits.push(Boolean::Constant(false));
     }
 
-    let input_bytes = bits_with_personalization
+    let input_bytes = bits
         .chunks(8)
         .map(|v| UInt8::from_bits_le(v))
         .collect::<Vec<UInt8>>();

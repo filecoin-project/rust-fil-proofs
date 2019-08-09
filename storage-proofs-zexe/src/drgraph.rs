@@ -8,13 +8,11 @@ use crate::error::*;
 use crate::hasher::pedersen::PedersenHasher;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::MerkleTree;
-use crate::parameter_cache::ParameterSetIdentifier;
+use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::{data_at_node, NODE_SIZE};
 
 #[cfg(feature = "disk-trees")]
 use crate::merkle::DiskMmapStore;
-#[cfg(feature = "disk-trees")]
-use crate::SP_LOG;
 #[cfg(feature = "disk-trees")]
 use merkletree::merkle::next_pow2;
 #[cfg(feature = "disk-trees")]
@@ -115,8 +113,11 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
             // FIXME: There is probably a more direct way of doing this without
             //  reconverting to string.
 
-            info!(SP_LOG, "creating leaves tree mmap-file"; "path-prefix" => leaves_path.to_str());
-            info!(SP_LOG, "creating top half tree mmap-file"; "path-prefix" => top_half_path.to_str());
+            info!("creating leaves tree mmap-file {:?}", leaves_path.to_str());
+            info!(
+                "creating top half tree mmap-file {:?}",
+                top_half_path.to_str()
+            );
 
             let leaves_disk_mmap =
                 DiskMmapStore::new_with_path(next_pow2(self.size()), leaves_path);
@@ -188,8 +189,8 @@ pub struct BucketGraph<H: Hasher> {
     _h: PhantomData<H>,
 }
 
-impl<H: Hasher> ParameterSetIdentifier for BucketGraph<H> {
-    fn parameter_set_identifier(&self) -> String {
+impl<H: Hasher> ParameterSetMetadata for BucketGraph<H> {
+    fn identifier(&self) -> String {
         // NOTE: Seed is not included because it does not influence parameter generation.
         format!(
             "drgraph::BucketGraph{{size: {}; degree: {}; hasher: {}}}",
@@ -197,6 +198,10 @@ impl<H: Hasher> ParameterSetIdentifier for BucketGraph<H> {
             self.base_degree,
             H::name(),
         )
+    }
+
+    fn sector_size(&self) -> u64 {
+        (self.nodes * 32) as u64
     }
 }
 

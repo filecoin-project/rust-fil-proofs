@@ -2,8 +2,6 @@ use std::sync::Mutex;
 
 use config::{Config, ConfigError, Environment, File};
 
-use crate::SP_LOG;
-
 lazy_static! {
     pub static ref SETTINGS: Mutex<Settings> =
         Mutex::new(Settings::new().expect("invalid configuration"));

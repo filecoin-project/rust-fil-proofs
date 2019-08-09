@@ -5,7 +5,7 @@ use crate::drgraph::graph_height;
 use crate::error::*;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
-use crate::parameter_cache::ParameterSetIdentifier;
+use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 
 /// The parameters shared between the prover and verifier.
@@ -16,12 +16,16 @@ pub struct PublicParams {
     pub private: bool,
 }
 
-impl ParameterSetIdentifier for PublicParams {
-    fn parameter_set_identifier(&self) -> String {
+impl ParameterSetMetadata for PublicParams {
+    fn identifier(&self) -> String {
         format!(
             "merklepor::PublicParams{{leaves: {}; private: {}}}",
             self.leaves, self.private
         )
+    }
+
+    fn sector_size(&self) -> u64 {
+        unimplemented!("required for parameter metadata file generation")
     }
 }
 

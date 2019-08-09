@@ -4,8 +4,6 @@ use crate::error::Result;
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 
-use crate::SP_LOG;
-
 /// The ProofScheme trait provides the methods that any proof scheme needs to implement.
 pub trait ProofScheme<'a> {
     type PublicParams: Clone;
@@ -32,27 +30,27 @@ pub trait ProofScheme<'a> {
         priv_in: &'b Self::PrivateInputs,
         partition_count: usize,
     ) -> Result<Vec<Self::Proof>> {
-        info!(SP_LOG, "groth_proof_count: {}", partition_count; "target" => "stats");
-        info!(SP_LOG, "generating {} groth proofs.", partition_count; "target" => "groth_proving");
+        info!("groth_proof_count: {}", partition_count);
+        info!("generating {} groth proofs.", partition_count);
         let start = Instant::now();
 
         let result = (0..partition_count)
             .map(|k| {
-                info!(SP_LOG, "generating groth proof {}.", k; "target" => "groth_proving");
+                info!("generating groth proof {}.", k);
                 let start = Instant::now();
 
                 let partition_pub_in = Self::with_partition((*pub_in).clone(), Some(k));
                 let proof = Self::prove(pub_params, &partition_pub_in, priv_in);
 
                 let proof_time = start.elapsed();
-                info!(SP_LOG, "groth_proof_time: {:?}", proof_time; "target" => "stats");
+                info!("groth_proof_time: {:?}", proof_time);
 
                 proof
             })
             .collect::<Result<Vec<Self::Proof>>>();
 
         let total_proof_time = start.elapsed();
-        info!(SP_LOG, "total_groth_proof_time: {:?}", total_proof_time; "target" => "stats");
+        info!("total_groth_proof_time: {:?}", total_proof_time);
 
         result
     }
