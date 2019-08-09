@@ -422,8 +422,7 @@ mod tests {
     use std::collections::HashMap;
 
     use crate::drgraph::new_seed;
-    // use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
-    use crate::hasher::PedersenHasher;
+    use crate::hasher::{Blake2sHasher, PedersenHasher};
 
     fn assert_graph_ascending<H: Hasher, G: Graph<H>>(g: G) {
         for i in 0..g.size() {
@@ -463,10 +462,10 @@ mod tests {
     //     test_zigzag_graph_zigzags::<Sha256Hasher>();
     // }
 
-    // #[test]
-    // fn zigzag_graph_zigzags_blake2s() {
-    //     test_zigzag_graph_zigzags::<Blake2sHasher>();
-    // }
+    #[test]
+    fn zigzag_graph_zigzags_blake2s() {
+        test_zigzag_graph_zigzags::<Blake2sHasher>();
+    }
 
     fn test_zigzag_graph_zigzags<H: 'static + Hasher>() {
         let g = ZigZagBucketGraph::<H>::new_zigzag(50, 5, DEFAULT_EXPANSION_DEGREE, new_seed());
@@ -486,10 +485,10 @@ mod tests {
     //     test_expansion::<Sha256Hasher>();
     // }
 
-    // #[test]
-    // fn expansion_blake2s() {
-    //     test_expansion::<Blake2sHasher>();
-    // }
+    #[test]
+    fn expansion_blake2s() {
+        test_expansion::<Blake2sHasher>();
+    }
 
     fn test_expansion<H: 'static + Hasher>() {
         // We need a graph.

@@ -167,7 +167,7 @@ mod tests {
 
     use crate::drgraph::new_seed;
     use crate::drgraph::{BucketGraph, Graph};
-    use crate::hasher::PedersenHasher;
+    use crate::hasher::{Blake2sHasher, PedersenHasher};
 
     fn merklepath<H: Hasher>() {
         let g = BucketGraph::<H>::new(10, 5, 0, new_seed());
@@ -209,8 +209,8 @@ mod tests {
     //     merklepath::<Sha256Hasher>();
     // }
 
-    // #[test]
-    // fn merklepath_blake2s() {
-    //     merklepath::<Blake2sHasher>();
-    // }
+    #[test]
+    fn merklepath_blake2s() {
+        merklepath::<Blake2sHasher>();
+    }
 }

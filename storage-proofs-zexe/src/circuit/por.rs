@@ -253,7 +253,7 @@ mod tests {
     use crate::compound_proof;
     use crate::drgraph::{new_seed, BucketGraph, Graph};
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
-    use crate::hasher::{Domain, Hasher, PedersenHasher};
+    use crate::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher};
     use crate::merklepor;
     use crate::proof::{NoRequirements, ProofScheme};
     use crate::util::data_at_node;
@@ -334,10 +334,10 @@ mod tests {
         test_por_input_circuit_with_bls12_381::<PedersenHasher>(25740);
     }
 
-    // #[test]
-    // fn test_por_input_circuit_with_bls12_381_blake2s() {
-    //     test_por_input_circuit_with_bls12_381::<Blake2sHasher>(128928);
-    // }
+    #[test]
+    fn test_por_input_circuit_with_bls12_381_blake2s() {
+        test_por_input_circuit_with_bls12_381::<Blake2sHasher>(65388);
+    }
 
     fn test_por_input_circuit_with_bls12_381<H: Hasher>(num_constraints: usize) {
         // let params = &JubjubBls12::new();
@@ -442,11 +442,11 @@ mod tests {
         private_por_test_compound::<PedersenHasher>();
     }
 
-    // #[ignore] // Slow test – run only when compiled for release.
-    // #[test]
-    // fn test_private_por_compound_blake2s() {
-    //     private_por_test_compound::<Blake2sHasher>();
-    // }
+    #[ignore] // Slow test – run only when compiled for release.
+    #[test]
+    fn test_private_por_compound_blake2s() {
+        private_por_test_compound::<Blake2sHasher>();
+    }
 
     fn private_por_test_compound<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);

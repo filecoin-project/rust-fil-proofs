@@ -488,7 +488,7 @@ mod tests {
 
     use crate::drgraph::{new_seed, BucketGraph};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::PedersenHasher;
+    use crate::hasher::{Blake2sHasher, PedersenHasher};
     use crate::util::data_at_node;
 
     pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
@@ -550,10 +550,10 @@ mod tests {
     //     test_extract_all::<Sha256Hasher>();
     // }
 
-    // #[test]
-    // fn extract_all_blake2s() {
-    //     test_extract_all::<Blake2sHasher>();
-    // }
+    #[test]
+    fn extract_all_blake2s() {
+        test_extract_all::<Blake2sHasher>();
+    }
 
     fn test_extract<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
@@ -609,10 +609,10 @@ mod tests {
     //     test_extract::<Sha256Hasher>();
     // }
 
-    // #[test]
-    // fn extract_blake2s() {
-    //     test_extract::<Blake2sHasher>();
-    // }
+    #[test]
+    fn extract_blake2s() {
+        test_extract::<Blake2sHasher>();
+    }
 
     fn prove_verify_aux<H: Hasher>(
         nodes: usize,
@@ -777,19 +777,19 @@ mod tests {
     fn prove_verify(n: usize, i: usize) {
         prove_verify_aux::<PedersenHasher>(n, i, false, false);
         // prove_verify_aux::<Sha256Hasher>(n, i, false, false);
-        // prove_verify_aux::<Blake2sHasher>(n, i, false, false);
+        prove_verify_aux::<Blake2sHasher>(n, i, false, false);
     }
 
     fn prove_verify_wrong_challenge(n: usize, i: usize) {
         prove_verify_aux::<PedersenHasher>(n, i, true, false);
         // prove_verify_aux::<Sha256Hasher>(n, i, true, false);
-        // prove_verify_aux::<Blake2sHasher>(n, i, true, false);
+        prove_verify_aux::<Blake2sHasher>(n, i, true, false);
     }
 
     fn prove_verify_wrong_parents(n: usize, i: usize) {
         prove_verify_aux::<PedersenHasher>(n, i, false, true);
         // prove_verify_aux::<Sha256Hasher>(n, i, false, true);
-        // prove_verify_aux::<Blake2sHasher>(n, i, false, true);
+        prove_verify_aux::<Blake2sHasher>(n, i, false, true);
     }
 
     table_tests! {
