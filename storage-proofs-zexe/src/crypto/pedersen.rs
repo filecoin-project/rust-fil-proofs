@@ -1,6 +1,6 @@
 use crate::fr32::bytes_into_frs;
 use crate::singletons::PEDERSEN_PARAMS;
-use bitvec::prelude::*;
+use bitvec::{self, BitVec};
 
 use algebra::biginteger::BigInteger;
 use algebra::curves::{
@@ -28,6 +28,7 @@ pub const PEDERSEN_BLOCK_BYTES: usize = PEDERSEN_BLOCK_SIZE / 8;
 pub enum Personalization {
     NoteCommitment,
     MerkleTree(usize),
+    None,
 }
 
 impl Personalization {
@@ -41,6 +42,7 @@ impl Personalization {
 
                 (0..6).map(|i| (num >> i) & 1 == 1).collect()
             }
+            Personalization::None => vec![],
         }
     }
 }
@@ -62,14 +64,14 @@ where
         bits.push(false);
     }
 
-    let bytes = BitVec::<LittleEndian, _>::from(&bits[..]);
+    let bytes = BitVec::<bitvec::LittleEndian, _>::from(&bits[..]);
 
-    PedersenCRH::<JubJub, BigWindow>::evaluate(&PEDERSEN_PARAMS, bytes.as_slice()).unwrap()
+    PedersenCRH::<JubJub, BigWindow>::evaluate(&PEDERSEN_PARAMS, bytes.as_ref()).unwrap()
 }
 
 pub fn pedersen(data: &[u8]) -> GroupProjective<JubJubParameters> {
-    let bits = BitVec::<LittleEndian, u8>::from(data);
-    pedersen_hash(Personalization::NoteCommitment, bits)
+    let bits = BitVec::<bitvec::LittleEndian, u8>::from(data);
+    pedersen_hash(Personalization::None, bits)
 }
 
 /// Pedersen hashing for inputs that have length multiple of the block size `256`. Based on pedersen hashes and a Merkle-Damgard construction.
@@ -126,8 +128,10 @@ mod tests {
         let bytes = b"ABC";
         let bits = bytes_into_bits(bytes);
 
-        let mut bits2 = bitvec![LittleEndian, u8; 0; bits.len()];
-        bits2.as_mut_slice()[0..bytes.len()].copy_from_slice(&bytes[..]);
+        let mut bits2 = core::iter::repeat(false)
+            .take(bits.len())
+            .collect::<BitVec<bitvec::LittleEndian, u8>>();
+        bits2.as_mut()[0..bytes.len()].copy_from_slice(&bytes[..]);
 
         assert_eq!(bits, bits2.iter().collect::<Vec<bool>>());
     }
@@ -139,8 +143,8 @@ mod tests {
         data.copy_from_slice(&bytes[..]);
         pedersen_compression(&mut data);
         let _expected = vec![
-            213, 235, 66, 156, 7, 85, 177, 39, 249, 31, 160, 247, 29, 106, 36, 46, 225, 71, 116,
-            23, 1, 89, 82, 149, 45, 189, 27, 189, 144, 98, 23, 98,
+            237, 70, 41, 231, 39, 180, 131, 120, 36, 36, 119, 199, 200, 225, 153, 242, 106, 116,
+            70, 9, 12, 249, 169, 84, 105, 38, 225, 115, 165, 188, 98, 25,
         ];
         // Note: this test fails as we use different generator points and zexe used a slightly different approach
         // for Pedersen hashing (no windowing). Hence the expected output should be updated.

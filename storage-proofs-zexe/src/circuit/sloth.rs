@@ -13,7 +13,6 @@ pub fn decode<CS>(
     mut cs: CS,
     key: &FpGadget<Bls12>,
     ciphertext: Option<Fr>,
-    rounds: usize,
 ) -> Result<FpGadget<Bls12>, SynthesisError>
 where
     CS: ConstraintSystem<Bls12>,
@@ -22,20 +21,7 @@ where
         Ok(ciphertext.ok_or_else(|| SynthesisError::AssignmentMissing)?)
     })?;
 
-    for i in 0..rounds {
-        let cs = &mut cs.ns(|| format!("round {}", i));
-
-        let c = plaintext;
-        let c2 = c.square(cs.ns(|| "c^2"))?;
-        let c4 = c2.square(cs.ns(|| "c^4"))?;
-        let c5 = c4.mul(cs.ns(|| "c^5"), &c)?;
-
-        plaintext = sub(cs.ns(|| "c^5 - k"), &c5, key)?;
-    }
-
-    if rounds == 0 {
-        plaintext = sub(cs.ns(|| "plaintext - k"), &plaintext, key)?;
-    }
+    plaintext = sub(cs.ns(|| "plaintext - k"), &plaintext, key)?;
 
     Ok(plaintext)
 }
@@ -68,6 +54,7 @@ mod tests {
     use super::*;
     use crate::circuit::test::TestConstraintSystem;
     use crate::crypto::sloth;
+    use algebra::fields::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]
@@ -77,17 +64,17 @@ mod tests {
         for _ in 0..10 {
             let key: Fr = rng.gen();
             let plaintext: Fr = rng.gen();
-            let ciphertext = sloth::encode::<Bls12>(&key, &plaintext, 10);
+            let ciphertext = sloth::encode::<Bls12>(&key, &plaintext);
 
             // Vanilla
-            let decrypted = sloth::decode::<Bls12>(&key, &ciphertext, 10);
+            let decrypted = sloth::decode::<Bls12>(&key, &ciphertext);
 
             assert_eq!(plaintext, decrypted, "vanilla failed");
 
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
             let key_num = FpGadget::alloc(cs.ns(|| "key"), || Ok(key)).unwrap();
-            let out = decode(cs.ns(|| "sloth"), &key_num, Some(ciphertext), 10).unwrap();
+            let out = decode(cs.ns(|| "sloth"), &key_num, Some(ciphertext)).unwrap();
 
             assert!(cs.is_satisfied());
             assert_eq!(out.get_value().unwrap(), decrypted, "no interop");
@@ -103,13 +90,13 @@ mod tests {
             let key_bad: Fr = rng.gen();
             let plaintext: Fr = rng.gen();
 
-            let ciphertext = sloth::encode::<Bls12>(&key, &plaintext, 10);
+            let ciphertext = sloth::encode::<Bls12>(&key, &plaintext);
 
-            let decrypted = sloth::decode::<Bls12>(&key, &ciphertext, 10);
+            let decrypted = sloth::decode::<Bls12>(&key, &ciphertext);
             let mut cs = TestConstraintSystem::<Bls12>::new();
             let key_bad_num = FpGadget::alloc(cs.ns(|| "key bad"), || Ok(key_bad)).unwrap();
 
-            let out = decode(cs.ns(|| "sloth"), &key_bad_num, Some(ciphertext), 10).unwrap();
+            let out = decode(cs.ns(|| "sloth"), &key_bad_num, Some(ciphertext)).unwrap();
 
             assert!(cs.is_satisfied());
             assert_ne!(out.get_value().unwrap(), decrypted);
@@ -121,39 +108,19 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         for _ in 0..10 {
-            let key: Fr = rng.gen();
+            let mut key: Fr = rng.gen();
             let plaintext: Fr = rng.gen();
 
-            let ciphertext = sloth::encode::<Bls12>(&key, &plaintext, 10);
-            let decrypted = sloth::decode::<Bls12>(&key, &ciphertext, 10);
+            let ciphertext = sloth::encode::<Bls12>(&key, &plaintext);
+            let decrypted = sloth::decode::<Bls12>(&key, &ciphertext);
 
-            {
-                let mut cs = TestConstraintSystem::<Bls12>::new();
-                let key_num = FpGadget::alloc(cs.ns(|| "key"), || Ok(key)).unwrap();
+            key += &Fr::one();
+            let mut cs = TestConstraintSystem::<Bls12>::new();
+            let key_num = FpGadget::alloc(cs.ns(|| "key"), || Ok(key)).unwrap();
+            let out_other = decode(cs.ns(|| "sloth other"), &key_num, Some(ciphertext)).unwrap();
 
-                let out9 = decode(cs.ns(|| "sloth 9"), &key_num, Some(ciphertext), 9).unwrap();
-
-                assert!(cs.is_satisfied());
-                assert_ne!(out9.get_value().unwrap(), decrypted);
-            }
-
-            {
-                let mut cs = TestConstraintSystem::<Bls12>::new();
-                let key_num = FpGadget::alloc(cs.ns(|| "key"), || Ok(key)).unwrap();
-                let out10 = decode(cs.ns(|| "sloth 10"), &key_num, Some(ciphertext), 10).unwrap();
-
-                assert!(cs.is_satisfied());
-                assert_eq!(out10.get_value().unwrap(), decrypted);
-            }
-
-            {
-                let mut cs = TestConstraintSystem::<Bls12>::new();
-                let key_num = FpGadget::alloc(cs.ns(|| "key"), || Ok(key)).unwrap();
-                let out11 = decode(cs.ns(|| "sloth 11"), &key_num, Some(ciphertext), 11).unwrap();
-
-                assert!(cs.is_satisfied());
-                assert_ne!(out11.get_value().unwrap(), decrypted);
-            }
+            assert!(cs.is_satisfied());
+            assert_ne!(out_other.get_value().unwrap(), decrypted);
         }
     }
 

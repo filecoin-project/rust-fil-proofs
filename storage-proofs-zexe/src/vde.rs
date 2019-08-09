@@ -8,12 +8,7 @@ use crate::merkle::MerkleTree;
 use crate::util::{data_at_node, data_at_node_offset, NODE_SIZE};
 
 /// encodes the data and overwrites the original data slice.
-pub fn encode<'a, H, G>(
-    graph: &'a G,
-    sloth_iter: usize,
-    replica_id: &'a H::Domain,
-    data: &'a mut [u8],
-) -> Result<()>
+pub fn encode<'a, H, G>(graph: &'a G, replica_id: &'a H::Domain, data: &'a mut [u8]) -> Result<()>
 where
     H: Hasher,
     G: Graph<H>,
@@ -42,7 +37,7 @@ where
         let end = start + NODE_SIZE;
 
         let node_data = H::Domain::try_from_bytes(&data[start..end])?;
-        let encoded = H::sloth_encode(&key, &node_data, sloth_iter);
+        let encoded = H::sloth_encode(&key, &node_data);
 
         encoded.write_bytes(&mut data[start..end])?;
     }
@@ -50,12 +45,7 @@ where
     Ok(())
 }
 
-pub fn decode<'a, H, G>(
-    graph: &'a G,
-    sloth_iter: usize,
-    replica_id: &'a H::Domain,
-    data: &'a [u8],
-) -> Result<Vec<u8>>
+pub fn decode<'a, H, G>(graph: &'a G, replica_id: &'a H::Domain, data: &'a [u8]) -> Result<Vec<u8>>
 where
     H: Hasher,
     G: Graph<H>,
@@ -63,7 +53,7 @@ where
     // TODO: parallelize
     (0..graph.size()).fold(Ok(Vec::with_capacity(data.len())), |acc, i| {
         acc.and_then(|mut acc| {
-            acc.extend(decode_block(graph, sloth_iter, replica_id, data, i)?.into_bytes());
+            acc.extend(decode_block(graph, replica_id, data, i)?.into_bytes());
             Ok(acc)
         })
     })
@@ -71,7 +61,6 @@ where
 
 pub fn decode_block<'a, H, G>(
     graph: &'a G,
-    sloth_iter: usize,
     replica_id: &'a H::Domain,
     data: &'a [u8],
     v: usize,
@@ -85,11 +74,10 @@ where
     let key = create_key::<H>(replica_id, v, &parents, &data)?;
     let node_data = H::Domain::try_from_bytes(&data_at_node(data, v)?)?;
 
-    Ok(H::sloth_decode(&key, &node_data, sloth_iter))
+    Ok(H::sloth_decode(&key, &node_data))
 }
 
 pub fn decode_domain_block<H>(
-    sloth_iter: usize,
     replica_id: &H::Domain,
     tree: &MerkleTree<H::Domain, H::Function>,
     node: usize,
@@ -101,7 +89,7 @@ where
 {
     let key = create_key_from_tree::<H>(replica_id, node, parents, tree)?;
 
-    Ok(H::sloth_decode(&key, &node_data, sloth_iter))
+    Ok(H::sloth_decode(&key, &node_data))
 }
 
 /// Creates the encoding key.

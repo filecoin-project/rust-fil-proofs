@@ -8,7 +8,6 @@ use memmap::MmapOptions;
 use rayon::prelude::*;
 use serde::de::Deserialize;
 use serde::ser::Serialize;
-use slog::*;
 
 use crate::challenge_derivation::derive_challenges;
 use crate::drgporep::{self, DrgPoRep};
@@ -16,12 +15,11 @@ use crate::drgraph::Graph;
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::merkle::MerkleTree;
-use crate::parameter_cache::ParameterSetIdentifier;
+use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
 use crate::settings;
 use crate::vde;
-use crate::SP_LOG;
 
 #[cfg(feature = "disk-trees")]
 use rand;
@@ -115,7 +113,6 @@ impl LayerChallenges {
 #[derive(Debug)]
 pub struct SetupParams {
     pub drg: drgporep::DrgParams,
-    pub sloth_iter: usize,
     pub layer_challenges: LayerChallenges,
 }
 
@@ -123,10 +120,10 @@ pub struct SetupParams {
 pub struct PublicParams<H, G>
 where
     H: Hasher,
-    G: Graph<H> + ParameterSetIdentifier,
+    G: Graph<H> + ParameterSetMetadata,
 {
     pub graph: G,
-    pub sloth_iter: usize,
+
     pub layer_challenges: LayerChallenges,
     _h: PhantomData<H>,
 }
@@ -155,44 +152,42 @@ impl<T: Domain> Tau<T> {
 impl<H, G> PublicParams<H, G>
 where
     H: Hasher,
-    G: Graph<H> + ParameterSetIdentifier,
+    G: Graph<H> + ParameterSetMetadata,
 {
-    pub fn new(graph: G, sloth_iter: usize, layer_challenges: LayerChallenges) -> Self {
+    pub fn new(graph: G, layer_challenges: LayerChallenges) -> Self {
         PublicParams {
             graph,
-            sloth_iter,
             layer_challenges,
             _h: PhantomData,
         }
     }
 }
 
-impl<H, G> ParameterSetIdentifier for PublicParams<H, G>
+impl<H, G> ParameterSetMetadata for PublicParams<H, G>
 where
     H: Hasher,
-    G: Graph<H> + ParameterSetIdentifier,
+    G: Graph<H> + ParameterSetMetadata,
 {
-    fn parameter_set_identifier(&self) -> String {
+    fn identifier(&self) -> String {
         format!(
-            "layered_drgporep::PublicParams{{ graph: {}, sloth: {}, challenges: {:?} }}",
-            self.graph.parameter_set_identifier(),
-            self.sloth_iter,
+            "layered_drgporep::PublicParams{{ graph: {}, challenges: {:?} }}",
+            self.graph.identifier(),
             self.layer_challenges,
         )
+    }
+
+    fn sector_size(&self) -> u64 {
+        self.graph.sector_size()
     }
 }
 
 impl<'a, H, G> From<&'a PublicParams<H, G>> for PublicParams<H, G>
 where
     H: Hasher,
-    G: Graph<H> + ParameterSetIdentifier,
+    G: Graph<H> + ParameterSetMetadata,
 {
     fn from(other: &PublicParams<H, G>) -> PublicParams<H, G> {
-        PublicParams::new(
-            other.graph.clone(),
-            other.sloth_iter,
-            other.layer_challenges.clone(),
-        )
+        PublicParams::new(other.graph.clone(), other.layer_challenges.clone())
     }
 }
 
@@ -201,6 +196,7 @@ pub type EncodingProof<H> = drgporep::Proof<H>;
 #[derive(Debug, Clone)]
 pub struct PublicInputs<T: Domain> {
     pub replica_id: T,
+    pub seed: Option<T>,
     pub tau: Option<porep::Tau<T>>,
     pub comm_r_star: T,
     pub k: Option<usize>,
@@ -214,14 +210,25 @@ impl<T: Domain> PublicInputs<T> {
         layer: u8,
         partition_k: Option<usize>,
     ) -> Vec<usize> {
-        derive_challenges::<T>(
-            layer_challenges,
-            layer,
-            leaves,
-            &self.replica_id,
-            &self.comm_r_star,
-            partition_k.unwrap_or(0) as u8,
-        )
+        if let Some(ref seed) = self.seed {
+            derive_challenges::<T>(
+                layer_challenges,
+                layer,
+                leaves,
+                &self.replica_id,
+                seed,
+                partition_k.unwrap_or(0) as u8,
+            )
+        } else {
+            derive_challenges::<T>(
+                layer_challenges,
+                layer,
+                leaves,
+                &self.replica_id,
+                &self.comm_r_star,
+                partition_k.unwrap_or(0) as u8,
+            )
+        }
     }
 }
 
@@ -269,7 +276,7 @@ type TransformedLayers<H> = (Vec<PorepTau<H>>, Vec<Tree<H>>);
 /// of layered proofs of replication. Implementations must provide transform and invert_transform methods.
 pub trait Layers {
     type Hasher: Hasher;
-    type Graph: Layerable<Self::Hasher> + ParameterSetIdentifier + Sync + Send;
+    type Graph: Layerable<Self::Hasher> + ParameterSetMetadata + Sync + Send;
 
     /// Transform a layer's public parameters, returning new public parameters corresponding to the next layer.
     /// Warning: This method will likely need to be extended for other implementations
@@ -283,7 +290,6 @@ pub trait Layers {
     #[allow(clippy::too_many_arguments)]
     fn prove_layers<'a>(
         graph: &Self::Graph,
-        sloth_iter: usize,
         pub_inputs: &PublicInputs<<Self::Hasher as Hasher>::Domain>,
         tau: &[PorepTau<Self::Hasher>],
         aux: &'a [Tree<Self::Hasher>],
@@ -311,7 +317,6 @@ pub trait Layers {
 
                 let pp = drgporep::PublicParams::new(
                     current_graph,
-                    sloth_iter,
                     true,
                     layer_challenges.challenges_for_layer(layer),
                 );
@@ -348,7 +353,6 @@ pub trait Layers {
 
     fn extract_and_invert_transform_layers<'a>(
         graph: &Self::Graph,
-        sloth_iter: usize,
         layer_challenges: &LayerChallenges,
         replica_id: &<Self::Hasher as Hasher>::Domain,
         data: &'a mut [u8],
@@ -360,7 +364,6 @@ pub trait Layers {
             let inverted = Self::invert_transform(&current_graph);
             let pp = drgporep::PublicParams::new(
                 inverted.clone(),
-                sloth_iter,
                 true,
                 layer_challenges.challenges_for_layer(layer),
             );
@@ -378,7 +381,6 @@ pub trait Layers {
 
     fn transform_and_replicate_layers(
         graph: &Self::Graph,
-        sloth_iter: usize,
         layer_challenges: &LayerChallenges,
         replica_id: &<Self::Hasher as Hasher>::Domain,
         data: &mut [u8],
@@ -398,13 +400,13 @@ pub trait Layers {
             (0..=layers).fold(graph.clone(), |current_graph, layer| {
                 let tree_d = Self::generate_data_tree(&current_graph, &data, layer);
 
-                info!(SP_LOG, "returning tree"; "layer" => format!("{}", layer));
+                info!("returning tree {}", layer);
 
                 sorted_trees.push(tree_d);
 
                 if layer < layers {
-                    info!(SP_LOG, "encoding"; "layer {}" => format!("{}", layer));
-                    vde::encode(&current_graph, sloth_iter, replica_id, data)
+                    info!("encoding {}", layer);
+                    vde::encode(&current_graph, replica_id, data)
                         .expect("encoding failed in thread");
                 }
 
@@ -419,7 +421,7 @@ pub trait Layers {
                     // The first iteration has no previous_tree.
                     if let Some(comm_d) = previous_comm_r {
                         let tau = porep::Tau { comm_r, comm_d };
-                        //                        info!(SP_LOG, "setting tau/aux"; "layer" => format!("{}", i - 1));
+                        //                        info!("setting tau/aux {}", i - 1);
                         // FIXME: Use `enumerate` if this log is worth it.
                         taus.push(tau);
                     };
@@ -445,7 +447,11 @@ pub trait Layers {
 
                 let errf = |e| {
                     let err_string = format!("{:?}", e);
-                    error!(SP_LOG, "MerkleTreeGenerationError"; "err" => &err_string, "backtrace" => format!("{:?}", failure::Backtrace::new()));
+                    error!(
+                        "MerkleTreeGenerationError {:?}: {:?}",
+                        err_string,
+                        failure::Backtrace::new()
+                    );
                     Error::MerkleTreeGenerationError(err_string)
                 };
 
@@ -471,7 +477,7 @@ pub trait Layers {
 
                             let tree_d = Self::generate_data_tree(&graph, &data_copy, layer);
 
-                            info!(SP_LOG, "returning tree"; "layer" => format!("{}", layer));
+                            info!("returning tree {}", layer);
                             return_channel
                                 .send((layer, tree_d))
                                 .expect("Failed to send value through channel");
@@ -480,8 +486,8 @@ pub trait Layers {
                         threads.push(thread);
 
                         if layer < layers {
-                            info!(SP_LOG, "encoding"; "layer {}" => format!("{}", layer));
-                            vde::encode(&current_graph, sloth_iter, replica_id, data)
+                            info!("encoding {}", layer);
+                            vde::encode(&current_graph, replica_id, data)
                                 .expect("encoding failed in thread");
                         }
                         Self::transform(&current_graph)
@@ -509,7 +515,7 @@ pub trait Layers {
                     // The first iteration has no previous_tree.
                     if let Some(comm_d) = previous_comm_r {
                         let tau = porep::Tau { comm_r, comm_d };
-                        info!(SP_LOG, "setting tau/aux"; "layer" => format!("{}", i - 1));
+                        info!("setting tau/aux {}", i - 1);
                         taus.push(tau);
                     };
 
@@ -587,11 +593,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
             sp.drg.seed,
         );
 
-        Ok(PublicParams::new(
-            graph,
-            sp.sloth_iter,
-            sp.layer_challenges.clone(),
-        ))
+        Ok(PublicParams::new(graph, sp.layer_challenges.clone()))
     }
 
     fn prove<'b>(
@@ -618,7 +620,6 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
 
         let proofs = Self::prove_layers(
             &pub_params.graph,
-            pub_params.sloth_iter,
             pub_inputs,
             &priv_inputs.tau,
             &priv_inputs.aux,
@@ -669,7 +670,6 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
 
                 let pp = drgporep::PublicParams::new(
                     current_graph,
-                    pub_params.sloth_iter,
                     true,
                     pub_params.layer_challenges.challenges_for_layer(layer),
                 );
@@ -714,6 +714,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
     fn with_partition(pub_in: Self::PublicInputs, k: Option<usize>) -> Self::PublicInputs {
         self::PublicInputs {
             replica_id: pub_in.replica_id,
+            seed: None,
             tau: pub_in.tau,
             comm_r_star: pub_in.comm_r_star,
             k,
@@ -757,7 +758,6 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let (taus, auxs) = Self::transform_and_replicate_layers(
             &pp.graph,
-            pp.sloth_iter,
             &pp.layer_challenges,
             replica_id,
             data,
@@ -781,7 +781,6 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
 
         Self::extract_and_invert_transform_layers(
             &pp.graph,
-            pp.sloth_iter,
             &pp.layer_challenges,
             replica_id,
             &mut data,

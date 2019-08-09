@@ -45,14 +45,14 @@ pub trait HashFunction<T: Domain>:
 {
     fn hash(data: &[u8]) -> T;
 
-    fn hash_leaf(data: &LightHashable<Self>) -> T {
+    fn hash_leaf(data: &dyn LightHashable<Self>) -> T {
         let mut a = Self::default();
         data.hash(&mut a);
         let item_hash = a.hash();
         a.leaf(item_hash)
     }
 
-    fn hash_single_node(data: &LightHashable<Self>) -> T {
+    fn hash_single_node(data: &dyn LightHashable<Self>) -> T {
         let mut a = Self::default();
         data.hash(&mut a);
         a.hash()
@@ -78,8 +78,8 @@ pub trait Hasher: Clone + ::std::fmt::Debug + Eq + Default + Send + Sync {
     type Function: HashFunction<Self::Domain>;
 
     fn kdf(data: &[u8], m: usize) -> Self::Domain;
-    fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain, rounds: usize) -> Self::Domain;
-    fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain, rounds: usize) -> Self::Domain;
+    fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain) -> Self::Domain;
+    fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain) -> Self::Domain;
 
     fn name() -> String;
 }

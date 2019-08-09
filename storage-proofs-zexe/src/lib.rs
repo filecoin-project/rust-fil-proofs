@@ -13,7 +13,7 @@ extern crate proptest;
 // #[macro_use]
 extern crate clap;
 #[macro_use]
-extern crate slog;
+extern crate log;
 #[macro_use]
 extern crate serde;
 
@@ -48,10 +48,3 @@ pub mod util;
 pub mod vde;
 pub mod zigzag_drgporep;
 pub mod zigzag_graph;
-
-use logging_toolkit::make_logger;
-use slog::Logger;
-
-lazy_static! {
-    pub static ref SP_LOG: Logger = make_logger("storage-proofs");
-}

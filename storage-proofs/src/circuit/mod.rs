@@ -1,7 +1,6 @@
 mod constraint;
 
 pub mod por;
-pub mod por_zexe;
 
 pub mod apex_commitment;
 pub mod beacon_post;
@@ -13,7 +12,6 @@ pub mod porc;
 pub mod ppor;
 pub mod sloth;
 pub mod variables;
-pub mod variables_zexe;
 pub mod vdf_post;
 pub mod xor;
 pub mod zigzag;
