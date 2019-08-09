@@ -1,3 +1,4 @@
+pub mod bench;
 pub mod constraint;
 pub mod drgporep;
 pub mod kdf;
