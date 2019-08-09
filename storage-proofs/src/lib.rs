@@ -1,6 +1,5 @@
 #![deny(clippy::all, clippy::perf, clippy::correctness)]
-#![allow(clippy::unreadable_literal)]
-#![allow(clippy::type_repetition_in_bounds)]
+#![allow(clippy::unreadable_literal, clippy::type_repetition_in_bounds)]
 
 #[macro_use]
 extern crate failure;
