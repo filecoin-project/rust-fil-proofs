@@ -522,7 +522,7 @@ mod tests {
     use crate::drgporep;
     use crate::drgraph::{graph_height, new_seed, BucketGraph};
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
-    use crate::hasher::{Hasher, PedersenHasher};
+    use crate::hasher::{Blake2sHasher, Hasher, PedersenHasher};
     use crate::porep::PoRep;
     use crate::proof::{NoRequirements, ProofScheme};
     use crate::util::data_at_node;
@@ -708,12 +708,12 @@ mod tests {
         drgporep_test_compound::<PedersenHasher>();
     }
 
-    //    #[test]
-    //    #[ignore] // Slow test – run only when compiled for release.
-    //    fn test_drgporep_compound_blake2s() {
-    //        drgporep_test_compound::<Blake2sHasher>();
-    //    }
-    //
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn test_drgporep_compound_blake2s() {
+        drgporep_test_compound::<Blake2sHasher>();
+    }
+
     fn drgporep_test_compound<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
