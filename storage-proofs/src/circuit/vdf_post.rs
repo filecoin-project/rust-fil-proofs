@@ -521,7 +521,7 @@ mod tests {
         let setup_params = compound_proof::SetupParams {
             vanilla_params: &vdf_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
                 challenge_count: 3,
-                sector_size: 1024 * lambda,
+                sector_size: 128 * lambda,
                 post_epochs: 3,
                 setup_params_vdf: vdf_sloth::SetupParams { key: rng.gen() },
                 sectors_count: 2,
@@ -533,16 +533,16 @@ mod tests {
             vdf_post::VDFPoSt<PedersenHasher, vdf_sloth::Sloth>,
         > = VDFPostCompound::setup(&setup_params).expect("setup failed");
 
-        let data0: Vec<u8> = (0..1024)
+        let data0: Vec<u8> = (0..128)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
-        let data1: Vec<u8> = (0..1024)
+        let data1: Vec<u8> = (0..128)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph0 = BucketGraph::<PedersenHasher>::new(1024, 5, 0, new_seed());
+        let graph0 = BucketGraph::<PedersenHasher>::new(128, 5, 0, new_seed());
         let tree0 = graph0.merkle_tree(data0.as_slice()).unwrap();
-        let graph1 = BucketGraph::<PedersenHasher>::new(1024, 5, 0, new_seed());
+        let graph1 = BucketGraph::<PedersenHasher>::new(128, 5, 0, new_seed());
         let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
 
         let pub_inputs = vdf_post::PublicInputs {
