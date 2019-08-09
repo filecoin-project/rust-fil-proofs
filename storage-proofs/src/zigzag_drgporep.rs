@@ -22,7 +22,7 @@ pub struct ZigZagDrgPoRep<'a, H: 'a + Hasher> {
     _a: PhantomData<&'a H>,
 }
 
-impl<'a, H: 'static + Hasher> Layers for ZigZagDrgPoRep<'a, H> where {
+impl<'a, H: 'static + Hasher> Layers for ZigZagDrgPoRep<'a, H> {
     type Hasher = <ZigZagBucketGraph<H> as ZigZag>::BaseHasher;
     type Graph = ZigZagBucketGraph<Self::Hasher>;
 
