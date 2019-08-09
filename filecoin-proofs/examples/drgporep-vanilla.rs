@@ -6,18 +6,18 @@ extern crate gperftools;
 extern crate log;
 
 use clap::{App, Arg};
-use paired::bls12_381::Bls12;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::time::{Duration, Instant};
 
 #[cfg(feature = "cpu-profile")]
 use gperftools::profiler::PROFILER;
 
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
 use storage_proofs::drgporep::*;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
-use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
+use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 
@@ -173,7 +173,7 @@ fn main() {
         .arg(
             Arg::with_name("hasher")
                 .long("hasher")
-                .help("Which hasher should be used.Available: \"pedersen\", \"sha256\", \"blake2s\" (default \"pedersen\")")
+                .help("Which hasher should be used.Available: \"pedersen\", \"blake2s\" (default \"pedersen\")")
                 .default_value("pedersen")
                 .takes_value(true),
         )
@@ -188,9 +188,9 @@ fn main() {
         "pedersen" => {
             do_the_work::<PedersenHasher>(data_size, m, challenge_count);
         }
-        "sha256" => {
-            do_the_work::<Sha256Hasher>(data_size, m, challenge_count);
-        }
+        // "sha256" => {
+        //     do_the_work::<Sha256Hasher>(data_size, m, challenge_count);
+        // }
         "blake2s" => {
             do_the_work::<Blake2sHasher>(data_size, m, challenge_count);
         }

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use paired::bls12_381::Bls12;
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
 use storage_proofs::circuit::vdf_post::{VDFPoStCircuit, VDFPostCompound};
 use storage_proofs::parameter_cache::{self, CacheableParameters};
 
@@ -38,7 +38,7 @@ impl PoStConfig {
     pub fn get_cache_identifier(&self) -> String {
         let params = crate::parameters::post_public_params(*self);
 
-        <VDFPostCompound as CacheableParameters<Bls12, VDFPoStCircuit<_>, _>>::cache_identifier(
+        <VDFPostCompound as CacheableParameters<Bls12, VDFPoStCircuit, _>>::cache_identifier(
             &params,
         )
     }

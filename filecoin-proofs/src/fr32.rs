@@ -989,8 +989,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use algebra::curves::bls12_381::Bls12_381 as Bls12;
     use itertools::Itertools;
-    use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
     use std::io::Cursor;
     use storage_proofs::fr32::bytes_into_fr;

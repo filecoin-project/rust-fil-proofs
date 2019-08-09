@@ -3,7 +3,7 @@ use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 
 use algebra::biginteger::BigInteger;
 use algebra::biginteger::BigInteger256 as FrRepr;
-use algebra::{PairingEngine as Engine, PrimeField};
+use algebra::{Field, PairingEngine as Engine, PrimeField};
 use std::io::Read;
 
 // Contains 32 bytes whose little-endian value represents an Fr.
@@ -36,8 +36,12 @@ pub fn bytes_into_fr<E: Engine>(bytes: &[u8]) -> Result<E::Fr> {
     fr_repr
         .read_le((&bytes[..]).by_ref())
         .map_err(|_| Error::BadFrBytes)?;
+    let res = E::Fr::from_repr(fr_repr);
+    if res.is_zero() && !bytes.iter().all(|i| *i == 0) {
+        return Err(Error::BadFrBytes);
+    }
 
-    Ok(E::Fr::from_repr(fr_repr))
+    Ok(res)
 }
 
 #[inline]
@@ -101,26 +105,27 @@ mod tests {
     // Note: zexe returns the zero field element for bigint representations that overflow / are not in the field,
     // while bellman was throwing an error. Due to this we had to adapt the logic of the following tests.
 
-    fn bytes_fr_test<E: Engine>(bytes: Fr32Ary, expect_zero: bool) {
+    fn bytes_fr_test<E: Engine>(bytes: Fr32Ary, expect_success: bool) {
         let mut b = &bytes[..];
         let fr_result = bytes_into_fr::<E>(&mut b);
-        if expect_zero {
-            assert_eq!(fr_result.unwrap(), E::Fr::zero())
-        } else {
+        if expect_success {
             let f = fr_result.expect("Failed to convert bytes to `Fr`");
             let b2 = fr_into_bytes::<E>(&f);
 
             assert_eq!(bytes.to_vec(), b2);
+        } else {
+            assert!(fr_result.is_err(), "expected a decoding error");
         }
     }
     #[test]
     fn test_bytes_into_fr_into_bytes() {
+        bytes_fr_test::<Bls12>([0u8; 32], true);
         bytes_fr_test::<Bls12>(
             [
                 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
                 23, 24, 25, 26, 27, 28, 29, 30, 31,
             ],
-            false,
+            true,
         );
         bytes_fr_test::<Bls12>(
             // Some bytes fail because they are not in the field.
@@ -128,7 +133,7 @@ mod tests {
                 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
                 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 115,
             ],
-            true,
+            false,
         );
         bytes_fr_test::<Bls12>(
             // This is okay.
@@ -136,7 +141,7 @@ mod tests {
                 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
                 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 114,
             ],
-            false,
+            true,
         );
         bytes_fr_test::<Bls12>(
             // So is this.
@@ -144,7 +149,7 @@ mod tests {
                 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
                 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 236, 115,
             ],
-            false,
+            true,
         );
         bytes_fr_test::<Bls12>(
             // But not this.
@@ -152,7 +157,7 @@ mod tests {
                 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
                 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 237, 115,
             ],
-            true,
+            false,
         );
     }
 

@@ -5,24 +5,23 @@ extern crate gperftools;
 #[macro_use]
 extern crate log;
 
-use chrono::Utc;
-use clap::{App, Arg};
-#[cfg(feature = "heap-profile")]
-use gperftools::heap_profiler::HEAP_PROFILER;
-#[cfg(feature = "cpu-profile")]
-use gperftools::profiler::PROFILER;
-use memmap::MmapMut;
-use memmap::MmapOptions;
-use paired::bls12_381::Bls12;
-use rand::{Rng, SeedableRng, XorShiftRng};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::time::{Duration, Instant};
 use std::u32;
 
-use bellperson::Circuit;
-use fil_sapling_crypto::jubjub::JubjubBls12;
+#[cfg(feature = "heap-profile")]
+use gperftools::heap_profiler::HEAP_PROFILER;
+#[cfg(feature = "cpu-profile")]
+use gperftools::profiler::PROFILER;
 
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use chrono::Utc;
+use clap::{App, Arg};
+use memmap::MmapMut;
+use memmap::MmapOptions;
+use rand::{Rng, SeedableRng, XorShiftRng};
+use snark::Circuit;
 use storage_proofs::circuit::metric::*;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
@@ -30,11 +29,10 @@ use storage_proofs::drgporep;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
-use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
+use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher};
 use storage_proofs::layered_drgporep::{self, ChallengeRequirements, LayerChallenges};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
-use storage_proofs::settings;
 use storage_proofs::zigzag_drgporep::*;
 
 // We can only one of the profilers at a time, either CPU (`profile`)
@@ -284,21 +282,15 @@ fn do_the_work<H: 'static>(
     };
 
     if circuit || groth || bench {
-        let window_size = settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size;
-        let engine_params = JubjubBls12::new_with_window_size(window_size);
         let compound_public_params = compound_proof::PublicParams {
             vanilla_params: pp.clone(),
-            engine_params: &engine_params,
             partitions: Some(partitions),
         };
         if circuit || bench {
             info!("Performing circuit bench.");
             let mut cs = MetricCS::<Bls12>::new();
 
-            ZigZagCompound::blank_circuit(&pp, &engine_params)
+            ZigZagCompound::blank_circuit(&pp)
                 .synthesize(&mut cs)
                 .expect("failed to synthesize circuit");
 
@@ -321,11 +313,8 @@ fn do_the_work<H: 'static>(
             // We should also allow the serialized vanilla proofs to be passed (as a file) to the example
             // and skip replication/vanilla-proving entirely.
             info!("Performing circuit groth.");
-            let gparams = ZigZagCompound::groth_params(
-                &compound_public_params.vanilla_params,
-                &engine_params,
-            )
-            .unwrap();
+            let gparams =
+                ZigZagCompound::groth_params(&compound_public_params.vanilla_params).unwrap();
 
             let multi_proof = {
                 let start = Instant::now();
@@ -428,7 +417,7 @@ fn main() {
         .arg(
             Arg::with_name("hasher")
                 .long("hasher")
-                .help("Which hasher should be used.Available: \"pedersen\", \"sha256\", \"blake2s\" (default \"pedersen\")")
+                .help("Which hasher should be used.Available: \"pedersen\", \"blake2s\" (default \"pedersen\")")
                 .default_value("pedersen")
                 .takes_value(true),
         )
@@ -539,22 +528,22 @@ fn main() {
                 bench_only,
             );
         }
-        "sha256" => {
-            do_the_work::<Sha256Hasher>(
-                data_size,
-                m,
-                expansion_degree,
-                challenges,
-                partitions,
-                circuit,
-                groth,
-                bench,
-                extract,
-                use_tmp,
-                dump_proofs,
-                bench_only,
-            );
-        }
+        // "sha256" => {
+        //     do_the_work::<Sha256Hasher>(
+        //         data_size,
+        //         m,
+        //         expansion_degree,
+        //         challenges,
+        //         partitions,
+        //         circuit,
+        //         groth,
+        //         bench,
+        //         extract,
+        //         use_tmp,
+        //         dump_proofs,
+        //         bench_only,
+        //     );
+        // }
         "blake2s" => {
             do_the_work::<Blake2sHasher>(
                 data_size,
