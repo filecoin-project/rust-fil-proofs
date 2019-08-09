@@ -3,26 +3,24 @@ use std::fs::{File, OpenOptions};
 use std::time::{Duration, Instant};
 use std::{io, u32};
 
-use bellperson::Circuit;
 use chrono::Utc;
 use failure::bail;
-use fil_sapling_crypto::jubjub::JubjubBls12;
 use memmap::MmapMut;
 use memmap::MmapOptions;
-use paired::bls12_381::Bls12;
 use rand::{Rng, SeedableRng, XorShiftRng};
 
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
 use fil_proofs_tooling::metadata::Metadata;
+use snark::Circuit;
 use storage_proofs::circuit::metric::MetricCS;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgporep;
 use storage_proofs::drgraph::*;
-use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
+use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher};
 use storage_proofs::layered_drgporep::{self, ChallengeRequirements, LayerChallenges};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
-use storage_proofs::settings;
 use storage_proofs::zigzag_drgporep::*;
 
 fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> Result<MmapMut, failure::Error> {
@@ -345,20 +343,14 @@ fn do_circuit_work<H: 'static + Hasher>(
         ..
     } = params;
 
-    let window_size = settings::SETTINGS
-        .lock()
-        .unwrap()
-        .pedersen_hash_exp_window_size;
-    let engine_params = JubjubBls12::new_with_window_size(window_size);
     let compound_public_params = compound_proof::PublicParams {
         vanilla_params: pp.clone(),
-        engine_params: &engine_params,
         partitions: Some(*partitions),
     };
 
     if *bench || *circuit {
         let mut cs = MetricCS::<Bls12>::new();
-        ZigZagCompound::blank_circuit(&pp, &engine_params).synthesize(&mut cs)?;
+        ZigZagCompound::blank_circuit(&pp).synthesize(&mut cs)?;
 
         report.outputs.circuit_num_inputs = Some(cs.num_inputs() as u64);
         report.outputs.circuit_num_constraints = Some(cs.num_constraints() as u64);
@@ -374,8 +366,7 @@ fn do_circuit_work<H: 'static + Hasher>(
         // We should implement a method of CompoundProof, which will skip vanilla proving.
         // We should also allow the serialized vanilla proofs to be passed (as a file) to the example
         // and skip replication/vanilla-proving entirely.
-        let gparams =
-            ZigZagCompound::groth_params(&compound_public_params.vanilla_params, &engine_params)?;
+        let gparams = ZigZagCompound::groth_params(&compound_public_params.vanilla_params)?;
 
         let multi_proof = {
             let FuncMeasurement {
@@ -534,7 +525,7 @@ pub fn run(opts: RunOpts) -> Result<(), failure::Error> {
 
     let report = match params.hasher.as_ref() {
         "pedersen" => generate_report::<PedersenHasher>(params)?,
-        "sha256" => generate_report::<Sha256Hasher>(params)?,
+        // "sha256" => generate_report::<Sha256Hasher>(params)?,
         "blake2s" => generate_report::<Blake2sHasher>(params)?,
         _ => bail!("invalid hasher: {}", params.hasher),
     };

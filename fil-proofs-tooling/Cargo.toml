@@ -23,11 +23,8 @@ prettytable-rs = "0.8"
 regex = "1.1.6"
 prometheus = { version = "0.6.1", features = ["push"] }
 commandspec = "0.12.2"
-bellperson = "0.2.0"
 chrono = { version = "0.4.7", features = ["serde"] }
-fil-sapling-crypto = "0.1.0"
 memmap = "0.7.0"
-paired = "0.15.0"
 rand = "0.4"
 storage-proofs = { path = "../storage-proofs"}
 tempfile = "3.0.8"
@@ -37,3 +34,7 @@ heim = "0.0.5"
 futures-preview = "0.3.0-alpha.17"
 raw-cpuid = "6.1.0"
 blake2s_simd = "0.5.6"
+dpc = { git = "https://github.com/filecoin-project/zexe", rev = "533a799" }
+snark = { git = "https://github.com/filecoin-project/zexe", rev = "533a799" }
+algebra = { git = "https://github.com/filecoin-project/zexe", rev = "533a799" }
+snark-gadgets = { git = "https://github.com/filecoin-project/zexe", rev = "533a799" }

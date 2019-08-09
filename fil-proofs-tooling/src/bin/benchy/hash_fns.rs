@@ -1,13 +1,16 @@
-use bellperson::ConstraintSystem;
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use algebra::curves::ProjectiveCurve;
+use dpc::gadgets::prf::blake2s::blake2s_gadget;
 use fil_proofs_tooling::metadata::Metadata;
-use fil_sapling_crypto::circuit as scircuit;
-use fil_sapling_crypto::circuit::boolean::Boolean;
-use fil_sapling_crypto::jubjub::JubjubBls12;
-use paired::bls12_381::Bls12;
 use rand::{Rng, SeedableRng, XorShiftRng};
+use snark::ConstraintSystem;
+use snark_gadgets::bits::uint32::UInt32;
+use snark_gadgets::boolean::Boolean;
+use snark_gadgets::fields::FieldGadget;
 use storage_proofs::circuit::pedersen::{pedersen_compression_num, pedersen_md_no_padding};
 use storage_proofs::circuit::test::TestConstraintSystem;
 use storage_proofs::crypto;
+use storage_proofs::singletons::PEDERSEN_PARAMS;
 use storage_proofs::util::{bits_to_bytes, bytes_into_boolean_vec};
 
 fn blake2s_count(bytes: usize) -> Result<Report, failure::Error> {
@@ -18,22 +21,24 @@ fn blake2s_count(bytes: usize) -> Result<Report, failure::Error> {
     rng.fill_bytes(&mut data);
 
     let data_bits: Vec<Boolean> = {
-        let mut cs = cs.namespace(|| "data");
+        let mut cs = cs.ns(|| "data");
         bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).unwrap()
     };
 
-    let personalization = vec![0u8; 8];
-    let out: Vec<bool> = scircuit::blake2s::blake2s(&mut cs, &data_bits, &personalization)?
-        .into_iter()
-        .map(|b| b.get_value().unwrap())
-        .collect();
+    let out = blake2s_gadget(&mut cs, &data_bits)?;
+    let bits = out
+        .iter()
+        .map(UInt32::to_bits_le)
+        .flatten()
+        .map(|v| v.get_value().unwrap())
+        .collect::<Vec<bool>>();
 
     assert!(cs.is_satisfied(), "constraints not satisfied");
 
     let expected = blake2s_simd::blake2s(&data);
     assert_eq!(
         expected.as_ref(),
-        &bits_to_bytes(&out[..])[..],
+        &bits_to_bytes(&bits[..])[..],
         "circuit and non circuit do not match"
     );
 
@@ -51,25 +56,25 @@ fn pedersen_count(bytes: usize) -> Result<Report, failure::Error> {
     let mut data = vec![0u8; bytes];
     rng.fill_bytes(&mut data);
 
-    let params = &JubjubBls12::new();
-
     let data_bits: Vec<Boolean> = {
-        let mut cs = cs.namespace(|| "data");
+        let mut cs = cs.ns(|| "data");
         bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).unwrap()
     };
 
     if bytes < 128 {
-        let out = pedersen_compression_num(&mut cs, params, &data_bits)?;
+        let out = pedersen_compression_num(&mut cs, &data_bits, &PEDERSEN_PARAMS)?;
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
-        let expected = crypto::pedersen::pedersen(data.as_slice());
+        let point = crypto::pedersen::pedersen(data.as_slice());
+        let expected = point.into_affine().x;
+
         assert_eq!(
             expected,
             out.get_value().unwrap(),
             "circuit and non circuit do not match"
         );
     } else {
-        let out = pedersen_md_no_padding(cs.namespace(|| "pedersen"), params, &data_bits)
+        let out = pedersen_md_no_padding(cs.ns(|| "pedersen"), &data_bits, &PEDERSEN_PARAMS)
             .expect("pedersen hashing failed");
         assert!(cs.is_satisfied(), "constraints not satisfied");
         let expected = crypto::pedersen::pedersen_md_no_padding(data.as_slice());
