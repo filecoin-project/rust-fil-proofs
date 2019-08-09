@@ -3,6 +3,7 @@ use algebra::PairingEngine as Engine;
 use snark::{ConstraintSystem, SynthesisError};
 use snark_gadgets::boolean::{self, AllocatedBit, Boolean};
 use snark_gadgets::utils::AllocGadget;
+use snark_gadgets::Assignment;
 
 pub const NODE_SIZE: usize = 32;
 
@@ -47,7 +48,7 @@ pub fn bytes_into_boolean_vec<E: Engine, CS: ConstraintSystem<E>>(
         .map(|(i, b)| {
             Ok(Boolean::from(AllocatedBit::alloc(
                 cs.ns(|| format!("bit {}", i)),
-                || Ok(b.unwrap()),
+                || b.get(),
             )?))
         })
         .collect::<Result<Vec<_>, SynthesisError>>()?;
