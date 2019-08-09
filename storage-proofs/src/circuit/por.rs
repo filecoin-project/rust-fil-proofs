@@ -204,7 +204,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for PoRCircuit<'a, H> {
                 // Validate that the root of the merkle tree that we calculated is the same as the input.
 
                 let rt = root.allocated(cs.ns(|| "root_value"))?;
-                constraint::equal(cs, || "enforce root is correct", &cur, &rt)?;
+                constraint::equal(cs.ns(|| "enforce root is correct"), &cur, &rt)?;
 
                 if !self.private {
                     // Expose the root

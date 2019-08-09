@@ -1,15 +1,18 @@
 use std::marker::PhantomData;
 
-use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use ff::Field;
-use fil_sapling_crypto::circuit::boolean::Boolean;
-use fil_sapling_crypto::circuit::num::{AllocatedNum, Num};
-use fil_sapling_crypto::circuit::{boolean, num, pedersen_hash};
-use fil_sapling_crypto::jubjub::JubjubEngine;
-use paired::bls12_381::{Bls12, Fr};
-use paired::Engine;
+use algebra::curves::{bls12_381::Bls12_381 as Bls12, jubjub::JubJubProjective as JubJub};
+use algebra::fields::bls12_381::Fr;
+use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
+use snark::{Circuit, ConstraintSystem, SynthesisError};
+use snark_gadgets::{
+    boolean,
+    fields::fp::FpGadget,
+    utils::{AllocGadget, CondReverseGadget, ToBitsGadget},
+    Assignment,
+};
 
-use crate::circuit::constraint;
+use crate::circuit::multipack::pack_into_allocated;
+use crate::circuit::{constraint, pedersen};
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::drgraph;
 use crate::fr32::u32_into_fr;
@@ -17,41 +20,18 @@ use crate::hasher::Hasher;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::porc::PoRC;
 use crate::proof::ProofScheme;
-
-/// Takes a sequence of booleans and returns a single `E::Fr` as a packed representation.
-/// NOTE: bit length must be less than `Fr::capacity()` for the field, or this will overflow.
-pub fn pack_into_allocated_num<E, CS>(
-    mut cs: CS,
-    bits: &[Boolean],
-) -> Result<AllocatedNum<E>, SynthesisError>
-where
-    E: Engine,
-    CS: ConstraintSystem<E>,
-{
-    let mut num = Num::<E>::zero();
-    let mut coeff = E::Fr::one();
-
-    //    for (i, bits) in bits.chunks(E::Fr::CAPACITY as usize).enumerate() {
-    for bit in bits {
-        num = num.add_bool_with_coeff(CS::one(), bit, coeff);
-
-        coeff.double();
-    }
-    let val = num::AllocatedNum::alloc(cs.namespace(|| "val"), || Ok(num.get_value().unwrap()))?;
-
-    Ok(val)
-}
+use crate::singletons::PEDERSEN_PARAMS;
 
 /// This is the `PoRC` circuit.
-pub struct PoRCCircuit<'a, E: JubjubEngine> {
+pub struct PoRCCircuit<'a> {
     /// Paramters for the engine.
-    pub params: &'a E::Params,
-    pub challenges: Vec<Option<E::Fr>>,
-    pub challenged_leafs: Vec<Option<E::Fr>>,
+    pub params: &'a PedersenParameters<JubJub>,
+    pub challenges: Vec<Option<Fr>>,
+    pub challenged_leafs: Vec<Option<Fr>>,
     pub challenged_sectors: Vec<Option<usize>>,
-    pub commitments: Vec<Option<E::Fr>>,
+    pub commitments: Vec<Option<Fr>>,
     #[allow(clippy::type_complexity)]
-    pub paths: Vec<Vec<Option<(E::Fr, bool)>>>,
+    pub paths: Vec<Vec<Option<(Fr, bool)>>>,
 }
 
 pub struct PoRCCompound<H>
@@ -61,8 +41,8 @@ where
     _h: PhantomData<H>,
 }
 
-impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata, H: Hasher>
-    CacheableParameters<E, C, P> for PoRCCompound<H>
+impl<C: Circuit<Bls12>, P: ParameterSetMetadata, H: Hasher> CacheableParameters<Bls12, C, P>
+    for PoRCCompound<H>
 {
     fn cache_prefix() -> String {
         String::from("proof-of-retrievable-commitments")
@@ -72,11 +52,11 @@ impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata, H: Hasher>
 #[derive(Clone, Default)]
 pub struct ComponentPrivateInputs {}
 
-impl<'a, E: JubjubEngine> CircuitComponent for PoRCCircuit<'a, E> {
+impl<'a> CircuitComponent for PoRCCircuit<'a> {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
-impl<'a, H> CompoundProof<'a, Bls12, PoRC<'a, H>, PoRCCircuit<'a, Bls12>> for PoRCCompound<H>
+impl<'a, H> CompoundProof<'a, Bls12, PoRC<'a, H>, PoRCCircuit<'a>> for PoRCCompound<H>
 where
     H: 'a + Hasher,
 {
@@ -90,11 +70,10 @@ where
 
     fn circuit(
         pub_in: &<PoRC<'a, H> as ProofScheme<'a>>::PublicInputs,
-        _component_private_inputs: <PoRCCircuit<'a, Bls12> as CircuitComponent>::ComponentPrivateInputs,
+        _component_private_inputs: <PoRCCircuit<'a> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &<PoRC<'a, H> as ProofScheme<'a>>::Proof,
         _pub_params: &<PoRC<'a, H> as ProofScheme<'a>>::PublicParams,
-        engine_params: &'a <Bls12 as JubjubEngine>::Params,
-    ) -> PoRCCircuit<'a, Bls12> {
+    ) -> PoRCCircuit<'a> {
         let challenged_leafs = vanilla_proof
             .leafs()
             .iter()
@@ -122,7 +101,7 @@ where
         let challenged_sectors = pub_in.challenged_sectors.iter().map(|&v| Some(v)).collect();
 
         PoRCCircuit {
-            params: engine_params,
+            params: &PEDERSEN_PARAMS,
             challenges,
             challenged_leafs,
             commitments,
@@ -133,8 +112,7 @@ where
 
     fn blank_circuit(
         pub_params: &<PoRC<'a, H> as ProofScheme<'a>>::PublicParams,
-        params: &'a <Bls12 as JubjubEngine>::Params,
-    ) -> PoRCCircuit<'a, Bls12> {
+    ) -> PoRCCircuit<'a> {
         let challenges_count = pub_params.challenges_count;
         let height = drgraph::graph_height(pub_params.leaves);
         let challenged_leafs = vec![None; challenges_count];
@@ -146,7 +124,7 @@ where
         let challenged_sectors = vec![None; challenges_count];
 
         PoRCCircuit {
-            params,
+            params: &PEDERSEN_PARAMS,
             challenges,
             challenged_leafs,
             commitments,
@@ -156,8 +134,8 @@ where
     }
 }
 
-impl<'a, E: JubjubEngine> Circuit<E> for PoRCCircuit<'a, E> {
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+impl<'a> Circuit<Bls12> for PoRCCircuit<'a> {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let params = self.params;
         let challenges = self.challenges;
         let challenged_sectors = self.challenged_sectors;
@@ -169,18 +147,16 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoRCCircuit<'a, E> {
         assert_eq!(paths.len(), commitments.len());
 
         for (i, (challenged_leaf, path)) in challenged_leafs.iter().zip(paths).enumerate() {
-            let mut cs = cs.namespace(|| format!("challenge_{}", i));
+            let mut cs = cs.ns(|| format!("challenge_{}", i));
 
             let commitment = challenged_sectors[i].and_then(|s| commitments[s]);
 
             // Allocate the commitment
-            let rt = num::AllocatedNum::alloc(cs.namespace(|| "commitment_num"), || {
+            let rt = FpGadget::alloc(cs.ns(|| "commitment_num"), || {
                 commitment.ok_or_else(|| SynthesisError::AssignmentMissing)
             })?;
 
-            let params = params;
-
-            let leaf_num = num::AllocatedNum::alloc(cs.namespace(|| "leaf_num"), || {
+            let leaf_num = FpGadget::alloc(cs.ns(|| "leaf_num"), || {
                 challenged_leaf.ok_or_else(|| SynthesisError::AssignmentMissing)
             })?;
 
@@ -192,63 +168,64 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoRCCircuit<'a, E> {
 
             // Ascend the merkle tree authentication path
             for (i, e) in path.iter().enumerate() {
-                let cs = &mut cs.namespace(|| format!("merkle tree hash {}", i));
+                let cs = &mut cs.ns(|| format!("merkle tree hash {}", i));
 
                 // Determines if the current subtree is the "right" leaf at this
                 // depth of the tree.
                 let cur_is_right = boolean::Boolean::from(boolean::AllocatedBit::alloc(
-                    cs.namespace(|| "position bit"),
-                    e.map(|e| e.1),
+                    cs.ns(|| "position bit"),
+                    || e.map(|e| e.1).get(),
                 )?);
 
                 // Witness the authentication path element adjacent
                 // at this depth.
-                let path_element =
-                    num::AllocatedNum::alloc(cs.namespace(|| "path element"), || {
-                        Ok(e.ok_or_else(|| SynthesisError::AssignmentMissing)?.0)
-                    })?;
+                let path_element = FpGadget::alloc(cs.ns(|| "path element"), || {
+                    Ok(e.ok_or_else(|| SynthesisError::AssignmentMissing)?.0)
+                })?;
 
                 // Swap the two if the current subtree is on the right
-                let (xl, xr) = num::AllocatedNum::conditionally_reverse(
-                    cs.namespace(|| "conditional reversal of preimage"),
+                let (xl, xr) = FpGadget::conditionally_reverse(
+                    cs.ns(|| "conditional reversal of preimage"),
+                    &cur_is_right,
                     &cur,
                     &path_element,
-                    &cur_is_right,
                 )?;
 
                 let mut preimage = vec![];
-                preimage.extend(xl.into_bits_le(cs.namespace(|| "xl into bits"))?);
-                preimage.extend(xr.into_bits_le(cs.namespace(|| "xr into bits"))?);
+                let mut xl_bits = xl.to_bits(cs.ns(|| "xl into bits"))?;
+                let mut xr_bits = xr.to_bits(cs.ns(|| "xr into bits"))?;
+
+                xl_bits.reverse();
+                xr_bits.reverse();
+                preimage.extend(xl_bits);
+                preimage.extend(xr_bits);
 
                 // Compute the new subtree value
-                cur = pedersen_hash::pedersen_hash(
-                    cs.namespace(|| "computation of pedersen hash"),
-                    pedersen_hash::Personalization::None,
+                cur = pedersen::pedersen_compression_num(
+                    cs.ns(|| "computation of pedersen hash"),
                     &preimage,
                     params,
                 )?
-                .get_x()
                 .clone(); // Injective encoding
 
                 path_bits.push(cur_is_right);
             }
 
-            let challenge_num =
-                num::AllocatedNum::alloc(cs.namespace(|| format!("challenge {}", i)), || {
-                    challenges[i].ok_or_else(|| SynthesisError::AssignmentMissing)
-                })?;
+            let challenge_num = FpGadget::alloc(cs.ns(|| format!("challenge_{}", i)), || {
+                challenges[i].ok_or_else(|| SynthesisError::AssignmentMissing)
+            })?;
 
             // allocate value for is_right path
-            let packed = pack_into_allocated_num(cs.namespace(|| "packed path"), &path_bits)?;
+            let packed = pack_into_allocated(cs.ns(|| "packed path"), &path_bits)?;
             constraint::equal(
-                &mut cs,
-                || "enforce path equals challenge",
+                cs.ns(|| "enforce path equals challenge"),
                 &packed,
                 &challenge_num,
-            );
+            )?;
+
             {
                 // Validate that the root of the merkle tree that we calculated is the same as the input.
-                constraint::equal(&mut cs, || "enforce commitment correct", &cur, &rt);
+                constraint::equal(cs.ns(|| "enforce commitment correct"), &cur, &rt)?;
             }
         }
 
@@ -256,19 +233,18 @@ impl<'a, E: JubjubEngine> Circuit<E> for PoRCCircuit<'a, E> {
     }
 }
 
-impl<'a, E: JubjubEngine> PoRCCircuit<'a, E> {
+impl<'a> PoRCCircuit<'a> {
     #[allow(clippy::type_complexity)]
-    pub fn synthesize<CS: ConstraintSystem<E>>(
+    pub fn synthesize<CS: ConstraintSystem<Bls12>>(
         cs: &mut CS,
-        params: &'a E::Params,
-        challenges: Vec<Option<E::Fr>>,
+        challenges: Vec<Option<Fr>>,
         challenged_sectors: Vec<Option<usize>>,
-        challenged_leafs: Vec<Option<E::Fr>>,
-        commitments: Vec<Option<E::Fr>>,
-        paths: Vec<Vec<Option<(E::Fr, bool)>>>,
+        challenged_leafs: Vec<Option<Fr>>,
+        commitments: Vec<Option<Fr>>,
+        paths: Vec<Vec<Option<(Fr, bool)>>>,
     ) -> Result<(), SynthesisError> {
         PoRCCircuit {
-            params,
+            params: &PEDERSEN_PARAMS,
             challenges,
             challenged_leafs,
             challenged_sectors,
@@ -283,8 +259,7 @@ impl<'a, E: JubjubEngine> PoRCCircuit<'a, E> {
 mod tests {
     use super::*;
 
-    use ff::Field;
-    use fil_sapling_crypto::jubjub::JubjubBls12;
+    use algebra::fields::Field;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     use crate::circuit::test::*;
@@ -294,15 +269,9 @@ mod tests {
     use crate::hasher::pedersen::*;
     use crate::porc::{self, PoRC};
     use crate::proof::{NoRequirements, ProofScheme};
-    use crate::settings;
 
     #[test]
     fn test_porc_circuit_with_bls12_381() {
-        let window_size = settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size;
-        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 32;
@@ -367,7 +336,7 @@ mod tests {
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
         let instance = PoRCCircuit {
-            params,
+            params: &PEDERSEN_PARAMS,
             challenges: challenges
                 .iter()
                 .map(|c| Some(u32_into_fr::<Bls12>(*c as u32)))
@@ -385,18 +354,13 @@ mod tests {
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
         assert_eq!(cs.num_inputs(), 1, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 13744, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 85796, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
     }
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn porc_test_compound() {
-        let window_size = settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size;
-        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 32;
@@ -407,7 +371,6 @@ mod tests {
                 sectors_count: 2,
                 challenges_count: 2,
             },
-            engine_params: params,
             partitions: None,
         };
 
@@ -437,9 +400,8 @@ mod tests {
             trees: &[&tree1, &tree2],
         };
 
-        let gparams =
-            PoRCCompound::<PedersenHasher>::groth_params(&pub_params.vanilla_params, &params)
-                .expect("failed to create groth params");
+        let gparams = PoRCCompound::<PedersenHasher>::groth_params(&pub_params.vanilla_params)
+            .expect("failed to create groth params");
 
         let proof =
             PoRCCompound::<PedersenHasher>::prove(&pub_params, &pub_inputs, &priv_inputs, &gparams)

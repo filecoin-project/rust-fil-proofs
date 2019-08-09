@@ -506,7 +506,7 @@ impl<H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<H> {
                 })?;
 
                 // ensure the encrypted data and data_node match
-                constraint::equal(&mut cs, || "equality", &expected, &decoded)?;
+                constraint::equal(cs.ns(|| "equality"), &expected, &decoded)?;
             }
         }
         // profit!

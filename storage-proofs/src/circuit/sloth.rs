@@ -44,7 +44,7 @@ fn sub<CS: ConstraintSystem<Bls12>>(
     })?;
 
     // a - b = res
-    constraint::difference(&mut cs, || "subtraction constraint", &a, &b, &res)?;
+    constraint::difference(cs.ns(|| "subtraction constraint"), &a, &b, &res)?;
 
     Ok(res)
 }

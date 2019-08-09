@@ -61,6 +61,51 @@ where
     Ok(())
 }
 
+/// Takes a sequence of booleans and returns a single `E::Fr` as a packed representation.
+/// NOTE: bit length must be less than `Fr::capacity()` for the field, or this will overflow.
+pub fn pack_into_allocated<E, CS>(
+    mut cs: CS,
+    bits: &[Boolean],
+) -> Result<FpGadget<E>, SynthesisError>
+where
+    E: Engine,
+    CS: ConstraintSystem<E>,
+{
+    let one = CS::one();
+    let mut lc = LinearCombination::<E>::zero();
+    let mut acc = E::Fr::zero();
+    let mut coeff = E::Fr::one();
+
+    for b in bits {
+        let value = b.get_value();
+        let fr = match value.get() {
+            Ok(v) => {
+                if *v {
+                    Some(E::Fr::one())
+                } else {
+                    Some(E::Fr::zero())
+                }
+            }
+            Err(_) => None,
+        };
+
+        lc = lc + b.lc(one, coeff);
+
+        if let Some(x) = &fr.map(|v| v.mul(&coeff)) {
+            acc += x;
+        }
+
+        coeff.double_in_place();
+    }
+
+    let val = FpGadget::alloc(cs.ns(|| "val"), || Ok(acc))?;
+
+    lc = &val.variable - lc;
+    cs.enforce(|| "packing constraint", |lc| lc, |lc| lc, |_| lc);
+
+    Ok(val)
+}
+
 pub fn bytes_to_bits(bytes: &[u8]) -> Vec<bool> {
     bytes
         .iter()

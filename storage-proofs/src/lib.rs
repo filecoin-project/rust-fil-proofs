@@ -48,5 +48,8 @@ pub mod settings;
 pub mod singletons;
 pub mod util;
 pub mod vde;
+pub mod vdf;
+pub mod vdf_post;
+pub mod vdf_sloth;
 pub mod zigzag_drgporep;
 pub mod zigzag_graph;
