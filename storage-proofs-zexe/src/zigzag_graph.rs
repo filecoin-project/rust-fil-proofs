@@ -6,9 +6,8 @@ use crate::crypto::feistel::{self, FeistelPrecomputed};
 use crate::drgraph::{BucketGraph, Graph};
 use crate::hasher::Hasher;
 use crate::layered_drgporep::Layerable;
-use crate::parameter_cache::ParameterSetIdentifier;
+use crate::parameter_cache::ParameterSetMetadata;
 use crate::settings;
-use crate::SP_LOG;
 
 pub const DEFAULT_EXPANSION_DEGREE: usize = 8;
 
@@ -72,7 +71,7 @@ where
         seed: [u32; 7],
     ) -> Self {
         let cache_entries = if settings::SETTINGS.lock().unwrap().maximize_caching {
-            info!(SP_LOG, "using parents cache of unlimited size",);
+            info!("using parents cache of unlimited size");
             nodes
         } else {
             0
@@ -96,17 +95,21 @@ where
     }
 }
 
-impl<H, G> ParameterSetIdentifier for ZigZagGraph<H, G>
+impl<H, G> ParameterSetMetadata for ZigZagGraph<H, G>
 where
     H: Hasher,
-    G: Graph<H> + ParameterSetIdentifier,
+    G: Graph<H> + ParameterSetMetadata,
 {
-    fn parameter_set_identifier(&self) -> String {
+    fn identifier(&self) -> String {
         format!(
             "zigzag_graph::ZigZagGraph{{expansion_degree: {} base_graph: {} }}",
             self.expansion_degree,
-            self.base_graph.parameter_set_identifier()
+            self.base_graph.identifier()
         )
+    }
+
+    fn sector_size(&self) -> u64 {
+        self.base_graph.sector_size()
     }
 }
 

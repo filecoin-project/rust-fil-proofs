@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use algebra::curves::bls12_381::Bls12_381 as Bls12;
 use algebra::fields::{bls12_381::Fr, FpParameters, PrimeField};
 use algebra::PairingEngine as Engine;
@@ -22,17 +24,15 @@ use crate::drgraph::Graph;
 use crate::fr32::fr_into_bytes;
 use crate::hasher::{Domain, Hasher};
 use crate::merklepor;
-use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
+use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
 use crate::util::{bytes_into_bits, bytes_into_boolean_vec};
-use std::marker::PhantomData;
 
 /// DRG based Proof of Replication.
 ///
 /// # Fields
 ///
 /// * `params` - parameters for the curve
-/// * `sloth_iter` - How many rounds sloth should run for.
 ///
 /// ----> Private `replica_node` - The replica node being proven.
 ///
@@ -58,7 +58,6 @@ use std::marker::PhantomData;
 //);
 
 pub struct DrgPoRepCircuit<H: Hasher> {
-    sloth_iter: usize,
     replica_nodes: Vec<Option<Fr>>,
     #[allow(clippy::type_complexity)]
     replica_nodes_paths: Vec<Vec<Option<(Fr, bool)>>>,
@@ -80,7 +79,6 @@ impl<H: Hasher> DrgPoRepCircuit<H> {
     #[allow(clippy::type_complexity, clippy::too_many_arguments)]
     pub fn synthesize<CS>(
         mut cs: CS,
-        sloth_iter: usize,
         replica_nodes: Vec<Option<Fr>>,
         replica_nodes_paths: Vec<Vec<Option<(Fr, bool)>>>,
         replica_root: Root<Bls12>,
@@ -97,7 +95,6 @@ impl<H: Hasher> DrgPoRepCircuit<H> {
         CS: ConstraintSystem<Bls12>,
     {
         DrgPoRepCircuit::<H> {
-            sloth_iter,
             replica_nodes,
             replica_nodes_paths,
             replica_root,
@@ -144,7 +141,7 @@ where
     _g: PhantomData<G>,
 }
 
-impl<E: Engine, C: Circuit<E>, H: Hasher, G: Graph<H>, P: ParameterSetIdentifier>
+impl<E: Engine, C: Circuit<E>, H: Hasher, G: Graph<H>, P: ParameterSetMetadata>
     CacheableParameters<E, C, P> for DrgPoRepCompound<H, G>
 {
     fn cache_prefix() -> String {
@@ -156,7 +153,7 @@ impl<'a, H, G> CompoundProof<'a, Bls12, DrgPoRep<'a, H, G>, DrgPoRepCircuit<H>>
     for DrgPoRepCompound<H, G>
 where
     H: 'a + Hasher,
-    G: 'a + Graph<H> + ParameterSetIdentifier + Sync + Send,
+    G: 'a + Graph<H> + ParameterSetMetadata + Sync + Send,
 {
     fn generate_public_inputs(
         pub_in: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicInputs,
@@ -306,7 +303,6 @@ where
         );
 
         DrgPoRepCircuit {
-            sloth_iter: public_params.sloth_iter,
             replica_nodes,
             replica_nodes_paths,
             replica_root,
@@ -340,7 +336,6 @@ where
         let data_root = Root::Val(None);
 
         DrgPoRepCircuit {
-            sloth_iter: public_params.sloth_iter,
             replica_nodes,
             replica_nodes_paths,
             replica_root,
@@ -502,12 +497,7 @@ impl<H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<H> {
                     degree,
                 )?;
 
-                let decoded = sloth::decode(
-                    cs.ns(|| "sloth_decode"),
-                    &key,
-                    *replica_node,
-                    self.sloth_iter,
-                )?;
+                let decoded = sloth::decode(cs.ns(|| "sloth_decode"), &key, *replica_node)?;
 
                 // TODO this should not be here, instead, this should be the leaf Fr in the data_auth_path
                 // TODO also note that we need to change/makesurethat the leaves are the data, instead of hashes of the data
@@ -548,7 +538,6 @@ mod tests {
         let nodes = 12;
         let degree = 6;
         let challenge = 2;
-        let sloth_iter = 0;
 
         let replica_id: Fr = rng.gen();
 
@@ -572,7 +561,6 @@ mod tests {
                 expansion_degree: 0,
                 seed: new_seed(),
             },
-            sloth_iter,
             private: false,
             challenges_count: 1,
         };
@@ -648,7 +636,6 @@ mod tests {
         let mut cs = TestConstraintSystem::<Bls12>::new();
         DrgPoRepCircuit::<PedersenHasher>::synthesize(
             cs.ns(|| "drgporep"),
-            sloth_iter,
             vec![replica_node],
             vec![replica_node_path],
             replica_root,
@@ -692,12 +679,10 @@ mod tests {
         let n = (1 << 30) / 32;
         let m = 6;
         let tree_depth = graph_height(n);
-        let sloth_iter = 0;
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
         DrgPoRepCircuit::<PedersenHasher>::synthesize(
             cs.ns(|| "drgporep"),
-            sloth_iter,
             vec![Some(Fr::rand(rng)); 1],
             vec![vec![Some((Fr::rand(rng), false)); tree_depth]; 1],
             Root::Val(Some(Fr::rand(rng))),
@@ -735,7 +720,6 @@ mod tests {
         let nodes = 5;
         let degree = 2;
         let challenges = vec![1, 3];
-        let sloth_iter = 0;
 
         let replica_id: Fr = rng.gen();
         let mut data: Vec<u8> = (0..nodes)
@@ -753,7 +737,6 @@ mod tests {
                     expansion_degree: 0,
                     seed,
                 },
-                sloth_iter,
                 private: false,
                 challenges_count: 2,
             },
@@ -791,7 +774,6 @@ mod tests {
                     expansion_degree: 0,
                     seed,
                 },
-                sloth_iter,
                 private: false,
                 challenges_count: 2,
             },

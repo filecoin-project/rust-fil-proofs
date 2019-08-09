@@ -15,7 +15,7 @@ use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::drgraph::graph_height;
 use crate::hasher::{HashFunction, Hasher};
 use crate::merklepor::MerklePoR;
-use crate::parameter_cache::{CacheableParameters, ParameterSetIdentifier};
+use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
 use crate::singletons::PEDERSEN_PARAMS;
 
@@ -56,7 +56,7 @@ pub fn challenge_into_auth_path_bits(challenge: usize, leaves: usize) -> Vec<boo
     bits
 }
 
-impl<C: Circuit<Bls12>, P: ParameterSetIdentifier, H: Hasher> CacheableParameters<Bls12, C, P>
+impl<C: Circuit<Bls12>, P: ParameterSetMetadata, H: Hasher> CacheableParameters<Bls12, C, P>
     for PoRCompound<H>
 {
     fn cache_prefix() -> String {
@@ -331,7 +331,7 @@ mod tests {
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_pedersen() {
-        test_por_input_circuit_with_bls12_381::<PedersenHasher>(4149);
+        test_por_input_circuit_with_bls12_381::<PedersenHasher>(25740);
     }
 
     // #[test]
@@ -399,12 +399,11 @@ mod tests {
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
             assert_eq!(cs.num_inputs(), 3, "wrong number of inputs");
-            //          Number of constraints is different in Zexe
-            //            assert_eq!(
-            //                cs.num_constraints(),
-            //                num_constraints,
-            //                "wrong number of constraints"
-            //            );
+            assert_eq!(
+                cs.num_constraints(),
+                num_constraints,
+                "wrong number of constraints"
+            );
 
             let auth_path_bits: Vec<bool> = proof
                 .proof
@@ -579,8 +578,7 @@ mod tests {
             assert!(cs.is_satisfied(), "constraints not satisfied");
 
             assert_eq!(cs.num_inputs(), 2, "wrong number of inputs");
-            // Number of constraints in Zexe is different
-            //             assert_eq!(cs.num_constraints(), 4148, "wrong number of constraints");
+            assert_eq!(cs.num_constraints(), 25739, "wrong number of constraints");
 
             let auth_path_bits: Vec<bool> = proof
                 .proof
