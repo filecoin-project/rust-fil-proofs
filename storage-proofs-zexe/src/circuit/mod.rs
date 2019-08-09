@@ -9,4 +9,5 @@ pub mod por;
 pub mod sloth;
 pub mod test;
 pub mod variables;
+pub mod xor;
 pub mod zigzag;
