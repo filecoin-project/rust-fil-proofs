@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use rayon::prelude::*;
 
 use crate::circuit::multi_proof::MultiProof;
@@ -136,6 +138,26 @@ where
             }
         }
         Ok(true)
+    }
+
+    fn print_public_inputs(
+        public_params: &PublicParams<'a, S>,
+        public_inputs: &S::PublicInputs,
+        multi_proof: &MultiProof<E>,
+    ) -> String {
+        let mut s = String::new();
+        let vanilla_public_params = &public_params.vanilla_params;
+
+        for (k, _) in multi_proof.circuit_proofs.iter().enumerate() {
+            let inputs =
+                Self::generate_public_inputs(public_inputs, vanilla_public_params, Some(k));
+
+            for input in &inputs {
+                writeln!(s, "INPUT {}", input).unwrap();
+            }
+        }
+
+        s
     }
 
     /// circuit_proof creates and synthesizes a circuit from concrete params/inputs, then generates a
