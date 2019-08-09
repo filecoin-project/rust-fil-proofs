@@ -53,7 +53,7 @@ mod tests {
     use crate::drgporep;
     use crate::drgraph::new_seed;
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::PedersenHasher;
+    use crate::hasher::{Blake2sHasher, PedersenHasher};
     use crate::layered_drgporep::{
         LayerChallenges, PrivateInputs, PublicInputs, PublicParams, SetupParams,
     };
@@ -72,10 +72,10 @@ mod tests {
     //     test_extract_all::<Sha256Hasher>();
     // }
 
-    // #[test]
-    // fn extract_all_blake2s() {
-    //     test_extract_all::<Blake2sHasher>();
-    // }
+    #[test]
+    fn extract_all_blake2s() {
+        test_extract_all::<Blake2sHasher>();
+    }
 
     fn test_extract_all<H: 'static + Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
@@ -125,7 +125,7 @@ mod tests {
 
         test_prove_verify::<PedersenHasher>(n, i, challenges.clone());
         // test_prove_verify::<Sha256Hasher>(n, i, challenges.clone());
-        // test_prove_verify::<Blake2sHasher>(n, i, challenges.clone());
+        test_prove_verify::<Blake2sHasher>(n, i, challenges.clone());
     }
 
     fn prove_verify_tapered(n: usize, i: usize) {
@@ -133,7 +133,7 @@ mod tests {
 
         test_prove_verify::<PedersenHasher>(n, i, challenges.clone());
         // test_prove_verify::<Sha256Hasher>(n, i, challenges.clone());
-        // test_prove_verify::<Blake2sHasher>(n, i, challenges.clone());
+        test_prove_verify::<Blake2sHasher>(n, i, challenges.clone());
     }
 
     fn test_prove_verify<H: 'static + Hasher>(n: usize, i: usize, challenges: LayerChallenges) {

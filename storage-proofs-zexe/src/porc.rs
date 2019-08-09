@@ -204,7 +204,7 @@ mod tests {
 
     use crate::drgraph::{new_seed, BucketGraph, Graph};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{HashFunction, PedersenHasher};
+    use crate::hasher::{Blake2sHasher, HashFunction, PedersenHasher};
     use crate::merkle::make_proof_for_test;
 
     fn test_porc<H: Hasher>() {
@@ -251,10 +251,10 @@ mod tests {
     //     test_porc::<Sha256Hasher>();
     // }
 
-    // #[test]
-    // fn porc_blake2s() {
-    //     test_porc::<Blake2sHasher>();
-    // }
+    #[test]
+    fn porc_blake2s() {
+        test_porc::<Blake2sHasher>();
+    }
 
     // Construct a proof that satisfies a cursory validation:
     // Data and proof are minimally consistent.
@@ -314,10 +314,10 @@ mod tests {
     //     test_porc_validates::<Sha256Hasher>();
     // }
 
-    // #[test]
-    // fn porc_actually_validates_blake2s() {
-    //     test_porc_validates::<Blake2sHasher>();
-    // }
+    #[test]
+    fn porc_actually_validates_blake2s() {
+        test_porc_validates::<Blake2sHasher>();
+    }
 
     #[test]
     fn porc_actually_validates_pedersen() {
@@ -371,10 +371,10 @@ mod tests {
     //     test_porc_validates_challenge_identity::<Sha256Hasher>();
     // }
 
-    // #[test]
-    // fn porc_actually_validates_challenge_identity_blake2s() {
-    //     test_porc_validates_challenge_identity::<Blake2sHasher>();
-    // }
+    #[test]
+    fn porc_actually_validates_challenge_identity_blake2s() {
+        test_porc_validates_challenge_identity::<Blake2sHasher>();
+    }
 
     #[test]
     fn porc_actually_validates_challenge_identity_pedersen() {
