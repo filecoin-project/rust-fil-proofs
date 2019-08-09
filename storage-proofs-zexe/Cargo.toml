@@ -58,3 +58,43 @@ big-sector-sizes-bench = []
 proptest = "0.7"
 criterion = "0.2"
 pretty_assertions = "0.6.1"
+
+[[bench]]
+name = "pedersen"
+harness = false
+
+[[bench]]
+name = "sha256"
+harness = false
+
+[[bench]]
+name = "blake2s"
+harness = false
+
+[[bench]]
+name = "drgraph"
+harness = false
+
+[[bench]]
+name = "sloth"
+harness = false
+
+[[bench]]
+name = "encode"
+harness = false
+
+[[bench]]
+name = "parents"
+harness = false
+
+[[bench]]
+name = "xor"
+harness = false
+
+[[bench]]
+name = "fr"
+harness = false
+
+[[bench]]
+name = "merkle"
+harness = false
