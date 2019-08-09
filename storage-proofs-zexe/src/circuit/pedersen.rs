@@ -121,8 +121,6 @@ mod tests {
 
     use super::*;
 
-    use algebra::curves::ProjectiveCurve;
-    use bitvec::prelude::*;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     use crate::circuit::test::TestConstraintSystem;

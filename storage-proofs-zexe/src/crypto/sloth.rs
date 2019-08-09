@@ -64,7 +64,7 @@ mod tests {
     use algebra::biginteger::BigInteger256 as FrRepr;
     use algebra::curves::bls12_381::Bls12_381 as Bls12;
     use algebra::fields::bls12_381::Fr;
-    use algebra::fields::{Field, PrimeField};
+    use algebra::fields::PrimeField;
     use std::str::FromStr;
 
     // the modulus from `bls12_381::Fr`

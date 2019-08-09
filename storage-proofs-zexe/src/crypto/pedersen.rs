@@ -138,7 +138,7 @@ mod tests {
         let mut data = vec![0; bytes.len()];
         data.copy_from_slice(&bytes[..]);
         pedersen_compression(&mut data);
-        let expected = vec![
+        let _expected = vec![
             213, 235, 66, 156, 7, 85, 177, 39, 249, 31, 160, 247, 29, 106, 36, 46, 225, 71, 116,
             23, 1, 89, 82, 149, 45, 189, 27, 189, 144, 98, 23, 98,
         ];
