@@ -1,22 +1,14 @@
-mod constraint;
-
-pub mod por;
-
-pub mod apex_commitment;
-pub mod beacon_post;
+pub mod bench;
+pub mod constraint;
 pub mod drgporep;
 pub mod kdf;
+pub mod metric;
 pub mod multi_proof;
+pub mod multipack;
 pub mod pedersen;
-pub mod porc;
-pub mod ppor;
+pub mod por;
 pub mod sloth;
+pub mod test;
 pub mod variables;
-pub mod vdf_post;
 pub mod xor;
 pub mod zigzag;
-
-// FIXME: Can we make a config like for test?
-pub mod bench;
-pub mod metric;
-pub mod test;

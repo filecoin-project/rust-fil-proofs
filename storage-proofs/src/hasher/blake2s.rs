@@ -1,17 +1,24 @@
 use std::fmt;
 use std::hash::Hasher as StdHasher;
 
-use bellperson::{ConstraintSystem, SynthesisError};
+use algebra::biginteger::BigInteger256 as FrRepr;
+use algebra::bytes::{FromBytes, ToBytes};
+use algebra::curves::{bls12_381::Bls12_381 as Bls12, jubjub::JubJubProjective as JubJub};
+use algebra::fields::{bls12_381::Fr, PrimeField};
 use blake2s_simd::{Hash as Blake2sHash, Params as Blake2s, State};
-use ff::{PrimeField, PrimeFieldRepr};
-use fil_sapling_crypto::circuit::{blake2s as blake2s_circuit, boolean, multipack, num};
-use fil_sapling_crypto::jubjub::JubjubEngine;
+use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
+use dpc::gadgets::prf::blake2s::blake2s_gadget;
 use merkletree::hash::{Algorithm, Hashable};
 use merkletree::merkle::Element;
-use paired::bls12_381::{Bls12, Fr, FrRepr};
 use rand::{Rand, Rng};
+use snark::{ConstraintSystem, SynthesisError};
+use snark_gadgets::bits::uint32::UInt32;
+use snark_gadgets::boolean::Boolean;
+use snark_gadgets::fields::fp::FpGadget;
+use snark_gadgets::utils::AllocGadget;
 
 use super::{Domain, HashFunction, Hasher};
+use crate::circuit::multipack;
 use crate::crypto::sloth;
 use crate::error::*;
 
@@ -119,7 +126,8 @@ impl Hashable<Blake2sFunction> for Blake2sDomain {
 impl From<Fr> for Blake2sDomain {
     fn from(val: Fr) -> Self {
         let mut res = Self::default();
-        val.into_repr().write_le(&mut res.0[0..32]).unwrap();
+        let mut curs = std::io::Cursor::new(&mut res.0[..32]);
+        val.into_repr().write(&mut curs).unwrap();
 
         res
     }
@@ -128,7 +136,8 @@ impl From<Fr> for Blake2sDomain {
 impl From<FrRepr> for Blake2sDomain {
     fn from(val: FrRepr) -> Self {
         let mut res = Self::default();
-        val.write_le(&mut res.0[0..32]).unwrap();
+        let mut curs = std::io::Cursor::new(&mut res.0[..32]);
+        val.write(&mut curs).unwrap();
 
         res
     }
@@ -153,10 +162,10 @@ impl Element for Blake2sDomain {
 
 impl From<Blake2sDomain> for Fr {
     fn from(val: Blake2sDomain) -> Self {
-        let mut res = FrRepr::default();
-        res.read_le(&val.0[0..32]).unwrap();
+        let mut curs = std::io::Cursor::new(&val.0[..32]);
+        let res = FrRepr::read(&mut curs).unwrap();
 
-        Fr::from_repr(res).unwrap()
+        Fr::from_repr(res)
     }
 }
 
@@ -207,50 +216,49 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
             .into()
     }
 
-    fn hash_leaf_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+    fn hash_leaf_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
-        left: &[boolean::Boolean],
-        right: &[boolean::Boolean],
+        left: &[Boolean],
+        right: &[Boolean],
         _height: usize,
-        params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
-        let mut preimage: Vec<boolean::Boolean> = vec![];
+        params: &PedersenParameters<JubJub>,
+    ) -> std::result::Result<FpGadget<Bls12>, SynthesisError> {
+        let mut preimage: Vec<Boolean> = vec![];
 
         preimage.extend_from_slice(left);
         while preimage.len() % 8 != 0 {
-            preimage.push(boolean::Boolean::Constant(false));
+            preimage.push(Boolean::Constant(false));
         }
 
         preimage.extend_from_slice(right);
         while preimage.len() % 8 != 0 {
-            preimage.push(boolean::Boolean::Constant(false));
+            preimage.push(Boolean::Constant(false));
         }
 
         Self::hash_circuit(cs, &preimage[..], params)
     }
 
-    fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+    fn hash_circuit<CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
-        bits: &[boolean::Boolean],
-        _params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
-        let personalization = vec![0u8; 8];
-        let alloc_bits =
-            blake2s_circuit::blake2s(cs.namespace(|| "hash"), &bits[..], &personalization)?;
-        let fr = match alloc_bits[0].get_value() {
+        bits: &[Boolean],
+        _params: &PedersenParameters<JubJub>,
+    ) -> std::result::Result<FpGadget<Bls12>, SynthesisError> {
+        let alloc_uint32 = blake2s_gadget(cs.ns(|| "hash"), &bits[..])?;
+        let fr = match alloc_uint32[0].get_value() {
             Some(_) => {
-                let bits = alloc_bits
+                let bits = alloc_uint32
                     .iter()
+                    .map(UInt32::to_bits_le)
+                    .flatten()
                     .map(|v| v.get_value().unwrap())
                     .collect::<Vec<bool>>();
                 // TODO: figure out if we can avoid this
-                let frs = multipack::compute_multipacking::<E>(&bits);
+                let frs = multipack::compute_multipacking::<Bls12>(&bits);
                 Ok(frs[0])
             }
             None => Err(SynthesisError::AssignmentMissing),
         };
-
-        num::AllocatedNum::<E>::alloc(cs.namespace(|| "num"), || fr)
+        FpGadget::alloc(cs.ns(|| "num"), || fr)
     }
 }
 

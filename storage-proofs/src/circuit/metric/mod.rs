@@ -1,10 +1,11 @@
-use bellperson::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
-use ff::{Field, PrimeField};
-use paired::Engine;
+use algebra::fields::{Field, FpParameters, PrimeField};
+use algebra::PairingEngine as Engine;
+use snark::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt::Write;
+use std::ops::AddAssign;
 
 #[derive(Clone, Copy)]
 struct OrderedVariable(Variable);
@@ -82,13 +83,17 @@ impl<E: Engine> MetricCS<E> {
         write!(s, "\n\n").unwrap();
 
         let negone = {
-            let mut tmp = E::Fr::one();
-            tmp.negate();
-            tmp
+            let tmp = E::Fr::one();
+            -tmp
         };
 
-        let powers_of_two = (0..E::Fr::NUM_BITS)
-            .map(|i| E::Fr::from_str("2").unwrap().pow(&[u64::from(i)]))
+        let powers_of_two = (0..<E::Fr as PrimeField>::Params::MODULUS_BITS)
+            // TODO: use `from_str` here
+            // .map(|i| ((E::Fr::from_str("2"))))
+            .map(|i| {
+                (E::Fr::from_repr_raw(<E::Fr as PrimeField>::BigInt::from(2 as u64))
+                    .pow(&[u64::from(i)]))
+            })
             .collect::<Vec<_>>();
 
         let _pp = |s: &mut String, lc: &LinearCombination<E>| {
@@ -255,6 +260,10 @@ impl<E: Engine> ConstraintSystem<E> for MetricCS<E> {
 
     fn get_root(&mut self) -> &mut Self::Root {
         self
+    }
+
+    fn num_constraints(&self) -> usize {
+        self.constraints.len()
     }
 }
 

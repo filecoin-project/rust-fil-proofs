@@ -1,7 +1,10 @@
-use bellperson::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
-use ff::Field;
-use paired::Engine;
 use std::cmp::Ordering;
+use std::ops::AddAssign;
+use std::ops::MulAssign;
+
+use algebra::fields::Field;
+use algebra::PairingEngine as Engine;
+use snark::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 
 #[derive(Clone, Copy)]
 struct OrderedVariable(Variable);
@@ -60,10 +63,6 @@ pub struct BenchCS<E: Engine> {
 impl<E: Engine> BenchCS<E> {
     pub fn new() -> Self {
         BenchCS::default()
-    }
-
-    pub fn num_constraints(&self) -> usize {
-        self.a.len()
     }
 }
 
@@ -140,5 +139,9 @@ impl<E: Engine> ConstraintSystem<E> for BenchCS<E> {
 
     fn get_root(&mut self) -> &mut Self::Root {
         self
+    }
+
+    fn num_constraints(&self) -> usize {
+        self.a.len()
     }
 }

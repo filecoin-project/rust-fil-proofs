@@ -4,8 +4,7 @@ extern crate criterion;
 use criterion::{black_box, Criterion, ParameterizedBenchmark};
 use rand::{thread_rng, Rng};
 use storage_proofs::drgraph::{new_seed, Graph};
-use storage_proofs::hasher::blake2s::Blake2sHasher;
-use storage_proofs::hasher::pedersen::PedersenHasher;
+use storage_proofs::hasher::{Blake2sHasher, PedersenHasher};
 use storage_proofs::zigzag_graph::{ZigZag, ZigZagBucketGraph, DEFAULT_EXPANSION_DEGREE};
 
 fn merkle_benchmark(c: &mut Criterion) {

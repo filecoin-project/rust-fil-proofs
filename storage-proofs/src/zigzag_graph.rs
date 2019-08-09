@@ -71,7 +71,7 @@ where
         seed: [u32; 7],
     ) -> Self {
         let cache_entries = if settings::SETTINGS.lock().unwrap().maximize_caching {
-            info!("using parents cache of unlimited size",);
+            info!("using parents cache of unlimited size");
             nodes
         } else {
             0
@@ -422,7 +422,7 @@ mod tests {
     use std::collections::{HashMap, HashSet};
 
     use crate::drgraph::new_seed;
-    use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::hasher::{Blake2sHasher, PedersenHasher};
 
     fn assert_graph_ascending<H: Hasher, G: Graph<H>>(g: G) {
         for i in 0..g.size() {
@@ -457,10 +457,10 @@ mod tests {
         test_zigzag_graph_zigzags::<PedersenHasher>();
     }
 
-    #[test]
-    fn zigzag_graph_zigzags_sha256() {
-        test_zigzag_graph_zigzags::<Sha256Hasher>();
-    }
+    // #[test]
+    // fn zigzag_graph_zigzags_sha256() {
+    //     test_zigzag_graph_zigzags::<Sha256Hasher>();
+    // }
 
     #[test]
     fn zigzag_graph_zigzags_blake2s() {
@@ -480,10 +480,10 @@ mod tests {
         test_expansion::<PedersenHasher>();
     }
 
-    #[test]
-    fn expansion_sha256() {
-        test_expansion::<Sha256Hasher>();
-    }
+    // #[test]
+    // fn expansion_sha256() {
+    //     test_expansion::<Sha256Hasher>();
+    // }
 
     #[test]
     fn expansion_blake2s() {

@@ -137,12 +137,12 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for MerklePoR<H> {
 mod tests {
     use super::*;
 
-    use paired::bls12_381::Bls12;
+    use algebra::curves::bls12_381::Bls12_381 as Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     use crate::drgraph::{new_seed, BucketGraph, Graph};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{Blake2sHasher, HashFunction, PedersenHasher, Sha256Hasher};
+    use crate::hasher::{Blake2sHasher, HashFunction, PedersenHasher};
     use crate::merkle::make_proof_for_test;
     use crate::util::data_at_node;
 
@@ -186,10 +186,10 @@ mod tests {
         test_merklepor::<PedersenHasher>();
     }
 
-    #[test]
-    fn merklepor_sha256() {
-        test_merklepor::<Sha256Hasher>();
-    }
+    // #[test]
+    // fn merklepor_sha256() {
+    //     test_merklepor::<Sha256Hasher>();
+    // }
 
     #[test]
     fn merklepor_blake2s() {
@@ -247,10 +247,10 @@ mod tests {
         assert!(!verified);
     }
 
-    #[test]
-    fn merklepor_actually_validates_sha256() {
-        test_merklepor_validates::<Sha256Hasher>();
-    }
+    // #[test]
+    // fn merklepor_actually_validates_sha256() {
+    //     test_merklepor_validates::<Sha256Hasher>();
+    // }
 
     #[test]
     fn merklepor_actually_validates_blake2s() {
@@ -303,10 +303,10 @@ mod tests {
         assert!(!verified);
     }
 
-    #[test]
-    fn merklepor_actually_validates_challenge_identity_sha256() {
-        test_merklepor_validates_challenge_identity::<Sha256Hasher>();
-    }
+    // #[test]
+    // fn merklepor_actually_validates_challenge_identity_sha256() {
+    //     test_merklepor_validates_challenge_identity::<Sha256Hasher>();
+    // }
 
     #[test]
     fn merklepor_actually_validates_challenge_identity_blake2s() {

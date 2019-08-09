@@ -1,40 +1,40 @@
 #[macro_use]
 extern crate criterion;
 
-use bellperson::groth16::*;
-use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
 use criterion::{black_box, Criterion, ParameterizedBenchmark};
-use fil_sapling_crypto::circuit::boolean::{self, Boolean};
-use fil_sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
-use paired::bls12_381::Bls12;
+use dpc::gadgets::Assignment;
 use rand::{thread_rng, Rng};
-use storage_proofs::circuit::bench::BenchCS;
-
+use snark::groth16::{create_random_proof, generate_random_parameters};
+use snark::{Circuit, ConstraintSystem, SynthesisError};
+use snark_gadgets::boolean::{self, Boolean};
+use snark_gadgets::fields::FieldGadget;
+use snark_gadgets::utils::AllocGadget;
 use storage_proofs::circuit;
+use storage_proofs::circuit::bench::BenchCS;
 use storage_proofs::crypto::pedersen;
-use storage_proofs::settings;
+use storage_proofs::singletons::PEDERSEN_PARAMS;
 
-struct PedersenExample<'a, E: JubjubEngine> {
-    params: &'a E::Params,
+struct PedersenExample<'a> {
     data: &'a [Option<bool>],
 }
 
-impl<'a, E: JubjubEngine> Circuit<E> for PedersenExample<'a, E> {
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+impl<'a> Circuit<Bls12> for PedersenExample<'a> {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let data: Vec<Boolean> = self
             .data
             .into_iter()
             .enumerate()
             .map(|(i, b)| {
                 Ok(Boolean::from(boolean::AllocatedBit::alloc(
-                    cs.namespace(|| format!("bit {}", i)),
-                    *b,
+                    cs.ns(|| format!("bit {}", i)),
+                    || b.get(),
                 )?))
             })
             .collect::<Result<Vec<_>, SynthesisError>>()?;
 
-        let cs = cs.namespace(|| "pedersen");
-        let res = circuit::pedersen::pedersen_compression_num(cs, self.params, &data)?;
+        let cs = cs.ns(|| "pedersen");
+        let res = circuit::pedersen::pedersen_compression_num(cs, &data, &PEDERSEN_PARAMS)?;
         // please compiler don't optimize the result away
         // only check if we actually have input data
         if self.data[0].is_some() {
@@ -68,16 +68,9 @@ fn pedersen_benchmark(c: &mut Criterion) {
 }
 
 fn pedersen_circuit_benchmark(c: &mut Criterion) {
-    let window_size = settings::SETTINGS
-        .lock()
-        .unwrap()
-        .pedersen_hash_exp_window_size;
-    let jubjub_params = JubjubBls12::new_with_window_size(window_size);
-    let jubjub_params2 = JubjubBls12::new_with_window_size(window_size);
     let mut rng1 = thread_rng();
     let groth_params = generate_random_parameters::<Bls12, _, _>(
         PedersenExample {
-            params: &jubjub_params,
             data: &vec![None; 256],
         },
         &mut rng1,
@@ -97,7 +90,6 @@ fn pedersen_circuit_benchmark(c: &mut Criterion) {
                 b.iter(|| {
                     let proof = create_random_proof(
                         PedersenExample {
-                            params: &jubjub_params,
                             data: data.as_slice(),
                         },
                         &groth_params,
@@ -117,7 +109,6 @@ fn pedersen_circuit_benchmark(c: &mut Criterion) {
             b.iter(|| {
                 let mut cs = BenchCS::<Bls12>::new();
                 PedersenExample {
-                    params: &jubjub_params2,
                     data: data.as_slice(),
                 }
                 .synthesize(&mut cs)

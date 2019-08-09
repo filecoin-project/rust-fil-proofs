@@ -1,22 +1,25 @@
-use crate::error::*;
-use bellperson::groth16::Parameters;
-use bellperson::{groth16, Circuit};
-use fil_sapling_crypto::jubjub::JubjubEngine;
-use fs2::FileExt;
-use itertools::Itertools;
-use rand::{SeedableRng, XorShiftRng};
-use sha2::{Digest, Sha256};
-
 use std::env;
 use std::fs::{self, create_dir_all, File};
 use std::io::{self, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use algebra::{
+    bytes::{FromBytes, ToBytes},
+    PairingEngine as Engine,
+};
+use fs2::FileExt;
+use itertools::Itertools;
+use rand::{SeedableRng, XorShiftRng};
+use sha2::{Digest, Sha256};
+use snark::{groth16, groth16::Parameters, Circuit};
+
 use crate::error::Error::Unclassified;
+use crate::error::*;
 
 /// Bump this when circuits change to invalidate the cache.
-pub const VERSION: usize = 11;
+/// Cache starting at a 100 are for zexe.
+pub const VERSION: usize = 101;
 
 pub const PARAMETER_CACHE_ENV_VAR: &str = "FILECOIN_PARAMETER_CACHE";
 
@@ -156,8 +159,8 @@ pub struct CacheEntryMetadata {
 
 pub trait CacheableParameters<E, C, P>
 where
+    E: Engine,
     C: Circuit<E>,
-    E: JubjubEngine,
     P: ParameterSetMetadata,
 {
     fn cache_prefix() -> String;
@@ -238,21 +241,17 @@ fn ensure_parent(path: &PathBuf) -> Result<()> {
     }
 }
 
-fn read_cached_params<E: JubjubEngine>(
-    cache_entry_path: &PathBuf,
-) -> Result<groth16::Parameters<E>> {
+fn read_cached_params<E: Engine>(cache_entry_path: &PathBuf) -> Result<groth16::Parameters<E>> {
     info!("checking cache_path: {:?} for parameters", cache_entry_path);
     with_exclusive_read_lock(cache_entry_path, |mut f| {
-        Parameters::read(&mut f, false)
-            .map_err(Error::from)
-            .map(|value| {
-                info!("read parameters from cache {:?} ", cache_entry_path);
-                value
-            })
+        Parameters::read(&mut f).map_err(Error::from).map(|value| {
+            info!("read parameters from cache {:?} ", cache_entry_path);
+            value
+        })
     })
 }
 
-fn read_cached_verifying_key<E: JubjubEngine>(
+fn read_cached_verifying_key<E: Engine>(
     cache_entry_path: &PathBuf,
 ) -> Result<groth16::VerifyingKey<E>> {
     info!(
@@ -295,7 +294,7 @@ fn write_cached_metadata(
     })
 }
 
-fn write_cached_verifying_key<E: JubjubEngine>(
+fn write_cached_verifying_key<E: Engine>(
     cache_entry_path: &PathBuf,
     value: groth16::VerifyingKey<E>,
 ) -> Result<groth16::VerifyingKey<E>> {
@@ -307,7 +306,7 @@ fn write_cached_verifying_key<E: JubjubEngine>(
     })
 }
 
-fn write_cached_params<E: JubjubEngine>(
+fn write_cached_params<E: Engine>(
     cache_entry_path: &PathBuf,
     value: groth16::Parameters<E>,
 ) -> Result<groth16::Parameters<E>> {

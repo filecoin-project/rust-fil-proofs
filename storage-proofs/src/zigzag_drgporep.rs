@@ -47,13 +47,13 @@ where
 mod tests {
     use super::*;
 
-    use paired::bls12_381::Bls12;
+    use algebra::curves::bls12_381::Bls12_381 as Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     use crate::drgporep;
     use crate::drgraph::new_seed;
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::hasher::{Blake2sHasher, PedersenHasher};
     use crate::layered_drgporep::{
         LayerChallenges, PrivateInputs, PublicInputs, PublicParams, SetupParams,
     };
@@ -67,10 +67,10 @@ mod tests {
         test_extract_all::<PedersenHasher>();
     }
 
-    #[test]
-    fn extract_all_sha256() {
-        test_extract_all::<Sha256Hasher>();
-    }
+    // #[test]
+    // fn extract_all_sha256() {
+    //     test_extract_all::<Sha256Hasher>();
+    // }
 
     #[test]
     fn extract_all_blake2s() {
@@ -124,7 +124,7 @@ mod tests {
         let challenges = LayerChallenges::new_fixed(DEFAULT_ZIGZAG_LAYERS, 5);
 
         test_prove_verify::<PedersenHasher>(n, i, challenges.clone());
-        test_prove_verify::<Sha256Hasher>(n, i, challenges.clone());
+        // test_prove_verify::<Sha256Hasher>(n, i, challenges.clone());
         test_prove_verify::<Blake2sHasher>(n, i, challenges.clone());
     }
 
@@ -132,7 +132,7 @@ mod tests {
         let challenges = LayerChallenges::new_tapered(5, 10, 5, 0.9);
 
         test_prove_verify::<PedersenHasher>(n, i, challenges.clone());
-        test_prove_verify::<Sha256Hasher>(n, i, challenges.clone());
+        // test_prove_verify::<Sha256Hasher>(n, i, challenges.clone());
         test_prove_verify::<Blake2sHasher>(n, i, challenges.clone());
     }
 
