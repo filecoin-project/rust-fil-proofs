@@ -368,7 +368,7 @@ mod tests {
     use crate::drgporep;
     use crate::drgraph::new_seed;
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{Hasher, PedersenHasher};
+    use crate::hasher::{Blake2sHasher, Hasher, PedersenHasher};
     use crate::layered_drgporep::{self, ChallengeRequirements, LayerChallenges};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
@@ -565,13 +565,13 @@ mod tests {
     fn test_zigzag_compound_pedersen() {
         zigzag_test_compound::<PedersenHasher>();
     }
-    //
-    //    #[test]
-    //    #[ignore] // Slow test – run only when compiled for release.
-    //    fn test_zigzag_compound_blake2s() {
-    //        zigzag_test_compound::<Blake2sHasher>();
-    //    }
-    //
+
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn test_zigzag_compound_blake2s() {
+        zigzag_test_compound::<Blake2sHasher>();
+    }
+
     fn zigzag_test_compound<H: 'static + Hasher>() {
         let nodes = 5;
         let degree = 2;

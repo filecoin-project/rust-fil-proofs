@@ -142,7 +142,7 @@ mod tests {
 
     use crate::drgraph::{new_seed, BucketGraph, Graph};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{HashFunction, PedersenHasher};
+    use crate::hasher::{Blake2sHasher, HashFunction, PedersenHasher};
     use crate::merkle::make_proof_for_test;
     use crate::util::data_at_node;
 
@@ -191,10 +191,10 @@ mod tests {
     //     test_merklepor::<Sha256Hasher>();
     // }
 
-    // #[test]
-    // fn merklepor_blake2s() {
-    //     test_merklepor::<Blake2sHasher>();
-    // }
+    #[test]
+    fn merklepor_blake2s() {
+        test_merklepor::<Blake2sHasher>();
+    }
 
     // Construct a proof that satisfies a cursory validation:
     // Data and proof are minimally consistent.
@@ -252,10 +252,10 @@ mod tests {
     //     test_merklepor_validates::<Sha256Hasher>();
     // }
 
-    // #[test]
-    // fn merklepor_actually_validates_blake2s() {
-    //     test_merklepor_validates::<Blake2sHasher>();
-    // }
+    #[test]
+    fn merklepor_actually_validates_blake2s() {
+        test_merklepor_validates::<Blake2sHasher>();
+    }
 
     #[test]
     fn merklepor_actually_validates_pedersen() {
@@ -308,10 +308,10 @@ mod tests {
     //     test_merklepor_validates_challenge_identity::<Sha256Hasher>();
     // }
 
-    // #[test]
-    // fn merklepor_actually_validates_challenge_identity_blake2s() {
-    //     test_merklepor_validates_challenge_identity::<Blake2sHasher>();
-    // }
+    #[test]
+    fn merklepor_actually_validates_challenge_identity_blake2s() {
+        test_merklepor_validates_challenge_identity::<Blake2sHasher>();
+    }
 
     #[test]
     fn merklepor_actually_validates_challenge_identity_pedersen() {
