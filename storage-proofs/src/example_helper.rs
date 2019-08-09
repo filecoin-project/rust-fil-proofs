@@ -3,17 +3,15 @@ use std::io::stderr;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use bellperson::groth16::*;
-use bellperson::Circuit;
-use clap::{self, App, Arg, SubCommand};
-use fil_sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
-use paired::bls12_381::Bls12;
+use algebra::bytes::{FromBytes, ToBytes};
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use clap::{self, value_t, App, Arg, SubCommand};
 use pbr::ProgressBar;
 use rand::{Rng, SeedableRng, XorShiftRng};
+use snark::{groth16, Circuit, ConstraintSystem};
 
 use crate::circuit::bench::BenchCS;
 use crate::circuit::test::TestConstraintSystem;
-use crate::settings;
 
 pub fn prettyb(num: usize) -> String {
     let num = num as f64;
@@ -55,15 +53,6 @@ pub enum CSType {
     Circuit,
 }
 
-lazy_static! {
-    static ref JUBJUB_BLS_PARAMS: JubjubBls12 = JubjubBls12::new_with_window_size(
-        settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size
-    );
-}
-
 /// A trait that makes it easy to implement "Examples". These are really tunable benchmarking CLI tools.
 pub trait Example<'a, C: Circuit<Bls12>>: Default {
     /// The actual work.
@@ -87,14 +76,13 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
         // caching
         let p = get_cache_path(&name, data_size, challenge_count, m);
         let cache_path = Path::new(&p);
-        let groth_params: Parameters<Bls12> = if cache_path.exists() {
+        let groth_params = if cache_path.exists() {
             info!("reading groth params from cache: {:?}", cache_path);
             let f = File::open(&cache_path).expect("failed to read cache");
-            Parameters::read(&f, false).expect("failed to read cached params")
+            groth16::Parameters::read(&f).expect("failed to read cached params")
         } else {
             info!("generating new groth params");
-            let p =
-                self.generate_groth_params(rng, &JUBJUB_BLS_PARAMS, tree_depth, challenge_count, m);
+            let p = self.generate_groth_params(rng, tree_depth, challenge_count, m);
             info!("writing params to cache: {:?}", cache_path);
 
             let mut f = File::create(&cache_path).expect("faild to open cache file");
@@ -104,7 +92,7 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
         };
 
         info!("generating verification key");
-        let pvk = prepare_verifying_key(&groth_params.vk);
+        let pvk = groth16::prepare_verifying_key(&groth_params.vk);
 
         param_duration += start.elapsed();
 
@@ -122,15 +110,8 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
             // -- create proof
 
             let start = Instant::now();
-            let proof = self.create_proof(
-                rng,
-                &JUBJUB_BLS_PARAMS,
-                &groth_params,
-                tree_depth,
-                challenge_count,
-                leaves,
-                m,
-            );
+            let proof =
+                self.create_proof(rng, &groth_params, tree_depth, challenge_count, leaves, m);
             proof
                 .write(&mut proof_vec)
                 .expect("failed to serialize proof");
@@ -185,28 +166,14 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
 
         info!(
             "constraints: {}",
-            self.get_num_constraints(
-                rng,
-                &JUBJUB_BLS_PARAMS,
-                tree_depth,
-                challenge_count,
-                leaves,
-                m,
-            )
+            self.get_num_constraints(rng, tree_depth, challenge_count, leaves, m,)
         );
 
         for _ in 0..samples {
             // -- create proof
 
             let start = Instant::now();
-            let c = self.create_circuit(
-                rng,
-                &JUBJUB_BLS_PARAMS,
-                tree_depth,
-                challenge_count,
-                leaves,
-                m,
-            );
+            let c = self.create_circuit(rng, tree_depth, challenge_count, leaves, m);
             let mut cs = BenchCS::<Bls12>::new();
             c.synthesize(&mut cs).expect("failed to synthesize circuit");
 
@@ -235,14 +202,7 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
         info!("m: {}", m);
         info!("tree_depth: {}", tree_depth);
 
-        let c = self.create_circuit(
-            rng,
-            &JUBJUB_BLS_PARAMS,
-            tree_depth,
-            challenge_count,
-            leaves,
-            m,
-        );
+        let c = self.create_circuit(rng, tree_depth, challenge_count, leaves, m);
         let mut cs = TestConstraintSystem::<Bls12>::new();
         c.synthesize(&mut cs).expect("failed to synthesize circuit");
         assert!(cs.is_satisfied(), "constraints not satisfied");
@@ -322,57 +282,50 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
     fn generate_groth_params<R: Rng>(
         &mut self,
         _: &mut R,
-        _: &'a <Bls12 as JubjubEngine>::Params,
         _: usize,
         _: usize,
         _: usize,
-    ) -> Parameters<Bls12>;
+    ) -> groth16::Parameters<Bls12>;
 
     /// How many samples should be taken when proofing and verifying
     fn samples() -> usize;
 
     /// Create a new random proof
     #[allow(clippy::too_many_arguments)]
-    fn create_circuit<R: Rng>(
-        &mut self,
-        _: &mut R,
-        _: &'a <Bls12 as JubjubEngine>::Params,
-        _: usize,
-        _: usize,
-        _: usize,
-        _: usize,
-    ) -> C;
+    fn create_circuit<R: Rng>(&mut self, _: &mut R, _: usize, _: usize, _: usize, _: usize) -> C;
 
     #[allow(clippy::too_many_arguments)]
     fn create_proof<R: Rng>(
         &mut self,
         rng: &mut R,
-        engine_params: &'a <Bls12 as JubjubEngine>::Params,
-        groth_params: &Parameters<Bls12>,
+        groth_params: &groth16::Parameters<Bls12>,
         tree_depth: usize,
         challenge_count: usize,
         leaves: usize,
         m: usize,
-    ) -> Proof<Bls12> {
-        let c = self.create_circuit(rng, engine_params, tree_depth, challenge_count, leaves, m);
-        create_random_proof(c, groth_params, rng).expect("failed to create proof")
+    ) -> groth16::Proof<Bls12> {
+        let c = self.create_circuit(rng, tree_depth, challenge_count, leaves, m);
+        groth16::create_random_proof(c, groth_params, rng).expect("failed to create proof")
     }
 
     /// Verify the given proof, return `None` if not implemented.
-    fn verify_proof(&mut self, _: &Proof<Bls12>, _: &PreparedVerifyingKey<Bls12>) -> Option<bool>;
+    fn verify_proof(
+        &mut self,
+        _: &groth16::Proof<Bls12>,
+        _: &groth16::PreparedVerifyingKey<Bls12>,
+    ) -> Option<bool>;
 
     /// Get the number of constraints of the circuit
     #[allow(clippy::too_many_arguments)]
     fn get_num_constraints<R: Rng>(
         &mut self,
         rng: &mut R,
-        engine_params: &'a JubjubBls12,
         tree_depth: usize,
         challenge_count: usize,
         leaves: usize,
         m: usize,
     ) -> usize {
-        let c = self.create_circuit(rng, engine_params, tree_depth, challenge_count, leaves, m);
+        let c = self.create_circuit(rng, tree_depth, challenge_count, leaves, m);
 
         let mut cs = BenchCS::<Bls12>::new();
         c.synthesize(&mut cs).expect("failed to synthesize circuit");

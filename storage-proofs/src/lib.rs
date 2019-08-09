@@ -33,6 +33,7 @@ pub mod compound_proof;
 pub mod drgporep;
 pub mod drgraph;
 pub mod error;
+pub mod example_helper;
 pub mod fr32;
 pub mod hasher;
 pub mod layered_drgporep;

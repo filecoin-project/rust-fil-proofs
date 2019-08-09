@@ -5,17 +5,18 @@ extern crate gperftools;
 #[macro_use]
 extern crate log;
 
-use clap::{App, Arg};
-#[cfg(feature = "cpu-profile")]
-use gperftools::profiler::PROFILER;
-use memmap::MmapMut;
-use memmap::MmapOptions;
-use paired::bls12_381::Bls12;
-use rand::{Rng, SeedableRng, XorShiftRng};
 use std::fs::File;
 use std::io::Write;
 use std::time::Instant;
 
+#[cfg(feature = "cpu-profile")]
+use gperftools::profiler::PROFILER;
+
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use clap::{App, Arg};
+use memmap::MmapMut;
+use memmap::MmapOptions;
+use rand::{Rng, SeedableRng, XorShiftRng};
 use storage_proofs::drgporep;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
