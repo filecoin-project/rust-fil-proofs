@@ -65,7 +65,8 @@ pub fn generate_post_spread_input(
     let remainder = chunks.remainder();
 
     for chunk in chunks {
-        let mut input_parts: [(String, Commitment); POST_SECTORS_COUNT] = Default::default();
+        let mut input_parts: [(String, Commitment); POST_SECTORS_COUNT] =
+            array![(String::from(""), [0u8;32]); POST_SECTORS_COUNT];
 
         for (i, input_part) in chunk.iter().cloned().enumerate() {
             input_parts[i] = input_part
@@ -79,7 +80,8 @@ pub fn generate_post_spread_input(
     }
 
     if !remainder.is_empty() {
-        let mut input_parts: [(String, Commitment); POST_SECTORS_COUNT] = Default::default();
+        let mut input_parts: [(String, Commitment); POST_SECTORS_COUNT] =
+            array![(String::from(""), [0u8;32]); POST_SECTORS_COUNT];
 
         // This commitment duplicating logic might need to be revisited. For
         // now, we duplicate the last commitment until LEN(COMM_R) divides
@@ -212,7 +214,7 @@ pub fn verify_post_spread_input(
     // evenly by POST_SECTORS_COUNT by duplicating the last comm_r in the
     // group until LEN(comm_rs) == POST_SECTORS_COUNT.
     if !remainder.is_empty() {
-        let mut comm_rs: [Commitment; POST_SECTORS_COUNT] = Default::default();
+        let mut comm_rs: [Commitment; POST_SECTORS_COUNT] = array![[0u8;32]; POST_SECTORS_COUNT];
 
         let iter_with_idx = remainder
             .iter()
