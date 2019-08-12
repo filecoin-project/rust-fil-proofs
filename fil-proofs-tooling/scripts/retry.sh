@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-# This software is freely available under the Apache 2.0 license.
-# Full license available here: https://www.apache.org/licenses/LICENSE-2.0.txt
-
 # Inspired by https://gist.github.com/reacocard/28611bfaa2395072119464521d48729a
 
 set -o errexit
