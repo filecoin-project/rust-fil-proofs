@@ -9,13 +9,13 @@ use crate::types::PoStConfig;
 pub struct GeneratePoStDynamicSectorsCountInput {
     pub post_config: PoStConfig,
     pub challenge_seed: ChallengeSeed,
-    pub input_parts: Vec<(Option<String>, Commitment)>,
+    pub input_parts: Vec<(String, Commitment)>,
 }
 
 pub struct GeneratePoStFixedSectorsCountInput {
     pub post_config: PoStConfig,
     pub challenge_seed: ChallengeSeed,
-    pub input_parts: [(Option<String>, Commitment); POST_SECTORS_COUNT],
+    pub input_parts: [(String, Commitment); POST_SECTORS_COUNT],
 }
 
 pub struct VerifyPoStDynamicSectorsCountInput {
@@ -65,8 +65,7 @@ pub fn generate_post_spread_input(
     let remainder = chunks.remainder();
 
     for chunk in chunks {
-        let mut input_parts: [(Option<String>, Commitment); POST_SECTORS_COUNT] =
-            Default::default();
+        let mut input_parts: [(String, Commitment); POST_SECTORS_COUNT] = Default::default();
 
         for (i, input_part) in chunk.iter().cloned().enumerate() {
             input_parts[i] = input_part
@@ -80,8 +79,7 @@ pub fn generate_post_spread_input(
     }
 
     if !remainder.is_empty() {
-        let mut input_parts: [(Option<String>, Commitment); POST_SECTORS_COUNT] =
-            Default::default();
+        let mut input_parts: [(String, Commitment); POST_SECTORS_COUNT] = Default::default();
 
         // This commitment duplicating logic might need to be revisited. For
         // now, we duplicate the last commitment until LEN(COMM_R) divides
@@ -328,7 +326,7 @@ mod tests {
     fn sector_access_flattened(fixed: &[GeneratePoStFixedSectorsCountInput]) -> Vec<&String> {
         fixed
             .iter()
-            .flat_map(|x| x.input_parts.iter().flat_map(|(x, _)| x.iter()))
+            .flat_map(|x| x.input_parts.iter().map(|(x, _)| x))
             .collect()
     }
 
@@ -361,25 +359,22 @@ mod tests {
         let dynamic_b = GeneratePoStDynamicSectorsCountInput {
             post_config: TEST_CONFIG,
             challenge_seed: [0; 32],
-            input_parts: vec![(Some("a".to_string()), [0; 32])],
+            input_parts: vec![("a".to_string(), [0; 32])],
         };
 
         let dynamic_c = GeneratePoStDynamicSectorsCountInput {
             post_config: TEST_CONFIG,
             challenge_seed: [0; 32],
-            input_parts: vec![
-                (Some("a".to_string()), [0; 32]),
-                (Some("b".to_string()), [0; 32]),
-            ],
+            input_parts: vec![("a".to_string(), [0; 32]), ("b".to_string(), [0; 32])],
         };
 
         let dynamic_d = GeneratePoStDynamicSectorsCountInput {
             post_config: TEST_CONFIG,
             challenge_seed: [0; 32],
             input_parts: vec![
-                (Some("a".to_string()), [0; 32]),
-                (Some("b".to_string()), [0; 32]),
-                (Some("c".to_string()), [0; 32]),
+                ("a".to_string(), [0; 32]),
+                ("b".to_string(), [0; 32]),
+                ("c".to_string(), [0; 32]),
             ],
         };
 
