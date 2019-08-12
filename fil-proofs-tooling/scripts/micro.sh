@@ -6,7 +6,7 @@ JQ_STDERR=$(mktemp)
 
 CMD="cargo run --quiet --bin micro --release ${@}"
 
-eval "RUSTFLAGS=\"-Awarnings -C target-cpu=native\" ${CMD}" 1> $MICRO_SDOUT 2> $MICRO_SDERR
+eval "RUST_BACKTRACE=1 RUSTFLAGS=\"-Awarnings -C target-cpu=native\" ${CMD}" 1> $MICRO_SDOUT 2> $MICRO_SDERR
 
 cat $MICRO_SDOUT | jq '.' 2> $JQ_STDERR
 
