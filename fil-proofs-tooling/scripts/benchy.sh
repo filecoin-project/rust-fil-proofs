@@ -7,7 +7,7 @@ GTIME_STDERR=$(mktemp)
 JQ_STDERR=$(mktemp)
 
 GTIME_BIN="env time"
-CMD="-f '{ \"outputs\": { \"max-resident-set-size-kb\": %M } }' cargo run --quiet --bin benchy --release -- ${@} > ${BENCHY_STDOUT} 2> ${GTIME_STDERR}"
+GTIME_ARG="-f '{ \"outputs\": { \"max-resident-set-size-kb\": %M } }' cargo run --quiet --bin benchy --release -- ${@}"
 
 if [[ $(env time --version 2>&1) != *"GNU"* ]]; then
     if [[ $(/usr/bin/time --version 2>&1) != *"GNU"* ]]; then
@@ -22,7 +22,9 @@ if [[ $(env time --version 2>&1) != *"GNU"* ]]; then
     fi
 fi
 
-eval "RUSTFLAGS=\"-Awarnings -C target-cpu=native\" ${GTIME_BIN} ${CMD}"
+CMD="${GTIME_BIN} ${GTIME_ARG}"
+
+eval "RUST_BACKTRACE=1 RUSTFLAGS=\"-Awarnings -C target-cpu=native\" ${CMD}" > $BENCHY_STDOUT 2> $GTIME_STDERR
 
 jq -s '.[0] * .[1]' $BENCHY_STDOUT $GTIME_STDERR 2> $JQ_STDERR
 
@@ -32,7 +34,7 @@ if [[ ! $? -eq 0 ]]; then
     >&2 echo "*********************************************"
     >&2 echo ""
     >&2 echo "<COMMAND>"
-    >&2 echo "${GTIME_BIN} ${CMD}"
+    >&2 echo "${CMD}"
     >&2 echo "</COMMAND>"
     >&2 echo ""
     >&2 echo "<GTIME_STDERR>"
