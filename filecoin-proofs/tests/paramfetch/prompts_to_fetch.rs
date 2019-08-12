@@ -1,14 +1,14 @@
 use std::collections::btree_map::BTreeMap;
 use std::path::PathBuf;
 use std::fs::File;
-use std::io::Write;
+use std::io::{BufReader, Write};
 
 use failure::Error as FailureError;
 
 use crate::paramfetch::support::session::ParamFetchSessionBuilder;
 use crate::support::tmp_manifest;
 use blake2b_simd::State as Blake2b;
-use filecoin_proofs::param::ParameterData;
+use filecoin_proofs::param::{ParameterData, ParameterMap};
 use rand::Rng;
 
 /// Produce a random sequence of bytes and first 32 characters of hex encoded
@@ -185,11 +185,19 @@ fn invalid_json_produces_error() -> Result<(), FailureError> {
 
 #[test]
 fn no_json_path_uses_default_manifest() -> Result<(), FailureError> {
+    let file = File::open("../parameters.json")?;
+    let reader = BufReader::new(file);
+    let manifest: ParameterMap = serde_json::from_reader(reader)?;
+
     let mut session = ParamFetchSessionBuilder::new(None)
         .with_session_timeout_ms(1000)
         .build();
 
     session.exp_string("using built-in manifest")?;
+
+    for parameter in manifest.keys() {
+        session.exp_string(&format!("checking: {}", parameter))?;
+    }
 
     Ok(())
 }
