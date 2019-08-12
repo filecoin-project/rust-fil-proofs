@@ -16,8 +16,8 @@ set -o pipefail
 # exit_code: The exit code to retry on.
 # attempts: The number of attempts to make.
 # sleep_millis: Multiplier for sleep between attempts. Examples:
-#     If multiplier is 1000, sleep intervals are 1, 2, 4, 8, 16, etc. seconds.
-#     If multiplier is 5000, sleep intervals are 5, 10, 20, 40, 80, etc. seconds.
+#     If multiplier is 1000, sleep intervals are 1, 4, 9, 16, etc. seconds.
+#     If multiplier is 5000, sleep intervals are 5, 20, 45, 80, 125, etc. seconds.
 
 exit_code=$1
 attempts=$2
