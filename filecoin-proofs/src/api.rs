@@ -74,7 +74,7 @@ pub struct SealOutput {
 pub fn generate_post(
     post_config: PoStConfig,
     challenge_seed: ChallengeSeed,
-    input_parts: Vec<(String, Commitment)>,
+    input_parts: Vec<(Option<String>, Commitment)>,
 ) -> error::Result<GeneratePoStDynamicSectorsCountOutput> {
     generate_post_dynamic(GeneratePoStDynamicSectorsCountInput {
         post_config,
@@ -539,12 +539,16 @@ fn generate_post_fixed_sectors_count(
     let trees: Vec<Tree> = fixed
         .input_parts
         .iter()
-        .map(|(s, _)| {
-            make_merkle_tree(
-                s,
-                PaddedBytesAmount(pub_params.vanilla_params.sector_size as u64),
-            )
-            .unwrap()
+        .map(|(access, _)| {
+            if let Some(s) = &access {
+                make_merkle_tree(
+                    s,
+                    PaddedBytesAmount(pub_params.vanilla_params.sector_size as u64),
+                )
+                .unwrap()
+            } else {
+                panic!("faults are not yet supported")
+            }
         })
         .collect();
 
