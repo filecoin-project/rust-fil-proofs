@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fs::File;
-use std::io::{stdin, stdout, BufReader, Write};
+use std::io::{stdin, stdout, Write};
 use std::path::{Path, PathBuf};
 
 use blake2b_simd::State as Blake2b;
@@ -23,22 +23,6 @@ pub struct ParameterData {
     pub cid: String,
     pub digest: String,
     pub sector_size: u64,
-}
-
-// Deserializes bytes from the provided path into a ParameterMap
-pub fn read_parameter_map_from_str(string: &str) -> Result<ParameterMap> {
-    let parameter_map = serde_json::from_str(string)?;
-
-    Ok(parameter_map)
-}
-
-// Deserializes bytes from the provided path into a ParameterMap
-pub fn read_parameter_map_from_disk<P: AsRef<Path>>(source_path: P) -> Result<ParameterMap> {
-    let file = File::open(source_path)?;
-    let reader = BufReader::new(file);
-    let parameter_map = serde_json::from_reader(reader)?;
-
-    Ok(parameter_map)
 }
 
 // Produces an absolute path to a file within the cache

@@ -3,7 +3,7 @@ use std::fs::{create_dir_all, rename, File};
 use std::io;
 use std::io::copy;
 use std::io::prelude::*;
-use std::io::Stdout;
+use std::io::{BufReader, Stdout};
 use std::path::PathBuf;
 use std::process::exit;
 
@@ -115,15 +115,27 @@ Set http_proxy/https_proxy environment variables to specify proxy for ipfs gatew
 }
 
 fn fetch(matches: &ArgMatches) -> Result<()> {
-    let json_path = PathBuf::from(matches.value_of("json").unwrap_or("./parameters.json"));
+    let manifest = if matches.is_present("json") {
+        let json_path = PathBuf::from(matches.value_of("json").unwrap());
+        println!("using json file: {:?}", json_path);
+
+        if !json_path.exists() {
+            return Err(err_msg(format!(
+                "json file '{}' does not exist",
+                &json_path.to_str().unwrap_or("")
+            )));
+        }
+
+        let file = File::open(json_path)?;
+        let reader = BufReader::new(file);
+        serde_json::from_reader(reader)?
+    } else {
+        println!("using built-in manifest");
+        serde_json::from_str(&DEFAULT_PARAMETERS)?
+    };
+
     let retry = matches.is_present("retry");
     let gateway = matches.value_of("gateway").unwrap_or("https://ipfs.io");
-
-    let manifest = if json_path.exists() {
-        read_parameter_map_from_disk(&json_path)?
-    } else {
-        read_parameter_map_from_str(&DEFAULT_PARAMETERS)?
-    };
 
     let mut filenames = get_filenames_from_parameter_map(&manifest)?;
 
