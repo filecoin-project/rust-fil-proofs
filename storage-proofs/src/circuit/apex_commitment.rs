@@ -358,5 +358,4 @@ mod tests {
     fn flat_commitment_circuit() {
         test_apex_commitment_circuit::<FlatApexCommitment<Bls12>>();
     }
-
 }
