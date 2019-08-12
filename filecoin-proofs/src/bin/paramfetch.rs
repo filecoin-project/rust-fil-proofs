@@ -22,6 +22,8 @@ use storage_proofs::parameter_cache::{
 const ERROR_PARAMETER_FILE: &str = "failed to find file in cache";
 const ERROR_PARAMETER_ID: &str = "failed to find key in manifest";
 
+const DEFAULT_PARAMETERS: &str = include_str!("../../../parameters.json");
+
 struct FetchProgress<R> {
     inner: R,
     progress_bar: ProgressBar<Stdout>,
@@ -117,14 +119,12 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
     let retry = matches.is_present("retry");
     let gateway = matches.value_of("gateway").unwrap_or("https://ipfs.io");
 
-    if !json_path.exists() {
-        return Err(err_msg(format!(
-            "json file '{}' does not exist",
-            &json_path.to_str().unwrap_or("")
-        )));
-    }
+    let manifest = if json_path.exists() {
+        read_parameter_map_from_disk(&json_path)?
+    } else {
+        read_parameter_map_from_str(&DEFAULT_PARAMETERS)?
+    };
 
-    let manifest = read_parameter_map_from_disk(&json_path)?;
     let mut filenames = get_filenames_from_parameter_map(&manifest)?;
 
     println!("{} files in manifest...", filenames.len());

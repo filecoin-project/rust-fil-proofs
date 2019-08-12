@@ -26,6 +26,13 @@ pub struct ParameterData {
 }
 
 // Deserializes bytes from the provided path into a ParameterMap
+pub fn read_parameter_map_from_str(string: &str) -> Result<ParameterMap> {
+    let parameter_map = serde_json::from_str(string)?;
+
+    Ok(parameter_map)
+}
+
+// Deserializes bytes from the provided path into a ParameterMap
 pub fn read_parameter_map_from_disk<P: AsRef<Path>>(source_path: P) -> Result<ParameterMap> {
     let file = File::open(source_path)?;
     let reader = BufReader::new(file);
