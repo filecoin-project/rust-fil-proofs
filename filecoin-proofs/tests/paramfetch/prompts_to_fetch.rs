@@ -1,7 +1,7 @@
 use std::collections::btree_map::BTreeMap;
-use std::path::PathBuf;
 use std::fs::File;
 use std::io::{BufReader, Write};
+use std::path::PathBuf;
 
 use failure::Error as FailureError;
 
@@ -178,7 +178,8 @@ fn invalid_json_produces_error() -> Result<(), FailureError> {
         .with_session_timeout_ms(1000)
         .build();
 
-    session.exp_string("fatal error: expected value at line 1 column 1")?;
+    session.exp_string("fatal error: json file")?;
+    session.exp_string("did not parse correctly: expected value at line 1 column 1")?;
 
     Ok(())
 }
