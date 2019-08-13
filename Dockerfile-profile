@@ -73,10 +73,9 @@ cargo build                                                                   \
     cpu-profile                                                               \
   -Z package-features                                                         \
 &&                                                                            \
-CPUPROFILE=zigzag.prof                                                        \
 RUST_BACKTRACE=full                                                           \
 RUST_LOG=trace                                                                \
 target/release/examples/zigzag                                                \
   --size 1024                                                                 \
 &&                                                                            \
-pprof target/release/examples/zigzag zigzag.prof
+pprof target/release/examples/zigzag replicate.profile || bash
