@@ -37,6 +37,8 @@ pretty_env_logger = "0.3.0"
 env_proxy = "0.3"
 array-macro = "1.0.4"
 os_type = "2.2.0"
+flate2 = { version = "1.0.9", features = ["rust_backend"]}
+tar = "0.4.26"
 
 [dependencies.reqwest]
 version = "0.9"

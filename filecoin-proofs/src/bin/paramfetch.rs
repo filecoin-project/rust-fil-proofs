@@ -1,18 +1,21 @@
 use std::collections::HashSet;
 use std::fs::{create_dir_all, rename, File};
-use std::io;
 use std::io::copy;
 use std::io::prelude::*;
 use std::io::{BufReader, Stdout};
 use std::path::PathBuf;
 use std::process::exit;
+use std::process::Command;
+use std::{fs, io};
 
 use clap::{values_t, App, Arg, ArgMatches};
 use env_proxy;
 use failure::err_msg;
+use flate2::read::GzDecoder;
 use itertools::Itertools;
 use pbr::{ProgressBar, Units};
 use reqwest::{header, Client, Proxy, Url};
+use tar::Archive;
 
 use filecoin_proofs::param::*;
 use storage_proofs::parameter_cache::{
@@ -22,7 +25,8 @@ use storage_proofs::parameter_cache::{
 const ERROR_PARAMETER_FILE: &str = "failed to find file in cache";
 const ERROR_PARAMETER_ID: &str = "failed to find key in manifest";
 
-const IPGET_BIN: &'static str = "/var/tmp/ipget";
+const IPGET_PATH: &'static str = "/var/tmp/ipget";
+const IPGET_BIN: &'static str = "/var/tmp/ipget/ipget";
 const DEFAULT_PARAMETERS: &str = include_str!("../../../parameters.json");
 
 struct FetchProgress<R> {
@@ -194,7 +198,7 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
 
     let is_verbose = matches.is_present("verbose");
     // Make sure we have ipget available
-    download_ipget(is_verbose)?;
+    ensure_ipget(is_verbose)?;
 
     loop {
         println!("{} files to fetch...", filenames.len());
@@ -235,25 +239,53 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
+/// Check if ipget is available, dowwnload it otherwise.
+fn ensure_ipget(is_verbose: bool) -> Result<()> {
+    if Path::new(IPGET_BIN).exists() {
+        if is_verbose {
+            println!("{} already exists", IPGET_BIN);
+        }
+        return Ok(());
+    }
+
+    download_ipget(is_verbose)
+}
+
 /// Download a version of ipget.
 fn download_ipget(is_verbose: bool) -> Result<()> {
-    if is_verbose {
-        println!("Downloading ipget...");
-    }
     let version = "v0.3.1";
-    let os = if cfg!(target_os = "macos") {
-        "darwin"
+    let (os, extension) = if cfg!(target_os = "macos") {
+        ("darwin", "tar.gz")
     } else if cfg!(target_os = "windows") {
-        "windows"
+        ("windows", "zip")
     } else {
-        "linux"
+        ("linux", "tar.gz")
     };
     let url = Url::parse(&format!(
-        "https://dist.ipfs.io/ipget/{}/ipget_{}_{}-amd64.tar.gz",
-        version, version, os
+        "https://dist.ipfs.io/ipget/{}/ipget_{}_{}-amd64.{}",
+        version, version, os, extension
     ))?;
 
-    download_file(url, IPGET_BIN, is_verbose)
+    if is_verbose {
+        println!("Downloading ipget@{}-{}...", version, os);
+    }
+
+    // download file
+    let p = format!("{}.{}", IPGET_PATH, extension);
+    download_file(url, &p, is_verbose)?;
+
+    // extract file
+    if extension == "tar.gz" {
+        let tar_gz = fs::File::open(p)?;
+        let tar = GzDecoder::new(tar_gz);
+        let mut archive = Archive::new(tar);
+        archive.unpack("/var/tmp/")?;
+    } else {
+        // TODO: handle zip archives on windows
+        unimplemented!("unzip is not yet supported");
+    }
+
+    Ok(())
 }
 
 /// Download the given file.
@@ -299,15 +331,12 @@ fn fetch_parameter_file(
     is_verbose: bool,
     parameter_map: &ParameterMap,
     filename: &str,
-    gateway: &str,
+    _gateway: &str,
 ) -> Result<()> {
     let parameter_data = parameter_map_lookup(parameter_map, filename)?;
     let path = get_full_path_for_file_within_cache(filename);
 
     create_dir_all(parameter_cache_dir())?;
-
-    // let url = Url::parse(&format!("{}/ipfs/{}", gateway, parameter_data.cid))?;
-
     download_file_with_ipget(&parameter_data.cid, path, is_verbose)
 }
 
@@ -316,13 +345,22 @@ fn download_file_with_ipget(
     target: impl AsRef<Path>,
     is_verbose: bool,
 ) -> Result<()> {
-    use std::process::Command;
-
-    Command::new(IPGET_BIN)
+    let output = Command::new(IPGET_BIN)
         .arg("-o")
         .arg(target.as_ref().to_str().unwrap())
         .arg(cid.as_ref())
-        .spawn()?;
+        .output()?;
+
+    if is_verbose {
+        io::stdout().write_all(&output.stdout)?;
+        io::stderr().write_all(&output.stderr)?;
+    }
+
+    failure::ensure!(
+        output.status.success(),
+        "failed to download {}",
+        target.as_ref().display()
+    );
 
     Ok(())
 }
