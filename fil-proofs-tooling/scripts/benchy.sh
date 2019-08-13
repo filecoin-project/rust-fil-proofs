@@ -26,9 +26,13 @@ CMD="${GTIME_BIN} ${GTIME_ARG}"
 
 eval "RUST_BACKTRACE=1 RUSTFLAGS=\"-Awarnings -C target-cpu=native\" ${CMD}" > $BENCHY_STDOUT 2> $GTIME_STDERR
 
+GTIME_EXIT_CODE=$?
+
 jq -s '.[0] * .[1]' $BENCHY_STDOUT $GTIME_STDERR 2> $JQ_STDERR
 
-if [[ ! $? -eq 0 ]]; then
+JQ_EXIT_CODE=$?
+
+if [[ ! $GTIME_EXIT_CODE -eq 0 || ! $JQ_EXIT_CODE -eq 0 ]]; then
     >&2 echo "*********************************************"
     >&2 echo "* benchy failed - dumping debug information *"
     >&2 echo "*********************************************"
