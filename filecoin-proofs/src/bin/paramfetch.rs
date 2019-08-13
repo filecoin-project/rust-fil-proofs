@@ -64,7 +64,7 @@ Set http_proxy/https_proxy environment variables to specify proxy for ipfs gatew
                 .takes_value(true)
                 .short("j")
                 .long("json")
-                .help("Use specific json file"),
+                .help("Use specific JSON file"),
         )
         .arg(
             Arg::with_name("gateway")
@@ -117,11 +117,11 @@ Set http_proxy/https_proxy environment variables to specify proxy for ipfs gatew
 fn fetch(matches: &ArgMatches) -> Result<()> {
     let manifest = if matches.is_present("json") {
         let json_path = PathBuf::from(matches.value_of("json").unwrap());
-        println!("using json file: {:?}", json_path);
+        println!("using JSON file: {:?}", json_path);
 
         if !json_path.exists() {
             return Err(err_msg(format!(
-                "json file '{}' does not exist",
+                "JSON file '{}' does not exist",
                 &json_path.to_str().unwrap_or("")
             )));
         }
@@ -131,7 +131,7 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
 
         serde_json::from_reader(reader).map_err(|err| {
             failure::format_err!(
-                "json file '{}' did not parse correctly: {}",
+                "JSON file '{}' did not parse correctly: {}",
                 &json_path.to_str().unwrap_or(""),
                 err,
             )
