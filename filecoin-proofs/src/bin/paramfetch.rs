@@ -128,17 +128,14 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
 
         let file = File::open(&json_path)?;
         let reader = BufReader::new(file);
-        let result = serde_json::from_reader(reader);
 
-        if result.is_err() {
-            return Err(err_msg(format!(
+        serde_json::from_reader(reader).map_err(|err| {
+            failure::format_err!(
                 "json file '{}' did not parse correctly: {}",
                 &json_path.to_str().unwrap_or(""),
-                result.err().unwrap(),
-            )));
-        }
-
-        result.unwrap()
+                err,
+            )
+        })?
     } else {
         println!("using built-in manifest");
         serde_json::from_str(&DEFAULT_PARAMETERS)?
