@@ -9,7 +9,7 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-storage-proofs = { version = "^0.5", path = "../storage-proofs" }
+storage-proofs = { version = "^0.6", path = "../storage-proofs" }
 bitvec = "0.5"
 chrono = "0.4"
 rand = "0.4"
