@@ -90,6 +90,10 @@ The results are written into the `.bencher` directory, as JSON files. The benchm
 
 Note: On macOS you need `gtime` (`brew install gnu-time`), as the built in `time` command is not enough.
 
+## Profiling
+
+For development purposes we have an (experimental) support for CPU and memory profiling in Rust through a [`gperftools`](https://github.com/dignifiedquire/rust-gperftools) binding library. These can be enabled though the `cpu-profile` and `heap-profile` features in `filecoin-proofs`. An example setup can be found in this [`Dockerfile`](./Dockerfile-profile) to profile CPU usage for the [`zigzag`](https://github.com/filecoin-project/rust-fil-proofs/blob/e6fa4232404641bb4be1ffc42944d2e734ab9748/filecoin-proofs/examples/zigzag.rs#L40-L61) example.
+
 ## Logging
 
 For better logging with backtraces on errors, developers should use `expects` rather than `expect` on `Result<T, E>` and `Option<T>`.
