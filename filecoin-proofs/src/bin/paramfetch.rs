@@ -3,7 +3,7 @@ use std::fs::{create_dir_all, rename, File};
 use std::io::copy;
 use std::io::prelude::*;
 use std::io::{BufReader, Stdout};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::process::Command;
 use std::{fs, io};
