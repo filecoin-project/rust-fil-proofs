@@ -12,7 +12,7 @@ use storage_proofs::compound_proof::CompoundProof;
 
 // Run this from the command-line, passing the path to the file to which the parameters will be written.
 pub fn main() {
-    pretty_env_logger::init();
+    pretty_env_logger::init_timed();
 
     let args: Vec<String> = env::args().collect();
     let out_file = &args[1];

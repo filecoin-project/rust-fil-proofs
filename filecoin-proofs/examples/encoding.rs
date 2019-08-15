@@ -121,7 +121,7 @@ where
 }
 
 fn main() {
-    pretty_env_logger::init();
+    pretty_env_logger::init_timed();
 
     let matches = App::new(stringify!("DrgPoRep Vanilla Bench"))
         .version("1.0")
