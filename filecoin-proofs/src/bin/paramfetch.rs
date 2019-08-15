@@ -242,13 +242,15 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
 /// Check if ipget is available, dowwnload it otherwise.
 fn ensure_ipget(is_verbose: bool) -> Result<()> {
     if Path::new(IPGET_BIN).exists() {
-        if is_verbose {
-            println!("{} already exists", IPGET_BIN);
-        }
-        return Ok(());
+        Ok(())
+    } else {
+        download_ipget(is_verbose)
     }
-
-    download_ipget(is_verbose)
+    .map(|_| {
+        if is_verbose {
+            println!("ipget installed: {}", IPGET_BIN);
+        }
+    })
 }
 
 /// Download a version of ipget.
