@@ -3,7 +3,7 @@ use std::fs::{create_dir_all, rename, File};
 use std::io;
 use std::io::copy;
 use std::io::prelude::*;
-use std::io::Stdout;
+use std::io::{BufReader, Stdout};
 use std::path::PathBuf;
 use std::process::exit;
 
@@ -21,6 +21,8 @@ use storage_proofs::parameter_cache::{
 
 const ERROR_PARAMETER_FILE: &str = "failed to find file in cache";
 const ERROR_PARAMETER_ID: &str = "failed to find key in manifest";
+
+const DEFAULT_PARAMETERS: &str = include_str!("../../../parameters.json");
 
 struct FetchProgress<R> {
     inner: R,
@@ -62,7 +64,7 @@ Set http_proxy/https_proxy environment variables to specify proxy for ipfs gatew
                 .takes_value(true)
                 .short("j")
                 .long("json")
-                .help("Use specific json file"),
+                .help("Use specific JSON file"),
         )
         .arg(
             Arg::with_name("gateway")
@@ -113,18 +115,35 @@ Set http_proxy/https_proxy environment variables to specify proxy for ipfs gatew
 }
 
 fn fetch(matches: &ArgMatches) -> Result<()> {
-    let json_path = PathBuf::from(matches.value_of("json").unwrap_or("./parameters.json"));
+    let manifest = if matches.is_present("json") {
+        let json_path = PathBuf::from(matches.value_of("json").unwrap());
+        println!("using JSON file: {:?}", json_path);
+
+        if !json_path.exists() {
+            return Err(err_msg(format!(
+                "JSON file '{}' does not exist",
+                &json_path.to_str().unwrap_or("")
+            )));
+        }
+
+        let file = File::open(&json_path)?;
+        let reader = BufReader::new(file);
+
+        serde_json::from_reader(reader).map_err(|err| {
+            failure::format_err!(
+                "JSON file '{}' did not parse correctly: {}",
+                &json_path.to_str().unwrap_or(""),
+                err,
+            )
+        })?
+    } else {
+        println!("using built-in manifest");
+        serde_json::from_str(&DEFAULT_PARAMETERS)?
+    };
+
     let retry = matches.is_present("retry");
     let gateway = matches.value_of("gateway").unwrap_or("https://ipfs.io");
 
-    if !json_path.exists() {
-        return Err(err_msg(format!(
-            "json file '{}' does not exist",
-            &json_path.to_str().unwrap_or("")
-        )));
-    }
-
-    let manifest = read_parameter_map_from_disk(&json_path)?;
     let mut filenames = get_filenames_from_parameter_map(&manifest)?;
 
     println!("{} files in manifest...", filenames.len());

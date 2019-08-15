@@ -134,7 +134,6 @@ impl<E: Engine> ConstraintSystem<E> for BenchCS<E> {
         NR: Into<String>,
         N: FnOnce() -> NR,
     {
-
     }
 
     fn pop_namespace(&mut self) {}

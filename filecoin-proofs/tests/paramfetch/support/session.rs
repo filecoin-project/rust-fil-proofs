@@ -16,12 +16,12 @@ pub struct ParamFetchSessionBuilder {
     cache_dir: TempDir,
     session_timeout_ms: u64,
     whitelisted_sector_sizes: Option<Vec<String>>,
-    manifest: PathBuf,
+    manifest: Option<PathBuf>,
     prompt_enabled: bool,
 }
 
 impl ParamFetchSessionBuilder {
-    pub fn new(manifest: PathBuf) -> ParamFetchSessionBuilder {
+    pub fn new(manifest: Option<PathBuf>) -> ParamFetchSessionBuilder {
         let temp_dir = tempfile::tempdir().expect("could not create temp dir");
 
         ParamFetchSessionBuilder {
@@ -82,13 +82,19 @@ impl ParamFetchSessionBuilder {
             })
             .unwrap_or("".to_string());
 
+        let json_argument = if self.manifest.is_some() {
+            format!("--json={:?}", self.manifest.unwrap())
+        } else {
+            "".to_string()
+        };
+
         let cmd = format!(
-            "{}={} {:?} {} --json={:?} {}",
+            "{}={} {:?} {} {} {}",
             PARAMETER_CACHE_ENV_VAR,
             cache_dir_path,
             paramfetch_path,
             if self.prompt_enabled { "" } else { "--all" },
-            self.manifest,
+            json_argument,
             whitelist
         );
 

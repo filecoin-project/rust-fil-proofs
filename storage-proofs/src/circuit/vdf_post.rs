@@ -60,10 +60,9 @@ impl<'a, H, V> CompoundProof<'a, Bls12, VDFPoSt<H, V>, VDFPoStCircuit<'a, Bls12>
     for VDFPostCompound
 where
     H: 'static + Hasher,
-    V: Vdf<H::Domain>,
+    V: Vdf<H::Domain> + Sync + Send,
     <V as Vdf<H::Domain>>::PublicParams: Send + Sync,
     <V as Vdf<H::Domain>>::Proof: Send + Sync,
-    V: Sync + Send,
 {
     fn generate_public_inputs(
         pub_in: &<VDFPoSt<H, V> as ProofScheme<'a>>::PublicInputs,

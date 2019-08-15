@@ -1,11 +1,14 @@
 use std::collections::btree_map::BTreeMap;
+use std::fs::File;
+use std::io::{BufReader, Write};
+use std::path::PathBuf;
 
 use failure::Error as FailureError;
 
 use crate::paramfetch::support::session::ParamFetchSessionBuilder;
 use crate::support::tmp_manifest;
 use blake2b_simd::State as Blake2b;
-use filecoin_proofs::param::ParameterData;
+use filecoin_proofs::param::{ParameterData, ParameterMap};
 use rand::Rng;
 
 /// Produce a random sequence of bytes and first 32 characters of hex encoded
@@ -43,7 +46,9 @@ fn nothing_to_fetch_if_cache_fully_hydrated() -> Result<(), FailureError> {
         },
     );
 
-    let mut session = ParamFetchSessionBuilder::new(tmp_manifest(Some(manifest))?)
+    let manifest_pbuf = tmp_manifest(Some(manifest))?;
+
+    let mut session = ParamFetchSessionBuilder::new(Some(manifest_pbuf))
         .with_session_timeout_ms(1000)
         .with_file_and_bytes("aaa.vk", &mut aaa_bytes)
         .build();
@@ -68,7 +73,9 @@ fn prompts_to_download_if_file_in_manifest_is_missing() -> Result<(), FailureErr
         },
     );
 
-    let mut session = ParamFetchSessionBuilder::new(tmp_manifest(Some(manifest))?)
+    let manifest_pbuf = tmp_manifest(Some(manifest))?;
+
+    let mut session = ParamFetchSessionBuilder::new(Some(manifest_pbuf))
         .with_session_timeout_ms(1000)
         .build();
 
@@ -99,7 +106,7 @@ fn prompts_to_download_if_file_checksum_does_not_match_manifest() -> Result<(), 
     let manifest_pbuf = tmp_manifest(Some(manifest))?;
 
     // start a session
-    let mut session = ParamFetchSessionBuilder::new(manifest_pbuf)
+    let mut session = ParamFetchSessionBuilder::new(Some(manifest_pbuf))
         .with_session_timeout_ms(1000)
         .with_file_and_bytes("aaa.vk", &mut aaa_bytes)
         .build();
@@ -134,7 +141,9 @@ fn fetches_vk_even_if_sector_size_does_not_match() -> Result<(), FailureError> {
         },
     );
 
-    let mut session = ParamFetchSessionBuilder::new(tmp_manifest(Some(manifest))?)
+    let manifest_pbuf = tmp_manifest(Some(manifest))?;
+
+    let mut session = ParamFetchSessionBuilder::new(Some(manifest_pbuf))
         .with_session_timeout_ms(1000)
         .whitelisted_sector_sizes(vec!["6666".to_string(), "4444".to_string()])
         .build();
@@ -143,6 +152,53 @@ fn fetches_vk_even_if_sector_size_does_not_match() -> Result<(), FailureError> {
     session.exp_string("1 files to check for (re)download")?;
     session.exp_string("checking: aaa.vk")?;
     session.exp_string("does file exist... no")?;
+
+    Ok(())
+}
+
+#[test]
+fn invalid_json_path_produces_error() -> Result<(), FailureError> {
+    let mut session = ParamFetchSessionBuilder::new(Some(PathBuf::from("/invalid/path")))
+        .with_session_timeout_ms(1000)
+        .build();
+
+    session.exp_string("fatal error: JSON file '/invalid/path' does not exist")?;
+
+    Ok(())
+}
+
+#[test]
+fn invalid_json_produces_error() -> Result<(), FailureError> {
+    let manifest_pbuf = tmp_manifest(None)?;
+
+    let mut file = File::create(&manifest_pbuf)?;
+    file.write_all(b"invalid json")?;
+
+    let mut session = ParamFetchSessionBuilder::new(Some(manifest_pbuf))
+        .with_session_timeout_ms(1000)
+        .build();
+
+    session.exp_string("fatal error: JSON file")?;
+    session.exp_string("did not parse correctly: expected value at line 1 column 1")?;
+
+    Ok(())
+}
+
+#[test]
+fn no_json_path_uses_default_manifest() -> Result<(), FailureError> {
+    let file = File::open("../parameters.json")?;
+    let reader = BufReader::new(file);
+    let manifest: ParameterMap = serde_json::from_reader(reader)?;
+
+    let mut session = ParamFetchSessionBuilder::new(None)
+        .with_session_timeout_ms(1000)
+        .build();
+
+    session.exp_string("using built-in manifest")?;
+
+    for parameter in manifest.keys() {
+        session.exp_string(&format!("checking: {}", parameter))?;
+    }
 
     Ok(())
 }

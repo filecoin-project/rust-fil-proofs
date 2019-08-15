@@ -125,5 +125,4 @@ mod test {
             assert_eq!(one_partition_challenges, many_partition_challenges);
         }
     }
-
 }
