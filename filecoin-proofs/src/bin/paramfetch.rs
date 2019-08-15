@@ -254,6 +254,7 @@ fn ensure_ipget(is_verbose: bool) -> Result<()> {
 /// Download a version of ipget.
 fn download_ipget(is_verbose: bool) -> Result<()> {
     let version = "v0.3.1";
+
     let (os, extension) = if cfg!(target_os = "macos") {
         ("darwin", "tar.gz")
     } else if cfg!(target_os = "windows") {
@@ -261,13 +262,14 @@ fn download_ipget(is_verbose: bool) -> Result<()> {
     } else {
         ("linux", "tar.gz")
     };
+
     let url = Url::parse(&format!(
         "https://dist.ipfs.io/ipget/{}/ipget_{}_{}-amd64.{}",
         version, version, os, extension
     ))?;
 
     if is_verbose {
-        println!("Downloading ipget@{}-{}...", version, os);
+        println!("downloading ipget@{}-{}...", version, os);
     }
 
     // download file
@@ -282,7 +284,7 @@ fn download_ipget(is_verbose: bool) -> Result<()> {
         archive.unpack("/var/tmp/")?;
     } else {
         // TODO: handle zip archives on windows
-        unimplemented!("unzip is not yet supported");
+        unimplemented!("failed to install ipget: unzip is not yet supported");
     }
 
     Ok(())
