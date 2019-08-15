@@ -145,7 +145,7 @@ fn do_the_work<H: Hasher>(data_size: usize, m: usize, challenge_count: usize) {
 }
 
 fn main() {
-    pretty_env_logger::init();
+    pretty_env_logger::init_timed();
 
     let matches = App::new(stringify!("DrgPoRep Vanilla Bench"))
         .version("1.0")

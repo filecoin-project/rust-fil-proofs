@@ -39,7 +39,7 @@ impl<R: Read> Read for FetchProgress<R> {
 }
 
 pub fn main() {
-    pretty_env_logger::init();
+    pretty_env_logger::init_timed();
 
     let matches = App::new("paramfetch")
         .version("1.1")
