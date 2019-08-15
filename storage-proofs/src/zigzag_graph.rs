@@ -543,6 +543,12 @@ mod tests {
         (*parents_cache_lock)[zigzag_graph.get_cache_index()].len()
     }
 
+    // Test that 3 (or more) rounds of the Feistel cipher can be used
+    // as a pseudorandom permutation, that is, each input will be mapped
+    // to a unique output (and though not test here, since the cipher
+    // is symmetric, the decryption rounds also work as the inverse
+    // permutation), for more details see:
+    // https://en.wikipedia.org/wiki/Feistel_cipher#Theoretical_work.
     #[test]
     fn test_shuffle() {
         let n = 2_u64.pow(10);
@@ -559,9 +565,20 @@ mod tests {
             for k in 0..d {
                 let permuted =
                     feistel::permute(n * d, i * d + k, feistel_keys, feistel_precomputed);
+
+                // Since the permutation implies a one-to-one correspondence,
+                // traversing the entire input space should generate the entire
+                // output space (in `shuffled`) without repetitions (since a duplicate
+                // output would imply there is another output that wasn't generated
+                // and the permutation would be incomplete).
                 assert!(shuffled.insert(permuted));
             }
         }
+
+        // Actually implied by the previous `assert!` this is left in place as an
+        // extra safety check that indeed the permutation preserved all the output
+        // space (of `n * d` nodes) without repetitions (which the `HashSet` would
+        // have skipped as duplicates).
         assert_eq!(shuffled.len(), (n * d) as usize);
     }
 }
