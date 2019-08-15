@@ -25,8 +25,8 @@ use storage_proofs::parameter_cache::{
 const ERROR_PARAMETER_FILE: &str = "failed to find file in cache";
 const ERROR_PARAMETER_ID: &str = "failed to find key in manifest";
 
-const IPGET_PATH: &'static str = "/var/tmp/ipget";
-const IPGET_BIN: &'static str = "/var/tmp/ipget/ipget";
+const IPGET_PATH: &str = "/var/tmp/ipget";
+const IPGET_BIN: &str = "/var/tmp/ipget/ipget";
 const DEFAULT_PARAMETERS: &str = include_str!("../../../parameters.json");
 
 struct FetchProgress<R> {
