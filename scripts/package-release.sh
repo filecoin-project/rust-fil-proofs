@@ -14,7 +14,7 @@ mkdir -p $TAR_PATH
 mkdir -p $TAR_PATH/bin
 mkdir -p $TAR_PATH/misc
 
-cp parameters.json $TAR_PATH/misc/
+cp filecoin-proofs/parameters.json $TAR_PATH/misc/
 cp target/release/paramcache $TAR_PATH/bin/
 cp target/release/paramfetch $TAR_PATH/bin/
 

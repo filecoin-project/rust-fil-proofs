@@ -26,7 +26,7 @@ const ERROR_PARAMETER_FILE: &str = "failed to find file in cache";
 const ERROR_PARAMETER_ID: &str = "failed to find key in manifest";
 
 const IPGET_PATH: &str = "/var/tmp/ipget";
-const DEFAULT_PARAMETERS: &str = include_str!("../../../parameters.json");
+const DEFAULT_PARAMETERS: &str = include_str!("../../parameters.json");
 const IPGET_VERSION: &str = "v0.3.1";
 
 struct FetchProgress<R> {
