@@ -103,6 +103,12 @@ Defaults to '{}'
                 .help("Use specific ipget binary instead of looking for (or installing) one in /var/tmp/ipget/ipget"),
         )
         .arg(
+            Arg::with_name("ipget-args")
+                .takes_value(true)
+                .long("ipget-args")
+                .help("Specify additional arguments for ipget")
+        )
+        .arg(
             Arg::with_name("ipget-version")
                 .long("ipget-version")
                 .takes_value(true)
@@ -199,6 +205,7 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
     let is_verbose = matches.is_present("verbose");
     let ipget_bin_path = matches.value_of("ipget-bin");
     let ipget_version = matches.value_of("ipget-version").unwrap();
+    let ipget_args = matches.value_of("ipget-args");
 
     // Make sure we have ipget available
     if ipget_bin_path.is_none() {
@@ -220,7 +227,7 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
             print!("downloading file... ");
             io::stdout().flush().unwrap();
 
-            match fetch_parameter_file(is_verbose, &manifest, &filename, &ipget_path) {
+            match fetch_parameter_file(is_verbose, &manifest, &filename, &ipget_path, ipget_args) {
                 Ok(_) => println!("ok\n"),
                 Err(err) => println!("error: {}\n", err),
             }
@@ -350,12 +357,19 @@ fn fetch_parameter_file(
     parameter_map: &ParameterMap,
     filename: &str,
     ipget_bin_path: impl AsRef<Path>,
+    ipget_args: Option<impl AsRef<str>>,
 ) -> Result<()> {
     let parameter_data = parameter_map_lookup(parameter_map, filename)?;
     let path = get_full_path_for_file_within_cache(filename);
 
     create_dir_all(parameter_cache_dir())?;
-    download_file_with_ipget(&parameter_data.cid, path, is_verbose, ipget_bin_path)
+    download_file_with_ipget(
+        &parameter_data.cid,
+        path,
+        is_verbose,
+        ipget_bin_path,
+        ipget_args,
+    )
 }
 
 fn download_file_with_ipget(
@@ -363,12 +377,18 @@ fn download_file_with_ipget(
     target: impl AsRef<Path>,
     is_verbose: bool,
     ipget_bin_path: impl AsRef<Path>,
+    ipget_args: Option<impl AsRef<str>>,
 ) -> Result<()> {
-    let output = Command::new(ipget_bin_path.as_ref().as_os_str())
-        .arg("-o")
+    let mut cmd = Command::new(ipget_bin_path.as_ref().as_os_str());
+    cmd.arg("-o")
         .arg(target.as_ref().to_str().unwrap())
-        .arg(cid.as_ref())
-        .output()?;
+        .arg(cid.as_ref());
+
+    if let Some(args) = ipget_args {
+        cmd.args(args.as_ref().split(' '));
+    }
+
+    let output = cmd.output()?;
 
     if is_verbose {
         io::stdout().write_all(&output.stdout)?;
