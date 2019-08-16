@@ -89,13 +89,14 @@ impl ParamFetchSessionBuilder {
         };
 
         let cmd = format!(
-            "{}={} {:?} {} {} {}",
+            "{}={} {:?} {} {} {} --ipget-bin={:?}",
             PARAMETER_CACHE_ENV_VAR,
             cache_dir_path,
             paramfetch_path,
             if self.prompt_enabled { "" } else { "--all" },
             json_argument,
-            whitelist
+            whitelist,
+            "true"
         );
 
         p.execute(&cmd, ".*").expect("could not execute paramfetch");
