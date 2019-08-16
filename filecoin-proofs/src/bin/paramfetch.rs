@@ -26,8 +26,8 @@ const ERROR_PARAMETER_FILE: &str = "failed to find file in cache";
 const ERROR_PARAMETER_ID: &str = "failed to find key in manifest";
 
 const IPGET_PATH: &str = "/var/tmp/ipget";
-const IPGET_BIN: &str = "/var/tmp/ipget/ipget";
 const DEFAULT_PARAMETERS: &str = include_str!("../../../parameters.json");
+const IPGET_VERSION: &str = "v0.3.1";
 
 struct FetchProgress<R> {
     inner: R,
@@ -101,6 +101,13 @@ Defaults to '{}'
                 .short("i")
                 .long("ipget-bin")
                 .help("Use specific ipget binary instead of looking for (or installing) one in /var/tmp/ipget/ipget"),
+        )
+        .arg(
+            Arg::with_name("ipget-version")
+                .long("ipget-version")
+                .takes_value(true)
+                .default_value(IPGET_VERSION)
+                .help("Set the version of ipget to use")
         )
         .get_matches();
 
@@ -191,11 +198,18 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
 
     let is_verbose = matches.is_present("verbose");
     let ipget_bin_path = matches.value_of("ipget-bin");
+    let ipget_version = matches.value_of("ipget-version").unwrap();
 
     // Make sure we have ipget available
     if ipget_bin_path.is_none() {
-        ensure_ipget(is_verbose)?;
+        ensure_ipget(is_verbose, ipget_version)?;
     }
+
+    let ipget_path = if let Some(p) = ipget_bin_path {
+        PathBuf::from(p)
+    } else {
+        PathBuf::from(&get_ipget_bin(ipget_version))
+    };
 
     loop {
         println!("{} files to fetch...", filenames.len());
@@ -206,12 +220,7 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
             print!("downloading file... ");
             io::stdout().flush().unwrap();
 
-            match fetch_parameter_file(
-                is_verbose,
-                &manifest,
-                &filename,
-                PathBuf::from(ipget_bin_path.unwrap_or(IPGET_BIN)),
-            ) {
+            match fetch_parameter_file(is_verbose, &manifest, &filename, &ipget_path) {
                 Ok(_) => println!("ok\n"),
                 Err(err) => println!("error: {}\n", err),
             }
@@ -241,24 +250,27 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
+fn get_ipget_bin(version: &str) -> String {
+    format!("{}-{}/ipget/ipget", IPGET_PATH, version)
+}
+
 /// Check if ipget is available, dowwnload it otherwise.
-fn ensure_ipget(is_verbose: bool) -> Result<()> {
-    if Path::new(IPGET_BIN).exists() {
+fn ensure_ipget(is_verbose: bool, version: &str) -> Result<()> {
+    let ipget_bin = get_ipget_bin(version);
+    if Path::new(&ipget_bin).exists() {
         Ok(())
     } else {
-        download_ipget(is_verbose)
+        download_ipget(is_verbose, version)
     }
     .map(|_| {
         if is_verbose {
-            println!("ipget installed: {}", IPGET_BIN);
+            println!("ipget installed: {}", ipget_bin);
         }
     })
 }
 
 /// Download a version of ipget.
-fn download_ipget(is_verbose: bool) -> Result<()> {
-    let version = "v0.3.1";
-
+fn download_ipget(is_verbose: bool, version: &str) -> Result<()> {
     let (os, extension) = if cfg!(target_os = "macos") {
         ("darwin", "tar.gz")
     } else if cfg!(target_os = "windows") {
@@ -277,7 +289,7 @@ fn download_ipget(is_verbose: bool) -> Result<()> {
     }
 
     // download file
-    let p = format!("{}.{}", IPGET_PATH, extension);
+    let p = format!("{}-{}.{}", IPGET_PATH, version, extension);
     download_file(url, &p, is_verbose)?;
 
     // extract file
@@ -285,7 +297,7 @@ fn download_ipget(is_verbose: bool) -> Result<()> {
         let tar_gz = fs::File::open(p)?;
         let tar = GzDecoder::new(tar_gz);
         let mut archive = Archive::new(tar);
-        archive.unpack("/var/tmp/")?;
+        archive.unpack(format!("/var/tmp/ipget-{}", version))?;
     } else {
         // TODO: handle zip archives on windows
         unimplemented!("failed to install ipget: unzip is not yet supported");
