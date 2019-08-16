@@ -97,6 +97,7 @@ Defaults to '{}'
         )
         .arg(
             Arg::with_name("ipget-bin")
+                .conflicts_with("ipget-version")
                 .takes_value(true)
                 .short("i")
                 .long("ipget-bin")
@@ -110,9 +111,9 @@ Defaults to '{}'
         )
         .arg(
             Arg::with_name("ipget-version")
+                .conflicts_with("ipget-bin")
                 .long("ipget-version")
                 .takes_value(true)
-                .default_value(IPGET_VERSION)
                 .help("Set the version of ipget to use")
         )
         .get_matches();
@@ -204,7 +205,7 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
 
     let is_verbose = matches.is_present("verbose");
     let ipget_bin_path = matches.value_of("ipget-bin");
-    let ipget_version = matches.value_of("ipget-version").unwrap();
+    let ipget_version = matches.value_of("ipget-version").unwrap_or(IPGET_VERSION);
     let ipget_args = matches.value_of("ipget-args");
 
     // Make sure we have ipget available
