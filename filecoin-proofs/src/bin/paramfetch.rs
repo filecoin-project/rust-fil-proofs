@@ -53,11 +53,6 @@ pub fn main() {
                 "
 Set {} to specify Groth parameter and verifying key-cache directory.
 Defaults to '{}'
-
-Use -g,--gateway to specify ipfs gateway.
-Defaults to 'https://ipfs.io'
-
-Set http_proxy/https_proxy environment variables to specify proxy for ipfs gateway.
 ",
                 PARAMETER_CACHE_ENV_VAR,
                 PARAMETER_CACHE_DIR
@@ -70,14 +65,6 @@ Set http_proxy/https_proxy environment variables to specify proxy for ipfs gatew
                 .short("j")
                 .long("json")
                 .help("Use specific JSON file"),
-        )
-        .arg(
-            Arg::with_name("gateway")
-                .value_name("URL")
-                .takes_value(true)
-                .short("g")
-                .long("gateway")
-                .help("Use specific ipfs gateway"),
         )
         .arg(
             Arg::with_name("retry")
@@ -154,7 +141,6 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
     };
 
     let retry = matches.is_present("retry");
-    let gateway = matches.value_of("gateway").unwrap_or("https://ipfs.io");
 
     let mut filenames = get_filenames_from_parameter_map(&manifest)?;
 
@@ -224,7 +210,6 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
                 is_verbose,
                 &manifest,
                 &filename,
-                &gateway,
                 PathBuf::from(ipget_bin_path.unwrap_or(IPGET_BIN)),
             ) {
                 Ok(_) => println!("ok\n"),
@@ -352,7 +337,6 @@ fn fetch_parameter_file(
     is_verbose: bool,
     parameter_map: &ParameterMap,
     filename: &str,
-    _gateway: &str,
     ipget_bin_path: impl AsRef<Path>,
 ) -> Result<()> {
     let parameter_data = parameter_map_lookup(parameter_map, filename)?;
