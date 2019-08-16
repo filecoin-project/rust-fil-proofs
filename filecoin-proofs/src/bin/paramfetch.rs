@@ -108,6 +108,13 @@ Set http_proxy/https_proxy environment variables to specify proxy for ipfs gatew
                 .long("verbose")
                 .help("Print diagnostic information to stdout"),
         )
+        .arg(
+            Arg::with_name("ipget-bin")
+                .takes_value(true)
+                .short("i")
+                .long("ipget-bin")
+                .help("Use specific ipget binary instead of looking for (or installing) one in /var/tmp/ipget/ipget"),
+        )
         .get_matches();
 
     match fetch(&matches) {
@@ -197,8 +204,12 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
     }
 
     let is_verbose = matches.is_present("verbose");
+    let ipget_bin_path = matches.value_of("ipget-bin");
+
     // Make sure we have ipget available
-    ensure_ipget(is_verbose)?;
+    if ipget_bin_path.is_none() {
+        ensure_ipget(is_verbose)?;
+    }
 
     loop {
         println!("{} files to fetch...", filenames.len());
@@ -209,7 +220,13 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
             print!("downloading file... ");
             io::stdout().flush().unwrap();
 
-            match fetch_parameter_file(is_verbose, &manifest, &filename, &gateway) {
+            match fetch_parameter_file(
+                is_verbose,
+                &manifest,
+                &filename,
+                &gateway,
+                PathBuf::from(ipget_bin_path.unwrap_or(IPGET_BIN)),
+            ) {
                 Ok(_) => println!("ok\n"),
                 Err(err) => println!("error: {}\n", err),
             }
@@ -336,20 +353,22 @@ fn fetch_parameter_file(
     parameter_map: &ParameterMap,
     filename: &str,
     _gateway: &str,
+    ipget_bin_path: impl AsRef<Path>,
 ) -> Result<()> {
     let parameter_data = parameter_map_lookup(parameter_map, filename)?;
     let path = get_full_path_for_file_within_cache(filename);
 
     create_dir_all(parameter_cache_dir())?;
-    download_file_with_ipget(&parameter_data.cid, path, is_verbose)
+    download_file_with_ipget(&parameter_data.cid, path, is_verbose, ipget_bin_path)
 }
 
 fn download_file_with_ipget(
     cid: impl AsRef<str>,
     target: impl AsRef<Path>,
     is_verbose: bool,
+    ipget_bin_path: impl AsRef<Path>,
 ) -> Result<()> {
-    let output = Command::new(IPGET_BIN)
+    let output = Command::new(ipget_bin_path.as_ref().as_os_str())
         .arg("-o")
         .arg(target.as_ref().to_str().unwrap())
         .arg(cid.as_ref())
