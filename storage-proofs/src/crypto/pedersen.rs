@@ -47,31 +47,15 @@ impl Personalization {
     }
 }
 
-pub fn pedersen_hash<I>(
+pub fn pedersen_hash(
     personalization: Personalization,
-    bits: I,
-) -> GroupProjective<JubJubParameters>
-where
-    I: IntoIterator<Item = bool>,
-{
-    let mut bits: Vec<bool> = personalization
-        .get_bits()
-        .into_iter()
-        .chain(bits.into_iter())
-        .collect();
-
-    while bits.len() % 8 != 0 {
-        bits.push(false);
-    }
-
-    let bytes = BitVec::<bitvec::LittleEndian, _>::from(&bits[..]);
-
-    PedersenCRH::<JubJub, BigWindow>::evaluate(&PEDERSEN_PARAMS, bytes.as_ref()).unwrap()
+    bytes: &[u8],
+) -> GroupProjective<JubJubParameters> {
+    PedersenCRH::<JubJub, BigWindow>::evaluate(&PEDERSEN_PARAMS, bytes).unwrap()
 }
 
 pub fn pedersen(data: &[u8]) -> GroupProjective<JubJubParameters> {
-    let bits = BitVec::<bitvec::LittleEndian, u8>::from(data);
-    pedersen_hash(Personalization::None, bits)
+    pedersen_hash(Personalization::None, data)
 }
 
 /// Pedersen hashing for inputs that have length multiple of the block size `256`. Based on pedersen hashes and a Merkle-Damgard construction.

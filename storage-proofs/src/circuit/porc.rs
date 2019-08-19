@@ -7,7 +7,7 @@ use snark::{Circuit, ConstraintSystem, SynthesisError};
 use snark_gadgets::{
     boolean,
     fields::fp::FpGadget,
-    utils::{AllocGadget, CondReverseGadget, ToBitsGadget},
+    utils::{AllocGadget, CondReverseGadget, ToBytesGadget},
     Assignment,
 };
 
@@ -192,18 +192,18 @@ impl<'a> Circuit<Bls12> for PoRCCircuit<'a> {
                 )?;
 
                 let mut preimage = vec![];
-                let mut xl_bits = xl.to_bits(cs.ns(|| "xl into bits"))?;
-                let mut xr_bits = xr.to_bits(cs.ns(|| "xr into bits"))?;
+                let mut xl_bytes = xl.to_bytes(cs.ns(|| "xl into bytes"))?;
+                let mut xr_bytes = xr.to_bytes(cs.ns(|| "xr into bytes"))?;
 
-                xl_bits.reverse();
-                xr_bits.reverse();
-                preimage.extend(xl_bits);
-                preimage.extend(xr_bits);
+                xl_bytes.reverse();
+                xr_bytes.reverse();
+                preimage.extend(xl_bytes);
+                preimage.extend(xr_bytes);
 
                 // Compute the new subtree value
                 cur = pedersen::pedersen_compression_num(
                     cs.ns(|| "computation of pedersen hash"),
-                    &preimage,
+                    &preimage[..],
                     params,
                 )?
                 .clone(); // Injective encoding

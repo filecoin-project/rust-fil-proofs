@@ -7,7 +7,7 @@ use snark::{Circuit, ConstraintSystem, SynthesisError};
 use snark_gadgets::{
     boolean,
     fields::fp::FpGadget,
-    utils::{AllocGadget, CondReverseGadget, ToBitsGadget},
+    utils::{AllocGadget, CondReverseGadget, ToBytesGadget},
 };
 
 use crate::circuit::{constraint, multipack, variables::Root};
@@ -180,17 +180,17 @@ impl<'a, H: Hasher> Circuit<Bls12> for PoRCircuit<'a, H> {
                     &path_element,
                 )?;
 
-                let mut xl_bits = xl.to_bits(cs.ns(|| "xl into bits"))?;
-                let mut xr_bits = xr.to_bits(cs.ns(|| "xr into bits"))?;
+                let mut xl_bytes = xl.to_bytes(cs.ns(|| "xl into bytes"))?;
+                let mut xr_bytes = xr.to_bytes(cs.ns(|| "xr into bytes"))?;
 
-                xl_bits.reverse();
-                xr_bits.reverse();
+                // xl_bytes.reverse();
+                // xr_bytes.reverse();
 
                 // Compute the new subtree value
                 cur = H::Function::hash_leaf_circuit(
                     cs.ns(|| "computation of pedersen hash"),
-                    &xl_bits,
-                    &xr_bits,
+                    &xl_bytes[..],
+                    &xr_bytes[..],
                     i,
                     params,
                 )?;
@@ -331,12 +331,12 @@ mod tests {
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_pedersen() {
-        test_por_input_circuit_with_bls12_381::<PedersenHasher>(25740);
+        test_por_input_circuit_with_bls12_381::<PedersenHasher>(25746);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_blake2s() {
-        test_por_input_circuit_with_bls12_381::<Blake2sHasher>(65388);
+        test_por_input_circuit_with_bls12_381::<Blake2sHasher>(65394);
     }
 
     fn test_por_input_circuit_with_bls12_381<H: Hasher>(num_constraints: usize) {

@@ -3,9 +3,9 @@ use std::marker::PhantomData;
 use algebra::curves::bls12_381::Bls12_381 as Bls12;
 use algebra::fields::bls12_381::Fr;
 use snark::{Circuit, ConstraintSystem, SynthesisError};
-use snark_gadgets::boolean;
 use snark_gadgets::fields::fp::FpGadget;
-use snark_gadgets::utils::{AllocGadget, ToBitsGadget};
+use snark_gadgets::uint8::UInt8;
+use snark_gadgets::utils::{AllocGadget, ToBytesGadget};
 
 use crate::circuit::constraint;
 use crate::circuit::drgporep::{ComponentPrivateInputs, DrgPoRepCompound};
@@ -201,29 +201,29 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, H> {
         // Compute CommRStar = Hash(replica_id | comm_r_0 | ... | comm_r_l).
         {
             // Collect the bits to be hashed into crs_boolean.
-            let mut crs_boolean = replica_id_num.to_bits(cs.ns(|| "replica_id_bits"))?;
+            let mut crs_bytes = replica_id_num.to_bytes(cs.ns(|| "replica_id_bytes"))?;
 
-            crs_boolean.reverse();
+            crs_bytes.reverse();
 
             // sad padding is sad
-            while crs_boolean.len() % 256 != 0 {
-                crs_boolean.push(boolean::Boolean::Constant(false));
+            while crs_bytes.len() % 256 != 0 {
+                crs_bytes.push(UInt8::constant(8));
             }
 
             for (i, comm_r) in comm_rs.into_iter().enumerate() {
-                let mut comm_r_bits = comm_r.to_bits(cs.ns(|| format!("comm_r-bits-{}", i)))?;
-                comm_r_bits.reverse();
-                crs_boolean.extend(comm_r_bits);
+                let mut comm_r_bytes = comm_r.to_bytes(cs.ns(|| format!("comm_r-bits-{}", i)))?;
+                comm_r_bytes.reverse();
+                crs_bytes.extend(comm_r_bytes);
                 // sad padding is sad
-                while crs_boolean.len() % 256 != 0 {
-                    crs_boolean.push(boolean::Boolean::Constant(false));
+                while crs_bytes.len() % 256 != 0 {
+                    crs_bytes.push(UInt8::constant(0));
                 }
             }
 
             // Calculate the pedersen hash.
             let computed_comm_r_star = H::Function::hash_circuit(
                 cs.ns(|| "comm_r_star"),
-                &crs_boolean[..],
+                &crs_bytes[..],
                 &PEDERSEN_PARAMS,
             )?;
 

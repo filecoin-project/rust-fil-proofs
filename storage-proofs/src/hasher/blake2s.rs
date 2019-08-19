@@ -12,8 +12,7 @@ use merkletree::hash::{Algorithm, Hashable};
 use merkletree::merkle::Element;
 use rand::{Rand, Rng};
 use snark::{ConstraintSystem, SynthesisError};
-use snark_gadgets::bits::uint32::UInt32;
-use snark_gadgets::boolean::Boolean;
+use snark_gadgets::bits::{uint32::UInt32, uint8::UInt8};
 use snark_gadgets::fields::fp::FpGadget;
 use snark_gadgets::utils::AllocGadget;
 
@@ -218,31 +217,29 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
 
     fn hash_leaf_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
-        left: &[Boolean],
-        right: &[Boolean],
+        left: &[UInt8],
+        right: &[UInt8],
         _height: usize,
         params: &PedersenParameters<JubJub>,
     ) -> std::result::Result<FpGadget<Bls12>, SynthesisError> {
-        let mut preimage: Vec<Boolean> = vec![];
+        let mut preimage: Vec<UInt8> = vec![];
 
         preimage.extend_from_slice(left);
-        while preimage.len() % 8 != 0 {
-            preimage.push(Boolean::Constant(false));
-        }
-
         preimage.extend_from_slice(right);
-        while preimage.len() % 8 != 0 {
-            preimage.push(Boolean::Constant(false));
-        }
 
         Self::hash_circuit(cs, &preimage[..], params)
     }
 
     fn hash_circuit<CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
-        bits: &[Boolean],
+        bytes: &[UInt8],
         _params: &PedersenParameters<JubJub>,
     ) -> std::result::Result<FpGadget<Bls12>, SynthesisError> {
+        let mut bits = Vec::with_capacity(bytes.len() * 8);
+        for byte in bytes.iter() {
+            bits.extend_from_slice(&byte.into_bits_le()[..]);
+        }
+
         let alloc_uint32 = blake2s_gadget(cs.ns(|| "hash"), &bits[..])?;
         let fr = match alloc_uint32[0].get_value() {
             Some(_) => {

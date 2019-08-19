@@ -1,13 +1,16 @@
+use algebra::biginteger::BigInteger;
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use algebra::fields::{bls12_381::Fr, BitIterator, FpParameters, PrimeField};
+use algebra::ToBytes;
+use rand::Rng;
+
 use crate::crypto;
 use crate::crypto::pedersen::{pedersen_hash, Personalization};
 use crate::error;
 use crate::fr32::{bytes_into_fr, fr_into_bytes};
 use crate::hasher::pedersen::{PedersenDomain, PedersenFunction, PedersenHasher};
 use crate::merkle::{MerkleProof, MerkleTree};
-use algebra::biginteger::BigInteger;
-use algebra::curves::bls12_381::Bls12_381 as Bls12;
-use algebra::fields::{bls12_381::Fr, BitIterator, FpParameters, PrimeField};
-use rand::Rng;
+
 #[macro_export]
 macro_rules! table_tests {
     ($property_test_func:ident {
@@ -153,22 +156,12 @@ pub fn random_merkle_path_with_value<R: Rng>(
             std::mem::swap(&mut lhs, &mut rhs);
         }
 
-        let mut lhs: Vec<bool> = BitIterator::new(lhs.into_repr()).collect();
-        let mut rhs: Vec<bool> = BitIterator::new(rhs.into_repr()).collect();
+        let mut bytes: Vec<u8> = Vec::new();
 
-        lhs.reverse();
-        rhs.reverse();
+        lhs.into_repr().write(&mut bytes).unwrap();
+        rhs.into_repr().write(&mut bytes).unwrap();
 
-        cur = pedersen_hash(
-            Personalization::None,
-            lhs.into_iter()
-                .take(<Fr as PrimeField>::Params::MODULUS_BITS as usize)
-                .chain(
-                    rhs.into_iter()
-                        .take(<Fr as PrimeField>::Params::MODULUS_BITS as usize),
-                ),
-        )
-        .x
+        cur = pedersen_hash(Personalization::None, &bytes).x
     }
 
     (auth_path, cur)
