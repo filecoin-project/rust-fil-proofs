@@ -195,16 +195,24 @@ jobs:
           command: apt-get install time jq -yqq
       - run:
           name: Run hash-constraints benchmarks on remote host
-          command: ./fil-proofs-tooling/scripts/benchy-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" hash-circuits
+          command: ./fil-proofs-tooling/scripts/benchy-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" hash-constraints > hash-constraints.json
           no_output_timeout: 60m
       - run:
           name: Run micro benchmarks
-          command: ./fil-proofs-tooling/scripts/micro-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}"
+          command: ./fil-proofs-tooling/scripts/micro-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" > micro-benchmarks.json
           no_output_timeout: 60m
       - run:
           name: Run ZigZag benchmarks using 1GiB sectors
-          command: ./fil-proofs-tooling/scripts/benchy-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" zigzag --size=$((1024*1024))
+          command: ./fil-proofs-tooling/scripts/benchy-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" zigzag --size=$((1024*1024)) > zigzag-benchmarks.json
           no_output_timeout: 60m
+      - run:
+          name: Aggregate benchmarks into single JSON document
+          command: |
+            jq -s '.[0] * { benchmarks: { "hash-constraints": .[1], "zigzag-benchmarks": .[2], "micro-benchmarks": .[3] } }' \
+              <(jq 'del (.benchmarks)' micro-benchmarks.json) \
+              <(jq '.benchmarks' hash-constraints.json) \
+              <(jq '.benchmarks' zigzag-benchmarks.json) \
+              <(jq '.benchmarks' micro-benchmarks.json)
 
   rustfmt:
     docker:

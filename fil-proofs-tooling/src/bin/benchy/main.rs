@@ -149,8 +149,8 @@ fn main() {
                 })
                 .expect("zigzag failed");
         }
-        ("hash-circuits", Some(_m)) => {
-            hash_fns::run().expect("hash-circuits failed");
+        ("hash-constraints", Some(_m)) => {
+            hash_fns::run().expect("hash-constraints failed");
         }
         _ => panic!("carnation"),
     }

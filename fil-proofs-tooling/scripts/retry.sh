@@ -35,7 +35,9 @@ for attempt in `seq 1 $attempts`; do
 
     sleep_ms="$(($attempt * $attempt * $sleep_millis))"
 
-    echo >&2 "sleeping ${sleep_ms:0:-3}.${sleep_ms: -3}s and then retrying ($((attempt + 1))/${attempts})"
+    sleep_seconds=$(echo "scale=2; ${sleep_ms}/1000" | bc)
 
-    sleep "${sleep_ms:0:-3}.${sleep_ms: -3}"
+    echo >&2 "sleeping ${sleep_seconds}s and then retrying ($((attempt + 1))/${attempts})"
+
+    sleep "${sleep_seconds}"
 done
