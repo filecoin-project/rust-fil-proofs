@@ -16,10 +16,10 @@ use crate::hasher::{Domain, Hasher};
 // `mmap`ed `MerkleTree` (replacing the previously `Vec`-backed
 // `MerkleTree`, now encapsulated in `merkle::VecStore` and exposed
 // as `VecMerkleTree`).
-pub type DiskMmapStore<E> = merkletree::merkle::DiskMmapStore<E>;
+pub type DiskStore<E> = merkletree::merkle::DiskStore<E>;
 pub type VecMerkleTree<T, A> = merkle::MerkleTree<T, A, VecStore<T>>;
 #[cfg(feature = "disk-trees")]
-pub type MerkleTree<T, A> = merkle::MerkleTree<T, A, DiskMmapStore<T>>;
+pub type MerkleTree<T, A> = merkle::MerkleTree<T, A, DiskStore<T>>;
 #[cfg(not(feature = "disk-trees"))]
 pub type MerkleTree<T, A> = merkle::MerkleTree<T, A, MmapStore<T>>;
 

@@ -12,7 +12,7 @@ use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::{data_at_node, NODE_SIZE};
 
 #[cfg(feature = "disk-trees")]
-use crate::merkle::DiskMmapStore;
+use crate::merkle::DiskStore;
 #[cfg(feature = "disk-trees")]
 use merkletree::merkle::next_pow2;
 #[cfg(feature = "disk-trees")]
@@ -122,10 +122,9 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
                 top_half_path.to_str()
             );
 
-            let leaves_disk_mmap =
-                DiskMmapStore::new_with_path(next_pow2(self.size()), leaves_path);
+            let leaves_disk_mmap = DiskStore::new_with_path(next_pow2(self.size()), leaves_path);
             let top_half_disk_mmap =
-                DiskMmapStore::new_with_path(next_pow2(self.size()), top_half_path);
+                DiskStore::new_with_path(next_pow2(self.size()), top_half_path);
 
             // FIXME: `new_with_path` is using the `from_iter` implementation,
             //  instead the `parallel` flag should be passed also as argument
@@ -138,7 +137,7 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
                 top_half_disk_mmap,
             ))
         // If path is `None` use the existing code that will eventually
-        // call the default `DiskMmapStore::new` creating a temporary
+        // call the default `DiskStore::new` creating a temporary
         // file.
         } else if parallel {
             Ok(MerkleTree::from_par_iter(

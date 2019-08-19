@@ -15,7 +15,7 @@ bench = false
 bitvec = "0.5"
 rand = "0.4"
 libc = "0.2"
-merkletree = "0.7.1"
+merkletree = "=0.8"
 failure = "0.1"
 byteorder = "1"
 config = "0.9.3"
