@@ -419,7 +419,7 @@ where
 mod tests {
     use super::*;
 
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
     use crate::drgraph::new_seed;
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
@@ -541,5 +541,44 @@ mod tests {
     fn get_cache_size<H: 'static + Hasher>(zigzag_graph: &ZigZagBucketGraph<H>) -> usize {
         let parents_cache_lock = zigzag_graph.parents_cache.read().unwrap();
         (*parents_cache_lock)[zigzag_graph.get_cache_index()].len()
+    }
+
+    // Test that 3 (or more) rounds of the Feistel cipher can be used
+    // as a pseudorandom permutation, that is, each input will be mapped
+    // to a unique output (and though not test here, since the cipher
+    // is symmetric, the decryption rounds also work as the inverse
+    // permutation), for more details see:
+    // https://en.wikipedia.org/wiki/Feistel_cipher#Theoretical_work.
+    #[test]
+    fn test_shuffle() {
+        let n = 2_u64.pow(10);
+        let d = DEFAULT_EXPANSION_DEGREE as u64;
+        // Use a relatively small value of `n` as Feistel is expensive (but big
+        // enough that `n >> d`).
+
+        let mut shuffled: HashSet<u64> = HashSet::with_capacity((n * d) as usize);
+
+        let feistel_keys = &[1, 2, 3, 4];
+        let feistel_precomputed = feistel::precompute((n * d) as feistel::Index);
+
+        for i in 0..n {
+            for k in 0..d {
+                let permuted =
+                    feistel::permute(n * d, i * d + k, feistel_keys, feistel_precomputed);
+
+                // Since the permutation implies a one-to-one correspondence,
+                // traversing the entire input space should generate the entire
+                // output space (in `shuffled`) without repetitions (since a duplicate
+                // output would imply there is another output that wasn't generated
+                // and the permutation would be incomplete).
+                assert!(shuffled.insert(permuted));
+            }
+        }
+
+        // Actually implied by the previous `assert!` this is left in place as an
+        // extra safety check that indeed the permutation preserved all the output
+        // space (of `n * d` nodes) without repetitions (which the `HashSet` would
+        // have skipped as duplicates).
+        assert_eq!(shuffled.len(), (n * d) as usize);
     }
 }
