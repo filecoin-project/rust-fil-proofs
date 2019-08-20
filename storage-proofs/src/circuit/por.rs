@@ -111,7 +111,7 @@ where
         PoRCircuit {
             params: engine_params,
             value: Some(proof.data.into()),
-            auth_path: proof.proof.as_circuit_auth_path(),
+            auth_path: proof.proof.as_options(),
             root,
             beta_height: public_params.beta_height,
             private,
@@ -499,7 +499,7 @@ mod tests {
             let por = PoRCircuit::<Bls12, AH, BH> {
                 params,
                 value: Some(proof.data.into()),
-                auth_path: proof.proof.as_circuit_auth_path(),
+                auth_path: proof.proof.as_options(),
                 root: Root::Val(Some(pub_inputs.commitment.unwrap().into())),
                 beta_height: BETA_HEIGHT,
                 private: false,
@@ -729,7 +729,7 @@ mod tests {
             let por = PoRCircuit::<Bls12, PedersenHasher, Blake2sHasher> {
                 params,
                 value: Some(proof.data.into()),
-                auth_path: proof.proof.as_circuit_auth_path(),
+                auth_path: proof.proof.as_options(),
                 root: Root::Val(Some(tree.root().into())),
                 beta_height: BETA_HEIGHT,
                 private: true,

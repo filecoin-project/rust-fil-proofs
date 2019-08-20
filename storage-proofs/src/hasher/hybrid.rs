@@ -1,13 +1,151 @@
 use std::cmp::Ordering;
+use std::hash::Hasher as StdHasher;
+use std::marker::PhantomData;
 
+use bellperson::{ConstraintSystem, SynthesisError};
+use fil_sapling_crypto::circuit::{boolean, num};
+use fil_sapling_crypto::jubjub::JubjubEngine;
+use merkletree::hash::{Algorithm, Hashable};
 use merkletree::merkle::Element;
-use paired::bls12_381::{Fr, FrRepr};
+use paired::bls12_381::{Bls12, Fr, FrRepr};
 use rand::{Rand, Rng};
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 
+use crate::crypto::sloth;
 use crate::error::Result;
-use crate::hasher::Domain;
+use crate::hasher::*;
+
+// TODO: make compile time parameter
+const BETA_HEIGHT: usize = 1;
+
+#[derive(Default, Copy, Clone, PartialEq, Eq, Debug)]
+pub struct HybridHasher<AH: Hasher, BH: Hasher> {
+    _a: PhantomData<AH>,
+    _b: PhantomData<BH>,
+}
+
+impl<AH: Hasher, BH: Hasher> Hasher for HybridHasher<AH, BH> {
+    type Domain = HybridDomain<AH::Domain, BH::Domain>;
+    type Function = HybridFunction<AH::Domain, BH::Domain, AH::Function, BH::Function>;
+
+    fn name() -> String {
+        format!("HybridHasher<{}, {}>", AH::name(), BH::name())
+    }
+
+    fn kdf(data: &[u8], m: usize) -> Self::Domain {
+        assert_eq!(
+            data.len(),
+            32 * (1 + m),
+            "invalid input length: data.len(): {} m: {}",
+            data.len(),
+            m
+        );
+
+        <Self::Function as HashFunction<Self::Domain>>::hash(data)
+    }
+
+    fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain) -> Self::Domain {
+        // TODO: validate this is how sloth should work in this case
+        let k = (*key).into();
+        let c = (*ciphertext).into();
+
+        sloth::encode::<Bls12>(&k, &c).into()
+    }
+
+    fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain) -> Self::Domain {
+        // TODO: validate this is how sloth should work in this case
+        sloth::decode::<Bls12>(&(*key).into(), &(*ciphertext).into()).into()
+    }
+}
+
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
+pub struct HybridFunction<AD: Domain, BD: Domain, AF: HashFunction<AD>, BF: HashFunction<BD>> {
+    a: AF,
+    b: BF,
+    _a: PhantomData<AD>,
+    _b: PhantomData<BD>,
+}
+
+impl<AD: Domain, BD: Domain, AF: HashFunction<AD>, BF: HashFunction<BD>> StdHasher
+    for HybridFunction<AD, BD, AF, BF>
+{
+    #[inline]
+    fn write(&mut self, msg: &[u8]) {
+        unreachable!("DO NOT USE ME");
+    }
+
+    #[inline]
+    fn finish(&self) -> u64 {
+        unreachable!("unused by Function -- should never be called")
+    }
+}
+
+impl<AD: Domain, BD: Domain, AF: HashFunction<AD>, BF: HashFunction<BD>>
+    HashFunction<HybridDomain<AD, BD>> for HybridFunction<AD, BD, AF, BF>
+{
+    fn hash(data: &[u8]) -> HybridDomain<AD, BD> {
+        // This construction assumes the leafs are hashed using `A`, can make a switch to change this.
+        HybridDomain::Alpha(<AF as HashFunction<AD>>::hash(data))
+    }
+
+    fn hash_leaf_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+        cs: CS,
+        left: &[boolean::Boolean],
+        right: &[boolean::Boolean],
+        height: usize,
+        params: &E::Params,
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+        // This construction assumes the leafs are hashed using `A`, can make a switch to change this.
+        if height < BETA_HEIGHT {
+            AF::hash_leaf_circuit::<E, CS>(cs, left, right, height, params)
+        } else {
+            BF::hash_leaf_circuit::<E, CS>(cs, left, right, height, params)
+        }
+    }
+
+    fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+        mut cs: CS,
+        bits: &[boolean::Boolean],
+        params: &E::Params,
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+        AF::hash_circuit(cs, bits, params)
+    }
+}
+
+impl<AD: Domain, BD: Domain, AF: HashFunction<AD>, BF: HashFunction<BD>>
+    Algorithm<HybridDomain<AD, BD>> for HybridFunction<AD, BD, AF, BF>
+{
+    #[inline]
+    fn hash(&mut self) -> HybridDomain<AD, BD> {
+        // This construction assumes the leafs are hashed using `A`, can make a switch to change this.
+        HybridDomain::Alpha(self.a.hash())
+    }
+
+    #[inline]
+    fn reset(&mut self) {
+        // This construction assumes the leafs are hashed using `A`, can make a switch to change this.
+        self.a.reset()
+    }
+
+    fn leaf(&mut self, leaf: HybridDomain<AD, BD>) -> HybridDomain<AD, BD> {
+        // This construction assumes the leafs are hashed using `A`, can make a switch to change this.
+        HybridDomain::Alpha(self.a.leaf(leaf.into_alpha()))
+    }
+
+    fn node(
+        &mut self,
+        left: HybridDomain<AD, BD>,
+        right: HybridDomain<AD, BD>,
+        height: usize,
+    ) -> HybridDomain<AD, BD> {
+        if height < BETA_HEIGHT {
+            HybridDomain::Alpha(self.a.node(left.into_alpha(), right.into_alpha(), height))
+        } else {
+            HybridDomain::Beta(self.b.node(left.into_beta(), right.into_beta(), height))
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, Serialize, Deserialize)]
 pub enum HybridDomain<AD, BD>
@@ -20,6 +158,14 @@ where
 
     #[serde(bound(serialize = "BD: Serialize", deserialize = "BD: DeserializeOwned"))]
     Beta(BD),
+}
+
+impl<AD: Domain, BD: Domain, AF: HashFunction<AD>, BF: HashFunction<BD>>
+    Hashable<HybridFunction<AD, BD, AF, BF>> for HybridDomain<AD, BD>
+{
+    fn hash(&self, state: &mut HybridFunction<AD, BD, AF, BF>) {
+        state.write(self.as_ref())
+    }
 }
 
 impl<AD, BD> Default for HybridDomain<AD, BD>
@@ -226,7 +372,7 @@ where
     }
 
     // Assumes that we can convert between `Alpha` and `Beta`.
-    pub fn into_alpha(self) -> Self {
+    pub fn convert_into_alpha(self) -> Self {
         if self.is_alpha() {
             self
         } else {
@@ -236,7 +382,7 @@ where
     }
 
     // Assumes that we can convert between `Alpha` and `Beta`.
-    pub fn into_beta(self) -> Self {
+    pub fn convert_into_beta(self) -> Self {
         if self.is_beta() {
             self
         } else {
@@ -248,9 +394,24 @@ where
     // Assumes that we can convert between `Alpha` and `Beta`.
     pub fn toggle(self) -> Self {
         if self.is_alpha() {
-            self.into_beta()
+            self.convert_into_beta()
         } else {
-            self.into_alpha()
+            self.convert_into_alpha()
+        }
+    }
+
+    pub fn into_alpha(self) -> AD {
+        match self {
+            HybridDomain::Alpha(a) => a,
+            HybridDomain::Beta(b) => AD::from_slice(self.as_ref()),
+        }
+    }
+
+    // Assumes that we can convert between `Alpha` and `Beta`.
+    pub fn into_beta(self) -> BD {
+        match self {
+            HybridDomain::Alpha(a) => BD::from_slice(self.as_ref()),
+            HybridDomain::Beta(b) => b,
         }
     }
 }

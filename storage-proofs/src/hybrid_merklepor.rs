@@ -5,7 +5,7 @@ use crate::drgraph::graph_height;
 use crate::error::{Error, Result};
 use crate::hasher::hybrid::HybridDomain;
 use crate::hasher::{Domain, Hasher};
-use crate::hybrid_merkle::HybridMerkleTree;
+use crate::hybrid_merkle::{HybridMerkleProof, HybridMerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 
@@ -48,8 +48,8 @@ where
 #[derive(Debug)]
 pub struct PrivateInputs<'a, AH, BH>
 where
-    AH: Hasher,
-    BH: Hasher,
+    AH: Hasher + 'a,
+    BH: Hasher + 'a,
 {
     /// The data of the leaf.
     pub leaf: HybridDomain<AH::Domain, BH::Domain>,
@@ -133,7 +133,7 @@ where
         }
 
         Ok(Proof {
-            proof: tree.gen_proof(challenge),
+            proof: HybridMerkleProof::new_from_proof(&tree.gen_proof(challenge)),
             data: priv_inputs.leaf,
         })
     }
@@ -152,22 +152,16 @@ where
             return Ok(false);
         }
 
-        let path_lengths_match = graph_height(pub_params.leaves) == proof.proof.path_len();
+        let path_lengths_match = graph_height(pub_params.leaves) == proof.proof.path().len();
 
         if !path_lengths_match {
             return Ok(false);
         }
 
-        let challenge_bytes_match = proof
-            .proof
-            .challenge_value_matches_bytes(&proof.data.as_ref());
+        let data_valid = proof.proof.validate_data(&proof.data.into_bytes());
+        let path_valid = proof.proof.validate(pub_inputs.challenge);
 
-        if !challenge_bytes_match {
-            return Ok(false);
-        }
-
-        let is_valid = proof.proof.validate(pub_inputs.challenge);
-        Ok(is_valid)
+        Ok(data_valid && path_valid)
     }
 }
 
@@ -180,8 +174,9 @@ mod tests {
 
     use crate::drgraph::{new_seed, BucketGraph, Graph};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::hasher::{Blake2sHasher, HybridHasher, PedersenHasher, Sha256Hasher};
     use crate::hybrid_merkle::HybridMerkleProof;
+    use crate::merkle::make_proof_for_test;
     use crate::util::data_at_node;
 
     const N_LEAVES: usize = 32;
@@ -267,7 +262,7 @@ mod tests {
         let leaf: HybridDomain<AH::Domain, BH::Domain> = HybridDomain::Beta(rng.gen());
         let merkle_path = vec![(leaf, true)];
         let root = pub_inputs.commitment.unwrap();
-        let merkle_proof = HybridMerkleProof::new(leaf, merkle_path, root, BETA_HEIGHT);
+        let merkle_proof = make_proof_for_test::<HybridHasher<AH, BH>>(root, leaf, merkle_path);
 
         Proof {
             data: leaf,

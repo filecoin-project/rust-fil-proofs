@@ -355,9 +355,9 @@ pub trait Layers {
                 // Convert the replica-id to the correct `HyrbidDomain` variant for this encoding
                 // layer's beta height.
                 let replica_id = if beta_heights[layer] == 0 {
-                    pub_inputs.replica_id.into_alpha()
+                    pub_inputs.replica_id.convert_into_alpha()
                 } else {
-                    pub_inputs.replica_id.into_beta()
+                    pub_inputs.replica_id.convert_into_beta()
                 };
 
                 let current_graph = new_graph.take().unwrap();
@@ -442,9 +442,9 @@ pub trait Layers {
             );
 
             let replica_id = if beta_heights[layer] == 0 {
-                replica_id.into_alpha()
+                replica_id.convert_into_alpha()
             } else {
-                replica_id.into_beta()
+                replica_id.convert_into_beta()
             };
 
             let mut res = DrgPoRep::extract_all(&pp, &replica_id, data)
@@ -511,10 +511,10 @@ pub trait Layers {
                         vde::encode(&current_graph, replica_id, data)
                             .expect("encoding failed in thread");
                     } else if beta_height == 0 {
-                        vde::encode(&current_graph, &replica_id.into_alpha(), data)
+                        vde::encode(&current_graph, &replica_id.convert_into_alpha(), data)
                             .expect("encoding failed in thread");
                     } else {
-                        vde::encode(&current_graph, &replica_id.into_beta(), data)
+                        vde::encode(&current_graph, &replica_id.convert_into_beta(), data)
                             .expect("encoding failed in thread");
                     };
                 }
@@ -616,10 +616,10 @@ pub trait Layers {
                                 vde::encode(&current_graph, replica_id, data)
                                     .expect("encoding failed in thread");
                             } else if beta_height == 0 {
-                                vde::encode(&current_graph, &replica_id.into_alpha(), data)
+                                vde::encode(&current_graph, &replica_id.convert_into_alpha(), data)
                                     .expect("encoding failed in thread");
                             } else {
-                                vde::encode(&current_graph, &replica_id.into_beta(), data)
+                                vde::encode(&current_graph, &replica_id.convert_into_beta(), data)
                                     .expect("encoding failed in thread");
                             };
                         }
@@ -833,9 +833,9 @@ where
                 );
 
                 let replica_id = if beta_height == 0 {
-                    pub_inputs.replica_id.into_alpha()
+                    pub_inputs.replica_id.convert_into_alpha()
                 } else {
-                    pub_inputs.replica_id.into_beta()
+                    pub_inputs.replica_id.convert_into_beta()
                 };
 
                 let new_pub_inputs = drgporep::PublicInputs {
@@ -869,9 +869,9 @@ where
             }
 
             let last_layer_replica_id = if *pub_params.beta_heights.last().unwrap() == 0 {
-                pub_inputs.replica_id.into_alpha()
+                pub_inputs.replica_id.convert_into_alpha()
             } else {
-                pub_inputs.replica_id.into_beta()
+                pub_inputs.replica_id.convert_into_beta()
             };
 
             let crs =
@@ -962,9 +962,9 @@ where
         // The `replica_id` argument has a `HybridDomain` variant passed corresponding to the data
         // layer's beta height, to compute comm-r-star we need the last layer's replica-id.
         let last_layer_replica_id = if *pp.beta_heights.last().unwrap() == 0 {
-            replica_id.into_alpha()
+            replica_id.convert_into_alpha()
         } else {
-            replica_id.into_beta()
+            replica_id.convert_into_beta()
         };
 
         let crs = comm_r_star::<L::AlphaHasher, L::BetaHasher>(&last_layer_replica_id, &comm_rs)?;

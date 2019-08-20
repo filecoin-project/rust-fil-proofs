@@ -1,5 +1,6 @@
 #![allow(clippy::len_without_is_empty)]
 
+use std::iter;
 use std::marker::PhantomData;
 
 // Reexport here, so we don't depend on merkletree directly in other places.
@@ -149,6 +150,14 @@ impl<H: Hasher> MerkleProof<H> {
 
     pub fn path(&self) -> &Vec<(H::Domain, bool)> {
         &self.path
+    }
+
+    /// Iterates over the proof path bookended with the root. Only used in Piece Inclusion Proofs.
+    pub fn path_with_root(&self) -> impl Iterator<Item = &H::Domain> {
+        self.path
+            .iter()
+            .map(|(path_elem, _)| path_elem)
+            .chain(iter::once(&self.root))
     }
 }
 

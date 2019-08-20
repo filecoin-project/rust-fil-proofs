@@ -9,7 +9,7 @@ use crate::error::*;
 use crate::fr32::Fr32Ary;
 use crate::hasher::hybrid::HybridDomain;
 use crate::hasher::{Domain, Hasher};
-use crate::hybrid_merkle::HybridMerkleTree;
+use crate::hybrid_merkle::{HybridMerkleProof, HybridMerkleTree};
 use crate::util::NODE_SIZE;
 
 // 8 bytes for `PieceInclusionProof.position` (the standard size of a `usize`).
@@ -139,7 +139,7 @@ where
 
     // The data layer's beta height is always the tree's height.
     let beta_height = (tree_size as f32).log2() as usize + 1;
-    HybridMerkleTree::from_leaves(data, beta_height)
+    HybridMerkleTree::<AH, BH>::new(data /*, beta_height*/)
 }
 
 /// Compute `comm_p` from a slice of Domain elements.  `comm_p` is the merkle root of a piece,
@@ -229,8 +229,8 @@ where
             return Err(Error::UnalignedPiece);
         }
 
-        let first_proof = tree.gen_proof(first_leaf);
-        let last_proof = tree.gen_proof(last_leaf);
+        let first_proof = HybridMerkleProof::<AH, BH>::new_from_proof(&tree.gen_proof(first_leaf));
+        let last_proof = HybridMerkleProof::<AH, BH>::new_from_proof(&tree.gen_proof(last_leaf));
 
         let first_proof_path: Vec<&HybridDomain<AH::Domain, BH::Domain>> =
             first_proof.path_with_root().collect();
@@ -259,7 +259,7 @@ where
             HybridDomain::Beta(comm_p_beta)
         };
 
-        let is_valid = pip.verify(&tree.root(), &comm_p, n_piece_leaves, tree.n_leaves());
+        let is_valid = pip.verify(&tree.root(), &comm_p, n_piece_leaves, tree.len());
 
         if is_valid {
             Ok(pip)

@@ -140,7 +140,7 @@ where
 {
     pub fn new_empty(tree_height: usize) -> Self {
         DataProof {
-            proof: HybridMerkleProof::new_empty(tree_height),
+            proof: HybridMerkleProof::new(tree_height),
             data: HybridDomain::default(),
         }
     }
@@ -345,7 +345,7 @@ where
 
             replica_nodes.push(DataProof {
                 data,
-                proof: tree_r.gen_proof(challenge),
+                proof: HybridMerkleProof::new_from_proof(&tree_r.gen_proof(challenge)),
             });
 
             let mut parents = vec![0; pub_params.graph.degree()];
@@ -355,7 +355,7 @@ where
             for p in &parents {
                 replica_parentsi.push((*p, {
                     DataProof {
-                        proof: tree_r.gen_proof(*p),
+                        proof: HybridMerkleProof::new_from_proof(&tree_r.gen_proof(*p)),
                         data: tree_r.read_at(*p),
                     }
                 }));
@@ -378,15 +378,15 @@ where
                 )?;
 
                 if tree_d_has_alpha_leaves {
-                    decoded.into_alpha()
+                    decoded.convert_into_alpha()
                 } else {
-                    decoded.into_beta()
+                    decoded.convert_into_beta()
                 }
             };
 
             data_nodes.push(DataProof {
                 data: extracted,
-                proof: node_proof,
+                proof: HybridMerkleProof::new_from_proof(&node_proof),
             });
         }
 
@@ -471,7 +471,7 @@ where
                 let alpha = AH::sloth_decode(&key, proof.replica_nodes[i].data.alpha_value());
                 let decoded = HybridDomain::Alpha(alpha);
                 if !prev_layer_is_alpha {
-                    decoded.into_beta()
+                    decoded.convert_into_beta()
                 } else {
                     decoded
                 }
@@ -480,7 +480,7 @@ where
                 let beta = BH::sloth_decode(&key, proof.replica_nodes[i].data.beta_value());
                 let decoded = HybridDomain::Beta(beta);
                 if prev_layer_is_alpha {
-                    decoded.into_alpha()
+                    decoded.convert_into_alpha()
                 } else {
                     decoded
                 }
@@ -490,10 +490,7 @@ where
                 return Ok(false);
             }
 
-            if !proof.nodes[i]
-                .proof
-                .challenge_value_matches_bytes(unsealed.as_ref())
-            {
+            if !proof.nodes[i].proof.validate_data(unsealed.as_ref()) {
                 println!("invalid data for merkle path {:?}", unsealed);
                 return Ok(false);
             }

@@ -122,7 +122,7 @@ where
     AH: Hasher,
     BH: Hasher,
 {
-    let key_fr = create_key_from_tree(replica_id.as_ref(), node_index, parents, tree)?;
+    let key_fr = create_key_from_tree::<AH, BH>(replica_id.as_ref(), node_index, parents, tree)?;
 
     // Nodes and encoding keys have the same variant of `HybridDomain` as the replica-id.
     let decoded = if replica_id.is_alpha() {
