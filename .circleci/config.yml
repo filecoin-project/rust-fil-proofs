@@ -199,11 +199,11 @@ jobs:
           no_output_timeout: 60m
       - run:
           name: Run micro benchmarks
-          command: ./fil-proofs-tooling/scripts/micro-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" > micro-benchmarks.json
+          command: ./fil-proofs-tooling/scripts/micro-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" -- hash-blake2s/non-circuit > micro-benchmarks.json
           no_output_timeout: 60m
       - run:
           name: Run ZigZag benchmarks using 1GiB sectors
-          command: ./fil-proofs-tooling/scripts/benchy-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" zigzag --size=$((1024*1024)) > zigzag-benchmarks.json
+          command: ./fil-proofs-tooling/scripts/benchy-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" zigzag --size=1 > zigzag-benchmarks.json
           no_output_timeout: 60m
       - run:
           name: Aggregate benchmarks into single JSON document
@@ -335,7 +335,7 @@ workflows:
             - cargo_fetch
           filters:
             branches:
-              only: master
+              only: feat/821-and-814-benchmark-improvements
       - build_linux_release:
           requires:
             - cargo_fetch
