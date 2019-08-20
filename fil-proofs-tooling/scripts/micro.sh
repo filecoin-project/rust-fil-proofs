@@ -4,7 +4,7 @@ MICRO_SDERR=$(mktemp)
 MICRO_SDOUT=$(mktemp)
 JQ_STDERR=$(mktemp)
 
-CMD="cargo run --quiet --bin micro --release ${@}"
+CMD="cargo run --bin micro --release ${@}"
 
 eval "RUST_BACKTRACE=1 RUSTFLAGS=\"-Awarnings -C target-cpu=native\" ${CMD}" 1> $MICRO_SDOUT 2> $MICRO_SDERR
 
