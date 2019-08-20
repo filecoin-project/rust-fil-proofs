@@ -199,11 +199,15 @@ jobs:
           no_output_timeout: 60m
       - run:
           name: Run micro benchmarks
-          command: ./fil-proofs-tooling/scripts/micro-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" -- hash-blake2s/non-circuit > micro-benchmarks.json
+          command: |
+            ./fil-proofs-tooling/scripts/micro-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" -- hash-blake2s/non-circuit > micro-benchmarks.json
+            cat micro-benchmarks.json
           no_output_timeout: 60m
       - run:
           name: Run ZigZag benchmarks using 1GiB sectors
-          command: ./fil-proofs-tooling/scripts/benchy-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" zigzag --size=1 > zigzag-benchmarks.json
+          command: |
+            ./fil-proofs-tooling/scripts/benchy-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" zigzag --size=1 > zigzag-benchmarks.json
+            cat zigzag-benchmarks.json
           no_output_timeout: 60m
       - run:
           name: Aggregate benchmarks into single JSON document
@@ -214,7 +218,16 @@ jobs:
                 <(jq 'del (.benchmarks)' micro-benchmarks.json) \
                 <(jq '.benchmarks' hash-constraints.json) \
                 <(jq '.benchmarks' zigzag-benchmarks.json) \
-                <(jq '.benchmarks' micro-benchmarks.json))
+                <(jq '.benchmarks' micro-benchmarks.json)) > combined-benchmarks.json
+            cat combined-benchmarks.json
+      - store_artifacts:
+          path: zigzag-benchmarks.json
+      - store_artifacts:
+          path: hash-constraints.json
+      - store_artifacts:
+          path: micro-benchmarks.json
+      - store_artifacts:
+          path: combined-benchmarks.json
 
   rustfmt:
     docker:
@@ -337,7 +350,7 @@ workflows:
             - cargo_fetch
           filters:
             branches:
-              only: feat/821-and-814-benchmark-improvements
+              only: master
       - build_linux_release:
           requires:
             - cargo_fetch
