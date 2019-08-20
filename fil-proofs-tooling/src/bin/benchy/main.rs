@@ -137,7 +137,7 @@ fn main() {
                         extract: m.is_present("extract"),
                         groth: m.is_present("groth"),
                         hasher: value_t!(m, "hasher", String)?,
-                        layers: value_t!(m, "layers", usize)?,
+                        layers,
                         m: value_t!(m, "m", usize)?,
                         no_bench: m.is_present("no-bench"),
                         no_tmp: m.is_present("no-tmp"),

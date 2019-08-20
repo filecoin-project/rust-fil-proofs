@@ -74,6 +74,8 @@ struct Params {
     dump_proofs: bool,
     bench_only: bool,
     hasher: String,
+    taper: f64,
+    taper_layers: usize,
 }
 
 impl From<Params> for Inputs {
@@ -88,6 +90,9 @@ impl From<Params> for Inputs {
             layers: p.layer_challenges.layers(),
             partition_challenges: p.layer_challenges.total_challenges(),
             total_challenges: p.layer_challenges.total_challenges() * p.partitions,
+            layer_challenges: p.layer_challenges,
+            taper: p.taper,
+            taper_layers: p.taper_layers,
         }
     }
 }
@@ -446,6 +451,9 @@ struct Inputs {
     layers: usize,
     partition_challenges: usize,
     total_challenges: usize,
+    taper: f64,
+    taper_layers: usize,
+    layer_challenges: LayerChallenges,
 }
 
 #[derive(Serialize, Default)]
@@ -530,6 +538,8 @@ pub fn run(opts: RunOpts) -> Result<(), failure::Error> {
         extract: opts.extract,
         hasher: opts.hasher,
         samples: 5,
+        taper: opts.taper,
+        taper_layers: opts.taper_layers,
     };
 
     let report = match params.hasher.as_ref() {
