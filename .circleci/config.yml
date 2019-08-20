@@ -214,14 +214,8 @@ jobs:
       - run:
           name: Aggregate benchmarks into single JSON document
           command: |
-            jq --sort-keys -s '{ benchmarks: { "zigzag-benchmarks": { outputs: { "max-resident-set-size-kb": .[0] } } } } * .[1]' \
-              <(jq '.["max-resident-set-size-kb"]' zigzag-benchmarks.json) \
-              <(jq -s '.[0] * { benchmarks: { "hash-constraints": .[1], "zigzag-benchmarks": .[2], "micro-benchmarks": .[3] } }' \
-                <(jq 'del (.benchmarks)' micro-benchmarks.json) \
-                <(jq '.benchmarks' hash-constraints.json) \
-                <(jq '.benchmarks' zigzag-benchmarks.json) \
-                <(jq '.benchmarks' micro-benchmarks.json)) > combined-benchmarks.json
-            cat combined-benchmarks.json
+            ./fil-proofs-tooling/scripts/aggregate-benchmarks.sh zigzag-benchmarks.json micro-benchmarks.json hash-constraints.json > aggregated-benchmarks.json
+            cat aggregated-benchmarks.json
       - store_artifacts:
           path: zigzag-benchmarks.json
       - store_artifacts:
@@ -229,7 +223,7 @@ jobs:
       - store_artifacts:
           path: micro-benchmarks.json
       - store_artifacts:
-          path: combined-benchmarks.json
+          path: aggregated-benchmarks.json
 
   rustfmt:
     docker:
