@@ -112,8 +112,8 @@ fn main() {
                         .takes_value(true)
                 );
 
-    let hash_cmd =
-        SubCommand::with_name("hash-circuits").about("Benchmark hash function inside of a circuit");
+    let hash_cmd = SubCommand::with_name("hash-constraints")
+        .about("Benchmark hash function inside of a circuit");
 
     let matches = App::new("benchy")
         .version("0.1")
