@@ -192,11 +192,9 @@ impl<'a> Circuit<Bls12> for PoRCCircuit<'a> {
                 )?;
 
                 let mut preimage = vec![];
-                let mut xl_bytes = xl.to_bytes(cs.ns(|| "xl into bytes"))?;
-                let mut xr_bytes = xr.to_bytes(cs.ns(|| "xr into bytes"))?;
+                let xl_bytes = xl.to_bytes(cs.ns(|| "xl into bytes"))?;
+                let xr_bytes = xr.to_bytes(cs.ns(|| "xr into bytes"))?;
 
-                xl_bytes.reverse();
-                xr_bytes.reverse();
                 preimage.extend(xl_bytes);
                 preimage.extend(xr_bytes);
 
@@ -354,7 +352,7 @@ mod tests {
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
         assert_eq!(cs.num_inputs(), 1, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 85796, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 46136, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
     }
 

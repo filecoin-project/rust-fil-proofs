@@ -1,11 +1,11 @@
 use algebra::biginteger::BigInteger;
 use algebra::curves::bls12_381::Bls12_381 as Bls12;
-use algebra::fields::{bls12_381::Fr, BitIterator, FpParameters, PrimeField};
+use algebra::fields::{bls12_381::Fr, PrimeField};
 use algebra::ToBytes;
 use rand::Rng;
 
 use crate::crypto;
-use crate::crypto::pedersen::{pedersen_hash, Personalization};
+use crate::crypto::pedersen::pedersen;
 use crate::error;
 use crate::fr32::{bytes_into_fr, fr_into_bytes};
 use crate::hasher::pedersen::{PedersenDomain, PedersenFunction, PedersenHasher};
@@ -161,7 +161,7 @@ pub fn random_merkle_path_with_value<R: Rng>(
         lhs.into_repr().write(&mut bytes).unwrap();
         rhs.into_repr().write(&mut bytes).unwrap();
 
-        cur = pedersen_hash(Personalization::None, &bytes).x
+        cur = pedersen(&bytes).x
     }
 
     (auth_path, cur)

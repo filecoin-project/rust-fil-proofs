@@ -1,8 +1,5 @@
 use algebra::curves::bls12_381::Bls12_381 as Bls12;
 use algebra::curves::jubjub::JubJubProjective as JubJub;
-use algebra::curves::ProjectiveCurve;
-use algebra::fields::PrimeField;
-
 use dpc::{
     crypto_primitives::crh::{pedersen::PedersenCRH, pedersen::PedersenParameters},
     gadgets::crh::{pedersen::PedersenCRHGadget, FixedLengthCRHGadget},
@@ -84,12 +81,7 @@ pub fn pedersen_compression<CS: ConstraintSystem<Bls12>>(
     params: &PedersenParameters<JubJub>,
 ) -> Result<Vec<UInt8>, SynthesisError> {
     let h = pedersen_compression_num(cs.ns(|| "compression"), bytes, params)?;
-    let mut out = h.to_bytes(cs.ns(|| "h into bits"))?;
-
-    // to_bits convert the value to a big-endian number, we need it to be little-endian
-    out.reverse();
-
-    Ok(out)
+    h.to_bytes(cs.ns(|| "h into bits"))
 }
 
 #[cfg(test)]
@@ -97,6 +89,7 @@ mod tests {
 
     use super::*;
 
+    use algebra::curves::ProjectiveCurve;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     use crate::circuit::test::TestConstraintSystem;
@@ -141,8 +134,8 @@ mod tests {
         let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let cases = [
-            (64, 8576),  // 64 bytes
-            (128, 9088), // 128 bytes
+            (64, 4608),  // 64 bytes
+            (128, 5120), // 128 bytes
         ];
 
         for (bytes, constraints) in &cases {

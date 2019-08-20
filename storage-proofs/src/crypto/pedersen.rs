@@ -1,7 +1,3 @@
-use crate::fr32::bytes_into_frs;
-use crate::singletons::PEDERSEN_PARAMS;
-use bitvec::{self, BitVec};
-
 use algebra::biginteger::BigInteger;
 use algebra::curves::{
     bls12_381::Bls12_381 as Bls12, jubjub::JubJubParameters, jubjub::JubJubProjective as JubJub,
@@ -13,12 +9,15 @@ use dpc::crypto_primitives::crh::{
     FixedLengthCRH,
 };
 
+use crate::fr32::bytes_into_frs;
+use crate::singletons::PEDERSEN_PARAMS;
+
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct BigWindow;
 
 impl PedersenWindow for BigWindow {
-    const WINDOW_SIZE: usize = 2016;
-    const NUM_WINDOWS: usize = 1;
+    const WINDOW_SIZE: usize = 128;
+    const NUM_WINDOWS: usize = 8;
 }
 
 pub const PEDERSEN_BLOCK_SIZE: usize = 256;
@@ -47,15 +46,8 @@ impl Personalization {
     }
 }
 
-pub fn pedersen_hash(
-    personalization: Personalization,
-    bytes: &[u8],
-) -> GroupProjective<JubJubParameters> {
-    PedersenCRH::<JubJub, BigWindow>::evaluate(&PEDERSEN_PARAMS, bytes).unwrap()
-}
-
 pub fn pedersen(data: &[u8]) -> GroupProjective<JubJubParameters> {
-    pedersen_hash(Personalization::None, data)
+    PedersenCRH::<JubJub, BigWindow>::evaluate(&PEDERSEN_PARAMS, data).unwrap()
 }
 
 /// Pedersen hashing for inputs that have length multiple of the block size `256`. Based on pedersen hashes and a Merkle-Damgard construction.
@@ -101,24 +93,10 @@ pub fn pedersen_compression(bytes: &mut Vec<u8>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::util::bytes_into_bits;
     use algebra::fields::Field;
     use rand::Rng;
     use rand::SeedableRng;
     use rand::XorShiftRng;
-
-    #[test]
-    fn test_bit_vec_le() {
-        let bytes = b"ABC";
-        let bits = bytes_into_bits(bytes);
-
-        let mut bits2 = core::iter::repeat(false)
-            .take(bits.len())
-            .collect::<BitVec<bitvec::LittleEndian, u8>>();
-        bits2.as_mut()[0..bytes.len()].copy_from_slice(&bytes[..]);
-
-        assert_eq!(bits, bits2.iter().collect::<Vec<bool>>());
-    }
 
     #[test]
     fn test_pedersen_compression() {

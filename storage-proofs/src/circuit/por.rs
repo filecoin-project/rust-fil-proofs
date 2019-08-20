@@ -180,11 +180,8 @@ impl<'a, H: Hasher> Circuit<Bls12> for PoRCircuit<'a, H> {
                     &path_element,
                 )?;
 
-                let mut xl_bytes = xl.to_bytes(cs.ns(|| "xl into bytes"))?;
-                let mut xr_bytes = xr.to_bytes(cs.ns(|| "xr into bytes"))?;
-
-                // xl_bytes.reverse();
-                // xr_bytes.reverse();
+                let xl_bytes = xl.to_bytes(cs.ns(|| "xl into bytes"))?;
+                let xr_bytes = xr.to_bytes(cs.ns(|| "xr into bytes"))?;
 
                 // Compute the new subtree value
                 cur = H::Function::hash_leaf_circuit(
@@ -331,7 +328,7 @@ mod tests {
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_pedersen() {
-        test_por_input_circuit_with_bls12_381::<PedersenHasher>(25746);
+        test_por_input_circuit_with_bls12_381::<PedersenHasher>(13842);
     }
 
     #[test]
@@ -578,7 +575,7 @@ mod tests {
             assert!(cs.is_satisfied(), "constraints not satisfied");
 
             assert_eq!(cs.num_inputs(), 2, "wrong number of inputs");
-            assert_eq!(cs.num_constraints(), 25739, "wrong number of constraints");
+            assert_eq!(cs.num_constraints(), 13841, "wrong number of constraints");
 
             let auth_path_bits: Vec<bool> = proof
                 .proof

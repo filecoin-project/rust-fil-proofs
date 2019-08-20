@@ -22,7 +22,7 @@ use snark_gadgets::groups::curves::twisted_edwards::jubjub::JubJubGadget;
 use snark_gadgets::utils::AllocGadget;
 
 use crate::circuit::pedersen::pedersen_md_no_padding;
-use crate::crypto::pedersen::{pedersen_hash, BigWindow, Personalization};
+use crate::crypto::pedersen::BigWindow;
 use crate::crypto::{kdf, pedersen, sloth};
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
@@ -280,48 +280,6 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
             .into_affine()
             .x
             .into()
-    }
-}
-
-/// Helper to iterate over a pair of `Fr`.
-struct NodeBits<'a> {
-    // 256 bits
-    lhs: &'a [u64],
-    // 256 bits
-    rhs: &'a [u64],
-    index: usize,
-}
-
-impl<'a> NodeBits<'a> {
-    pub fn new(lhs: &'a [u64], rhs: &'a [u64]) -> Self {
-        NodeBits { lhs, rhs, index: 0 }
-    }
-}
-
-impl<'a> Iterator for NodeBits<'a> {
-    type Item = bool;
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.index < 255 {
-            // return lhs
-            let a = self.index / 64;
-            let b = self.index % 64;
-            let res = (self.lhs[a] & (1 << b)) != 0;
-            self.index += 1;
-            return Some(res);
-        }
-
-        if self.index < 2 * 255 {
-            // return rhs
-            let a = (self.index - 255) / 64;
-            let b = (self.index - 255) % 64;
-            let res = (self.rhs[a] & (1 << b)) != 0;
-            self.index += 1;
-            return Some(res);
-        }
-
-        None
     }
 }
 

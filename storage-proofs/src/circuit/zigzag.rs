@@ -4,7 +4,6 @@ use algebra::curves::bls12_381::Bls12_381 as Bls12;
 use algebra::fields::bls12_381::Fr;
 use snark::{Circuit, ConstraintSystem, SynthesisError};
 use snark_gadgets::fields::fp::FpGadget;
-use snark_gadgets::uint8::UInt8;
 use snark_gadgets::utils::{AllocGadget, ToBytesGadget};
 
 use crate::circuit::constraint;
@@ -203,21 +202,9 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, H> {
             // Collect the bits to be hashed into crs_boolean.
             let mut crs_bytes = replica_id_num.to_bytes(cs.ns(|| "replica_id_bytes"))?;
 
-            crs_bytes.reverse();
-
-            // sad padding is sad
-            while crs_bytes.len() % 256 != 0 {
-                crs_bytes.push(UInt8::constant(8));
-            }
-
             for (i, comm_r) in comm_rs.into_iter().enumerate() {
-                let mut comm_r_bytes = comm_r.to_bytes(cs.ns(|| format!("comm_r-bits-{}", i)))?;
-                comm_r_bytes.reverse();
+                let comm_r_bytes = comm_r.to_bytes(cs.ns(|| format!("comm_r-bits-{}", i)))?;
                 crs_bytes.extend(comm_r_bytes);
-                // sad padding is sad
-                while crs_bytes.len() % 256 != 0 {
-                    crs_bytes.push(UInt8::constant(0));
-                }
             }
 
             // Calculate the pedersen hash.
@@ -437,7 +424,7 @@ mod tests {
         // End copied section.
 
         let expected_inputs = 16;
-        let expected_constraints = 362488;
+        let expected_constraints = 235576;
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.
             let mut cs = MetricCS::<Bls12>::new();
