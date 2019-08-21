@@ -7,7 +7,7 @@ use snark::{Circuit, ConstraintSystem, SynthesisError};
 use snark_gadgets::{
     boolean,
     fields::fp::FpGadget,
-    utils::{AllocGadget, CondReverseGadget, ToBitsGadget},
+    utils::{AllocGadget, CondReverseGadget, ToBytesGadget},
     Assignment,
 };
 
@@ -192,18 +192,16 @@ impl<'a> Circuit<Bls12> for PoRCCircuit<'a> {
                 )?;
 
                 let mut preimage = vec![];
-                let mut xl_bits = xl.to_bits(cs.ns(|| "xl into bits"))?;
-                let mut xr_bits = xr.to_bits(cs.ns(|| "xr into bits"))?;
+                let xl_bytes = xl.to_bytes(cs.ns(|| "xl into bytes"))?;
+                let xr_bytes = xr.to_bytes(cs.ns(|| "xr into bytes"))?;
 
-                xl_bits.reverse();
-                xr_bits.reverse();
-                preimage.extend(xl_bits);
-                preimage.extend(xr_bits);
+                preimage.extend(xl_bytes);
+                preimage.extend(xr_bytes);
 
                 // Compute the new subtree value
                 cur = pedersen::pedersen_compression_num(
                     cs.ns(|| "computation of pedersen hash"),
-                    &preimage,
+                    &preimage[..],
                     params,
                 )?
                 .clone(); // Injective encoding
@@ -354,7 +352,7 @@ mod tests {
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
         assert_eq!(cs.num_inputs(), 1, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 85796, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 46136, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
     }
 

@@ -10,7 +10,7 @@ use algebra::curves::jubjub::JubJubProjective as JubJub;
 use algebra::fields::bls12_381::Fr;
 use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
 use snark::{ConstraintSystem, SynthesisError};
-use snark_gadgets::bits::boolean;
+use snark_gadgets::bits::uint8::UInt8;
 use snark_gadgets::fields::fp::FpGadget;
 
 use crate::error::Result;
@@ -60,15 +60,15 @@ pub trait HashFunction<T: Domain>:
 
     fn hash_leaf_circuit<CS: ConstraintSystem<Bls12_381>>(
         cs: CS,
-        left: &[boolean::Boolean],
-        right: &[boolean::Boolean],
+        left: &[UInt8],
+        right: &[UInt8],
         height: usize,
         params: &PedersenParameters<JubJub>,
     ) -> std::result::Result<FpGadget<Bls12_381>, SynthesisError>;
 
     fn hash_circuit<CS: ConstraintSystem<Bls12_381>>(
         cs: CS,
-        bits: &[boolean::Boolean],
+        bits: &[UInt8],
         params: &PedersenParameters<JubJub>,
     ) -> std::result::Result<FpGadget<Bls12_381>, SynthesisError>;
 }

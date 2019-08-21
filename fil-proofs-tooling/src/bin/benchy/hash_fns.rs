@@ -4,9 +4,11 @@ use dpc::gadgets::prf::blake2s::blake2s_gadget;
 use fil_proofs_tooling::metadata::Metadata;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use snark::ConstraintSystem;
+use snark_gadgets::bits::boolean::Boolean;
 use snark_gadgets::bits::uint32::UInt32;
-use snark_gadgets::boolean::Boolean;
 use snark_gadgets::fields::FieldGadget;
+use snark_gadgets::uint8::UInt8;
+use snark_gadgets::utils::AllocGadget;
 use storage_proofs::circuit::pedersen::{pedersen_compression_num, pedersen_md_no_padding};
 use storage_proofs::circuit::test::TestConstraintSystem;
 use storage_proofs::crypto;
@@ -56,13 +58,18 @@ fn pedersen_count(bytes: usize) -> Result<Report, failure::Error> {
     let mut data = vec![0u8; bytes];
     rng.fill_bytes(&mut data);
 
-    let data_bits: Vec<Boolean> = {
+    let data_bytes: Vec<UInt8> = {
         let mut cs = cs.ns(|| "data");
-        bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).unwrap()
+        data.iter()
+            .enumerate()
+            .map(|(byte_i, input_byte)| {
+                let cs = cs.ns(|| format!("input_byte_{}", byte_i));
+                UInt8::alloc(cs, || Ok(*input_byte)).unwrap()
+            })
+            .collect()
     };
-
     if bytes < 128 {
-        let out = pedersen_compression_num(&mut cs, &data_bits, &PEDERSEN_PARAMS)?;
+        let out = pedersen_compression_num(&mut cs, &data_bytes, &PEDERSEN_PARAMS)?;
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
         let point = crypto::pedersen::pedersen(data.as_slice());
@@ -74,7 +81,7 @@ fn pedersen_count(bytes: usize) -> Result<Report, failure::Error> {
             "circuit and non circuit do not match"
         );
     } else {
-        let out = pedersen_md_no_padding(cs.ns(|| "pedersen"), &data_bits, &PEDERSEN_PARAMS)
+        let out = pedersen_md_no_padding(cs.ns(|| "pedersen"), &data_bytes, &PEDERSEN_PARAMS)
             .expect("pedersen hashing failed");
         assert!(cs.is_satisfied(), "constraints not satisfied");
         let expected = crypto::pedersen::pedersen_md_no_padding(data.as_slice());

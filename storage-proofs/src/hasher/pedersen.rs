@@ -3,34 +3,30 @@ use std::hash::Hasher as StdHasher;
 use std::io::Read;
 use std::io::Write;
 
-use snark::{ConstraintSystem, SynthesisError};
-
 use algebra::biginteger::BigInteger;
 use algebra::biginteger::BigInteger256 as FrRepr;
 use algebra::curves::ProjectiveCurve;
 use algebra::curves::{bls12_381::Bls12_381 as Bls12, jubjub::JubJubProjective as JubJub};
 use algebra::fields::{bls12_381::Fr, PrimeField};
-
-use snark_gadgets::bits::uint8::UInt8;
-use snark_gadgets::boolean::Boolean;
-use snark_gadgets::fields::fp::FpGadget;
-use snark_gadgets::groups::curves::twisted_edwards::jubjub::JubJubGadget;
-
-use snark_gadgets::utils::AllocGadget;
-
+use dpc::crypto_primitives::crh::FixedLengthCRH;
 use dpc::{
     crypto_primitives::crh::pedersen::{PedersenCRH, PedersenParameters},
     gadgets::crh::{pedersen::PedersenCRHGadget, FixedLengthCRHGadget},
 };
-
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
+use snark::{ConstraintSystem, SynthesisError};
+use snark_gadgets::bits::uint8::UInt8;
+use snark_gadgets::fields::fp::FpGadget;
+use snark_gadgets::groups::curves::twisted_edwards::jubjub::JubJubGadget;
+use snark_gadgets::utils::AllocGadget;
 
 use crate::circuit::pedersen::pedersen_md_no_padding;
-use crate::crypto::pedersen::{pedersen_hash, BigWindow, Personalization};
+use crate::crypto::pedersen::BigWindow;
 use crate::crypto::{kdf, pedersen, sloth};
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
+use crate::singletons::PEDERSEN_PARAMS;
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PedersenHasher {}
@@ -212,12 +208,12 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
 
     fn hash_leaf_circuit<CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
-        left: &[Boolean],
-        right: &[Boolean],
+        left: &[UInt8],
+        right: &[UInt8],
         _height: usize,
         params: &PedersenParameters<JubJub>,
     ) -> std::result::Result<FpGadget<Bls12>, SynthesisError> {
-        let mut preimage: Vec<Boolean> = vec![];
+        let mut preimage: Vec<UInt8> = vec![];
         preimage.extend_from_slice(left);
         preimage.extend_from_slice(right);
 
@@ -231,20 +227,11 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
             )
             .unwrap();
 
-        while preimage.len() % 8 != 0 {
-            preimage.push(Boolean::Constant(false));
-        }
-
-        let input_bytes = preimage
-            .chunks(8)
-            .map(|v| UInt8::from_bits_le(v))
-            .collect::<Vec<UInt8>>();
-
         let gadget_result =
             <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::check_evaluation_gadget(
                 &mut cs.ns(|| "gadget_evaluation"),
                 &gadget_parameters,
-                &input_bytes,
+                &preimage,
             )
             .unwrap();
 
@@ -253,10 +240,10 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
 
     fn hash_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
-        bits: &[Boolean],
+        bytes: &[UInt8],
         params: &PedersenParameters<JubJub>,
     ) -> std::result::Result<FpGadget<Bls12>, SynthesisError> {
-        pedersen_md_no_padding(cs, bits, params)
+        pedersen_md_no_padding(cs, bytes, params)
     }
 }
 
@@ -281,54 +268,18 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
         right: PedersenDomain,
         _height: usize,
     ) -> PedersenDomain {
-        let node_bits = NodeBits::new(&(left.0).0[..], &(right.0).0[..]);
+        let left: &[u8] = left.as_ref();
+        let right: &[u8] = right.as_ref();
 
-        pedersen_hash::<_>(Personalization::None, node_bits)
+        let mut bytes = Vec::with_capacity(left.len() + right.len());
+        bytes.extend_from_slice(left);
+        bytes.extend_from_slice(right);
+
+        PedersenCRH::<JubJub, BigWindow>::evaluate(&PEDERSEN_PARAMS, &bytes[..])
+            .unwrap()
             .into_affine()
             .x
             .into()
-    }
-}
-
-/// Helper to iterate over a pair of `Fr`.
-struct NodeBits<'a> {
-    // 256 bits
-    lhs: &'a [u64],
-    // 256 bits
-    rhs: &'a [u64],
-    index: usize,
-}
-
-impl<'a> NodeBits<'a> {
-    pub fn new(lhs: &'a [u64], rhs: &'a [u64]) -> Self {
-        NodeBits { lhs, rhs, index: 0 }
-    }
-}
-
-impl<'a> Iterator for NodeBits<'a> {
-    type Item = bool;
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.index < 255 {
-            // return lhs
-            let a = self.index / 64;
-            let b = self.index % 64;
-            let res = (self.lhs[a] & (1 << b)) != 0;
-            self.index += 1;
-            return Some(res);
-        }
-
-        if self.index < 2 * 255 {
-            // return rhs
-            let a = (self.index - 255) / 64;
-            let b = (self.index - 255) % 64;
-            let res = (self.rhs[a] & (1 << b)) != 0;
-            self.index += 1;
-            return Some(res);
-        }
-
-        None
     }
 }
 
