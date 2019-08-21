@@ -39,7 +39,7 @@ fn anonymous_mmap(len: usize) -> MmapMut {
         .expect("Failed to create memory map")
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum LayerChallenges {
     Fixed {
         layers: usize,
