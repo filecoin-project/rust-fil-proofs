@@ -3,7 +3,7 @@
 This crate contains the following binaries
 
 - `benchy` - Can be used to capture ZigZag performance metrics
-- `micro` - Runs the micro benchmarks written with criterion, parses the output and pushes the information into prometheus.
+- `micro` - Runs the micro benchmarks written with criterion, parses the output.
 
 ## `benchy`
 
@@ -105,8 +105,6 @@ benchy-remote.sh script:
 
 All arguments passed to `micro` will be passed to `cargo bench --all <your arguments> -- --verbose --color never`.
 Except for the following
-
-- `--push-prometheus`: If set triggers the code to push to a prometheus gateway, expected to listen on `127.0.0.1:9091`.
 
 ### Example
 
