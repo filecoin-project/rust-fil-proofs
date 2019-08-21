@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use paired::bls12_381::Bls12;
-use storage_proofs::circuit::vdf_post::{VDFPoStCircuit, VDFPostCompound};
+use storage_proofs::circuit::rational_post::{RationalPoStCircuit, RationalPoStCompound};
+use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::parameter_cache::{self, CacheableParameters};
 
 use crate::types::*;
@@ -30,9 +31,11 @@ impl PoStConfig {
     pub fn get_cache_identifier(&self) -> String {
         let params = crate::parameters::post_public_params(*self);
 
-        <VDFPostCompound as CacheableParameters<Bls12, VDFPoStCircuit<_>, _>>::cache_identifier(
-            &params,
-        )
+        <RationalPoStCompound<DefaultTreeHasher> as CacheableParameters<
+            Bls12,
+            RationalPoStCircuit<_, DefaultTreeHasher>,
+            _,
+        >>::cache_identifier(&params)
     }
 
     pub fn get_cache_metadata_path(&self) -> PathBuf {

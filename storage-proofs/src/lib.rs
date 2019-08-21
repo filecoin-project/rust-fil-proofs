@@ -25,8 +25,6 @@ pub mod test_helper;
 
 pub mod example_helper;
 
-pub mod batchpost;
-pub mod beacon_post;
 pub mod challenge_derivation;
 pub mod circuit;
 pub mod compound_proof;
@@ -48,9 +46,6 @@ pub mod proof;
 pub mod rational_post;
 pub mod settings;
 pub mod util;
-pub mod vdf;
-pub mod vdf_post;
-pub mod vdf_sloth;
 pub mod zigzag_drgporep;
 pub mod zigzag_graph;
 
