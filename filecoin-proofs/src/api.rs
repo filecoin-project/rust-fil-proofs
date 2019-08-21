@@ -99,13 +99,15 @@ pub fn generate_post(
         })
         .collect::<error::Result<_>>()?;
 
-    let sector_count = commitments_all.len();
+    let sector_size = u64::from(PaddedBytesAmount::from(post_config));
+    let sector_count = commitments_all.len() as u64;
 
     let pub_params: compound_proof::PublicParams<_, rational_post::RationalPoSt<PedersenHasher>> =
         RationalPoStCompound::setup(&setup_params).expect("setup failed");
 
     let challenges = rational_post::derive_challenges(
         vanilla_params.challenges_count,
+        sector_size,
         sector_count,
         challenge_seed,
         &faults,
@@ -113,10 +115,7 @@ pub fn generate_post(
 
     let commitments: Vec<_> = challenges
         .iter()
-        .map(|c| {
-            let sector = rational_post::challenge_to_sector(*c, commitments_all.len() as u64);
-            commitments_all[sector as usize]
-        })
+        .map(|c| commitments_all[c.sector as usize])
         .collect();
 
     let pub_inputs = rational_post::PublicInputs {
@@ -185,10 +184,12 @@ pub fn verify_post(
         })
         .collect::<error::Result<_>>()?;
 
-    let sector_count = commitments_all.len();
+    let sector_size = u64::from(PaddedBytesAmount::from(post_config));
+    let sector_count = commitments_all.len() as u64;
 
     let challenges = rational_post::derive_challenges(
         vanilla_params.challenges_count,
+        sector_size,
         sector_count,
         challenge_seed,
         faults,
@@ -196,10 +197,7 @@ pub fn verify_post(
 
     let commitments: Vec<_> = challenges
         .iter()
-        .map(|c| {
-            let sector = rational_post::challenge_to_sector(*c, commitments_all.len() as u64);
-            commitments_all[sector as usize]
-        })
+        .map(|c| commitments_all[c.sector as usize])
         .collect();
 
     let public_params: compound_proof::PublicParams<
