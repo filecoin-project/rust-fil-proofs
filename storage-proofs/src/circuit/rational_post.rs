@@ -68,7 +68,7 @@ where
         for (challenge, commitment) in pub_in.challenges.iter().zip(pub_in.commitments) {
             let por_pub_inputs = merklepor::PublicInputs {
                 commitment: Some(*commitment),
-                challenge: *challenge as usize,
+                challenge: challenge.leaf as usize,
             };
             let por_inputs =
                 PoRCompound::<H>::generate_public_inputs(&por_pub_inputs, &por_pub_params, None);
@@ -224,14 +224,11 @@ mod tests {
 
         let faults = vec![];
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
-        let challenges = derive_challenges(challenges_count, 2, &seed, &faults);
+        let challenges = derive_challenges(challenges_count, sector_size, 2, &seed, &faults);
         let commitments_raw = vec![tree1.root(), tree2.root()];
         let commitments: Vec<_> = challenges
             .iter()
-            .map(|c| {
-                let sector = rational_post::challenge_to_sector(*c, commitments_raw.len() as u64);
-                commitments_raw[sector as usize]
-            })
+            .map(|c| commitments_raw[c.sector as usize])
             .collect();
 
         let pub_inputs = rational_post::PublicInputs {
@@ -322,14 +319,11 @@ mod tests {
 
         let faults = vec![];
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
-        let challenges = derive_challenges(challenges_count, 2, &seed, &faults);
+        let challenges = derive_challenges(challenges_count, sector_size, 2, &seed, &faults);
         let commitments_raw = vec![tree1.root(), tree2.root()];
         let commitments: Vec<_> = challenges
             .iter()
-            .map(|c| {
-                let sector = rational_post::challenge_to_sector(*c, commitments_raw.len() as u64);
-                commitments_raw[sector as usize].into()
-            })
+            .map(|c| commitments_raw[c.sector as usize].into())
             .collect();
 
         let pub_inputs = rational_post::PublicInputs {
