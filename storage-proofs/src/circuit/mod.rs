@@ -3,7 +3,6 @@ mod constraint;
 pub mod por;
 
 pub mod apex_commitment;
-pub mod beacon_post;
 pub mod drgporep;
 pub mod kdf;
 pub mod multi_proof;
@@ -13,7 +12,6 @@ pub mod ppor;
 pub mod rational_post;
 pub mod sloth;
 pub mod variables;
-pub mod vdf_post;
 pub mod xor;
 pub mod zigzag;
 
