@@ -21,7 +21,6 @@ glob = "0.3"
 human-size = "0.4"
 prettytable-rs = "0.8"
 regex = "1.1.6"
-prometheus = { version = "0.6.1", features = ["push"] }
 commandspec = "0.12.2"
 bellperson = "0.2.0"
 chrono = { version = "0.4.7", features = ["serde"] }
