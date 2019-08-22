@@ -5,7 +5,7 @@ use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 
 use algebra::biginteger::BigInteger256 as FrRepr;
-use algebra::curves::bls12_381::Bls12_381;
+use algebra::curves::bls12_381::Bls12_381 as Bls12;
 use algebra::curves::jubjub::JubJubProjective as JubJub;
 use algebra::fields::bls12_381::Fr;
 use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
@@ -58,19 +58,19 @@ pub trait HashFunction<T: Domain>:
         a.hash()
     }
 
-    fn hash_leaf_circuit<CS: ConstraintSystem<Bls12_381>>(
+    fn hash_leaf_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
         left: &[UInt8],
         right: &[UInt8],
         height: usize,
         params: &PedersenParameters<JubJub>,
-    ) -> std::result::Result<FpGadget<Bls12_381>, SynthesisError>;
+    ) -> std::result::Result<FpGadget<Bls12>, SynthesisError>;
 
-    fn hash_circuit<CS: ConstraintSystem<Bls12_381>>(
+    fn hash_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
         bits: &[UInt8],
         params: &PedersenParameters<JubJub>,
-    ) -> std::result::Result<FpGadget<Bls12_381>, SynthesisError>;
+    ) -> std::result::Result<FpGadget<Bls12>, SynthesisError>;
 }
 
 pub trait Hasher: Clone + ::std::fmt::Debug + Eq + Default + Send + Sync {
