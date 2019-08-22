@@ -21,15 +21,6 @@ use crate::proof::ProofScheme;
 use crate::settings;
 use crate::vde;
 
-#[cfg(feature = "disk-trees")]
-use rand;
-#[cfg(feature = "disk-trees")]
-use std::fs;
-#[cfg(feature = "disk-trees")]
-use std::io;
-#[cfg(feature = "disk-trees")]
-use std::path::PathBuf;
-
 type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 
 fn anonymous_mmap(len: usize) -> MmapMut {
@@ -389,7 +380,7 @@ pub trait Layers {
             let mut sorted_trees: Vec<_> = Vec::new();
 
             (0..=layers).fold(graph.clone(), |current_graph, layer| {
-                let tree_d = Self::generate_data_tree(&current_graph, &data, layer);
+                let tree_d = current_graph.merkle_tree(&data).unwrap();
 
                 info!("returning tree (layer: {})", layer);
 
@@ -466,7 +457,7 @@ pub trait Layers {
                                 .recv()
                                 .expect("Failed to receive value through channel");
 
-                            let tree_d = Self::generate_data_tree(&graph, &data_copy, layer);
+                            let tree_d = graph.merkle_tree(&data_copy).unwrap();
 
                             info!("returning tree (layer: {})", layer);
                             return_channel
@@ -517,53 +508,6 @@ pub trait Layers {
         }
 
         Ok((taus, auxs))
-    }
-
-    fn generate_data_tree(
-        graph: &Self::Graph,
-        data: &[u8],
-        _layer: usize,
-    ) -> MerkleTree<<Self::Hasher as Hasher>::Domain, <Self::Hasher as Hasher>::Function> {
-        #[cfg(not(feature = "disk-trees"))]
-        return graph.merkle_tree(&data).unwrap();
-
-        #[cfg(feature = "disk-trees")]
-        {
-            let tree_dir = &settings::SETTINGS.lock().unwrap().replicated_trees_dir;
-            // We should always be able to get this configuration
-            // variable (at least as an empty string).
-
-            if tree_dir.is_empty() {
-                // Signal `merkle_tree_path` to create a temporary file.
-                return graph.merkle_tree_path(&data, None).unwrap();
-            } else {
-                // Try to create `tree_dir`, ignore the error if `AlreadyExists`.
-                if let Some(create_error) = fs::create_dir(&tree_dir).err() {
-                    if create_error.kind() != io::ErrorKind::AlreadyExists {
-                        panic!(create_error);
-                    }
-                }
-
-                let tree_d = graph
-                    .merkle_tree_path(
-                        &data,
-                        Some(&PathBuf::from(tree_dir).join(format!(
-                            "tree-{}-{}",
-                            _layer,
-                            // FIXME: This argument is used only with `disk-trees`.
-                            rand::random::<u32>()
-                        ))),
-                    )
-                    .unwrap();
-                // FIXME: The user of `REPLICATED_TREES_DIR` should figure out
-                // how to manage this directory, for now we create every file with
-                // a different random number; the problem being that tests now do
-                // replications many times in the same run so they may end up
-                // reusing the same files with invalid (old) data and failing.
-
-                return tree_d;
-            }
-        }
     }
 }
 

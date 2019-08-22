@@ -161,7 +161,7 @@ To check that it's working you can inspect the replication log to find `using pa
 
 ### Memory
 
-We try to generate the MTs in parallel to speed up the process but that takes 2 sector sizes per each layer (e.g., a 1 GiB sector may require, in the worst case scenario, up to 20 GiB of memory to hold the MTs alone). To reduce that (at the cost of speed) we have the (experimental) `disk-trees` feature to offload the MTs to disk when we don't use them. For example, to run the `zigzag` example with this feature you'd need to indicate so to `cargo` *and* then indicate to the example (or any other code doing the replication) where they should be stored using the `FIL_PROOFS_REPLICATED_TREES_DIR` environmental variable (if set to a relative path, it will be relative  to the current working directory of the process in which the replication happens, see [`create_dir`](https://doc.rust-lang.org/std/fs/fn.create_dir.html#platform-specific-behavior)),
+We try to generate the MTs in parallel to speed up the process but that takes 2 sector sizes per each layer (e.g., a 1 GiB sector may require, in the worst case scenario, up to 20 GiB of memory to hold the MTs alone). To reduce that (at the cost of speed) we have the (experimental) `disk-trees` feature to offload the MTs to disk when we don't use them. For example, to run the `zigzag` example with this feature you'd need to indicate so to `cargo`,
 
 ```
 # From inside the `storage-proofs` directory, where this feature
@@ -172,14 +172,9 @@ cargo build                                                                   \
   --example zigzag                                                            \
   --features                                                                  \
     disk-trees                                                               &&
-FIL_PROOFS_REPLICATED_TREES_DIR="<tree-dir>"                                  \
 ../target/release/examples/zigzag                                             \
     --size 1048576
 ```
-
-To check if the feature is indeed working you can inspect the replication log to find the text `creating leaves tree mmap-file` indicating the path where each MT file is saved.
-
-Note that at the moment we do *not* clean up `<tree-dir>` so you'll need to **remove old MT files** yourself (otherwise the disk will start to fill up pretty fast). To avoid collisions in the directory we append a random hexadecimal value to each file, to check which files belong to the latest replication run you can (besides checking modification times) inspect the replication log to find out the actual file names generated.
 
 To optimize even more for memory there's another option (used in addition to the `disk-trees` feature) to generate all MTs in sequential order, to make sure we can offload them to disk before we start buildding the next one,
 
