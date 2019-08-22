@@ -169,7 +169,7 @@ pub struct PaddingMap {
 // Most of the code in this module is general-purpose and could move elsewhere.
 // The application-specific wrappers which implicitly use Fr32 embed the FR32_PADDING_MAP.
 pub const FR32_PADDING_MAP: PaddingMap = PaddingMap {
-    data_bits: 254,
+    data_bits: 252,
     element_bits: 256,
 };
 
