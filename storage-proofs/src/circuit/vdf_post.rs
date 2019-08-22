@@ -1,5 +1,5 @@
-use algebra::curves::{bls12_381::Bls12_381 as Bls12, jubjub::JubJubProjective as JubJub};
-use algebra::fields::bls12_381::Fr;
+use algebra::curves::{bls12_377::Bls12_377 as Bls12, edwards_bls12::EdwardsProjective};
+use algebra::fields::bls12_377::Fr;
 use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
 use snark::{Circuit, ConstraintSystem, SynthesisError};
 use snark_gadgets::{fields::fp::FpGadget, utils::AllocGadget};
@@ -20,7 +20,7 @@ use crate::vdf_post::{self, compute_root_commitment, VDFPoSt};
 #[derive(Debug)]
 pub struct VDFPoStCircuit<'a> {
     /// Paramters for the engine.
-    pub params: &'a PedersenParameters<JubJub>,
+    pub params: &'a PedersenParameters<EdwardsProjective>,
 
     pub challenge_seed: Option<Fr>,
 
@@ -324,7 +324,7 @@ impl<'a> VDFPoStCircuit<'a> {
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     pub fn synthesize<CS: ConstraintSystem<Bls12>>(
         cs: &mut CS,
-        params: &PedersenParameters<JubJub>,
+        params: &PedersenParameters<EdwardsProjective>,
         challenge_seed: Option<Fr>,
         vdf_key: Option<Fr>,
         vdf_ys: Vec<Option<Fr>>,
@@ -371,7 +371,7 @@ mod tests {
     use crate::vdf_sloth;
 
     #[test]
-    fn test_vdf_post_circuit_with_bls12_381() {
+    fn test_vdf_post_circuit_with_bls12_377() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let lambda = 32;

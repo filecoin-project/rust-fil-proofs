@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
-use algebra::curves::bls12_381::Bls12_381 as Bls12;
-use algebra::fields::bls12_381::Fr;
+use algebra::curves::bls12_377::Bls12_377 as Bls12;
+use algebra::fields::bls12_377::Fr;
 use snark::{Circuit, ConstraintSystem, SynthesisError};
 use snark_gadgets::fields::fp::FpGadget;
 use snark_gadgets::utils::{AllocGadget, ToBytesGadget};
@@ -362,7 +362,7 @@ mod tests {
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]
-    fn zigzag_drgporep_input_circuit_with_bls12_381() {
+    fn zigzag_drgporep_input_circuit_with_bls12_377() {
         let nodes = 5;
         let degree = 1;
         let expansion_degree = 2;

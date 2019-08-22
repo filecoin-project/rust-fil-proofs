@@ -1,9 +1,9 @@
 use algebra::biginteger::BigInteger;
 use algebra::curves::{
-    bls12_381::Bls12_381 as Bls12, jubjub::JubJubParameters, jubjub::JubJubProjective as JubJub,
+    bls12_377::Bls12_377 as Bls12, edwards_bls12::EdwardsParameters, edwards_bls12::EdwardsProjective,
     models::twisted_edwards_extended::GroupProjective, ProjectiveCurve,
 };
-use algebra::fields::{bls12_381::Fr, PrimeField};
+use algebra::fields::{bls12_377::Fr, PrimeField};
 use dpc::crypto_primitives::crh::{
     pedersen::{PedersenCRH, PedersenWindow},
     FixedLengthCRH,
@@ -46,8 +46,8 @@ impl Personalization {
     }
 }
 
-pub fn pedersen(data: &[u8]) -> GroupProjective<JubJubParameters> {
-    PedersenCRH::<JubJub, BigWindow>::evaluate(&PEDERSEN_PARAMS, data).unwrap()
+pub fn pedersen(data: &[u8]) -> GroupProjective<EdwardsParameters> {
+    PedersenCRH::<EdwardsProjective, BigWindow>::evaluate(&PEDERSEN_PARAMS, data).unwrap()
 }
 
 /// Pedersen hashing for inputs that have length multiple of the block size `256`. Based on pedersen hashes and a Merkle-Damgard construction.

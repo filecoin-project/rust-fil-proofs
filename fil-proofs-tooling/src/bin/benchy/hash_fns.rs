@@ -1,4 +1,4 @@
-use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use algebra::curves::bls12_377::Bls12_377 as Bls12;
 use algebra::curves::ProjectiveCurve;
 use dpc::gadgets::prf::blake2s::blake2s_gadget;
 use fil_proofs_tooling::metadata::Metadata;

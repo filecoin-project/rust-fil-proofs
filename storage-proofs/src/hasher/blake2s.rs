@@ -3,8 +3,8 @@ use std::hash::Hasher as StdHasher;
 
 use algebra::biginteger::BigInteger256 as FrRepr;
 use algebra::bytes::{FromBytes, ToBytes};
-use algebra::curves::{bls12_381::Bls12_381 as Bls12, jubjub::JubJubProjective as JubJub};
-use algebra::fields::{bls12_381::Fr, PrimeField};
+use algebra::curves::{bls12_377::Bls12_377 as Bls12, edwards_bls12::EdwardsProjective};
+use algebra::fields::{bls12_377::Fr, PrimeField};
 use blake2s_simd::{Hash as Blake2sHash, Params as Blake2s, State};
 use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
 use dpc::gadgets::prf::blake2s::blake2s_gadget;
@@ -220,7 +220,7 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
         left: &[UInt8],
         right: &[UInt8],
         _height: usize,
-        params: &PedersenParameters<JubJub>,
+        params: &PedersenParameters<EdwardsProjective>,
     ) -> std::result::Result<FpGadget<Bls12>, SynthesisError> {
         let mut preimage: Vec<UInt8> = vec![];
 
@@ -233,7 +233,7 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
     fn hash_circuit<CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
         bytes: &[UInt8],
-        _params: &PedersenParameters<JubJub>,
+        _params: &PedersenParameters<EdwardsProjective>,
     ) -> std::result::Result<FpGadget<Bls12>, SynthesisError> {
         let mut bits = Vec::with_capacity(bytes.len() * 8);
         for byte in bytes.iter() {

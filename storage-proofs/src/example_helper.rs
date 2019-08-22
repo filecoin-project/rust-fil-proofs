@@ -4,7 +4,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use algebra::bytes::{FromBytes, ToBytes};
-use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use algebra::curves::bls12_377::Bls12_377 as Bls12;
 use clap::{self, value_t, App, Arg, SubCommand};
 use pbr::ProgressBar;
 use rand::{Rng, SeedableRng, XorShiftRng};

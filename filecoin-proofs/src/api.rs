@@ -4,7 +4,7 @@ use std::io::prelude::*;
 use std::io::{BufWriter, Cursor, Read, SeekFrom};
 use std::path::{Path, PathBuf};
 
-use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use algebra::curves::bls12_377::Bls12_377 as Bls12;
 use algebra::fields::PrimeField;
 use algebra::PairingEngine as Engine;
 use memmap::MmapOptions;

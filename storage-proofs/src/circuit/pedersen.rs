@@ -1,5 +1,5 @@
-use algebra::curves::bls12_381::Bls12_381 as Bls12;
-use algebra::curves::jubjub::JubJubProjective as JubJub;
+use algebra::curves::bls12_377::Bls12_377 as Bls12;
+use algebra::curves::edwards_bls12::EdwardsProjective;
 use dpc::{
     crypto_primitives::crh::{pedersen::PedersenCRH, pedersen::PedersenParameters},
     gadgets::crh::{pedersen::PedersenCRHGadget, FixedLengthCRHGadget},
@@ -7,19 +7,19 @@ use dpc::{
 use snark::{ConstraintSystem, SynthesisError};
 use snark_gadgets::bits::uint8::UInt8;
 use snark_gadgets::fields::fp::FpGadget;
-use snark_gadgets::groups::curves::twisted_edwards::jubjub::JubJubGadget;
+use snark_gadgets::groups::curves::twisted_edwards::edwards_bls12::EdwardsBlsGadget;
 use snark_gadgets::utils::{AllocGadget, ToBytesGadget};
 
 use crate::crypto::pedersen::{BigWindow, PEDERSEN_BLOCK_SIZE};
 
-type CRHGadget = PedersenCRHGadget<JubJub, Bls12, JubJubGadget>;
-type CRH = PedersenCRH<JubJub, BigWindow>;
+type CRHGadget = PedersenCRHGadget<EdwardsProjective, Bls12, EdwardsBlsGadget>;
+type CRH = PedersenCRH<EdwardsProjective, BigWindow>;
 
 /// Pedersen hashing for inputs with length multiple of the block size. Based on a Merkle-Damgard construction.
 pub fn pedersen_md_no_padding<CS: ConstraintSystem<Bls12>>(
     mut cs: CS,
     bytes: &[UInt8],
-    params: &PedersenParameters<JubJub>,
+    params: &PedersenParameters<EdwardsProjective>,
 ) -> Result<FpGadget<Bls12>, SynthesisError> {
     assert!(
         (bytes.len() * 8) >= 2 * PEDERSEN_BLOCK_SIZE,
@@ -56,7 +56,7 @@ pub fn pedersen_md_no_padding<CS: ConstraintSystem<Bls12>>(
 pub fn pedersen_compression_num<CS: ConstraintSystem<Bls12>>(
     mut cs: CS,
     bytes: &[UInt8],
-    params: &PedersenParameters<JubJub>,
+    params: &PedersenParameters<EdwardsProjective>,
 ) -> Result<FpGadget<Bls12>, SynthesisError> {
     let gadget_parameters =
         <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::ParametersGadget::alloc(
@@ -78,7 +78,7 @@ pub fn pedersen_compression_num<CS: ConstraintSystem<Bls12>>(
 pub fn pedersen_compression<CS: ConstraintSystem<Bls12>>(
     mut cs: CS,
     bytes: &[UInt8],
-    params: &PedersenParameters<JubJub>,
+    params: &PedersenParameters<EdwardsProjective>,
 ) -> Result<Vec<UInt8>, SynthesisError> {
     let h = pedersen_compression_num(cs.ns(|| "compression"), bytes, params)?;
     h.to_bytes(cs.ns(|| "h into bits"))

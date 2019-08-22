@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate criterion;
 
-use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use algebra::curves::bls12_377::Bls12_377 as Bls12;
 use criterion::{black_box, Criterion, ParameterizedBenchmark};
 use dpc::gadgets::prf::blake2s::blake2s_gadget;
 use dpc::gadgets::Assignment;

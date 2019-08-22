@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
-use algebra::curves::bls12_381::Bls12_381 as Bls12;
-use algebra::fields::{bls12_381::Fr, FpParameters, PrimeField};
+use algebra::curves::bls12_377::Bls12_377 as Bls12;
+use algebra::fields::{bls12_377::Fr, FpParameters, PrimeField};
 use algebra::PairingEngine as Engine;
 use snark::{Circuit, ConstraintSystem, SynthesisError};
 use snark_gadgets::boolean::Boolean;
@@ -532,7 +532,7 @@ mod tests {
     use rand::{Rand, Rng, SeedableRng, XorShiftRng};
 
     #[test]
-    fn drgporep_input_circuit_with_bls12_381() {
+    fn drgporep_input_circuit_with_bls12_377() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let nodes = 12;

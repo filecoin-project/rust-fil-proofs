@@ -9,7 +9,7 @@ use memmap::MmapMut;
 use memmap::MmapOptions;
 use rand::{Rng, SeedableRng, XorShiftRng};
 
-use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use algebra::curves::bls12_377::Bls12_377 as Bls12;
 use fil_proofs_tooling::metadata::Metadata;
 use snark::Circuit;
 use storage_proofs::circuit::metric::MetricCS;

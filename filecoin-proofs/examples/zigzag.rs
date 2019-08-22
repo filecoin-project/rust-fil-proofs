@@ -15,7 +15,7 @@ use gperftools::heap_profiler::HEAP_PROFILER;
 #[cfg(feature = "cpu-profile")]
 use gperftools::profiler::PROFILER;
 
-use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use algebra::curves::bls12_377::Bls12_377 as Bls12;
 use chrono::Utc;
 use clap::{App, Arg};
 use memmap::MmapMut;

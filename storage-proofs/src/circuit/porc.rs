@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
-use algebra::curves::{bls12_381::Bls12_381 as Bls12, jubjub::JubJubProjective as JubJub};
-use algebra::fields::bls12_381::Fr;
+use algebra::curves::{bls12_377::Bls12_377 as Bls12, edwards_bls12::EdwardsProjective};
+use algebra::fields::bls12_377::Fr;
 use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
 use snark::{Circuit, ConstraintSystem, SynthesisError};
 use snark_gadgets::{
@@ -25,7 +25,7 @@ use crate::singletons::PEDERSEN_PARAMS;
 /// This is the `PoRC` circuit.
 pub struct PoRCCircuit<'a> {
     /// Paramters for the engine.
-    pub params: &'a PedersenParameters<JubJub>,
+    pub params: &'a PedersenParameters<EdwardsProjective>,
     pub challenges: Vec<Option<Fr>>,
     pub challenged_leafs: Vec<Option<Fr>>,
     pub challenged_sectors: Vec<Option<usize>>,
@@ -269,7 +269,7 @@ mod tests {
     use crate::proof::{NoRequirements, ProofScheme};
 
     #[test]
-    fn test_porc_circuit_with_bls12_381() {
+    fn test_porc_circuit_with_bls12_377() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 32;

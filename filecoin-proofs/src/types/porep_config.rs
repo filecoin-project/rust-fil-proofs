@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use algebra::curves::bls12_377::Bls12_377 as Bls12;
 use storage_proofs::circuit::zigzag::{ZigZagCircuit, ZigZagCompound};
 use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::parameter_cache::{self, CacheableParameters};

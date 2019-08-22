@@ -12,7 +12,7 @@ use std::time::Instant;
 #[cfg(feature = "cpu-profile")]
 use gperftools::profiler::PROFILER;
 
-use algebra::curves::bls12_381::Bls12_381 as Bls12;
+use algebra::curves::bls12_377::Bls12_377 as Bls12;
 use clap::{App, Arg};
 use memmap::MmapMut;
 use memmap::MmapOptions;

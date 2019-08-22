@@ -87,7 +87,7 @@ pub fn bits_to_bytes(bits: &[bool]) -> Vec<u8> {
 mod tests {
     use super::*;
     use crate::circuit::test::*;
-    use algebra::curves::bls12_381::Bls12_381 as Bls12;
+    use algebra::curves::bls12_377::Bls12_377 as Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]

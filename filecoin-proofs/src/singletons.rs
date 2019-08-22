@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use algebra::fields::bls12_381::Fr;
+use algebra::fields::bls12_377::Fr;
 use algebra::fields::PrimeField;
 use storage_proofs::hasher::pedersen::PedersenDomain;
 

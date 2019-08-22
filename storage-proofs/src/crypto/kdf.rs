@@ -1,6 +1,6 @@
 use blake2s_simd::Params as Blake2s;
 
-use algebra::fields::bls12_381::Fr;
+use algebra::fields::bls12_377::Fr;
 use algebra::PrimeField;
 
 use crate::fr32::bytes_into_fr_repr_safe;
@@ -28,7 +28,7 @@ pub fn kdf(data: &[u8], m: usize) -> Fr {
 mod tests {
     use super::kdf;
     use crate::fr32::bytes_into_fr;
-    use algebra::curves::bls12_381::Bls12_381 as Bls12;
+    use algebra::curves::bls12_377::Bls12_377 as Bls12;
 
     #[test]
     fn kdf_valid_block_len() {

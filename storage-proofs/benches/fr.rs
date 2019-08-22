@@ -1,8 +1,8 @@
 #[macro_use]
 extern crate criterion;
 
-use algebra::curves::bls12_381::Bls12_381 as Bls12;
-use algebra::fields::bls12_381::Fr;
+use algebra::curves::bls12_377::Bls12_377 as Bls12;
+use algebra::fields::bls12_377::Fr;
 use criterion::{black_box, Criterion};
 use rand::{thread_rng, Rng};
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes};

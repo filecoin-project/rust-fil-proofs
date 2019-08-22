@@ -27,12 +27,12 @@ mod tests {
     use super::*;
 
     use algebra::biginteger::BigInteger256 as FrRepr;
-    use algebra::curves::bls12_381::Bls12_381 as Bls12;
-    use algebra::fields::bls12_381::Fr;
+    use algebra::curves::bls12_377::Bls12_377 as Bls12;
+    use algebra::fields::bls12_377::Fr;
     use algebra::fields::PrimeField;
     use std::str::FromStr;
 
-    // the modulus from `bls12_381::Fr`
+    // the modulus from `bls12_377::Fr`
     // The definition of MODULUS and comment defining r come from paired/src/bls_12_381/fr.rs.
     // r = 52435875175126190479447740508185965837690552500527637822603658699938581184513
     const MODULUS: [u64; 4] = [

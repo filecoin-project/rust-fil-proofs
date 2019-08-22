@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
-use algebra::curves::{bls12_381::Bls12_381 as Bls12, jubjub::JubJubProjective as JubJub};
-use algebra::fields::bls12_381::Fr;
+use algebra::curves::{bls12_377::Bls12_377 as Bls12, edwards_bls12::EdwardsProjective};
+use algebra::fields::bls12_377::Fr;
 use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
 use snark::{Circuit, ConstraintSystem, SynthesisError};
 use snark_gadgets::{
@@ -29,7 +29,7 @@ use crate::singletons::PEDERSEN_PARAMS;
 /// * `root` - The merkle root of the tree.
 ///
 pub struct PoRCircuit<'a, H: Hasher> {
-    params: &'a PedersenParameters<JubJub>,
+    params: &'a PedersenParameters<EdwardsProjective>,
     value: Option<Fr>,
     auth_path: Vec<Option<(Fr, bool)>>,
     root: Root<Bls12>,
@@ -327,16 +327,16 @@ mod tests {
     }
 
     #[test]
-    fn test_por_input_circuit_with_bls12_381_pedersen() {
-        test_por_input_circuit_with_bls12_381::<PedersenHasher>(13842);
+    fn test_por_input_circuit_with_bls12_377_pedersen() {
+        test_por_input_circuit_with_bls12_377::<PedersenHasher>(13842);
     }
 
     #[test]
-    fn test_por_input_circuit_with_bls12_381_blake2s() {
-        test_por_input_circuit_with_bls12_381::<Blake2sHasher>(65394);
+    fn test_por_input_circuit_with_bls12_377_blake2s() {
+        test_por_input_circuit_with_bls12_377::<Blake2sHasher>(65394);
     }
 
-    fn test_por_input_circuit_with_bls12_381<H: Hasher>(num_constraints: usize) {
+    fn test_por_input_circuit_with_bls12_377<H: Hasher>(num_constraints: usize) {
         // let params = &JubjubBls12::new();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
@@ -512,7 +512,7 @@ mod tests {
     }
 
     #[test]
-    fn test_private_por_input_circuit_with_bls12_381() {
+    fn test_private_por_input_circuit_with_bls12_377() {
         test_private_por_input_circuit::<PedersenHasher>();
     }
 

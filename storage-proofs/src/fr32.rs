@@ -99,7 +99,7 @@ pub fn u32_into_fr<E: Engine>(n: u32) -> E::Fr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use algebra::curves::bls12_381::Bls12_381 as Bls12;
+    use algebra::curves::bls12_377::Bls12_377 as Bls12;
 
     // Note: zexe returns the zero field element for bigint representations that overflow / are not in the field,
     // while bellman was throwing an error. Due to this we had to adapt the logic of the following tests.

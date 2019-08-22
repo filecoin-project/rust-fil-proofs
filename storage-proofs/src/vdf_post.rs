@@ -3,8 +3,8 @@ use std::marker::PhantomData;
 use std::ops::SubAssign;
 
 use algebra::biginteger::BigInteger256 as FrRepr;
-use algebra::curves::bls12_381::Bls12_381 as Bls12;
-use algebra::fields::bls12_381::Fr;
+use algebra::curves::bls12_377::Bls12_377 as Bls12;
+use algebra::fields::bls12_377::Fr;
 use algebra::fields::{Field, PrimeField};
 use algebra::PairingEngine as Engine;
 use bitvec::{self, BitVec};

@@ -3,8 +3,8 @@ extern crate clap;
 #[macro_use]
 extern crate log;
 
-use algebra::curves::bls12_381::Bls12_381 as Bls12;
-use algebra::fields::bls12_381::Fr;
+use algebra::curves::bls12_377::Bls12_377 as Bls12;
+use algebra::fields::bls12_377::Fr;
 use clap::{App, Arg};
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::time::{Duration, Instant};

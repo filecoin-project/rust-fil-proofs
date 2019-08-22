@@ -6,8 +6,8 @@ use std::io::Write;
 use algebra::biginteger::BigInteger;
 use algebra::biginteger::BigInteger256 as FrRepr;
 use algebra::curves::ProjectiveCurve;
-use algebra::curves::{bls12_381::Bls12_381 as Bls12, jubjub::JubJubProjective as JubJub};
-use algebra::fields::{bls12_381::Fr, PrimeField};
+use algebra::curves::{bls12_377::Bls12_377 as Bls12, edwards_bls12::EdwardsProjective};
+use algebra::fields::{bls12_377::Fr, PrimeField};
 use dpc::crypto_primitives::crh::FixedLengthCRH;
 use dpc::{
     crypto_primitives::crh::pedersen::{PedersenCRH, PedersenParameters},
@@ -18,7 +18,7 @@ use merkletree::merkle::Element;
 use snark::{ConstraintSystem, SynthesisError};
 use snark_gadgets::bits::uint8::UInt8;
 use snark_gadgets::fields::fp::FpGadget;
-use snark_gadgets::groups::curves::twisted_edwards::jubjub::JubJubGadget;
+use snark_gadgets::groups::curves::twisted_edwards::edwards_bls12::EdwardsBlsGadget;
 use snark_gadgets::utils::AllocGadget;
 
 use crate::circuit::pedersen::pedersen_md_no_padding;
@@ -211,14 +211,14 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         left: &[UInt8],
         right: &[UInt8],
         _height: usize,
-        params: &PedersenParameters<JubJub>,
+        params: &PedersenParameters<EdwardsProjective>,
     ) -> std::result::Result<FpGadget<Bls12>, SynthesisError> {
         let mut preimage: Vec<UInt8> = vec![];
         preimage.extend_from_slice(left);
         preimage.extend_from_slice(right);
 
-        type CRHGadget = PedersenCRHGadget<JubJub, Bls12, JubJubGadget>;
-        type CRH = PedersenCRH<JubJub, BigWindow>;
+        type CRHGadget = PedersenCRHGadget<EdwardsProjective, Bls12, EdwardsBlsGadget>;
+        type CRH = PedersenCRH<EdwardsProjective, BigWindow>;
 
         let gadget_parameters =
             <CRHGadget as FixedLengthCRHGadget<CRH, Bls12>>::ParametersGadget::alloc(
@@ -241,7 +241,7 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
     fn hash_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
         bytes: &[UInt8],
-        params: &PedersenParameters<JubJub>,
+        params: &PedersenParameters<EdwardsProjective>,
     ) -> std::result::Result<FpGadget<Bls12>, SynthesisError> {
         pedersen_md_no_padding(cs, bytes, params)
     }
@@ -275,7 +275,7 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
         bytes.extend_from_slice(left);
         bytes.extend_from_slice(right);
 
-        PedersenCRH::<JubJub, BigWindow>::evaluate(&PEDERSEN_PARAMS, &bytes[..])
+        PedersenCRH::<EdwardsProjective, BigWindow>::evaluate(&PEDERSEN_PARAMS, &bytes[..])
             .unwrap()
             .into_affine()
             .x

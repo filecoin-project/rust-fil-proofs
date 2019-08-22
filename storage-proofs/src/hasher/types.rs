@@ -5,9 +5,9 @@ use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 
 use algebra::biginteger::BigInteger256 as FrRepr;
-use algebra::curves::bls12_381::Bls12_381 as Bls12;
-use algebra::curves::jubjub::JubJubProjective as JubJub;
-use algebra::fields::bls12_381::Fr;
+use algebra::curves::bls12_377::Bls12_377 as Bls12;
+use algebra::curves::edwards_bls12::EdwardsProjective;
+use algebra::fields::bls12_377::Fr;
 use dpc::crypto_primitives::crh::pedersen::PedersenParameters;
 use snark::{ConstraintSystem, SynthesisError};
 use snark_gadgets::bits::uint8::UInt8;
@@ -63,13 +63,13 @@ pub trait HashFunction<T: Domain>:
         left: &[UInt8],
         right: &[UInt8],
         height: usize,
-        params: &PedersenParameters<JubJub>,
+        params: &PedersenParameters<EdwardsProjective>,
     ) -> std::result::Result<FpGadget<Bls12>, SynthesisError>;
 
     fn hash_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
         bits: &[UInt8],
-        params: &PedersenParameters<JubJub>,
+        params: &PedersenParameters<EdwardsProjective>,
     ) -> std::result::Result<FpGadget<Bls12>, SynthesisError>;
 }
 

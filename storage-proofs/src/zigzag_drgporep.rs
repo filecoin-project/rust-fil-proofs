@@ -47,7 +47,7 @@ where
 mod tests {
     use super::*;
 
-    use algebra::curves::bls12_381::Bls12_381 as Bls12;
+    use algebra::curves::bls12_377::Bls12_377 as Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     use crate::drgporep;

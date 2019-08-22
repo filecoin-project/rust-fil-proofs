@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
-use algebra::curves::bls12_381::Bls12_381 as Bls12;
-use algebra::fields::bls12_381::Fr;
+use algebra::curves::bls12_377::Bls12_377 as Bls12;
+use algebra::fields::bls12_377::Fr;
 use rand::Rng;
 use snark::groth16::*;
 use snark::{Circuit, ConstraintSystem, SynthesisError};
