@@ -536,23 +536,43 @@ fn generate_post_fixed_sectors_count(
         faults: Vec::new(),
     };
 
-    let trees: Vec<Tree> = fixed
-        .input_parts
-        .iter()
-        .map(|(access, _)| {
-            if let Some(s) = &access {
+    // Because of padding the last real tree is duplicated many times, so instead of recreating it
+    // we stop when they are the same and only use references.
+    let mut trees: Vec<Tree> = Vec::new();
+    let mut last_comm = None;
+
+    for (access, comm) in fixed.input_parts.iter() {
+        if let Some(last_comm) = last_comm {
+            if comm == last_comm {
+                // we are done generating unique trees
+                break;
+            }
+        }
+
+        if let Some(s) = &access {
+            trees.push(
                 make_merkle_tree(
                     s,
                     PaddedBytesAmount(pub_params.vanilla_params.sector_size as u64),
                 )
-                .unwrap()
-            } else {
-                panic!("faults are not yet supported")
-            }
-        })
-        .collect();
+                .unwrap(),
+            );
+            last_comm = Some(comm);
+        } else {
+            panic!("faults are not yet supported");
+        }
+    }
 
-    let borrowed_trees: Vec<&Tree> = trees.iter().map(|t| t).collect();
+    let fixed_len = fixed.input_parts.len();
+    let mut borrowed_trees: Vec<&Tree> = Vec::with_capacity(fixed_len);
+    for tree in &trees {
+        borrowed_trees.push(tree);
+    }
+    // "Pad" with the last tree
+    let last_tree = &trees[trees.len() - 1];
+    while borrowed_trees.len() < fixed_len {
+        borrowed_trees.push(last_tree);
+    }
 
     let priv_inputs = vdf_post::PrivateInputs::<PedersenHasher>::new(&borrowed_trees[..]);
 
