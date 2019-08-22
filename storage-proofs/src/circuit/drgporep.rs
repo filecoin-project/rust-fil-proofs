@@ -699,7 +699,7 @@ mod tests {
 
         assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
         //        assert_eq!(cs.num_constraints(), 363392, "wrong number of constraints");
-        assert_eq!(cs.num_constraints(), 1010691, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 1010679, "wrong number of constraints");
     }
 
     #[test]
