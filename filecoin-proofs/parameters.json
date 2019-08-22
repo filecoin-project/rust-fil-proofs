@@ -1,20 +1,20 @@
 {
-  "v11-vdf-post-7734b138d16b609af122a44c8105ec323810a40eb743479f7127a14630ae407f.params": {
+  "v11-vdf-post-6142c5095dcab8adf8698aaea24eac78035e3fefe6503b3e2f80758e4c948639.params": {
     "cid": "QmYS9NmkfVtZCtQPF18uQBeWfajF5YRKKkDPXpVR6pzzP4",
     "digest": "43008a8c945076a08aa2e7c4785241de",
     "sector_size": 1024
   },
-  "v11-vdf-post-7734b138d16b609af122a44c8105ec323810a40eb743479f7127a14630ae407f.vk": {
+  "v11-vdf-post-6142c5095dcab8adf8698aaea24eac78035e3fefe6503b3e2f80758e4c948639.vk": {
     "cid": "QmTXenYSVvEz2yEJ1deCobfQBVgykkigBuvWJCzTM5tmC2",
     "digest": "73b49d9cf0ba983b3e861da0e0ee2e2a",
     "sector_size": 1024
   },
-  "v11-vdf-post-fcc91dc272c9e6dfc906ff56cf65c412340b02fdef60b8132610bbe1dce61b20.params": {
+  "v11-vdf-post-71ca99ebb6212e45b2affa16eb6e1f671c37986e84ee8b9edbf924ab45b5fdfe.params": {
     "cid": "Qmc3R5xmapcSGKGR9zRC2fyPo3QuAuChtsKwswE6NZ6QMQ",
     "digest": "8091b735d254982b0b62e712bab82139",
     "sector_size": 268435456
   },
-  "v11-vdf-post-fcc91dc272c9e6dfc906ff56cf65c412340b02fdef60b8132610bbe1dce61b20.vk": {
+  "v11-vdf-post-71ca99ebb6212e45b2affa16eb6e1f671c37986e84ee8b9edbf924ab45b5fdfe.vk": {
     "cid": "QmeD4mdJFPjsWouBPPwvm6iVFYG8bpqNYetd2Ux7PoZawz",
     "digest": "32784464acc85a662ea16ecf5aba931d",
     "sector_size": 268435456
