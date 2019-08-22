@@ -52,7 +52,7 @@ pub fn bytes_into_fr_repr_safe(r: &[u8]) -> FrRepr {
         LittleEndian::read_u64(&r[0..8]),
         LittleEndian::read_u64(&r[8..16]),
         LittleEndian::read_u64(&r[16..24]),
-        u64::from(r[31] & 0b0011_1111) << 56
+        u64::from(r[31] & 0b0000_1111) << 56
             | u64::from(r[30]) << 48
             | u64::from(r[29]) << 40
             | u64::from(r[28]) << 32

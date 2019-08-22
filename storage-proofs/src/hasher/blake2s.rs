@@ -98,8 +98,8 @@ pub struct Blake2sDomain(pub [u8; 32]);
 
 impl Blake2sDomain {
     fn trim_to_fr32(&mut self) {
-        // strip last two bits, to ensure result is in Fr.
-        self.0[31] &= 0b0011_1111;
+        // strip last four bits, to ensure result is in Fr.
+        self.0[31] &= 0b0000_1111;
     }
 }
 

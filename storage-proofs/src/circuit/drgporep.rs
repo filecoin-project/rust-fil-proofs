@@ -660,7 +660,7 @@ mod tests {
         assert!(cs.is_satisfied(), "constraints not satisfied");
         assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
         //        assert_eq!(cs.num_constraints(), 131216, "wrong number of constraints");
-        assert_eq!(cs.num_constraints(), 235707, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 235695, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
@@ -672,7 +672,6 @@ mod tests {
 
     #[test]
     fn drgporep_input_circuit_num_constraints() {
-        //        let params = &JubjubBls12::new();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         // 1 GB

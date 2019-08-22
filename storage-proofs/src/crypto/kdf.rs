@@ -5,7 +5,7 @@ use algebra::PrimeField;
 
 use crate::fr32::bytes_into_fr_repr_safe;
 
-/// Key derivation function, based on pedersen hashing.
+/// Key derivation function, based on Pedersen hashing.
 pub fn kdf(data: &[u8], m: usize) -> Fr {
     assert_eq!(
         data.len(),
@@ -26,9 +26,7 @@ pub fn kdf(data: &[u8], m: usize) -> Fr {
 
 #[cfg(test)]
 mod tests {
-    use super::kdf;
-    use crate::fr32::bytes_into_fr;
-    use algebra::curves::bls12_377::Bls12_377 as Bls12;
+    use super::*;
 
     #[test]
     fn kdf_valid_block_len() {
@@ -36,14 +34,12 @@ mod tests {
         let size = 32 * (1 + m);
 
         let data = vec![1u8; size];
-        let expected = bytes_into_fr::<Bls12>(
+        let expected = Fr::from_repr(bytes_into_fr_repr_safe(
             &mut vec![
                 220, 60, 76, 126, 119, 247, 67, 162, 98, 94, 119, 28, 247, 18, 71, 208, 167, 72,
                 33, 85, 59, 56, 96, 13, 9, 67, 49, 109, 95, 246, 152, 63,
-            ]
-            .as_slice(),
-        )
-        .unwrap();
+            ].as_slice(),
+        ));
 
         let res = kdf(&data, m);
         assert_eq!(res, expected);
