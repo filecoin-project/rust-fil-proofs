@@ -33,13 +33,13 @@ mod tests {
     use std::str::FromStr;
 
     // the modulus from `bls12_377::Fr`
-    // The definition of MODULUS and comment defining r come from paired/src/bls_12_381/fr.rs.
-    // r = 52435875175126190479447740508185965837690552500527637822603658699938581184513
+    // The definition of MODULUS comes from algebra/src/fields/bls12_377/fr.rs
+    // MODULUS = 8444461749428370424248824938781546531375899335154063827935233455917409239041
     const MODULUS: [u64; 4] = [
-        0xffffffff00000001,
-        0x53bda402fffe5bfe,
-        0x3339d80809a1d805,
-        0x73eda753299d7d48,
+        0x0a11800000000001,
+        0x59aa76fed0000001,
+        0x60b44d1e5c37b001,
+        0x12ab655e9a2ca556,
     ];
 
     #[test]
