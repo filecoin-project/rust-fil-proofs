@@ -15,7 +15,8 @@ bench = false
 bitvec = "0.5"
 rand = "0.4"
 libc = "0.2"
-merkletree = "=0.8"
+# merkletree = "=0.8"
+merkletree = { git = "https://github.com/filecoin-project/merkle_light", branch = "fix/use-only-temp-files" }
 failure = "0.1"
 byteorder = "1"
 config = "0.9.3"

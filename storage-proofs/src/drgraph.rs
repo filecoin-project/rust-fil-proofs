@@ -11,15 +11,6 @@ use crate::merkle::MerkleTree;
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::{data_at_node, NODE_SIZE};
 
-#[cfg(feature = "disk-trees")]
-use crate::merkle::DiskStore;
-#[cfg(feature = "disk-trees")]
-use merkletree::merkle::next_pow2;
-#[cfg(feature = "disk-trees")]
-use std::path::Path;
-#[cfg(feature = "disk-trees")]
-use std::path::PathBuf;
-
 /// The default hasher currently in use.
 pub type DefaultTreeHasher = PedersenHasher;
 
@@ -62,84 +53,6 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
         };
 
         if parallel {
-            Ok(MerkleTree::from_par_iter(
-                (0..self.size()).into_par_iter().map(f),
-            ))
-        } else {
-            Ok(MerkleTree::new((0..self.size()).map(f)))
-        }
-    }
-
-    /// Builds a merkle tree based on the given data and stores it in `path`
-    /// (if set).
-    #[cfg(feature = "disk-trees")]
-    fn merkle_tree_path<'a>(
-        &self,
-        data: &'a [u8],
-        path: Option<&Path>,
-    ) -> Result<MerkleTree<H::Domain, H::Function>> {
-        self.merkle_tree_aux_path(data, PARALLEL_MERKLE, path)
-    }
-
-    #[cfg(feature = "disk-trees")]
-    fn merkle_tree_aux_path<'a>(
-        &self,
-        data: &'a [u8],
-        parallel: bool,
-        path: Option<&Path>,
-    ) -> Result<MerkleTree<H::Domain, H::Function>> {
-        if data.len() != (NODE_SIZE * self.size()) as usize {
-            return Err(Error::InvalidMerkleTreeArgs(
-                data.len(),
-                NODE_SIZE,
-                self.size(),
-            ));
-        }
-
-        let f = |i| {
-            let d = data_at_node(&data, i).expect("data_at_node math failed");
-            // TODO/FIXME: This can panic. FOR NOW, let's leave this since we're experimenting with
-            // optimization paths. However, we need to ensure that bad input will not lead to a panic
-            // that isn't caught by the FPS API.
-            // Unfortunately, it's not clear how to perform this error-handling in the parallel
-            // iterator case.
-            H::Domain::try_from_bytes(d).unwrap()
-        };
-
-        if let Some(path) = path {
-            let path_prefix = path.to_str().expect("couldn't convert path to string");
-            let leaves_path = &PathBuf::from([path_prefix, "leaves"].join("-"));
-            let top_half_path = &PathBuf::from([path_prefix, "top-half"].join("-"));
-            // FIXME: There is probably a more direct way of doing this without
-            // reconverting to string.
-
-            info!(
-                "creating leaves tree mmap-file (path-prefix: {:?})",
-                leaves_path.to_str()
-            );
-            info!(
-                "creating top half tree mmap-file (path-prefix: {:?})",
-                top_half_path.to_str()
-            );
-
-            let leaves_disk_mmap = DiskStore::new_with_path(next_pow2(self.size()), leaves_path);
-            let top_half_disk_mmap =
-                DiskStore::new_with_path(next_pow2(self.size()), top_half_path);
-
-            // FIXME: `new_with_path` is using the `from_iter` implementation,
-            //  instead the `parallel` flag should be passed also as argument
-            //  and decide *there* which code to use (merging this into the
-            //  `if` logic below).
-
-            Ok(MerkleTree::from_data_with_store(
-                (0..self.size()).map(f),
-                leaves_disk_mmap,
-                top_half_disk_mmap,
-            ))
-        // If path is `None` use the existing code that will eventually
-        // call the default `DiskStore::new` creating a temporary
-        // file.
-        } else if parallel {
             Ok(MerkleTree::from_par_iter(
                 (0..self.size()).into_par_iter().map(f),
             ))
