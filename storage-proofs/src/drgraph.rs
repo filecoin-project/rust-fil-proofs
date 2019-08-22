@@ -10,6 +10,7 @@ use crate::hasher::{Domain, Hasher};
 use crate::merkle::MerkleTree;
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::{data_at_node, NODE_SIZE};
+use merkletree::merkle::FromIndexedParallelIterator;
 
 /// The default hasher currently in use.
 pub type DefaultTreeHasher = PedersenHasher;
