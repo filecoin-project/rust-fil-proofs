@@ -47,6 +47,7 @@ use storage_proofs::piece_inclusion_proof::{
 use storage_proofs::porep::{replica_id, PoRep, Tau};
 use storage_proofs::proof::NoRequirements;
 use storage_proofs::rational_post;
+use storage_proofs::sector_id::SectorId;
 use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
 use tempfile::tempfile;
 
@@ -129,7 +130,7 @@ pub fn generate_post(
     post_config: PoStConfig,
     challenge_seed: &ChallengeSeed,
     replicas: Vec<ReplicaInfo>,
-    faults: &[u64],
+    faults: &[SectorId],
 ) -> error::Result<Vec<u8>> {
     let sector_count = replicas.len() as u64;
     let sector_size = u64::from(PaddedBytesAmount::from(post_config));
@@ -155,19 +156,19 @@ pub fn generate_post(
         sector_size,
         sector_count,
         challenge_seed,
-        &faults,
+        faults,
     );
 
     // Match the replicas to the challenges, as these are the only ones required.
     let challenged_replicas: Vec<_> = challenges
         .iter()
         .map(|c| {
-            if let Some(replica) = replicas.get(c.sector as usize) {
+            if let Some(replica) = replicas.get(u64::from(c.sector_id) as usize) {
                 Ok(replica)
             } else {
                 Err(format_err!(
-                    "Invalid challenge generated: {}, only {} sectors are being proven",
-                    c.sector as usize,
+                    "Invalid challenge generated: {:?}, only {} sectors are being proven",
+                    c.sector_id,
                     sector_count
                 ))
             }
@@ -228,7 +229,7 @@ pub fn verify_post(
     comm_rs: Vec<Commitment>,
     challenge_seed: &ChallengeSeed,
     proof: &[u8],
-    faults: &[u64],
+    faults: &[SectorId],
 ) -> error::Result<bool> {
     let sector_size = u64::from(PaddedBytesAmount::from(post_config));
     let sector_count = comm_rs.len() as u64;
@@ -259,12 +260,12 @@ pub fn verify_post(
     let commitments: Vec<_> = challenges
         .iter()
         .map(|c| {
-            if let Some(comm) = commitments_all.get(c.sector as usize) {
+            if let Some(comm) = commitments_all.get(u64::from(c.sector_id) as usize) {
                 Ok(*comm)
             } else {
                 Err(format_err!(
-                    "Invalid challenge generated: {}, only {} sectors are being proven",
-                    c.sector as usize,
+                    "Invalid challenge generated: {:?}, only {} sectors are being proven",
+                    c.sector_id,
                     sector_count
                 ))
             }
@@ -372,7 +373,7 @@ pub fn seal<T: AsRef<Path>>(
     in_path: T,
     out_path: T,
     prover_id_in: &FrSafe,
-    sector_id_in: &FrSafe,
+    sector_id: SectorId,
     piece_lengths: &[UnpaddedBytesAmount],
 ) -> error::Result<SealOutput> {
     let sector_bytes = usize::from(PaddedBytesAmount::from(porep_config));
@@ -391,8 +392,8 @@ pub fn seal<T: AsRef<Path>>(
     // Zero-pad the prover_id to 32 bytes (and therefore Fr32).
     let prover_id = pad_safe_fr(prover_id_in);
     // Zero-pad the sector_id to 32 bytes (and therefore Fr32).
-    let sector_id = pad_safe_fr(sector_id_in);
-    let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
+    let sector_id_as_safe_fr = pad_safe_fr(&sector_id.as_fr_safe());
+    let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id_as_safe_fr);
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: &setup_params(
@@ -486,7 +487,7 @@ pub fn seal<T: AsRef<Path>>(
         comm_d,
         comm_r_star,
         prover_id_in,
-        sector_id_in,
+        sector_id,
         &buf,
     )
     .expect("post-seal verification sanity check failed");
@@ -509,13 +510,13 @@ pub fn verify_seal(
     comm_d: Commitment,
     comm_r_star: Commitment,
     prover_id_in: &FrSafe,
-    sector_id_in: &FrSafe,
+    sector_id: SectorId,
     proof_vec: &[u8],
 ) -> error::Result<bool> {
     let sector_bytes = PaddedBytesAmount::from(porep_config);
     let prover_id = pad_safe_fr(prover_id_in);
-    let sector_id = pad_safe_fr(sector_id_in);
-    let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
+    let sector_id_as_safe_fr = pad_safe_fr(&sector_id.as_fr_safe());
+    let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id_as_safe_fr);
 
     let comm_r = as_safe_commitment(&comm_r, "comm_r")?;
     let comm_d = as_safe_commitment(&comm_d, "comm_d")?;
@@ -808,7 +809,7 @@ mod tests {
                 convertible_to_fr_bytes,
                 convertible_to_fr_bytes,
                 &[0; 31],
-                &[0; 31],
+                SectorId::from(0),
                 &[],
             );
 
@@ -832,7 +833,7 @@ mod tests {
                 not_convertible_to_fr_bytes,
                 convertible_to_fr_bytes,
                 &[0; 31],
-                &[0; 31],
+                SectorId::from(0),
                 &[],
             );
 
@@ -856,7 +857,7 @@ mod tests {
                 convertible_to_fr_bytes,
                 not_convertible_to_fr_bytes,
                 &[0; 31],
-                &[0; 31],
+                SectorId::from(0),
                 &[],
             );
 
@@ -935,7 +936,7 @@ mod tests {
             &staged_sector_file.path(),
             &sealed_sector_file.path(),
             &[0; 31],
-            &[0; 31],
+            SectorId::from(0),
             &[number_of_bytes_in_piece],
         )?;
 
