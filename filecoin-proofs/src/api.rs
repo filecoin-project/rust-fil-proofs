@@ -538,12 +538,9 @@ pub fn verify_seal(
 
     let public_inputs = layered_drgporep::PublicInputs::<<DefaultTreeHasher as Hasher>::Domain> {
         replica_id,
-        tau: Some(Tau {
-            comm_r: comm_r.into(),
-            comm_d: comm_d.into(),
-        }),
+        tau: Some(Tau { comm_r, comm_d }),
         seed: None,
-        comm_r_star: comm_r_star.into(),
+        comm_r_star,
         k: None,
     };
 
