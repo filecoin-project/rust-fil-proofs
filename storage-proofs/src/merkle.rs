@@ -3,7 +3,7 @@
 use std::marker::PhantomData;
 
 // Reexport here, so we don't depend on merkletree directly in other places.
-use merkletree::hash::Algorithm;
+pub use merkletree::hash::Algorithm;
 use merkletree::merkle;
 #[cfg(not(feature = "disk-trees"))]
 use merkletree::merkle::MmapStore;
@@ -16,13 +16,20 @@ use crate::hasher::{Domain, Hasher};
 // `mmap`ed `MerkleTree` (replacing the previously `Vec`-backed
 // `MerkleTree`, now encapsulated in `merkle::VecStore` and exposed
 // as `VecMerkleTree`).
+pub use merkletree::merkle::Store;
+pub use merkletree::merkle::next_pow2;
+pub use merkletree::merkle::BUILD_LEAVES_BLOCK_SIZE;
 pub type DiskStore<E> = merkletree::merkle::DiskStore<E>;
+pub type MmapStore<E> = merkletree::merkle::MmapStore<E>;
 pub type VecMerkleTree<T, A> = merkle::MerkleTree<T, A, VecStore<T>>;
 #[cfg(feature = "disk-trees")]
 pub type MerkleTree<T, A> = merkle::MerkleTree<T, A, DiskStore<T>>;
 #[cfg(not(feature = "disk-trees"))]
 pub type MerkleTree<T, A> = merkle::MerkleTree<T, A, MmapStore<T>>;
-
+#[cfg(feature = "disk-trees")]
+pub type MerkleStore<T> = DiskStore<T>;
+#[cfg(not(feature = "disk-trees"))]
+pub type MerkleStore<T> = MmapStore<T>;
 /// Representation of a merkle proof.
 /// Each element in the `path` vector consists of a tuple `(hash, is_right)`, with `hash` being the the hash of the node at the current level and `is_right` a boolean indicating if the path is taking the right path.
 /// The first element is the hash of leaf itself, and the last is the root hash.

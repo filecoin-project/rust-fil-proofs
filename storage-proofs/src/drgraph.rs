@@ -7,7 +7,7 @@ use rayon::prelude::*;
 use crate::error::*;
 use crate::hasher::pedersen::PedersenHasher;
 use crate::hasher::{Domain, Hasher};
-use crate::merkle::MerkleTree;
+use crate::merkle::{MerkleTree, MerkleStore};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::{data_at_node, NODE_SIZE};
 use merkletree::merkle::FromIndexedParallelIterator;
@@ -60,6 +60,12 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
         } else {
             Ok(MerkleTree::new((0..self.size()).map(f)))
         }
+    }
+
+    /// Builds a merkle tree based on the given leaves store.
+    // FIXME: Add the parallel case (if it's worth it).
+    fn merkle_tree_from_leaves<'a>(&self, leaves: MerkleStore<H::Domain>, leafs_number: usize) -> Result<MerkleTree<H::Domain, H::Function>> {
+        Ok(MerkleTree::from_leaves_store(leaves, leafs_number))
     }
 
     /// Returns the merkle tree depth.

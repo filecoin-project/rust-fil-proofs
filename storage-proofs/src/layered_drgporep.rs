@@ -14,11 +14,12 @@ use crate::drgporep::{self, DrgPoRep};
 use crate::drgraph::Graph;
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::MerkleTree;
+use crate::merkle::{next_pow2, MerkleStore, MerkleTree, Store, BUILD_LEAVES_BLOCK_SIZE, Algorithm};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
 use crate::settings;
+use crate::util::{data_at_node, NODE_SIZE};
 use crate::vde;
 
 type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
@@ -443,6 +444,43 @@ pub trait Layers {
                         let mut data_copy = anonymous_mmap(data.len());
                         data_copy[0..data.len()].clone_from_slice(data);
 
+                        let leafs = data_copy.len() / NODE_SIZE;
+                        assert_eq!(data_copy.len() % NODE_SIZE, 0);
+                        let pow = next_pow2(leafs);
+                        // FIXME: Who's actually responsible for ensuring power of 2
+                        //  sector sizes?
+
+                        let mut leaves_store = MerkleStore::new(pow);
+                        // FIXME: Horrible iterator coming, not sure how to elegantly do this:
+                        let f = |i| {
+                            let d = data_at_node(&data, i).expect("data_at_node math failed");
+                            <Self::Hasher as Hasher>::Domain::try_from_bytes(d)
+                                .expect("failed to convert node data to domain element")
+                        };
+
+                        // FIXME: Copying `populate_leaves` code here because I can't make
+                        // the call compile (wrong 4th iterator parameter).
+                        {
+                            let mut buf = Vec::with_capacity(BUILD_LEAVES_BLOCK_SIZE * NODE_SIZE);
+
+                            let mut a = <Self::Hasher as Hasher>::Function::default();
+                            for item in (0..leafs).map(f) {
+                                a.reset();
+                                buf.extend(a.leaf(item).as_ref());
+                                if buf.len() >= BUILD_LEAVES_BLOCK_SIZE * NODE_SIZE {
+                                    let leaves_len = leaves_store.len();
+                                    // FIXME: Integrate into `len()` call into `copy_from_slice`
+                                    // once we update to `stable` 1.36.
+                                    leaves_store.copy_from_slice(&buf, leaves_len);
+                                    buf.clear();
+                                }
+                            }
+                            let leaves_len = leaves_store.len();
+                            leaves_store.copy_from_slice(&buf, leaves_len);
+
+                            leaves_store.sync();
+                        }
+
                         let return_channel = tx.clone();
                         let (transfer_tx, transfer_rx) = channel::<Self::Graph>();
 
@@ -457,7 +495,8 @@ pub trait Layers {
                                 .recv()
                                 .expect("Failed to receive value through channel");
 
-                            let tree_d = graph.merkle_tree(&data_copy).unwrap();
+                            let tree_d =
+                                graph.merkle_tree_from_leaves(leaves_store, leafs).unwrap();
 
                             info!("returning tree (layer: {})", layer);
                             return_channel
@@ -677,7 +716,7 @@ fn comm_r_star<H: Hasher>(replica_id: &H::Domain, comm_rs: &[H::Domain]) -> Resu
         comm_r.write_bytes(&mut bytes[(i + 1) * 32..(i + 2) * 32])?;
     }
 
-    Ok(H::Function::hash(&bytes))
+    Ok(HashFunction::<H::Domain>::hash(&bytes))
 }
 
 impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
