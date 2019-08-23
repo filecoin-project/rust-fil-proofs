@@ -22,7 +22,7 @@ impl std::cmp::Ord for SectorId {
 }
 
 impl SectorId {
-    pub fn as_fr_safe(&self) -> [u8; 31] {
+    pub fn as_fr_safe(self) -> [u8; 31] {
         let mut buf: [u8; 31] = [0; 31];
         byteorder::LittleEndian::write_u64(&mut buf[0..8], self.0);
         buf
