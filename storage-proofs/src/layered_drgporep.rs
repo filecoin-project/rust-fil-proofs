@@ -3,8 +3,6 @@ use std::marker::PhantomData;
 use std::sync::mpsc::channel;
 
 use crossbeam_utils::thread;
-use memmap::MmapMut;
-use memmap::MmapOptions;
 use rayon::prelude::*;
 use serde::de::Deserialize;
 use serde::ser::Serialize;
@@ -25,13 +23,6 @@ use crate::util::{data_at_node, NODE_SIZE};
 use crate::vde;
 
 type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
-
-fn anonymous_mmap(len: usize) -> MmapMut {
-    MmapOptions::new()
-        .len(len)
-        .map_anon()
-        .expect("Failed to create memory map")
-}
 
 #[derive(Debug, Clone, Serialize)]
 pub enum LayerChallenges {
@@ -443,11 +434,8 @@ pub trait Layers {
                 let _ = thread::scope(|scope| -> Result<()> {
                     let mut threads = Vec::with_capacity(layers + 1);
                     (0..=layers).fold(graph.clone(), |current_graph, layer| {
-                        let mut data_copy = anonymous_mmap(data.len());
-                        data_copy[0..data.len()].clone_from_slice(data);
-
-                        let leafs = data_copy.len() / NODE_SIZE;
-                        assert_eq!(data_copy.len() % NODE_SIZE, 0);
+                        let leafs = data.len() / NODE_SIZE;
+                        assert_eq!(data.len() % NODE_SIZE, 0);
                         let pow = next_pow2(leafs);
                         // FIXME: Who's actually responsible for ensuring power of 2
                         //  sector sizes?
