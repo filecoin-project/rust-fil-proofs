@@ -321,7 +321,6 @@ impl<E: Engine> TestConstraintSystem<E> {
         assert_eq!(expected.len() + 1, self.inputs.len());
         for (a, b) in self.inputs.iter().skip(1).zip(expected.iter()) {
             if &a.0 != b {
-                println!("failed {:?} - {:?}", a, b);
                 return false;
             }
         }

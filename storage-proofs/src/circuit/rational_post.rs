@@ -65,6 +65,12 @@ where
             private: false,
         };
 
+        assert_eq!(
+            pub_in.challenges.len(),
+            pub_in.commitments.len(),
+            "Missmatch in challenges and commitments"
+        );
+
         for (challenge, commitment) in pub_in.challenges.iter().zip(pub_in.commitments) {
             let por_pub_inputs = merklepor::PublicInputs {
                 commitment: Some(*commitment),

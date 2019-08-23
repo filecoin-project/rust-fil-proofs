@@ -192,9 +192,12 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
     }
 }
 
+/// A challenge specifying a sector and leaf.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Challenge {
+    // The ID of the sector this challenge points at.
     pub sector: u64,
+    // The leaf index this challenge points at.
     pub leaf: u64,
 }
 
