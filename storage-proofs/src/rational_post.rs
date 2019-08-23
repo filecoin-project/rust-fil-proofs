@@ -129,7 +129,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
             .iter()
             .zip(pub_inputs.commitments.iter())
             .map(|(challenge, commitment)| {
-                let challenged_sector = u64::from(challenge.sector_id);
+                let challenged_sector = u64::from(challenge.sector);
                 let challenged_leaf = challenge.leaf;
 
                 let tree = priv_inputs.trees[challenged_sector as usize];
@@ -197,7 +197,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Challenge {
     // The ID of the sector this challenge points at.
-    pub sector_id: SectorId,
+    pub sector: SectorId,
     // The leaf index this challenge points at.
     pub leaf: u64,
 }
@@ -218,7 +218,7 @@ pub fn derive_challenges(
                 let c = derive_challenge(seed, n as u64, attempt, sector_size, sector_count);
 
                 // check for faulty sector
-                if faults.binary_search(&c.sector_id).is_err() {
+                if faults.binary_search(&c.sector).is_err() {
                     // valid challenge, not found
                     return c;
                 }
@@ -245,7 +245,7 @@ fn derive_challenge(
     let leaf_challenge = LittleEndian::read_u64(&challenge_bytes[8..16]);
 
     Challenge {
-        sector_id: SectorId::from(sector_challenge % sector_count),
+        sector: SectorId::from(sector_challenge % sector_count),
         leaf: leaf_challenge % (sector_size / NODE_SIZE as u64),
     }
 }
@@ -291,7 +291,7 @@ mod tests {
         let commitments = challenges
             .iter()
             .map(|c| {
-                if u64::from(c.sector_id) % 2 == 0 {
+                if u64::from(c.sector) % 2 == 0 {
                     tree1.root()
                 } else {
                     tree2.root()

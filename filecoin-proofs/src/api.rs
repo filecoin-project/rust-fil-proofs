@@ -163,12 +163,12 @@ pub fn generate_post(
     let challenged_replicas: Vec<_> = challenges
         .iter()
         .map(|c| {
-            if let Some(replica) = replicas.get(u64::from(c.sector_id) as usize) {
+            if let Some(replica) = replicas.get(u64::from(c.sector) as usize) {
                 Ok(replica)
             } else {
                 Err(format_err!(
                     "Invalid challenge generated: {}, only {} sectors are being proven",
-                    c.sector_id,
+                    c.sector,
                     sector_count
                 ))
             }
@@ -260,12 +260,12 @@ pub fn verify_post(
     let commitments: Vec<_> = challenges
         .iter()
         .map(|c| {
-            if let Some(comm) = commitments_all.get(u64::from(c.sector_id) as usize) {
+            if let Some(comm) = commitments_all.get(u64::from(c.sector) as usize) {
                 Ok(*comm)
             } else {
                 Err(format_err!(
                     "Invalid challenge generated: {}, only {} sectors are being proven",
-                    c.sector_id,
+                    c.sector,
                     sector_count
                 ))
             }

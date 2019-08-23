@@ -234,7 +234,7 @@ mod tests {
         let commitments_raw = vec![tree1.root(), tree2.root()];
         let commitments: Vec<_> = challenges
             .iter()
-            .map(|c| commitments_raw[u64::from(c.sector_id) as usize])
+            .map(|c| commitments_raw[u64::from(c.sector) as usize])
             .collect();
 
         let pub_inputs = rational_post::PublicInputs {
@@ -329,7 +329,7 @@ mod tests {
         let commitments_raw = vec![tree1.root(), tree2.root()];
         let commitments: Vec<_> = challenges
             .iter()
-            .map(|c| commitments_raw[u64::from(c.sector_id) as usize].into())
+            .map(|c| commitments_raw[u64::from(c.sector) as usize].into())
             .collect();
 
         let pub_inputs = rational_post::PublicInputs {
