@@ -64,7 +64,7 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
 
     /// Builds a merkle tree based on the given leaves store.
     // FIXME: Add the parallel case (if it's worth it).
-    fn merkle_tree_from_leaves<'a>(&self, leaves: MerkleStore<H::Domain>, leafs_number: usize) -> Result<MerkleTree<H::Domain, H::Function>> {
+    fn merkle_tree_from_leaves(&self, leaves: MerkleStore<H::Domain>, leafs_number: usize) -> Result<MerkleTree<H::Domain, H::Function>> {
         Ok(MerkleTree::from_leaves_store(leaves, leafs_number))
     }
 
