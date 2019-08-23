@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fs::{copy, File, OpenOptions};
 use std::io::prelude::*;
@@ -7,6 +8,7 @@ use std::path::{Path, PathBuf};
 use memmap::MmapOptions;
 use paired::bls12_381::Bls12;
 use paired::Engine;
+use rayon::prelude::*;
 
 use crate::caches::{
     get_post_params, get_post_verifying_key, get_zigzag_params, get_zigzag_verifying_key,
@@ -65,45 +67,88 @@ pub struct SealOutput {
     pub piece_inclusion_proofs: Vec<PieceInclusionProof<PedersenHasher>>,
 }
 
-#[derive(Clone, Debug)]
-pub struct GeneratePoStOutput {
-    pub proof: Vec<u8>,
+/// The minimal information required about a replica, in order to be able to generate
+/// a PoSt over it.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ReplicaInfo {
+    /// Path to the replica.
+    access: String,
+    /// The replica commitment.
+    commitment: Commitment,
 }
 
-/// Generates a proof-of-spacetime, returning and detected storage faults.
+impl std::cmp::Ord for ReplicaInfo {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.commitment.as_ref().cmp(other.commitment.as_ref())
+    }
+}
+
+impl std::cmp::PartialOrd for ReplicaInfo {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl ReplicaInfo {
+    pub fn new(access: String, commitment: Commitment) -> Self {
+        ReplicaInfo { access, commitment }
+    }
+
+    pub fn safe_commitment(&self) -> Result<PedersenDomain, failure::Error> {
+        as_safe_commitment(&self.commitment, "comm_r")
+    }
+
+    /// Generate the merkle tree of this particular replica.
+    pub fn merkle_tree(&self, sector_size: u64) -> Result<Tree, Error> {
+        let mut f_in = File::open(&self.access)?;
+        let mut data = Vec::new();
+        f_in.read_to_end(&mut data)?;
+
+        let bytes = PaddedBytesAmount(sector_size as u64);
+        public_params(bytes, 1).graph.merkle_tree(&data)
+    }
+}
+
+fn as_safe_commitment(
+    comm: &Commitment,
+    commitment_name: impl AsRef<str>,
+) -> Result<PedersenDomain, failure::Error> {
+    bytes_into_fr::<Bls12>(comm).map(Into::into).map_err(|err| {
+        format_err!(
+            "Invalid commitment ({}): {:?}",
+            commitment_name.as_ref(),
+            err
+        )
+    })
+}
+
+/// Generates a proof-of-spacetime.
 /// Accepts as input a challenge seed, configuration struct, and a vector of
-/// sealed sector file-path plus CommR tuples.
+/// sealed sector file-path plus CommR tuples, as well as a list of faults.
 pub fn generate_post(
     post_config: PoStConfig,
     challenge_seed: &ChallengeSeed,
-    input_parts: Vec<(Option<String>, Commitment)>,
+    replicas: Vec<ReplicaInfo>,
     faults: &[u64],
-) -> error::Result<GeneratePoStOutput> {
+) -> error::Result<Vec<u8>> {
+    let sector_count = replicas.len() as u64;
+    let sector_size = u64::from(PaddedBytesAmount::from(post_config));
+
+    // Only one fault per sector is possible.
+    ensure!(
+        faults.len() as u64 <= sector_count,
+        "Too many faults submitted"
+    );
+
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
         vanilla_params: &vanilla_params,
         engine_params: &(*ENGINE_PARAMS),
         partitions: None,
     };
-    let commitments_all: Vec<PedersenDomain> = input_parts
-        .iter()
-        .map(|(_, comm_r)| {
-            bytes_into_fr::<Bls12>(comm_r)
-                .map(Into::into)
-                .map_err(|err| match err {
-                    Error::BadFrBytes => {
-                        format_err!("could not transform comm_r into Fr32: {:?}", err)
-                    }
-                    _ => err.into(),
-                })
-        })
-        .collect::<error::Result<_>>()?;
-
-    let sector_size = u64::from(PaddedBytesAmount::from(post_config));
-    let sector_count = commitments_all.len() as u64;
 
     let pub_params: compound_proof::PublicParams<_, rational_post::RationalPoSt<PedersenHasher>> =
-        RationalPoStCompound::setup(&setup_params).expect("setup failed");
+        RationalPoStCompound::setup(&setup_params)?;
 
     let challenges = rational_post::derive_challenges(
         vanilla_params.challenges_count,
@@ -113,10 +158,52 @@ pub fn generate_post(
         &faults,
     );
 
-    let commitments: Vec<_> = challenges
+    // Match the replicas to the challenges, as these are the only ones required.
+    let challenged_replicas: Vec<_> = challenges
         .iter()
-        .map(|c| commitments_all[c.sector as usize])
+        .map(|c| {
+            if let Some(replica) = replicas.get(c.sector as usize) {
+                Ok(replica)
+            } else {
+                Err(format_err!(
+                    "Invalid challenge generated: {}, only {} sectors are being proven",
+                    c.sector as usize,
+                    sector_count
+                ))
+            }
+        })
+        .collect::<Result<_, _>>()?;
+
+    // Generate merkle trees for the challenged replicas.
+    // Merkle trees should be generated only once, not multiple times if the same sector is challenged
+    // multiple times, so we build a HashMap of trees.
+
+    let mut unique_challenged_replicas = challenged_replicas.clone();
+    unique_challenged_replicas.sort_unstable(); // dedup requires a sorted list
+    unique_challenged_replicas.dedup();
+
+    let unique_trees_res: Vec<_> = unique_challenged_replicas
+        .into_par_iter()
+        .map(|replica| replica.merkle_tree(sector_size).map(|tree| (replica, tree)))
         .collect();
+
+    // resolve results
+    let unique_trees: HashMap<&ReplicaInfo, Tree> =
+        unique_trees_res.into_iter().collect::<Result<_, _>>()?;
+
+    let borrowed_trees: Vec<&Tree> = challenged_replicas
+        .iter()
+        .map(|replica| {
+            // Safe to unwrap, as we constructed the HashMap such that each of these has an entry.
+            unique_trees.get(*replica).unwrap()
+        })
+        .collect();
+
+    // Construct the list of actual commitments
+    let commitments: Vec<_> = challenged_replicas
+        .iter()
+        .map(|replica| replica.safe_commitment())
+        .collect::<Result<_, _>>()?;
 
     let pub_inputs = rational_post::PublicInputs {
         challenges: &challenges,
@@ -124,39 +211,18 @@ pub fn generate_post(
         faults,
     };
 
-    let trees: Vec<Tree> = input_parts
-        .iter()
-        .map(|(access, _)| {
-            if let Some(s) = &access {
-                make_merkle_tree(
-                    s,
-                    PaddedBytesAmount(pub_params.vanilla_params.sector_size as u64),
-                )
-                .unwrap()
-            } else {
-                panic!("faults are not yet supported")
-            }
-        })
-        .collect();
-
-    let borrowed_trees: Vec<&Tree> = trees.iter().map(|t| t).collect();
-
     let priv_inputs = rational_post::PrivateInputs::<PedersenHasher> {
         trees: &borrowed_trees[..],
     };
 
     let groth_params = get_post_params(post_config)?;
 
-    let proof = RationalPoStCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)
-        .expect("failed while proving");
+    let proof = RationalPoStCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)?;
 
-    Ok(GeneratePoStOutput {
-        proof: proof.to_vec(),
-    })
+    Ok(proof.to_vec())
 }
 
 /// Verifies a proof-of-spacetime.
-///
 pub fn verify_post(
     post_config: PoStConfig,
     comm_rs: Vec<Commitment>,
@@ -164,6 +230,12 @@ pub fn verify_post(
     proof: &[u8],
     faults: &[u64],
 ) -> error::Result<bool> {
+    let sector_size = u64::from(PaddedBytesAmount::from(post_config));
+    let sector_count = comm_rs.len() as u64;
+
+    // Only one fault per sector is possible.
+    ensure!(faults.len() as u64 <= sector_count, "Too many faults");
+
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
         vanilla_params: &vanilla_params,
@@ -172,20 +244,8 @@ pub fn verify_post(
     };
     let commitments_all: Vec<PedersenDomain> = comm_rs
         .iter()
-        .map(|comm_r| {
-            bytes_into_fr::<Bls12>(comm_r)
-                .map(Into::into)
-                .map_err(|err| match err {
-                    Error::BadFrBytes => {
-                        format_err!("could not transform comm_r into Fr32: {:?}", err)
-                    }
-                    _ => err.into(),
-                })
-        })
-        .collect::<error::Result<_>>()?;
-
-    let sector_size = u64::from(PaddedBytesAmount::from(post_config));
-    let sector_count = commitments_all.len() as u64;
+        .map(|c| as_safe_commitment(c, "comm_r"))
+        .collect::<Result<_, _>>()?;
 
     let challenges = rational_post::derive_challenges(
         vanilla_params.challenges_count,
@@ -195,15 +255,26 @@ pub fn verify_post(
         faults,
     );
 
+    // Match the replicas to the challenges, as these are the only ones required.
     let commitments: Vec<_> = challenges
         .iter()
-        .map(|c| commitments_all[c.sector as usize])
-        .collect();
+        .map(|c| {
+            if let Some(comm) = commitments_all.get(c.sector as usize) {
+                Ok(*comm)
+            } else {
+                Err(format_err!(
+                    "Invalid challenge generated: {}, only {} sectors are being proven",
+                    c.sector as usize,
+                    sector_count
+                ))
+            }
+        })
+        .collect::<Result<_, _>>()?;
 
     let public_params: compound_proof::PublicParams<
         _,
         rational_post::RationalPoSt<PedersenHasher>,
-    > = RationalPoStCompound::setup(&setup_params).expect("setup failed");
+    > = RationalPoStCompound::setup(&setup_params)?;
 
     let public_inputs = rational_post::PublicInputs::<PedersenDomain> {
         challenges: &challenges,
@@ -446,20 +517,9 @@ pub fn verify_seal(
     let sector_id = pad_safe_fr(sector_id_in);
     let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
 
-    let comm_r = bytes_into_fr::<Bls12>(&comm_r).map_err(|err| match err {
-        Error::BadFrBytes => format_err!("could not transform comm_r into Fr32: {:?}", err),
-        _ => err.into(),
-    })?;
-
-    let comm_d = bytes_into_fr::<Bls12>(&comm_d).map_err(|err| match err {
-        Error::BadFrBytes => format_err!("could not transform comm_d into Fr32: {:?}", err),
-        _ => err.into(),
-    })?;
-
-    let comm_r_star = bytes_into_fr::<Bls12>(&comm_r_star).map_err(|err| match err {
-        Error::BadFrBytes => format_err!("could not transform comm_r_star into Fr32: {:?}", err),
-        _ => err.into(),
-    })?;
+    let comm_r = as_safe_commitment(&comm_r, "comm_r")?;
+    let comm_d = as_safe_commitment(&comm_d, "comm_d")?;
+    let comm_r_star = as_safe_commitment(&comm_r_star, "comm_r_star")?;
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: &setup_params(
@@ -596,17 +656,6 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     let written = write_unpadded(&unsealed, &mut buf_writer, offset.into(), num_bytes.into())?;
 
     Ok(UnpaddedBytesAmount(written as u64))
-}
-
-fn make_merkle_tree<T: Into<PathBuf> + AsRef<Path>>(
-    sealed_path: T,
-    bytes: PaddedBytesAmount,
-) -> storage_proofs::error::Result<Tree> {
-    let mut f_in = File::open(sealed_path.into())?;
-    let mut data = Vec::new();
-    f_in.read_to_end(&mut data)?;
-
-    public_params(bytes, 1).graph.merkle_tree(&data)
 }
 
 fn commitment_from_fr<E: Engine>(fr: E::Fr) -> Commitment {
@@ -767,7 +816,7 @@ mod tests {
             );
 
             if let Err(err) = result {
-                let needle = "could not transform comm_r into Fr32";
+                let needle = "Invalid commitment (comm_r)";
                 let haystack = format!("{}", err);
 
                 assert!(
@@ -791,7 +840,7 @@ mod tests {
             );
 
             if let Err(err) = result {
-                let needle = "could not transform comm_d into Fr32";
+                let needle = "Invalid commitment (comm_d)";
                 let haystack = format!("{}", err);
 
                 assert!(
@@ -815,7 +864,7 @@ mod tests {
             );
 
             if let Err(err) = result {
-                let needle = "could not transform comm_r_star into Fr32";
+                let needle = "Invalid commitment (comm_r_star)";
                 let haystack = format!("{}", err);
 
                 assert!(
@@ -843,7 +892,7 @@ mod tests {
         );
 
         if let Err(err) = result {
-            let needle = "could not transform comm_r into Fr32";
+            let needle = "Invalid commitment (comm_r)";
             let haystack = format!("{}", err);
 
             assert!(
