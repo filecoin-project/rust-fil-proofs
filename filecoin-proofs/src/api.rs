@@ -167,7 +167,7 @@ pub fn generate_post(
                 Ok(replica)
             } else {
                 Err(format_err!(
-                    "Invalid challenge generated: {:?}, only {} sectors are being proven",
+                    "Invalid challenge generated: {}, only {} sectors are being proven",
                     c.sector_id,
                     sector_count
                 ))
@@ -264,7 +264,7 @@ pub fn verify_post(
                 Ok(*comm)
             } else {
                 Err(format_err!(
-                    "Invalid challenge generated: {:?}, only {} sectors are being proven",
+                    "Invalid challenge generated: {}, only {} sectors are being proven",
                     c.sector_id,
                     sector_count
                 ))

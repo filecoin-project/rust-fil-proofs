@@ -1,4 +1,5 @@
 use byteorder::ByteOrder;
+use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialOrd, PartialEq, Eq)]
 pub struct SectorId(u64);
@@ -18,6 +19,12 @@ impl From<SectorId> for u64 {
 impl std::cmp::Ord for SectorId {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.0.cmp(&other.0)
+    }
+}
+
+impl fmt::Display for SectorId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "SectorId({})", self.0)
     }
 }
 
