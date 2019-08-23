@@ -14,7 +14,9 @@ use crate::drgporep::{self, DrgPoRep};
 use crate::drgraph::Graph;
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::{next_pow2, MerkleStore, MerkleTree, Store, BUILD_LEAVES_BLOCK_SIZE, Algorithm};
+use crate::merkle::{
+    next_pow2, Algorithm, MerkleStore, MerkleTree, Store, BUILD_LEAVES_BLOCK_SIZE,
+};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
@@ -716,7 +718,7 @@ fn comm_r_star<H: Hasher>(replica_id: &H::Domain, comm_rs: &[H::Domain]) -> Resu
         comm_r.write_bytes(&mut bytes[(i + 1) * 32..(i + 2) * 32])?;
     }
 
-    Ok(HashFunction::<H::Domain>::hash(&bytes))
+    Ok(<H::Function as HashFunction<H::Domain>>::hash(&bytes))
 }
 
 impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {

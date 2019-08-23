@@ -5,8 +5,8 @@ use std::marker::PhantomData;
 // Reexport here, so we don't depend on merkletree directly in other places.
 pub use merkletree::hash::Algorithm;
 use merkletree::merkle;
-#[cfg(not(feature = "disk-trees"))]
-use merkletree::merkle::MmapStore;
+// #[cfg(not(feature = "disk-trees"))]
+// use merkletree::merkle::MmapStore;
 use merkletree::merkle::VecStore;
 use merkletree::proof;
 use paired::bls12_381::Fr;
@@ -16,8 +16,8 @@ use crate::hasher::{Domain, Hasher};
 // `mmap`ed `MerkleTree` (replacing the previously `Vec`-backed
 // `MerkleTree`, now encapsulated in `merkle::VecStore` and exposed
 // as `VecMerkleTree`).
-pub use merkletree::merkle::Store;
 pub use merkletree::merkle::next_pow2;
+pub use merkletree::merkle::Store;
 pub use merkletree::merkle::BUILD_LEAVES_BLOCK_SIZE;
 pub type DiskStore<E> = merkletree::merkle::DiskStore<E>;
 pub type MmapStore<E> = merkletree::merkle::MmapStore<E>;
