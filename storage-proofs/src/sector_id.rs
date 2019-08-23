@@ -1,7 +1,7 @@
 use byteorder::ByteOrder;
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialOrd, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub struct SectorId(u64);
 
 impl From<u64> for SectorId {
@@ -13,12 +13,6 @@ impl From<u64> for SectorId {
 impl From<SectorId> for u64 {
     fn from(n: SectorId) -> Self {
         n.0
-    }
-}
-
-impl std::cmp::Ord for SectorId {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0.cmp(&other.0)
     }
 }
 
