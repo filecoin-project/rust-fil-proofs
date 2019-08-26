@@ -195,16 +195,35 @@ jobs:
           command: apt-get install time jq -yqq
       - run:
           name: Run hash-constraints benchmarks on remote host
-          command: ./fil-proofs-tooling/scripts/benchy-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" hash-circuits
+          command: |
+            ./fil-proofs-tooling/scripts/benchy-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" hash-constraints > hash-constraints.json
+            cat hash-constraints.json
           no_output_timeout: 60m
       - run:
           name: Run micro benchmarks
-          command: ./fil-proofs-tooling/scripts/micro-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}"
+          command: |
+            ./fil-proofs-tooling/scripts/micro-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" > micro-benchmarks.json
+            cat micro-benchmarks.json
           no_output_timeout: 60m
       - run:
           name: Run ZigZag benchmarks using 1GiB sectors
-          command: ./fil-proofs-tooling/scripts/benchy-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" zigzag --size=$((1024*1024))
+          command: |
+            ./fil-proofs-tooling/scripts/benchy-remote.sh "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" zigzag --size=$((1024*1024)) > zigzag-benchmarks.json
+            cat zigzag-benchmarks.json
           no_output_timeout: 60m
+      - run:
+          name: Aggregate benchmarks into single JSON document
+          command: |
+            ./fil-proofs-tooling/scripts/aggregate-benchmarks.sh zigzag-benchmarks.json micro-benchmarks.json hash-constraints.json > aggregated-benchmarks.json
+            cat aggregated-benchmarks.json
+      - store_artifacts:
+          path: zigzag-benchmarks.json
+      - store_artifacts:
+          path: hash-constraints.json
+      - store_artifacts:
+          path: micro-benchmarks.json
+      - store_artifacts:
+          path: aggregated-benchmarks.json
 
   rustfmt:
     docker:

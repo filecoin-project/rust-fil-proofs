@@ -7,7 +7,7 @@ GTIME_STDERR=$(mktemp)
 JQ_STDERR=$(mktemp)
 
 GTIME_BIN="env time"
-GTIME_ARG="-f '{ \"outputs\": { \"max-resident-set-size-kb\": %M } }' cargo run --quiet --bin benchy --release -- ${@}"
+GTIME_ARG="-f '{ \"max-resident-set-size-kb\": %M }' cargo run --quiet --bin benchy --release -- ${@}"
 
 if [[ $(env time --version 2>&1) != *"GNU"* ]]; then
     if [[ $(/usr/bin/time --version 2>&1) != *"GNU"* ]]; then

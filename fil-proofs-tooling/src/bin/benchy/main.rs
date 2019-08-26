@@ -112,8 +112,8 @@ fn main() {
                         .takes_value(true)
                 );
 
-    let hash_cmd =
-        SubCommand::with_name("hash-circuits").about("Benchmark hash function inside of a circuit");
+    let hash_cmd = SubCommand::with_name("hash-constraints")
+        .about("Benchmark hash function inside of a circuit");
 
     let matches = App::new("benchy")
         .version("0.1")
@@ -137,7 +137,7 @@ fn main() {
                         extract: m.is_present("extract"),
                         groth: m.is_present("groth"),
                         hasher: value_t!(m, "hasher", String)?,
-                        layers: value_t!(m, "layers", usize)?,
+                        layers,
                         m: value_t!(m, "m", usize)?,
                         no_bench: m.is_present("no-bench"),
                         no_tmp: m.is_present("no-tmp"),
@@ -149,8 +149,8 @@ fn main() {
                 })
                 .expect("zigzag failed");
         }
-        ("hash-circuits", Some(_m)) => {
-            hash_fns::run().expect("hash-circuits failed");
+        ("hash-constraints", Some(_m)) => {
+            hash_fns::run().expect("hash-constraints failed");
         }
         _ => panic!("carnation"),
     }
