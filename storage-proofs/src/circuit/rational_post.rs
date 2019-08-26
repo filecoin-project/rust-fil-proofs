@@ -200,6 +200,7 @@ mod tests {
     use crate::hasher::pedersen::*;
     use crate::proof::{NoRequirements, ProofScheme};
     use crate::rational_post::{self, derive_challenges, RationalPoSt};
+    use crate::sector::SectorSet;
 
     #[test]
     fn test_rational_post_circuit_with_bls12_381() {
@@ -228,9 +229,13 @@ mod tests {
         let graph2 = BucketGraph::<PedersenHasher>::new(32, 5, 0, new_seed());
         let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
 
-        let faults = vec![];
+        let faults = SectorSet::new();
+        let mut sectors = SectorSet::new();
+        sectors.insert(0.into());
+        sectors.insert(1.into());
+
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
-        let challenges = derive_challenges(challenges_count, sector_size, 2, &seed, &faults);
+        let challenges = derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults);
         let commitments_raw = vec![tree1.root(), tree2.root()];
         let commitments: Vec<_> = challenges
             .iter()
@@ -323,9 +328,13 @@ mod tests {
         let graph2 = BucketGraph::<PedersenHasher>::new(32, 5, 0, new_seed());
         let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
 
-        let faults = vec![];
+        let faults = SectorSet::new();
+        let mut sectors = SectorSet::new();
+        sectors.insert(0.into());
+        sectors.insert(1.into());
+
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
-        let challenges = derive_challenges(challenges_count, sector_size, 2, &seed, &faults);
+        let challenges = derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults);
         let commitments_raw = vec![tree1.root(), tree2.root()];
         let commitments: Vec<_> = challenges
             .iter()

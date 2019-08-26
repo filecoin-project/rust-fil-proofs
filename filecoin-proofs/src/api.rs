@@ -47,7 +47,7 @@ use storage_proofs::piece_inclusion_proof::{
 use storage_proofs::porep::{replica_id, PoRep, Tau};
 use storage_proofs::proof::NoRequirements;
 use storage_proofs::rational_post;
-use storage_proofs::sector_id::SectorId;
+use storage_proofs::sector::*;
 use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
 use tempfile::tempfile;
 
@@ -72,6 +72,8 @@ pub struct SealOutput {
 /// a PoSt over it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ReplicaInfo {
+    /// The id of this sector.
+    sector_id: SectorId,
     /// Path to the replica.
     access: String,
     /// The replica commitment.
@@ -91,8 +93,12 @@ impl std::cmp::PartialOrd for ReplicaInfo {
 }
 
 impl ReplicaInfo {
-    pub fn new(access: String, commitment: Commitment) -> Self {
-        ReplicaInfo { access, commitment }
+    pub fn new(id: SectorId, access: String, commitment: Commitment) -> Self {
+        ReplicaInfo {
+            sector_id: id,
+            access,
+            commitment,
+        }
     }
 
     pub fn safe_commitment(&self) -> Result<PedersenDomain, failure::Error> {
@@ -129,8 +135,9 @@ fn as_safe_commitment(
 pub fn generate_post(
     post_config: PoStConfig,
     challenge_seed: &ChallengeSeed,
-    replicas: Vec<ReplicaInfo>,
-    faults: &[SectorId],
+    replicas: &[ReplicaInfo],
+    sectors: &SectorSet,
+    faults: &SectorSet,
 ) -> error::Result<Vec<u8>> {
     let sector_count = replicas.len() as u64;
     let sector_size = u64::from(PaddedBytesAmount::from(post_config));
@@ -154,7 +161,7 @@ pub fn generate_post(
     let challenges = rational_post::derive_challenges(
         vanilla_params.challenges_count,
         sector_size,
-        sector_count,
+        sectors,
         challenge_seed,
         faults,
     );
@@ -163,7 +170,7 @@ pub fn generate_post(
     let challenged_replicas: Vec<_> = challenges
         .iter()
         .map(|c| {
-            if let Some(replica) = replicas.get(u64::from(c.sector) as usize) {
+            if let Some(replica) = replicas.iter().find(|r| r.sector_id == c.sector) {
                 Ok(replica)
             } else {
                 Err(format_err!(
@@ -229,7 +236,8 @@ pub fn verify_post(
     comm_rs: Vec<Commitment>,
     challenge_seed: &ChallengeSeed,
     proof: &[u8],
-    faults: &[SectorId],
+    sectors: &SectorSet,
+    faults: &SectorSet,
 ) -> error::Result<bool> {
     let sector_size = u64::from(PaddedBytesAmount::from(post_config));
     let sector_count = comm_rs.len() as u64;
@@ -251,7 +259,7 @@ pub fn verify_post(
     let challenges = rational_post::derive_challenges(
         vanilla_params.challenges_count,
         sector_size,
-        sector_count,
+        sectors,
         challenge_seed,
         faults,
     );
@@ -880,13 +888,16 @@ mod tests {
         let not_convertible_to_fr_bytes = [255; 32];
         let out = bytes_into_fr::<Bls12>(&not_convertible_to_fr_bytes);
         assert!(out.is_err(), "tripwire");
+        let mut sectors = SectorSet::new();
+        sectors.insert(1.into());
 
         let result = verify_post(
             PoStConfig(SectorSize(TEST_SECTOR_SIZE)),
             vec![not_convertible_to_fr_bytes],
             &[0; 32],
             &vec![0; SINGLE_PARTITION_PROOF_LEN],
-            &vec![],
+            &sectors,
+            &SectorSet::new(),
         );
 
         if let Err(err) = result {

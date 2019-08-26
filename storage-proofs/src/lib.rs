@@ -44,7 +44,7 @@ pub mod porc;
 pub mod porep;
 pub mod proof;
 pub mod rational_post;
-pub mod sector_id;
+pub mod sector;
 pub mod settings;
 pub mod util;
 pub mod zigzag_drgporep;

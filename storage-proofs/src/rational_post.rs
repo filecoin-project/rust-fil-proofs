@@ -10,7 +10,7 @@ use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
-use crate::sector_id::SectorId;
+use crate::sector::*;
 use crate::util::NODE_SIZE;
 
 #[derive(Debug, Clone)]
@@ -48,7 +48,7 @@ impl ParameterSetMetadata for PublicParams {
 pub struct PublicInputs<'a, T: 'a + Domain> {
     /// The challenges, which leafs to prove.
     pub challenges: &'a [Challenge],
-    pub faults: &'a [SectorId],
+    pub faults: &'a SectorSet,
     /// The root hashes of the underlying merkle trees.
     pub commitments: &'a [T],
 }
@@ -196,7 +196,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
 /// A challenge specifying a sector and leaf.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Challenge {
-    // The ID of the sector this challenge points at.
+    // The index of the sector into the sector list.
     pub sector: SectorId,
     // The leaf index this challenge points at.
     pub leaf: u64,
@@ -206,19 +206,18 @@ pub struct Challenge {
 pub fn derive_challenges(
     challenge_count: usize,
     sector_size: u64,
-    sector_count: u64,
+    sectors: &SectorSet,
     seed: &[u8],
-    faults: &[SectorId],
+    faults: &SectorSet,
 ) -> Vec<Challenge> {
-    // TODO: ensure sorting of faults
     (0..challenge_count)
         .map(|n| {
             let mut attempt = 0;
             loop {
-                let c = derive_challenge(seed, n as u64, attempt, sector_size, sector_count);
+                let c = derive_challenge(seed, n as u64, attempt, sector_size, sectors);
 
                 // check for faulty sector
-                if faults.binary_search(&c.sector).is_err() {
+                if !faults.contains(&c.sector) {
                     // valid challenge, not found
                     return c;
                 }
@@ -233,7 +232,7 @@ fn derive_challenge(
     n: u64,
     attempt: u64,
     sector_size: u64,
-    sector_count: u64,
+    sectors: &SectorSet,
 ) -> Challenge {
     let mut data = seed.to_vec();
     data.extend_from_slice(&n.to_le_bytes()[..]);
@@ -244,8 +243,14 @@ fn derive_challenge(
     let sector_challenge = LittleEndian::read_u64(&challenge_bytes[..8]);
     let leaf_challenge = LittleEndian::read_u64(&challenge_bytes[8..16]);
 
+    let sector_index = (sector_challenge % sectors.len() as u64) as usize;
+    let sector = *sectors
+        .iter()
+        .nth(sector_index)
+        .expect("invalid challenge generated");
+
     Challenge {
-        sector: SectorId::from(sector_challenge % sector_count),
+        sector,
         leaf: leaf_challenge % (sector_size / NODE_SIZE as u64),
     }
 }
@@ -286,8 +291,13 @@ mod tests {
         let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
 
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
-        let faults = vec![SectorId::from(1)];
-        let challenges = derive_challenges(challenges_count, sector_size, 2, &seed, &faults);
+        let mut faults = SectorSet::new();
+        faults.insert(1.into());
+        let mut sectors = SectorSet::new();
+        sectors.insert(0.into());
+        sectors.insert(1.into());
+
+        let challenges = derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults);
         let commitments = challenges
             .iter()
             .map(|c| {
@@ -370,8 +380,13 @@ mod tests {
         let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
-        let faults = vec![];
-        let challenges = derive_challenges(challenges_count, sector_size, 2, &seed, &faults);
+
+        let faults = SectorSet::new();
+        let mut sectors = SectorSet::new();
+        sectors.insert(0.into());
+        sectors.insert(1.into());
+
+        let challenges = derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults);
         let commitments = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();
 
         let pub_inputs = PublicInputs::<H::Domain> {
@@ -428,8 +443,13 @@ mod tests {
         let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
-        let faults = vec![SectorId::from(1)];
-        let challenges = derive_challenges(challenges_count, sector_size, 2, &seed, &faults);
+        let mut faults = SectorSet::new();
+        faults.insert(1.into());
+        let mut sectors = SectorSet::new();
+        sectors.insert(0.into());
+        sectors.insert(1.into());
+
+        let challenges = derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults);
         let commitments = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();
 
         let pub_inputs = PublicInputs {
@@ -444,7 +464,7 @@ mod tests {
             .expect("proving failed");
 
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
-        let challenges = derive_challenges(challenges_count, sector_size, 2, &seed, &faults);
+        let challenges = derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults);
         let commitments = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();
 
         let different_pub_inputs = PublicInputs {

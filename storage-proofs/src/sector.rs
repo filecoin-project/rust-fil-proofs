@@ -1,7 +1,13 @@
-use byteorder::ByteOrder;
+use std::collections::BTreeSet;
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
+use byteorder::ByteOrder;
+
+/// An ordered set of `SectorId`s.
+pub type SectorSet = BTreeSet<SectorId>;
+
+/// Identifier for a single sector.
+#[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct SectorId(u64);
 
 impl From<u64> for SectorId {
