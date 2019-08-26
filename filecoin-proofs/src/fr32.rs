@@ -1253,42 +1253,6 @@ mod tests {
         }
     }
 
-    // `write_padded` for a raw data stream of increasing values and specific
-    // outliers (0xFF, 9), check the content of the raw data encoded (with
-    // different alignments) in the padded layouts.
-    #[test]
-    fn test_write_padded_alt() {
-        let mut source = vec![
-            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-            25, 26, 27, 28, 29, 30, 31, 0xff, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-            16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 0xff, 9, 9,
-        ];
-        // FIXME: This doesn't exercise the ability to write a second time, which is the point of the extra_bytes in write_test.
-        source.extend(vec![9, 0xff]);
-
-        let buf = Vec::new();
-        let mut cursor = Cursor::new(buf);
-        write_padded(&mut source[..].as_ref(), &mut cursor).unwrap();
-        let buf = cursor.into_inner();
-
-        for i in 0..31 {
-            assert_eq!(buf[i], i as u8 + 1);
-        }
-        assert_eq!(buf[31], 63); // Six least significant bits of 0xff
-        assert_eq!(buf[32], (1 << 2) | 0b11); // 7
-        for i in 33..63 {
-            assert_eq!(buf[i], (i as u8 - 31) << 2);
-        }
-        assert_eq!(buf[63], (0x0f << 2)); // 4-bits of ones, half of 0xff, shifted by two, followed by two bits of 0-padding.
-        assert_eq!(buf[64], 0x0f | 9 << 4); // The last half of 0xff, 'followed' by 9.
-        assert_eq!(buf[65], 9 << 4); // A shifted 9.
-        assert_eq!(buf[66], 9 << 4); // Another.
-        assert_eq!(buf[67], 0xf0); // The final 0xff is split into two bytes. Here is the first half.
-        assert_eq!(buf[68], 0x0f); // And here is the second.
-
-        assert_eq!(buf.into_boxed_slice(), bit_vec_padding(source));
-    }
-
     // `write_padded` and `write_unpadded` for 1016 bytes of 1s, check the
     // recovered raw data.
     #[test]
