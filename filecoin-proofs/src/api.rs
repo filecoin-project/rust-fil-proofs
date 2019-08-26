@@ -656,6 +656,7 @@ mod tests {
 
     use crate::constants::{POST_SECTORS_COUNT, TEST_SECTOR_SIZE};
     use crate::error::ExpectWithBacktrace;
+    use crate::fr32::BYTE_ALIGNED_DATA;
     use crate::types::SectorSize;
 
     use super::*;
@@ -755,8 +756,8 @@ mod tests {
 
             for (&piece_length, piece_spec) in piece_lengths.iter().zip(pseudo_piece_specs.iter()) {
                 let usize_piece_length = u64::from(piece_length) as usize;
-                let expected_piece_leaves = if usize_piece_length <= 127 {
-                    4
+                let expected_piece_leaves = if usize_piece_length <= BYTE_ALIGNED_DATA {
+                    2
                 } else {
                     let padded_piece_length: PaddedBytesAmount = piece_length.into();
                     (u64::from(padded_piece_length).next_power_of_two() as usize) / NODE_SIZE

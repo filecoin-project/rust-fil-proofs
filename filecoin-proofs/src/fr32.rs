@@ -122,7 +122,8 @@ bytes `[127..159]` (indexed like this in the input raw data stream) will keep
 its original alignment when embedded in the padded layout, i.e., every raw
 data byte written will keep the output bit stream byte-aligned (without extra
 bits). (Technically, the last byte actually won't be a full byte since its last
-bits will be replaced by padding).
+bits will be replaced by padding). This number of raw data bytes that
+corresponds to full elements is saved in `BYTE_ALIGNED_DATA`.
 
 # Key terms
 
@@ -164,6 +165,7 @@ pub struct PaddingMap {
 // in a new `Padder` structure which would remember the positions (remaining
 // data bits in the element, etc.) to avoid recalculating them each time across
 // different (un)pad calls.
+// FIXME: Update documentation examples with new `data_bits` of 252.
 
 // This is the padding map corresponding to Fr32.
 // Most of the code in this module is general-purpose and could move elsewhere.
@@ -172,6 +174,32 @@ pub const FR32_PADDING_MAP: PaddingMap = PaddingMap {
     data_bits: 252,
     element_bits: 256,
 };
+
+// Number of raw data bytes that need to be inputted to the `PaddingMap` to generate
+// the smallest group of full elements possible when padded, e.g., with 252 data bits,
+// that is, 4 bits of padding, 63 bytes of data will generate two full elements.
+pub const BYTE_ALIGNED_DATA: usize = 63;
+// Number of ful elements the `BYTE_ALIGNED_DATA` corresponds to.
+pub const INPUT_BYTE_ALIGNED_FULL_ELEMENTS: usize = 2;
+// FIXME: These numbers are tied to `data_bits`, it should be computed in a way similar
+// to:
+// ```text
+// lazy_static! {
+//     static ref BYTE_ALIGNED_DATA: usize = (8 / FR32_PADDING_MAP.pad_bits()) * FR32_PADDING_MAP.data_bits / 8;
+//     const_assert!(1 >= 2);
+//     static_assert!(FR32_PADDING_MAP.pad_bits() % 2 == 0);
+//     static_assert!(FR32_PADDING_MAP.pad_bits() < 8);
+//     // FIXME: Suppositions implicit in the `BYTE_ALIGNED_DATA`
+//     // calculation.
+//
+//     static_assert_eq!(BYTE_ALIGNED_DATA, 63);
+//     // FIXME: Temporary sanity check, should be updated with `BYTE_ALIGNED_DATA`
+//     // and if the above computation is robust enough (without the assumptions)
+//     // this can be eliminated.
+// }
+// ```
+// but I can't make the static asserts (or any macro for that matter) work inside
+// `lazy_static`.
 
 pub type BitVecLEu8 = BitVec<LittleEndian, u8>;
 
@@ -636,11 +664,11 @@ pub fn clear_right_bits(byte: &mut u8, offset: usize) {
 }
 
 // In order to optimize alignment in the common case of writing from an aligned
-// start, we should make the chunk a multiple of 127 (4 full elements, see
-// `PaddingMap#alignment`). N was hand-tuned to do reasonably well in the
+// start, we should make the chunk a multiple of BYTE_ALIGNED_DATA (2 full elements,
+// see `PaddingMap#alignment`). N was hand-tuned to do reasonably well in the
 // benchmarks.
 const N: usize = 1000;
-const CHUNK_SIZE: usize = 127 * N;
+const CHUNK_SIZE: usize = BYTE_ALIGNED_DATA * N;
 
 pub fn write_padded<R, W>(source: &mut R, target: &mut W) -> io::Result<usize>
 where
@@ -995,6 +1023,13 @@ mod tests {
     use std::io::Cursor;
     use storage_proofs::fr32::bytes_into_fr;
 
+    // Last byte of the element with the padding data use for
+    // all-ones tests.
+    const PADDED_BYTE: u8 = 0b0000_1111;
+    // FIXME: This value (precisely the number of padding zeros)
+    // is tied to `data_bits` (`256 - data_bits` zeros) and should
+    // not be hardcoded here.
+
     #[test]
     fn test_position() {
         let mut bits = 0;
@@ -1110,33 +1145,38 @@ mod tests {
         );
 
         assert_eq!(&padded[0..31], &data[0..31]);
-        assert_eq!(padded[31], 0b0011_1111);
+        assert_eq!(padded[31], PADDED_BYTE);
         assert_eq!(padded[32], 0b1111_1111);
         assert_eq!(&padded[33..63], vec![255u8; 30].as_slice());
-        assert_eq!(padded[63], 0b0011_1111);
+        assert_eq!(padded[63], PADDED_BYTE);
         assert_eq!(padded.into_boxed_slice(), bit_vec_padding(data));
     }
 
-    // `write_padded` for 256 bytes of 1s, splitting it in two calls of 127 bytes,
-    // aligning the calls with the padded element boundaries, check padding.
+    // `write_padded` for 256 bytes of 1s, splitting it in two calls of BYTE_ALIGNED_DATA
+    // bytes, aligning the calls with the padded element boundaries, check padding.
     #[test]
     fn test_write_padded_multiple_aligned() {
-        let mut data = vec![255u8; 254];
+        let data_len = BYTE_ALIGNED_DATA * 4;
+        let mut data = vec![255u8; data_len];
         let buf = Vec::new();
         let mut cursor = Cursor::new(buf);
-        let mut written = write_padded(&mut data[0..127].as_ref(), &mut cursor).unwrap();
-        written += write_padded(&mut data[127..].as_ref(), &mut cursor).unwrap();
+        let mut written =
+            write_padded(&mut data[0..BYTE_ALIGNED_DATA].as_ref(), &mut cursor).unwrap();
+        written += write_padded(&mut data[BYTE_ALIGNED_DATA..].as_ref(), &mut cursor).unwrap();
         let padded = cursor.into_inner();
 
-        assert_eq!(written, 254);
+        assert_eq!(written, data_len);
         assert_eq!(
             padded.len(),
-            FR32_PADDING_MAP.transform_byte_offset(254, true)
+            FR32_PADDING_MAP.transform_byte_offset(data_len, true)
         );
 
-        assert_eq!(padded[127], 0b0011_1111);
-        assert_eq!(padded[128], 0b1111_1111);
-        assert_eq!(&padded[128..159], vec![255u8; 31].as_slice());
+        assert_eq!(padded[BYTE_ALIGNED_DATA], PADDED_BYTE);
+        assert_eq!(padded[BYTE_ALIGNED_DATA + 1], 0b1111_1111);
+        assert_eq!(
+            &padded[BYTE_ALIGNED_DATA + 1..BYTE_ALIGNED_DATA + 32],
+            vec![255u8; 31].as_slice()
+        );
         assert_eq!(padded.into_boxed_slice(), bit_vec_padding(data));
     }
 
@@ -1147,8 +1187,9 @@ mod tests {
         let mut data = vec![255u8; 265];
         let buf = Vec::new();
         let mut cursor = Cursor::new(buf);
-        let mut written = write_padded(&mut data[0..127].as_ref(), &mut cursor).unwrap();
-        written += write_padded(&mut data[127..].as_ref(), &mut cursor).unwrap();
+        let mut written =
+            write_padded(&mut data[0..BYTE_ALIGNED_DATA].as_ref(), &mut cursor).unwrap();
+        written += write_padded(&mut data[BYTE_ALIGNED_DATA..].as_ref(), &mut cursor).unwrap();
         let padded = cursor.into_inner();
 
         assert_eq!(written, 265);
@@ -1157,9 +1198,12 @@ mod tests {
             FR32_PADDING_MAP.transform_byte_offset(265, true)
         );
 
-        assert_eq!(padded[127], 0b0011_1111);
-        assert_eq!(padded[128], 0b1111_1111);
-        assert_eq!(&padded[128..159], vec![255u8; 31].as_slice());
+        assert_eq!(padded[BYTE_ALIGNED_DATA], PADDED_BYTE);
+        assert_eq!(padded[BYTE_ALIGNED_DATA + 1], 0b1111_1111);
+        assert_eq!(
+            &padded[BYTE_ALIGNED_DATA + 1..BYTE_ALIGNED_DATA + 32],
+            vec![255u8; 31].as_slice()
+        );
         assert_eq!(padded[data.len()], 0b1111_1111);
         assert_eq!(padded.into_boxed_slice(), bit_vec_padding(data));
     }
@@ -1174,31 +1218,32 @@ mod tests {
         }
     }
 
-    // `write_padded` for 127 bytes of 1s, splitting it in two calls of varying
+    // `write_padded` for BYTE_ALIGNED_DATA bytes of 1s, splitting it in two calls of varying
     // sizes, from 0 to the full size, generating many unaligned calls, check padding.
     #[test]
     fn test_write_padded_multiple_unaligned() {
-        // Use 127 for this test because it unpads to 128 – a multiple of 32.
-        // Otherwise the last chunk will be too short and cannot be converted to Fr.
-        for i in 1..126 {
-            let mut data = vec![255u8; 127];
+        // Use BYTE_ALIGNED_DATA for this test because it unpads to BYTE_ALIGNED_DATA + 1,
+        // a multiple of 32. Otherwise the last chunk will be too short and cannot be converted
+        // to Fr.
+        for i in 1..BYTE_ALIGNED_DATA - 1 {
+            let mut data = vec![255u8; BYTE_ALIGNED_DATA];
             let buf = Vec::new();
             let mut cursor = Cursor::new(buf);
             let mut written = write_padded(&mut data[0..i].as_ref(), &mut cursor).unwrap();
             written += write_padded(&mut data[i..].as_ref(), &mut cursor).unwrap();
             let padded = cursor.into_inner();
             validate_fr32(&padded);
-            assert_eq!(written, 127);
+            assert_eq!(written, BYTE_ALIGNED_DATA);
             assert_eq!(
                 padded.len(),
-                FR32_PADDING_MAP.transform_byte_offset(127, true)
+                FR32_PADDING_MAP.transform_byte_offset(BYTE_ALIGNED_DATA, true)
             );
 
             // Check bytes in the boundary between calls: `i` and `i-1`.
             for offset in [i - 1, i].iter() {
                 if *offset % 32 == 31 {
                     // Byte with padding.
-                    assert_eq!(padded[*offset], 0b0011_1111);
+                    assert_eq!(padded[*offset], PADDED_BYTE);
                 } else {
                     assert_eq!(padded[*offset], 255u8);
                 }

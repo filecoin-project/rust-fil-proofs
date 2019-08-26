@@ -114,6 +114,8 @@ pub fn get_aligned_source(
 mod tests {
     use super::*;
 
+    // FIXME: The 127 in these tests comes from `BYTE_ALIGNED_DATA`, now
+    // updated to 63, still this test seems valid on its own.
     #[test]
     fn test_get_piece_alignment() {
         let table = vec![

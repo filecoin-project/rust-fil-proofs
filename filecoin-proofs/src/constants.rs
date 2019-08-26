@@ -1,3 +1,4 @@
+use crate::fr32::INPUT_BYTE_ALIGNED_FULL_ELEMENTS;
 use storage_proofs::util::NODE_SIZE;
 
 pub const POST_SECTORS_COUNT: usize = 512;
@@ -10,8 +11,8 @@ pub const TEST_SECTOR_SIZE: u64 = 1024;
 // Sector size, in bytes, during live operation.
 pub const LIVE_SECTOR_SIZE: u64 = 1 << 28; // 256MiB
 
-pub const MINIMUM_RESERVED_LEAVES_FOR_PIECE_IN_SECTOR: usize = 4;
+pub const MINIMUM_RESERVED_LEAVES_FOR_PIECE_IN_SECTOR: usize = INPUT_BYTE_ALIGNED_FULL_ELEMENTS;
 
-// Bit padding causes bytes to only be aligned at every 127 bytes (for 31.75 bytes).
+// Bit padding causes bytes to only be aligned at every BYTE_ALIGNED_DATA bytes (for 31.75 bytes).
 pub const MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR: usize =
     (MINIMUM_RESERVED_LEAVES_FOR_PIECE_IN_SECTOR * NODE_SIZE) - 1;
