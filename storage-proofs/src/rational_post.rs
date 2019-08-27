@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::marker::PhantomData;
 
 use byteorder::{ByteOrder, LittleEndian};
@@ -212,19 +212,27 @@ pub fn derive_challenges(
     sectors: &SectorSet,
     seed: &[u8],
     faults: &SectorSet,
-) -> Vec<Challenge> {
+) -> std::result::Result<Vec<Challenge>, failure::Error> {
     (0..challenge_count)
         .map(|n| {
             let mut attempt = 0;
+            let mut attempted_sectors = HashSet::new();
             loop {
                 let c = derive_challenge(seed, n as u64, attempt, sector_size, sectors);
 
                 // check for faulty sector
                 if !faults.contains(&c.sector) {
                     // valid challenge, not found
-                    return c;
+                    return Ok(c);
+                } else {
+                    attempt += 1;
+                    attempted_sectors.insert(c.sector);
+
+                    ensure!(
+                        attempted_sectors.len() == sectors.len(),
+                        "all sectors are faulty"
+                    );
                 }
-                attempt += 1;
             }
         })
         .collect()
@@ -310,7 +318,8 @@ mod tests {
         trees.insert(891.into(), &tree2);
         // other two faults don't have a tree available
 
-        let challenges = derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults);
+        let challenges =
+            derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
 
         // the only valid sector to challenge is 891
         assert!(
@@ -397,7 +406,8 @@ mod tests {
         sectors.insert(0.into());
         sectors.insert(1.into());
 
-        let challenges = derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults);
+        let challenges =
+            derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
         let commitments = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();
 
         let pub_inputs = PublicInputs::<H::Domain> {
@@ -463,7 +473,8 @@ mod tests {
         let mut trees = BTreeMap::new();
         trees.insert(0.into(), &tree);
 
-        let challenges = derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults);
+        let challenges =
+            derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
         let commitments = challenges
             .iter()
             .map(|c| trees.get(&c.sector).unwrap().root())
@@ -481,7 +492,8 @@ mod tests {
             .expect("proving failed");
 
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
-        let challenges = derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults);
+        let challenges =
+            derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
         let commitments = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();
 
         let different_pub_inputs = PublicInputs {
@@ -510,5 +522,22 @@ mod tests {
     #[test]
     fn rational_post_actually_validates_challenge_identity_pedersen() {
         test_rational_post_validates_challenge_identity::<PedersenHasher>();
+    }
+
+    #[test]
+    fn test_derive_challenges_fails_on_all_faulty() {
+        use std::collections::BTreeSet;
+
+        let mut sectors = BTreeSet::new();
+        sectors.insert(SectorId::from(1));
+        sectors.insert(SectorId::from(2));
+
+        let mut faults = BTreeSet::new();
+        faults.insert(SectorId::from(1));
+        faults.insert(SectorId::from(2));
+
+        let seed = vec![0u8];
+
+        assert!(derive_challenges(10, 1024, &sectors, &seed, &faults).is_err());
     }
 }

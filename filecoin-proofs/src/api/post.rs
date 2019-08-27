@@ -159,7 +159,7 @@ pub fn generate_post(
         &sectors,
         challenge_seed,
         &faults,
-    );
+    )?;
 
     // Match the replicas to the challenges, as these are the only ones required.
     let challenged_replicas: Vec<_> = challenges
@@ -272,7 +272,7 @@ pub fn verify_post(
         &sectors,
         challenge_seed,
         &faults,
-    );
+    )?;
 
     // Match the replicas to the challenges, as these are the only ones required.
     let commitments: Vec<_> = challenges
