@@ -5,13 +5,12 @@ use std::sync::Mutex;
 use bellperson::groth16;
 use paired::bls12_381::Bls12;
 
-use storage_proofs::circuit::vdf_post::VDFPoStCircuit;
-use storage_proofs::circuit::vdf_post::VDFPostCompound;
+use storage_proofs::circuit::rational_post::RationalPoStCircuit;
+use storage_proofs::circuit::rational_post::RationalPoStCompound;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::hasher::PedersenHasher;
-use storage_proofs::vdf_post::VDFPoSt;
-use storage_proofs::vdf_sloth::Sloth;
+use storage_proofs::rational_post::RationalPoSt;
 
 use crate::error;
 use crate::parameters::{post_public_params, public_params};
@@ -108,10 +107,10 @@ pub fn get_post_params(post_config: PoStConfig) -> error::Result<Arc<groth16::Pa
     let post_public_params = post_public_params(post_config);
 
     let parameters_generator = || {
-        <VDFPostCompound as CompoundProof<
+        <RationalPoStCompound<PedersenHasher> as CompoundProof<
             Bls12,
-            VDFPoSt<PedersenHasher, Sloth>,
-            VDFPoStCircuit<Bls12>,
+            RationalPoSt<PedersenHasher>,
+            RationalPoStCircuit<Bls12, PedersenHasher>,
         >>::groth_params(&post_public_params, &ENGINE_PARAMS)
         .map_err(Into::into)
     };
@@ -149,10 +148,10 @@ pub fn get_post_verifying_key(post_config: PoStConfig) -> error::Result<Arc<Bls1
     let post_public_params = post_public_params(post_config);
 
     let vk_generator = || {
-        <VDFPostCompound as CompoundProof<
+        <RationalPoStCompound<PedersenHasher> as CompoundProof<
             Bls12,
-            VDFPoSt<PedersenHasher, Sloth>,
-            VDFPoStCircuit<Bls12>,
+            RationalPoSt<PedersenHasher>,
+            RationalPoStCircuit<Bls12, PedersenHasher>,
         >>::verifying_key(&post_public_params, &ENGINE_PARAMS)
         .map_err(Into::into)
     };

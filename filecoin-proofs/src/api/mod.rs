@@ -4,17 +4,31 @@ use std::io::prelude::*;
 use std::io::{BufWriter, Cursor, Read, SeekFrom};
 use std::path::{Path, PathBuf};
 
-use ff::PrimeField;
 use memmap::MmapOptions;
 use paired::bls12_381::Bls12;
 use paired::Engine;
 
+use crate::caches::{get_zigzag_params, get_zigzag_verifying_key};
+use crate::constants::{
+    MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
+    MINIMUM_RESERVED_LEAVES_FOR_PIECE_IN_SECTOR as MIN_NUM_LEAVES, POREP_MINIMUM_CHALLENGES,
+    SINGLE_PARTITION_PROOF_LEN,
+};
+use crate::error;
+use crate::file_cleanup::FileCleanup;
+use crate::fr32::{write_padded, write_unpadded};
+use crate::parameters::{public_params, setup_params};
+use crate::pieces::{get_aligned_source, get_piece_alignment, PieceAlignment};
+use crate::singletons::ENGINE_PARAMS;
+use crate::types::{
+    PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, SectorSize, UnpaddedByteIndex,
+    UnpaddedBytesAmount,
+};
+
 use storage_proofs::circuit::multi_proof::MultiProof;
-use storage_proofs::circuit::vdf_post::VDFPostCompound;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
-use storage_proofs::error::Error;
+use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
 use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::hasher::{Domain, Hasher};
@@ -25,36 +39,18 @@ use storage_proofs::piece_inclusion_proof::{
     PieceSpec,
 };
 use storage_proofs::porep::{replica_id, PoRep, Tau};
-use storage_proofs::proof::NoRequirements;
+use storage_proofs::sector::SectorId;
 use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
-use storage_proofs::{vdf_post, vdf_sloth};
 use tempfile::tempfile;
 
-use crate::caches::{
-    get_post_params, get_post_verifying_key, get_zigzag_params, get_zigzag_verifying_key,
-};
-use crate::constants::{
-    MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
-    MINIMUM_RESERVED_LEAVES_FOR_PIECE_IN_SECTOR as MIN_NUM_LEAVES, POREP_MINIMUM_CHALLENGES,
-    SINGLE_PARTITION_PROOF_LEN,
-};
-use crate::error;
-use crate::file_cleanup::FileCleanup;
-use crate::fr32::{write_padded, write_unpadded};
-use crate::parameters::{post_setup_params, public_params, setup_params};
-use crate::pieces::{get_aligned_source, get_piece_alignment, PieceAlignment};
-use crate::post_adapter::*;
-use crate::singletons::ENGINE_PARAMS;
-use crate::types::{
-    PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, PoStProofPartitions,
-    SectorSize, UnpaddedByteIndex, UnpaddedBytesAmount,
-};
+mod post;
+pub use crate::api::post::*;
 
 /// FrSafe is an array of the largest whole number of bytes guaranteed not to overflow the field.
 pub type FrSafe = [u8; 31];
 
 pub type Commitment = Fr32Ary;
-pub type ChallengeSeed = Fr32Ary;
+pub type ChallengeSeed = [u8; 32];
 type Tree = MerkleTree<PedersenDomain, <PedersenHasher as Hasher>::Function>;
 
 #[derive(Clone, Debug)]
@@ -67,37 +63,16 @@ pub struct SealOutput {
     pub piece_inclusion_proofs: Vec<PieceInclusionProof<PedersenHasher>>,
 }
 
-/// Generates a proof-of-spacetime, returning and detected storage faults.
-/// Accepts as input a challenge seed, configuration struct, and a vector of
-/// sealed sector file-path plus CommR tuples.
-///
-pub fn generate_post(
-    post_config: PoStConfig,
-    challenge_seed: ChallengeSeed,
-    input_parts: Vec<(Option<String>, Commitment)>,
-) -> error::Result<GeneratePoStDynamicSectorsCountOutput> {
-    generate_post_dynamic(GeneratePoStDynamicSectorsCountInput {
-        post_config,
-        challenge_seed,
-        input_parts,
-    })
-}
-
-/// Verifies a proof-of-spacetime.
-///
-pub fn verify_post(
-    post_config: PoStConfig,
-    comm_rs: Vec<Commitment>,
-    challenge_seed: ChallengeSeed,
-    proofs: Vec<Vec<u8>>,
-    faults: Vec<u64>,
-) -> error::Result<VerifyPoStDynamicSectorsCountOutput> {
-    verify_post_dynamic(VerifyPoStDynamicSectorsCountInput {
-        post_config,
-        comm_rs,
-        challenge_seed,
-        proofs,
-        faults,
+fn as_safe_commitment(
+    comm: &Commitment,
+    commitment_name: impl AsRef<str>,
+) -> Result<PedersenDomain, failure::Error> {
+    bytes_into_fr::<Bls12>(comm).map(Into::into).map_err(|err| {
+        format_err!(
+            "Invalid commitment ({}): {:?}",
+            commitment_name.as_ref(),
+            err
+        )
     })
 }
 
@@ -180,7 +155,7 @@ pub fn seal<T: AsRef<Path>>(
     in_path: T,
     out_path: T,
     prover_id_in: &FrSafe,
-    sector_id_in: &FrSafe,
+    sector_id: SectorId,
     piece_lengths: &[UnpaddedBytesAmount],
 ) -> error::Result<SealOutput> {
     let sector_bytes = usize::from(PaddedBytesAmount::from(porep_config));
@@ -199,8 +174,8 @@ pub fn seal<T: AsRef<Path>>(
     // Zero-pad the prover_id to 32 bytes (and therefore Fr32).
     let prover_id = pad_safe_fr(prover_id_in);
     // Zero-pad the sector_id to 32 bytes (and therefore Fr32).
-    let sector_id = pad_safe_fr(sector_id_in);
-    let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
+    let sector_id_as_safe_fr = pad_safe_fr(&sector_id.as_fr_safe());
+    let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id_as_safe_fr);
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: &setup_params(
@@ -294,7 +269,7 @@ pub fn seal<T: AsRef<Path>>(
         comm_d,
         comm_r_star,
         prover_id_in,
-        sector_id_in,
+        sector_id,
         &buf,
     )
     .expect("post-seal verification sanity check failed");
@@ -317,28 +292,17 @@ pub fn verify_seal(
     comm_d: Commitment,
     comm_r_star: Commitment,
     prover_id_in: &FrSafe,
-    sector_id_in: &FrSafe,
+    sector_id: SectorId,
     proof_vec: &[u8],
 ) -> error::Result<bool> {
     let sector_bytes = PaddedBytesAmount::from(porep_config);
     let prover_id = pad_safe_fr(prover_id_in);
-    let sector_id = pad_safe_fr(sector_id_in);
-    let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
+    let sector_id_as_safe_fr = pad_safe_fr(&sector_id.as_fr_safe());
+    let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id_as_safe_fr);
 
-    let comm_r = bytes_into_fr::<Bls12>(&comm_r).map_err(|err| match err {
-        Error::BadFrBytes => format_err!("could not transform comm_r into Fr32: {:?}", err),
-        _ => err.into(),
-    })?;
-
-    let comm_d = bytes_into_fr::<Bls12>(&comm_d).map_err(|err| match err {
-        Error::BadFrBytes => format_err!("could not transform comm_d into Fr32: {:?}", err),
-        _ => err.into(),
-    })?;
-
-    let comm_r_star = bytes_into_fr::<Bls12>(&comm_r_star).map_err(|err| match err {
-        Error::BadFrBytes => format_err!("could not transform comm_r_star into Fr32: {:?}", err),
-        _ => err.into(),
-    })?;
+    let comm_r = as_safe_commitment(&comm_r, "comm_r")?;
+    let comm_d = as_safe_commitment(&comm_d, "comm_d")?;
+    let comm_r_star = as_safe_commitment(&comm_r_star, "comm_r_star")?;
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: &setup_params(
@@ -357,12 +321,9 @@ pub fn verify_seal(
 
     let public_inputs = layered_drgporep::PublicInputs::<<DefaultTreeHasher as Hasher>::Domain> {
         replica_id,
-        tau: Some(Tau {
-            comm_r: comm_r.into(),
-            comm_d: comm_d.into(),
-        }),
+        tau: Some(Tau { comm_r, comm_d }),
         seed: None,
-        comm_r_star: comm_r_star.into(),
+        comm_r_star,
         k: None,
     };
 
@@ -477,170 +438,6 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     Ok(UnpaddedBytesAmount(written as u64))
 }
 
-fn verify_post_dynamic(
-    dynamic: VerifyPoStDynamicSectorsCountInput,
-) -> error::Result<VerifyPoStDynamicSectorsCountOutput> {
-    let fixed = verify_post_spread_input(dynamic)?
-        .iter()
-        .map(verify_post_fixed_sectors_count)
-        .collect();
-
-    verify_post_collect_output(fixed)
-}
-
-fn generate_post_dynamic(
-    dynamic: GeneratePoStDynamicSectorsCountInput,
-) -> error::Result<GeneratePoStDynamicSectorsCountOutput> {
-    let n = { dynamic.input_parts.len() };
-
-    let fixed_output = generate_post_spread_input(dynamic)
-        .iter()
-        .map(generate_post_fixed_sectors_count)
-        .collect();
-
-    generate_post_collect_output(n, fixed_output)
-}
-
-fn generate_post_fixed_sectors_count(
-    fixed: &GeneratePoStFixedSectorsCountInput,
-) -> error::Result<GeneratePoStFixedSectorsCountOutput> {
-    let faults: Vec<u64> = Vec::new();
-
-    let setup_params = compound_proof::SetupParams {
-        vanilla_params: &post_setup_params(fixed.post_config),
-        engine_params: &(*ENGINE_PARAMS),
-        partitions: None,
-    };
-
-    let pub_params: compound_proof::PublicParams<
-        _,
-        vdf_post::VDFPoSt<PedersenHasher, vdf_sloth::Sloth>,
-    > = VDFPostCompound::setup(&setup_params).expect("setup failed");
-
-    let commitments = fixed
-        .input_parts
-        .iter()
-        .map(|(_, comm_r)| PedersenDomain::try_from_bytes(&comm_r[..]).unwrap()) // FIXME: don't unwrap
-        .collect();
-
-    let safe_challenge_seed = {
-        let mut cs = vec![0; 32];
-        cs.copy_from_slice(&fixed.challenge_seed);
-        cs[31] &= 0b0011_1111;
-        cs
-    };
-
-    let pub_inputs = vdf_post::PublicInputs {
-        challenge_seed: PedersenDomain::try_from_bytes(&safe_challenge_seed).unwrap(),
-        commitments,
-        faults: Vec::new(),
-    };
-
-    let trees: Vec<Tree> = fixed
-        .input_parts
-        .iter()
-        .map(|(access, _)| {
-            if let Some(s) = &access {
-                make_merkle_tree(
-                    s,
-                    PaddedBytesAmount(pub_params.vanilla_params.sector_size as u64),
-                )
-                .unwrap()
-            } else {
-                panic!("faults are not yet supported")
-            }
-        })
-        .collect();
-
-    let borrowed_trees: Vec<&Tree> = trees.iter().map(|t| t).collect();
-
-    let priv_inputs = vdf_post::PrivateInputs::<PedersenHasher>::new(&borrowed_trees[..]);
-
-    let groth_params = get_post_params(fixed.post_config)?;
-
-    let proof = VDFPostCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)
-        .expect("failed while proving");
-
-    let mut buf = Vec::with_capacity(
-        SINGLE_PARTITION_PROOF_LEN * usize::from(PoStProofPartitions::from(fixed.post_config)),
-    );
-
-    proof.write(&mut buf)?;
-
-    Ok(GeneratePoStFixedSectorsCountOutput { proof: buf, faults })
-}
-
-fn verify_post_fixed_sectors_count(
-    fixed: &VerifyPoStFixedSectorsCountInput,
-) -> error::Result<VerifyPoStFixedSectorsCountOutput> {
-    let safe_challenge_seed = {
-        let mut cs = vec![0; 32];
-        cs.copy_from_slice(&fixed.challenge_seed);
-        cs[31] &= 0b0011_1111;
-        cs
-    };
-
-    let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: &post_setup_params(fixed.post_config),
-        engine_params: &(*ENGINE_PARAMS),
-        partitions: None,
-    };
-
-    let compound_public_params: compound_proof::PublicParams<
-        _,
-        vdf_post::VDFPoSt<PedersenHasher, vdf_sloth::Sloth>,
-    > = VDFPostCompound::setup(&compound_setup_params).expect("setup failed");
-
-    let mut commitments: Vec<PedersenDomain> = vec![];
-
-    for comm_r in fixed.comm_rs.iter() {
-        let commitment = bytes_into_fr::<Bls12>(comm_r).map_err(|err| match err {
-            Error::BadFrBytes => format_err!("could not transform comm_r into Fr32: {:?}", err),
-            _ => err.into(),
-        })?;
-
-        commitments.push(PedersenDomain(commitment.into_repr()));
-    }
-
-    let public_inputs = vdf_post::PublicInputs::<PedersenDomain> {
-        commitments,
-        challenge_seed: PedersenDomain::try_from_bytes(&safe_challenge_seed)?,
-        faults: fixed.faults.clone(),
-    };
-
-    let verifying_key = get_post_verifying_key(fixed.post_config)?;
-
-    let num_post_proof_bytes =
-        SINGLE_PARTITION_PROOF_LEN * usize::from(PoStProofPartitions::from(fixed.post_config));
-
-    let proof = MultiProof::new_from_reader(
-        Some(usize::from(PoStProofPartitions::from(fixed.post_config))),
-        &fixed.proof[0..num_post_proof_bytes],
-        &verifying_key,
-    )?;
-
-    let is_valid = VDFPostCompound::verify(
-        &compound_public_params,
-        &public_inputs,
-        &proof,
-        &NoRequirements,
-    )?;
-
-    // Since callers may rely on previous mocked success, just pretend verification succeeded, for now.
-    Ok(VerifyPoStFixedSectorsCountOutput { is_valid })
-}
-
-fn make_merkle_tree<T: Into<PathBuf> + AsRef<Path>>(
-    sealed_path: T,
-    bytes: PaddedBytesAmount,
-) -> storage_proofs::error::Result<Tree> {
-    let mut f_in = File::open(sealed_path.into())?;
-    let mut data = Vec::new();
-    f_in.read_to_end(&mut data)?;
-
-    public_params(bytes, 1).graph.merkle_tree(&data)
-}
-
 fn commitment_from_fr<E: Engine>(fr: E::Fr) -> Commitment {
     let mut commitment = [0; 32];
     for (i, b) in fr_into_bytes::<E>(&fr).iter().enumerate() {
@@ -657,14 +454,16 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
+    use crate::constants::TEST_SECTOR_SIZE;
+    use crate::error::ExpectWithBacktrace;
+    use crate::types::{PoStConfig, SectorSize};
+
     use rand::Rng;
     use tempfile::NamedTempFile;
 
     use storage_proofs::util::NODE_SIZE;
-
-    use crate::constants::{POST_SECTORS_COUNT, TEST_SECTOR_SIZE};
-    use crate::error::ExpectWithBacktrace;
-    use crate::types::SectorSize;
 
     use super::*;
 
@@ -794,12 +593,12 @@ mod tests {
                 convertible_to_fr_bytes,
                 convertible_to_fr_bytes,
                 &[0; 31],
-                &[0; 31],
+                SectorId::from(0),
                 &[],
             );
 
             if let Err(err) = result {
-                let needle = "could not transform comm_r into Fr32";
+                let needle = "Invalid commitment (comm_r)";
                 let haystack = format!("{}", err);
 
                 assert!(
@@ -818,12 +617,12 @@ mod tests {
                 not_convertible_to_fr_bytes,
                 convertible_to_fr_bytes,
                 &[0; 31],
-                &[0; 31],
+                SectorId::from(0),
                 &[],
             );
 
             if let Err(err) = result {
-                let needle = "could not transform comm_d into Fr32";
+                let needle = "Invalid commitment (comm_d)";
                 let haystack = format!("{}", err);
 
                 assert!(
@@ -842,12 +641,12 @@ mod tests {
                 convertible_to_fr_bytes,
                 not_convertible_to_fr_bytes,
                 &[0; 31],
-                &[0; 31],
+                SectorId::from(0),
                 &[],
             );
 
             if let Err(err) = result {
-                let needle = "could not transform comm_r_star into Fr32";
+                let needle = "Invalid commitment (comm_r_star)";
                 let haystack = format!("{}", err);
 
                 assert!(
@@ -865,17 +664,21 @@ mod tests {
         let not_convertible_to_fr_bytes = [255; 32];
         let out = bytes_into_fr::<Bls12>(&not_convertible_to_fr_bytes);
         assert!(out.is_err(), "tripwire");
+        let mut replicas = BTreeMap::new();
+        replicas.insert(
+            1.into(),
+            PublicReplicaInfo::new(not_convertible_to_fr_bytes),
+        );
 
         let result = verify_post(
-            PoStConfig(SectorSize(TEST_SECTOR_SIZE), PoStProofPartitions(2)),
-            vec![not_convertible_to_fr_bytes],
-            [0; 32],
-            vec![[0; POST_SECTORS_COUNT * SINGLE_PARTITION_PROOF_LEN].to_vec()],
-            vec![],
+            PoStConfig(SectorSize(TEST_SECTOR_SIZE)),
+            &[0; 32],
+            &vec![0; SINGLE_PARTITION_PROOF_LEN],
+            &replicas,
         );
 
         if let Err(err) = result {
-            let needle = "could not transform comm_r into Fr32";
+            let needle = "Invalid commitment (comm_r)";
             let haystack = format!("{}", err);
 
             assert!(
@@ -921,7 +724,7 @@ mod tests {
             &staged_sector_file.path(),
             &sealed_sector_file.path(),
             &[0; 31],
-            &[0; 31],
+            SectorId::from(0),
             &[number_of_bytes_in_piece],
         )?;
 
