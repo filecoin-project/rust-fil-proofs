@@ -295,15 +295,28 @@ mod tests {
 
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
         let mut faults = SectorSet::new();
+        faults.insert(139.into());
         faults.insert(1.into());
+        faults.insert(32.into());
+
         let mut sectors = SectorSet::new();
-        sectors.insert(0.into());
+        sectors.insert(891.into());
+        sectors.insert(139.into());
+        sectors.insert(32.into());
         sectors.insert(1.into());
+
         let mut trees = BTreeMap::new();
-        trees.insert(0.into(), &tree1);
-        trees.insert(1.into(), &tree2);
+        trees.insert(139.into(), &tree1); // faulty with tree
+        trees.insert(891.into(), &tree2);
+        // other two faults don't have a tree available
 
         let challenges = derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults);
+
+        // the only valid sector to challenge is 891
+        assert!(
+            challenges.iter().all(|c| c.sector == 891.into()),
+            "invalid challenge generated"
+        );
         let commitments = challenges
             .iter()
             .map(|c| trees.get(&c.sector).unwrap().root())
