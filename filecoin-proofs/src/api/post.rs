@@ -197,10 +197,16 @@ pub fn generate_post(
     let borrowed_trees: BTreeMap<SectorId, &Tree> = challenged_replicas
         .iter()
         .map(|(id, _)| {
-            // Safe to unwrap, as we constructed the BTreeMap such that each of these has an entry.
-            (*id, unique_trees.get(id).unwrap())
+            if let Some(tree) = unique_trees.get(id) {
+                Ok((*id, tree))
+            } else {
+                Err(format_err!(
+                    "Bug: Failed to generate merkle tree for {} sector",
+                    id
+                ))
+            }
         })
-        .collect();
+        .collect::<Result<_, _>>()?;
 
     // Construct the list of actual commitments
     let commitments: Vec<_> = challenged_replicas
