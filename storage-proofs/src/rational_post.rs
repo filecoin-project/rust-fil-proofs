@@ -229,7 +229,7 @@ pub fn derive_challenges(
                     attempted_sectors.insert(c.sector);
 
                     ensure!(
-                        attempted_sectors.len() == sectors.len(),
+                        attempted_sectors.len() < sectors.len(),
                         "all sectors are faulty"
                     );
                 }
