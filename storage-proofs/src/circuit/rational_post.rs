@@ -189,6 +189,8 @@ impl<'a, E: JubjubEngine, H: Hasher> RationalPoStCircuit<'a, E, H> {
 mod tests {
     use super::*;
 
+    use std::collections::BTreeMap;
+
     use ff::Field;
     use fil_sapling_crypto::jubjub::JubjubBls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
@@ -248,9 +250,11 @@ mod tests {
             commitments: &commitments,
         };
 
-        let priv_inputs = rational_post::PrivateInputs::<PedersenHasher> {
-            trees: &[&tree1, &tree2],
-        };
+        let mut trees = BTreeMap::new();
+        trees.insert(0.into(), &tree1);
+        trees.insert(1.into(), &tree2);
+
+        let priv_inputs = rational_post::PrivateInputs::<PedersenHasher> { trees: &trees };
 
         let proof = RationalPoSt::<PedersenHasher>::prove(&pub_params, &pub_inputs, &priv_inputs)
             .expect("proving failed");
@@ -347,9 +351,11 @@ mod tests {
             commitments: &commitments,
         };
 
-        let priv_inputs = rational_post::PrivateInputs::<PedersenHasher> {
-            trees: &[&tree1, &tree2],
-        };
+        let mut trees = BTreeMap::new();
+        trees.insert(0.into(), &tree1);
+        trees.insert(1.into(), &tree2);
+
+        let priv_inputs = rational_post::PrivateInputs::<PedersenHasher> { trees: &trees };
 
         let gparams = RationalPoStCompound::<PedersenHasher>::groth_params(
             &pub_params.vanilla_params,

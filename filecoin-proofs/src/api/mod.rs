@@ -454,6 +454,8 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use crate::constants::TEST_SECTOR_SIZE;
     use crate::error::ExpectWithBacktrace;
     use crate::types::{PoStConfig, SectorSize};
@@ -461,7 +463,6 @@ mod tests {
     use rand::Rng;
     use tempfile::NamedTempFile;
 
-    use storage_proofs::sector::SectorSet;
     use storage_proofs::util::NODE_SIZE;
 
     use super::*;
@@ -663,16 +664,17 @@ mod tests {
         let not_convertible_to_fr_bytes = [255; 32];
         let out = bytes_into_fr::<Bls12>(&not_convertible_to_fr_bytes);
         assert!(out.is_err(), "tripwire");
-        let mut sectors = SectorSet::new();
-        sectors.insert(1.into());
+        let mut replicas = BTreeMap::new();
+        replicas.insert(
+            1.into(),
+            PublicReplicaInfo::new(not_convertible_to_fr_bytes),
+        );
 
         let result = verify_post(
             PoStConfig(SectorSize(TEST_SECTOR_SIZE)),
-            vec![not_convertible_to_fr_bytes],
             &[0; 32],
             &vec![0; SINGLE_PARTITION_PROOF_LEN],
-            &sectors,
-            &SectorSet::new(),
+            &replicas,
         );
 
         if let Err(err) = result {

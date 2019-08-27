@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Read;
 
@@ -23,33 +23,41 @@ use crate::types::{PaddedBytesAmount, PoStConfig};
 /// The minimal information required about a replica, in order to be able to generate
 /// a PoSt over it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ReplicaInfo {
-    /// The id of this sector.
-    sector_id: SectorId,
+pub struct PrivateReplicaInfo {
     /// Path to the replica.
     access: String,
     /// The replica commitment.
     commitment: Commitment,
+    /// Is this sector marked as a fault?
+    is_fault: bool,
 }
 
-impl std::cmp::Ord for ReplicaInfo {
+impl std::cmp::Ord for PrivateReplicaInfo {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.commitment.as_ref().cmp(other.commitment.as_ref())
     }
 }
 
-impl std::cmp::PartialOrd for ReplicaInfo {
+impl std::cmp::PartialOrd for PrivateReplicaInfo {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl ReplicaInfo {
-    pub fn new(id: SectorId, access: String, commitment: Commitment) -> Self {
-        ReplicaInfo {
-            sector_id: id,
+impl PrivateReplicaInfo {
+    pub fn new(access: String, commitment: Commitment) -> Self {
+        PrivateReplicaInfo {
             access,
             commitment,
+            is_fault: false,
+        }
+    }
+
+    pub fn new_faulty(access: String, commitment: Commitment) -> Self {
+        PrivateReplicaInfo {
+            access,
+            commitment,
+            is_fault: true,
         }
     }
 
@@ -68,24 +76,58 @@ impl ReplicaInfo {
     }
 }
 
+/// The minimal information required about a replica, in order to be able to verify
+/// a PoSt over it.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct PublicReplicaInfo {
+    /// The replica commitment.
+    commitment: Commitment,
+    /// Is this sector marked as a fault?
+    is_fault: bool,
+}
+
+impl std::cmp::Ord for PublicReplicaInfo {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.commitment.as_ref().cmp(other.commitment.as_ref())
+    }
+}
+
+impl std::cmp::PartialOrd for PublicReplicaInfo {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PublicReplicaInfo {
+    pub fn new(commitment: Commitment) -> Self {
+        PublicReplicaInfo {
+            commitment,
+            is_fault: false,
+        }
+    }
+
+    pub fn new_faulty(commitment: Commitment) -> Self {
+        PublicReplicaInfo {
+            commitment,
+            is_fault: true,
+        }
+    }
+
+    pub fn safe_commitment(&self) -> Result<PedersenDomain, failure::Error> {
+        as_safe_commitment(&self.commitment, "comm_r")
+    }
+}
+
 /// Generates a proof-of-spacetime.
 /// Accepts as input a challenge seed, configuration struct, and a vector of
 /// sealed sector file-path plus CommR tuples, as well as a list of faults.
 pub fn generate_post(
     post_config: PoStConfig,
     challenge_seed: &ChallengeSeed,
-    replicas: &[ReplicaInfo],
-    sectors: &SectorSet,
-    faults: &SectorSet,
+    replicas: &BTreeMap<SectorId, PrivateReplicaInfo>,
 ) -> error::Result<Vec<u8>> {
     let sector_count = replicas.len() as u64;
     let sector_size = u64::from(PaddedBytesAmount::from(post_config));
-
-    // Only one fault per sector is possible.
-    ensure!(
-        faults.len() as u64 <= sector_count,
-        "Too many faults submitted"
-    );
 
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
@@ -97,20 +139,34 @@ pub fn generate_post(
     let pub_params: compound_proof::PublicParams<_, rational_post::RationalPoSt<PedersenHasher>> =
         RationalPoStCompound::setup(&setup_params)?;
 
+    let sectors = replicas.keys().copied().collect();
+    let faults = replicas
+        .iter()
+        .filter_map(
+            |(id, replica)| {
+                if replica.is_fault {
+                    Some(*id)
+                } else {
+                    None
+                }
+            },
+        )
+        .collect();
+
     let challenges = rational_post::derive_challenges(
         vanilla_params.challenges_count,
         sector_size,
-        sectors,
+        &sectors,
         challenge_seed,
-        faults,
+        &faults,
     );
 
     // Match the replicas to the challenges, as these are the only ones required.
     let challenged_replicas: Vec<_> = challenges
         .iter()
         .map(|c| {
-            if let Some(replica) = replicas.iter().find(|r| r.sector_id == c.sector) {
-                Ok(replica)
+            if let Some(replica) = replicas.get(&c.sector) {
+                Ok((c.sector, replica))
             } else {
                 Err(format_err!(
                     "Invalid challenge generated: {}, only {} sectors are being proven",
@@ -131,35 +187,35 @@ pub fn generate_post(
 
     let unique_trees_res: Vec<_> = unique_challenged_replicas
         .into_par_iter()
-        .map(|replica| replica.merkle_tree(sector_size).map(|tree| (replica, tree)))
+        .map(|(id, replica)| replica.merkle_tree(sector_size).map(|tree| (id, tree)))
         .collect();
 
     // resolve results
-    let unique_trees: HashMap<&ReplicaInfo, Tree> =
+    let unique_trees: BTreeMap<SectorId, Tree> =
         unique_trees_res.into_iter().collect::<Result<_, _>>()?;
 
-    let borrowed_trees: Vec<&Tree> = challenged_replicas
+    let borrowed_trees: BTreeMap<SectorId, &Tree> = challenged_replicas
         .iter()
-        .map(|replica| {
-            // Safe to unwrap, as we constructed the HashMap such that each of these has an entry.
-            unique_trees.get(*replica).unwrap()
+        .map(|(id, _)| {
+            // Safe to unwrap, as we constructed the BTreeMap such that each of these has an entry.
+            (*id, unique_trees.get(id).unwrap())
         })
         .collect();
 
     // Construct the list of actual commitments
     let commitments: Vec<_> = challenged_replicas
         .iter()
-        .map(|replica| replica.safe_commitment())
+        .map(|(_id, replica)| replica.safe_commitment())
         .collect::<Result<_, _>>()?;
 
     let pub_inputs = rational_post::PublicInputs {
         challenges: &challenges,
         commitments: &commitments,
-        faults,
+        faults: &faults,
     };
 
     let priv_inputs = rational_post::PrivateInputs::<PedersenHasher> {
-        trees: &borrowed_trees[..],
+        trees: &borrowed_trees,
     };
 
     let groth_params = get_post_params(post_config)?;
@@ -172,17 +228,12 @@ pub fn generate_post(
 /// Verifies a proof-of-spacetime.
 pub fn verify_post(
     post_config: PoStConfig,
-    comm_rs: Vec<Commitment>,
     challenge_seed: &ChallengeSeed,
     proof: &[u8],
-    sectors: &SectorSet,
-    faults: &SectorSet,
+    replicas: &BTreeMap<SectorId, PublicReplicaInfo>,
 ) -> error::Result<bool> {
     let sector_size = u64::from(PaddedBytesAmount::from(post_config));
-    let sector_count = comm_rs.len() as u64;
-
-    // Only one fault per sector is possible.
-    ensure!(faults.len() as u64 <= sector_count, "Too many faults");
+    let sector_count = replicas.len() as u64;
 
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
@@ -190,17 +241,31 @@ pub fn verify_post(
         engine_params: &(*ENGINE_PARAMS),
         partitions: None,
     };
-    let commitments_all: Vec<PedersenDomain> = comm_rs
-        .iter()
-        .map(|c| as_safe_commitment(c, "comm_r"))
+    let commitments_all: Vec<PedersenDomain> = replicas
+        .values()
+        .map(|r| r.safe_commitment())
         .collect::<Result<_, _>>()?;
+
+    let sectors = replicas.keys().copied().collect();
+    let faults = replicas
+        .iter()
+        .filter_map(
+            |(id, replica)| {
+                if replica.is_fault {
+                    Some(*id)
+                } else {
+                    None
+                }
+            },
+        )
+        .collect();
 
     let challenges = rational_post::derive_challenges(
         vanilla_params.challenges_count,
         sector_size,
-        sectors,
+        &sectors,
         challenge_seed,
-        faults,
+        &faults,
     );
 
     // Match the replicas to the challenges, as these are the only ones required.

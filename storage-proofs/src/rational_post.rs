@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
 use byteorder::{ByteOrder, LittleEndian};
@@ -55,7 +56,7 @@ pub struct PublicInputs<'a, T: 'a + Domain> {
 
 #[derive(Debug, Clone)]
 pub struct PrivateInputs<'a, H: 'a + Hasher> {
-    pub trees: &'a [&'a MerkleTree<H::Domain, H::Function>],
+    pub trees: &'a BTreeMap<SectorId, &'a MerkleTree<H::Domain, H::Function>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -129,17 +130,19 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
             .iter()
             .zip(pub_inputs.commitments.iter())
             .map(|(challenge, commitment)| {
-                let challenged_sector = u64::from(challenge.sector);
                 let challenged_leaf = challenge.leaf;
 
-                let tree = priv_inputs.trees[challenged_sector as usize];
-                if commitment != &tree.root() {
-                    return Err(Error::InvalidCommitment);
-                }
+                if let Some(tree) = priv_inputs.trees.get(&challenge.sector) {
+                    if commitment != &tree.root() {
+                        return Err(Error::InvalidCommitment);
+                    }
 
-                Ok(MerkleProof::new_from_proof(
-                    &tree.gen_proof(challenged_leaf as usize),
-                ))
+                    Ok(MerkleProof::new_from_proof(
+                        &tree.gen_proof(challenged_leaf as usize),
+                    ))
+                } else {
+                    Err(Error::MalformedInput)
+                }
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -196,7 +199,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
 /// A challenge specifying a sector and leaf.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Challenge {
-    // The index of the sector into the sector list.
+    // The identifier of the challenged sector.
     pub sector: SectorId,
     // The leaf index this challenge points at.
     pub leaf: u64,
@@ -296,17 +299,14 @@ mod tests {
         let mut sectors = SectorSet::new();
         sectors.insert(0.into());
         sectors.insert(1.into());
+        let mut trees = BTreeMap::new();
+        trees.insert(0.into(), &tree1);
+        trees.insert(1.into(), &tree2);
 
         let challenges = derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults);
         let commitments = challenges
             .iter()
-            .map(|c| {
-                if u64::from(c.sector) % 2 == 0 {
-                    tree1.root()
-                } else {
-                    tree2.root()
-                }
-            })
+            .map(|c| trees.get(&c.sector).unwrap().root())
             .collect::<Vec<_>>();
 
         let pub_inputs = PublicInputs {
@@ -315,9 +315,7 @@ mod tests {
             faults: &faults,
         };
 
-        let priv_inputs = PrivateInputs::<H> {
-            trees: &[&tree1, &tree2],
-        };
+        let priv_inputs = PrivateInputs::<H> { trees: &trees };
 
         let proof = RationalPoSt::<H>::prove(&pub_params, &pub_inputs, &priv_inputs)
             .expect("proving failed");
@@ -449,8 +447,14 @@ mod tests {
         sectors.insert(0.into());
         sectors.insert(1.into());
 
+        let mut trees = BTreeMap::new();
+        trees.insert(0.into(), &tree);
+
         let challenges = derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults);
-        let commitments = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();
+        let commitments = challenges
+            .iter()
+            .map(|c| trees.get(&c.sector).unwrap().root())
+            .collect::<Vec<_>>();
 
         let pub_inputs = PublicInputs {
             challenges: &challenges,
@@ -458,7 +462,7 @@ mod tests {
             commitments: &commitments,
         };
 
-        let priv_inputs = PrivateInputs::<H> { trees: &[&tree] };
+        let priv_inputs = PrivateInputs::<H> { trees: &trees };
 
         let proof = RationalPoSt::<H>::prove(&pub_params, &pub_inputs, &priv_inputs)
             .expect("proving failed");
