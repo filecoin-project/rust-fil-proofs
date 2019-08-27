@@ -272,7 +272,7 @@ mod tests {
     use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
-    use crate::drgraph::{new_seed, BucketGraph, Graph};
+    use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, HashFunction, PedersenHasher, Sha256Hasher};
     use crate::merkle::make_proof_for_test;
@@ -296,8 +296,8 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph1 = BucketGraph::<H>::new(32, 5, 0, new_seed());
-        let graph2 = BucketGraph::<H>::new(32, 5, 0, new_seed());
+        let graph1 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
+        let graph2 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
         let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
         let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
 
@@ -397,7 +397,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
+        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
 
@@ -461,7 +461,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
+        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
         let mut faults = OrderedSectorSet::new();

@@ -460,8 +460,8 @@ mod tests {
 
         // End copied section.
 
-        let expected_inputs = 36;
-        let expected_constraints = 432312;
+        let expected_inputs = 38;
+        let expected_constraints = 483850;
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.
             let mut cs = MetricCS::<Bls12>::new();
