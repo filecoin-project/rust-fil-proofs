@@ -4,7 +4,7 @@ use std::fmt;
 use byteorder::ByteOrder;
 
 /// An ordered set of `SectorId`s.
-pub type SectorSet = BTreeSet<SectorId>;
+pub type OrderedSectorSet = BTreeSet<SectorId>;
 
 /// Identifier for a single sector.
 #[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]

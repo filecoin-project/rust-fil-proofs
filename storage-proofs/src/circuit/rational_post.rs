@@ -202,7 +202,7 @@ mod tests {
     use crate::hasher::pedersen::*;
     use crate::proof::{NoRequirements, ProofScheme};
     use crate::rational_post::{self, derive_challenges, RationalPoSt};
-    use crate::sector::SectorSet;
+    use crate::sector::OrderedSectorSet;
 
     #[test]
     fn test_rational_post_circuit_with_bls12_381() {
@@ -231,8 +231,8 @@ mod tests {
         let graph2 = BucketGraph::<PedersenHasher>::new(32, 5, 0, new_seed());
         let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
 
-        let faults = SectorSet::new();
-        let mut sectors = SectorSet::new();
+        let faults = OrderedSectorSet::new();
+        let mut sectors = OrderedSectorSet::new();
         sectors.insert(0.into());
         sectors.insert(1.into());
 
@@ -333,8 +333,8 @@ mod tests {
         let graph2 = BucketGraph::<PedersenHasher>::new(32, 5, 0, new_seed());
         let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
 
-        let faults = SectorSet::new();
-        let mut sectors = SectorSet::new();
+        let faults = OrderedSectorSet::new();
+        let mut sectors = OrderedSectorSet::new();
         sectors.insert(0.into());
         sectors.insert(1.into());
 

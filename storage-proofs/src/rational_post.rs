@@ -49,7 +49,7 @@ impl ParameterSetMetadata for PublicParams {
 pub struct PublicInputs<'a, T: 'a + Domain> {
     /// The challenges, which leafs to prove.
     pub challenges: &'a [Challenge],
-    pub faults: &'a SectorSet,
+    pub faults: &'a OrderedSectorSet,
     /// The root hashes of the underlying merkle trees.
     pub commitments: &'a [T],
 }
@@ -209,9 +209,9 @@ pub struct Challenge {
 pub fn derive_challenges(
     challenge_count: usize,
     sector_size: u64,
-    sectors: &SectorSet,
+    sectors: &OrderedSectorSet,
     seed: &[u8],
-    faults: &SectorSet,
+    faults: &OrderedSectorSet,
 ) -> std::result::Result<Vec<Challenge>, failure::Error> {
     (0..challenge_count)
         .map(|n| {
@@ -243,7 +243,7 @@ fn derive_challenge(
     n: u64,
     attempt: u64,
     sector_size: u64,
-    sectors: &SectorSet,
+    sectors: &OrderedSectorSet,
 ) -> Challenge {
     let mut data = seed.to_vec();
     data.extend_from_slice(&n.to_le_bytes()[..]);
@@ -302,12 +302,12 @@ mod tests {
         let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
 
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
-        let mut faults = SectorSet::new();
+        let mut faults = OrderedSectorSet::new();
         faults.insert(139.into());
         faults.insert(1.into());
         faults.insert(32.into());
 
-        let mut sectors = SectorSet::new();
+        let mut sectors = OrderedSectorSet::new();
         sectors.insert(891.into());
         sectors.insert(139.into());
         sectors.insert(32.into());
@@ -401,8 +401,8 @@ mod tests {
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
 
-        let faults = SectorSet::new();
-        let mut sectors = SectorSet::new();
+        let faults = OrderedSectorSet::new();
+        let mut sectors = OrderedSectorSet::new();
         sectors.insert(0.into());
         sectors.insert(1.into());
 
@@ -464,9 +464,9 @@ mod tests {
         let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
-        let mut faults = SectorSet::new();
+        let mut faults = OrderedSectorSet::new();
         faults.insert(1.into());
-        let mut sectors = SectorSet::new();
+        let mut sectors = OrderedSectorSet::new();
         sectors.insert(0.into());
         sectors.insert(1.into());
 
