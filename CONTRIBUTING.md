@@ -117,17 +117,15 @@ Must be one of the following:
 * **refactor**: A code change that neither fixes a bug nor adds a feature
 * **style**: Changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc)
 * **test**: Adding missing tests or correcting existing tests
+* **revert**: Used only for `git revert` commits.
 
 ### Scope
 The scope should be the name of the crate affected (as perceived by the person reading the changelog generated from commit messages.
 
 The following is the list of supported scopes:
 
-* **drop-struct-macro-derive**
-* **ffi-toolkit**
 * **fil-proofs-tooling**
 * **filecoin-proofs**
-* **sector-base**
 * **storage-proofs**
 
 There are currently a few exceptions to the "use package name" rule:
