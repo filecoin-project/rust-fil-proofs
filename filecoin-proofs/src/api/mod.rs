@@ -408,13 +408,13 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     sealed_path: T,
     output_path: T,
     prover_id_in: &FrSafe,
-    sector_id_in: &FrSafe,
+    sector_id: SectorId,
     offset: UnpaddedByteIndex,
     num_bytes: UnpaddedBytesAmount,
 ) -> error::Result<(UnpaddedBytesAmount)> {
+    let sector_id_as_safe_fr = pad_safe_fr(&sector_id.as_fr_safe());
     let prover_id = pad_safe_fr(prover_id_in);
-    let sector_id = pad_safe_fr(sector_id_in);
-    let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id);
+    let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id_as_safe_fr);
 
     let f_in = File::open(sealed_path)?;
     let mut data = Vec::new();

@@ -7,7 +7,9 @@ use byteorder::ByteOrder;
 pub type OrderedSectorSet = BTreeSet<SectorId>;
 
 /// Identifier for a single sector.
-#[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]
+#[derive(
+    Default, Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash, Serialize, Deserialize,
+)]
 pub struct SectorId(u64);
 
 impl From<u64> for SectorId {
