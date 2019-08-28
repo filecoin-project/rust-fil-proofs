@@ -247,10 +247,6 @@ pub fn verify_post(
         engine_params: &(*ENGINE_PARAMS),
         partitions: None,
     };
-    let commitments_all: Vec<PedersenDomain> = replicas
-        .values()
-        .map(|r| r.safe_commitment())
-        .collect::<Result<_, _>>()?;
 
     let sectors = replicas.keys().copied().collect();
     let faults = replicas
@@ -278,8 +274,8 @@ pub fn verify_post(
     let commitments: Vec<_> = challenges
         .iter()
         .map(|c| {
-            if let Some(comm) = commitments_all.get(u64::from(c.sector) as usize) {
-                Ok(*comm)
+            if let Some(replica) = replicas.get(&c.sector) {
+                replica.safe_commitment()
             } else {
                 Err(format_err!(
                     "Invalid challenge generated: {}, only {} sectors are being proven",
