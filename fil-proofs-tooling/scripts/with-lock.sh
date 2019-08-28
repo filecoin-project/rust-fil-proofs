@@ -8,14 +8,14 @@ shift 2
 
 if mkdir "$lockdir" > /dev/null 2>&1
 then
-    echo >&2 "successfully acquired lock (${lockdir})"
+    (>&2 echo "successfully acquired lock (${lockdir})")
 
     # Unlock (by removing dir) when the script finishes
-    trap 'echo >&2 "relinquishing lock (${lockdir})"; rm -rf "$lockdir"' EXIT
+    trap '(>&2 echo "relinquishing lock (${lockdir})"); rm -rf "$lockdir"' EXIT
 
     # Execute command
     "$@"
 else
-    echo >&2 "failed to acquire lock (${lockdir})"
+    (>&2 echo "failed to acquire lock (${lockdir})")
     exit $failure_code
 fi
