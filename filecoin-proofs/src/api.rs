@@ -257,6 +257,7 @@ pub fn seal<T: AsRef<Path>>(
         &public_inputs,
         &private_inputs,
         &groth_params,
+        true,
     )?;
 
     let mut buf = Vec::with_capacity(
@@ -552,7 +553,7 @@ fn generate_post_fixed_sectors_count(
 
     let groth_params = get_post_params(fixed.post_config)?;
 
-    let proof = VDFPostCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)
+    let proof = VDFPostCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params, false)
         .expect("failed while proving");
 
     let mut buf = Vec::with_capacity(

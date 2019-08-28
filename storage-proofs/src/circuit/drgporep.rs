@@ -830,6 +830,7 @@ mod tests {
                 &public_inputs,
                 &private_inputs,
                 &gparams,
+                false,
             )
             .expect("failed while proving");
 

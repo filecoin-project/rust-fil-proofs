@@ -374,7 +374,7 @@ fn do_circuit_work<H: 'static + Hasher>(
                 cpu_time,
                 return_value,
             } = measure(|| {
-                ZigZagCompound::prove(&compound_public_params, &pub_inputs, &priv_inputs, &gparams)
+                ZigZagCompound::prove(&compound_public_params, &pub_inputs, &priv_inputs, &gparams, false)
                     .map_err(|err| err.into())
             })?;
             proving_wall_time += wall_time;

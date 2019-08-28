@@ -402,7 +402,7 @@ mod tests {
             .expect("failed to create groth params");
 
         let proof =
-            PoRCCompound::<PedersenHasher>::prove(&pub_params, &pub_inputs, &priv_inputs, &gparams)
+            PoRCCompound::<PedersenHasher>::prove(&pub_params, &pub_inputs, &priv_inputs, &gparams, false)
                 .expect("proving failed");
 
         let (circuit, inputs) = PoRCCompound::<PedersenHasher>::circuit_for_test(

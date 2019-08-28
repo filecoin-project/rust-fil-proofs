@@ -8,12 +8,23 @@ use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::partitions;
 use crate::proof::ProofScheme;
 use crate::settings;
+use crate::circuit::test::TestConstraintSystem;
 use algebra::{
     bytes::{FromBytes, ToBytes},
+    curves::{sw6::SW6, bls12_377::Bls12_377 as Bls12},
+    fields::{bls12_377::Fr, PrimeField},
+    BitIterator,
     PairingEngine as Engine,
 };
+use dpc::gadgets::verifier::{
+    groth16::{Groth16VerifierGadget, PreparedVerifyingKeyGadget, ProofGadget, VerifyingKeyGadget},
+    NIZKBatchVerifierGadget
+};
+use dpc::crypto_primitives::nizk::groth16::Groth16;
 use rand::OsRng;
-use snark::{groth16, Circuit};
+use snark::{groth16, Circuit, ConstraintSystem};
+use snark_gadgets::{bits::boolean::Boolean, pairing::bls12_377::PairingGadget as Bls12PairingGadget};
+use snark_gadgets::utils::AllocGadget;
 
 pub struct SetupParams<'a, 'b: 'a, S: ProofScheme<'a>>
 where
@@ -71,6 +82,7 @@ where
         pub_in: &'b S::PublicInputs,
         priv_in: &'b S::PrivateInputs,
         groth_params: &'b groth16::Parameters<E>,
+        should_batch: bool,
     ) -> Result<MultiProof<'b, E>> {
         let partitions = Self::partition_count(pub_params);
         let partition_count = Self::partition_count(pub_params);
@@ -105,7 +117,62 @@ where
                 .collect()
         });
 
-        Ok(MultiProof::new(groth_proofs?, &groth_params.vk))
+        if should_batch {
+            type ProofSystem = Groth16<Bls12, TestConstraintSystem<Bls12>, Fr>;
+            type VerifierGadget = Groth16VerifierGadget<Bls12, SW6, Bls12PairingGadget>;
+            type ProofGadgetT = ProofGadget<Bls12, SW6, Bls12PairingGadget>;
+            type VkGadget = VerifyingKeyGadget<Bls12, SW6, Bls12PairingGadget>;
+
+            let mut cs = TestConstraintSystem::<SW6>::new();
+            let mut multi_input_gadgets = Vec::new();
+
+            for i in 0..partition_count {
+                let mut cs = cs.ns(|| format!("Allocate public input parameters {}", i));
+                let inputs = Self::generate_public_inputs(
+                    pub_in,
+                    &pub_params.vanilla_params,
+                    Some(i));
+
+                let mut input_gadgets = Vec::new();
+                for (j, input) in inputs.iter().enumerate() {
+                    let mut input_bits = BitIterator::new(input.into_repr()).collect::<Vec<_>>();
+                    // Input must be in little-endian, but BitIterator outputs in big-endian.
+                    input_bits.reverse();
+
+                    let input_bits =
+                        Vec::<Boolean>::alloc_input(cs.ns(|| format!("Alloc input: {} {}", i, j)), || {
+                            Ok(input_bits)
+                        }).unwrap();
+
+                    input_gadgets.push(input_bits);
+                }
+                multi_input_gadgets.push(input_gadgets);
+            }
+
+            let mut proof_gadgets = Vec::new();
+            for (i, proof) in groth_proofs?.iter().enumerate() {
+                let proof_gadget = ProofGadget::alloc(cs.ns(|| format!("Alloc Proof Gadget: {}", i)), || {
+                    Ok(proof.clone())
+                }).unwrap();
+                proof_gadgets.push(proof_gadget);
+            }
+
+            let vk_gadget = VkGadget::alloc_input(
+                cs.ns(|| "Vk"), || Ok(groth_params.vk)).unwrap();
+
+            let mut inputs_batch_iter: Vec<_> =
+                multi_input_gadgets.iter().map(|x| x.iter()).collect();
+
+            <VerifierGadget as NIZKBatchVerifierGadget<ProofSystem, SW6>>::check_batch_verify(cs.ns(|| "Verify"),
+                                                                                              &vk_gadget,
+                                                                                              &mut inputs_batch_iter,
+                                                                                              &proof_gadgets,
+            ).unwrap();
+
+            Ok(MultiProof::new(groth_proofs?, &groth_params.vk))
+        } else {
+            Ok(MultiProof::new(groth_proofs?, &groth_params.vk))
+        }
     }
 
     // verify is equivalent to ProofScheme::verify.

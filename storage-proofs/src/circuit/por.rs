@@ -300,6 +300,7 @@ mod tests {
                 &public_inputs,
                 &private_inputs,
                 &gparams,
+                false,
             )
             .expect("failed while proving");
 
@@ -486,6 +487,7 @@ mod tests {
                 &public_inputs,
                 &private_inputs,
                 &groth_params,
+                false,
             )
             .expect("proving failed");
 
