@@ -37,7 +37,7 @@ for attempt in `seq 1 $attempts`; do
 
     sleep_seconds=$(echo "scale=2; ${sleep_ms}/1000" | bc)
 
-    echo >&2 "sleeping ${sleep_seconds}s and then retrying ($((attempt + 1))/${attempts})"
+    (>&2 echo "sleeping ${sleep_seconds}s and then retrying ($((attempt + 1))/${attempts})")
 
     sleep "${sleep_seconds}"
 done
