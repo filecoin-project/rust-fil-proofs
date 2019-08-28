@@ -56,7 +56,7 @@ impl<'a> CircuitComponent for PoRCCircuit<'a> {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
-impl<'a, H> CompoundProof<'a, Bls12, PoRC<'a, H>, PoRCCircuit<'a>> for PoRCCompound<H>
+impl<'a, H> CompoundProof<'a, PoRC<'a, H>, PoRCCircuit<'a>> for PoRCCompound<H>
 where
     H: 'a + Hasher,
 {

@@ -53,12 +53,12 @@ pub trait CircuitComponent {
 /// See documentation at proof::ProofScheme for details.
 /// Implementations should generally only need to supply circuit and generate_public_inputs.
 /// The remaining trait methods are used internally and implement the necessary plumbing.
-pub trait CompoundProof<'a, E: Engine, S: ProofScheme<'a>, C: Circuit<E> + CircuitComponent>
+pub trait CompoundProof<'a, S: ProofScheme<'a>, C: Circuit<Bls12> + CircuitComponent>
 where
     S::Proof: Sync + Send,
     S::PublicParams: ParameterSetMetadata + Sync + Send,
     S::PublicInputs: Clone + Sync,
-    Self: CacheableParameters<E, C, S::PublicParams>,
+    Self: CacheableParameters<Bls12, C, S::PublicParams>,
 {
     // setup is equivalent to ProofScheme::setup.
     fn setup<'b>(sp: &SetupParams<'a, 'b, S>) -> Result<PublicParams<'a, S>> {
@@ -81,9 +81,9 @@ where
         pub_params: &'b PublicParams<'a, S>,
         pub_in: &'b S::PublicInputs,
         priv_in: &'b S::PrivateInputs,
-        groth_params: &'b groth16::Parameters<E>,
+        groth_params: &'b groth16::Parameters<Bls12>,
         should_batch: bool,
-    ) -> Result<MultiProof<'b, E>> {
+    ) -> Result<MultiProof<'b, Bls12>> {
         let partitions = Self::partition_count(pub_params);
         let partition_count = Self::partition_count(pub_params);
 
@@ -118,7 +118,8 @@ where
         });
 
         if should_batch {
-            type ProofSystem = Groth16<Bls12, TestConstraintSystem<Bls12>, Fr>;
+            // TODO: Need a circuit with a size known at compile time instead of Circuit<Bls12>
+            type ProofSystem = Groth16<Bls12, Circuit<Bls12>, Fr>;
             type VerifierGadget = Groth16VerifierGadget<Bls12, SW6, Bls12PairingGadget>;
             type ProofGadgetT = ProofGadget<Bls12, SW6, Bls12PairingGadget>;
             type VkGadget = VerifyingKeyGadget<Bls12, SW6, Bls12PairingGadget>;
@@ -150,15 +151,16 @@ where
             }
 
             let mut proof_gadgets = Vec::new();
-            for (i, proof) in groth_proofs?.iter().enumerate() {
-                let proof_gadget = ProofGadget::alloc(cs.ns(|| format!("Alloc Proof Gadget: {}", i)), || {
-                    Ok(proof.clone())
-                }).unwrap();
+            for (i, proof) in groth_proofs?.into_iter().enumerate() {
+                let proof_gadget = ProofGadgetT::alloc(
+                    cs.ns(|| format!("Alloc Proof Gadget: {}", i)),
+                    || Ok(proof)
+                ).unwrap();
                 proof_gadgets.push(proof_gadget);
             }
 
             let vk_gadget = VkGadget::alloc_input(
-                cs.ns(|| "Vk"), || Ok(groth_params.vk)).unwrap();
+                cs.ns(|| "Vk"), || Ok(&groth_params.vk)).unwrap();
 
             let mut inputs_batch_iter: Vec<_> =
                 multi_input_gadgets.iter().map(|x| x.iter()).collect();
@@ -169,6 +171,7 @@ where
                                                                                               &proof_gadgets,
             ).unwrap();
 
+            // TODO
             Ok(MultiProof::new(groth_proofs?, &groth_params.vk))
         } else {
             Ok(MultiProof::new(groth_proofs?, &groth_params.vk))
@@ -179,7 +182,7 @@ where
     fn verify(
         public_params: &PublicParams<'a, S>,
         public_inputs: &S::PublicInputs,
-        multi_proof: &MultiProof<E>,
+        multi_proof: &MultiProof<Bls12>,
         requirements: &S::Requirements,
     ) -> Result<bool> {
         let vanilla_public_params = &public_params.vanilla_params;
@@ -210,7 +213,7 @@ where
     fn print_public_inputs(
         public_params: &PublicParams<'a, S>,
         public_inputs: &S::PublicInputs,
-        multi_proof: &MultiProof<E>,
+        multi_proof: &MultiProof<Bls12>,
     ) -> String {
         let mut s = String::new();
         let vanilla_public_params = &public_params.vanilla_params;
@@ -235,8 +238,8 @@ where
         pub_in: &S::PublicInputs,
         vanilla_proof: &S::Proof,
         pub_params: &'b S::PublicParams,
-        groth_params: &groth16::Parameters<E>,
-    ) -> Result<groth16::Proof<E>> {
+        groth_params: &groth16::Parameters<Bls12>,
+    ) -> Result<groth16::Proof<Bls12>> {
         let rng = &mut OsRng::new().expect("Failed to create `OsRng`");
 
         // We need to make the circuit repeatedly because we can't clone it.
@@ -254,7 +257,7 @@ where
 
         let mut proof_vec = vec![];
         groth_proof.write(&mut proof_vec)?;
-        let gp = groth16::Proof::<E>::read(&proof_vec[..])?;
+        let gp = groth16::Proof::<Bls12>::read(&proof_vec[..])?;
 
         Ok(gp)
     }
@@ -266,7 +269,7 @@ where
         pub_in: &S::PublicInputs,
         pub_params: &S::PublicParams,
         partition_k: Option<usize>,
-    ) -> Vec<E::Fr>;
+    ) -> Vec<Fr>;
 
     /// circuit constructs an instance of this CompoundProof's bellperson::Circuit.
     /// circuit takes PublicInputs, PublicParams, and Proof from this CompoundProof's proof::ProofScheme (S)
@@ -281,11 +284,11 @@ where
 
     fn blank_circuit(public_params: &S::PublicParams) -> C;
 
-    fn groth_params(public_params: &S::PublicParams) -> Result<groth16::Parameters<E>> {
+    fn groth_params(public_params: &S::PublicParams) -> Result<groth16::Parameters<Bls12>> {
         Self::get_groth_params(Self::blank_circuit(public_params), public_params)
     }
 
-    fn verifying_key(public_params: &S::PublicParams) -> Result<groth16::VerifyingKey<E>> {
+    fn verifying_key(public_params: &S::PublicParams) -> Result<groth16::VerifyingKey<Bls12>> {
         Self::get_verifying_key(Self::blank_circuit(public_params), public_params)
     }
 
@@ -293,7 +296,7 @@ where
         public_parameters: &PublicParams<'a, S>,
         public_inputs: &S::PublicInputs,
         private_inputs: &S::PrivateInputs,
-    ) -> (C, Vec<E::Fr>) {
+    ) -> (C, Vec<Fr>) {
         let vanilla_params = &public_parameters.vanilla_params;
         let partition_count = partitions::partition_count(public_parameters.partitions);
         let vanilla_proofs = S::prove_all_partitions(

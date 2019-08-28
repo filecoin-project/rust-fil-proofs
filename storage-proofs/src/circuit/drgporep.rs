@@ -149,7 +149,7 @@ impl<E: Engine, C: Circuit<E>, H: Hasher, G: Graph<H>, P: ParameterSetMetadata>
     }
 }
 
-impl<'a, H, G> CompoundProof<'a, Bls12, DrgPoRep<'a, H, G>, DrgPoRepCircuit<H>>
+impl<'a, H, G> CompoundProof<'a, DrgPoRep<'a, H, G>, DrgPoRepCircuit<H>>
     for DrgPoRepCompound<H, G>
 where
     H: 'a + Hasher,

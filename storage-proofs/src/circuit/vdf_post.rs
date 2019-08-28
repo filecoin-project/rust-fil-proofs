@@ -57,7 +57,7 @@ impl<'a> CircuitComponent for VDFPoStCircuit<'a> {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
-impl<'a, H, V> CompoundProof<'a, Bls12, VDFPoSt<H, V>, VDFPoStCircuit<'a>> for VDFPostCompound
+impl<'a, H, V> CompoundProof<'a, VDFPoSt<H, V>, VDFPoStCircuit<'a>> for VDFPostCompound
 where
     H: 'static + Hasher,
     V: Vdf<H::Domain> + Sync + Send,

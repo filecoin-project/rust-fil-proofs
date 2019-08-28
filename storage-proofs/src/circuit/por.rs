@@ -65,7 +65,7 @@ impl<C: Circuit<Bls12>, P: ParameterSetMetadata, H: Hasher> CacheableParameters<
 }
 
 // can only implement for Bls12 because merklepor is not generic over the engine.
-impl<'a, H> CompoundProof<'a, Bls12, MerklePoR<H>, PoRCircuit<'a, H>> for PoRCompound<H>
+impl<'a, H> CompoundProof<'a, MerklePoR<H>, PoRCircuit<'a, H>> for PoRCompound<H>
 where
     H: 'a + Hasher,
 {

@@ -249,7 +249,7 @@ impl<C: Circuit<Bls12>, P: ParameterSetMetadata> CacheableParameters<Bls12, C, P
     }
 }
 
-impl<'a, H: 'static + Hasher> CompoundProof<'a, Bls12, ZigZagDrgPoRep<'a, H>, ZigZagCircuit<'a, H>>
+impl<'a, H: 'static + Hasher> CompoundProof<'a, ZigZagDrgPoRep<'a, H>, ZigZagCircuit<'a, H>>
     for ZigZagCompound
 {
     fn generate_public_inputs(
