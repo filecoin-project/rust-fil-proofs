@@ -17,8 +17,8 @@ use crate::hasher::{Domain, Hasher};
 // `MerkleTree`, now encapsulated in `merkle::VecStore` and exposed
 // as `VecMerkleTree`).
 pub use merkletree::merkle::next_pow2;
+pub use merkletree::merkle::populate_leaves;
 pub use merkletree::merkle::Store;
-pub use merkletree::merkle::BUILD_LEAVES_BLOCK_SIZE;
 pub type DiskStore<E> = merkletree::merkle::DiskStore<E>;
 pub type MmapStore<E> = merkletree::merkle::MmapStore<E>;
 pub type VecMerkleTree<T, A> = merkle::MerkleTree<T, A, VecStore<T>>;

@@ -12,9 +12,7 @@ use crate::drgporep::{self, DrgPoRep};
 use crate::drgraph::Graph;
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::{
-    next_pow2, Algorithm, MerkleStore, MerkleTree, Store, BUILD_LEAVES_BLOCK_SIZE,
-};
+use crate::merkle::{next_pow2, populate_leaves, MerkleStore, MerkleTree, Store};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
@@ -448,29 +446,12 @@ pub trait Layers {
                                 .expect("failed to convert node data to domain element")
                         };
 
-                        // FIXME: Copying `populate_leaves` code here because I can't make
-                        // the call compile (wrong 4th iterator parameter).
-                        {
-                            let mut buf = Vec::with_capacity(BUILD_LEAVES_BLOCK_SIZE * NODE_SIZE);
-
-                            let mut a = <Self::Hasher as Hasher>::Function::default();
-                            for item in (0..leafs).map(f) {
-                                a.reset();
-                                buf.extend(a.leaf(item).as_ref());
-                                if buf.len() >= BUILD_LEAVES_BLOCK_SIZE * NODE_SIZE {
-                                    let leaves_len = leaves_store.len();
-                                    // FIXME: Integrate into `len()` call into `copy_from_slice`
-                                    // once we update to `stable` 1.36.
-                                    leaves_store.copy_from_slice(&buf, leaves_len);
-                                    buf.clear();
-                                }
-                            }
-                            let leaves_len = leaves_store.len();
-                            leaves_store.copy_from_slice(&buf, leaves_len);
-
-                            leaves_store.sync();
-                        }
-
+                        populate_leaves::<
+                            _,
+                            <Self::Hasher as Hasher>::Function,
+                            _,
+                            std::iter::Map<_, _>,
+                        >(&mut leaves_store, (0..leafs).map(f));
                         let return_channel = tx.clone();
                         let (transfer_tx, transfer_rx) = channel::<Self::Graph>();
 
