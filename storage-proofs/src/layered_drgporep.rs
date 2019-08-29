@@ -16,7 +16,6 @@ use crate::merkle::{next_pow2, populate_leaves, MerkleStore, MerkleTree, Store};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
-use crate::settings;
 use crate::util::{data_at_node, NODE_SIZE};
 use crate::vde;
 
@@ -364,158 +363,112 @@ pub trait Layers {
         let mut taus = Vec::with_capacity(layers);
         let mut auxs: Vec<Tree<Self::Hasher>> = Vec::with_capacity(layers);
 
-        if !&settings::SETTINGS
-            .lock()
-            .unwrap()
-            .generate_merkle_trees_in_parallel
-        {
-            let mut sorted_trees: Vec<_> = Vec::new();
+        // We need to create a scope which encloses all the work, spawning threads
+        // for merkle tree generation and sending the results back to a channel.
+        // The received results need to be sorted by layer because ordering of the completed results
+        // is not guaranteed. Misordered results will be seen in practice when trees are small.
 
-            (0..=layers).fold(graph.clone(), |current_graph, layer| {
-                let tree_d = current_graph.merkle_tree(&data).unwrap();
+        // The outer scope ensure that `tx` is dropped and closed before we read from `outer_rx`.
+        // Otherwise, the read loop will block forever waiting for more input.
+        let outer_rx = {
+            let (tx, rx) = channel();
 
-                info!("returning tree (layer: {})", layer);
-
-                sorted_trees.push(tree_d);
-
-                if layer < layers {
-                    info!("encoding (layer: {})", layer);
-                    vde::encode(&current_graph, replica_id, data)
-                        .expect("encoding failed in thread");
-                }
-
-                Self::transform(&current_graph)
-            });
-
-            sorted_trees
-                .into_iter()
-                .fold(None, |previous_comm_r: Option<_>, replica_tree| {
-                    let comm_r = replica_tree.root();
-                    // Each iteration's replica_tree becomes the next iteration's previous_tree (data_tree).
-                    // The first iteration has no previous_tree.
-                    if let Some(comm_d) = previous_comm_r {
-                        let tau = porep::Tau { comm_r, comm_d };
-                        // info!("setting tau/aux (layer: {})", i - 1);
-                        // FIXME: Use `enumerate` if this log is worth it.
-                        taus.push(tau);
-                    };
-
-                    auxs.push(replica_tree);
-
-                    Some(comm_r)
-                });
-        } else {
-            // The parallel case is more complicated but should produce the same results as the
-            // serial case. Note that to make lifetimes work out, we have to inline and tease apart
-            // the definition of DrgPoRep::replicate. This is because as implemented, it entangles
-            // encoding and merkle tree generation too tightly to be used as a subcomponent.
-            // Instead, we need to create a scope which encloses all the work, spawning threads
-            // for merkle tree generation and sending the results back to a channel.
-            // The received results need to be sorted by layer because ordering of the completed results
-            // is not guaranteed. Misordered results will be seen in practice when trees are small.
-
-            // The outer scope ensure that `tx` is dropped and closed before we read from `outer_rx`.
-            // Otherwise, the read loop will block forever waiting for more input.
-            let outer_rx = {
-                let (tx, rx) = channel();
-
-                let errf = |e| {
-                    let err_string = format!("{:?}", e);
-                    error!(
-                        "MerkleTreeGenerationError: {} - {:?}",
-                        &err_string,
-                        failure::Backtrace::new()
-                    );
-                    Error::MerkleTreeGenerationError(err_string)
-                };
-
-                let _ = thread::scope(|scope| -> Result<()> {
-                    let mut threads = Vec::with_capacity(layers + 1);
-                    (0..=layers).fold(graph.clone(), |current_graph, layer| {
-                        let leafs = data.len() / NODE_SIZE;
-                        assert_eq!(data.len() % NODE_SIZE, 0);
-                        let pow = next_pow2(leafs);
-                        // FIXME: Who's actually responsible for ensuring power of 2
-                        //  sector sizes?
-
-                        let mut leaves_store = MerkleStore::new(pow);
-                        // FIXME: Horrible iterator coming, not sure how to elegantly do this:
-                        let f = |i| {
-                            let d = data_at_node(&data, i).expect("data_at_node math failed");
-                            <Self::Hasher as Hasher>::Domain::try_from_bytes(d)
-                                .expect("failed to convert node data to domain element")
-                        };
-
-                        populate_leaves::<
-                            _,
-                            <Self::Hasher as Hasher>::Function,
-                            _,
-                            std::iter::Map<_, _>,
-                        >(&mut leaves_store, (0..leafs).map(f));
-                        let return_channel = tx.clone();
-                        let (transfer_tx, transfer_rx) = channel::<Self::Graph>();
-
-                        transfer_tx
-                            .send(current_graph.clone())
-                            .expect("Failed to send value through channel");
-
-                        let thread = scope.spawn(move |_| {
-                            // If we panic anywhere in this closure, thread.join() below will receive an error —
-                            // so it is safe to unwrap.
-                            let graph = transfer_rx
-                                .recv()
-                                .expect("Failed to receive value through channel");
-
-                            let tree_d =
-                                graph.merkle_tree_from_leaves(leaves_store, leafs).unwrap();
-
-                            info!("returning tree (layer: {})", layer);
-                            return_channel
-                                .send((layer, tree_d))
-                                .expect("Failed to send value through channel");
-                        });
-
-                        threads.push(thread);
-
-                        if layer < layers {
-                            info!("encoding (layer: {})", layer);
-                            vde::encode(&current_graph, replica_id, data)
-                                .expect("encoding failed in thread");
-                        }
-                        Self::transform(&current_graph)
-                    });
-
-                    for thread in threads {
-                        thread.join().map_err(errf)?;
-                    }
-
-                    Ok(())
-                })
-                .map_err(errf)?;
-
-                rx
+            let errf = |e| {
+                let err_string = format!("{:?}", e);
+                error!(
+                    "MerkleTreeGenerationError: {} - {:?}",
+                    &err_string,
+                    failure::Backtrace::new()
+                );
+                Error::MerkleTreeGenerationError(err_string)
             };
 
-            let mut sorted_trees = outer_rx.iter().collect::<Vec<_>>();
-            sorted_trees.sort_unstable_by_key(|k| k.0);
+            let _ = thread::scope(|scope| -> Result<()> {
+                let mut threads = Vec::with_capacity(layers + 1);
+                (0..=layers).fold(graph.clone(), |current_graph, layer| {
+                    let leafs = data.len() / NODE_SIZE;
+                    assert_eq!(data.len() % NODE_SIZE, 0);
+                    let pow = next_pow2(leafs);
+                    // FIXME: Who's actually responsible for ensuring power of 2
+                    //  sector sizes?
 
-            sorted_trees
-                .into_iter()
-                .fold(None, |previous_comm_r: Option<_>, (i, replica_tree)| {
-                    let comm_r = replica_tree.root();
-                    // Each iteration's replica_tree becomes the next iteration's previous_tree (data_tree).
-                    // The first iteration has no previous_tree.
-                    if let Some(comm_d) = previous_comm_r {
-                        let tau = porep::Tau { comm_r, comm_d };
-                        info!("setting tau/aux (layer: {})", i - 1);
-                        taus.push(tau);
+                    let mut leaves_store = MerkleStore::new(pow);
+                    // FIXME: Horrible iterator coming, not sure how to elegantly do this:
+                    let f = |i| {
+                        let d = data_at_node(&data, i).expect("data_at_node math failed");
+                        <Self::Hasher as Hasher>::Domain::try_from_bytes(d)
+                            .expect("failed to convert node data to domain element")
                     };
 
-                    auxs.push(replica_tree);
+                    populate_leaves::<
+                        _,
+                        <Self::Hasher as Hasher>::Function,
+                        _,
+                        std::iter::Map<_, _>,
+                    >(&mut leaves_store, (0..leafs).map(f));
+                    let return_channel = tx.clone();
+                    let (transfer_tx, transfer_rx) = channel::<Self::Graph>();
 
-                    Some(comm_r)
+                    transfer_tx
+                        .send(current_graph.clone())
+                        .expect("Failed to send value through channel");
+
+                    let thread = scope.spawn(move |_| {
+                        // If we panic anywhere in this closure, thread.join() below will receive an error —
+                        // so it is safe to unwrap.
+                        let graph = transfer_rx
+                            .recv()
+                            .expect("Failed to receive value through channel");
+
+                        let tree_d =
+                            graph.merkle_tree_from_leaves(leaves_store, leafs).unwrap();
+
+                        info!("returning tree (layer: {})", layer);
+                        return_channel
+                            .send((layer, tree_d))
+                            .expect("Failed to send value through channel");
+                    });
+
+                    threads.push(thread);
+
+                    if layer < layers {
+                        info!("encoding (layer: {})", layer);
+                        vde::encode(&current_graph, replica_id, data)
+                            .expect("encoding failed in thread");
+                    }
+                    Self::transform(&current_graph)
                 });
-        }
+
+                for thread in threads {
+                    thread.join().map_err(errf)?;
+                }
+
+                Ok(())
+            })
+            .map_err(errf)?;
+
+            rx
+        };
+
+        let mut sorted_trees = outer_rx.iter().collect::<Vec<_>>();
+        sorted_trees.sort_unstable_by_key(|k| k.0);
+
+        sorted_trees
+            .into_iter()
+            .fold(None, |previous_comm_r: Option<_>, (i, replica_tree)| {
+                let comm_r = replica_tree.root();
+                // Each iteration's replica_tree becomes the next iteration's previous_tree (data_tree).
+                // The first iteration has no previous_tree.
+                if let Some(comm_d) = previous_comm_r {
+                    let tau = porep::Tau { comm_r, comm_d };
+                    info!("setting tau/aux (layer: {})", i - 1);
+                    taus.push(tau);
+                };
+
+                auxs.push(replica_tree);
+
+                Some(comm_r)
+            });
 
         Ok((taus, auxs))
     }

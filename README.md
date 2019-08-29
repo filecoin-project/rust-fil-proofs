@@ -176,15 +176,7 @@ cargo build                                                                   \
     --size 1048576
 ```
 
-To optimize even more for memory there's another option (used in addition to the `disk-trees` feature) to generate all MTs in sequential order, to make sure we can offload them to disk before we start buildding the next one,
-
-```
-FIL_PROOFS_GENERATE_MERKLE_TREES_IN_PARALLEL=0
-```
-
-You can inspect that it's working also in the replication log, where you'll see that the MTs are all generated in order without any layer index out of place.
-
-All these optimizations (`disk-trees` with a directory to offload MTs plus sequential generation) should reduce the maximum RSS, in the `zigzag` example, to 3 times the sector size used (so in the above command that tested ZigZag with a 1 GiB sector the maximum RSS reported by commands like `/usr/bin/time -v` should not exceed 3 GiB, please submit an issue if you observe otherwise).
+This optimization should reduce the maximum RSS, in the `zigzag` example, to 1-2 times the sector size used (so in the above command that tested ZigZag with a 1 GiB sector the maximum RSS reported by commands like `/usr/bin/time -v` should not exceed 2 GiB, please submit an issue if you observe otherwise).
 
 ## Generate Documentation
 
