@@ -640,7 +640,7 @@ fn comm_r_star<H: Hasher>(replica_id: &H::Domain, comm_rs: &[H::Domain]) -> Resu
         comm_r.write_bytes(&mut bytes[(i + 1) * 32..(i + 2) * 32])?;
     }
 
-    Ok(<H::Function as HashFunction<H::Domain>>::hash(&bytes))
+    Ok(H::Function::hash(&bytes))
 }
 
 impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
