@@ -176,9 +176,30 @@ cargo run                                                                     \
     --size 1048576
 ```
 
+**Speed Optimized Pedersen Hashing** - we use Pedersen hashing to generate Merkle Trees and verify Merkle proofs. Batched Pedersen hashing has the property that we can pre-compute known intermediary values intrinsic to the Pedersen hashing process that will be reused across hashes in the batch. By pre-computing and cacheing these intermediary values, we decrease the runtime per Pedersen hash at the cost of increasing memory usage. We optimize for this speed-memory trade-off by varying the cache size via a Pedersen Hash parameter known as the "window-size". This window-size parameter is configured via the [`pedersen_hash_exp_window_size` setting in `storage-proofs`](https://github.com/filecoin-project/rust-fil-proofs/blob/master/storage-proofs/src/settings.rs). By default, Bellman has a cache size of 256 values (a window-size of 8 bits), we increase the cache size to 65,536 values (a window-size of 16 bits) which results in a roughly 40% decrease in Pedersen Hash runtime at the cost of a 9% increase in memory usage. See the [Pedersen cache issue](https://github.com/filecoin-project/rust-fil-proofs/issues/697) for more benchmarks and expected performance effects.
+
 ### Memory
 
 At the moment the default configuration is set to reduce memory consumption as much as possible so there's not much to do from the user side. (We are now storing MTs on disk, which were the main source of memory consumption.) You should expect a maximum RSS between 1-2 sector sizes, if you experience peaks beyond that range please report an issue (you can check the max RSS with the `/usr/bin/time -v` command).
+
+**Memory Optimized Pedersen Hashing** - for consumers of `storage-proofs` concerned with memory usage, the memory usage of Pedersen hashing can be reduced by lowering the Pederen Hash `window-size` parameter (i.e. its cache size). Reducing the cache size will reduce memory usage while increasing the runtime per Pedersen hash. The Pedersen Hash window-size can be changed via the setting `pedersen_hash_exp_window_size` in [`settings.rs`](https://github.com/filecoin-project/rust-fil-proofs/blob/master/storage-proofs/src/settings.rs). See the [Pedersen cache issue](https://github.com/filecoin-project/rust-fil-proofs/issues/697) for more benchmarks and expected performance effects.
+
+The following benchmarks were observed when running replication on 1MiB (1024 kibibytes) of data on a new m5a.2xlarge EC2 instance with 32GB of RAM for Pedersen Hash window-sizes of 16 (the current default) and 8 bits:
+
+```
+$ cargo build --bin benchy --release
+$ env time -v cargo run --bin benchy --release -- zigzag --size=1024
+
+window-size: 16
+User time (seconds): 87.82
+Maximum resident set size (kbytes): 1712320
+
+window-size: 8
+User time (seconds): 128.85
+Maximum resident set size (kbytes): 1061564
+```
+
+Note that for a window-size of 16 bits the runtime for replication is 30% faster while the maximum RSS is about 40% higher compared to a window-size of 8 bits.
 
 ## Generate Documentation
 
