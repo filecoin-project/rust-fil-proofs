@@ -17,7 +17,7 @@ mod tests {
     use std::fmt;
     use std::iter::FromIterator;
 
-    use crate::merkle::VecMerkleTree;
+    use crate::merkle::MerkleTree;
     use merkletree::hash::{Algorithm, Hashable};
 
     use super::super::{DigestDomain, Hasher};
@@ -109,8 +109,8 @@ mod tests {
 
         let v: Vec<DigestDomain> = vec![h1.into(), h2.into(), h3.into()];
         let v2: Vec<DigestDomain> = vec![h1.into(), h2.into()];
-        let t = VecMerkleTree::<<Sha256Hasher as Hasher>::Domain, <Sha256Hasher as Hasher>::Function>::from_iter(v);
-        let t2 = VecMerkleTree::<
+        let t = MerkleTree::<<Sha256Hasher as Hasher>::Domain, <Sha256Hasher as Hasher>::Function>::from_iter(v);
+        let t2 = MerkleTree::<
             <Sha256Hasher as Hasher>::Domain,
             <Sha256Hasher as Hasher>::Function,
         >::from_iter(v2);

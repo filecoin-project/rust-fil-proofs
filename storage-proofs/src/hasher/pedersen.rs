@@ -319,7 +319,7 @@ mod tests {
 
     use merkletree::hash::Hashable;
 
-    use crate::merkle::{MerkleTree, VecMerkleTree};
+    use crate::merkle::MerkleTree;
 
     #[test]
     fn test_path() {
@@ -335,8 +335,7 @@ mod tests {
     fn test_pedersen_hasher() {
         let values = ["hello", "world", "you", "two"];
 
-        let t = VecMerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter());
-        // Using `VecMerkleTree` since the `MmapStore` of `MerkleTree` doesn't support `Deref` (`as_slice`).
+        let t = MerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter());
 
         assert_eq!(t.leafs(), 4);
 
