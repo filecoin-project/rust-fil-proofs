@@ -393,19 +393,17 @@ pub trait Layers {
                     //  sector sizes?
 
                     let mut leaves_store = MerkleStore::new(pow);
-                    // FIXME: Horrible iterator coming, not sure how to elegantly do this:
-                    let f = |i| {
-                        let d = data_at_node(&data, i).expect("data_at_node math failed");
-                        <Self::Hasher as Hasher>::Domain::try_from_bytes(d)
-                            .expect("failed to convert node data to domain element")
-                    };
 
                     populate_leaves::<
                         _,
                         <Self::Hasher as Hasher>::Function,
                         _,
                         std::iter::Map<_, _>,
-                    >(&mut leaves_store, (0..leafs).map(f));
+                    >(&mut leaves_store, (0..leafs).map(|i| {
+                        let d = data_at_node(&data, i).expect("data_at_node math failed");
+                        <Self::Hasher as Hasher>::Domain::try_from_bytes(d)
+                            .expect("failed to convert node data to domain element")
+                    }));
                     let return_channel = tx.clone();
                     let (transfer_tx, transfer_rx) = channel::<Self::Graph>();
 
