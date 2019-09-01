@@ -289,7 +289,14 @@ impl<E: Engine> TestConstraintSystem<E> {
     }
 
     pub fn is_satisfied(&self) -> bool {
-        self.which_is_unsatisfied().is_none()
+        match self.which_is_unsatisfied() {
+            Some(b) => {
+                println!("fail: {:?}", b);
+                false
+            }
+            None => true,
+        }
+        // self.which_is_unsatisfied().is_none()
     }
 
     pub fn num_constraints(&self) -> usize {

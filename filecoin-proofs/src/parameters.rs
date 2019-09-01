@@ -1,23 +1,18 @@
 use storage_proofs::drgporep::DrgParams;
 use storage_proofs::drgraph::DefaultTreeHasher;
-use storage_proofs::hasher::pedersen::PedersenDomain;
 use storage_proofs::hasher::PedersenHasher;
 use storage_proofs::layered_drgporep;
 use storage_proofs::layered_drgporep::LayerChallenges;
 use storage_proofs::proof::ProofScheme;
-use storage_proofs::vdf_post;
-use storage_proofs::vdf_post::VDFPoSt;
-use storage_proofs::vdf_sloth;
+use storage_proofs::rational_post;
+use storage_proofs::rational_post::RationalPoSt;
 use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
 use storage_proofs::zigzag_graph::ZigZagBucketGraph;
 
 use crate::constants::POREP_MINIMUM_CHALLENGES;
-use crate::constants::POST_SECTORS_COUNT;
-use crate::singletons::POST_VDF_KEY;
 use crate::types::{PaddedBytesAmount, PoStConfig};
 
-const POST_CHALLENGE_COUNT: usize = 30;
-const POST_EPOCHS: usize = 3;
+const POST_CHALLENGE_COUNT: usize = 30; // TODO: correct value
 
 const DEGREE: usize = 5;
 const EXPANSION_DEGREE: usize = 8;
@@ -27,8 +22,8 @@ const TAPER: f64 = 1.0 / 3.0;
 
 const DRG_SEED: [u32; 7] = [1, 2, 3, 4, 5, 6, 7]; // Arbitrary, need a theory for how to vary this over time.
 
-type PostSetupParams = vdf_post::SetupParams<PedersenDomain, vdf_sloth::Sloth>;
-pub type PostPublicParams = vdf_post::PublicParams<PedersenDomain, vdf_sloth::Sloth>;
+type PostSetupParams = rational_post::SetupParams;
+pub type PostPublicParams = rational_post::PublicParams;
 
 pub fn public_params(
     sector_bytes: PaddedBytesAmount,
@@ -38,18 +33,15 @@ pub fn public_params(
 }
 
 pub fn post_public_params(post_config: PoStConfig) -> PostPublicParams {
-    VDFPoSt::<PedersenHasher, vdf_sloth::Sloth>::setup(&post_setup_params(post_config)).unwrap()
+    RationalPoSt::<PedersenHasher>::setup(&post_setup_params(post_config)).unwrap()
 }
 
 pub fn post_setup_params(post_config: PoStConfig) -> PostSetupParams {
     let size = PaddedBytesAmount::from(post_config);
 
-    vdf_post::SetupParams::<PedersenDomain, vdf_sloth::Sloth> {
-        challenge_count: POST_CHALLENGE_COUNT,
+    rational_post::SetupParams {
+        challenges_count: POST_CHALLENGE_COUNT,
         sector_size: size.into(),
-        post_epochs: POST_EPOCHS,
-        setup_params_vdf: vdf_sloth::SetupParams { key: *POST_VDF_KEY },
-        sectors_count: POST_SECTORS_COUNT,
     }
 }
 

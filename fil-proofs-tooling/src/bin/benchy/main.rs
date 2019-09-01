@@ -7,6 +7,8 @@ mod hash_fns;
 mod zigzag;
 
 fn main() {
+    pretty_env_logger::init_timed();
+
     let zigzag_cmd = SubCommand::with_name("zigzag")
                 .about("Run zigzag sealing")
                 .arg(
@@ -126,7 +128,6 @@ fn main() {
             Ok(())
                 .and_then(|_| {
                     let layers = value_t!(m, "layers", usize)?;
-
                     zigzag::run(zigzag::RunOpts {
                         bench: m.is_present("bench"),
                         bench_only: m.is_present("bench-only"),

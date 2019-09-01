@@ -352,10 +352,14 @@ workflows:
             - cargo_fetch
           filters:
             branches:
-              only: master
+              only:
+                - master
+                - /hotfix.*/
       - build_darwin_release:
           requires:
             - cargo_fetch
           filters:
             branches:
-              only: master
+              only:
+                - master
+                - /hotfix.*/

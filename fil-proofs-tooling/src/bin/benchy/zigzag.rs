@@ -1,12 +1,13 @@
-use cpu_time::ProcessTime;
 use std::fs::{File, OpenOptions};
 use std::time::{Duration, Instant};
 use std::{io, u32};
 
 use bellperson::Circuit;
 use chrono::Utc;
+use cpu_time::ProcessTime;
 use failure::bail;
 use fil_sapling_crypto::jubjub::JubjubBls12;
+use log::info;
 use memmap::MmapMut;
 use memmap::MmapOptions;
 use paired::bls12_381::Bls12;
@@ -541,6 +542,8 @@ pub fn run(opts: RunOpts) -> Result<(), failure::Error> {
         taper: opts.taper,
         taper_layers: opts.taper_layers,
     };
+
+    info!("Benchy ZigZag: {:?}", &params);
 
     let report = match params.hasher.as_ref() {
         "pedersen" => generate_report::<PedersenHasher>(params)?,

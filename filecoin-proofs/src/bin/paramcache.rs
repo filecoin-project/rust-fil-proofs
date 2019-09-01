@@ -8,13 +8,12 @@ use filecoin_proofs::constants::*;
 use filecoin_proofs::parameters::{post_public_params, public_params};
 use filecoin_proofs::singletons::ENGINE_PARAMS;
 use filecoin_proofs::types::*;
-use storage_proofs::circuit::vdf_post::{VDFPoStCircuit, VDFPostCompound};
+use storage_proofs::circuit::rational_post::{RationalPoStCircuit, RationalPoStCompound};
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::hasher::pedersen::PedersenHasher;
 use storage_proofs::parameter_cache::CacheableParameters;
-use storage_proofs::vdf_post::VDFPoSt;
-use storage_proofs::vdf_sloth::Sloth;
+use storage_proofs::rational_post::RationalPoSt;
 
 const POREP_PROOF_PARTITION_CHOICES: [PoRepProofPartitions; 1] = [PoRepProofPartitions(2)];
 
@@ -54,32 +53,44 @@ fn cache_post_params(post_config: PoStConfig) {
     let post_public_params = post_public_params(post_config);
 
     {
-        let post_circuit: VDFPoStCircuit<Bls12> =
-            <VDFPostCompound as CompoundProof<
+        let post_circuit: RationalPoStCircuit<Bls12, PedersenHasher> =
+            <RationalPoStCompound<PedersenHasher> as CompoundProof<
                 Bls12,
-                VDFPoSt<PedersenHasher, Sloth>,
-                VDFPoStCircuit<Bls12>,
+                RationalPoSt<PedersenHasher>,
+                RationalPoStCircuit<Bls12, PedersenHasher>,
             >>::blank_circuit(&post_public_params, &ENGINE_PARAMS);
-        let _ = VDFPostCompound::get_param_metadata(post_circuit, &post_public_params);
+        let _ = <RationalPoStCompound<PedersenHasher>>::get_param_metadata(
+            post_circuit,
+            &post_public_params,
+        )
+        .expect("failed to get metadata");
     }
     {
-        let post_circuit: VDFPoStCircuit<Bls12> =
-            <VDFPostCompound as CompoundProof<
+        let post_circuit: RationalPoStCircuit<Bls12, PedersenHasher> =
+            <RationalPoStCompound<PedersenHasher> as CompoundProof<
                 Bls12,
-                VDFPoSt<PedersenHasher, Sloth>,
-                VDFPoStCircuit<Bls12>,
+                RationalPoSt<PedersenHasher>,
+                RationalPoStCircuit<Bls12, PedersenHasher>,
             >>::blank_circuit(&post_public_params, &ENGINE_PARAMS);
-        let _ = VDFPostCompound::get_groth_params(post_circuit, &post_public_params);
+        let _ = <RationalPoStCompound<PedersenHasher>>::get_groth_params(
+            post_circuit,
+            &post_public_params,
+        )
+        .expect("failed to get groth params");
     }
     {
-        let post_circuit: VDFPoStCircuit<Bls12> =
-            <VDFPostCompound as CompoundProof<
+        let post_circuit: RationalPoStCircuit<Bls12, PedersenHasher> =
+            <RationalPoStCompound<PedersenHasher> as CompoundProof<
                 Bls12,
-                VDFPoSt<PedersenHasher, Sloth>,
-                VDFPoStCircuit<Bls12>,
+                RationalPoSt<PedersenHasher>,
+                RationalPoStCircuit<Bls12, PedersenHasher>,
             >>::blank_circuit(&post_public_params, &ENGINE_PARAMS);
 
-        let _ = VDFPostCompound::get_verifying_key(post_circuit, &post_public_params);
+        let _ = <RationalPoStCompound<PedersenHasher>>::get_verifying_key(
+            post_circuit,
+            &post_public_params,
+        )
+        .expect("failed to get verifying key");
     }
 }
 
@@ -104,19 +115,13 @@ pub fn main() {
         SectorSize(TEST_SECTOR_SIZE),
         PoRepProofPartitions(2),
     ));
-    cache_post_params(PoStConfig(
-        SectorSize(TEST_SECTOR_SIZE),
-        PoStProofPartitions(1),
-    ));
+    cache_post_params(PoStConfig(SectorSize(TEST_SECTOR_SIZE)));
 
     if !test_only {
         for p in &POREP_PROOF_PARTITION_CHOICES {
             cache_porep_params(PoRepConfig(SectorSize(LIVE_SECTOR_SIZE), *p));
         }
 
-        cache_post_params(PoStConfig(
-            SectorSize(LIVE_SECTOR_SIZE),
-            PoStProofPartitions(1),
-        ));
+        cache_post_params(PoStConfig(SectorSize(LIVE_SECTOR_SIZE)));
     }
 }

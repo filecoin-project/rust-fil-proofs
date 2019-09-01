@@ -42,4 +42,10 @@ impl<'a, E: Engine> MultiProof<'a, E> {
         }
         Ok(())
     }
+
+    pub fn to_vec(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        self.write(&mut out).expect("known allocation target");
+        out
+    }
 }
