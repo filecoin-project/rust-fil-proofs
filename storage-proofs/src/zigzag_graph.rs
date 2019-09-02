@@ -190,7 +190,7 @@ pub trait ZigZag: ::std::fmt::Debug + Clone + PartialEq + Eq {
     fn base_graph(&self) -> Self::BaseGraph;
     fn expansion_degree(&self) -> usize;
     fn reversed(&self) -> bool;
-    fn expanded_parents<F, T>(&self, node: usize, cb: F) -> T
+    fn expanded_parents<F, T>(&self, node: usize, invert_permutation_order: bool, cb: F) -> T
     where
         F: FnMut(&Vec<u32>) -> T;
     fn real_index(&self, i: usize) -> usize;
@@ -208,7 +208,7 @@ impl<Z: ZigZag> Graph<Z::BaseHasher> for Z {
     }
 
     fn degree(&self) -> usize {
-        self.base_graph().degree() + self.expansion_degree()
+        self.base_graph().degree() + self.expansion_degree() * 2
     }
 
     #[inline]
@@ -223,22 +223,32 @@ impl<Z: ZigZag> Graph<Z::BaseHasher> for Z {
             *parent = self.real_index(*parent);
         }
 
-        // expanded_parents takes raw_node
-        self.expanded_parents(raw_node, |expanded_parents| {
-            for (ii, value) in expanded_parents.iter().enumerate() {
-                parents[ii + self.base_graph().degree()] = *value as usize
-            }
-
-            // Pad so all nodes have correct degree.
-            let current_length = self.base_graph().degree() + expanded_parents.len();
-            for ii in 0..(self.degree() - current_length) {
-                if self.reversed() {
-                    parents[ii + current_length] = self.size() - 1
-                } else {
-                    parents[ii + current_length] = 0
+        // From the `expanded_degree()` generate twice that amount of expanded parents, one
+        // with one permutation order and the other with its inverse, to achieve in average
+        // a number of `valid_expanded_parents` (without padding) closer to the desired
+        // `expanded_degree()`.
+        let mut valid_expanded_parents = 0;
+        for &invert_permutation_order in &[false, true] {
+            // expanded_parents takes raw_node
+            self.expanded_parents(raw_node, invert_permutation_order, |expanded_parents| {
+                for (ii, value) in expanded_parents.iter().enumerate() {
+                    parents[ii + self.base_graph().degree() + valid_expanded_parents] =
+                        *value as usize
                 }
+
+                valid_expanded_parents += expanded_parents.len();
+            });
+        }
+
+        // Pad so all nodes have correct degree.
+        let current_length = self.base_graph().degree() + valid_expanded_parents;
+        for ii in 0..(self.degree() - current_length) {
+            if self.reversed() {
+                parents[ii + current_length] = self.size() - 1
+            } else {
+                parents[ii + current_length] = 0
             }
-        });
+        }
         assert!(parents.len() == self.degree());
         if self.forward() {
             parents.sort();
@@ -272,46 +282,48 @@ where
     H: Hasher,
     G: Graph<H> + ParameterSetMetadata,
 {
-    // Assign `expansion_degree` parents to `node` using an invertible function. That
-    // means we can't just generate random values between `[0, size())`, we need to
-    // expand the search space (domain) to accommodate every unique parent assignment
-    // generated here. This can be visualized more clearly as a matrix where the each
-    // new parent of each new node is assigned a unique `index`:
-    //
-    //
-    //          | Parent 1 | Parent 2 | Parent 3 |
-    //
-    // | Node 1 |     0    |     1    |     2    |
-    //
-    // | Node 2 |     3    |     4    |     5    |
-    //
-    // | Node 3 |     6    |     7    |     8    |
-    //
-    // | Node 4 |     9    |     A    |     B    |
-    //
-    // This starting `index` will be shuffled to another position to generate a
-    // parent-child relationship, e.g., if generating the parents for the second node,
-    // `permute` would be called with values `[3; 4; 5]` that would be mapped to other
-    // indexes in the search space of `[0, B]`, say, values `[A; 0; 4]`, that would
-    // correspond to nodes numbered `[4; 1, 2]` which will become the parents of the
-    // second node. In a later pass invalid parents like 2, self-referencing, and parents
-    // with indexes bigger than 2 (if in the `forward` direction, smaller than 2 if the
-    // inverse), will be removed.
-    //
-    // Since `permute` is a bijective function which has the inverse `invert_permute`,
-    // it is guaranteed that when looking for the parents in the `reversed` direction
-    // the child `node` used earlier will now actually be the parent of the output
-    // parents generated before (inverting the relationship). Following the example,
-    // in the reverse direction, when looking for the parents of, say, node 1,
-    // `invert_permute` (that maps back the output of `permute` to its input) would
-    // receive the indexes `[0; 1; 2]`, where the index `0` is guaranteed to map back
-    // to the index `4` that generated it earlier, corresponding to the node 2, inverting
-    // in fact the child-parent relationship.
-    fn correspondent(&self, node: usize, i: usize) -> usize {
+    /// Assign one parent to `node` using a Chung's construction with a reversible
+    /// permutation function from a Feistel cipher (controlled by `invert_permutation`).
+    fn correspondent(&self, node: usize, i: usize, invert_permutation: bool) -> usize {
+        // We can't just generate random values between `[0, size())`, we need to
+        // expand the search space (domain) to accommodate every unique parent assignment
+        // generated here. This can be visualized more clearly as a matrix where the each
+        // new parent of each new node is assigned a unique `index`:
+        //
+        //
+        //          | Parent 1 | Parent 2 | Parent 3 |
+        //
+        // | Node 1 |     0    |     1    |     2    |
+        //
+        // | Node 2 |     3    |     4    |     5    |
+        //
+        // | Node 3 |     6    |     7    |     8    |
+        //
+        // | Node 4 |     9    |     A    |     B    |
+        //
+        // This starting `index` will be shuffled to another position to generate a
+        // parent-child relationship, e.g., if generating the parents for the second node,
+        // `permute` would be called with values `[3; 4; 5]` that would be mapped to other
+        // indexes in the search space of `[0, B]`, say, values `[A; 0; 4]`, that would
+        // correspond to nodes numbered `[4; 1, 2]` which will become the parents of the
+        // second node. In a later pass invalid parents like 2, self-referencing, and parents
+        // with indexes bigger than 2 (if in the `forward` direction, smaller than 2 if the
+        // inverse), will be removed.
+        //
+        // Since `permute` is a bijective function which has the inverse `invert_permute`,
+        // it is guaranteed that when looking for the parents in the `reversed` direction
+        // the child `node` used earlier will now actually be the parent of the output
+        // parents generated before (inverting the relationship). Following the example,
+        // in the reverse direction, when looking for the parents of, say, node 1,
+        // `invert_permute` (that maps back the output of `permute` to its input) would
+        // receive the indexes `[0; 1; 2]`, where the index `0` is guaranteed to map back
+        // to the index `4` that generated it earlier, corresponding to the node 2, inverting
+        // in fact the child-parent relationship.
+
         let a = (node * self.expansion_degree) as feistel::Index + i as feistel::Index;
         let feistel_keys = &[1, 2, 3, 4];
 
-        let transformed = if self.reversed {
+        let transformed = if invert_permutation {
             feistel::invert_permute(
                 self.size() as feistel::Index * self.expansion_degree as feistel::Index,
                 a,
@@ -351,10 +363,14 @@ where
         }
     }
 
-    fn generate_expanded_parents(&self, node: usize) -> Vec<u32> {
+    fn generate_expanded_parents(&self, node: usize, invert_permutation_order: bool) -> Vec<u32> {
         (0..self.expansion_degree)
             .filter_map(|i| {
-                let other = self.correspondent(node, i);
+                // For each edge in a forward layer the same edge should exist (reversed) in the
+                // reverse layer, independent of the permutation used. We use one permutation
+                // for one layer and the inverse for the other (it doesn't matter which permutation
+                // is used with which layer, just that they be consistent).
+                let other = self.correspondent(node, i, self.reversed ^ invert_permutation_order);
                 if self.reversed {
                     if other > node {
                         Some(other as u32)
@@ -413,27 +429,25 @@ where
         self.reversed
     }
 
-    // TODO: Optimization: Evaluate providing an `all_parents` (and hence
-    // `all_expanded_parents`) method that would return the entire cache
-    // in a single lock operation, or at least (if the cache is not big enough)
-    // it would allow to batch parents calculations with that single lock. Also,
-    // since there is a reciprocity between forward and reversed parents,
-    // we would only need to compute the parents in one direction and with
-    // that fill both caches.
+    /// Assign `expansion_degree()` parents to `node` using an invertible permutation
+    /// that is applied one way for the forward layers and one way for the reversed
+    /// ones. Set `invert_permutation_order` to invert the order the permutation is
+    /// applied to the layers and have it the other way around (used to generate
+    /// double the parents of `expansion_degree()`).
     #[inline]
-    fn expanded_parents<F, T>(&self, node: usize, mut cb: F) -> T
+    fn expanded_parents<F, T>(&self, node: usize, invert_permutation_order: bool, mut cb: F) -> T
     where
         F: FnMut(&Vec<u32>) -> T,
     {
         if !self.use_cache {
             // No cache usage, generate on demand.
-            return cb(&self.generate_expanded_parents(node));
+            return cb(&self.generate_expanded_parents(node, invert_permutation_order));
         }
 
         // Check if we need to fill the cache.
         if !self.contains_parents_cache(node) {
             // Cache is empty so we need to generate the parents.
-            let parents = self.generate_expanded_parents(node);
+            let parents = self.generate_expanded_parents(node, invert_permutation_order);
 
             // Store the newly generated cached value.
             let mut cache_lock = PARENT_CACHE.write().unwrap();
@@ -589,11 +603,10 @@ mod tests {
         // And then do the same check to make sure all (expanded) node-parent relationships from the original
         // are present in the zigzag, just reversed.
         for i in 0..g.size() {
-            g.expanded_parents(i, |parents| {
-                for p in parents.iter() {
-                    assert!(gzcache[&(*p as usize)].contains(&(i as u32)));
-                }
-            });
+            let parents = gcache.get(&i).unwrap();
+            for p in parents {
+                assert!(gzcache[&(*p as usize)].contains(&(i as u32)));
+            }
         }
         // Having checked both ways, we know the graph and its zigzag counterpart have 'expanded' components
         // which are each other's inverses. It's important that this be true.
@@ -604,7 +617,9 @@ mod tests {
     ) -> HashMap<usize, Vec<u32>> {
         let mut parents_map: HashMap<usize, Vec<u32>> = HashMap::new();
         for i in 0..zigzag_graph.size() {
-            parents_map.insert(i, zigzag_graph.expanded_parents(i, |p| p.clone()));
+            for &perm in &[false, true] {
+                parents_map.insert(i, zigzag_graph.expanded_parents(i, perm, |p| p.clone()));
+            }
         }
 
         parents_map
