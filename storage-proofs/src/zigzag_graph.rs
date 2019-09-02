@@ -9,7 +9,7 @@ use crate::layered_drgporep::Layerable;
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::settings;
 
-pub const DEFAULT_EXPANSION_DEGREE: usize = 8;
+pub const DEFAULT_EXPANSION_DEGREE: usize = 16;
 
 // Cache of node's parents.
 pub type ParentCache = HashMap<usize, Vec<usize>>;

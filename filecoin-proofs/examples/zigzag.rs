@@ -415,7 +415,7 @@ fn main() {
             Arg::with_name("exp")
                 .help("Expansion degree")
                 .long("expansion")
-                .default_value("8")
+                .default_value("16")
                 .takes_value(true),
         )
         .arg(
