@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
@@ -13,17 +12,80 @@ use crate::settings;
 pub const EXP_DEGREE: usize = 8;
 
 // Cache of node's parents.
-pub type ParentCache = HashMap<usize, Vec<usize>>;
+pub type ParentCache = Vec<Option<Vec<u32>>>;
 
 // ZigZagGraph will hold two different (but related) `ParentCache`,
 // the first one for the `forward` direction and the second one
 // for the `reversed`.
-pub type TwoWayParentCache = [ParentCache; 2];
+#[derive(Debug, Clone)]
+pub struct ShareableParentCache {
+    forward: Arc<RwLock<ParentCache>>,
+    reverse: Arc<RwLock<ParentCache>>,
+    // Keep the size of the cache outside the lock to be easily accessible.
+    cache_entries: u32,
+}
 
-// The cache is hold in an `Arc` to make it available across different
-// threads. It is accessed through a `RwLock` to distinguish between
-// read an write operations.
-pub type ShareableParentCache = Arc<RwLock<TwoWayParentCache>>;
+impl ShareableParentCache {
+    pub fn new(cache_entries: u32) -> Self {
+        ShareableParentCache {
+            forward: Arc::new(RwLock::new(vec![None; cache_entries as usize])),
+            reverse: Arc::new(RwLock::new(vec![None; cache_entries as usize])),
+            cache_entries,
+        }
+    }
+
+    pub fn contains_forward(&self, node: u32) -> bool {
+        assert!(node < self.cache_entries);
+        self.forward.read().unwrap()[node as usize].is_some()
+    }
+
+    pub fn contains_reverse(&self, node: u32) -> bool {
+        assert!(node < self.cache_entries);
+        self.reverse.read().unwrap()[node as usize].is_some()
+    }
+
+    pub fn read_forward<F, T>(&self, node: u32, mut cb: F) -> T
+    where
+        F: FnMut(Option<&Vec<u32>>) -> T,
+    {
+        assert!(node < self.cache_entries);
+        let lock = self.forward.read().unwrap();
+        cb(lock[node as usize].as_ref())
+    }
+
+    pub fn read_reverse<F, T>(&self, node: u32, mut cb: F) -> T
+    where
+        F: FnMut(Option<&Vec<u32>>) -> T,
+    {
+        assert!(node < self.cache_entries);
+        let lock = self.reverse.read().unwrap();
+        cb(lock[node as usize].as_ref())
+    }
+
+    pub fn write_forward(&self, node: u32, parents: Vec<u32>) {
+        assert!(node < self.cache_entries);
+
+        let mut write_lock = self.forward.write().unwrap();
+
+        let old_value = std::mem::replace(&mut write_lock[node as usize], Some(parents));
+
+        debug_assert_eq!(old_value, None);
+        // We shouldn't be rewriting entries (with most likely the same values),
+        // this would be a clear indication of a bug.
+    }
+
+    pub fn write_reverse(&self, node: u32, parents: Vec<u32>) {
+        assert!(node < self.cache_entries);
+
+        let mut write_lock = self.reverse.write().unwrap();
+
+        let old_value = std::mem::replace(&mut write_lock[node as usize], Some(parents));
+
+        debug_assert_eq!(old_value, None);
+        // We shouldn't be rewriting entries (with most likely the same values),
+        // this would be a clear indication of a bug.
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ZigZagGraph<H, G>
@@ -44,9 +106,7 @@ where
     // all entries sequentially when encoding or any random entry once when proving
     // or verifying, but there's no locality to take advantage of so keep the logic
     // as simple as possible).
-    parents_cache: ShareableParentCache,
-    // Keep the size of the cache outside the lock to be easily accessible.
-    cache_entries: usize,
+    parents_cache: Option<ShareableParentCache>,
     _h: PhantomData<H>,
 }
 
@@ -76,11 +136,12 @@ where
             assert_eq!(expansion_degree, EXP_DEGREE);
         }
 
-        let cache_entries = if settings::SETTINGS.lock().unwrap().maximize_caching {
+        let parents_cache = if settings::SETTINGS.lock().unwrap().maximize_caching {
             info!("using parents cache of unlimited size",);
-            nodes
+            assert!(nodes <= std::u32::MAX as usize);
+            Some(ShareableParentCache::new(nodes as u32))
         } else {
-            0
+            None
         };
 
         ZigZagGraph {
@@ -91,11 +152,7 @@ where
             expansion_degree,
             reversed: false,
             feistel_precomputed: feistel::precompute((expansion_degree * nodes) as feistel::Index),
-            parents_cache: Arc::new(RwLock::new([
-                HashMap::with_capacity(cache_entries),
-                HashMap::with_capacity(cache_entries),
-            ])),
-            cache_entries,
+            parents_cache,
             _h: PhantomData,
         }
     }
@@ -131,7 +188,9 @@ pub trait ZigZag: ::std::fmt::Debug + Clone + PartialEq + Eq {
     fn base_graph(&self) -> Self::BaseGraph;
     fn expansion_degree(&self) -> usize;
     fn reversed(&self) -> bool;
-    fn expanded_parents(&self, node: usize) -> Vec<usize>;
+    fn expanded_parents<F, T>(&self, node: usize, cb: F) -> T
+    where
+        F: FnMut(&Vec<u32>) -> T;
     fn real_index(&self, i: usize) -> usize;
     fn new_zigzag(
         nodes: usize,
@@ -163,21 +222,21 @@ impl<Z: ZigZag> Graph<Z::BaseHasher> for Z {
         }
 
         // expanded_parents takes raw_node
-        let expanded_parents = self.expanded_parents(raw_node);
-
-        for (ii, value) in expanded_parents.iter().enumerate() {
-            parents[ii + self.base_graph().degree()] = *value
-        }
-
-        // Pad so all nodes have correct degree.
-        let current_length = self.base_graph().degree() + expanded_parents.len();
-        for ii in 0..(self.degree() - current_length) {
-            if self.reversed() {
-                parents[ii + current_length] = self.size() - 1
-            } else {
-                parents[ii + current_length] = 0
+        self.expanded_parents(raw_node, |expanded_parents| {
+            for (ii, value) in expanded_parents.iter().enumerate() {
+                parents[ii + self.base_graph().degree()] = *value as usize
             }
-        }
+
+            // Pad so all nodes have correct degree.
+            let current_length = self.base_graph().degree() + expanded_parents.len();
+            for ii in 0..(self.degree() - current_length) {
+                if self.reversed() {
+                    parents[ii + current_length] = self.size() - 1
+                } else {
+                    parents[ii + current_length] = 0
+                }
+            }
+        });
         assert!(parents.len() == self.degree());
         parents.sort();
 
@@ -266,52 +325,19 @@ where
         // back this function in the `reversed` direction).
     }
 
-    // The first cache in `parents_cache` corresponds to the forward direction,
-    // the second one to the reversed.
-    fn get_cache_index(&self) -> usize {
-        if self.forward() {
-            0
-        } else {
-            1
-        }
-    }
-
     // Read the `node` entry in the parents cache (which may not exist) for
     // the current direction set in the graph and return a copy of it (or
     // `None` to signal a cache miss).
-    fn read_parents_cache(&self, node: usize) -> Option<Vec<usize>> {
-        // If the index exceeds the cache size don't bother checking.
-        if node >= self.cache_entries {
-            return None;
-        }
-
-        let read_lock = self.parents_cache.read().unwrap();
-
-        let parents_cache = &(*read_lock)[self.get_cache_index()];
-
-        if let Some(parents) = parents_cache.get(&node) {
-            Some(parents.clone())
+    fn contains_parents_cache(&self, node: usize) -> bool {
+        if let Some(ref cache) = self.parents_cache {
+            if self.forward() {
+                cache.contains_forward(node as u32)
+            } else {
+                cache.contains_reverse(node as u32)
+            }
         } else {
-            None
+            false
         }
-    }
-
-    // Save the `parents` of the `node` in its entry of the cache.
-    fn write_parents_cache(&self, node: usize, parents: Vec<usize>) {
-        // Don't allow writing more entries than the already allocated space.
-        if node >= self.cache_entries {
-            return;
-        }
-
-        let mut write_lock = self.parents_cache.write().unwrap();
-
-        let parents_cache = &mut (*write_lock)[self.get_cache_index()];
-
-        let old_value = parents_cache.insert(node, parents);
-
-        debug_assert_eq!(old_value, None);
-        // We shouldn't be rewriting entries (with most likely the same values),
-        // this would be a clear indication of a bug.
     }
 }
 
@@ -365,31 +391,48 @@ where
     // we would only need to compute the parents in one direction and with
     // that fill both caches.
     #[inline]
-    fn expanded_parents(&self, node: usize) -> Vec<usize> {
-        if let Some(parents) = self.read_parents_cache(node) {
-            return parents;
-        }
-
-        let parents: Vec<usize> = (0..self.expansion_degree)
-            .filter_map(|i| {
-                let other = self.correspondent(node, i);
-                if self.reversed {
-                    if other > node {
-                        Some(other)
+    fn expanded_parents<F, T>(&self, node: usize, mut cb: F) -> T
+    where
+        F: FnMut(&Vec<u32>) -> T,
+    {
+        if !self.contains_parents_cache(node) {
+            let parents: Vec<u32> = (0..self.expansion_degree)
+                .filter_map(|i| {
+                    let other = self.correspondent(node, i);
+                    if self.reversed {
+                        if other > node {
+                            Some(other as u32)
+                        } else {
+                            None
+                        }
+                    } else if other < node {
+                        Some(other as u32)
                     } else {
                         None
                     }
-                } else if other < node {
-                    Some(other)
+                })
+                .collect();
+
+            if let Some(ref cache) = self.parents_cache {
+                if self.forward() {
+                    cache.write_forward(node as u32, parents);
                 } else {
-                    None
+                    cache.write_reverse(node as u32, parents);
                 }
-            })
-            .collect();
+            } else {
+                return cb(&parents);
+            }
+        }
 
-        self.write_parents_cache(node, parents.clone());
-
-        parents
+        if let Some(ref cache) = self.parents_cache {
+            if self.forward() {
+                cache.read_forward(node as u32, |parents| cb(parents.unwrap()))
+            } else {
+                cache.read_reverse(node as u32, |parents| cb(parents.unwrap()))
+            }
+        } else {
+            unreachable!()
+        }
     }
 
     #[inline]
@@ -515,17 +558,18 @@ mod tests {
             // Check to make sure all (expanded) node-parent relationships also exist in reverse,
             // in the original graph's Hashmap.
             for p in parents {
-                assert!(gcache[&p].contains(&i));
+                assert!(gcache[&(*p as usize)].contains(&(i as u32)));
             }
         }
 
         // And then do the same check to make sure all (expanded) node-parent relationships from the original
         // are present in the zigzag, just reversed.
         for i in 0..g.size() {
-            let parents = g.expanded_parents(i);
-            for p in parents {
-                assert!(gzcache[&p].contains(&i));
-            }
+            g.expanded_parents(i, |parents| {
+                for p in parents.iter() {
+                    assert!(gzcache[&(*p as usize)].contains(&(i as u32)));
+                }
+            });
         }
         // Having checked both ways, we know the graph and its zigzag counterpart have 'expanded' components
         // which are each other's inverses. It's important that this be true.
@@ -533,20 +577,13 @@ mod tests {
 
     fn get_all_expanded_parents<H: 'static + Hasher>(
         zigzag_graph: &ZigZagBucketGraph<H>,
-    ) -> HashMap<usize, Vec<usize>> {
-        let mut parents_map: HashMap<usize, Vec<usize>> = HashMap::new();
+    ) -> HashMap<usize, Vec<u32>> {
+        let mut parents_map: HashMap<usize, Vec<u32>> = HashMap::new();
         for i in 0..zigzag_graph.size() {
-            parents_map.insert(i, zigzag_graph.expanded_parents(i));
+            parents_map.insert(i, zigzag_graph.expanded_parents(i, |p| p.clone()));
         }
 
-        assert_eq!(get_cache_size(&zigzag_graph), zigzag_graph.cache_entries);
-
         parents_map
-    }
-
-    fn get_cache_size<H: 'static + Hasher>(zigzag_graph: &ZigZagBucketGraph<H>) -> usize {
-        let parents_cache_lock = zigzag_graph.parents_cache.read().unwrap();
-        (*parents_cache_lock)[zigzag_graph.get_cache_index()].len()
     }
 
     // Test that 3 (or more) rounds of the Feistel cipher can be used
