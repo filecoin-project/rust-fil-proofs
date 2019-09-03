@@ -52,7 +52,6 @@ fn cache_post_params(post_config: PoStConfig) {
 
     {
         let post_circuit: VDFPoStCircuit = <VDFPostCompound as CompoundProof<
-            _,
             VDFPoSt<PedersenHasher, Sloth>,
             VDFPoStCircuit,
         >>::blank_circuit(&post_public_params);
@@ -60,7 +59,6 @@ fn cache_post_params(post_config: PoStConfig) {
     }
     {
         let post_circuit: VDFPoStCircuit = <VDFPostCompound as CompoundProof<
-            _,
             VDFPoSt<PedersenHasher, Sloth>,
             VDFPoStCircuit,
         >>::blank_circuit(&post_public_params);
@@ -68,7 +66,6 @@ fn cache_post_params(post_config: PoStConfig) {
     }
     {
         let post_circuit: VDFPoStCircuit = <VDFPostCompound as CompoundProof<
-            _,
             VDFPoSt<PedersenHasher, Sloth>,
             VDFPoStCircuit,
         >>::blank_circuit(&post_public_params);

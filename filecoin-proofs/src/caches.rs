@@ -107,7 +107,6 @@ pub fn get_post_params(post_config: PoStConfig) -> error::Result<Arc<groth16::Pa
 
     let parameters_generator = || {
         <VDFPostCompound as CompoundProof<
-            Bls12,
             VDFPoSt<PedersenHasher, Sloth>,
             VDFPoStCircuit,
         >>::groth_params(&post_public_params)
@@ -147,7 +146,6 @@ pub fn get_post_verifying_key(post_config: PoStConfig) -> error::Result<Arc<Bls1
 
     let vk_generator = || {
         <VDFPostCompound as CompoundProof<
-            Bls12,
             VDFPoSt<PedersenHasher, Sloth>,
             VDFPoStCircuit,
         >>::verifying_key(&post_public_params)

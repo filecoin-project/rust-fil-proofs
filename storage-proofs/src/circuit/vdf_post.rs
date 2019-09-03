@@ -556,13 +556,12 @@ mod tests {
 
         let gparams: groth16::Parameters<_> = <VDFPostCompound as CompoundProof<
             '_,
-            Bls12,
             VDFPoSt<PedersenHasher, _>,
             VDFPoStCircuit,
         >>::groth_params(&pub_params.vanilla_params)
         .expect("failed to create groth params");
 
-        let proof = VDFPostCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &gparams)
+        let proof = VDFPostCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &gparams, false)
             .expect("failed while proving");
 
         let (circuit, inputs) =

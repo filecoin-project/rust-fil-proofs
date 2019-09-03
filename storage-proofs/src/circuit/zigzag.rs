@@ -671,6 +671,7 @@ mod tests {
             &public_inputs,
             &private_inputs,
             &blank_groth_params,
+            false,
         )
         .expect("failed while proving");
 

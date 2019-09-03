@@ -2,7 +2,7 @@ use std::fmt::Write;
 
 use rayon::prelude::*;
 
-use crate::circuit::multi_proof::MultiProof;
+use crate::circuit::{multi_proof::MultiProof, proof_batching::ProofBatching};
 use crate::error::Result;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::partitions;
@@ -118,61 +118,31 @@ where
         });
 
         if should_batch {
-            // TODO: Need a circuit with a size known at compile time instead of Circuit<Bls12>
-            type ProofSystem = Groth16<Bls12, Circuit<Bls12>, Fr>;
-            type VerifierGadget = Groth16VerifierGadget<Bls12, SW6, Bls12PairingGadget>;
-            type ProofGadgetT = ProofGadget<Bls12, SW6, Bls12PairingGadget>;
-            type VkGadget = VerifyingKeyGadget<Bls12, SW6, Bls12PairingGadget>;
-
-            let mut cs = TestConstraintSystem::<SW6>::new();
-            let mut multi_input_gadgets = Vec::new();
+            let mut public_inputs = Vec::new();
 
             for i in 0..partition_count {
-                let mut cs = cs.ns(|| format!("Allocate public input parameters {}", i));
                 let inputs = Self::generate_public_inputs(
                     pub_in,
                     &pub_params.vanilla_params,
                     Some(i));
-
-                let mut input_gadgets = Vec::new();
-                for (j, input) in inputs.iter().enumerate() {
-                    let mut input_bits = BitIterator::new(input.into_repr()).collect::<Vec<_>>();
-                    // Input must be in little-endian, but BitIterator outputs in big-endian.
-                    input_bits.reverse();
-
-                    let input_bits =
-                        Vec::<Boolean>::alloc_input(cs.ns(|| format!("Alloc input: {} {}", i, j)), || {
-                            Ok(input_bits)
-                        }).unwrap();
-
-                    input_gadgets.push(input_bits);
-                }
-                multi_input_gadgets.push(input_gadgets);
+                public_inputs.push(inputs);
             }
 
-            let mut proof_gadgets = Vec::new();
-            for (i, proof) in groth_proofs?.into_iter().enumerate() {
-                let proof_gadget = ProofGadgetT::alloc(
-                    cs.ns(|| format!("Alloc Proof Gadget: {}", i)),
-                    || Ok(proof)
-                ).unwrap();
-                proof_gadgets.push(proof_gadget);
-            }
+            let proof_batching_circuit = ProofBatching {
+                verifying_key: groth_params.clone().vk,
+                public_inputs: public_inputs,
+                groth_proofs: groth_proofs?
+            };
 
-            let vk_gadget = VkGadget::alloc_input(
-                cs.ns(|| "Vk"), || Ok(&groth_params.vk)).unwrap();
-
-            let mut inputs_batch_iter: Vec<_> =
-                multi_input_gadgets.iter().map(|x| x.iter()).collect();
-
-            <VerifierGadget as NIZKBatchVerifierGadget<ProofSystem, SW6>>::check_batch_verify(cs.ns(|| "Verify"),
-                                                                                              &vk_gadget,
-                                                                                              &mut inputs_batch_iter,
-                                                                                              &proof_gadgets,
-            ).unwrap();
+            let rng = &mut OsRng::new().expect("Failed to create `OsRng`");
+            let params = groth16::generate_random_parameters(proof_batching_circuit.clone(), rng)?;
+            let batched_proof = groth16::create_random_proof(
+                proof_batching_circuit,
+                &params,
+                rng)?;
 
             // TODO
-            Ok(MultiProof::new(groth_proofs?, &groth_params.vk))
+            Ok(MultiProof::new(vec![], &groth_params.vk))
         } else {
             Ok(MultiProof::new(groth_proofs?, &groth_params.vk))
         }

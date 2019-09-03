@@ -8,6 +8,7 @@ pub mod multipack;
 pub mod pedersen;
 pub mod por;
 pub mod porc;
+pub mod proof_batching;
 pub mod sloth;
 pub mod test;
 pub mod variables;

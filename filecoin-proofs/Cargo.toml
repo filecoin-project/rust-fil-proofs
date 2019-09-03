@@ -35,9 +35,9 @@ array-macro = "1.0.4"
 os_type = "2.2.0"
 flate2 = { version = "1.0.9", features = ["rust_backend"]}
 tar = "0.4.26"
-snark = { git = "https://github.com/filecoin-project/zexe", rev = "533a799" }
-algebra = { git = "https://github.com/filecoin-project/zexe", rev = "533a799" }
-dpc = { git = "https://github.com/filecoin-project/zexe", rev = "533a799" }
+snark = { git = "https://github.com/sanchopansa/zexe", rev = "d0e8f3d" }
+algebra = { git = "https://github.com/sanchopansa/zexe", rev = "d0e8f3d" }
+dpc = { git = "https://github.com/sanchopansa/zexe", rev = "d0e8f3d" }
 
 [dependencies.reqwest]
 version = "0.9"

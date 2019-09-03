@@ -34,7 +34,7 @@ heim = "0.0.5"
 futures-preview = "0.3.0-alpha.17"
 raw-cpuid = "6.1.0"
 blake2s_simd = "0.5.6"
-dpc = { git = "https://github.com/filecoin-project/zexe", rev = "533a799" }
-snark = { git = "https://github.com/filecoin-project/zexe", rev = "533a799" }
-algebra = { git = "https://github.com/filecoin-project/zexe", rev = "533a799" }
-snark-gadgets = { git = "https://github.com/filecoin-project/zexe", rev = "533a799" }
+dpc = { git = "https://github.com/sanchopansa/zexe", rev = "d0e8f3d" }
+snark = { git = "https://github.com/sanchopansa/zexe", rev = "d0e8f3d" }
+algebra = { git = "https://github.com/sanchopansa/zexe", rev = "d0e8f3d" }
+snark-gadgets = { git = "https://github.com/sanchopansa/zexe", rev = "d0e8f3d" }
