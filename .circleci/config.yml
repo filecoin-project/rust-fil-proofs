@@ -80,7 +80,10 @@ jobs:
             cargo +stable test --verbose --release --all
             RUSTFLAGS="-D warnings" cargo +stable build --examples --release --all
 
-  test_disk_trees:
+  # Using `--no-default-features` to turn off default `disk-trees`.
+  # FIXME: If a new default feature is added it will have to manually be
+  # added again here to overcome the `--no-default-features`.
+  test_no_disk_trees:
     docker:
       - image: filecoin/rust:latest
     working_directory: /mnt/crate
@@ -94,9 +97,9 @@ jobs:
             - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
             - parameter-cache-{{ .Revision }}
       - run:
-          name: Test (nightly) disk-trees feature
+          name: Test (nightly) without the disk-trees feature
           command: |
-            cargo +$(cat rust-toolchain) test --verbose --release -p storage-proofs --features disk-trees -Z package-features
+            cargo +$(cat rust-toolchain) test --verbose --release -p storage-proofs --no-default-features
           environment:
             FIL_PROOFS_REPLICATED_TREES_DIR: replicated-disk-trees
 
@@ -329,7 +332,7 @@ workflows:
       - test_release:
           requires:
             - cargo_fetch
-      - test_disk_trees:
+      - test_no_disk_trees:
           requires:
             - cargo_fetch
       - test_ignored_release:
