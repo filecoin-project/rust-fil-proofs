@@ -159,23 +159,24 @@ To check that it's working you can inspect the replication log to find `using pa
 
 (You can also verify if the cache is working by inspecting the time each layer takes to encode, `encoding, layer:` in the log, where the first two layers, forward and reverse, will take more time than the rest to populate the cache while the remaining 8 should see a considerable time drop.)
 
-In the most extreme case, to reduce time at the cost of *a lot* of memory consumption you can turn off the feature that stores MTs on disk (`disk-trees`) to generate them all on RAM and avoid disk I/O (if the HW doesn't have enough RAM to handle the MTs, roughly 20x the sector size, this won't have the desired effect as the OS will start backing them on disk anyway). For example, to run the `zigzag` example with this feature turned off you'd need to indicate so to `cargo`,
+In the most extreme case, to reduce time at the cost of *a lot* of memory consumption you can turn on the feature that stores MTs on memory (`mem-trees`) instead of on disk (the default) to generate them all on RAM and avoid disk I/O (if the HW doesn't have enough RAM to handle the MTs, roughly 20x the sector size, this won't have the desired effect as the OS will start backing them on disk anyway). For example, to run the `zigzag` example with this feature turned on you'd need to indicate so to `cargo`,
 
 ```
 # NEEDS TO BE RUN INSIDE `storage-proofs\` directory
-# for the `--no-default-features` to take effect.
+# for the `--features` to take effect.
 cargo run                                                                     \
   -p filecoin-proofs                                                          \
   --release                                                                   \
   --example zigzag                                                            \
-  --no-default-features                                                       \
+  --features                                                                  \
+    mem-trees                                                                 \
     --                                                                        \
     --size 1048576
 ```
 
 ### Memory
 
-At the moment the default configuration is set to reduce memory consumption as much as possible so there's not much to do from the user side. (We have enabled the `disk-trees` feature by default, storing MTs on disk, which were the main source of memory consumption.) You should expect a maximum RSS between 1-2 sector sizes, if you experience peaks beyond that range please report an issue (you can check the max RSS with the `/usr/bin/time -v` command).
+At the moment the default configuration is set to reduce memory consumption as much as possible so there's not much to do from the user side. (We are now storing MTs on disk, which were the main source of memory consumption.) You should expect a maximum RSS between 1-2 sector sizes, if you experience peaks beyond that range please report an issue (you can check the max RSS with the `/usr/bin/time -v` command).
 
 ## Generate Documentation
 

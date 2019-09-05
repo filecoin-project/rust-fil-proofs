@@ -12,18 +12,18 @@ use crate::hasher::{Domain, Hasher};
 
 pub use merkletree::merkle::{next_pow2, populate_leaves, Store};
 
-#[cfg(feature = "disk-trees")]
+#[cfg(not(feature = "mem-trees"))]
 type DiskStore<E> = merkletree::merkle::DiskStore<E>;
-#[cfg(feature = "disk-trees")]
+#[cfg(not(feature = "mem-trees"))]
 pub type MerkleTree<T, A> = merkle::MerkleTree<T, A, DiskStore<T>>;
-#[cfg(feature = "disk-trees")]
+#[cfg(not(feature = "mem-trees"))]
 pub type MerkleStore<T> = DiskStore<T>;
 
-#[cfg(not(feature = "disk-trees"))]
+#[cfg(feature = "mem-trees")]
 type VecStore<E> = merkletree::merkle::VecStore<E>;
-#[cfg(not(feature = "disk-trees"))]
+#[cfg(feature = "mem-trees")]
 pub type MerkleTree<T, A> = merkle::MerkleTree<T, A, VecStore<T>>;
-#[cfg(not(feature = "disk-trees"))]
+#[cfg(feature = "mem-trees")]
 pub type MerkleStore<T> = VecStore<T>;
 
 /// Representation of a merkle proof.

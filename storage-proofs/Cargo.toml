@@ -48,10 +48,10 @@ log = "0.4.7"
 pretty_env_logger = "0.3.0"
 
 [features]
-default = ["disk-trees"]
+default = []
 simd = []
 asm = ["sha2/sha2-asm"]
-disk-trees = []
+mem-trees = []
 big-sector-sizes-bench = []
 unchecked-degrees = []
 
