@@ -80,7 +80,7 @@ jobs:
             cargo +stable test --verbose --release --all
             RUSTFLAGS="-D warnings" cargo +stable build --examples --release --all
 
-  test_disk_trees:
+  test_mem_trees:
     docker:
       - image: filecoin/rust:latest
     working_directory: /mnt/crate
@@ -94,9 +94,9 @@ jobs:
             - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
             - parameter-cache-{{ .Revision }}
       - run:
-          name: Test (nightly) disk-trees feature
+          name: Test (nightly) mem-trees feature
           command: |
-            cargo +$(cat rust-toolchain) test --verbose --release -p storage-proofs --features disk-trees -Z package-features
+            cargo +$(cat rust-toolchain) test --verbose --release -p storage-proofs --features mem-trees -Z package-features
           environment:
             FIL_PROOFS_REPLICATED_TREES_DIR: replicated-disk-trees
 
@@ -346,7 +346,7 @@ workflows:
       - test_release:
           requires:
             - cargo_fetch
-      - test_disk_trees:
+      - test_mem_trees:
           requires:
             - cargo_fetch
       - test_ignored_release:
