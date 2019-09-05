@@ -56,6 +56,7 @@ where
     _h: PhantomData<H>,
 }
 
+// TODO: what should be actually in this?
 #[derive(Debug, Clone)]
 pub struct Tau<T: Domain> {
     pub layer_taus: Taus<T>,
@@ -65,13 +66,6 @@ pub struct Tau<T: Domain> {
 #[derive(Default)]
 pub struct ChallengeRequirements {
     pub minimum_challenges: usize,
-}
-
-impl<T: Domain> Tau<T> {
-    /// Return a single porep::Tau with the initial data and final replica commitments of layer_taus.
-    pub fn simplify(&self) -> porep::Tau<T> {
-        unimplemented!()
-    }
 }
 
 impl<H, G> PublicParams<H, G>
@@ -152,11 +146,13 @@ impl<T: Domain> PublicInputs<T> {
     }
 }
 
+// TODO: what should be actually in these?
 pub struct PrivateInputs<H: Hasher> {
     pub tau: Taus<H::Domain>,
     pub aux: Aux<H>,
 }
 
+// TODO: what should be actually in this?
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proof<H: Hasher> {
     #[serde(bound(
@@ -216,6 +212,7 @@ pub struct Taus<D: Domain> {
     comm_r: D,
 }
 
+// TODO: what should be actually in this?
 #[derive(Debug, Clone)]
 pub struct Aux<H: Hasher> {
     tree_d: Tree<H>,
@@ -313,8 +310,7 @@ pub trait Layers {
         trace!("prove_layers ({})", nodes_count);
 
         (0..partition_count)
-            // .into_par_iter()
-            .into_iter()
+            .into_par_iter()
             .map(|k| {
                 trace!("proving partition {}/{}", k, partition_count);
 
