@@ -25,6 +25,7 @@ use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::settings;
 use storage_proofs::zigzag_drgporep::*;
+use storage_proofs::zigzag_graph::EXP_DEGREE;
 
 fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> Result<MmapMut, failure::Error> {
     let file: File = if use_tmp {
@@ -63,8 +64,6 @@ fn dump_proof_bytes<H: Hasher>(
 struct Params {
     samples: usize,
     data_size: usize,
-    base_degree: usize,
-    expansion_degree: usize,
     layer_challenges: LayerChallenges,
     partitions: usize,
     circuit: bool,
@@ -83,8 +82,6 @@ impl From<Params> for Inputs {
     fn from(p: Params) -> Self {
         Inputs {
             sector_size: p.data_size,
-            base_degree: p.base_degree,
-            expansion_degree: p.expansion_degree,
             partitions: p.partitions,
             hasher: p.hasher.clone(),
             samples: p.samples,
@@ -136,8 +133,6 @@ where
         let Params {
             samples,
             data_size,
-            base_degree,
-            expansion_degree,
             layer_challenges,
             partitions,
             circuit,
@@ -160,8 +155,8 @@ where
         let sp = layered_drgporep::SetupParams {
             drg: drgporep::DrgParams {
                 nodes,
-                degree: *base_degree,
-                expansion_degree: *expansion_degree,
+                degree: BASE_DEGREE,
+                expansion_degree: EXP_DEGREE,
                 seed: new_seed(),
             },
             layer_challenges: layer_challenges.clone(),
@@ -444,8 +439,6 @@ fn do_circuit_work<H: 'static + Hasher>(
 #[serde(rename_all = "kebab-case")]
 struct Inputs {
     sector_size: usize,
-    base_degree: usize,
-    expansion_degree: usize,
     partitions: usize,
     hasher: String,
     samples: usize,
@@ -503,12 +496,10 @@ pub struct RunOpts {
     pub challenges: usize,
     pub circuit: bool,
     pub dump: bool,
-    pub exp: usize,
     pub extract: bool,
     pub groth: bool,
     pub hasher: String,
     pub layers: usize,
-    pub m: usize,
     pub no_bench: bool,
     pub no_tmp: bool,
     pub partitions: usize,
@@ -527,8 +518,6 @@ pub fn run(opts: RunOpts) -> Result<(), failure::Error> {
     let params = Params {
         layer_challenges,
         data_size: opts.size * 1024,
-        base_degree: opts.m,
-        expansion_degree: opts.exp,
         partitions: opts.partitions,
         use_tmp: !opts.no_tmp,
         dump_proofs: opts.dump,

@@ -45,9 +45,10 @@ fn stop_profile() {
 #[inline(always)]
 fn stop_profile() {}
 
-fn do_the_work<H: Hasher>(data_size: usize, m: usize, challenge_count: usize) {
+fn do_the_work<H: Hasher>(data_size: usize, challenge_count: usize) {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
     let challenges = vec![2; challenge_count];
+    let m = BASE_DEGREE;
 
     info!("data_size:  {}", prettyb(data_size));
     info!("challenge_count: {}", challenge_count);
@@ -157,13 +158,6 @@ fn main() {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("m")
-                .help("The size of m")
-                .long("m")
-                .default_value("6")
-                .takes_value(true),
-        )
-        .arg(
             Arg::with_name("challenges")
                 .long("challenges")
                 .help("How many challenges to execute, defaults to 1")
@@ -180,19 +174,18 @@ fn main() {
         .get_matches();
 
     let data_size = value_t!(matches, "size", usize).unwrap() * 1024;
-    let m = value_t!(matches, "m", usize).unwrap();
     let challenge_count = value_t!(matches, "challenges", usize).unwrap();
     let hasher = value_t!(matches, "hasher", String).unwrap();
     info!("hasher: {}", hasher);
     match hasher.as_ref() {
         "pedersen" => {
-            do_the_work::<PedersenHasher>(data_size, m, challenge_count);
+            do_the_work::<PedersenHasher>(data_size, challenge_count);
         }
         "sha256" => {
-            do_the_work::<Sha256Hasher>(data_size, m, challenge_count);
+            do_the_work::<Sha256Hasher>(data_size, challenge_count);
         }
         "blake2s" => {
-            do_the_work::<Blake2sHasher>(data_size, m, challenge_count);
+            do_the_work::<Blake2sHasher>(data_size, challenge_count);
         }
         _ => panic!(format!("invalid hasher: {}", hasher)),
     }

@@ -486,7 +486,7 @@ mod tests {
     use std::io::Write;
     use tempfile;
 
-    use crate::drgraph::{new_seed, BucketGraph};
+    use crate::drgraph::{new_seed, BucketGraph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
     use crate::util::data_at_node;
@@ -515,7 +515,7 @@ mod tests {
         let sp = SetupParams {
             drg: DrgParams {
                 nodes: data.len() / 32,
-                degree: 5,
+                degree: BASE_DEGREE,
                 expansion_degree: 0,
                 seed: new_seed(),
             },
@@ -568,7 +568,7 @@ mod tests {
         let sp = SetupParams {
             drg: DrgParams {
                 nodes: data.len() / 32,
-                degree: 5,
+                degree: BASE_DEGREE,
                 expansion_degree: 0,
                 seed: new_seed(),
             },
@@ -625,7 +625,7 @@ mod tests {
         // The loop is here in case we need to retry because of an edge case in the test design.
         loop {
             let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-            let degree = 10;
+            let degree = BASE_DEGREE;
             let expansion_degree = 0;
             let seed = new_seed();
 

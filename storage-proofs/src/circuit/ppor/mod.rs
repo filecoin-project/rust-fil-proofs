@@ -124,7 +124,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for ParallelProofOfRetrievability<'a, E> {
 mod tests {
     use super::*;
     use crate::circuit::test::*;
-    use crate::drgraph::{new_seed, BucketGraph, Graph};
+    use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
     use crate::hasher::pedersen::*;
     use crate::merklepor;
@@ -156,7 +156,7 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
                 .collect();
 
-            let graph = BucketGraph::<PedersenHasher>::new(leaves, 6, 0, new_seed());
+            let graph = BucketGraph::<PedersenHasher>::new(leaves, BASE_DEGREE, 0, new_seed());
             let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
             let pub_inputs: Vec<_> = (0..leaves)

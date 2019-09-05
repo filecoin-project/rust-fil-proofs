@@ -164,12 +164,11 @@ mod tests {
     use rand::{self, Rng};
     use std::io::Write;
 
-    use crate::drgraph::new_seed;
-    use crate::drgraph::{BucketGraph, Graph};
+    use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
 
     fn merklepath<H: Hasher>() {
-        let g = BucketGraph::<H>::new(10, 5, 0, new_seed());
+        let g = BucketGraph::<H>::new(10, BASE_DEGREE, 0, new_seed());
         let mut rng = rand::thread_rng();
         let node_size = 32;
         let mut data = Vec::new();
