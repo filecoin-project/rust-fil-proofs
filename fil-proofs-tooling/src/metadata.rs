@@ -32,7 +32,11 @@ pub struct GitMetadata {
 
 impl GitMetadata {
     pub fn new() -> Result<Self, Error> {
-        let repo_path = std::env::var("CARGO_MANIFEST_DIR")?;
+        let repo_path = if let Ok(mdir) = std::env::var("CARGO_MANIFEST_DIR") {
+            std::path::Path::new(&mdir).into()
+        } else {
+            std::env::current_dir()?
+        };
         let repo = Repository::discover(&repo_path)?;
         let head = repo.head()?;
         let commit = head.peel_to_commit()?;
