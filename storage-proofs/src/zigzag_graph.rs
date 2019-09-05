@@ -426,6 +426,7 @@ where
         if !self.contains_parents_cache(node) {
             // Cache is empty so we need to generate the parents.
             let parents = self.generate_expanded_parents(node);
+            assert_eq!(parents.len(), self.expansion_degree());
 
             // Store the newly generated cached value.
             let mut cache_lock = PARENT_CACHE.write().unwrap();
