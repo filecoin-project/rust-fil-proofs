@@ -1,95 +1,41 @@
-use std::cmp::{max, min};
 use std::marker::PhantomData;
-use std::sync::mpsc::channel;
 
 use blake2s_simd::Params as Blake2s;
-use crossbeam_utils::thread;
 use rayon::prelude::*;
 use serde::de::Deserialize;
 use serde::ser::Serialize;
 
 use crate::challenge_derivation::derive_challenges;
-use crate::drgporep::{self, DrgPoRep};
+use crate::drgporep::{self, DataProof, DrgPoRep};
 use crate::drgraph::Graph;
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::{next_pow2, populate_leaves, MerkleStore, MerkleTree, Store};
+use crate::merkle::{next_pow2, populate_leaves, MerkleProof, MerkleStore, MerkleTree, Store};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
 use crate::util::{data_at_node, NODE_SIZE};
 use crate::vde;
+use crate::zigzag_graph::ZigZag;
 
 type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 
 #[derive(Debug, Clone, Serialize)]
-pub enum LayerChallenges {
-    Fixed {
-        layers: usize,
-        count: usize,
-    },
-    Tapered {
-        layers: usize,
-        count: usize,
-        taper: f64,
-        taper_layers: usize,
-    },
+pub struct LayerChallenges {
+    layers: usize,
+    count: usize,
 }
 
 impl LayerChallenges {
     pub const fn new_fixed(layers: usize, count: usize) -> Self {
-        LayerChallenges::Fixed { layers, count }
+        LayerChallenges { layers, count }
     }
-
-    pub fn new_tapered(layers: usize, challenges: usize, taper_layers: usize, taper: f64) -> Self {
-        LayerChallenges::Tapered {
-            layers,
-            count: challenges,
-            taper,
-            taper_layers,
-        }
-    }
-
     pub fn layers(&self) -> usize {
-        match self {
-            LayerChallenges::Fixed { layers, .. } => *layers,
-            LayerChallenges::Tapered { layers, .. } => *layers,
-        }
+        self.layers
     }
 
-    pub fn challenges_for_layer(&self, layer: usize) -> usize {
-        match self {
-            LayerChallenges::Fixed { count, .. } => *count,
-            LayerChallenges::Tapered {
-                taper,
-                taper_layers,
-                count,
-                layers,
-            } => {
-                assert!(layer < *layers);
-                let l = (layers - 1) - layer;
-
-                let r: f64 = 1.0 - *taper;
-                let t = min(l, *taper_layers);
-                let total_taper = r.powi(t as i32);
-
-                let calculated = (total_taper * *count as f64).ceil() as usize;
-
-                // Although implied by the call to `ceil()` above, be explicit that a layer cannot contain 0 challenges.
-                max(1, calculated)
-            }
-        }
-    }
-
-    pub fn total_challenges(&self) -> usize {
-        (0..self.layers())
-            .map(|x| self.challenges_for_layer(x))
-            .sum()
-    }
-    pub fn all_challenges(&self) -> Vec<usize> {
-        (0..self.layers())
-            .map(|x| self.challenges_for_layer(x))
-            .collect()
+    pub fn challenges(&self) -> usize {
+        self.count
     }
 }
 
@@ -112,7 +58,7 @@ where
 
 #[derive(Debug, Clone)]
 pub struct Tau<T: Domain> {
-    pub layer_taus: Vec<porep::Tau<T>>,
+    pub layer_taus: Taus,
     pub comm_r_star: T,
 }
 
@@ -124,10 +70,7 @@ pub struct ChallengeRequirements {
 impl<T: Domain> Tau<T> {
     /// Return a single porep::Tau with the initial data and final replica commitments of layer_taus.
     pub fn simplify(&self) -> porep::Tau<T> {
-        porep::Tau {
-            comm_r: self.layer_taus[self.layer_taus.len() - 1].comm_r,
-            comm_d: self.layer_taus[0].comm_d,
-        }
+        unimplemented!()
     }
 }
 
@@ -173,8 +116,6 @@ where
     }
 }
 
-pub type EncodingProof<H> = drgporep::Proof<H>;
-
 #[derive(Debug, Clone)]
 pub struct PublicInputs<T: Domain> {
     pub replica_id: T,
@@ -189,13 +130,11 @@ impl<T: Domain> PublicInputs<T> {
         &self,
         layer_challenges: &LayerChallenges,
         leaves: usize,
-        layer: u8,
         partition_k: Option<usize>,
     ) -> Vec<usize> {
         if let Some(ref seed) = self.seed {
             derive_challenges::<T>(
                 layer_challenges,
-                layer,
                 leaves,
                 &self.replica_id,
                 seed,
@@ -204,7 +143,6 @@ impl<T: Domain> PublicInputs<T> {
         } else {
             derive_challenges::<T>(
                 layer_challenges,
-                layer,
                 leaves,
                 &self.replica_id,
                 &self.comm_r_star,
@@ -215,22 +153,48 @@ impl<T: Domain> PublicInputs<T> {
 }
 
 pub struct PrivateInputs<H: Hasher> {
-    /// MerkleTree for the last replication layer.
-    pub tree_r_last: Tree<H>,
-    /// The aggregated columns.
-    pub columns: Vec<u8>,
-    /// MerkleTree for the columns.
-    pub tree_c: Tree<H>,
+    pub tau: Taus,
+    pub aux: Aux<H>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proof<H: Hasher> {
     #[serde(bound(
-        serialize = "EncodingProof<H>: Serialize",
-        deserialize = "EncodingProof<H>: Deserialize<'de>"
+        serialize = "DataProof<H>: Serialize",
+        deserialize = "DataProof<H>: Deserialize<'de>"
     ))]
-    pub encoding_proofs: Vec<EncodingProof<H>>,
-    pub tau: Vec<porep::Tau<H::Domain>>,
+    pub comm_d_proofs: Vec<DataProof<H>>,
+    #[serde(bound(
+        serialize = "MerkleProof<H>: Serialize",
+        deserialize = "MerkleProof<H>: Deserialize<'de>"
+    ))]
+    pub comm_c_proofs_even: Vec<MerkleProof<H>>,
+    #[serde(bound(
+        serialize = "MerkleProof<H>: Serialize",
+        deserialize = "MerkleProof<H>: Deserialize<'de>"
+    ))]
+    pub comm_c_proofs_odd: Vec<MerkleProof<H>>,
+    pub layer_labels: Vec<Vec<Vec<u8>>>,
+    #[serde(bound(
+        serialize = "DataProof<H>: Serialize",
+        deserialize = "DataProof<H>: Deserialize<'de>"
+    ))]
+    pub comm_r_last_proofs: Vec<DataProof<H>>,
+    #[serde(bound(
+        serialize = "DrgParentsProof<H>: Serialize",
+        deserialize = "DrgParentsProof<H>: Deserialize<'de>"
+    ))]
+    pub drg_parents_proofs: Vec<Vec<DrgParentsProof<H>>>,
+    #[serde(bound(
+        serialize = "ExpEvenParentsProof<H>: Serialize",
+        deserialize = "ExpEvenParentsProof<H>: Deserialize<'de>"
+    ))]
+    pub exp_parents_even_proofs: Vec<Vec<ExpEvenParentsProof<H>>>,
+    #[serde(bound(
+        serialize = "ExpOddParentsProof<H>: Serialize",
+        deserialize = "ExpOddParentsProof<H>: Deserialize<'de>"
+    ))]
+    pub exp_parents_odd_proofs: Vec<Vec<ExpOddParentsProof<H>>>,
 }
 
 impl<H: Hasher> Proof<H> {
@@ -241,28 +205,73 @@ impl<H: Hasher> Proof<H> {
 
 pub type PartitionProofs<H> = Vec<Proof<H>>;
 
-impl<H: Hasher> Proof<H> {
-    pub fn new(
-        encoding_proofs: Vec<EncodingProof<H>>,
-        tau: Vec<porep::Tau<H::Domain>>,
-    ) -> Proof<H> {
-        Proof {
-            encoding_proofs,
-            tau,
-        }
-    }
+type PorepTau<H> = porep::Tau<<H as Hasher>::Domain>;
+type TransformedLayers<H> = (Taus, Aux<H>);
+
+#[derive(Debug, Clone)]
+pub struct Taus {
+    /// The encoded nodes for 1..layers.
+    encodings: Vec<Vec<u8>>,
 }
 
-pub trait Layerable<H: Hasher>: Graph<H> {}
+#[derive(Debug, Clone)]
+pub struct Aux<H: Hasher> {
+    tree_d: Tree<H>,
+    tree_r_last: Tree<H>,
+    tree_c: Tree<H>,
+}
 
-type PorepTau<H> = porep::Tau<<H as Hasher>::Domain>;
-type TransformedLayers<H> = (Vec<PorepTau<H>>, Vec<Tree<H>>);
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DrgParentsProof<H: Hasher> {
+    pub labels: Vec<Vec<u8>>,
+    #[serde(bound(
+        serialize = "MerkleProof<H>: Serialize",
+        deserialize = "MerkleProof<H>: Deserialize<'de>"
+    ))]
+    pub comm_c: MerkleProof<H>,
+    #[serde(bound(
+        serialize = "MerkleProof<H>: Serialize",
+        deserialize = "MerkleProof<H>: Deserialize<'de>"
+    ))]
+    pub comm_r_last: MerkleProof<H>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExpEvenParentsProof<H: Hasher> {
+    pub labels: Vec<Vec<u8>>,
+    pub value: Vec<u8>,
+    #[serde(bound(
+        serialize = "MerkleProof<H>: Serialize",
+        deserialize = "MerkleProof<H>: Deserialize<'de>"
+    ))]
+    pub comm_c: MerkleProof<H>,
+    #[serde(bound(
+        serialize = "MerkleProof<H>: Serialize",
+        deserialize = "MerkleProof<H>: Deserialize<'de>"
+    ))]
+    pub comm_r_last: MerkleProof<H>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExpOddParentsProof<H: Hasher> {
+    pub labels: Vec<Vec<u8>>,
+    pub value: Vec<u8>,
+    #[serde(bound(
+        serialize = "MerkleProof<H>: Serialize",
+        deserialize = "MerkleProof<H>: Deserialize<'de>"
+    ))]
+    pub comm_c: MerkleProof<H>,
+}
 
 /// Layers provides default implementations of methods required to handle proof and verification
 /// of layered proofs of replication. Implementations must provide transform and invert_transform methods.
 pub trait Layers {
     type Hasher: Hasher;
-    type Graph: Layerable<Self::Hasher> + ParameterSetMetadata + Sync + Send;
+    type BaseGraph: Graph<Self::Hasher>;
+    type Graph: ZigZag<BaseHasher = Self::Hasher, BaseGraph = Self::BaseGraph>
+        + ParameterSetMetadata
+        + Sync
+        + Send;
 
     /// Transform a layer's public parameters, returning new public parameters corresponding to the next layer.
     /// Warning: This method will likely need to be extended for other implementations
@@ -277,56 +286,261 @@ pub trait Layers {
     fn prove_layers<'a>(
         graph: &Self::Graph,
         pub_inputs: &PublicInputs<<Self::Hasher as Hasher>::Domain>,
-        tau: &[PorepTau<Self::Hasher>],
-        aux: &'a [Tree<Self::Hasher>],
+        tau: &Taus,
+        aux: &'a Aux<Self::Hasher>,
         layer_challenges: &LayerChallenges,
         layers: usize,
         total_layers: usize,
         partition_count: usize,
-    ) -> Result<Vec<Vec<EncodingProof<Self::Hasher>>>> {
+    ) -> Result<Vec<Proof<Self::Hasher>>> {
         assert!(layers > 0);
 
-        let mut new_graph = Some(graph.clone());
+        let graph_size = graph.size();
 
-        (0..layers)
-            .map(|layer| {
-                let current_graph = new_graph.take().unwrap();
-                let inner_layers = layers - layer;
+        // generate graphs for layer 1 and 2
+        let graph_1 = Self::transform(graph);
+        let graph_2 = Self::transform(&graph_1);
 
-                let new_priv_inputs = drgporep::PrivateInputs {
-                    tree_d: &aux[layer],
-                    tree_r: &aux[layer + 1],
-                };
-                let layer_diff = total_layers - inner_layers;
-                let graph_size = current_graph.size();
-                new_graph = Some(Self::transform(&current_graph));
+        (0..partition_count)
+            .into_par_iter()
+            .map(|k| {
+                // Derive the set of challenges we are proving over.
+                let challenges = pub_inputs.challenges(layer_challenges, graph_size, Some(k));
 
-                let pp = drgporep::PublicParams::new(
-                    current_graph,
-                    true,
-                    layer_challenges.challenges_for_layer(layer),
-                );
-                let partition_proofs: Vec<_> = (0..partition_count)
-                    .into_par_iter()
-                    .map(|k| {
-                        let drgporep_pub_inputs = drgporep::PublicInputs {
-                            replica_id: Some(pub_inputs.replica_id),
-                            challenges: pub_inputs.challenges(
-                                layer_challenges,
-                                graph_size,
-                                layer_diff as u8,
-                                Some(k),
+                let mut comm_d_proofs = Vec::with_capacity(challenges.len());
+                let mut comm_r_last_proofs = Vec::with_capacity(challenges.len());
+                let mut comm_c_proofs_even = Vec::with_capacity(challenges.len());
+                let mut comm_c_proofs_odd = Vec::with_capacity(challenges.len());
+                let mut layer_labels = Vec::with_capacity(challenges.len());
+                let mut drg_parents_proofs = Vec::with_capacity(challenges.len());
+                let mut exp_parents_even_proofs = Vec::with_capacity(challenges.len());
+                let mut exp_parents_odd_proofs = Vec::with_capacity(challenges.len());
+
+                // ZigZag commitment specifics
+                for challenge in challenges.into_iter() {
+                    // Initial data layer openings (D_X in Comm_D)
+                    {
+                        comm_d_proofs.push(DataProof {
+                            data: aux.tree_d.read_at(challenge),
+                            proof: MerkleProof::new_from_proof(&aux.tree_d.gen_proof(challenge)),
+                        });
+                    }
+
+                    // C_n-X+1 in Comm_C
+                    {
+                        comm_c_proofs_even.push(MerkleProof::new_from_proof(
+                            &aux.tree_c.gen_proof(NODE_SIZE - challenge + 1),
+                        ));
+                    }
+
+                    // C_X in Comm_C
+                    {
+                        comm_c_proofs_odd.push(MerkleProof::new_from_proof(
+                            &aux.tree_c.gen_proof(challenge),
+                        ));
+                    }
+
+                    // e_X^(j) and e_n-X+1^(j)
+                    {
+                        let mut labels = Vec::with_capacity(2 * layers);
+                        for layer in 1..layers {
+                            // even
+                            labels.push(
+                                data_at_node(&tau.encodings[layer - 1], NODE_SIZE - challenge + 1)
+                                    .unwrap()
+                                    .to_vec(),
+                            );
+                            // odd
+                            labels.push(
+                                data_at_node(&tau.encodings[layer - 1], challenge)
+                                    .unwrap()
+                                    .to_vec(),
+                            )
+                        }
+                        layer_labels.push(labels);
+                    }
+
+                    // Final replica layer openings (e_n-X-1^(l))
+                    {
+                        let challenge_inv = NODE_SIZE - challenge + 1;
+                        comm_r_last_proofs.push(DataProof {
+                            data: aux.tree_r_last.read_at(challenge_inv),
+                            proof: MerkleProof::new_from_proof(
+                                &aux.tree_r_last.gen_proof(challenge_inv),
                             ),
-                            tau: Some(tau[layer]),
-                        };
+                        });
+                    }
 
-                        DrgPoRep::prove(&pp, &drgporep_pub_inputs, &new_priv_inputs)
-                    })
-                    .collect::<Result<Vec<_>>>()?;
+                    // DRG Parents
+                    {
+                        let base_degree = graph_1.base_graph().degree();
 
-                Ok(partition_proofs)
+                        // DRG.Parents(X, 1)
+                        let mut drg_parents = vec![0; base_degree];
+                        graph_1.base_graph().parents(challenge, &mut drg_parents);
+
+                        let mut proofs = Vec::with_capacity(base_degree);
+
+                        for k in &drg_parents {
+                            // labels e_k^(2j-1), e_n-k+1^(2j) for j=1..l/2
+                            let mut labels = Vec::with_capacity(layers);
+                            for j in 1..layers / 2 {
+                                // -1 because encodings is zero indexed
+                                labels.push(
+                                    data_at_node(&tau.encodings[(2 * j - 1) - 1], *k)
+                                        .unwrap()
+                                        .to_vec(),
+                                );
+                                labels.push(
+                                    data_at_node(&tau.encodings[(2 * j) - 1], NODE_SIZE - k + 1)
+                                        .unwrap()
+                                        .to_vec(),
+                                );
+                            }
+
+                            // path for C_k to Comm_C
+                            let comm_c = MerkleProof::new_from_proof(&aux.tree_c.gen_proof(*k));
+
+                            // path for e_n-k+1^(l) to Comm_rlast
+                            let comm_r_last = MerkleProof::new_from_proof(
+                                &aux.tree_r_last.gen_proof(NODE_SIZE - k + 1),
+                            );
+
+                            proofs.push(DrgParentsProof {
+                                labels,
+                                comm_c,
+                                comm_r_last,
+                            });
+                        }
+                        drg_parents_proofs.push(proofs);
+                    }
+
+                    // Expander Parents - Even Layers
+                    {
+                        let exp_degree = graph_2.expansion_degree();
+
+                        // EXP.Parents(n-X+1, 2)
+                        let mut exp_parents = vec![0; exp_degree];
+                        graph_2.expanded_parents(NODE_SIZE - challenge + 1, |p| {
+                            exp_parents.copy_from_slice(&p[..]);
+                        });
+
+                        let mut proofs = Vec::with_capacity(exp_degree);
+
+                        for k in &exp_parents {
+                            // labels e_k^(2j) for j=1..l/2
+                            let mut labels = Vec::with_capacity(layers / 2);
+                            for j in 1..layers / 2 {
+                                // -1 because encodings is zero indexed
+                                labels.push(
+                                    data_at_node(&tau.encodings[(2 * j) - 1], *k as usize)
+                                        .unwrap()
+                                        .to_vec(),
+                                );
+                            }
+
+                            // O_n-k+1
+                            let value = {
+                                // H(e_i^(1) || e_i^(3) || .. || e_i^(l-1))
+                                let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
+                                for layer in (1..layers).step_by(2) {
+                                    hasher.update(
+                                        data_at_node(
+                                            &tau.encodings[layer],
+                                            NODE_SIZE - (*k as usize) + 1,
+                                        )
+                                        .unwrap(),
+                                    );
+                                }
+                                hasher.finalize().as_ref().to_vec()
+                            };
+
+                            // path for C_n-k+1 to Comm_C
+                            let comm_c = MerkleProof::new_from_proof(
+                                &aux.tree_c.gen_proof(NODE_SIZE - (*k as usize) + 1),
+                            );
+
+                            // path for e_k^(l) to Comm_rlast
+                            let comm_r_last = MerkleProof::new_from_proof(
+                                &aux.tree_r_last.gen_proof(*k as usize),
+                            );
+
+                            proofs.push(ExpEvenParentsProof {
+                                labels,
+                                value,
+                                comm_c,
+                                comm_r_last,
+                            });
+                        }
+                        exp_parents_even_proofs.push(proofs);
+                    }
+
+                    // Expander Parents - Odd Layers
+                    {
+                        let exp_degree = graph_1.expansion_degree();
+
+                        // EXP.Parents(X, 1)
+                        let mut exp_parents = vec![0; exp_degree];
+                        graph_1.expanded_parents(NODE_SIZE - challenge + 1, |p| {
+                            exp_parents.copy_from_slice(&p[..]);
+                        });
+
+                        let mut proofs = Vec::with_capacity(exp_degree);
+
+                        for k in &exp_parents {
+                            // labels e_k^(2j-1) for j=1..l/2
+                            let mut labels = Vec::with_capacity(layers / 2);
+                            for j in 1..layers / 2 {
+                                // -1 because encodings is zero indexed
+                                labels.push(
+                                    data_at_node(&tau.encodings[(2 * j - 1) - 1], *k as usize)
+                                        .unwrap()
+                                        .to_vec(),
+                                );
+                            }
+
+                            // E_n-k+1
+                            let value = {
+                                // H(e_i^(2) || e_i^(4) || .. || e_i^(l-2))
+                                let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
+                                for layer in (2..layers - 1).step_by(2) {
+                                    hasher.update(
+                                        data_at_node(
+                                            &tau.encodings[layer],
+                                            NODE_SIZE - (*k as usize) + 1,
+                                        )
+                                        .unwrap(),
+                                    );
+                                }
+                                hasher.finalize().as_ref().to_vec()
+                            };
+
+                            // path for C_k to Comm_C
+                            let comm_c =
+                                MerkleProof::new_from_proof(&aux.tree_c.gen_proof(*k as usize));
+
+                            proofs.push(ExpOddParentsProof {
+                                labels,
+                                value,
+                                comm_c,
+                            });
+                        }
+                        exp_parents_odd_proofs.push(proofs);
+                    }
+                }
+
+                Ok(Proof {
+                    comm_d_proofs,
+                    comm_r_last_proofs,
+                    comm_c_proofs_even,
+                    comm_c_proofs_odd,
+                    layer_labels,
+                    drg_parents_proofs,
+                    exp_parents_even_proofs,
+                    exp_parents_odd_proofs,
+                })
             })
-            .collect::<Result<Vec<_>>>()
+            .collect()
     }
 
     fn extract_and_invert_transform_layers<'a>(
@@ -340,11 +554,8 @@ pub trait Layers {
 
         (0..layers).fold(graph.clone(), |current_graph, layer| {
             let inverted = Self::invert_transform(&current_graph);
-            let pp = drgporep::PublicParams::new(
-                inverted.clone(),
-                true,
-                layer_challenges.challenges_for_layer(layer),
-            );
+            let pp =
+                drgporep::PublicParams::new(inverted.clone(), true, layer_challenges.challenges());
             let mut res = DrgPoRep::extract_all(&pp, replica_id, data)
                 .expect("failed to extract data from PoRep");
 
@@ -389,7 +600,7 @@ pub trait Layers {
         };
 
         // 1. Build the MerkleTree over the original data
-        let tree_d = build_tree(&data);
+        let tree_d = build_tree(&data)?;
 
         // 2. Encode all layers
         let mut encoded_data: Vec<Vec<u8>> = Vec::with_capacity(layers);
@@ -414,7 +625,7 @@ pub trait Layers {
         let mut odd_partition = Vec::with_capacity(layers / 2);
         let mut even_partition = Vec::with_capacity(layers / 2);
 
-        for (layer_num, layer) in encoded_data.into_iter().enumerate() {
+        for (layer_num, layer) in encoded_data.iter().enumerate() {
             if layer_num % 2 == 0 {
                 even_partition.push(layer);
             } else {
@@ -464,7 +675,18 @@ pub trait Layers {
         // 4. Construct final replica commitment
         let tree_r_last = build_tree(&r_last)?;
 
-        unimplemented!()
+        assert_eq!(encoded_data.len(), layers - 1);
+
+        Ok((
+            Taus {
+                encodings: encoded_data,
+            },
+            Aux {
+                tree_c,
+                tree_d,
+                tree_r_last,
+            },
+        ))
     }
 }
 
@@ -509,7 +731,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
     ) -> Result<Vec<Self::Proof>> {
         assert!(partition_count > 0);
 
-        let proofs = Self::prove_layers(
+        Self::prove_layers(
             &pub_params.graph,
             pub_inputs,
             &priv_inputs.tau,
@@ -518,22 +740,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
             pub_params.layer_challenges.layers(),
             pub_params.layer_challenges.layers(),
             partition_count,
-        )?;
-
-        let mut proof_columns = vec![Vec::new(); partition_count];
-
-        for partition_proofs in proofs.into_iter() {
-            for (j, proof) in partition_proofs.into_iter().enumerate() {
-                proof_columns[j].push(proof);
-            }
-        }
-
-        let proofs = proof_columns
-            .into_iter()
-            .map(|p| Proof::new(p, priv_inputs.tau.clone()))
-            .collect();
-
-        Ok(proofs)
+        )
     }
 
     fn verify_all_partitions(
@@ -541,65 +748,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         pub_inputs: &Self::PublicInputs,
         partition_proofs: &[Self::Proof],
     ) -> Result<bool> {
-        for (k, proof) in partition_proofs.iter().enumerate() {
-            if proof.encoding_proofs.len() != pub_params.layer_challenges.layers() {
-                return Ok(false);
-            }
-
-            // TODO: verification is broken for the first node, figure out how to unbreak
-            // with permutations
-
-            let mut comm_rs = Vec::new();
-            let mut graph = Some(pub_params.graph.clone());
-
-            for (layer, proof_layer) in proof.encoding_proofs.iter().enumerate() {
-                comm_rs.push(proof.tau[layer].comm_r);
-
-                let current_graph = graph.take().unwrap();
-                let graph_size = current_graph.size();
-                graph = Some(Self::transform(&current_graph));
-
-                let pp = drgporep::PublicParams::new(
-                    current_graph,
-                    true,
-                    pub_params.layer_challenges.challenges_for_layer(layer),
-                );
-                let new_pub_inputs = drgporep::PublicInputs {
-                    replica_id: Some(pub_inputs.replica_id),
-                    challenges: pub_inputs.challenges(
-                        &pub_params.layer_challenges,
-                        graph_size,
-                        layer as u8,
-                        Some(k),
-                    ),
-                    tau: Some(proof.tau[layer]),
-                };
-
-                let ep = &proof_layer;
-                let res = DrgPoRep::verify(
-                    &pp,
-                    &new_pub_inputs,
-                    &drgporep::Proof {
-                        data_root: ep.data_root,
-                        replica_root: ep.replica_root,
-                        replica_nodes: ep.replica_nodes.clone(),
-                        replica_parents: ep.replica_parents.clone(),
-                        // TODO: investigate if clone can be avoided by using a reference in drgporep::DataProof
-                        nodes: ep.nodes.clone(),
-                    },
-                )?;
-
-                if !res {
-                    return Ok(false);
-                }
-            }
-            let crs = comm_r_star::<L::Hasher>(&pub_inputs.replica_id, &comm_rs)?;
-
-            if crs != pub_inputs.comm_r_star {
-                return Ok(false);
-            }
-        }
-        Ok(true)
+        unimplemented!();
     }
 
     fn with_partition(pub_in: Self::PublicInputs, k: Option<usize>) -> Self::PublicInputs {
@@ -617,7 +766,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         requirements: &ChallengeRequirements,
         partitions: usize,
     ) -> bool {
-        let partition_challenges = public_params.layer_challenges.total_challenges();
+        let partition_challenges = public_params.layer_challenges.challenges();
 
         partition_challenges * partitions >= requirements.minimum_challenges
     }
@@ -639,7 +788,7 @@ fn comm_r_star<H: Hasher>(replica_id: &H::Domain, comm_rs: &[H::Domain]) -> Resu
 
 impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
     type Tau = Tau<<L::Hasher as Hasher>::Domain>;
-    type ProverAux = Vec<Tree<L::Hasher>>;
+    type ProverAux = Aux<L::Hasher>;
 
     fn replicate(
         pp: &'a PublicParams<L::Hasher, L::Graph>,
@@ -647,20 +796,20 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
         data: &mut [u8],
         _data_tree: Option<Tree<L::Hasher>>,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
-        let (taus, auxs) = Self::transform_and_replicate_layers(
+        let (taus, aux) = Self::transform_and_replicate_layers(
             &pp.graph,
             &pp.layer_challenges,
             replica_id,
             data,
         )?;
-
-        let comm_rs: Vec<_> = taus.iter().map(|tau| tau.comm_r).collect();
+        // TODO: solidify this.
+        let comm_rs = vec![aux.tree_r_last.root()];
         let crs = comm_r_star::<L::Hasher>(replica_id, &comm_rs)?;
         let tau = Tau {
             layer_taus: taus,
             comm_r_star: crs,
         };
-        Ok((tau, auxs))
+        Ok((tau, aux))
     }
 
     fn extract_all<'b>(
@@ -695,30 +844,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_calculate_taper_challenges() {
-        let layer_challenges = LayerChallenges::new_tapered(10, 333, 7, 1.0 / 3.0);
-        // Last layers should have most challenges.
-        let expected: Vec<usize> = vec![20, 20, 20, 30, 44, 66, 99, 149, 223, 333];
-
-        for (i, expected_count) in expected.iter().enumerate() {
-            let calculated_count = layer_challenges.challenges_for_layer(i);
-            assert_eq!(*expected_count as usize, calculated_count);
-        }
-
-        assert_eq!(expected, layer_challenges.all_challenges());
-        assert_eq!(layer_challenges.total_challenges(), 1004);
-        let live_challenges = LayerChallenges::new_tapered(4, 2, 2, 1.0 / 3.0);
-        assert_eq!(live_challenges.total_challenges(), 6)
-    }
-
-    #[test]
     fn test_calculate_fixed_challenges() {
         let layer_challenges = LayerChallenges::new_fixed(10, 333);
-        let expected = [333, 333, 333, 333, 333, 333, 333, 333, 333, 333];
+        let expected = 333;
 
-        for (i, expected_count) in expected.iter().enumerate() {
-            let calculated_count = layer_challenges.challenges_for_layer(i);
-            assert_eq!(*expected_count as usize, calculated_count);
-        }
+        let calculated_count = layer_challenges.challenges();
+        assert_eq!(expected as usize, calculated_count);
     }
 }
