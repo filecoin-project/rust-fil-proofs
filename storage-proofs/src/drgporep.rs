@@ -125,14 +125,7 @@ impl<H: Hasher> DataProof<H> {
     /// proves_challenge returns true if this self.proof corresponds to challenge.
     /// This is useful for verifying that a supplied proof is actually relevant to a given challenge.
     pub fn proves_challenge(&self, challenge: usize) -> bool {
-        let mut c = challenge;
-        for (_, is_right) in self.proof.path().iter() {
-            if ((c & 1) == 1) ^ is_right {
-                return false;
-            };
-            c >>= 1;
-        }
-        true
+        self.proof.proves_challenge(challenge)
     }
 }
 

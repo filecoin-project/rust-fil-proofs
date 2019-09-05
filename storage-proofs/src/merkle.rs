@@ -153,6 +153,19 @@ impl<H: Hasher> MerkleProof<H> {
     pub fn path(&self) -> &Vec<(H::Domain, bool)> {
         &self.path
     }
+
+    /// proves_challenge returns true if this self.proof corresponds to challenge.
+    /// This is useful for verifying that a supplied proof is actually relevant to a given challenge.
+    pub fn proves_challenge(&self, challenge: usize) -> bool {
+        let mut c = challenge;
+        for (_, is_right) in self.path().iter() {
+            if ((c & 1) == 1) ^ is_right {
+                return false;
+            };
+            c >>= 1;
+        }
+        true
+    }
 }
 
 fn path_index<T: Domain>(path: &[(T, bool)]) -> usize {
