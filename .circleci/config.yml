@@ -115,7 +115,10 @@ jobs:
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (stable) in release profile
-          command: cargo +stable test --verbose --release --all -- --ignored
+          command: |
+              # We must change directories into `storage-proofs` for the `unchecked-degrees` feature to take effect.
+              cd storage-proofs
+              cargo +stable test --verbose --release --all --features unchecked-degrees -- --ignored
       - save_cache:
           key: parameter-cache-{{ .Revision }}
           paths:

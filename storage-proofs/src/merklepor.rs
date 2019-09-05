@@ -140,7 +140,7 @@ mod tests {
     use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
-    use crate::drgraph::{new_seed, BucketGraph, Graph};
+    use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, HashFunction, PedersenHasher, Sha256Hasher};
     use crate::merkle::make_proof_for_test;
@@ -158,7 +158,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
+        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {
@@ -230,7 +230,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
+        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {
@@ -274,7 +274,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
+        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {

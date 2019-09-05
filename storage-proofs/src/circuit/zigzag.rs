@@ -10,13 +10,14 @@ use crate::circuit::drgporep::{ComponentPrivateInputs, DrgPoRepCompound};
 use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::drgporep::{self, DrgPoRep};
-use crate::drgraph::Graph;
+use crate::drgraph::{Graph, BASE_DEGREE};
 use crate::hasher::{HashFunction, Hasher};
 use crate::layered_drgporep::{self, Layers as LayersTrait};
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::porep;
 use crate::proof::ProofScheme;
 use crate::zigzag_drgporep::ZigZagDrgPoRep;
+use crate::zigzag_graph::{ZigZag, EXP_DEGREE};
 
 type Layers<'a, H, G> = Vec<
     Option<(
@@ -83,6 +84,13 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let graph = &self.public_params.graph;
         let layer_challenges = &self.public_params.layer_challenges;
+
+        // In most cases (the exception being during testing) we want to ensure that the base and
+        // expansion degrees are the optimal values.
+        if !cfg!(feature = "unchecked-degrees") {
+            assert_eq!(graph.base_graph().degree(), BASE_DEGREE);
+            assert_eq!(graph.expansion_degree(), EXP_DEGREE);
+        }
 
         assert_eq!(layer_challenges.layers(), self.layers.len());
 
@@ -372,13 +380,14 @@ mod tests {
     use crate::circuit::test::*;
     use crate::compound_proof;
     use crate::drgporep;
-    use crate::drgraph::new_seed;
+    use crate::drgraph::{new_seed, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, Hasher, PedersenHasher};
     use crate::layered_drgporep::{self, ChallengeRequirements, LayerChallenges};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
     use crate::settings;
+    use crate::zigzag_graph::EXP_DEGREE;
 
     use ff::Field;
     use fil_sapling_crypto::jubjub::JubjubBls12;
@@ -392,8 +401,8 @@ mod tests {
             .pedersen_hash_exp_window_size;
         let params = &JubjubBls12::new_with_window_size(window_size);
         let nodes = 5;
-        let degree = 1;
-        let expansion_degree = 2;
+        let degree = BASE_DEGREE;
+        let expansion_degree = EXP_DEGREE;
         let num_layers = 2;
         let layer_challenges = LayerChallenges::new_fixed(num_layers, 1);
 
@@ -451,8 +460,8 @@ mod tests {
 
         // End copied section.
 
-        let expected_inputs = 16;
-        let expected_constraints = 130832;
+        let expected_inputs = 36;
+        let expected_constraints = 432312;
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.
             let mut cs = MetricCS::<Bls12>::new();

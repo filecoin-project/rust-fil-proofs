@@ -36,6 +36,7 @@ use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::settings;
 use storage_proofs::zigzag_drgporep::*;
+use storage_proofs::zigzag_graph::EXP_DEGREE;
 
 // We can only one of the profilers at a time, either CPU (`profile`)
 // or memory (`heap-profile`), duplicating the function so they won't
@@ -141,8 +142,6 @@ fn dump_proof_bytes<H: Hasher>(all_partition_proofs: &[layered_drgporep::Proof<H
 
 fn do_the_work<H: 'static>(
     data_size: usize,
-    m: usize,
-    expansion_degree: usize,
     layer_challenges: LayerChallenges,
     partitions: usize,
     circuit: bool,
@@ -156,6 +155,9 @@ fn do_the_work<H: 'static>(
     H: Hasher,
 {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+    let m = BASE_DEGREE;
+    let expansion_degree = EXP_DEGREE;
 
     info!("data size: {}", prettyb(data_size));
     info!("m: {}", m);
@@ -405,20 +407,6 @@ fn main() {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("m")
-                .help("The size of m")
-                .long("m")
-                .default_value("5")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("exp")
-                .help("Expansion degree")
-                .long("expansion")
-                .default_value("8")
-                .takes_value(true),
-        )
-        .arg(
             Arg::with_name("challenges")
                 .long("challenges")
                 .help("How many challenges to execute")
@@ -499,8 +487,6 @@ fn main() {
         .get_matches();
 
     let data_size = value_t!(matches, "size", usize).unwrap() * 1024;
-    let m = value_t!(matches, "m", usize).unwrap();
-    let expansion_degree = value_t!(matches, "exp", usize).unwrap();
     let challenge_count = value_t!(matches, "challenges", usize).unwrap();
     let hasher = value_t!(matches, "hasher", String).unwrap();
     let layers = value_t!(matches, "layers", usize).unwrap();
@@ -526,8 +512,6 @@ fn main() {
         "pedersen" => {
             do_the_work::<PedersenHasher>(
                 data_size,
-                m,
-                expansion_degree,
                 challenges,
                 partitions,
                 circuit,
@@ -542,8 +526,6 @@ fn main() {
         "sha256" => {
             do_the_work::<Sha256Hasher>(
                 data_size,
-                m,
-                expansion_degree,
                 challenges,
                 partitions,
                 circuit,
@@ -558,8 +540,6 @@ fn main() {
         "blake2s" => {
             do_the_work::<Blake2sHasher>(
                 data_size,
-                m,
-                expansion_degree,
                 challenges,
                 partitions,
                 circuit,

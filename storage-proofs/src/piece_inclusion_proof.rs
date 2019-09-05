@@ -367,7 +367,7 @@ fn subtree_capacity(pos: usize, total: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::drgraph::{new_seed, BucketGraph, Graph};
+    use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
     use crate::util::NODE_SIZE;
     use rand::Rng;
@@ -441,7 +441,7 @@ mod tests {
     ) {
         assert_eq!(node_lengths.len(), 1); // For now.
         let size = nodes * NODE_SIZE;
-        let g = BucketGraph::<H>::new(nodes, 0, 0, new_seed());
+        let g = BucketGraph::<H>::new(nodes, BASE_DEGREE, 0, new_seed());
         let mut data = vec![0u8; size]; //Vec::<u8>::with_capacity(nodes);
 
         let data_size = node_lengths[0] * NODE_SIZE;

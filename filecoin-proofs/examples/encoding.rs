@@ -25,6 +25,7 @@ use storage_proofs::layered_drgporep::{self, LayerChallenges};
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::vde;
 use storage_proofs::zigzag_drgporep::*;
+use storage_proofs::zigzag_graph::EXP_DEGREE;
 
 #[cfg(feature = "cpu-profile")]
 #[inline(always)]
@@ -70,11 +71,13 @@ pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
     unsafe { MmapOptions::new().map_mut(&tmpfile).unwrap() }
 }
 
-fn do_the_work<H: 'static>(data_size: usize, m: usize, expansion_degree: usize)
+fn do_the_work<H: 'static>(data_size: usize)
 where
     H: Hasher,
 {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    let m = BASE_DEGREE;
+    let expansion_degree = EXP_DEGREE;
 
     info!("data size: {}", prettyb(data_size));
     info!("m: {}", m);
@@ -133,20 +136,6 @@ fn main() {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("m")
-                .help("The size of m")
-                .long("m")
-                .default_value("5")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("exp")
-                .help("Expansion degree")
-                .long("expansion")
-                .default_value("6")
-                .takes_value(true),
-        )
-        .arg(
             Arg::with_name("layers")
                 .long("layers")
                 .help("How many layers to use")
@@ -156,8 +145,5 @@ fn main() {
         .get_matches();
 
     let data_size = value_t!(matches, "size", usize).unwrap() * 1024;
-    let m = value_t!(matches, "m", usize).unwrap();
-    let expansion_degree = value_t!(matches, "exp", usize).unwrap();
-
-    do_the_work::<PedersenHasher>(data_size, m, expansion_degree);
+    do_the_work::<PedersenHasher>(data_size);
 }

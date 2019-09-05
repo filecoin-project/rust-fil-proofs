@@ -289,7 +289,7 @@ mod tests {
 
     use crate::circuit::test::*;
     use crate::compound_proof;
-    use crate::drgraph::{new_seed, BucketGraph, Graph};
+    use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::pedersen::*;
     use crate::porc::{self, PoRC};
@@ -320,10 +320,10 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph1 = BucketGraph::<PedersenHasher>::new(32, 5, 0, new_seed());
+        let graph1 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed());
         let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
 
-        let graph2 = BucketGraph::<PedersenHasher>::new(32, 5, 0, new_seed());
+        let graph2 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed());
         let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
 
         let challenges = vec![rng.gen_range(0, leaves), rng.gen_range(0, leaves)];
@@ -421,10 +421,10 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph1 = BucketGraph::<PedersenHasher>::new(32, 5, 0, new_seed());
+        let graph1 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed());
         let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
 
-        let graph2 = BucketGraph::<PedersenHasher>::new(32, 5, 0, new_seed());
+        let graph2 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed());
         let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
 
         let pub_inputs = porc::PublicInputs {
