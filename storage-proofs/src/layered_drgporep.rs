@@ -2,6 +2,7 @@ use std::cmp::{max, min};
 use std::marker::PhantomData;
 use std::sync::mpsc::channel;
 
+use blake2s_simd::Params as Blake2s;
 use crossbeam_utils::thread;
 use rayon::prelude::*;
 use serde::de::Deserialize;
@@ -214,8 +215,12 @@ impl<T: Domain> PublicInputs<T> {
 }
 
 pub struct PrivateInputs<H: Hasher> {
-    pub aux: Vec<Tree<H>>,
-    pub tau: Vec<porep::Tau<H::Domain>>,
+    /// MerkleTree for the last replication layer.
+    pub tree_r_last: Tree<H>,
+    /// The aggregated columns.
+    pub columns: Vec<u8>,
+    /// MerkleTree for the columns.
+    pub tree_c: Tree<H>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -358,117 +363,108 @@ pub trait Layers {
         replica_id: &<Self::Hasher as Hasher>::Domain,
         data: &mut [u8],
     ) -> Result<TransformedLayers<Self::Hasher>> {
+        // TODO:
+        // The implementation below is a memory hog, and very naive in terms of performance.
+        // It also hardcodes the hash function.
+        // This is done to get an initial version implemented and make sure it is correct.
+        // After that we can improve on that.
+
         let layers = layer_challenges.layers();
         assert!(layers > 0);
-        let mut taus = Vec::with_capacity(layers);
-        let mut auxs: Vec<Tree<Self::Hasher>> = Vec::with_capacity(layers);
 
-        // We need to create a scope which encloses all the work, spawning threads
-        // for merkle tree generation and sending the results back to a channel.
-        // The received results need to be sorted by layer because ordering of the completed results
-        // is not guaranteed. Misordered results will be seen in practice when trees are small.
+        let build_tree = |tree_data: &[u8]| {
+            let leafs = tree_data.len() / NODE_SIZE;
+            assert_eq!(tree_data.len() % NODE_SIZE, 0);
+            let pow = next_pow2(leafs);
+            let mut leaves_store = MerkleStore::new(pow);
+            populate_leaves::<_, <Self::Hasher as Hasher>::Function, _, std::iter::Map<_, _>>(
+                &mut leaves_store,
+                (0..leafs).map(|i| {
+                    let d = data_at_node(tree_data, i).unwrap();
+                    <Self::Hasher as Hasher>::Domain::try_from_bytes(d).unwrap()
+                }),
+            );
 
-        // The outer scope ensure that `tx` is dropped and closed before we read from `outer_rx`.
-        // Otherwise, the read loop will block forever waiting for more input.
-        let outer_rx = {
-            let (tx, rx) = channel();
-
-            let errf = |e| {
-                let err_string = format!("{:?}", e);
-                error!(
-                    "MerkleTreeGenerationError: {} - {:?}",
-                    &err_string,
-                    failure::Backtrace::new()
-                );
-                Error::MerkleTreeGenerationError(err_string)
-            };
-
-            let _ = thread::scope(|scope| -> Result<()> {
-                let mut threads = Vec::with_capacity(layers + 1);
-                (0..=layers).fold(graph.clone(), |current_graph, layer| {
-                    let leafs = data.len() / NODE_SIZE;
-                    assert_eq!(data.len() % NODE_SIZE, 0);
-                    let pow = next_pow2(leafs);
-                    // FIXME: Who's actually responsible for ensuring power of 2
-                    //  sector sizes?
-
-                    let mut leaves_store = MerkleStore::new(pow);
-
-                    populate_leaves::<
-                        _,
-                        <Self::Hasher as Hasher>::Function,
-                        _,
-                        std::iter::Map<_, _>,
-                    >(&mut leaves_store, (0..leafs).map(|i| {
-                        let d = data_at_node(&data, i).expect("data_at_node math failed");
-                        <Self::Hasher as Hasher>::Domain::try_from_bytes(d)
-                            .expect("failed to convert node data to domain element")
-                    }));
-                    let return_channel = tx.clone();
-                    let (transfer_tx, transfer_rx) = channel::<Self::Graph>();
-
-                    transfer_tx
-                        .send(current_graph.clone())
-                        .expect("Failed to send value through channel");
-
-                    let thread = scope.spawn(move |_| {
-                        // If we panic anywhere in this closure, thread.join() below will receive an error —
-                        // so it is safe to unwrap.
-                        let graph = transfer_rx
-                            .recv()
-                            .expect("Failed to receive value through channel");
-
-                        let tree_d =
-                            graph.merkle_tree_from_leaves(leaves_store, leafs).unwrap();
-
-                        info!("returning tree (layer: {})", layer);
-                        return_channel
-                            .send((layer, tree_d))
-                            .expect("Failed to send value through channel");
-                    });
-
-                    threads.push(thread);
-
-                    if layer < layers {
-                        info!("encoding (layer: {})", layer);
-                        vde::encode(&current_graph, replica_id, data)
-                            .expect("encoding failed in thread");
-                    }
-                    Self::transform(&current_graph)
-                });
-
-                for thread in threads {
-                    thread.join().map_err(errf)?;
-                }
-
-                Ok(())
-            })
-            .map_err(errf)?;
-
-            rx
+            graph.merkle_tree_from_leaves(leaves_store, leafs)
         };
 
-        let mut sorted_trees = outer_rx.iter().collect::<Vec<_>>();
-        sorted_trees.sort_unstable_by_key(|k| k.0);
+        // 1. Build the MerkleTree over the original data
+        let tree_d = build_tree(&data);
 
-        sorted_trees
-            .into_iter()
-            .fold(None, |previous_comm_r: Option<_>, (i, replica_tree)| {
-                let comm_r = replica_tree.root();
-                // Each iteration's replica_tree becomes the next iteration's previous_tree (data_tree).
-                // The first iteration has no previous_tree.
-                if let Some(comm_d) = previous_comm_r {
-                    let tau = porep::Tau { comm_r, comm_d };
-                    info!("setting tau/aux (layer: {})", i - 1);
-                    taus.push(tau);
-                };
+        // 2. Encode all layers
+        let mut encoded_data: Vec<Vec<u8>> = Vec::with_capacity(layers);
+        let mut current_graph = graph.clone();
 
-                auxs.push(replica_tree);
+        for layer in 0..layers {
+            info!("encoding (layer: {})", layer);
+            let mut to_encode = if layer == 0 {
+                data.to_vec()
+            } else {
+                encoded_data[layer - 1].clone()
+            };
+            vde::encode(&current_graph, replica_id, &mut to_encode)?;
+            current_graph = Self::transform(&current_graph);
+            encoded_data.push(to_encode);
+        }
 
-                Some(comm_r)
-            });
+        // 3. Construct Column Commitments
+        // Split encoded layers into even, odd and the last one
+        let r_last = encoded_data.pop().unwrap();
 
-        Ok((taus, auxs))
+        let mut odd_partition = Vec::with_capacity(layers / 2);
+        let mut even_partition = Vec::with_capacity(layers / 2);
+
+        for (layer_num, layer) in encoded_data.into_iter().enumerate() {
+            if layer_num % 2 == 0 {
+                even_partition.push(layer);
+            } else {
+                odd_partition.push(layer);
+            }
+        }
+
+        // build the columns
+        let nodes_count = data.len() / NODE_SIZE;
+
+        // odd columns
+        let mut odd_columns = Vec::with_capacity(nodes_count);
+        for i in 0..nodes_count {
+            let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
+            for layer in 1..layers {
+                let e = data_at_node(&odd_partition[layer], i).unwrap();
+                hasher.update(e);
+            }
+
+            odd_columns.push(hasher.finalize());
+        }
+
+        // even columns
+        let mut even_columns = Vec::with_capacity(nodes_count);
+        for i in 0..nodes_count {
+            let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
+            for layer in 1..layers {
+                let e = data_at_node(&even_partition[layer], NODE_SIZE - i + 1).unwrap();
+                hasher.update(e);
+            }
+
+            even_columns.push(hasher.finalize());
+        }
+
+        // combine odd and even
+        let mut columns = Vec::with_capacity(data.len());
+        for i in 0..nodes_count {
+            let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
+            hasher.update(odd_columns[i].as_ref());
+            hasher.update(even_columns[i].as_ref());
+            columns.extend_from_slice(hasher.finalize().as_ref());
+        }
+
+        // Build the tree for CommC
+        let tree_c = build_tree(&columns)?;
+
+        // 4. Construct final replica commitment
+        let tree_r_last = build_tree(&r_last)?;
+
+        unimplemented!()
     }
 }
 
