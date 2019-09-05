@@ -5,7 +5,6 @@ use std::sync::{Arc, RwLock};
 use crate::crypto::feistel::{self, FeistelPrecomputed};
 use crate::drgraph::{BucketGraph, Graph, BASE_DEGREE};
 use crate::hasher::Hasher;
-use crate::layered_drgporep::Layerable;
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::settings;
 
@@ -102,13 +101,6 @@ where
 }
 
 pub type ZigZagBucketGraph<H> = ZigZagGraph<H, BucketGraph<H>>;
-
-impl<'a, H, G> Layerable<H> for ZigZagGraph<H, G>
-where
-    H: Hasher,
-    G: Graph<H> + ParameterSetMetadata + 'static,
-{
-}
 
 impl<H, G> ZigZagGraph<H, G>
 where

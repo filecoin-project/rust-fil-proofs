@@ -24,6 +24,7 @@ pub struct ZigZagDrgPoRep<'a, H: 'a + Hasher> {
 
 impl<'a, H: 'static + Hasher> Layers for ZigZagDrgPoRep<'a, H> {
     type Hasher = <ZigZagBucketGraph<H> as ZigZag>::BaseHasher;
+    type BaseGraph = <ZigZagBucketGraph<H> as ZigZag>::BaseGraph;
     type Graph = ZigZagBucketGraph<Self::Hasher>;
 
     fn transform(graph: &Self::Graph) -> Self::Graph {
@@ -129,14 +130,6 @@ mod tests {
         test_prove_verify::<Blake2sHasher>(n, challenges.clone());
     }
 
-    fn prove_verify_tapered(n: usize) {
-        let challenges = LayerChallenges::new_tapered(5, 10, 5, 0.9);
-
-        test_prove_verify::<PedersenHasher>(n, challenges.clone());
-        test_prove_verify::<Sha256Hasher>(n, challenges.clone());
-        test_prove_verify::<Blake2sHasher>(n, challenges.clone());
-    }
-
     fn test_prove_verify<H: 'static + Hasher>(n: usize, challenges: LayerChallenges) {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
@@ -203,11 +196,6 @@ mod tests {
            prove_verify_fixed_32_5(5);
         }
     }
-    table_tests! {
-        prove_verify_tapered{
-            prove_verify_tapered_32_5(5);
-        }
-    }
 
     #[test]
     // We are seeing a bug, in which setup never terminates for some sector sizes.
@@ -216,7 +204,7 @@ mod tests {
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
         let nodes = 1024 * 1024 * 32 * 8; // This corresponds to 8GiB sectors (32-byte nodes)
-        let layer_challenges = LayerChallenges::new_tapered(10, 333, 7, 0.3);
+        let layer_challenges = LayerChallenges::new_fixed(10, 333);
         let sp = SetupParams {
             drg: drgporep::DrgParams {
                 nodes,

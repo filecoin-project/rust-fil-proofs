@@ -8,19 +8,18 @@ use crate::layered_drgporep::LayerChallenges;
 
 pub fn derive_challenges<D: Domain>(
     challenges: &LayerChallenges,
-    layer: u8,
     leaves: usize,
     replica_id: &D,
     commitment: &D,
     k: u8,
 ) -> Vec<usize> {
-    let n = challenges.challenges_for_layer(layer as usize);
+    let n = challenges.challenges();
     (0..n)
         .map(|i| {
             let mut bytes = replica_id.into_bytes();
             let j = ((n * k as usize) + i) as u32;
             bytes.extend(commitment.into_bytes());
-            bytes.push(layer);
+
             // Unwraping here is safe, all hash domains are larger than 4 bytes (the size of a `u32`).
             bytes.write_u32::<LittleEndian>(j).unwrap();
 
@@ -62,14 +61,8 @@ mod test {
         for layer in 0..layers {
             let mut histogram = HashMap::new();
             for k in 0..partitions {
-                let challenges = derive_challenges(
-                    &challenges,
-                    layer as u8,
-                    leaves,
-                    &replica_id,
-                    &commitment,
-                    k as u8,
-                );
+                let challenges =
+                    derive_challenges(&challenges, leaves, &replica_id, &commitment, k as u8);
 
                 for challenge in challenges {
                     let counter = histogram.entry(challenge).or_insert(0);
@@ -103,7 +96,6 @@ mod test {
         for layer in 0..layers {
             let one_partition_challenges = derive_challenges(
                 &LayerChallenges::new_fixed(layers, total_challenges),
-                layer as u8,
                 leaves,
                 &replica_id,
                 &commitment,
@@ -113,7 +105,6 @@ mod test {
                 .flat_map(|k| {
                     derive_challenges(
                         &LayerChallenges::new_fixed(layers, n),
-                        layer as u8,
                         leaves,
                         &replica_id,
                         &commitment,
