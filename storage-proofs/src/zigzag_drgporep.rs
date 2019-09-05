@@ -131,6 +131,7 @@ mod tests {
     }
 
     fn test_prove_verify<H: 'static + Hasher>(n: usize, challenges: LayerChallenges) {
+        // pretty_env_logger::init();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let degree = BASE_DEGREE;
@@ -162,7 +163,7 @@ mod tests {
         let pub_inputs = PublicInputs::<H::Domain> {
             replica_id,
             seed: None,
-            tau: Some(tau.simplify().into()),
+            tau: Some(tau.clone()),
             comm_r_star: tau.comm_r_star,
             k: None,
         };
@@ -185,15 +186,7 @@ mod tests {
 
     table_tests! {
         prove_verify_fixed{
-            // TODO: figure out why this was failing
-            // prove_verify_32_2_1(32, 2, 1);
-            // prove_verify_32_2_2(32, 2, 2);
-
-            // TODO: why u fail???
-            // prove_verify_32_3_1(32, 3, 1);
-            // prove_verify_32_3_2(32, 3, 2);
-
-           prove_verify_fixed_32_5(5);
+           prove_verify_fixed_32_4(4);
         }
     }
 

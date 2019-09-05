@@ -283,46 +283,47 @@ impl<'a, H: 'static + Hasher>
         pub_params: &<ZigZagDrgPoRep<H> as ProofScheme>::PublicParams,
         k: Option<usize>,
     ) -> Vec<Fr> {
-        let mut inputs = Vec::new();
+        unimplemented!()
+        // let mut inputs = Vec::new();
 
-        let comm_d = pub_in.tau.expect("missing tau").comm_d.into();
-        inputs.push(comm_d);
+        // let comm_d = pub_in.tau.expect("missing tau").comm_d.into();
+        // inputs.push(comm_d);
 
-        let comm_r = pub_in.tau.expect("missing tau").comm_r.into();
-        inputs.push(comm_r);
+        // let comm_r = pub_in.tau.expect("missing tau").comm_r.into();
+        // inputs.push(comm_r);
 
-        let mut current_graph = Some(pub_params.graph.clone());
-        let layers = pub_params.layer_challenges.layers();
-        for layer in 0..layers {
-            let drgporep_pub_params = drgporep::PublicParams::new(
-                current_graph.take().unwrap(),
-                true,
-                pub_params.layer_challenges.challenges(),
-            );
+        // let mut current_graph = Some(pub_params.graph.clone());
+        // let layers = pub_params.layer_challenges.layers();
+        // for layer in 0..layers {
+        //     let drgporep_pub_params = drgporep::PublicParams::new(
+        //         current_graph.take().unwrap(),
+        //         true,
+        //         pub_params.layer_challenges.challenges(),
+        //     );
 
-            let drgporep_pub_inputs = drgporep::PublicInputs {
-                replica_id: Some(pub_in.replica_id),
-                challenges: pub_in.challenges(
-                    &pub_params.layer_challenges,
-                    pub_params.graph.size(),
-                    k,
-                ),
-                tau: None,
-            };
+        //     let drgporep_pub_inputs = drgporep::PublicInputs {
+        //         replica_id: Some(pub_in.replica_id),
+        //         challenges: pub_in.challenges(
+        //             &pub_params.layer_challenges,
+        //             pub_params.graph.size(),
+        //             k,
+        //         ),
+        //         tau: None,
+        //     };
 
-            let drgporep_inputs = DrgPoRepCompound::generate_public_inputs(
-                &drgporep_pub_inputs,
-                &drgporep_pub_params,
-                None,
-            );
-            inputs.extend(drgporep_inputs);
+        //     let drgporep_inputs = DrgPoRepCompound::generate_public_inputs(
+        //         &drgporep_pub_inputs,
+        //         &drgporep_pub_params,
+        //         None,
+        //     );
+        //     inputs.extend(drgporep_inputs);
 
-            current_graph = Some(<ZigZagDrgPoRep<H> as layered_drgporep::Layers>::transform(
-                &drgporep_pub_params.graph,
-            ));
-        }
-        inputs.push(pub_in.comm_r_star.into());
-        inputs
+        //     current_graph = Some(<ZigZagDrgPoRep<H> as layered_drgporep::Layers>::transform(
+        //         &drgporep_pub_params.graph,
+        //     ));
+        // }
+        // inputs.push(pub_in.comm_r_star.into());
+        // inputs
     }
 
     fn circuit<'b>(

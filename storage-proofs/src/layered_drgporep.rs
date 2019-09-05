@@ -120,7 +120,7 @@ where
 pub struct PublicInputs<T: Domain> {
     pub replica_id: T,
     pub seed: Option<T>,
-    pub tau: Option<porep::Tau<T>>,
+    pub tau: Option<Tau<T>>,
     pub comm_r_star: T,
     pub k: Option<usize>,
 }
@@ -265,6 +265,12 @@ pub struct ExpOddParentsProof<H: Hasher> {
     pub comm_c: MerkleProof<H>,
 }
 
+/// Calculates the inverse index for 0 based indexing.
+fn inv_index(n: usize, i: usize) -> usize {
+    // TODO: verify this is correct, the paper uses n - i + 1 for 1 based indexing
+    n - i - 1
+}
+
 /// Layers provides default implementations of methods required to handle proof and verification
 /// of layered proofs of replication. Implementations must provide transform and invert_transform methods.
 pub trait Layers {
@@ -303,9 +309,15 @@ pub trait Layers {
         let graph_1 = Self::transform(graph);
         let graph_2 = Self::transform(&graph_1);
 
+        let nodes_count = graph.size();
+        trace!("prove_layers ({})", nodes_count);
+
         (0..partition_count)
-            .into_par_iter()
+            // .into_par_iter()
+            .into_iter()
             .map(|k| {
+                trace!("proving partition {}/{}", k, partition_count);
+
                 // Derive the set of challenges we are proving over.
                 let challenges = pub_inputs.challenges(layer_challenges, graph_size, Some(k));
 
@@ -333,7 +345,7 @@ pub trait Layers {
                     // C_n-X+1 in Comm_C
                     {
                         comm_c_proofs_even.push(MerkleProof::new_from_proof(
-                            &aux.tree_c.gen_proof(NODE_SIZE - challenge + 1),
+                            &aux.tree_c.gen_proof(inv_index(nodes_count, challenge)),
                         ));
                     }
 
@@ -350,12 +362,17 @@ pub trait Layers {
                         for layer in 1..layers {
                             // even
                             labels.push(
-                                data_at_node(&tau.encodings[layer - 1], NODE_SIZE - challenge + 1)
-                                    .unwrap()
-                                    .to_vec(),
+                                data_at_node(
+                                    // -1 because encodings is zero indexed
+                                    &tau.encodings[layer - 1],
+                                    inv_index(nodes_count, challenge),
+                                )
+                                .unwrap()
+                                .to_vec(),
                             );
                             // odd
                             labels.push(
+                                // -1 because encodings is zero indexed
                                 data_at_node(&tau.encodings[layer - 1], challenge)
                                     .unwrap()
                                     .to_vec(),
@@ -366,7 +383,7 @@ pub trait Layers {
 
                     // Final replica layer openings (e_n-X-1^(l))
                     {
-                        let challenge_inv = NODE_SIZE - challenge + 1;
+                        let challenge_inv = inv_index(nodes_count, challenge);
                         comm_r_last_proofs.push(DataProof {
                             data: aux.tree_r_last.read_at(challenge_inv),
                             proof: MerkleProof::new_from_proof(
@@ -396,9 +413,13 @@ pub trait Layers {
                                         .to_vec(),
                                 );
                                 labels.push(
-                                    data_at_node(&tau.encodings[(2 * j) - 1], NODE_SIZE - k + 1)
-                                        .unwrap()
-                                        .to_vec(),
+                                    data_at_node(
+                                        // -1 because encodings is zero indexed
+                                        &tau.encodings[(2 * j) - 1],
+                                        inv_index(nodes_count, *k),
+                                    )
+                                    .unwrap()
+                                    .to_vec(),
                                 );
                             }
 
@@ -407,7 +428,7 @@ pub trait Layers {
 
                             // path for e_n-k+1^(l) to Comm_rlast
                             let comm_r_last = MerkleProof::new_from_proof(
-                                &aux.tree_r_last.gen_proof(NODE_SIZE - k + 1),
+                                &aux.tree_r_last.gen_proof(inv_index(nodes_count, *k)),
                             );
 
                             proofs.push(DrgParentsProof {
@@ -425,8 +446,8 @@ pub trait Layers {
 
                         // EXP.Parents(n-X+1, 2)
                         let mut exp_parents = vec![0; exp_degree];
-                        graph_2.expanded_parents(NODE_SIZE - challenge + 1, |p| {
-                            exp_parents.copy_from_slice(&p[..]);
+                        graph_2.expanded_parents(inv_index(nodes_count, challenge), |p| {
+                            exp_parents[..p.len()].copy_from_slice(&p[..]);
                         });
 
                         let mut proofs = Vec::with_capacity(exp_degree);
@@ -450,8 +471,9 @@ pub trait Layers {
                                 for layer in (1..layers).step_by(2) {
                                     hasher.update(
                                         data_at_node(
-                                            &tau.encodings[layer],
-                                            NODE_SIZE - (*k as usize) + 1,
+                                            // -1 because encodings is zero indexed
+                                            &tau.encodings[layer - 1],
+                                            inv_index(nodes_count, *k as usize),
                                         )
                                         .unwrap(),
                                     );
@@ -461,13 +483,15 @@ pub trait Layers {
 
                             // path for C_n-k+1 to Comm_C
                             let comm_c = MerkleProof::new_from_proof(
-                                &aux.tree_c.gen_proof(NODE_SIZE - (*k as usize) + 1),
+                                &aux.tree_c.gen_proof(inv_index(nodes_count, *k as usize)),
                             );
+                            assert!(comm_c.proves_challenge(inv_index(nodes_count, *k as usize)));
 
                             // path for e_k^(l) to Comm_rlast
                             let comm_r_last = MerkleProof::new_from_proof(
                                 &aux.tree_r_last.gen_proof(*k as usize),
                             );
+                            assert!(comm_r_last.proves_challenge(*k as usize));
 
                             proofs.push(ExpEvenParentsProof {
                                 labels,
@@ -485,8 +509,8 @@ pub trait Layers {
 
                         // EXP.Parents(X, 1)
                         let mut exp_parents = vec![0; exp_degree];
-                        graph_1.expanded_parents(NODE_SIZE - challenge + 1, |p| {
-                            exp_parents.copy_from_slice(&p[..]);
+                        graph_1.expanded_parents(inv_index(nodes_count, challenge), |p| {
+                            exp_parents[..p.len()].copy_from_slice(&p[..]);
                         });
 
                         let mut proofs = Vec::with_capacity(exp_degree);
@@ -510,8 +534,9 @@ pub trait Layers {
                                 for layer in (2..layers - 1).step_by(2) {
                                     hasher.update(
                                         data_at_node(
-                                            &tau.encodings[layer],
-                                            NODE_SIZE - (*k as usize) + 1,
+                                            // -1 because encodings is zero indexed
+                                            &tau.encodings[layer - 1],
+                                            inv_index(nodes_count, *k as usize),
                                         )
                                         .unwrap(),
                                     );
@@ -522,6 +547,7 @@ pub trait Layers {
                             // path for C_k to Comm_C
                             let comm_c =
                                 MerkleProof::new_from_proof(&aux.tree_c.gen_proof(*k as usize));
+                            assert!(comm_c.proves_challenge(*k as usize));
 
                             proofs.push(ExpOddParentsProof {
                                 labels,
@@ -534,7 +560,7 @@ pub trait Layers {
                 }
 
                 Ok(Proof {
-                    comm_r: tau.comm_r.clone(),
+                    comm_r: tau.comm_r,
                     comm_d_proofs,
                     comm_r_last_proofs,
                     comm_c_proofs_even,
@@ -554,6 +580,8 @@ pub trait Layers {
         replica_id: &<Self::Hasher as Hasher>::Domain,
         data: &'a mut [u8],
     ) -> Result<()> {
+        trace!("extract_and_invert_transform_layers");
+
         let layers = layer_challenges.layers();
         assert!(layers > 0);
 
@@ -579,6 +607,11 @@ pub trait Layers {
         replica_id: &<Self::Hasher as Hasher>::Domain,
         data: &mut [u8],
     ) -> Result<TransformedLayers<Self::Hasher>> {
+        trace!("transform_and_replicate_layers");
+        let nodes_count = graph.size();
+
+        assert_eq!(data.len(), nodes_count * NODE_SIZE);
+
         // TODO:
         // The implementation below is a memory hog, and very naive in terms of performance.
         // It also hardcodes the hash function.
@@ -589,6 +622,8 @@ pub trait Layers {
         assert!(layers > 0);
 
         let build_tree = |tree_data: &[u8]| {
+            trace!("building tree {}", tree_data.len());
+
             let leafs = tree_data.len() / NODE_SIZE;
             assert_eq!(tree_data.len() % NODE_SIZE, 0);
             let pow = next_pow2(leafs);
@@ -605,14 +640,16 @@ pub trait Layers {
         };
 
         // 1. Build the MerkleTree over the original data
+        trace!("build merkle tree for the original data");
         let tree_d = build_tree(&data)?;
 
         // 2. Encode all layers
+        trace!("encode layers");
         let mut encoded_data: Vec<Vec<u8>> = Vec::with_capacity(layers);
         let mut current_graph = graph.clone();
 
         for layer in 0..layers {
-            info!("encoding (layer: {})", layer);
+            trace!("encoding (layer: {})", layer);
             let mut to_encode = if layer == 0 {
                 data.to_vec()
             } else {
@@ -620,12 +657,17 @@ pub trait Layers {
             };
             vde::encode(&current_graph, replica_id, &mut to_encode)?;
             current_graph = Self::transform(&current_graph);
+            assert_eq!(to_encode.len(), NODE_SIZE * nodes_count);
             encoded_data.push(to_encode);
         }
 
-        // 3. Construct Column Commitments
         // Split encoded layers into even, odd and the last one
         let r_last = encoded_data.pop().unwrap();
+
+        // store the last layer in the original data
+        data[..NODE_SIZE * nodes_count].copy_from_slice(&r_last);
+
+        // 3. Construct Column Commitments
 
         let mut odd_partition = Vec::with_capacity(layers / 2);
         let mut even_partition = Vec::with_capacity(layers / 2);
@@ -639,14 +681,13 @@ pub trait Layers {
         }
 
         // build the columns
-        let nodes_count = data.len() / NODE_SIZE;
 
         // odd columns
         let mut odd_columns = Vec::with_capacity(nodes_count);
         for i in 0..nodes_count {
             let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
-            for layer in 1..layers {
-                let e = data_at_node(&odd_partition[layer], i).unwrap();
+            for partition in &odd_partition {
+                let e = data_at_node(partition, i).unwrap();
                 hasher.update(e);
             }
 
@@ -657,8 +698,8 @@ pub trait Layers {
         let mut even_columns = Vec::with_capacity(nodes_count);
         for i in 0..nodes_count {
             let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
-            for layer in 1..layers {
-                let e = data_at_node(&even_partition[layer], NODE_SIZE - i + 1).unwrap();
+            for partition in &even_partition {
+                let e = data_at_node(partition, inv_index(nodes_count, i)).unwrap();
                 hasher.update(e);
             }
 
@@ -742,6 +783,7 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         priv_inputs: &'b Self::PrivateInputs,
         partition_count: usize,
     ) -> Result<Vec<Self::Proof>> {
+        trace!("prove_all_partitions");
         assert!(partition_count > 0);
 
         Self::prove_layers(
@@ -768,20 +810,31 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         let graph_1 = Self::transform(graph);
         let graph_2 = Self::transform(&graph_1);
 
+        let nodes_count = graph.size();
+
+        trace!("verify_all_partitions ({})", nodes_count);
+
         for (k, proof) in partition_proofs.iter().enumerate() {
+            trace!("verify partition proof {}/{}", k, partition_proofs.len());
+
             let challenges =
                 pub_inputs.challenges(&pub_params.layer_challenges, graph.size(), Some(k));
             for i in 0..challenges.len() {
+                trace!("verify challenge {}/{}", i, challenges.len());
                 // Validate for this challenge
                 let challenge = challenges[i] % graph.size();
 
                 // 1. Verify inclusion proofs
                 {
+                    trace!("verify inclusion");
+
                     if !proof.comm_d_proofs[i].proves_challenge(challenge) {
                         return Ok(false);
                     }
 
-                    if !proof.comm_c_proofs_even[i].proves_challenge(NODE_SIZE - challenge + 1) {
+                    if !proof.comm_c_proofs_even[i]
+                        .proves_challenge(inv_index(nodes_count, challenge))
+                    {
                         return Ok(false);
                     }
 
@@ -789,40 +842,53 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
                         return Ok(false);
                     }
 
-                    if !proof.comm_r_last_proofs[i].proves_challenge(NODE_SIZE - challenge + 1) {
+                    if !proof.comm_r_last_proofs[i]
+                        .proves_challenge(inv_index(nodes_count, challenge))
+                    {
                         return Ok(false);
                     }
 
-                    // drg parents proofs
-                    for proof in &proof.drg_parents_proofs[i] {
+                    trace!("verify drg parents");
+                    // DRG Parents
+                    {
                         let base_degree = graph_1.base_graph().degree();
 
                         // DRG.Parents(X, 1)
                         let mut drg_parents = vec![0; base_degree];
                         graph_1.base_graph().parents(challenge, &mut drg_parents);
 
-                        for k in &drg_parents {
+                        assert_eq!(drg_parents.len(), proof.drg_parents_proofs[i].len());
+                        for (k, proof) in drg_parents.iter().zip(&proof.drg_parents_proofs[i]) {
                             if !proof.comm_c.proves_challenge(*k as usize) {
                                 return Ok(false);
                             }
-                            if !proof.comm_r_last.proves_challenge(NODE_SIZE - k + 1) {
+                            if !proof
+                                .comm_r_last
+                                .proves_challenge(inv_index(nodes_count, *k))
+                            {
                                 return Ok(false);
                             }
                         }
                     }
 
-                    // exp parents even
-                    for proof in &proof.exp_parents_even_proofs[i] {
+                    // Expander Parents - Even Layers
+                    trace!("verify exp parents even");
+                    {
                         let exp_degree = graph_2.expansion_degree();
 
                         // EXP.Parents(n-X+1, 2)
                         let mut exp_parents = vec![0; exp_degree];
-                        graph_2.expanded_parents(NODE_SIZE - challenge + 1, |p| {
-                            exp_parents.copy_from_slice(&p[..]);
+                        graph_2.expanded_parents(inv_index(nodes_count, challenge), |p| {
+                            exp_parents[..p.len()].copy_from_slice(&p[..]);
                         });
 
-                        for k in &exp_parents {
-                            if !proof.comm_c.proves_challenge(NODE_SIZE - (*k) as usize + 1) {
+                        assert_eq!(exp_parents.len(), proof.exp_parents_even_proofs[i].len());
+                        for (k, proof) in exp_parents.iter().zip(&proof.exp_parents_even_proofs[i])
+                        {
+                            if !proof
+                                .comm_c
+                                .proves_challenge(inv_index(nodes_count, *k as usize))
+                            {
                                 return Ok(false);
                             }
                             if !proof.comm_r_last.proves_challenge(*k as usize) {
@@ -831,19 +897,18 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
                         }
                     }
 
-                    // exp parents odd
-
                     // Expander Parents - Odd Layers
-                    for proof in &proof.exp_parents_odd_proofs[i] {
+                    {
                         let exp_degree = graph_1.expansion_degree();
 
                         // EXP.Parents(X, 1)
                         let mut exp_parents = vec![0; exp_degree];
-                        graph_1.expanded_parents(NODE_SIZE - challenge + 1, |p| {
-                            exp_parents.copy_from_slice(&p[..]);
+                        graph_1.expanded_parents(inv_index(nodes_count, challenge), |p| {
+                            exp_parents[..p.len()].copy_from_slice(&p[..]);
                         });
 
-                        for k in &exp_parents {
+                        assert_eq!(exp_parents.len(), proof.exp_parents_odd_proofs[i].len());
+                        for (k, proof) in exp_parents.iter().zip(&proof.exp_parents_odd_proofs[i]) {
                             if !proof.comm_c.proves_challenge(*k as usize) {
                                 return Ok(false);
                             }
@@ -860,15 +925,18 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
                 // TODO:
             }
 
+            trace!("verify comm_r_star");
+
             // 4. verify comm_r_star
             // TODO: is this still relevant
-            let comm_rs = vec![proof.comm_r.clone()];
+            let comm_rs = vec![proof.comm_r];
             let crs = comm_r_star::<L::Hasher>(&pub_inputs.replica_id, &comm_rs)?;
 
             if crs != pub_inputs.comm_r_star {
                 return Ok(false);
             }
         }
+
         Ok(true)
     }
 
