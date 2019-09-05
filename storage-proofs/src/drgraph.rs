@@ -17,6 +17,9 @@ pub type DefaultTreeHasher = PedersenHasher;
 
 pub const PARALLEL_MERKLE: bool = true;
 
+/// The base degree used for all drg graphs.
+pub const BASE_DEGREE: usize = 5;
+
 /// A depth robust graph.
 pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
     /// Returns the expected size of all nodes in the graph.
@@ -194,7 +197,12 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
     }
 
     fn new(nodes: usize, base_degree: usize, expansion_degree: usize, seed: [u32; 7]) -> Self {
+        if !cfg!(feature = "unchecked-degrees") {
+            assert_eq!(base_degree, BASE_DEGREE);
+        }
+
         assert_eq!(expansion_degree, 0);
+
         BucketGraph {
             nodes,
             base_degree,
@@ -229,42 +237,42 @@ mod tests {
     }
 
     fn graph_bucket<H: Hasher>() {
+        let degree = BASE_DEGREE;
+
         for size in vec![3, 10, 200, 2000] {
-            for degree in 2..12 {
-                let g = BucketGraph::<H>::new(size, degree, 0, new_seed());
+            let g = BucketGraph::<H>::new(size, degree, 0, new_seed());
 
-                assert_eq!(g.size(), size, "wrong nodes count");
+            assert_eq!(g.size(), size, "wrong nodes count");
 
-                let mut parents = vec![0; degree];
-                g.parents(0, &mut parents);
-                assert_eq!(parents, vec![0; degree as usize]);
-                parents = vec![0; degree];
-                g.parents(1, &mut parents);
-                assert_eq!(parents, vec![0; degree as usize]);
+            let mut parents = vec![0; degree];
+            g.parents(0, &mut parents);
+            assert_eq!(parents, vec![0; degree as usize]);
+            parents = vec![0; degree];
+            g.parents(1, &mut parents);
+            assert_eq!(parents, vec![0; degree as usize]);
 
-                for i in 2..size {
-                    let mut pa1 = vec![0; degree];
-                    g.parents(i, &mut pa1);
-                    let mut pa2 = vec![0; degree];
-                    g.parents(i, &mut pa2);
+            for i in 2..size {
+                let mut pa1 = vec![0; degree];
+                g.parents(i, &mut pa1);
+                let mut pa2 = vec![0; degree];
+                g.parents(i, &mut pa2);
 
-                    assert_eq!(pa1.len(), degree);
-                    assert_eq!(pa1, pa2, "different parents on the same node");
+                assert_eq!(pa1.len(), degree);
+                assert_eq!(pa1, pa2, "different parents on the same node");
 
-                    let mut p1 = vec![0; degree];
-                    g.parents(i, &mut p1);
-                    let mut p2 = vec![0; degree];
-                    g.parents(i, &mut p2);
+                let mut p1 = vec![0; degree];
+                g.parents(i, &mut p1);
+                let mut p2 = vec![0; degree];
+                g.parents(i, &mut p2);
 
-                    for parent in p1 {
-                        // TODO: fix me
-                        assert_ne!(i, parent, "self reference found");
-                    }
-
-                    let mut p1 = p2.clone();
-                    p1.sort();
-                    assert_eq!(p1, p2, "not sorted");
+                for parent in p1 {
+                    // TODO: fix me
+                    assert_ne!(i, parent, "self reference found");
                 }
+
+                let mut p1 = p2.clone();
+                p1.sort();
+                assert_eq!(p1, p2, "not sorted");
             }
         }
     }
@@ -285,7 +293,7 @@ mod tests {
     }
 
     fn gen_proof<H: Hasher>(parallel: bool) {
-        let g = BucketGraph::<H>::new(5, 3, 0, new_seed());
+        let g = BucketGraph::<H>::new(5, BASE_DEGREE, 0, new_seed());
         let data = vec![2u8; NODE_SIZE * 5];
 
         let mmapped = &mmap_from(&data);

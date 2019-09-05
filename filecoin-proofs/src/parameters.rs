@@ -1,5 +1,5 @@
 use storage_proofs::drgporep::DrgParams;
-use storage_proofs::drgraph::DefaultTreeHasher;
+use storage_proofs::drgraph::{DefaultTreeHasher, BASE_DEGREE};
 use storage_proofs::hasher::PedersenHasher;
 use storage_proofs::layered_drgporep;
 use storage_proofs::layered_drgporep::LayerChallenges;
@@ -7,15 +7,13 @@ use storage_proofs::proof::ProofScheme;
 use storage_proofs::rational_post;
 use storage_proofs::rational_post::RationalPoSt;
 use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
-use storage_proofs::zigzag_graph::ZigZagBucketGraph;
+use storage_proofs::zigzag_graph::{ZigZagBucketGraph, EXP_DEGREE};
 
 use crate::constants::POREP_MINIMUM_CHALLENGES;
 use crate::types::{PaddedBytesAmount, PoStConfig};
 
 const POST_CHALLENGE_COUNT: usize = 30; // TODO: correct value
 
-const DEGREE: usize = 5;
-const EXPANSION_DEGREE: usize = 8;
 const LAYERS: usize = 4; // TODO: 10;
 const TAPER_LAYERS: usize = 2; // TODO: 7
 const TAPER: f64 = 1.0 / 3.0;
@@ -68,8 +66,8 @@ pub fn setup_params(
     layered_drgporep::SetupParams {
         drg: DrgParams {
             nodes,
-            degree: DEGREE,
-            expansion_degree: EXPANSION_DEGREE,
+            degree: BASE_DEGREE,
+            expansion_degree: EXP_DEGREE,
             seed: DRG_SEED,
         },
         layer_challenges: challenges,

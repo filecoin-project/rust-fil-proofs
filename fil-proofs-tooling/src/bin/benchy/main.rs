@@ -19,20 +19,6 @@ fn main() {
                         .takes_value(true),
                 )
                 .arg(
-                    Arg::with_name("m")
-                        .help("The size of m")
-                        .long("m")
-                        .default_value("5")
-                        .takes_value(true),
-                )
-                .arg(
-                    Arg::with_name("exp")
-                        .help("Expansion degree")
-                        .long("expansion")
-                        .default_value("8")
-                        .takes_value(true),
-                )
-                .arg(
                     Arg::with_name("challenges")
                         .long("challenges")
                         .help("How many challenges to execute")
@@ -134,12 +120,10 @@ fn main() {
                         challenges: value_t!(m, "challenges", usize)?,
                         circuit: m.is_present("circuit"),
                         dump: m.is_present("dump"),
-                        exp: value_t!(m, "exp", usize)?,
                         extract: m.is_present("extract"),
                         groth: m.is_present("groth"),
                         hasher: value_t!(m, "hasher", String)?,
                         layers,
-                        m: value_t!(m, "m", usize)?,
                         no_bench: m.is_present("no-bench"),
                         no_tmp: m.is_present("no-tmp"),
                         partitions: value_t!(m, "partitions", usize)?,

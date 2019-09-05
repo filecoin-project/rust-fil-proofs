@@ -430,6 +430,7 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for DrgPoRepCircuit<'a, E, H> {
             let replica_parents = &self.replica_parents[i];
             let data_node = &self.data_nodes[i];
 
+            assert_eq!(replica_parents.len(), replica_parents_paths.len());
             assert_eq!(data_node_path.len(), replica_node_path.len());
             assert_eq!(replica_node.is_some(), data_node.is_some());
 
@@ -522,7 +523,7 @@ mod tests {
     use crate::circuit::test::*;
     use crate::compound_proof;
     use crate::drgporep;
-    use crate::drgraph::{graph_height, new_seed, BucketGraph};
+    use crate::drgraph::{graph_height, new_seed, BucketGraph, BASE_DEGREE};
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
     use crate::hasher::{Blake2sHasher, Hasher, PedersenHasher};
     use crate::porep::PoRep;
@@ -544,7 +545,7 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let nodes = 12;
-        let degree = 6;
+        let degree = BASE_DEGREE;
         let challenge = 2;
 
         let replica_id: Fr = rng.gen();
@@ -667,8 +668,8 @@ mod tests {
         }
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 130957, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 16, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 103813, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
@@ -689,7 +690,7 @@ mod tests {
 
         // 1 GB
         let n = (1 << 30) / 32;
-        let m = 6;
+        let m = BASE_DEGREE;
         let tree_depth = graph_height(n);
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
@@ -710,8 +711,8 @@ mod tests {
         )
         .expect("failed to synthesize circuit");
 
-        assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 361789, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 16, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 305791, "wrong number of constraints");
     }
 
     #[test]
@@ -735,7 +736,7 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let nodes = 5;
-        let degree = 2;
+        let degree = BASE_DEGREE;
         let challenges = vec![1, 3];
 
         let replica_id: Fr = rng.gen();
