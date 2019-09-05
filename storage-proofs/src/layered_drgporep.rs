@@ -58,7 +58,7 @@ where
 
 #[derive(Debug, Clone)]
 pub struct Tau<T: Domain> {
-    pub layer_taus: Taus,
+    pub layer_taus: Taus<T>,
     pub comm_r_star: T,
 }
 
@@ -153,7 +153,7 @@ impl<T: Domain> PublicInputs<T> {
 }
 
 pub struct PrivateInputs<H: Hasher> {
-    pub tau: Taus,
+    pub tau: Taus<H::Domain>,
     pub aux: Aux<H>,
 }
 
@@ -195,6 +195,7 @@ pub struct Proof<H: Hasher> {
         deserialize = "ExpOddParentsProof<H>: Deserialize<'de>"
     ))]
     pub exp_parents_odd_proofs: Vec<Vec<ExpOddParentsProof<H>>>,
+    pub comm_r: H::Domain,
 }
 
 impl<H: Hasher> Proof<H> {
@@ -206,12 +207,13 @@ impl<H: Hasher> Proof<H> {
 pub type PartitionProofs<H> = Vec<Proof<H>>;
 
 type PorepTau<H> = porep::Tau<<H as Hasher>::Domain>;
-type TransformedLayers<H> = (Taus, Aux<H>);
+type TransformedLayers<H> = (Taus<<H as Hasher>::Domain>, Aux<H>);
 
 #[derive(Debug, Clone)]
-pub struct Taus {
+pub struct Taus<D: Domain> {
     /// The encoded nodes for 1..layers.
     encodings: Vec<Vec<u8>>,
+    comm_r: D,
 }
 
 #[derive(Debug, Clone)]
@@ -286,7 +288,7 @@ pub trait Layers {
     fn prove_layers<'a>(
         graph: &Self::Graph,
         pub_inputs: &PublicInputs<<Self::Hasher as Hasher>::Domain>,
-        tau: &Taus,
+        tau: &Taus<<Self::Hasher as Hasher>::Domain>,
         aux: &'a Aux<Self::Hasher>,
         layer_challenges: &LayerChallenges,
         layers: usize,
@@ -317,7 +319,9 @@ pub trait Layers {
                 let mut exp_parents_odd_proofs = Vec::with_capacity(challenges.len());
 
                 // ZigZag commitment specifics
-                for challenge in challenges.into_iter() {
+                for i in 0..challenges.len() {
+                    let challenge = challenges[i] % graph.size();
+
                     // Initial data layer openings (D_X in Comm_D)
                     {
                         comm_d_proofs.push(DataProof {
@@ -530,6 +534,7 @@ pub trait Layers {
                 }
 
                 Ok(Proof {
+                    comm_r: tau.comm_r.clone(),
                     comm_d_proofs,
                     comm_r_last_proofs,
                     comm_c_proofs_even,
@@ -677,9 +682,17 @@ pub trait Layers {
 
         assert_eq!(encoded_data.len(), layers - 1);
 
+        // comm_r = H(comm_c || comm_r_last)
+        let comm_r = {
+            let mut bytes = tree_c.root().as_ref().to_vec();
+            bytes.extend_from_slice(tree_r_last.root().as_ref());
+            <Self::Hasher as Hasher>::Function::hash(&bytes)
+        };
+
         Ok((
             Taus {
                 encodings: encoded_data,
+                comm_r,
             },
             Aux {
                 tree_c,
@@ -748,7 +761,115 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         pub_inputs: &Self::PublicInputs,
         partition_proofs: &[Self::Proof],
     ) -> Result<bool> {
-        unimplemented!();
+        // TODO: does comm_r go into the proof or not? if not we need to verify H(comm_c || com_r_last) = comm_r
+
+        let graph = &pub_params.graph;
+        // generate graphs for layer 1 and 2
+        let graph_1 = Self::transform(graph);
+        let graph_2 = Self::transform(&graph_1);
+
+        for (k, proof) in partition_proofs.iter().enumerate() {
+            let challenges =
+                pub_inputs.challenges(&pub_params.layer_challenges, graph.size(), Some(k));
+            for i in 0..challenges.len() {
+                // Validate for this challenge
+                let challenge = challenges[i] % graph.size();
+
+                // 1. Verify inclusion proofs
+                {
+                    if !proof.comm_d_proofs[i].proves_challenge(challenge) {
+                        return Ok(false);
+                    }
+
+                    if !proof.comm_c_proofs_even[i].proves_challenge(NODE_SIZE - challenge + 1) {
+                        return Ok(false);
+                    }
+
+                    if !proof.comm_c_proofs_odd[i].proves_challenge(challenge) {
+                        return Ok(false);
+                    }
+
+                    if !proof.comm_r_last_proofs[i].proves_challenge(NODE_SIZE - challenge + 1) {
+                        return Ok(false);
+                    }
+
+                    // drg parents proofs
+                    for proof in &proof.drg_parents_proofs[i] {
+                        let base_degree = graph_1.base_graph().degree();
+
+                        // DRG.Parents(X, 1)
+                        let mut drg_parents = vec![0; base_degree];
+                        graph_1.base_graph().parents(challenge, &mut drg_parents);
+
+                        for k in &drg_parents {
+                            if !proof.comm_c.proves_challenge(*k as usize) {
+                                return Ok(false);
+                            }
+                            if !proof.comm_r_last.proves_challenge(NODE_SIZE - k + 1) {
+                                return Ok(false);
+                            }
+                        }
+                    }
+
+                    // exp parents even
+                    for proof in &proof.exp_parents_even_proofs[i] {
+                        let exp_degree = graph_2.expansion_degree();
+
+                        // EXP.Parents(n-X+1, 2)
+                        let mut exp_parents = vec![0; exp_degree];
+                        graph_2.expanded_parents(NODE_SIZE - challenge + 1, |p| {
+                            exp_parents.copy_from_slice(&p[..]);
+                        });
+
+                        for k in &exp_parents {
+                            if !proof.comm_c.proves_challenge(NODE_SIZE - (*k) as usize + 1) {
+                                return Ok(false);
+                            }
+                            if !proof.comm_r_last.proves_challenge(*k as usize) {
+                                return Ok(false);
+                            }
+                        }
+                    }
+
+                    // exp parents odd
+
+                    // Expander Parents - Odd Layers
+                    for proof in &proof.exp_parents_odd_proofs[i] {
+                        let exp_degree = graph_1.expansion_degree();
+
+                        // EXP.Parents(X, 1)
+                        let mut exp_parents = vec![0; exp_degree];
+                        graph_1.expanded_parents(NODE_SIZE - challenge + 1, |p| {
+                            exp_parents.copy_from_slice(&p[..]);
+                        });
+
+                        for k in &exp_parents {
+                            if !proof.comm_c.proves_challenge(*k as usize) {
+                                return Ok(false);
+                            }
+                        }
+                    }
+                }
+
+                // 2. D_X = e_x^(1) - H(tau || Parents_0(x))
+
+                // 3. for 2..l-1
+                // if j = 0 % 2 => e_n-x+1^(j-1) = e_n-x+1^(j) - H(tau || Parents_j(n-x+1))
+                // else => e_x^(j-1) = e_x^(j) - H(tau || Parents_j(x))
+
+                // TODO:
+            }
+
+            // 4. verify comm_r_star
+            // TODO: is this still relevant
+            let comm_rs = vec![proof.comm_r.clone()];
+            let crs = comm_r_star::<L::Hasher>(&pub_inputs.replica_id, &comm_rs)?;
+
+            if crs != pub_inputs.comm_r_star {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     fn with_partition(pub_in: Self::PublicInputs, k: Option<usize>) -> Self::PublicInputs {
@@ -803,7 +924,7 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
             data,
         )?;
         // TODO: solidify this.
-        let comm_rs = vec![aux.tree_r_last.root()];
+        let comm_rs = vec![taus.comm_r];
         let crs = comm_r_star::<L::Hasher>(replica_id, &comm_rs)?;
         let tau = Tau {
             layer_taus: taus,
