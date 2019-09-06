@@ -16,7 +16,7 @@ use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::porep;
 use crate::proof::ProofScheme;
 use crate::zigzag_drgporep::ZigZagDrgPoRep;
-use crate::zigzag_graph::{ZigZag, ZigZagBucketGraph, EXP_DEGREE};
+use crate::zigzag_graph::{ZigZagBucketGraph, EXP_DEGREE};
 
 type Layers<'a, H, G> = Vec<
     Option<(

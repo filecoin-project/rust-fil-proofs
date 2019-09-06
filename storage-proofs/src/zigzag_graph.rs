@@ -170,32 +170,11 @@ where
     }
 }
 
-pub trait ZigZag: ::std::fmt::Debug + Clone + PartialEq + Eq {
-    type BaseHasher: Hasher;
-    type BaseGraph: Graph<Self::BaseHasher>;
-
-    /// zigzag returns a new graph with expansion component inverted and a distinct
-    /// base DRG graph -- with the direction of drg connections reversed. (i.e. from high-to-low nodes).
-    /// The name is 'weird', but so is the operation -- hence the choice.
-    fn zigzag(&self) -> Self;
-    /// Constructs a new graph.
-    fn base_graph(&self) -> Self::BaseGraph;
-    fn expansion_degree(&self) -> usize;
-    fn reversed(&self) -> bool;
-    fn base_parents(&self, raw_node: usize, parents: &mut [usize]);
-    fn expanded_parents<F, T>(&self, node: usize, cb: F) -> T
-    where
-        F: FnMut(&Vec<u32>) -> T;
-    fn real_index(&self, i: usize) -> usize;
-    fn new_zigzag(
-        nodes: usize,
-        base_degree: usize,
-        expansion_degree: usize,
-        seed: [u32; 7],
-    ) -> Self;
-}
-
-impl<Z: ZigZag> Graph<Z::BaseHasher> for Z {
+impl<H, G> Graph<H> for ZigZagGraph<H, G>
+where
+    H: Hasher,
+    G: Graph<H> + ParameterSetMetadata,
+{
     fn size(&self) -> usize {
         self.base_graph().size()
     }
@@ -252,7 +231,7 @@ impl<Z: ZigZag> Graph<Z::BaseHasher> for Z {
     }
 
     fn new(nodes: usize, base_degree: usize, expansion_degree: usize, seed: [u32; 7]) -> Self {
-        Z::new_zigzag(nodes, base_degree, expansion_degree, seed)
+        Self::new_zigzag(nodes, base_degree, expansion_degree, seed)
     }
 
     fn forward(&self) -> bool {
@@ -371,17 +350,8 @@ where
         );
         parents
     }
-}
 
-impl<'a, H, G> ZigZag for ZigZagGraph<H, G>
-where
-    H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
-{
-    type BaseHasher = H;
-    type BaseGraph = G;
-
-    fn new_zigzag(
+    pub fn new_zigzag(
         nodes: usize,
         base_degree: usize,
         expansion_degree: usize,
@@ -397,26 +367,26 @@ where
     // caches (depending of its direction). This allows to propagate
     // the caches across different layers, where consecutive even+odd
     // layers have inverse directions.
-    fn zigzag(&self) -> Self {
+    pub fn zigzag(&self) -> Self {
         let mut zigzag = self.clone();
         zigzag.reversed = !zigzag.reversed;
         zigzag
     }
 
-    fn base_graph(&self) -> Self::BaseGraph {
+    pub fn base_graph(&self) -> G {
         // TODO: why does this not return a reference?
         self.base_graph.clone()
     }
 
-    fn expansion_degree(&self) -> usize {
+    pub fn expansion_degree(&self) -> usize {
         self.expansion_degree
     }
 
-    fn reversed(&self) -> bool {
+    pub fn reversed(&self) -> bool {
         self.reversed
     }
 
-    fn base_parents(&self, raw_node: usize, parents: &mut [usize]) {
+    pub fn base_parents(&self, raw_node: usize, parents: &mut [usize]) {
         self.base_graph()
             .parents(self.real_index(raw_node), parents);
         for parent in parents.iter_mut().take(self.base_graph().degree()) {
@@ -431,8 +401,7 @@ where
     // since there is a reciprocity between forward and reversed parents,
     // we would only need to compute the parents in one direction and with
     // that fill both caches.
-    #[inline]
-    fn expanded_parents<F, T>(&self, node: usize, mut cb: F) -> T
+    pub fn expanded_parents<F, T>(&self, node: usize, mut cb: F) -> T
     where
         F: FnMut(&Vec<u32>) -> T,
     {
@@ -471,8 +440,7 @@ where
         }
     }
 
-    #[inline]
-    fn real_index(&self, i: usize) -> usize {
+    pub fn real_index(&self, i: usize) -> usize {
         if self.reversed {
             (self.size() - 1) - i
         } else {

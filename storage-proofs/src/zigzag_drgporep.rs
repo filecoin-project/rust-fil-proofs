@@ -28,7 +28,7 @@ use crate::porep::PoRep;
 use crate::proof::ProofScheme;
 use crate::util::{data_at_node, NODE_SIZE};
 use crate::vde;
-use crate::zigzag_graph::{ZigZag, ZigZagBucketGraph};
+use crate::zigzag_graph::ZigZagBucketGraph;
 
 type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 
