@@ -12,12 +12,11 @@ use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::drgporep::{self, DrgPoRep};
 use crate::drgraph::{Graph, BASE_DEGREE};
 use crate::hasher::{HashFunction, Hasher};
-use crate::layered_drgporep::{self, Layers as LayersTrait};
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::porep;
 use crate::proof::ProofScheme;
 use crate::zigzag_drgporep::ZigZagDrgPoRep;
-use crate::zigzag_graph::{ZigZag, EXP_DEGREE};
+use crate::zigzag_graph::{ZigZag, ZigZagBucketGraph, EXP_DEGREE};
 
 type Layers<'a, H, G> = Vec<
     Option<(
@@ -37,12 +36,8 @@ type Layers<'a, H, G> = Vec<
 pub struct ZigZagCircuit<'a, E: JubjubEngine, H: 'static + Hasher> {
     params: &'a E::Params,
     public_params: <ZigZagDrgPoRep<'a, H> as ProofScheme<'a>>::PublicParams,
-    layers: Layers<
-        'a,
-        <ZigZagDrgPoRep<'a, H> as LayersTrait>::Hasher,
-        <ZigZagDrgPoRep<'a, H> as LayersTrait>::Graph,
-    >,
-    tau: Option<porep::Tau<<<ZigZagDrgPoRep<'a, H> as LayersTrait>::Hasher as Hasher>::Domain>>,
+    layers: Layers<'a, H, ZigZagBucketGraph<H>>,
+    tau: Option<porep::Tau<H::Domain>>,
     comm_r_star: Option<H::Domain>,
     _e: PhantomData<E>,
 }
@@ -56,12 +51,8 @@ impl<'a, H: Hasher> ZigZagCircuit<'a, Bls12, H> {
         mut cs: CS,
         params: &'a <Bls12 as JubjubEngine>::Params,
         public_params: <ZigZagDrgPoRep<'a, H> as ProofScheme<'a>>::PublicParams,
-        layers: Layers<
-            'a,
-            <ZigZagDrgPoRep<H> as LayersTrait>::Hasher,
-            <ZigZagDrgPoRep<H> as LayersTrait>::Graph,
-        >,
-        tau: Option<porep::Tau<<<ZigZagDrgPoRep<H> as LayersTrait>::Hasher as Hasher>::Domain>>,
+        layers: Layers<'a, H, ZigZagBucketGraph<H>>,
+        tau: Option<porep::Tau<H::Domain>>,
         comm_r_star: Option<H::Domain>,
     ) -> Result<(), SynthesisError>
     where
@@ -134,8 +125,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
             // Get the matching proof for this layer.
             let proof = match layer_proof {
                 Some(wrapped_proof) => {
-                    let typed_proof: drgporep::Proof<<ZigZagDrgPoRep<H> as LayersTrait>::Hasher> =
-                        wrapped_proof.into();
+                    let typed_proof: drgporep::Proof<H> = wrapped_proof.into();
                     typed_proof
                 }
                 None => drgporep::Proof::new_empty(
@@ -318,7 +308,7 @@ impl<'a, H: 'static + Hasher>
         //     );
         //     inputs.extend(drgporep_inputs);
 
-        //     current_graph = Some(<ZigZagDrgPoRep<H> as layered_drgporep::Layers>::transform(
+        //     current_graph = Some(<ZigZagDrgPoRep<H> as zigzag_drgporep::Layers>::transform(
         //         &drgporep_pub_params.graph,
         //     ));
         // }
@@ -384,10 +374,10 @@ mod tests {
     use crate::drgraph::{new_seed, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, Hasher, PedersenHasher};
-    use crate::layered_drgporep::{self, ChallengeRequirements, LayerChallenges};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
     use crate::settings;
+    use crate::zigzag_drgporep::{self, ChallengeRequirements, LayerChallenges};
     use crate::zigzag_graph::EXP_DEGREE;
 
     use ff::Field;

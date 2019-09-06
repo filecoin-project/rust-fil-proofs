@@ -32,7 +32,6 @@ use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
 use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::hasher::{Domain, Hasher};
-use storage_proofs::layered_drgporep::{self, ChallengeRequirements};
 use storage_proofs::merkle::MerkleTree;
 use storage_proofs::piece_inclusion_proof::{
     generate_piece_commitment_bytes_from_source, piece_inclusion_proofs, PieceInclusionProof,
@@ -40,7 +39,7 @@ use storage_proofs::piece_inclusion_proof::{
 };
 use storage_proofs::porep::{replica_id, PoRep, Tau};
 use storage_proofs::sector::SectorId;
-use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
+use storage_proofs::zigzag_drgporep::{self, ChallengeRequirements, ZigZagDrgPoRep};
 use tempfile::tempfile;
 
 mod post;
@@ -207,9 +206,9 @@ pub fn seal<T: AsRef<Path>>(
     data.flush()?;
     cleanup.success = true;
 
-    let public_tau = tau.simplify();
+    let public_tau = tau.clone();
 
-    let public_inputs = layered_drgporep::PublicInputs {
+    let public_inputs = zigzag_drgporep::PublicInputs {
         replica_id,
         tau: Some(public_tau),
         comm_r_star: tau.comm_r_star,
@@ -217,7 +216,7 @@ pub fn seal<T: AsRef<Path>>(
         seed: None,
     };
 
-    let private_inputs = layered_drgporep::PrivateInputs::<DefaultTreeHasher> {
+    let private_inputs = zigzag_drgporep::PrivateInputs::<DefaultTreeHasher> {
         aux,
         tau: tau.layer_taus,
     };
@@ -319,7 +318,7 @@ pub fn verify_seal(
         ZigZagDrgPoRep<'_, DefaultTreeHasher>,
     > = ZigZagCompound::setup(&compound_setup_params)?;
 
-    let public_inputs = layered_drgporep::PublicInputs::<<DefaultTreeHasher as Hasher>::Domain> {
+    let public_inputs = zigzag_drgporep::PublicInputs::<<DefaultTreeHasher as Hasher>::Domain> {
         replica_id,
         tau: Some(Tau { comm_r, comm_d }),
         seed: None,
