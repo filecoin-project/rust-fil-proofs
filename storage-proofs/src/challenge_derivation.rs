@@ -4,7 +4,7 @@ use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
 
 use crate::hasher::Domain;
-use crate::layered_drgporep::LayerChallenges;
+use crate::zigzag_drgporep::LayerChallenges;
 
 pub fn derive_challenges<D: Domain>(
     challenges: &LayerChallenges,

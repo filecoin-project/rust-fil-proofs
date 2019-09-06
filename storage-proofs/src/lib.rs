@@ -34,7 +34,6 @@ pub mod drgraph;
 pub mod error;
 pub mod fr32;
 pub mod hasher;
-pub mod layered_drgporep;
 pub mod merkle;
 pub mod merklepor;
 pub mod parameter_cache;
