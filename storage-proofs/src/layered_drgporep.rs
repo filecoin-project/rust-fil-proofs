@@ -913,12 +913,42 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
                 }
 
                 // 2. D_X = e_x^(1) - H(tau || Parents_0(x))
+                {
+                    let replica_id = &pub_inputs.replica_id;
+
+                    // build up Parents_0(x)
+                    //   drg parents
+                    // TODO: where do these come from?
+
+                    // create the key = H(tau || Parents_0(x))
+
+                    // decode
+                    // assert equality
+                }
 
                 // 3. for 2..l-1
-                // if j = 0 % 2 => e_n-x+1^(j-1) = e_n-x+1^(j) - H(tau || Parents_j(n-x+1))
-                // else => e_x^(j-1) = e_x^(j) - H(tau || Parents_j(x))
+                let layers = pub_params.layer_challenges.layers();
 
-                // TODO:
+                for j in 2..layers - 1 {
+                    // TODO: verify the bound is l-1, not l
+                    if j % 2 == 0 {
+                        // if j = 0 % 2 =>
+                        // e_n-x+1^(j-1) = e_n-x+1^(j) - H(tau || Parents_j(n-x+1))
+                        // let parents_j = Vec::with_capacity(graph.degree());
+                        // drg parents
+                        // TODO: where do these come from?
+                        // exp parents
+                        // TODO: where to get these from?
+                    } else {
+                        // else =>
+                        // e_x^(j-1) = e_x^(j) - H(tau || Parents_j(x))
+                        // let parents_j = Vec::with_capacity(graph.degree());
+                        // drg parents
+                        // TODO: where do these come from?
+                        // exp parents
+                        // TODO: where to get these from?
+                    }
+                }
             }
 
             trace!("verify comm_r_star");
