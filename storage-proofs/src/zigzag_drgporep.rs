@@ -20,6 +20,7 @@ use crate::challenge_derivation::derive_challenges;
 use crate::drgporep::{self, DataProof, DrgPoRep};
 use crate::drgraph::Graph;
 use crate::error::Result;
+use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::merkle::{next_pow2, populate_leaves, MerkleProof, MerkleStore, MerkleTree, Store};
 use crate::parameter_cache::ParameterSetMetadata;
@@ -186,7 +187,8 @@ pub struct Proof<H: Hasher> {
         deserialize = "MerkleProof<H>: Deserialize<'de>"
     ))]
     pub comm_c_proofs_odd: Vec<MerkleProof<H>>,
-    pub layer_labels: Vec<Vec<Vec<u8>>>,
+    /// Indexed by challenge number, then by layer.
+    pub layer_labels: Vec<Vec<H::Domain>>,
     #[serde(bound(
         serialize = "DataProof<H>: Serialize",
         deserialize = "DataProof<H>: Deserialize<'de>"
@@ -253,7 +255,7 @@ pub struct DrgParentsProof<H: Hasher> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExpEvenParentsProof<H: Hasher> {
     pub labels: Vec<Vec<u8>>,
-    pub value: Vec<u8>,
+    pub value: H::Domain,
     #[serde(bound(
         serialize = "MerkleProof<H>: Serialize",
         deserialize = "MerkleProof<H>: Deserialize<'de>"
@@ -269,7 +271,7 @@ pub struct ExpEvenParentsProof<H: Hasher> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExpOddParentsProof<H: Hasher> {
     pub labels: Vec<Vec<u8>>,
-    pub value: Vec<u8>,
+    pub value: H::Domain,
     #[serde(bound(
         serialize = "MerkleProof<H>: Serialize",
         deserialize = "MerkleProof<H>: Deserialize<'de>"
@@ -281,6 +283,10 @@ pub struct ExpOddParentsProof<H: Hasher> {
 fn inv_index(n: usize, i: usize) -> usize {
     // TODO: verify this is correct, the paper uses n - i + 1 for 1 based indexing
     n - i - 1
+}
+
+fn get_node<H: Hasher>(data: &[u8], index: usize) -> Result<H::Domain> {
+    H::Domain::try_from_bytes(data_at_node(data, index).expect("invalid node math"))
 }
 
 impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
@@ -299,7 +305,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
     #[allow(clippy::too_many_arguments)]
     fn prove_layers(
-        graph: &ZigZagBucketGraph<H>,
+        graph_1: &ZigZagBucketGraph<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain>,
         tau: &Taus<<H as Hasher>::Domain>,
         aux: &Aux<H>,
@@ -310,13 +316,10 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
     ) -> Result<Vec<Proof<H>>> {
         assert!(layers > 0);
 
-        let graph_size = graph.size();
-
-        // generate graphs for layer 1 and 2
-        let graph_1 = Self::transform(graph);
+        let graph_size = graph_1.size();
         let graph_2 = Self::transform(&graph_1);
 
-        let nodes_count = graph.size();
+        let nodes_count = graph_1.size();
         trace!("prove_layers ({})", nodes_count);
 
         (0..partition_count)
@@ -331,14 +334,14 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                 let mut comm_r_last_proofs = Vec::with_capacity(challenges.len());
                 let mut comm_c_proofs_even = Vec::with_capacity(challenges.len());
                 let mut comm_c_proofs_odd = Vec::with_capacity(challenges.len());
-                let mut layer_labels = Vec::with_capacity(challenges.len());
+                let mut layer_labels: Vec<Vec<H::Domain>> = Vec::with_capacity(challenges.len());
                 let mut drg_parents_proofs = Vec::with_capacity(challenges.len());
                 let mut exp_parents_even_proofs = Vec::with_capacity(challenges.len());
                 let mut exp_parents_odd_proofs = Vec::with_capacity(challenges.len());
 
                 // ZigZag commitment specifics
                 for raw_challenge in challenges {
-                    let challenge = raw_challenge % graph.size();
+                    let challenge = raw_challenge % graph_1.size();
 
                     // Initial data layer openings (D_X in Comm_D)
                     {
@@ -366,23 +369,18 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                     {
                         let mut labels = Vec::with_capacity(2 * layers);
                         for layer in 1..layers {
-                            // even
-                            labels.push(
-                                data_at_node(
-                                    // -1 because encodings is zero indexed
-                                    &tau.encodings[layer - 1],
-                                    inv_index(nodes_count, challenge),
-                                )
-                                .unwrap()
-                                .to_vec(),
-                            );
                             // odd
                             labels.push(
                                 // -1 because encodings is zero indexed
-                                data_at_node(&tau.encodings[layer - 1], challenge)
-                                    .unwrap()
-                                    .to_vec(),
-                            )
+                                get_node::<H>(&tau.encodings[layer - 1], challenge)?,
+                            );
+
+                            // even
+                            labels.push(get_node::<H>(
+                                // -1 because encodings is zero indexed
+                                &tau.encodings[layer - 1],
+                                inv_index(nodes_count, challenge),
+                            )?);
                         }
                         layer_labels.push(labels);
                     }
@@ -404,8 +402,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
                         // DRG.Parents(X, 1)
                         let mut drg_parents = vec![0; base_degree];
-                        graph_1.base_graph().parents(challenge, &mut drg_parents);
-
+                        graph_1.base_parents(challenge, &mut drg_parents);
                         let mut proofs = Vec::with_capacity(base_degree);
 
                         for k in &drg_parents {
@@ -414,17 +411,14 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                             for j in 1..layers / 2 {
                                 // -1 because encodings is zero indexed
                                 labels.push(
-                                    data_at_node(&tau.encodings[(2 * j - 1) - 1], *k)
-                                        .unwrap()
-                                        .to_vec(),
+                                    data_at_node(&tau.encodings[(2 * j - 1) - 1], *k)?.to_vec(),
                                 );
                                 labels.push(
                                     data_at_node(
                                         // -1 because encodings is zero indexed
                                         &tau.encodings[(2 * j) - 1],
                                         inv_index(nodes_count, *k),
-                                    )
-                                    .unwrap()
+                                    )?
                                     .to_vec(),
                                 );
                             }
@@ -450,7 +444,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                     {
                         let exp_degree = graph_2.expansion_degree();
 
-                        // EXP.Parents(n-X+1, 2)
+                        // EXP.Parents(n-X+1, 0)
                         let mut exp_parents = vec![0; exp_degree];
                         graph_2.expanded_parents(inv_index(nodes_count, challenge), |p| {
                             exp_parents[..p.len()].copy_from_slice(&p[..]);
@@ -464,44 +458,39 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                             for j in 1..layers / 2 {
                                 // -1 because encodings is zero indexed
                                 labels.push(
-                                    data_at_node(&tau.encodings[(2 * j) - 1], *k as usize)
-                                        .unwrap()
+                                    data_at_node(&tau.encodings[(2 * j) - 1], *k as usize)?
                                         .to_vec(),
                                 );
                             }
 
                             // O_n-k+1
-                            let value = {
+                            let value: Result<H::Domain> = {
                                 // H(e_i^(1) || e_i^(3) || .. || e_i^(l-1))
                                 let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
                                 for layer in (1..layers).step_by(2) {
-                                    hasher.update(
-                                        data_at_node(
-                                            // -1 because encodings is zero indexed
-                                            &tau.encodings[layer - 1],
-                                            inv_index(nodes_count, *k as usize),
-                                        )
-                                        .unwrap(),
-                                    );
+                                    hasher.update(data_at_node(
+                                        // -1 because encodings is zero indexed
+                                        &tau.encodings[layer - 1],
+                                        inv_index(nodes_count, *k as usize),
+                                    )?);
                                 }
-                                hasher.finalize().as_ref().to_vec()
+                                let hash = hasher.finalize();
+                                Ok(bytes_into_fr_repr_safe(hash.as_ref()).into())
                             };
 
                             // path for C_n-k+1 to Comm_C
                             let comm_c = MerkleProof::new_from_proof(
                                 &aux.tree_c.gen_proof(inv_index(nodes_count, *k as usize)),
                             );
-                            assert!(comm_c.proves_challenge(inv_index(nodes_count, *k as usize)));
 
                             // path for e_k^(l) to Comm_rlast
                             let comm_r_last = MerkleProof::new_from_proof(
                                 &aux.tree_r_last.gen_proof(*k as usize),
                             );
-                            assert!(comm_r_last.proves_challenge(*k as usize));
 
                             proofs.push(ExpEvenParentsProof {
                                 labels,
-                                value,
+                                value: value?,
                                 comm_c,
                                 comm_r_last,
                             });
@@ -515,7 +504,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
                         // EXP.Parents(X, 1)
                         let mut exp_parents = vec![0; exp_degree];
-                        graph_1.expanded_parents(inv_index(nodes_count, challenge), |p| {
+                        graph_1.expanded_parents(challenge, |p| {
                             exp_parents[..p.len()].copy_from_slice(&p[..]);
                         });
 
@@ -527,37 +516,34 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                             for j in 1..layers / 2 {
                                 // -1 because encodings is zero indexed
                                 labels.push(
-                                    data_at_node(&tau.encodings[(2 * j - 1) - 1], *k as usize)
-                                        .unwrap()
+                                    data_at_node(&tau.encodings[(2 * j - 1) - 1], *k as usize)?
                                         .to_vec(),
                                 );
                             }
 
                             // E_n-k+1
-                            let value = {
+                            let value: Result<H::Domain> = {
                                 // H(e_i^(2) || e_i^(4) || .. || e_i^(l-2))
                                 let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
                                 for layer in (2..layers - 1).step_by(2) {
-                                    hasher.update(
-                                        data_at_node(
-                                            // -1 because encodings is zero indexed
-                                            &tau.encodings[layer - 1],
-                                            inv_index(nodes_count, *k as usize),
-                                        )
-                                        .unwrap(),
-                                    );
+                                    hasher.update(data_at_node(
+                                        // -1 because encodings is zero indexed
+                                        &tau.encodings[layer - 1],
+                                        inv_index(nodes_count, *k as usize),
+                                    )?);
                                 }
-                                hasher.finalize().as_ref().to_vec()
+
+                                let hash = hasher.finalize();
+                                Ok(bytes_into_fr_repr_safe(hash.as_ref()).into())
                             };
 
                             // path for C_k to Comm_C
                             let comm_c =
                                 MerkleProof::new_from_proof(&aux.tree_c.gen_proof(*k as usize));
-                            assert!(comm_c.proves_challenge(*k as usize));
 
                             proofs.push(ExpOddParentsProof {
                                 labels,
-                                value,
+                                value: value?,
                                 comm_c,
                             });
                         }
@@ -636,10 +622,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
             let mut leaves_store = MerkleStore::new(pow);
             populate_leaves::<_, <H as Hasher>::Function, _, std::iter::Map<_, _>>(
                 &mut leaves_store,
-                (0..leafs).map(|i| {
-                    let d = data_at_node(tree_data, i).unwrap();
-                    <H as Hasher>::Domain::try_from_bytes(d).unwrap()
-                }),
+                (0..leafs).map(|i| get_node::<H>(tree_data, i).unwrap()),
             );
 
             graph.merkle_tree_from_leaves(leaves_store, leafs)
@@ -811,12 +794,12 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
     ) -> Result<bool> {
         // TODO: does comm_r go into the proof or not? if not we need to verify H(comm_c || com_r_last) = comm_r
 
-        let graph = &pub_params.graph;
-        // generate graphs for layer 1 and 2
-        let graph_1 = Self::transform(graph);
-        let graph_2 = Self::transform(&graph_1);
+        // generate graphs
+        let graph_1 = &pub_params.graph;
+        let graph_2 = Self::transform(graph_1);
 
-        let nodes_count = graph.size();
+        let nodes_count = graph_1.size();
+        let replica_id = &pub_inputs.replica_id;
 
         trace!("verify_all_partitions ({})", nodes_count);
 
@@ -824,11 +807,11 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
             trace!("verify partition proof {}/{}", k, partition_proofs.len());
 
             let challenges =
-                pub_inputs.challenges(&pub_params.layer_challenges, graph.size(), Some(k));
+                pub_inputs.challenges(&pub_params.layer_challenges, graph_1.size(), Some(k));
             for i in 0..challenges.len() {
                 trace!("verify challenge {}/{}", i, challenges.len());
                 // Validate for this challenge
-                let challenge = challenges[i] % graph.size();
+                let challenge = challenges[i] % graph_1.size();
 
                 // 1. Verify inclusion proofs
                 {
@@ -861,7 +844,7 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
 
                         // DRG.Parents(X, 1)
                         let mut drg_parents = vec![0; base_degree];
-                        graph_1.base_graph().parents(challenge, &mut drg_parents);
+                        graph_1.base_parents(challenge, &mut drg_parents);
 
                         assert_eq!(drg_parents.len(), proof.drg_parents_proofs[i].len());
                         for (k, proof) in drg_parents.iter().zip(&proof.drg_parents_proofs[i]) {
@@ -882,7 +865,7 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
                     {
                         let exp_degree = graph_2.expansion_degree();
 
-                        // EXP.Parents(n-X+1, 2)
+                        // EXP.Parents(n-X+1, 0)
                         let mut exp_parents = vec![0; exp_degree];
                         graph_2.expanded_parents(inv_index(nodes_count, challenge), |p| {
                             exp_parents[..p.len()].copy_from_slice(&p[..]);
@@ -909,7 +892,7 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
 
                         // EXP.Parents(X, 1)
                         let mut exp_parents = vec![0; exp_degree];
-                        graph_1.expanded_parents(inv_index(nodes_count, challenge), |p| {
+                        graph_1.expanded_parents(challenge, |p| {
                             exp_parents[..p.len()].copy_from_slice(&p[..]);
                         });
 
@@ -924,16 +907,32 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
 
                 // 2. D_X = e_x^(1) - H(tau || Parents_0(x))
                 {
-                    let replica_id = &pub_inputs.replica_id;
+                    trace!("verify encoding");
+                    // create the key = H(tau || (e_k^(1))_{k in Parents(x, 1)})
+                    let key = {
+                        let mut hasher = Blake2s::new().hash_length(32).to_state();
+                        hasher.update(replica_id.as_ref());
+                        for p in &proof.drg_parents_proofs[i] {
+                            // [0] stores the layer 1 encoding
+                            hasher.update(&p.labels[0]);
+                        }
+                        // TODO: according to the paper there are no expander parents in the first layer
+                        // but the current encoding does use them.
+                        for p in &proof.exp_parents_odd_proofs[i] {
+                            hasher.update(&p.labels[0]);
+                        }
 
-                    // build up Parents_0(x)
-                    //   drg parents
-                    // TODO: where do these come from?
+                        let hash = hasher.finalize();
+                        bytes_into_fr_repr_safe(hash.as_ref()).into()
+                    };
 
-                    // create the key = H(tau || Parents_0(x))
+                    // decode:
+                    let unsealed = H::sloth_decode(&key, &proof.layer_labels[i][0]);
 
-                    // decode
                     // assert equality
+                    if unsealed != proof.comm_d_proofs[i].data {
+                        return Ok(false);
+                    }
                 }
 
                 // 3. for 2..l-1

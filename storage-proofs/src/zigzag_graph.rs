@@ -182,6 +182,7 @@ pub trait ZigZag: ::std::fmt::Debug + Clone + PartialEq + Eq {
     fn base_graph(&self) -> Self::BaseGraph;
     fn expansion_degree(&self) -> usize;
     fn reversed(&self) -> bool;
+    fn base_parents(&self, raw_node: usize, parents: &mut [usize]);
     fn expanded_parents<F, T>(&self, node: usize, cb: F) -> T
     where
         F: FnMut(&Vec<u32>) -> T;
@@ -209,11 +210,7 @@ impl<Z: ZigZag> Graph<Z::BaseHasher> for Z {
         // So we convert a raw reversed node to an unreversed node, calculate its parents,
         // then convert the parents to reversed.
 
-        self.base_graph()
-            .parents(self.real_index(raw_node), parents);
-        for parent in parents.iter_mut().take(self.base_graph().degree()) {
-            *parent = self.real_index(*parent);
-        }
+        self.base_parents(raw_node, parents);
 
         // expanded_parents takes raw_node
         self.expanded_parents(raw_node, |expanded_parents| {
@@ -221,29 +218,33 @@ impl<Z: ZigZag> Graph<Z::BaseHasher> for Z {
                 parents[ii + self.base_graph().degree()] = *value as usize
             }
 
-            // Pad so all nodes have correct degree.
-            let current_length = self.base_graph().degree() + expanded_parents.len();
-            for ii in 0..(self.degree() - current_length) {
-                if self.reversed() {
-                    parents[ii + current_length] = self.size() - 1
-                } else {
-                    parents[ii + current_length] = 0
-                }
-            }
+            // // Pad so all nodes have correct degree.
+            // let current_length = self.base_graph().degree() + expanded_parents.len();
+            // for ii in 0..(self.degree() - current_length) {
+            //     if self.reversed() {
+            //         parents[ii + current_length] = self.size() - 1
+            //     } else {
+            //         parents[ii + current_length] = 0
+            //     }
+            // }
         });
         assert!(parents.len() == self.degree());
-        if self.forward() {
-            parents.sort();
-        } else {
-            // Sort in reverse order.
-            parents.sort_by(|a, b| a.cmp(b).reverse());
-        }
+        // TODO: figure out how to make this work
+        // it needs to be true that (base_parents || exp_parents) == parents
+        // but running padding + sorting in this method breaks this
 
-        assert!(parents.iter().all(|p| if self.forward() {
-            *p <= raw_node
-        } else {
-            *p >= raw_node
-        }));
+        // if self.forward() {
+        //     parents.sort();
+        // } else {
+        //     // Sort in reverse order.
+        //     parents.sort_by(|a, b| a.cmp(b).reverse());
+        // }
+
+        // assert!(parents.iter().all(|p| if self.forward() {
+        //     *p <= raw_node
+        // } else {
+        //     *p >= raw_node
+        // }));
     }
 
     fn seed(&self) -> [u32; 7] {
@@ -344,7 +345,7 @@ where
     }
 
     fn generate_expanded_parents(&self, node: usize) -> Vec<u32> {
-        (0..self.expansion_degree)
+        let mut parents: Vec<u32> = (0..self.expansion_degree)
             .filter_map(|i| {
                 let other = self.correspondent(node, i);
                 if self.reversed {
@@ -359,7 +360,16 @@ where
                     None
                 }
             })
-            .collect()
+            .collect();
+        parents.resize(
+            self.expansion_degree,
+            if self.reversed {
+                self.size() as u32 - 1
+            } else {
+                0
+            },
+        );
+        parents
     }
 }
 
@@ -394,6 +404,7 @@ where
     }
 
     fn base_graph(&self) -> Self::BaseGraph {
+        // TODO: why does this not return a reference?
         self.base_graph.clone()
     }
 
@@ -403,6 +414,14 @@ where
 
     fn reversed(&self) -> bool {
         self.reversed
+    }
+
+    fn base_parents(&self, raw_node: usize, parents: &mut [usize]) {
+        self.base_graph()
+            .parents(self.real_index(raw_node), parents);
+        for parent in parents.iter_mut().take(self.base_graph().degree()) {
+            *parent = self.real_index(*parent);
+        }
     }
 
     // TODO: Optimization: Evaluate providing an `all_parents` (and hence
