@@ -4,6 +4,7 @@ extern crate serde;
 use clap::{value_t, App, Arg, SubCommand};
 
 mod hash_fns;
+mod rational_post;
 mod zigzag;
 
 fn main() {
@@ -100,12 +101,23 @@ fn main() {
                         .takes_value(true)
                 );
 
+    let rational_post_cmd = SubCommand::with_name("rational-post")
+        .about("Benchmark Rational PoST")
+        .arg(
+            Arg::with_name("size")
+                .long("size")
+                .required(true)
+                .help("The data size in KiB")
+                .takes_value(true),
+        );
+
     let hash_cmd = SubCommand::with_name("hash-constraints")
         .about("Benchmark hash function inside of a circuit");
 
     let matches = App::new("benchy")
         .version("0.1")
         .subcommand(zigzag_cmd)
+        .subcommand(rational_post_cmd)
         .subcommand(hash_cmd)
         .get_matches();
 
@@ -133,6 +145,12 @@ fn main() {
                     })
                 })
                 .expect("zigzag failed");
+        }
+        ("rational-post", Some(m)) => {
+            let sector_size_kibs = value_t!(m, "size", usize)
+                .expect("could not convert `size` CLI argument to `usize`");
+            let sector_size = sector_size_kibs * 1024;
+            rational_post::run(sector_size).expect("rational-post failed");
         }
         ("hash-constraints", Some(_m)) => {
             hash_fns::run().expect("hash-constraints failed");
