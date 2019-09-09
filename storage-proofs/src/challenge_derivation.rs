@@ -60,7 +60,7 @@ mod test {
 
         let mut layers_with_duplicates = 0;
 
-        for layer in 0..layers {
+        for _layer in 0..layers {
             let mut histogram = HashMap::new();
             for k in 0..partitions {
                 let challenges =

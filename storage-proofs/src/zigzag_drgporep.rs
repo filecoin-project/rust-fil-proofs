@@ -17,7 +17,7 @@ use serde::de::Deserialize;
 use serde::ser::Serialize;
 
 use crate::challenge_derivation::derive_challenges;
-use crate::drgporep::{self, DataProof, DrgPoRep};
+use crate::drgporep::{self, DrgPoRep};
 use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
@@ -159,10 +159,10 @@ pub struct PrivateInputs<H: Hasher> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proof<H: Hasher> {
     #[serde(bound(
-        serialize = "DataProof<H>: Serialize",
-        deserialize = "DataProof<H>: Deserialize<'de>"
+        serialize = "MerkleProof<H>: Serialize",
+        deserialize = "MerkleProof<H>: Deserialize<'de>"
     ))]
-    pub comm_d_proofs: Vec<DataProof<H>>,
+    pub comm_d_proofs: Vec<MerkleProof<H>>,
     #[serde(bound(
         serialize = "MerkleProof<H>: Serialize",
         deserialize = "MerkleProof<H>: Deserialize<'de>"
@@ -174,10 +174,10 @@ pub struct Proof<H: Hasher> {
     ))]
     pub comm_c_proofs_odd: Vec<MerkleProof<H>>,
     #[serde(bound(
-        serialize = "DataProof<H>: Serialize",
-        deserialize = "DataProof<H>: Deserialize<'de>"
+        serialize = "MerkleProof<H>: Serialize",
+        deserialize = "MerkleProof<H>: Deserialize<'de>"
     ))]
-    pub comm_r_last_proofs: Vec<DataProof<H>>,
+    pub comm_r_last_proofs: Vec<MerkleProof<H>>,
     #[serde(bound(
         serialize = "DrgParentsProof<H>: Serialize",
         deserialize = "DrgParentsProof<H>: Deserialize<'de>"
@@ -197,28 +197,36 @@ pub struct Proof<H: Hasher> {
         serialize = "EncodingProof<H>: Serialize",
         deserialize = "EncodingProof<H>: Deserialize<'de>"
     ))]
+    /// Indexed by challenge. The encoding proof for layer 1.
     pub encoding_proof_1: Vec<EncodingProof<H>>,
-    // pub encoding_proofs: Vec<EncodingProof<H>>,
+    #[serde(bound(
+        serialize = "EncodingProof<H>: Serialize",
+        deserialize = "EncodingProof<H>: Deserialize<'de>"
+    ))]
+    /// Indexed first by challenge then by layer in 2..layers - 1.
+    pub encoding_proofs: Vec<Vec<EncodingProof<H>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EncodingProof<H: Hasher> {
     encoded_node: H::Domain,
+    decoded_node: H::Domain,
     parents: Vec<Vec<u8>>,
     #[serde(skip)]
     _h: PhantomData<H>,
 }
 
 impl<H: Hasher> EncodingProof<H> {
-    pub fn new(encoded_node: H::Domain, parents: Vec<Vec<u8>>) -> Self {
+    pub fn new(encoded_node: H::Domain, decoded_node: H::Domain, parents: Vec<Vec<u8>>) -> Self {
         EncodingProof {
             encoded_node,
+            decoded_node,
             parents,
             _h: PhantomData,
         }
     }
 
-    pub fn verify(&self, replica_id: &H::Domain, decoded_node: &H::Domain) -> bool {
+    pub fn verify(&self, replica_id: &H::Domain) -> bool {
         // create the key = H(tau || (e_k^(j))_{k in Parents(x, 1)})
         let key = {
             let mut hasher = Blake2s::new().hash_length(32).to_state();
@@ -235,7 +243,7 @@ impl<H: Hasher> EncodingProof<H> {
         let unsealed = H::sloth_decode(&key, &self.encoded_node);
 
         // assert equality
-        &unsealed == decoded_node
+        unsealed == self.decoded_node
     }
 }
 
@@ -359,6 +367,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                 let mut exp_parents_odd_proofs = Vec::with_capacity(challenges.len());
 
                 let mut encoding_proof_1 = Vec::with_capacity(challenges.len());
+                let mut encoding_proofs = Vec::with_capacity(challenges.len());
 
                 // ZigZag commitment specifics
                 for raw_challenge in challenges {
@@ -366,10 +375,9 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
                     // Initial data layer openings (D_X in Comm_D)
                     {
-                        comm_d_proofs.push(DataProof {
-                            data: aux.tree_d.read_at(challenge),
-                            proof: MerkleProof::new_from_proof(&aux.tree_d.gen_proof(challenge)),
-                        });
+                        comm_d_proofs.push(MerkleProof::new_from_proof(
+                            &aux.tree_d.gen_proof(challenge),
+                        ));
                     }
 
                     // C_n-X+1 in Comm_C
@@ -389,17 +397,15 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                     // Final replica layer openings (e_n-X-1^(l))
                     {
                         let challenge_inv = graph_1.inv_index(challenge);
-                        comm_r_last_proofs.push(DataProof {
-                            data: aux.tree_r_last.read_at(challenge_inv),
-                            proof: MerkleProof::new_from_proof(
-                                &aux.tree_r_last.gen_proof(challenge_inv),
-                            ),
-                        });
+                        comm_r_last_proofs.push(MerkleProof::new_from_proof(
+                            &aux.tree_r_last.gen_proof(challenge_inv),
+                        ));
                     }
 
                     // Encoding Proof layer 1
                     {
                         let encoded_node = get_node::<H>(&aux.encodings[0], challenge)?;
+                        let decoded_node = aux.tree_d.read_at(challenge);
 
                         let mut parents = vec![0; graph_1.degree()];
                         graph_1.parents(challenge, &mut parents);
@@ -411,7 +417,48 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                             })
                             .collect::<Result<_>>()?;
 
-                        encoding_proof_1.push(EncodingProof::<H>::new(encoded_node, parents_data));
+                        encoding_proof_1.push(EncodingProof::<H>::new(
+                            encoded_node,
+                            decoded_node,
+                            parents_data,
+                        ));
+                    }
+
+                    // Encoding Proof Layer 2..l-1
+                    {
+                        let mut proofs = Vec::with_capacity(layers - 2);
+
+                        for layer in 2..layers {
+                            let (graph, challenge) = if layer % 2 == 0 {
+                                (&graph_2, graph_2.inv_index(challenge))
+                            } else {
+                                (graph_1, challenge)
+                            };
+
+                            let encoded_data = &aux.encodings[layer - 1];
+                            let decoded_data = &aux.encodings[layer - 2];
+
+                            let encoded_node = get_node::<H>(&encoded_data, challenge)?;
+                            let decoded_node = get_node::<H>(&decoded_data, challenge)?;
+
+                            let mut parents = vec![0; graph.degree()];
+                            graph.parents(challenge, &mut parents);
+
+                            let parents_data = parents
+                                .into_iter()
+                                .map(|parent| {
+                                    data_at_node(&encoded_data, parent).map(|v| v.to_vec())
+                                })
+                                .collect::<Result<_>>()?;
+
+                            proofs.push(EncodingProof::<H>::new(
+                                encoded_node,
+                                decoded_node,
+                                parents_data,
+                            ));
+                        }
+
+                        encoding_proofs.push(proofs);
                     }
 
                     // DRG Parents
@@ -538,6 +585,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                     exp_parents_even_proofs,
                     exp_parents_odd_proofs,
                     encoding_proof_1,
+                    encoding_proofs,
                 })
             })
             .collect()
@@ -777,11 +825,16 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
 
         let nodes_count = graph_1.size();
         let replica_id = &pub_inputs.replica_id;
+        let layers = pub_params.layer_challenges.layers();
 
         trace!("verify_all_partitions ({})", nodes_count);
 
         for (k, proof) in partition_proofs.iter().enumerate() {
-            trace!("verify partition proof {}/{}", k, partition_proofs.len());
+            trace!(
+                "verify partition proof {}/{}",
+                k + 1,
+                partition_proofs.len()
+            );
 
             let challenges =
                 pub_inputs.challenges(&pub_params.layer_challenges, graph_1.size(), Some(k));
@@ -875,69 +928,28 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
                     }
                 }
 
-                // 2. D_X = e_x^(1) - H(tau || Parents_0(x))
+                // 2. Verify Encoding Layer 1
                 trace!("verify encoding (layer: 1)");
-                if !proof.encoding_proof_1[i].verify(replica_id, &proof.comm_d_proofs[i].data) {
+                if !proof.encoding_proof_1[i].verify(replica_id) {
                     return Ok(false);
                 }
 
-                // 3. for 2..l-1
-                let layers = pub_params.layer_challenges.layers();
+                // 3. Verify Encoding Layer 2..layers - 1
+                assert_eq!(proof.encoding_proofs[i].len(), layers - 2);
 
-                for j in 2..layers - 1 {
-                    trace!("verify encoding (layer: {})", j);
+                let mut invalid = 0;
+                for (j, encoding_proof) in proof.encoding_proofs[i].iter().enumerate() {
+                    trace!("verify encoding (layer: {})", j + 2);
 
-                    // TODO: verify the bound is l-1, not l
-                    if j % 2 == 0 {
-                        // if j = 0 % 2 =>
-                        // e_{n-x+1}^(j-1) = e_{n-x+1}^(j) - H(tau || (e_{n-x+1}^(j))_{k in Parents(n-x+1, j)})
-
-                        // create the key = H(tau || (e_{n-x+1}^(j))_{k in Parents(n-x+1, j)})
-                        // let key = {
-                        //     println!(
-                        //         "creating key ({} - {}) - {:?} - {:?}",
-                        //         challenge,
-                        //         j,
-                        //         proof.drg_parents_proofs[i]
-                        //             .iter()
-                        //             .map(|p| &p.labels[j / 2].0)
-                        //             .collect::<Vec<_>>(),
-                        //         proof.exp_parents_even_proofs[i]
-                        //             .iter()
-                        //             .map(|p| &p.labels[j / 2])
-                        //             .collect::<Vec<_>>()
-                        //     );
-                        //     let mut hasher = Blake2s::new().hash_length(32).to_state();
-                        //     hasher.update(replica_id.as_ref());
-                        //     for p in &proof.drg_parents_proofs[i] {
-                        //         // are good for the first layer selection
-                        //         hasher.update(&p.labels[j / 2].0);
-                        //     }
-                        //     for p in &proof.exp_parents_even_proofs[i] {
-                        //         // still breaks
-                        //         hasher.update(&p.labels[j / 2]);
-                        //     }
-
-                        //     let hash = hasher.finalize();
-                        //     bytes_into_fr_repr_safe(hash.as_ref()).into()
-                        // };
-
-                        // // decode:
-                        // let unsealed = H::sloth_decode(&key, &proof.layer_labels[i][j - 1].1);
-
-                        // // assert equality
-                        // if unsealed != proof.layer_labels[i][j - 2].1 {
-                        //     return Ok(false);
-                        // }
-                    } else {
-                        // else =>
-                        // e_x^(j-1) = e_x^(j) - H(tau || Parents_j(x))
-                        // let parents_j = Vec::with_capacity(graph.degree());
-                        // drg parents
-                        // TODO: where do these come from?
-                        // exp parents
-                        // TODO: where to get these from?
+                    if !encoding_proof.verify(replica_id) {
+                        trace!("invalid proof");
+                        // return Ok(false);
+                        invalid += 1;
                     }
+                }
+
+                if invalid > 0 {
+                    return Ok(false);
                 }
             }
         }
