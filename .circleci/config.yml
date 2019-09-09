@@ -315,6 +315,23 @@ jobs:
           name: Run publish-release.sh
           command: bash ./scripts/publish-release.sh
 
+
+  validate_commit_msg:
+    docker:
+      - image: circleci/node:latest
+    resource_class: xlarge
+    steps:
+      - checkout
+      - attach_workspace:
+          at: "."
+      - run:
+          name: Install dependencies
+          command: npm i @commitlint/config-angular @commitlint/cli
+      - run:
+          name: Validate Commit Messages
+          command: |
+              npx commitlint --extends @commitlint/config-angular --from origin/master --to $CIRCLE_SHA1
+
 workflows:
   version: 2
   test_all:
@@ -344,6 +361,7 @@ workflows:
       - bench_nightly:
           requires:
             - cargo_fetch
+      - validate_commit_msg
       - metrics_capture:
           requires:
             - cargo_fetch
