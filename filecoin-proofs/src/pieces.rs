@@ -113,23 +113,24 @@ pub fn get_aligned_source(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fr32::BYTE_ALIGNED_DATA;
 
-    // FIXME: The 127 in these tests comes from `BYTE_ALIGNED_DATA`, now
-    // updated to 63, still this test seems valid on its own.
     #[test]
     fn test_get_piece_alignment() {
+        let aligned_data = BYTE_ALIGNED_DATA as u64;
         let table = vec![
-            (0, 0, (0, 127)),
-            (0, 127, (0, 0)),
-            (0, 254, (0, 0)),
-            (0, 508, (0, 0)),
-            (0, 1016, (0, 0)),
-            (127, 127, (0, 0)),
-            (127, 254, (127, 0)),
-            (127, 508, (381, 0)),
-            (100, 100, (27, 27)),
-            (200, 200, (54, 54)),
-            (300, 300, (208, 208)),
+            (0, 0, (0, aligned_data)),
+            (0, aligned_data, (0, 0)),
+            (0, aligned_data * 2, (0, 0)),
+            (0, aligned_data * 4, (0, 0)),
+            (0, aligned_data * 8, (0, 0)),
+            (aligned_data, aligned_data, (0, 0)),
+            (aligned_data, aligned_data * 2, (aligned_data, 0)),
+            (aligned_data, aligned_data * 4, (aligned_data * 3, 0)),
+            (50, 50, (13, 13)),
+            (100, 100, (26, 26)),
+            (150, 150, (102, 102)),
+            // FIXME: This last hard-coded part will be difficult to maintain.
         ];
 
         for (bytes_in_sector, bytes_in_piece, (expected_left_align, expected_right_align)) in
@@ -163,11 +164,11 @@ mod tests {
         );
         assert_eq!(
             get_piece_start_byte(&pieces[..1], pieces[1]),
-            UnpaddedByteIndex(127)
+            UnpaddedByteIndex(BYTE_ALIGNED_DATA as u64)
         );
         assert_eq!(
             get_piece_start_byte(&pieces[..2], pieces[2]),
-            UnpaddedByteIndex(254)
+            UnpaddedByteIndex((BYTE_ALIGNED_DATA * 2) as u64)
         );
     }
 }

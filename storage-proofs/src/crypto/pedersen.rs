@@ -1,7 +1,8 @@
 use algebra::biginteger::BigInteger;
 use algebra::curves::{
-    bls12_377::Bls12_377 as Bls12, edwards_bls12::EdwardsParameters, edwards_bls12::EdwardsProjective,
-    models::twisted_edwards_extended::GroupProjective, ProjectiveCurve,
+    bls12_377::Bls12_377 as Bls12, edwards_bls12::EdwardsParameters,
+    edwards_bls12::EdwardsProjective, models::twisted_edwards_extended::GroupProjective,
+    ProjectiveCurve,
 };
 use algebra::fields::{bls12_377::Fr, PrimeField};
 use dpc::crypto_primitives::crh::{

@@ -711,11 +711,11 @@ mod tests {
     #[test]
     fn test_generate_piece_commitment_over_minimum() -> Result<(), failure::Error> {
         // sanity check that larger byte lengths are still zero padded
-        let bytes: Vec<u8> = (0..400).map(|_| rand::random::<u8>()).collect();
-        let mut data_a = vec![0; 400];
-        let mut data_b = vec![0; 508];
+        let bytes: Vec<u8> = (0..200).map(|_| rand::random::<u8>()).collect();
+        let mut data_a = vec![0; 200];
+        let mut data_b = vec![0; BYTE_ALIGNED_DATA * 4];
 
-        for i in 0..400 {
+        for i in 0..200 {
             data_a[i] = bytes[i];
             data_b[i] = bytes[i];
         }

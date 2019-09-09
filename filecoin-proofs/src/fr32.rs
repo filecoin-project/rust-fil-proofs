@@ -179,7 +179,7 @@ pub const FR32_PADDING_MAP: PaddingMap = PaddingMap {
 // the smallest group of full elements possible when padded, e.g., with 252 data bits,
 // that is, 4 bits of padding, 63 bytes of data will generate two full elements.
 pub const BYTE_ALIGNED_DATA: usize = 63;
-// Number of ful elements the `BYTE_ALIGNED_DATA` corresponds to.
+// Number of full elements the `BYTE_ALIGNED_DATA` corresponds to.
 pub const INPUT_BYTE_ALIGNED_FULL_ELEMENTS: usize = 2;
 // FIXME: These numbers are tied to `data_bits`, it should be computed in a way similar
 // to:
