@@ -189,41 +189,15 @@ where
         // So we convert a raw reversed node to an unreversed node, calculate its parents,
         // then convert the parents to reversed.
 
-        self.base_parents(raw_node, parents);
+        self.base_parents(raw_node, &mut parents[..self.base_graph().degree()]);
 
         // expanded_parents takes raw_node
         self.expanded_parents(raw_node, |expanded_parents| {
             for (ii, value) in expanded_parents.iter().enumerate() {
                 parents[ii + self.base_graph().degree()] = *value as usize
             }
-
-            // // Pad so all nodes have correct degree.
-            // let current_length = self.base_graph().degree() + expanded_parents.len();
-            // for ii in 0..(self.degree() - current_length) {
-            //     if self.reversed() {
-            //         parents[ii + current_length] = self.size() - 1
-            //     } else {
-            //         parents[ii + current_length] = 0
-            //     }
-            // }
         });
         assert!(parents.len() == self.degree());
-        // TODO: figure out how to make this work
-        // it needs to be true that (base_parents || exp_parents) == parents
-        // but running padding + sorting in this method breaks this
-
-        // if self.forward() {
-        //     parents.sort();
-        // } else {
-        //     // Sort in reverse order.
-        //     parents.sort_by(|a, b| a.cmp(b).reverse());
-        // }
-
-        // assert!(parents.iter().all(|p| if self.forward() {
-        //     *p <= raw_node
-        // } else {
-        //     *p >= raw_node
-        // }));
     }
 
     fn seed(&self) -> [u32; 7] {
