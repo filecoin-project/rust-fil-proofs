@@ -13,7 +13,7 @@ pub fn derive_challenges<D: Domain>(
     commitment: &D,
     k: u8,
 ) -> Vec<usize> {
-    assert!(leaves > 2, "Too little leaves");
+    assert!(leaves > 2, "Too few leaves: {}", leaves);
 
     let n = challenges.challenges();
     (0..n)

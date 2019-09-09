@@ -29,7 +29,7 @@ where
             // If the graph is reversed, traverse in reverse order.
             (graph.size() - n) - 1
         };
-
+        // println!("encode {}", node);
         graph.parents(node, &mut parents);
 
         let key = create_key::<H>(replica_id, node, &parents, data)?;
@@ -101,6 +101,15 @@ pub fn create_key<H: Hasher>(
     parents: &[usize],
     data: &[u8],
 ) -> Result<H::Domain> {
+    // println!(
+    //     "create key (node: {}) {:?} - {:?}",
+    //     node,
+    //     id,
+    //     parents
+    //         .iter()
+    //         .map(|p| data_at_node(data, *p).unwrap())
+    //         .collect::<Vec<_>>(),
+    // );
     let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
     hasher.update(id.as_ref());
 
