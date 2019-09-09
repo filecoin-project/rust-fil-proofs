@@ -334,7 +334,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
     #[allow(clippy::too_many_arguments)]
     fn prove_layers(
-        graph_1: &ZigZagBucketGraph<H>,
+        graph_0: &ZigZagBucketGraph<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain>,
         aux: &Aux<H>,
         layer_challenges: &LayerChallenges,
@@ -344,11 +344,13 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
     ) -> Result<Vec<Proof<H>>> {
         assert!(layers > 0);
 
-        let graph_size = graph_1.size();
+        let graph_size = graph_0.size();
+        let graph_1 = Self::transform(&graph_0);
         let graph_2 = Self::transform(&graph_1);
 
-        let nodes_count = graph_1.size();
-        trace!("prove_layers ({})", nodes_count);
+        assert_eq!(graph_0.layer(), 0);
+        assert_eq!(graph_1.layer(), 1);
+        assert_eq!(graph_2.layer(), 2);
 
         (0..partition_count)
             .into_par_iter()
@@ -371,7 +373,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
                 // ZigZag commitment specifics
                 for raw_challenge in challenges {
-                    let challenge = raw_challenge % graph_1.size();
+                    let challenge = raw_challenge % graph_0.size();
 
                     // Initial data layer openings (D_X in Comm_D)
                     {
@@ -383,7 +385,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                     // C_n-X+1 in Comm_C
                     {
                         comm_c_proofs_even.push(MerkleProof::new_from_proof(
-                            &aux.tree_c.gen_proof(graph_1.inv_index(challenge)),
+                            &aux.tree_c.gen_proof(graph_0.inv_index(challenge)),
                         ));
                     }
 
@@ -396,7 +398,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
                     // Final replica layer openings (e_n-X-1^(l))
                     {
-                        let challenge_inv = graph_1.inv_index(challenge);
+                        let challenge_inv = graph_0.inv_index(challenge);
                         comm_r_last_proofs.push(MerkleProof::new_from_proof(
                             &aux.tree_r_last.gen_proof(challenge_inv),
                         ));
@@ -407,8 +409,8 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                         let encoded_node = get_node::<H>(&aux.encodings[0], challenge)?;
                         let decoded_node = aux.tree_d.read_at(challenge);
 
-                        let mut parents = vec![0; graph_1.degree()];
-                        graph_1.parents(challenge, &mut parents);
+                        let mut parents = vec![0; graph_0.degree()];
+                        graph_0.parents(challenge, &mut parents);
 
                         let parents_data = parents
                             .into_iter()
@@ -430,9 +432,9 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
                         for layer in 2..layers {
                             let (graph, challenge) = if layer % 2 == 0 {
-                                (&graph_2, graph_2.inv_index(challenge))
+                                (&graph_1, graph_1.inv_index(challenge))
                             } else {
-                                (graph_1, challenge)
+                                (&graph_2, challenge)
                             };
 
                             let encoded_data = &aux.encodings[layer - 1];
@@ -463,11 +465,11 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
                     // DRG Parents
                     {
-                        let base_degree = graph_1.base_graph().degree();
+                        let base_degree = graph_0.base_graph().degree();
 
                         // DRG.Parents(X, 1)
                         let mut drg_parents = vec![0; base_degree];
-                        graph_1.base_parents(challenge, &mut drg_parents);
+                        graph_0.base_parents(challenge, &mut drg_parents);
                         let mut proofs = Vec::with_capacity(base_degree);
 
                         for k in &drg_parents {
@@ -476,7 +478,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
                             // path for e_n-k+1^(l) to Comm_rlast
                             let comm_r_last = MerkleProof::new_from_proof(
-                                &aux.tree_r_last.gen_proof(graph_1.inv_index(*k)),
+                                &aux.tree_r_last.gen_proof(graph_0.inv_index(*k)),
                             );
 
                             proofs.push(DrgParentsProof {
@@ -489,11 +491,11 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
                     // Expander Parents - Even Layers
                     {
-                        let exp_degree = graph_2.expansion_degree();
+                        let exp_degree = graph_1.expansion_degree();
 
                         // EXP.Parents(n-X+1, 0)
                         let mut exp_parents = vec![0; exp_degree];
-                        graph_2.expanded_parents(graph_1.inv_index(challenge), |p| {
+                        graph_1.expanded_parents(graph_1.inv_index(challenge), |p| {
                             exp_parents[..p.len()].copy_from_slice(&p[..]);
                         });
 
@@ -536,11 +538,11 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
                     // Expander Parents - Odd Layers
                     {
-                        let exp_degree = graph_1.expansion_degree();
+                        let exp_degree = graph_2.expansion_degree();
 
                         // EXP.Parents(X, 1)
                         let mut exp_parents = vec![0; exp_degree];
-                        graph_1.expanded_parents(challenge, |p| {
+                        graph_2.expanded_parents(challenge, |p| {
                             exp_parents[..p.len()].copy_from_slice(&p[..]);
                         });
 
@@ -555,7 +557,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                                     hasher.update(data_at_node(
                                         // -1 because encodings is zero indexed
                                         &aux.encodings[layer - 1],
-                                        graph_1.inv_index(*k as usize),
+                                        graph_2.inv_index(*k as usize),
                                     )?);
                                 }
 
@@ -774,6 +776,7 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
             sp.drg.nodes,
             sp.drg.degree,
             sp.drg.expansion_degree,
+            0,
             sp.drg.seed,
         );
 
@@ -820,10 +823,15 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
         partition_proofs: &[Self::Proof],
     ) -> Result<bool> {
         // generate graphs
-        let graph_1 = &pub_params.graph;
-        let graph_2 = Self::transform(graph_1);
+        let graph_0 = &pub_params.graph;
+        let graph_1 = Self::transform(graph_0);
+        let graph_2 = Self::transform(&graph_1);
 
-        let nodes_count = graph_1.size();
+        assert_eq!(graph_0.layer(), 0);
+        assert_eq!(graph_1.layer(), 1);
+        assert_eq!(graph_2.layer(), 2);
+
+        let nodes_count = graph_0.size();
         let replica_id = &pub_inputs.replica_id;
         let layers = pub_params.layer_challenges.layers();
 
@@ -837,11 +845,11 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
             );
 
             let challenges =
-                pub_inputs.challenges(&pub_params.layer_challenges, graph_1.size(), Some(k));
+                pub_inputs.challenges(&pub_params.layer_challenges, graph_0.size(), Some(k));
             for i in 0..challenges.len() {
                 trace!("verify challenge {}/{}", i, challenges.len());
                 // Validate for this challenge
-                let challenge = challenges[i] % graph_1.size();
+                let challenge = challenges[i] % graph_0.size();
 
                 // 1. Verify inclusion proofs
                 {
@@ -851,7 +859,7 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
                         return Ok(false);
                     }
 
-                    if !proof.comm_c_proofs_even[i].proves_challenge(graph_1.inv_index(challenge)) {
+                    if !proof.comm_c_proofs_even[i].proves_challenge(graph_0.inv_index(challenge)) {
                         return Ok(false);
                     }
 
@@ -859,25 +867,25 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
                         return Ok(false);
                     }
 
-                    if !proof.comm_r_last_proofs[i].proves_challenge(graph_1.inv_index(challenge)) {
+                    if !proof.comm_r_last_proofs[i].proves_challenge(graph_0.inv_index(challenge)) {
                         return Ok(false);
                     }
 
                     trace!("verify drg parents");
                     // DRG Parents
                     {
-                        let base_degree = graph_1.base_graph().degree();
+                        let base_degree = graph_0.base_graph().degree();
 
                         // DRG.Parents(X, 1)
                         let mut drg_parents = vec![0; base_degree];
-                        graph_1.base_parents(challenge, &mut drg_parents);
+                        graph_0.base_parents(challenge, &mut drg_parents);
 
                         assert_eq!(drg_parents.len(), proof.drg_parents_proofs[i].len());
                         for (k, proof) in drg_parents.iter().zip(&proof.drg_parents_proofs[i]) {
                             if !proof.comm_c.proves_challenge(*k as usize) {
                                 return Ok(false);
                             }
-                            if !proof.comm_r_last.proves_challenge(graph_1.inv_index(*k)) {
+                            if !proof.comm_r_last.proves_challenge(graph_0.inv_index(*k)) {
                                 return Ok(false);
                             }
                         }
@@ -886,11 +894,11 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
                     // Expander Parents - Even Layers
                     trace!("verify exp parents even");
                     {
-                        let exp_degree = graph_2.expansion_degree();
+                        let exp_degree = graph_1.expansion_degree();
 
                         // EXP.Parents(n-X+1, 0)
                         let mut exp_parents = vec![0; exp_degree];
-                        graph_2.expanded_parents(graph_1.inv_index(challenge), |p| {
+                        graph_1.expanded_parents(graph_1.inv_index(challenge), |p| {
                             exp_parents[..p.len()].copy_from_slice(&p[..]);
                         });
 
@@ -911,11 +919,11 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
 
                     // Expander Parents - Odd Layers
                     {
-                        let exp_degree = graph_1.expansion_degree();
+                        let exp_degree = graph_2.expansion_degree();
 
                         // EXP.Parents(X, 1)
                         let mut exp_parents = vec![0; exp_degree];
-                        graph_1.expanded_parents(challenge, |p| {
+                        graph_2.expanded_parents(challenge, |p| {
                             exp_parents[..p.len()].copy_from_slice(&p[..]);
                         });
 

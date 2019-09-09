@@ -97,6 +97,7 @@ where
     feistel_precomputed: FeistelPrecomputed,
     id: String,
     use_cache: bool,
+    layer: usize,
     _h: PhantomData<H>,
 }
 
@@ -112,6 +113,7 @@ where
         nodes: usize,
         base_degree: usize,
         expansion_degree: usize,
+        layer: usize,
         seed: [u32; 7],
     ) -> Self {
         if !cfg!(feature = "unchecked-degrees") {
@@ -136,6 +138,7 @@ where
             expansion_degree,
             use_cache,
             reversed: false,
+            layer,
             feistel_precomputed: feistel::precompute((expansion_degree * nodes) as feistel::Index),
             _h: PhantomData,
         };
@@ -197,7 +200,7 @@ where
                 parents[ii + self.base_graph().degree()] = *value as usize
             }
         });
-        assert!(parents.len() == self.degree());
+        debug_assert!(parents.len() == self.degree());
     }
 
     fn seed(&self) -> [u32; 7] {
@@ -205,7 +208,7 @@ where
     }
 
     fn new(nodes: usize, base_degree: usize, expansion_degree: usize, seed: [u32; 7]) -> Self {
-        Self::new_zigzag(nodes, base_degree, expansion_degree, seed)
+        Self::new_zigzag(nodes, base_degree, expansion_degree, 0, seed)
     }
 
     fn forward(&self) -> bool {
@@ -329,9 +332,10 @@ where
         nodes: usize,
         base_degree: usize,
         expansion_degree: usize,
+        layer: usize,
         seed: [u32; 7],
     ) -> Self {
-        Self::new(None, nodes, base_degree, expansion_degree, seed)
+        Self::new(None, nodes, base_degree, expansion_degree, layer, seed)
     }
 
     /// To zigzag a graph, we just toggle its reversed field.
@@ -344,7 +348,12 @@ where
     pub fn zigzag(&self) -> Self {
         let mut zigzag = self.clone();
         zigzag.reversed = !zigzag.reversed;
+        zigzag.layer += 1;
         zigzag
+    }
+
+    pub fn layer(&self) -> usize {
+        self.layer
     }
 
     pub fn base_graph(&self) -> G {
@@ -379,6 +388,10 @@ where
     where
         F: FnMut(&Vec<u32>) -> T,
     {
+        if self.layer == 0 {
+            return cb(&vec![0; self.expansion_degree()]);
+        }
+
         if !self.use_cache {
             // No cache usage, generate on demand.
             return cb(&self.generate_expanded_parents(node));
@@ -500,11 +513,34 @@ mod tests {
     }
 
     fn test_zigzag_graph_zigzags<H: 'static + Hasher>() {
-        let g = ZigZagBucketGraph::<H>::new_zigzag(50, BASE_DEGREE, EXP_DEGREE, new_seed());
+        let g = ZigZagBucketGraph::<H>::new_zigzag(50, BASE_DEGREE, EXP_DEGREE, 0, new_seed());
         let gz = g.zigzag();
 
         assert_graph_ascending(g);
         assert_graph_descending(gz);
+    }
+
+    fn test_expansion_layer_0<H: 'static + Hasher>() {
+        let g = ZigZagBucketGraph::<H>::new_zigzag(25, BASE_DEGREE, EXP_DEGREE, 0, new_seed());
+        let exp_parents = get_all_expanded_parents(&g);
+        for (i, parents) in &exp_parents {
+            assert!(parents.iter().all(|p| *p == 0));
+        }
+    }
+
+    #[test]
+    fn expansion_layer_0_pedersen() {
+        test_expansion_layer_0::<PedersenHasher>();
+    }
+
+    #[test]
+    fn expansion_layer_0_sha256() {
+        test_expansion_layer_0::<Sha256Hasher>();
+    }
+
+    #[test]
+    fn expansion_layer_0_blake2s() {
+        test_expansion_layer_0::<Blake2sHasher>();
     }
 
     #[test]
@@ -524,7 +560,7 @@ mod tests {
 
     fn test_expansion<H: 'static + Hasher>() {
         // We need a graph.
-        let g = ZigZagBucketGraph::<H>::new_zigzag(25, BASE_DEGREE, EXP_DEGREE, new_seed());
+        let g = ZigZagBucketGraph::<H>::new_zigzag(25, BASE_DEGREE, EXP_DEGREE, 1, new_seed());
 
         // We're going to fully realize the expansion-graph component, in a HashMap.
         let gcache = get_all_expanded_parents(&g);
@@ -541,7 +577,12 @@ mod tests {
             // Check to make sure all (expanded) node-parent relationships also exist in reverse,
             // in the original graph's Hashmap.
             for p in parents {
-                assert!(gcache[&(*p as usize)].contains(&(i as u32)));
+                assert!(
+                    gcache[&(*p as usize)].contains(&(i as u32)),
+                    "missing {} in {:?}",
+                    i,
+                    gcache[&(*p as usize)]
+                );
             }
         }
 
