@@ -440,9 +440,14 @@ where
         }
     }
 
+    /// Calculates the inverse index for 0 based indexing.
+    pub fn inv_index(&self, i: usize) -> usize {
+        (self.size() - 1) - i
+    }
+
     pub fn real_index(&self, i: usize) -> usize {
         if self.reversed {
-            (self.size() - 1) - i
+            self.inv_index(i)
         } else {
             i
         }

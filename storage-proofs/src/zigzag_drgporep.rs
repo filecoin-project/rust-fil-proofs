@@ -267,12 +267,6 @@ pub struct ExpOddParentsProof<H: Hasher> {
     pub comm_c: MerkleProof<H>,
 }
 
-/// Calculates the inverse index for 0 based indexing.
-fn inv_index(n: usize, i: usize) -> usize {
-    // TODO: verify this is correct, the paper uses n - i + 1 for 1 based indexing
-    n - i - 1
-}
-
 fn get_node<H: Hasher>(data: &[u8], index: usize) -> Result<H::Domain> {
     H::Domain::try_from_bytes(data_at_node(data, index).expect("invalid node math"))
 }
@@ -342,7 +336,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                     // C_n-X+1 in Comm_C
                     {
                         comm_c_proofs_even.push(MerkleProof::new_from_proof(
-                            &aux.tree_c.gen_proof(inv_index(nodes_count, challenge)),
+                            &aux.tree_c.gen_proof(graph_1.inv_index(challenge)),
                         ));
                     }
 
@@ -365,7 +359,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                                 get_node::<H>(
                                     // -1 because encodings is zero indexed
                                     &aux.encodings[layer - 1],
-                                    inv_index(nodes_count, challenge),
+                                    graph_1.inv_index(challenge),
                                 )?,
                             ));
                         }
@@ -374,7 +368,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
                     // Final replica layer openings (e_n-X-1^(l))
                     {
-                        let challenge_inv = inv_index(nodes_count, challenge);
+                        let challenge_inv = graph_1.inv_index(challenge);
                         comm_r_last_proofs.push(DataProof {
                             data: aux.tree_r_last.read_at(challenge_inv),
                             proof: MerkleProof::new_from_proof(
@@ -402,7 +396,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                                     data_at_node(
                                         // -1 because encodings is zero indexed
                                         &aux.encodings[(2 * j) - 1],
-                                        inv_index(nodes_count, *k),
+                                        graph_1.inv_index(*k),
                                     )?
                                     .to_vec(),
                                 );
@@ -418,7 +412,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
                             // path for e_n-k+1^(l) to Comm_rlast
                             let comm_r_last = MerkleProof::new_from_proof(
-                                &aux.tree_r_last.gen_proof(inv_index(nodes_count, *k)),
+                                &aux.tree_r_last.gen_proof(graph_1.inv_index(*k)),
                             );
 
                             proofs.push(DrgParentsProof {
@@ -436,7 +430,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
                         // EXP.Parents(n-X+1, 0)
                         let mut exp_parents = vec![0; exp_degree];
-                        graph_2.expanded_parents(inv_index(nodes_count, challenge), |p| {
+                        graph_2.expanded_parents(graph_1.inv_index(challenge), |p| {
                             exp_parents[..p.len()].copy_from_slice(&p[..]);
                         });
 
@@ -461,7 +455,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                                     hasher.update(data_at_node(
                                         // -1 because encodings is zero indexed
                                         &aux.encodings[layer - 1],
-                                        inv_index(nodes_count, *k as usize),
+                                        graph_1.inv_index(*k as usize),
                                     )?);
                                 }
                                 let hash = hasher.finalize();
@@ -470,7 +464,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
                             // path for C_n-k+1 to Comm_C
                             let comm_c = MerkleProof::new_from_proof(
-                                &aux.tree_c.gen_proof(inv_index(nodes_count, *k as usize)),
+                                &aux.tree_c.gen_proof(graph_1.inv_index(*k as usize)),
                             );
 
                             // path for e_k^(l) to Comm_rlast
@@ -519,7 +513,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                                     hasher.update(data_at_node(
                                         // -1 because encodings is zero indexed
                                         &aux.encodings[layer - 1],
-                                        inv_index(nodes_count, *k as usize),
+                                        graph_1.inv_index(*k as usize),
                                     )?);
                                 }
 
@@ -677,7 +671,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
         for i in 0..nodes_count {
             let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
             for partition in &even_partition {
-                let e = data_at_node(partition, inv_index(nodes_count, i)).unwrap();
+                let e = data_at_node(partition, graph.inv_index(i)).unwrap();
                 hasher.update(e);
             }
 
@@ -812,9 +806,7 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
                         return Ok(false);
                     }
 
-                    if !proof.comm_c_proofs_even[i]
-                        .proves_challenge(inv_index(nodes_count, challenge))
-                    {
+                    if !proof.comm_c_proofs_even[i].proves_challenge(graph_1.inv_index(challenge)) {
                         return Ok(false);
                     }
 
@@ -822,9 +814,7 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
                         return Ok(false);
                     }
 
-                    if !proof.comm_r_last_proofs[i]
-                        .proves_challenge(inv_index(nodes_count, challenge))
-                    {
+                    if !proof.comm_r_last_proofs[i].proves_challenge(graph_1.inv_index(challenge)) {
                         return Ok(false);
                     }
 
@@ -842,10 +832,7 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
                             if !proof.comm_c.proves_challenge(*k as usize) {
                                 return Ok(false);
                             }
-                            if !proof
-                                .comm_r_last
-                                .proves_challenge(inv_index(nodes_count, *k))
-                            {
+                            if !proof.comm_r_last.proves_challenge(graph_1.inv_index(*k)) {
                                 return Ok(false);
                             }
                         }
@@ -858,7 +845,7 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
 
                         // EXP.Parents(n-X+1, 0)
                         let mut exp_parents = vec![0; exp_degree];
-                        graph_2.expanded_parents(inv_index(nodes_count, challenge), |p| {
+                        graph_2.expanded_parents(graph_1.inv_index(challenge), |p| {
                             exp_parents[..p.len()].copy_from_slice(&p[..]);
                         });
 
@@ -867,7 +854,7 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
                         {
                             if !proof
                                 .comm_c
-                                .proves_challenge(inv_index(nodes_count, *k as usize))
+                                .proves_challenge(graph_1.inv_index(*k as usize))
                             {
                                 return Ok(false);
                             }
