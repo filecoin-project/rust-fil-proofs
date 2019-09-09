@@ -625,6 +625,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
         layer_challenges: &LayerChallenges,
         replica_id: &<H as Hasher>::Domain,
         data: &mut [u8],
+        data_tree: Option<Tree<H>>,
     ) -> Result<TransformedLayers<H>> {
         trace!("transform_and_replicate_layers");
         let nodes_count = graph.size();
@@ -657,7 +658,10 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
         // 1. Build the MerkleTree over the original data
         trace!("build merkle tree for the original data");
-        let tree_d = build_tree(&data)?;
+        let tree_d = match data_tree {
+            Some(t) => t,
+            None => build_tree(&data)?,
+        };
 
         // 2. Encode all layers
         trace!("encode layers");
@@ -697,39 +701,35 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
         }
 
         // build the columns
+        let columns: Vec<u8> = (0..nodes_count)
+            .into_par_iter()
+            .map(|i| {
+                // odd
+                let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
+                for partition in &odd_partition {
+                    let e = data_at_node(partition, i).unwrap();
+                    hasher.update(e);
+                }
 
-        // odd columns
-        let mut odd_columns = Vec::with_capacity(nodes_count);
-        for i in 0..nodes_count {
-            let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
-            for partition in &odd_partition {
-                let e = data_at_node(partition, i).unwrap();
-                hasher.update(e);
-            }
+                let odd_hash = hasher.finalize();
+                // even
+                let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
+                for partition in &even_partition {
+                    let e = data_at_node(partition, graph.inv_index(i)).unwrap();
+                    hasher.update(e);
+                }
 
-            odd_columns.push(hasher.finalize());
-        }
+                let even_hash = hasher.finalize();
 
-        // even columns
-        let mut even_columns = Vec::with_capacity(nodes_count);
-        for i in 0..nodes_count {
-            let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
-            for partition in &even_partition {
-                let e = data_at_node(partition, graph.inv_index(i)).unwrap();
-                hasher.update(e);
-            }
+                // combine
+                let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
+                hasher.update(odd_hash.as_ref());
+                hasher.update(even_hash.as_ref());
 
-            even_columns.push(hasher.finalize());
-        }
-
-        // combine odd and even
-        let mut columns = Vec::with_capacity(data.len());
-        for i in 0..nodes_count {
-            let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
-            hasher.update(odd_columns[i].as_ref());
-            hasher.update(even_columns[i].as_ref());
-            columns.extend_from_slice(hasher.finalize().as_ref());
-        }
+                hasher.finalize().as_ref().to_vec()
+            })
+            .flatten()
+            .collect();
 
         // Build the tree for CommC
         let tree_c = build_tree(&columns)?;
@@ -993,13 +993,14 @@ impl<'a, 'c, H: 'static + Hasher> PoRep<'a, H> for ZigZagDrgPoRep<'a, H> {
         pp: &'a PublicParams<H, ZigZagBucketGraph<H>>,
         replica_id: &<H as Hasher>::Domain,
         data: &mut [u8],
-        _data_tree: Option<Tree<H>>,
+        data_tree: Option<Tree<H>>,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let (tau, aux) = Self::transform_and_replicate_layers(
             &pp.graph,
             &pp.layer_challenges,
             replica_id,
             data,
+            data_tree,
         )?;
 
         Ok((tau, aux))

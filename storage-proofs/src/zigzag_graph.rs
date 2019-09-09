@@ -523,7 +523,7 @@ mod tests {
     fn test_expansion_layer_0<H: 'static + Hasher>() {
         let g = ZigZagBucketGraph::<H>::new_zigzag(25, BASE_DEGREE, EXP_DEGREE, 0, new_seed());
         let exp_parents = get_all_expanded_parents(&g);
-        for (i, parents) in &exp_parents {
+        for (_i, parents) in &exp_parents {
             assert!(parents.iter().all(|p| *p == 0));
         }
     }
