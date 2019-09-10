@@ -292,50 +292,35 @@ pub enum ColumnProof<H: Hasher> {
 }
 
 impl<H: Hasher> ColumnProof<H> {
-    pub fn all_from_column(column: Column, tree_c: &Tree<H>) -> Self {
-        let inclusion_proof = MerkleProof::new_from_proof(&tree_c.gen_proof(column.index));
-
+    pub fn all_from_column(column: Column, inclusion_proof: MerkleProof<H>) -> Self {
         let res = ColumnProof::All {
             column,
             inclusion_proof,
         };
-        debug_assert_eq!(
-            &res.column_hash(),
-            &tree_c.read_at(res.column_index()).as_ref()
-        );
+        debug_assert!(res.verify());
 
         res
     }
 
-    pub fn even_from_column(column: Column, tree_c: &Tree<H>, o_i: &[u8]) -> Self {
-        let inclusion_proof = MerkleProof::new_from_proof(&tree_c.gen_proof(column.index));
-
+    pub fn even_from_column(column: Column, inclusion_proof: MerkleProof<H>, o_i: &[u8]) -> Self {
         let res = ColumnProof::Even {
             column,
             inclusion_proof,
             o_i: o_i.to_vec(),
         };
-
-        debug_assert_eq!(
-            &hash2(o_i, &res.column_hash()),
-            &tree_c.read_at(res.column_index()).as_ref()
-        );
+        debug_assert!(res.verify());
 
         res
     }
 
-    pub fn odd_from_column(column: Column, tree_c: &Tree<H>, e_i: &[u8]) -> Self {
-        let inclusion_proof = MerkleProof::new_from_proof(&tree_c.gen_proof(column.index));
-
+    pub fn odd_from_column(column: Column, inclusion_proof: MerkleProof<H>, e_i: &[u8]) -> Self {
         let res = ColumnProof::Odd {
             column,
             inclusion_proof,
             e_i: e_i.to_vec(),
         };
-        debug_assert_eq!(
-            &hash2(&res.column_hash(), e_i),
-            &tree_c.read_at(res.column_index()).as_ref()
-        );
+
+        debug_assert!(res.verify());
 
         res
     }
@@ -590,9 +575,6 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
         };
 
         let get_exp_parents_even_columns = |x: usize| -> Result<Vec<Column>> {
-            // Use the inverse for even column challenges
-            let x = graph_1.inv_index(x);
-
             let exp_degree = graph_1.expansion_degree();
 
             let mut columns = Vec::with_capacity(exp_degree);
@@ -629,7 +611,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
         };
 
         (0..partition_count)
-            .into_iter() //_par_iter()
+            .into_par_iter()
             .map(|k| {
                 trace!("proving partition {}/{}", k + 1, partition_count);
 
@@ -649,6 +631,8 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                     trace!(" challenge {}", challenge);
                     debug_assert!(challenge < graph_0.size());
 
+                    let inv_challenge = graph_0.inv_index(challenge);
+
                     // Initial data layer openings (D_X in Comm_D)
                     comm_d_proofs.push(MerkleProof::new_from_proof(
                         &aux.tree_d.gen_proof(challenge),
@@ -661,26 +645,36 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                         let c_x = {
                             let column =
                                 get_full_column(&aux.encodings, &graph_0, layers, challenge)?;
-                            ColumnProof::<H>::all_from_column(column, &aux.tree_c)
+
+                            let inclusion_proof =
+                                MerkleProof::new_from_proof(&aux.tree_c.gen_proof(column.index));
+                            ColumnProof::<H>::all_from_column(column, inclusion_proof)
                         };
 
                         // Only odd-layer labels in the renumbered column C_\bar{X}
                         trace!("  c_inv_x");
                         let c_inv_x = {
-                            let column = get_odd_column(
-                                &aux.encodings,
-                                layers,
-                                graph_0.inv_index(challenge),
-                            )?;
+                            let column = get_odd_column(&aux.encodings, layers, inv_challenge)?;
+                            let inclusion_proof =
+                                MerkleProof::new_from_proof(&aux.tree_c.gen_proof(column.index));
                             let index = column.index;
-                            ColumnProof::<H>::odd_from_column(column, &aux.tree_c, &aux.es[index])
+                            ColumnProof::<H>::odd_from_column(
+                                column,
+                                inclusion_proof,
+                                &aux.es[index],
+                            )
                         };
 
                         // All labels in the DRG parents.
                         trace!("  drg_parents");
                         let drg_parents = get_drg_parents_columns(challenge)?
                             .into_iter()
-                            .map(|column| ColumnProof::<H>::all_from_column(column, &aux.tree_c))
+                            .map(|column| {
+                                let inclusion_proof = MerkleProof::new_from_proof(
+                                    &aux.tree_c.gen_proof(column.index),
+                                );
+                                ColumnProof::<H>::all_from_column(column, inclusion_proof)
+                            })
                             .collect::<Vec<_>>();
 
                         // Odd layer labels for the expander parents
@@ -689,9 +683,12 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                             .into_iter()
                             .map(|column| {
                                 let index = column.index;
+                                let inclusion_proof = MerkleProof::new_from_proof(
+                                    &aux.tree_c.gen_proof(column.index),
+                                );
                                 ColumnProof::<H>::odd_from_column(
                                     column,
-                                    &aux.tree_c,
+                                    inclusion_proof,
                                     &aux.es[index],
                                 )
                             })
@@ -699,13 +696,15 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
                         // Even layer labels for the expander parents
                         trace!("  exp_parents_even");
-                        let exp_parents_even = get_exp_parents_even_columns(challenge)?
+                        let exp_parents_even = get_exp_parents_even_columns(inv_challenge)?
                             .into_iter()
                             .map(|column| {
-                                let index = column.index;
+                                let index = graph_1.inv_index(column.index);
+                                let inclusion_proof =
+                                    MerkleProof::new_from_proof(&aux.tree_c.gen_proof(index));
                                 ColumnProof::<H>::even_from_column(
                                     column,
-                                    &aux.tree_c,
+                                    inclusion_proof,
                                     &aux.os[index],
                                 )
                             })
@@ -723,9 +722,8 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                     // Final replica layer openings
                     {
                         // All challenged Labels e_\bar{X}^(L)
-                        let challenge_inv = graph_0.inv_index(challenge);
                         comm_r_last_proofs.push(MerkleProof::new_from_proof(
-                            &aux.tree_r_last.gen_proof(challenge_inv),
+                            &aux.tree_r_last.gen_proof(inv_challenge),
                         ));
 
                         // TODO: Even Challenged Parents
@@ -759,7 +757,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
                         for layer in 2..layers {
                             let (graph, challenge) = if layer % 2 == 0 {
-                                (&graph_1, graph_1.inv_index(challenge))
+                                (&graph_1, inv_challenge)
                             } else {
                                 (&graph_2, challenge)
                             };
@@ -1288,10 +1286,11 @@ mod tests {
     }
 
     fn test_prove_verify<H: 'static + Hasher>(n: usize, challenges: LayerChallenges) {
-        //pretty_env_logger::init();
+        // This will be called multiple times, only the first one succeeds, and that is ok.
         femme::pretty::Logger::new()
             .start(log::LevelFilter::Trace)
-            .unwrap();
+            .ok();
+
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let degree = BASE_DEGREE;
