@@ -152,7 +152,8 @@ impl<T: Domain> PublicInputs<T> {
 }
 
 pub struct PrivateInputs<H: Hasher> {
-    pub aux: Aux<H>,
+    pub p_aux: PersistentAux<H::Domain>,
+    pub t_aux: TemporaryAux<H>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -429,19 +430,28 @@ fn hash2(a: &[u8], b: &[u8]) -> Vec<u8> {
 
 pub type PartitionProofs<H> = Vec<Proof<H>>;
 
-type TransformedLayers<H> = (Tau<<H as Hasher>::Domain>, Aux<H>);
+type TransformedLayers<H> = (
+    Tau<<H as Hasher>::Domain>,
+    PersistentAux<<H as Hasher>::Domain>,
+    TemporaryAux<H>,
+);
 
 /// Tau for a single parition.
 #[derive(Debug, Clone)]
 pub struct Tau<D: Domain> {
     comm_d: D,
-    comm_c: D,
     comm_r: D,
+}
+
+#[derive(Debug, Clone)]
+/// Stored along side the sector on disk.
+pub struct PersistentAux<D: Domain> {
+    comm_c: D,
     comm_r_last: D,
 }
 
 #[derive(Debug, Clone)]
-pub struct Aux<H: Hasher> {
+pub struct TemporaryAux<H: Hasher> {
     /// The encoded nodes for 1..layers.
     encodings: Vec<Vec<u8>>,
     tree_d: Tree<H>,
@@ -537,18 +547,19 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
     fn prove_layers(
         graph_0: &ZigZagBucketGraph<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain>,
-        aux: &Aux<H>,
+        p_aux: &PersistentAux<H::Domain>,
+        t_aux: &TemporaryAux<H>,
         layer_challenges: &LayerChallenges,
         layers: usize,
         _total_layers: usize,
         partition_count: usize,
     ) -> Result<Vec<Proof<H>>> {
         assert!(layers > 0);
-        assert_eq!(aux.encodings.len(), layers - 1);
+        assert_eq!(t_aux.encodings.len(), layers - 1);
 
         let graph_size = graph_0.size();
-        assert_eq!(aux.es.len(), graph_size);
-        assert_eq!(aux.os.len(), graph_size);
+        assert_eq!(t_aux.es.len(), graph_size);
+        assert_eq!(t_aux.os.len(), graph_size);
 
         let graph_1 = Self::transform(&graph_0);
         let graph_2 = Self::transform(&graph_1);
@@ -566,7 +577,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
             graph_0.base_parents(x, &mut parents);
 
             for parent in &parents {
-                columns.push(get_full_column(&aux.encodings, graph_0, layers, *parent)?);
+                columns.push(get_full_column(&t_aux.encodings, graph_0, layers, *parent)?);
             }
 
             debug_assert!(columns.len() == base_degree);
@@ -585,7 +596,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
             });
 
             for parent in &parents {
-                columns.push(get_even_column(&aux.encodings, layers, *parent as usize)?);
+                columns.push(get_even_column(&t_aux.encodings, layers, *parent as usize)?);
             }
             debug_assert!(columns.len() == exp_degree);
 
@@ -603,7 +614,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
             });
 
             for parent in &parents {
-                columns.push(get_odd_column(&aux.encodings, layers, *parent as usize)?);
+                columns.push(get_odd_column(&t_aux.encodings, layers, *parent as usize)?);
             }
             debug_assert!(columns.len() == exp_degree);
 
@@ -635,7 +646,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
                     // Initial data layer openings (D_X in Comm_D)
                     comm_d_proofs.push(MerkleProof::new_from_proof(
-                        &aux.tree_d.gen_proof(challenge),
+                        &t_aux.tree_d.gen_proof(challenge),
                     ));
 
                     // ZigZag replica column openings
@@ -644,24 +655,24 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                         trace!("  c_x");
                         let c_x = {
                             let column =
-                                get_full_column(&aux.encodings, &graph_0, layers, challenge)?;
+                                get_full_column(&t_aux.encodings, &graph_0, layers, challenge)?;
 
                             let inclusion_proof =
-                                MerkleProof::new_from_proof(&aux.tree_c.gen_proof(column.index));
+                                MerkleProof::new_from_proof(&t_aux.tree_c.gen_proof(column.index));
                             ColumnProof::<H>::all_from_column(column, inclusion_proof)
                         };
 
                         // Only odd-layer labels in the renumbered column C_\bar{X}
                         trace!("  c_inv_x");
                         let c_inv_x = {
-                            let column = get_odd_column(&aux.encodings, layers, inv_challenge)?;
+                            let column = get_odd_column(&t_aux.encodings, layers, inv_challenge)?;
                             let inclusion_proof =
-                                MerkleProof::new_from_proof(&aux.tree_c.gen_proof(column.index));
+                                MerkleProof::new_from_proof(&t_aux.tree_c.gen_proof(column.index));
                             let index = column.index;
                             ColumnProof::<H>::odd_from_column(
                                 column,
                                 inclusion_proof,
-                                &aux.es[index],
+                                &t_aux.es[index],
                             )
                         };
 
@@ -671,7 +682,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                             .into_iter()
                             .map(|column| {
                                 let inclusion_proof = MerkleProof::new_from_proof(
-                                    &aux.tree_c.gen_proof(column.index),
+                                    &t_aux.tree_c.gen_proof(column.index),
                                 );
                                 ColumnProof::<H>::all_from_column(column, inclusion_proof)
                             })
@@ -684,12 +695,12 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                             .map(|column| {
                                 let index = column.index;
                                 let inclusion_proof = MerkleProof::new_from_proof(
-                                    &aux.tree_c.gen_proof(column.index),
+                                    &t_aux.tree_c.gen_proof(column.index),
                                 );
                                 ColumnProof::<H>::odd_from_column(
                                     column,
                                     inclusion_proof,
-                                    &aux.es[index],
+                                    &t_aux.es[index],
                                 )
                             })
                             .collect::<Vec<_>>();
@@ -701,11 +712,11 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                             .map(|column| {
                                 let index = graph_1.inv_index(column.index);
                                 let inclusion_proof =
-                                    MerkleProof::new_from_proof(&aux.tree_c.gen_proof(index));
+                                    MerkleProof::new_from_proof(&t_aux.tree_c.gen_proof(index));
                                 ColumnProof::<H>::even_from_column(
                                     column,
                                     inclusion_proof,
-                                    &aux.os[index],
+                                    &t_aux.os[index],
                                 )
                             })
                             .collect::<Vec<_>>();
@@ -724,8 +735,9 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                     {
                         // All challenged Labels e_\bar{X}^(L)
                         trace!("  inclusion proof");
-                        let inclusion_proof =
-                            MerkleProof::new_from_proof(&aux.tree_r_last.gen_proof(inv_challenge));
+                        let inclusion_proof = MerkleProof::new_from_proof(
+                            &t_aux.tree_r_last.gen_proof(inv_challenge),
+                        );
 
                         // Even challenged parents (any kind)
                         trace!(" even parents");
@@ -735,7 +747,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                         let even_parents_proof = parents
                             .into_iter()
                             .map(|parent| {
-                                MerkleProof::new_from_proof(&aux.tree_r_last.gen_proof(parent))
+                                MerkleProof::new_from_proof(&t_aux.tree_r_last.gen_proof(parent))
                             })
                             .collect::<Vec<_>>();
 
@@ -744,8 +756,8 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
                     // Encoding Proof layer 1
                     {
-                        let encoded_node = get_node::<H>(&aux.encodings[0], challenge)?;
-                        let decoded_node = aux.tree_d.read_at(challenge);
+                        let encoded_node = get_node::<H>(&t_aux.encodings[0], challenge)?;
+                        let decoded_node = t_aux.tree_d.read_at(challenge);
 
                         let mut parents = vec![0; graph_0.degree()];
                         graph_0.parents(challenge, &mut parents);
@@ -753,7 +765,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                         let parents_data = parents
                             .into_iter()
                             .map(|parent| {
-                                data_at_node(&aux.encodings[0], parent).map(|v| v.to_vec())
+                                data_at_node(&t_aux.encodings[0], parent).map(|v| v.to_vec())
                             })
                             .collect::<Result<_>>()?;
 
@@ -775,8 +787,8 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                                 (&graph_2, challenge)
                             };
 
-                            let encoded_data = &aux.encodings[layer - 1];
-                            let decoded_data = &aux.encodings[layer - 2];
+                            let encoded_data = &t_aux.encodings[layer - 1];
+                            let decoded_data = &t_aux.encodings[layer - 2];
 
                             let encoded_node = get_node::<H>(&encoded_data, challenge)?;
                             let decoded_node = get_node::<H>(&decoded_data, challenge)?;
@@ -957,12 +969,14 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
         Ok((
             Tau {
-                comm_c: tree_c.root(),
                 comm_d: tree_d.root(),
                 comm_r,
+            },
+            PersistentAux {
+                comm_c: tree_c.root(),
                 comm_r_last: tree_r_last.root(),
             },
-            Aux {
+            TemporaryAux {
                 encodings,
                 es,
                 os,
@@ -1020,7 +1034,8 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
         Self::prove_layers(
             &pub_params.graph,
             pub_inputs,
-            &priv_inputs.aux,
+            &priv_inputs.p_aux,
+            &priv_inputs.t_aux,
             &pub_params.layer_challenges,
             pub_params.layer_challenges.layers(),
             pub_params.layer_challenges.layers(),
@@ -1179,7 +1194,7 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
 
 impl<'a, 'c, H: 'static + Hasher> PoRep<'a, H> for ZigZagDrgPoRep<'a, H> {
     type Tau = Tau<<H as Hasher>::Domain>;
-    type ProverAux = Aux<H>;
+    type ProverAux = (PersistentAux<H::Domain>, TemporaryAux<H>);
 
     fn replicate(
         pp: &'a PublicParams<H, ZigZagBucketGraph<H>>,
@@ -1187,7 +1202,7 @@ impl<'a, 'c, H: 'static + Hasher> PoRep<'a, H> for ZigZagDrgPoRep<'a, H> {
         data: &mut [u8],
         data_tree: Option<Tree<H>>,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
-        let (tau, aux) = Self::transform_and_replicate_layers(
+        let (tau, p_aux, t_aux) = Self::transform_and_replicate_layers(
             &pp.graph,
             &pp.layer_challenges,
             replica_id,
@@ -1195,7 +1210,7 @@ impl<'a, 'c, H: 'static + Hasher> PoRep<'a, H> for ZigZagDrgPoRep<'a, H> {
             data_tree,
         )?;
 
-        Ok((tau, aux))
+        Ok((tau, (p_aux, t_aux)))
     }
 
     fn extract_all<'b>(
@@ -1349,7 +1364,7 @@ mod tests {
         };
 
         let pp = ZigZagDrgPoRep::<H>::setup(&sp).expect("setup failed");
-        let (tau, aux) =
+        let (tau, (p_aux, t_aux)) =
             ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None)
                 .expect("replication failed");
         assert_ne!(data, data_copy);
@@ -1361,7 +1376,7 @@ mod tests {
             k: None,
         };
 
-        let priv_inputs = PrivateInputs { aux };
+        let priv_inputs = PrivateInputs { p_aux, t_aux };
 
         let all_partition_proofs =
             &ZigZagDrgPoRep::<H>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, partitions)
