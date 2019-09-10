@@ -163,10 +163,10 @@ pub struct Proof<H: Hasher> {
     ))]
     pub comm_d_proofs: Vec<MerkleProof<H>>,
     #[serde(bound(
-        serialize = "MerkleProof<H>: Serialize",
-        deserialize = "MerkleProof<H>: Deserialize<'de>"
+        serialize = "MerkleProof<H>: Serialize, ColumnProof<H>: Serialize",
+        deserialize = "MerkleProof<H>: Deserialize<'de>, ColumnProof<H>: Deserialize<'de>"
     ))]
-    pub comm_r_last_proofs: Vec<MerkleProof<H>>,
+    pub comm_r_last_proofs: Vec<(MerkleProof<H>, Vec<MerkleProof<H>>)>,
     #[serde(bound(
         serialize = "ReplicaColumnProof<H>: Serialize",
         deserialize = "ReplicaColumnProof<H>: Deserialize<'de>"
@@ -720,13 +720,26 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                     }
 
                     // Final replica layer openings
+                    trace!("final replica layer openings");
                     {
                         // All challenged Labels e_\bar{X}^(L)
-                        comm_r_last_proofs.push(MerkleProof::new_from_proof(
-                            &aux.tree_r_last.gen_proof(inv_challenge),
-                        ));
+                        trace!("  inclusion proof");
+                        let inclusion_proof =
+                            MerkleProof::new_from_proof(&aux.tree_r_last.gen_proof(inv_challenge));
 
-                        // TODO: Even Challenged Parents
+                        // Even challenged parents (any kind)
+                        trace!(" even parents");
+                        let mut parents = vec![0; graph_1.degree()];
+                        graph_1.parents(inv_challenge, &mut parents);
+
+                        let even_parents_proof = parents
+                            .into_iter()
+                            .map(|parent| {
+                                MerkleProof::new_from_proof(&aux.tree_r_last.gen_proof(parent))
+                            })
+                            .collect::<Vec<_>>();
+
+                        comm_r_last_proofs.push((inclusion_proof, even_parents_proof));
                     }
 
                     // Encoding Proof layer 1
@@ -1094,8 +1107,30 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
                 // Verify final replica layer openings
                 trace!("verify final replica layer openings");
                 {
-                    if !proof.comm_r_last_proofs[i].proves_challenge(graph_0.inv_index(challenge)) {
+                    let inv_challenge = graph_0.inv_index(challenge);
+
+                    if !proof.comm_r_last_proofs[i]
+                        .0
+                        .proves_challenge(inv_challenge)
+                    {
                         return Ok(false);
+                    }
+
+                    let mut parents = vec![0; graph_1.degree()];
+                    graph_1.parents(inv_challenge, &mut parents);
+
+                    if parents.len() != proof.comm_r_last_proofs[i].1.len() {
+                        return Ok(false);
+                    }
+
+                    for (p, parent) in proof.comm_r_last_proofs[i]
+                        .1
+                        .iter()
+                        .zip(parents.into_iter())
+                    {
+                        if !p.proves_challenge(parent) {
+                            return Ok(false);
+                        }
                     }
                 }
 
