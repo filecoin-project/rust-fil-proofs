@@ -91,13 +91,8 @@ impl<H: Hasher> MerkleProof<H> {
             .collect::<Vec<_>>()
     }
 
-    /// Validates the MerkleProof and that it corresponds to the supplied node.
-    pub fn validate(&self, node: usize) -> bool {
+    fn verify(&self) -> bool {
         let mut a = H::Function::default();
-
-        if path_index(&self.path) != node {
-            return false;
-        }
 
         self.root()
             == &(0..self.path.len()).fold(self.leaf, |h, i| {
@@ -114,8 +109,21 @@ impl<H: Hasher> MerkleProof<H> {
             })
     }
 
+    /// Validates the MerkleProof and that it corresponds to the supplied node.
+    pub fn validate(&self, node: usize) -> bool {
+        if path_index(&self.path) != node {
+            return false;
+        }
+
+        self.verify()
+    }
+
     /// Validates that the data hashes to the leaf of the merkle path.
     pub fn validate_data(&self, data: &[u8]) -> bool {
+        if !self.verify() {
+            return false;
+        }
+
         self.leaf().into_bytes() == data
     }
 
