@@ -1069,6 +1069,11 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
                 partition_proofs.len()
             );
 
+            // TODO:
+            // 1. grab all comm_r_last and ensure they are the same (from inclusion proofs)
+            // 2. grab all comm_c and ensure they are the same (from inclusion proofs)
+            // 3. check that H(comm_c || comm_r_last) == comm_r
+
             let challenges =
                 pub_inputs.challenges(&pub_params.layer_challenges, graph_0.size(), Some(k));
             for i in 0..challenges.len() {
@@ -1079,6 +1084,10 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
                 // Verify initial data layer
                 trace!("verify initial data layer");
                 if !proof.comm_d_proofs[i].proves_challenge(challenge) {
+                    return Ok(false);
+                }
+
+                if proof.comm_d_proofs[i].root() != &pub_inputs.tau.comm_d {
                     return Ok(false);
                 }
 
