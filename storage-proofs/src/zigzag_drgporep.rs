@@ -922,31 +922,28 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
         data[..NODE_SIZE * nodes_count].copy_from_slice(&r_last);
 
         // 3. Construct Column Commitments
-
         let odd_columns = (0..nodes_count)
-            .map(|x| get_odd_column(&encodings, layers, x))
-            .collect::<Result<Vec<_>>>()?;
+            .into_par_iter()
+            .map(|x| get_odd_column(&encodings, layers, x));
 
         let even_columns = (0..nodes_count)
-            .map(|x| get_even_column(&encodings, layers, graph.inv_index(x)))
-            .collect::<Result<Vec<_>>>()?;
+            .into_par_iter()
+            .map(|x| get_even_column(&encodings, layers, graph.inv_index(x)));
 
         // O_i = H( e_i^(1) || .. )
         let os = odd_columns
-            .into_iter()
-            .map(|c| hash_single_column(&c.rows))
-            .collect::<Vec<_>>();
+            .map(|c| c.map(|c| hash_single_column(&c.rows)))
+            .collect::<Result<Vec<_>>>()?;
 
         // E_i = H( e_\bar{i}^(2) || .. )
         let es = even_columns
-            .into_iter()
-            .map(|c| hash_single_column(&c.rows))
-            .collect::<Vec<_>>();
+            .map(|c| c.map(|c| hash_single_column(&c.rows)))
+            .collect::<Result<Vec<_>>>()?;
 
         // C_i = H(O_i || E_i)
         let cs = os
-            .iter()
-            .zip(es.iter())
+            .par_iter()
+            .zip(es.par_iter())
             .flat_map(|(o_i, e_i)| hash2(&o_i[..], &e_i[..]))
             .collect::<Vec<_>>();
 
@@ -1062,123 +1059,128 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
         let replica_id = &pub_inputs.replica_id;
         let layers = pub_params.layer_challenges.layers();
 
-        for (k, proof) in partition_proofs.iter().enumerate() {
-            trace!(
-                "verifying partition proof {}/{}",
-                k + 1,
-                partition_proofs.len()
-            );
+        let valid = partition_proofs
+            .into_par_iter()
+            .enumerate()
+            .all(|(k, proof)| {
+                trace!(
+                    "verifying partition proof {}/{}",
+                    k + 1,
+                    partition_proofs.len()
+                );
 
-            // TODO:
-            // 1. grab all comm_r_last and ensure they are the same (from inclusion proofs)
-            // 2. grab all comm_c and ensure they are the same (from inclusion proofs)
-            // 3. check that H(comm_c || comm_r_last) == comm_r
+                // TODO:
+                // 1. grab all comm_r_last and ensure they are the same (from inclusion proofs)
+                // 2. grab all comm_c and ensure they are the same (from inclusion proofs)
+                // 3. check that H(comm_c || comm_r_last) == comm_r
 
-            let challenges =
-                pub_inputs.challenges(&pub_params.layer_challenges, graph_0.size(), Some(k));
-            for i in 0..challenges.len() {
-                trace!("verify challenge {}/{}", i, challenges.len());
-                // Validate for this challenge
-                let challenge = challenges[i] % graph_0.size();
+                let challenges =
+                    pub_inputs.challenges(&pub_params.layer_challenges, graph_0.size(), Some(k));
+                for i in 0..challenges.len() {
+                    trace!("verify challenge {}/{}", i, challenges.len());
+                    // Validate for this challenge
+                    let challenge = challenges[i] % graph_0.size();
 
-                // Verify initial data layer
-                trace!("verify initial data layer");
-                if !proof.comm_d_proofs[i].proves_challenge(challenge) {
-                    return Ok(false);
-                }
-
-                if proof.comm_d_proofs[i].root() != &pub_inputs.tau.comm_d {
-                    return Ok(false);
-                }
-
-                // Verify replica column openings
-                trace!("verify replica column openings");
-                {
-                    let rco = &proof.replica_column_proofs[i];
-
-                    trace!("  verify c_x");
-                    if !rco.c_x.verify() {
-                        return Ok(false);
+                    // Verify initial data layer
+                    trace!("verify initial data layer");
+                    if !proof.comm_d_proofs[i].proves_challenge(challenge) {
+                        return false;
                     }
 
-                    trace!("  verify c_inv_x");
-                    if !rco.c_inv_x.verify() {
-                        return Ok(false);
+                    if proof.comm_d_proofs[i].root() != &pub_inputs.tau.comm_d {
+                        return false;
                     }
 
-                    trace!("  verify drg_parents");
-                    for proof in &rco.drg_parents {
-                        if !proof.verify() {
-                            return Ok(false);
-                        }
-                    }
-
-                    trace!("  verify exp_parents_even");
-                    for proof in &rco.exp_parents_even {
-                        if !proof.verify() {
-                            return Ok(false);
-                        }
-                    }
-
-                    trace!("  verify exp_parents_odd");
-                    for proof in &rco.exp_parents_odd {
-                        if !proof.verify() {
-                            return Ok(false);
-                        }
-                    }
-                }
-
-                // Verify final replica layer openings
-                trace!("verify final replica layer openings");
-                {
-                    let inv_challenge = graph_0.inv_index(challenge);
-
-                    if !proof.comm_r_last_proofs[i]
-                        .0
-                        .proves_challenge(inv_challenge)
+                    // Verify replica column openings
+                    trace!("verify replica column openings");
                     {
-                        return Ok(false);
+                        let rco = &proof.replica_column_proofs[i];
+
+                        trace!("  verify c_x");
+                        if !rco.c_x.verify() {
+                            return false;
+                        }
+
+                        trace!("  verify c_inv_x");
+                        if !rco.c_inv_x.verify() {
+                            return false;
+                        }
+
+                        trace!("  verify drg_parents");
+                        for proof in &rco.drg_parents {
+                            if !proof.verify() {
+                                return false;
+                            }
+                        }
+
+                        trace!("  verify exp_parents_even");
+                        for proof in &rco.exp_parents_even {
+                            if !proof.verify() {
+                                return false;
+                            }
+                        }
+
+                        trace!("  verify exp_parents_odd");
+                        for proof in &rco.exp_parents_odd {
+                            if !proof.verify() {
+                                return false;
+                            }
+                        }
                     }
 
-                    let mut parents = vec![0; graph_1.degree()];
-                    graph_1.parents(inv_challenge, &mut parents);
-
-                    if parents.len() != proof.comm_r_last_proofs[i].1.len() {
-                        return Ok(false);
-                    }
-
-                    for (p, parent) in proof.comm_r_last_proofs[i]
-                        .1
-                        .iter()
-                        .zip(parents.into_iter())
+                    // Verify final replica layer openings
+                    trace!("verify final replica layer openings");
                     {
-                        if !p.proves_challenge(parent) {
-                            return Ok(false);
+                        let inv_challenge = graph_0.inv_index(challenge);
+
+                        if !proof.comm_r_last_proofs[i]
+                            .0
+                            .proves_challenge(inv_challenge)
+                        {
+                            return false;
+                        }
+
+                        let mut parents = vec![0; graph_1.degree()];
+                        graph_1.parents(inv_challenge, &mut parents);
+
+                        if parents.len() != proof.comm_r_last_proofs[i].1.len() {
+                            return false;
+                        }
+
+                        for (p, parent) in proof.comm_r_last_proofs[i]
+                            .1
+                            .iter()
+                            .zip(parents.into_iter())
+                        {
+                            if !p.proves_challenge(parent) {
+                                return false;
+                            }
+                        }
+                    }
+
+                    // Verify Encoding Layer 1
+                    trace!("verify encoding (layer: 1)");
+                    if !proof.encoding_proof_1[i].verify(replica_id) {
+                        return false;
+                    }
+
+                    // Verify Encoding Layer 2..layers - 1
+                    {
+                        assert_eq!(proof.encoding_proofs[i].len(), layers - 2);
+                        for (j, encoding_proof) in proof.encoding_proofs[i].iter().enumerate() {
+                            trace!("verify encoding (layer: {})", j + 2);
+
+                            if !encoding_proof.verify(replica_id) {
+                                return false;
+                            }
                         }
                     }
                 }
 
-                // Verify Encoding Layer 1
-                trace!("verify encoding (layer: 1)");
-                if !proof.encoding_proof_1[i].verify(replica_id) {
-                    return Ok(false);
-                }
+                true
+            });
 
-                // Verify Encoding Layer 2..layers - 1
-                {
-                    assert_eq!(proof.encoding_proofs[i].len(), layers - 2);
-                    for (j, encoding_proof) in proof.encoding_proofs[i].iter().enumerate() {
-                        trace!("verify encoding (layer: {})", j + 2);
-
-                        if !encoding_proof.verify(replica_id) {
-                            return Ok(false);
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(true)
+        Ok(valid)
     }
 
     fn with_partition(pub_in: Self::PublicInputs, k: Option<usize>) -> Self::PublicInputs {
