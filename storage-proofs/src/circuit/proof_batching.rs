@@ -13,6 +13,7 @@ use snark::{groth16, Circuit, ConstraintSystem, SynthesisError};
 use snark_gadgets::{bits::boolean::Boolean, pairing::bls12_377::PairingGadget as Bls12PairingGadget, utils::AllocGadget};
 use crate::circuit::multi_proof::MultiProof;
 use snark::groth16::VerifyingKey;
+use snark_gadgets::fields::fp::FpGadget;
 
 type VerifierGadget = Groth16VerifierGadget<Bls12, SW6, Bls12PairingGadget>;
 type ProofGadgetT = ProofGadget<Bls12, SW6, Bls12PairingGadget>;
@@ -21,7 +22,7 @@ type VkGadget = VerifyingKeyGadget<Bls12, SW6, Bls12PairingGadget>;
 #[derive(Clone)]
 pub struct ProofBatching {
     pub verifying_key: VerifyingKey<Bls12>,
-    pub public_inputs: Vec<Vec<bls12::Fr>>,
+    pub public_inputs: Vec<Vec<sw6::Fr>>,
     pub groth_proofs: Vec<groth16::Proof<Bls12>>,
 }
 
@@ -40,7 +41,6 @@ impl Circuit<SW6> for ProofBatching {
                     Vec::<Boolean>::alloc_input(cs.ns(|| format!("Alloc input: {} {}", i, j)), || {
                         Ok(input_bits)
                     }).unwrap();
-
                 input_gadgets.push(input_bits);
             }
             multi_input_gadgets.push(input_gadgets);
@@ -55,7 +55,7 @@ impl Circuit<SW6> for ProofBatching {
             proof_gadgets.push(proof_gadget);
         }
 
-        let vk_gadget = VkGadget::alloc_input(
+        let vk_gadget = VkGadget::alloc(
             cs.ns(|| "Vk"), || Ok(&self.verifying_key)).unwrap();
 
         let mut inputs_batch_iter: Vec<_> =
@@ -77,7 +77,8 @@ mod tests {
     use rand::{thread_rng, Rng};
     use std::borrow::Borrow;
     use crate::circuit::test::TestConstraintSystem;
-    use algebra::utils::ToEngineFr;
+    use algebra::fields::Field;
+    use snark::groth16::PreparedVerifyingKey;
 
     struct DummyCircuit<E: PairingEngine> {
         inputs:          Vec<Option<E::Fr>>,
@@ -162,22 +163,27 @@ mod tests {
         // TODO: Get rid of cloning
         let proof_batching_circuit = ProofBatching {
             verifying_key: params.vk,
-            public_inputs: test_proofs.clone().into_iter().map(|tp| tp.0).collect(),
+            public_inputs: test_proofs.clone().into_iter().map(|tp|
+                tp.0
+                    .into_iter()
+                    .map(|v| {
+                        use algebra::biginteger::{BigInteger256, BigInteger384};
+
+                        let big256: BigInteger256 = v.into_repr();
+                        let big384: BigInteger384 = BigInteger384::new([
+                            big256.0[0],
+                            big256.0[1],
+                            big256.0[2],
+                            big256.0[3],
+                            0,
+                            0,
+                        ]);
+                        sw6::Fr::from_repr(big384)
+                    })
+                    .collect::<Vec<_>>()
+            ).collect(),
             groth_proofs: test_proofs.clone().into_iter().map(|tp| tp.1).collect(),
         };
-
-//        {
-//            let mut cs = TestConstraintSystem::new();
-//
-//            proof_batching_circuit.synthesize(&mut cs).expect("failed to synthesize");
-//
-//            if !cs.is_satisfied() {
-//                panic!(
-//                    "failed to satisfy: {:?}",
-//                    cs.which_is_unsatisfied().unwrap()
-//                );
-//            }
-//        }
 
         let batch_params = groth16::generate_random_parameters(proof_batching_circuit.clone(), rng).unwrap();
         let batch_proof = groth16::create_random_proof(proof_batching_circuit.clone(), &batch_params, rng).unwrap();
@@ -187,10 +193,22 @@ mod tests {
             &proof_batching_circuit
                 .public_inputs
                 .into_iter()
-                .map(|pi|
-                    pi.iter().map(|v| sw6::Fr::from_repr(v.into_repr())).collect()
+                .flat_map(|pi|
+                    pi.into_iter().flat_map(|v| {
+                        let mut bits = BitIterator::new(v.into_repr()).collect::<Vec<_>>();
+                        bits.reverse();
+                        bits.into_iter().map(|b| {
+                            if b {
+                                sw6::Fr::one()
+                            } else {
+                                sw6::Fr::zero()
+                            }
+                        }).collect::<Vec<_>>()
+                    })
                 )
                 .collect::<Vec<_>>()
         ).unwrap();
+
+        assert!(verified);
     }
 }
