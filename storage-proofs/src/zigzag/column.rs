@@ -5,8 +5,14 @@ use serde::de::Deserialize;
 use serde::ser::Serialize;
 
 use crate::hasher::Hasher;
+use crate::merkle::MerkleProof;
 use crate::util::NODE_SIZE;
-use crate::zigzag::hash::{hash2, hash_single_column};
+use crate::zigzag::{
+    column_proof::ColumnProof,
+    graph::ZigZagBucketGraph,
+    hash::{hash2, hash_single_column},
+    params::Tree,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type")]
@@ -169,5 +175,35 @@ impl<H: Hasher> Column<H> {
                 &inner.rows[row_index]
             }
         }
+    }
+
+    /// Create a column proof for this column.
+    pub fn into_proof_all(self, tree_c: &Tree<H>) -> ColumnProof<H> {
+        assert!(self.is_all());
+
+        let inclusion_proof = MerkleProof::new_from_proof(&tree_c.gen_proof(self.index()));
+        ColumnProof::<H>::all_from_column(self, inclusion_proof)
+    }
+
+    /// Create an even column proof for this column.
+    pub fn into_proof_odd(self, tree_c: &Tree<H>, e_i: &[u8]) -> ColumnProof<H> {
+        assert!(self.is_odd());
+
+        let inclusion_proof = MerkleProof::new_from_proof(&tree_c.gen_proof(self.index()));
+        ColumnProof::<H>::odd_from_column(self, inclusion_proof, e_i)
+    }
+
+    /// Create an odd column proof for this column.
+    pub fn into_proof_even(
+        self,
+        tree_c: &Tree<H>,
+        graph: &ZigZagBucketGraph<H>,
+        o_i: &[u8],
+    ) -> ColumnProof<H> {
+        assert!(self.is_even());
+
+        let inclusion_proof =
+            MerkleProof::new_from_proof(&tree_c.gen_proof(graph.inv_index(self.index())));
+        ColumnProof::<H>::even_from_column(self, inclusion_proof, o_i)
     }
 }

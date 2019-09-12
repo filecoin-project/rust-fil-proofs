@@ -13,7 +13,6 @@ use crate::vde;
 use crate::zigzag::{
     challenges::LayerChallenges,
     column::Column,
-    column_proof::ColumnProof,
     encoding_proof::EncodingProof,
     graph::ZigZagBucketGraph,
     hash::hash2,
@@ -52,7 +51,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
         layers: usize,
         _total_layers: usize,
         partition_count: usize,
-    ) -> Result<Vec<Proof<H>>> {
+    ) -> Result<Vec<Vec<Proof<H>>>> {
         assert!(layers > 0);
         assert_eq!(t_aux.encodings.len(), layers - 1);
 
@@ -121,219 +120,189 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
         };
 
         (0..partition_count)
-            .into_par_iter()
             .map(|k| {
                 trace!("proving partition {}/{}", k + 1, partition_count);
 
                 // Derive the set of challenges we are proving over.
                 let challenges = pub_inputs.challenges(layer_challenges, graph_size, Some(k));
 
-                let mut comm_d_proofs = Vec::with_capacity(challenges.len());
-                let mut comm_r_last_proofs = Vec::with_capacity(challenges.len());
-
-                let mut replica_column_proofs = Vec::with_capacity(challenges.len());
-
-                let mut encoding_proof_1 = Vec::with_capacity(challenges.len());
-                let mut encoding_proofs = Vec::with_capacity(challenges.len());
-
                 // ZigZag commitment specifics
-                for challenge in challenges {
-                    trace!(" challenge {}", challenge);
-                    debug_assert!(challenge < graph_0.size());
+                challenges
+                    .into_par_iter()
+                    .map(|challenge| {
+                        trace!(" challenge {}", challenge);
+                        assert!(challenge < graph_0.size());
 
-                    let inv_challenge = graph_0.inv_index(challenge);
+                        let inv_challenge = graph_0.inv_index(challenge);
 
-                    // Initial data layer openings (D_X in Comm_D)
-                    let comm_d_proof =
-                        MerkleProof::new_from_proof(&t_aux.tree_d.gen_proof(challenge));
+                        // Initial data layer openings (D_X in Comm_D)
+                        let comm_d_proof =
+                            MerkleProof::new_from_proof(&t_aux.tree_d.gen_proof(challenge));
 
-                    // ZigZag replica column openings
-                    let rpc = {
-                        // All labels in C_X
-                        trace!("  c_x");
-                        let c_x = {
-                            let column = t_aux.full_column(&graph_0, challenge)?;
+                        // ZigZag replica column openings
+                        let rpc = {
+                            // All labels in C_X
+                            trace!("  c_x");
+                            let c_x = t_aux
+                                .full_column(&graph_0, challenge)?
+                                .into_proof_all(&t_aux.tree_c);
 
-                            let inclusion_proof = MerkleProof::new_from_proof(
-                                &t_aux.tree_c.gen_proof(column.index()),
-                            );
-                            ColumnProof::<H>::all_from_column(column, inclusion_proof)
+                            // Only odd-layer labels in the renumbered column C_\bar{X}
+                            trace!("  c_inv_x");
+                            let c_inv_x = t_aux
+                                .full_column(&graph_0, inv_challenge)?
+                                .into_proof_all(&t_aux.tree_c);
+
+                            // All labels in the DRG parents.
+                            trace!("  drg_parents");
+                            let drg_parents = get_drg_parents_columns(challenge)?
+                                .into_iter()
+                                .map(|column| column.into_proof_all(&t_aux.tree_c))
+                                .collect::<Vec<_>>();
+
+                            // Odd layer labels for the expander parents
+                            trace!("  exp_parents_odd");
+                            let exp_parents_odd = get_exp_parents_odd_columns(challenge)?
+                                .into_iter()
+                                .map(|column| {
+                                    let index = column.index();
+                                    column.into_proof_odd(&t_aux.tree_c, &t_aux.es[index])
+                                })
+                                .collect::<Vec<_>>();
+
+                            // Even layer labels for the expander parents
+                            trace!("  exp_parents_even");
+                            let exp_parents_even = get_exp_parents_even_columns(inv_challenge)?
+                                .into_iter()
+                                .map(|column| {
+                                    let index = graph_1.inv_index(column.index());
+                                    column.into_proof_even(
+                                        &t_aux.tree_c,
+                                        &graph_1,
+                                        &t_aux.os[index],
+                                    )
+                                })
+                                .collect::<Vec<_>>();
+
+                            ReplicaColumnProof {
+                                c_x,
+                                c_inv_x,
+                                drg_parents,
+                                exp_parents_even,
+                                exp_parents_odd,
+                            }
                         };
 
-                        // Only odd-layer labels in the renumbered column C_\bar{X}
-                        trace!("  c_inv_x");
-                        let c_inv_x = {
-                            let column = t_aux.full_column(&graph_0, inv_challenge)?;
+                        // Final replica layer openings
+                        trace!("final replica layer openings");
+                        let comm_r_last_proofs = {
+                            // All challenged Labels e_\bar{X}^(L)
+                            trace!("  inclusion proof");
                             let inclusion_proof = MerkleProof::new_from_proof(
-                                &t_aux.tree_c.gen_proof(column.index()),
+                                &t_aux.tree_r_last.gen_proof(inv_challenge),
                             );
-                            ColumnProof::<H>::all_from_column(column, inclusion_proof)
+
+                            // Even challenged parents (any kind)
+                            trace!(" even parents");
+                            let mut parents = vec![0; graph_1.degree()];
+                            graph_1.parents(inv_challenge, &mut parents);
+
+                            let even_parents_proof = parents
+                                .into_iter()
+                                .map(|parent| {
+                                    MerkleProof::new_from_proof(
+                                        &t_aux.tree_r_last.gen_proof(parent),
+                                    )
+                                })
+                                .collect::<Vec<_>>();
+
+                            (inclusion_proof, even_parents_proof)
                         };
 
-                        // All labels in the DRG parents.
-                        trace!("  drg_parents");
-                        let drg_parents = get_drg_parents_columns(challenge)?
-                            .into_iter()
-                            .map(|column| {
-                                let inclusion_proof = MerkleProof::new_from_proof(
-                                    &t_aux.tree_c.gen_proof(column.index()),
-                                );
-                                ColumnProof::<H>::all_from_column(column, inclusion_proof)
-                            })
-                            .collect::<Vec<_>>();
+                        // Encoding Proof layer 1
+                        trace!("  encoding proof layer 1");
+                        let encoding_proof_1 = {
+                            let encoded_node = rpc.c_x.get_verified_node_at_layer(1);
 
-                        // Odd layer labels for the expander parents
-                        trace!("  exp_parents_odd");
-                        let exp_parents_odd = get_exp_parents_odd_columns(challenge)?
-                            .into_iter()
-                            .map(|column| {
-                                let index = column.index();
-                                let inclusion_proof =
-                                    MerkleProof::new_from_proof(&t_aux.tree_c.gen_proof(index));
-                                ColumnProof::<H>::odd_from_column(
-                                    column,
-                                    inclusion_proof,
-                                    &t_aux.es[index],
-                                )
-                            })
-                            .collect::<Vec<_>>();
+                            // TODO: pull this out of the inclusion proof
+                            let decoded_node = comm_d_proof.verified_leaf();
 
-                        // Even layer labels for the expander parents
-                        trace!("  exp_parents_even");
-                        let exp_parents_even = get_exp_parents_even_columns(inv_challenge)?
-                            .into_iter()
-                            .map(|column| {
-                                let index = graph_1.inv_index(column.index());
-                                let inclusion_proof =
-                                    MerkleProof::new_from_proof(&t_aux.tree_c.gen_proof(index));
-                                ColumnProof::<H>::even_from_column(
-                                    column,
-                                    inclusion_proof,
-                                    &t_aux.os[index],
-                                )
-                            })
-                            .collect::<Vec<_>>();
-
-                        ReplicaColumnProof {
-                            c_x,
-                            c_inv_x,
-                            drg_parents,
-                            exp_parents_even,
-                            exp_parents_odd,
-                        }
-                    };
-
-                    // Final replica layer openings
-                    trace!("final replica layer openings");
-                    {
-                        // All challenged Labels e_\bar{X}^(L)
-                        trace!("  inclusion proof");
-                        let inclusion_proof = MerkleProof::new_from_proof(
-                            &t_aux.tree_r_last.gen_proof(inv_challenge),
-                        );
-
-                        // Even challenged parents (any kind)
-                        trace!(" even parents");
-                        let mut parents = vec![0; graph_1.degree()];
-                        graph_1.parents(inv_challenge, &mut parents);
-
-                        let even_parents_proof = parents
-                            .into_iter()
-                            .map(|parent| {
-                                MerkleProof::new_from_proof(&t_aux.tree_r_last.gen_proof(parent))
-                            })
-                            .collect::<Vec<_>>();
-
-                        comm_r_last_proofs.push((inclusion_proof, even_parents_proof));
-                    }
-
-                    // Encoding Proof layer 1
-                    trace!("  encoding proof layer 1");
-                    {
-                        let encoded_node = rpc.c_x.get_verified_node_at_layer(1);
-
-                        // TODO: pull this out of the inclusion proof
-                        let decoded_node = comm_d_proof.verified_leaf();
-
-                        let mut parents = vec![0; graph_0.degree()];
-                        graph_0.parents(challenge, &mut parents);
-
-                        let parents_data = parents
-                            .into_iter()
-                            .map(|parent| {
-                                data_at_node(t_aux.encoding_at_layer(1), parent).map(|v| v.to_vec())
-                            })
-                            .collect::<Result<_>>()?;
-
-                        encoding_proof_1.push(EncodingProof::<H>::new(
-                            encoded_node,
-                            decoded_node,
-                            parents_data,
-                        ));
-                    }
-
-                    // Encoding Proof Layer 2..l-1
-                    {
-                        let mut proofs = Vec::with_capacity(layers - 2);
-
-                        for layer in 2..layers {
-                            trace!("  encoding proof layer {}", layer);
-                            let (graph, challenge, encoded_node, decoded_node) = if layer % 2 == 0 {
-                                (
-                                    &graph_1,
-                                    inv_challenge,
-                                    rpc.c_x.get_verified_node_at_layer(layer),
-                                    rpc.c_inv_x.get_verified_node_at_layer(layer - 1),
-                                )
-                            } else {
-                                (
-                                    &graph_2,
-                                    challenge,
-                                    rpc.c_x.get_verified_node_at_layer(layer),
-                                    rpc.c_inv_x.get_verified_node_at_layer(layer - 1),
-                                )
-                            };
-
-                            let encoded_data = t_aux.encoding_at_layer(layer);
-
-                            let mut parents = vec![0; graph.degree()];
-                            graph.parents(challenge, &mut parents);
+                            let mut parents = vec![0; graph_0.degree()];
+                            graph_0.parents(challenge, &mut parents);
 
                             let parents_data = parents
                                 .into_iter()
                                 .map(|parent| {
-                                    data_at_node(&encoded_data, parent).map(|v| v.to_vec())
+                                    data_at_node(t_aux.encoding_at_layer(1), parent)
+                                        .map(|v| v.to_vec())
                                 })
                                 .collect::<Result<_>>()?;
 
-                            let proof = EncodingProof::<H>::new(
-                                encoded_node.clone(),
-                                decoded_node.clone(),
-                                parents_data,
-                            );
+                            EncodingProof::<H>::new(encoded_node, decoded_node, parents_data)
+                        };
 
-                            debug_assert!(
-                                proof.verify(&pub_inputs.replica_id, &encoded_node, &decoded_node),
-                                "Invalid encoding proof generated"
-                            );
+                        // Encoding Proof Layer 2..l-1
+                        let mut encoding_proofs = Vec::with_capacity(layers - 2);
+                        {
+                            for layer in 2..layers {
+                                trace!("  encoding proof layer {}", layer);
+                                let (graph, challenge, encoded_node, decoded_node) =
+                                    if layer % 2 == 0 {
+                                        (
+                                            &graph_1,
+                                            inv_challenge,
+                                            rpc.c_x.get_verified_node_at_layer(layer),
+                                            rpc.c_inv_x.get_verified_node_at_layer(layer - 1),
+                                        )
+                                    } else {
+                                        (
+                                            &graph_2,
+                                            challenge,
+                                            rpc.c_x.get_verified_node_at_layer(layer),
+                                            rpc.c_inv_x.get_verified_node_at_layer(layer - 1),
+                                        )
+                                    };
 
-                            proofs.push(proof);
+                                let encoded_data = t_aux.encoding_at_layer(layer);
+
+                                let mut parents = vec![0; graph.degree()];
+                                graph.parents(challenge, &mut parents);
+
+                                let parents_data = parents
+                                    .into_iter()
+                                    .map(|parent| {
+                                        data_at_node(&encoded_data, parent).map(|v| v.to_vec())
+                                    })
+                                    .collect::<Result<_>>()?;
+
+                                let proof = EncodingProof::<H>::new(
+                                    encoded_node.clone(),
+                                    decoded_node.clone(),
+                                    parents_data,
+                                );
+
+                                debug_assert!(
+                                    proof.verify(
+                                        &pub_inputs.replica_id,
+                                        &encoded_node,
+                                        &decoded_node
+                                    ),
+                                    "Invalid encoding proof generated"
+                                );
+
+                                encoding_proofs.push(proof);
+                            }
                         }
 
-                        encoding_proofs.push(proofs);
-                    }
-
-                    comm_d_proofs.push(comm_d_proof);
-                    replica_column_proofs.push(rpc);
-                }
-
-                Ok(Proof {
-                    comm_d_proofs,
-                    replica_column_proofs,
-                    comm_r_last_proofs,
-                    encoding_proof_1,
-                    encoding_proofs,
-                })
+                        Ok(Proof {
+                            comm_d_proofs: comm_d_proof,
+                            replica_column_proofs: rpc,
+                            comm_r_last_proofs,
+                            encoding_proof_1,
+                            encoding_proofs,
+                        })
+                    })
+                    .collect()
             })
             .collect()
     }

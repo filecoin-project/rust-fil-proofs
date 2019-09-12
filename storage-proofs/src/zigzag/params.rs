@@ -111,29 +111,98 @@ pub struct Proof<H: Hasher> {
         serialize = "MerkleProof<H>: Serialize",
         deserialize = "MerkleProof<H>: Deserialize<'de>"
     ))]
-    pub comm_d_proofs: Vec<MerkleProof<H>>,
+    pub comm_d_proofs: MerkleProof<H>,
     #[serde(bound(
         serialize = "MerkleProof<H>: Serialize, ColumnProof<H>: Serialize",
         deserialize = "MerkleProof<H>: Deserialize<'de>, ColumnProof<H>: Deserialize<'de>"
     ))]
-    pub comm_r_last_proofs: Vec<(MerkleProof<H>, Vec<MerkleProof<H>>)>,
+    pub comm_r_last_proofs: (MerkleProof<H>, Vec<MerkleProof<H>>),
     #[serde(bound(
         serialize = "ReplicaColumnProof<H>: Serialize",
         deserialize = "ReplicaColumnProof<H>: Deserialize<'de>"
     ))]
-    pub replica_column_proofs: Vec<ReplicaColumnProof<H>>,
+    pub replica_column_proofs: ReplicaColumnProof<H>,
     #[serde(bound(
         serialize = "EncodingProof<H>: Serialize",
         deserialize = "EncodingProof<H>: Deserialize<'de>"
     ))]
     /// Indexed by challenge. The encoding proof for layer 1.
-    pub encoding_proof_1: Vec<EncodingProof<H>>,
+    pub encoding_proof_1: EncodingProof<H>,
     #[serde(bound(
         serialize = "EncodingProof<H>: Serialize",
         deserialize = "EncodingProof<H>: Deserialize<'de>"
     ))]
     /// Indexed first by challenge then by layer in 2..layers - 1.
-    pub encoding_proofs: Vec<Vec<EncodingProof<H>>>,
+    pub encoding_proofs: Vec<EncodingProof<H>>,
+}
+
+impl<H: Hasher> Proof<H> {
+    pub fn verify(
+        &self,
+        pub_params: &PublicParams<H, ZigZagBucketGraph<H>>,
+        pub_inputs: &PublicInputs<<H as Hasher>::Domain>,
+        challenge: usize,
+        graph_0: &ZigZagBucketGraph<H>,
+        graph_1: &ZigZagBucketGraph<H>,
+    ) -> bool {
+        let replica_id = &pub_inputs.replica_id;
+        let layers = pub_params.layer_challenges.layers();
+
+        check!(challenge < graph_0.size());
+
+        // Verify initial data layer
+        trace!("verify initial data layer");
+
+        check!(self.comm_d_proofs.proves_challenge(challenge));
+        check_eq!(self.comm_d_proofs.root(), &pub_inputs.tau.comm_d);
+
+        // Verify replica column openings
+        trace!("verify replica column openings");
+        check!(self.replica_column_proofs.verify());
+
+        // Verify final replica layer openings
+        trace!("verify final replica layer openings");
+        {
+            let inv_challenge = graph_0.inv_index(challenge);
+
+            check!(self.comm_r_last_proofs.0.proves_challenge(inv_challenge));
+
+            let mut parents = vec![0; graph_1.degree()];
+            graph_1.parents(inv_challenge, &mut parents);
+
+            check_eq!(parents.len(), self.comm_r_last_proofs.1.len());
+
+            for (p, parent) in self.comm_r_last_proofs.1.iter().zip(parents.into_iter()) {
+                check!(p.proves_challenge(parent));
+            }
+        }
+
+        // Verify Encoding Layer 1
+        trace!("verify encoding (layer: 1)");
+        let rpc = &self.replica_column_proofs;
+        let comm_d = &self.comm_d_proofs;
+
+        check!(self.encoding_proof_1.verify(
+            replica_id,
+            rpc.c_x.get_node_at_layer(1),
+            comm_d.leaf()
+        ));
+
+        // Verify Encoding Layer 2..layers - 1
+        check_eq!(self.encoding_proofs.len(), layers - 2);
+
+        for (j, encoding_proof) in self.encoding_proofs.iter().enumerate() {
+            let layer = j + 2;
+            trace!("verify encoding (layer: {})", layer);;
+
+            let encoded_node = rpc.c_x.get_node_at_layer(layer);
+            let decoded_node = rpc.c_inv_x.get_node_at_layer(layer - 1);
+
+            check!(encoding_proof.verify(replica_id, encoded_node, decoded_node));
+        }
+
+        true
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -163,6 +232,33 @@ pub struct ReplicaColumnProof<H: Hasher> {
         deserialize = "ColumnProof<H>: Deserialize<'de>"
     ))]
     pub exp_parents_odd: Vec<ColumnProof<H>>,
+}
+
+impl<H: Hasher> ReplicaColumnProof<H> {
+    pub fn verify(&self) -> bool {
+        trace!("  verify c_x");
+        check!(self.c_x.verify());
+
+        trace!("  verify c_inv_x");
+        check!(self.c_inv_x.verify());
+
+        trace!("  verify drg_parents");
+        for proof in &self.drg_parents {
+            check!(proof.verify());
+        }
+
+        trace!("  verify exp_parents_even");
+        for proof in &self.exp_parents_even {
+            check!(proof.verify());
+        }
+
+        trace!("  verify exp_parents_odd");
+        for proof in &self.exp_parents_odd {
+            check!(proof.verify());
+        }
+
+        true
+    }
 }
 
 impl<H: Hasher> Proof<H> {
