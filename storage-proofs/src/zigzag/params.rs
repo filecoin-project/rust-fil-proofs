@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::drgporep;
 use crate::drgraph::Graph;
 use crate::error::Result;
-use crate::hasher::{Domain, Hasher};
+use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::data_at_node;
@@ -137,6 +137,21 @@ pub struct Proof<H: Hasher> {
 }
 
 impl<H: Hasher> Proof<H> {
+    fn comm_r_last(&self) -> &H::Domain {
+        self.comm_r_last_proofs.0.root()
+    }
+
+    fn comm_c(&self) -> &H::Domain {
+        self.replica_column_proofs.c_x.root()
+    }
+
+    fn comm_r(&self) -> H::Domain {
+        let mut bytes = self.comm_c().as_ref().to_vec();
+        bytes.extend_from_slice(self.comm_r_last().as_ref());
+        <H as Hasher>::Function::hash(&bytes)
+    }
+
+    /// Verify the full proof.
     pub fn verify(
         &self,
         pub_params: &PublicParams<H, ZigZagBucketGraph<H>>,
@@ -150,6 +165,12 @@ impl<H: Hasher> Proof<H> {
 
         check!(challenge < graph_0.size());
 
+        // just grabbing the first one
+        let actual_comm_r = self.comm_r();
+        let expected_comm_r = &pub_inputs.tau.comm_r;
+
+        check_eq!(expected_comm_r, &actual_comm_r);
+
         // Verify initial data layer
         trace!("verify initial data layer");
 
@@ -160,28 +181,20 @@ impl<H: Hasher> Proof<H> {
         trace!("verify replica column openings");
         check!(self.replica_column_proofs.verify());
 
-        // Verify final replica layer openings
-        trace!("verify final replica layer openings");
-        {
-            let inv_challenge = graph_0.inv_index(challenge);
+        check!(self.verify_final_replica_layer(challenge, graph_1));
 
-            check!(self.comm_r_last_proofs.0.proves_challenge(inv_challenge));
+        check!(self.verify_encodings(replica_id, layers));
 
-            let mut parents = vec![0; graph_1.degree()];
-            graph_1.parents(inv_challenge, &mut parents);
+        true
+    }
 
-            check_eq!(parents.len(), self.comm_r_last_proofs.1.len());
-
-            for (p, parent) in self.comm_r_last_proofs.1.iter().zip(parents.into_iter()) {
-                check!(p.proves_challenge(parent));
-            }
-        }
-
-        // Verify Encoding Layer 1
-        trace!("verify encoding (layer: 1)");
+    /// Verify all encodings.
+    fn verify_encodings(&self, replica_id: &H::Domain, layers: usize) -> bool {
         let rpc = &self.replica_column_proofs;
         let comm_d = &self.comm_d_proofs;
 
+        // Verify Encoding layer 1
+        trace!("verify encoding (layer: 1)");
         check!(self.encoding_proof_1.verify(
             replica_id,
             rpc.c_x.get_node_at_layer(1),
@@ -199,6 +212,26 @@ impl<H: Hasher> Proof<H> {
             let decoded_node = rpc.c_inv_x.get_node_at_layer(layer - 1);
 
             check!(encoding_proof.verify(replica_id, encoded_node, decoded_node));
+        }
+
+        true
+    }
+
+    /// Verify final replica layer openings
+    fn verify_final_replica_layer(&self, challenge: usize, graph_1: &ZigZagBucketGraph<H>) -> bool {
+        trace!("verify final replica layer openings");
+        let inv_challenge = graph_1.inv_index(challenge);
+
+        check!(self.comm_r_last_proofs.0.proves_challenge(inv_challenge));
+
+        let mut parents = vec![0; graph_1.degree()];
+        graph_1.parents(inv_challenge, &mut parents);
+
+        check_eq!(parents.len(), self.comm_r_last_proofs.1.len());
+
+        for (p, parent) in self.comm_r_last_proofs.1.iter().zip(parents.into_iter()) {
+            check!(p.proves_challenge(parent));
+            check_eq!(self.comm_r_last(), p.root());
         }
 
         true
@@ -236,25 +269,31 @@ pub struct ReplicaColumnProof<H: Hasher> {
 
 impl<H: Hasher> ReplicaColumnProof<H> {
     pub fn verify(&self) -> bool {
+        let expected_comm_c = self.c_x.root();
+
         trace!("  verify c_x");
         check!(self.c_x.verify());
 
         trace!("  verify c_inv_x");
         check!(self.c_inv_x.verify());
+        check_eq!(expected_comm_c, self.c_inv_x.root());
 
         trace!("  verify drg_parents");
         for proof in &self.drg_parents {
             check!(proof.verify());
+            check_eq!(expected_comm_c, proof.root());
         }
 
         trace!("  verify exp_parents_even");
         for proof in &self.exp_parents_even {
             check!(proof.verify());
+            check_eq!(expected_comm_c, proof.root());
         }
 
         trace!("  verify exp_parents_odd");
         for proof in &self.exp_parents_odd {
             check!(proof.verify());
+            check_eq!(expected_comm_c, proof.root());
         }
 
         true

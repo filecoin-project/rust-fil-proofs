@@ -223,8 +223,6 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                         trace!("  encoding proof layer 1");
                         let encoding_proof_1 = {
                             let encoded_node = rpc.c_x.get_verified_node_at_layer(1);
-
-                            // TODO: pull this out of the inclusion proof
                             let decoded_node = comm_d_proof.verified_leaf();
 
                             let mut parents = vec![0; graph_0.degree()];

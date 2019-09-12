@@ -78,6 +78,20 @@ impl<H: Hasher> ColumnProof<H> {
         res
     }
 
+    pub fn root(&self) -> &H::Domain {
+        match self {
+            ColumnProof::All {
+                inclusion_proof, ..
+            } => inclusion_proof.root(),
+            ColumnProof::Odd {
+                inclusion_proof, ..
+            } => inclusion_proof.root(),
+            ColumnProof::Even {
+                inclusion_proof, ..
+            } => inclusion_proof.root(),
+        }
+    }
+
     pub fn odd_from_column(column: Column<H>, inclusion_proof: MerkleProof<H>, e_i: &[u8]) -> Self {
         assert!(column.is_odd());
 
