@@ -1,280 +1,31 @@
-//! ZigZagDrgPorep is a layered PoRep which replicates layer by layer.
-//! Between layers, the graph is 'reversed' in such a way that the dependencies expand with each iteration.
-//! This reversal is not a straightforward inversion -- so we coin the term 'zigzag' to describe the transformation.
-//! Each graph can be divided into base and expansion components.
-//! The 'base' component is an ordinary DRG. The expansion component attempts to add a target (expansion_degree) number of connections
-//! between nodes in a reversible way. Expansion connections are therefore simply inverted at each layer.
-//! Because of how DRG-sampled parents are calculated on demand, the base components are not. Instead, a same-degree
-//! DRG with connections in the opposite direction (and using the same random seed) is used when calculating parents on demand.
-//! For the algorithm to have the desired properties, it is important that the expansion components are directly inverted at each layer.
-//! However, it is fortunately not necessary that the base DRG components also have this property.
-
 use std::marker::PhantomData;
 
 use rayon::prelude::*;
-use serde::de::Deserialize;
-use serde::ser::Serialize;
 
 use crate::drgporep::{self, DrgPoRep};
 use crate::drgraph::Graph;
 use crate::error::Result;
-use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::{next_pow2, populate_leaves, MerkleProof, MerkleStore, MerkleTree, Store};
-use crate::parameter_cache::ParameterSetMetadata;
+use crate::hasher::{HashFunction, Hasher};
+use crate::merkle::{next_pow2, populate_leaves, MerkleProof, MerkleStore, Store};
 use crate::porep::PoRep;
-use crate::proof::ProofScheme;
 use crate::util::{data_at_node, NODE_SIZE};
 use crate::vde;
-use crate::zigzag::column::Column;
-use crate::zigzag::column_proof::ColumnProof;
-use crate::zigzag::encoding_proof::EncodingProof;
-use crate::zigzag::hash::hash2;
-use crate::zigzag::{ChallengeRequirements, LayerChallenges, ZigZagBucketGraph};
-
-type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
+use crate::zigzag::{
+    challenges::LayerChallenges,
+    column::Column,
+    column_proof::ColumnProof,
+    encoding_proof::EncodingProof,
+    graph::ZigZagBucketGraph,
+    hash::hash2,
+    params::{
+        get_even_column, get_full_column, get_node, get_odd_column, PersistentAux, Proof,
+        PublicInputs, ReplicaColumnProof, Tau, TemporaryAux, TransformedLayers, Tree,
+    },
+};
 
 #[derive(Debug)]
 pub struct ZigZagDrgPoRep<'a, H: 'a + Hasher> {
     _a: PhantomData<&'a H>,
-}
-
-#[derive(Debug)]
-pub struct SetupParams {
-    pub drg: drgporep::DrgParams,
-    pub layer_challenges: LayerChallenges,
-}
-
-#[derive(Debug, Clone)]
-pub struct PublicParams<H, G>
-where
-    H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
-{
-    pub graph: G,
-    pub layer_challenges: LayerChallenges,
-    _h: PhantomData<H>,
-}
-
-impl<H, G> PublicParams<H, G>
-where
-    H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
-{
-    pub fn new(graph: G, layer_challenges: LayerChallenges) -> Self {
-        PublicParams {
-            graph,
-            layer_challenges,
-            _h: PhantomData,
-        }
-    }
-}
-
-impl<H, G> ParameterSetMetadata for PublicParams<H, G>
-where
-    H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
-{
-    fn identifier(&self) -> String {
-        format!(
-            "layered_drgporep::PublicParams{{ graph: {}, challenges: {:?} }}",
-            self.graph.identifier(),
-            self.layer_challenges,
-        )
-    }
-
-    fn sector_size(&self) -> u64 {
-        self.graph.sector_size()
-    }
-}
-
-impl<'a, H, G> From<&'a PublicParams<H, G>> for PublicParams<H, G>
-where
-    H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
-{
-    fn from(other: &PublicParams<H, G>) -> PublicParams<H, G> {
-        PublicParams::new(other.graph.clone(), other.layer_challenges.clone())
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct PublicInputs<T: Domain> {
-    pub replica_id: T,
-    pub seed: Option<T>,
-    pub tau: Tau<T>,
-    pub k: Option<usize>,
-}
-
-impl<T: Domain> PublicInputs<T> {
-    pub fn challenges(
-        &self,
-        layer_challenges: &LayerChallenges,
-        leaves: usize,
-        partition_k: Option<usize>,
-    ) -> Vec<usize> {
-        let k = partition_k.unwrap_or(0);
-
-        if let Some(ref seed) = self.seed {
-            layer_challenges.derive::<T>(leaves, &self.replica_id, seed, k as u8)
-        } else {
-            layer_challenges.derive::<T>(leaves, &self.replica_id, &self.tau.comm_r, k as u8)
-        }
-    }
-}
-
-pub struct PrivateInputs<H: Hasher> {
-    pub p_aux: PersistentAux<H::Domain>,
-    pub t_aux: TemporaryAux<H>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Proof<H: Hasher> {
-    #[serde(bound(
-        serialize = "MerkleProof<H>: Serialize",
-        deserialize = "MerkleProof<H>: Deserialize<'de>"
-    ))]
-    pub comm_d_proofs: Vec<MerkleProof<H>>,
-    #[serde(bound(
-        serialize = "MerkleProof<H>: Serialize, ColumnProof<H>: Serialize",
-        deserialize = "MerkleProof<H>: Deserialize<'de>, ColumnProof<H>: Deserialize<'de>"
-    ))]
-    pub comm_r_last_proofs: Vec<(MerkleProof<H>, Vec<MerkleProof<H>>)>,
-    #[serde(bound(
-        serialize = "ReplicaColumnProof<H>: Serialize",
-        deserialize = "ReplicaColumnProof<H>: Deserialize<'de>"
-    ))]
-    pub replica_column_proofs: Vec<ReplicaColumnProof<H>>,
-    #[serde(bound(
-        serialize = "EncodingProof<H>: Serialize",
-        deserialize = "EncodingProof<H>: Deserialize<'de>"
-    ))]
-    /// Indexed by challenge. The encoding proof for layer 1.
-    pub encoding_proof_1: Vec<EncodingProof<H>>,
-    #[serde(bound(
-        serialize = "EncodingProof<H>: Serialize",
-        deserialize = "EncodingProof<H>: Deserialize<'de>"
-    ))]
-    /// Indexed first by challenge then by layer in 2..layers - 1.
-    pub encoding_proofs: Vec<Vec<EncodingProof<H>>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReplicaColumnProof<H: Hasher> {
-    #[serde(bound(
-        serialize = "ColumnProof<H>: Serialize",
-        deserialize = "ColumnProof<H>: Deserialize<'de>"
-    ))]
-    c_x: ColumnProof<H>,
-    #[serde(bound(
-        serialize = "ColumnProof<H>: Serialize",
-        deserialize = "ColumnProof<H>: Deserialize<'de>"
-    ))]
-    c_inv_x: ColumnProof<H>,
-    #[serde(bound(
-        serialize = "ColumnProof<H>: Serialize",
-        deserialize = "ColumnProof<H>: Deserialize<'de>"
-    ))]
-    drg_parents: Vec<ColumnProof<H>>,
-    #[serde(bound(
-        serialize = "ColumnProof<H>: Serialize",
-        deserialize = "ColumnProof<H>: Deserialize<'de>"
-    ))]
-    exp_parents_even: Vec<ColumnProof<H>>,
-    #[serde(bound(
-        serialize = "ColumnProof<H>: Serialize",
-        deserialize = "ColumnProof<H>: Deserialize<'de>"
-    ))]
-    exp_parents_odd: Vec<ColumnProof<H>>,
-}
-
-impl<H: Hasher> Proof<H> {
-    pub fn serialize(&self) -> Vec<u8> {
-        unimplemented!();
-    }
-}
-
-type TransformedLayers<H> = (
-    Tau<<H as Hasher>::Domain>,
-    PersistentAux<<H as Hasher>::Domain>,
-    TemporaryAux<H>,
-);
-
-/// Tau for a single parition.
-#[derive(Debug, Clone)]
-pub struct Tau<D: Domain> {
-    comm_d: D,
-    comm_r: D,
-}
-
-#[derive(Debug, Clone)]
-/// Stored along side the sector on disk.
-pub struct PersistentAux<D: Domain> {
-    comm_c: D,
-    comm_r_last: D,
-}
-
-#[derive(Debug, Clone)]
-pub struct TemporaryAux<H: Hasher> {
-    /// The encoded nodes for 1..layers.
-    encodings: Vec<Vec<u8>>,
-    tree_d: Tree<H>,
-    tree_r_last: Tree<H>,
-    tree_c: Tree<H>,
-    /// E_i
-    es: Vec<Vec<u8>>,
-    /// O_i
-    os: Vec<Vec<u8>>,
-}
-
-fn get_node<H: Hasher>(data: &[u8], index: usize) -> Result<H::Domain> {
-    H::Domain::try_from_bytes(data_at_node(data, index).expect("invalid node math"))
-}
-
-fn get_even_column<H: Hasher>(encodings: &[Vec<u8>], layers: usize, x: usize) -> Result<Column<H>> {
-    debug_assert_eq!(encodings.len(), layers - 1);
-
-    let rows = (1..layers - 1)
-        .step_by(2)
-        .map(|layer| H::Domain::try_from_bytes(get_node_at_layer(encodings, x, layer)?))
-        .collect::<Result<_>>()?;
-
-    Ok(Column::new_even(x, rows))
-}
-
-fn get_odd_column<H: Hasher>(encodings: &[Vec<u8>], layers: usize, x: usize) -> Result<Column<H>> {
-    debug_assert_eq!(encodings.len(), layers - 1);
-
-    let rows = (0..layers)
-        .step_by(2)
-        .map(|layer| H::Domain::try_from_bytes(get_node_at_layer(encodings, x, layer)?))
-        .collect::<Result<_>>()?;
-
-    Ok(Column::new_odd(x, rows))
-}
-
-fn get_full_column<H: Hasher>(
-    encodings: &[Vec<u8>],
-    graph: &ZigZagBucketGraph<H>,
-    layers: usize,
-    x: usize,
-) -> Result<Column<H>> {
-    debug_assert_eq!(encodings.len(), layers - 1);
-
-    let inv_index = graph.inv_index(x);
-
-    let rows = (0..layers - 1)
-        .map(|i| {
-            let x = if (i + 1) % 2 == 0 { inv_index } else { x };
-
-            H::Domain::try_from_bytes(get_node_at_layer(&encodings, x, i)?)
-        })
-        .collect::<Result<_>>()?;
-
-    Ok(Column::new_all(x, rows))
-}
-
-fn get_node_at_layer(encodings: &[Vec<u8>], node: usize, layer: usize) -> Result<&[u8]> {
-    data_at_node(&encodings[layer], node)
 }
 
 impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
@@ -282,17 +33,17 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
     /// Warning: This method will likely need to be extended for other implementations
     /// but because it is not clear what parameters they will need, only the ones needed
     /// for zizag are currently present (same applies to [invert_transform]).
-    fn transform(graph: &ZigZagBucketGraph<H>) -> ZigZagBucketGraph<H> {
+    pub(crate) fn transform(graph: &ZigZagBucketGraph<H>) -> ZigZagBucketGraph<H> {
         graph.zigzag()
     }
 
     /// Transform a layer's public parameters, returning new public parameters corresponding to the previous layer.
-    fn invert_transform(graph: &ZigZagBucketGraph<H>) -> ZigZagBucketGraph<H> {
+    pub(crate) fn invert_transform(graph: &ZigZagBucketGraph<H>) -> ZigZagBucketGraph<H> {
         graph.zigzag()
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn prove_layers(
+    pub(crate) fn prove_layers(
         graph_0: &ZigZagBucketGraph<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain>,
         p_aux: &PersistentAux<H::Domain>,
@@ -590,7 +341,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
             .collect()
     }
 
-    fn extract_and_invert_transform_layers(
+    pub(crate) fn extract_and_invert_transform_layers(
         graph: &ZigZagBucketGraph<H>,
         layer_challenges: &LayerChallenges,
         replica_id: &<H as Hasher>::Domain,
@@ -620,7 +371,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
         Ok(())
     }
 
-    fn transform_and_replicate_layers(
+    pub(crate) fn transform_and_replicate_layers(
         graph: &ZigZagBucketGraph<H>,
         layer_challenges: &LayerChallenges,
         replica_id: &<H as Hasher>::Domain,
@@ -753,265 +504,6 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
     }
 }
 
-impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
-    type PublicParams = PublicParams<H, ZigZagBucketGraph<H>>;
-    type SetupParams = SetupParams;
-    type PublicInputs = PublicInputs<<H as Hasher>::Domain>;
-    type PrivateInputs = PrivateInputs<H>;
-    type Proof = Proof<H>;
-    type Requirements = ChallengeRequirements;
-
-    fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
-        let graph = ZigZagBucketGraph::<H>::new_zigzag(
-            sp.drg.nodes,
-            sp.drg.degree,
-            sp.drg.expansion_degree,
-            0,
-            sp.drg.seed,
-        );
-
-        Ok(PublicParams::new(graph, sp.layer_challenges.clone()))
-    }
-
-    fn prove<'b>(
-        pub_params: &'b Self::PublicParams,
-        pub_inputs: &'b Self::PublicInputs,
-        priv_inputs: &'b Self::PrivateInputs,
-    ) -> Result<Self::Proof> {
-        let proofs = Self::prove_all_partitions(pub_params, pub_inputs, priv_inputs, 1)?;
-        let k = match pub_inputs.k {
-            None => 0,
-            Some(k) => k,
-        };
-
-        Ok(proofs[k].to_owned())
-    }
-
-    fn prove_all_partitions<'b>(
-        pub_params: &'b Self::PublicParams,
-        pub_inputs: &'b Self::PublicInputs,
-        priv_inputs: &'b Self::PrivateInputs,
-        partition_count: usize,
-    ) -> Result<Vec<Self::Proof>> {
-        trace!("prove_all_partitions");
-        assert!(partition_count > 0);
-
-        Self::prove_layers(
-            &pub_params.graph,
-            pub_inputs,
-            &priv_inputs.p_aux,
-            &priv_inputs.t_aux,
-            &pub_params.layer_challenges,
-            pub_params.layer_challenges.layers(),
-            pub_params.layer_challenges.layers(),
-            partition_count,
-        )
-    }
-
-    fn verify_all_partitions(
-        pub_params: &Self::PublicParams,
-        pub_inputs: &Self::PublicInputs,
-        partition_proofs: &[Self::Proof],
-    ) -> Result<bool> {
-        trace!("verify_all_partitions");
-
-        // generate graphs
-        let graph_0 = &pub_params.graph;
-        let graph_1 = Self::transform(graph_0);
-        let graph_2 = Self::transform(&graph_1);
-
-        assert_eq!(graph_0.layer(), 0);
-        assert_eq!(graph_1.layer(), 1);
-        assert_eq!(graph_2.layer(), 2);
-
-        let replica_id = &pub_inputs.replica_id;
-        let layers = pub_params.layer_challenges.layers();
-
-        let valid = partition_proofs
-            .into_par_iter()
-            .enumerate()
-            .all(|(k, proof)| {
-                trace!(
-                    "verifying partition proof {}/{}",
-                    k + 1,
-                    partition_proofs.len()
-                );
-
-                // TODO:
-                // 1. grab all comm_r_last and ensure they are the same (from inclusion proofs)
-                // 2. grab all comm_c and ensure they are the same (from inclusion proofs)
-                // 3. check that H(comm_c || comm_r_last) == comm_r
-
-                let challenges =
-                    pub_inputs.challenges(&pub_params.layer_challenges, graph_0.size(), Some(k));
-                for i in 0..challenges.len() {
-                    trace!("verify challenge {}/{}", i, challenges.len());
-                    // Validate for this challenge
-                    let challenge = challenges[i] % graph_0.size();
-
-                    // Verify initial data layer
-                    trace!("verify initial data layer");
-                    check!(proof.comm_d_proofs[i].proves_challenge(challenge));
-
-                    check_eq!(proof.comm_d_proofs[i].root(), &pub_inputs.tau.comm_d);
-
-                    // Verify replica column openings
-                    trace!("verify replica column openings");
-                    {
-                        let rco = &proof.replica_column_proofs[i];
-
-                        trace!("  verify c_x");
-                        check!(rco.c_x.verify());
-
-                        trace!("  verify c_inv_x");
-                        check!(rco.c_inv_x.verify());
-
-                        trace!("  verify drg_parents");
-                        for proof in &rco.drg_parents {
-                            check!(proof.verify());
-                        }
-
-                        trace!("  verify exp_parents_even");
-                        for proof in &rco.exp_parents_even {
-                            check!(proof.verify());
-                        }
-
-                        trace!("  verify exp_parents_odd");
-                        for proof in &rco.exp_parents_odd {
-                            check!(proof.verify());
-                        }
-                    }
-
-                    // Verify final replica layer openings
-                    trace!("verify final replica layer openings");
-                    {
-                        let inv_challenge = graph_0.inv_index(challenge);
-
-                        check!(proof.comm_r_last_proofs[i]
-                            .0
-                            .proves_challenge(inv_challenge));
-
-                        let mut parents = vec![0; graph_1.degree()];
-                        graph_1.parents(inv_challenge, &mut parents);
-
-                        check_eq!(parents.len(), proof.comm_r_last_proofs[i].1.len());
-
-                        for (p, parent) in proof.comm_r_last_proofs[i]
-                            .1
-                            .iter()
-                            .zip(parents.into_iter())
-                        {
-                            check!(p.proves_challenge(parent));
-                        }
-                    }
-
-                    // Verify Encoding Layer 1
-                    trace!("verify encoding (layer: 1)");
-                    let rpc = &proof.replica_column_proofs[i];
-                    let comm_d = &proof.comm_d_proofs[i];
-
-                    check!(proof.encoding_proof_1[i].verify(
-                        replica_id,
-                        rpc.c_x.get_node_at_layer(1),
-                        comm_d.leaf()
-                    ));
-
-                    // Verify Encoding Layer 2..layers - 1
-                    {
-                        assert_eq!(proof.encoding_proofs[i].len(), layers - 2);
-                        for (j, encoding_proof) in proof.encoding_proofs[i].iter().enumerate() {
-                            let layer = j + 2;
-                            trace!("verify encoding (layer: {})", layer);;
-                            let (encoded_node, decoded_node) = if layer % 2 == 0 {
-                                (
-                                    rpc.c_x.get_node_at_layer(layer),
-                                    rpc.c_inv_x.get_node_at_layer(layer - 1),
-                                )
-                            } else {
-                                (
-                                    rpc.c_x.get_node_at_layer(layer),
-                                    rpc.c_inv_x.get_node_at_layer(layer - 1),
-                                )
-                            };
-                            check!(encoding_proof.verify(replica_id, encoded_node, decoded_node));
-                        }
-                    }
-                }
-
-                true
-            });
-
-        Ok(valid)
-    }
-
-    fn with_partition(pub_in: Self::PublicInputs, k: Option<usize>) -> Self::PublicInputs {
-        self::PublicInputs {
-            replica_id: pub_in.replica_id,
-            seed: None,
-            tau: pub_in.tau,
-            k,
-        }
-    }
-
-    fn satisfies_requirements(
-        public_params: &PublicParams<H, ZigZagBucketGraph<H>>,
-        requirements: &ChallengeRequirements,
-        partitions: usize,
-    ) -> bool {
-        let partition_challenges = public_params.layer_challenges.challenges_count();
-
-        partition_challenges * partitions >= requirements.minimum_challenges
-    }
-}
-
-impl<'a, 'c, H: 'static + Hasher> PoRep<'a, H> for ZigZagDrgPoRep<'a, H> {
-    type Tau = Tau<<H as Hasher>::Domain>;
-    type ProverAux = (PersistentAux<H::Domain>, TemporaryAux<H>);
-
-    fn replicate(
-        pp: &'a PublicParams<H, ZigZagBucketGraph<H>>,
-        replica_id: &<H as Hasher>::Domain,
-        data: &mut [u8],
-        data_tree: Option<Tree<H>>,
-    ) -> Result<(Self::Tau, Self::ProverAux)> {
-        let (tau, p_aux, t_aux) = Self::transform_and_replicate_layers(
-            &pp.graph,
-            &pp.layer_challenges,
-            replica_id,
-            data,
-            data_tree,
-        )?;
-
-        Ok((tau, (p_aux, t_aux)))
-    }
-
-    fn extract_all<'b>(
-        pp: &'b PublicParams<H, ZigZagBucketGraph<H>>,
-        replica_id: &'b <H as Hasher>::Domain,
-        data: &'b [u8],
-    ) -> Result<Vec<u8>> {
-        let mut data = data.to_vec();
-
-        Self::extract_and_invert_transform_layers(
-            &pp.graph,
-            &pp.layer_challenges,
-            replica_id,
-            &mut data,
-        )?;
-
-        Ok(data)
-    }
-
-    fn extract(
-        _pp: &PublicParams<H, ZigZagBucketGraph<H>>,
-        _replica_id: &<H as Hasher>::Domain,
-        _data: &[u8],
-        _node: usize,
-    ) -> Result<Vec<u8>> {
-        unimplemented!();
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1023,10 +515,10 @@ mod tests {
     use crate::drgraph::{new_seed, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::blake2s::Blake2sDomain;
-    use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::hasher::{Blake2sHasher, Domain, PedersenHasher, Sha256Hasher};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
-    use crate::zigzag::EXP_DEGREE;
+    use crate::zigzag::{PrivateInputs, PublicParams, SetupParams, EXP_DEGREE};
 
     const DEFAULT_ZIGZAG_LAYERS: usize = 10;
 

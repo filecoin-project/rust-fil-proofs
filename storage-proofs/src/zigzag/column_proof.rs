@@ -106,7 +106,7 @@ impl<H: Hasher> ColumnProof<H> {
 
     pub fn get_verified_node_at_layer(&self, layer: usize) -> IncludedNode<H> {
         let value = self.get_node_at_layer(layer);
-        IncludedNode::new(value.clone())
+        IncludedNode::new(*value)
     }
 
     pub fn column_hash(&self) -> Vec<u8> {

@@ -138,7 +138,7 @@ impl<H: Hasher> MerkleProof<H> {
     }
 
     pub fn verified_leaf(&self) -> IncludedNode<H> {
-        IncludedNode::new(self.leaf.clone())
+        IncludedNode::new(*self.leaf())
     }
 
     /// Returns the length of the proof. That is all path elements plus 1 for the
