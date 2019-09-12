@@ -4,6 +4,7 @@ use blake2s_simd::Params as Blake2s;
 use serde::de::Deserialize;
 use serde::ser::Serialize;
 
+use crate::fr32::trim_bytes_to_fr_safe;
 use crate::hasher::Hasher;
 use crate::merkle::MerkleProof;
 use crate::util::NODE_SIZE;
@@ -113,8 +114,8 @@ impl<H: Hasher> Column<H> {
                 }
 
                 hash2(
-                    odd_hasher.finalize().as_ref(),
-                    even_hasher.finalize().as_ref(),
+                    trim_bytes_to_fr_safe(odd_hasher.finalize().as_ref()),
+                    trim_bytes_to_fr_safe(even_hasher.finalize().as_ref()),
                 )
             }
             Column::Even(inner) => hash_single_column(&inner.rows),
