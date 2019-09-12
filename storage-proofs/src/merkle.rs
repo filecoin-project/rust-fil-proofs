@@ -193,6 +193,10 @@ impl<H: Hasher> IncludedNode<H> {
             _h: PhantomData,
         }
     }
+
+    pub fn into_fr(self) -> Fr {
+        self.value.into()
+    }
 }
 
 impl<H: Hasher> std::ops::Deref for IncludedNode<H> {

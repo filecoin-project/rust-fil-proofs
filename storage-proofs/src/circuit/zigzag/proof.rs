@@ -8,6 +8,7 @@ use paired::bls12_381::{Bls12, Fr};
 // use crate::circuit::constraint;
 // use crate::circuit::drgporep::{ComponentPrivateInputs, DrgPoRepCompound};
 // use crate::circuit::variables::Root;
+use crate::circuit::zigzag::params::Proof;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::drgraph::{Graph, BASE_DEGREE};
 use crate::hasher::Hasher;
@@ -24,8 +25,13 @@ use crate::zigzag::{ZigZagDrgPoRep, EXP_DEGREE};
 pub struct ZigZagCircuit<'a, E: JubjubEngine, H: 'static + Hasher> {
     params: &'a E::Params,
     public_params: <ZigZagDrgPoRep<'a, H> as ProofScheme<'a>>::PublicParams,
-    public_inputs: Option<<ZigZagDrgPoRep<'a, H> as ProofScheme<'a>>::PublicInputs>,
-    vanilla_proof: Option<<ZigZagDrgPoRep<'a, H> as ProofScheme<'a>>::Proof>,
+    replica_id: Option<<H as Hasher>::Domain>,
+    comm_d: Option<<H as Hasher>::Domain>,
+    comm_r: Option<<H as Hasher>::Domain>,
+
+    // one proof per challenge
+    proofs: Vec<Proof>,
+
     _e: PhantomData<E>,
 }
 
@@ -40,8 +46,10 @@ impl<'a, H: Hasher> ZigZagCircuit<'a, Bls12, H> {
         mut cs: CS,
         params: &'a <Bls12 as JubjubEngine>::Params,
         public_params: <ZigZagDrgPoRep<'a, H> as ProofScheme<'a>>::PublicParams,
-        public_inputs: Option<<ZigZagDrgPoRep<'a, H> as ProofScheme<'a>>::PublicInputs>,
-        vanilla_proof: Option<<ZigZagDrgPoRep<'a, H> as ProofScheme<'a>>::Proof>,
+        replica_id: Option<H::Domain>,
+        comm_d: Option<H::Domain>,
+        comm_r: Option<H::Domain>,
+        proofs: Vec<Proof>,
     ) -> Result<(), SynthesisError>
     where
         CS: ConstraintSystem<Bls12>,
@@ -49,8 +57,10 @@ impl<'a, H: Hasher> ZigZagCircuit<'a, Bls12, H> {
         let circuit = ZigZagCircuit::<'a, Bls12, H> {
             params,
             public_params,
-            public_inputs,
-            vanilla_proof,
+            replica_id,
+            comm_d,
+            comm_r,
+            proofs,
             _e: PhantomData,
         };
 
@@ -149,8 +159,10 @@ impl<'a, H: 'static + Hasher>
         ZigZagCircuit {
             params: engine_params,
             public_params: public_params.clone(),
-            public_inputs: Some(public_inputs.clone()),
-            vanilla_proof: Some(vanilla_proof.clone()),
+            replica_id: Some(public_inputs.replica_id),
+            comm_d: public_inputs.tau.as_ref().map(|t| t.comm_d),
+            comm_r: public_inputs.tau.as_ref().map(|t| t.comm_r),
+            proofs: vanilla_proof.iter().cloned().map(|p| p.into()).collect(),
             _e: PhantomData,
         }
     }
@@ -162,8 +174,10 @@ impl<'a, H: 'static + Hasher>
         ZigZagCircuit {
             params,
             public_params: public_params.clone(),
-            public_inputs: None,
-            vanilla_proof: None,
+            replica_id: None,
+            comm_d: None,
+            comm_r: None,
+            proofs: vec![Proof::empty(public_params)],
             _e: PhantomData,
         }
     }

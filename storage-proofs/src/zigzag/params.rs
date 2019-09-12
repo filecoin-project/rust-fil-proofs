@@ -23,22 +23,20 @@ pub struct SetupParams {
 }
 
 #[derive(Debug, Clone)]
-pub struct PublicParams<H, G>
+pub struct PublicParams<H>
 where
-    H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
+    H: 'static + Hasher,
 {
-    pub graph: G,
+    pub graph: ZigZagBucketGraph<H>,
     pub layer_challenges: LayerChallenges,
     _h: PhantomData<H>,
 }
 
-impl<H, G> PublicParams<H, G>
+impl<H> PublicParams<H>
 where
     H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
 {
-    pub fn new(graph: G, layer_challenges: LayerChallenges) -> Self {
+    pub fn new(graph: ZigZagBucketGraph<H>, layer_challenges: LayerChallenges) -> Self {
         PublicParams {
             graph,
             layer_challenges,
@@ -47,10 +45,9 @@ where
     }
 }
 
-impl<H, G> ParameterSetMetadata for PublicParams<H, G>
+impl<H> ParameterSetMetadata for PublicParams<H>
 where
     H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
 {
     fn identifier(&self) -> String {
         format!(
@@ -65,12 +62,11 @@ where
     }
 }
 
-impl<'a, H, G> From<&'a PublicParams<H, G>> for PublicParams<H, G>
+impl<'a, H> From<&'a PublicParams<H>> for PublicParams<H>
 where
     H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
 {
-    fn from(other: &PublicParams<H, G>) -> PublicParams<H, G> {
+    fn from(other: &PublicParams<H>) -> PublicParams<H> {
         PublicParams::new(other.graph.clone(), other.layer_challenges.clone())
     }
 }
@@ -142,11 +138,11 @@ pub struct Proof<H: Hasher> {
 }
 
 impl<H: Hasher> Proof<H> {
-    fn comm_r_last(&self) -> &H::Domain {
+    pub fn comm_r_last(&self) -> &H::Domain {
         self.comm_r_last_proofs.0.root()
     }
 
-    fn comm_c(&self) -> &H::Domain {
+    pub fn comm_c(&self) -> &H::Domain {
         self.replica_column_proofs.c_x.root()
     }
 
@@ -159,7 +155,7 @@ impl<H: Hasher> Proof<H> {
     /// Verify the full proof.
     pub fn verify(
         &self,
-        pub_params: &PublicParams<H, ZigZagBucketGraph<H>>,
+        pub_params: &PublicParams<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain>,
         challenge: usize,
         graph_0: &ZigZagBucketGraph<H>,
@@ -347,9 +343,9 @@ pub struct TemporaryAux<H: Hasher> {
     pub tree_r_last: Tree<H>,
     pub tree_c: Tree<H>,
     /// E_i
-    pub es: Vec<Vec<u8>>,
+    pub es: Vec<H::Domain>,
     /// O_i
-    pub os: Vec<Vec<u8>>,
+    pub os: Vec<H::Domain>,
 }
 
 impl<H: Hasher> TemporaryAux<H> {
@@ -359,6 +355,11 @@ impl<H: Hasher> TemporaryAux<H> {
 
     pub fn node_at_layer(&self, layer: usize, node_index: usize) -> Result<&[u8]> {
         self.encodings.node_at_layer(layer, node_index)
+    }
+
+    pub fn domain_node_at_layer(&self, layer: usize, node_index: usize) -> Result<H::Domain> {
+        self.node_at_layer(layer, node_index)
+            .and_then(H::Domain::try_from_bytes)
     }
 
     pub fn even_column(&self, column_index: usize) -> Result<Column<H>> {

@@ -2,7 +2,6 @@ use crate::error::Result;
 use crate::hasher::Hasher;
 use crate::porep::PoRep;
 use crate::zigzag::{
-    graph::ZigZagBucketGraph,
     params::{PersistentAux, PublicParams, Tau, TemporaryAux, Tree},
     proof::ZigZagDrgPoRep,
 };
@@ -12,7 +11,7 @@ impl<'a, 'c, H: 'static + Hasher> PoRep<'a, H> for ZigZagDrgPoRep<'a, H> {
     type ProverAux = (PersistentAux<H::Domain>, TemporaryAux<H>);
 
     fn replicate(
-        pp: &'a PublicParams<H, ZigZagBucketGraph<H>>,
+        pp: &'a PublicParams<H>,
         replica_id: &<H as Hasher>::Domain,
         data: &mut [u8],
         data_tree: Option<Tree<H>>,
@@ -29,7 +28,7 @@ impl<'a, 'c, H: 'static + Hasher> PoRep<'a, H> for ZigZagDrgPoRep<'a, H> {
     }
 
     fn extract_all<'b>(
-        pp: &'b PublicParams<H, ZigZagBucketGraph<H>>,
+        pp: &'b PublicParams<H>,
         replica_id: &'b <H as Hasher>::Domain,
         data: &'b [u8],
     ) -> Result<Vec<u8>> {
@@ -46,7 +45,7 @@ impl<'a, 'c, H: 'static + Hasher> PoRep<'a, H> for ZigZagDrgPoRep<'a, H> {
     }
 
     fn extract(
-        _pp: &PublicParams<H, ZigZagBucketGraph<H>>,
+        _pp: &PublicParams<H>,
         _replica_id: &<H as Hasher>::Domain,
         _data: &[u8],
         _node: usize,

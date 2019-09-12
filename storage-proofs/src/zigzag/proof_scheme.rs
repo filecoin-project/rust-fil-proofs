@@ -12,7 +12,7 @@ use crate::zigzag::{
 };
 
 impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
-    type PublicParams = PublicParams<H, ZigZagBucketGraph<H>>;
+    type PublicParams = PublicParams<H>;
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<<H as Hasher>::Domain>;
     type PrivateInputs = PrivateInputs<H>;
@@ -117,7 +117,7 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
     }
 
     fn satisfies_requirements(
-        public_params: &PublicParams<H, ZigZagBucketGraph<H>>,
+        public_params: &PublicParams<H>,
         requirements: &ChallengeRequirements,
         partitions: usize,
     ) -> bool {

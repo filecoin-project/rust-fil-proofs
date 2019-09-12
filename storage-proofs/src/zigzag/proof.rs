@@ -5,10 +5,10 @@ use rayon::prelude::*;
 use crate::drgporep::{self, DrgPoRep};
 use crate::drgraph::Graph;
 use crate::error::Result;
-use crate::hasher::{HashFunction, Hasher};
+use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::merkle::{next_pow2, populate_leaves, MerkleProof, MerkleStore, Store};
 use crate::porep::PoRep;
-use crate::util::{data_at_node, NODE_SIZE};
+use crate::util::NODE_SIZE;
 use crate::vde;
 use crate::zigzag::{
     challenges::LayerChallenges,
@@ -166,7 +166,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                                 .into_iter()
                                 .map(|column| {
                                     let index = column.index();
-                                    column.into_proof_odd(&t_aux.tree_c, &t_aux.es[index])
+                                    column.into_proof_odd(&t_aux.tree_c, t_aux.es[index])
                                 })
                                 .collect::<Vec<_>>();
 
@@ -176,11 +176,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                                 .into_iter()
                                 .map(|column| {
                                     let index = graph_1.inv_index(column.index());
-                                    column.into_proof_even(
-                                        &t_aux.tree_c,
-                                        &graph_1,
-                                        &t_aux.os[index],
-                                    )
+                                    column.into_proof_even(&t_aux.tree_c, &graph_1, t_aux.os[index])
                                 })
                                 .collect::<Vec<_>>();
 
@@ -230,10 +226,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
                             let parents_data = parents
                                 .into_iter()
-                                .map(|parent| {
-                                    data_at_node(t_aux.encoding_at_layer(1), parent)
-                                        .map(|v| v.to_vec())
-                                })
+                                .map(|parent| t_aux.domain_node_at_layer(1, parent))
                                 .collect::<Result<_>>()?;
 
                             EncodingProof::<H>::new(encoded_node, decoded_node, parents_data)
@@ -261,16 +254,12 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                                         )
                                     };
 
-                                let encoded_data = t_aux.encoding_at_layer(layer);
-
                                 let mut parents = vec![0; graph.degree()];
                                 graph.parents(challenge, &mut parents);
 
                                 let parents_data = parents
                                     .into_iter()
-                                    .map(|parent| {
-                                        data_at_node(&encoded_data, parent).map(|v| v.to_vec())
-                                    })
+                                    .map(|parent| t_aux.domain_node_at_layer(layer, parent))
                                     .collect::<Result<_>>()?;
 
                                 let proof = EncodingProof::<H>::new(
@@ -417,19 +406,25 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
         // O_i = H( e_i^(1) || .. )
         let os = odd_columns
-            .map(|c| c.map(|c| c.hash()))
+            .map(|c| {
+                c.map(|c| c.hash())
+                    .and_then(|v| H::Domain::try_from_bytes(&v))
+            })
             .collect::<Result<Vec<_>>>()?;
 
         // E_i = H( e_\bar{i}^(2) || .. )
         let es = even_columns
-            .map(|c| c.map(|c| c.hash()))
+            .map(|c| {
+                c.map(|c| c.hash())
+                    .and_then(|v| H::Domain::try_from_bytes(&v))
+            })
             .collect::<Result<Vec<_>>>()?;
 
         // C_i = H(O_i || E_i)
         let cs = os
             .par_iter()
             .zip(es.par_iter())
-            .flat_map(|(o_i, e_i)| hash2(&o_i[..], &e_i[..]))
+            .flat_map(|(o_i, e_i)| hash2(o_i, e_i))
             .collect::<Vec<_>>();
 
         // Build the tree for CommC

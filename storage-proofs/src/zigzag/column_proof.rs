@@ -31,7 +31,7 @@ pub enum ColumnProof<H: Hasher> {
             deserialize = "MerkleProof<H>: Deserialize<'de>"
         ))]
         inclusion_proof: MerkleProof<H>,
-        o_i: Vec<u8>,
+        o_i: H::Domain,
     },
     Odd {
         #[serde(bound(
@@ -44,7 +44,7 @@ pub enum ColumnProof<H: Hasher> {
             deserialize = "MerkleProof<H>: Deserialize<'de>"
         ))]
         inclusion_proof: MerkleProof<H>,
-        e_i: Vec<u8>,
+        e_i: H::Domain,
     },
 }
 
@@ -64,14 +64,14 @@ impl<H: Hasher> ColumnProof<H> {
     pub fn even_from_column(
         column: Column<H>,
         inclusion_proof: MerkleProof<H>,
-        o_i: &[u8],
+        o_i: H::Domain,
     ) -> Self {
         assert!(column.is_even());
 
         let res = ColumnProof::Even {
             column,
             inclusion_proof,
-            o_i: o_i.to_vec(),
+            o_i,
         };
         debug_assert!(res.verify());
 
@@ -92,13 +92,17 @@ impl<H: Hasher> ColumnProof<H> {
         }
     }
 
-    pub fn odd_from_column(column: Column<H>, inclusion_proof: MerkleProof<H>, e_i: &[u8]) -> Self {
+    pub fn odd_from_column(
+        column: Column<H>,
+        inclusion_proof: MerkleProof<H>,
+        e_i: H::Domain,
+    ) -> Self {
         assert!(column.is_odd());
 
         let res = ColumnProof::Odd {
             column,
             inclusion_proof,
-            e_i: e_i.to_vec(),
+            e_i,
         };
 
         debug_assert!(res.verify());

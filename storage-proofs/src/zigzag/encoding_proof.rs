@@ -14,13 +14,13 @@ pub struct EncodingProof<H: Hasher> {
         serialize = "IncludedNode<H>: Serialize",
         deserialize = "IncludedNode<H>: Deserialize<'de>"
     ))]
-    encoded_node: IncludedNode<H>,
+    pub(crate) encoded_node: IncludedNode<H>,
     #[serde(bound(
         serialize = "IncludedNode<H>: Serialize",
         deserialize = "IncludedNode<H>: Deserialize<'de>"
     ))]
-    decoded_node: IncludedNode<H>,
-    parents: Vec<Vec<u8>>,
+    pub(crate) decoded_node: IncludedNode<H>,
+    pub(crate) parents: Vec<H::Domain>,
     #[serde(skip)]
     _h: PhantomData<H>,
 }
@@ -29,7 +29,7 @@ impl<H: Hasher> EncodingProof<H> {
     pub fn new(
         encoded_node: IncludedNode<H>,
         decoded_node: IncludedNode<H>,
-        parents: Vec<Vec<u8>>,
+        parents: Vec<H::Domain>,
     ) -> Self {
         EncodingProof {
             encoded_node,
@@ -50,7 +50,7 @@ impl<H: Hasher> EncodingProof<H> {
             let mut hasher = Blake2s::new().hash_length(32).to_state();
             hasher.update(replica_id.as_ref());
             for parent in &self.parents {
-                hasher.update(parent);
+                hasher.update(parent.as_ref());
             }
 
             let hash = hasher.finalize();

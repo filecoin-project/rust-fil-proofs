@@ -36,8 +36,8 @@ pub enum Column<H: Hasher> {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RawColumn<H: Hasher> {
-    index: usize,
-    rows: Vec<H::Domain>,
+    pub(crate) index: usize,
+    pub(crate) rows: Vec<H::Domain>,
     _h: PhantomData<H>,
 }
 
@@ -186,7 +186,7 @@ impl<H: Hasher> Column<H> {
     }
 
     /// Create an even column proof for this column.
-    pub fn into_proof_odd(self, tree_c: &Tree<H>, e_i: &[u8]) -> ColumnProof<H> {
+    pub fn into_proof_odd(self, tree_c: &Tree<H>, e_i: H::Domain) -> ColumnProof<H> {
         assert!(self.is_odd());
 
         let inclusion_proof = MerkleProof::new_from_proof(&tree_c.gen_proof(self.index()));
@@ -198,7 +198,7 @@ impl<H: Hasher> Column<H> {
         self,
         tree_c: &Tree<H>,
         graph: &ZigZagBucketGraph<H>,
-        o_i: &[u8],
+        o_i: H::Domain,
     ) -> ColumnProof<H> {
         assert!(self.is_even());
 

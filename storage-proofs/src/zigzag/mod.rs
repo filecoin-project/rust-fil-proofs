@@ -24,8 +24,12 @@ mod proof;
 mod proof_scheme;
 
 pub use self::challenges::{ChallengeRequirements, LayerChallenges};
+pub use self::column::{Column, RawColumn};
+pub use self::column_proof::ColumnProof;
+pub use self::encoding_proof::EncodingProof;
 pub use self::graph::{ZigZagBucketGraph, ZigZagGraph, EXP_DEGREE};
 pub use self::params::{
-    PersistentAux, PrivateInputs, PublicInputs, PublicParams, SetupParams, Tau, TemporaryAux,
+    PersistentAux, PrivateInputs, Proof, PublicInputs, PublicParams, ReplicaColumnProof,
+    SetupParams, Tau, TemporaryAux,
 };
 pub use self::proof::ZigZagDrgPoRep;
