@@ -15,8 +15,7 @@ use crate::hasher::{HashFunction, Hasher};
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::porep;
 use crate::proof::ProofScheme;
-use crate::zigzag_drgporep::ZigZagDrgPoRep;
-use crate::zigzag_graph::{ZigZagBucketGraph, EXP_DEGREE};
+use crate::zigzag::{ZigZagBucketGraph, ZigZagDrgPoRep, EXP_DEGREE};
 
 type Layers<'a, H, G> = Vec<
     Option<(
@@ -131,7 +130,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
                 None => drgporep::Proof::new_empty(
                     height,
                     graph.degree(),
-                    layer_challenges.challenges(),
+                    layer_challenges.challenges_count(),
                 ),
             };
 
@@ -170,7 +169,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
             let porep_params = drgporep::PublicParams::new(
                 graph.clone(), // TODO: avoid
                 true,
-                layer_challenges.challenges(),
+                layer_challenges.challenges_count(),
             );
 
             assert_eq!(layer_proof.is_none(), public_inputs.is_none());
@@ -181,7 +180,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
                 None => drgporep::PublicInputs {
                     replica_id: None,
                     // These are ignored, so fine to pass `0` through.
-                    challenges: vec![0; layer_challenges.challenges()],
+                    challenges: vec![0; layer_challenges.challenges_count()],
                     tau: None,
                 },
             };
@@ -377,8 +376,7 @@ mod tests {
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
     use crate::settings;
-    use crate::zigzag_drgporep::{self, ChallengeRequirements, LayerChallenges};
-    use crate::zigzag_graph::EXP_DEGREE;
+    use crate::zigzag::{ChallengeRequirements, LayerChallenges, EXP_DEGREE};
 
     use ff::Field;
     use fil_sapling_crypto::jubjub::JubjubBls12;

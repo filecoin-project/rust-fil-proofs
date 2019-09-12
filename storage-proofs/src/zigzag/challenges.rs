@@ -4,38 +4,62 @@ use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
 
 use crate::hasher::Domain;
-use crate::zigzag_drgporep::LayerChallenges;
 
-pub fn derive_challenges<D: Domain>(
-    challenges: &LayerChallenges,
-    leaves: usize,
-    replica_id: &D,
-    commitment: &D,
-    k: u8,
-) -> Vec<usize> {
-    assert!(leaves > 2, "Too few leaves: {}", leaves);
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LayerChallenges {
+    layers: usize,
+    count: usize,
+}
 
-    let n = challenges.challenges();
-    (0..n)
-        .map(|i| {
-            let mut bytes = replica_id.into_bytes();
-            let j = ((n * k as usize) + i) as u32;
-            bytes.extend(commitment.into_bytes());
+impl LayerChallenges {
+    pub const fn new_fixed(layers: usize, count: usize) -> Self {
+        LayerChallenges { layers, count }
+    }
+    pub fn layers(&self) -> usize {
+        self.layers
+    }
 
-            // Unwraping here is safe, all hash domains are larger than 4 bytes (the size of a `u32`).
-            bytes.write_u32::<LittleEndian>(j).unwrap();
+    pub fn challenges_count(&self) -> usize {
+        self.count
+    }
 
-            let hash = blake2s(bytes.as_slice());
-            let big_challenge = BigUint::from_bytes_le(hash.as_ref());
+    /// Derive a set of challenges, for the given inputs.
+    pub fn derive<D: Domain>(
+        &self,
+        leaves: usize,
+        replica_id: &D,
+        commitment: &D,
+        k: u8,
+    ) -> Vec<usize> {
+        assert!(leaves > 2, "Too few leaves: {}", leaves);
 
-            // For now, we cannot try to prove the first or last node, so make sure the challenge can never be 0 or leaves - 1.
-            let big_mod_challenge = big_challenge % (leaves - 2);
-            let big_mod_challenge = big_mod_challenge
-                .to_usize()
-                .expect("`big_mod_challenge` exceeds size of `usize`");
-            big_mod_challenge + 1
-        })
-        .collect()
+        let n = self.challenges_count();
+        (0..n)
+            .map(|i| {
+                let mut bytes = replica_id.into_bytes();
+                let j = ((n * k as usize) + i) as u32;
+                bytes.extend(commitment.into_bytes());
+
+                // Unwraping here is safe, all hash domains are larger than 4 bytes (the size of a `u32`).
+                bytes.write_u32::<LittleEndian>(j).unwrap();
+
+                let hash = blake2s(bytes.as_slice());
+                let big_challenge = BigUint::from_bytes_le(hash.as_ref());
+
+                // For now, we cannot try to prove the first or last node, so make sure the challenge can never be 0 or leaves - 1.
+                let big_mod_challenge = big_challenge % (leaves - 2);
+                let big_mod_challenge = big_mod_challenge
+                    .to_usize()
+                    .expect("`big_mod_challenge` exceeds size of `usize`");
+                big_mod_challenge + 1
+            })
+            .collect()
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct ChallengeRequirements {
+    pub minimum_challenges: usize,
 }
 
 #[cfg(test)]
@@ -63,8 +87,7 @@ mod test {
         for _layer in 0..layers {
             let mut histogram = HashMap::new();
             for k in 0..partitions {
-                let challenges =
-                    derive_challenges(&challenges, leaves, &replica_id, &commitment, k as u8);
+                let challenges = challenges.derive(leaves, &replica_id, &commitment, k as u8);
 
                 for challenge in challenges {
                     let counter = histogram.entry(challenge).or_insert(0);
@@ -95,18 +118,12 @@ mod test {
         let layers = 100;
         let total_challenges = n * partitions;
 
-        for layer in 0..layers {
-            let one_partition_challenges = derive_challenges(
-                &LayerChallenges::new_fixed(layers, total_challenges),
-                leaves,
-                &replica_id,
-                &commitment,
-                0,
-            );
+        for _layer in 0..layers {
+            let one_partition_challenges = LayerChallenges::new_fixed(layers, total_challenges)
+                .derive(leaves, &replica_id, &commitment, 0);
             let many_partition_challenges = (0..partitions)
                 .flat_map(|k| {
-                    derive_challenges(
-                        &LayerChallenges::new_fixed(layers, n),
+                    LayerChallenges::new_fixed(layers, n).derive(
                         leaves,
                         &replica_id,
                         &commitment,

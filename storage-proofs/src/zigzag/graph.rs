@@ -22,7 +22,7 @@ lazy_static! {
 // ZigZagGraph will hold two different (but related) `ParentCache`,
 // the first one for the `forward` direction and the second one for the `reversed`.
 #[derive(Debug, Clone)]
-pub struct ParentCache {
+struct ParentCache {
     forward: Vec<Option<Vec<u32>>>,
     reverse: Vec<Option<Vec<u32>>>,
     // Keep the size of the cache outside the lock to be easily accessible.

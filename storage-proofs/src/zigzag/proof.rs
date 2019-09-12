@@ -11,97 +11,31 @@
 
 use std::marker::PhantomData;
 
-use blake2s_simd::Params as Blake2s;
 use rayon::prelude::*;
 use serde::de::Deserialize;
 use serde::ser::Serialize;
 
-use crate::challenge_derivation::derive_challenges;
 use crate::drgporep::{self, DrgPoRep};
 use crate::drgraph::Graph;
 use crate::error::Result;
-use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::{
-    next_pow2, populate_leaves, IncludedNode, MerkleProof, MerkleStore, MerkleTree, Store,
-};
+use crate::merkle::{next_pow2, populate_leaves, MerkleProof, MerkleStore, MerkleTree, Store};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::PoRep;
 use crate::proof::ProofScheme;
 use crate::util::{data_at_node, NODE_SIZE};
 use crate::vde;
-use crate::zigzag_graph::ZigZagBucketGraph;
+use crate::zigzag::column::Column;
+use crate::zigzag::column_proof::ColumnProof;
+use crate::zigzag::encoding_proof::EncodingProof;
+use crate::zigzag::hash::hash2;
+use crate::zigzag::{ChallengeRequirements, LayerChallenges, ZigZagBucketGraph};
 
 type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 
 #[derive(Debug)]
 pub struct ZigZagDrgPoRep<'a, H: 'a + Hasher> {
     _a: PhantomData<&'a H>,
-}
-
-/// Checks that the two passed values are equal. If they are not equal it prints a trace and returns `false`.
-macro_rules! check_eq {
-    ($left:expr , $right:expr,) => ({
-        check_eq!($left, $right)
-    });
-    ($left:expr , $right:expr) => ({
-        match (&($left), &($right)) {
-            (left_val, right_val) => {
-                if !(*left_val == *right_val) {
-                    trace!("check failed: `(left == right)`\
-                          \n\
-                          \n{}\
-                          \n",
-                           pretty_assertions::Comparison::new(left_val, right_val));
-                    return false;
-                }
-            }
-        }
-    });
-    ($left:expr , $right:expr, $($arg:tt)*) => ({
-        match (&($left), &($right)) {
-            (left_val, right_val) => {
-                if !(*left_val == *right_val) {
-                    trace!("check failed: `(left == right)`: {}\
-                          \n\
-                          \n{}\
-                          \n",
-                           format_args!($($arg)*),
-                           pretty_assertions::Comparison::new(left_val, right_val));
-                    return false;
-                }
-            }
-        }
-    });
-}
-
-/// Checks that the passed in value is true. If they are not equal it prints a trace and returns `false`.
-macro_rules! check {
-    ($val:expr) => {
-        if !$val {
-            trace!("expected {:?} to be true", dbg!($val));
-            return false;
-        }
-    };
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct LayerChallenges {
-    layers: usize,
-    count: usize,
-}
-
-impl LayerChallenges {
-    pub const fn new_fixed(layers: usize, count: usize) -> Self {
-        LayerChallenges { layers, count }
-    }
-    pub fn layers(&self) -> usize {
-        self.layers
-    }
-
-    pub fn challenges(&self) -> usize {
-        self.count
-    }
 }
 
 #[derive(Debug)]
@@ -119,11 +53,6 @@ where
     pub graph: G,
     pub layer_challenges: LayerChallenges,
     _h: PhantomData<H>,
-}
-
-#[derive(Default)]
-pub struct ChallengeRequirements {
-    pub minimum_challenges: usize,
 }
 
 impl<H, G> PublicParams<H, G>
@@ -186,15 +115,9 @@ impl<T: Domain> PublicInputs<T> {
         let k = partition_k.unwrap_or(0);
 
         if let Some(ref seed) = self.seed {
-            derive_challenges::<T>(layer_challenges, leaves, &self.replica_id, seed, k as u8)
+            layer_challenges.derive::<T>(leaves, &self.replica_id, seed, k as u8)
         } else {
-            derive_challenges::<T>(
-                layer_challenges,
-                leaves,
-                &self.replica_id,
-                &self.tau.comm_r,
-                k as u8,
-            )
+            layer_challenges.derive::<T>(leaves, &self.replica_id, &self.tau.comm_r, k as u8)
         }
     }
 }
@@ -264,308 +187,11 @@ pub struct ReplicaColumnProof<H: Hasher> {
     exp_parents_odd: Vec<ColumnProof<H>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EncodingProof<H: Hasher> {
-    #[serde(bound(
-        serialize = "IncludedNode<H>: Serialize",
-        deserialize = "IncludedNode<H>: Deserialize<'de>"
-    ))]
-    encoded_node: IncludedNode<H>,
-    #[serde(bound(
-        serialize = "IncludedNode<H>: Serialize",
-        deserialize = "IncludedNode<H>: Deserialize<'de>"
-    ))]
-    decoded_node: IncludedNode<H>,
-    parents: Vec<Vec<u8>>,
-    #[serde(skip)]
-    _h: PhantomData<H>,
-}
-
-impl<H: Hasher> EncodingProof<H> {
-    pub fn new(
-        encoded_node: IncludedNode<H>,
-        decoded_node: IncludedNode<H>,
-        parents: Vec<Vec<u8>>,
-    ) -> Self {
-        EncodingProof {
-            encoded_node,
-            decoded_node,
-            parents,
-            _h: PhantomData,
-        }
-    }
-
-    pub fn verify(
-        &self,
-        replica_id: &H::Domain,
-        expected_encoded_node: &H::Domain,
-        expected_decoded_node: &H::Domain,
-    ) -> bool {
-        // create the key = H(tau || (e_k^(j))_{k in Parents(x, 1)})
-        let key = {
-            let mut hasher = Blake2s::new().hash_length(32).to_state();
-            hasher.update(replica_id.as_ref());
-            for parent in &self.parents {
-                hasher.update(parent);
-            }
-
-            let hash = hasher.finalize();
-            bytes_into_fr_repr_safe(hash.as_ref()).into()
-        };
-
-        // decode:
-        let unsealed = H::sloth_decode(&key, &self.encoded_node);
-        let decoded_node: &H::Domain = &self.decoded_node;
-        let encoded_node: &H::Domain = &self.encoded_node;
-
-        check_eq!(&unsealed, decoded_node);
-        check_eq!(decoded_node, expected_decoded_node);
-        check_eq!(expected_encoded_node, encoded_node);
-
-        true
-    }
-}
-
 impl<H: Hasher> Proof<H> {
     pub fn serialize(&self) -> Vec<u8> {
         unimplemented!();
     }
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ColumnProof<H: Hasher> {
-    All {
-        #[serde(bound(
-            serialize = "Column<H>: Serialize",
-            deserialize = "Column<H>: Deserialize<'de>"
-        ))]
-        column: Column<H>,
-        #[serde(bound(
-            serialize = "MerkleProof<H>: Serialize",
-            deserialize = "MerkleProof<H>: Deserialize<'de>"
-        ))]
-        inclusion_proof: MerkleProof<H>,
-    },
-    Even {
-        #[serde(bound(
-            serialize = "Column<H>: Serialize",
-            deserialize = "Column<H>: Deserialize<'de>"
-        ))]
-        column: Column<H>,
-        #[serde(bound(
-            serialize = "MerkleProof<H>: Serialize",
-            deserialize = "MerkleProof<H>: Deserialize<'de>"
-        ))]
-        inclusion_proof: MerkleProof<H>,
-        o_i: Vec<u8>,
-    },
-    Odd {
-        #[serde(bound(
-            serialize = "Column<H>: Serialize",
-            deserialize = "Column<H>: Deserialize<'de>"
-        ))]
-        column: Column<H>,
-        #[serde(bound(
-            serialize = "MerkleProof<H>: Serialize",
-            deserialize = "MerkleProof<H>: Deserialize<'de>"
-        ))]
-        inclusion_proof: MerkleProof<H>,
-        e_i: Vec<u8>,
-    },
-}
-
-impl<H: Hasher> ColumnProof<H> {
-    pub fn all_from_column(column: Column<H>, inclusion_proof: MerkleProof<H>) -> Self {
-        let res = ColumnProof::All {
-            column,
-            inclusion_proof,
-        };
-        debug_assert!(res.verify());
-
-        res
-    }
-
-    pub fn even_from_column(
-        column: Column<H>,
-        inclusion_proof: MerkleProof<H>,
-        o_i: &[u8],
-    ) -> Self {
-        let res = ColumnProof::Even {
-            column,
-            inclusion_proof,
-            o_i: o_i.to_vec(),
-        };
-        debug_assert!(res.verify());
-
-        res
-    }
-
-    pub fn odd_from_column(column: Column<H>, inclusion_proof: MerkleProof<H>, e_i: &[u8]) -> Self {
-        let res = ColumnProof::Odd {
-            column,
-            inclusion_proof,
-            e_i: e_i.to_vec(),
-        };
-
-        debug_assert!(res.verify());
-
-        res
-    }
-
-    pub fn column_index(&self) -> usize {
-        match self {
-            ColumnProof::All { column, .. } => column.index,
-            ColumnProof::Even { column, .. } => column.index,
-            ColumnProof::Odd { column, .. } => column.index,
-        }
-    }
-
-    pub fn get_node_at_layer(&self, layer: usize) -> &H::Domain {
-        match self {
-            ColumnProof::All { column, .. } => {
-                assert!(layer > 0, "layer must be greater than 0");
-                let row_index = layer - 1;
-                &column.rows[row_index]
-            }
-            ColumnProof::Odd { column, .. } => {
-                assert!(layer > 0, "layer must be greater than 0");
-                assert!(layer % 2 != 0, "layer must be odd");
-
-                // layer | row_index
-                //   1   | 0
-                //   3   | 1
-                //   5   | 2
-
-                let row_index = (layer - 1) / 2;
-                &column.rows[row_index]
-            }
-            ColumnProof::Even { column, .. } => {
-                assert!(layer > 0, "layer must be greater than 0");
-                assert!(layer % 2 == 0, "layer must be even");
-
-                // layer | row_index
-                //   2   | 0
-                //   4   | 1
-                //   6   | 2
-
-                let row_index = (layer / 2) - 1;
-                &column.rows[row_index]
-            }
-        }
-    }
-
-    pub fn get_verified_node_at_layer(&self, layer: usize) -> IncludedNode<H> {
-        let value = self.get_node_at_layer(layer);
-        IncludedNode::new(value.clone())
-    }
-
-    pub fn column_hash(&self) -> Vec<u8> {
-        match self {
-            ColumnProof::All { column, .. } => column_hash(&column.rows),
-            ColumnProof::Odd { column, .. } => hash_single_column(&column.rows),
-            ColumnProof::Even { column, .. } => hash_single_column(&column.rows),
-        }
-    }
-
-    pub fn verify(&self) -> bool {
-        match self {
-            ColumnProof::All {
-                inclusion_proof, ..
-            } => {
-                let c_i = self.column_hash();
-
-                check!(inclusion_proof.validate_data(&c_i));
-
-                true
-            }
-            ColumnProof::Even {
-                inclusion_proof,
-                o_i,
-                ..
-            } => {
-                let e_i = self.column_hash();
-                let c_i = hash2(&o_i, &e_i);
-
-                check!(inclusion_proof.validate_data(&c_i));
-
-                true
-            }
-            ColumnProof::Odd {
-                inclusion_proof,
-                e_i,
-                ..
-            } => {
-                let o_i = self.column_hash();
-                let c_i = hash2(&o_i, &e_i);
-
-                check!(inclusion_proof.validate_data(&c_i));
-
-                true
-            }
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Column<H: Hasher> {
-    pub index: usize,
-    pub rows: Vec<H::Domain>,
-    _h: PhantomData<H>,
-}
-
-impl<H: Hasher> Column<H> {
-    pub fn new(index: usize, rows: Vec<H::Domain>) -> Self {
-        Column {
-            index,
-            rows,
-            _h: PhantomData,
-        }
-    }
-
-    pub fn with_capacity(rows: usize) -> Self {
-        Column::new(0, Vec::with_capacity(rows))
-    }
-}
-
-/// Calculate the column hashes `C_i = H(E_i, O_i)` for the passed in column.
-fn column_hash(column: &[impl AsRef<[u8]>]) -> Vec<u8> {
-    let mut even_hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
-    let mut odd_hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
-
-    for (i, row) in column.iter().enumerate() {
-        // adjust index, as the column stored at index 0 is layer 1 => odd
-        if (i + 1) % 2 == 0 {
-            even_hasher.update(row.as_ref());
-        } else {
-            odd_hasher.update(row.as_ref());
-        }
-    }
-
-    hash2(
-        odd_hasher.finalize().as_ref(),
-        even_hasher.finalize().as_ref(),
-    )
-}
-
-/// Hash all elements in the given column. Useful when the column already only contains even or odd values.
-fn hash_single_column(column: &[impl AsRef<[u8]>]) -> Vec<u8> {
-    let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
-    for row in column.iter() {
-        hasher.update(row.as_ref());
-    }
-    hasher.finalize().as_ref().to_vec()
-}
-
-/// Hash 2 individual elements.
-fn hash2(a: impl AsRef<[u8]>, b: impl AsRef<[u8]>) -> Vec<u8> {
-    let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
-    hasher.update(a.as_ref());
-    hasher.update(b.as_ref());
-
-    hasher.finalize().as_ref().to_vec()
-}
-
-pub type PartitionProofs<H> = Vec<Proof<H>>;
 
 type TransformedLayers<H> = (
     Tau<<H as Hasher>::Domain>,
@@ -606,38 +232,24 @@ fn get_node<H: Hasher>(data: &[u8], index: usize) -> Result<H::Domain> {
 
 fn get_even_column<H: Hasher>(encodings: &[Vec<u8>], layers: usize, x: usize) -> Result<Column<H>> {
     debug_assert_eq!(encodings.len(), layers - 1);
-    let mut column = Column::with_capacity((layers / 2) - 1);
-    column.index = x;
 
-    for layer in (1..layers - 1).step_by(2) {
-        column
-            .rows
-            .push(H::Domain::try_from_bytes(get_node_at_layer(
-                encodings, x, layer,
-            )?)?);
-    }
+    let rows = (1..layers - 1)
+        .step_by(2)
+        .map(|layer| H::Domain::try_from_bytes(get_node_at_layer(encodings, x, layer)?))
+        .collect::<Result<_>>()?;
 
-    debug_assert_eq!(column.rows.len(), (layers / 2) - 1);
-
-    Ok(column)
+    Ok(Column::new_even(x, rows))
 }
 
 fn get_odd_column<H: Hasher>(encodings: &[Vec<u8>], layers: usize, x: usize) -> Result<Column<H>> {
     debug_assert_eq!(encodings.len(), layers - 1);
-    let mut column = Column::with_capacity(layers / 2);
-    column.index = x;
 
-    for layer in (0..layers).step_by(2) {
-        column
-            .rows
-            .push(H::Domain::try_from_bytes(get_node_at_layer(
-                encodings, x, layer,
-            )?)?);
-    }
+    let rows = (0..layers)
+        .step_by(2)
+        .map(|layer| H::Domain::try_from_bytes(get_node_at_layer(encodings, x, layer)?))
+        .collect::<Result<_>>()?;
 
-    debug_assert_eq!(column.rows.len(), layers / 2);
-
-    Ok(column)
+    Ok(Column::new_odd(x, rows))
 }
 
 fn get_full_column<H: Hasher>(
@@ -648,24 +260,17 @@ fn get_full_column<H: Hasher>(
 ) -> Result<Column<H>> {
     debug_assert_eq!(encodings.len(), layers - 1);
 
-    let mut column = Column::with_capacity(layers - 1);
-    column.index = x;
-
     let inv_index = graph.inv_index(x);
 
-    for i in 0..layers - 1 {
-        let x = if (i + 1) % 2 == 0 { inv_index } else { x };
+    let rows = (0..layers - 1)
+        .map(|i| {
+            let x = if (i + 1) % 2 == 0 { inv_index } else { x };
 
-        column
-            .rows
-            .push(H::Domain::try_from_bytes(get_node_at_layer(
-                &encodings, x, i,
-            )?)?);
-    }
+            H::Domain::try_from_bytes(get_node_at_layer(&encodings, x, i)?)
+        })
+        .collect::<Result<_>>()?;
 
-    debug_assert_eq!(column.rows.len(), layers - 1);
-
-    Ok(column)
+    Ok(Column::new_all(x, rows))
 }
 
 fn get_node_at_layer(encodings: &[Vec<u8>], node: usize, layer: usize) -> Result<&[u8]> {
@@ -765,8 +370,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
         };
 
         (0..partition_count)
-            //.into_par_iter()
-            .into_iter()
+            .into_par_iter()
             .map(|k| {
                 trace!("proving partition {}/{}", k + 1, partition_count);
 
@@ -800,8 +404,9 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                             let column =
                                 get_full_column(&t_aux.encodings, &graph_0, layers, challenge)?;
 
-                            let inclusion_proof =
-                                MerkleProof::new_from_proof(&t_aux.tree_c.gen_proof(column.index));
+                            let inclusion_proof = MerkleProof::new_from_proof(
+                                &t_aux.tree_c.gen_proof(column.index()),
+                            );
                             ColumnProof::<H>::all_from_column(column, inclusion_proof)
                         };
 
@@ -811,8 +416,9 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                         let c_inv_x = {
                             let column =
                                 get_full_column(&t_aux.encodings, &graph_0, layers, inv_challenge)?;
-                            let inclusion_proof =
-                                MerkleProof::new_from_proof(&t_aux.tree_c.gen_proof(column.index));
+                            let inclusion_proof = MerkleProof::new_from_proof(
+                                &t_aux.tree_c.gen_proof(column.index()),
+                            );
                             ColumnProof::<H>::all_from_column(column, inclusion_proof)
                         };
 
@@ -822,7 +428,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                             .into_iter()
                             .map(|column| {
                                 let inclusion_proof = MerkleProof::new_from_proof(
-                                    &t_aux.tree_c.gen_proof(column.index),
+                                    &t_aux.tree_c.gen_proof(column.index()),
                                 );
                                 ColumnProof::<H>::all_from_column(column, inclusion_proof)
                             })
@@ -833,10 +439,9 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                         let exp_parents_odd = get_exp_parents_odd_columns(challenge)?
                             .into_iter()
                             .map(|column| {
-                                let index = column.index;
-                                let inclusion_proof = MerkleProof::new_from_proof(
-                                    &t_aux.tree_c.gen_proof(column.index),
-                                );
+                                let index = column.index();
+                                let inclusion_proof =
+                                    MerkleProof::new_from_proof(&t_aux.tree_c.gen_proof(index));
                                 ColumnProof::<H>::odd_from_column(
                                     column,
                                     inclusion_proof,
@@ -850,7 +455,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                         let exp_parents_even = get_exp_parents_even_columns(inv_challenge)?
                             .into_iter()
                             .map(|column| {
-                                let index = graph_1.inv_index(column.index);
+                                let index = graph_1.inv_index(column.index());
                                 let inclusion_proof =
                                     MerkleProof::new_from_proof(&t_aux.tree_c.gen_proof(index));
                                 ColumnProof::<H>::even_from_column(
@@ -998,8 +603,11 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
         (0..layers).fold(graph.clone(), |current_graph, _layer| {
             let inverted = Self::invert_transform(&current_graph);
-            let pp =
-                drgporep::PublicParams::new(inverted.clone(), true, layer_challenges.challenges());
+            let pp = drgporep::PublicParams::new(
+                inverted.clone(),
+                true,
+                layer_challenges.challenges_count(),
+            );
             let mut res = DrgPoRep::extract_all(&pp, replica_id, data)
                 .expect("failed to extract data from PoRep");
 
@@ -1092,12 +700,12 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
         // O_i = H( e_i^(1) || .. )
         let os = odd_columns
-            .map(|c| c.map(|c| hash_single_column(&c.rows)))
+            .map(|c| c.map(|c| c.hash()))
             .collect::<Result<Vec<_>>>()?;
 
         // E_i = H( e_\bar{i}^(2) || .. )
         let es = even_columns
-            .map(|c| c.map(|c| hash_single_column(&c.rows)))
+            .map(|c| c.map(|c| c.hash()))
             .collect::<Result<Vec<_>>>()?;
 
         // C_i = H(O_i || E_i)
@@ -1350,7 +958,7 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for ZigZagDrgPoRep<'c, H> {
         requirements: &ChallengeRequirements,
         partitions: usize,
     ) -> bool {
-        let partition_challenges = public_params.layer_challenges.challenges();
+        let partition_challenges = public_params.layer_challenges.challenges_count();
 
         partition_challenges * partitions >= requirements.minimum_challenges
     }
@@ -1418,10 +1026,7 @@ mod tests {
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
-    use crate::zigzag_drgporep::{
-        LayerChallenges, PrivateInputs, PublicInputs, PublicParams, SetupParams,
-    };
-    use crate::zigzag_graph::EXP_DEGREE;
+    use crate::zigzag::EXP_DEGREE;
 
     const DEFAULT_ZIGZAG_LAYERS: usize = 10;
 
@@ -1430,7 +1035,7 @@ mod tests {
         let layer_challenges = LayerChallenges::new_fixed(10, 333);
         let expected = 333;
 
-        let calculated_count = layer_challenges.challenges();
+        let calculated_count = layer_challenges.challenges_count();
         assert_eq!(expected as usize, calculated_count);
     }
 
@@ -1595,7 +1200,7 @@ mod tests {
 
         assert_eq!(
             get_odd_column::<Blake2sHasher>(&encodings, 6, 0).unwrap(),
-            Column::new(
+            Column::new_odd(
                 0,
                 vec![
                     Blake2sDomain::try_from_bytes(&vec![1; NODE_SIZE]).unwrap(),
@@ -1618,7 +1223,7 @@ mod tests {
 
         assert_eq!(
             get_even_column::<Blake2sHasher>(&encodings, 6, 0).unwrap(),
-            Column::new(
+            Column::new_even(
                 0,
                 vec![
                     Blake2sDomain::try_from_bytes(&vec![2; NODE_SIZE]).unwrap(),
@@ -1663,20 +1268,20 @@ mod tests {
                 get_even_column::<Blake2sHasher>(&encodings, 6, graph.inv_index(node)).unwrap();
             let odd = get_odd_column::<Blake2sHasher>(&encodings, 6, node).unwrap();
             let all = get_full_column::<Blake2sHasher>(&encodings, &graph, 6, node).unwrap();
-            assert_eq!(all.index, node);
+            assert_eq!(all.index(), node);
 
             assert_eq!(
-                odd.rows
+                odd.rows()
                     .iter()
                     .cloned()
-                    .interleave(even.rows.iter().cloned())
+                    .interleave(even.rows().iter().cloned())
                     .collect::<Vec<_>>(),
-                all.rows.clone(),
+                all.rows().clone(),
             );
 
-            let col_hash = column_hash(&all.rows);
-            let e_hash = hash_single_column(&even.rows);
-            let o_hash = hash_single_column(&odd.rows);
+            let col_hash = all.hash();
+            let e_hash = even.hash();
+            let o_hash = odd.hash();
             let combined_hash = hash2(&o_hash, &e_hash);
 
             assert_eq!(col_hash, combined_hash);
