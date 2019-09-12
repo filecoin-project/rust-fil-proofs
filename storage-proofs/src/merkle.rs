@@ -137,6 +137,10 @@ impl<H: Hasher> MerkleProof<H> {
         &self.root
     }
 
+    pub fn verified_leaf(&self) -> IncludedNode<H> {
+        IncludedNode::new(self.leaf.clone())
+    }
+
     /// Returns the length of the proof. That is all path elements plus 1 for the
     /// leaf and 1 for the root.
     pub fn len(&self) -> usize {
@@ -173,6 +177,29 @@ impl<H: Hasher> MerkleProof<H> {
             c >>= 1;
         }
         true
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IncludedNode<H: Hasher> {
+    value: H::Domain,
+    _h: PhantomData<H>,
+}
+
+impl<H: Hasher> IncludedNode<H> {
+    pub fn new(value: H::Domain) -> Self {
+        IncludedNode {
+            value,
+            _h: PhantomData,
+        }
+    }
+}
+
+impl<H: Hasher> std::ops::Deref for IncludedNode<H> {
+    type Target = H::Domain;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
     }
 }
 
