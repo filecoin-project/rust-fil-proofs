@@ -600,7 +600,7 @@ mod tests {
         let pub_inputs = PublicInputs::<H::Domain> {
             replica_id,
             seed: None,
-            tau,
+            tau: Some(tau),
             k: None,
         };
 

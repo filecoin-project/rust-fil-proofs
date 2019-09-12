@@ -25,5 +25,7 @@ mod proof_scheme;
 
 pub use self::challenges::{ChallengeRequirements, LayerChallenges};
 pub use self::graph::{ZigZagBucketGraph, ZigZagGraph, EXP_DEGREE};
-pub use self::params::{PrivateInputs, PublicInputs, PublicParams, SetupParams};
+pub use self::params::{
+    PersistentAux, PrivateInputs, PublicInputs, PublicParams, SetupParams, Tau, TemporaryAux,
+};
 pub use self::proof::ZigZagDrgPoRep;

@@ -79,7 +79,7 @@ where
 pub struct PublicInputs<T: Domain> {
     pub replica_id: T,
     pub seed: Option<T>,
-    pub tau: Tau<T>,
+    pub tau: Option<Tau<T>>,
     pub k: Option<usize>,
 }
 
@@ -95,7 +95,12 @@ impl<T: Domain> PublicInputs<T> {
         if let Some(ref seed) = self.seed {
             layer_challenges.derive::<T>(leaves, &self.replica_id, seed, k as u8)
         } else {
-            layer_challenges.derive::<T>(leaves, &self.replica_id, &self.tau.comm_r, k as u8)
+            layer_challenges.derive::<T>(
+                leaves,
+                &self.replica_id,
+                &self.tau.as_ref().expect("missing comm_r").comm_r,
+                k as u8,
+            )
         }
     }
 }
@@ -167,7 +172,11 @@ impl<H: Hasher> Proof<H> {
 
         // just grabbing the first one
         let actual_comm_r = self.comm_r();
-        let expected_comm_r = &pub_inputs.tau.comm_r;
+        let expected_comm_r = if let Some(ref tau) = pub_inputs.tau {
+            &tau.comm_r
+        } else {
+            return false;
+        };
 
         check_eq!(expected_comm_r, &actual_comm_r);
 
@@ -175,7 +184,11 @@ impl<H: Hasher> Proof<H> {
         trace!("verify initial data layer");
 
         check!(self.comm_d_proofs.proves_challenge(challenge));
-        check_eq!(self.comm_d_proofs.root(), &pub_inputs.tau.comm_d);
+        if let Some(ref tau) = pub_inputs.tau {
+            check_eq!(self.comm_d_proofs.root(), &tau.comm_d);
+        } else {
+            return false;
+        }
 
         // Verify replica column openings
         trace!("verify replica column openings");
