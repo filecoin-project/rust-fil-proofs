@@ -90,7 +90,7 @@ To run benchy on a remote server, provide SSH connection information to the
 benchy-remote.sh script:
 
 ```shell
-10:13 $ ./fil-proofs-tooling/scripts/benchy-remote.sh foo@16.16.16.16 zigzag --size=1 | jq '.'
+10:13 $ ./fil-proofs-tooling/scripts/benchy-remote.sh master foo@16.16.16.16 zigzag --size=1 | jq '.'
 {
   "inputs": {
     // ...
