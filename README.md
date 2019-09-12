@@ -46,6 +46,8 @@ Configure to use nightly:
 
 ## Build
 
+**NOTE:** `rust-fil-proofs` can only be built for and run on 64-bit platforms; building will panic if the target architecture is not 64-bits.
+
 ```
 > cargo build --release --all
 ```
