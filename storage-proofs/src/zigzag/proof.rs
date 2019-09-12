@@ -18,8 +18,8 @@ use crate::zigzag::{
     graph::ZigZagBucketGraph,
     hash::hash2,
     params::{
-        get_even_column, get_full_column, get_node, get_odd_column, PersistentAux, Proof,
-        PublicInputs, ReplicaColumnProof, Tau, TemporaryAux, TransformedLayers, Tree,
+        get_node, Encodings, PersistentAux, Proof, PublicInputs, ReplicaColumnProof, Tau,
+        TemporaryAux, TransformedLayers, Tree,
     },
 };
 
@@ -76,7 +76,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
             graph_0.base_parents(x, &mut parents);
 
             for parent in &parents {
-                columns.push(get_full_column(&t_aux.encodings, graph_0, layers, *parent)?);
+                columns.push(t_aux.full_column(graph_0, *parent)?);
             }
 
             debug_assert!(columns.len() == base_degree);
@@ -95,7 +95,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
             });
 
             for parent in &parents {
-                columns.push(get_even_column(&t_aux.encodings, layers, *parent as usize)?);
+                columns.push(t_aux.even_column(*parent as usize)?);
             }
             debug_assert!(columns.len() == exp_degree);
 
@@ -113,7 +113,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
             });
 
             for parent in &parents {
-                columns.push(get_odd_column(&t_aux.encodings, layers, *parent as usize)?);
+                columns.push(t_aux.odd_column(*parent as usize)?);
             }
             debug_assert!(columns.len() == exp_degree);
 
@@ -152,8 +152,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                         // All labels in C_X
                         trace!("  c_x");
                         let c_x = {
-                            let column =
-                                get_full_column(&t_aux.encodings, &graph_0, layers, challenge)?;
+                            let column = t_aux.full_column(&graph_0, challenge)?;
 
                             let inclusion_proof = MerkleProof::new_from_proof(
                                 &t_aux.tree_c.gen_proof(column.index()),
@@ -162,11 +161,9 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                         };
 
                         // Only odd-layer labels in the renumbered column C_\bar{X}
-                        // WARNING: pulls the full column, as this is a bug in the spec atm.
                         trace!("  c_inv_x");
                         let c_inv_x = {
-                            let column =
-                                get_full_column(&t_aux.encodings, &graph_0, layers, inv_challenge)?;
+                            let column = t_aux.full_column(&graph_0, inv_challenge)?;
                             let inclusion_proof = MerkleProof::new_from_proof(
                                 &t_aux.tree_c.gen_proof(column.index()),
                             );
@@ -264,7 +261,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                         let parents_data = parents
                             .into_iter()
                             .map(|parent| {
-                                data_at_node(&t_aux.encodings[0], parent).map(|v| v.to_vec())
+                                data_at_node(t_aux.encoding_at_layer(1), parent).map(|v| v.to_vec())
                             })
                             .collect::<Result<_>>()?;
 
@@ -297,7 +294,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
                                 )
                             };
 
-                            let encoded_data = &t_aux.encodings[layer - 1];
+                            let encoded_data = t_aux.encoding_at_layer(layer);
 
                             let mut parents = vec![0; graph.degree()];
                             graph.parents(challenge, &mut parents);
@@ -435,6 +432,8 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
         assert_eq!(encodings.len(), layers - 1);
 
+        let encodings = Encodings::<H>::new(encodings);
+
         let r_last = to_encode;
 
         // store the last layer in the original data
@@ -443,11 +442,11 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
         // 3. Construct Column Commitments
         let odd_columns = (0..nodes_count)
             .into_par_iter()
-            .map(|x| get_odd_column::<H>(&encodings, layers, x));
+            .map(|x| encodings.odd_column(x));
 
         let even_columns = (0..nodes_count)
             .into_par_iter()
-            .map(|x| get_even_column::<H>(&encodings, layers, graph.inv_index(x)));
+            .map(|x| encodings.even_column(graph.inv_index(x)));
 
         // O_i = H( e_i^(1) || .. )
         let os = odd_columns
@@ -682,16 +681,16 @@ mod tests {
 
     #[test]
     fn test_odd_column() {
-        let encodings = vec![
+        let encodings = Encodings::<Blake2sHasher>::new(vec![
             vec![1; NODE_SIZE],
             vec![2; NODE_SIZE],
             vec![3; NODE_SIZE],
             vec![4; NODE_SIZE],
             vec![5; NODE_SIZE],
-        ];
+        ]);
 
         assert_eq!(
-            get_odd_column::<Blake2sHasher>(&encodings, 6, 0).unwrap(),
+            encodings.odd_column(0).unwrap(),
             Column::new_odd(
                 0,
                 vec![
@@ -705,16 +704,16 @@ mod tests {
 
     #[test]
     fn test_even_column() {
-        let encodings = vec![
+        let encodings = Encodings::<Blake2sHasher>::new(vec![
             vec![1; NODE_SIZE],
             vec![2; NODE_SIZE],
             vec![3; NODE_SIZE],
             vec![4; NODE_SIZE],
             vec![5; NODE_SIZE],
-        ];
+        ]);
 
         assert_eq!(
-            get_even_column::<Blake2sHasher>(&encodings, 6, 0).unwrap(),
+            encodings.even_column(0).unwrap(),
             Column::new_even(
                 0,
                 vec![
@@ -739,13 +738,13 @@ mod tests {
             res
         };
 
-        let encodings: Vec<Vec<u8>> = vec![
+        let encodings = Encodings::<Blake2sHasher>::new(vec![
             make_nodes(1),
             make_nodes(2),
             make_nodes(3),
             make_nodes(4),
             make_nodes(5),
-        ];
+        ]);
 
         let graph = ZigZagBucketGraph::<Blake2sHasher>::new_zigzag(
             nodes,
@@ -756,10 +755,9 @@ mod tests {
         );
 
         for node in 0..nodes {
-            let even =
-                get_even_column::<Blake2sHasher>(&encodings, 6, graph.inv_index(node)).unwrap();
-            let odd = get_odd_column::<Blake2sHasher>(&encodings, 6, node).unwrap();
-            let all = get_full_column::<Blake2sHasher>(&encodings, &graph, 6, node).unwrap();
+            let even = encodings.even_column(graph.inv_index(node)).unwrap();
+            let odd = encodings.odd_column(node).unwrap();
+            let all = encodings.full_column(&graph, node).unwrap();
             assert_eq!(all.index(), node);
 
             assert_eq!(

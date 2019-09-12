@@ -194,7 +194,7 @@ pub struct PersistentAux<D: Domain> {
 #[derive(Debug, Clone)]
 pub struct TemporaryAux<H: Hasher> {
     /// The encoded nodes for 1..layers.
-    pub encodings: Vec<Vec<u8>>,
+    pub encodings: Encodings<H>,
     pub tree_d: Tree<H>,
     pub tree_r_last: Tree<H>,
     pub tree_c: Tree<H>,
@@ -204,59 +204,116 @@ pub struct TemporaryAux<H: Hasher> {
     pub os: Vec<Vec<u8>>,
 }
 
-pub fn get_even_column<H: Hasher>(
-    encodings: &[Vec<u8>],
-    layers: usize,
-    x: usize,
-) -> Result<Column<H>> {
-    debug_assert_eq!(encodings.len(), layers - 1);
+impl<H: Hasher> TemporaryAux<H> {
+    pub fn encoding_at_layer(&self, layer: usize) -> &[u8] {
+        self.encodings.encoding_at_layer(layer)
+    }
 
-    let rows = (1..layers - 1)
-        .step_by(2)
-        .map(|layer| H::Domain::try_from_bytes(get_node_at_layer(encodings, x, layer)?))
-        .collect::<Result<_>>()?;
+    pub fn node_at_layer(&self, layer: usize, node_index: usize) -> Result<&[u8]> {
+        self.encodings.node_at_layer(layer, node_index)
+    }
 
-    Ok(Column::new_even(x, rows))
+    pub fn even_column(&self, column_index: usize) -> Result<Column<H>> {
+        self.encodings.even_column(column_index)
+    }
+
+    pub fn odd_column(&self, column_index: usize) -> Result<Column<H>> {
+        self.encodings.odd_column(column_index)
+    }
+
+    pub fn full_column(
+        &self,
+        graph: &ZigZagBucketGraph<H>,
+        column_index: usize,
+    ) -> Result<Column<H>> {
+        self.encodings.full_column(graph, column_index)
+    }
 }
 
-pub fn get_odd_column<H: Hasher>(
-    encodings: &[Vec<u8>],
-    layers: usize,
-    x: usize,
-) -> Result<Column<H>> {
-    debug_assert_eq!(encodings.len(), layers - 1);
-
-    let rows = (0..layers)
-        .step_by(2)
-        .map(|layer| H::Domain::try_from_bytes(get_node_at_layer(encodings, x, layer)?))
-        .collect::<Result<_>>()?;
-
-    Ok(Column::new_odd(x, rows))
+#[derive(Debug, Clone)]
+pub struct Encodings<H: Hasher> {
+    encodings: Vec<Vec<u8>>,
+    _h: PhantomData<H>,
 }
 
-pub fn get_full_column<H: Hasher>(
-    encodings: &[Vec<u8>],
-    graph: &ZigZagBucketGraph<H>,
-    layers: usize,
-    x: usize,
-) -> Result<Column<H>> {
-    debug_assert_eq!(encodings.len(), layers - 1);
+impl<H: Hasher> Encodings<H> {
+    pub fn new(encodings: Vec<Vec<u8>>) -> Self {
+        Encodings {
+            encodings,
+            _h: PhantomData,
+        }
+    }
 
-    let inv_index = graph.inv_index(x);
+    pub fn len(&self) -> usize {
+        self.encodings.len()
+    }
 
-    let rows = (0..layers - 1)
-        .map(|i| {
-            let x = if (i + 1) % 2 == 0 { inv_index } else { x };
+    pub fn is_empty(&self) -> bool {
+        self.encodings.is_empty()
+    }
 
-            H::Domain::try_from_bytes(get_node_at_layer(&encodings, x, i)?)
-        })
-        .collect::<Result<_>>()?;
+    pub fn encoding_at_layer(&self, layer: usize) -> &[u8] {
+        assert!(layer != 0, "Layer cannot be 0");
+        assert!(
+            layer < self.layers(),
+            "Layer {} is not available (only {} layers available)",
+            layer,
+            self.layers()
+        );
 
-    Ok(Column::new_all(x, rows))
-}
+        let row_index = layer - 1;
+        &self.encodings[row_index][..]
+    }
 
-pub fn get_node_at_layer(encodings: &[Vec<u8>], node: usize, layer: usize) -> Result<&[u8]> {
-    data_at_node(&encodings[layer], node)
+    /// How many layers are available.
+    fn layers(&self) -> usize {
+        self.encodings.len() + 1
+    }
+
+    pub fn node_at_layer(&self, layer: usize, node_index: usize) -> Result<&[u8]> {
+        let encoding = self.encoding_at_layer(layer);
+        data_at_node(encoding, node_index)
+    }
+
+    pub fn even_column(&self, column_index: usize) -> Result<Column<H>> {
+        let rows = (2..self.layers())
+            .step_by(2)
+            .map(|layer| H::Domain::try_from_bytes(self.node_at_layer(layer, column_index)?))
+            .collect::<Result<_>>()?;
+
+        Ok(Column::new_even(column_index, rows))
+    }
+
+    pub fn odd_column(&self, column_index: usize) -> Result<Column<H>> {
+        let rows = (1..self.layers())
+            .step_by(2)
+            .map(|layer| H::Domain::try_from_bytes(self.node_at_layer(layer, column_index)?))
+            .collect::<Result<_>>()?;
+
+        Ok(Column::new_odd(column_index, rows))
+    }
+
+    pub fn full_column(
+        &self,
+        graph: &ZigZagBucketGraph<H>,
+        column_index: usize,
+    ) -> Result<Column<H>> {
+        let inv_index = graph.inv_index(column_index);
+
+        let rows = (1..self.layers())
+            .map(|layer| {
+                let x = if layer % 2 == 0 {
+                    inv_index
+                } else {
+                    column_index
+                };
+
+                H::Domain::try_from_bytes(self.node_at_layer(layer, x)?)
+            })
+            .collect::<Result<_>>()?;
+
+        Ok(Column::new_all(column_index, rows))
+    }
 }
 
 pub fn get_node<H: Hasher>(data: &[u8], index: usize) -> Result<H::Domain> {
