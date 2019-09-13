@@ -1,27 +1,31 @@
+use std::marker::PhantomData;
+
 use bellperson::{ConstraintSystem, SynthesisError};
 use fil_sapling_crypto::circuit::num;
+use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
-use crate::circuit::zigzag::column_proof::ColumnProof;
-use crate::circuit::zigzag::encoding_proof::EncodingProof;
+use crate::circuit::zigzag::{column_proof::ColumnProof, encoding_proof::EncodingProof};
+use crate::circuit::{por::PoRCircuit, variables::Root};
 use crate::drgraph::Graph;
 use crate::hasher::Hasher;
+use crate::merkle::MerkleProof;
 use crate::zigzag::{
     Proof as VanillaProof, PublicParams, ReplicaColumnProof as VanillaReplicaColumnProof,
 };
 
 #[derive(Debug, Clone)]
-pub struct Proof {
-    pub comm_d_proof: InclusionPath,
-    pub comm_r_last_proofs: (InclusionPath, Vec<InclusionPath>),
-    pub replica_column_proof: ReplicaColumnProof,
+pub struct Proof<H: Hasher> {
+    pub comm_d_proof: InclusionPath<H>,
+    pub comm_r_last_proofs: (InclusionPath<H>, Vec<InclusionPath<H>>),
+    pub replica_column_proof: ReplicaColumnProof<H>,
     pub encoding_proof_1: EncodingProof,
     pub encoding_proofs: Vec<EncodingProof>,
 }
 
-impl Proof {
+impl<H: Hasher> Proof<H> {
     /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty<H: Hasher>(params: &PublicParams<H>) -> Self {
+    pub fn empty(params: &PublicParams<H>) -> Self {
         let degree = params.graph.degree();
         let challenges_count = params.layer_challenges.challenges_count();
         let layers = params.layer_challenges.layers();
@@ -41,9 +45,9 @@ impl Proof {
     /// Circuit synthesis.
     pub fn synthesize<CS: ConstraintSystem<Bls12>>(
         self,
-        cs: &mut CS,
-        comm_r_last_0: &num::AllocatedNum<Bls12>,
-        comm_c_0: &num::AllocatedNum<Bls12>,
+        mut cs: CS,
+        params: &<Bls12 as JubjubEngine>::Params,
+        comm_d: &num::AllocatedNum<Bls12>,
     ) -> Result<(), SynthesisError> {
         let Proof {
             comm_d_proof,
@@ -54,6 +58,7 @@ impl Proof {
         } = self;
 
         // verify initial data layer
+        comm_d_proof.synthesize(cs.namespace(|| "comm_d_inclusion"), params, comm_d)?;
 
         // verify replica column openings
 
@@ -65,7 +70,7 @@ impl Proof {
     }
 }
 
-impl<H: Hasher> From<VanillaProof<H>> for Proof {
+impl<H: Hasher> From<VanillaProof<H>> for Proof<H> {
     fn from(vanilla_proof: VanillaProof<H>) -> Self {
         let VanillaProof {
             comm_d_proofs,
@@ -76,14 +81,10 @@ impl<H: Hasher> From<VanillaProof<H>> for Proof {
         } = vanilla_proof;
 
         Proof {
-            comm_d_proof: comm_d_proofs.as_options().into(),
+            comm_d_proof: comm_d_proofs.into(),
             comm_r_last_proofs: (
-                comm_r_last_proofs.0.as_options().into(),
-                comm_r_last_proofs
-                    .1
-                    .into_iter()
-                    .map(|p| p.as_options().into())
-                    .collect(),
+                comm_r_last_proofs.0.into(),
+                comm_r_last_proofs.1.into_iter().map(Into::into).collect(),
             ),
             replica_column_proof: replica_column_proofs.into(),
             encoding_proof_1: encoding_proof_1.into(),
@@ -93,33 +94,61 @@ impl<H: Hasher> From<VanillaProof<H>> for Proof {
 }
 
 #[derive(Debug, Clone)]
-pub struct InclusionPath(Vec<Option<(Fr, bool)>>);
+pub struct InclusionPath<H: Hasher> {
+    value: Option<Fr>,
+    auth_path: Vec<Option<(Fr, bool)>>,
+    _h: PhantomData<H>,
+}
 
-impl InclusionPath {
+impl<H: Hasher> InclusionPath<H> {
     /// Create an empty proof, used in `blank_circuit`s.
     pub fn empty(degree: usize) -> Self {
-        InclusionPath(vec![None; degree])
+        InclusionPath {
+            value: None,
+            auth_path: vec![None; degree],
+            _h: PhantomData,
+        }
+    }
+
+    pub fn synthesize<CS: ConstraintSystem<Bls12>>(
+        self,
+        cs: CS,
+        params: &<Bls12 as JubjubEngine>::Params,
+        root: &num::AllocatedNum<Bls12>,
+    ) -> Result<(), SynthesisError> {
+        let InclusionPath {
+            value, auth_path, ..
+        } = self;
+
+        let root = Root::from_allocated::<CS>(root.clone());
+        PoRCircuit::<Bls12, H>::synthesize(cs, params, value, auth_path, root, true)
     }
 }
 
-impl From<Vec<Option<(Fr, bool)>>> for InclusionPath {
-    fn from(other: Vec<Option<(Fr, bool)>>) -> Self {
-        InclusionPath(other)
+impl<H: Hasher> From<MerkleProof<H>> for InclusionPath<H> {
+    fn from(other: MerkleProof<H>) -> Self {
+        let (value, auth_path) = other.into_options_with_leaf();
+
+        InclusionPath {
+            value,
+            auth_path,
+            _h: PhantomData,
+        }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct ReplicaColumnProof {
-    c_x: ColumnProof,
-    c_inv_x: ColumnProof,
-    drg_parents: Vec<ColumnProof>,
-    exp_parents_even: Vec<ColumnProof>,
-    exp_parents_odd: Vec<ColumnProof>,
+pub struct ReplicaColumnProof<H: Hasher> {
+    c_x: ColumnProof<H>,
+    c_inv_x: ColumnProof<H>,
+    drg_parents: Vec<ColumnProof<H>>,
+    exp_parents_even: Vec<ColumnProof<H>>,
+    exp_parents_odd: Vec<ColumnProof<H>>,
 }
 
-impl ReplicaColumnProof {
+impl<H: Hasher> ReplicaColumnProof<H> {
     /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty<H: Hasher>(params: &PublicParams<H>) -> Self {
+    pub fn empty(params: &PublicParams<H>) -> Self {
         ReplicaColumnProof {
             c_x: ColumnProof::empty_all(params),
             c_inv_x: ColumnProof::empty_all(params),
@@ -133,7 +162,7 @@ impl ReplicaColumnProof {
     }
 }
 
-impl<H: Hasher> From<VanillaReplicaColumnProof<H>> for ReplicaColumnProof {
+impl<H: Hasher> From<VanillaReplicaColumnProof<H>> for ReplicaColumnProof<H> {
     fn from(vanilla_proof: VanillaReplicaColumnProof<H>) -> Self {
         let VanillaReplicaColumnProof {
             c_x,

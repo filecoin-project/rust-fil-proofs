@@ -117,8 +117,8 @@ where
         seed: [u32; 7],
     ) -> Self {
         if !cfg!(feature = "unchecked-degrees") {
-            assert_eq!(base_degree, BASE_DEGREE);
-            assert_eq!(expansion_degree, EXP_DEGREE);
+            assert_eq!(base_degree, BASE_DEGREE, "Invalid base degree");
+            assert_eq!(expansion_degree, EXP_DEGREE, "Invalid expansion degree");
         }
 
         let use_cache = settings::SETTINGS.lock().unwrap().maximize_caching;

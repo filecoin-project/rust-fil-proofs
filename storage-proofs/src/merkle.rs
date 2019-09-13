@@ -84,6 +84,15 @@ impl<H: Hasher> MerkleProof<H> {
             .collect::<Vec<_>>()
     }
 
+    pub fn into_options_with_leaf(self) -> (Option<Fr>, Vec<Option<(Fr, bool)>>) {
+        let MerkleProof { leaf, path, .. } = self;
+
+        (
+            Some(leaf.into()),
+            path.into_iter().map(|(a, b)| Some((a.into(), b))).collect(),
+        )
+    }
+
     pub fn as_pairs(&self) -> Vec<(Fr, bool)> {
         self.path
             .iter()

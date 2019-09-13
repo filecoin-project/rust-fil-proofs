@@ -5,7 +5,7 @@ use rayon::prelude::*;
 use crate::drgporep::{self, DrgPoRep};
 use crate::drgraph::Graph;
 use crate::error::Result;
-use crate::hasher::{Domain, HashFunction, Hasher};
+use crate::hasher::{Domain, Hasher};
 use crate::merkle::{next_pow2, populate_leaves, MerkleProof, MerkleStore, Store};
 use crate::porep::PoRep;
 use crate::util::NODE_SIZE;
