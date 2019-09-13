@@ -17,7 +17,7 @@ mod column;
 mod column_proof;
 mod encoding_proof;
 mod graph;
-mod hash;
+pub(crate) mod hash;
 mod params;
 mod porep;
 mod proof;

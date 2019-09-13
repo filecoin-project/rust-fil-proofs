@@ -1,6 +1,7 @@
 mod column;
 mod column_proof;
 mod encoding_proof;
+mod hash;
 mod params;
 mod proof;
 

@@ -5,13 +5,13 @@ use serde::{Deserialize, Serialize};
 use crate::drgporep;
 use crate::drgraph::Graph;
 use crate::error::Result;
-use crate::hasher::{Domain, HashFunction, Hasher};
+use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::data_at_node;
 use crate::zigzag::{
     column::Column, column_proof::ColumnProof, encoding_proof::EncodingProof,
-    graph::ZigZagBucketGraph, LayerChallenges,
+    graph::ZigZagBucketGraph, hash::hash2, LayerChallenges,
 };
 
 pub type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
@@ -147,9 +147,7 @@ impl<H: Hasher> Proof<H> {
     }
 
     fn comm_r(&self) -> H::Domain {
-        let mut bytes = self.comm_c().as_ref().to_vec();
-        bytes.extend_from_slice(self.comm_r_last().as_ref());
-        <H as Hasher>::Function::hash(&bytes)
+        H::Domain::try_from_bytes(&hash2(self.comm_c(), self.comm_r_last())).expect("invalid proof")
     }
 
     /// Verify the full proof.

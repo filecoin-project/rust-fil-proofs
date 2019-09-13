@@ -1,14 +1,14 @@
 use std::marker::PhantomData;
 
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-// use fil_sapling_crypto::circuit::{boolean, num};
+use fil_sapling_crypto::circuit::num;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
-// use crate::circuit::constraint;
-// use crate::circuit::drgporep::{ComponentPrivateInputs, DrgPoRepCompound};
-// use crate::circuit::variables::Root;
-use crate::circuit::zigzag::params::Proof;
+use crate::circuit::{
+    constraint,
+    zigzag::{hash::hash2, params::Proof},
+};
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::drgraph::{Graph, BASE_DEGREE};
 use crate::hasher::Hasher;
@@ -25,9 +25,11 @@ use crate::zigzag::{ZigZagDrgPoRep, EXP_DEGREE};
 pub struct ZigZagCircuit<'a, E: JubjubEngine, H: 'static + Hasher> {
     params: &'a E::Params,
     public_params: <ZigZagDrgPoRep<'a, H> as ProofScheme<'a>>::PublicParams,
-    replica_id: Option<<H as Hasher>::Domain>,
-    comm_d: Option<<H as Hasher>::Domain>,
-    comm_r: Option<<H as Hasher>::Domain>,
+    replica_id: Option<Fr>,
+    comm_d: Option<Fr>,
+    comm_r: Option<Fr>,
+    comm_r_last: Option<Fr>,
+    comm_c: Option<Fr>,
 
     // one proof per challenge
     proofs: Vec<Proof>,
@@ -49,6 +51,8 @@ impl<'a, H: Hasher> ZigZagCircuit<'a, Bls12, H> {
         replica_id: Option<H::Domain>,
         comm_d: Option<H::Domain>,
         comm_r: Option<H::Domain>,
+        comm_r_last: Option<H::Domain>,
+        comm_c: Option<H::Domain>,
         proofs: Vec<Proof>,
     ) -> Result<(), SynthesisError>
     where
@@ -57,9 +61,11 @@ impl<'a, H: Hasher> ZigZagCircuit<'a, Bls12, H> {
         let circuit = ZigZagCircuit::<'a, Bls12, H> {
             params,
             public_params,
-            replica_id,
-            comm_d,
-            comm_r,
+            replica_id: replica_id.map(Into::into),
+            comm_d: comm_d.map(Into::into),
+            comm_r: comm_r.map(Into::into),
+            comm_r_last: comm_r_last.map(Into::into),
+            comm_c: comm_c.map(Into::into),
             proofs,
             _e: PhantomData,
         };
@@ -70,14 +76,71 @@ impl<'a, H: Hasher> ZigZagCircuit<'a, Bls12, H> {
 
 impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        let graph = &self.public_params.graph;
-        // let layer_challenges = &self.public_params.layer_challenges;
+        let ZigZagCircuit {
+            public_params,
+            proofs,
+            replica_id,
+            comm_r,
+            comm_d,
+            comm_r_last,
+            comm_c,
+            ..
+        } = self;
+
+        let graph = &public_params.graph;
 
         // In most cases (the exception being during testing) we want to ensure that the base and
         // expansion degrees are the optimal values.
         if !cfg!(feature = "unchecked-degrees") {
             assert_eq!(graph.base_graph().degree(), BASE_DEGREE);
             assert_eq!(graph.expansion_degree(), EXP_DEGREE);
+        }
+
+        // Allocate comm_r as Fr
+        let comm_r_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_r"), || {
+            comm_r.ok_or_else(|| SynthesisError::AssignmentMissing)
+        })?;
+
+        // Allocate comm_r_last as Fr
+        let comm_r_last_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_r_last"), || {
+            comm_r_last.ok_or_else(|| SynthesisError::AssignmentMissing)
+        })?;
+
+        // Allocate comm_r_last as booleans
+        let comm_r_last_bits = comm_r_last_num.into_bits_le(cs.namespace(|| "comm_r_last_bits"))?;
+
+        // Allocate comm_c as Fr
+        let comm_c_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_c"), || {
+            comm_c.ok_or_else(|| SynthesisError::AssignmentMissing)
+        })?;
+
+        // Allocate comm_c as booleans
+        let comm_c_bits = comm_c_num.into_bits_le(cs.namespace(|| "comm_c_bits"))?;
+
+        // Verify comm_r = H(comm_c || comm_r_last)
+        {
+            let hash_num = hash2(
+                cs.namespace(|| "H_comm_c_comm_r_last"),
+                &comm_c_bits,
+                &comm_r_last_bits,
+            )?;
+
+            // Check actual equality
+            constraint::equal(
+                cs,
+                || "enforce comm_r = H(comm_c || comm_r_last)",
+                &comm_r_num,
+                &hash_num,
+            );
+        }
+
+        for (i, proof) in proofs.into_iter().enumerate() {
+            // TODO: don't check equality for the first proofs, as we took the values comm_r_last and comm_c from it.
+            proof.synthesize(
+                &mut cs.namespace(|| format!("challenge_{}", i)),
+                &comm_r_last_num,
+                &comm_c_num,
+            )?;
         }
 
         Ok(())
@@ -156,12 +219,28 @@ impl<'a, H: 'static + Hasher>
         public_params: &'b <ZigZagDrgPoRep<H> as ProofScheme>::PublicParams,
         engine_params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> ZigZagCircuit<'a, Bls12, H> {
+        assert!(
+            !vanilla_proof.is_empty(),
+            "Cannot create a circuit with no vanilla proofs"
+        );
+
+        let comm_r_last = *vanilla_proof[0].comm_r_last();
+        let comm_c = *vanilla_proof[0].comm_c();
+
+        // ensure consistency
+        assert!(vanilla_proof
+            .iter()
+            .all(|p| p.comm_r_last() == &comm_r_last));
+        assert!(vanilla_proof.iter().all(|p| p.comm_c() == &comm_c));
+
         ZigZagCircuit {
             params: engine_params,
             public_params: public_params.clone(),
-            replica_id: Some(public_inputs.replica_id),
-            comm_d: public_inputs.tau.as_ref().map(|t| t.comm_d),
-            comm_r: public_inputs.tau.as_ref().map(|t| t.comm_r),
+            replica_id: Some(public_inputs.replica_id.into()),
+            comm_d: public_inputs.tau.as_ref().map(|t| t.comm_d.into()),
+            comm_r: public_inputs.tau.as_ref().map(|t| t.comm_r.into()),
+            comm_r_last: Some(comm_r_last.into()),
+            comm_c: Some(comm_c.into()),
             proofs: vanilla_proof.iter().cloned().map(|p| p.into()).collect(),
             _e: PhantomData,
         }
@@ -177,6 +256,8 @@ impl<'a, H: 'static + Hasher>
             replica_id: None,
             comm_d: None,
             comm_r: None,
+            comm_r_last: None,
+            comm_c: None,
             proofs: vec![Proof::empty(public_params)],
             _e: PhantomData,
         }
@@ -218,22 +299,17 @@ mod tests {
         let num_layers = 2;
         let layer_challenges = LayerChallenges::new_fixed(num_layers, 1);
 
-        let n = nodes; // FIXME: Consolidate variable names.
-
-        // TODO: The code in this section was copied directly from zizag_drgporep::tests::prove_verify.
-        // We should refactor to share the code – ideally in such a way that we can just add
-        // methods and get the assembled tests for free.
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let replica_id: Fr = rng.gen();
-        let data: Vec<u8> = (0..n)
+        let data: Vec<u8> = (0..nodes)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
         let sp = SetupParams {
             drg: drgporep::DrgParams {
-                nodes: n,
+                nodes,
                 degree,
                 expansion_degree,
                 seed: new_seed(),
@@ -267,10 +343,9 @@ mod tests {
 
         assert!(proofs_are_valid);
 
-        // End copied section.
+        let expected_inputs = 1;
+        let expected_constraints = 21519;
 
-        let expected_inputs = 36;
-        let expected_constraints = 432312;
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.
             let mut cs = MetricCS::<Bls12>::new();
@@ -314,67 +389,8 @@ mod tests {
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
-        // This test was modeled on equivalent from drgporep circuit.
         // TODO: add add assertions about other inputs.
     }
-
-    // Thist test is broken. empty proofs do not validate
-    //
-    // #[test]
-    // fn zigzag_input_circuit_num_constraints_fixed() {
-    //     let window_size = settings::SETTINGS.lock().unwrap().pedersen_hash_exp_window_size;
-    //     let params = &JubjubBls12::new_with_window_size(window_size);
-    //     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-
-    //     // 1 GB
-    //     let n = (1 << 30) / 32;
-    //     let num_layers = 2;
-    //     let base_degree = 2;
-    //     let expansion_degree = 2;
-    //     let layer_challenges = LayerChallenges::new_fixed(num_layers, 1);
-    //     let challenge = 1;
-    //     let replica_id: Fr = rng.gen();
-
-    //     let mut cs = TestConstraintSystem::<Bls12>::new();
-    //     let graph = ZigZagGraph::new_zigzag(n, base_degree, expansion_degree, new_seed());
-    //     let height = graph.merkle_tree_depth() as usize;
-
-    //     let layers = (0..num_layers)
-    //         .map(|l| {
-    //             // l is ignored because we assume uniform layers here.
-    //             let public_inputs = drgporep::PublicInputs {
-    //                 replica_id: replica_id.into(),
-    //                 challenges: vec![challenge],
-    //                 tau: None,
-    //             };
-    //             let proof = drgporep::Proof::new_empty(
-    //                 height,
-    //                 graph.degree(),
-    //                 layer_challenges.challenges_for_layer(l),
-    //             );
-    //             Some((public_inputs, proof))
-    //         })
-    //         .collect();
-    //     let public_params =
-    //         PublicParams::new(graph, layer_challenges);
-
-    //     ZigZagCircuit::<Bls12, PedersenHasher>::synthesize(
-    //         cs.namespace(|| "zigzag_drgporep"),
-    //         params,
-    //         public_params,
-    //         layers,
-    //         Some(porep::Tau {
-    //             comm_r: rng.gen(),
-    //             comm_d: rng.gen(),
-    //         }),
-    //         rng.gen(),
-    //     )
-    //     .expect("failed to synthesize circuit");
-    //     assert!(cs.is_satisfied(), "TestContraintSystem was not satisfied");
-
-    //     assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
-    //     assert_eq!(cs.num_constraints(), 547539, "wrong number of constraints");
-    // }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.

@@ -1,4 +1,6 @@
-use paired::bls12_381::Fr;
+use bellperson::{ConstraintSystem, SynthesisError};
+use fil_sapling_crypto::circuit::num;
+use paired::bls12_381::{Bls12, Fr};
 
 use crate::circuit::zigzag::column_proof::ColumnProof;
 use crate::circuit::zigzag::encoding_proof::EncodingProof;
@@ -10,8 +12,6 @@ use crate::zigzag::{
 
 #[derive(Debug, Clone)]
 pub struct Proof {
-    pub comm_r_last: Option<Fr>,
-    pub comm_c: Option<Fr>,
     pub comm_d_proof: InclusionPath,
     pub comm_r_last_proofs: (InclusionPath, Vec<InclusionPath>),
     pub replica_column_proof: ReplicaColumnProof,
@@ -27,8 +27,6 @@ impl Proof {
         let layers = params.layer_challenges.layers();
 
         Proof {
-            comm_r_last: None,
-            comm_c: None,
             comm_d_proof: InclusionPath::empty(degree),
             comm_r_last_proofs: (
                 InclusionPath::empty(degree),
@@ -39,13 +37,36 @@ impl Proof {
             encoding_proofs: vec![EncodingProof::empty(params); layers - 2],
         }
     }
+
+    /// Circuit synthesis.
+    pub fn synthesize<CS: ConstraintSystem<Bls12>>(
+        self,
+        cs: &mut CS,
+        comm_r_last_0: &num::AllocatedNum<Bls12>,
+        comm_c_0: &num::AllocatedNum<Bls12>,
+    ) -> Result<(), SynthesisError> {
+        let Proof {
+            comm_d_proof,
+            comm_r_last_proofs,
+            replica_column_proof,
+            encoding_proof_1,
+            encoding_proofs,
+        } = self;
+
+        // verify initial data layer
+
+        // verify replica column openings
+
+        // verify final replica layer
+
+        // verify encodings
+
+        Ok(())
+    }
 }
 
 impl<H: Hasher> From<VanillaProof<H>> for Proof {
     fn from(vanilla_proof: VanillaProof<H>) -> Self {
-        let comm_r_last = *vanilla_proof.comm_r_last();
-        let comm_c = *vanilla_proof.comm_c();
-
         let VanillaProof {
             comm_d_proofs,
             comm_r_last_proofs,
@@ -55,8 +76,6 @@ impl<H: Hasher> From<VanillaProof<H>> for Proof {
         } = vanilla_proof;
 
         Proof {
-            comm_r_last: Some(comm_r_last.into()),
-            comm_c: Some(comm_c.into()),
             comm_d_proof: comm_d_proofs.as_options().into(),
             comm_r_last_proofs: (
                 comm_r_last_proofs.0.as_options().into(),

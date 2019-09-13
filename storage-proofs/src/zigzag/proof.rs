@@ -438,11 +438,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
         let tree_r_last = build_tree(&r_last)?;
 
         // comm_r = H(comm_c || comm_r_last)
-        let comm_r = {
-            let mut bytes = tree_c.root().as_ref().to_vec();
-            bytes.extend_from_slice(tree_r_last.root().as_ref());
-            <H as Hasher>::Function::hash(&bytes)
-        };
+        let comm_r = H::Domain::try_from_bytes(&hash2(tree_c.root(), tree_r_last.root()))?;
 
         Ok((
             Tau {
