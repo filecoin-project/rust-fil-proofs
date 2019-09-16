@@ -9,6 +9,7 @@ use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Domain, Hasher};
+use crate::layered_drgporep::DumbCache;
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::{self, PoRep};
@@ -434,6 +435,7 @@ where
     type ProverAux = porep::ProverAux<H>;
 
     fn replicate(
+        cache: &mut DumbCache,
         pp: &Self::PublicParams,
         replica_id: &H::Domain,
         data: &mut [u8],
@@ -525,7 +527,9 @@ mod tests {
 
         let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).expect("setup failed");
 
-        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
+        let mut cache = DumbCache::new(tempfile::TempDir::new().unwrap().into_path());
+
+        DrgPoRep::replicate(&mut cache, &pp, &replica_id, &mut mmapped_data_copy, None)
             .expect("replication failed");
 
         let mut copied = vec![0; data.len()];
@@ -578,7 +582,9 @@ mod tests {
 
         let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).expect("setup failed");
 
-        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
+        let mut cache = DumbCache::new(tempfile::TempDir::new().unwrap().into_path());
+
+        DrgPoRep::replicate(&mut cache, &pp, &replica_id, &mut mmapped_data_copy, None)
             .expect("replication failed");
 
         let mut copied = vec![0; data.len()];
@@ -652,9 +658,16 @@ mod tests {
 
             let pp = DrgPoRep::<H, BucketGraph<_>>::setup(&sp).expect("setup failed");
 
-            let (tau, aux) =
-                DrgPoRep::<H, _>::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
-                    .expect("replication failed");
+            let mut cache = DumbCache::new(tempfile::TempDir::new().unwrap().into_path());
+
+            let (tau, aux) = DrgPoRep::<H, _>::replicate(
+                &mut cache,
+                &pp,
+                &replica_id,
+                &mut mmapped_data_copy,
+                None,
+            )
+            .expect("replication failed");
 
             let mut copied = vec![0; data.len()];
             copied.copy_from_slice(&mmapped_data_copy);

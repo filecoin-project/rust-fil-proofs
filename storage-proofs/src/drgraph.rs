@@ -11,6 +11,7 @@ use crate::merkle::{MerkleStore, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::{data_at_node, NODE_SIZE};
 use merkletree::merkle::FromIndexedParallelIterator;
+use std::fs::File;
 
 /// The default hasher currently in use.
 pub type DefaultTreeHasher = PedersenHasher;

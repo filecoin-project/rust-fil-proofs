@@ -531,6 +531,7 @@ mod tests {
     use crate::settings;
     use crate::util::data_at_node;
 
+    use crate::layered_drgporep::DumbCache;
     use ff::Field;
     use fil_sapling_crypto::jubjub::JubjubBls12;
     use rand::{Rand, Rng, SeedableRng, XorShiftRng};
@@ -574,9 +575,12 @@ mod tests {
             challenges_count: 1,
         };
 
+        let mut cache = DumbCache::new(tempfile::TempDir::new().unwrap().into_path());
+
         let pp = drgporep::DrgPoRep::<PedersenHasher, BucketGraph<_>>::setup(&sp)
             .expect("failed to create drgporep setup");
         let (tau, aux) = drgporep::DrgPoRep::<PedersenHasher, _>::replicate(
+            &mut cache,
             &pp,
             &replica_id.into(),
             data.as_mut_slice(),
@@ -765,7 +769,10 @@ mod tests {
         let public_params =
             DrgPoRepCompound::<H, BucketGraph<_>>::setup(&setup_params).expect("setup failed");
 
+        let mut cache = DumbCache::new(tempfile::TempDir::new().unwrap().into_path());
+
         let (tau, aux) = drgporep::DrgPoRep::<H, _>::replicate(
+            &mut cache,
             &public_params.vanilla_params,
             &replica_id.into(),
             data.as_mut_slice(),

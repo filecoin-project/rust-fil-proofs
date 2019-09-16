@@ -18,6 +18,7 @@ use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
 use crate::util::{data_at_node, NODE_SIZE};
 use crate::vde;
+use std::path::{Path, PathBuf};
 
 type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 
@@ -173,6 +174,52 @@ where
 }
 
 pub type EncodingProof<H> = drgporep::Proof<H>;
+
+pub enum MerkleTreeCacheKey {
+    CommR([u8; 32]),
+    Layer(usize, [u8; 32]),
+}
+
+pub struct DumbCache {
+    version: usize,
+    root: PathBuf,
+}
+
+pub struct CachedTreeAbsPaths {
+    pub top_half: PathBuf,
+    pub leaves: PathBuf,
+}
+
+impl DumbCache {
+    pub fn new<T: AsRef<Path>>(root: T) -> DumbCache {
+        DumbCache {
+            version: 0,
+            root: root.as_ref().to_path_buf(),
+        }
+    }
+
+    fn file_names(&self, k: MerkleTreeCacheKey) -> (String, String) {
+        match k {
+            MerkleTreeCacheKey::CommR(replica_id) => (
+                format!("{:?}-{:x?}-commr.top", self.version, replica_id),
+                format!("{:?}-{:x?}-commr.leaves", self.version, replica_id),
+            ),
+            MerkleTreeCacheKey::Layer(n, replica_id) => (
+                format!("{:?}-{:x?}-layer{:?}.top", self.version, replica_id, n),
+                format!("{:?}-{:x?}-layer{:?}.leaves", self.version, replica_id, n),
+            ),
+        }
+    }
+
+    fn paths<'a>(&self, k: MerkleTreeCacheKey) -> CachedTreeAbsPaths {
+        let (top_half, leaves) = self.file_names(k);
+
+        CachedTreeAbsPaths {
+            top_half: self.root.join(top_half),
+            leaves: self.root.join(leaves),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct PublicInputs<T: Domain> {
@@ -353,6 +400,7 @@ pub trait Layers {
     }
 
     fn transform_and_replicate_layers(
+        cache: &mut DumbCache,
         graph: &Self::Graph,
         layer_challenges: &LayerChallenges,
         replica_id: &<Self::Hasher as Hasher>::Domain,
@@ -646,12 +694,14 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
     type ProverAux = Vec<Tree<L::Hasher>>;
 
     fn replicate(
+        mut cache: &mut DumbCache,
         pp: &'a PublicParams<L::Hasher, L::Graph>,
         replica_id: &<L::Hasher as Hasher>::Domain,
         data: &mut [u8],
         _data_tree: Option<Tree<L::Hasher>>,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let (taus, auxs) = Self::transform_and_replicate_layers(
+            &mut cache,
             &pp.graph,
             &pp.layer_challenges,
             replica_id,

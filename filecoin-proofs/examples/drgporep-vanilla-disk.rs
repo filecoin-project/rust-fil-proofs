@@ -20,6 +20,7 @@ use memmap::MmapMut;
 use memmap::MmapOptions;
 use std::fs::File;
 use std::io::Write;
+use storage_proofs::layered_drgporep::DumbCache;
 
 fn file_backed_mmap_from_random_bytes(n: usize) -> MmapMut {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
@@ -68,9 +69,12 @@ fn do_the_work<H: Hasher>(data_size: usize, challenge_count: usize) {
     let start = Instant::now();
     let mut param_duration = Duration::new(0, 0);
 
+    let mut cache = DumbCache::new(tempfile::TempDir::new().unwrap().into_path());
+
     info!("running replicate");
     let (tau, aux) =
-        DrgPoRep::<H, _>::replicate(&pp, &replica_id.into(), &mut mmapped, None).unwrap();
+        DrgPoRep::<H, _>::replicate(&mut cache, &pp, &replica_id.into(), &mut mmapped, None)
+            .unwrap();
 
     let pub_inputs = PublicInputs::<H::Domain> {
         replica_id: Some(replica_id.into()),

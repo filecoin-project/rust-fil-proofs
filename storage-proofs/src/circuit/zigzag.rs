@@ -383,7 +383,7 @@ mod tests {
     use crate::drgraph::{new_seed, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, Hasher, PedersenHasher};
-    use crate::layered_drgporep::{self, ChallengeRequirements, LayerChallenges};
+    use crate::layered_drgporep::{self, ChallengeRequirements, DumbCache, LayerChallenges};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
     use crate::settings;
@@ -429,10 +429,17 @@ mod tests {
             layer_challenges: layer_challenges.clone(),
         };
 
+        let mut cache = DumbCache::new(tempfile::TempDir::new().unwrap().into_path());
+
         let pp = ZigZagDrgPoRep::setup(&sp).expect("setup failed");
-        let (tau, aux) =
-            ZigZagDrgPoRep::replicate(&pp, &replica_id.into(), data_copy.as_mut_slice(), None)
-                .expect("replication failed");
+        let (tau, aux) = ZigZagDrgPoRep::replicate(
+            &mut cache,
+            &pp,
+            &replica_id.into(),
+            data_copy.as_mut_slice(),
+            None,
+        )
+        .expect("replication failed");
         assert_ne!(data, data_copy);
 
         let simplified_tau = tau.clone().simplify();
@@ -635,8 +642,11 @@ mod tests {
             partitions: Some(partition_count),
         };
 
+        let mut cache = DumbCache::new(tempfile::TempDir::new().unwrap().into_path());
+
         let public_params = ZigZagCompound::setup(&setup_params).expect("setup failed");
         let (tau, aux) = ZigZagDrgPoRep::replicate(
+            &mut cache,
             &public_params.vanilla_params,
             &replica_id.into(),
             data_copy.as_mut_slice(),

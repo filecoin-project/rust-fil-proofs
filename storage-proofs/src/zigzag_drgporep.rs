@@ -55,7 +55,7 @@ mod tests {
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
     use crate::layered_drgporep::{
-        LayerChallenges, PrivateInputs, PublicInputs, PublicParams, SetupParams,
+        DumbCache, LayerChallenges, PrivateInputs, PublicInputs, PublicParams, SetupParams,
     };
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
@@ -104,8 +104,16 @@ mod tests {
             pp.graph = zigzag(&pp.graph);
         }
 
-        ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None)
-            .expect("replication failed");
+        let mut cache = DumbCache::new(tempfile::TempDir::new().unwrap().into_path());
+
+        ZigZagDrgPoRep::<H>::replicate(
+            &mut cache,
+            &pp,
+            &replica_id,
+            data_copy.as_mut_slice(),
+            None,
+        )
+        .expect("replication failed");
 
         let transformed_params = PublicParams::new(pp.graph, challenges.clone());
 
@@ -150,6 +158,8 @@ mod tests {
         let mut data_copy = data.clone();
         let partitions = 2;
 
+        let mut cache = DumbCache::new(tempfile::TempDir::new().unwrap().into_path());
+
         let sp = SetupParams {
             drg: drgporep::DrgParams {
                 nodes: n,
@@ -161,9 +171,14 @@ mod tests {
         };
 
         let pp = ZigZagDrgPoRep::<H>::setup(&sp).expect("setup failed");
-        let (tau, aux) =
-            ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None)
-                .expect("replication failed");
+        let (tau, aux) = ZigZagDrgPoRep::<H>::replicate(
+            &mut cache,
+            &pp,
+            &replica_id,
+            data_copy.as_mut_slice(),
+            None,
+        )
+        .expect("replication failed");
         assert_ne!(data, data_copy);
 
         let pub_inputs = PublicInputs::<H::Domain> {

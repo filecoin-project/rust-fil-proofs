@@ -18,6 +18,7 @@ use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
 use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
+use storage_proofs::layered_drgporep::DumbCache;
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 
@@ -84,9 +85,12 @@ fn do_the_work<H: Hasher>(data_size: usize, challenge_count: usize) {
 
     info!("running replicate");
 
+    let mut cache = DumbCache::new(tempfile::TempDir::new().unwrap().into_path());
+
     start_profile("replicate");
     let (tau, aux) =
-        DrgPoRep::<H, _>::replicate(&pp, &replica_id, data.as_mut_slice(), None).unwrap();
+        DrgPoRep::<H, _>::replicate(&mut cache, &pp, &replica_id, data.as_mut_slice(), None)
+            .unwrap();
     stop_profile();
     let pub_inputs = PublicInputs {
         replica_id: Some(replica_id),

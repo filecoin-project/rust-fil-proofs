@@ -20,7 +20,7 @@ use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgporep;
 use storage_proofs::drgraph::*;
 use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
-use storage_proofs::layered_drgporep::{self, ChallengeRequirements, LayerChallenges};
+use storage_proofs::layered_drgporep::{self, ChallengeRequirements, DumbCache, LayerChallenges};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::settings;
@@ -174,7 +174,10 @@ where
                 wall_time: replication_wall_time,
                 return_value: (pub_inputs, priv_inputs),
             } = measure(|| {
-                let (tau, aux) = ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, &mut data, None)?;
+                let mut cache = DumbCache::new(tempfile::TempDir::new().unwrap().into_path());
+
+                let (tau, aux) =
+                    ZigZagDrgPoRep::<H>::replicate(&mut cache, &pp, &replica_id, &mut data, None)?;
 
                 let pb = layered_drgporep::PublicInputs::<H::Domain> {
                     replica_id,

@@ -15,7 +15,7 @@ bench = false
 bitvec = "0.5"
 rand = "0.4"
 libc = "0.2"
-merkletree = "=0.10"
+merkletree = { path = "/Users/erinswenson-healey/dev/merkle_light/merkle" }
 failure = "0.1"
 byteorder = "1"
 config = "0.9.3"

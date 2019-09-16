@@ -31,7 +31,7 @@ use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
 use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
-use storage_proofs::layered_drgporep::{self, ChallengeRequirements, LayerChallenges};
+use storage_proofs::layered_drgporep::{self, ChallengeRequirements, DumbCache, LayerChallenges};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::settings;
@@ -206,8 +206,11 @@ fn do_the_work<H: 'static>(
 
         info!("running replicate");
 
+        let mut cache = DumbCache::new(tempfile::TempDir::new().unwrap().into_path());
+
         start_profile("replicate");
-        let (tau, aux) = ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, &mut data, None).unwrap();
+        let (tau, aux) =
+            ZigZagDrgPoRep::<H>::replicate(&mut cache, &pp, &replica_id, &mut data, None).unwrap();
         stop_profile();
         let pub_inputs = layered_drgporep::PublicInputs::<H::Domain> {
             replica_id,

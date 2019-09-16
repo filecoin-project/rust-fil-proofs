@@ -32,7 +32,7 @@ use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
 use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::hasher::{Domain, Hasher};
-use storage_proofs::layered_drgporep::{self, ChallengeRequirements};
+use storage_proofs::layered_drgporep::{self, ChallengeRequirements, DumbCache};
 use storage_proofs::merkle::MerkleTree;
 use storage_proofs::piece_inclusion_proof::{
     generate_piece_commitment_bytes_from_source, piece_inclusion_proofs, PieceInclusionProof,
@@ -177,6 +177,12 @@ pub fn seal<T: AsRef<Path>>(
     let sector_id_as_safe_fr = pad_safe_fr(&sector_id.as_fr_safe());
     let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id_as_safe_fr);
 
+    // TODO: The cache-root should be provided by the caller, but for now we'll
+    // just create a directory in a known location
+    let abs_path = "/tmp/merkle-cache";
+    let dir = std::fs::create_dir(abs_path)?;
+    let mut cache = DumbCache::new(PathBuf::from(abs_path));
+
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: &setup_params(
             PaddedBytesAmount::from(porep_config),
@@ -189,6 +195,7 @@ pub fn seal<T: AsRef<Path>>(
     let compound_public_params = ZigZagCompound::setup(&compound_setup_params)?;
 
     let (tau, aux) = ZigZagDrgPoRep::replicate(
+        &mut cache,
         &compound_public_params.vanilla_params,
         &replica_id,
         &mut data,

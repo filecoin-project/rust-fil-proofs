@@ -1,5 +1,6 @@
 use crate::error::Result;
 use crate::hasher::{Domain, HashFunction, Hasher};
+use crate::layered_drgporep::DumbCache;
 use crate::merkle::MerkleTree;
 use crate::proof::ProofScheme;
 
@@ -52,6 +53,7 @@ pub trait PoRep<'a, H: Hasher>: ProofScheme<'a> {
     type ProverAux;
 
     fn replicate(
+        cache: &mut DumbCache,
         pub_params: &'a Self::PublicParams,
         replica_id: &H::Domain,
         data: &mut [u8],
