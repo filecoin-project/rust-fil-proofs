@@ -4,7 +4,7 @@ use fil_sapling_crypto::circuit::boolean::Boolean;
 use fil_sapling_crypto::circuit::{multipack, num};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 
-/// Hash two elements together
+/// Hash two elements together.
 pub fn hash2<E, CS>(
     mut cs: CS,
     first: &[Boolean],
@@ -28,9 +28,18 @@ where
         values.push(Boolean::Constant(false));
     }
 
+    hash1(cs.namespace(|| "hash2"), &values)
+}
+
+/// Hash a list of bits.
+pub fn hash1<E, CS>(mut cs: CS, values: &[Boolean]) -> Result<num::AllocatedNum<E>, SynthesisError>
+where
+    E: JubjubEngine,
+    CS: ConstraintSystem<E>,
+{
     let personalization = vec![0u8; 8];
 
-    let hash_bits = blake2s_circuit(cs.namespace(|| "hash2"), &values, &personalization)?;
+    let hash_bits = blake2s_circuit(cs.namespace(|| "hash1"), &values, &personalization)?;
 
     let hash_fr = match hash_bits[0].get_value() {
         Some(_) => {
@@ -44,7 +53,37 @@ where
         None => Err(SynthesisError::AssignmentMissing),
     };
 
-    num::AllocatedNum::alloc(cs.namespace(|| "hash2_num"), || hash_fr)
+    num::AllocatedNum::alloc(cs.namespace(|| "hash1_num"), || hash_fr)
+}
+
+/// Hash a list of bits.
+pub fn hash_single_column<E, CS>(
+    mut cs: CS,
+    rows: &[Option<E::Fr>],
+) -> Result<num::AllocatedNum<E>, SynthesisError>
+where
+    E: JubjubEngine,
+    CS: ConstraintSystem<E>,
+{
+    let mut bits = Vec::new();
+    for (i, row) in rows.iter().enumerate() {
+        let row_num = num::AllocatedNum::alloc(
+            cs.namespace(|| format!("hash_single_column_row_{}_num", i)),
+            || {
+                row.map(Into::into)
+                    .ok_or_else(|| SynthesisError::AssignmentMissing)
+            },
+        )?;
+        let mut row_bits =
+            row_num.into_bits_le(cs.namespace(|| format!("hash_single_column_row_{}_bits", i)))?;
+        // pad to full bytes
+        while row_bits.len() % 8 > 0 {
+            row_bits.push(Boolean::Constant(false));
+        }
+        bits.extend(row_bits);
+    }
+
+    hash1(cs.namespace(|| "hash_single_column"), &bits)
 }
 
 #[cfg(test)]

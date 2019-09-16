@@ -48,6 +48,8 @@ impl<H: Hasher> Proof<H> {
         mut cs: CS,
         params: &<Bls12 as JubjubEngine>::Params,
         comm_d: &num::AllocatedNum<Bls12>,
+        comm_c: &num::AllocatedNum<Bls12>,
+        comm_r_last: &num::AllocatedNum<Bls12>,
     ) -> Result<(), SynthesisError> {
         let Proof {
             comm_d_proof,
@@ -58,11 +60,37 @@ impl<H: Hasher> Proof<H> {
         } = self;
 
         // verify initial data layer
-        comm_d_proof.synthesize(cs.namespace(|| "comm_d_inclusion"), params, comm_d)?;
+        let comm_d_leaf = comm_d_proof.alloc_value(cs.namespace(|| "comm_d_leaf"))?;
+        comm_d_proof.synthesize(
+            cs.namespace(|| "comm_d_inclusion"),
+            params,
+            comm_d,
+            &comm_d_leaf,
+        )?;
 
         // verify replica column openings
+        replica_column_proof.synthesize(cs.namespace(|| "replica_column_proof"), params, comm_c)?;
 
         // verify final replica layer
+        let (comm_r_last_data_proof, comm_r_last_parents_proofs) = comm_r_last_proofs;
+        let comm_r_last_data_leaf =
+            comm_r_last_data_proof.alloc_value(cs.namespace(|| "comm_r_last_data_leaf"))?;
+        comm_r_last_data_proof.synthesize(
+            cs.namespace(|| "comm_r_last_data_inclusion"),
+            params,
+            comm_r_last,
+            &comm_r_last_data_leaf,
+        )?;
+        for (i, proof) in comm_r_last_parents_proofs.into_iter().enumerate() {
+            let leaf =
+                proof.alloc_value(cs.namespace(|| format!("comm_r_last_parent_{}_leaf", i)))?;
+            proof.synthesize(
+                cs.namespace(|| format!("comm_r_last_parent_{}_inclusion", i)),
+                params,
+                comm_r_last,
+                &leaf,
+            )?;
+        }
 
         // verify encodings
 
@@ -110,16 +138,29 @@ impl<H: Hasher> InclusionPath<H> {
         }
     }
 
+    pub fn alloc_value<CS: ConstraintSystem<Bls12>>(
+        &self,
+        cs: CS,
+    ) -> Result<num::AllocatedNum<Bls12>, SynthesisError> {
+        num::AllocatedNum::alloc(cs, || {
+            self.value
+                .map(Into::into)
+                .ok_or_else(|| SynthesisError::AssignmentMissing)
+        })
+    }
+
     pub fn synthesize<CS: ConstraintSystem<Bls12>>(
         self,
         cs: CS,
         params: &<Bls12 as JubjubEngine>::Params,
         root: &num::AllocatedNum<Bls12>,
+        _leaf: &num::AllocatedNum<Bls12>,
     ) -> Result<(), SynthesisError> {
         let InclusionPath {
             value, auth_path, ..
         } = self;
 
+        // TODO: pass leaf to PorCircuit
         let root = Root::from_allocated::<CS>(root.clone());
         PoRCircuit::<Bls12, H>::synthesize(cs, params, value, auth_path, root, true)
     }
@@ -159,6 +200,52 @@ impl<H: Hasher> ReplicaColumnProof<H> {
             ],
             exp_parents_odd: vec![ColumnProof::empty_odd(params); params.graph.expansion_degree()],
         }
+    }
+
+    pub fn synthesize<CS: ConstraintSystem<Bls12>>(
+        self,
+        mut cs: CS,
+        params: &<Bls12 as JubjubEngine>::Params,
+        comm_c: &num::AllocatedNum<Bls12>,
+    ) -> Result<(), SynthesisError> {
+        let ReplicaColumnProof {
+            c_x,
+            c_inv_x,
+            drg_parents,
+            exp_parents_even,
+            exp_parents_odd,
+        } = self;
+
+        // c_x
+        c_x.synthesize(cs.namespace(|| "c_x"), params, comm_c)?;
+
+        // c_inv_x
+        c_inv_x.synthesize(cs.namespace(|| "c_inv_x"), params, comm_c)?;
+
+        // drg parents
+        for (i, parent) in drg_parents.into_iter().enumerate() {
+            parent.synthesize(cs.namespace(|| format!("drg_parent_{}", i)), params, comm_c)?;
+        }
+
+        // exp parents even
+        for (i, parent) in exp_parents_even.into_iter().enumerate() {
+            parent.synthesize(
+                cs.namespace(|| format!("exp_parent_even_{}", i)),
+                params,
+                comm_c,
+            )?;
+        }
+
+        // exp parents odd
+        for (i, parent) in exp_parents_odd.into_iter().enumerate() {
+            parent.synthesize(
+                cs.namespace(|| format!("exp_parent_odd_{}", i)),
+                params,
+                comm_c,
+            )?;
+        }
+
+        Ok(())
     }
 }
 

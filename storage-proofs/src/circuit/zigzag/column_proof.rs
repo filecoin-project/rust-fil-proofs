@@ -1,6 +1,12 @@
-use paired::bls12_381::Fr;
+use bellperson::{ConstraintSystem, SynthesisError};
+use fil_sapling_crypto::circuit::num;
+use fil_sapling_crypto::jubjub::JubjubEngine;
+use paired::bls12_381::{Bls12, Fr};
 
-use crate::circuit::zigzag::{column::Column, params::InclusionPath};
+use crate::circuit::{
+    constraint,
+    zigzag::{column::Column, hash::hash2, params::InclusionPath},
+};
 use crate::drgraph::Graph;
 use crate::hasher::Hasher;
 use crate::zigzag::{ColumnProof as VanillaColumnProof, PublicParams};
@@ -48,6 +54,88 @@ impl<H: Hasher> ColumnProof<H> {
             inclusion_path: InclusionPath::empty(params.graph.degree()),
             e_i: None,
         }
+    }
+
+    pub fn synthesize<CS: ConstraintSystem<Bls12>>(
+        self,
+        mut cs: CS,
+        params: &<Bls12 as JubjubEngine>::Params,
+        comm_c: &num::AllocatedNum<Bls12>,
+    ) -> Result<(), SynthesisError> {
+        match self {
+            ColumnProof::All {
+                inclusion_path,
+                column,
+            } => {
+                let c_i = column.hash(cs.namespace(|| "column_hash"), params)?;
+
+                let leaf_num = inclusion_path.alloc_value(cs.namespace(|| "leaf"))?;
+
+                constraint::equal(&mut cs, || "enforce column_hash = leaf", &c_i, &leaf_num);
+
+                // TODO: currently allocating the leaf twice, inclusion path should take the already allocated leaf.
+                inclusion_path.synthesize(
+                    cs.namespace(|| "column_proof_all_inclusion"),
+                    params,
+                    comm_c,
+                    &leaf_num,
+                )?;
+            }
+            ColumnProof::Even {
+                inclusion_path,
+                o_i,
+                column,
+            } => {
+                let e_i = column.hash(cs.namespace(|| "column_hash"), params)?;
+                let e_i_bits = e_i.into_bits_le(cs.namespace(|| "e_i_bits"))?;
+                let o_i_num = num::AllocatedNum::alloc(cs.namespace(|| "o_i"), || {
+                    o_i.map(Into::into)
+                        .ok_or_else(|| SynthesisError::AssignmentMissing)
+                })?;
+                let o_i_bits = o_i_num.into_bits_le(cs.namespace(|| "o_i_bits"))?;
+
+                let c_i = hash2(cs.namespace(|| "h(o_i, e_i)"), &o_i_bits, &e_i_bits)?;
+
+                let leaf_num = inclusion_path.alloc_value(cs.namespace(|| "leaf"))?;
+                constraint::equal(&mut cs, || "enforce h(o_i, e_i) = leaf", &c_i, &leaf_num);
+
+                // TODO: currently allocating the leaf twice, inclusion path should take the already allocated leaf.
+                inclusion_path.synthesize(
+                    cs.namespace(|| "column_proof_even_inclusion"),
+                    params,
+                    comm_c,
+                    &leaf_num,
+                )?;
+            }
+            ColumnProof::Odd {
+                inclusion_path,
+                e_i,
+                column,
+            } => {
+                let o_i = column.hash(cs.namespace(|| "column_hash"), params)?;
+                let o_i_bits = o_i.into_bits_le(cs.namespace(|| "o_i_bits"))?;
+                let e_i_num = num::AllocatedNum::alloc(cs.namespace(|| "e_i"), || {
+                    e_i.map(Into::into)
+                        .ok_or_else(|| SynthesisError::AssignmentMissing)
+                })?;
+                let e_i_bits = e_i_num.into_bits_le(cs.namespace(|| "e_i_bits"))?;
+
+                let c_i = hash2(cs.namespace(|| "h(o_i, e_i)"), &o_i_bits, &e_i_bits)?;
+
+                let leaf_num = inclusion_path.alloc_value(cs.namespace(|| "leaf"))?;
+
+                constraint::equal(&mut cs, || "enforce h(o_i, e_i) = leaf", &c_i, &leaf_num);
+
+                inclusion_path.synthesize(
+                    cs.namespace(|| "column_proof_odd_inclusion"),
+                    params,
+                    comm_c,
+                    &leaf_num,
+                )?;
+            }
+        }
+
+        Ok(())
     }
 }
 

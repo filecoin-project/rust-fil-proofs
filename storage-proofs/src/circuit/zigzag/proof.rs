@@ -39,13 +39,12 @@ pub struct ZigZagCircuit<'a, E: JubjubEngine, H: 'static + Hasher> {
     _e: PhantomData<E>,
 }
 
-// TODO: create `Option` version of the different inputs
-
 impl<'a, E: JubjubEngine, H: Hasher> CircuitComponent for ZigZagCircuit<'a, E, H> {
     type ComponentPrivateInputs = ();
 }
 
 impl<'a, H: Hasher> ZigZagCircuit<'a, Bls12, H> {
+    #[allow(clippy::too_many_arguments)]
     pub fn synthesize<CS>(
         mut cs: CS,
         params: &'a <Bls12 as JubjubEngine>::Params,
@@ -156,11 +155,12 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
         }
 
         for (i, proof) in proofs.into_iter().enumerate() {
-            // TODO: don't check equality for the first proofs, as we took the values comm_r_last and comm_c from it.
             proof.synthesize(
                 &mut cs.namespace(|| format!("challenge_{}", i)),
                 &self.params,
                 &comm_d_num,
+                &comm_c_num,
+                &comm_r_last_num,
             )?;
         }
 
@@ -359,8 +359,8 @@ mod tests {
 
         assert!(proofs_are_valid);
 
-        let expected_inputs = 4;
-        let expected_constraints = 25645;
+        let expected_inputs = 41;
+        let expected_constraints = 992_100; // was 432_312 with zigzag all pedersen
 
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.
