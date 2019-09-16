@@ -45,7 +45,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
     pub(crate) fn prove_layers(
         graph_0: &ZigZagBucketGraph<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain>,
-        p_aux: &PersistentAux<H::Domain>,
+        _p_aux: &PersistentAux<H::Domain>,
         t_aux: &TemporaryAux<H>,
         layer_challenges: &LayerChallenges,
         layers: usize,

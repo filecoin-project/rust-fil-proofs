@@ -15,13 +15,23 @@ where
     E: Engine,
     CS: ConstraintSystem<E>,
 {
-    let mut plaintext = num::AllocatedNum::alloc(cs.namespace(|| "decoded"), || {
+    let plaintext = num::AllocatedNum::alloc(cs.namespace(|| "decoded"), || {
         Ok(ciphertext.ok_or_else(|| SynthesisError::AssignmentMissing)?)
     })?;
 
-    plaintext = sub(cs.namespace(|| "plaintext - k"), &plaintext, key)?;
+    decode_no_alloc(cs.namespace(|| "plaintext"), key, &plaintext)
+}
 
-    Ok(plaintext)
+pub fn decode_no_alloc<E, CS>(
+    mut cs: CS,
+    key: &num::AllocatedNum<E>,
+    ciphertext: &num::AllocatedNum<E>,
+) -> Result<num::AllocatedNum<E>, SynthesisError>
+where
+    E: Engine,
+    CS: ConstraintSystem<E>,
+{
+    sub(cs.namespace(|| "decode-sub"), &ciphertext, key)
 }
 
 fn sub<E: Engine, CS: ConstraintSystem<E>>(

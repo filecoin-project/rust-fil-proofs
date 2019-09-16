@@ -66,6 +66,30 @@ impl Column {
         })
     }
 
+    pub fn get_node_at_layer(&self, layer: usize) -> Option<Fr> {
+        match self {
+            Column::All(inner) => {
+                assert!(layer > 0, "layer must be greater than 0");
+                let row_index = layer - 1;
+                inner.rows[row_index]
+            }
+            Column::Odd(inner) => {
+                assert!(layer > 0, "layer must be greater than 0");
+                assert!(layer % 2 != 0, "layer must be odd");
+
+                let row_index = (layer - 1) / 2;
+                inner.rows[row_index]
+            }
+            Column::Even(inner) => {
+                assert!(layer > 0, "layer must be greater than 0");
+                assert!(layer % 2 == 0, "layer must be even");
+
+                let row_index = (layer / 2) - 1;
+                inner.rows[row_index]
+            }
+        }
+    }
+
     pub fn hash<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: CS,

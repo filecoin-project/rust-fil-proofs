@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::circuit::num;
+use fil_sapling_crypto::circuit::{boolean::Boolean, num};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
@@ -97,6 +97,20 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
             assert_eq!(graph.expansion_degree(), EXP_DEGREE);
         }
 
+        // Allocate replica_id
+        let replica_id_num = num::AllocatedNum::alloc(cs.namespace(|| "replica_id_num"), || {
+            replica_id
+                .map(Into::into)
+                .ok_or_else(|| SynthesisError::AssignmentMissing)
+        })?;
+
+        let mut replica_id_bits =
+            replica_id_num.into_bits_le(cs.namespace(|| "replica_id_bits"))?;
+        // pad
+        while replica_id_bits.len() % 8 > 0 {
+            replica_id_bits.push(Boolean::Constant(false));
+        }
+
         // Allocate comm_d as Fr
         let comm_d_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_d"), || {
             comm_d
@@ -161,6 +175,8 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
                 &comm_d_num,
                 &comm_c_num,
                 &comm_r_last_num,
+                &replica_id_bits,
+                graph.degree(),
             )?;
         }
 
@@ -359,8 +375,8 @@ mod tests {
 
         assert!(proofs_are_valid);
 
-        let expected_inputs = 41;
-        let expected_constraints = 992_100; // was 432_312 with zigzag all pedersen
+        let expected_inputs = 41; // was 39 with "old" zigzag all pedersen
+        let expected_constraints = 1_145_032; // was 432_312 with "old" zigzag all pedersen
 
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.

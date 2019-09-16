@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use bellperson::{ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::circuit::num;
+use fil_sapling_crypto::circuit::{boolean::Boolean, num};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
@@ -43,6 +43,7 @@ impl<H: Hasher> Proof<H> {
     }
 
     /// Circuit synthesis.
+    #[allow(clippy::too_many_arguments)]
     pub fn synthesize<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: CS,
@@ -50,6 +51,8 @@ impl<H: Hasher> Proof<H> {
         comm_d: &num::AllocatedNum<Bls12>,
         comm_c: &num::AllocatedNum<Bls12>,
         comm_r_last: &num::AllocatedNum<Bls12>,
+        replica_id: &[Boolean],
+        degree: usize,
     ) -> Result<(), SynthesisError> {
         let Proof {
             comm_d_proof,
@@ -64,9 +67,46 @@ impl<H: Hasher> Proof<H> {
         comm_d_proof.synthesize(
             cs.namespace(|| "comm_d_inclusion"),
             params,
-            comm_d,
-            &comm_d_leaf,
+            comm_d.clone(),
+            comm_d_leaf.clone(),
         )?;
+
+        // verify encodings
+        // NOTE: the order is changed, to make borrowing easier with respect to using `replica_column_proof`.
+        {
+            let encoded_node = replica_column_proof
+                .c_x
+                .alloc_node_at_layer(cs.namespace(|| "encoding_proof_1_alloc_encoded"), 1)?;
+            encoding_proof_1.synthesize(
+                cs.namespace(|| "encoding_proof_1"),
+                params,
+                degree,
+                replica_id,
+                &encoded_node,
+                &comm_d_leaf,
+            )?;
+        }
+
+        for (i, proof) in encoding_proofs.into_iter().enumerate() {
+            let layer = i + 2;
+            let encoded_node = replica_column_proof.c_x.alloc_node_at_layer(
+                cs.namespace(|| format!("encoding_proof_{}_alloc_encoded", i)),
+                layer,
+            )?;
+            let decoded_node = replica_column_proof.c_inv_x.alloc_node_at_layer(
+                cs.namespace(|| format!("encoding_proof_{}_alloc_decoded", i)),
+                layer - 1,
+            )?;
+
+            proof.synthesize(
+                cs.namespace(|| format!("encoding_proof_{}", layer)),
+                params,
+                degree,
+                replica_id,
+                &encoded_node,
+                &decoded_node,
+            )?;
+        }
 
         // verify replica column openings
         replica_column_proof.synthesize(cs.namespace(|| "replica_column_proof"), params, comm_c)?;
@@ -78,8 +118,8 @@ impl<H: Hasher> Proof<H> {
         comm_r_last_data_proof.synthesize(
             cs.namespace(|| "comm_r_last_data_inclusion"),
             params,
-            comm_r_last,
-            &comm_r_last_data_leaf,
+            comm_r_last.clone(),
+            comm_r_last_data_leaf,
         )?;
         for (i, proof) in comm_r_last_parents_proofs.into_iter().enumerate() {
             let leaf =
@@ -87,12 +127,10 @@ impl<H: Hasher> Proof<H> {
             proof.synthesize(
                 cs.namespace(|| format!("comm_r_last_parent_{}_inclusion", i)),
                 params,
-                comm_r_last,
-                &leaf,
+                comm_r_last.clone(),
+                leaf,
             )?;
         }
-
-        // verify encodings
 
         Ok(())
     }
@@ -153,15 +191,13 @@ impl<H: Hasher> InclusionPath<H> {
         self,
         cs: CS,
         params: &<Bls12 as JubjubEngine>::Params,
-        root: &num::AllocatedNum<Bls12>,
-        _leaf: &num::AllocatedNum<Bls12>,
+        root: num::AllocatedNum<Bls12>,
+        leaf: num::AllocatedNum<Bls12>,
     ) -> Result<(), SynthesisError> {
-        let InclusionPath {
-            value, auth_path, ..
-        } = self;
+        let InclusionPath { auth_path, .. } = self;
 
-        // TODO: pass leaf to PorCircuit
         let root = Root::from_allocated::<CS>(root.clone());
+        let value = Root::from_allocated::<CS>(leaf);
         PoRCircuit::<Bls12, H>::synthesize(cs, params, value, auth_path, root, true)
     }
 }

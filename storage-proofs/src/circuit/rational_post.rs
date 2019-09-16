@@ -154,7 +154,7 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for RationalPoStCircuit<'a, E, H
             PoRCircuit::<_, H>::synthesize(
                 cs.namespace(|| format!("challenge_inclusion{}", i)),
                 &params,
-                leafs[i],
+                Root::Val(leafs[i]),
                 paths[i].clone(),
                 Root::Val(*commitment),
                 false,

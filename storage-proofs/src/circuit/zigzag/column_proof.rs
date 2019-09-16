@@ -56,6 +56,27 @@ impl<H: Hasher> ColumnProof<H> {
         }
     }
 
+    pub fn column(&self) -> &Column {
+        match self {
+            ColumnProof::All { ref column, .. } => column,
+            ColumnProof::Even { ref column, .. } => column,
+            ColumnProof::Odd { ref column, .. } => column,
+        }
+    }
+
+    pub fn alloc_node_at_layer<CS: ConstraintSystem<Bls12>>(
+        &self,
+        cs: CS,
+        layer: usize,
+    ) -> Result<num::AllocatedNum<Bls12>, SynthesisError> {
+        let value = self.column().get_node_at_layer(layer);
+        num::AllocatedNum::alloc(cs, || {
+            value
+                .map(Into::into)
+                .ok_or_else(|| SynthesisError::AssignmentMissing)
+        })
+    }
+
     pub fn synthesize<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: CS,
@@ -77,8 +98,8 @@ impl<H: Hasher> ColumnProof<H> {
                 inclusion_path.synthesize(
                     cs.namespace(|| "column_proof_all_inclusion"),
                     params,
-                    comm_c,
-                    &leaf_num,
+                    comm_c.clone(),
+                    leaf_num,
                 )?;
             }
             ColumnProof::Even {
@@ -103,8 +124,8 @@ impl<H: Hasher> ColumnProof<H> {
                 inclusion_path.synthesize(
                     cs.namespace(|| "column_proof_even_inclusion"),
                     params,
-                    comm_c,
-                    &leaf_num,
+                    comm_c.clone(),
+                    leaf_num,
                 )?;
             }
             ColumnProof::Odd {
@@ -129,8 +150,8 @@ impl<H: Hasher> ColumnProof<H> {
                 inclusion_path.synthesize(
                     cs.namespace(|| "column_proof_odd_inclusion"),
                     params,
-                    comm_c,
-                    &leaf_num,
+                    comm_c.clone(),
+                    leaf_num,
                 )?;
             }
         }

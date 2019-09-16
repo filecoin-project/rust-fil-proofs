@@ -58,11 +58,11 @@ impl<H: Hasher> EncodingProof<H> {
         };
 
         // decode:
-        let unsealed = H::sloth_decode(&key, &self.encoded_node);
+        let decoded = H::sloth_decode(&key, &self.encoded_node);
         let decoded_node: &H::Domain = &self.decoded_node;
         let encoded_node: &H::Domain = &self.encoded_node;
 
-        check_eq!(&unsealed, decoded_node);
+        check_eq!(&decoded, decoded_node);
         check_eq!(decoded_node, expected_decoded_node);
         check_eq!(expected_encoded_node, encoded_node);
 

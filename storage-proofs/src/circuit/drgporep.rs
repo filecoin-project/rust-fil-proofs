@@ -440,7 +440,7 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for DrgPoRepCircuit<'a, E, H> {
                 PoRCircuit::<_, H>::synthesize(
                     cs.namespace(|| "replica_inclusion"),
                     &params,
-                    *replica_node,
+                    Root::Val(*replica_node),
                     replica_node_path.clone(),
                     replica_root_var.clone(),
                     self.private,
@@ -451,7 +451,7 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for DrgPoRepCircuit<'a, E, H> {
                     PoRCircuit::<_, H>::synthesize(
                         cs.namespace(|| format!("parents_inclusion_{}", j)),
                         &params,
-                        replica_parents[j],
+                        Root::Val(replica_parents[j]),
                         replica_parents_paths[j].clone(),
                         replica_root_var.clone(),
                         self.private,
@@ -462,7 +462,7 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for DrgPoRepCircuit<'a, E, H> {
                 PoRCircuit::<_, H>::synthesize(
                     cs.namespace(|| "data_inclusion"),
                     &params,
-                    *data_node,
+                    Root::Val(*data_node),
                     data_node_path.clone(),
                     data_root_var.clone(),
                     self.private,
@@ -495,7 +495,7 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for DrgPoRepCircuit<'a, E, H> {
                 // generate the encryption key
                 let key = kdf(
                     cs.namespace(|| "kdf"),
-                    replica_id_bits.clone(),
+                    &replica_id_bits,
                     parents_bits,
                     degree,
                 )?;
