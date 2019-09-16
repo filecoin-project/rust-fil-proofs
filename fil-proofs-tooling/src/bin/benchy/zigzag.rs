@@ -1,10 +1,9 @@
 use std::fs::{File, OpenOptions};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use std::{io, u32};
 
 use bellperson::Circuit;
 use chrono::Utc;
-use cpu_time::ProcessTime;
 use failure::bail;
 use fil_sapling_crypto::jubjub::JubjubBls12;
 use log::info;
@@ -13,7 +12,7 @@ use memmap::MmapOptions;
 use paired::bls12_381::Bls12;
 use rand::{Rng, SeedableRng, XorShiftRng};
 
-use fil_proofs_tooling::metadata::Metadata;
+use fil_proofs_tooling::{measure, FuncMeasurement, Metadata};
 use storage_proofs::circuit::metric::MetricCS;
 use storage_proofs::circuit::zigzag::ZigZagCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
@@ -93,27 +92,6 @@ impl From<Params> for Inputs {
             taper_layers: p.taper_layers,
         }
     }
-}
-
-struct FuncMeasurement<T> {
-    cpu_time: Duration,
-    wall_time: Duration,
-    return_value: T,
-}
-
-fn measure<T, F: FnOnce() -> Result<T, failure::Error>>(
-    f: F,
-) -> Result<FuncMeasurement<T>, failure::Error> {
-    let cpu_time_start = ProcessTime::now();
-    let wall_start_time = Instant::now();
-
-    let x = f()?;
-
-    Ok(FuncMeasurement {
-        cpu_time: cpu_time_start.elapsed(),
-        wall_time: wall_start_time.elapsed(),
-        return_value: x,
-    })
 }
 
 fn generate_report<H: 'static>(params: Params) -> Result<Report, failure::Error>
