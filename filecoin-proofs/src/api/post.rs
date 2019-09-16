@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
-use std::fs::File;
-use std::io::Read;
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Seek, SeekFrom};
 
 use rayon::prelude::*;
 use storage_proofs::circuit::multi_proof::MultiProof;
@@ -15,10 +15,14 @@ use storage_proofs::sector::*;
 
 use crate::api::{as_safe_commitment, ChallengeSeed, Commitment, Tree};
 use crate::caches::{get_post_params, get_post_verifying_key};
-use crate::error;
 use crate::parameters::{post_setup_params, public_params};
 use crate::singletons::ENGINE_PARAMS;
 use crate::types::{PaddedBytesAmount, PoStConfig};
+use crate::{create_dumb_cache, error};
+use std::path::Path;
+use storage_proofs::layered_drgporep::{CachedTreeAbsPaths, MerkleTreeCacheKey};
+use storage_proofs::merkle::MerkleTree;
+use storage_proofs::util::NODE_SIZE;
 
 /// The minimal information required about a replica, in order to be able to generate
 /// a PoSt over it.
@@ -187,7 +191,48 @@ pub fn generate_post(
 
     let unique_trees_res: Vec<_> = unique_challenged_replicas
         .into_par_iter()
-        .map(|(id, replica)| replica.merkle_tree(sector_size).map(|tree| (id, tree)))
+        .map(|(id, replica)| {
+            // TODO: The cache-root should be provided by the caller, but for now we'll
+            // just create a directory in a known location
+            let mut cache = create_dumb_cache(id).unwrap();
+
+            let CachedTreeAbsPaths { top_half, leaves } = cache.paths(MerkleTreeCacheKey::CommR());
+
+            println!("checking merkle tree (leaves) cache-file: {:?}", leaves);
+
+            let tree: std::result::Result<_, failure::Error> = if Path::new(&leaves).exists() {
+                println!("merkle tree (leaves) cache-file existed: {:?}", leaves);
+
+                let mut leaves_cache_file = File::open(leaves.clone()).unwrap();
+
+                leaves_cache_file.seek(SeekFrom::Start(0)).unwrap();
+
+                let mut top_half_cache_file = OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(false)
+                    .read(true)
+                    .open(top_half.clone())
+                    .unwrap();
+
+                top_half_cache_file.seek(SeekFrom::Start(0)).unwrap();
+
+                MerkleTree::new_with_files(
+                    sector_size as usize / NODE_SIZE,
+                    Some(leaves_cache_file),
+                    Some(top_half_cache_file),
+                    sector_size as usize / NODE_SIZE,
+                    true,
+                )
+                .map_err(|err| err.into())
+            } else {
+                println!("did not have a cached (leaves) tree");
+
+                replica.merkle_tree(sector_size).map_err(|err| err.into())
+            };
+
+            tree.map(|mt| (id, mt))
+        })
         .collect();
 
     // resolve results

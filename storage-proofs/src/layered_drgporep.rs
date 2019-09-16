@@ -18,6 +18,8 @@ use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
 use crate::util::{data_at_node, NODE_SIZE};
 use crate::vde;
+use std::fs::OpenOptions;
+use std::io::{Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
@@ -176,8 +178,8 @@ where
 pub type EncodingProof<H> = drgporep::Proof<H>;
 
 pub enum MerkleTreeCacheKey {
-    CommR([u8; 32]),
-    Layer(usize, [u8; 32]),
+    CommR(),
+    Layer(usize),
 }
 
 pub struct DumbCache {
@@ -200,18 +202,18 @@ impl DumbCache {
 
     fn file_names(&self, k: MerkleTreeCacheKey) -> (String, String) {
         match k {
-            MerkleTreeCacheKey::CommR(replica_id) => (
-                format!("{:?}-{:x?}-commr.top", self.version, replica_id),
-                format!("{:?}-{:x?}-commr.leaves", self.version, replica_id),
+            MerkleTreeCacheKey::CommR() => (
+                format!("v{:?}-commr-top", self.version),
+                format!("v{:?}-commr-leaves", self.version),
             ),
-            MerkleTreeCacheKey::Layer(n, replica_id) => (
-                format!("{:?}-{:x?}-layer{:?}.top", self.version, replica_id, n),
-                format!("{:?}-{:x?}-layer{:?}.leaves", self.version, replica_id, n),
+            MerkleTreeCacheKey::Layer(n) => (
+                format!("v{:?}-layer{:?}-top", self.version, n),
+                format!("v{:?}-layer{:?}-leaves", self.version, n),
             ),
         }
     }
 
-    fn paths<'a>(&self, k: MerkleTreeCacheKey) -> CachedTreeAbsPaths {
+    pub fn paths<'a>(&self, k: MerkleTreeCacheKey) -> CachedTreeAbsPaths {
         let (top_half, leaves) = self.file_names(k);
 
         CachedTreeAbsPaths {
@@ -440,18 +442,49 @@ pub trait Layers {
                     // FIXME: Who's actually responsible for ensuring power of 2
                     //  sector sizes?
 
-                    let mut leaves_store = MerkleStore::new(pow);
+                    let key = if layer == layers {
+                        MerkleTreeCacheKey::CommR()
+                    } else {
+                        MerkleTreeCacheKey::Layer(layer)
+                    };
 
+                    let CachedTreeAbsPaths { top_half, leaves } = cache.paths(key);
+
+                    println!(
+                        "creating (truncating) merkle tree (leaves) cache-file: {:?}",
+                        leaves
+                    );
+
+                    // TODO: This isn't thread safe at all
+                    let mut leaves_cache_file = OpenOptions::new()
+                        .create(true)
+                        .write(true)
+                        .truncate(true)
+                        .read(true)
+                        .open(leaves.clone())
+                        .unwrap();
+
+                    leaves_cache_file.seek(SeekFrom::Start(0)).unwrap();
+
+                    let mut leaves_store =
+                        MerkleStore::new_with_file(pow, Some(leaves_cache_file)).unwrap();
+
+                    // TODO: I think that this should be modified to populate
+                    // the top-half of the tree, right? Otherwise we'll have to
+                    // generate it during PoSt...
                     populate_leaves::<
                         _,
                         <Self::Hasher as Hasher>::Function,
                         _,
                         std::iter::Map<_, _>,
-                    >(&mut leaves_store, (0..leafs).map(|i| {
-                        let d = data_at_node(&data, i).expect("data_at_node math failed");
-                        <Self::Hasher as Hasher>::Domain::try_from_bytes(d)
-                            .expect("failed to convert node data to domain element")
-                    }));
+                    >(
+                        &mut leaves_store,
+                        (0..leafs).map(|i| {
+                            let d = data_at_node(&data, i).expect("data_at_node math failed");
+                            <Self::Hasher as Hasher>::Domain::try_from_bytes(d)
+                                .expect("failed to convert node data to domain element")
+                        }),
+                    );
                     let return_channel = tx.clone();
                     let (transfer_tx, transfer_rx) = channel::<Self::Graph>();
 

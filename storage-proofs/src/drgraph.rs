@@ -11,7 +11,6 @@ use crate::merkle::{MerkleStore, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::{data_at_node, NODE_SIZE};
 use merkletree::merkle::FromIndexedParallelIterator;
-use std::fs::File;
 
 /// The default hasher currently in use.
 pub type DefaultTreeHasher = PedersenHasher;
@@ -29,6 +28,7 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
     }
 
     /// Builds a merkle tree based on the given data.
+    /// TODO: Do we need to provide this thing with a merkle tree cache path, too?
     fn merkle_tree<'a>(&self, data: &'a [u8]) -> Result<MerkleTree<H::Domain, H::Function>> {
         self.merkle_tree_aux(data, PARALLEL_MERKLE)
     }

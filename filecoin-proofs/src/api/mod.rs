@@ -147,6 +147,12 @@ fn generate_piece_specs_from_source(
     Ok(piece_specs)
 }
 
+pub(crate) fn create_dumb_cache(sector_id: SectorId) -> Result<DumbCache, failure::Error> {
+    let abs_path = format!("/tmp/merkle-cache-{:?}", sector_id);
+    let _ = std::fs::create_dir_all(abs_path.clone())?;
+    Ok(DumbCache::new(PathBuf::from(abs_path)))
+}
+
 /// Seals the staged sector at `in_path` in place, saving the resulting replica
 /// to `out_path`.
 ///
@@ -158,6 +164,10 @@ pub fn seal<T: AsRef<Path>>(
     sector_id: SectorId,
     piece_lengths: &[UnpaddedBytesAmount],
 ) -> error::Result<SealOutput> {
+    // TODO: The cache-root should be provided by the caller, but for now we'll
+    // just create a directory in a known location
+    let mut cache = create_dumb_cache(sector_id)?;
+
     let sector_bytes = usize::from(PaddedBytesAmount::from(porep_config));
 
     let mut cleanup = FileCleanup::new(&out_path);
@@ -176,12 +186,6 @@ pub fn seal<T: AsRef<Path>>(
     // Zero-pad the sector_id to 32 bytes (and therefore Fr32).
     let sector_id_as_safe_fr = pad_safe_fr(&sector_id.as_fr_safe());
     let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id_as_safe_fr);
-
-    // TODO: The cache-root should be provided by the caller, but for now we'll
-    // just create a directory in a known location
-    let abs_path = "/tmp/merkle-cache";
-    let dir = std::fs::create_dir(abs_path)?;
-    let mut cache = DumbCache::new(PathBuf::from(abs_path));
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: &setup_params(
@@ -705,50 +709,118 @@ mod tests {
         let number_of_bytes_in_piece =
             UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size.clone()));
 
-        let piece_bytes: Vec<u8> = (0..number_of_bytes_in_piece.0)
-            .map(|_| rand::random::<u8>())
-            .collect();
+        let porep_config = PoRepConfig(SectorSize(sector_size.clone()), PoRepProofPartitions(2));
 
-        let mut piece_file = NamedTempFile::new()?;
-        piece_file.write_all(&piece_bytes)?;
-        piece_file.seek(SeekFrom::Start(0))?;
+        let post_config = PoStConfig(SectorSize(sector_size.clone()));
 
-        let comm_p = generate_piece_commitment(&piece_file.path(), number_of_bytes_in_piece)?;
+        let prover_id = [6; 31];
 
-        let mut staged_sector_file = NamedTempFile::new()?;
-        add_piece(
-            &mut piece_file,
-            &mut staged_sector_file,
-            number_of_bytes_in_piece,
-            &[],
-        )?;
+        let post_challenge_seed = [1; 32];
 
         let sealed_sector_file = NamedTempFile::new()?;
-        let config = PoRepConfig(SectorSize(sector_size.clone()), PoRepProofPartitions(2));
+        let mut staged_sector_file = NamedTempFile::new()?;
 
-        let output = seal(
-            config,
-            &staged_sector_file.path(),
-            &sealed_sector_file.path(),
-            &[0; 31],
-            SectorId::from(0),
-            &[number_of_bytes_in_piece],
-        )?;
+        // write a piece to a staged sector
+        let comm_p = {
+            let piece_bytes: Vec<u8> = (0..number_of_bytes_in_piece.0)
+                .map(|_| rand::random::<u8>())
+                .collect();
 
-        let piece_inclusion_proof_bytes: Vec<u8> = output.piece_inclusion_proofs[0].clone().into();
+            let mut piece_file = NamedTempFile::new()?;
+            piece_file.write_all(&piece_bytes)?;
+            piece_file.seek(SeekFrom::Start(0))?;
 
-        let verified = verify_piece_inclusion_proof(
-            &piece_inclusion_proof_bytes,
-            &output.comm_d,
-            &output.comm_ps[0],
-            number_of_bytes_in_piece,
-            SectorSize(sector_size),
-        )?;
+            let comm_p = generate_piece_commitment(&piece_file.path(), number_of_bytes_in_piece)?;
 
-        assert!(verified);
+            add_piece(
+                &mut piece_file,
+                &mut staged_sector_file,
+                number_of_bytes_in_piece,
+                &[],
+            )?;
 
-        assert_eq!(output.comm_ps.len(), 1);
-        assert_eq!(output.comm_ps[0], comm_p);
+            comm_p
+        };
+
+        // seal something
+        let seal_output = {
+            seal(
+                porep_config,
+                &staged_sector_file.path(),
+                &sealed_sector_file.path(),
+                &prover_id,
+                SectorId::from(42),
+                &[number_of_bytes_in_piece],
+            )?
+        };
+
+        // verify the seal output
+        {
+            let is_valid = verify_seal(
+                porep_config,
+                seal_output.comm_r,
+                seal_output.comm_d,
+                seal_output.comm_r_star,
+                &prover_id,
+                SectorId::from(42),
+                &seal_output.proof,
+            )?;
+
+            assert!(is_valid);
+        }
+
+        // verify a piece inclusion proof
+        {
+            assert_eq!(seal_output.comm_ps.len(), 1);
+            assert_eq!(seal_output.comm_ps[0], comm_p);
+
+            let piece_inclusion_proof_bytes: Vec<u8> =
+                seal_output.piece_inclusion_proofs[0].clone().into();
+
+            let pip_is_valid = verify_piece_inclusion_proof(
+                &piece_inclusion_proof_bytes,
+                &seal_output.comm_d,
+                &seal_output.comm_ps[0],
+                number_of_bytes_in_piece,
+                SectorSize(sector_size),
+            )?;
+
+            assert!(pip_is_valid);
+        };
+
+        // generate a PoSt
+        let post_proof = {
+            let private_replica_info: BTreeMap<SectorId, PrivateReplicaInfo> = vec![(
+                SectorId::from(42),
+                PrivateReplicaInfo::new(
+                    sealed_sector_file.path().to_str().unwrap().to_string(),
+                    seal_output.comm_r,
+                ),
+            )]
+            .into_iter()
+            .collect();
+
+            generate_post(post_config, &post_challenge_seed, &private_replica_info)?
+        };
+
+        // verify PoSt
+        {
+            let public_replica_info: BTreeMap<SectorId, PublicReplicaInfo> = vec![(
+                SectorId::from(42),
+                PublicReplicaInfo::new(seal_output.comm_r),
+            )]
+            .into_iter()
+            .collect();
+
+            let is_valid = verify_post(
+                post_config,
+                &post_challenge_seed,
+                &post_proof,
+                &public_replica_info,
+            )?;
+
+            assert!(is_valid);
+        }
 
         Ok(())
     }

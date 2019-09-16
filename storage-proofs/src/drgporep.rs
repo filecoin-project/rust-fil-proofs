@@ -435,7 +435,7 @@ where
     type ProverAux = porep::ProverAux<H>;
 
     fn replicate(
-        cache: &mut DumbCache,
+        _cache: &mut DumbCache, // TODO: What do we do with this cache?
         pp: &Self::PublicParams,
         replica_id: &H::Domain,
         data: &mut [u8],
