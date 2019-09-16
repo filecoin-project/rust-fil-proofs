@@ -206,7 +206,10 @@ impl<'a, H: 'static + Hasher>
         pub_params: &<ZigZagDrgPoRep<H> as ProofScheme>::PublicParams,
         k: Option<usize>,
     ) -> Vec<Fr> {
-        let graph = &pub_params.graph;
+        let graph_0 = &pub_params.graph;
+        let graph_1 = ZigZagDrgPoRep::transform(graph_0);
+        let graph_2 = ZigZagDrgPoRep::transform(&graph_1);
+
         let mut inputs = Vec::new();
 
         let comm_d = pub_in.tau.as_ref().expect("missing tau").comm_d;
@@ -215,26 +218,67 @@ impl<'a, H: 'static + Hasher>
         let comm_r = pub_in.tau.as_ref().expect("missing tau").comm_r;
         inputs.push(comm_r.into());
 
-        let challenges = pub_in.challenges(&pub_params.layer_challenges, graph.size(), k);
+        let challenges = pub_in.challenges(&pub_params.layer_challenges, graph_0.size(), k);
         let por_params = merklepor::MerklePoR::<H>::setup(&merklepor::SetupParams {
-            leaves: graph.size(),
+            leaves: graph_1.size(),
             private: true,
         })
         .expect("setup failed");
 
+        let generate_inclusion_inputs = |c: usize| {
+            let pub_inputs = merklepor::PublicInputs::<H::Domain> {
+                challenge: c,
+                commitment: None,
+            };
+
+            PoRCompound::<H>::generate_public_inputs(&pub_inputs, &por_params, k)
+        };
+
         for challenge in challenges.into_iter() {
             // comm_d_proof
-            {
-                let pub_inputs = merklepor::PublicInputs::<H::Domain> {
-                    challenge,
-                    commitment: None,
-                };
+            inputs.extend(generate_inclusion_inputs(challenge));
 
-                inputs.extend(PoRCompound::<H>::generate_public_inputs(
-                    &pub_inputs,
-                    &por_params,
-                    k,
-                ));
+            // replica column proof
+            {
+                // c_x
+                inputs.extend(generate_inclusion_inputs(challenge));
+
+                // c_inv_x
+                inputs.extend(generate_inclusion_inputs(graph_0.inv_index(challenge)));
+
+                // drg parents
+                let mut drg_parents = vec![0; graph_0.base_graph().degree()];
+                graph_0.base_graph().parents(challenge, &mut drg_parents);
+
+                for parent in drg_parents.into_iter() {
+                    inputs.extend(generate_inclusion_inputs(parent));
+                }
+
+                // exp parents even
+                let exp_parents_even =
+                    graph_1.expanded_parents(graph_1.inv_index(challenge), |p| p.clone());
+                for parent in exp_parents_even.into_iter() {
+                    inputs.extend(generate_inclusion_inputs(
+                        graph_1.inv_index(parent as usize),
+                    ));
+                }
+
+                // exp parents odd
+                let exp_parents_odd = graph_2.expanded_parents(challenge, |p| p.clone());
+                for parent in exp_parents_odd.into_iter() {
+                    inputs.extend(generate_inclusion_inputs(parent as usize));
+                }
+            }
+
+            // final replica layer
+            {
+                inputs.extend(generate_inclusion_inputs(graph_0.inv_index(challenge)));
+
+                let mut parents = vec![0; graph_1.degree()];
+                graph_1.parents(graph_0.inv_index(challenge), &mut parents);
+                for parent in parents.into_iter() {
+                    inputs.extend(generate_inclusion_inputs(parent as usize));
+                }
             }
         }
 
@@ -421,7 +465,20 @@ mod tests {
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
-        // TODO: add add assertions about other inputs.
+        let generated_inputs = ZigZagCompound::generate_public_inputs(&pub_inputs, &pp, None);
+        let expected_inputs = cs.get_inputs();
+
+        for ((input, label), generated_input) in
+            expected_inputs.iter().skip(1).zip(generated_inputs.iter())
+        {
+            assert_eq!(input, generated_input, "{}", label);
+        }
+
+        assert_eq!(
+            generated_inputs.len(),
+            expected_inputs.len() - 1,
+            "inputs are not the same length"
+        );
     }
 
     #[test]

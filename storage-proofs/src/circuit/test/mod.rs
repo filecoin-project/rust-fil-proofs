@@ -340,6 +340,10 @@ impl<E: Engine> TestConstraintSystem<E> {
         assignment
     }
 
+    pub fn get_inputs(&self) -> &[(E::Fr, String)] {
+        &self.inputs[..]
+    }
+
     pub fn get(&mut self, path: &str) -> E::Fr {
         match self.named_objects.get(path) {
             Some(&NamedObject::Var(ref v)) => match v.get_unchecked() {

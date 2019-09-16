@@ -46,7 +46,7 @@ impl Column {
     pub fn empty_all<H: Hasher>(params: &PublicParams<H>) -> Self {
         Column::All(RawColumn {
             index: None,
-            rows: vec![None; params.layer_challenges.layers()],
+            rows: vec![None; params.layer_challenges.layers() - 1],
         })
     }
 
