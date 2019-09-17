@@ -68,6 +68,7 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
 
     /// Builds a merkle tree based on the given leaves store.
     // FIXME: Add the parallel case (if it's worth it).
+    // FIXME: May need to be removed once the MT cache is implemented.
     fn merkle_tree_from_leaves(
         &self,
         leaves: MerkleStore<H::Domain>,

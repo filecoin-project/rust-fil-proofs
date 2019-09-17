@@ -488,13 +488,13 @@ pub trait Layers {
 
                     // TODO: This isn't thread safe at all
                     let leaves_cache_file = cache.create_file(&leaves);
-
                     let mut leaves_store =
                         MerkleStore::new_with_file(pow, Some(leaves_cache_file)).unwrap();
 
-                    // TODO: I think that this should be modified to populate
-                    // the top-half of the tree, right? Otherwise we'll have to
-                    // generate it during PoSt...
+                    let top_half_cache_file = cache.create_file(&top_half);
+                    let top_half_store: MerkleStore<<Self::Hasher as Hasher>::Domain> =
+                        MerkleStore::new_with_file(pow, Some(top_half_cache_file)).unwrap();
+
                     populate_leaves::<
                         _,
                         <Self::Hasher as Hasher>::Function,
@@ -521,9 +521,14 @@ pub trait Layers {
                         let graph = transfer_rx
                             .recv()
                             .expect("Failed to receive value through channel");
+                            // FIXME: This may be safe to remove.
 
-                        let tree_d =
-                            graph.merkle_tree_from_leaves(leaves_store, leafs).unwrap();
+                        let tree_d = MerkleTree::new_with_stores(
+                            leaves_store,
+                            top_half_store,
+                            leafs,
+                            true,
+                        ).unwrap();
 
                         info!("returning tree (layer: {})", layer);
                         return_channel
