@@ -456,7 +456,7 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
 mod tests {
     use std::collections::BTreeMap;
 
-    use crate::constants::TEST_SECTOR_SIZE;
+    use crate::constants::SECTOR_SIZE_ONE_KIB;
     use crate::error::ExpectWithBacktrace;
     use crate::types::{PoStConfig, SectorSize};
 
@@ -588,7 +588,7 @@ mod tests {
 
         {
             let result = verify_seal(
-                PoRepConfig(SectorSize(TEST_SECTOR_SIZE), PoRepProofPartitions(2)),
+                PoRepConfig(SectorSize(SECTOR_SIZE_ONE_KIB), PoRepProofPartitions(2)),
                 not_convertible_to_fr_bytes,
                 convertible_to_fr_bytes,
                 convertible_to_fr_bytes,
@@ -612,7 +612,7 @@ mod tests {
 
         {
             let result = verify_seal(
-                PoRepConfig(SectorSize(TEST_SECTOR_SIZE), PoRepProofPartitions(2)),
+                PoRepConfig(SectorSize(SECTOR_SIZE_ONE_KIB), PoRepProofPartitions(2)),
                 convertible_to_fr_bytes,
                 not_convertible_to_fr_bytes,
                 convertible_to_fr_bytes,
@@ -636,7 +636,7 @@ mod tests {
 
         {
             let result = verify_seal(
-                PoRepConfig(SectorSize(TEST_SECTOR_SIZE), PoRepProofPartitions(2)),
+                PoRepConfig(SectorSize(SECTOR_SIZE_ONE_KIB), PoRepProofPartitions(2)),
                 convertible_to_fr_bytes,
                 convertible_to_fr_bytes,
                 not_convertible_to_fr_bytes,
@@ -671,7 +671,7 @@ mod tests {
         );
 
         let result = verify_post(
-            PoStConfig(SectorSize(TEST_SECTOR_SIZE)),
+            PoStConfig(SectorSize(SECTOR_SIZE_ONE_KIB)),
             &[0; 32],
             &vec![0; SINGLE_PARTITION_PROOF_LEN],
             &replicas,
@@ -693,7 +693,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_pip_lifecycle() -> Result<(), failure::Error> {
-        let sector_size = TEST_SECTOR_SIZE;
+        let sector_size = SECTOR_SIZE_ONE_KIB;
 
         let number_of_bytes_in_piece =
             UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size.clone()));

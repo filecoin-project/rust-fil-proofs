@@ -18,7 +18,7 @@ pub fn main() {
     let out_file = &args[1];
 
     let public_params = public_params(
-        PaddedBytesAmount::from(SectorSize(TEST_SECTOR_SIZE)),
+        PaddedBytesAmount::from(SectorSize(SECTOR_SIZE_ONE_KIB)),
         usize::from(PoRepProofPartitions(2)),
     );
 
