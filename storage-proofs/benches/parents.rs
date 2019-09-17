@@ -9,7 +9,7 @@ use storage_proofs::hasher::blake2s::Blake2sHasher;
 use storage_proofs::hasher::pedersen::PedersenHasher;
 use storage_proofs::hasher::sha256::Sha256Hasher;
 use storage_proofs::hasher::Hasher;
-use storage_proofs::zigzag_graph::{ZigZag, ZigZagBucketGraph, EXP_DEGREE};
+use storage_proofs::zigzag::{ZigZagBucketGraph, EXP_DEGREE};
 
 #[cfg(feature = "cpu-profile")]
 #[inline(always)]
@@ -41,7 +41,7 @@ fn stop_profile() {}
 
 fn pregenerate_graph<H: Hasher>(size: usize) -> ZigZagBucketGraph<H> {
     let seed = [1, 2, 3, 4, 5, 6, 7];
-    ZigZagBucketGraph::<H>::new_zigzag(size, BASE_DEGREE, EXP_DEGREE, seed)
+    ZigZagBucketGraph::<H>::new_zigzag(size, BASE_DEGREE, EXP_DEGREE, 0, seed)
 }
 
 fn parents_loop<H: Hasher, G: Graph<H>>(graph: &G, parents: &mut [usize]) {
