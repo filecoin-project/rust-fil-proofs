@@ -201,17 +201,22 @@ pub fn generate_post(
             println!("checking merkle tree (leaves) cache-file: {:?}", leaves);
 
             let tree: std::result::Result<_, failure::Error> = if Path::new(&leaves).exists() {
+                // FIXME: Evaluate moving this check inside the cache.
+
                 println!("merkle tree (leaves) cache-file existed: {:?}", leaves);
 
                 let leaves_cache_file = cache.load_file(&leaves);
                 let top_half_cache_file = cache.load_file(&top_half);
+                // FIXME: We're assuming now that if the leaves file existed the top half
+                // file also did (as we always have 2 files or none), should we explicitly
+                // check that?
 
                 MerkleTree::new_with_files(
                     sector_size as usize / NODE_SIZE,
                     Some(leaves_cache_file),
                     Some(top_half_cache_file),
                     sector_size as usize / NODE_SIZE,
-                    true,
+                    false, // Do not build the top half again, just load the file contents from cache.
                 )
                 .map_err(|err| err.into())
             } else {
