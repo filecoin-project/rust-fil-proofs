@@ -15,7 +15,9 @@ bench = false
 bitvec = "0.5"
 rand = "0.4"
 libc = "0.2"
-merkletree = { path = "/Users/erinswenson-healey/dev/merkle_light/merkle" }
+# merkletree = "=0.10"
+# FIXME: BLOCKING: Update to new release.
+merkletree = { git = "https://github.com/filecoin-project/merkle_light", branch = "feat/new/add-path-option"}
 failure = "0.1"
 byteorder = "1"
 config = "0.9.3"
