@@ -109,7 +109,7 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
     let post_config = PoStConfig(SectorSize(sector_size as u64));
 
     let gen_post_measurement =
-        measure(|| generate_post(post_config.clone(), &CHALLENGE_SEED, &priv_replica_info))
+        measure(|| generate_post(post_config, &CHALLENGE_SEED, &priv_replica_info))
             .expect("failed to generate PoSt");
 
     let proof = &gen_post_measurement.return_value;

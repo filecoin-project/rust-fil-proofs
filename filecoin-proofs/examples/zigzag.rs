@@ -31,12 +31,12 @@ use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
 use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
-use storage_proofs::layered_drgporep::{self, ChallengeRequirements, LayerChallenges};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::settings;
-use storage_proofs::zigzag_drgporep::*;
-use storage_proofs::zigzag_graph::EXP_DEGREE;
+use storage_proofs::zigzag::{
+    self, ChallengeRequirements, LayerChallenges, ZigZagDrgPoRep, EXP_DEGREE,
+};
 
 // We can only one of the profilers at a time, either CPU (`profile`)
 // or memory (`heap-profile`), duplicating the function so they won't
@@ -127,7 +127,7 @@ pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
     unsafe { MmapOptions::new().map_mut(&tmpfile).unwrap() }
 }
 
-fn dump_proof_bytes<H: Hasher>(all_partition_proofs: &[layered_drgporep::Proof<H>]) {
+fn dump_proof_bytes<H: Hasher>(all_partition_proofs: &[Vec<zigzag::Proof<H>>]) {
     let file = OpenOptions::new()
         .write(true)
         .create(true)
@@ -163,11 +163,6 @@ fn do_the_work<H: 'static>(
     info!("m: {}", m);
     info!("expansion_degree: {}", expansion_degree);
     info!("layer_challenges: {:?}", layer_challenges);
-    info!("all_challenges: {:?}", layer_challenges.all_challenges());
-    info!(
-        "total_challenges: {:?}",
-        layer_challenges.total_challenges()
-    );
     info!("layers: {}", layer_challenges.layers());
     info!("partitions: {}", partitions);
     info!("circuit: {:?}", circuit);
@@ -177,7 +172,7 @@ fn do_the_work<H: 'static>(
     let nodes = data_size / 32;
 
     let replica_id: H::Domain = rng.gen();
-    let sp = layered_drgporep::SetupParams {
+    let sp = zigzag::SetupParams {
         drg: drgporep::DrgParams {
             nodes,
             degree: m,
@@ -207,20 +202,17 @@ fn do_the_work<H: 'static>(
         info!("running replicate");
 
         start_profile("replicate");
-        let (tau, aux) = ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, &mut data, None).unwrap();
+        let (tau, (p_aux, t_aux)) =
+            ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, &mut data, None).unwrap();
         stop_profile();
-        let pub_inputs = layered_drgporep::PublicInputs::<H::Domain> {
+        let pub_inputs = zigzag::PublicInputs::<H::Domain> {
             replica_id,
-            tau: Some(tau.simplify().into()),
-            comm_r_star: tau.comm_r_star,
+            tau: Some(tau.clone()),
             k: Some(0),
             seed: None,
         };
 
-        let priv_inputs = layered_drgporep::PrivateInputs {
-            aux,
-            tau: tau.layer_taus,
-        };
+        let priv_inputs = zigzag::PrivateInputs { p_aux, t_aux };
 
         replication_duration += start.elapsed();
 
@@ -471,19 +463,6 @@ fn main() {
                 .long("extract")
                 .help("Extract data after proving and verifying.")
         )
-        .arg(
-            Arg::with_name("taper")
-                .long("taper")
-                .help("fraction of challenges by which to taper at each layer")
-                .default_value("0.0")
-        )
-        .arg(
-            Arg::with_name("taper-layers")
-                .long("taper-layers")
-                .help("number of layers to taper")
-                .takes_value(true)
-        )
-
         .get_matches();
 
     let data_size = value_t!(matches, "size", usize).unwrap() * 1024;
@@ -491,8 +470,6 @@ fn main() {
     let hasher = value_t!(matches, "hasher", String).unwrap();
     let layers = value_t!(matches, "layers", usize).unwrap();
     let partitions = value_t!(matches, "partitions", usize).unwrap();
-    let taper = value_t!(matches, "taper", f64).unwrap();
-    let taper_layers = value_t!(matches, "taper-layers", usize).unwrap_or(layers);
     let use_tmp = !matches.is_present("no-tmp");
     let dump_proofs = matches.is_present("dump");
     let groth = matches.is_present("groth");
@@ -501,11 +478,7 @@ fn main() {
     let circuit = matches.is_present("circuit");
     let extract = matches.is_present("extract");
 
-    let challenges = if taper == 0.0 {
-        LayerChallenges::new_fixed(layers, challenge_count)
-    } else {
-        LayerChallenges::new_tapered(layers, challenge_count, taper_layers, taper)
-    };
+    let challenges = LayerChallenges::new_fixed(layers, challenge_count);
 
     info!("hasher: {}", hasher);
     match hasher.as_ref() {

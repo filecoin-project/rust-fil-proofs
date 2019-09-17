@@ -21,11 +21,9 @@ use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
 use storage_proofs::hasher::{Hasher, PedersenHasher};
-use storage_proofs::layered_drgporep::{self, LayerChallenges};
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::vde;
-use storage_proofs::zigzag_drgporep::*;
-use storage_proofs::zigzag_graph::EXP_DEGREE;
+use storage_proofs::zigzag::{self, LayerChallenges, ZigZagDrgPoRep, EXP_DEGREE};
 
 #[cfg(feature = "cpu-profile")]
 #[inline(always)]
@@ -90,7 +88,7 @@ where
 
     let replica_id: H::Domain = rng.gen();
 
-    let sp = layered_drgporep::SetupParams {
+    let sp = zigzag::SetupParams {
         drg: drgporep::DrgParams {
             nodes,
             degree: m,

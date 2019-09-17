@@ -19,12 +19,12 @@ use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgporep;
 use storage_proofs::drgraph::*;
 use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
-use storage_proofs::layered_drgporep::{self, ChallengeRequirements, LayerChallenges};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::settings;
-use storage_proofs::zigzag_drgporep::*;
-use storage_proofs::zigzag_graph::EXP_DEGREE;
+use storage_proofs::zigzag::{
+    self, ChallengeRequirements, LayerChallenges, ZigZagDrgPoRep, EXP_DEGREE,
+};
 
 fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> Result<MmapMut, failure::Error> {
     let file: File = if use_tmp {
@@ -46,7 +46,7 @@ fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> Result<MmapMut, fail
 }
 
 fn dump_proof_bytes<H: Hasher>(
-    all_partition_proofs: &[layered_drgporep::Proof<H>],
+    all_partition_proofs: &[Vec<zigzag::Proof<H>>],
 ) -> Result<(), failure::Error> {
     let file = OpenOptions::new()
         .write(true)
@@ -73,8 +73,6 @@ struct Params {
     dump_proofs: bool,
     bench_only: bool,
     hasher: String,
-    taper: f64,
-    taper_layers: usize,
 }
 
 impl From<Params> for Inputs {
@@ -85,11 +83,9 @@ impl From<Params> for Inputs {
             hasher: p.hasher.clone(),
             samples: p.samples,
             layers: p.layer_challenges.layers(),
-            partition_challenges: p.layer_challenges.total_challenges(),
-            total_challenges: p.layer_challenges.total_challenges() * p.partitions,
+            partition_challenges: p.layer_challenges.challenges_count(),
+            total_challenges: p.layer_challenges.challenges_count() * p.partitions,
             layer_challenges: p.layer_challenges,
-            taper: p.taper,
-            taper_layers: p.taper_layers,
         }
     }
 }
@@ -130,7 +126,7 @@ where
         let nodes = data_size / 32;
 
         let replica_id: H::Domain = rng.gen();
-        let sp = layered_drgporep::SetupParams {
+        let sp = zigzag::SetupParams {
             drg: drgporep::DrgParams {
                 nodes,
                 degree: BASE_DEGREE,
@@ -152,20 +148,17 @@ where
                 wall_time: replication_wall_time,
                 return_value: (pub_inputs, priv_inputs),
             } = measure(|| {
-                let (tau, aux) = ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, &mut data, None)?;
+                let (tau, (p_aux, t_aux)) =
+                    ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, &mut data, None)?;
 
-                let pb = layered_drgporep::PublicInputs::<H::Domain> {
+                let pb = zigzag::PublicInputs::<H::Domain> {
                     replica_id,
                     seed: None,
-                    tau: Some(tau.simplify()),
-                    comm_r_star: tau.comm_r_star,
+                    tau: Some(tau.clone()),
                     k: Some(0),
                 };
 
-                let pv = layered_drgporep::PrivateInputs {
-                    aux,
-                    tau: tau.layer_taus,
-                };
+                let pv = zigzag::PrivateInputs { p_aux, t_aux };
 
                 Ok((pb, pv))
             })?;
@@ -423,8 +416,6 @@ struct Inputs {
     layers: usize,
     partition_challenges: usize,
     total_challenges: usize,
-    taper: f64,
-    taper_layers: usize,
     layer_challenges: LayerChallenges,
 }
 
@@ -482,16 +473,10 @@ pub struct RunOpts {
     pub no_tmp: bool,
     pub partitions: usize,
     pub size: usize,
-    pub taper: f64,
-    pub taper_layers: usize,
 }
 
 pub fn run(opts: RunOpts) -> Result<(), failure::Error> {
-    let layer_challenges = if opts.taper == 0.0 {
-        LayerChallenges::new_fixed(opts.layers, opts.challenges)
-    } else {
-        LayerChallenges::new_tapered(opts.layers, opts.challenges, opts.taper_layers, opts.taper)
-    };
+    let layer_challenges = LayerChallenges::new_fixed(opts.layers, opts.challenges);
 
     let params = Params {
         layer_challenges,
@@ -506,8 +491,6 @@ pub fn run(opts: RunOpts) -> Result<(), failure::Error> {
         extract: opts.extract,
         hasher: opts.hasher,
         samples: 5,
-        taper: opts.taper,
-        taper_layers: opts.taper_layers,
     };
 
     info!("Benchy ZigZag: {:?}", &params);

@@ -37,9 +37,9 @@ use storage_proofs::piece_inclusion_proof::{
     generate_piece_commitment_bytes_from_source, piece_inclusion_proofs, PieceInclusionProof,
     PieceSpec,
 };
-use storage_proofs::porep::{replica_id, PoRep, Tau};
+use storage_proofs::porep::{replica_id, PoRep};
 use storage_proofs::sector::SectorId;
-use storage_proofs::zigzag_drgporep::{self, ChallengeRequirements, ZigZagDrgPoRep};
+use storage_proofs::zigzag::{self, ChallengeRequirements, PersistentAux, Tau, ZigZagDrgPoRep};
 use tempfile::tempfile;
 
 mod post;
@@ -55,8 +55,8 @@ type Tree = MerkleTree<PedersenDomain, <PedersenHasher as Hasher>::Function>;
 #[derive(Clone, Debug)]
 pub struct SealOutput {
     pub comm_r: Commitment,
-    pub comm_r_star: Commitment,
     pub comm_d: Commitment,
+    pub p_aux: PersistentAux<PedersenDomain>,
     pub proof: Vec<u8>,
     pub comm_ps: Vec<Commitment>,
     pub piece_inclusion_proofs: Vec<PieceInclusionProof<PedersenHasher>>,
@@ -187,16 +187,19 @@ pub fn seal<T: AsRef<Path>>(
 
     let compound_public_params = ZigZagCompound::setup(&compound_setup_params)?;
 
-    let (tau, aux) = ZigZagDrgPoRep::replicate(
+    let (tau, (p_aux, t_aux)) = ZigZagDrgPoRep::replicate(
         &compound_public_params.vanilla_params,
         &replica_id,
         &mut data,
         None,
     )?;
 
+    // TODO: persist `p_aux` to disk
+
     let mut in_data = OpenOptions::new().read(true).open(&in_path)?;
     let piece_specs = generate_piece_specs_from_source(&mut in_data, &piece_lengths)?;
-    let piece_inclusion_proofs = piece_inclusion_proofs::<PedersenHasher>(&piece_specs, &aux[0])?;
+    let piece_inclusion_proofs =
+        piece_inclusion_proofs::<PedersenHasher>(&piece_specs, &t_aux.tree_d)?;
     let comm_ps: Vec<Commitment> = piece_specs
         .iter()
         .map(|piece_spec| piece_spec.comm_p)
@@ -206,19 +209,18 @@ pub fn seal<T: AsRef<Path>>(
     data.flush()?;
     cleanup.success = true;
 
-    let public_tau = tau.clone();
+    let public_tau = tau;
 
-    let public_inputs = zigzag_drgporep::PublicInputs {
+    let public_inputs = zigzag::PublicInputs {
         replica_id,
-        tau: Some(public_tau),
-        comm_r_star: tau.comm_r_star,
+        tau: Some(public_tau.clone()),
         k: None,
         seed: None,
     };
 
-    let private_inputs = zigzag_drgporep::PrivateInputs::<DefaultTreeHasher> {
-        aux,
-        tau: tau.layer_taus,
+    let private_inputs = zigzag::PrivateInputs::<DefaultTreeHasher> {
+        p_aux: p_aux.clone(),
+        t_aux,
     };
 
     let groth_params = get_zigzag_params(porep_config)?;
@@ -243,7 +245,6 @@ pub fn seal<T: AsRef<Path>>(
 
     let comm_r = commitment_from_fr::<Bls12>(public_tau.comm_r.into());
     let comm_d = commitment_from_fr::<Bls12>(public_tau.comm_d.into());
-    let comm_r_star = commitment_from_fr::<Bls12>(tau.comm_r_star.into());
 
     let valid_pieces = PieceInclusionProof::verify_all(
         &comm_d,
@@ -262,21 +263,13 @@ pub fn seal<T: AsRef<Path>>(
 
     // Verification is cheap when parameters are cached,
     // and it is never correct to return a proof which does not verify.
-    verify_seal(
-        porep_config,
-        comm_r,
-        comm_d,
-        comm_r_star,
-        prover_id_in,
-        sector_id,
-        &buf,
-    )
-    .expect("post-seal verification sanity check failed");
+    verify_seal(porep_config, comm_r, comm_d, prover_id_in, sector_id, &buf)
+        .expect("post-seal verification sanity check failed");
 
     Ok(SealOutput {
         comm_r,
-        comm_r_star,
         comm_d,
+        p_aux,
         proof: buf,
         comm_ps,
         piece_inclusion_proofs,
@@ -289,7 +282,6 @@ pub fn verify_seal(
     porep_config: PoRepConfig,
     comm_r: Commitment,
     comm_d: Commitment,
-    comm_r_star: Commitment,
     prover_id_in: &FrSafe,
     sector_id: SectorId,
     proof_vec: &[u8],
@@ -301,7 +293,6 @@ pub fn verify_seal(
 
     let comm_r = as_safe_commitment(&comm_r, "comm_r")?;
     let comm_d = as_safe_commitment(&comm_d, "comm_d")?;
-    let comm_r_star = as_safe_commitment(&comm_r_star, "comm_r_star")?;
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: &setup_params(
@@ -318,11 +309,10 @@ pub fn verify_seal(
         ZigZagDrgPoRep<'_, DefaultTreeHasher>,
     > = ZigZagCompound::setup(&compound_setup_params)?;
 
-    let public_inputs = zigzag_drgporep::PublicInputs::<<DefaultTreeHasher as Hasher>::Domain> {
+    let public_inputs = zigzag::PublicInputs::<<DefaultTreeHasher as Hasher>::Domain> {
         replica_id,
         tau: Some(Tau { comm_r, comm_d }),
         seed: None,
-        comm_r_star,
         k: None,
     };
 
@@ -592,7 +582,6 @@ mod tests {
                 PoRepConfig(SectorSize(SECTOR_SIZE_ONE_KIB), PoRepProofPartitions(2)),
                 not_convertible_to_fr_bytes,
                 convertible_to_fr_bytes,
-                convertible_to_fr_bytes,
                 &[0; 31],
                 SectorId::from(0),
                 &[],
@@ -616,7 +605,6 @@ mod tests {
                 PoRepConfig(SectorSize(SECTOR_SIZE_ONE_KIB), PoRepProofPartitions(2)),
                 convertible_to_fr_bytes,
                 not_convertible_to_fr_bytes,
-                convertible_to_fr_bytes,
                 &[0; 31],
                 SectorId::from(0),
                 &[],
@@ -632,30 +620,6 @@ mod tests {
                 );
             } else {
                 panic!("should have failed comm_d to Fr32 conversion");
-            }
-        }
-
-        {
-            let result = verify_seal(
-                PoRepConfig(SectorSize(SECTOR_SIZE_ONE_KIB), PoRepProofPartitions(2)),
-                convertible_to_fr_bytes,
-                convertible_to_fr_bytes,
-                not_convertible_to_fr_bytes,
-                &[0; 31],
-                SectorId::from(0),
-                &[],
-            );
-
-            if let Err(err) = result {
-                let needle = "Invalid commitment (comm_r_star)";
-                let haystack = format!("{}", err);
-
-                assert!(
-                    haystack.contains(needle),
-                    format!("\"{}\" did not contain \"{}\"", haystack, needle)
-                );
-            } else {
-                panic!("should have failed comm_r_star to Fr32 conversion");
             }
         }
     }

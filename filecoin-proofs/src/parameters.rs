@@ -2,10 +2,8 @@ use storage_proofs::drgporep::DrgParams;
 use storage_proofs::drgraph::{DefaultTreeHasher, BASE_DEGREE};
 use storage_proofs::hasher::PedersenHasher;
 use storage_proofs::proof::ProofScheme;
-use storage_proofs::rational_post;
-use storage_proofs::rational_post::RationalPoSt;
-use storage_proofs::zigzag_drgporep::{self, LayerChallenges, ZigZagDrgPoRep};
-use storage_proofs::zigzag_graph::{ZigZagBucketGraph, EXP_DEGREE};
+use storage_proofs::rational_post::{self, RationalPoSt};
+use storage_proofs::zigzag::{self, LayerChallenges, ZigZagDrgPoRep, EXP_DEGREE};
 
 use crate::constants::POREP_MINIMUM_CHALLENGES;
 use crate::types::{PaddedBytesAmount, PoStConfig};
@@ -13,8 +11,6 @@ use crate::types::{PaddedBytesAmount, PoStConfig};
 const POST_CHALLENGE_COUNT: usize = 30; // TODO: correct value
 
 const LAYERS: usize = 4; // TODO: 10;
-const TAPER_LAYERS: usize = 2; // TODO: 7
-const TAPER: f64 = 1.0 / 3.0;
 
 const DRG_SEED: [u32; 7] = [1, 2, 3, 4, 5, 6, 7]; // Arbitrary, need a theory for how to vary this over time.
 
@@ -24,7 +20,7 @@ pub type PostPublicParams = rational_post::PublicParams;
 pub fn public_params(
     sector_bytes: PaddedBytesAmount,
     partitions: usize,
-) -> zigzag_drgporep::PublicParams<DefaultTreeHasher, ZigZagBucketGraph<DefaultTreeHasher>> {
+) -> zigzag::PublicParams<DefaultTreeHasher> {
     ZigZagDrgPoRep::<DefaultTreeHasher>::setup(&setup_params(sector_bytes, partitions)).unwrap()
 }
 
@@ -41,10 +37,7 @@ pub fn post_setup_params(post_config: PoStConfig) -> PostSetupParams {
     }
 }
 
-pub fn setup_params(
-    sector_bytes: PaddedBytesAmount,
-    partitions: usize,
-) -> zigzag_drgporep::SetupParams {
+pub fn setup_params(sector_bytes: PaddedBytesAmount, partitions: usize) -> zigzag::SetupParams {
     let sector_bytes = usize::from(sector_bytes);
 
     let challenges = select_challenges(partitions, POREP_MINIMUM_CHALLENGES, LAYERS);
@@ -55,7 +48,7 @@ pub fn setup_params(
         sector_bytes,
     );
     let nodes = sector_bytes / 32;
-    zigzag_drgporep::SetupParams {
+    zigzag::SetupParams {
         drg: DrgParams {
             nodes,
             degree: BASE_DEGREE,
@@ -73,7 +66,7 @@ fn select_challenges(
 ) -> LayerChallenges {
     let mut count = 1;
     let mut guess = LayerChallenges::new_fixed(count, layers);
-    while partitions * guess.challenges() < minimum_total_challenges {
+    while partitions * guess.challenges_count() < minimum_total_challenges {
         count += 1;
         guess = LayerChallenges::new_fixed(count, layers);
     }
@@ -90,7 +83,7 @@ mod tests {
     #[test]
     fn partition_layer_challenges_test() {
         let f = |partitions| {
-            select_challenges(partitions, POREP_MINIMUM_CHALLENGES, LAYERS).challenges()
+            select_challenges(partitions, POREP_MINIMUM_CHALLENGES, LAYERS).challenges_count()
         };
         // Update to ensure all supported PoRepProofPartitions options are represented here.
         assert_eq!(1, f(usize::from(PoRepProofPartitions(2))));

@@ -87,18 +87,6 @@ fn main() {
                     Arg::with_name("extract")
                         .long("extract")
                         .help("Extract data after proving and verifying.")
-                )
-                .arg(
-                    Arg::with_name("taper")
-                        .long("taper")
-                        .help("fraction of challenges by which to taper at each layer")
-                        .default_value("0.0")
-                )
-                .arg(
-                    Arg::with_name("taper-layers")
-                        .long("taper-layers")
-                        .help("number of layers to taper")
-                        .takes_value(true)
                 );
 
     let rational_post_cmd = SubCommand::with_name("rational-post")
@@ -140,8 +128,6 @@ fn main() {
                         no_tmp: m.is_present("no-tmp"),
                         partitions: value_t!(m, "partitions", usize)?,
                         size: value_t!(m, "size", usize)?,
-                        taper: value_t!(m, "taper", f64)?,
-                        taper_layers: value_t!(m, "taper-layers", usize).unwrap_or(layers),
                     })
                 })
                 .expect("zigzag failed");
