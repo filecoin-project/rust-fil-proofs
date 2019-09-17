@@ -1,9 +1,13 @@
+use std::fmt::{self, Debug, Formatter};
 use std::hash::Hasher as StdHasher;
 
 use bellperson::{ConstraintSystem, SynthesisError};
+use bitvec::{BitVec, LittleEndian};
 use ff::{PrimeField, PrimeFieldRepr};
 use fil_sapling_crypto::circuit::{boolean, num, pedersen_hash as pedersen_hash_circuit};
-use fil_sapling_crypto::jubjub::JubjubEngine;
+use fil_sapling_crypto::jubjub::{
+    edwards, pedersen_hash_params_for_segments, JubjubEngine, PrimeOrder,
+};
 use fil_sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
@@ -14,6 +18,11 @@ use crate::circuit::pedersen::pedersen_md_no_padding;
 use crate::crypto::{kdf, pedersen, sloth};
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
+use crate::settings;
+
+const N_CHUNKS_PER_SEGMENT: usize = 63;
+const N_BITS_PER_CHUNK: usize = 3;
+const N_SEGMENT_BITS: usize = N_CHUNKS_PER_SEGMENT * N_BITS_PER_CHUNK;
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PedersenHasher {}
@@ -48,12 +57,48 @@ impl Hasher for PedersenHasher {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct PedersenFunction(Fr);
+#[derive(Clone, PartialEq)]
+pub struct PedersenFunction {
+    // The Pedersen Hash segment index of the next unhashed segment.
+    next_segment: u32,
+    // Stores any unhashed bits between calls to `self.update()`. `unhashed_bits`'s bit-length never
+    // exceeds `N_SEGMENT_BITS` (i.e. never contains more than one segment's worth of unhashed
+    // data).
+    unhashed_bits: BitVec<LittleEndian, u8>,
+    // Stores the current Pederen Hash. A Pedersen Hash is a summation of curve points; everytime
+    // `self.update()` is called with anouther segment's worth of data, an element of the prime
+    // order JubJub subgroup (an Edward's point) is added to this value.
+    curr_hash: edwards::Point<Bls12, PrimeOrder>,
+    // The Pedersen Hash window size.
+    window_size: u32,
+}
 
 impl Default for PedersenFunction {
-    fn default() -> PedersenFunction {
-        PedersenFunction(Fr::from_repr(FrRepr::default()).expect("failed default"))
+    fn default() -> Self {
+        let window_size = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size;
+
+        PedersenFunction {
+            next_segment: 0,
+            unhashed_bits: BitVec::with_capacity(N_SEGMENT_BITS),
+            curr_hash: edwards::Point::zero(),
+            window_size,
+        }
+    }
+}
+
+impl Eq for PedersenFunction {}
+
+impl Debug for PedersenFunction {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.debug_struct("PedersenFunction")
+            .field("next_segment", &self.next_segment)
+            .field("unhashed_bits", &self.unhashed_bits)
+            .field("curr_hash", &self.curr_hash.into_xy())
+            .field("window_size", &self.window_size)
+            .finish()
     }
 }
 
@@ -176,9 +221,17 @@ impl Element for PedersenDomain {
 }
 
 impl StdHasher for PedersenFunction {
+    // Pedersen hashes `msg` and stores the digest internally. The length of `msg` cannot exceed 118
+    // bytes. If you are using `PedersenFunction` as an updatable hasher (i.e. you are streaming in
+    // data by calling `self.update()`), calling this method will overwrite the current state of the
+    // Pedersen Hash summation.
     #[inline]
     fn write(&mut self, msg: &[u8]) {
-        self.0 = pedersen::pedersen(msg);
+        let bits = BitVec::<LittleEndian, u8>::from(msg);
+        let n_bits = 8 * msg.len();
+        let bits_iter = bits.iter().take(n_bits);
+        self.curr_hash =
+            pedersen_hash::<Bls12, _>(Personalization::None, bits_iter, &pedersen::JJ_PARAMS);
     }
 
     #[inline]
@@ -220,14 +273,18 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
 }
 
 impl LightAlgorithm<PedersenDomain> for PedersenFunction {
+    // Returns the internally stored digest's x-coordinate. If you are using `PedersenFunction` as
+    // an updatable hasher, you should call `self.finalize()` instead of `self.hash()` to retrieve
+    // the hash digest.
     #[inline]
     fn hash(&mut self) -> PedersenDomain {
-        self.0.into()
+        self.curr_hash.into_xy().0.into()
     }
 
+    // Resets any internal state associated with this hasher.
     #[inline]
     fn reset(&mut self) {
-        self.0 = Fr::from_repr(FrRepr::from(0)).expect("failed 0");
+        *self = PedersenFunction::default();
     }
 
     fn leaf(&mut self, leaf: PedersenDomain) -> PedersenDomain {
@@ -246,6 +303,96 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
             .into_xy()
             .0
             .into()
+    }
+}
+
+impl PedersenFunction {
+    pub fn new() -> Self {
+        PedersenFunction::default()
+    }
+
+    /// Allows the user to use `PedersenFunction` as an updatable hasher where the user passes in
+    /// data continuously as opposed to all at once. This method bitwise concatenates the `data`
+    /// argument with any previously passed in data and updates the stored hash `self.curr_hash` if
+    /// more than one Pedersen segment's worth of data is available.
+    ///
+    /// When all preimage data has been passed in via one or more calls to `self.update()`, the user
+    /// must call `self.finalize()` to retrieve the hash digest.
+    pub fn update(&mut self, data: &[u8]) {
+        let input_bits = BitVec::<LittleEndian, u8>::from(data);
+
+        let n_input_bits = input_bits.len();
+        let n_stored_bits = self.unhashed_bits.len();
+        let n_bits_total = n_input_bits + n_stored_bits;
+
+        if n_bits_total < N_SEGMENT_BITS {
+            self.unhashed_bits.extend(input_bits);
+            return;
+        }
+
+        let n_bits_to_store = n_bits_total % N_SEGMENT_BITS;
+        let n_bits_to_hash = n_bits_total - n_bits_to_store;
+
+        let bits_to_hash = self
+            .unhashed_bits
+            .iter()
+            .chain(input_bits.iter())
+            .take(n_bits_to_hash);
+
+        let first_segment_index = self.next_segment;
+        let n_segments_to_hash = (n_bits_to_hash / N_SEGMENT_BITS) as u32;
+
+        let jubjub_params = pedersen_hash_params_for_segments(
+            first_segment_index,
+            n_segments_to_hash,
+            self.window_size,
+        );
+
+        let digest = pedersen_hash::<Bls12, _>(Personalization::None, bits_to_hash, &jubjub_params);
+
+        self.curr_hash = self.curr_hash.add(&digest, &jubjub_params);
+
+        if n_bits_to_store == 0 {
+            self.unhashed_bits.clear();
+        } else {
+            let n_input_bits_hashed = n_input_bits - n_bits_to_store;
+            self.unhashed_bits = input_bits.iter().skip(n_input_bits_hashed).collect();
+        }
+
+        self.next_segment += n_segments_to_hash;
+    }
+
+    /// When using `PedersenFunction` as an updatable hasher via `self.update()`, `self.finalize()`
+    /// returns the digest of all the data passed in up until that point.
+    ///
+    /// Returns: PedersenHash(data_0 || data_1 || data_2 || ...)
+    /// where each `data_i` was passed into `PedersenFunction` via `self.update(data)` and `||`
+    /// represents bitwise concatentation.
+    ///
+    /// Note that this method only returns the x Affine component of the digest point.
+    ///
+    /// Note that this method consumes `self` to prevent the user from calling `self.update()` after
+    /// `self.finalize()` has been called.
+    pub fn finalize(mut self) -> Fr {
+        let n_bits_remaining = self.unhashed_bits.len();
+
+        // If we have unhashed bits remaining in the buffer, hash them as a partial segment (a
+        // segment whose bit length is less than `N_SEGMENT_BITS`).
+        if n_bits_remaining != 0 {
+            let bits_to_hash = self.unhashed_bits.iter().take(n_bits_remaining);
+
+            // There will never be more than one segments worth of bits remaining in the
+            // `self.unhashed_bits` buffer when `self.finalized()` is called.
+            let jubjub_params =
+                pedersen_hash_params_for_segments(self.next_segment, 1, self.window_size);
+
+            let digest =
+                pedersen_hash::<Bls12, _>(Personalization::None, bits_to_hash, &jubjub_params);
+
+            self.curr_hash = self.curr_hash.add(&digest, &jubjub_params);
+        }
+
+        self.curr_hash.into_xy().0
     }
 }
 
@@ -318,7 +465,9 @@ mod tests {
     use std::mem;
 
     use merkletree::hash::Hashable;
+    use rand::{thread_rng, Rng};
 
+    use crate::crypto::pedersen::JJ_PARAMS as DEFAULT_JUBJUB_PARAMS;
     use crate::merkle::MerkleTree;
 
     #[test]
@@ -431,5 +580,43 @@ mod tests {
             .expect("Failed to deserialize JSON string to `PedersenDomain`");
 
         assert_eq!(val, val_back);
+    }
+
+    // Asserts that hashing 118 bytes using `sapling`'s Pedersen Hash yields the same digest as
+    // hashing with `PedersenHasher`. 118 bytes is the largest buffer that `sapling`'s Pedersen Hash
+    // can handle before `panic`ing (`sapling` only generates 5 segments worth of generators, so it
+    // will run out of generators if hashing more than 118 bytes).
+    #[test]
+    fn test_updatable_pedersen_hasher() {
+        // The length in bytes of each preimage that we are going to test for. These specific
+        // lengths were not chosen for any reason other than they are even numbers (allow us to
+        // divide in half without remainders) and less than or equal to 118 bytes (the max number of
+        // bytes `sapling`'s Pedersen Hash can handle.
+        const PREIMAGE_LENGTHS: [usize; 5] = [2, 20, 50, 100, 118];
+
+        let mut rng = thread_rng();
+
+        for preimage_len in PREIMAGE_LENGTHS.iter() {
+            let data: Vec<u8> = (0..*preimage_len).map(|_| rng.gen()).collect();
+
+            // Hash with the updatable Pedersen hasher.
+            let mut hasher = PedersenFunction::new();
+            let preimage_len_half = preimage_len / 2;
+            hasher.update(&data[..preimage_len_half]);
+            hasher.update(&data[preimage_len_half..]);
+            let digest = hasher.finalize();
+
+            // Hash with `sapling`'s Pedersen hasher.
+            let bits = BitVec::<bitvec::LittleEndian, u8>::from(data.as_slice());
+            let expected_digest = pedersen_hash::<Bls12, _>(
+                Personalization::None,
+                bits.iter().take(8 * preimage_len),
+                &DEFAULT_JUBJUB_PARAMS,
+            )
+            .into_xy()
+            .0;
+
+            assert_eq!(digest, expected_digest);
+        }
     }
 }
