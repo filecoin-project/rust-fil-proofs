@@ -102,6 +102,7 @@ impl<T: Domain> PublicInputs<T> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct PrivateInputs<H: Hasher> {
     pub p_aux: PersistentAux<H::Domain>,
     pub t_aux: TemporaryAux<H>,
@@ -327,9 +328,9 @@ pub struct Tau<D: Domain> {
     pub comm_r: D,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 /// Stored along side the sector on disk.
-pub struct PersistentAux<D: Domain> {
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct PersistentAux<D> {
     pub comm_c: D,
     pub comm_r_last: D,
 }
