@@ -11,7 +11,7 @@ use crate::circuit::variables::Root;
 use crate::circuit::zigzag::hash::hash2;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::drgraph;
-use crate::hasher::{Domain, Hasher};
+use crate::hasher::Hasher;
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
@@ -47,13 +47,10 @@ impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata, H: Hasher>
 }
 
 #[derive(Clone, Default)]
-pub struct ComponentPrivateInputs<T: Domain> {
-    pub comm_cs: Vec<T>,
-    pub comm_r_lasts: Vec<T>,
-}
+pub struct ComponentPrivateInputs {}
 
 impl<'a, E: JubjubEngine, H: Hasher> CircuitComponent for RationalPoStCircuit<'a, E, H> {
-    type ComponentPrivateInputs = ComponentPrivateInputs<H::Domain>;
+    type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
 impl<'a, H> CompoundProof<'a, Bls12, RationalPoSt<'a, H>, RationalPoStCircuit<'a, Bls12, H>>
@@ -97,17 +94,21 @@ where
 
     fn circuit(
         pub_in: &<RationalPoSt<'a, H> as ProofScheme<'a>>::PublicInputs,
-        priv_in: <RationalPoStCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
+        _priv_in: <RationalPoStCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &<RationalPoSt<'a, H> as ProofScheme<'a>>::Proof,
         _pub_params: &<RationalPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
         engine_params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> RationalPoStCircuit<'a, Bls12, H> {
         let comm_rs: Vec<_> = pub_in.comm_rs.iter().map(|c| Some((*c).into())).collect();
-        let comm_cs: Vec<_> = priv_in.comm_cs.iter().map(|c| Some((*c).into())).collect();
-
-        let comm_r_lasts: Vec<_> = priv_in
-            .comm_r_lasts
+        let comm_cs: Vec<_> = vanilla_proof
+            .comm_cs
             .iter()
+            .map(|c| Some((*c).into()))
+            .collect();
+
+        let comm_r_lasts: Vec<_> = vanilla_proof
+            .commitments()
+            .into_iter()
             .map(|c| Some((*c).into()))
             .collect();
 
@@ -202,7 +203,7 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for RationalPoStCircuit<'a, E, H
 
             comm_r_num.inputize(cs.namespace(|| format!("comm_r_{}_input", i)))?;
 
-            // TODO: verify H(Comm_C || comm_r_last) == comm_r
+            // Verify H(Comm_C || comm_r_last) == comm_r
             {
                 // Allocate comm_c as booleansn
                 let comm_c_bits =
@@ -327,11 +328,7 @@ mod tests {
             .map(|c| comm_r_lasts_raw[u64::from(c.sector) as usize])
             .collect();
 
-        let comm_cs_raw = vec![rng.gen(), rng.gen()];
-        let comm_cs: Vec<_> = challenges
-            .iter()
-            .map(|c| comm_cs_raw[u64::from(c.sector) as usize])
-            .collect();
+        let comm_cs: Vec<PedersenDomain> = challenges.iter().map(|_c| rng.gen()).collect();
 
         let comm_rs: Vec<PedersenDomain> = comm_cs
             .iter()
@@ -394,7 +391,7 @@ mod tests {
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
         assert_eq!(cs.num_inputs(), 5, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 56784, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 16_496, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
         let generated_inputs = RationalPoStCompound::<PedersenHasher>::generate_public_inputs(
@@ -467,11 +464,7 @@ mod tests {
             .map(|c| comm_r_lasts_raw[u64::from(c.sector) as usize])
             .collect();
 
-        let comm_cs_raw = vec![rng.gen(), rng.gen()];
-        let comm_cs: Vec<_> = challenges
-            .iter()
-            .map(|c| comm_cs_raw[u64::from(c.sector) as usize])
-            .collect();
+        let comm_cs: Vec<PedersenDomain> = challenges.iter().map(|_c| rng.gen()).collect();
 
         let comm_rs: Vec<PedersenDomain> = comm_cs
             .iter()

@@ -68,7 +68,7 @@ pub struct Proof<H: Hasher> {
         deserialize = "MerkleProof<H>: Deserialize<'de>"
     ))]
     inclusion_proofs: Vec<MerkleProof<H>>,
-    comm_cs: Vec<H::Domain>,
+    pub comm_cs: Vec<H::Domain>,
 }
 
 impl<H: Hasher> Proof<H> {
