@@ -102,7 +102,7 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
 
     priv_replica_info.insert(
         sector_id,
-        PrivateReplicaInfo::new(sealed_path_string, seal_output.comm_r),
+        PrivateReplicaInfo::new(sealed_path_string, seal_output.comm_r, seal_output.p_aux),
     );
 
     // Measure PoSt generation and verification.

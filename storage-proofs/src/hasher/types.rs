@@ -27,6 +27,7 @@ pub trait Domain:
     + Serialize
     + DeserializeOwned
     + Element
+    + std::hash::Hash
 {
     fn serialize(&self) -> Vec<u8>;
     fn into_bytes(&self) -> Vec<u8>;

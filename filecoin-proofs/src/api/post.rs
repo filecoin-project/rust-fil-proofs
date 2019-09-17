@@ -12,6 +12,7 @@ use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::proof::NoRequirements;
 use storage_proofs::rational_post;
 use storage_proofs::sector::*;
+use storage_proofs::zigzag::PersistentAux;
 
 use crate::api::{as_safe_commitment, ChallengeSeed, Commitment, Tree};
 use crate::caches::{get_post_params, get_post_verifying_key};
@@ -27,14 +28,16 @@ pub struct PrivateReplicaInfo {
     /// Path to the replica.
     access: String,
     /// The replica commitment.
-    commitment: Commitment,
+    comm_r: Commitment,
+    /// Persistent Aux.
+    aux: PersistentAux<PedersenDomain>,
     /// Is this sector marked as a fault?
     is_fault: bool,
 }
 
 impl std::cmp::Ord for PrivateReplicaInfo {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.commitment.as_ref().cmp(other.commitment.as_ref())
+        self.comm_r.as_ref().cmp(other.comm_r.as_ref())
     }
 }
 
@@ -45,24 +48,38 @@ impl std::cmp::PartialOrd for PrivateReplicaInfo {
 }
 
 impl PrivateReplicaInfo {
-    pub fn new(access: String, commitment: Commitment) -> Self {
+    pub fn new(access: String, comm_r: Commitment, aux: PersistentAux<PedersenDomain>) -> Self {
         PrivateReplicaInfo {
             access,
-            commitment,
+            comm_r,
+            aux,
             is_fault: false,
         }
     }
 
-    pub fn new_faulty(access: String, commitment: Commitment) -> Self {
+    pub fn new_faulty(
+        access: String,
+        comm_r: Commitment,
+        aux: PersistentAux<PedersenDomain>,
+    ) -> Self {
         PrivateReplicaInfo {
             access,
-            commitment,
+            comm_r,
+            aux,
             is_fault: true,
         }
     }
 
-    pub fn safe_commitment(&self) -> Result<PedersenDomain, failure::Error> {
-        as_safe_commitment(&self.commitment, "comm_r")
+    pub fn safe_comm_r(&self) -> Result<PedersenDomain, failure::Error> {
+        as_safe_commitment(&self.comm_r, "comm_r")
+    }
+
+    pub fn safe_comm_c(&self) -> Result<PedersenDomain, failure::Error> {
+        Ok(self.aux.comm_c)
+    }
+
+    pub fn safe_comm_r_last(&self) -> Result<PedersenDomain, failure::Error> {
+        Ok(self.aux.comm_r_last)
     }
 
     /// Generate the merkle tree of this particular replica.
@@ -81,14 +98,14 @@ impl PrivateReplicaInfo {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PublicReplicaInfo {
     /// The replica commitment.
-    commitment: Commitment,
+    comm_r: Commitment,
     /// Is this sector marked as a fault?
     is_fault: bool,
 }
 
 impl std::cmp::Ord for PublicReplicaInfo {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.commitment.as_ref().cmp(other.commitment.as_ref())
+        self.comm_r.as_ref().cmp(other.comm_r.as_ref())
     }
 }
 
@@ -99,22 +116,22 @@ impl std::cmp::PartialOrd for PublicReplicaInfo {
 }
 
 impl PublicReplicaInfo {
-    pub fn new(commitment: Commitment) -> Self {
+    pub fn new(comm_r: Commitment) -> Self {
         PublicReplicaInfo {
-            commitment,
+            comm_r,
             is_fault: false,
         }
     }
 
-    pub fn new_faulty(commitment: Commitment) -> Self {
+    pub fn new_faulty(comm_r: Commitment) -> Self {
         PublicReplicaInfo {
-            commitment,
+            comm_r,
             is_fault: true,
         }
     }
 
-    pub fn safe_commitment(&self) -> Result<PedersenDomain, failure::Error> {
-        as_safe_commitment(&self.commitment, "comm_r")
+    pub fn safe_comm_r(&self) -> Result<PedersenDomain, failure::Error> {
+        as_safe_commitment(&self.comm_r, "comm_r")
     }
 }
 
@@ -209,19 +226,31 @@ pub fn generate_post(
         .collect::<Result<_, _>>()?;
 
     // Construct the list of actual commitments
-    let commitments: Vec<_> = challenged_replicas
+    let comm_rs: Vec<_> = challenged_replicas
         .iter()
-        .map(|(_id, replica)| replica.safe_commitment())
+        .map(|(_id, replica)| replica.safe_comm_r())
+        .collect::<Result<_, _>>()?;
+
+    let comm_cs: Vec<_> = challenged_replicas
+        .iter()
+        .map(|(_id, replica)| replica.safe_comm_c())
+        .collect::<Result<_, _>>()?;
+
+    let comm_r_lasts: Vec<_> = challenged_replicas
+        .iter()
+        .map(|(_id, replica)| replica.safe_comm_r_last())
         .collect::<Result<_, _>>()?;
 
     let pub_inputs = rational_post::PublicInputs {
         challenges: &challenges,
-        commitments: &commitments,
+        comm_rs: &comm_rs,
         faults: &faults,
     };
 
     let priv_inputs = rational_post::PrivateInputs::<PedersenHasher> {
         trees: &borrowed_trees,
+        comm_cs: &comm_cs,
+        comm_r_lasts: &comm_r_lasts,
     };
 
     let groth_params = get_post_params(post_config)?;
@@ -271,11 +300,11 @@ pub fn verify_post(
     )?;
 
     // Match the replicas to the challenges, as these are the only ones required.
-    let commitments: Vec<_> = challenges
+    let comm_rs: Vec<_> = challenges
         .iter()
         .map(|c| {
             if let Some(replica) = replicas.get(&c.sector) {
-                replica.safe_commitment()
+                replica.safe_comm_r()
             } else {
                 Err(format_err!(
                     "Invalid challenge generated: {}, only {} sectors are being proven",
@@ -293,7 +322,7 @@ pub fn verify_post(
 
     let public_inputs = rational_post::PublicInputs::<PedersenDomain> {
         challenges: &challenges,
-        commitments: &commitments,
+        comm_rs: &comm_rs,
         faults: &faults,
     };
 

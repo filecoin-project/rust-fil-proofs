@@ -65,10 +65,10 @@ fn select_challenges(
     layers: usize,
 ) -> LayerChallenges {
     let mut count = 1;
-    let mut guess = LayerChallenges::new_fixed(count, layers);
+    let mut guess = LayerChallenges::new_fixed(layers, count);
     while partitions * guess.challenges_count() < minimum_total_challenges {
         count += 1;
-        guess = LayerChallenges::new_fixed(count, layers);
+        guess = LayerChallenges::new_fixed(layers, count);
     }
     guess
 }
@@ -86,10 +86,10 @@ mod tests {
             select_challenges(partitions, POREP_MINIMUM_CHALLENGES, LAYERS).challenges_count()
         };
         // Update to ensure all supported PoRepProofPartitions options are represented here.
-        assert_eq!(1, f(usize::from(PoRepProofPartitions(2))));
+        assert_eq!(6, f(usize::from(PoRepProofPartitions(2))));
 
-        assert_eq!(1, f(1));
-        assert_eq!(2, f(2));
-        assert_eq!(4, f(4));
+        assert_eq!(12, f(1));
+        assert_eq!(6, f(2));
+        assert_eq!(3, f(4));
     }
 }

@@ -75,8 +75,23 @@ impl Hashable<PedersenFunction> for PedersenDomain {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct PedersenDomain(pub FrRepr);
+
+impl std::hash::Hash for PedersenDomain {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let raw: &[u64] = self.0.as_ref();
+        std::hash::Hash::hash(raw, state);
+    }
+}
+
+impl PartialEq for PedersenDomain {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.as_ref() == other.0.as_ref()
+    }
+}
+
+impl Eq for PedersenDomain {}
 
 impl Default for PedersenDomain {
     fn default() -> PedersenDomain {

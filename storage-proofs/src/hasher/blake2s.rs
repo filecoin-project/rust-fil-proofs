@@ -87,7 +87,9 @@ impl StdHasher for Blake2sFunction {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, PartialOrd, Ord, Default, Serialize, Deserialize)]
+#[derive(
+    Copy, Clone, PartialEq, Eq, Debug, PartialOrd, Ord, Default, Serialize, Deserialize, Hash,
+)]
 pub struct Blake2sDomain(pub [u8; 32]);
 
 impl Blake2sDomain {

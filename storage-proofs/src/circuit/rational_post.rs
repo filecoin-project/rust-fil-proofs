@@ -1,14 +1,17 @@
 use std::marker::PhantomData;
 
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use fil_sapling_crypto::circuit::num;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
+use crate::circuit::constraint;
 use crate::circuit::por::{PoRCircuit, PoRCompound};
 use crate::circuit::variables::Root;
+use crate::circuit::zigzag::hash::hash2;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::drgraph;
-use crate::hasher::Hasher;
+use crate::hasher::{Domain, Hasher};
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
@@ -19,7 +22,9 @@ use crate::util::NODE_SIZE;
 pub struct RationalPoStCircuit<'a, E: JubjubEngine, H: Hasher> {
     /// Paramters for the engine.
     pub params: &'a E::Params,
-    pub commitments: Vec<Option<E::Fr>>,
+    pub comm_rs: Vec<Option<E::Fr>>,
+    pub comm_cs: Vec<Option<E::Fr>>,
+    pub comm_r_lasts: Vec<Option<E::Fr>>,
     pub leafs: Vec<Option<E::Fr>>,
     #[allow(clippy::type_complexity)]
     pub paths: Vec<Vec<Option<(E::Fr, bool)>>>,
@@ -42,10 +47,13 @@ impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata, H: Hasher>
 }
 
 #[derive(Clone, Default)]
-pub struct ComponentPrivateInputs {}
+pub struct ComponentPrivateInputs<T: Domain> {
+    pub comm_cs: Vec<T>,
+    pub comm_r_lasts: Vec<T>,
+}
 
 impl<'a, E: JubjubEngine, H: Hasher> CircuitComponent for RationalPoStCircuit<'a, E, H> {
-    type ComponentPrivateInputs = ComponentPrivateInputs;
+    type ComponentPrivateInputs = ComponentPrivateInputs<H::Domain>;
 }
 
 impl<'a, H> CompoundProof<'a, Bls12, RationalPoSt<'a, H>, RationalPoStCircuit<'a, Bls12, H>>
@@ -62,18 +70,20 @@ where
 
         let por_pub_params = merklepor::PublicParams {
             leaves: (pub_params.sector_size as usize / NODE_SIZE),
-            private: false,
+            private: true,
         };
 
         assert_eq!(
             pub_in.challenges.len(),
-            pub_in.commitments.len(),
-            "Missmatch in challenges and commitments"
+            pub_in.comm_rs.len(),
+            "Missmatch in challenges and comm_rs"
         );
 
-        for (challenge, commitment) in pub_in.challenges.iter().zip(pub_in.commitments) {
+        for (challenge, comm_r) in pub_in.challenges.iter().zip(pub_in.comm_rs.iter()) {
+            inputs.push((*comm_r).into());
+
             let por_pub_inputs = merklepor::PublicInputs {
-                commitment: Some(*commitment),
+                commitment: None,
                 challenge: challenge.leaf as usize,
             };
             let por_inputs =
@@ -87,13 +97,16 @@ where
 
     fn circuit(
         pub_in: &<RationalPoSt<'a, H> as ProofScheme<'a>>::PublicInputs,
-        _component_private_inputs: <RationalPoStCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
+        priv_in: <RationalPoStCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &<RationalPoSt<'a, H> as ProofScheme<'a>>::Proof,
         _pub_params: &<RationalPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
         engine_params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> RationalPoStCircuit<'a, Bls12, H> {
-        let commitments: Vec<_> = pub_in
-            .commitments
+        let comm_rs: Vec<_> = pub_in.comm_rs.iter().map(|c| Some((*c).into())).collect();
+        let comm_cs: Vec<_> = priv_in.comm_cs.iter().map(|c| Some((*c).into())).collect();
+
+        let comm_r_lasts: Vec<_> = priv_in
+            .comm_r_lasts
             .iter()
             .map(|c| Some((*c).into()))
             .collect();
@@ -113,7 +126,9 @@ where
         RationalPoStCircuit {
             params: engine_params,
             leafs,
-            commitments,
+            comm_rs,
+            comm_cs,
+            comm_r_lasts,
             paths,
             _h: PhantomData,
         }
@@ -126,13 +141,17 @@ where
         let challenges_count = pub_params.challenges_count;
         let height = drgraph::graph_height(pub_params.sector_size as usize / NODE_SIZE);
 
-        let commitments = vec![None; challenges_count];
+        let comm_rs = vec![None; challenges_count];
+        let comm_cs = vec![None; challenges_count];
+        let comm_r_lasts = vec![None; challenges_count];
         let leafs = vec![None; challenges_count];
         let paths = vec![vec![None; height]; challenges_count];
 
         RationalPoStCircuit {
             params,
-            commitments,
+            comm_rs,
+            comm_cs,
+            comm_r_lasts,
             leafs,
             paths,
             _h: PhantomData,
@@ -143,21 +162,78 @@ where
 impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for RationalPoStCircuit<'a, E, H> {
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let params = self.params;
-        let commitments = self.commitments;
+        let comm_rs = self.comm_rs;
+        let comm_cs = self.comm_cs;
+        let comm_r_lasts = self.comm_r_lasts;
         let leafs = self.leafs;
         let paths = self.paths;
 
         assert_eq!(paths.len(), leafs.len());
-        assert_eq!(paths.len(), commitments.len());
+        assert_eq!(paths.len(), comm_rs.len());
+        assert_eq!(paths.len(), comm_cs.len());
+        assert_eq!(paths.len(), comm_r_lasts.len());
 
-        for (i, commitment) in commitments.iter().enumerate() {
-            PoRCircuit::<_, H>::synthesize(
+        for (((i, comm_r_last), comm_c), comm_r) in comm_r_lasts
+            .iter()
+            .enumerate()
+            .zip(comm_cs.iter())
+            .zip(comm_rs.iter())
+        {
+            let comm_r_last_num =
+                num::AllocatedNum::alloc(cs.namespace(|| format!("comm_r_last_{}", i)), || {
+                    comm_r_last
+                        .map(Into::into)
+                        .ok_or_else(|| SynthesisError::AssignmentMissing)
+                })?;
+
+            let comm_c_num =
+                num::AllocatedNum::alloc(cs.namespace(|| format!("comm_c_{}", i)), || {
+                    comm_c
+                        .map(Into::into)
+                        .ok_or_else(|| SynthesisError::AssignmentMissing)
+                })?;
+
+            let comm_r_num =
+                num::AllocatedNum::alloc(cs.namespace(|| format!("comm_r_{}", i)), || {
+                    comm_r
+                        .map(Into::into)
+                        .ok_or_else(|| SynthesisError::AssignmentMissing)
+                })?;
+
+            comm_r_num.inputize(cs.namespace(|| format!("comm_r_{}_input", i)))?;
+
+            // TODO: verify H(Comm_C || comm_r_last) == comm_r
+            {
+                // Allocate comm_c as booleansn
+                let comm_c_bits =
+                    comm_c_num.into_bits_le(cs.namespace(|| format!("comm_c_{}_bits", i)))?;
+
+                // Allocate comm_r_last as booleans
+                let comm_r_last_bits = comm_r_last_num
+                    .into_bits_le(cs.namespace(|| format!("comm_r_last_{}_bits", i)))?;
+
+                let hash_num = hash2(
+                    cs.namespace(|| format!("H_comm_c_comm_r_last_{}", i)),
+                    &comm_c_bits,
+                    &comm_r_last_bits,
+                )?;
+
+                // Check actual equality
+                constraint::equal(
+                    cs,
+                    || format!("enforce_comm_c_comm_r_last_hash_comm_r_{}", i),
+                    &comm_r_num,
+                    &hash_num,
+                );
+            }
+
+            PoRCircuit::<E, H>::synthesize(
                 cs.namespace(|| format!("challenge_inclusion{}", i)),
                 &params,
                 Root::Val(leafs[i]),
                 paths[i].clone(),
-                Root::Val(*commitment),
-                false,
+                Root::from_allocated::<CS>(comm_r_last_num),
+                true,
             )?;
         }
 
@@ -171,13 +247,17 @@ impl<'a, E: JubjubEngine, H: Hasher> RationalPoStCircuit<'a, E, H> {
         cs: &mut CS,
         params: &'a E::Params,
         leafs: Vec<Option<E::Fr>>,
-        commitments: Vec<Option<E::Fr>>,
+        comm_rs: Vec<Option<E::Fr>>,
+        comm_cs: Vec<Option<E::Fr>>,
+        comm_r_lasts: Vec<Option<E::Fr>>,
         paths: Vec<Vec<Option<(E::Fr, bool)>>>,
     ) -> Result<(), SynthesisError> {
         Self {
             params,
             leafs,
-            commitments,
+            comm_rs,
+            comm_cs,
+            comm_r_lasts,
             paths,
             _h: PhantomData,
         }
@@ -203,6 +283,7 @@ mod tests {
     use crate::proof::{NoRequirements, ProofScheme};
     use crate::rational_post::{self, derive_challenges, RationalPoSt};
     use crate::sector::OrderedSectorSet;
+    use crate::zigzag::hash::hash2;
 
     #[test]
     fn test_rational_post_circuit_with_bls12_381() {
@@ -239,23 +320,42 @@ mod tests {
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
         let challenges =
             derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
-        let commitments_raw = vec![tree1.root(), tree2.root()];
-        let commitments: Vec<_> = challenges
+        let comm_r_lasts_raw = vec![tree1.root(), tree2.root()];
+        let comm_r_lasts: Vec<_> = challenges
             .iter()
-            .map(|c| commitments_raw[u64::from(c.sector) as usize])
+            .map(|c| comm_r_lasts_raw[u64::from(c.sector) as usize])
+            .collect();
+
+        let comm_cs_raw = vec![rng.gen(), rng.gen()];
+        let comm_cs: Vec<_> = challenges
+            .iter()
+            .map(|c| comm_cs_raw[u64::from(c.sector) as usize])
+            .collect();
+
+        let comm_rs: Vec<_> = comm_cs
+            .iter()
+            .zip(comm_r_lasts.iter())
+            .map(|(comm_c, comm_r_last)| {
+                <PedersenHasher as Hasher>::Domain::try_from_bytes(&hash2(comm_c, comm_r_last))
+                    .unwrap()
+            })
             .collect();
 
         let pub_inputs = rational_post::PublicInputs {
             challenges: &challenges,
             faults: &faults,
-            commitments: &commitments,
+            comm_rs: &comm_rs,
         };
 
         let mut trees = BTreeMap::new();
         trees.insert(0.into(), &tree1);
         trees.insert(1.into(), &tree2);
 
-        let priv_inputs = rational_post::PrivateInputs::<PedersenHasher> { trees: &trees };
+        let priv_inputs = rational_post::PrivateInputs::<PedersenHasher> {
+            trees: &trees,
+            comm_cs: &comm_cs,
+            comm_r_lasts: &comm_r_lasts,
+        };
 
         let proof = RationalPoSt::<PedersenHasher>::prove(&pub_params, &pub_inputs, &priv_inputs)
             .expect("proving failed");
@@ -283,7 +383,9 @@ mod tests {
             params,
             leafs,
             paths,
-            commitments: commitments.into_iter().map(|c| Some(c.into())).collect(),
+            comm_rs: comm_rs.iter().copied().map(|c| Some(c.into())).collect(),
+            comm_cs: comm_cs.into_iter().map(|c| Some(c.into())).collect(),
+            comm_r_lasts: comm_r_lasts.into_iter().map(|c| Some(c.into())).collect(),
             _h: PhantomData,
         };
 
@@ -294,8 +396,27 @@ mod tests {
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
         assert_eq!(cs.num_inputs(), 5, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 13746, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 56784, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
+
+        let generated_inputs = RationalPoStCompound::<PedersenHasher>::generate_public_inputs(
+            &pub_inputs,
+            &pub_params,
+            None,
+        );
+        let expected_inputs = cs.get_inputs();
+
+        for ((input, label), generated_input) in
+            expected_inputs.iter().skip(1).zip(generated_inputs.iter())
+        {
+            assert_eq!(input, generated_input, "{}", label);
+        }
+
+        assert_eq!(
+            generated_inputs.len(),
+            expected_inputs.len() - 1,
+            "inputs are not the same length"
+        );
     }
 
     #[ignore] // Slow test – run only when compiled for release.
@@ -341,23 +462,43 @@ mod tests {
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
         let challenges =
             derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
-        let commitments_raw = vec![tree1.root(), tree2.root()];
-        let commitments: Vec<_> = challenges
+
+        let comm_r_lasts_raw = vec![tree1.root(), tree2.root()];
+        let comm_r_lasts: Vec<_> = challenges
             .iter()
-            .map(|c| commitments_raw[u64::from(c.sector) as usize].into())
+            .map(|c| comm_r_lasts_raw[u64::from(c.sector) as usize])
+            .collect();
+
+        let comm_cs_raw = vec![rng.gen(), rng.gen()];
+        let comm_cs: Vec<_> = challenges
+            .iter()
+            .map(|c| comm_cs_raw[u64::from(c.sector) as usize])
+            .collect();
+
+        let comm_rs: Vec<_> = comm_cs
+            .iter()
+            .zip(comm_r_lasts.iter())
+            .map(|(comm_c, comm_r_last)| {
+                <PedersenHasher as Hasher>::Domain::try_from_bytes(&hash2(comm_c, comm_r_last))
+                    .unwrap()
+            })
             .collect();
 
         let pub_inputs = rational_post::PublicInputs {
             challenges: &challenges,
             faults: &faults,
-            commitments: &commitments,
+            comm_rs: &comm_rs,
         };
 
         let mut trees = BTreeMap::new();
         trees.insert(0.into(), &tree1);
         trees.insert(1.into(), &tree2);
 
-        let priv_inputs = rational_post::PrivateInputs::<PedersenHasher> { trees: &trees };
+        let priv_inputs = rational_post::PrivateInputs::<PedersenHasher> {
+            trees: &trees,
+            comm_r_lasts: &comm_r_lasts,
+            comm_cs: &comm_cs,
+        };
 
         let gparams = RationalPoStCompound::<PedersenHasher>::groth_params(
             &pub_params.vanilla_params,

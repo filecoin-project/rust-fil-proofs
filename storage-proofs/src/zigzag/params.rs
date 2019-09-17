@@ -320,13 +320,13 @@ pub type TransformedLayers<H> = (
 );
 
 /// Tau for a single parition.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Tau<D: Domain> {
     pub comm_d: D,
     pub comm_r: D,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 /// Stored along side the sector on disk.
 pub struct PersistentAux<D: Domain> {
     pub comm_c: D,

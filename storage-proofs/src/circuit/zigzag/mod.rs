@@ -1,7 +1,7 @@
 mod column;
 mod column_proof;
 mod encoding_proof;
-mod hash;
+pub(crate) mod hash;
 mod params;
 mod proof;
 
