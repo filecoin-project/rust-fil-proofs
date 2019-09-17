@@ -5,6 +5,8 @@ pub const SINGLE_PARTITION_PROOF_LEN: usize = 192;
 
 pub const SECTOR_SIZE_ONE_KIB: u64 = 1024;
 
+pub const SECTOR_SIZE_16_MIB: u64 = 1 << 14;
+
 pub const SECTOR_SIZE_256_MIB: u64 = 1 << 28;
 
 pub const SECTOR_SIZE_1_GIB: u64 = 1 << 30;

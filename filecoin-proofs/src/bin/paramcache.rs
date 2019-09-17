@@ -17,8 +17,12 @@ use storage_proofs::rational_post::RationalPoSt;
 
 const POREP_PROOF_PARTITION_CHOICES: [PoRepProofPartitions; 1] = [PoRepProofPartitions(2)];
 
-const TEST_ONLY_SECTOR_SIZES: [u64; 1] = [SECTOR_SIZE_ONE_KIB];
-const ALL_SECTOR_SIZES: [u64; 3] = [SECTOR_SIZE_ONE_KIB, SECTOR_SIZE_256_MIB, SECTOR_SIZE_1_GIB];
+const PUBLISHED_SECTOR_SIZES: [u64; 4] = [
+    SECTOR_SIZE_ONE_KIB,
+    SECTOR_SIZE_16_MIB,
+    SECTOR_SIZE_256_MIB,
+    SECTOR_SIZE_1_GIB,
+];
 
 fn cache_porep_params(porep_config: PoRepConfig) {
     let n = u64::from(PaddedBytesAmount::from(porep_config));
@@ -114,10 +118,12 @@ pub fn main() {
 
     let test_only: bool = matches.is_present("test-only");
 
+    let smallest = vec![SECTOR_SIZE_ONE_KIB];
+
     let sizes: &[u64] = if test_only {
-        &TEST_ONLY_SECTOR_SIZES
+        &smallest
     } else {
-        &ALL_SECTOR_SIZES
+        &PUBLISHED_SECTOR_SIZES
     };
 
     for size in sizes {
