@@ -18,7 +18,7 @@ use crate::porep::{self, PoRep};
 use crate::proof::ProofScheme;
 use crate::util::{data_at_node, NODE_SIZE};
 use crate::vde;
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
 use std::io::{Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
@@ -220,6 +220,37 @@ impl DumbCache {
             top_half: self.root.join(top_half),
             leaves: self.root.join(leaves),
         }
+    }
+
+    // FIXME: Although it's not necessary for this function to be
+    // part of the cache now, eventually the path handling should happen
+    // inside of this structure and you'd just request the files without
+    // exposing `CachedTreeAbsPaths`.
+    pub fn open_file(&self, path: &PathBuf, truncate: bool) -> File {
+        let mut file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(truncate)
+            .read(true)
+            .open(path)
+            .unwrap();
+
+        file.seek(SeekFrom::Start(0)).unwrap();
+        file
+    }
+
+    /// Create a cache file to write new content.
+    pub fn create_file(&self, path: &PathBuf) -> File {
+        self.open_file(path, true)
+    }
+
+    /// Load a cache file with previously created content..
+    pub fn load_file(&self, path: &PathBuf) -> File {
+        self.open_file(path, false)
+        // FIXME: Actually if this is a load operation the
+        // `create` option should be set to false and this
+        // should fail (signalling we don't have the file
+        // we thought we had).
     }
 }
 
@@ -456,15 +487,7 @@ pub trait Layers {
                     );
 
                     // TODO: This isn't thread safe at all
-                    let mut leaves_cache_file = OpenOptions::new()
-                        .create(true)
-                        .write(true)
-                        .truncate(true)
-                        .read(true)
-                        .open(leaves.clone())
-                        .unwrap();
-
-                    leaves_cache_file.seek(SeekFrom::Start(0)).unwrap();
+                    let leaves_cache_file = cache.create_file(&leaves);
 
                     let mut leaves_store =
                         MerkleStore::new_with_file(pow, Some(leaves_cache_file)).unwrap();

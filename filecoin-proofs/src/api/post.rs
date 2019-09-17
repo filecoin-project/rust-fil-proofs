@@ -203,19 +203,8 @@ pub fn generate_post(
             let tree: std::result::Result<_, failure::Error> = if Path::new(&leaves).exists() {
                 println!("merkle tree (leaves) cache-file existed: {:?}", leaves);
 
-                let mut leaves_cache_file = File::open(leaves.clone()).unwrap();
-
-                leaves_cache_file.seek(SeekFrom::Start(0)).unwrap();
-
-                let mut top_half_cache_file = OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .truncate(false)
-                    .read(true)
-                    .open(top_half.clone())
-                    .unwrap();
-
-                top_half_cache_file.seek(SeekFrom::Start(0)).unwrap();
+                let leaves_cache_file = cache.load_file(&leaves);
+                let top_half_cache_file = cache.load_file(&top_half);
 
                 MerkleTree::new_with_files(
                     sector_size as usize / NODE_SIZE,
