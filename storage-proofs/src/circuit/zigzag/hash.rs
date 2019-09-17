@@ -1,12 +1,16 @@
 use bellperson::{ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::circuit::blake2s::blake2s as blake2s_circuit;
+use ff::Field;
 use fil_sapling_crypto::circuit::boolean::Boolean;
-use fil_sapling_crypto::circuit::{multipack, num};
+use fil_sapling_crypto::circuit::num;
 use fil_sapling_crypto::jubjub::JubjubEngine;
+
+use crate::circuit::pedersen::{pedersen_compression_num as pedersen, pedersen_md_no_padding};
+use crate::crypto::pedersen::PEDERSEN_BLOCK_SIZE;
 
 /// Hash two elements together.
 pub fn hash2<E, CS>(
     mut cs: CS,
+    params: &E::Params,
     first: &[Boolean],
     second: &[Boolean],
 ) -> Result<num::AllocatedNum<E>, SynthesisError>
@@ -28,37 +32,35 @@ where
         values.push(Boolean::Constant(false));
     }
 
-    hash1(cs.namespace(|| "hash2"), &values)
+    hash1(cs.namespace(|| "hash2"), params, &values)
 }
 
 /// Hash a list of bits.
-pub fn hash1<E, CS>(mut cs: CS, values: &[Boolean]) -> Result<num::AllocatedNum<E>, SynthesisError>
+pub fn hash1<E, CS>(
+    mut cs: CS,
+    params: &E::Params,
+    values: &[Boolean],
+) -> Result<num::AllocatedNum<E>, SynthesisError>
 where
     E: JubjubEngine,
     CS: ConstraintSystem<E>,
 {
-    let personalization = vec![0u8; 8];
+    assert!(values.len() % 32 == 0, "input must be a multiple of 32bits");
 
-    let hash_bits = blake2s_circuit(cs.namespace(|| "hash1"), &values, &personalization)?;
-
-    let hash_fr = match hash_bits[0].get_value() {
-        Some(_) => {
-            let bits = hash_bits
-                .iter()
-                .map(|v| v.get_value().unwrap())
-                .collect::<Vec<bool>>();
-            let frs = multipack::compute_multipacking::<E>(&bits);
-            Ok(frs[0])
-        }
-        None => Err(SynthesisError::AssignmentMissing),
-    };
-
-    num::AllocatedNum::alloc(cs.namespace(|| "hash1_num"), || hash_fr)
+    if values.is_empty() {
+        // can happen with small layers
+        num::AllocatedNum::alloc(cs.namespace(|| "hash1"), || Ok(E::Fr::zero()))
+    } else if values.len() > PEDERSEN_BLOCK_SIZE {
+        pedersen_md_no_padding(cs.namespace(|| "hash1"), params, values)
+    } else {
+        pedersen(cs.namespace(|| "hash1"), params, values)
+    }
 }
 
 /// Hash a list of bits.
 pub fn hash_single_column<E, CS>(
     mut cs: CS,
+    params: &E::Params,
     rows: &[Option<E::Fr>],
 ) -> Result<num::AllocatedNum<E>, SynthesisError>
 where
@@ -83,7 +85,7 @@ where
         bits.extend(row_bits);
     }
 
-    hash1(cs.namespace(|| "hash_single_column"), &bits)
+    hash1(cs.namespace(|| "hash_single_column"), params, &bits)
 }
 
 #[cfg(test)]
@@ -92,18 +94,24 @@ mod tests {
 
     use bellperson::ConstraintSystem;
     use fil_sapling_crypto::circuit::boolean::Boolean;
-    use paired::bls12_381::Bls12;
+    use fil_sapling_crypto::jubjub::JubjubBls12;
+    use paired::bls12_381::{Bls12, Fr};
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     use crate::circuit::test::TestConstraintSystem;
     use crate::fr32::fr_into_bytes;
+    use crate::settings;
     use crate::util::bytes_into_boolean_vec;
-
     use crate::zigzag::hash::hash2 as vanilla_hash2;
 
     #[test]
     fn test_hash2_circuit() {
         let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let window_size = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .pedersen_hash_exp_window_size;
+        let params = &JubjubBls12::new_with_window_size(window_size);
 
         for _ in 0..10 {
             let mut cs = TestConstraintSystem::<Bls12>::new();
@@ -121,17 +129,17 @@ mod tests {
                 bytes_into_boolean_vec(&mut cs, Some(b_bytes.as_slice()), b_bytes.len()).unwrap()
             };
 
-            let out =
-                hash2(cs.namespace(|| "hash2"), &a_bits, &b_bits).expect("hash2 function failed");
+            let out = hash2(cs.namespace(|| "hash2"), &params, &a_bits, &b_bits)
+                .expect("hash2 function failed");
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
-            assert_eq!(cs.num_constraints(), 21518);
+            assert_eq!(cs.num_constraints(), 1376);
 
-            let expected = vanilla_hash2(&a_bytes, &b_bytes);
+            let expected: Fr = vanilla_hash2(&a_bytes, &b_bytes).into();
 
             assert_eq!(
                 expected,
-                fr_into_bytes::<Bls12>(&out.get_value().unwrap()),
+                out.get_value().unwrap(),
                 "circuit and non circuit do not match"
             );
         }

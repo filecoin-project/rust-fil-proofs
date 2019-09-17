@@ -1,6 +1,7 @@
 use serde::de::Deserialize;
 use serde::ser::Serialize;
 
+use crate::hasher::pedersen::PedersenDomain;
 use crate::hasher::Hasher;
 use crate::merkle::{IncludedNode, MerkleProof};
 use crate::zigzag::column::Column;
@@ -127,7 +128,7 @@ impl<H: Hasher> ColumnProof<H> {
         IncludedNode::new(*value)
     }
 
-    pub fn column_hash(&self) -> Vec<u8> {
+    pub fn column_hash(&self) -> PedersenDomain {
         self.column().hash()
     }
 
@@ -138,7 +139,7 @@ impl<H: Hasher> ColumnProof<H> {
             } => {
                 let c_i = self.column_hash();
 
-                check!(inclusion_proof.validate_data(&c_i));
+                check!(inclusion_proof.validate_data(c_i.as_ref()));
 
                 true
             }
@@ -150,7 +151,7 @@ impl<H: Hasher> ColumnProof<H> {
                 let e_i = self.column_hash();
                 let c_i = hash2(&o_i, &e_i);
 
-                check!(inclusion_proof.validate_data(&c_i));
+                check!(inclusion_proof.validate_data(c_i.as_ref()));
 
                 true
             }
@@ -162,7 +163,7 @@ impl<H: Hasher> ColumnProof<H> {
                 let o_i = self.column_hash();
                 let c_i = hash2(&o_i, &e_i);
 
-                check!(inclusion_proof.validate_data(&c_i));
+                check!(inclusion_proof.validate_data(c_i.as_ref()));
 
                 true
             }

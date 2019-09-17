@@ -1,17 +1,15 @@
 use std::marker::PhantomData;
 
-use blake2s_simd::Params as Blake2s;
 use serde::de::Deserialize;
 use serde::ser::Serialize;
 
-use crate::fr32::trim_bytes_to_fr_safe;
+use crate::hasher::pedersen::PedersenDomain;
 use crate::hasher::Hasher;
 use crate::merkle::MerkleProof;
-use crate::util::NODE_SIZE;
 use crate::zigzag::{
     column_proof::ColumnProof,
     graph::ZigZagBucketGraph,
-    hash::{hash2, hash_single_column},
+    hash::{hash1, hash2, hash_single_column},
     params::Tree,
 };
 
@@ -98,25 +96,25 @@ impl<H: Hasher> Column<H> {
     }
 
     /// Calculate the column hashes `C_i = H(E_i, O_i)` for the passed in column.
-    pub fn hash(&self) -> Vec<u8> {
+    pub fn hash(&self) -> PedersenDomain {
         match self {
             Column::All(inner) => {
-                let mut even_hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
-                let mut odd_hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
+                let mut even_buffer = Vec::new();
+                let mut odd_buffer = Vec::new();
 
                 for (i, row) in inner.rows.iter().enumerate() {
                     // adjust index, as the column stored at index 0 is layer 1 => odd
                     if (i + 1) % 2 == 0 {
-                        even_hasher.update(row.as_ref());
+                        even_buffer.extend_from_slice(row.as_ref());
                     } else {
-                        odd_hasher.update(row.as_ref());
+                        odd_buffer.extend_from_slice(row.as_ref());
                     }
                 }
 
-                hash2(
-                    trim_bytes_to_fr_safe(odd_hasher.finalize().as_ref()),
-                    trim_bytes_to_fr_safe(even_hasher.finalize().as_ref()),
-                )
+                let o_i = hash1(&odd_buffer);
+                let e_i = hash1(&even_buffer);
+
+                hash2(o_i, e_i)
             }
             Column::Even(inner) => hash_single_column(&inner.rows),
             Column::Odd(inner) => hash_single_column(&inner.rows),

@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use paired::bls12_381::Fr;
 use serde::{Deserialize, Serialize};
 
 use crate::drgporep;
@@ -147,7 +148,7 @@ impl<H: Hasher> Proof<H> {
     }
 
     fn comm_r(&self) -> H::Domain {
-        H::Domain::try_from_bytes(&hash2(self.comm_c(), self.comm_r_last())).expect("invalid proof")
+        Fr::from(hash2(self.comm_c(), self.comm_r_last())).into()
     }
 
     /// Verify the full proof.

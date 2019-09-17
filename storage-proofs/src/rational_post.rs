@@ -194,7 +194,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
             // comm_r_last is the root of the proof
             let comm_r_last = merkle_proof.root();
 
-            if &hash2(comm_c, comm_r_last)[..] != comm_r.as_ref() {
+            if hash2(comm_c, comm_r_last).as_ref() != comm_r.as_ref() {
                 return Ok(false);
             }
 
@@ -287,7 +287,7 @@ fn derive_challenge(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use paired::bls12_381::Bls12;
+    use paired::bls12_381::{Bls12, Fr};
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     use crate::drgraph::{new_seed, BucketGraph, Graph};
@@ -352,12 +352,10 @@ mod tests {
 
         let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| rng.gen()).collect();
 
-        let comm_rs: Vec<_> = comm_cs
+        let comm_rs: Vec<H::Domain> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| {
-                H::Domain::try_from_bytes(&hash2(comm_c, comm_r_last)).unwrap()
-            })
+            .map(|(comm_c, comm_r_last)| Fr::from(hash2(comm_c, comm_r_last)).into())
             .collect();
 
         let pub_inputs = PublicInputs {
@@ -445,12 +443,10 @@ mod tests {
 
         let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| rng.gen()).collect();
 
-        let comm_rs: Vec<_> = comm_cs
+        let comm_rs: Vec<H::Domain> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| {
-                H::Domain::try_from_bytes(&hash2(comm_c, comm_r_last)).unwrap()
-            })
+            .map(|(comm_c, comm_r_last)| Fr::from(hash2(comm_c, comm_r_last)).into())
             .collect();
 
         let pub_inputs = PublicInputs::<H::Domain> {
@@ -526,12 +522,10 @@ mod tests {
 
         let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| rng.gen()).collect();
 
-        let comm_rs: Vec<_> = comm_cs
+        let comm_rs: Vec<H::Domain> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| {
-                H::Domain::try_from_bytes(&hash2(comm_c, comm_r_last)).unwrap()
-            })
+            .map(|(comm_c, comm_r_last)| Fr::from(hash2(comm_c, comm_r_last)).into())
             .collect();
 
         let pub_inputs = PublicInputs {
@@ -556,12 +550,10 @@ mod tests {
 
         let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| rng.gen()).collect();
 
-        let comm_rs: Vec<_> = comm_cs
+        let comm_rs: Vec<H::Domain> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| {
-                H::Domain::try_from_bytes(&hash2(comm_c, comm_r_last)).unwrap()
-            })
+            .map(|(comm_c, comm_r_last)| Fr::from(hash2(comm_c, comm_r_last)).into())
             .collect();
 
         let different_pub_inputs = PublicInputs {

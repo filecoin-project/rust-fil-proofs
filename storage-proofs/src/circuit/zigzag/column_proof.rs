@@ -115,7 +115,7 @@ impl<H: Hasher> ColumnProof<H> {
                 })?;
                 let o_i_bits = o_i_num.into_bits_le(cs.namespace(|| "o_i_bits"))?;
 
-                let c_i = hash2(cs.namespace(|| "h(o_i, e_i)"), &o_i_bits, &e_i_bits)?;
+                let c_i = hash2(cs.namespace(|| "h(o_i, e_i)"), params, &o_i_bits, &e_i_bits)?;
 
                 let leaf_num = inclusion_path.alloc_value(cs.namespace(|| "leaf"))?;
                 constraint::equal(&mut cs, || "enforce h(o_i, e_i) = leaf", &c_i, &leaf_num);
@@ -141,7 +141,7 @@ impl<H: Hasher> ColumnProof<H> {
                 })?;
                 let e_i_bits = e_i_num.into_bits_le(cs.namespace(|| "e_i_bits"))?;
 
-                let c_i = hash2(cs.namespace(|| "h(o_i, e_i)"), &o_i_bits, &e_i_bits)?;
+                let c_i = hash2(cs.namespace(|| "h(o_i, e_i)"), params, &o_i_bits, &e_i_bits)?;
 
                 let leaf_num = inclusion_path.alloc_value(cs.namespace(|| "leaf"))?;
 

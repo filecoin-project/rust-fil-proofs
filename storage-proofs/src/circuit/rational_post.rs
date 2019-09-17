@@ -214,6 +214,7 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for RationalPoStCircuit<'a, E, H
 
                 let hash_num = hash2(
                     cs.namespace(|| format!("H_comm_c_comm_r_last_{}", i)),
+                    params,
                     &comm_c_bits,
                     &comm_r_last_bits,
                 )?;
@@ -332,13 +333,10 @@ mod tests {
             .map(|c| comm_cs_raw[u64::from(c.sector) as usize])
             .collect();
 
-        let comm_rs: Vec<_> = comm_cs
+        let comm_rs: Vec<PedersenDomain> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| {
-                <PedersenHasher as Hasher>::Domain::try_from_bytes(&hash2(comm_c, comm_r_last))
-                    .unwrap()
-            })
+            .map(|(comm_c, comm_r_last)| hash2(comm_c, comm_r_last).into())
             .collect();
 
         let pub_inputs = rational_post::PublicInputs {
@@ -475,13 +473,10 @@ mod tests {
             .map(|c| comm_cs_raw[u64::from(c.sector) as usize])
             .collect();
 
-        let comm_rs: Vec<_> = comm_cs
+        let comm_rs: Vec<PedersenDomain> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| {
-                <PedersenHasher as Hasher>::Domain::try_from_bytes(&hash2(comm_c, comm_r_last))
-                    .unwrap()
-            })
+            .map(|(comm_c, comm_r_last)| hash2(comm_c, comm_r_last).into())
             .collect();
 
         let pub_inputs = rational_post::PublicInputs {

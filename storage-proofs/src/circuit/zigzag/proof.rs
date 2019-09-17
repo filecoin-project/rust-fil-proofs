@@ -89,7 +89,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
         } = self;
 
         let graph = &public_params.graph;
-
+        let params = &self.params;
         // In most cases (the exception being during testing) we want to ensure that the base and
         // expansion degrees are the optimal values.
         if !cfg!(feature = "unchecked-degrees") {
@@ -155,6 +155,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for ZigZagCircuit<'a, Bls12, H> {
         {
             let hash_num = hash2(
                 cs.namespace(|| "H_comm_c_comm_r_last"),
+                params,
                 &comm_c_bits,
                 &comm_r_last_bits,
             )?;
@@ -363,7 +364,7 @@ mod tests {
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]
-    fn zigzag_drgporep_input_circuit_with_bls12_381() {
+    fn zigzag_input_circuit_with_bls12_381() {
         let window_size = settings::SETTINGS
             .lock()
             .unwrap()
@@ -420,7 +421,7 @@ mod tests {
         assert!(proofs_are_valid);
 
         let expected_inputs = 41; // was 39 with "old" zigzag all pedersen
-        let expected_constraints = 1_145_032; // was 432_312 with "old" zigzag all pedersen
+        let expected_constraints = 352_981; // was 432_312 with "old" zigzag all pedersen
 
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.

@@ -93,7 +93,7 @@ impl Column {
     pub fn hash<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: CS,
-        _params: &<Bls12 as JubjubEngine>::Params,
+        params: &<Bls12 as JubjubEngine>::Params,
     ) -> Result<num::AllocatedNum<Bls12>, SynthesisError> {
         match self {
             Column::All(RawColumn { rows, .. }) => {
@@ -123,19 +123,19 @@ impl Column {
                 }
 
                 // calculate hashes
-                let e_i = hash1(cs.namespace(|| "hash_even"), &even_bits)?;
-                let o_i = hash1(cs.namespace(|| "hash_odd"), &odd_bits)?;
+                let e_i = hash1(cs.namespace(|| "hash_even"), params, &even_bits)?;
+                let o_i = hash1(cs.namespace(|| "hash_odd"), params, &odd_bits)?;
 
                 let e_i_bits = e_i.into_bits_le(cs.namespace(|| "e_i_bits"))?;
                 let o_i_bits = o_i.into_bits_le(cs.namespace(|| "o_i_bits"))?;
 
-                hash2(cs.namespace(|| "h(o_i, e_i)"), &o_i_bits, &e_i_bits)
+                hash2(cs.namespace(|| "h(o_i, e_i)"), params, &o_i_bits, &e_i_bits)
             }
             Column::Even(RawColumn { rows, .. }) => {
-                hash_single_column(cs.namespace(|| "even_column_hash"), &rows)
+                hash_single_column(cs.namespace(|| "even_column_hash"), params, &rows)
             }
             Column::Odd(RawColumn { rows, .. }) => {
-                hash_single_column(cs.namespace(|| "odd_column_hash"), &rows)
+                hash_single_column(cs.namespace(|| "odd_column_hash"), params, &rows)
             }
         }
     }

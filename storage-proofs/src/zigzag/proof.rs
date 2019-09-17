@@ -1,11 +1,12 @@
 use std::marker::PhantomData;
 
+use paired::bls12_381::Fr;
 use rayon::prelude::*;
 
 use crate::drgporep::{self, DrgPoRep};
 use crate::drgraph::Graph;
 use crate::error::Result;
-use crate::hasher::{Domain, Hasher};
+use crate::hasher::Hasher;
 use crate::merkle::{next_pow2, populate_leaves, MerkleProof, MerkleStore, Store};
 use crate::porep::PoRep;
 use crate::util::NODE_SIZE;
@@ -406,26 +407,20 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
         // O_i = H( e_i^(1) || .. )
         let os = odd_columns
-            .map(|c| {
-                c.map(|c| c.hash())
-                    .and_then(|v| H::Domain::try_from_bytes(&v))
-            })
-            .collect::<Result<Vec<_>>>()?;
+            .map(|c| c.map(|c| Fr::from(c.hash()).into()))
+            .collect::<Result<Vec<H::Domain>>>()?;
 
         // E_i = H( e_\bar{i}^(2) || .. )
         let es = even_columns
-            .map(|c| {
-                c.map(|c| c.hash())
-                    .and_then(|v| H::Domain::try_from_bytes(&v))
-            })
-            .collect::<Result<Vec<_>>>()?;
+            .map(|c| c.map(|c| Fr::from(c.hash()).into()))
+            .collect::<Result<Vec<H::Domain>>>()?;
 
         // C_i = H(O_i || E_i)
         let cs = os
             .par_iter()
             .zip(es.par_iter())
-            .flat_map(|(o_i, e_i)| hash2(o_i, e_i))
-            .collect::<Vec<_>>();
+            .flat_map(|(o_i, e_i)| hash2(o_i, e_i).as_ref().to_vec())
+            .collect::<Vec<u8>>();
 
         // Build the tree for CommC
         let tree_c = build_tree(&cs)?;
@@ -438,7 +433,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
         let tree_r_last = build_tree(&r_last)?;
 
         // comm_r = H(comm_c || comm_r_last)
-        let comm_r = H::Domain::try_from_bytes(&hash2(tree_c.root(), tree_r_last.root()))?;
+        let comm_r: H::Domain = Fr::from(hash2(tree_c.root(), tree_r_last.root())).into();
 
         Ok((
             Tau {
@@ -556,9 +551,9 @@ mod tests {
 
     fn test_prove_verify<H: 'static + Hasher>(n: usize, challenges: LayerChallenges) {
         // This will be called multiple times, only the first one succeeds, and that is ok.
-        femme::pretty::Logger::new()
-            .start(log::LevelFilter::Trace)
-            .ok();
+        // femme::pretty::Logger::new()
+        //     .start(log::LevelFilter::Trace)
+        //     .ok();
 
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
