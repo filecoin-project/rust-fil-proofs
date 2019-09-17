@@ -454,6 +454,7 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::io::{Seek, SeekFrom};
 
     use crate::constants::TEST_SECTOR_SIZE;
     use crate::error::ExpectWithBacktrace;
@@ -469,6 +470,8 @@ mod tests {
     fn generate_comm_p(data: &[u8]) -> Result<Commitment, failure::Error> {
         let mut file = NamedTempFile::new().expects("could not create named temp file");
         file.write_all(data)?;
+        file.seek(SeekFrom::Start(0))?;
+
         let comm_p =
             generate_piece_commitment(file.as_file_mut(), UnpaddedBytesAmount(data.len() as u64))?;
         Ok(comm_p)
