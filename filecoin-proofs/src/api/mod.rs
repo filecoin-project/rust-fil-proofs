@@ -706,9 +706,11 @@ mod tests {
 
         let mut piece_file = NamedTempFile::new()?;
         piece_file.write_all(&piece_bytes)?;
-        piece_file.seek(SeekFrom::Start(0))?;
+        piece_file.as_file_mut().sync_all()?;
+        piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
 
         let comm_p = generate_piece_commitment(piece_file.as_file_mut(), number_of_bytes_in_piece)?;
+        piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
 
         let mut staged_sector_file = NamedTempFile::new()?;
         add_piece(
