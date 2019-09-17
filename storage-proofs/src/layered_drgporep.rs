@@ -241,13 +241,13 @@ impl DumbCache {
 
     /// Create a cache file to write new content.
     pub fn create_file(&self, path: &PathBuf) -> File {
-        info!("creating (truncating) merkle tree cache-file: {:?}", path);
+        println!("creating (truncating) merkle tree cache-file: {:?}", path);
         self.open_file(path, true)
     }
 
     /// Load a cache file with previously created content..
     pub fn load_file(&self, path: &PathBuf) -> File {
-        info!("loading merkle tree cache-file: {:?}", path);
+        println!("loading merkle tree cache-file: {:?}", path);
         self.open_file(path, false)
         // FIXME: Actually if this is a load operation the
         // `create` option should be set to false and this
