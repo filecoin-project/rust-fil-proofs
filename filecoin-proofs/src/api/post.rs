@@ -12,9 +12,8 @@ use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::proof::NoRequirements;
 use storage_proofs::rational_post;
 use storage_proofs::sector::*;
-use storage_proofs::zigzag::PersistentAux;
 
-use crate::api::{as_safe_commitment, ChallengeSeed, Commitment, Tree};
+use crate::api::{as_safe_commitment, ChallengeSeed, Commitment, PersistentAux, Tree};
 use crate::caches::{get_post_params, get_post_verifying_key};
 use crate::error;
 use crate::parameters::{post_setup_params, public_params};
@@ -30,7 +29,7 @@ pub struct PrivateReplicaInfo {
     /// The replica commitment.
     comm_r: Commitment,
     /// Persistent Aux.
-    aux: PersistentAux<PedersenDomain>,
+    aux: PersistentAux,
     /// Is this sector marked as a fault?
     is_fault: bool,
 }
@@ -48,7 +47,7 @@ impl std::cmp::PartialOrd for PrivateReplicaInfo {
 }
 
 impl PrivateReplicaInfo {
-    pub fn new(access: String, comm_r: Commitment, aux: PersistentAux<PedersenDomain>) -> Self {
+    pub fn new(access: String, comm_r: Commitment, aux: PersistentAux) -> Self {
         PrivateReplicaInfo {
             access,
             comm_r,
@@ -57,11 +56,7 @@ impl PrivateReplicaInfo {
         }
     }
 
-    pub fn new_faulty(
-        access: String,
-        comm_r: Commitment,
-        aux: PersistentAux<PedersenDomain>,
-    ) -> Self {
+    pub fn new_faulty(access: String, comm_r: Commitment, aux: PersistentAux) -> Self {
         PrivateReplicaInfo {
             access,
             comm_r,

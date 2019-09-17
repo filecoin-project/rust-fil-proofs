@@ -329,7 +329,7 @@ pub struct Tau<D: Domain> {
 }
 
 /// Stored along side the sector on disk.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PersistentAux<D> {
     pub comm_c: D,
     pub comm_r_last: D,

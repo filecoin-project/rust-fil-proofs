@@ -39,7 +39,7 @@ use storage_proofs::piece_inclusion_proof::{
 };
 use storage_proofs::porep::{replica_id, PoRep};
 use storage_proofs::sector::SectorId;
-use storage_proofs::zigzag::{self, ChallengeRequirements, PersistentAux, Tau, ZigZagDrgPoRep};
+use storage_proofs::zigzag::{self, ChallengeRequirements, Tau, ZigZagDrgPoRep};
 use tempfile::tempfile;
 
 mod post;
@@ -52,11 +52,13 @@ pub type Commitment = Fr32Ary;
 pub type ChallengeSeed = [u8; 32];
 type Tree = MerkleTree<PedersenDomain, <PedersenHasher as Hasher>::Function>;
 
+pub type PersistentAux = zigzag::PersistentAux<PedersenDomain>;
+
 #[derive(Clone, Debug)]
 pub struct SealOutput {
     pub comm_r: Commitment,
     pub comm_d: Commitment,
-    pub p_aux: PersistentAux<PedersenDomain>,
+    pub p_aux: PersistentAux,
     pub proof: Vec<u8>,
     pub comm_ps: Vec<Commitment>,
     pub piece_inclusion_proofs: Vec<PieceInclusionProof<PedersenHasher>>,
