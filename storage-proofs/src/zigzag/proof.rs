@@ -337,11 +337,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
         assert_eq!(data.len(), nodes_count * NODE_SIZE);
 
-        // TODO:
-        // The implementation below is a memory hog, and very naive in terms of performance.
-        // It also hardcodes the hash function.
-        // This is done to get an initial version implemented and make sure it is correct.
-        // After that we can improve on that.
+        // FIXME: The implementation below is a memory hog.
 
         let layers = layer_challenges.layers();
         assert!(layers > 0);

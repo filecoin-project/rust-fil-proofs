@@ -104,6 +104,7 @@ mod test {
         // any duplicates for this assertion to succeed.
         // assert!(layers_with_duplicates < 3);
         // TODO: verify why this now fails
+        println!("duplicates: {}", layers_with_duplicates);
     }
 
     #[test]
