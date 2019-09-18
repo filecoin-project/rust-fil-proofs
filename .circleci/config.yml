@@ -120,10 +120,10 @@ jobs:
             - cargo-v13-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
             - parameter-cache-{{ .Revision }}
       - run:
-          name: Test (stable) in release profile
+          name: Test ignored in release profile
           command: |
               cd << parameters.crate >>
-              RUST_LOG=info cargo test --verbose --release << parameters.features >> -- --ignored
+              cargo test --release << parameters.features >> -- --ignored
       - save_cache:
           key: parameter-cache-{{ .Revision }}
           paths:
