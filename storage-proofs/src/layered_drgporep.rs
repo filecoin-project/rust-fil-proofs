@@ -490,7 +490,9 @@ pub trait Layers {
 
                     let top_half_cache_file = cache.create_file(&top_half);
                     let top_half_store: MerkleStore<<Self::Hasher as Hasher>::Domain> =
-                        MerkleStore::new_with_file(pow, Some(top_half_cache_file)).unwrap();
+                        MerkleStore::new_with_file(pow - 1, Some(top_half_cache_file)).unwrap();
+                    // FIXME: The top half has `leaves - 1` (`pow - 1`) nodes, but the MT
+                    // repo should be worrying about this, not us.
 
                     populate_leaves::<
                         _,
