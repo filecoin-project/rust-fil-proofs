@@ -318,6 +318,10 @@ fn compute_path(ns: &[String], this: &str) -> String {
         "'/' is not allowed in names"
     );
 
+    if ns.is_empty() {
+        return this.to_string();
+    }
+
     let name = ns.join("/");
     format!("{}/{}", name, this)
 }
