@@ -27,14 +27,13 @@ impl<H: Hasher> Proof<H> {
     /// Create an empty proof, used in `blank_circuit`s.
     pub fn empty(params: &PublicParams<H>) -> Self {
         let degree = params.graph.degree();
-        let challenges_count = params.layer_challenges.challenges_count();
         let layers = params.layer_challenges.layers();
 
         Proof {
-            comm_d_proof: InclusionPath::empty(degree),
+            comm_d_proof: InclusionPath::empty(&params.graph),
             comm_r_last_proofs: (
-                InclusionPath::empty(degree),
-                vec![InclusionPath::empty(degree); challenges_count],
+                InclusionPath::empty(&params.graph),
+                vec![InclusionPath::empty(&params.graph); degree],
             ),
             replica_column_proof: ReplicaColumnProof::empty(params),
             encoding_proof_1: EncodingProof::empty(params),
@@ -90,11 +89,11 @@ impl<H: Hasher> Proof<H> {
         for (i, proof) in encoding_proofs.into_iter().enumerate() {
             let layer = i + 2;
             let encoded_node = replica_column_proof.c_x.alloc_node_at_layer(
-                cs.namespace(|| format!("encoding_proof_{}_alloc_encoded", i)),
+                cs.namespace(|| format!("encoding_proof_{}_alloc_encoded", layer)),
                 layer,
             )?;
             let decoded_node = replica_column_proof.c_inv_x.alloc_node_at_layer(
-                cs.namespace(|| format!("encoding_proof_{}_alloc_decoded", i)),
+                cs.namespace(|| format!("encoding_proof_{}_alloc_decoded", layer)),
                 layer - 1,
             )?;
 
@@ -168,10 +167,10 @@ pub struct InclusionPath<H: Hasher> {
 
 impl<H: Hasher> InclusionPath<H> {
     /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty(degree: usize) -> Self {
+    pub fn empty(graph: &impl Graph<H>) -> Self {
         InclusionPath {
             value: None,
-            auth_path: vec![None; degree],
+            auth_path: vec![None; graph.merkle_tree_depth() as usize],
             _h: PhantomData,
         }
     }

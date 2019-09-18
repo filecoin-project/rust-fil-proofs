@@ -7,7 +7,6 @@ use crate::circuit::{
     constraint,
     zigzag::{column::Column, hash::hash2, params::InclusionPath},
 };
-use crate::drgraph::Graph;
 use crate::hasher::Hasher;
 use crate::zigzag::{ColumnProof as VanillaColumnProof, PublicParams};
 
@@ -34,7 +33,7 @@ impl<H: Hasher> ColumnProof<H> {
     pub fn empty_all(params: &PublicParams<H>) -> Self {
         ColumnProof::All {
             column: Column::empty_all(params),
-            inclusion_path: InclusionPath::empty(params.graph.degree()),
+            inclusion_path: InclusionPath::empty(&params.graph),
         }
     }
 
@@ -42,7 +41,7 @@ impl<H: Hasher> ColumnProof<H> {
     pub fn empty_even(params: &PublicParams<H>) -> Self {
         ColumnProof::Even {
             column: Column::empty_even(params),
-            inclusion_path: InclusionPath::empty(params.graph.degree()),
+            inclusion_path: InclusionPath::empty(&params.graph),
             o_i: None,
         }
     }
@@ -51,7 +50,7 @@ impl<H: Hasher> ColumnProof<H> {
     pub fn empty_odd(params: &PublicParams<H>) -> Self {
         ColumnProof::Odd {
             column: Column::empty_odd(params),
-            inclusion_path: InclusionPath::empty(params.graph.degree()),
+            inclusion_path: InclusionPath::empty(&params.graph),
             e_i: None,
         }
     }
