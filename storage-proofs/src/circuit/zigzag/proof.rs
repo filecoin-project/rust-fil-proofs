@@ -420,8 +420,8 @@ mod tests {
 
         assert!(proofs_are_valid);
 
-        let expected_inputs = 41; // was 39 with "old" zigzag all pedersen
-        let expected_constraints = 352_981; // was 432_312 with "old" zigzag all pedersen
+        let expected_inputs = 43; // was 39 with "old" zigzag all pedersen
+        let expected_constraints = 384_939; // was 432_312 with "old" zigzag all pedersen
 
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.
