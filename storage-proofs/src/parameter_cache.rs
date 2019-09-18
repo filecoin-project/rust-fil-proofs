@@ -18,7 +18,7 @@ use crate::error::Error::Unclassified;
 /// Bump this when circuits change to invalidate the cache.
 pub const VERSION: usize = 12;
 
-pub const PARAMETER_CACHE_ENV_VAR: &str = "FILECOIN_PARAMETER_CACHE";
+pub const PARAMETER_CACHE_ENV_VAR: &str = "FIL_PROOFS_PARAMETER_CACHE";
 
 pub const PARAMETER_CACHE_DIR: &str = "/var/tmp/filecoin-proof-parameters/";
 

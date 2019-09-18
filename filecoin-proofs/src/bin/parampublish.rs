@@ -30,7 +30,7 @@ pub fn main() {
         .about(
             &format!(
                 "
-Set $FILECOIN_PARAMETER_CACHE to specify parameter directory.
+Set $FIL_PROOFS_PARAMETER_CACHE to specify parameter directory.
 Defaults to '{}'
 ",
                 PARAMETER_CACHE_DIR
