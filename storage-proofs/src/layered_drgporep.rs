@@ -213,7 +213,7 @@ impl DumbCache {
         }
     }
 
-    pub fn paths<'a>(&self, k: MerkleTreeCacheKey) -> CachedTreeAbsPaths {
+    pub fn paths(&self, k: MerkleTreeCacheKey) -> CachedTreeAbsPaths {
         let (top_half, leaves) = self.file_names(k);
 
         CachedTreeAbsPaths {
