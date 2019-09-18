@@ -361,13 +361,11 @@ workflows:
           requires:
             - cargo_fetch
       - test_ignored_release:
-          name: test_ignored_release_storage_proofs
           crate: "storage-proofs"
           features: "--features unchecked-degrees"
           requires:
             - cargo_fetch
       - test_ignored_release:
-          name: test_ignored_release_filecoin_proofs
           crate: "filecoin-proofs"
           requires:
             - cargo_fetch
