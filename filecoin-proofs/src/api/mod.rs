@@ -148,7 +148,7 @@ fn generate_piece_specs_from_source(
 }
 
 pub(crate) fn create_dumb_cache(sector_id: SectorId) -> Result<DumbCache, failure::Error> {
-    let abs_path = format!("/tmp/merkle-cache-{:?}", sector_id);
+    let abs_path = format!("/tmp/merkle-cache-sector-id-{}", u64::from(sector_id));
     let _ = std::fs::create_dir_all(abs_path.clone())?;
     Ok(DumbCache::new(PathBuf::from(abs_path)))
 }
