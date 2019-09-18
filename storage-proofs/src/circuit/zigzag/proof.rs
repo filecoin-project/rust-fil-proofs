@@ -501,8 +501,8 @@ mod tests {
             .pedersen_hash_exp_window_size;
         let params = &JubjubBls12::new_with_window_size(window_size);
         let nodes = 5;
-        let degree = 2;
-        let expansion_degree = 1;
+        let degree = 3;
+        let expansion_degree = 4;
         let num_layers = 2;
         let layer_challenges = LayerChallenges::new_fixed(num_layers, 3);
         let partition_count = 1;
@@ -549,7 +549,6 @@ mod tests {
         };
         let private_inputs = PrivateInputs::<H> { p_aux, t_aux };
 
-        // TOOD: Move this to e.g. circuit::test::compound_helper and share between all compound proofs.
         {
             let (circuit, inputs) =
                 ZigZagCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);
@@ -571,31 +570,27 @@ mod tests {
         }
 
         // Use this to debug differences between blank and regular circuit generation.
-        {
-            let (circuit1, _inputs) =
-                ZigZagCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);
-            let blank_circuit =
-                ZigZagCompound::blank_circuit(&public_params.vanilla_params, params);
+        // {
+        //     let (circuit1, _inputs) =
+        //         ZigZagCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);
+        //     let blank_circuit =
+        //         ZigZagCompound::blank_circuit(&public_params.vanilla_params, params);
 
-            let mut cs_blank = TestConstraintSystem::new();
-            blank_circuit
-                .synthesize(&mut cs_blank)
-                .expect("failed to synthesize");
+        //     let mut cs_blank = TestConstraintSystem::new();
+        //     blank_circuit
+        //         .synthesize(&mut cs_blank)
+        //         .expect("failed to synthesize");
 
-            let a = cs_blank.pretty_print();
+        //     let a = cs_blank.pretty_print_list();
 
-            let mut cs1 = TestConstraintSystem::new();
-            circuit1.synthesize(&mut cs1).expect("failed to synthesize");
-            let b = cs1.pretty_print();
+        //     let mut cs1 = TestConstraintSystem::new();
+        //     circuit1.synthesize(&mut cs1).expect("failed to synthesize");
+        //     let b = cs1.pretty_print_list();
 
-            let a_vec = a.split("\n").collect::<Vec<_>>();
-            let b_vec = b.split("\n").collect::<Vec<_>>();
-
-            for (i, (a, b)) in a_vec.chunks(100).zip(b_vec.chunks(100)).enumerate() {
-                println!("chunk {}", i);
-                assert_eq!(a, b);
-            }
-        }
+        //     for (i, (a, b)) in a.chunks(100).zip(b.chunks(100)).enumerate() {
+        //         assert_eq!(a, b, "failed at chunk {}", i);
+        //     }
+        // }
 
         let blank_groth_params =
             ZigZagCompound::groth_params(&public_params.vanilla_params, params)
