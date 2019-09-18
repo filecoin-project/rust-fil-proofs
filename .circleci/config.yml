@@ -106,8 +106,11 @@ jobs:
     working_directory: /mnt/crate
     resource_class: xlarge
     parameters:
-      crate_name:
+      crate:
         type: string
+      features:
+        type: string
+        default: ""
     steps:
       - checkout
       - attach_workspace:
@@ -119,9 +122,8 @@ jobs:
       - run:
           name: Test (stable) in release profile
           command: |
-              # We must change directories into `storage-proofs` for the `unchecked-degrees` feature to take effect.
-              cd << parameters.crate_name >>
-              RUST_LOG=info cargo test --verbose --release --features unchecked-degrees -- --ignored
+              cd << parameters.crate >>
+              RUST_LOG=info cargo test --verbose --release << parameters.features >> -- --ignored
       - save_cache:
           key: parameter-cache-{{ .Revision }}
           paths:
@@ -360,12 +362,13 @@ workflows:
             - cargo_fetch
       - test_ignored_release:
           name: test_ignored_release_storage_proofs
-          crate_name: storage-proofs
+          crate: "storage-proofs"
+          features: "--features unchecked-degrees"
           requires:
             - cargo_fetch
       - test_ignored_release:
           name: test_ignored_release_filecoin_proofs
-          crate_name: filecoin-proofs
+          crate: "filecoin-proofs"
           requires:
             - cargo_fetch
       - test:
