@@ -105,6 +105,9 @@ jobs:
       - image: filecoin/rust:latest
     working_directory: /mnt/crate
     resource_class: xlarge
+    parameters:
+      crate_name:
+        type: string
     steps:
       - checkout
       - attach_workspace:
@@ -117,8 +120,8 @@ jobs:
           name: Test (stable) in release profile
           command: |
               # We must change directories into `storage-proofs` for the `unchecked-degrees` feature to take effect.
-              cd storage-proofs
-              cargo +stable test --verbose --release --all --features unchecked-degrees -- --ignored
+              cd << parameters.crate_name >>
+              RUST_LOG=info cargo test --verbose --release --features unchecked-degrees -- --ignored
       - save_cache:
           key: parameter-cache-{{ .Revision }}
           paths:
@@ -356,6 +359,13 @@ workflows:
           requires:
             - cargo_fetch
       - test_ignored_release:
+          name: test_ignored_release_storage_proofs
+          crate_name: storage-proofs
+          requires:
+            - cargo_fetch
+      - test_ignored_release:
+          name: test_ignored_release_filecoin_proofs
+          crate_name: filecoin-proofs
           requires:
             - cargo_fetch
       - test:
