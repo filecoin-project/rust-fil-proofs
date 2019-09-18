@@ -18,7 +18,7 @@ pub type DefaultTreeHasher = PedersenHasher;
 pub const PARALLEL_MERKLE: bool = true;
 
 /// The base degree used for all drg graphs.
-pub const BASE_DEGREE: usize = 5;
+pub const BASE_DEGREE: usize = 1;
 
 /// A depth robust graph.
 pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {

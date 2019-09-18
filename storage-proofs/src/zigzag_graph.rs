@@ -10,7 +10,7 @@ use crate::parameter_cache::ParameterSetMetadata;
 use crate::settings;
 
 /// The expansion degree used for ZigZag Graphs.
-pub const EXP_DEGREE: usize = 8;
+pub const EXP_DEGREE: usize = 0;
 
 lazy_static! {
     // This parents cache is currently used for the *expanded parents only*, generated

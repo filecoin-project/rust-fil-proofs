@@ -1,6 +1,6 @@
 use storage_proofs::util::NODE_SIZE;
 
-pub const POREP_MINIMUM_CHALLENGES: usize = 12; // FIXME: 8,000
+pub const POREP_MINIMUM_CHALLENGES: usize = 1; // FIXME: 8,000
 pub const SINGLE_PARTITION_PROOF_LEN: usize = 192;
 
 // Sector size, in bytes, for tests.
