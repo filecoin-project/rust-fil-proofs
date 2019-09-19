@@ -650,11 +650,21 @@ where
     let mut buffer = [0; CHUNK_SIZE];
     let mut written = 0;
 
-    while let Ok(bytes_read) = source.read(&mut buffer) {
-        if bytes_read == 0 {
-            break;
+    loop {
+        match source.read(&mut buffer) {
+            Ok(bytes_read) => {
+                if bytes_read == 0 {
+                    break;
+                }
+                written += write_padded_aux(&FR32_PADDING_MAP, &buffer[..bytes_read], target)?;
+            }
+            Err(err) => {
+                if err.kind() == io::ErrorKind::Interrupted {
+                    continue;
+                }
+                return Err(err);
+            }
         }
-        written += write_padded_aux(&FR32_PADDING_MAP, &buffer[..bytes_read], target)?;
     }
 
     Ok(written)
@@ -1172,6 +1182,46 @@ mod tests {
                 chunk
             ));
         }
+    }
+
+    #[test]
+    fn test_write_padded_chained_byte_source() {
+        let random_bytes: Vec<u8> = (0..127).map(|_| rand::random::<u8>()).collect();
+
+        // read 127 bytes from a non-chained source
+        let (n, output_x) = {
+            let mut input_x = Cursor::new(random_bytes.clone());
+            let mut output_x = Cursor::new(Vec::new());
+
+            let n_x = write_padded(&mut input_x, &mut output_x).unwrap();
+            output_x.seek(SeekFrom::Start(0)).expect("could not seek");
+
+            let mut buf_x = Vec::new();
+            output_x.read_to_end(&mut buf_x).expect("could not seek");
+
+            (n_x, buf_x)
+        };
+
+        // read 127 bytes from a 32-byte buffer and then a 95-byte buffer
+        let (m, output_y) = {
+            let mut input_y =
+                Cursor::new(random_bytes.iter().take(32).cloned().collect::<Vec<u8>>()).chain(
+                    Cursor::new(random_bytes.iter().skip(32).cloned().collect::<Vec<u8>>()),
+                );
+
+            let mut output_y = Cursor::new(Vec::new());
+
+            let n_y = write_padded(&mut input_y, &mut output_y).unwrap();
+            output_y.seek(SeekFrom::Start(0)).expect("could not seek");
+
+            let mut buf_y = Vec::new();
+            output_y.read_to_end(&mut buf_y).expect("could not seek");
+
+            (n_y, buf_y)
+        };
+
+        assert_eq!(n, m, "should have written same number of bytes");
+        assert_eq!(output_x, output_y, "should have written same bytes")
     }
 
     // `write_padded` for 127 bytes of 1s, splitting it in two calls of varying

@@ -381,14 +381,13 @@ pub fn verify_piece_inclusion_proof(
 
 /// Takes a piece file at `unpadded_piece_path` and the size of the piece and returns the comm_p.
 ///
-pub fn generate_piece_commitment<T: Into<PathBuf> + AsRef<Path>>(
-    unpadded_piece_path: T,
+pub fn generate_piece_commitment<T: std::io::Read>(
+    unpadded_piece_file: T,
     unpadded_piece_size: UnpaddedBytesAmount,
 ) -> error::Result<Commitment> {
-    let mut unpadded_piece_file = File::open(unpadded_piece_path)?;
     let mut padded_piece_file = tempfile()?;
 
-    let (_, mut source) = get_aligned_source(&mut unpadded_piece_file, &[], unpadded_piece_size);
+    let (_, mut source) = get_aligned_source(unpadded_piece_file, &[], unpadded_piece_size);
     write_padded(&mut source, &mut padded_piece_file)?;
 
     let _ = padded_piece_file.seek(SeekFrom::Start(0))?;
@@ -455,6 +454,7 @@ fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::io::{Seek, SeekFrom};
 
     use crate::constants::SECTOR_SIZE_ONE_KIB;
     use crate::error::ExpectWithBacktrace;
@@ -470,8 +470,10 @@ mod tests {
     fn generate_comm_p(data: &[u8]) -> Result<Commitment, failure::Error> {
         let mut file = NamedTempFile::new().expects("could not create named temp file");
         file.write_all(data)?;
+        file.seek(SeekFrom::Start(0))?;
+
         let comm_p =
-            generate_piece_commitment(file.path(), UnpaddedBytesAmount(data.len() as u64))?;
+            generate_piece_commitment(file.as_file_mut(), UnpaddedBytesAmount(data.len() as u64))?;
         Ok(comm_p)
     }
 
@@ -704,9 +706,11 @@ mod tests {
 
         let mut piece_file = NamedTempFile::new()?;
         piece_file.write_all(&piece_bytes)?;
-        piece_file.seek(SeekFrom::Start(0))?;
+        piece_file.as_file_mut().sync_all()?;
+        piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
 
-        let comm_p = generate_piece_commitment(&piece_file.path(), number_of_bytes_in_piece)?;
+        let comm_p = generate_piece_commitment(piece_file.as_file_mut(), number_of_bytes_in_piece)?;
+        piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
 
         let mut staged_sector_file = NamedTempFile::new()?;
         add_piece(
