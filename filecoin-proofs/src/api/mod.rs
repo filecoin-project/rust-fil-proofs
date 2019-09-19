@@ -382,7 +382,7 @@ pub fn verify_piece_inclusion_proof(
 /// Takes a piece file at `unpadded_piece_path` and the size of the piece and returns the comm_p.
 ///
 pub fn generate_piece_commitment(
-    unpadded_piece_file: &mut File,
+    unpadded_piece_file: impl std::io::Read,
     unpadded_piece_size: UnpaddedBytesAmount,
 ) -> error::Result<Commitment> {
     let mut padded_piece_file = tempfile()?;
