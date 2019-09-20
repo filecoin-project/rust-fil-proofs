@@ -502,7 +502,7 @@ mod tests {
         let params = &JubjubBls12::new_with_window_size(window_size);
         let nodes = 5;
         let degree = 3;
-        let expansion_degree = 4;
+        let expansion_degree = 2;
         let num_layers = 2;
         let layer_challenges = LayerChallenges::new_fixed(num_layers, 3);
         let partition_count = 1;
