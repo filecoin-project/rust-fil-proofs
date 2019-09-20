@@ -124,7 +124,7 @@ jobs:
           command: |
               cd << parameters.crate >>
               cargo test --release << parameters.features >> -- --ignored
-          timeout: 1200 # 20min
+          no_output_timeout: 30m
       - save_cache:
           key: parameter-cache-{{ .Revision }}
           paths:
