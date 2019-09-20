@@ -355,10 +355,7 @@ where
 
         // Add padding parents.
         let pad_parent = if self.reversed() { self.size() - 1 } else { 0 } as u32;
-        expanded_parents.extend(vec![
-            pad_parent;
-            self.expansion_degree * 2 - expanded_parents.len()
-        ]);
+        expanded_parents.resize(self.expansion_degree * 2, pad_parent);
 
         if self.forward() {
             expanded_parents.sort();
