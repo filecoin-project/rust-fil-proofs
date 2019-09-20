@@ -392,12 +392,12 @@ where
     /// that is applied one way for the forward layers and one way for the reversed
     /// ones.
     #[inline]
-    fn expanded_parents<F, T>(&self, node: usize, mut cb: F) -> T
+    pub fn expanded_parents<F, T>(&self, node: usize, mut cb: F) -> T
     where
         F: FnMut(&Vec<u32>) -> T,
     {
         if self.layer == 0 {
-            return cb(&vec![0; self.expansion_degree()]);
+            return cb(&vec![0; 2 * self.expansion_degree()]);
         }
 
         if !self.use_cache {
@@ -409,7 +409,7 @@ where
         if !self.contains_parents_cache(node) {
             // Cache is empty so we need to generate the parents.
             let parents = self.generate_expanded_parents(node);
-            assert_eq!(parents.len(), self.expansion_degree());
+            assert_eq!(parents.len(), 2 * self.expansion_degree());
 
             // Store the newly generated cached value.
             let mut cache_lock = PARENT_CACHE.write().unwrap();
@@ -538,6 +538,21 @@ mod tests {
         assert_graph_descending(gz);
     }
 
+    #[test]
+    fn expansion_pedersen() {
+        test_expansion::<PedersenHasher>();
+    }
+
+    #[test]
+    fn expansion_sha256() {
+        test_expansion::<Sha256Hasher>();
+    }
+
+    #[test]
+    fn expansion_blake2s() {
+        test_expansion::<Blake2sHasher>();
+    }
+
     fn test_expansion_layer_0<H: 'static + Hasher>() {
         let g = ZigZagBucketGraph::<H>::new_zigzag(25, BASE_DEGREE, EXP_DEGREE, 0, new_seed());
         let exp_parents = get_all_expanded_parents(&g);
@@ -558,7 +573,8 @@ mod tests {
 
     fn test_expansion<H: 'static + Hasher>() {
         // We need a graph.
-        let g = ZigZagBucketGraph::<H>::new_zigzag(25, BASE_DEGREE, EXP_DEGREE, new_seed());
+        // start with an even layer, not 0 to make sure we have parents
+        let g = ZigZagBucketGraph::<H>::new_zigzag(25, BASE_DEGREE, EXP_DEGREE, 2, new_seed());
 
         // We're going to fully realize the expansion-graph component, in a HashMap.
         let gcache = get_all_expanded_parents(&g);

@@ -231,9 +231,12 @@ impl<H: Hasher> ReplicaColumnProof<H> {
             drg_parents: vec![ColumnProof::empty_all(params); params.graph.base_graph().degree()],
             exp_parents_even: vec![
                 ColumnProof::empty_even(params);
-                params.graph.expansion_degree()
+                2 * params.graph.expansion_degree()
             ],
-            exp_parents_odd: vec![ColumnProof::empty_odd(params); params.graph.expansion_degree()],
+            exp_parents_odd: vec![
+                ColumnProof::empty_odd(params);
+                2 * params.graph.expansion_degree()
+            ],
         }
     }
 

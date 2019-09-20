@@ -83,39 +83,21 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
         };
 
         let get_exp_parents_even_columns = |x: usize| -> Result<Vec<Column<H>>> {
-            let exp_degree = graph_1.expansion_degree();
-
-            let mut columns = Vec::with_capacity(exp_degree);
-
-            let mut parents = vec![0; exp_degree];
-            graph_1.expanded_parents(x, |p| {
-                parents.copy_from_slice(p);
-            });
-
-            for parent in &parents {
-                columns.push(t_aux.even_column(*parent as usize)?);
-            }
-            debug_assert!(columns.len() == exp_degree);
-
-            Ok(columns)
+            graph_1.expanded_parents(x, |parents| {
+                parents
+                    .iter()
+                    .map(|parent| t_aux.even_column(*parent as usize))
+                    .collect()
+            })
         };
 
         let get_exp_parents_odd_columns = |x: usize| -> Result<Vec<Column<H>>> {
-            let exp_degree = graph_2.expansion_degree();
-
-            let mut columns = Vec::with_capacity(exp_degree);
-
-            let mut parents = vec![0; exp_degree];
-            graph_2.expanded_parents(x, |p| {
-                parents.copy_from_slice(p);
-            });
-
-            for parent in &parents {
-                columns.push(t_aux.odd_column(*parent as usize)?);
-            }
-            debug_assert!(columns.len() == exp_degree);
-
-            Ok(columns)
+            graph_2.expanded_parents(x, |parents| {
+                parents
+                    .iter()
+                    .map(|parent| t_aux.odd_column(*parent as usize))
+                    .collect()
+            })
         };
 
         (0..partition_count)
