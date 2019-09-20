@@ -336,6 +336,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
             graph.merkle_tree_from_leaves(leaves_store, leafs)
         };
 
+        #[allow(clippy::type_complexity)]
         let (tree_d, tree_r_last, tree_c, comm_r, encodings, es, os): (
             Tree<H>,
             Tree<H>,
