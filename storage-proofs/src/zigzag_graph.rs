@@ -231,13 +231,6 @@ impl<Z: ZigZag> Graph<Z::BaseHasher> for Z {
         });
 
         assert!(parents.len() == self.degree());
-        if self.forward() {
-            parents.sort();
-        } else {
-            // Sort in reverse order.
-            parents.sort_by(|a, b| a.cmp(b).reverse());
-        }
-
         assert!(parents.iter().all(|p| if self.forward() {
             *p <= raw_node
         } else {
@@ -366,6 +359,13 @@ where
             pad_parent;
             self.expansion_degree * 2 - expanded_parents.len()
         ]);
+
+        if self.forward() {
+            expanded_parents.sort();
+        } else {
+            // Sort in reverse order.
+            expanded_parents.sort_by(|a, b| a.cmp(b).reverse());
+        }
 
         expanded_parents
     }
