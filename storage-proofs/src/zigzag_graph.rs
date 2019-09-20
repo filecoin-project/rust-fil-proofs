@@ -190,7 +190,7 @@ pub trait ZigZag: ::std::fmt::Debug + Clone + PartialEq + Eq {
     fn base_graph(&self) -> Self::BaseGraph;
     fn expansion_degree(&self) -> usize;
     fn reversed(&self) -> bool;
-    fn expanded_parents<F, T>(&self, node: usize, invert_permutation_order: bool, cb: F) -> T
+    fn expanded_parents<F, T>(&self, node: usize, cb: F) -> T
     where
         F: FnMut(&Vec<u32>) -> T;
     fn real_index(&self, i: usize) -> usize;
@@ -223,32 +223,13 @@ impl<Z: ZigZag> Graph<Z::BaseHasher> for Z {
             *parent = self.real_index(*parent);
         }
 
-        // From the `expanded_degree()` generate twice that amount of expanded parents, one
-        // with one permutation order and the other with its inverse, to achieve in average
-        // a number of `valid_expanded_parents` (without padding) closer to the desired
-        // `expanded_degree()`.
-        let mut valid_expanded_parents = 0;
-        for &invert_permutation_order in &[false, true] {
-            // expanded_parents takes raw_node
-            self.expanded_parents(raw_node, invert_permutation_order, |expanded_parents| {
-                for (ii, value) in expanded_parents.iter().enumerate() {
-                    parents[ii + self.base_graph().degree() + valid_expanded_parents] =
-                        *value as usize
-                }
-
-                valid_expanded_parents += expanded_parents.len();
-            });
-        }
-
-        // Pad so all nodes have correct degree.
-        let current_length = self.base_graph().degree() + valid_expanded_parents;
-        for ii in 0..(self.degree() - current_length) {
-            if self.reversed() {
-                parents[ii + current_length] = self.size() - 1
-            } else {
-                parents[ii + current_length] = 0
+        // expanded_parents takes raw_node
+        self.expanded_parents(raw_node, |expanded_parents| {
+            for (ii, value) in expanded_parents.iter().enumerate() {
+                parents[ii + self.base_graph().degree()] = *value as usize
             }
-        }
+        });
+
         assert!(parents.len() == self.degree());
         if self.forward() {
             parents.sort();
@@ -363,27 +344,30 @@ where
         }
     }
 
-    fn generate_expanded_parents(&self, node: usize, invert_permutation_order: bool) -> Vec<u32> {
-        (0..self.expansion_degree)
-            .filter_map(|i| {
-                // For each edge in a forward layer the same edge should exist (reversed) in the
-                // reverse layer, independent of the permutation used. We use one permutation
-                // for one layer and the inverse for the other (it doesn't matter which permutation
-                // is used with which layer, just that they be consistent).
+    fn generate_expanded_parents(&self, node: usize) -> Vec<u32> {
+        let mut expanded_parents = Vec::with_capacity(self.expansion_degree * 2);
+        // Generate half of the parents from one permutation order and the other with its inverse.
+        for &invert_permutation_order in &[false, true] {
+            for i in 0..self.expansion_degree {
                 let other = self.correspondent(node, i, self.reversed ^ invert_permutation_order);
                 if self.reversed {
                     if other > node {
-                        Some(other as u32)
-                    } else {
-                        None
+                        expanded_parents.push(other as u32);
                     }
                 } else if other < node {
-                    Some(other as u32)
-                } else {
-                    None
+                    expanded_parents.push(other as u32);
                 }
-            })
-            .collect()
+            }
+        }
+
+        // Add padding parents.
+        let pad_parent = if self.reversed() { self.size() - 1 } else { 0 } as u32;
+        expanded_parents.extend(vec![
+            pad_parent;
+            self.expansion_degree * 2 - expanded_parents.len()
+        ]);
+
+        expanded_parents
     }
 }
 
@@ -429,25 +413,23 @@ where
         self.reversed
     }
 
-    /// Assign `expansion_degree()` parents to `node` using an invertible permutation
+    /// Assign `self.expansion_degree * 2` parents to `node` using an invertible permutation
     /// that is applied one way for the forward layers and one way for the reversed
-    /// ones. Set `invert_permutation_order` to invert the order the permutation is
-    /// applied to the layers and have it the other way around (used to generate
-    /// double the parents of `expansion_degree()`).
+    /// ones.
     #[inline]
-    fn expanded_parents<F, T>(&self, node: usize, invert_permutation_order: bool, mut cb: F) -> T
+    fn expanded_parents<F, T>(&self, node: usize, mut cb: F) -> T
     where
         F: FnMut(&Vec<u32>) -> T,
     {
         if !self.use_cache {
             // No cache usage, generate on demand.
-            return cb(&self.generate_expanded_parents(node, invert_permutation_order));
+            return cb(&self.generate_expanded_parents(node));
         }
 
         // Check if we need to fill the cache.
         if !self.contains_parents_cache(node) {
             // Cache is empty so we need to generate the parents.
-            let parents = self.generate_expanded_parents(node, invert_permutation_order);
+            let parents = self.generate_expanded_parents(node);
 
             // Store the newly generated cached value.
             let mut cache_lock = PARENT_CACHE.write().unwrap();
@@ -617,9 +599,7 @@ mod tests {
     ) -> HashMap<usize, Vec<u32>> {
         let mut parents_map: HashMap<usize, Vec<u32>> = HashMap::new();
         for i in 0..zigzag_graph.size() {
-            for &perm in &[false, true] {
-                parents_map.insert(i, zigzag_graph.expanded_parents(i, perm, |p| p.clone()));
-            }
+            parents_map.insert(i, zigzag_graph.expanded_parents(i, |p| p.clone()));
         }
 
         parents_map
