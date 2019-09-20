@@ -521,6 +521,16 @@ mod tests {
         }
     }
 
+    impl<'a, H, G> ZigZagGraph<H, G>
+    where
+        H: Hasher,
+        G: Graph<H> + ParameterSetMetadata,
+    {
+        fn is_pad_node(&self, node: usize) -> bool {
+            self.forward() && node == 0 || self.reversed() && node == self.size() - 1
+        }
+    }
+
     #[test]
     fn zigzag_graph_zigzags_pedersen() {
         test_zigzag_graph_zigzags::<PedersenHasher>();
@@ -576,8 +586,11 @@ mod tests {
             let parents = gzcache.get(&i).unwrap();
 
             // Check to make sure all (expanded) node-parent relationships also exist in reverse,
-            // in the original graph's Hashmap.
+            // in the original graph's Hashmap except for padding nodes (0 and `size()-1`).
             for p in parents {
+                if gz.is_pad_node(*p as usize) {
+                    continue;
+                }
                 assert!(gcache[&(*p as usize)].contains(&(i as u32)));
             }
         }
@@ -587,6 +600,9 @@ mod tests {
         for i in 0..g.size() {
             let parents = gcache.get(&i).unwrap();
             for p in parents {
+                if g.is_pad_node(*p as usize) {
+                    continue;
+                }
                 assert!(gzcache[&(*p as usize)].contains(&(i as u32)));
             }
         }
