@@ -336,79 +336,94 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
             graph.merkle_tree_from_leaves(leaves_store, leafs)
         };
 
-        // 1. Build the MerkleTree over the original data
-        trace!("build merkle tree for the original data");
-        let tree_d = match data_tree {
-            Some(t) => t,
-            None => build_tree(&data)?,
-        };
+        let (tree_d, tree_r_last, tree_c, comm_r, encodings, es, os): (
+            Tree<H>,
+            Tree<H>,
+            Tree<H>,
+            H::Domain,
+            Encodings<_>,
+            Vec<H::Domain>,
+            Vec<H::Domain>,
+        ) = crossbeam::thread::scope(|s| -> Result<_> {
+            // 1. Build the MerkleTree over the original data
+            trace!("build merkle tree for the original data");
+            let tree_d_handle = s.spawn(|_| match data_tree {
+                Some(t) => Ok(t),
+                None => build_tree(&data),
+            });
+            // 2. Encode all layers
+            trace!("encode layers");
+            let mut encodings: Vec<Vec<u8>> = Vec::with_capacity(layers - 1);
+            let mut current_graph = graph.clone();
+            let mut to_encode = data.to_vec();
 
-        // 2. Encode all layers
-        trace!("encode layers");
-        let mut encodings: Vec<Vec<u8>> = Vec::with_capacity(layers - 1);
-        let mut current_graph = graph.clone();
-        let mut to_encode = data.to_vec();
+            for layer in 0..layers {
+                trace!("encoding (layer: {})", layer);
+                vde::encode(&current_graph, replica_id, &mut to_encode)?;
+                current_graph = Self::transform(&current_graph);
 
-        for layer in 0..layers {
-            trace!("encoding (layer: {})", layer);
-            vde::encode(&current_graph, replica_id, &mut to_encode)?;
-            current_graph = Self::transform(&current_graph);
+                assert_eq!(to_encode.len(), NODE_SIZE * nodes_count);
 
-            assert_eq!(to_encode.len(), NODE_SIZE * nodes_count);
-
-            if layer != layers - 1 {
-                let p = to_encode.clone();
-                encodings.push(p);
+                if layer != layers - 1 {
+                    let p = to_encode.clone();
+                    encodings.push(p);
+                }
             }
-        }
 
-        assert_eq!(encodings.len(), layers - 1);
+            assert_eq!(encodings.len(), layers - 1);
 
-        let encodings = Encodings::<H>::new(encodings);
+            let encodings = Encodings::<H>::new(encodings);
 
-        let r_last = to_encode;
+            let r_last = to_encode;
+
+            // Construct final replica commitment
+            let tree_r_last_handle = s.spawn(move |_| build_tree(&r_last));
+
+            // 3. Construct Column Commitments
+            let odd_columns = (0..nodes_count)
+                .into_par_iter()
+                .map(|x| encodings.odd_column(x));
+
+            let even_columns = (0..nodes_count)
+                .into_par_iter()
+                .map(|x| encodings.even_column(graph.inv_index(x)));
+
+            // O_i = H( e_i^(1) || .. )
+            let os = odd_columns
+                .map(|c| c.map(|c| Fr::from(c.hash()).into()))
+                .collect::<Result<Vec<H::Domain>>>()?;
+
+            // E_i = H( e_\bar{i}^(2) || .. )
+            let es = even_columns
+                .map(|c| c.map(|c| Fr::from(c.hash()).into()))
+                .collect::<Result<Vec<H::Domain>>>()?;
+
+            // C_i = H(O_i || E_i)
+            let cs = os
+                .par_iter()
+                .zip(es.par_iter())
+                .flat_map(|(o_i, e_i)| hash2(o_i, e_i).as_ref().to_vec())
+                .collect::<Vec<u8>>();
+
+            // Build the tree for CommC
+            let tree_c = build_tree(&cs)?;
+
+            // sanity check
+            debug_assert_eq!(tree_c.read_at(0).as_ref(), &cs[..NODE_SIZE]);
+            debug_assert_eq!(tree_c.read_at(1).as_ref(), &cs[NODE_SIZE..NODE_SIZE * 2]);
+
+            let tree_r_last = tree_r_last_handle.join()??;
+
+            // comm_r = H(comm_c || comm_r_last)
+            let comm_r: H::Domain = Fr::from(hash2(tree_c.root(), tree_r_last.root())).into();
+
+            let tree_d = tree_d_handle.join()??;
+
+            Ok((tree_d, tree_r_last, tree_c, comm_r, encodings, es, os))
+        })??;
 
         // store the last layer in the original data
-        data[..NODE_SIZE * nodes_count].copy_from_slice(&r_last);
-
-        // 3. Construct Column Commitments
-        let odd_columns = (0..nodes_count)
-            .into_par_iter()
-            .map(|x| encodings.odd_column(x));
-
-        let even_columns = (0..nodes_count)
-            .into_par_iter()
-            .map(|x| encodings.even_column(graph.inv_index(x)));
-
-        // O_i = H( e_i^(1) || .. )
-        let os = odd_columns
-            .map(|c| c.map(|c| Fr::from(c.hash()).into()))
-            .collect::<Result<Vec<H::Domain>>>()?;
-
-        // E_i = H( e_\bar{i}^(2) || .. )
-        let es = even_columns
-            .map(|c| c.map(|c| Fr::from(c.hash()).into()))
-            .collect::<Result<Vec<H::Domain>>>()?;
-
-        // C_i = H(O_i || E_i)
-        let cs = os
-            .par_iter()
-            .zip(es.par_iter())
-            .flat_map(|(o_i, e_i)| hash2(o_i, e_i).as_ref().to_vec())
-            .collect::<Vec<u8>>();
-
-        // Build the tree for CommC
-        let tree_c = build_tree(&cs)?;
-
-        // sanity check
-        debug_assert_eq!(tree_c.read_at(0).as_ref(), &cs[..NODE_SIZE]);
-        debug_assert_eq!(tree_c.read_at(1).as_ref(), &cs[NODE_SIZE..NODE_SIZE * 2]);
-
-        // 4. Construct final replica commitment
-        let tree_r_last = build_tree(&r_last)?;
-
-        // comm_r = H(comm_c || comm_r_last)
-        let comm_r: H::Domain = Fr::from(hash2(tree_c.root(), tree_r_last.root())).into();
+        tree_r_last.read_into_all(0, &mut data[..NODE_SIZE * nodes_count]);
 
         Ok((
             Tau {

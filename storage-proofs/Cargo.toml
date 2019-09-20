@@ -15,7 +15,7 @@ bench = false
 bitvec = "0.5"
 rand = "0.4"
 libc = "0.2"
-merkletree = "=0.10"
+merkletree = {git = "https://github.com/filecoin-project/merkle_light", branch = "feat/read_into_all" } #"=0.10"
 failure = "0.1"
 byteorder = "1"
 config = "0.9.3"
@@ -47,6 +47,7 @@ serde_json = "1.0"
 log = "0.4.7"
 pretty_env_logger = "0.3.0"
 pretty_assertions = "0.6.1"
+crossbeam = "0.7.2"
 
 [features]
 default = []
