@@ -267,6 +267,7 @@ where
 
         if let Some(data) = d {
             if *extract {
+                let pp = pp.transform_to_last_layer();
                 let m = measure(|| {
                     ZigZagDrgPoRep::<H>::extract_all(&pp, &replica_id, &data)
                         .map_err(|err| err.into())

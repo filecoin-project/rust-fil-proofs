@@ -376,6 +376,7 @@ fn do_the_work<H: 'static>(
             let start = Instant::now();
             info!("Extracting.");
             start_profile("extract");
+            let pp = pp.transform_to_last_layer();
             let decoded_data = ZigZagDrgPoRep::<H>::extract_all(&pp, &replica_id, &data).unwrap();
             stop_profile();
             let extracting = start.elapsed();

@@ -3,12 +3,10 @@ use std::marker::PhantomData;
 use paired::bls12_381::Fr;
 use rayon::prelude::*;
 
-use crate::drgporep::{self, DrgPoRep};
 use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::hasher::Hasher;
 use crate::merkle::{next_pow2, populate_leaves, MerkleProof, MerkleStore, Store};
-use crate::porep::PoRep;
 use crate::util::NODE_SIZE;
 use crate::vde;
 use crate::zigzag::{
@@ -39,7 +37,7 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
     /// Transform a layer's public parameters, returning new public parameters corresponding to the previous layer.
     pub(crate) fn invert_transform(graph: &ZigZagBucketGraph<H>) -> ZigZagBucketGraph<H> {
-        graph.zigzag()
+        graph.zigzag_invert()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -305,22 +303,21 @@ impl<'a, H: 'static + Hasher> ZigZagDrgPoRep<'a, H> {
 
         let layers = layer_challenges.layers();
         assert!(layers > 0);
+        assert_eq!(graph.layer(), layers, "invalid graph passed");
 
-        (0..layers).fold(graph.clone(), |current_graph, _layer| {
-            let inverted = Self::invert_transform(&current_graph);
-            let pp = drgporep::PublicParams::new(
-                inverted.clone(),
-                true,
-                layer_challenges.challenges_count(),
-            );
-            let mut res = DrgPoRep::extract_all(&pp, replica_id, data)
-                .expect("failed to extract data from PoRep");
+        let last_graph = (0..layers).try_fold(
+            graph.clone(),
+            |current_graph, _layer| -> Result<ZigZagBucketGraph<H>> {
+                let inverted = Self::invert_transform(&current_graph);
+                let res = vde::decode(&inverted, replica_id, data)?;
 
-            for (i, r) in res.iter_mut().enumerate() {
-                data[i] = *r;
-            }
-            inverted
-        });
+                data.copy_from_slice(&res);
+
+                Ok(inverted)
+            },
+        )?;
+
+        assert_eq!(last_graph.layer(), 0);
 
         Ok(())
     }
@@ -466,9 +463,9 @@ mod tests {
     use crate::hasher::{Blake2sHasher, Domain, PedersenHasher, Sha256Hasher};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
-    use crate::zigzag::{PrivateInputs, PublicParams, SetupParams, EXP_DEGREE};
+    use crate::zigzag::{PrivateInputs, SetupParams, EXP_DEGREE};
 
-    const DEFAULT_ZIGZAG_LAYERS: usize = 10;
+    const DEFAULT_ZIGZAG_LAYERS: usize = 4;
 
     #[test]
     fn test_calculate_fixed_challenges() {
@@ -497,7 +494,14 @@ mod tests {
     fn test_extract_all<H: 'static + Hasher>() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let replica_id: H::Domain = rng.gen();
-        let data = vec![2u8; 32 * 3];
+        let nodes = 8;
+
+        let data: Vec<u8> = (0..nodes)
+            .flat_map(|_| {
+                let v: H::Domain = rng.gen();
+                v.as_ref().to_vec()
+            })
+            .collect();
         let challenges = LayerChallenges::new_fixed(DEFAULT_ZIGZAG_LAYERS, 5);
 
         // create a copy, so we can compare roundtrips
@@ -505,7 +509,7 @@ mod tests {
 
         let sp = SetupParams {
             drg: drgporep::DrgParams {
-                nodes: data.len() / 32,
+                nodes,
                 degree: BASE_DEGREE,
                 expansion_degree: EXP_DEGREE,
                 seed: new_seed(),
@@ -513,22 +517,17 @@ mod tests {
             layer_challenges: challenges.clone(),
         };
 
-        let mut pp = ZigZagDrgPoRep::<H>::setup(&sp).expect("setup failed");
-        // Get the graph for the last layer.
-        // In reality, this is a no-op with an even number of layers.
-        for _ in 0..pp.layer_challenges.layers() {
-            pp.graph = pp.graph.zigzag();
-        }
+        let pp = ZigZagDrgPoRep::<H>::setup(&sp).expect("setup failed");
 
         ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None)
             .expect("replication failed");
 
-        let transformed_params = PublicParams::new(pp.graph, challenges.clone());
-
         assert_ne!(data, data_copy);
 
+        let transformed_pp = pp.transform_to_last_layer();
+
         let decoded_data = ZigZagDrgPoRep::<H>::extract_all(
-            &transformed_params,
+            &transformed_pp,
             &replica_id,
             data_copy.as_mut_slice(),
         )
@@ -559,6 +558,7 @@ mod tests {
         let data: Vec<u8> = (0..n)
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
+
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
         let partitions = 2;

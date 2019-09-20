@@ -44,6 +44,27 @@ where
             _h: PhantomData,
         }
     }
+
+    /// Transform into the layer version.
+    pub fn transform_to_last_layer(self) -> Self {
+        assert_eq!(self.graph.layer(), 0);
+
+        let PublicParams {
+            mut graph,
+            layer_challenges,
+            _h,
+        } = self;
+
+        for _ in 0..layer_challenges.layers() {
+            graph = graph.zigzag();
+        }
+
+        PublicParams {
+            graph,
+            layer_challenges,
+            _h,
+        }
+    }
 }
 
 impl<H> ParameterSetMetadata for PublicParams<H>

@@ -352,6 +352,13 @@ where
         zigzag
     }
 
+    pub fn zigzag_invert(&self) -> Self {
+        let mut zigzag = self.clone();
+        zigzag.reversed = !zigzag.reversed;
+        zigzag.layer -= 1;
+        zigzag
+    }
+
     pub fn layer(&self) -> usize {
         self.layer
     }

@@ -1,4 +1,5 @@
 use blake2s_simd::Params as Blake2s;
+use rayon::prelude::*;
 
 use crate::drgraph::Graph;
 use crate::error::Result;
@@ -48,15 +49,19 @@ where
 pub fn decode<'a, H, G>(graph: &'a G, replica_id: &'a H::Domain, data: &'a [u8]) -> Result<Vec<u8>>
 where
     H: Hasher,
-    G: Graph<H>,
+    G: Graph<H> + Sync,
 {
-    // TODO: parallelize
-    (0..graph.size()).fold(Ok(Vec::with_capacity(data.len())), |acc, i| {
-        acc.and_then(|mut acc| {
-            acc.extend(decode_block(graph, replica_id, data, i)?.into_bytes());
-            Ok(acc)
+    // TODO: proper error handling
+    let result = (0..graph.size())
+        .into_par_iter()
+        .flat_map(|i| {
+            decode_block(graph, replica_id, data, i)
+                .unwrap()
+                .into_bytes()
         })
-    })
+        .collect();
+
+    Ok(result)
 }
 
 pub fn decode_block<'a, H, G>(
@@ -101,15 +106,6 @@ pub fn create_key<H: Hasher>(
     parents: &[usize],
     data: &[u8],
 ) -> Result<H::Domain> {
-    // println!(
-    //     "create key (node: {}) {:?} - {:?}",
-    //     node,
-    //     id,
-    //     parents
-    //         .iter()
-    //         .map(|p| data_at_node(data, *p).unwrap())
-    //         .collect::<Vec<_>>(),
-    // );
     let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
     hasher.update(id.as_ref());
 

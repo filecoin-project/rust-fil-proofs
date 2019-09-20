@@ -24,6 +24,14 @@ pub fn public_params(
     ZigZagDrgPoRep::<DefaultTreeHasher>::setup(&setup_params(sector_bytes, partitions)).unwrap()
 }
 
+pub fn public_params_for_extraction(
+    sector_bytes: PaddedBytesAmount,
+    partitions: usize,
+) -> zigzag::PublicParams<DefaultTreeHasher> {
+    let base_params = public_params(sector_bytes, partitions);
+    base_params.transform_to_last_layer()
+}
+
 pub fn post_public_params(post_config: PoStConfig) -> PostPublicParams {
     RationalPoSt::<PedersenHasher>::setup(&post_setup_params(post_config)).unwrap()
 }

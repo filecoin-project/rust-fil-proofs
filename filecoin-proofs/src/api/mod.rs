@@ -17,7 +17,7 @@ use crate::constants::{
 use crate::error;
 use crate::file_cleanup::FileCleanup;
 use crate::fr32::{write_padded, write_unpadded};
-use crate::parameters::{public_params, setup_params};
+use crate::parameters::{public_params_for_extraction, setup_params};
 use crate::pieces::{get_aligned_source, get_piece_alignment, PieceAlignment};
 use crate::singletons::ENGINE_PARAMS;
 use crate::types::{
@@ -415,7 +415,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     let mut buf_writer = BufWriter::new(f_out);
 
     let unsealed = ZigZagDrgPoRep::extract_all(
-        &public_params(
+        &public_params_for_extraction(
             PaddedBytesAmount::from(porep_config),
             usize::from(PoRepProofPartitions::from(porep_config)),
         ),
