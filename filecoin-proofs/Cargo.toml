@@ -28,9 +28,9 @@ regex = "1"
 ff = "0.4.0"
 blake2b_simd = "0.5"
 phase21 = "0.3"
-bellperson = "0.2"
+bellperson = "0.3"
 paired = "0.15"
-fil-sapling-crypto = "0.1.1"
+fil-sapling-crypto = "0.1.2"
 clap = "2"
 log = "0.4.7"
 pretty_env_logger = "0.3.0"
@@ -56,6 +56,7 @@ cpu-profile = []
 heap-profile = []
 simd = ["storage-proofs/simd"]
 asm = ["storage-proofs/asm"]
+gpu = ["storage-proofs/gpu", "bellperson/gpu", "fil-sapling-crypto/gpu", "phase21/gpu"]
 
 [[bench]]
 name = "preprocessing"
