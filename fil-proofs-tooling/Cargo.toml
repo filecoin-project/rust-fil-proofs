@@ -22,9 +22,9 @@ human-size = "0.4"
 prettytable-rs = "0.8"
 regex = "1.1.6"
 commandspec = "0.12.2"
-bellperson = "0.2.0"
+bellperson = "0.3"
 chrono = { version = "0.4.7", features = ["serde"] }
-fil-sapling-crypto = "0.1.0"
+fil-sapling-crypto = "0.1.2"
 memmap = "0.7.0"
 paired = "0.15.0"
 rand = "0.4"
@@ -32,10 +32,15 @@ storage-proofs = { path = "../storage-proofs"}
 filecoin-proofs = { path = "../filecoin-proofs"}
 tempfile = "3.0.8"
 cpu-time = "0.1.0"
-git2 = "0.9.2"
-heim = "0.0.5"
+git2 = "0.10.1"
+heim = "0.0.7"
 futures-preview = "0.3.0-alpha.17"
 raw-cpuid = "6.1.0"
 blake2s_simd = "0.5.6"
 pretty_env_logger = "0.3.1"
 log = "0.4.8"
+uom = "0.25.0"
+
+[features]
+default = []
+gpu = ["storage-proofs/gpu", "filecoin-proofs/gpu", "bellperson/gpu", "fil-sapling-crypto/gpu"]
