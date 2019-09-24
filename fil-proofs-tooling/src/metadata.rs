@@ -109,7 +109,7 @@ impl SystemMetadata {
                 .unwrap_or_default(),
             processor_cores_logical: cpu_logical,
             processor_cores_physical: cpu_physical,
-            memory_total_bytes: memory.total().get(),
+            memory_total_bytes: memory.total().get::<uom::si::information::byte>(),
         })
     }
 }
