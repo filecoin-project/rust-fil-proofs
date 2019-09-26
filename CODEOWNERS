@@ -1,7 +1,6 @@
 # Global Owners
-* @porcuquine @dignifiedquire
+* @dignifiedquire
 
-/storage-proofs/        @porcuquine @dignifiedquire
-/filecoin-proofs/       @porcuquine @dignifiedquire @laser
-/ffi-toolkit/           @laser
-/storage-backend/       @porcuquine @dignifiedquire
+/storage-proofs/        @dignifiedquire
+/filecoin-proofs/       @dignifiedquire @laser
+/fil-proofs-tooling/    @dignifiedquire @laser
