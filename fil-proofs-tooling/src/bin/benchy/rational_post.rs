@@ -69,6 +69,8 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
         .expect("file name is not a UTF-8 string")
         .to_string();
 
+    let metadata_dir = tempfile::TempDir::new()?;
+
     // Generate the data from which we will create a replica, we will then prove the continued
     // storage of that replica using the PoSt.
     let data: Vec<u8> = (0..sector_size).map(|_| random()).collect();
@@ -86,6 +88,7 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
 
     let seal_output = seal(
         porep_config,
+        metadata_dir.path(),
         staged_file.path(),
         sealed_file.path(),
         &PROVER_ID,

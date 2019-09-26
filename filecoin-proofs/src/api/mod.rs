@@ -45,6 +45,7 @@ use tempfile::tempfile;
 
 mod post;
 pub use crate::api::post::*;
+use crate::scratch_area::persisted::ScratchDirectory;
 
 /// FrSafe is an array of the largest whole number of bytes guaranteed not to overflow the field.
 pub type FrSafe = [u8; 31];
@@ -152,12 +153,15 @@ fn generate_piece_specs_from_source(
 ///
 pub fn seal<T: AsRef<Path>>(
     porep_config: PoRepConfig,
+    scratch_path: T,
     in_path: T,
     out_path: T,
     prover_id_in: &FrSafe,
     sector_id: SectorId,
     piece_lengths: &[UnpaddedBytesAmount],
 ) -> error::Result<SealOutput> {
+    let scratch = ScratchDirectory::new(sector_id, scratch_path);
+
     let sector_bytes = usize::from(PaddedBytesAmount::from(porep_config));
 
     let mut cleanup = FileCleanup::new(&out_path);
@@ -720,13 +724,16 @@ mod tests {
             &[],
         )?;
 
+        let metadata_dir = tempfile::TempDir::new()?;
+
         let sealed_sector_file = NamedTempFile::new()?;
         let config = PoRepConfig(SectorSize(sector_size.clone()), PoRepProofPartitions(2));
 
         let output = seal(
             config,
-            &staged_sector_file.path(),
-            &sealed_sector_file.path(),
+            metadata_dir.path(),
+            staged_sector_file.path(),
+            sealed_sector_file.path(),
             &[0; 31],
             SectorId::from(0),
             &[number_of_bytes_in_piece],
