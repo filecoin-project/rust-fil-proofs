@@ -581,6 +581,7 @@ mod tests {
             &replica_id.into(),
             data.as_mut_slice(),
             None,
+            |_| {},
         )
         .expect("failed to replicate");
 
@@ -770,6 +771,7 @@ mod tests {
             &replica_id.into(),
             data.as_mut_slice(),
             None,
+            |_| {},
         )
         .expect("failed to replicate");
 

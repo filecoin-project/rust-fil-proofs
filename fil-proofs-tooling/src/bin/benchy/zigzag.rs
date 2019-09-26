@@ -152,7 +152,10 @@ where
                 wall_time: replication_wall_time,
                 return_value: (pub_inputs, priv_inputs),
             } = measure(|| {
-                let (tau, aux) = ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, &mut data, None)?;
+                let (tau, aux) =
+                    ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, &mut data, None, |event| {
+                        info!("replicate: {:?}", event);
+                    })?;
 
                 let pb = layered_drgporep::PublicInputs::<H::Domain> {
                     replica_id,

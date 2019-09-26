@@ -147,26 +147,49 @@ fn generate_piece_specs_from_source(
     Ok(piece_specs)
 }
 
+/// The different progress events that happen during a seal operation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SealEvent {
+    Start,
+    Copy,
+    Pad,
+    ProofSetup,
+    Replicate(layered_drgporep::ReplicateEvent),
+    CreatePieceInclusionProofs,
+    FetchGrothParams,
+    GenerateSealProof,
+    VerifyPieceInclusionProofs,
+    Done,
+}
+
 /// Seals the staged sector at `in_path` in place, saving the resulting replica
 /// to `out_path`.
-///
-pub fn seal<T: AsRef<Path>>(
+pub fn seal<T, F>(
     porep_config: PoRepConfig,
     in_path: T,
     out_path: T,
     prover_id_in: &FrSafe,
     sector_id: SectorId,
     piece_lengths: &[UnpaddedBytesAmount],
-) -> error::Result<SealOutput> {
+    progress: F,
+) -> error::Result<SealOutput>
+where
+    T: AsRef<Path>,
+    F: Fn(SealEvent),
+{
+    progress(SealEvent::Start);
+
     let sector_bytes = usize::from(PaddedBytesAmount::from(porep_config));
 
     let mut cleanup = FileCleanup::new(&out_path);
 
     // Copy unsealed data to output location, where it will be sealed in place.
+    progress(SealEvent::Copy);
     copy(&in_path, &out_path)?;
     let f_data = OpenOptions::new().read(true).write(true).open(&out_path)?;
 
     // Zero-pad the data to the requested size by extending the underlying file if needed.
+    progress(SealEvent::Pad);
     f_data.set_len(sector_bytes as u64)?;
 
     let mut data = unsafe { MmapOptions::new().map_mut(&f_data).unwrap() };
@@ -177,6 +200,7 @@ pub fn seal<T: AsRef<Path>>(
     let sector_id_as_safe_fr = pad_safe_fr(&sector_id.as_fr_safe());
     let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id_as_safe_fr);
 
+    progress(SealEvent::ProofSetup);
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: &setup_params(
             PaddedBytesAmount::from(porep_config),
@@ -193,8 +217,10 @@ pub fn seal<T: AsRef<Path>>(
         &replica_id,
         &mut data,
         None,
+        |event| progress(SealEvent::Replicate(event)),
     )?;
 
+    progress(SealEvent::CreatePieceInclusionProofs);
     let mut in_data = OpenOptions::new().read(true).open(&in_path)?;
     let piece_specs = generate_piece_specs_from_source(&mut in_data, &piece_lengths)?;
     let piece_inclusion_proofs = piece_inclusion_proofs::<PedersenHasher>(&piece_specs, &aux[0])?;
@@ -222,6 +248,7 @@ pub fn seal<T: AsRef<Path>>(
         tau: tau.layer_taus,
     };
 
+    progress(SealEvent::FetchGrothParams);
     let groth_params = get_zigzag_params(porep_config)?;
 
     info!(
@@ -229,6 +256,7 @@ pub fn seal<T: AsRef<Path>>(
         u64::from(PaddedBytesAmount::from(porep_config))
     );
 
+    progress(SealEvent::GenerateSealProof);
     let proof = ZigZagCompound::prove(
         &compound_public_params,
         &public_inputs,
@@ -246,6 +274,7 @@ pub fn seal<T: AsRef<Path>>(
     let comm_d = commitment_from_fr::<Bls12>(public_tau.comm_d.into());
     let comm_r_star = commitment_from_fr::<Bls12>(tau.comm_r_star.into());
 
+    progress(SealEvent::VerifyPieceInclusionProofs);
     let valid_pieces = PieceInclusionProof::verify_all(
         &comm_d,
         &piece_inclusion_proofs,
@@ -273,6 +302,8 @@ pub fn seal<T: AsRef<Path>>(
         &buf,
     )
     .expect("post-seal verification sanity check failed");
+
+    progress(SealEvent::Done);
 
     Ok(SealOutput {
         comm_r,
@@ -730,6 +761,7 @@ mod tests {
             &[0; 31],
             SectorId::from(0),
             &[number_of_bytes_in_piece],
+            |_| {},
         )?;
 
         let piece_inclusion_proof_bytes: Vec<u8> = output.piece_inclusion_proofs[0].clone().into();

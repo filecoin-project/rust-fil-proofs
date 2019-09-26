@@ -50,13 +50,17 @@ impl<H: Hasher> ProverAux<H> {
 pub trait PoRep<'a, H: Hasher>: ProofScheme<'a> {
     type Tau;
     type ProverAux;
+    type ReplicateEvent;
 
-    fn replicate(
+    fn replicate<F>(
         pub_params: &'a Self::PublicParams,
         replica_id: &H::Domain,
         data: &mut [u8],
         data_tree: Option<MerkleTree<H::Domain, H::Function>>,
-    ) -> Result<(Self::Tau, Self::ProverAux)>;
+        progress: F,
+    ) -> Result<(Self::Tau, Self::ProverAux)>
+    where
+        F: Fn(Self::ReplicateEvent);
 
     fn extract_all(
         pub_params: &'a Self::PublicParams,

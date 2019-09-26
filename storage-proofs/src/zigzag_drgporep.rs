@@ -104,7 +104,7 @@ mod tests {
             pp.graph = zigzag(&pp.graph);
         }
 
-        ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None)
+        ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None, |_| {})
             .expect("replication failed");
 
         let transformed_params = PublicParams::new(pp.graph, challenges.clone());
@@ -161,9 +161,14 @@ mod tests {
         };
 
         let pp = ZigZagDrgPoRep::<H>::setup(&sp).expect("setup failed");
-        let (tau, aux) =
-            ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None)
-                .expect("replication failed");
+        let (tau, aux) = ZigZagDrgPoRep::<H>::replicate(
+            &pp,
+            &replica_id,
+            data_copy.as_mut_slice(),
+            None,
+            |_| {},
+        )
+        .expect("replication failed");
         assert_ne!(data, data_copy);
 
         let pub_inputs = PublicInputs::<H::Domain> {

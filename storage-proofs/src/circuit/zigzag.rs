@@ -430,9 +430,14 @@ mod tests {
         };
 
         let pp = ZigZagDrgPoRep::setup(&sp).expect("setup failed");
-        let (tau, aux) =
-            ZigZagDrgPoRep::replicate(&pp, &replica_id.into(), data_copy.as_mut_slice(), None)
-                .expect("replication failed");
+        let (tau, aux) = ZigZagDrgPoRep::replicate(
+            &pp,
+            &replica_id.into(),
+            data_copy.as_mut_slice(),
+            None,
+            |_| {},
+        )
+        .expect("replication failed");
         assert_ne!(data, data_copy);
 
         let simplified_tau = tau.clone().simplify();
@@ -641,6 +646,7 @@ mod tests {
             &replica_id.into(),
             data_copy.as_mut_slice(),
             None,
+            |_| {},
         )
         .expect("replication failed");
 

@@ -91,6 +91,7 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
         &PROVER_ID,
         sector_id,
         &[sector_size_unpadded_bytes_ammount],
+        |event| info!("seal: {:?}", event),
     )
     .expect("failed to seal");
 

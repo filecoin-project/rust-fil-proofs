@@ -352,12 +352,16 @@ pub trait Layers {
         Ok(())
     }
 
-    fn transform_and_replicate_layers(
+    fn transform_and_replicate_layers<F>(
         graph: &Self::Graph,
         layer_challenges: &LayerChallenges,
         replica_id: &<Self::Hasher as Hasher>::Domain,
         data: &mut [u8],
-    ) -> Result<TransformedLayers<Self::Hasher>> {
+        progress: &F,
+    ) -> Result<TransformedLayers<Self::Hasher>>
+    where
+        F: Fn(ReplicateEvent),
+    {
         let layers = layer_challenges.layers();
         assert!(layers > 0);
         let mut taus = Vec::with_capacity(layers);
@@ -386,6 +390,8 @@ pub trait Layers {
             let _ = thread::scope(|scope| -> Result<()> {
                 let mut threads = Vec::with_capacity(layers + 1);
                 (0..=layers).fold(graph.clone(), |current_graph, layer| {
+                    progress(ReplicateEvent::Layer(layer));
+
                     let leafs = data.len() / NODE_SIZE;
                     assert_eq!(data.len() % NODE_SIZE, 0);
                     let pow = next_pow2(leafs);
@@ -641,21 +647,36 @@ fn comm_r_star<H: Hasher>(replica_id: &H::Domain, comm_rs: &[H::Domain]) -> Resu
     Ok(H::Function::hash(&bytes))
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReplicateEvent {
+    Start,
+    Layer(usize),
+    Done,
+}
+
 impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
     type Tau = Tau<<L::Hasher as Hasher>::Domain>;
     type ProverAux = Vec<Tree<L::Hasher>>;
+    type ReplicateEvent = ReplicateEvent;
 
-    fn replicate(
+    fn replicate<F>(
         pp: &'a PublicParams<L::Hasher, L::Graph>,
         replica_id: &<L::Hasher as Hasher>::Domain,
         data: &mut [u8],
         _data_tree: Option<Tree<L::Hasher>>,
-    ) -> Result<(Self::Tau, Self::ProverAux)> {
+        progress: F,
+    ) -> Result<(Self::Tau, Self::ProverAux)>
+    where
+        F: Fn(Self::ReplicateEvent),
+    {
+        progress(ReplicateEvent::Start);
+
         let (taus, auxs) = Self::transform_and_replicate_layers(
             &pp.graph,
             &pp.layer_challenges,
             replica_id,
             data,
+            &progress,
         )?;
 
         let comm_rs: Vec<_> = taus.iter().map(|tau| tau.comm_r).collect();
@@ -664,6 +685,9 @@ impl<'a, 'c, L: Layers> PoRep<'a, L::Hasher> for L {
             layer_taus: taus,
             comm_r_star: crs,
         };
+
+        progress(ReplicateEvent::Done);
+
         Ok((tau, auxs))
     }
 

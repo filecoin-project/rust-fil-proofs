@@ -70,7 +70,10 @@ fn do_the_work<H: Hasher>(data_size: usize, challenge_count: usize) {
 
     info!("running replicate");
     let (tau, aux) =
-        DrgPoRep::<H, _>::replicate(&pp, &replica_id.into(), &mut mmapped, None).unwrap();
+        DrgPoRep::<H, _>::replicate(&pp, &replica_id.into(), &mut mmapped, None, |event| {
+            info!("replicate progress: {:?}", event);
+        })
+        .unwrap();
 
     let pub_inputs = PublicInputs::<H::Domain> {
         replica_id: Some(replica_id.into()),

@@ -86,7 +86,10 @@ fn do_the_work<H: Hasher>(data_size: usize, challenge_count: usize) {
 
     start_profile("replicate");
     let (tau, aux) =
-        DrgPoRep::<H, _>::replicate(&pp, &replica_id, data.as_mut_slice(), None).unwrap();
+        DrgPoRep::<H, _>::replicate(&pp, &replica_id, data.as_mut_slice(), None, |event| {
+            info!("replicate progress: {:?}", event);
+        })
+        .unwrap();
     stop_profile();
     let pub_inputs = PublicInputs {
         replica_id: Some(replica_id),

@@ -432,13 +432,18 @@ where
 {
     type Tau = porep::Tau<H::Domain>;
     type ProverAux = porep::ProverAux<H>;
+    type ReplicateEvent = ();
 
-    fn replicate(
+    fn replicate<F>(
         pp: &Self::PublicParams,
         replica_id: &H::Domain,
         data: &mut [u8],
         data_tree: Option<MerkleTree<H::Domain, H::Function>>,
-    ) -> Result<(porep::Tau<H::Domain>, porep::ProverAux<H>)> {
+        _progress: F,
+    ) -> Result<(porep::Tau<H::Domain>, porep::ProverAux<H>)>
+    where
+        F: Fn(Self::ReplicateEvent),
+    {
         let tree_d = match data_tree {
             Some(tree) => tree,
             None => pp.graph.merkle_tree(data)?,
@@ -525,7 +530,7 @@ mod tests {
 
         let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).expect("setup failed");
 
-        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
+        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None, |_| {})
             .expect("replication failed");
 
         let mut copied = vec![0; data.len()];
@@ -578,7 +583,7 @@ mod tests {
 
         let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).expect("setup failed");
 
-        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
+        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None, |_| {})
             .expect("replication failed");
 
         let mut copied = vec![0; data.len()];
@@ -653,7 +658,7 @@ mod tests {
             let pp = DrgPoRep::<H, BucketGraph<_>>::setup(&sp).expect("setup failed");
 
             let (tau, aux) =
-                DrgPoRep::<H, _>::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
+                DrgPoRep::<H, _>::replicate(&pp, &replica_id, &mut mmapped_data_copy, None, |_| {})
                     .expect("replication failed");
 
             let mut copied = vec![0; data.len()];
