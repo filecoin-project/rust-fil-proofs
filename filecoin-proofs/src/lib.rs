@@ -10,6 +10,7 @@ extern crate log;
 mod api;
 mod caches;
 mod file_cleanup;
+mod scratch_area;
 
 pub mod constants;
 pub mod error;
