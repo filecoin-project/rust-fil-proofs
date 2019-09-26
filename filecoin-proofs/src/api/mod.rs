@@ -39,13 +39,13 @@ use storage_proofs::piece_inclusion_proof::{
     PieceSpec,
 };
 use storage_proofs::porep::{replica_id, PoRep, Tau};
+use storage_proofs::scratch_area::persisted::ScratchDirectory;
 use storage_proofs::sector::SectorId;
 use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
 use tempfile::tempfile;
 
 mod post;
 pub use crate::api::post::*;
-use crate::scratch_area::persisted::ScratchDirectory;
 
 /// FrSafe is an array of the largest whole number of bytes guaranteed not to overflow the field.
 pub type FrSafe = [u8; 31];

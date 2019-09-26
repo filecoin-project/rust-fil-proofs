@@ -44,6 +44,7 @@ pub mod porc;
 pub mod porep;
 pub mod proof;
 pub mod rational_post;
+pub mod scratch_area;
 pub mod sector;
 pub mod settings;
 pub mod util;

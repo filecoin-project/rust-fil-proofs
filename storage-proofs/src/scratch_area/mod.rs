@@ -1,14 +1,12 @@
-use std::fs::{File, OpenOptions};
-use std::path::{Path, PathBuf};
-use storage_proofs::sector::SectorId;
+use std::fs::File;
 
 pub mod persisted;
 
-trait IntoFile {
+pub trait IntoFile {
     fn into_file(self) -> File;
 }
 
-trait ScratchArea {
+pub trait ScratchArea {
     type Item: IntoFile;
 
     fn new_item(&mut self) -> std::result::Result<Self::Item, failure::Error>;
@@ -20,6 +18,11 @@ trait ScratchArea {
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub enum Key {
-    CommRMerkleTree(bool),
-    LayerMerkleTree(usize, bool),
+    CommRMerkleTree {
+        is_top_half_tree: bool,
+    },
+    LayerMerkleTree {
+        layer_number: usize,
+        is_top_half_tree: bool,
+    },
 }

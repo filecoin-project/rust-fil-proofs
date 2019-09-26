@@ -1,7 +1,7 @@
 use crate::scratch_area::{IntoFile, Key, ScratchArea};
+use crate::sector::SectorId;
 use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
-use storage_proofs::sector::SectorId;
 
 /// ScratchDirectory provides threadsafe write and read access to a directory.
 pub struct ScratchDirectory {
@@ -73,19 +73,22 @@ impl ScratchDirectory {
 
     fn abs_path(&self, k: Key) -> PathBuf {
         let file_name = match k {
-            Key::CommRMerkleTree(b) => {
+            Key::CommRMerkleTree { is_top_half_tree } => {
                 (format!(
                     "v{}-commr-{}",
                     self.version,
-                    if b { "top" } else { "leaves" }
+                    if is_top_half_tree { "top" } else { "leaves" }
                 ))
             }
-            Key::LayerMerkleTree(n, b) => {
+            Key::LayerMerkleTree {
+                layer_number,
+                is_top_half_tree,
+            } => {
                 (format!(
                     "v{}-layer{}-{}",
                     self.version,
-                    n,
-                    if b { "top" } else { "leaves" }
+                    layer_number,
+                    if is_top_half_tree { "top" } else { "leaves" }
                 ))
             }
         };
