@@ -352,6 +352,8 @@ pub trait Layers {
         Ok(())
     }
 
+    /// Take the user `data` and `encode` and `transform` it sequentially `layers`
+    /// times. For each layer (including the original `data`) create a `MerkleTree`.
     fn transform_and_replicate_layers(
         graph: &Self::Graph,
         layer_challenges: &LayerChallenges,
@@ -405,21 +407,9 @@ pub trait Layers {
                             .expect("failed to convert node data to domain element")
                     }));
                     let return_channel = tx.clone();
-                    let (transfer_tx, transfer_rx) = channel::<Self::Graph>();
-
-                    transfer_tx
-                        .send(current_graph.clone())
-                        .expect("Failed to send value through channel");
 
                     let thread = scope.spawn(move |_| {
-                        // If we panic anywhere in this closure, thread.join() below will receive an error —
-                        // so it is safe to unwrap.
-                        let graph = transfer_rx
-                            .recv()
-                            .expect("Failed to receive value through channel");
-
-                        let tree_d =
-                            graph.merkle_tree_from_leaves(leaves_store, leafs).unwrap();
+                        let tree_d = MerkleTree::from_leaves_store(leaves_store, leafs);
 
                         info!("returning tree (layer: {})", layer);
                         return_channel
