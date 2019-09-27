@@ -1,6 +1,6 @@
 use std::cmp::{max, min};
 use std::marker::PhantomData;
-use std::sync::mpsc::channel;
+use std::sync::{Arc, Mutex};
 
 use crossbeam_utils::thread;
 use rayon::prelude::*;
@@ -365,98 +365,89 @@ pub trait Layers {
         let mut taus = Vec::with_capacity(layers);
         let mut auxs: Vec<Tree<Self::Hasher>> = Vec::with_capacity(layers);
 
-        // We need to create a scope which encloses all the work, spawning threads
-        // for merkle tree generation and sending the results back to a channel.
-        // The received results need to be sorted by layer because ordering of the completed results
-        // is not guaranteed. Misordered results will be seen in practice when trees are small.
+        let errf = |e| {
+            let err_string = format!("{:?}", e);
+            error!(
+                "MerkleTreeGenerationError: {} - {:?}",
+                &err_string,
+                failure::Backtrace::new()
+            );
+            Error::MerkleTreeGenerationError(err_string)
+        };
 
-        // The outer scope ensure that `tx` is dropped and closed before we read from `outer_rx`.
-        // Otherwise, the read loop will block forever waiting for more input.
-        let outer_rx = {
-            let (tx, rx) = channel();
+        let merkle_trees = Arc::new(Mutex::new(vec![None; layers + 1]));
 
-            let errf = |e| {
-                let err_string = format!("{:?}", e);
-                error!(
-                    "MerkleTreeGenerationError: {} - {:?}",
-                    &err_string,
-                    failure::Backtrace::new()
-                );
-                Error::MerkleTreeGenerationError(err_string)
-            };
+        thread::scope(|scope| -> Result<()> {
+            (0..=layers).fold(graph.clone(), |current_graph, layer| {
+                let leafs = data.len() / NODE_SIZE;
+                assert_eq!(data.len() % NODE_SIZE, 0);
+                let pow = next_pow2(leafs);
+                // FIXME: Who's actually responsible for ensuring power of 2
+                //  sector sizes?
 
-            let _ = thread::scope(|scope| -> Result<()> {
-                let mut threads = Vec::with_capacity(layers + 1);
-                (0..=layers).fold(graph.clone(), |current_graph, layer| {
-                    let leafs = data.len() / NODE_SIZE;
-                    assert_eq!(data.len() % NODE_SIZE, 0);
-                    let pow = next_pow2(leafs);
-                    // FIXME: Who's actually responsible for ensuring power of 2
-                    //  sector sizes?
-
-                    let mut leaves_store = MerkleStore::new(pow);
-
-                    populate_leaves::<
-                        _,
-                        <Self::Hasher as Hasher>::Function,
-                        _,
-                        std::iter::Map<_, _>,
-                    >(&mut leaves_store, (0..leafs).map(|i| {
+                let mut leaves_store = MerkleStore::new(pow);
+                populate_leaves::<_, <Self::Hasher as Hasher>::Function, _, std::iter::Map<_, _>>(
+                    &mut leaves_store,
+                    (0..leafs).map(|i| {
                         let d = data_at_node(&data, i).expect("data_at_node math failed");
                         <Self::Hasher as Hasher>::Domain::try_from_bytes(d)
                             .expect("failed to convert node data to domain element")
-                    }));
-                    let return_channel = tx.clone();
+                    }),
+                );
 
-                    let thread = scope.spawn(move |_| {
-                        let tree_d = MerkleTree::from_leaves_store(leaves_store, leafs);
-
-                        info!("returning tree (layer: {})", layer);
-                        return_channel
-                            .send((layer, tree_d))
-                            .expect("Failed to send value through channel");
-                    });
-
-                    threads.push(thread);
-
-                    if layer < layers {
-                        info!("encoding (layer: {})", layer);
-                        vde::encode(&current_graph, replica_id, data)
-                            .expect("encoding failed in thread");
-                    }
-                    Self::transform(&current_graph)
+                let mt_thread = merkle_trees.clone();
+                scope.spawn(move |_| {
+                    mt_thread.lock().unwrap()[layer] =
+                        Some(MerkleTree::from_leaves_store(leaves_store, leafs));
                 });
 
-                for thread in threads {
-                    thread.join().map_err(errf)?;
+                if layer < layers {
+                    info!("encoding (layer: {})", layer);
+                    vde::encode(&current_graph, replica_id, data)
+                        .expect("encoding failed in thread");
                 }
-
-                Ok(())
-            })
-            .map_err(errf)?;
-
-            rx
-        };
-
-        let mut sorted_trees = outer_rx.iter().collect::<Vec<_>>();
-        sorted_trees.sort_unstable_by_key(|k| k.0);
-
-        sorted_trees
-            .into_iter()
-            .fold(None, |previous_comm_r: Option<_>, (i, replica_tree)| {
-                let comm_r = replica_tree.root();
-                // Each iteration's replica_tree becomes the next iteration's previous_tree (data_tree).
-                // The first iteration has no previous_tree.
-                if let Some(comm_d) = previous_comm_r {
-                    let tau = porep::Tau { comm_r, comm_d };
-                    info!("setting tau/aux (layer: {})", i - 1);
-                    taus.push(tau);
-                };
-
-                auxs.push(replica_tree);
-
-                Some(comm_r)
+                Self::transform(&current_graph)
             });
+
+            Ok(())
+        })
+        .map_err(errf)??;
+        // FIXME: Replace `errf` here (used once), Rust needs to know the type of `e`.
+        // .map_err(|e| {
+        //     let err_string = format!("{:?}", e);
+        //     error!(
+        //         "MerkleTreeGenerationError: {} - {:?}",
+        //         &err_string,
+        //         failure::Backtrace::new()
+        //     );
+        //     Error::MerkleTreeGenerationError(err_string)
+        // })?;
+
+        Arc::try_unwrap(merkle_trees)
+            .unwrap()
+            .into_inner()
+            .unwrap()
+            .into_iter()
+            .enumerate()
+            .fold(
+                None,
+                |previous_comm_r: Option<_>, (layer, replica_tree_option)| {
+                    let replica_tree = replica_tree_option
+                        .unwrap_or_else(|| panic!("missing MT for layer {}", layer));
+                    let comm_r = replica_tree.root();
+                    // Each iteration's replica_tree becomes the next iteration's previous_tree (data_tree).
+                    // The first iteration has no previous_tree.
+                    if let Some(comm_d) = previous_comm_r {
+                        let tau = porep::Tau { comm_r, comm_d };
+                        info!("setting tau/aux (layer: {})", layer);
+                        taus.push(tau);
+                    };
+
+                    auxs.push(replica_tree);
+
+                    Some(comm_r)
+                },
+            );
 
         Ok((taus, auxs))
     }
