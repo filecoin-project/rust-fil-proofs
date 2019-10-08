@@ -496,11 +496,19 @@ impl<'a, L: Layers> ProofScheme<'a> for L {
         pub_inputs: &'b Self::PublicInputs,
         priv_inputs: &'b Self::PrivateInputs,
     ) -> Result<Self::Proof> {
-        let proofs = Self::prove_all_partitions(pub_params, pub_inputs, priv_inputs, 1)?;
         let k = match pub_inputs.k {
             None => 0,
             Some(k) => k,
         };
+        let proofs = Self::prove_all_partitions(pub_params, pub_inputs, priv_inputs, k)?;
+
+        // Because partition proofs require a common setup, the general ProofScheme implementation,
+        // which makes use of `ProofScheme::prove` cannot be used here. Instead, we need to prove all
+        // partitions in one pass, as implemented by `prove_all_partitions` below.
+        assert!(
+            k < 2,
+            "It is a programmer error to call LayeredDrgPoRep::prove with more than one partition."
+        );
 
         Ok(proofs[k].to_owned())
     }
