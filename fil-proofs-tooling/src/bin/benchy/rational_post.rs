@@ -17,7 +17,7 @@ use tempfile::NamedTempFile;
 // The seed for the rng used to generate which sectors to challenge.
 const CHALLENGE_SEED: [u8; 32] = [0; 32];
 
-const PROVER_ID: [u8; 31] = [0; 31];
+const PROVER_ID: [u8; 32] = [0; 32];
 const SECTOR_ID: u64 = 0;
 const N_PARTITIONS: PoRepProofPartitions = PoRepProofPartitions(1);
 
@@ -89,7 +89,7 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
         porep_config,
         staged_file.path(),
         sealed_file.path(),
-        &PROVER_ID,
+        PROVER_ID,
         sector_id,
         ticket,
         &[sector_size_unpadded_bytes_ammount],

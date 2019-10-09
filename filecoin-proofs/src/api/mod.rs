@@ -45,15 +45,12 @@ use tempfile::tempfile;
 mod post;
 pub use crate::api::post::*;
 
-/// FrSafe is an array of the largest whole number of bytes guaranteed not to overflow the field.
-pub type FrSafe = [u8; 31];
-
 pub type Commitment = Fr32Ary;
 pub type ChallengeSeed = [u8; 32];
 type Tree = MerkleTree<PedersenDomain, <PedersenHasher as Hasher>::Function>;
 
 pub type PersistentAux = stacked::PersistentAux<PedersenDomain>;
-
+pub type ProverId = [u8; 32];
 pub type Ticket = [u8; 32];
 
 #[derive(Clone, Debug)]
@@ -157,7 +154,7 @@ pub fn seal<T: AsRef<Path>>(
     porep_config: PoRepConfig,
     in_path: T,
     out_path: T,
-    prover_id_in: &FrSafe,
+    prover_id: ProverId,
     sector_id: SectorId,
     ticket: Ticket,
     piece_lengths: &[UnpaddedBytesAmount],
@@ -174,13 +171,6 @@ pub fn seal<T: AsRef<Path>>(
     f_data.set_len(sector_bytes as u64)?;
 
     let mut data = unsafe { MmapOptions::new().map_mut(&f_data).unwrap() };
-
-    // TODO: do these need to be Fr safe?
-
-    // Zero-pad the prover_id to 32 bytes (and therefore Fr32).
-    let prover_id = pad_safe_fr(prover_id_in);
-    // Zero-pad the sector_id to 32 bytes (and therefore Fr32).
-    let sector_id_as_safe_fr = pad_safe_fr(&sector_id.as_fr_safe());
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: &setup_params(
@@ -200,7 +190,7 @@ pub fn seal<T: AsRef<Path>>(
 
     let replica_id = generate_replica_id::<DefaultTreeHasher>(
         &prover_id,
-        &sector_id_as_safe_fr,
+        sector_id.into(),
         &ticket,
         data_tree.root(),
     );
@@ -283,7 +273,7 @@ pub fn seal<T: AsRef<Path>>(
         porep_config,
         comm_r,
         comm_d,
-        prover_id_in,
+        prover_id,
         sector_id,
         ticket,
         &buf,
@@ -306,24 +296,18 @@ pub fn verify_seal(
     porep_config: PoRepConfig,
     comm_r: Commitment,
     comm_d: Commitment,
-    prover_id_in: &FrSafe,
+    prover_id: ProverId,
     sector_id: SectorId,
     ticket: Ticket,
     proof_vec: &[u8],
 ) -> error::Result<bool> {
     let sector_bytes = PaddedBytesAmount::from(porep_config);
-    let prover_id = pad_safe_fr(prover_id_in);
-    let sector_id_as_safe_fr = pad_safe_fr(&sector_id.as_fr_safe());
 
     let comm_r = as_safe_commitment(&comm_r, "comm_r")?;
     let comm_d = as_safe_commitment(&comm_d, "comm_d")?;
 
-    let replica_id = generate_replica_id::<DefaultTreeHasher>(
-        &prover_id,
-        &sector_id_as_safe_fr,
-        &ticket,
-        comm_d,
-    );
+    let replica_id =
+        generate_replica_id::<DefaultTreeHasher>(&prover_id, sector_id.into(), &ticket, comm_d);
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: &setup_params(
@@ -426,23 +410,17 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     porep_config: PoRepConfig,
     sealed_path: T,
     output_path: T,
-    prover_id_in: &FrSafe,
+    prover_id: ProverId,
     sector_id: SectorId,
     comm_d: Commitment,
     ticket: Ticket,
     offset: UnpaddedByteIndex,
     num_bytes: UnpaddedBytesAmount,
 ) -> error::Result<(UnpaddedBytesAmount)> {
-    let sector_id_as_safe_fr = pad_safe_fr(&sector_id.as_fr_safe());
-    let prover_id = pad_safe_fr(prover_id_in);
     let comm_d = storage_proofs::hasher::pedersen::PedersenDomain::try_from_bytes(&comm_d)?;
 
-    let replica_id = generate_replica_id::<DefaultTreeHasher>(
-        &prover_id,
-        &sector_id_as_safe_fr,
-        &ticket,
-        comm_d,
-    );
+    let replica_id =
+        generate_replica_id::<DefaultTreeHasher>(&prover_id, sector_id.into(), &ticket, comm_d);
 
     let f_in = File::open(sealed_path)?;
     let mut data = Vec::new();
@@ -472,12 +450,6 @@ fn commitment_from_fr<E: Engine>(fr: E::Fr) -> Commitment {
         commitment[i] = *b;
     }
     commitment
-}
-
-fn pad_safe_fr(unpadded: &FrSafe) -> Fr32Ary {
-    let mut res = [0; 32];
-    res[0..31].copy_from_slice(unpadded);
-    res
 }
 
 #[cfg(test)]
@@ -622,7 +594,7 @@ mod tests {
                 PoRepConfig(SectorSize(SECTOR_SIZE_ONE_KIB), PoRepProofPartitions(2)),
                 not_convertible_to_fr_bytes,
                 convertible_to_fr_bytes,
-                &[0; 31],
+                [0; 32],
                 SectorId::from(0),
                 [0; 32],
                 &[],
@@ -646,7 +618,7 @@ mod tests {
                 PoRepConfig(SectorSize(SECTOR_SIZE_ONE_KIB), PoRepProofPartitions(2)),
                 convertible_to_fr_bytes,
                 not_convertible_to_fr_bytes,
-                &[0; 31],
+                [0; 32],
                 SectorId::from(0),
                 [0; 32],
                 &[],
@@ -732,7 +704,7 @@ mod tests {
             config,
             &staged_sector_file.path(),
             &sealed_sector_file.path(),
-            &[0; 31],
+            [0; 32],
             SectorId::from(0),
             [0; 32],
             &[number_of_bytes_in_piece],

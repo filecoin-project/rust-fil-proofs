@@ -417,15 +417,15 @@ pub fn get_node<H: Hasher>(data: &[u8], index: usize) -> Result<H::Domain> {
 /// Generate the replica id as expected for Stacked DRG.
 pub fn generate_replica_id<H: Hasher>(
     prover_id: &[u8; 32],
-    sector_id: &[u8; 32],
+    sector_id: u64,
     ticket: &[u8; 32],
     comm_d: H::Domain,
 ) -> H::Domain {
-    let mut to_hash = [0u8; 4 * 32];
+    let mut to_hash = [0u8; 3 * 32 + 8];
     to_hash[..32].copy_from_slice(prover_id);
-    to_hash[32..64].copy_from_slice(sector_id);
-    to_hash[64..96].copy_from_slice(ticket);
-    to_hash[96..].copy_from_slice(AsRef::<[u8]>::as_ref(&comm_d));
+    to_hash[32..40].copy_from_slice(&sector_id.to_le_bytes()[..]);
+    to_hash[40..72].copy_from_slice(ticket);
+    to_hash[72..].copy_from_slice(AsRef::<[u8]>::as_ref(&comm_d));
 
     H::Function::hash(&to_hash[..])
 }
