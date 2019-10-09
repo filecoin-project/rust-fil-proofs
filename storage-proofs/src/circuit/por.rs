@@ -25,7 +25,7 @@ use crate::proof::ProofScheme;
 ///
 pub struct PoRCircuit<'a, E: JubjubEngine, H: Hasher> {
     params: &'a E::Params,
-    value: Option<E::Fr>,
+    value: Root<E>,
     auth_path: Vec<Option<(E::Fr, bool)>>,
     root: Root<E>,
     private: bool,
@@ -81,7 +81,7 @@ where
 
         PoRCircuit::<Bls12, H> {
             params: engine_params,
-            value: Some(proof.data.into()),
+            value: Root::Val(Some(proof.data.into())),
             auth_path: proof.proof.as_options(),
             root,
             private,
@@ -95,7 +95,7 @@ where
     ) -> PoRCircuit<'a, Bls12, H> {
         PoRCircuit::<Bls12, H> {
             params,
-            value: None,
+            value: Root::Val(None),
             auth_path: vec![None; graph_height(public_params.leaves)],
             root: Root::Val(None),
             private: public_params.private,
@@ -147,9 +147,7 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for PoRCircuit<'a, E, H> {
         let root = self.root;
 
         {
-            let value_num = num::AllocatedNum::alloc(cs.namespace(|| "value"), || {
-                value.ok_or_else(|| SynthesisError::AssignmentMissing)
-            })?;
+            let value_num = value.allocated(cs.namespace(|| "value"))?;
 
             let mut cur = value_num;
 
@@ -200,7 +198,6 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for PoRCircuit<'a, E, H> {
 
             {
                 // Validate that the root of the merkle tree that we calculated is the same as the input.
-
                 let rt = root.allocated(cs.namespace(|| "root_value"))?;
                 constraint::equal(cs, || "enforce root is correct", &cur, &rt);
 
@@ -219,7 +216,7 @@ impl<'a, E: JubjubEngine, H: Hasher> PoRCircuit<'a, E, H> {
     pub fn synthesize<CS>(
         mut cs: CS,
         params: &E::Params,
-        value: Option<E::Fr>,
+        value: Root<E>,
         auth_path: Vec<Option<(E::Fr, bool)>>,
         root: Root<E>,
         private: bool,
@@ -402,7 +399,7 @@ mod tests {
             let mut cs = TestConstraintSystem::<Bls12>::new();
             let por = PoRCircuit::<Bls12, H> {
                 params,
-                value: Some(proof.data.into()),
+                value: Root::Val(Some(proof.data.into())),
                 auth_path: proof.proof.as_options(),
                 root: Root::Val(Some(pub_inputs.commitment.unwrap().into())),
                 private: false,
@@ -597,7 +594,7 @@ mod tests {
 
             let por = PoRCircuit::<Bls12, PedersenHasher> {
                 params,
-                value: Some(proof.data.into()),
+                value: Root::Val(Some(proof.data.into())),
                 auth_path: proof.proof.as_options(),
                 root: Root::Val(Some(tree.root().into())),
                 private: true,

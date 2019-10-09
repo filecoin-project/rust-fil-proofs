@@ -27,7 +27,7 @@ ENV LIBUNWIND_VERSION="0.99-beta"
 ENV HOME="/root"
 ENV DOWNLOADS=${HOME}/downloads
 RUN mkdir -p ${DOWNLOADS}
-RUN echo ${DOWNLOADS} 
+RUN echo ${DOWNLOADS}
 WORKDIR ${DOWNLOADS}
 
 RUN wget http://download.savannah.gnu.org/releases/libunwind/libunwind-${LIBUNWIND_VERSION}.tar.gz --output-document ${DOWNLOADS}/libunwind-${LIBUNWIND_VERSION}.tar.gz
@@ -68,14 +68,14 @@ cargo update                                                                  \
 cargo build                                                                   \
   -p filecoin-proofs                                                          \
   --release                                                                   \
-  --example zigzag                                                            \
+  --example stacked                                                            \
   --features                                                                  \
     cpu-profile                                                               \
   -Z package-features                                                         \
 &&                                                                            \
 RUST_BACKTRACE=full                                                           \
 RUST_LOG=trace                                                                \
-target/release/examples/zigzag                                                \
+target/release/examples/stacked                                                \
   --size 1024                                                                 \
 &&                                                                            \
-pprof target/release/examples/zigzag replicate.profile || bash
+pprof target/release/examples/stacked replicate.profile || bash

@@ -12,6 +12,7 @@ use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::sector::*;
+use crate::stacked::hash::hash2;
 use crate::util::NODE_SIZE;
 
 #[derive(Debug, Clone)]
@@ -50,13 +51,14 @@ pub struct PublicInputs<'a, T: 'a + Domain> {
     /// The challenges, which leafs to prove.
     pub challenges: &'a [Challenge],
     pub faults: &'a OrderedSectorSet,
-    /// The root hashes of the underlying merkle trees.
-    pub commitments: &'a [T],
+    pub comm_rs: &'a [T],
 }
 
 #[derive(Debug, Clone)]
 pub struct PrivateInputs<'a, H: 'a + Hasher> {
     pub trees: &'a BTreeMap<SectorId, &'a MerkleTree<H::Domain, H::Function>>,
+    pub comm_cs: &'a [H::Domain],
+    pub comm_r_lasts: &'a [H::Domain],
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,6 +68,7 @@ pub struct Proof<H: Hasher> {
         deserialize = "MerkleProof<H>: Deserialize<'de>"
     ))]
     inclusion_proofs: Vec<MerkleProof<H>>,
+    pub comm_cs: Vec<H::Domain>,
 }
 
 impl<H: Hasher> Proof<H> {
@@ -121,19 +124,29 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
     ) -> Result<Self::Proof> {
         assert_eq!(
             pub_inputs.challenges.len(),
-            pub_inputs.commitments.len(),
-            "mismatched challenges and commitments"
+            pub_inputs.comm_rs.len(),
+            "mismatched challenges and comm_rs"
+        );
+        assert_eq!(
+            pub_inputs.challenges.len(),
+            priv_inputs.comm_cs.len(),
+            "mismatched challenges and comm_cs"
+        );
+        assert_eq!(
+            pub_inputs.challenges.len(),
+            priv_inputs.comm_r_lasts.len(),
+            "mismatched challenges and comm_r_lasts"
         );
         let challenges = pub_inputs.challenges;
 
         let proofs = challenges
             .iter()
-            .zip(pub_inputs.commitments.iter())
-            .map(|(challenge, commitment)| {
+            .zip(priv_inputs.comm_r_lasts.iter())
+            .map(|(challenge, comm_r_last)| {
                 let challenged_leaf = challenge.leaf;
 
                 if let Some(tree) = priv_inputs.trees.get(&challenge.sector) {
-                    if commitment != &tree.root() {
+                    if comm_r_last != &tree.root() {
                         return Err(Error::InvalidCommitment);
                     }
 
@@ -148,6 +161,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
 
         Ok(Proof {
             inclusion_proofs: proofs,
+            comm_cs: priv_inputs.comm_cs.to_vec(),
         })
     }
 
@@ -158,7 +172,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
     ) -> Result<bool> {
         let challenges = pub_inputs.challenges;
 
-        if challenges.len() != pub_inputs.commitments.len() as usize {
+        if challenges.len() != pub_inputs.comm_rs.len() as usize {
             return Err(Error::MalformedInput);
         }
 
@@ -167,16 +181,21 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
         }
 
         // validate each proof
-        for ((merkle_proof, challenge), commitment) in proof
+        for (((merkle_proof, challenge), comm_r), comm_c) in proof
             .inclusion_proofs
             .iter()
             .zip(challenges.iter())
-            .zip(pub_inputs.commitments.iter())
+            .zip(pub_inputs.comm_rs.iter())
+            .zip(proof.comm_cs.iter())
         {
             let challenged_leaf = challenge.leaf;
 
-            // validate the commitment
-            if merkle_proof.root() != commitment {
+            // verify that H(Comm_c || Comm_r_last) == Comm_R
+            // comm_r_last is the root of the proof
+            let comm_r_last = merkle_proof.root();
+
+            if AsRef::<[u8]>::as_ref(&hash2(comm_c, comm_r_last)) != AsRef::<[u8]>::as_ref(&comm_r)
+            {
                 return Ok(false);
             }
 
@@ -269,10 +288,10 @@ fn derive_challenge(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use paired::bls12_381::Bls12;
+    use paired::bls12_381::{Bls12, Fr};
     use rand::{Rng, SeedableRng, XorShiftRng};
 
-    use crate::drgraph::{new_seed, BucketGraph, Graph};
+    use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, HashFunction, PedersenHasher, Sha256Hasher};
     use crate::merkle::make_proof_for_test;
@@ -296,8 +315,8 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph1 = BucketGraph::<H>::new(32, 5, 0, new_seed());
-        let graph2 = BucketGraph::<H>::new(32, 5, 0, new_seed());
+        let graph1 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
+        let graph2 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
         let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
         let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
 
@@ -326,18 +345,31 @@ mod tests {
             challenges.iter().all(|c| c.sector == 891.into()),
             "invalid challenge generated"
         );
-        let commitments = challenges
+
+        let comm_r_lasts = challenges
             .iter()
             .map(|c| trees.get(&c.sector).unwrap().root())
             .collect::<Vec<_>>();
 
+        let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| rng.gen()).collect();
+
+        let comm_rs: Vec<H::Domain> = comm_cs
+            .iter()
+            .zip(comm_r_lasts.iter())
+            .map(|(comm_c, comm_r_last)| Fr::from(hash2(comm_c, comm_r_last)).into())
+            .collect();
+
         let pub_inputs = PublicInputs {
             challenges: &challenges,
-            commitments: &commitments,
+            comm_rs: &comm_rs,
             faults: &faults,
         };
 
-        let priv_inputs = PrivateInputs::<H> { trees: &trees };
+        let priv_inputs = PrivateInputs::<H> {
+            trees: &trees,
+            comm_cs: &comm_cs,
+            comm_r_lasts: &comm_r_lasts,
+        };
 
         let proof = RationalPoSt::<H>::prove(&pub_params, &pub_inputs, &priv_inputs)
             .expect("proving failed");
@@ -376,7 +408,7 @@ mod tests {
         let hashed_leaf = H::Function::hash_leaf(&bogus_leaf);
 
         make_proof_for_test(
-            pub_inputs.commitments[0],
+            pub_inputs.comm_rs[0],
             hashed_leaf,
             vec![(hashed_leaf, true)],
         )
@@ -397,7 +429,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
+        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
 
@@ -408,12 +440,20 @@ mod tests {
 
         let challenges =
             derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
-        let commitments = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();
+        let comm_r_lasts = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();
+
+        let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| rng.gen()).collect();
+
+        let comm_rs: Vec<H::Domain> = comm_cs
+            .iter()
+            .zip(comm_r_lasts.iter())
+            .map(|(comm_c, comm_r_last)| Fr::from(hash2(comm_c, comm_r_last)).into())
+            .collect();
 
         let pub_inputs = PublicInputs::<H::Domain> {
             challenges: &challenges,
             faults: &faults,
-            commitments: &commitments,
+            comm_rs: &comm_rs,
         };
 
         let bad_proof = Proof {
@@ -421,6 +461,7 @@ mod tests {
                 make_bogus_proof::<H>(&pub_inputs, rng),
                 make_bogus_proof::<H>(&pub_inputs, rng),
             ],
+            comm_cs,
         };
 
         let verified = RationalPoSt::verify(&pub_params, &pub_inputs, &bad_proof)
@@ -461,7 +502,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
             .collect();
 
-        let graph = BucketGraph::<H>::new(32, 5, 0, new_seed());
+        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
         let mut faults = OrderedSectorSet::new();
@@ -475,18 +516,30 @@ mod tests {
 
         let challenges =
             derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
-        let commitments = challenges
+        let comm_r_lasts = challenges
             .iter()
             .map(|c| trees.get(&c.sector).unwrap().root())
             .collect::<Vec<_>>();
 
+        let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| rng.gen()).collect();
+
+        let comm_rs: Vec<H::Domain> = comm_cs
+            .iter()
+            .zip(comm_r_lasts.iter())
+            .map(|(comm_c, comm_r_last)| Fr::from(hash2(comm_c, comm_r_last)).into())
+            .collect();
+
         let pub_inputs = PublicInputs {
             challenges: &challenges,
             faults: &faults,
-            commitments: &commitments,
+            comm_rs: &comm_rs,
         };
 
-        let priv_inputs = PrivateInputs::<H> { trees: &trees };
+        let priv_inputs = PrivateInputs::<H> {
+            trees: &trees,
+            comm_cs: &comm_cs,
+            comm_r_lasts: &comm_r_lasts,
+        };
 
         let proof = RationalPoSt::<H>::prove(&pub_params, &pub_inputs, &priv_inputs)
             .expect("proving failed");
@@ -494,12 +547,20 @@ mod tests {
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
         let challenges =
             derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
-        let commitments = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();
+        let comm_r_lasts = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();
+
+        let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| rng.gen()).collect();
+
+        let comm_rs: Vec<H::Domain> = comm_cs
+            .iter()
+            .zip(comm_r_lasts.iter())
+            .map(|(comm_c, comm_r_last)| Fr::from(hash2(comm_c, comm_r_last)).into())
+            .collect();
 
         let different_pub_inputs = PublicInputs {
             challenges: &challenges,
             faults: &faults,
-            commitments: &commitments,
+            comm_rs: &comm_rs,
         };
 
         let verified = RationalPoSt::<H>::verify(&pub_params, &different_pub_inputs, &proof)

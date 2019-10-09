@@ -17,13 +17,15 @@ where
 {
     assert!(
         data.len() >= 2 * PEDERSEN_BLOCK_SIZE,
-        "must be at least 2 block sizes long"
+        "must be at least 2 block sizes long ({})",
+        data.len()
     );
 
     assert_eq!(
         data.len() % PEDERSEN_BLOCK_SIZE,
         0,
-        "data must be a multiple of the block size"
+        "data must be a multiple of the block size ({})",
+        data.len()
     );
 
     let mut chunks = data.chunks(PEDERSEN_BLOCK_SIZE);

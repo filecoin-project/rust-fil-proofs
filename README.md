@@ -12,7 +12,7 @@ There are currently four different crates:
      Primary Components:
      -   **PoR** (**_Proof-of-Retrievability_**: Merkle inclusion proof)
      -   **DrgPoRep** (_Depth Robust Graph_ **_Proof-of-Replication_**)
-     -   **ZigZagDrgPoRep** (implemented as a specialized **LayeredDrgPoRep**)
+     -   **StackedDrgPoRep**
      -   **PoSt** (Proof-of-Spacetime)
 
 
@@ -94,7 +94,7 @@ Note: On macOS you need `gtime` (`brew install gnu-time`), as the built in `time
 
 ## Profiling
 
-For development purposes we have an (experimental) support for CPU and memory profiling in Rust through a [`gperftools`](https://github.com/dignifiedquire/rust-gperftools) binding library. These can be enabled though the `cpu-profile` and `heap-profile` features in `filecoin-proofs`. An example setup can be found in this [`Dockerfile`](./Dockerfile-profile) to profile CPU usage for the [`zigzag`](https://github.com/filecoin-project/rust-fil-proofs/blob/e6fa4232404641bb4be1ffc42944d2e734ab9748/filecoin-proofs/examples/zigzag.rs#L40-L61) example.
+For development purposes we have an (experimental) support for CPU and memory profiling in Rust through a [`gperftools`](https://github.com/dignifiedquire/rust-gperftools) binding library. These can be enabled though the `cpu-profile` and `heap-profile` features in `filecoin-proofs`. An example setup can be found in this [`Dockerfile`](./Dockerfile-profile) to profile CPU usage for the [`stacked`](https://github.com/filecoin-project/rust-fil-proofs/blob/master/filecoin-proofs/examples/stacked.rs#L40-L61) example.
 
 ## Logging
 
@@ -151,7 +151,7 @@ While replicating and generating the Merkle Trees (MT) for the proof at the same
 
 ### Speed
 
-One of the most computational expensive operations during replication (besides the encoding itself) is the generation of the indexes of the (expansion) parents in the ZigZag graph, implemented through a Feistel cipher (used as a pseudorandom permutation). To reduce that time we provide a caching mechanism to generate them only once and reuse them throughout replication (across the different layers). Already built into the system it can be activated with the environmental variable
+One of the most computational expensive operations during replication (besides the encoding itself) is the generation of the indexes of the (expansion) parents in the Stacked graph, implemented through a Feistel cipher (used as a pseudorandom permutation). To reduce that time we provide a caching mechanism to generate them only once and reuse them throughout replication (across the different layers). Already built into the system it can be activated with the environmental variable
 
 ```
 FIL_PROOFS_MAXIMIZE_CACHING=1
@@ -161,7 +161,7 @@ To check that it's working you can inspect the replication log to find `using pa
 
 (You can also verify if the cache is working by inspecting the time each layer takes to encode, `encoding, layer:` in the log, where the first two layers, forward and reverse, will take more time than the rest to populate the cache while the remaining 8 should see a considerable time drop.)
 
-In the most extreme case, to reduce time at the cost of *a lot* of memory consumption you can turn on the feature that stores MTs on memory (`mem-trees`) instead of on disk (the default) to generate them all on RAM and avoid disk I/O (if the HW doesn't have enough RAM to handle the MTs, roughly 20x the sector size, this won't have the desired effect as the OS will start backing them on disk anyway). For example, to run the `zigzag` example with this feature turned on you'd need to indicate so to `cargo`,
+In the most extreme case, to reduce time at the cost of *a lot* of memory consumption you can turn on the feature that stores MTs on memory (`mem-trees`) instead of on disk (the default) to generate them all on RAM and avoid disk I/O (if the HW doesn't have enough RAM to handle the MTs, roughly 20x the sector size, this won't have the desired effect as the OS will start backing them on disk anyway). For example, to run the `stacked` example with this feature turned on you'd need to indicate so to `cargo`,
 
 ```
 # NEEDS TO BE RUN INSIDE `storage-proofs\` directory
@@ -169,7 +169,7 @@ In the most extreme case, to reduce time at the cost of *a lot* of memory consum
 cargo run                                                                     \
   -p filecoin-proofs                                                          \
   --release                                                                   \
-  --example zigzag                                                            \
+  --example stacked                                                            \
   --features                                                                  \
     mem-trees                                                                 \
     --                                                                        \
@@ -188,7 +188,7 @@ The following benchmarks were observed when running replication on 1MiB (1024 ki
 
 ```
 $ cargo build --bin benchy --release
-$ env time -v cargo run --bin benchy --release -- zigzag --size=1024
+$ env time -v cargo run --bin benchy --release -- stacked --size=1024
 
 window-size: 16
 User time (seconds): 87.82

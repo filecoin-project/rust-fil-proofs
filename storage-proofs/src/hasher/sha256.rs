@@ -51,7 +51,7 @@ mod tests {
         "hello".hash(&mut a);
         let h1 = a.hash();
         assert_eq!(
-            format!("{}", HexSlice::new(h1.as_ref())),
+            format!("{}", HexSlice::new(AsRef::<[u8]>::as_ref(&h1))),
             "24988b93623304735e42a71f5c1e161b9ee2b9c52a3be8260ea3b05fba4df22c"
         );
     }
@@ -116,13 +116,22 @@ mod tests {
         >::from_iter(v2);
         // Using `VecMerkleTree` since the `MmapStore` of `MerkleTree` doesn't support `Deref` (`as_slice`).
 
-        assert_eq!(t2.read_at(0).as_ref(), l1.as_ref());
-        assert_eq!(t2.read_at(1).as_ref(), l2.as_ref());
-        assert_eq!(t2.read_at(2).as_ref(), h21.as_ref());
+        assert_eq!(
+            AsRef::<[u8]>::as_ref(&t2.read_at(0)),
+            AsRef::<[u8]>::as_ref(&l1)
+        );
+        assert_eq!(
+            AsRef::<[u8]>::as_ref(&t2.read_at(1)),
+            AsRef::<[u8]>::as_ref(&l2)
+        );
+        assert_eq!(
+            AsRef::<[u8]>::as_ref(&t2.read_at(2)),
+            AsRef::<[u8]>::as_ref(&h21)
+        );
 
         // TODO: Verify this is the right hash — bearing in mind that the two most significant bits must be cleared after each hash.
         assert_eq!(
-            format!("{}", HexSlice::new(t.root().as_ref())),
+            format!("{}", HexSlice::new(AsRef::<[u8]>::as_ref(&t.root()))),
             "1c1afe57ff6efa4204cf4e17e20bf4d7f6ebf3a4c27391f93993291560107f88"
         );
     }

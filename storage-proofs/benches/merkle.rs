@@ -6,7 +6,7 @@ use rand::{thread_rng, Rng};
 use storage_proofs::drgraph::{new_seed, Graph, BASE_DEGREE};
 use storage_proofs::hasher::blake2s::Blake2sHasher;
 use storage_proofs::hasher::pedersen::PedersenHasher;
-use storage_proofs::zigzag_graph::{ZigZag, ZigZagBucketGraph, EXP_DEGREE};
+use storage_proofs::stacked::{StackedBucketGraph, EXP_DEGREE};
 
 fn merkle_benchmark(c: &mut Criterion) {
     #[cfg(feature = "big-sector-sizes-bench")]
@@ -21,7 +21,7 @@ fn merkle_benchmark(c: &mut Criterion) {
             move |b, n_nodes| {
                 let mut rng = thread_rng();
                 let data: Vec<u8> = (0..32 * *n_nodes).map(|_| rng.gen()).collect();
-                let graph = ZigZagBucketGraph::<Blake2sHasher>::new_zigzag(
+                let graph = StackedBucketGraph::<Blake2sHasher>::new_stacked(
                     *n_nodes,
                     BASE_DEGREE,
                     EXP_DEGREE,
@@ -35,7 +35,7 @@ fn merkle_benchmark(c: &mut Criterion) {
         .with_function("pedersen", move |b, n_nodes| {
             let mut rng = thread_rng();
             let data: Vec<u8> = (0..32 * *n_nodes).map(|_| rng.gen()).collect();
-            let graph = ZigZagBucketGraph::<PedersenHasher>::new_zigzag(
+            let graph = StackedBucketGraph::<PedersenHasher>::new_stacked(
                 *n_nodes,
                 BASE_DEGREE,
                 EXP_DEGREE,

@@ -23,6 +23,10 @@ impl<E: Engine> fmt::Debug for Root<E> {
 }
 
 impl<E: Engine> Root<E> {
+    pub fn from_allocated<CS: ConstraintSystem<E>>(allocated: AllocatedNum<E>) -> Self {
+        Root::Var(allocated)
+    }
+
     pub fn allocated<CS: ConstraintSystem<E>>(
         &self,
         cs: CS,

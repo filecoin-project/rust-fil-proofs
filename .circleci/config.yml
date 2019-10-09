@@ -1,5 +1,5 @@
+version: 2.1
 
-version: 2
 jobs:
   cargo_fetch:
     docker:
@@ -13,7 +13,7 @@ jobs:
           command: cargo generate-lockfile
       - restore_cache:
           keys:
-            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v13-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run: rustup install $(cat rust-toolchain)
       - run: rustup default $(cat rust-toolchain)
       - run: rustup component add rustfmt-preview
@@ -27,7 +27,7 @@ jobs:
           paths:
             - Cargo.lock
       - save_cache:
-          key: cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+          key: cargo-v13-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
           paths:
             - /root/.cargo
             - /root/.rustup
@@ -42,7 +42,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v13-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_cache:
           keys:
             - parameter-cache-{{ .Revision }}
@@ -72,7 +72,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v13-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (stable) in release profile
@@ -91,7 +91,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v13-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (nightly) mem-trees feature
@@ -105,20 +105,28 @@ jobs:
       - image: filecoin/rust:latest
     working_directory: /mnt/crate
     resource_class: xlarge
+    parameters:
+      crate:
+        type: string
+      features:
+        type: string
+        default: ""
     steps:
       - checkout
       - attach_workspace:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v13-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
             - parameter-cache-{{ .Revision }}
       - run:
-          name: Test (stable) in release profile
+          name: Test ignored in release profile
           command: |
-              # We must change directories into `storage-proofs` for the `unchecked-degrees` feature to take effect.
-              cd storage-proofs
-              cargo +stable test --verbose --release --all --features unchecked-degrees -- --ignored
+              cd << parameters.crate >>
+              cargo test --release << parameters.features >> -- --ignored
+          environment:
+            RUST_TEST_THREADS: 1
+          no_output_timeout: 30m
       - save_cache:
           key: parameter-cache-{{ .Revision }}
           paths:
@@ -135,7 +143,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v13-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_cache:
           keys:
             - parameter-cache-{{ .Revision }}
@@ -155,7 +163,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v13-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_cache:
           keys:
             - parameter-cache-{{ .Revision }}
@@ -189,7 +197,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v13-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_cache:
           keys:
             - parameter-cache-{{ .Revision }}
@@ -245,7 +253,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v13-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
           name: Run cargo fmt
           command: cargo fmt --all -- --check
@@ -261,7 +269,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v13-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
           name: Run cargo clippy
           command: cargo clippy --all
@@ -277,7 +285,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v12-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v13-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
           name: Build (release)
           command: cargo +$(cat rust-toolchain) build --release --verbose --all
@@ -356,6 +364,14 @@ workflows:
           requires:
             - cargo_fetch
       - test_ignored_release:
+          name: test_ignored_release_storage_proofs
+          crate: "storage-proofs"
+          features: "--features unchecked-degrees"
+          requires:
+            - cargo_fetch
+      - test_ignored_release:
+          name: test_ignored_release_filecoin_proofs
+          crate: "filecoin-proofs"
           requires:
             - cargo_fetch
       - test:
