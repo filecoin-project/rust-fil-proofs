@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use bellperson::SynthesisError;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
@@ -55,5 +57,11 @@ impl From<::std::io::Error> for Error {
 impl From<serde_json::error::Error> for Error {
     fn from(inner: serde_json::error::Error) -> Error {
         Error::Serde(inner)
+    }
+}
+
+impl From<Box<dyn Any + Send>> for Error {
+    fn from(inner: Box<dyn Any + Send>) -> Error {
+        Error::Unclassified(format!("{:?}", dbg!(inner)))
     }
 }

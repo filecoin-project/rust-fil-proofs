@@ -9,7 +9,7 @@ use filecoin_proofs::parameters::{post_public_params, public_params};
 use filecoin_proofs::singletons::ENGINE_PARAMS;
 use filecoin_proofs::types::*;
 use storage_proofs::circuit::rational_post::{RationalPoStCircuit, RationalPoStCompound};
-use storage_proofs::circuit::zigzag::ZigZagCompound;
+use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::hasher::pedersen::PedersenHasher;
 use storage_proofs::parameter_cache::CacheableParameters;
@@ -37,16 +37,16 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     );
 
     {
-        let circuit = ZigZagCompound::blank_circuit(&public_params, &ENGINE_PARAMS);
-        let _ = ZigZagCompound::get_param_metadata(circuit, &public_params);
+        let circuit = StackedCompound::blank_circuit(&public_params, &ENGINE_PARAMS);
+        let _ = StackedCompound::get_param_metadata(circuit, &public_params);
     }
     {
-        let circuit = ZigZagCompound::blank_circuit(&public_params, &ENGINE_PARAMS);
-        let _ = ZigZagCompound::get_groth_params(circuit, &public_params);
+        let circuit = StackedCompound::blank_circuit(&public_params, &ENGINE_PARAMS);
+        let _ = StackedCompound::get_groth_params(circuit, &public_params);
     }
     {
-        let circuit = ZigZagCompound::blank_circuit(&public_params, &ENGINE_PARAMS);
-        let _ = ZigZagCompound::get_verifying_key(circuit, &public_params);
+        let circuit = StackedCompound::blank_circuit(&public_params, &ENGINE_PARAMS);
+        let _ = StackedCompound::get_verifying_key(circuit, &public_params);
     }
 }
 

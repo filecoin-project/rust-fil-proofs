@@ -4,18 +4,20 @@ extern crate criterion;
 use criterion::{black_box, Criterion, ParameterizedBenchmark};
 use paired::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
+use storage_proofs::drgraph::{new_seed, Graph};
 use storage_proofs::fr32::fr_into_bytes;
 use storage_proofs::hasher::blake2s::Blake2sHasher;
 use storage_proofs::hasher::pedersen::PedersenHasher;
 use storage_proofs::hasher::sha256::Sha256Hasher;
 use storage_proofs::hasher::{Domain, Hasher};
+use storage_proofs::stacked::StackedBucketGraph;
 use storage_proofs::util::{data_at_node_offset, NODE_SIZE};
-use storage_proofs::vde;
 
-struct Pregenerated<H: Hasher> {
+struct Pregenerated<H: 'static + Hasher> {
     data: Vec<u8>,
     parents: Vec<usize>,
     replica_id: H::Domain,
+    graph: StackedBucketGraph<H>,
 }
 
 fn pregenerate_data<H: Hasher>(degree: usize) -> Pregenerated<H> {
@@ -25,10 +27,14 @@ fn pregenerate_data<H: Hasher>(degree: usize) -> Pregenerated<H> {
         .collect();
     let parents: Vec<usize> = (0..degree).map(|pos| pos).collect();
     let replica_id: H::Domain = rng.gen();
+
+    let graph = StackedBucketGraph::<H>::new_stacked(degree + 1, degree, 0, new_seed());
+
     Pregenerated {
         data,
         parents,
         replica_id,
+        graph,
     }
 }
 
@@ -37,13 +43,17 @@ fn encode_single_node<H: Hasher>(
     parents: &[usize],
     replica_id: &H::Domain,
     node: usize,
+    graph: &StackedBucketGraph<H>,
 ) {
-    let key = vde::create_key::<H>(replica_id, node, parents, data).unwrap();
+    let key = graph
+        .create_key(replica_id, node, parents, data, None)
+        .unwrap();
     let start = data_at_node_offset(node);
     let end = start + NODE_SIZE;
 
     let node_data = H::Domain::try_from_bytes(&data[start..end]).unwrap();
-    let encoded = H::sloth_encode(&key, &node_data);
+    let key_data = H::Domain::try_from_bytes(&key).unwrap();
+    let encoded = H::sloth_encode(&key_data, &node_data);
     encoded.write_bytes(&mut data[start..end]).unwrap();
 }
 
@@ -59,14 +69,10 @@ fn kdf_benchmark(c: &mut Criterion) {
                     mut data,
                     parents,
                     replica_id,
+                    graph,
                 } = pregenerate_data::<Blake2sHasher>(*degree);
                 b.iter(|| {
-                    black_box(vde::create_key::<Blake2sHasher>(
-                        &replica_id,
-                        *degree,
-                        &parents,
-                        &mut data,
-                    ))
+                    black_box(graph.create_key(&replica_id, *degree, &parents, &mut data, None))
                 })
             },
             degrees,
@@ -76,30 +82,9 @@ fn kdf_benchmark(c: &mut Criterion) {
                 mut data,
                 parents,
                 replica_id,
+                graph,
             } = pregenerate_data::<PedersenHasher>(*degree);
-            b.iter(|| {
-                black_box(vde::create_key::<PedersenHasher>(
-                    &replica_id,
-                    *degree,
-                    &parents,
-                    &mut data,
-                ))
-            })
-        })
-        .with_function("sha256", |b, degree| {
-            let Pregenerated {
-                mut data,
-                parents,
-                replica_id,
-            } = pregenerate_data::<Sha256Hasher>(*degree);
-            b.iter(|| {
-                black_box(encode_single_node::<Sha256Hasher>(
-                    &mut data,
-                    &parents,
-                    &replica_id,
-                    *degree,
-                ))
-            })
+            b.iter(|| black_box(graph.create_key(&replica_id, *degree, &parents, &mut data, None)))
         }),
     );
 }
@@ -116,6 +101,7 @@ fn encode_single_node_benchmark(c: &mut Criterion) {
                     mut data,
                     parents,
                     replica_id,
+                    graph,
                 } = pregenerate_data::<Blake2sHasher>(*degree);
                 b.iter(|| {
                     black_box(encode_single_node::<Blake2sHasher>(
@@ -123,6 +109,7 @@ fn encode_single_node_benchmark(c: &mut Criterion) {
                         &parents,
                         &replica_id,
                         *degree,
+                        &graph,
                     ))
                 })
             },
@@ -133,6 +120,7 @@ fn encode_single_node_benchmark(c: &mut Criterion) {
                 mut data,
                 parents,
                 replica_id,
+                graph,
             } = pregenerate_data::<PedersenHasher>(*degree);
             b.iter(|| {
                 black_box(encode_single_node::<PedersenHasher>(
@@ -140,6 +128,7 @@ fn encode_single_node_benchmark(c: &mut Criterion) {
                     &parents,
                     &replica_id,
                     *degree,
+                    &graph,
                 ))
             })
         })
@@ -148,6 +137,7 @@ fn encode_single_node_benchmark(c: &mut Criterion) {
                 mut data,
                 parents,
                 replica_id,
+                graph,
             } = pregenerate_data::<Sha256Hasher>(*degree);
             b.iter(|| {
                 black_box(encode_single_node::<Sha256Hasher>(
@@ -155,6 +145,7 @@ fn encode_single_node_benchmark(c: &mut Criterion) {
                     &parents,
                     &replica_id,
                     *degree,
+                    &graph,
                 ))
             })
         }),

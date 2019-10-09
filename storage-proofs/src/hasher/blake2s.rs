@@ -87,11 +87,19 @@ impl StdHasher for Blake2sFunction {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, PartialOrd, Ord, Default, Serialize, Deserialize)]
+#[derive(
+    Copy, Clone, PartialEq, Eq, Debug, PartialOrd, Ord, Default, Serialize, Deserialize, Hash,
+)]
 pub struct Blake2sDomain(pub [u8; 32]);
 
+impl AsRef<Blake2sDomain> for Blake2sDomain {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+
 impl Blake2sDomain {
-    fn trim_to_fr32(&mut self) {
+    pub fn trim_to_fr32(&mut self) {
         // strip last two bits, to ensure result is in Fr.
         self.0[31] &= 0b0011_1111;
     }

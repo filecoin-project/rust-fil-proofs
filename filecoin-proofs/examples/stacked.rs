@@ -24,19 +24,19 @@ use bellperson::Circuit;
 use fil_sapling_crypto::jubjub::JubjubBls12;
 
 use storage_proofs::circuit::metric::*;
-use storage_proofs::circuit::zigzag::ZigZagCompound;
+use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgporep;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
 use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
-use storage_proofs::layered_drgporep::{self, ChallengeRequirements, LayerChallenges};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::settings;
-use storage_proofs::zigzag_drgporep::*;
-use storage_proofs::zigzag_graph::EXP_DEGREE;
+use storage_proofs::stacked::{
+    self, ChallengeRequirements, LayerChallenges, StackedDrg, EXP_DEGREE,
+};
 
 // We can only one of the profilers at a time, either CPU (`profile`)
 // or memory (`heap-profile`), duplicating the function so they won't
@@ -90,7 +90,7 @@ fn _file_backed_mmap_from_random_bytes(n: usize, use_tmp: bool) -> MmapMut {
             .read(true)
             .write(true)
             .create(true)
-            .open(format!("./random-zigzag-data-{:?}", Utc::now()))
+            .open(format!("./random-stacked-data-{:?}", Utc::now()))
             .unwrap()
     };
     info!("generating fake data");
@@ -110,7 +110,7 @@ fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> MmapMut {
             .read(true)
             .write(true)
             .create(true)
-            .open(format!("./zigzag-data-{:?}", Utc::now()))
+            .open(format!("./stacked-data-{:?}", Utc::now()))
             .unwrap()
     };
 
@@ -127,7 +127,7 @@ pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
     unsafe { MmapOptions::new().map_mut(&tmpfile).unwrap() }
 }
 
-fn dump_proof_bytes<H: Hasher>(all_partition_proofs: &[layered_drgporep::Proof<H>]) {
+fn dump_proof_bytes<H: Hasher>(all_partition_proofs: &[Vec<stacked::Proof<H>>]) {
     let file = OpenOptions::new()
         .write(true)
         .create(true)
@@ -163,11 +163,6 @@ fn do_the_work<H: 'static>(
     info!("m: {}", m);
     info!("expansion_degree: {}", expansion_degree);
     info!("layer_challenges: {:?}", layer_challenges);
-    info!("all_challenges: {:?}", layer_challenges.all_challenges());
-    info!(
-        "total_challenges: {:?}",
-        layer_challenges.total_challenges()
-    );
     info!("layers: {}", layer_challenges.layers());
     info!("partitions: {}", partitions);
     info!("circuit: {:?}", circuit);
@@ -177,7 +172,7 @@ fn do_the_work<H: 'static>(
     let nodes = data_size / 32;
 
     let replica_id: H::Domain = rng.gen();
-    let sp = layered_drgporep::SetupParams {
+    let sp = stacked::SetupParams {
         drg: drgporep::DrgParams {
             nodes,
             degree: m,
@@ -189,7 +184,7 @@ fn do_the_work<H: 'static>(
 
     info!("running setup");
     start_profile("setup");
-    let pp = ZigZagDrgPoRep::<H>::setup(&sp).unwrap();
+    let pp = StackedDrg::<H>::setup(&sp).unwrap();
     info!("setup complete");
     stop_profile();
 
@@ -207,20 +202,17 @@ fn do_the_work<H: 'static>(
         info!("running replicate");
 
         start_profile("replicate");
-        let (tau, aux) = ZigZagDrgPoRep::<H>::replicate(&pp, &replica_id, &mut data, None).unwrap();
+        let (tau, (p_aux, t_aux)) =
+            StackedDrg::<H>::replicate(&pp, &replica_id, &mut data, None).unwrap();
         stop_profile();
-        let pub_inputs = layered_drgporep::PublicInputs::<H::Domain> {
+        let pub_inputs = stacked::PublicInputs::<H::Domain> {
             replica_id,
-            tau: Some(tau.simplify().into()),
-            comm_r_star: tau.comm_r_star,
+            tau: Some(tau.clone()),
             k: Some(0),
             seed: None,
         };
 
-        let priv_inputs = layered_drgporep::PrivateInputs {
-            aux,
-            tau: tau.layer_taus,
-        };
+        let priv_inputs = stacked::PrivateInputs { p_aux, t_aux };
 
         replication_duration += start.elapsed();
 
@@ -246,7 +238,7 @@ fn do_the_work<H: 'static>(
         let start = Instant::now();
         start_profile("prove");
         let all_partition_proofs =
-            ZigZagDrgPoRep::<H>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, partitions)
+            StackedDrg::<H>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, partitions)
                 .expect("failed to prove");
         stop_profile();
         let vanilla_proving = start.elapsed();
@@ -264,7 +256,7 @@ fn do_the_work<H: 'static>(
         for _ in 0..samples {
             let start = Instant::now();
             let verified =
-                ZigZagDrgPoRep::<H>::verify_all_partitions(&pp, &pub_inputs, &all_partition_proofs)
+                StackedDrg::<H>::verify_all_partitions(&pp, &pub_inputs, &all_partition_proofs)
                     .expect("failed during verification");
             if !verified {
                 info!("Verification failed.");
@@ -300,7 +292,7 @@ fn do_the_work<H: 'static>(
             info!("Performing circuit bench.");
             let mut cs = MetricCS::<Bls12>::new();
 
-            ZigZagCompound::blank_circuit(&pp, &engine_params)
+            StackedCompound::blank_circuit(&pp, &engine_params)
                 .synthesize(&mut cs)
                 .expect("failed to synthesize circuit");
 
@@ -323,7 +315,7 @@ fn do_the_work<H: 'static>(
             // We should also allow the serialized vanilla proofs to be passed (as a file) to the example
             // and skip replication/vanilla-proving entirely.
             info!("Performing circuit groth.");
-            let gparams = ZigZagCompound::groth_params(
+            let gparams = StackedCompound::groth_params(
                 &compound_public_params.vanilla_params,
                 &engine_params,
             )
@@ -332,7 +324,7 @@ fn do_the_work<H: 'static>(
             let multi_proof = {
                 let start = Instant::now();
                 start_profile("groth-prove");
-                let result = ZigZagCompound::prove(
+                let result = StackedCompound::prove(
                     &compound_public_params,
                     &pub_inputs,
                     &priv_inputs,
@@ -354,7 +346,7 @@ fn do_the_work<H: 'static>(
                 for _ in 0..samples {
                     let start = Instant::now();
                     let cur_result = result;
-                    ZigZagCompound::verify(
+                    StackedCompound::verify(
                         &compound_public_params,
                         &pub_inputs,
                         &multi_proof,
@@ -384,7 +376,7 @@ fn do_the_work<H: 'static>(
             let start = Instant::now();
             info!("Extracting.");
             start_profile("extract");
-            let decoded_data = ZigZagDrgPoRep::<H>::extract_all(&pp, &replica_id, &data).unwrap();
+            let decoded_data = StackedDrg::<H>::extract_all(&pp, &replica_id, &data).unwrap();
             stop_profile();
             let extracting = start.elapsed();
             info!("extracting_time: {:?}", extracting);
@@ -471,19 +463,6 @@ fn main() {
                 .long("extract")
                 .help("Extract data after proving and verifying.")
         )
-        .arg(
-            Arg::with_name("taper")
-                .long("taper")
-                .help("fraction of challenges by which to taper at each layer")
-                .default_value("0.0")
-        )
-        .arg(
-            Arg::with_name("taper-layers")
-                .long("taper-layers")
-                .help("number of layers to taper")
-                .takes_value(true)
-        )
-
         .get_matches();
 
     let data_size = value_t!(matches, "size", usize).unwrap() * 1024;
@@ -491,8 +470,6 @@ fn main() {
     let hasher = value_t!(matches, "hasher", String).unwrap();
     let layers = value_t!(matches, "layers", usize).unwrap();
     let partitions = value_t!(matches, "partitions", usize).unwrap();
-    let taper = value_t!(matches, "taper", f64).unwrap();
-    let taper_layers = value_t!(matches, "taper-layers", usize).unwrap_or(layers);
     let use_tmp = !matches.is_present("no-tmp");
     let dump_proofs = matches.is_present("dump");
     let groth = matches.is_present("groth");
@@ -501,11 +478,7 @@ fn main() {
     let circuit = matches.is_present("circuit");
     let extract = matches.is_present("extract");
 
-    let challenges = if taper == 0.0 {
-        LayerChallenges::new_fixed(layers, challenge_count)
-    } else {
-        LayerChallenges::new_tapered(layers, challenge_count, taper_layers, taper)
-    };
+    let challenges = LayerChallenges::new(layers, challenge_count);
 
     info!("hasher: {}", hasher);
     match hasher.as_ref() {

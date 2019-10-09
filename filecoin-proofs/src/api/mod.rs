@@ -8,7 +8,7 @@ use memmap::MmapOptions;
 use paired::bls12_381::Bls12;
 use paired::Engine;
 
-use crate::caches::{get_zigzag_params, get_zigzag_verifying_key};
+use crate::caches::{get_stacked_params, get_stacked_verifying_key};
 use crate::constants::{
     MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
     MINIMUM_RESERVED_LEAVES_FOR_PIECE_IN_SECTOR as MIN_NUM_LEAVES, POREP_MINIMUM_CHALLENGES,
@@ -26,21 +26,20 @@ use crate::types::{
 };
 
 use storage_proofs::circuit::multi_proof::MultiProof;
-use storage_proofs::circuit::zigzag::ZigZagCompound;
+use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::drgraph::DefaultTreeHasher;
+use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
 use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::hasher::{Domain, Hasher};
-use storage_proofs::layered_drgporep::{self, ChallengeRequirements};
 use storage_proofs::merkle::MerkleTree;
 use storage_proofs::piece_inclusion_proof::{
     generate_piece_commitment_bytes_from_source, piece_inclusion_proofs, PieceInclusionProof,
     PieceSpec,
 };
-use storage_proofs::porep::{replica_id, PoRep, Tau};
+use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
-use storage_proofs::zigzag_drgporep::ZigZagDrgPoRep;
+use storage_proofs::stacked::{self, generate_replica_id, ChallengeRequirements, StackedDrg, Tau};
 use tempfile::tempfile;
 
 mod post;
@@ -53,11 +52,15 @@ pub type Commitment = Fr32Ary;
 pub type ChallengeSeed = [u8; 32];
 type Tree = MerkleTree<PedersenDomain, <PedersenHasher as Hasher>::Function>;
 
+pub type PersistentAux = stacked::PersistentAux<PedersenDomain>;
+
+pub type Ticket = [u8; 32];
+
 #[derive(Clone, Debug)]
 pub struct SealOutput {
     pub comm_r: Commitment,
-    pub comm_r_star: Commitment,
     pub comm_d: Commitment,
+    pub p_aux: PersistentAux,
     pub proof: Vec<u8>,
     pub comm_ps: Vec<Commitment>,
     pub piece_inclusion_proofs: Vec<PieceInclusionProof<PedersenHasher>>,
@@ -156,6 +159,7 @@ pub fn seal<T: AsRef<Path>>(
     out_path: T,
     prover_id_in: &FrSafe,
     sector_id: SectorId,
+    ticket: Ticket,
     piece_lengths: &[UnpaddedBytesAmount],
 ) -> error::Result<SealOutput> {
     let sector_bytes = usize::from(PaddedBytesAmount::from(porep_config));
@@ -171,11 +175,12 @@ pub fn seal<T: AsRef<Path>>(
 
     let mut data = unsafe { MmapOptions::new().map_mut(&f_data).unwrap() };
 
+    // TODO: do these need to be Fr safe?
+
     // Zero-pad the prover_id to 32 bytes (and therefore Fr32).
     let prover_id = pad_safe_fr(prover_id_in);
     // Zero-pad the sector_id to 32 bytes (and therefore Fr32).
     let sector_id_as_safe_fr = pad_safe_fr(&sector_id.as_fr_safe());
-    let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id_as_safe_fr);
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: &setup_params(
@@ -186,18 +191,31 @@ pub fn seal<T: AsRef<Path>>(
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };
 
-    let compound_public_params = ZigZagCompound::setup(&compound_setup_params)?;
+    let compound_public_params = StackedCompound::setup(&compound_setup_params)?;
 
-    let (tau, aux) = ZigZagDrgPoRep::replicate(
+    let data_tree = compound_public_params
+        .vanilla_params
+        .graph
+        .merkle_tree(&data)?;
+
+    let replica_id = generate_replica_id::<DefaultTreeHasher>(
+        &prover_id,
+        &sector_id_as_safe_fr,
+        &ticket,
+        data_tree.root(),
+    );
+
+    let (tau, (p_aux, t_aux)) = StackedDrg::replicate(
         &compound_public_params.vanilla_params,
         &replica_id,
         &mut data,
-        None,
+        Some(data_tree),
     )?;
 
     let mut in_data = OpenOptions::new().read(true).open(&in_path)?;
     let piece_specs = generate_piece_specs_from_source(&mut in_data, &piece_lengths)?;
-    let piece_inclusion_proofs = piece_inclusion_proofs::<PedersenHasher>(&piece_specs, &aux[0])?;
+    let piece_inclusion_proofs =
+        piece_inclusion_proofs::<PedersenHasher>(&piece_specs, &t_aux.tree_d)?;
     let comm_ps: Vec<Commitment> = piece_specs
         .iter()
         .map(|piece_spec| piece_spec.comm_p)
@@ -207,29 +225,28 @@ pub fn seal<T: AsRef<Path>>(
     data.flush()?;
     cleanup.success = true;
 
-    let public_tau = tau.simplify();
+    let public_tau = tau;
 
-    let public_inputs = layered_drgporep::PublicInputs {
+    let public_inputs = stacked::PublicInputs {
         replica_id,
-        tau: Some(public_tau),
-        comm_r_star: tau.comm_r_star,
+        tau: Some(public_tau.clone()),
         k: None,
         seed: None,
     };
 
-    let private_inputs = layered_drgporep::PrivateInputs::<DefaultTreeHasher> {
-        aux,
-        tau: tau.layer_taus,
+    let private_inputs = stacked::PrivateInputs::<DefaultTreeHasher> {
+        p_aux: p_aux.clone(),
+        t_aux,
     };
 
-    let groth_params = get_zigzag_params(porep_config)?;
+    let groth_params = get_stacked_params(porep_config)?;
 
     info!(
         "got groth params ({}) while sealing",
         u64::from(PaddedBytesAmount::from(porep_config))
     );
 
-    let proof = ZigZagCompound::prove(
+    let proof = StackedCompound::prove(
         &compound_public_params,
         &public_inputs,
         &private_inputs,
@@ -244,7 +261,6 @@ pub fn seal<T: AsRef<Path>>(
 
     let comm_r = commitment_from_fr::<Bls12>(public_tau.comm_r.into());
     let comm_d = commitment_from_fr::<Bls12>(public_tau.comm_d.into());
-    let comm_r_star = commitment_from_fr::<Bls12>(tau.comm_r_star.into());
 
     let valid_pieces = PieceInclusionProof::verify_all(
         &comm_d,
@@ -267,17 +283,17 @@ pub fn seal<T: AsRef<Path>>(
         porep_config,
         comm_r,
         comm_d,
-        comm_r_star,
         prover_id_in,
         sector_id,
+        ticket,
         &buf,
     )
     .expect("post-seal verification sanity check failed");
 
     Ok(SealOutput {
         comm_r,
-        comm_r_star,
         comm_d,
+        p_aux,
         proof: buf,
         comm_ps,
         piece_inclusion_proofs,
@@ -290,19 +306,24 @@ pub fn verify_seal(
     porep_config: PoRepConfig,
     comm_r: Commitment,
     comm_d: Commitment,
-    comm_r_star: Commitment,
     prover_id_in: &FrSafe,
     sector_id: SectorId,
+    ticket: Ticket,
     proof_vec: &[u8],
 ) -> error::Result<bool> {
     let sector_bytes = PaddedBytesAmount::from(porep_config);
     let prover_id = pad_safe_fr(prover_id_in);
     let sector_id_as_safe_fr = pad_safe_fr(&sector_id.as_fr_safe());
-    let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id_as_safe_fr);
 
     let comm_r = as_safe_commitment(&comm_r, "comm_r")?;
     let comm_d = as_safe_commitment(&comm_d, "comm_d")?;
-    let comm_r_star = as_safe_commitment(&comm_r_star, "comm_r_star")?;
+
+    let replica_id = generate_replica_id::<DefaultTreeHasher>(
+        &prover_id,
+        &sector_id_as_safe_fr,
+        &ticket,
+        comm_d,
+    );
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: &setup_params(
@@ -316,18 +337,17 @@ pub fn verify_seal(
     let compound_public_params: compound_proof::PublicParams<
         '_,
         Bls12,
-        ZigZagDrgPoRep<'_, DefaultTreeHasher>,
-    > = ZigZagCompound::setup(&compound_setup_params)?;
+        StackedDrg<'_, DefaultTreeHasher>,
+    > = StackedCompound::setup(&compound_setup_params)?;
 
-    let public_inputs = layered_drgporep::PublicInputs::<<DefaultTreeHasher as Hasher>::Domain> {
+    let public_inputs = stacked::PublicInputs::<<DefaultTreeHasher as Hasher>::Domain> {
         replica_id,
         tau: Some(Tau { comm_r, comm_d }),
         seed: None,
-        comm_r_star,
         k: None,
     };
 
-    let verifying_key = get_zigzag_verifying_key(porep_config)?;
+    let verifying_key = get_stacked_verifying_key(porep_config)?;
 
     info!(
         "got verifying key ({}) while verifying seal",
@@ -340,7 +360,7 @@ pub fn verify_seal(
         &verifying_key,
     )?;
 
-    ZigZagCompound::verify(
+    StackedCompound::verify(
         &compound_public_params,
         &public_inputs,
         &proof,
@@ -401,19 +421,28 @@ pub fn generate_piece_commitment<T: std::io::Read>(
 /// whose first (unpadded) byte begins at `offset` and ends at `offset` plus
 /// `num_bytes`, inclusive. Note that the entire sector is unsealed each time
 /// this function is called.
-///
+#[allow(clippy::too_many_arguments)]
 pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     porep_config: PoRepConfig,
     sealed_path: T,
     output_path: T,
     prover_id_in: &FrSafe,
     sector_id: SectorId,
+    comm_d: Commitment,
+    ticket: Ticket,
     offset: UnpaddedByteIndex,
     num_bytes: UnpaddedBytesAmount,
 ) -> error::Result<(UnpaddedBytesAmount)> {
     let sector_id_as_safe_fr = pad_safe_fr(&sector_id.as_fr_safe());
     let prover_id = pad_safe_fr(prover_id_in);
-    let replica_id = replica_id::<DefaultTreeHasher>(prover_id, sector_id_as_safe_fr);
+    let comm_d = storage_proofs::hasher::pedersen::PedersenDomain::try_from_bytes(&comm_d)?;
+
+    let replica_id = generate_replica_id::<DefaultTreeHasher>(
+        &prover_id,
+        &sector_id_as_safe_fr,
+        &ticket,
+        comm_d,
+    );
 
     let f_in = File::open(sealed_path)?;
     let mut data = Vec::new();
@@ -423,7 +452,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     let f_out = File::create(output_path)?;
     let mut buf_writer = BufWriter::new(f_out);
 
-    let unsealed = ZigZagDrgPoRep::extract_all(
+    let unsealed = StackedDrg::extract_all(
         &public_params(
             PaddedBytesAmount::from(porep_config),
             usize::from(PoRepProofPartitions::from(porep_config)),
@@ -593,9 +622,9 @@ mod tests {
                 PoRepConfig(SectorSize(SECTOR_SIZE_ONE_KIB), PoRepProofPartitions(2)),
                 not_convertible_to_fr_bytes,
                 convertible_to_fr_bytes,
-                convertible_to_fr_bytes,
                 &[0; 31],
                 SectorId::from(0),
+                [0; 32],
                 &[],
             );
 
@@ -617,9 +646,9 @@ mod tests {
                 PoRepConfig(SectorSize(SECTOR_SIZE_ONE_KIB), PoRepProofPartitions(2)),
                 convertible_to_fr_bytes,
                 not_convertible_to_fr_bytes,
-                convertible_to_fr_bytes,
                 &[0; 31],
                 SectorId::from(0),
+                [0; 32],
                 &[],
             );
 
@@ -633,30 +662,6 @@ mod tests {
                 );
             } else {
                 panic!("should have failed comm_d to Fr32 conversion");
-            }
-        }
-
-        {
-            let result = verify_seal(
-                PoRepConfig(SectorSize(SECTOR_SIZE_ONE_KIB), PoRepProofPartitions(2)),
-                convertible_to_fr_bytes,
-                convertible_to_fr_bytes,
-                not_convertible_to_fr_bytes,
-                &[0; 31],
-                SectorId::from(0),
-                &[],
-            );
-
-            if let Err(err) = result {
-                let needle = "Invalid commitment (comm_r_star)";
-                let haystack = format!("{}", err);
-
-                assert!(
-                    haystack.contains(needle),
-                    format!("\"{}\" did not contain \"{}\"", haystack, needle)
-                );
-            } else {
-                panic!("should have failed comm_r_star to Fr32 conversion");
             }
         }
     }
@@ -729,6 +734,7 @@ mod tests {
             &sealed_sector_file.path(),
             &[0; 31],
             SectorId::from(0),
+            [0; 32],
             &[number_of_bytes_in_piece],
         )?;
 

@@ -96,8 +96,16 @@ impl<D: Digester> StdHasher for DigestFunction<D> {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, PartialOrd, Ord, Default, Serialize, Deserialize)]
+#[derive(
+    Copy, Clone, PartialEq, Eq, Debug, PartialOrd, Ord, Default, Serialize, Deserialize, Hash,
+)]
 pub struct DigestDomain(pub [u8; 32]);
+
+impl AsRef<DigestDomain> for DigestDomain {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
 
 impl DigestDomain {
     fn trim_to_fr32(&mut self) {

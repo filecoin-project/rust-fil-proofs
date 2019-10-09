@@ -27,6 +27,7 @@ pub trait Domain:
     + Serialize
     + DeserializeOwned
     + Element
+    + std::hash::Hash
 {
     fn serialize(&self) -> Vec<u8>;
     fn into_bytes(&self) -> Vec<u8>;
@@ -69,7 +70,7 @@ pub trait HashFunction<T: Domain>:
 }
 
 pub trait Hasher: Clone + ::std::fmt::Debug + Eq + Default + Send + Sync {
-    type Domain: Domain + LightHashable<Self::Function>;
+    type Domain: Domain + LightHashable<Self::Function> + AsRef<Self::Domain>;
     type Function: HashFunction<Self::Domain>;
 
     fn kdf(data: &[u8], m: usize) -> Self::Domain;

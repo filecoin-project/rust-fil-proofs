@@ -2,16 +2,16 @@
 
 This crate contains the following binaries
 
-- `benchy` - Can be used to capture ZigZag performance metrics
+- `benchy` - Can be used to capture Stacked performance metrics
 - `micro` - Runs the micro benchmarks written with criterion, parses the output.
 
 ## `benchy`
 
-The `benchy` program can (currently) be used to capture ZigZag performance
+The `benchy` program can (currently) be used to capture Stacked performance
 metrics. Metrics are printed to stdout.
 
 ```
-$ ./target/release/benchy zigzag --size=1024 | jq '.'
+$ ./target/release/benchy stacked --size=1024 | jq '.'
 {
   "inputs": {
     "dataSize": 1048576,
@@ -46,11 +46,11 @@ $ ./target/release/benchy zigzag --size=1024 | jq '.'
 }
 ```
 
-To include information about RAM utilization during ZigZag benchmarking, run
+To include information about RAM utilization during Stacked benchmarking, run
 `benchy` via its wrapper script:
 
 ```
-$ ./scripts/benchy.sh zigzag --size=1024 | jq '.'
+$ ./scripts/benchy.sh stacked --size=1024 | jq '.'
 {
   "inputs": {
     "dataSize": 1048576,
@@ -90,7 +90,7 @@ To run benchy on a remote server, provide SSH connection information to the
 benchy-remote.sh script:
 
 ```shell
-10:13 $ ./fil-proofs-tooling/scripts/benchy-remote.sh master foo@16.16.16.16 zigzag --size=1 | jq '.'
+10:13 $ ./fil-proofs-tooling/scripts/benchy-remote.sh master foo@16.16.16.16 stacked --size=1 | jq '.'
 {
   "inputs": {
     // ...

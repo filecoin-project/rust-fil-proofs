@@ -25,7 +25,6 @@ pub mod test_helper;
 
 pub mod example_helper;
 
-pub mod challenge_derivation;
 pub mod circuit;
 pub mod compound_proof;
 pub mod crypto;
@@ -34,7 +33,6 @@ pub mod drgraph;
 pub mod error;
 pub mod fr32;
 pub mod hasher;
-pub mod layered_drgporep;
 pub mod merkle;
 pub mod merklepor;
 pub mod parameter_cache;
@@ -46,8 +44,7 @@ pub mod proof;
 pub mod rational_post;
 pub mod sector;
 pub mod settings;
+pub mod stacked;
 pub mod util;
-pub mod zigzag_drgporep;
-pub mod zigzag_graph;
 
 pub mod vde;

@@ -125,14 +125,7 @@ impl<H: Hasher> DataProof<H> {
     /// proves_challenge returns true if this self.proof corresponds to challenge.
     /// This is useful for verifying that a supplied proof is actually relevant to a given challenge.
     pub fn proves_challenge(&self, challenge: usize) -> bool {
-        let mut c = challenge;
-        for (_, is_right) in self.proof.path().iter() {
-            if ((c & 1) == 1) ^ is_right {
-                return false;
-            };
-            c >>= 1;
-        }
-        true
+        self.proof.proves_challenge(challenge)
     }
 }
 
@@ -399,10 +392,10 @@ where
             let key = {
                 let mut hasher = Blake2s::new().hash_length(32).to_state();
                 let prover_bytes = pub_inputs.replica_id.expect("missing replica_id");
-                hasher.update(prover_bytes.as_ref());
+                hasher.update(AsRef::<[u8]>::as_ref(&prover_bytes));
 
                 for p in proof.replica_parents[i].iter() {
-                    hasher.update(p.1.data.as_ref());
+                    hasher.update(AsRef::<[u8]>::as_ref(&p.1.data));
                 }
 
                 let hash = hasher.finalize();
@@ -428,6 +421,7 @@ where
 impl<'a, H, G> PoRep<'a, H> for DrgPoRep<'a, H, G>
 where
     H: 'a + Hasher,
+    G::Key: AsRef<H::Domain>,
     G: 'a + Graph<H> + ParameterSetMetadata + Sync + Send,
 {
     type Tau = porep::Tau<H::Domain>;
@@ -444,7 +438,7 @@ where
             None => pp.graph.merkle_tree(data)?,
         };
 
-        vde::encode(&pp.graph, replica_id, data)?;
+        vde::encode(&pp.graph, replica_id, data, None)?;
 
         let comm_d = tree_d.root();
         let tree_r = pp.graph.merkle_tree(data)?;
@@ -461,7 +455,7 @@ where
         replica_id: &'b H::Domain,
         data: &'b [u8],
     ) -> Result<Vec<u8>> {
-        vde::decode(&pp.graph, replica_id, data)
+        vde::decode(&pp.graph, replica_id, data, None)
     }
 
     fn extract(
@@ -470,7 +464,7 @@ where
         data: &[u8],
         node: usize,
     ) -> Result<Vec<u8>> {
-        Ok(decode_block(&pp.graph, replica_id, data, node)?.into_bytes())
+        Ok(decode_block(&pp.graph, replica_id, data, None, node)?.into_bytes())
     }
 }
 

@@ -5,13 +5,13 @@ use clap::{value_t, App, Arg, SubCommand};
 
 mod hash_fns;
 mod rational_post;
-mod zigzag;
+mod stacked;
 
 fn main() {
     pretty_env_logger::init_timed();
 
-    let zigzag_cmd = SubCommand::with_name("zigzag")
-                .about("Run zigzag sealing")
+    let stacked_cmd = SubCommand::with_name("stacked")
+                .about("Run stacked sealing")
                 .arg(
                     Arg::with_name("size")
                         .required(true)
@@ -87,18 +87,6 @@ fn main() {
                     Arg::with_name("extract")
                         .long("extract")
                         .help("Extract data after proving and verifying.")
-                )
-                .arg(
-                    Arg::with_name("taper")
-                        .long("taper")
-                        .help("fraction of challenges by which to taper at each layer")
-                        .default_value("0.0")
-                )
-                .arg(
-                    Arg::with_name("taper-layers")
-                        .long("taper-layers")
-                        .help("number of layers to taper")
-                        .takes_value(true)
                 );
 
     let rational_post_cmd = SubCommand::with_name("rational-post")
@@ -116,17 +104,17 @@ fn main() {
 
     let matches = App::new("benchy")
         .version("0.1")
-        .subcommand(zigzag_cmd)
+        .subcommand(stacked_cmd)
         .subcommand(rational_post_cmd)
         .subcommand(hash_cmd)
         .get_matches();
 
     match matches.subcommand() {
-        ("zigzag", Some(m)) => {
+        ("stacked", Some(m)) => {
             Ok(())
                 .and_then(|_| {
                     let layers = value_t!(m, "layers", usize)?;
-                    zigzag::run(zigzag::RunOpts {
+                    stacked::run(stacked::RunOpts {
                         bench: m.is_present("bench"),
                         bench_only: m.is_present("bench-only"),
                         challenges: value_t!(m, "challenges", usize)?,
@@ -140,11 +128,9 @@ fn main() {
                         no_tmp: m.is_present("no-tmp"),
                         partitions: value_t!(m, "partitions", usize)?,
                         size: value_t!(m, "size", usize)?,
-                        taper: value_t!(m, "taper", f64)?,
-                        taper_layers: value_t!(m, "taper-layers", usize).unwrap_or(layers),
                     })
                 })
-                .expect("zigzag failed");
+                .expect("stacked failed");
         }
         ("rational-post", Some(m)) => {
             let sector_size_kibs = value_t!(m, "size", usize)

@@ -39,7 +39,6 @@ use std::marker::PhantomData;
 /// * `data_node_path` - The path of the data node being proven.
 /// * `data_root` - The merkle root of the data.
 /// * `replica_id` - The id of the replica.
-/// * `degree` - The degree of the graph.
 ///
 //implement_drgporep!(
 //    DrgPoRepCircuit,
@@ -64,7 +63,6 @@ pub struct DrgPoRepCircuit<'a, E: JubjubEngine, H: Hasher> {
     data_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
     data_root: Root<E>,
     replica_id: Option<E::Fr>,
-    degree: usize,
     private: bool,
     _h: PhantomData<H>,
 }
@@ -83,7 +81,6 @@ impl<'a, E: JubjubEngine, H: Hasher> DrgPoRepCircuit<'a, E, H> {
         data_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
         data_root: Root<E>,
         replica_id: Option<E::Fr>,
-        degree: usize,
         private: bool,
     ) -> Result<(), SynthesisError>
     where
@@ -101,7 +98,6 @@ impl<'a, E: JubjubEngine, H: Hasher> DrgPoRepCircuit<'a, E, H> {
             data_nodes_paths,
             data_root,
             replica_id,
-            degree,
             private,
             _h: Default::default(),
         }
@@ -131,6 +127,7 @@ impl<'a, E: JubjubEngine, H: Hasher> CircuitComponent for DrgPoRepCircuit<'a, E,
 pub struct DrgPoRepCompound<H, G>
 where
     H: Hasher,
+    G::Key: AsRef<H::Domain>,
     G: Graph<H>,
 {
     // Sad phantom is sad
@@ -140,6 +137,8 @@ where
 
 impl<E: JubjubEngine, C: Circuit<E>, H: Hasher, G: Graph<H>, P: ParameterSetMetadata>
     CacheableParameters<E, C, P> for DrgPoRepCompound<H, G>
+where
+    G::Key: AsRef<H::Domain>,
 {
     fn cache_prefix() -> String {
         format!("drg-proof-of-replication-{}", H::name())
@@ -150,6 +149,7 @@ impl<'a, H, G> CompoundProof<'a, Bls12, DrgPoRep<'a, H, G>, DrgPoRepCircuit<'a, 
     for DrgPoRepCompound<H, G>
 where
     H: 'a + Hasher,
+    G::Key: AsRef<H::Domain>,
     G: 'a + Graph<H> + ParameterSetMetadata + Sync + Send,
 {
     fn generate_public_inputs(
@@ -310,7 +310,6 @@ where
             data_nodes_paths,
             data_root,
             replica_id: replica_id.map(Into::into),
-            degree: public_params.graph.degree(),
             private: public_params.private,
             _h: Default::default(),
         }
@@ -345,7 +344,6 @@ where
             data_nodes_paths,
             data_root,
             replica_id: None,
-            degree: public_params.graph.degree(),
             private: public_params.private,
             _h: Default::default(),
         }
@@ -386,7 +384,6 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for DrgPoRepCircuit<'a, E, H> {
         let replica_root = self.replica_root;
         let data_root = self.data_root;
 
-        let degree = self.degree;
         let nodes = self.data_nodes.len();
 
         assert_eq!(self.replica_nodes.len(), nodes);
@@ -440,7 +437,7 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for DrgPoRepCircuit<'a, E, H> {
                 PoRCircuit::<_, H>::synthesize(
                     cs.namespace(|| "replica_inclusion"),
                     &params,
-                    *replica_node,
+                    Root::Val(*replica_node),
                     replica_node_path.clone(),
                     replica_root_var.clone(),
                     self.private,
@@ -451,7 +448,7 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for DrgPoRepCircuit<'a, E, H> {
                     PoRCircuit::<_, H>::synthesize(
                         cs.namespace(|| format!("parents_inclusion_{}", j)),
                         &params,
-                        replica_parents[j],
+                        Root::Val(replica_parents[j]),
                         replica_parents_paths[j].clone(),
                         replica_root_var.clone(),
                         self.private,
@@ -462,7 +459,7 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for DrgPoRepCircuit<'a, E, H> {
                 PoRCircuit::<_, H>::synthesize(
                     cs.namespace(|| "data_inclusion"),
                     &params,
-                    *data_node,
+                    Root::Val(*data_node),
                     data_node_path.clone(),
                     data_root_var.clone(),
                     self.private,
@@ -493,12 +490,7 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for DrgPoRepCircuit<'a, E, H> {
                 };
 
                 // generate the encryption key
-                let key = kdf(
-                    cs.namespace(|| "kdf"),
-                    replica_id_bits.clone(),
-                    parents_bits,
-                    degree,
-                )?;
+                let key = kdf(cs.namespace(|| "kdf"), &replica_id_bits, parents_bits, None)?;
 
                 let decoded = sloth::decode(cs.namespace(|| "sloth_decode"), &key, *replica_node)?;
 
@@ -655,7 +647,6 @@ mod tests {
             vec![data_node_path],
             data_root,
             replica_id,
-            degree,
             false,
         )
         .expect("failed to synthesize circuit");
@@ -668,8 +659,8 @@ mod tests {
         }
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_inputs(), 16, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 103813, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 130957, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
@@ -706,13 +697,12 @@ mod tests {
             vec![vec![Some((Fr::rand(rng), false)); tree_depth]; 1],
             Root::Val(Some(Fr::rand(rng))),
             Some(Fr::rand(rng)),
-            m,
             false,
         )
         .expect("failed to synthesize circuit");
 
-        assert_eq!(cs.num_inputs(), 16, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 305791, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 361789, "wrong number of constraints");
     }
 
     #[test]

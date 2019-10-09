@@ -84,6 +84,15 @@ impl<H: Hasher> MerkleProof<H> {
             .collect::<Vec<_>>()
     }
 
+    pub fn into_options_with_leaf(self) -> (Option<Fr>, Vec<Option<(Fr, bool)>>) {
+        let MerkleProof { leaf, path, .. } = self;
+
+        (
+            Some(leaf.into()),
+            path.into_iter().map(|(a, b)| Some((a.into(), b))).collect(),
+        )
+    }
+
     pub fn as_pairs(&self) -> Vec<(Fr, bool)> {
         self.path
             .iter()
@@ -91,13 +100,8 @@ impl<H: Hasher> MerkleProof<H> {
             .collect::<Vec<_>>()
     }
 
-    /// Validates the MerkleProof and that it corresponds to the supplied node.
-    pub fn validate(&self, node: usize) -> bool {
+    fn verify(&self) -> bool {
         let mut a = H::Function::default();
-
-        if path_index(&self.path) != node {
-            return false;
-        }
 
         self.root()
             == &(0..self.path.len()).fold(self.leaf, |h, i| {
@@ -114,8 +118,21 @@ impl<H: Hasher> MerkleProof<H> {
             })
     }
 
+    /// Validates the MerkleProof and that it corresponds to the supplied node.
+    pub fn validate(&self, node: usize) -> bool {
+        if path_index(&self.path) != node {
+            return false;
+        }
+
+        self.verify()
+    }
+
     /// Validates that the data hashes to the leaf of the merkle path.
     pub fn validate_data(&self, data: &[u8]) -> bool {
+        if !self.verify() {
+            return false;
+        }
+
         self.leaf().into_bytes() == data
     }
 
@@ -127,6 +144,10 @@ impl<H: Hasher> MerkleProof<H> {
     /// Returns the root hash
     pub fn root(&self) -> &H::Domain {
         &self.root
+    }
+
+    pub fn verified_leaf(&self) -> IncludedNode<H> {
+        IncludedNode::new(*self.leaf())
     }
 
     /// Returns the length of the proof. That is all path elements plus 1 for the
@@ -152,6 +173,46 @@ impl<H: Hasher> MerkleProof<H> {
 
     pub fn path(&self) -> &Vec<(H::Domain, bool)> {
         &self.path
+    }
+
+    /// proves_challenge returns true if this self.proof corresponds to challenge.
+    /// This is useful for verifying that a supplied proof is actually relevant to a given challenge.
+    pub fn proves_challenge(&self, challenge: usize) -> bool {
+        let mut c = challenge;
+        for (_, is_right) in self.path().iter() {
+            if ((c & 1) == 1) ^ is_right {
+                return false;
+            };
+            c >>= 1;
+        }
+        true
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IncludedNode<H: Hasher> {
+    value: H::Domain,
+    _h: PhantomData<H>,
+}
+
+impl<H: Hasher> IncludedNode<H> {
+    pub fn new(value: H::Domain) -> Self {
+        IncludedNode {
+            value,
+            _h: PhantomData,
+        }
+    }
+
+    pub fn into_fr(self) -> Fr {
+        self.value.into()
+    }
+}
+
+impl<H: Hasher> std::ops::Deref for IncludedNode<H> {
+    type Target = H::Domain;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
     }
 }
 

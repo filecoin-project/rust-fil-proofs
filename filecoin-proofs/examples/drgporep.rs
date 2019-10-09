@@ -21,7 +21,6 @@ struct DrgPoRepExample<'a, E: JubjubEngine> {
     data_nodes_paths: Vec<Vec<Option<(E::Fr, bool)>>>,
     data_root: Root<E>,
     replica_id: Option<E::Fr>,
-    m: usize,
 }
 
 impl<'a> Circuit<Bls12> for DrgPoRepExample<'a, Bls12> {
@@ -38,7 +37,6 @@ impl<'a> Circuit<Bls12> for DrgPoRepExample<'a, Bls12> {
             self.data_nodes_paths,
             self.data_root,
             self.replica_id,
-            self.m,
             false,
         )
     }
@@ -72,7 +70,6 @@ impl<'a> Example<'a, DrgPoRepExample<'a, Bls12>> for DrgPoRepApp {
                 data_nodes_paths: vec![vec![None; tree_depth]; challenge_count],
                 data_root: Root::Val(None),
                 replica_id: None,
-                m,
             },
             rng,
         )
@@ -110,7 +107,6 @@ impl<'a> Example<'a, DrgPoRepExample<'a, Bls12>> for DrgPoRepApp {
             data_nodes_paths: f.data_nodes_paths,
             data_root: Root::Val(Some(f.data_root)),
             replica_id: Some(f.replica_id),
-            m,
         }
     }
 

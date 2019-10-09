@@ -7,7 +7,7 @@ use paired::bls12_381::Bls12;
 
 use storage_proofs::circuit::rational_post::RationalPoStCircuit;
 use storage_proofs::circuit::rational_post::RationalPoStCompound;
-use storage_proofs::circuit::zigzag::ZigZagCompound;
+use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::hasher::PedersenHasher;
 use storage_proofs::rational_post::RationalPoSt;
@@ -83,7 +83,7 @@ where
     cache_lookup(&*VERIFYING_KEY_MEMORY_CACHE, vk_identifier, generator)
 }
 
-pub fn get_zigzag_params(
+pub fn get_stacked_params(
     porep_config: PoRepConfig,
 ) -> error::Result<Arc<groth16::Parameters<Bls12>>> {
     let public_params = public_params(
@@ -92,11 +92,11 @@ pub fn get_zigzag_params(
     );
 
     let parameters_generator =
-        || ZigZagCompound::groth_params(&public_params, &ENGINE_PARAMS).map_err(Into::into);
+        || StackedCompound::groth_params(&public_params, &ENGINE_PARAMS).map_err(Into::into);
 
     Ok(lookup_groth_params(
         format!(
-            "ZIGZAG[{}]",
+            "STACKED[{}]",
             usize::from(PaddedBytesAmount::from(porep_config))
         ),
         parameters_generator,
@@ -124,7 +124,7 @@ pub fn get_post_params(post_config: PoStConfig) -> error::Result<Arc<groth16::Pa
     )?)
 }
 
-pub fn get_zigzag_verifying_key(
+pub fn get_stacked_verifying_key(
     porep_config: PoRepConfig,
 ) -> error::Result<Arc<Bls12VerifyingKey>> {
     let public_params = public_params(
@@ -133,11 +133,11 @@ pub fn get_zigzag_verifying_key(
     );
 
     let vk_generator =
-        || ZigZagCompound::verifying_key(&public_params, &ENGINE_PARAMS).map_err(Into::into);
+        || StackedCompound::verifying_key(&public_params, &ENGINE_PARAMS).map_err(Into::into);
 
     Ok(lookup_verifying_key(
         format!(
-            "ZIGZAG[{}]",
+            "STACKED[{}]",
             usize::from(PaddedBytesAmount::from(porep_config))
         ),
         vk_generator,

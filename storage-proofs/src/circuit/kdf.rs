@@ -4,25 +4,31 @@ use fil_sapling_crypto::circuit::boolean::Boolean;
 use fil_sapling_crypto::circuit::{multipack, num};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 
-/// Key derivation function, using pedersen hashes as the underlying primitive.
+use crate::circuit::uint64;
+
+/// Key derivation function.
 pub fn kdf<E, CS>(
     mut cs: CS,
-    id: Vec<Boolean>,
+    id: &[Boolean],
     parents: Vec<Vec<Boolean>>,
-    m: usize,
+    node: Option<uint64::UInt64>,
 ) -> Result<num::AllocatedNum<E>, SynthesisError>
 where
     E: JubjubEngine,
     CS: ConstraintSystem<E>,
 {
     // ciphertexts will become a buffer of the layout
-    // id | encodedParentNode1 | encodedParentNode1 | ...
-    let ciphertexts = parents.into_iter().fold(id, |mut acc, parent| {
-        acc.extend(parent);
-        acc
-    });
+    // id | node | encodedParentNode1 | encodedParentNode1 | ...
 
-    assert_eq!(ciphertexts.len(), 8 * 32 * (1 + m), "invalid input length");
+    let mut ciphertexts = id.to_vec();
+
+    if let Some(node) = node {
+        ciphertexts.extend(node.to_bits_le());
+    }
+
+    for parent in parents.into_iter() {
+        ciphertexts.extend(parent);
+    }
 
     let personalization = vec![0u8; 8];
     let alloc_bits = blake2s_circuit(cs.namespace(|| "hash"), &ciphertexts[..], &personalization)?;
@@ -77,13 +83,8 @@ mod tests {
                 bytes_into_boolean_vec(&mut cs, Some(p.as_slice()), p.len()).unwrap()
             })
             .collect();
-        let out = kdf(
-            cs.namespace(|| "kdf"),
-            id_bits.clone(),
-            parents_bits.clone(),
-            m,
-        )
-        .expect("key derivation function failed");
+        let out = kdf(cs.namespace(|| "kdf"), &id_bits, parents_bits.clone(), None)
+            .expect("key derivation function failed");
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
         assert_eq!(cs.num_constraints(), 240282);

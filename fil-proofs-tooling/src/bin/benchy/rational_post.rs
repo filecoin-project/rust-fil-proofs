@@ -83,6 +83,7 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
     // Replicate the staged sector, write the replica file to `sealed_path`.
     let porep_config = PoRepConfig(SectorSize(sector_size as u64), N_PARTITIONS);
     let sector_id = SectorId::from(SECTOR_ID);
+    let ticket = [0u8; 32];
 
     let seal_output = seal(
         porep_config,
@@ -90,6 +91,7 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
         sealed_file.path(),
         &PROVER_ID,
         sector_id,
+        ticket,
         &[sector_size_unpadded_bytes_ammount],
     )
     .expect("failed to seal");
@@ -102,14 +104,14 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
 
     priv_replica_info.insert(
         sector_id,
-        PrivateReplicaInfo::new(sealed_path_string, seal_output.comm_r),
+        PrivateReplicaInfo::new(sealed_path_string, seal_output.comm_r, seal_output.p_aux),
     );
 
     // Measure PoSt generation and verification.
     let post_config = PoStConfig(SectorSize(sector_size as u64));
 
     let gen_post_measurement =
-        measure(|| generate_post(post_config.clone(), &CHALLENGE_SEED, &priv_replica_info))
+        measure(|| generate_post(post_config, &CHALLENGE_SEED, &priv_replica_info))
             .expect("failed to generate PoSt");
 
     let proof = &gen_post_measurement.return_value;
