@@ -6,14 +6,15 @@ use serde::{Deserialize, Serialize};
 use crate::drgporep;
 use crate::drgraph::Graph;
 use crate::error::Result;
-use crate::hasher::{Domain, HashFunction, Hasher};
+use crate::fr32::bytes_into_fr_repr_safe;
+use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::stacked::{
     column::Column, column_proof::ColumnProof, encoding_proof::EncodingProof,
     graph::StackedBucketGraph, hash::hash2, LayerChallenges,
 };
-use crate::util::data_at_node;
+use crate::util::{data_at_node, NODE_SIZE};
 
 pub type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 
@@ -417,15 +418,18 @@ pub fn get_node<H: Hasher>(data: &[u8], index: usize) -> Result<H::Domain> {
 /// Generate the replica id as expected for Stacked DRG.
 pub fn generate_replica_id<H: Hasher>(
     prover_id: &[u8; 32],
-    sector_id: &[u8; 32],
+    sector_id: u64,
     ticket: &[u8; 32],
     comm_d: H::Domain,
 ) -> H::Domain {
-    let mut to_hash = [0u8; 4 * 32];
-    to_hash[..32].copy_from_slice(prover_id);
-    to_hash[32..64].copy_from_slice(sector_id);
-    to_hash[64..96].copy_from_slice(ticket);
-    to_hash[96..].copy_from_slice(AsRef::<[u8]>::as_ref(&comm_d));
+    use blake2s_simd::Params as Blake2s;
 
-    H::Function::hash(&to_hash[..])
+    let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
+
+    hasher.update(prover_id);
+    hasher.update(&sector_id.to_le_bytes()[..]);
+    hasher.update(ticket);
+    hasher.update(AsRef::<[u8]>::as_ref(&comm_d));
+
+    bytes_into_fr_repr_safe(hasher.finalize().as_ref()).into()
 }
