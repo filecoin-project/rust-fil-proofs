@@ -36,17 +36,8 @@ impl<H: Hasher> Proof<H> {
                 continue;
             }
 
-            if layer == 1 {
-                // first layer has no expansion parents
-                encoding_proofs.push(EncodingProof::empty_base(params));
-            } else if layer == layers {
-                // last layer has a decoded node
-                encoding_proofs.push(EncodingProof::empty_with_decoded(params));
-            } else {
-                encoding_proofs.push(EncodingProof::empty(params));
-            }
+            encoding_proofs.push(EncodingProof::empty(params, layer));
         }
-
         Proof {
             comm_d_proof: InclusionPath::empty(&params.graph),
             comm_r_last_proof: InclusionPath::empty(&params.graph),
@@ -61,6 +52,7 @@ impl<H: Hasher> Proof<H> {
         self,
         mut cs: CS,
         params: &<Bls12 as JubjubEngine>::Params,
+        layers: usize,
         comm_d: &num::AllocatedNum<Bls12>,
         comm_c: &num::AllocatedNum<Bls12>,
         comm_r_last: &num::AllocatedNum<Bls12>,
@@ -82,21 +74,44 @@ impl<H: Hasher> Proof<H> {
             comm_d_leaf.clone(),
         )?;
 
+        let comm_r_last_data_leaf =
+            comm_r_last_proof.alloc_value(cs.namespace(|| "comm_r_last_data_leaf"))?;
+
         // verify encodings
-        for (layer, proof) in encoding_proofs.into_iter().enumerate() {
-            proof.synthesize(
-                cs.namespace(|| format!("encoding_proof_{}", layer)),
-                params,
-                replica_id,
-            )?;
+        for (i, proof) in encoding_proofs.into_iter().enumerate() {
+            let layer = i + 1;
+
+            if layer == layers {
+                proof.synthesize_decoded(
+                    cs.namespace(|| format!("encoding_proof_{}", layer)),
+                    params,
+                    replica_id,
+                    &comm_r_last_data_leaf,
+                    &comm_d_leaf,
+                )?;
+            } else {
+                let raw = replica_column_proof.c_x.get_node_at_layer(layer);
+                let encoded_node = num::AllocatedNum::alloc(
+                    cs.namespace(|| format!("enc_node_{}", layer)),
+                    || {
+                        raw.map(Into::into)
+                            .ok_or_else(|| SynthesisError::AssignmentMissing)
+                    },
+                )?;
+
+                proof.synthesize_key(
+                    cs.namespace(|| format!("encoding_proof_{}", layer)),
+                    params,
+                    replica_id,
+                    &encoded_node,
+                )?;
+            }
         }
 
         // verify replica column openings
         replica_column_proof.synthesize(cs.namespace(|| "replica_column_proof"), params, comm_c)?;
 
         // verify final replica layer
-        let comm_r_last_data_leaf =
-            comm_r_last_proof.alloc_value(cs.namespace(|| "comm_r_last_data_leaf"))?;
         comm_r_last_proof.synthesize(
             cs.namespace(|| "comm_r_last_data_inclusion"),
             params,

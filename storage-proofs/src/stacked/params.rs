@@ -230,10 +230,23 @@ impl<H: Hasher> Proof<H> {
                 layer,
                 expect_challenge
             );
+
+            let (encoded_node, decoded_node) = if layer == layer_challenges.layers() {
+                (
+                    self.comm_r_last_proof.leaf(),
+                    Some(self.comm_d_proofs.leaf()),
+                )
+            } else {
+                (
+                    self.replica_column_proofs.c_x.get_node_at_layer(layer),
+                    None,
+                )
+            };
+
             if expect_challenge {
                 check!(self.encoding_proofs.get(layer - 1).is_some());
                 let encoding_proof = &self.encoding_proofs[layer - 1];
-                check!(encoding_proof.verify(replica_id));
+                check!(encoding_proof.verify(replica_id, encoded_node, decoded_node));
             } else {
                 check!(self.encoding_proofs.get(layer - 1).is_none());
             }

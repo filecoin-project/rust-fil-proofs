@@ -1,7 +1,7 @@
 use bellperson::{ConstraintSystem, SynthesisError};
 use fil_sapling_crypto::circuit::num;
 use fil_sapling_crypto::jubjub::JubjubEngine;
-use paired::bls12_381::Bls12;
+use paired::bls12_381::{Bls12, Fr};
 
 use crate::circuit::{
     constraint,
@@ -23,6 +23,10 @@ impl<H: Hasher> ColumnProof<H> {
             column: Column::empty(params),
             inclusion_path: InclusionPath::empty(&params.graph),
         }
+    }
+
+    pub fn get_node_at_layer(&self, layer: usize) -> &Option<Fr> {
+        self.column.get_node_at_layer(layer)
     }
 
     pub fn synthesize<CS: ConstraintSystem<Bls12>>(

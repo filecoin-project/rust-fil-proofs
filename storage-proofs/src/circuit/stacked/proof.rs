@@ -173,6 +173,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H> {
             proof.synthesize(
                 &mut cs.namespace(|| format!("challenge_{}", i)),
                 &self.params,
+                public_params.layer_challenges.layers(),
                 &comm_d_num,
                 &comm_c_num,
                 &comm_r_last_num,

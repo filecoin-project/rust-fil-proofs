@@ -33,6 +33,12 @@ impl Column {
         }
     }
 
+    pub fn get_node_at_layer(&self, layer: usize) -> &Option<Fr> {
+        assert!(layer > 0, "layer must be greater than 0");
+        let row_index = layer - 1;
+        &self.rows[row_index]
+    }
+
     pub fn hash<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: CS,
