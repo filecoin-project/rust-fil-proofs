@@ -165,29 +165,24 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                                     .collect::<Result<_>>()?
                             };
 
-                            let proof = if layer == layers {
-                                let encoded_node = comm_r_last_proof.verified_leaf();
-                                let decoded_node = comm_d_proof.verified_leaf();
+                            let proof = EncodingProof::<H>::new(challenge as u64, parents_data);
 
-                                EncodingProof::<H>::new(
-                                    challenge as u64,
-                                    parents_data,
-                                    encoded_node,
-                                    Some(decoded_node),
-                                )
-                            } else {
-                                let encoded_node = rpc.c_x.get_verified_node_at_layer(layer);
-                                EncodingProof::<H>::new(
-                                    challenge as u64,
-                                    parents_data,
-                                    encoded_node,
-                                    None,
-                                )
-                            };
-                            assert!(
-                                proof.verify(&pub_inputs.replica_id),
-                                "Invalid encoding proof generated"
-                            );
+                            {
+                                let (encoded_node, decoded_node) = if layer == layers {
+                                    (comm_r_last_proof.leaf(), Some(comm_d_proof.leaf()))
+                                } else {
+                                    (rpc.c_x.get_node_at_layer(layer), None)
+                                };
+
+                                assert!(
+                                    proof.verify(
+                                        &pub_inputs.replica_id,
+                                        &encoded_node,
+                                        decoded_node
+                                    ),
+                                    "Invalid encoding proof generated"
+                                );
+                            }
 
                             encoding_proofs.push(proof);
                         }

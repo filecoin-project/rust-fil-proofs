@@ -11,42 +11,20 @@ use crate::stacked::{EncodingProof as VanillaEncodingProof, PublicParams};
 #[derive(Debug, Clone)]
 pub struct EncodingProof {
     node: Option<u64>,
-    encoded_node: Option<Fr>,
-    // The inner `Option` is for the circuit, the outer to determine if
-    // if we need to encode sth.
-    #[allow(clippy::option_option)]
-    decoded_node: Option<Option<Fr>>,
     parents: Vec<Option<Fr>>,
 }
 
 impl EncodingProof {
     /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty<H: Hasher>(params: &PublicParams<H>) -> Self {
+    pub fn empty<H: Hasher>(params: &PublicParams<H>, layer: usize) -> Self {
+        let degree = if layer == 1 {
+            params.graph.base_graph().degree()
+        } else {
+            params.graph.degree()
+        };
         EncodingProof {
             node: None,
-            encoded_node: None,
-            decoded_node: None,
-            parents: vec![None; params.graph.degree()],
-        }
-    }
-
-    /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty_base<H: Hasher>(params: &PublicParams<H>) -> Self {
-        EncodingProof {
-            node: None,
-            encoded_node: None,
-            decoded_node: None,
-            parents: vec![None; params.graph.base_graph().degree()],
-        }
-    }
-
-    /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty_with_decoded<H: Hasher>(params: &PublicParams<H>) -> Self {
-        EncodingProof {
-            node: None,
-            encoded_node: None,
-            decoded_node: Some(None),
-            parents: vec![None; params.graph.degree()],
+            parents: vec![None; degree],
         }
     }
 
@@ -91,18 +69,14 @@ impl EncodingProof {
         )
     }
 
-    pub fn synthesize<CS: ConstraintSystem<Bls12>>(
+    pub fn synthesize_key<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: CS,
         params: &<Bls12 as JubjubEngine>::Params,
         replica_id: &[Boolean],
+        exp_encoded_node: &num::AllocatedNum<Bls12>,
     ) -> Result<(), SynthesisError> {
-        let EncodingProof {
-            node,
-            parents,
-            encoded_node,
-            decoded_node,
-        } = self;
+        let EncodingProof { node, parents } = self;
 
         let key = Self::create_key(
             cs.namespace(|| "create_key"),
@@ -112,25 +86,39 @@ impl EncodingProof {
             parents,
         )?;
 
-        let encoded_node = num::AllocatedNum::alloc(cs.namespace(|| "encoded_num"), || {
-            encoded_node
-                .map(Into::into)
-                .ok_or_else(|| SynthesisError::AssignmentMissing)
-        })?;
+        // enforce equality
+        constraint::equal(&mut cs, || "equality_key", &exp_encoded_node, &key);
 
-        let encoded_node_new = if let Some(decoded_node) = decoded_node {
-            let decoded_num = num::AllocatedNum::alloc(cs.namespace(|| "decoded_num"), || {
-                decoded_node
-                    .map(Into::into)
-                    .ok_or_else(|| SynthesisError::AssignmentMissing)
-            })?;
-            encode(cs.namespace(|| "encode"), &key, &decoded_num)?
-        } else {
-            key
-        };
+        Ok(())
+    }
+
+    pub fn synthesize_decoded<CS: ConstraintSystem<Bls12>>(
+        self,
+        mut cs: CS,
+        params: &<Bls12 as JubjubEngine>::Params,
+        replica_id: &[Boolean],
+        exp_encoded_node: &num::AllocatedNum<Bls12>,
+        decoded_node: &num::AllocatedNum<Bls12>,
+    ) -> Result<(), SynthesisError> {
+        let EncodingProof { node, parents } = self;
+
+        let key = Self::create_key(
+            cs.namespace(|| "create_key"),
+            params,
+            replica_id,
+            node,
+            parents,
+        )?;
+
+        let encoded_node = encode(cs.namespace(|| "encode"), &key, decoded_node)?;
 
         // enforce equality
-        constraint::equal(&mut cs, || "equality", &encoded_node_new, &encoded_node);
+        constraint::equal(
+            &mut cs,
+            || "equality_encoded_node",
+            &exp_encoded_node,
+            &encoded_node,
+        );
 
         Ok(())
     }
@@ -138,18 +126,10 @@ impl EncodingProof {
 
 impl<H: Hasher> From<VanillaEncodingProof<H>> for EncodingProof {
     fn from(vanilla_proof: VanillaEncodingProof<H>) -> Self {
-        let VanillaEncodingProof {
-            parents,
-            decoded_node,
-            encoded_node,
-            node,
-            ..
-        } = vanilla_proof;
+        let VanillaEncodingProof { parents, node, .. } = vanilla_proof;
 
         EncodingProof {
             node: Some(node),
-            encoded_node: Some(encoded_node.into_fr()),
-            decoded_node: decoded_node.map(|n| Some(n.into_fr())),
             parents: parents.into_iter().map(|p| Some(p.into())).collect(),
         }
     }
