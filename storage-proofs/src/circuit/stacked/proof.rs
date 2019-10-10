@@ -369,9 +369,11 @@ mod tests {
                 .expect("replication failed");
         assert_ne!(data, data_copy);
 
+        let seed = rng.gen();
+
         let pub_inputs = PublicInputs::<<PedersenHasher as Hasher>::Domain> {
             replica_id: replica_id.into(),
-            seed: None,
+            seed,
             tau: Some(tau.into()),
             k: None,
         };
@@ -503,9 +505,11 @@ mod tests {
 
         assert_ne!(data, data_copy);
 
+        let seed = rng.gen();
+
         let public_inputs = PublicInputs::<H::Domain> {
             replica_id: replica_id.into(),
-            seed: None,
+            seed,
             tau: Some(tau),
             k: None,
         };

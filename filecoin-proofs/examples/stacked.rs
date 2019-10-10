@@ -196,6 +196,7 @@ fn do_the_work<H: 'static>(
         let mut replication_duration = Duration::new(0, 0);
 
         info!("running replicate");
+        let seed = rng.gen();
 
         start_profile("replicate");
         let (tau, (p_aux, t_aux)) =
@@ -205,7 +206,7 @@ fn do_the_work<H: 'static>(
             replica_id,
             tau: Some(tau.clone()),
             k: Some(0),
-            seed: None,
+            seed,
         };
 
         let priv_inputs = stacked::PrivateInputs { p_aux, t_aux };

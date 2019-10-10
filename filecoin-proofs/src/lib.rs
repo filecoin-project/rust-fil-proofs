@@ -9,7 +9,6 @@ extern crate log;
 
 mod api;
 mod caches;
-mod file_cleanup;
 
 pub mod constants;
 pub mod error;
@@ -24,3 +23,7 @@ pub mod types;
 pub use api::*;
 pub use constants::SINGLE_PARTITION_PROOF_LEN;
 pub use types::*;
+
+#[cfg(test)]
+#[macro_use]
+extern crate pretty_assertions;

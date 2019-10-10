@@ -14,11 +14,11 @@ use storage_proofs::proof::NoRequirements;
 use storage_proofs::rational_post;
 use storage_proofs::sector::*;
 
-use crate::api::{as_safe_commitment, ChallengeSeed, Commitment, PersistentAux, Tree};
+use crate::api::util::as_safe_commitment;
 use crate::caches::{get_post_params, get_post_verifying_key};
 use crate::error;
 use crate::parameters::{post_setup_params, public_params};
-use crate::types::{PaddedBytesAmount, PoStConfig};
+use crate::types::{ChallengeSeed, Commitment, PaddedBytesAmount, PersistentAux, PoStConfig, Tree};
 use std::path::PathBuf;
 
 /// The minimal information required about a replica, in order to be able to generate

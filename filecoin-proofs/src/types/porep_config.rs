@@ -34,6 +34,13 @@ impl From<PoRepConfig> for PoRepProofPartitions {
     }
 }
 
+impl From<PoRepConfig> for SectorSize {
+    fn from(cfg: PoRepConfig) -> Self {
+        let PoRepConfig(size, _) = cfg;
+        size
+    }
+}
+
 impl PoRepConfig {
     /// Returns the cache identifier as used by `storage-proofs::paramater_cache`.
     pub fn get_cache_identifier(&self) -> String {

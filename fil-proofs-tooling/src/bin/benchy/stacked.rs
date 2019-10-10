@@ -138,6 +138,7 @@ where
             (None, None, None)
         } else {
             let mut data = file_backed_mmap_from_zeroes(nodes, *use_tmp)?;
+            let seed = rng.gen();
 
             let FuncMeasurement {
                 cpu_time: replication_cpu_time,
@@ -149,7 +150,7 @@ where
 
                 let pb = stacked::PublicInputs::<H::Domain> {
                     replica_id,
-                    seed: None,
+                    seed,
                     tau: Some(tau.clone()),
                     k: Some(0),
                 };

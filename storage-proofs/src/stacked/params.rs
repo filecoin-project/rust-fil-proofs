@@ -87,7 +87,7 @@ where
 #[derive(Debug, Clone)]
 pub struct PublicInputs<T: Domain> {
     pub replica_id: T,
-    pub seed: Option<T>,
+    pub seed: T,
     pub tau: Option<Tau<T>>,
     pub k: Option<usize>,
 }
@@ -102,17 +102,7 @@ impl<T: Domain> PublicInputs<T> {
     ) -> Vec<usize> {
         let k = partition_k.unwrap_or(0);
 
-        if let Some(ref seed) = self.seed {
-            layer_challenges.derive::<T>(layer, leaves, &self.replica_id, seed, k as u8)
-        } else {
-            layer_challenges.derive::<T>(
-                layer,
-                leaves,
-                &self.replica_id,
-                &self.tau.as_ref().expect("missing comm_r").comm_r,
-                k as u8,
-            )
-        }
+        layer_challenges.derive::<T>(layer, leaves, &self.replica_id, &self.seed, k as u8)
     }
 
     pub fn all_challenges(
@@ -123,16 +113,7 @@ impl<T: Domain> PublicInputs<T> {
     ) -> Vec<usize> {
         let k = partition_k.unwrap_or(0);
 
-        if let Some(ref seed) = self.seed {
-            layer_challenges.derive_all::<T>(leaves, &self.replica_id, seed, k as u8)
-        } else {
-            layer_challenges.derive_all::<T>(
-                leaves,
-                &self.replica_id,
-                &self.tau.as_ref().expect("missing comm_r").comm_r,
-                k as u8,
-            )
-        }
+        layer_challenges.derive_all::<T>(leaves, &self.replica_id, &self.seed, k as u8)
     }
 }
 

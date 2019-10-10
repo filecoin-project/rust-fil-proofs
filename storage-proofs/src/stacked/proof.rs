@@ -641,9 +641,11 @@ mod tests {
                 .expect("replication failed");
         assert_ne!(data, data_copy);
 
+        let seed = rng.gen();
+
         let pub_inputs = PublicInputs::<H::Domain> {
             replica_id,
-            seed: None,
+            seed,
             tau: Some(tau),
             k: None,
         };

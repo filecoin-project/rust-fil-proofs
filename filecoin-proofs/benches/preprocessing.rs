@@ -27,9 +27,9 @@ fn preprocessing_benchmark(c: &mut Criterion) {
                 let data = random_data(*size);
 
                 b.iter(|| {
-                    let mut tmpfile: File = tempfile::tempfile().unwrap();
+                    let tmpfile: File = tempfile::tempfile().unwrap();
 
-                    write_padded_bench(&mut tmpfile, data.clone());
+                    write_padded_bench(tmpfile, data.clone());
                 })
             },
             vec![128, 256, 512, 256_000, 512_000, 1024_000, 2048_000],
@@ -38,9 +38,9 @@ fn preprocessing_benchmark(c: &mut Criterion) {
             let data = random_data(*size);
 
             b.iter(|| {
-                let mut tmpfile: File = tempfile::tempfile().unwrap();
+                let tmpfile: File = tempfile::tempfile().unwrap();
 
-                write_padded_unpadded_bench(&mut tmpfile, data.clone());
+                write_padded_unpadded_bench(tmpfile, data.clone());
             })
         })
         .sample_size(2)
@@ -49,15 +49,15 @@ fn preprocessing_benchmark(c: &mut Criterion) {
     );
 }
 
-fn write_padded_bench(file: &mut File, data: Vec<u8>) {
-    let _ = write_padded(&mut &data[..], file).unwrap();
+fn write_padded_bench(mut file: File, data: Vec<u8>) {
+    let _ = write_padded(&mut &data[..], &mut file).unwrap();
     let padded_written = file.seek(SeekFrom::End(0)).unwrap() as usize;
 
     assert!(padded_written > data.len());
 }
 
-fn write_padded_unpadded_bench(file: &mut File, data: Vec<u8>) {
-    write_padded(&mut &data[..], file).unwrap();
+fn write_padded_unpadded_bench(mut file: File, data: Vec<u8>) {
+    write_padded(&mut &data[..], &mut file).unwrap();
 
     let padded_written = file.seek(SeekFrom::End(0)).unwrap() as usize;
 

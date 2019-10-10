@@ -642,10 +642,10 @@ pub fn clear_right_bits(byte: &mut u8, offset: usize) {
 const N: usize = 1000;
 const CHUNK_SIZE: usize = 127 * N;
 
-pub fn write_padded<R, W>(source: &mut R, target: &mut W) -> io::Result<usize>
+pub fn write_padded<R, W>(mut source: R, mut target: W) -> io::Result<usize>
 where
-    R: Read + ?Sized,
-    W: Read + Write + Seek + ?Sized,
+    R: Read,
+    W: Read + Write + Seek,
 {
     let mut buffer = [0; CHUNK_SIZE];
     let mut written = 0;
@@ -656,7 +656,7 @@ where
                 if bytes_read == 0 {
                     break;
                 }
-                written += write_padded_aux(&FR32_PADDING_MAP, &buffer[..bytes_read], target)?;
+                written += write_padded_aux(&FR32_PADDING_MAP, &buffer[..bytes_read], &mut target)?;
             }
             Err(err) => {
                 if err.kind() == io::ErrorKind::Interrupted {
@@ -692,11 +692,7 @@ need to handle the potential bit-level misalignments:
 **/
 // TODO: Change name, this is the real write padded function, the previous one
 // just partition data in chunks.
-fn write_padded_aux<W: ?Sized>(
-    padding_map: &PaddingMap,
-    source: &[u8],
-    target: &mut W,
-) -> io::Result<usize>
+fn write_padded_aux<W>(padding_map: &PaddingMap, source: &[u8], mut target: W) -> io::Result<usize>
 where
     W: Read + Write + Seek,
 {
@@ -704,7 +700,7 @@ where
     // the alignment calculations that will be worthless (because we wont' have any
     // data with which to align).
 
-    let (padded_bytes, _, padded_bits) = padding_map.target_offsets(target)?;
+    let (padded_bytes, _, padded_bits) = padding_map.target_offsets(&mut target)?;
 
     // (1): Overwrite the extra bits (if any): we actually don't write in-place, we
     // remove the last byte and extract its valid bits to `last_bits` to be later
