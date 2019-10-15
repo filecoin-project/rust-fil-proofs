@@ -1,12 +1,15 @@
 use std::marker::PhantomData;
 
+use blake2s_simd::Params as Blake2s;
+use merkletree::merkle::FromIndexedParallelIterator;
+use merkletree::store::DiskStore;
 use paired::bls12_381::Fr;
 use rayon::prelude::*;
 
 use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::hasher::{Domain, Hasher};
-use crate::merkle::{next_pow2, populate_leaves, MerkleProof, MerkleStore, Store};
+use crate::merkle::{MerkleProof, MerkleTree, Store};
 use crate::stacked::{
     challenges::LayerChallenges,
     column::Column,
@@ -19,7 +22,7 @@ use crate::stacked::{
         TemporaryAux, TransformedLayers, Tree,
     },
 };
-use crate::util::{data_at_node_offset, NODE_SIZE};
+use crate::util::NODE_SIZE;
 
 #[derive(Debug)]
 pub struct StackedDrg<'a, H: 'a + Hasher> {
@@ -82,7 +85,8 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                     .enumerate()
                     .map(|(challenge_index, challenge)| {
                         trace!(" challenge {} ({})", challenge, challenge_index);
-                        assert!(challenge < graph.size());
+                        assert!(challenge < graph.size(), "Invalid challenge");
+                        assert!(challenge > 0, "Invalid challenge");
 
                         // Initial data layer openings (c_X in Comm_D)
                         let comm_d_proof =
@@ -213,12 +217,14 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
         // generate encodings
         let encodings = Self::generate_layers(graph, layer_challenges, replica_id)?;
 
-        for (key_bytes, encoded_node_bytes) in encodings
+        let size = encodings.encoding_at_last_layer().len();
+
+        for (key, encoded_node_bytes) in encodings
             .encoding_at_last_layer()
-            .chunks(NODE_SIZE)
+            .read_range(0..size)
+            .into_iter()
             .zip(data.chunks_mut(NODE_SIZE))
         {
-            let key = H::Domain::try_from_bytes(key_bytes)?;
             let encoded_node = H::Domain::try_from_bytes(encoded_node_bytes)?;
             let data_node = decode::<H::Domain>(key, encoded_node);
 
@@ -234,33 +240,41 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
         layer_challenges: &LayerChallenges,
         replica_id: &<H as Hasher>::Domain,
     ) -> Result<Encodings<H>> {
-        trace!("generate layers");
+        info!("generate layers");
         let layers = layer_challenges.layers();
-        let mut encodings: Vec<Vec<u8>> = Vec::with_capacity(layers);
+        let mut encodings: Vec<DiskStore<H::Domain>> = Vec::with_capacity(layers);
 
-        let mut to_encode = vec![0; graph.size() * NODE_SIZE];
+        let layer_size = graph.size() * NODE_SIZE;
         let mut parents = vec![0; graph.degree()];
+        let mut key = [0u8; NODE_SIZE];
 
         for i in 0..layers {
             let layer = i + 1;
-            trace!("encoding (layer: {})", layer);
+            info!("generating layer: {}", layer);
+            let mut encoding = DiskStore::new(layer_size)?;
             let exp_parents_data = if i == 0 {
                 None
             } else {
-                Some(&encodings[i - 1][..])
+                Some(&encodings[i - 1])
             };
 
             for node in 0..graph.size() {
                 graph.parents(node, &mut parents);
-                let encoded_node =
-                    graph.create_key(replica_id, node, &parents, &to_encode, exp_parents_data)?;
-                let start = data_at_node_offset(node);
-                let end = start + NODE_SIZE;
+                Self::create_key(
+                    graph,
+                    replica_id,
+                    node,
+                    &parents,
+                    &encoding,
+                    exp_parents_data,
+                    &mut key,
+                );
 
-                to_encode[start..end].copy_from_slice(encoded_node.as_ref());
+                encoding.copy_from_slice(&key, node);
             }
 
-            encodings.push(to_encode.clone());
+            assert_eq!(encoding.len(), graph.size(), "Invalid encoding layer size");
+            encodings.push(encoding);
         }
 
         assert_eq!(
@@ -270,6 +284,49 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
         );
 
         Ok(Encodings::<H>::new(encodings))
+    }
+
+    fn create_key(
+        graph: &StackedBucketGraph<H>,
+        id: &H::Domain,
+        node: usize,
+        parents: &[usize],
+        base_parents_data: &DiskStore<H::Domain>,
+        exp_parents_data: Option<&DiskStore<H::Domain>>,
+        key: &mut [u8],
+    ) {
+        let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
+
+        // hash replica id
+        hasher.update(AsRef::<[u8]>::as_ref(&id));
+
+        // hash node id
+        let node_arr = (node as u64).to_le_bytes();
+        hasher.update(&node_arr);
+
+        // hash parents for all non 0 nodes
+        if node > 0 {
+            let base_parents_count = graph.base_graph().degree();
+            let mut buf = [0u8; NODE_SIZE];
+
+            // Base parents
+            for parent in parents.iter().take(base_parents_count) {
+                base_parents_data.read_into(*parent, &mut buf);
+                hasher.update(&buf);
+            }
+
+            if let Some(parents_data) = exp_parents_data {
+                // Expander parents
+                for parent in parents.iter().skip(base_parents_count) {
+                    parents_data.read_into(*parent, &mut buf);
+                    hasher.update(&buf);
+                }
+            }
+        }
+
+        key.copy_from_slice(hasher.finalize().as_ref());
+        // strip last two bits, to ensure result is in Fr.
+        key[31] &= 0b0011_1111;
     }
 
     pub(crate) fn transform_and_replicate_layers(
@@ -284,24 +341,19 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
 
         assert_eq!(data.len(), nodes_count * NODE_SIZE);
 
-        // FIXME: The implementation below is a memory hog.
-
         let layers = layer_challenges.layers();
         assert!(layers > 0);
 
         let build_tree = |tree_data: &[u8]| {
-            trace!("building tree {}", tree_data.len());
+            trace!("building tree (size: {})", tree_data.len());
 
             let leafs = tree_data.len() / NODE_SIZE;
             assert_eq!(tree_data.len() % NODE_SIZE, 0);
-            let pow = next_pow2(leafs);
-            let mut leaves_store = MerkleStore::new(pow);
-            populate_leaves::<_, <H as Hasher>::Function, _, std::iter::Map<_, _>>(
-                &mut leaves_store,
-                (0..leafs).map(|i| get_node::<H>(tree_data, i).unwrap()),
-            );
-
-            graph.merkle_tree_from_leaves(leaves_store, leafs)
+            MerkleTree::from_par_iter(
+                (0..leafs)
+                    .into_par_iter()
+                    .map(|i| get_node::<H>(tree_data, i).unwrap()),
+            )
         };
 
         #[allow(clippy::type_complexity)]
@@ -317,32 +369,26 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                 s.spawn(move |_| Self::generate_layers(graph, layer_challenges, replica_id));
 
             // Build the MerkleTree over the original data
-            trace!("build merkle tree for the original data");
+            info!("building merkle tree for the original data");
             let tree_d = match data_tree {
-                Some(t) => Ok(t),
+                Some(t) => t,
                 None => build_tree(&data),
-            }?;
+            };
 
             // encode layers
             let encodings = encodings_handle.join().expect("failed to encode layers")?;
+            let size = encodings.encoding_at_last_layer().len();
 
             // encode original data into the last layer
+            info!("encoding data");
             encodings
                 .encoding_at_last_layer()
-                .par_chunks(NODE_SIZE)
-                .zip(data.par_chunks_mut(NODE_SIZE).enumerate())
-                .try_for_each(|(key_bytes, (node, data_node_bytes))| -> Result<()> {
-                    let key = H::Domain::try_from_bytes(key_bytes)?;
+                .read_range(0..size)
+                .into_par_iter()
+                .zip(data.par_chunks_mut(NODE_SIZE))
+                .try_for_each(|(key, data_node_bytes)| -> Result<()> {
                     let data_node = H::Domain::try_from_bytes(data_node_bytes)?;
                     let encoded_node = encode::<H::Domain>(key, data_node);
-
-                    trace!(
-                        "{} - {:?} {:?} - {:?}",
-                        node,
-                        &encoded_node,
-                        &data_node,
-                        &key
-                    );
 
                     // store result in the data
                     data_node_bytes.copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
@@ -357,19 +403,14 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
             let tree_r_last_handle = s.spawn(move |_| build_tree(&r_last));
 
             // construct column commitments
+            info!("constructing column commitments");
             let cs = (0..nodes_count)
                 .into_par_iter()
-                .flat_map(|x| {
-                    encodings
-                        .column(x)
-                        .expect("failed to calculate column hash")
-                        .hash()
-                        .into_bytes()
-                })
+                .flat_map(|x| encodings.column_hash(x).into_bytes())
                 .collect::<Vec<u8>>();
 
             // build the tree for CommC
-            let tree_c = build_tree(&cs)?;
+            let tree_c = build_tree(&cs);
 
             // sanity checks
             debug_assert_eq!(AsRef::<[u8]>::as_ref(&tree_c.read_at(0)), &cs[..NODE_SIZE]);
@@ -378,7 +419,10 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                 &cs[NODE_SIZE..NODE_SIZE * 2]
             );
 
-            let tree_r_last = tree_r_last_handle.join()??;
+            // drop memory for cs asap
+            drop(cs);
+
+            let tree_r_last = tree_r_last_handle.join()?;
 
             // comm_r = H(comm_c || comm_r_last)
             let comm_r: H::Domain = Fr::from(hash2(tree_c.root(), tree_r_last.root())).into();

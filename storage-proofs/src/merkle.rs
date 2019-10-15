@@ -10,10 +10,11 @@ use paired::bls12_381::Fr;
 
 use crate::hasher::{Domain, Hasher};
 
-pub use merkletree::merkle::{next_pow2, populate_leaves, Store};
+pub use merkletree::merkle::next_pow2;
+pub use merkletree::store::Store;
 
 #[cfg(not(feature = "mem-trees"))]
-type DiskStore<E> = merkletree::merkle::DiskStore<E>;
+type DiskStore<E> = merkletree::store::DiskStore<E>;
 #[cfg(not(feature = "mem-trees"))]
 pub type MerkleTree<T, A> = merkle::MerkleTree<T, A, DiskStore<T>>;
 #[cfg(not(feature = "mem-trees"))]

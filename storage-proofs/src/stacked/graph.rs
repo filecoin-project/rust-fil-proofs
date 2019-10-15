@@ -2,16 +2,12 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
-use blake2s_simd::Params as Blake2s;
-
 use crate::crypto::feistel::{self, FeistelPrecomputed};
 use crate::drgraph::{BucketGraph, Graph, BASE_DEGREE};
 use crate::error::Result;
-use crate::fr32::trim_bytes_to_fr_safe;
 use crate::hasher::Hasher;
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::settings;
-use crate::util::{data_at_node_offset, NODE_SIZE};
 
 /// The expansion degree used for Stacked Graphs.
 pub const EXP_DEGREE: usize = 8;
@@ -186,40 +182,13 @@ where
 
     fn create_key(
         &self,
-        id: &H::Domain,
-        node: usize,
-        parents: &[usize],
-        base_parents_data: &[u8],
-        exp_parents_data: Option<&[u8]>,
+        _id: &H::Domain,
+        _node: usize,
+        _parents: &[usize],
+        _base_parents_data: &[u8],
+        _exp_parents_data: Option<&[u8]>,
     ) -> Result<Self::Key> {
-        let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
-
-        // hash replica id
-        hasher.update(AsRef::<[u8]>::as_ref(&id));
-
-        // hash node id
-        let node_arr = (node as u64).to_le_bytes();
-        hasher.update(&node_arr);
-
-        let base_parents_count = self.base_graph().degree();
-
-        // Base parents
-        for parent in parents.iter().take(base_parents_count) {
-            let offset = data_at_node_offset(*parent);
-            let node = &base_parents_data[offset..offset + NODE_SIZE];
-            hasher.update(node);
-        }
-
-        // Expander parents
-        if let Some(exp_parents_data) = exp_parents_data {
-            for parent in parents.iter().skip(base_parents_count) {
-                let offset = data_at_node_offset(*parent);
-                let node = &exp_parents_data[offset..offset + NODE_SIZE];
-                hasher.update(node);
-            }
-        }
-
-        Ok(trim_bytes_to_fr_safe(hasher.finalize().as_ref()))
+        unimplemented!("not used");
     }
 }
 

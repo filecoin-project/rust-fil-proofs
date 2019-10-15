@@ -53,7 +53,7 @@ rexpect = "0.3.0"
 [features]
 default = []
 cpu-profile = []
-heap-profile = []
+heap-profile = ["gperftools/heap"]
 simd = ["storage-proofs/simd"]
 asm = ["storage-proofs/asm"]
 gpu = ["storage-proofs/gpu", "bellperson/gpu", "fil-sapling-crypto/gpu", "phase21/gpu"]
