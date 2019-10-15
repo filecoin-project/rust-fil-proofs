@@ -250,6 +250,11 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
 
         let mut exp_parents_data: Option<Vec<u8>> = None;
 
+        // setup hasher to reuse
+        let mut base_hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
+        // hash replica id
+        base_hasher.update(AsRef::<[u8]>::as_ref(replica_id));
+
         for i in 0..layers {
             let layer = i + 1;
             info!("generating layer: {}", layer);
@@ -259,10 +264,7 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
 
                 // CreateKey inlined, to avoid borrow issues
 
-                let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
-
-                // hash replica id
-                hasher.update(AsRef::<[u8]>::as_ref(replica_id));
+                let mut hasher = base_hasher.clone();
 
                 // hash node id
                 let node_arr = (node as u64).to_le_bytes();
