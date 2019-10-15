@@ -22,7 +22,7 @@ use crate::stacked::{
         TemporaryAux, TransformedLayers, Tree,
     },
 };
-use crate::util::NODE_SIZE;
+use crate::util::{data_at_node, data_at_node_offset, NODE_SIZE};
 
 #[derive(Debug)]
 pub struct StackedDrg<'a, H: 'a + Hasher> {
@@ -246,35 +246,61 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
 
         let layer_size = graph.size() * NODE_SIZE;
         let mut parents = vec![0; graph.degree()];
-        let mut key = [0u8; NODE_SIZE];
+        let mut encoding = vec![0u8; layer_size];
+
+        let mut exp_parents_data: Option<Vec<u8>> = None;
 
         for i in 0..layers {
             let layer = i + 1;
             info!("generating layer: {}", layer);
-            let mut encoding = DiskStore::new(layer_size)?;
-            let exp_parents_data = if i == 0 {
-                None
-            } else {
-                Some(&encodings[i - 1])
-            };
 
             for node in 0..graph.size() {
                 graph.parents(node, &mut parents);
-                Self::create_key(
-                    graph,
-                    replica_id,
-                    node,
-                    &parents,
-                    &encoding,
-                    exp_parents_data,
-                    &mut key,
-                );
 
-                encoding.copy_from_slice(&key, node);
+                // CreateKey inlined, to avoid borrow issues
+
+                let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
+
+                // hash replica id
+                hasher.update(AsRef::<[u8]>::as_ref(replica_id));
+
+                // hash node id
+                let node_arr = (node as u64).to_le_bytes();
+                hasher.update(&node_arr);
+
+                // hash parents for all non 0 nodes
+                if node > 0 {
+                    let base_parents_count = graph.base_graph().degree();
+
+                    // Base parents
+                    for parent in parents.iter().take(base_parents_count) {
+                        let buf = data_at_node(&encoding, *parent).expect("invalid node");
+                        hasher.update(buf);
+                    }
+
+                    if let Some(ref parents_data) = exp_parents_data {
+                        // Expander parents
+                        for parent in parents.iter().skip(base_parents_count) {
+                            let buf = data_at_node(parents_data, *parent).expect("invalid node");
+                            hasher.update(&buf);
+                        }
+                    }
+                }
+
+                let start = data_at_node_offset(node);
+                let end = start + NODE_SIZE;
+
+                // store resuling key
+                encoding[start..end].copy_from_slice(hasher.finalize().as_ref());
+                // strip last two bits, to ensure result is in Fr.
+                encoding[start + NODE_SIZE - 1] &= 0b0011_1111;
             }
 
-            assert_eq!(encoding.len(), graph.size(), "Invalid encoding layer size");
-            encodings.push(encoding);
+            // NOTE: this means we currently keep 2x sector size around, to improve speed.
+            exp_parents_data = Some(encoding.clone());
+
+            // Write the result to disk to avoid keeping it in memory all the time.
+            encodings.push(DiskStore::new_from_slice(layer_size, &encoding)?);
         }
 
         assert_eq!(
@@ -284,49 +310,6 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
         );
 
         Ok(Encodings::<H>::new(encodings))
-    }
-
-    fn create_key(
-        graph: &StackedBucketGraph<H>,
-        id: &H::Domain,
-        node: usize,
-        parents: &[usize],
-        base_parents_data: &DiskStore<H::Domain>,
-        exp_parents_data: Option<&DiskStore<H::Domain>>,
-        key: &mut [u8],
-    ) {
-        let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
-
-        // hash replica id
-        hasher.update(AsRef::<[u8]>::as_ref(&id));
-
-        // hash node id
-        let node_arr = (node as u64).to_le_bytes();
-        hasher.update(&node_arr);
-
-        // hash parents for all non 0 nodes
-        if node > 0 {
-            let base_parents_count = graph.base_graph().degree();
-            let mut buf = [0u8; NODE_SIZE];
-
-            // Base parents
-            for parent in parents.iter().take(base_parents_count) {
-                base_parents_data.read_into(*parent, &mut buf);
-                hasher.update(&buf);
-            }
-
-            if let Some(parents_data) = exp_parents_data {
-                // Expander parents
-                for parent in parents.iter().skip(base_parents_count) {
-                    parents_data.read_into(*parent, &mut buf);
-                    hasher.update(&buf);
-                }
-            }
-        }
-
-        key.copy_from_slice(hasher.finalize().as_ref());
-        // strip last two bits, to ensure result is in Fr.
-        key[31] &= 0b0011_1111;
     }
 
     pub(crate) fn transform_and_replicate_layers(
@@ -543,9 +526,9 @@ mod tests {
 
     fn test_prove_verify<H: 'static + Hasher>(n: usize, challenges: LayerChallenges) {
         // This will be called multiple times, only the first one succeeds, and that is ok.
-        femme::pretty::Logger::new()
-            .start(log::LevelFilter::Trace)
-            .ok();
+        // femme::pretty::Logger::new()
+        //     .start(log::LevelFilter::Trace)
+        //     .ok();
 
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
