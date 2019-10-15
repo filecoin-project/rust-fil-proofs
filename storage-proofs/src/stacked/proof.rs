@@ -300,6 +300,7 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
             exp_parents_data = Some(encoding.clone());
 
             // Write the result to disk to avoid keeping it in memory all the time.
+            info!("  storing layer on disk");
             encodings.push(DiskStore::new_from_slice(layer_size, &encoding)?);
         }
 
