@@ -21,11 +21,11 @@ use std::time::{Duration, Instant};
 use std::u32;
 
 use bellperson::Circuit;
-use fil_sapling_crypto::jubjub::JubjubBls12;
 
 use storage_proofs::circuit::metric::*;
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
+use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::drgporep;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
@@ -33,7 +33,6 @@ use storage_proofs::fr32::fr_into_bytes;
 use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
-use storage_proofs::settings;
 use storage_proofs::stacked::{
     self, ChallengeRequirements, LayerChallenges, StackedDrg, EXP_DEGREE,
 };
@@ -278,21 +277,16 @@ fn do_the_work<H: 'static>(
     };
 
     if circuit || groth || bench {
-        let window_size = settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size;
-        let engine_params = JubjubBls12::new_with_window_size(window_size);
         let compound_public_params = compound_proof::PublicParams {
             vanilla_params: pp.clone(),
-            engine_params: &engine_params,
+            engine_params: &*JJ_PARAMS,
             partitions: Some(partitions),
         };
         if circuit || bench {
             info!("Performing circuit bench.");
             let mut cs = MetricCS::<Bls12>::new();
 
-            StackedCompound::blank_circuit(&pp, &engine_params)
+            StackedCompound::blank_circuit(&pp, &JJ_PARAMS)
                 .synthesize(&mut cs)
                 .expect("failed to synthesize circuit");
 
@@ -315,11 +309,9 @@ fn do_the_work<H: 'static>(
             // We should also allow the serialized vanilla proofs to be passed (as a file) to the example
             // and skip replication/vanilla-proving entirely.
             info!("Performing circuit groth.");
-            let gparams = StackedCompound::groth_params(
-                &compound_public_params.vanilla_params,
-                &engine_params,
-            )
-            .unwrap();
+            let gparams =
+                StackedCompound::groth_params(&compound_public_params.vanilla_params, &JJ_PARAMS)
+                    .unwrap();
 
             let multi_proof = {
                 let start = Instant::now();

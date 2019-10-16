@@ -246,15 +246,14 @@ mod tests {
     use ff::ScalarEngine;
     use fil_sapling_crypto::circuit::boolean::{AllocatedBit, Boolean};
     use fil_sapling_crypto::circuit::num::AllocatedNum;
-    use fil_sapling_crypto::jubjub::JubjubBls12;
     use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     use crate::circuit::constraint;
     use crate::circuit::test::TestConstraintSystem;
     use crate::crypto;
+    use crate::crypto::pedersen::JJ_PARAMS;
     use crate::fr32::fr_into_bytes;
-    use crate::settings;
 
     fn path_from_index<E: JubjubEngine, CS: ConstraintSystem<E>>(
         cs: &mut CS,
@@ -282,11 +281,6 @@ mod tests {
     fn test_apex_commitment_circuit<T: ApexCommitment<Bls12>>() {
         let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let max_len = 8;
-        let window_size = settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size;
-        let params = JubjubBls12::new_with_window_size(window_size);
 
         for n in 1..max_len {
             let size = 1 << n;
@@ -310,8 +304,9 @@ mod tests {
                 })
                 .unwrap();
 
-            let (bc, root) = T::commit(&mut outer_cs.namespace(|| "apex_commit"), &nums, &params)
-                .expect("apex commitment failed");
+            let (bc, root) =
+                T::commit(&mut outer_cs.namespace(|| "apex_commit"), &nums, &JJ_PARAMS)
+                    .expect("apex commitment failed");
 
             constraint::equal(
                 &mut outer_cs,

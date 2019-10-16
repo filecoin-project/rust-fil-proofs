@@ -245,26 +245,21 @@ mod tests {
     use crate::proof::NoRequirements;
     use ff::Field;
     use fil_sapling_crypto::circuit::multipack;
-    use fil_sapling_crypto::jubjub::JubjubBls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     use crate::circuit::test::*;
     use crate::compound_proof;
+    use crate::crypto::pedersen::JJ_PARAMS;
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
     use crate::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher};
     use crate::merklepor;
     use crate::proof::ProofScheme;
-    use crate::settings;
     use crate::util::data_at_node;
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn por_test_compound() {
-        let window_size = settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size;
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let leaves = 6;
         let data: Vec<u8> = (0..leaves)
@@ -284,7 +279,7 @@ mod tests {
                     leaves,
                     private: false,
                 },
-                engine_params: &JubjubBls12::new_with_window_size(window_size),
+                engine_params: &*JJ_PARAMS,
                 partitions: None,
             };
             let public_params =
@@ -347,11 +342,6 @@ mod tests {
     }
 
     fn test_por_input_circuit_with_bls12_381<H: Hasher>(num_constraints: usize) {
-        let window_size = settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size;
-        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 6;
@@ -398,7 +388,7 @@ mod tests {
 
             let mut cs = TestConstraintSystem::<Bls12>::new();
             let por = PoRCircuit::<Bls12, H> {
-                params,
+                params: &JJ_PARAMS,
                 value: Root::Val(Some(proof.data.into())),
                 auth_path: proof.proof.as_options(),
                 root: Root::Val(Some(pub_inputs.commitment.unwrap().into())),
@@ -460,10 +450,6 @@ mod tests {
     }
 
     fn private_por_test_compound<H: Hasher>() {
-        let window_size = settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size;
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let leaves = 6;
         let data: Vec<u8> = (0..leaves)
@@ -483,7 +469,7 @@ mod tests {
                     leaves,
                     private: true,
                 },
-                engine_params: &JubjubBls12::new_with_window_size(window_size),
+                engine_params: &*JJ_PARAMS,
                 partitions: None,
             };
             let public_params = PoRCompound::<H>::setup(&setup_params).expect("setup failed");
@@ -535,11 +521,6 @@ mod tests {
 
     #[test]
     fn test_private_por_input_circuit_with_bls12_381() {
-        let window_size = settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size;
-        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 6;
@@ -593,7 +574,7 @@ mod tests {
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
             let por = PoRCircuit::<Bls12, PedersenHasher> {
-                params,
+                params: &JJ_PARAMS,
                 value: Root::Val(Some(proof.data.into())),
                 auth_path: proof.proof.as_options(),
                 root: Root::Val(Some(tree.root().into())),

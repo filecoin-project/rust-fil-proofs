@@ -2,12 +2,12 @@ use bellperson::ConstraintSystem;
 use fil_proofs_tooling::metadata::Metadata;
 use fil_sapling_crypto::circuit as scircuit;
 use fil_sapling_crypto::circuit::boolean::Boolean;
-use fil_sapling_crypto::jubjub::JubjubBls12;
 use paired::bls12_381::Bls12;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use storage_proofs::circuit::pedersen::{pedersen_compression_num, pedersen_md_no_padding};
 use storage_proofs::circuit::test::TestConstraintSystem;
 use storage_proofs::crypto;
+use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::util::{bits_to_bytes, bytes_into_boolean_vec};
 
 fn blake2s_count(bytes: usize) -> Result<Report, failure::Error> {
@@ -51,15 +51,13 @@ fn pedersen_count(bytes: usize) -> Result<Report, failure::Error> {
     let mut data = vec![0u8; bytes];
     rng.fill_bytes(&mut data);
 
-    let params = &JubjubBls12::new();
-
     let data_bits: Vec<Boolean> = {
         let mut cs = cs.namespace(|| "data");
         bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).unwrap()
     };
 
     if bytes < 128 {
-        let out = pedersen_compression_num(&mut cs, params, &data_bits)?;
+        let out = pedersen_compression_num(&mut cs, &JJ_PARAMS, &data_bits)?;
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
         let expected = crypto::pedersen::pedersen(data.as_slice());
@@ -69,7 +67,7 @@ fn pedersen_count(bytes: usize) -> Result<Report, failure::Error> {
             "circuit and non circuit do not match"
         );
     } else {
-        let out = pedersen_md_no_padding(cs.namespace(|| "pedersen"), params, &data_bits)
+        let out = pedersen_md_no_padding(cs.namespace(|| "pedersen"), &JJ_PARAMS, &data_bits)
             .expect("pedersen hashing failed");
         assert!(cs.is_satisfied(), "constraints not satisfied");
         let expected = crypto::pedersen::pedersen_md_no_padding(data.as_slice());

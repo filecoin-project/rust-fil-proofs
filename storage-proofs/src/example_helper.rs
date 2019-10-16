@@ -13,7 +13,7 @@ use rand::{Rng, SeedableRng, XorShiftRng};
 
 use crate::circuit::bench::BenchCS;
 use crate::circuit::test::TestConstraintSystem;
-use crate::settings;
+use crate::crypto::pedersen::JJ_PARAMS;
 
 pub fn prettyb(num: usize) -> String {
     let num = num as f64;
@@ -55,15 +55,6 @@ pub enum CSType {
     Circuit,
 }
 
-lazy_static! {
-    static ref JUBJUB_BLS_PARAMS: JubjubBls12 = JubjubBls12::new_with_window_size(
-        settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size
-    );
-}
-
 /// A trait that makes it easy to implement "Examples". These are really tunable benchmarking CLI tools.
 pub trait Example<'a, C: Circuit<Bls12>>: Default {
     /// The actual work.
@@ -93,8 +84,7 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
             Parameters::read(&f, false).expect("failed to read cached params")
         } else {
             info!("generating new groth params");
-            let p =
-                self.generate_groth_params(rng, &JUBJUB_BLS_PARAMS, tree_depth, challenge_count, m);
+            let p = self.generate_groth_params(rng, &JJ_PARAMS, tree_depth, challenge_count, m);
             info!("writing params to cache: {:?}", cache_path);
 
             let mut f = File::create(&cache_path).expect("faild to open cache file");
@@ -124,7 +114,7 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
             let start = Instant::now();
             let proof = self.create_proof(
                 rng,
-                &JUBJUB_BLS_PARAMS,
+                &JJ_PARAMS,
                 &groth_params,
                 tree_depth,
                 challenge_count,
@@ -185,28 +175,14 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
 
         info!(
             "constraints: {}",
-            self.get_num_constraints(
-                rng,
-                &JUBJUB_BLS_PARAMS,
-                tree_depth,
-                challenge_count,
-                leaves,
-                m,
-            )
+            self.get_num_constraints(rng, &JJ_PARAMS, tree_depth, challenge_count, leaves, m)
         );
 
         for _ in 0..samples {
             // -- create proof
 
             let start = Instant::now();
-            let c = self.create_circuit(
-                rng,
-                &JUBJUB_BLS_PARAMS,
-                tree_depth,
-                challenge_count,
-                leaves,
-                m,
-            );
+            let c = self.create_circuit(rng, &JJ_PARAMS, tree_depth, challenge_count, leaves, m);
             let mut cs = BenchCS::<Bls12>::new();
             c.synthesize(&mut cs).expect("failed to synthesize circuit");
 
@@ -235,14 +211,7 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
         info!("m: {}", m);
         info!("tree_depth: {}", tree_depth);
 
-        let c = self.create_circuit(
-            rng,
-            &JUBJUB_BLS_PARAMS,
-            tree_depth,
-            challenge_count,
-            leaves,
-            m,
-        );
+        let c = self.create_circuit(rng, &JJ_PARAMS, tree_depth, challenge_count, leaves, m);
         let mut cs = TestConstraintSystem::<Bls12>::new();
         c.synthesize(&mut cs).expect("failed to synthesize circuit");
         assert!(cs.is_satisfied(), "constraints not satisfied");

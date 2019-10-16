@@ -514,26 +514,20 @@ mod tests {
     use super::*;
     use crate::circuit::test::*;
     use crate::compound_proof;
+    use crate::crypto::pedersen::JJ_PARAMS;
     use crate::drgporep;
     use crate::drgraph::{graph_height, new_seed, BucketGraph, BASE_DEGREE};
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
     use crate::hasher::{Blake2sHasher, Hasher, PedersenHasher};
     use crate::porep::PoRep;
     use crate::proof::{NoRequirements, ProofScheme};
-    use crate::settings;
     use crate::util::data_at_node;
 
     use ff::Field;
-    use fil_sapling_crypto::jubjub::JubjubBls12;
     use rand::{Rand, Rng, SeedableRng, XorShiftRng};
 
     #[test]
     fn drgporep_input_circuit_with_bls12_381() {
-        let window_size = settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size;
-        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let nodes = 12;
@@ -637,7 +631,7 @@ mod tests {
         let mut cs = TestConstraintSystem::<Bls12>::new();
         DrgPoRepCircuit::<_, PedersenHasher>::synthesize(
             cs.namespace(|| "drgporep"),
-            params,
+            &JJ_PARAMS,
             vec![replica_node],
             vec![replica_node_path],
             replica_root,
@@ -672,11 +666,6 @@ mod tests {
 
     #[test]
     fn drgporep_input_circuit_num_constraints() {
-        let window_size = settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size;
-        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         // 1 GB
@@ -687,7 +676,7 @@ mod tests {
         let mut cs = TestConstraintSystem::<Bls12>::new();
         DrgPoRepCircuit::<_, PedersenHasher>::synthesize(
             cs.namespace(|| "drgporep"),
-            params,
+            &JJ_PARAMS,
             vec![Some(Fr::rand(rng)); 1],
             vec![vec![Some((Fr::rand(rng), false)); tree_depth]; 1],
             Root::Val(Some(Fr::rand(rng))),
@@ -718,11 +707,6 @@ mod tests {
     }
 
     fn drgporep_test_compound<H: Hasher>() {
-        let window_size = settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size;
-        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let nodes = 5;
@@ -748,7 +732,7 @@ mod tests {
                 private: false,
                 challenges_count: 2,
             },
-            engine_params: params,
+            engine_params: &*JJ_PARAMS,
             partitions: None,
         };
 
@@ -785,7 +769,7 @@ mod tests {
                 private: false,
                 challenges_count: 2,
             },
-            engine_params: params,
+            engine_params: &*JJ_PARAMS,
             partitions: None,
         };
 
@@ -808,7 +792,7 @@ mod tests {
 
         {
             let gparams =
-                DrgPoRepCompound::<H, _>::groth_params(&public_params.vanilla_params, &params)
+                DrgPoRepCompound::<H, _>::groth_params(&public_params.vanilla_params, &JJ_PARAMS)
                     .expect("failed to get groth params");
 
             let proof = DrgPoRepCompound::<H, _>::prove(

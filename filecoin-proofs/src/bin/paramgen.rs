@@ -5,10 +5,10 @@ use rand::OsRng;
 
 use filecoin_proofs::constants::*;
 use filecoin_proofs::parameters::public_params;
-use filecoin_proofs::singletons::ENGINE_PARAMS;
 use filecoin_proofs::types::*;
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::CompoundProof;
+use storage_proofs::crypto::pedersen::JJ_PARAMS;
 
 // Run this from the command-line, passing the path to the file to which the parameters will be written.
 pub fn main() {
@@ -22,14 +22,14 @@ pub fn main() {
         usize::from(PoRepProofPartitions(2)),
     );
 
-    let circuit = StackedCompound::blank_circuit(&public_params, &ENGINE_PARAMS);
+    let circuit = StackedCompound::blank_circuit(&public_params, &JJ_PARAMS);
     let mut params = phase21::MPCParameters::new(circuit).unwrap();
 
     let rng = &mut OsRng::new().unwrap();
     let hash = params.contribute(rng);
 
     {
-        let circuit = StackedCompound::blank_circuit(&public_params, &ENGINE_PARAMS);
+        let circuit = StackedCompound::blank_circuit(&public_params, &JJ_PARAMS);
         let contributions = params.verify(circuit).expect("parameters should be valid!");
 
         // We need to check the `contributions` to see if our `hash`

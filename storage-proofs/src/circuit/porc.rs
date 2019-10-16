@@ -284,25 +284,19 @@ mod tests {
     use super::*;
 
     use ff::Field;
-    use fil_sapling_crypto::jubjub::JubjubBls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     use crate::circuit::test::*;
     use crate::compound_proof;
+    use crate::crypto::pedersen::JJ_PARAMS;
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::pedersen::*;
     use crate::porc::{self, PoRC};
     use crate::proof::{NoRequirements, ProofScheme};
-    use crate::settings;
 
     #[test]
     fn test_porc_circuit_with_bls12_381() {
-        let window_size = settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size;
-        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 32;
@@ -367,7 +361,7 @@ mod tests {
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
         let instance = PoRCCircuit {
-            params,
+            params: &*JJ_PARAMS,
             challenges: challenges
                 .iter()
                 .map(|c| Some(u32_into_fr::<Bls12>(*c as u32)))
@@ -392,11 +386,6 @@ mod tests {
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn porc_test_compound() {
-        let window_size = settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size;
-        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 32;
@@ -407,7 +396,7 @@ mod tests {
                 sectors_count: 2,
                 challenges_count: 2,
             },
-            engine_params: params,
+            engine_params: &*JJ_PARAMS,
             partitions: None,
         };
 
@@ -438,7 +427,7 @@ mod tests {
         };
 
         let gparams =
-            PoRCCompound::<PedersenHasher>::groth_params(&pub_params.vanilla_params, &params)
+            PoRCCompound::<PedersenHasher>::groth_params(&pub_params.vanilla_params, &JJ_PARAMS)
                 .expect("failed to create groth params");
 
         let proof =

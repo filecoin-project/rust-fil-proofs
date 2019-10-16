@@ -5,14 +5,13 @@ use bellperson::groth16::*;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use criterion::{black_box, Criterion, ParameterizedBenchmark};
 use fil_sapling_crypto::circuit::boolean::{self, Boolean};
-use fil_sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
+use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
 use storage_proofs::circuit::bench::BenchCS;
 
 use storage_proofs::circuit;
-use storage_proofs::crypto::pedersen;
-use storage_proofs::settings;
+use storage_proofs::crypto::pedersen::{self, JJ_PARAMS};
 
 struct PedersenExample<'a, E: JubjubEngine> {
     params: &'a E::Params,
@@ -68,16 +67,10 @@ fn pedersen_benchmark(c: &mut Criterion) {
 }
 
 fn pedersen_circuit_benchmark(c: &mut Criterion) {
-    let window_size = settings::SETTINGS
-        .lock()
-        .unwrap()
-        .pedersen_hash_exp_window_size;
-    let jubjub_params = JubjubBls12::new_with_window_size(window_size);
-    let jubjub_params2 = JubjubBls12::new_with_window_size(window_size);
     let mut rng1 = thread_rng();
     let groth_params = generate_random_parameters::<Bls12, _, _>(
         PedersenExample {
-            params: &jubjub_params,
+            params: &*JJ_PARAMS,
             data: &vec![None; 256],
         },
         &mut rng1,
@@ -97,7 +90,7 @@ fn pedersen_circuit_benchmark(c: &mut Criterion) {
                 b.iter(|| {
                     let proof = create_random_proof(
                         PedersenExample {
-                            params: &jubjub_params,
+                            params: &*JJ_PARAMS,
                             data: data.as_slice(),
                         },
                         &groth_params,
@@ -117,7 +110,7 @@ fn pedersen_circuit_benchmark(c: &mut Criterion) {
             b.iter(|| {
                 let mut cs = BenchCS::<Bls12>::new();
                 PedersenExample {
-                    params: &jubjub_params2,
+                    params: &*JJ_PARAMS,
                     data: data.as_slice(),
                 }
                 .synthesize(&mut cs)
