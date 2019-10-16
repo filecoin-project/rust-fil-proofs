@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use crate::crypto::pedersen::{pedersen_md_no_padding_bits, Bits};
 use merkletree::store::DiskStore;
 use merkletree::store::Store;
 use paired::bls12_381::Fr;
@@ -15,7 +16,7 @@ use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::stacked::{
     column::Column, column_proof::ColumnProof, encoding_proof::EncodingProof,
-    graph::StackedBucketGraph, hash::hash2, hash::hash_single_column, LayerChallenges,
+    graph::StackedBucketGraph, hash::hash2, LayerChallenges,
 };
 use crate::util::{data_at_node, NODE_SIZE};
 
@@ -416,14 +417,9 @@ impl<H: Hasher> Encodings<H> {
 
     /// Calculate the hash of the column at the given node, reducing intermediary allocations.
     pub fn column_hash(&self, node: usize) -> PedersenDomain {
-        // TODO: can we avoid allocating this vec?
-        let rows: Vec<_> = self
-            .encodings
-            .iter()
-            .map(|encoding| encoding.read_at(node))
-            .collect();
+        let rows = self.encodings.iter().map(|encoding| encoding.read_at(node));
 
-        hash_single_column(&rows)
+        pedersen_md_no_padding_bits(Bits::new_many(rows)).into()
     }
 }
 

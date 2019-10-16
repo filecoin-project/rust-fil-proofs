@@ -22,172 +22,10 @@ pub fn pedersen(data: &[u8]) -> Fr {
     pedersen_bits(Bits::new(data))
 }
 
-pub fn pedersen_bits(data: Bits) -> Fr {
+pub fn pedersen_bits<'a, S: Iterator<Item = &'a [u8]>>(data: Bits<&'a [u8], S>) -> Fr {
     pedersen_hash::<Bls12, _>(Personalization::None, data, &JJ_PARAMS)
         .into_xy()
         .0
-}
-
-#[derive(Debug, Clone)]
-enum VecOrSingle<T> {
-    Vec(Vec<T>),
-    Single(T),
-}
-
-impl<T> VecOrSingle<T> {
-    pub fn len(&self) -> usize {
-        match self {
-            VecOrSingle::Vec(ref list) => list.len(),
-            VecOrSingle::Single(_) => 1,
-        }
-    }
-}
-
-/// Creates an iterator over the byte slices in little endian format.
-#[derive(Debug, Clone)]
-pub struct Bits<'a> {
-    parts: VecOrSingle<&'a [u8]>,
-    position_byte: usize,
-    position_bit: u8,
-    position_part: usize,
-    done: bool,
-}
-
-impl<'a> Bits<'a> {
-    pub fn new(parts: &'a [u8]) -> Self {
-        Bits {
-            parts: VecOrSingle::Single(parts),
-            position_byte: 0,
-            position_bit: 0,
-            position_part: 0,
-            done: false,
-        }
-    }
-
-    pub fn new_vec(parts: Vec<&'a [u8]>) -> Self {
-        Bits {
-            parts: VecOrSingle::Vec(parts),
-            position_byte: 0,
-            position_bit: 0,
-            position_part: 0,
-            done: false,
-        }
-    }
-
-    fn get_part(&self, part: usize) -> &'a [u8] {
-        match self.parts {
-            VecOrSingle::Vec(ref parts) => parts[part],
-            VecOrSingle::Single(part) => part,
-        }
-    }
-
-    /// Increments the inner positions by 1 bit.
-    fn inc(&mut self) {
-        if self.position_bit < 7 {
-            self.position_bit += 1;
-            return;
-        }
-
-        self.position_bit = 0;
-        if self.position_byte + 1 < self.get_part(self.position_part).len() {
-            self.position_byte += 1;
-            return;
-        }
-
-        self.position_byte = 0;
-        if self.position_part + 1 < self.parts.len() {
-            self.position_part += 1;
-            return;
-        }
-
-        self.done = true;
-    }
-
-    fn ref_take<'b>(&'b mut self, take: usize) -> BitsTake<'b, 'a> {
-        BitsTake::new(self, take)
-    }
-}
-
-#[derive(Debug)]
-struct BitsTake<'a, 'b: 'a> {
-    iter: &'a mut Bits<'b>,
-    take: usize,
-}
-
-impl<'a, 'b> BitsTake<'a, 'b> {
-    pub fn new(iter: &'a mut Bits<'b>, take: usize) -> Self {
-        BitsTake { iter, take }
-    }
-}
-
-impl<'a, 'b> ExactSizeIterator for BitsTake<'a, 'b> {
-    fn len(&self) -> usize {
-        self.take
-    }
-}
-
-impl<'a, 'b> std::iter::FusedIterator for BitsTake<'a, 'b> {}
-
-impl<'a, 'b> Iterator for BitsTake<'a, 'b> {
-    type Item = bool;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.take == 0 {
-            return None;
-        }
-
-        self.take -= 1;
-        self.iter.next()
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let size = self.len();
-        (size, Some(size))
-    }
-}
-
-impl<'a> ExactSizeIterator for Bits<'a> {
-    fn len(&self) -> usize {
-        let byte_len: usize = match self.parts {
-            VecOrSingle::Vec(ref parts) => parts.iter().map(|part| part.len()).sum(),
-            VecOrSingle::Single(ref part) => part.len(),
-        };
-
-        byte_len * 8
-    }
-}
-
-impl<'a> std::iter::FusedIterator for Bits<'a> {}
-
-impl<'a> Iterator for Bits<'a> {
-    type Item = bool;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.done {
-            return None;
-        }
-
-        let byte = self.get_part(self.position_part)[self.position_byte];
-
-        let res = (byte >> self.position_bit) & 1u8 == 1u8;
-        self.inc();
-
-        Some(res)
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let size = self.len();
-        (size, Some(size))
-    }
-
-    // optimized nth method so we can use it to skip forward easily
-    fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        for _ in 0..n {
-            // TODO: implement optimized inc for n bits.
-            self.inc();
-        }
-        self.next()
-    }
 }
 
 /// Pedersen hashing for inputs that have length mulitple of the block size `256`. Based on pedersen hashes and a Merkle-Damgard construction.
@@ -195,20 +33,9 @@ pub fn pedersen_md_no_padding(data: &[u8]) -> Fr {
     pedersen_md_no_padding_bits(Bits::new(data))
 }
 
-pub fn pedersen_md_no_padding_bits(mut data: Bits) -> Fr {
-    assert!(
-        data.len() >= 2 * PEDERSEN_BLOCK_BYTES,
-        "must be at least 2 block sizes long, got {}bits",
-        data.len()
-    );
-    assert_eq!(
-        data.len() % PEDERSEN_BLOCK_BYTES,
-        0,
-        "input must be a multiple of the blocksize"
-    );
-
-    let block_count = data.len() / PEDERSEN_BLOCK_SIZE;
-
+pub fn pedersen_md_no_padding_bits<T: AsRef<[u8]>, S: Iterator<Item = T>>(
+    mut data: Bits<T, S>,
+) -> Fr {
     let mut cur = Vec::with_capacity(PEDERSEN_BLOCK_SIZE);
 
     // hash the first two blocks
@@ -217,7 +44,7 @@ pub fn pedersen_md_no_padding_bits(mut data: Bits) -> Fr {
         .write_le(&mut cur)
         .expect("failed to write result hash");
 
-    for _ in 2..block_count {
+    while !data.is_done() {
         let r = data.ref_take(PEDERSEN_BLOCK_SIZE);
         let x = pedersen_compression_bits(Bits::new(&cur).chain(r));
 
@@ -236,6 +63,178 @@ where
 {
     let (x, _) = pedersen_hash::<Bls12, _>(Personalization::None, bits, &JJ_PARAMS).into_xy();
     x.into()
+}
+
+/// Creates an iterator over the byte slices in little endian format.
+#[derive(Debug, Clone)]
+pub struct Bits<K: AsRef<[u8]>, S: Iterator<Item = K>> {
+    /// The individual parts that make up the data that is being iterated over.
+    parts: ManyOrSingle<K, S>,
+    /// How many bytes we are into the `current_part`
+    position_byte: usize,
+    /// How many bits we are into the `current_byte`.
+    position_bit: u8,
+    /// The current part we are reading from.
+    current_part: Option<K>,
+    /// Track the first iteration.
+    first: bool,
+    /// Are we done yet?
+    done: bool,
+}
+
+/// Abstraction over either an iterator or a single element.
+#[derive(Debug, Clone)]
+enum ManyOrSingle<T, S = <Vec<T> as IntoIterator>::IntoIter>
+where
+    S: Iterator<Item = T>,
+{
+    Many(S),
+    Single(Option<T>),
+}
+
+impl<T: AsRef<[u8]>> Bits<T, <Vec<T> as IntoIterator>::IntoIter> {
+    pub fn new(parts: T) -> Self {
+        Bits {
+            parts: ManyOrSingle::<T, <Vec<T> as IntoIterator>::IntoIter>::Single(Some(parts)),
+            position_byte: 0,
+            position_bit: 0,
+            current_part: None,
+            first: true,
+            done: false,
+        }
+    }
+}
+
+impl<T: AsRef<[u8]>, S: Iterator<Item = T>> Bits<T, S> {
+    pub fn new_many(parts: S) -> Self {
+        Bits {
+            parts: ManyOrSingle::Many(parts),
+            position_byte: 0,
+            position_bit: 0,
+            current_part: None,
+            first: true,
+            done: false,
+        }
+    }
+
+    pub fn is_done(&self) -> bool {
+        self.done
+    }
+
+    fn inc_part(&mut self) {
+        self.current_part = match self.parts {
+            ManyOrSingle::Many(ref mut parts) => {
+                if self.first {
+                    self.first = false;
+                }
+                parts.next()
+            }
+            ManyOrSingle::Single(ref mut part) => {
+                if self.first {
+                    self.first = false;
+                    part.take()
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    /// Increments the inner positions by 1 bit.
+    fn inc(&mut self) {
+        if self.position_bit < 7 {
+            self.position_bit += 1;
+            return;
+        }
+
+        self.position_bit = 0;
+        if let Some(ref part) = self.current_part {
+            if self.position_byte + 1 < part.as_ref().len() {
+                self.position_byte += 1;
+                return;
+            }
+        }
+
+        self.inc_part();
+        self.position_byte = 0;
+        self.done = self.current_part.is_none();
+    }
+
+    fn ref_take(&mut self, take: usize) -> BitsTake<'_, T, S> {
+        BitsTake::new(self, take)
+    }
+}
+
+#[derive(Debug)]
+struct BitsTake<'a, T: AsRef<[u8]>, S: Iterator<Item = T>> {
+    iter: &'a mut Bits<T, S>,
+    take: usize,
+}
+
+impl<'a, T: AsRef<[u8]>, S: Iterator<Item = T>> BitsTake<'a, T, S> {
+    pub fn new(iter: &'a mut Bits<T, S>, take: usize) -> Self {
+        BitsTake { iter, take }
+    }
+}
+
+impl<'a, T: AsRef<[u8]>, S: Iterator<Item = T> + std::iter::FusedIterator> std::iter::FusedIterator
+    for BitsTake<'a, T, S>
+{
+}
+
+impl<'a, T: AsRef<[u8]>, S: Iterator<Item = T>> Iterator for BitsTake<'a, T, S> {
+    type Item = bool;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.take == 0 {
+            return None;
+        }
+
+        self.take -= 1;
+        self.iter.next()
+    }
+}
+
+impl<T: AsRef<[u8]>, S: Iterator<Item = T> + std::iter::FusedIterator> std::iter::FusedIterator
+    for Bits<T, S>
+{
+}
+
+impl<T: AsRef<[u8]>, S: Iterator<Item = T>> Iterator for Bits<T, S> {
+    type Item = bool;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+
+        if self.first {
+            // first time
+            self.inc_part();
+        }
+
+        let byte = match self.current_part {
+            Some(ref part) => part.as_ref()[self.position_byte],
+            None => {
+                self.done = true;
+                return None;
+            }
+        };
+
+        let res = (byte >> self.position_bit) & 1u8 == 1u8;
+        self.inc();
+
+        Some(res)
+    }
+
+    // optimized nth method so we can use it to skip forward easily
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        for _ in 0..n {
+            // TODO: implement optimized inc for n bits.
+            self.inc();
+        }
+        self.next()
+    }
 }
 
 #[cfg(test)]
@@ -288,7 +287,7 @@ mod tests {
     }
 
     #[test]
-    fn test_bits() {
+    fn test_bits_collect() {
         let bytes = b"hello";
         let bits = bytes_into_bits(bytes);
 
@@ -300,8 +299,8 @@ mod tests {
         let bytes = b"hello world these are some bytes";
         let bits = bytes_into_bits(bytes);
 
-        let bits_iter = Bits::new_vec(vec![b"hello ", b"world", b" these are some bytes"]);
-        assert_eq!(bits_iter.len(), bits.len());
+        let parts: Vec<&[u8]> = vec![b"hello ", b"world", b" these are some bytes"];
+        let bits_iter = Bits::new_many(parts.into_iter());
 
         let bits_iter_collected: Vec<bool> = bits_iter.collect();
 
@@ -313,8 +312,8 @@ mod tests {
         let bytes = b"hello world these are some bytes";
         let bits = bytes_into_bits(bytes);
 
-        let mut bits_iter = Bits::new_vec(vec![b"hello ", b"world", b" these are some bytes"]);
-        assert_eq!(bits_iter.len(), bits.len());
+        let parts: Vec<&[u8]> = vec![b"hello ", b"world", b" these are some bytes"];
+        let mut bits_iter = Bits::new_many(parts.into_iter());
 
         let bits_collected: Vec<bool> = vec![
             bits_iter.ref_take(8).collect::<Vec<bool>>(),

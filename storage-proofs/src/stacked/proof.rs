@@ -435,11 +435,6 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                 d_handle.join().unwrap();
             })?;
 
-            // let cs = (0..nodes_count)
-            //     .into_iter()
-            //     .flat_map(|x| encodings.column_hash(x).into_bytes())
-            //     .collect::<Vec<u8>>();
-
             // build the tree for CommC
             let tree_c = build_tree(&cs);
 
