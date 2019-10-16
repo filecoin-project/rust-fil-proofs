@@ -292,7 +292,7 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                 let start = data_at_node_offset(node);
                 let end = start + NODE_SIZE;
 
-                // store resuling key
+                // store resulting key
                 encoding[start..end].copy_from_slice(hasher.finalize().as_ref());
                 // strip last two bits, to ensure result is in Fr.
                 encoding[start + NODE_SIZE - 1] &= 0b0011_1111;
