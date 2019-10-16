@@ -174,7 +174,8 @@ mod tests {
             assert_eq!(
                 expected,
                 out.get_value().unwrap(),
-                "circuit and non circuit do not match"
+                "circuit and non circuit do not match {} bytes",
+                bytes
             );
         }
     }
