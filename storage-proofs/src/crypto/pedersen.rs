@@ -19,7 +19,11 @@ pub const PEDERSEN_BLOCK_SIZE: usize = 256;
 pub const PEDERSEN_BLOCK_BYTES: usize = PEDERSEN_BLOCK_SIZE / 8;
 
 pub fn pedersen(data: &[u8]) -> Fr {
-    pedersen_hash::<Bls12, _>(Personalization::None, Bits::new(data), &JJ_PARAMS)
+    pedersen_bits(Bits::new(data))
+}
+
+pub fn pedersen_bits(data: Bits) -> Fr {
+    pedersen_hash::<Bls12, _>(Personalization::None, data, &JJ_PARAMS)
         .into_xy()
         .0
 }

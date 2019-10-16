@@ -1,33 +1,21 @@
-use crate::crypto::pedersen::{pedersen, pedersen_md_no_padding};
+use crate::crypto::pedersen::{pedersen_bits, pedersen_md_no_padding_bits, Bits};
 use crate::hasher::pedersen::PedersenDomain;
 
 /// Hash 2 individual elements.
-pub fn hash2(a: impl AsRef<[u8]>, b: impl AsRef<[u8]>) -> PedersenDomain {
-    let mut buffer = Vec::with_capacity(a.as_ref().len() + b.as_ref().len());
-    buffer.extend_from_slice(a.as_ref());
-    buffer.extend_from_slice(b.as_ref());
-
-    hash1(buffer)
+pub fn hash2<S: AsRef<[u8]>, T: AsRef<[u8]>>(a: S, b: T) -> PedersenDomain {
+    hash1(Bits::new_vec(vec![a.as_ref(), b.as_ref()]))
 }
 
 /// Hash all elements in the given column.
-pub fn hash_single_column(column: &[impl AsRef<[u8]>]) -> PedersenDomain {
-    let buffer: Vec<u8> = column
-        .iter()
-        .flat_map(|row| row.as_ref())
-        .copied()
-        .collect();
-
-    hash1(buffer)
+pub fn hash_single_column<T: AsRef<[u8]>>(column: &[T]) -> PedersenDomain {
+    hash1(Bits::new_vec(column.iter().map(|t| t.as_ref()).collect()))
 }
 
 /// Hash all elements in the given buffer
-pub fn hash1(data: impl AsRef<[u8]>) -> PedersenDomain {
-    let data = data.as_ref();
-
+pub fn hash1(data: Bits) -> PedersenDomain {
     if data.len() > 32 {
-        pedersen_md_no_padding(&data).into()
+        pedersen_md_no_padding_bits(data).into()
     } else {
-        pedersen(data).into()
+        pedersen_bits(data).into()
     }
 }
