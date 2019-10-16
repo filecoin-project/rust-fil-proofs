@@ -302,7 +302,6 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
             exp_parents_data = Some(encoding.clone());
 
             // Write the result to disk to avoid keeping it in memory all the time.
-            info!("  storing layer on disk");
             encodings.push(DiskStore::new_from_slice(layer_size, &encoding)?);
         }
 
@@ -390,10 +389,56 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
 
             // construct column commitments
             info!("constructing column commitments");
-            let cs = (0..nodes_count)
-                .into_par_iter()
-                .flat_map(|x| encodings.column_hash(x).into_bytes())
-                .collect::<Vec<u8>>();
+
+            // For now split into 4 chunks to trade space (memory) vs speed reasonably.
+            let chunks = 4;
+
+            let len = nodes_count * NODE_SIZE;
+            let node_part_len = nodes_count / chunks;
+
+            let mut cs = vec![0; len];
+
+            let part_len = node_part_len * NODE_SIZE;
+            let (p1, p2) = cs.split_at_mut(part_len * 2);
+            let (a, b) = p1.split_at_mut(part_len);
+            let (c, d) = p2.split_at_mut(part_len);
+
+            crossbeam::thread::scope(|s| {
+                let a_handle = s.spawn(|_| {
+                    for (x, chunk) in (0..node_part_len).zip(a.chunks_exact_mut(NODE_SIZE)) {
+                        chunk.copy_from_slice(AsRef::<[u8]>::as_ref(&encodings.column_hash(x)));
+                    }
+                });
+                let b_handle = s.spawn(|_| {
+                    for (x, chunk) in
+                        (node_part_len..2 * node_part_len).zip(b.chunks_exact_mut(NODE_SIZE))
+                    {
+                        chunk.copy_from_slice(AsRef::<[u8]>::as_ref(&encodings.column_hash(x)));
+                    }
+                });
+                let c_handle = s.spawn(|_| {
+                    for (x, chunk) in
+                        (2 * node_part_len..3 * node_part_len).zip(c.chunks_exact_mut(NODE_SIZE))
+                    {
+                        chunk.copy_from_slice(AsRef::<[u8]>::as_ref(&encodings.column_hash(x)));
+                    }
+                });
+                let d_handle = s.spawn(|_| {
+                    for (x, chunk) in (3 * node_part_len..).zip(d.chunks_exact_mut(NODE_SIZE)) {
+                        chunk.copy_from_slice(AsRef::<[u8]>::as_ref(&encodings.column_hash(x)));
+                    }
+                });
+
+                a_handle.join().unwrap();
+                b_handle.join().unwrap();
+                c_handle.join().unwrap();
+                d_handle.join().unwrap();
+            })?;
+
+            // let cs = (0..nodes_count)
+            //     .into_iter()
+            //     .flat_map(|x| encodings.column_hash(x).into_bytes())
+            //     .collect::<Vec<u8>>();
 
             // build the tree for CommC
             let tree_c = build_tree(&cs);
