@@ -21,7 +21,7 @@ pub type MerkleTree<T, A> = merkle::MerkleTree<T, A, DiskStore<T>>;
 pub type MerkleStore<T> = DiskStore<T>;
 
 #[cfg(feature = "mem-trees")]
-type VecStore<E> = merkletree::merkle::VecStore<E>;
+type VecStore<E> = merkletree::store::VecStore<E>;
 #[cfg(feature = "mem-trees")]
 pub type MerkleTree<T, A> = merkle::MerkleTree<T, A, VecStore<T>>;
 #[cfg(feature = "mem-trees")]
