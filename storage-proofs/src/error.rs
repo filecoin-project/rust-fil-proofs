@@ -40,6 +40,8 @@ pub enum Error {
     Serde(#[cause] serde_json::error::Error),
     #[fail(display = "unclassified error: {}", _0)]
     Unclassified(String),
+    #[fail(display = "{}", _0)]
+    Failure(failure::Error),
 }
 
 impl From<SynthesisError> for Error {
@@ -63,5 +65,11 @@ impl From<serde_json::error::Error> for Error {
 impl From<Box<dyn Any + Send>> for Error {
     fn from(inner: Box<dyn Any + Send>) -> Error {
         Error::Unclassified(format!("{:?}", dbg!(inner)))
+    }
+}
+
+impl From<failure::Error> for Error {
+    fn from(inner: failure::Error) -> Error {
+        Error::Failure(inner)
     }
 }

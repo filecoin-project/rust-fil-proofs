@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use merkletree::hash::Algorithm;
-use merkletree::merkle::{self, next_pow2, VecStore};
+use merkletree::merkle::{self, next_pow2};
+use merkletree::store::VecStore;
 use std::io::Read;
 
 use crate::error::*;

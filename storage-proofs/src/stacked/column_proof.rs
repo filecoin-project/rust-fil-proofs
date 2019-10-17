@@ -49,7 +49,7 @@ impl<H: Hasher> ColumnProof<H> {
     }
 
     pub fn column_hash(&self) -> PedersenDomain {
-        self.column().hash()
+        self.column.hash()
     }
 
     pub fn verify(&self) -> bool {

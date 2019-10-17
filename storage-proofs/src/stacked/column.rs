@@ -35,7 +35,7 @@ impl<H: Hasher> Column<H> {
 
     /// Calculate the column hashes `C_i = H(E_i, O_i)` for the passed in column.
     pub fn hash(&self) -> PedersenDomain {
-        hash_single_column(&self.rows)
+        hash_single_column(&self.rows[..])
     }
 
     pub fn get_node_at_layer(&self, layer: usize) -> &H::Domain {

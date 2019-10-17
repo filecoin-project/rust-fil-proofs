@@ -30,9 +30,10 @@ impl LayerChallenges {
         assert!(layer <= self.layers, "Layer too large");
 
         // TODO: proper tapering
-        match layer {
-            1 => self.max_count,
-            _ => self.max_count / 2,
+        if layer == 1 {
+            self.max_count
+        } else {
+            self.max_count / 2
         }
     }
 
@@ -92,8 +93,9 @@ impl LayerChallenges {
                 let hash = blake2s(bytes.as_slice());
                 let big_challenge = BigUint::from_bytes_le(hash.as_ref());
 
-                // For now, we cannot try to prove the first or last node, so make sure the challenge can never be 0 or leaves - 1.
-                let big_mod_challenge = big_challenge % (leaves - 2);
+                // For now, we cannot try to prove the first or last node, so make sure the challenge
+                // can never be 0.
+                let big_mod_challenge = big_challenge % (leaves - 1);
                 let big_mod_challenge = big_mod_challenge
                     .to_usize()
                     .expect("`big_mod_challenge` exceeds size of `usize`");

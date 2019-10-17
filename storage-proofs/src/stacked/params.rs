@@ -1,5 +1,8 @@
 use std::marker::PhantomData;
 
+use crate::crypto::pedersen::{pedersen_md_no_padding_bits, Bits};
+use merkletree::store::DiskStore;
+use merkletree::store::Store;
 use paired::bls12_381::Fr;
 use serde::{Deserialize, Serialize};
 
@@ -7,6 +10,7 @@ use crate::drgporep;
 use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
+use crate::hasher::pedersen::PedersenDomain;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
@@ -125,7 +129,7 @@ impl<T: Domain> PublicInputs<T> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct PrivateInputs<H: Hasher> {
     pub p_aux: PersistentAux<H::Domain>,
     pub t_aux: TemporaryAux<H>,
@@ -332,7 +336,7 @@ pub struct PersistentAux<D> {
     pub comm_r_last: D,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct TemporaryAux<H: Hasher> {
     /// The encoded nodes for 1..layers.
     pub encodings: Encodings<H>,
@@ -342,17 +346,12 @@ pub struct TemporaryAux<H: Hasher> {
 }
 
 impl<H: Hasher> TemporaryAux<H> {
-    pub fn encoding_at_layer(&self, layer: usize) -> &[u8] {
+    pub fn encoding_at_layer(&self, layer: usize) -> &DiskStore<H::Domain> {
         self.encodings.encoding_at_layer(layer)
     }
 
-    pub fn node_at_layer(&self, layer: usize, node_index: usize) -> Result<&[u8]> {
-        self.encodings.node_at_layer(layer, node_index)
-    }
-
     pub fn domain_node_at_layer(&self, layer: usize, node_index: usize) -> Result<H::Domain> {
-        self.node_at_layer(layer, node_index)
-            .and_then(H::Domain::try_from_bytes)
+        Ok(self.encoding_at_layer(layer).read_at(node_index))
     }
 
     pub fn column(&self, column_index: usize) -> Result<Column<H>> {
@@ -360,14 +359,14 @@ impl<H: Hasher> TemporaryAux<H> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Encodings<H: Hasher> {
-    encodings: Vec<Vec<u8>>,
+    encodings: Vec<DiskStore<H::Domain>>,
     _h: PhantomData<H>,
 }
 
 impl<H: Hasher> Encodings<H> {
-    pub fn new(encodings: Vec<Vec<u8>>) -> Self {
+    pub fn new(encodings: Vec<DiskStore<H::Domain>>) -> Self {
         Encodings {
             encodings,
             _h: PhantomData,
@@ -382,7 +381,7 @@ impl<H: Hasher> Encodings<H> {
         self.encodings.is_empty()
     }
 
-    pub fn encoding_at_layer(&self, layer: usize) -> &[u8] {
+    pub fn encoding_at_layer(&self, layer: usize) -> &DiskStore<H::Domain> {
         assert!(layer != 0, "Layer cannot be 0");
         assert!(
             layer <= self.layers(),
@@ -392,12 +391,12 @@ impl<H: Hasher> Encodings<H> {
         );
 
         let row_index = layer - 1;
-        &self.encodings[row_index][..]
+        &self.encodings[row_index]
     }
 
     /// Returns encoding on the last layer.
-    pub fn encoding_at_last_layer(&self) -> &[u8] {
-        &self.encodings[self.encodings.len() - 1][..]
+    pub fn encoding_at_last_layer(&self) -> &DiskStore<H::Domain> {
+        &self.encodings[self.encodings.len() - 1]
     }
 
     /// How many layers are available.
@@ -405,22 +404,22 @@ impl<H: Hasher> Encodings<H> {
         self.encodings.len()
     }
 
-    pub fn node_at_layer(&self, layer: usize, node_index: usize) -> Result<&[u8]> {
-        let encoding = self.encoding_at_layer(layer);
-        data_at_node(encoding, node_index)
-    }
-
-    pub fn column(&self, column_index: usize) -> Result<Column<H>> {
+    /// Build the column for the given node.
+    pub fn column(&self, node: usize) -> Result<Column<H>> {
         let rows = self
             .encodings
             .iter()
-            .map(|encoding| {
-                let data = data_at_node(encoding, column_index)?;
-                H::Domain::try_from_bytes(data)
-            })
-            .collect::<Result<_>>()?;
+            .map(|encoding| encoding.read_at(node))
+            .collect();
 
-        Ok(Column::new(column_index, rows))
+        Ok(Column::new(node, rows))
+    }
+
+    /// Calculate the hash of the column at the given node, reducing intermediary allocations.
+    pub fn column_hash(&self, node: usize) -> PedersenDomain {
+        let rows = self.encodings.iter().map(|encoding| encoding.read_at(node));
+
+        pedersen_md_no_padding_bits(Bits::new_many(rows)).into()
     }
 }
 
@@ -445,4 +444,43 @@ pub fn generate_replica_id<H: Hasher>(
     hasher.update(AsRef::<[u8]>::as_ref(&comm_d));
 
     bytes_into_fr_repr_safe(hasher.finalize().as_ref()).into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::hasher::PedersenHasher;
+    use rand::{Rng, SeedableRng, XorShiftRng};
+
+    #[test]
+    fn test_column_hash() {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let layers = 4;
+        let sector_size = 256;
+
+        let rows = (0..layers)
+            .map(|_| {
+                let row: Vec<u8> = (0..sector_size / NODE_SIZE)
+                    .flat_map(|_| {
+                        let el: PedersenDomain = rng.gen();
+                        el.into_bytes()
+                    })
+                    .collect();
+                DiskStore::<PedersenDomain>::new_from_slice(sector_size, &row[..]).unwrap()
+            })
+            .collect();
+
+        let encodings = Encodings::<PedersenHasher>::new(rows);
+
+        for layer in 1..=layers {
+            assert_eq!(
+                encodings.column(layer).unwrap().hash(),
+                encodings.column_hash(layer),
+                "layer {}",
+                layer
+            );
+        }
+    }
 }
