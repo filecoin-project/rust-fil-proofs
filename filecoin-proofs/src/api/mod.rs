@@ -150,10 +150,12 @@ fn generate_piece_specs_from_source(
 /// Seals the staged sector at `in_path` in place, saving the resulting replica
 /// to `out_path`.
 ///
+#[allow(clippy::too_many_arguments)]
 pub fn seal<T: AsRef<Path>>(
     porep_config: PoRepConfig,
-    in_path: T,
-    out_path: T,
+    _cache_dir: T,
+    staged_sector: T,
+    sealed_sector: T,
     prover_id: ProverId,
     sector_id: SectorId,
     ticket: Ticket,
@@ -161,11 +163,14 @@ pub fn seal<T: AsRef<Path>>(
 ) -> error::Result<SealOutput> {
     let sector_bytes = usize::from(PaddedBytesAmount::from(porep_config));
 
-    let mut cleanup = FileCleanup::new(&out_path);
+    let mut cleanup = FileCleanup::new(&sealed_sector);
 
     // Copy unsealed data to output location, where it will be sealed in place.
-    copy(&in_path, &out_path)?;
-    let f_data = OpenOptions::new().read(true).write(true).open(&out_path)?;
+    copy(&staged_sector, &sealed_sector)?;
+    let f_data = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&sealed_sector)?;
 
     // Zero-pad the data to the requested size by extending the underlying file if needed.
     f_data.set_len(sector_bytes as u64)?;
@@ -202,7 +207,7 @@ pub fn seal<T: AsRef<Path>>(
         Some(data_tree),
     )?;
 
-    let mut in_data = OpenOptions::new().read(true).open(&in_path)?;
+    let mut in_data = OpenOptions::new().read(true).open(&staged_sector)?;
     let piece_specs = generate_piece_specs_from_source(&mut in_data, &piece_lengths)?;
     let piece_inclusion_proofs =
         piece_inclusion_proofs::<PedersenHasher>(&piece_specs, &t_aux.tree_d)?;
@@ -699,9 +704,11 @@ mod tests {
 
         let sealed_sector_file = NamedTempFile::new()?;
         let config = PoRepConfig(SectorSize(sector_size.clone()), PoRepProofPartitions(2));
+        let cache_dir = tempfile::tempdir().unwrap();
 
         let output = seal(
             config,
+            cache_dir.path(),
             &staged_sector_file.path(),
             &sealed_sector_file.path(),
             [0; 32],
