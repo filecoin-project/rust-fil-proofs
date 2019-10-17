@@ -58,9 +58,8 @@ CLUSTER_PRIMARY="/dns4/cluster0.fsn.dwebops.pub/udp/4001/quic/p2p/QmUEMvxS2e7iDr
 CLUSTER_PIN_NAME="filecoin-proof-parameters-$VERSION"
 DNSLINK_DOMAIN="proofs.filecoin.io"
 
-# show ipfs cid as we go so we see some progress
+# Pin to ipfs
 ROOT_CID=$(ipfs add --quieter --recursive $INPUT_DIR)
-# ROOT_CID="Qmawm9HXUzvSQFYJuhSQcFGQ27eYFy3ZKFVaYRy7YY9Ls7"
 echo "ok! root cid is $ROOT_CID"
 
 echo "linking to previous version..."
