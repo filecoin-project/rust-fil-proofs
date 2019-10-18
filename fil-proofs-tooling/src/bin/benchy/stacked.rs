@@ -151,7 +151,7 @@ where
                 let pb = stacked::PublicInputs::<H::Domain, <Blake2sHasher as Hasher>::Domain> {
                     replica_id,
                     seed,
-                    tau: Some(tau.clone()),
+                    tau: Some(tau),
                     k: Some(0),
                 };
 
