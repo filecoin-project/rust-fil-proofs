@@ -65,6 +65,7 @@ where
     x.into()
 }
 
+#[derive(Debug, Clone)]
 pub struct Hasher {
     curr: [u8; 32],
 }
@@ -82,11 +83,16 @@ impl Hasher {
         assert_eq!(data.len(), 32);
 
         let parts = [&self.curr, data];
-        let data = Bits::new_many(parts.into_iter());
+        let data = Bits::new_many(parts.iter());
         let x = pedersen_compression_bits(data);
 
         x.write_le(std::io::Cursor::new(&mut self.curr[..]))
             .expect("faile to write result");
+    }
+
+    pub fn finalize_bytes(self) -> [u8; 32] {
+        let Hasher { curr } = self;
+        curr
     }
 
     pub fn finalize(self) -> Fr {

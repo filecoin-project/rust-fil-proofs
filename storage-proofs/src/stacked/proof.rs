@@ -215,7 +215,7 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
         assert!(layers > 0);
 
         // generate encodings
-        let encodings = Self::generate_layers(graph, layer_challenges, replica_id)?;
+        let (encodings, _) = Self::generate_layers(graph, layer_challenges, replica_id, false)?;
 
         let size = encodings.encoding_at_last_layer().len();
 
@@ -235,11 +235,13 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
         Ok(())
     }
 
+    #[allow(clippy::type_complexity)]
     fn generate_layers(
         graph: &StackedBucketGraph<H>,
         layer_challenges: &LayerChallenges,
         replica_id: &<H as Hasher>::Domain,
-    ) -> Result<Encodings<H>> {
+        with_hashing: bool,
+    ) -> Result<(Encodings<H>, Option<Vec<[u8; 32]>>)> {
         info!("generate layers");
         let layers = layer_challenges.layers();
         let mut encodings: Vec<DiskStore<H::Domain>> = Vec::with_capacity(layers);
@@ -248,12 +250,47 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
         let mut parents = vec![0; graph.degree()];
         let mut encoding = vec![0u8; layer_size];
 
+        use crate::crypto::pedersen::Hasher as PedersenHasher;
+
         let mut exp_parents_data: Option<Vec<u8>> = None;
 
         // setup hasher to reuse
         let mut base_hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
         // hash replica id
         base_hasher.update(AsRef::<[u8]>::as_ref(replica_id));
+
+        let (sender, receiver) = crossbeam::channel::unbounded();
+        enum Message {
+            Init(usize, Vec<u8>),
+            Hash(usize, Vec<u8>),
+            Done,
+        }
+
+        let graph_size = graph.size();
+
+        // Construct column hashes on a background thread.
+        let cs_handle = if with_hashing {
+            Some(std::thread::spawn(move || {
+                let mut column_hashes = Vec::with_capacity(graph_size);
+                while let Ok(msg) = receiver.recv() {
+                    match msg {
+                        Message::Init(_node, ref hash) => {
+                            column_hashes.push(PedersenHasher::new(hash))
+                        }
+                        Message::Hash(node, ref hash) => column_hashes[node].update(hash),
+                        Message::Done => {
+                            return column_hashes
+                                .into_iter()
+                                .map(|h| h.finalize_bytes())
+                                .collect::<Vec<[u8; 32]>>();
+                        }
+                    }
+                }
+                panic!("Need to finalize with a Done call");
+            }))
+        } else {
+            None
+        };
 
         for i in 0..layers {
             let layer = i + 1;
@@ -296,6 +333,18 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                 encoding[start..end].copy_from_slice(hasher.finalize().as_ref());
                 // strip last two bits, to ensure result is in Fr.
                 encoding[start + NODE_SIZE - 1] &= 0b0011_1111;
+
+                if with_hashing {
+                    if layer == 1 {
+                        sender
+                            .send(Message::Init(node, encoding[start..end].to_vec()))
+                            .expect("failed to init hasher");
+                    } else {
+                        sender
+                            .send(Message::Hash(node, encoding[start..end].to_vec()))
+                            .expect("failed to update hasher");
+                    }
+                }
             }
 
             // NOTE: this means we currently keep 2x sector size around, to improve speed.
@@ -305,13 +354,20 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
             encodings.push(DiskStore::new_from_slice(layer_size, &encoding)?);
         }
 
+        if with_hashing {
+            sender
+                .send(Message::Done)
+                .expect("failed to finalize hasher");
+        }
+
         assert_eq!(
             encodings.len(),
             layers,
             "Invalid amount of layers encoded expected"
         );
 
-        Ok(Encodings::<H>::new(encodings))
+        let column_hashes_vec = cs_handle.map(|handle| handle.join().unwrap());
+        Ok((Encodings::<H>::new(encodings), column_hashes_vec))
     }
 
     pub(crate) fn transform_and_replicate_layers(
@@ -342,7 +398,9 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
         };
 
         // encode layers
-        let encodings = Self::generate_layers(graph, layer_challenges, replica_id)?;
+        let (encodings, column_hashes) =
+            Self::generate_layers(graph, layer_challenges, replica_id, true)?;
+        let column_hashes = column_hashes.unwrap();
 
         // Build the MerkleTree over the original data
         info!("building merkle tree for the original data");
@@ -374,56 +432,19 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                     build_tree(data)
                 });
 
-                // construct column commitments
-                info!("constructing column commitments");
-
-                let chunks = num_cpus::get_physical();
-
-                let len = nodes_count * NODE_SIZE;
-
-                // only use chunking if there are enough nodes
-                let node_part_len = if nodes_count >= 2 * chunks {
-                    nodes_count / chunks
-                } else {
-                    nodes_count
-                };
-
-                // our target commitments
-                let mut cs = vec![0; len];
-
-                crossbeam::thread::scope(|s| {
-                    let mut handles = Vec::with_capacity(chunks);
-                    let encodings = &encodings;
-
-                    for (i, part) in cs.chunks_mut(node_part_len * NODE_SIZE).enumerate() {
-                        handles.push(s.spawn(move |_| {
-                            for (j, chunk) in part.chunks_exact_mut(NODE_SIZE).enumerate() {
-                                let x = node_part_len * NODE_SIZE * i + j;
-                                chunk.copy_from_slice(AsRef::<[u8]>::as_ref(
-                                    &encodings.column_hash(x),
-                                ));
-                            }
-                        }));
-                    }
-
-                    while let Some(handle) = handles.pop() {
-                        handle.join().unwrap();
-                    }
-                })?;
-
                 // build the tree for CommC
-                let tree_c = build_tree(&cs);
+                let tree_c_handle = s.spawn(|_| {
+                    let column_hashes_flat = unsafe {
+                        // column_hashes is of type Vec<[u8; 32]>
+                        std::slice::from_raw_parts(
+                            column_hashes.as_ptr() as *const _,
+                            column_hashes.len() * 32,
+                        )
+                    };
+                    build_tree(column_hashes_flat)
+                });
 
-                // sanity checks
-                debug_assert_eq!(AsRef::<[u8]>::as_ref(&tree_c.read_at(0)), &cs[..NODE_SIZE]);
-                debug_assert_eq!(
-                    AsRef::<[u8]>::as_ref(&tree_c.read_at(1)),
-                    &cs[NODE_SIZE..NODE_SIZE * 2]
-                );
-
-                // drop memory for cs asap
-                drop(cs);
-
+                let tree_c = tree_c_handle.join()?;
                 let tree_r_last = tree_r_last_handle.join()?;
 
                 // comm_r = H(comm_c || comm_r_last)

@@ -1,6 +1,5 @@
 use std::marker::PhantomData;
 
-use crate::crypto::pedersen::{pedersen_md_no_padding_bits, Bits};
 use merkletree::store::DiskStore;
 use merkletree::store::Store;
 use paired::bls12_381::Fr;
@@ -10,7 +9,6 @@ use crate::drgporep;
 use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
-use crate::hasher::pedersen::PedersenDomain;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
@@ -414,13 +412,6 @@ impl<H: Hasher> Encodings<H> {
 
         Ok(Column::new(node, rows))
     }
-
-    /// Calculate the hash of the column at the given node, reducing intermediary allocations.
-    pub fn column_hash(&self, node: usize) -> PedersenDomain {
-        let rows = self.encodings.iter().map(|encoding| encoding.read_at(node));
-
-        pedersen_md_no_padding_bits(Bits::new_many(rows)).into()
-    }
 }
 
 pub fn get_node<H: Hasher>(data: &[u8], index: usize) -> Result<H::Domain> {
@@ -444,43 +435,4 @@ pub fn generate_replica_id<H: Hasher>(
     hasher.update(AsRef::<[u8]>::as_ref(&comm_d));
 
     bytes_into_fr_repr_safe(hasher.finalize().as_ref()).into()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use crate::hasher::PedersenHasher;
-    use rand::{Rng, SeedableRng, XorShiftRng};
-
-    #[test]
-    fn test_column_hash() {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-
-        let layers = 4;
-        let sector_size = 256;
-
-        let rows = (0..layers)
-            .map(|_| {
-                let row: Vec<u8> = (0..sector_size / NODE_SIZE)
-                    .flat_map(|_| {
-                        let el: PedersenDomain = rng.gen();
-                        el.into_bytes()
-                    })
-                    .collect();
-                DiskStore::<PedersenDomain>::new_from_slice(sector_size, &row[..]).unwrap()
-            })
-            .collect();
-
-        let encodings = Encodings::<PedersenHasher>::new(rows);
-
-        for layer in 1..=layers {
-            assert_eq!(
-                encodings.column(layer).unwrap().hash(),
-                encodings.column_hash(layer),
-                "layer {}",
-                layer
-            );
-        }
-    }
 }
