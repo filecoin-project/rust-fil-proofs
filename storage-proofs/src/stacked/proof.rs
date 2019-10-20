@@ -257,7 +257,6 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
         // hash replica id
         base_hasher.update(AsRef::<[u8]>::as_ref(replica_id));
 
-        let (sender, receiver) = crossbeam::channel::unbounded();
         enum Message {
             Init(usize, [u8; 32]),
             Hash(usize, [u8; 32]),
@@ -266,27 +265,43 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
 
         let graph_size = graph.size();
 
+        // 1 less, to account for the thread we are on, which is doign the encoding.
+        let chunks = std::cmp::min(graph_size / 4, num_cpus::get() - 1);
+        let chunk_len = graph_size / chunks;
+
         // Construct column hashes on a background thread.
         let cs_handle = if with_hashing {
-            Some(std::thread::spawn(move || {
-                let mut column_hashes = Vec::with_capacity(graph_size);
-                while let Ok(msg) = receiver.recv() {
-                    match msg {
-                        Message::Init(_node, ref hash) => {
-                            column_hashes.push(PedersenHasher::new(hash))
+            let handles = (0..chunks)
+                .map(|i| {
+                    let (sender, receiver) = crossbeam::channel::unbounded();
+                    let handle = std::thread::spawn(move || {
+                        let mut column_hashes = Vec::with_capacity(chunk_len);
+                        while let Ok(msg) = receiver.recv() {
+                            match msg {
+                                Message::Init(_node, ref hash) => {
+                                    column_hashes.push(PedersenHasher::new(hash))
+                                }
+                                Message::Hash(node, ref hash) => {
+                                    // info!("hash {} - {} - {} ", node, i, chunk_len);
+                                    column_hashes[node - i * chunk_len].update(hash)
+                                }
+                                Message::Done => {
+                                    info!("Finalizing column commitments {}", i);
+                                    return column_hashes
+                                        .into_iter()
+                                        .map(|h| h.finalize_bytes())
+                                        .collect::<Vec<[u8; 32]>>();
+                                }
+                            }
                         }
-                        Message::Hash(node, ref hash) => column_hashes[node].update(hash),
-                        Message::Done => {
-                            info!("Finalizing column commitments");
-                            return column_hashes
-                                .into_iter()
-                                .map(|h| h.finalize_bytes())
-                                .collect::<Vec<[u8; 32]>>();
-                        }
-                    }
-                }
-                panic!("Need to finalize with a Done call");
-            }))
+                        panic!("Need to finalize with a Done call");
+                    });
+
+                    (handle, sender)
+                })
+                .collect::<Vec<_>>();
+
+            Some(handles)
         } else {
             None
         };
@@ -337,6 +352,15 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                 encoding[start..end].copy_from_slice(&key[..]);
 
                 if with_hashing {
+                    let sender_index = node / chunk_len;
+                    // info!(
+                    //     "{} - {} - {} - {}",
+                    //     node,
+                    //     chunk_len,
+                    //     sender_index,
+                    //     cs_handle.as_ref().unwrap().len()
+                    // );
+                    let sender = &cs_handle.as_ref().unwrap()[sender_index].1;
                     if layer == 1 {
                         sender
                             .send(Message::Init(node, key))
@@ -350,9 +374,11 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
             }
 
             if with_hashing && layer == layers {
-                sender
-                    .send(Message::Done)
-                    .expect("failed to finalize hasher");
+                for (_, sender) in cs_handle.as_ref().unwrap().iter() {
+                    sender
+                        .send(Message::Done)
+                        .expect("failed to finalize hasher");
+                }
             }
 
             // NOTE: this means we currently keep 2x sector size around, to improve speed.
@@ -372,7 +398,12 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
             "Invalid amount of layers encoded expected"
         );
 
-        let column_hashes_vec = cs_handle.map(|handle| handle.join().unwrap());
+        let column_hashes_vec = cs_handle.map(|handles| {
+            handles
+                .into_iter()
+                .flat_map(|(h, _)| h.join().unwrap())
+                .collect()
+        });
 
         info!("Layers generated");
         Ok((Encodings::<H>::new(encodings), column_hashes_vec))
