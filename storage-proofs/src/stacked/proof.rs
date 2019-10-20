@@ -271,6 +271,7 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
 
         // Construct column hashes on a background thread.
         let cs_handle = if with_hashing {
+            info!("hashing columns with {} chunks", chunks);
             let handles = (0..chunks)
                 .map(|i| {
                     let (sender, receiver) = crossbeam::channel::unbounded();
