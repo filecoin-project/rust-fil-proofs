@@ -44,7 +44,7 @@ fn pregenerate_graph<H: Hasher>(size: usize) -> StackedBucketGraph<H> {
     StackedBucketGraph::<H>::new_stacked(size, BASE_DEGREE, EXP_DEGREE, seed)
 }
 
-fn parents_loop<H: Hasher, G: Graph<H>>(graph: &G, parents: &mut [usize]) {
+fn parents_loop<H: Hasher, G: Graph<H>>(graph: &G, parents: &mut [u32]) {
     (0..graph.size())
         .map(|node| graph.parents(node, parents))
         .collect()
