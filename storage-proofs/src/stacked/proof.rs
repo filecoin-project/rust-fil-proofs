@@ -261,8 +261,8 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
 
         let (sender, receiver) = crossbeam::channel::unbounded();
         enum Message {
-            Init(usize, Vec<u8>),
-            Hash(usize, Vec<u8>),
+            Init(usize, [u8; 32]),
+            Hash(usize, [u8; 32]),
             Done,
         }
 
@@ -330,25 +330,31 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                 let end = start + NODE_SIZE;
 
                 // store resulting key
-                encoding[start..end].copy_from_slice(hasher.finalize().as_ref());
+                let mut key = *hasher.finalize().as_array();
                 // strip last two bits, to ensure result is in Fr.
-                encoding[start + NODE_SIZE - 1] &= 0b0011_1111;
+                key[31] &= 0b0011_1111;
+
+                encoding[start..end].copy_from_slice(&key[..]);
 
                 if with_hashing {
                     if layer == 1 {
                         sender
-                            .send(Message::Init(node, encoding[start..end].to_vec()))
+                            .send(Message::Init(node, key))
                             .expect("failed to init hasher");
                     } else {
                         sender
-                            .send(Message::Hash(node, encoding[start..end].to_vec()))
+                            .send(Message::Hash(node, key))
                             .expect("failed to update hasher");
                     }
                 }
             }
 
             // NOTE: this means we currently keep 2x sector size around, to improve speed.
-            exp_parents_data = Some(encoding.clone());
+            if let Some(ref mut exp_parents_data) = exp_parents_data {
+                exp_parents_data.copy_from_slice(&encoding);
+            } else {
+                exp_parents_data = Some(encoding.clone());
+            }
 
             // Write the result to disk to avoid keeping it in memory all the time.
             encodings.push(DiskStore::new_from_slice(layer_size, &encoding)?);
