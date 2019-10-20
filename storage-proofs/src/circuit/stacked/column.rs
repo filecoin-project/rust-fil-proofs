@@ -9,7 +9,7 @@ use crate::stacked::{Column as VanillaColumn, PublicParams};
 
 #[derive(Debug, Clone)]
 pub struct Column {
-    index: Option<usize>,
+    index: Option<u32>,
     rows: Vec<Option<Fr>>,
 }
 

@@ -348,11 +348,11 @@ impl<H: Hasher> TemporaryAux<H> {
         self.encodings.encoding_at_layer(layer)
     }
 
-    pub fn domain_node_at_layer(&self, layer: usize, node_index: usize) -> Result<H::Domain> {
-        Ok(self.encoding_at_layer(layer).read_at(node_index))
+    pub fn domain_node_at_layer(&self, layer: usize, node_index: u32) -> Result<H::Domain> {
+        Ok(self.encoding_at_layer(layer).read_at(node_index as usize))
     }
 
-    pub fn column(&self, column_index: usize) -> Result<Column<H>> {
+    pub fn column(&self, column_index: u32) -> Result<Column<H>> {
         self.encodings.column(column_index)
     }
 }
@@ -403,11 +403,11 @@ impl<H: Hasher> Encodings<H> {
     }
 
     /// Build the column for the given node.
-    pub fn column(&self, node: usize) -> Result<Column<H>> {
+    pub fn column(&self, node: u32) -> Result<Column<H>> {
         let rows = self
             .encodings
             .iter()
-            .map(|encoding| encoding.read_at(node))
+            .map(|encoding| encoding.read_at(node as usize))
             .collect();
 
         Ok(Column::new(node, rows))

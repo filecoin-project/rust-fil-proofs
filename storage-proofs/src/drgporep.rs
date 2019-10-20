@@ -129,7 +129,7 @@ impl<H: Hasher> DataProof<H> {
     }
 }
 
-pub type ReplicaParents<H> = Vec<(usize, DataProof<H>)>;
+pub type ReplicaParents<H> = Vec<(u32, DataProof<H>)>;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Proof<H: Hasher> {
@@ -292,10 +292,10 @@ where
 
             for p in &parents {
                 replica_parentsi.push((*p, {
-                    let proof = tree_r.gen_proof(*p);
+                    let proof = tree_r.gen_proof(*p as usize);
                     DataProof {
                         proof: MerkleProof::new_from_proof(&proof),
-                        data: tree_r.read_at(*p),
+                        data: tree_r.read_at(*p as usize),
                     }
                 }));
             }
@@ -384,7 +384,7 @@ where
             }
 
             for (parent_node, p) in &proof.replica_parents[i] {
-                if !p.proof.validate(*parent_node) {
+                if !p.proof.validate(*parent_node as usize) {
                     return Ok(false);
                 }
             }
@@ -717,7 +717,7 @@ mod tests {
                         // Rotate the real parent proofs.
                         let x = (i + 1) % real_parents[0].len();
                         let j = real_parents[0][x].0;
-                        (*p, real_parents[0][j].1.clone())
+                        (*p, real_parents[0][j as usize].1.clone())
                     })
                     .collect::<Vec<_>>()];
 

@@ -64,12 +64,10 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
         };
 
         let get_exp_parents_columns = |x: usize| -> Result<Vec<Column<H>>> {
-            graph.expanded_parents(x, |parents| {
-                parents
-                    .iter()
-                    .map(|parent| t_aux.column(*parent as usize))
-                    .collect()
-            })
+            let mut parents = vec![0; graph.expansion_degree()];
+            graph.expanded_parents(x, &mut parents);
+
+            parents.iter().map(|parent| t_aux.column(*parent)).collect()
         };
 
         (0..partition_count)
@@ -96,7 +94,7 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                         let rpc = {
                             // All labels in C_X
                             trace!("  c_x");
-                            let c_x = t_aux.column(challenge)?.into_proof(&t_aux.tree_c);
+                            let c_x = t_aux.column(challenge as u32)?.into_proof(&t_aux.tree_c);
 
                             // All labels in the DRG parents.
                             trace!("  drg_parents");
@@ -279,6 +277,7 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                         }
                         Message::Hash(node, ref hash) => column_hashes[node].update(hash),
                         Message::Done => {
+                            info!("Finalizing column commitments");
                             return column_hashes
                                 .into_iter()
                                 .map(|h| h.finalize_bytes())
@@ -313,14 +312,15 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
 
                     // Base parents
                     for parent in parents.iter().take(base_parents_count) {
-                        let buf = data_at_node(&encoding, *parent).expect("invalid node");
+                        let buf = data_at_node(&encoding, *parent as usize).expect("invalid node");
                         hasher.update(buf);
                     }
 
                     if let Some(ref parents_data) = exp_parents_data {
                         // Expander parents
                         for parent in parents.iter().skip(base_parents_count) {
-                            let buf = data_at_node(parents_data, *parent).expect("invalid node");
+                            let buf =
+                                data_at_node(parents_data, *parent as usize).expect("invalid node");
                             hasher.update(&buf);
                         }
                     }
@@ -349,6 +349,12 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                 }
             }
 
+            if with_hashing && layer == layers {
+                sender
+                    .send(Message::Done)
+                    .expect("failed to finalize hasher");
+            }
+
             // NOTE: this means we currently keep 2x sector size around, to improve speed.
             if let Some(ref mut exp_parents_data) = exp_parents_data {
                 exp_parents_data.copy_from_slice(&encoding);
@@ -360,12 +366,6 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
             encodings.push(DiskStore::new_from_slice(layer_size, &encoding)?);
         }
 
-        if with_hashing {
-            sender
-                .send(Message::Done)
-                .expect("failed to finalize hasher");
-        }
-
         assert_eq!(
             encodings.len(),
             layers,
@@ -373,6 +373,8 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
         );
 
         let column_hashes_vec = cs_handle.map(|handle| handle.join().unwrap());
+
+        info!("Layers generated");
         Ok((Encodings::<H>::new(encodings), column_hashes_vec))
     }
 
@@ -435,11 +437,13 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                         });
 
                     // construct final replica commitment
+                    info!("building tree_r_last");
                     build_tree(data)
                 });
 
                 // build the tree for CommC
                 let tree_c_handle = s.spawn(|_| {
+                    info!("building tree_c");
                     let column_hashes_flat = unsafe {
                         // column_hashes is of type Vec<[u8; 32]>
                         std::slice::from_raw_parts(
@@ -451,7 +455,9 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                 });
 
                 let tree_c = tree_c_handle.join()?;
+                info!("tree_c done");
                 let tree_r_last = tree_r_last_handle.join()?;
+                info!("tree_r_last done");
 
                 // comm_r = H(comm_c || comm_r_last)
                 let comm_r: H::Domain = Fr::from(hash2(tree_c.root(), tree_r_last.root())).into();

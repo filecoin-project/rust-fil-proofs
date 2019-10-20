@@ -91,7 +91,7 @@ pub fn decode_domain_block<H>(
     tree: &MerkleTree<H::Domain, H::Function>,
     node: usize,
     node_data: <H as Hasher>::Domain,
-    parents: &[usize],
+    parents: &[u32],
 ) -> Result<H::Domain>
 where
     H: Hasher,
@@ -107,17 +107,17 @@ where
 pub fn create_key_from_tree<H: Hasher>(
     id: &H::Domain,
     node: usize,
-    parents: &[usize],
+    parents: &[u32],
     tree: &MerkleTree<H::Domain, H::Function>,
 ) -> Result<H::Domain> {
     let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
     hasher.update(AsRef::<[u8]>::as_ref(&id));
 
     // The hash is about the parents, hence skip if a node doesn't have any parents
-    if node != parents[0] {
+    if node != parents[0] as usize {
         let mut scratch: [u8; NODE_SIZE] = [0; NODE_SIZE];
         for parent in parents.iter() {
-            tree.read_into(*parent, &mut scratch);
+            tree.read_into(*parent as usize, &mut scratch);
             hasher.update(&scratch);
         }
     }

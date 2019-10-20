@@ -247,11 +247,12 @@ impl<'a, H: 'static + Hasher>
                 graph.base_graph().parents(challenge, &mut drg_parents);
 
                 for parent in drg_parents.into_iter() {
-                    inputs.extend(generate_inclusion_inputs(parent));
+                    inputs.extend(generate_inclusion_inputs(parent as usize));
                 }
 
                 // exp parents
-                let exp_parents = graph.expanded_parents(challenge, |p| p.clone());
+                let mut exp_parents = vec![0; graph.expansion_degree()];
+                graph.expanded_parents(challenge, &mut exp_parents);
                 for parent in exp_parents.into_iter() {
                     inputs.extend(generate_inclusion_inputs(parent as usize));
                 }

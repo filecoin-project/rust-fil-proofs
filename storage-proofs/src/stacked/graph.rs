@@ -159,15 +159,15 @@ where
     }
 
     #[inline]
-    fn parents(&self, raw_node: usize, parents: &mut [usize]) {
+    fn parents(&self, raw_node: usize, parents: &mut [u32]) {
         self.base_parents(raw_node, &mut parents[..self.base_graph().degree()]);
 
         // expanded_parents takes raw_node
-        self.expanded_parents(raw_node, |expanded_parents| {
-            for (ii, value) in expanded_parents.iter().enumerate() {
-                parents[ii + self.base_graph().degree()] = *value as usize
-            }
-        });
+        self.expanded_parents(
+            raw_node,
+            &mut parents
+                [self.base_graph().degree()..self.base_graph().degree() + self.expansion_degree()],
+        );
 
         debug_assert!(parents.len() == self.degree());
     }
@@ -184,7 +184,7 @@ where
         &self,
         _id: &H::Domain,
         _node: usize,
-        _parents: &[usize],
+        _parents: &[u32],
         _base_parents_data: &[u8],
         _exp_parents_data: Option<&[u8]>,
     ) -> Result<Self::Key> {
@@ -199,7 +199,7 @@ where
 {
     /// Assign one parent to `node` using a Chung's construction with a reversible
     /// permutation function from a Feistel cipher (controlled by `invert_permutation`).
-    fn correspondent(&self, node: usize, i: usize) -> usize {
+    fn correspondent(&self, node: usize, i: usize) -> u32 {
         // We can't just generate random values between `[0, size())`, we need to
         // expand the search space (domain) to accommodate every unique parent assignment
         // generated here. This can be visualized more clearly as a matrix where the each
@@ -233,7 +233,7 @@ where
             feistel_keys,
             self.feistel_precomputed,
         );
-        transformed as usize / self.expansion_degree
+        transformed as u32 / self.expansion_degree as u32
         // Collapse the output in the matrix search space to the row of the corresponding
         // node (losing the column information, that will be regenerated later when calling
         // back this function in the `reversed` direction).
@@ -254,18 +254,11 @@ where
         }
     }
 
-    fn generate_expanded_parents(&self, node: usize) -> Vec<u32> {
-        let mut expanded_parents = Vec::with_capacity(self.expansion_degree);
-        // Generate half of the parents from one permutation order and the other with its inverse.
-        for i in 0..self.expansion_degree {
-            let other = self.correspondent(node, i);
-            expanded_parents.push(other as u32);
+    fn generate_expanded_parents(&self, node: usize, expanded_parents: &mut [u32]) {
+        debug_assert_eq!(expanded_parents.len(), self.expansion_degree);
+        for (i, el) in expanded_parents.iter_mut().enumerate() {
+            *el = self.correspondent(node, i);
         }
-
-        // Add padding parents.
-        expanded_parents.resize(self.expansion_degree, 0);
-
-        expanded_parents
     }
 
     pub fn new_stacked(
@@ -285,7 +278,7 @@ where
         self.expansion_degree
     }
 
-    pub fn base_parents(&self, raw_node: usize, parents: &mut [usize]) {
+    pub fn base_parents(&self, raw_node: usize, parents: &mut [u32]) {
         self.base_graph().parents(raw_node, parents);
     }
 
@@ -293,20 +286,17 @@ where
     /// that is applied one way for the forward layers and one way for the reversed
     /// ones.
     #[inline]
-    pub fn expanded_parents<F, T>(&self, node: usize, mut cb: F) -> T
-    where
-        F: FnMut(&Vec<u32>) -> T,
-    {
+    pub fn expanded_parents(&self, node: usize, parents: &mut [u32]) {
         if !self.use_cache {
             // No cache usage, generate on demand.
-            return cb(&self.generate_expanded_parents(node));
+            return self.generate_expanded_parents(node, parents);
         }
 
         // Check if we need to fill the cache.
         if !self.contains_parents_cache(node) {
             // Cache is empty so we need to generate the parents.
-            let parents = self.generate_expanded_parents(node);
-            assert_eq!(parents.len(), self.expansion_degree());
+            let mut parents = vec![0; self.expansion_degree()];
+            self.generate_expanded_parents(node, &mut parents);
 
             // Store the newly generated cached value.
             let mut cache_lock = PARENT_CACHE.write().unwrap();
@@ -321,7 +311,10 @@ where
         let cache = cache_lock
             .get(&self.id)
             .expect("Invalid cache construction");
-        cache.read(node as u32, |parents| cb(parents.unwrap()))
+
+        cache.read(node as u32, |cache_parents| {
+            parents.copy_from_slice(cache_parents.expect("Invalid cache construction"));
+        });
     }
 }
 
