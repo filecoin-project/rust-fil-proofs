@@ -341,120 +341,96 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
             )
         };
 
-        #[allow(clippy::type_complexity)]
-        let (tree_d, tree_r_last, tree_c, comm_r, encodings): (
-            Tree<H>,
-            Tree<H>,
-            Tree<H>,
-            H::Domain,
-            Encodings<_>,
-        ) = crossbeam::thread::scope(|s| -> Result<_> {
-            // encode all layers
-            let encodings_handle =
-                s.spawn(move |_| Self::generate_layers(graph, layer_challenges, replica_id));
+        // encode layers
+        let encodings = Self::generate_layers(graph, layer_challenges, replica_id)?;
 
-            // Build the MerkleTree over the original data
-            info!("building merkle tree for the original data");
-            let tree_d = match data_tree {
-                Some(t) => t,
-                None => build_tree(&data),
-            };
+        // Build the MerkleTree over the original data
+        info!("building merkle tree for the original data");
+        let tree_d = match data_tree {
+            Some(t) => t,
+            None => build_tree(&data),
+        };
 
-            // encode layers
-            let encodings = encodings_handle.join().expect("failed to encode layers")?;
-            let size = encodings.encoding_at_last_layer().len();
+        let (tree_r_last, tree_c, comm_r): (Tree<H>, Tree<H>, H::Domain) =
+            crossbeam::thread::scope(|s| -> Result<_> {
+                // encode original data into the last layer
+                let tree_r_last_handle = s.spawn(|_| {
+                    info!("encoding data");
+                    let size = encodings.encoding_at_last_layer().len();
+                    encodings
+                        .encoding_at_last_layer()
+                        .read_range(0..size)
+                        .into_par_iter()
+                        .zip(data.par_chunks_mut(NODE_SIZE))
+                        .for_each(|(key, data_node_bytes)| {
+                            let data_node = H::Domain::try_from_bytes(data_node_bytes).unwrap();
+                            let encoded_node = encode::<H::Domain>(key, data_node);
 
-            // encode original data into the last layer
-            info!("encoding data");
-            encodings
-                .encoding_at_last_layer()
-                .read_range(0..size)
-                .into_par_iter()
-                .zip(data.par_chunks_mut(NODE_SIZE))
-                .try_for_each(|(key, data_node_bytes)| -> Result<()> {
-                    let data_node = H::Domain::try_from_bytes(data_node_bytes)?;
-                    let encoded_node = encode::<H::Domain>(key, data_node);
+                            // store result in the data
+                            data_node_bytes.copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
+                        });
 
-                    // store result in the data
-                    data_node_bytes.copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
+                    // construct final replica commitment
+                    build_tree(data)
+                });
 
-                    Ok(())
+                // construct column commitments
+                info!("constructing column commitments");
+
+                let chunks = num_cpus::get_physical();
+
+                let len = nodes_count * NODE_SIZE;
+
+                // only use chunking if there are enough nodes
+                let node_part_len = if nodes_count >= 2 * chunks {
+                    nodes_count / chunks
+                } else {
+                    nodes_count
+                };
+
+                // our target commitments
+                let mut cs = vec![0; len];
+
+                crossbeam::thread::scope(|s| {
+                    let mut handles = Vec::with_capacity(chunks);
+                    let encodings = &encodings;
+
+                    for (i, part) in cs.chunks_mut(node_part_len * NODE_SIZE).enumerate() {
+                        handles.push(s.spawn(move |_| {
+                            for (j, chunk) in part.chunks_exact_mut(NODE_SIZE).enumerate() {
+                                let x = node_part_len * NODE_SIZE * i + j;
+                                chunk.copy_from_slice(AsRef::<[u8]>::as_ref(
+                                    &encodings.column_hash(x),
+                                ));
+                            }
+                        }));
+                    }
+
+                    while let Some(handle) = handles.pop() {
+                        handle.join().unwrap();
+                    }
                 })?;
 
-            // the last layer is now stored in the data slice
-            let r_last = data;
+                // build the tree for CommC
+                let tree_c = build_tree(&cs);
 
-            // construct final replica commitment
-            let tree_r_last_handle = s.spawn(move |_| build_tree(&r_last));
+                // sanity checks
+                debug_assert_eq!(AsRef::<[u8]>::as_ref(&tree_c.read_at(0)), &cs[..NODE_SIZE]);
+                debug_assert_eq!(
+                    AsRef::<[u8]>::as_ref(&tree_c.read_at(1)),
+                    &cs[NODE_SIZE..NODE_SIZE * 2]
+                );
 
-            // construct column commitments
-            info!("constructing column commitments");
+                // drop memory for cs asap
+                drop(cs);
 
-            // For now split into 4 chunks to trade space (memory) vs speed reasonably.
-            let chunks = 4;
+                let tree_r_last = tree_r_last_handle.join()?;
 
-            let len = nodes_count * NODE_SIZE;
-            let node_part_len = nodes_count / chunks;
+                // comm_r = H(comm_c || comm_r_last)
+                let comm_r: H::Domain = Fr::from(hash2(tree_c.root(), tree_r_last.root())).into();
 
-            let mut cs = vec![0; len];
-
-            let part_len = node_part_len * NODE_SIZE;
-            let (p1, p2) = cs.split_at_mut(part_len * 2);
-            let (a, b) = p1.split_at_mut(part_len);
-            let (c, d) = p2.split_at_mut(part_len);
-
-            crossbeam::thread::scope(|s| {
-                let a_handle = s.spawn(|_| {
-                    for (x, chunk) in (0..node_part_len).zip(a.chunks_exact_mut(NODE_SIZE)) {
-                        chunk.copy_from_slice(AsRef::<[u8]>::as_ref(&encodings.column_hash(x)));
-                    }
-                });
-                let b_handle = s.spawn(|_| {
-                    for (x, chunk) in
-                        (node_part_len..2 * node_part_len).zip(b.chunks_exact_mut(NODE_SIZE))
-                    {
-                        chunk.copy_from_slice(AsRef::<[u8]>::as_ref(&encodings.column_hash(x)));
-                    }
-                });
-                let c_handle = s.spawn(|_| {
-                    for (x, chunk) in
-                        (2 * node_part_len..3 * node_part_len).zip(c.chunks_exact_mut(NODE_SIZE))
-                    {
-                        chunk.copy_from_slice(AsRef::<[u8]>::as_ref(&encodings.column_hash(x)));
-                    }
-                });
-                let d_handle = s.spawn(|_| {
-                    for (x, chunk) in (3 * node_part_len..).zip(d.chunks_exact_mut(NODE_SIZE)) {
-                        chunk.copy_from_slice(AsRef::<[u8]>::as_ref(&encodings.column_hash(x)));
-                    }
-                });
-
-                a_handle.join().unwrap();
-                b_handle.join().unwrap();
-                c_handle.join().unwrap();
-                d_handle.join().unwrap();
-            })?;
-
-            // build the tree for CommC
-            let tree_c = build_tree(&cs);
-
-            // sanity checks
-            debug_assert_eq!(AsRef::<[u8]>::as_ref(&tree_c.read_at(0)), &cs[..NODE_SIZE]);
-            debug_assert_eq!(
-                AsRef::<[u8]>::as_ref(&tree_c.read_at(1)),
-                &cs[NODE_SIZE..NODE_SIZE * 2]
-            );
-
-            // drop memory for cs asap
-            drop(cs);
-
-            let tree_r_last = tree_r_last_handle.join()?;
-
-            // comm_r = H(comm_c || comm_r_last)
-            let comm_r: H::Domain = Fr::from(hash2(tree_c.root(), tree_r_last.root())).into();
-
-            Ok((tree_d, tree_r_last, tree_c, comm_r, encodings))
-        })??;
+                Ok((tree_r_last, tree_c, comm_r))
+            })??;
 
         Ok((
             Tau {
