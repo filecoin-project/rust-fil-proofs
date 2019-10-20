@@ -267,7 +267,7 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
 
         // 1 less, to account for the thread we are on, which is doign the encoding.
         let chunks = std::cmp::min(graph_size / 4, num_cpus::get() - 1);
-        let chunk_len = graph_size / chunks;
+        let chunk_len = (graph_size as f64 / chunks as f64).ceil() as usize;
 
         // Construct column hashes on a background thread.
         let cs_handle = if with_hashing {
@@ -277,8 +277,8 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                     let (sender, receiver) = crossbeam::channel::unbounded();
                     let handle = std::thread::spawn(move || {
                         let mut column_hashes = Vec::with_capacity(chunk_len);
-                        while let Ok(msg) = receiver.recv() {
-                            match msg {
+                        loop {
+                            match receiver.recv().unwrap() {
                                 Message::Init(_node, ref hash) => {
                                     column_hashes.push(PedersenHasher::new(hash))
                                 }
@@ -295,7 +295,6 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                                 }
                             }
                         }
-                        panic!("Need to finalize with a Done call");
                     });
 
                     (handle, sender)
