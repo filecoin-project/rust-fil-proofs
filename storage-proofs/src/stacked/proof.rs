@@ -287,7 +287,7 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                                     column_hashes[node - i * chunk_len].update(hash)
                                 }
                                 Message::Done => {
-                                    info!("Finalizing column commitments {}", i);
+                                    trace!("Finalizing column commitments {}", i);
                                     return column_hashes
                                         .into_iter()
                                         .map(|h| h.finalize_bytes())
@@ -437,16 +437,21 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
         };
 
         // encode layers
-        let (encodings, column_hashes) =
-            Self::generate_layers(graph, layer_challenges, replica_id, true)?;
-        let column_hashes = column_hashes.unwrap();
+        let (encodings, column_hashes, tree_d) = crossbeam::thread::scope(|s| {
+            let h = s.spawn(|_| Self::generate_layers(graph, layer_challenges, replica_id, true));
 
-        // Build the MerkleTree over the original data
-        info!("building merkle tree for the original data");
-        let tree_d = match data_tree {
-            Some(t) => t,
-            None => build_tree(&data),
-        };
+            // Build the MerkleTree over the original data
+            info!("building merkle tree for the original data");
+            let tree_d = match data_tree {
+                Some(t) => t,
+                None => build_tree(&data),
+            };
+
+            let (encodings, column_hashes) = h.join().unwrap().unwrap();
+            let column_hashes = column_hashes.unwrap();
+
+            (encodings, column_hashes, tree_d)
+        })?;
 
         let (tree_r_last, tree_c, comm_r): (Tree<H>, Tree<H>, H::Domain) =
             crossbeam::thread::scope(|s| -> Result<_> {
