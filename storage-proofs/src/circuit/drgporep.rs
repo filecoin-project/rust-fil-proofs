@@ -186,14 +186,14 @@ where
 
         let mut parents = vec![0; pub_params.graph.degree()];
         for challenge in challenges {
-            let mut por_nodes = vec![*challenge];
+            let mut por_nodes = vec![*challenge as u32];
             pub_params.graph.parents(*challenge, &mut parents);
             por_nodes.extend_from_slice(&parents);
 
             for node in por_nodes {
                 let por_pub_inputs = merklepor::PublicInputs {
                     commitment: comm_r,
-                    challenge: node,
+                    challenge: node as usize,
                 };
                 let por_inputs = PoRCompound::<H>::generate_public_inputs(
                     &por_pub_inputs,

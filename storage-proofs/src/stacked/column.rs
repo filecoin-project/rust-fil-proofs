@@ -7,13 +7,13 @@ use crate::stacked::{column_proof::ColumnProof, hash::hash_single_column, params
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Column<H: Hasher> {
-    pub(crate) index: usize,
+    pub(crate) index: u32,
     pub(crate) rows: Vec<H::Domain>,
     _h: PhantomData<H>,
 }
 
 impl<H: Hasher> Column<H> {
-    pub fn new(index: usize, rows: Vec<H::Domain>) -> Self {
+    pub fn new(index: u32, rows: Vec<H::Domain>) -> Self {
         Column {
             index,
             rows,
@@ -21,7 +21,7 @@ impl<H: Hasher> Column<H> {
         }
     }
 
-    pub fn with_capacity(index: usize, capacity: usize) -> Self {
+    pub fn with_capacity(index: u32, capacity: usize) -> Self {
         Column::new(index, Vec::with_capacity(capacity))
     }
 
@@ -29,7 +29,7 @@ impl<H: Hasher> Column<H> {
         &self.rows
     }
 
-    pub fn index(&self) -> usize {
+    pub fn index(&self) -> u32 {
         self.index
     }
 
@@ -46,7 +46,7 @@ impl<H: Hasher> Column<H> {
 
     /// Create a column proof for this column.
     pub fn into_proof(self, tree_c: &Tree<H>) -> ColumnProof<H> {
-        let inclusion_proof = MerkleProof::new_from_proof(&tree_c.gen_proof(self.index()));
+        let inclusion_proof = MerkleProof::new_from_proof(&tree_c.gen_proof(self.index() as usize));
         ColumnProof::<H>::from_column(self, inclusion_proof)
     }
 }

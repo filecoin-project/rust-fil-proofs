@@ -65,6 +65,44 @@ where
     x.into()
 }
 
+#[derive(Debug, Clone)]
+pub struct Hasher {
+    curr: [u8; 32],
+}
+
+impl Hasher {
+    pub fn new(data: &[u8]) -> Self {
+        assert_eq!(data.len(), 32);
+        let mut curr = [0u8; 32];
+        curr.copy_from_slice(data);
+
+        Hasher { curr }
+    }
+
+    pub fn update(&mut self, data: &[u8]) {
+        assert_eq!(data.len(), 32);
+
+        let parts = [&self.curr, data];
+        let data = Bits::new_many(parts.iter());
+        let x = pedersen_compression_bits(data);
+
+        x.write_le(std::io::Cursor::new(&mut self.curr[..]))
+            .expect("failed to write result");
+    }
+
+    pub fn finalize_bytes(self) -> [u8; 32] {
+        let Hasher { curr } = self;
+        curr
+    }
+
+    pub fn finalize(self) -> Fr {
+        let frs =
+            bytes_into_frs::<Bls12>(&self.curr).expect("pedersen must generate valid fr elements");
+        assert_eq!(frs.len(), 1);
+        frs[0]
+    }
+}
+
 /// Creates an iterator over the byte slices in little endian format.
 #[derive(Debug, Clone)]
 pub struct Bits<K: AsRef<[u8]>, S: Iterator<Item = K>> {
@@ -325,5 +363,27 @@ mod tests {
         .collect();
 
         assert_eq!(bits, bits_collected);
+    }
+
+    #[test]
+    fn test_pedersen_hasher_update() {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        for _ in 2..5 {
+            let x: Vec<Vec<u8>> = (0..5)
+                .map(|_| (0..32).map(|_| rng.gen()).collect())
+                .collect();
+            let flat: Vec<u8> = x.iter().flatten().copied().collect();
+            let hashed = pedersen_md_no_padding(&flat);
+
+            let mut hasher = Hasher::new(&x[0]);
+            for k in 1..5 {
+                hasher.update(&x[k]);
+            }
+
+            let hasher_final = hasher.finalize();
+
+            assert_eq!(hashed, hasher_final);
+        }
     }
 }

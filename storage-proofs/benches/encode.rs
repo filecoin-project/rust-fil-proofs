@@ -15,7 +15,7 @@ use storage_proofs::util::{data_at_node_offset, NODE_SIZE};
 
 struct Pregenerated<H: 'static + Hasher> {
     data: Vec<u8>,
-    parents: Vec<usize>,
+    parents: Vec<u32>,
     replica_id: H::Domain,
     graph: StackedBucketGraph<H>,
 }
@@ -25,7 +25,7 @@ fn pregenerate_data<H: Hasher>(degree: usize) -> Pregenerated<H> {
     let data: Vec<u8> = (0..(degree + 1))
         .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
         .collect();
-    let parents: Vec<usize> = (0..degree).map(|pos| pos).collect();
+    let parents: Vec<u32> = (0..degree as u32).map(|pos| pos).collect();
     let replica_id: H::Domain = rng.gen();
 
     let graph = StackedBucketGraph::<H>::new_stacked(degree + 1, degree, 0, new_seed());
@@ -40,7 +40,7 @@ fn pregenerate_data<H: Hasher>(degree: usize) -> Pregenerated<H> {
 
 fn encode_single_node<H: Hasher>(
     data: &mut [u8],
-    parents: &[usize],
+    parents: &[u32],
     replica_id: &H::Domain,
     node: usize,
     graph: &StackedBucketGraph<H>,
