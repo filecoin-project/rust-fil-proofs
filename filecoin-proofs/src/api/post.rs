@@ -149,6 +149,7 @@ pub fn generate_post(
     replicas: &BTreeMap<SectorId, PrivateReplicaInfo>,
 ) -> error::Result<Vec<u8>> {
     let sector_count = replicas.len() as u64;
+    ensure!(sector_count > 0, "Must supply at least one replica");
     let sector_size = u64::from(PaddedBytesAmount::from(post_config));
 
     let vanilla_params = post_setup_params(post_config);
@@ -274,6 +275,7 @@ pub fn verify_post(
 ) -> error::Result<bool> {
     let sector_size = u64::from(PaddedBytesAmount::from(post_config));
     let sector_count = replicas.len() as u64;
+    ensure!(sector_count > 0, "Must supply at least one replica");
 
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
