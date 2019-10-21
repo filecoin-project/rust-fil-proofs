@@ -87,7 +87,7 @@ impl Hasher {
         let x = pedersen_compression_bits(data);
 
         x.write_le(std::io::Cursor::new(&mut self.curr[..]))
-            .expect("faile to write result");
+            .expect("failed to write result");
     }
 
     pub fn finalize_bytes(self) -> [u8; 32] {

@@ -283,7 +283,6 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                                     column_hashes.push(PedersenHasher::new(hash))
                                 }
                                 Message::Hash(node, ref hash) => {
-                                    // info!("hash {} - {} - {} ", node, i, chunk_len);
                                     column_hashes[node - i * chunk_len].update(hash)
                                 }
                                 Message::Done => {
@@ -331,8 +330,9 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                         hasher.update(buf);
                     }
 
+                    // Expander parents
+                    // This will happen for all layers > 1
                     if let Some(ref parents_data) = exp_parents_data {
-                        // Expander parents
                         for parent in parents.iter().skip(base_parents_count) {
                             let buf =
                                 data_at_node(parents_data, *parent as usize).expect("invalid node");
@@ -344,28 +344,24 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                 let start = data_at_node_offset(node);
                 let end = start + NODE_SIZE;
 
-                // store resulting key
+                // finalize the key
                 let mut key = *hasher.finalize().as_array();
                 // strip last two bits, to ensure result is in Fr.
                 key[31] &= 0b0011_1111;
 
+                // store the newly generated key
                 encoding[start..end].copy_from_slice(&key[..]);
 
                 if with_hashing {
                     let sender_index = node / chunk_len;
-                    // info!(
-                    //     "{} - {} - {} - {}",
-                    //     node,
-                    //     chunk_len,
-                    //     sender_index,
-                    //     cs_handle.as_ref().unwrap().len()
-                    // );
                     let sender = &cs_handle.as_ref().unwrap()[sender_index].1;
                     if layer == 1 {
+                        // Initialize hashes on layer 1.
                         sender
                             .send(Message::Init(node, key))
                             .expect("failed to init hasher");
                     } else {
+                        // Update hashes for all other layers.
                         sender
                             .send(Message::Hash(node, key))
                             .expect("failed to update hasher");
@@ -374,6 +370,7 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
             }
 
             if with_hashing && layer == layers {
+                // Finalize column hashes.
                 for (_, sender) in cs_handle.as_ref().unwrap().iter() {
                     sender
                         .send(Message::Done)
@@ -398,7 +395,8 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
             "Invalid amount of layers encoded expected"
         );
 
-        let column_hashes_vec = cs_handle.map(|handles| {
+        // Collect the column hashes from the spawned threads.
+        let column_hashes = cs_handle.map(|handles| {
             handles
                 .into_iter()
                 .flat_map(|(h, _)| h.join().unwrap())
@@ -406,7 +404,7 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
         });
 
         info!("Layers generated");
-        Ok((Encodings::<H>::new(encodings), column_hashes_vec))
+        Ok((Encodings::<H>::new(encodings), column_hashes))
     }
 
     pub(crate) fn transform_and_replicate_layers(
@@ -436,11 +434,11 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
             )
         };
 
-        // encode layers
         let (encodings, column_hashes, tree_d) = crossbeam::thread::scope(|s| {
+            // Generate key layers.
             let h = s.spawn(|_| Self::generate_layers(graph, layer_challenges, replica_id, true));
 
-            // Build the MerkleTree over the original data
+            // Build the MerkleTree over the original data.
             info!("building merkle tree for the original data");
             let tree_d = match data_tree {
                 Some(t) => t,
@@ -455,7 +453,7 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
 
         let (tree_r_last, tree_c, comm_r): (Tree<H>, Tree<H>, H::Domain) =
             crossbeam::thread::scope(|s| -> Result<_> {
-                // encode original data into the last layer
+                // Encode original data into the last layer.
                 let tree_r_last_handle = s.spawn(|_| {
                     info!("encoding data");
                     let size = encodings.encoding_at_last_layer().len();
@@ -468,20 +466,21 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                             let data_node = H::Domain::try_from_bytes(data_node_bytes).unwrap();
                             let encoded_node = encode::<H::Domain>(key, data_node);
 
-                            // store result in the data
+                            // Store the result in the place of the original data.
                             data_node_bytes.copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
                         });
 
-                    // construct final replica commitment
+                    // Construct the final replica commitment.
                     info!("building tree_r_last");
                     build_tree(data)
                 });
 
-                // build the tree for CommC
+                // Build the tree for CommC
                 let tree_c_handle = s.spawn(|_| {
                     info!("building tree_c");
                     let column_hashes_flat = unsafe {
-                        // column_hashes is of type Vec<[u8; 32]>
+                        // Column_hashes is of type Vec<[u8; 32]>, so this is safe to do.
+                        // We do this to avoid unnecessary allocations.
                         std::slice::from_raw_parts(
                             column_hashes.as_ptr() as *const _,
                             column_hashes.len() * 32,
