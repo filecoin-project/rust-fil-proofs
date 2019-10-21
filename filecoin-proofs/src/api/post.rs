@@ -19,6 +19,7 @@ use crate::caches::{get_post_params, get_post_verifying_key};
 use crate::error;
 use crate::parameters::{post_setup_params, public_params};
 use crate::types::{PaddedBytesAmount, PoStConfig};
+use std::path::PathBuf;
 
 /// The minimal information required about a replica, in order to be able to generate
 /// a PoSt over it.
@@ -32,6 +33,8 @@ pub struct PrivateReplicaInfo {
     aux: PersistentAux,
     /// Is this sector marked as a fault?
     is_fault: bool,
+    /// Contains sector-specific (e.g. merkle trees) assets
+    cache_dir: PathBuf,
 }
 
 impl std::cmp::Ord for PrivateReplicaInfo {
@@ -47,21 +50,28 @@ impl std::cmp::PartialOrd for PrivateReplicaInfo {
 }
 
 impl PrivateReplicaInfo {
-    pub fn new(access: String, comm_r: Commitment, aux: PersistentAux) -> Self {
+    pub fn new(access: String, comm_r: Commitment, aux: PersistentAux, cache_dir: PathBuf) -> Self {
         PrivateReplicaInfo {
             access,
             comm_r,
             aux,
             is_fault: false,
+            cache_dir,
         }
     }
 
-    pub fn new_faulty(access: String, comm_r: Commitment, aux: PersistentAux) -> Self {
+    pub fn new_faulty(
+        access: String,
+        comm_r: Commitment,
+        aux: PersistentAux,
+        cache_dir: PathBuf,
+    ) -> Self {
         PrivateReplicaInfo {
             access,
             comm_r,
             aux,
             is_fault: true,
+            cache_dir,
         }
     }
 

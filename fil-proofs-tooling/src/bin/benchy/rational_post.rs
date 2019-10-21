@@ -82,11 +82,13 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
 
     // Replicate the staged sector, write the replica file to `sealed_path`.
     let porep_config = PoRepConfig(SectorSize(sector_size as u64), N_PARTITIONS);
+    let cache_dir = tempfile::tempdir().unwrap();
     let sector_id = SectorId::from(SECTOR_ID);
     let ticket = [0u8; 32];
 
     let seal_output = seal(
         porep_config,
+        cache_dir.path(),
         staged_file.path(),
         sealed_file.path(),
         PROVER_ID,
@@ -104,7 +106,12 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
 
     priv_replica_info.insert(
         sector_id,
-        PrivateReplicaInfo::new(sealed_path_string, seal_output.comm_r, seal_output.p_aux),
+        PrivateReplicaInfo::new(
+            sealed_path_string,
+            seal_output.comm_r,
+            seal_output.p_aux,
+            cache_dir.into_path(),
+        ),
     );
 
     // Measure PoSt generation and verification.
