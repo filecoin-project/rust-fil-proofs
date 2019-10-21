@@ -124,25 +124,19 @@ impl<'a, E: JubjubEngine> Circuit<E> for ParallelProofOfRetrievability<'a, E> {
 mod tests {
     use super::*;
     use crate::circuit::test::*;
+    use crate::crypto::pedersen::JJ_PARAMS;
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
     use crate::hasher::pedersen::*;
     use crate::merklepor;
     use crate::proof::ProofScheme;
-    use crate::settings;
     use crate::util::data_at_node;
     use ff::Field;
-    use fil_sapling_crypto::jubjub::JubjubBls12;
     use paired::bls12_381::*;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]
     fn test_parallel_por_input_circuit_with_bls12_381() {
-        let window_size = settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size;
-        let params = &JubjubBls12::new_with_window_size(window_size);
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 16;
@@ -206,7 +200,7 @@ mod tests {
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
             let instance = ParallelProofOfRetrievability {
-                params,
+                params: &*JJ_PARAMS,
                 values,
                 auth_paths,
                 root: Some(tree.root().into()),

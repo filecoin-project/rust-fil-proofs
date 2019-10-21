@@ -19,7 +19,6 @@ use crate::file_cleanup::FileCleanup;
 use crate::fr32::{write_padded, write_unpadded};
 use crate::parameters::{public_params, setup_params};
 use crate::pieces::{get_aligned_source, get_piece_alignment, PieceAlignment};
-use crate::singletons::ENGINE_PARAMS;
 use crate::types::{
     PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, SectorSize, UnpaddedByteIndex,
     UnpaddedBytesAmount,
@@ -28,6 +27,7 @@ use crate::types::{
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
+use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes, Fr32Ary};
 use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
@@ -177,7 +177,7 @@ pub fn seal<T: AsRef<Path>>(
             PaddedBytesAmount::from(porep_config),
             usize::from(PoRepProofPartitions::from(porep_config)),
         ),
-        engine_params: &(*ENGINE_PARAMS),
+        engine_params: &*JJ_PARAMS,
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };
 
@@ -314,7 +314,7 @@ pub fn verify_seal(
             PaddedBytesAmount::from(porep_config),
             usize::from(PoRepProofPartitions::from(porep_config)),
         ),
-        engine_params: &(*ENGINE_PARAMS),
+        engine_params: &*JJ_PARAMS,
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };
 

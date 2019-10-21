@@ -324,29 +324,23 @@ mod tests {
     use crate::circuit::metric::*;
     use crate::circuit::test::*;
     use crate::compound_proof;
+    use crate::crypto::pedersen::JJ_PARAMS;
     use crate::drgporep;
     use crate::drgraph::{new_seed, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, Hasher, PedersenHasher};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
-    use crate::settings;
     use crate::stacked::{
         ChallengeRequirements, LayerChallenges, PrivateInputs, PublicInputs, SetupParams,
         EXP_DEGREE,
     };
 
     use ff::Field;
-    use fil_sapling_crypto::jubjub::JubjubBls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]
     fn stacked_input_circuit_with_bls12_381() {
-        let window_size = settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size;
-        let params = &JubjubBls12::new_with_window_size(window_size);
         let nodes = 5;
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
@@ -409,7 +403,7 @@ mod tests {
             <StackedCircuit<Bls12, PedersenHasher> as CircuitComponent>::ComponentPrivateInputs::default(),
             &proofs[0],
             &pp,
-            params,
+            &JJ_PARAMS,
         )
             .synthesize(&mut cs.namespace(|| "stacked drgporep"))
             .expect("failed to synthesize circuit");
@@ -428,7 +422,7 @@ mod tests {
             <StackedCircuit<Bls12, PedersenHasher> as CircuitComponent>::ComponentPrivateInputs::default(),
             &proofs[0],
             &pp,
-            params,
+            &JJ_PARAMS,
         )
         .synthesize(&mut cs.namespace(|| "stacked drgporep"))
         .expect("failed to synthesize circuit");
@@ -472,11 +466,6 @@ mod tests {
     }
 
     fn stacked_test_compound<H: 'static + Hasher>() {
-        let window_size = settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size;
-        let params = &JubjubBls12::new_with_window_size(window_size);
         let nodes = 5;
         let degree = 3;
         let expansion_degree = 2;
@@ -494,7 +483,7 @@ mod tests {
         let mut data_copy = data.clone();
 
         let setup_params = compound_proof::SetupParams {
-            engine_params: params,
+            engine_params: &*JJ_PARAMS,
             vanilla_params: &SetupParams {
                 drg: drgporep::DrgParams {
                     nodes,
@@ -551,7 +540,7 @@ mod tests {
             let (circuit1, _inputs) =
                 StackedCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);
             let blank_circuit =
-                StackedCompound::blank_circuit(&public_params.vanilla_params, params);
+                StackedCompound::blank_circuit(&public_params.vanilla_params, &JJ_PARAMS);
 
             let mut cs_blank = TestConstraintSystem::new();
             blank_circuit
@@ -570,7 +559,7 @@ mod tests {
         }
 
         let blank_groth_params =
-            StackedCompound::groth_params(&public_params.vanilla_params, params)
+            StackedCompound::groth_params(&public_params.vanilla_params, &JJ_PARAMS)
                 .expect("failed to generate groth params");
 
         let proof = StackedCompound::prove(

@@ -6,6 +6,7 @@ use rayon::prelude::*;
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::rational_post::RationalPoStCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
+use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::drgraph::Graph;
 use storage_proofs::error::Error;
 use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
@@ -17,7 +18,6 @@ use crate::api::{as_safe_commitment, ChallengeSeed, Commitment, PersistentAux, T
 use crate::caches::{get_post_params, get_post_verifying_key};
 use crate::error;
 use crate::parameters::{post_setup_params, public_params};
-use crate::singletons::ENGINE_PARAMS;
 use crate::types::{PaddedBytesAmount, PoStConfig};
 
 /// The minimal information required about a replica, in order to be able to generate
@@ -144,7 +144,7 @@ pub fn generate_post(
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
         vanilla_params: &vanilla_params,
-        engine_params: &(*ENGINE_PARAMS),
+        engine_params: &*JJ_PARAMS,
         partitions: None,
     };
 
@@ -268,7 +268,7 @@ pub fn verify_post(
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
         vanilla_params: &vanilla_params,
-        engine_params: &(*ENGINE_PARAMS),
+        engine_params: &*JJ_PARAMS,
         partitions: None,
     };
 

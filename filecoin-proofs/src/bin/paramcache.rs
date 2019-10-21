@@ -6,11 +6,11 @@ use paired::bls12_381::Bls12;
 
 use filecoin_proofs::constants::*;
 use filecoin_proofs::parameters::{post_public_params, public_params};
-use filecoin_proofs::singletons::ENGINE_PARAMS;
 use filecoin_proofs::types::*;
 use storage_proofs::circuit::rational_post::{RationalPoStCircuit, RationalPoStCompound};
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::CompoundProof;
+use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::hasher::pedersen::PedersenHasher;
 use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::rational_post::RationalPoSt;
@@ -37,15 +37,15 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     );
 
     {
-        let circuit = StackedCompound::blank_circuit(&public_params, &ENGINE_PARAMS);
+        let circuit = StackedCompound::blank_circuit(&public_params, &JJ_PARAMS);
         let _ = StackedCompound::get_param_metadata(circuit, &public_params);
     }
     {
-        let circuit = StackedCompound::blank_circuit(&public_params, &ENGINE_PARAMS);
+        let circuit = StackedCompound::blank_circuit(&public_params, &JJ_PARAMS);
         let _ = StackedCompound::get_groth_params(circuit, &public_params);
     }
     {
-        let circuit = StackedCompound::blank_circuit(&public_params, &ENGINE_PARAMS);
+        let circuit = StackedCompound::blank_circuit(&public_params, &JJ_PARAMS);
         let _ = StackedCompound::get_verifying_key(circuit, &public_params);
     }
 }
@@ -65,7 +65,7 @@ fn cache_post_params(post_config: PoStConfig) {
                 Bls12,
                 RationalPoSt<PedersenHasher>,
                 RationalPoStCircuit<Bls12, PedersenHasher>,
-            >>::blank_circuit(&post_public_params, &ENGINE_PARAMS);
+            >>::blank_circuit(&post_public_params, &JJ_PARAMS);
         let _ = <RationalPoStCompound<PedersenHasher>>::get_param_metadata(
             post_circuit,
             &post_public_params,
@@ -78,7 +78,7 @@ fn cache_post_params(post_config: PoStConfig) {
                 Bls12,
                 RationalPoSt<PedersenHasher>,
                 RationalPoStCircuit<Bls12, PedersenHasher>,
-            >>::blank_circuit(&post_public_params, &ENGINE_PARAMS);
+            >>::blank_circuit(&post_public_params, &JJ_PARAMS);
         let _ = <RationalPoStCompound<PedersenHasher>>::get_groth_params(
             post_circuit,
             &post_public_params,
@@ -91,7 +91,7 @@ fn cache_post_params(post_config: PoStConfig) {
                 Bls12,
                 RationalPoSt<PedersenHasher>,
                 RationalPoStCircuit<Bls12, PedersenHasher>,
-            >>::blank_circuit(&post_public_params, &ENGINE_PARAMS);
+            >>::blank_circuit(&post_public_params, &JJ_PARAMS);
 
         let _ = <RationalPoStCompound<PedersenHasher>>::get_verifying_key(
             post_circuit,

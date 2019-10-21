@@ -9,12 +9,12 @@ use storage_proofs::circuit::rational_post::RationalPoStCircuit;
 use storage_proofs::circuit::rational_post::RationalPoStCompound;
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::CompoundProof;
+use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::hasher::PedersenHasher;
 use storage_proofs::rational_post::RationalPoSt;
 
 use crate::error;
 use crate::parameters::{post_public_params, public_params};
-use crate::singletons::ENGINE_PARAMS;
 use crate::types::*;
 
 type Bls12GrothParams = groth16::Parameters<Bls12>;
@@ -92,7 +92,7 @@ pub fn get_stacked_params(
     );
 
     let parameters_generator =
-        || StackedCompound::groth_params(&public_params, &ENGINE_PARAMS).map_err(Into::into);
+        || StackedCompound::groth_params(&public_params, &JJ_PARAMS).map_err(Into::into);
 
     Ok(lookup_groth_params(
         format!(
@@ -111,7 +111,7 @@ pub fn get_post_params(post_config: PoStConfig) -> error::Result<Arc<groth16::Pa
             Bls12,
             RationalPoSt<PedersenHasher>,
             RationalPoStCircuit<Bls12, PedersenHasher>,
-        >>::groth_params(&post_public_params, &ENGINE_PARAMS)
+        >>::groth_params(&post_public_params, &JJ_PARAMS)
         .map_err(Into::into)
     };
 
@@ -133,7 +133,7 @@ pub fn get_stacked_verifying_key(
     );
 
     let vk_generator =
-        || StackedCompound::verifying_key(&public_params, &ENGINE_PARAMS).map_err(Into::into);
+        || StackedCompound::verifying_key(&public_params, &JJ_PARAMS).map_err(Into::into);
 
     Ok(lookup_verifying_key(
         format!(
@@ -152,7 +152,7 @@ pub fn get_post_verifying_key(post_config: PoStConfig) -> error::Result<Arc<Bls1
             Bls12,
             RationalPoSt<PedersenHasher>,
             RationalPoStCircuit<Bls12, PedersenHasher>,
-        >>::verifying_key(&post_public_params, &ENGINE_PARAMS)
+        >>::verifying_key(&post_public_params, &JJ_PARAMS)
         .map_err(Into::into)
     };
 

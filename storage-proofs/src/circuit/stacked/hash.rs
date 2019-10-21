@@ -94,24 +94,18 @@ mod tests {
 
     use bellperson::ConstraintSystem;
     use fil_sapling_crypto::circuit::boolean::Boolean;
-    use fil_sapling_crypto::jubjub::JubjubBls12;
     use paired::bls12_381::{Bls12, Fr};
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     use crate::circuit::test::TestConstraintSystem;
+    use crate::crypto::pedersen::JJ_PARAMS;
     use crate::fr32::fr_into_bytes;
-    use crate::settings;
     use crate::stacked::hash::hash2 as vanilla_hash2;
     use crate::util::bytes_into_boolean_vec;
 
     #[test]
     fn test_hash2_circuit() {
         let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-        let window_size = settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size;
-        let params = &JubjubBls12::new_with_window_size(window_size);
 
         for _ in 0..10 {
             let mut cs = TestConstraintSystem::<Bls12>::new();
@@ -129,7 +123,7 @@ mod tests {
                 bytes_into_boolean_vec(&mut cs, Some(b_bytes.as_slice()), b_bytes.len()).unwrap()
             };
 
-            let out = hash2(cs.namespace(|| "hash2"), &params, &a_bits, &b_bits)
+            let out = hash2(cs.namespace(|| "hash2"), &JJ_PARAMS, &a_bits, &b_bits)
                 .expect("hash2 function failed");
 
             assert!(cs.is_satisfied(), "constraints not satisfied");

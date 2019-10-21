@@ -274,11 +274,11 @@ mod tests {
     use std::collections::BTreeMap;
 
     use ff::Field;
-    use fil_sapling_crypto::jubjub::JubjubBls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     use crate::circuit::test::*;
     use crate::compound_proof;
+    use crate::crypto::pedersen::JJ_PARAMS;
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::pedersen::*;
@@ -289,7 +289,6 @@ mod tests {
 
     #[test]
     fn test_rational_post_circuit_with_bls12_381() {
-        let params = &JubjubBls12::new();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 32;
@@ -375,7 +374,7 @@ mod tests {
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
         let instance = RationalPoStCircuit::<_, PedersenHasher> {
-            params,
+            params: &*JJ_PARAMS,
             leafs,
             paths,
             comm_rs: comm_rs.iter().copied().map(|c| Some(c.into())).collect(),
@@ -417,7 +416,6 @@ mod tests {
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn rational_post_test_compound() {
-        let params = &JubjubBls12::new();
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let leaves = 32;
@@ -429,7 +427,7 @@ mod tests {
                 sector_size,
                 challenges_count,
             },
-            engine_params: params,
+            engine_params: &*JJ_PARAMS,
             partitions: None,
         };
 
@@ -490,7 +488,7 @@ mod tests {
 
         let gparams = RationalPoStCompound::<PedersenHasher>::groth_params(
             &pub_params.vanilla_params,
-            &params,
+            &JJ_PARAMS,
         )
         .expect("failed to create groth params");
 

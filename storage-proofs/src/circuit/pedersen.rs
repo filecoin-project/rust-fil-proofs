@@ -85,20 +85,15 @@ mod tests {
     use super::*;
     use crate::circuit::test::TestConstraintSystem;
     use crate::crypto;
-    use crate::settings;
+    use crate::crypto::pedersen::JJ_PARAMS;
     use crate::util::bytes_into_boolean_vec;
     use bellperson::ConstraintSystem;
     use fil_sapling_crypto::circuit::boolean::Boolean;
-    use fil_sapling_crypto::jubjub::JubjubBls12;
     use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]
     fn test_pedersen_single_input_circut() {
-        let window_size = settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size;
         let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let cases = [(32, 689), (64, 1376)];
@@ -106,13 +101,12 @@ mod tests {
         for (bytes, constraints) in &cases {
             let mut cs = TestConstraintSystem::<Bls12>::new();
             let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
-            let params = &JubjubBls12::new_with_window_size(window_size);
 
             let data_bits: Vec<Boolean> = {
                 let mut cs = cs.namespace(|| "data");
                 bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).unwrap()
             };
-            let out = pedersen_compression_num(&mut cs, params, &data_bits)
+            let out = pedersen_compression_num(&mut cs, &JJ_PARAMS, &data_bits)
                 .expect("pedersen hashing failed");
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
@@ -135,10 +129,6 @@ mod tests {
 
     #[test]
     fn test_pedersen_md_input_circut() {
-        let window_size = settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size;
         let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let cases = [
@@ -152,13 +142,12 @@ mod tests {
         for (bytes, constraints) in &cases {
             let mut cs = TestConstraintSystem::<Bls12>::new();
             let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
-            let params = &JubjubBls12::new_with_window_size(window_size);
 
             let data_bits: Vec<Boolean> = {
                 let mut cs = cs.namespace(|| "data");
                 bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).unwrap()
             };
-            let out = pedersen_md_no_padding(cs.namespace(|| "pedersen"), params, &data_bits)
+            let out = pedersen_md_no_padding(cs.namespace(|| "pedersen"), &JJ_PARAMS, &data_bits)
                 .expect("pedersen hashing failed");
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
