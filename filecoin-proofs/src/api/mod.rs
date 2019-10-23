@@ -3,13 +3,14 @@ use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use storage_proofs::drgraph::DefaultTreeHasher;
-use storage_proofs::hasher::Domain;
+use storage_proofs::hasher::Hasher;
 use storage_proofs::pieces::generate_piece_commitment_bytes_from_source;
 use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
 use storage_proofs::stacked::{generate_replica_id, StackedDrg};
 use tempfile::tempfile;
 
+use crate::api::util::as_safe_commitment;
 use crate::constants::{
     DefaultPieceHasher,
     MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
@@ -48,10 +49,11 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     offset: UnpaddedByteIndex,
     num_bytes: UnpaddedBytesAmount,
 ) -> error::Result<(UnpaddedBytesAmount)> {
-    let comm_d = storage_proofs::hasher::pedersen::PedersenDomain::try_from_bytes(&comm_d)?;
+    let comm_d =
+        as_safe_commitment::<<DefaultPieceHasher as Hasher>::Domain, _>(&comm_d, "comm_d")?;
 
     let replica_id =
-        generate_replica_id::<DefaultTreeHasher>(&prover_id, sector_id.into(), &ticket, comm_d);
+        generate_replica_id::<DefaultTreeHasher, _>(&prover_id, sector_id.into(), &ticket, comm_d);
 
     let f_in = File::open(sealed_path)?;
     let mut data = Vec::new();
@@ -61,7 +63,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     let f_out = File::create(output_path)?;
     let mut buf_writer = BufWriter::new(f_out);
 
-    let unsealed = StackedDrg::extract_all(
+    let unsealed = StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::extract_all(
         &public_params(
             PaddedBytesAmount::from(porep_config),
             usize::from(PoRepProofPartitions::from(porep_config)),

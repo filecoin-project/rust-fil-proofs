@@ -47,7 +47,7 @@ impl<H: Hasher> ProverAux<H> {
     }
 }
 
-pub trait PoRep<'a, H: Hasher>: ProofScheme<'a> {
+pub trait PoRep<'a, H: Hasher, G: Hasher>: ProofScheme<'a> {
     type Tau;
     type ProverAux;
 
@@ -55,7 +55,7 @@ pub trait PoRep<'a, H: Hasher>: ProofScheme<'a> {
         pub_params: &'a Self::PublicParams,
         replica_id: &H::Domain,
         data: &mut [u8],
-        data_tree: Option<MerkleTree<H::Domain, H::Function>>,
+        data_tree: Option<MerkleTree<G::Domain, G::Function>>,
     ) -> Result<(Self::Tau, Self::ProverAux)>;
 
     fn extract_all(

@@ -24,7 +24,7 @@ pub use self::sector_size::*;
 pub type Commitment = [u8; 32];
 pub type ChallengeSeed = [u8; 32];
 pub type PersistentAux = stacked::PersistentAux<PedersenDomain>;
-pub type TemporaryAux = stacked::TemporaryAux<PedersenHasher>;
+pub type TemporaryAux = stacked::TemporaryAux<PedersenHasher, crate::constants::DefaultPieceHasher>;
 pub type ProverId = [u8; 32];
 pub type Ticket = [u8; 32];
 pub type Tree = MerkleTree<PedersenDomain, <PedersenHasher as Hasher>::Function>;

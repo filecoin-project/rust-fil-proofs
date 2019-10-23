@@ -178,9 +178,11 @@ impl Domain for Blake2sDomain {
     }
 
     fn try_from_bytes(raw: &[u8]) -> Result<Self> {
-        if raw.len() != 32 {
+        if raw.len() != 32 || u32::from(raw[31]) > Fr::NUM_BITS {
+            println!("{:?}", raw[31]);
             return Err(Error::InvalidInputSize);
         }
+
         let mut res = Blake2sDomain::default();
         res.0.copy_from_slice(&raw[0..32]);
         Ok(res)

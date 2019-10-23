@@ -5,6 +5,7 @@ use storage_proofs::circuit::stacked::{StackedCircuit, StackedCompound};
 use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::parameter_cache::{self, CacheableParameters};
 
+use crate::constants::DefaultPieceHasher;
 use crate::types::*;
 
 #[derive(Clone, Copy, Debug)]
@@ -46,9 +47,11 @@ impl PoRepConfig {
     pub fn get_cache_identifier(&self) -> String {
         let params = crate::parameters::public_params(self.0.into(), self.1.into());
 
-        <StackedCompound as CacheableParameters<Bls12, StackedCircuit<_, DefaultTreeHasher>, _>>::cache_identifier(
-            &params,
-        )
+        <StackedCompound as CacheableParameters<
+            Bls12,
+            StackedCircuit<_, DefaultTreeHasher, DefaultPieceHasher>,
+            _,
+        >>::cache_identifier(&params)
     }
 
     pub fn get_cache_metadata_path(&self) -> PathBuf {

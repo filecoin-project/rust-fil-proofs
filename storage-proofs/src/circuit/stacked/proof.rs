@@ -24,42 +24,42 @@ use crate::stacked::{StackedDrg, EXP_DEGREE};
 ///
 /// * `params` - parameters for the curve
 ///
-pub struct StackedCircuit<'a, E: JubjubEngine, H: 'static + Hasher> {
+pub struct StackedCircuit<'a, E: JubjubEngine, H: 'static + Hasher, G: 'static + Hasher> {
     params: &'a E::Params,
-    public_params: <StackedDrg<'a, H> as ProofScheme<'a>>::PublicParams,
+    public_params: <StackedDrg<'a, H, G> as ProofScheme<'a>>::PublicParams,
     replica_id: Option<H::Domain>,
-    comm_d: Option<H::Domain>,
+    comm_d: Option<G::Domain>,
     comm_r: Option<H::Domain>,
     comm_r_last: Option<H::Domain>,
     comm_c: Option<H::Domain>,
 
     // one proof per challenge
-    proofs: Vec<Proof<H>>,
+    proofs: Vec<Proof<H, G>>,
 
     _e: PhantomData<E>,
 }
 
-impl<'a, E: JubjubEngine, H: Hasher> CircuitComponent for StackedCircuit<'a, E, H> {
+impl<'a, E: JubjubEngine, H: Hasher, G: Hasher> CircuitComponent for StackedCircuit<'a, E, H, G> {
     type ComponentPrivateInputs = ();
 }
 
-impl<'a, H: Hasher> StackedCircuit<'a, Bls12, H> {
+impl<'a, H: Hasher, G: 'static + Hasher> StackedCircuit<'a, Bls12, H, G> {
     #[allow(clippy::too_many_arguments)]
     pub fn synthesize<CS>(
         mut cs: CS,
         params: &'a <Bls12 as JubjubEngine>::Params,
-        public_params: <StackedDrg<'a, H> as ProofScheme<'a>>::PublicParams,
+        public_params: <StackedDrg<'a, H, G> as ProofScheme<'a>>::PublicParams,
         replica_id: Option<H::Domain>,
-        comm_d: Option<H::Domain>,
+        comm_d: Option<G::Domain>,
         comm_r: Option<H::Domain>,
         comm_r_last: Option<H::Domain>,
         comm_c: Option<H::Domain>,
-        proofs: Vec<Proof<H>>,
+        proofs: Vec<Proof<H, G>>,
     ) -> Result<(), SynthesisError>
     where
         CS: ConstraintSystem<Bls12>,
     {
-        let circuit = StackedCircuit::<'a, Bls12, H> {
+        let circuit = StackedCircuit::<'a, Bls12, H, G> {
             params,
             public_params,
             replica_id,
@@ -75,7 +75,7 @@ impl<'a, H: Hasher> StackedCircuit<'a, Bls12, H> {
     }
 }
 
-impl<'a, H: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H> {
+impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let StackedCircuit {
             public_params,
@@ -198,12 +198,13 @@ impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata> CacheableParameter
     }
 }
 
-impl<'a, H: 'static + Hasher>
-    CompoundProof<'a, Bls12, StackedDrg<'a, H>, StackedCircuit<'a, Bls12, H>> for StackedCompound
+impl<'a, H: 'static + Hasher, G: 'static + Hasher>
+    CompoundProof<'a, Bls12, StackedDrg<'a, H, G>, StackedCircuit<'a, Bls12, H, G>>
+    for StackedCompound
 {
     fn generate_public_inputs(
-        pub_in: &<StackedDrg<H> as ProofScheme>::PublicInputs,
-        pub_params: &<StackedDrg<H> as ProofScheme>::PublicParams,
+        pub_in: &<StackedDrg<H, G> as ProofScheme>::PublicInputs,
+        pub_params: &<StackedDrg<H, G> as ProofScheme>::PublicParams,
         k: Option<usize>,
     ) -> Vec<Fr> {
         let graph = &pub_params.graph;
@@ -266,12 +267,12 @@ impl<'a, H: 'static + Hasher>
     }
 
     fn circuit<'b>(
-        public_inputs: &'b <StackedDrg<H> as ProofScheme>::PublicInputs,
-        _component_private_inputs: <StackedCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
-        vanilla_proof: &'b <StackedDrg<H> as ProofScheme>::Proof,
-        public_params: &'b <StackedDrg<H> as ProofScheme>::PublicParams,
+        public_inputs: &'b <StackedDrg<H, G> as ProofScheme>::PublicInputs,
+        _component_private_inputs: <StackedCircuit<'a, Bls12, H, G> as CircuitComponent>::ComponentPrivateInputs,
+        vanilla_proof: &'b <StackedDrg<H, G> as ProofScheme>::Proof,
+        public_params: &'b <StackedDrg<H, G> as ProofScheme>::PublicParams,
         engine_params: &'a <Bls12 as JubjubEngine>::Params,
-    ) -> StackedCircuit<'a, Bls12, H> {
+    ) -> StackedCircuit<'a, Bls12, H, G> {
         assert!(
             !vanilla_proof.is_empty(),
             "Cannot create a circuit with no vanilla proofs"
@@ -300,9 +301,9 @@ impl<'a, H: 'static + Hasher>
     }
 
     fn blank_circuit(
-        public_params: &<StackedDrg<H> as ProofScheme>::PublicParams,
+        public_params: &<StackedDrg<H, G> as ProofScheme>::PublicParams,
         params: &'a <Bls12 as JubjubEngine>::Params,
-    ) -> StackedCircuit<'a, Bls12, H> {
+    ) -> StackedCircuit<'a, Bls12, H, G> {
         StackedCircuit {
             params,
             public_params: public_params.clone(),
@@ -363,28 +364,38 @@ mod tests {
             layer_challenges: layer_challenges.clone(),
         };
 
-        let pp = StackedDrg::setup(&sp).expect("setup failed");
-        let (tau, (p_aux, t_aux)) =
-            StackedDrg::replicate(&pp, &replica_id.into(), data_copy.as_mut_slice(), None)
-                .expect("replication failed");
+        let pp = StackedDrg::<PedersenHasher, Blake2sHasher>::setup(&sp).expect("setup failed");
+        let (tau, (p_aux, t_aux)) = StackedDrg::<PedersenHasher, Blake2sHasher>::replicate(
+            &pp,
+            &replica_id.into(),
+            data_copy.as_mut_slice(),
+            None,
+        )
+        .expect("replication failed");
         assert_ne!(data, data_copy);
 
         let seed = rng.gen();
 
-        let pub_inputs = PublicInputs::<<PedersenHasher as Hasher>::Domain> {
-            replica_id: replica_id.into(),
-            seed,
-            tau: Some(tau.into()),
-            k: None,
-        };
+        let pub_inputs =
+            PublicInputs::<<PedersenHasher as Hasher>::Domain, <Blake2sHasher as Hasher>::Domain> {
+                replica_id: replica_id.into(),
+                seed,
+                tau: Some(tau.into()),
+                k: None,
+            };
 
-        let priv_inputs = PrivateInputs::<PedersenHasher> {
+        let priv_inputs = PrivateInputs::<PedersenHasher, Blake2sHasher> {
             p_aux: p_aux.into(),
             t_aux: t_aux.into(),
         };
 
-        let proofs = StackedDrg::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, 1)
-            .expect("failed to generate partition proofs");
+        let proofs = StackedDrg::<PedersenHasher, Blake2sHasher>::prove_all_partitions(
+            &pp,
+            &pub_inputs,
+            &priv_inputs,
+            1,
+        )
+        .expect("failed to generate partition proofs");
 
         let proofs_are_valid = StackedDrg::verify_all_partitions(&pp, &pub_inputs, &proofs)
             .expect("failed to verify partition proofs");
@@ -392,7 +403,7 @@ mod tests {
         assert!(proofs_are_valid);
 
         let expected_inputs = 20; // was 39 with "old" stacked all pedersen
-        let expected_constraints = 179_143; // was 432_312 with "old" stacked all pedersen
+        let expected_constraints = 239_584; // was 432_312 with "old" stacked all pedersen
 
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.
@@ -400,7 +411,7 @@ mod tests {
 
             StackedCompound::circuit(
             &pub_inputs,
-            <StackedCircuit<Bls12, PedersenHasher> as CircuitComponent>::ComponentPrivateInputs::default(),
+            <StackedCircuit<Bls12, PedersenHasher, Blake2sHasher> as CircuitComponent>::ComponentPrivateInputs::default(),
             &proofs[0],
             &pp,
             &JJ_PARAMS,
@@ -419,7 +430,7 @@ mod tests {
 
         StackedCompound::circuit(
             &pub_inputs,
-            <StackedCircuit<Bls12, PedersenHasher> as CircuitComponent>::ComponentPrivateInputs::default(),
+            <StackedCircuit<Bls12, PedersenHasher, Blake2sHasher> as CircuitComponent>::ComponentPrivateInputs::default(),
             &proofs[0],
             &pp,
             &JJ_PARAMS,
@@ -437,7 +448,11 @@ mod tests {
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
-        let generated_inputs = StackedCompound::generate_public_inputs(&pub_inputs, &pp, None);
+        let generated_inputs = <StackedCompound as CompoundProof<
+            _,
+            StackedDrg<PedersenHasher, Blake2sHasher>,
+            _,
+        >>::generate_public_inputs(&pub_inputs, &pp, None);
         let expected_inputs = cs.get_inputs();
 
         for ((input, label), generated_input) in
@@ -507,13 +522,13 @@ mod tests {
 
         let seed = rng.gen();
 
-        let public_inputs = PublicInputs::<H::Domain> {
+        let public_inputs = PublicInputs::<H::Domain, <Blake2sHasher as Hasher>::Domain> {
             replica_id: replica_id.into(),
             seed,
             tau: Some(tau),
             k: None,
         };
-        let private_inputs = PrivateInputs::<H> { p_aux, t_aux };
+        let private_inputs = PrivateInputs::<H, Blake2sHasher> { p_aux, t_aux };
 
         {
             let (circuit, inputs) =
@@ -539,8 +554,13 @@ mod tests {
         {
             let (circuit1, _inputs) =
                 StackedCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);
-            let blank_circuit =
-                StackedCompound::blank_circuit(&public_params.vanilla_params, &JJ_PARAMS);
+            let blank_circuit = <StackedCompound as CompoundProof<
+                _,
+                StackedDrg<H, Blake2sHasher>,
+                _,
+            >>::blank_circuit(
+                &public_params.vanilla_params, &JJ_PARAMS
+            );
 
             let mut cs_blank = TestConstraintSystem::new();
             blank_circuit
@@ -558,9 +578,12 @@ mod tests {
             }
         }
 
-        let blank_groth_params =
-            StackedCompound::groth_params(&public_params.vanilla_params, &JJ_PARAMS)
-                .expect("failed to generate groth params");
+        let blank_groth_params = <StackedCompound as CompoundProof<
+            _,
+            StackedDrg<H, Blake2sHasher>,
+            _,
+        >>::groth_params(&public_params.vanilla_params, &JJ_PARAMS)
+        .expect("failed to generate groth params");
 
         let proof = StackedCompound::prove(
             &public_params,

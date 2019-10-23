@@ -14,6 +14,7 @@ use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::hasher::pedersen::PedersenHasher;
 use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::rational_post::RationalPoSt;
+use storage_proofs::stacked::StackedDrg;
 
 const POREP_PROOF_PARTITION_CHOICES: [PoRepProofPartitions; 1] = [PoRepProofPartitions(2)];
 
@@ -37,15 +38,27 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     );
 
     {
-        let circuit = StackedCompound::blank_circuit(&public_params, &JJ_PARAMS);
+        let circuit = <StackedCompound as CompoundProof<
+            _,
+            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+            _,
+        >>::blank_circuit(&public_params, &JJ_PARAMS);
         let _ = StackedCompound::get_param_metadata(circuit, &public_params);
     }
     {
-        let circuit = StackedCompound::blank_circuit(&public_params, &JJ_PARAMS);
+        let circuit = <StackedCompound as CompoundProof<
+            _,
+            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+            _,
+        >>::blank_circuit(&public_params, &JJ_PARAMS);
         let _ = StackedCompound::get_groth_params(circuit, &public_params);
     }
     {
-        let circuit = StackedCompound::blank_circuit(&public_params, &JJ_PARAMS);
+        let circuit = <StackedCompound as CompoundProof<
+            _,
+            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+            _,
+        >>::blank_circuit(&public_params, &JJ_PARAMS);
         let _ = StackedCompound::get_verifying_key(circuit, &public_params);
     }
 }

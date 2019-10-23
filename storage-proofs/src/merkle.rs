@@ -2,15 +2,19 @@
 
 use std::marker::PhantomData;
 
-// Reexport here, so we don't depend on merkletree directly in other places.
 use merkletree::hash::Algorithm;
 use merkletree::merkle;
 use merkletree::proof;
 use paired::bls12_381::Fr;
+use rayon::prelude::*;
 
+use crate::error::*;
 use crate::hasher::{Domain, Hasher};
+use crate::util::{data_at_node, NODE_SIZE};
 
+// Reexport here, so we don't depend on merkletree directly in other places.
 pub use merkletree::merkle::next_pow2;
+use merkletree::merkle::FromIndexedParallelIterator;
 pub use merkletree::store::Store;
 
 #[cfg(not(feature = "mem-trees"))]
@@ -221,6 +225,28 @@ fn path_index<T: Domain>(path: &[(T, bool)]) -> usize {
     path.iter().rev().fold(0, |acc, (_, is_right)| {
         (acc << 1) + if *is_right { 1 } else { 0 }
     })
+}
+
+/// Construct a new merkle tree.
+pub fn create_merkle_tree<H: Hasher>(
+    size: usize,
+    data: &[u8],
+) -> Result<MerkleTree<H::Domain, H::Function>> {
+    if data.len() != (NODE_SIZE * size) as usize {
+        return Err(Error::InvalidMerkleTreeArgs(data.len(), NODE_SIZE, size));
+    }
+
+    let f = |i| {
+        let d = data_at_node(&data, i).expect("data_at_node math failed");
+        // TODO/FIXME: This can panic. FOR NOW, let's leave this since we're experimenting with
+        // optimization paths. However, we need to ensure that bad input will not lead to a panic
+        // that isn't caught by the FPS API.
+        // Unfortunately, it's not clear how to perform this error-handling in the parallel
+        // iterator case.
+        H::Domain::try_from_bytes(d).expect("failed to convert node data to domain element")
+    };
+
+    Ok(MerkleTree::from_par_iter((0..size).into_par_iter().map(f)))
 }
 
 #[cfg(test)]

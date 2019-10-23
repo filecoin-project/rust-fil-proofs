@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use blake2s_simd::Params as Blake2s;
+use paired::bls12_381::Fr;
 
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::Hasher;
@@ -40,16 +41,17 @@ impl<H: Hasher> EncodingProof<H> {
         bytes_into_fr_repr_safe(hasher.finalize().as_ref()).into()
     }
 
-    pub fn verify(
+    pub fn verify<G: Hasher>(
         &self,
         replica_id: &H::Domain,
         exp_encoded_node: &H::Domain,
-        decoded_node: Option<&H::Domain>,
+        decoded_node: Option<&G::Domain>,
     ) -> bool {
         let key = self.create_key(replica_id);
 
         let encoded_node = if let Some(decoded_node) = decoded_node {
-            encode(key, *decoded_node)
+            let fr: Fr = (*decoded_node).into();
+            encode(key, fr.into())
         } else {
             key
         };

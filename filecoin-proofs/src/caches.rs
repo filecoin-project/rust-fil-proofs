@@ -10,9 +10,12 @@ use storage_proofs::circuit::rational_post::RationalPoStCompound;
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::crypto::pedersen::JJ_PARAMS;
+use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::hasher::PedersenHasher;
 use storage_proofs::rational_post::RationalPoSt;
+use storage_proofs::stacked::StackedDrg;
 
+use crate::constants::DefaultPieceHasher;
 use crate::error;
 use crate::parameters::{post_public_params, public_params};
 use crate::types::*;
@@ -91,8 +94,14 @@ pub fn get_stacked_params(
         usize::from(PoRepProofPartitions::from(porep_config)),
     );
 
-    let parameters_generator =
-        || StackedCompound::groth_params(&public_params, &JJ_PARAMS).map_err(Into::into);
+    let parameters_generator = || {
+        <StackedCompound as CompoundProof<
+            _,
+            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+            _,
+        >>::groth_params(&public_params, &JJ_PARAMS)
+        .map_err(Into::into)
+    };
 
     Ok(lookup_groth_params(
         format!(
@@ -132,8 +141,14 @@ pub fn get_stacked_verifying_key(
         usize::from(PoRepProofPartitions::from(porep_config)),
     );
 
-    let vk_generator =
-        || StackedCompound::verifying_key(&public_params, &JJ_PARAMS).map_err(Into::into);
+    let vk_generator = || {
+        <StackedCompound as CompoundProof<
+            _,
+            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+            _,
+        >>::verifying_key(&public_params, &JJ_PARAMS)
+        .map_err(Into::into)
+    };
 
     Ok(lookup_verifying_key(
         format!(

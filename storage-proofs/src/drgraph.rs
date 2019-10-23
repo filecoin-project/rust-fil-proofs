@@ -3,16 +3,14 @@ use std::marker::PhantomData;
 
 use blake2s_simd::Params as Blake2s;
 use rand::{ChaChaRng, OsRng, Rng, SeedableRng};
-use rayon::prelude::*;
 
 use crate::error::*;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::pedersen::PedersenHasher;
-use crate::hasher::{Domain, Hasher};
-use crate::merkle::MerkleTree;
+use crate::hasher::Hasher;
+use crate::merkle::{create_merkle_tree, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
-use crate::util::{data_at_node, data_at_node_offset, NODE_SIZE};
-use merkletree::merkle::FromIndexedParallelIterator;
+use crate::util::{data_at_node_offset, NODE_SIZE};
 
 /// The default hasher currently in use.
 pub type DefaultTreeHasher = PedersenHasher;
@@ -35,40 +33,7 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
 
     /// Builds a merkle tree based on the given data.
     fn merkle_tree<'a>(&self, data: &'a [u8]) -> Result<MerkleTree<H::Domain, H::Function>> {
-        self.merkle_tree_aux(data, PARALLEL_MERKLE)
-    }
-
-    /// Builds a merkle tree based on the given data.
-    fn merkle_tree_aux<'a>(
-        &self,
-        data: &'a [u8],
-        parallel: bool,
-    ) -> Result<MerkleTree<H::Domain, H::Function>> {
-        if data.len() != (NODE_SIZE * self.size()) as usize {
-            return Err(Error::InvalidMerkleTreeArgs(
-                data.len(),
-                NODE_SIZE,
-                self.size(),
-            ));
-        }
-
-        let f = |i| {
-            let d = data_at_node(&data, i).expect("data_at_node math failed");
-            // TODO/FIXME: This can panic. FOR NOW, let's leave this since we're experimenting with
-            // optimization paths. However, we need to ensure that bad input will not lead to a panic
-            // that isn't caught by the FPS API.
-            // Unfortunately, it's not clear how to perform this error-handling in the parallel
-            // iterator case.
-            H::Domain::try_from_bytes(d).expect("failed to convert node data to domain element")
-        };
-
-        if parallel {
-            Ok(MerkleTree::from_par_iter(
-                (0..self.size()).into_par_iter().map(f),
-            ))
-        } else {
-            Ok(MerkleTree::new((0..self.size()).map(f)))
-        }
+        create_merkle_tree::<H>(self.size(), data)
     }
 
     /// Returns the merkle tree depth.
@@ -318,12 +283,12 @@ mod tests {
         graph_bucket::<PedersenHasher>();
     }
 
-    fn gen_proof<H: Hasher>(parallel: bool) {
+    fn gen_proof<H: Hasher>() {
         let g = BucketGraph::<H>::new(5, BASE_DEGREE, 0, new_seed());
         let data = vec![2u8; NODE_SIZE * 5];
 
         let mmapped = &mmap_from(&data);
-        let tree = g.merkle_tree_aux(mmapped, parallel).unwrap();
+        let tree = g.merkle_tree(mmapped).unwrap();
         let proof = tree.gen_proof(2);
 
         assert!(proof.validate::<H::Function>());
@@ -331,19 +296,16 @@ mod tests {
 
     #[test]
     fn gen_proof_pedersen() {
-        gen_proof::<PedersenHasher>(true);
-        gen_proof::<PedersenHasher>(false);
+        gen_proof::<PedersenHasher>();
     }
 
     #[test]
     fn gen_proof_sha256() {
-        gen_proof::<Sha256Hasher>(true);
-        gen_proof::<Sha256Hasher>(false);
+        gen_proof::<Sha256Hasher>();
     }
 
     #[test]
     fn gen_proof_blake2s() {
-        gen_proof::<Blake2sHasher>(true);
-        gen_proof::<Blake2sHasher>(false);
+        gen_proof::<Blake2sHasher>();
     }
 }

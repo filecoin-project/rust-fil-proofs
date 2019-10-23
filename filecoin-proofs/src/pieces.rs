@@ -20,6 +20,7 @@ pub fn verify_pieces(
     piece_infos: &[PieceInfo],
     sector_size: SectorSize,
 ) -> Result<bool> {
+    info!("verifying {} pieces", piece_infos.len());
     ensure!(!piece_infos.is_empty(), "Missing piece infos");
 
     let unpadded_sector: UnpaddedBytesAmount = sector_size.into();

@@ -1,4 +1,4 @@
-use std::fs::{copy, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::path::Path;
 
 use memmap::MmapOptions;
@@ -9,7 +9,8 @@ use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
 use storage_proofs::fr32::bytes_into_fr;
-use storage_proofs::hasher::Hasher;
+use storage_proofs::hasher::{Domain, Hasher};
+use storage_proofs::merkle::create_merkle_tree;
 use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
 use storage_proofs::stacked::{self, generate_replica_id, ChallengeRequirements, StackedDrg, Tau};
@@ -17,12 +18,12 @@ use storage_proofs::stacked::{self, generate_replica_id, ChallengeRequirements, 
 use crate::api::util::{as_safe_commitment, commitment_from_fr};
 use crate::api::verify_pieces;
 use crate::caches::{get_stacked_params, get_stacked_verifying_key};
-use crate::constants::{POREP_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN};
+use crate::constants::{DefaultPieceHasher, POREP_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN};
 use crate::error;
 use crate::parameters::setup_params;
 use crate::types::{
     Commitment, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, ProverId,
-    SealCommitOutput, SealPreCommitOutput, Ticket, Tree,
+    SealCommitOutput, SealPreCommitOutput, Ticket,
 };
 
 /// Seals the staged sector at `in_path` in place, saving the resulting replica to `out_path`.
@@ -41,7 +42,7 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
     let sector_bytes = usize::from(PaddedBytesAmount::from(porep_config));
 
     // Copy unsealed data to output location, where it will be sealed in place.
-    copy(&in_path, &out_path)?;
+    fs::copy(&in_path, &out_path)?;
     let f_data = OpenOptions::new().read(true).write(true).open(&out_path)?;
 
     // Zero-pad the data to the requested size by extending the underlying file if needed.
@@ -58,13 +59,17 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };
 
-    let compound_public_params = StackedCompound::setup(&compound_setup_params)?;
+    let compound_public_params = <StackedCompound as CompoundProof<
+        _,
+        StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+        _,
+    >>::setup(&compound_setup_params)?;
 
-    // FIXME: this must use the PieceHasher (Blake2s) not the DefaultTreeHasher.
-    let data_tree: Tree = compound_public_params
-        .vanilla_params
-        .graph
-        .merkle_tree(&data)?;
+    info!("building merkle tree for the original data");
+    let data_tree = create_merkle_tree::<DefaultPieceHasher>(
+        compound_public_params.vanilla_params.graph.size(),
+        &data,
+    )?;
 
     let comm_d_root: Fr = data_tree.root().into();
     let comm_d = commitment_from_fr::<Bls12>(comm_d_root);
@@ -74,14 +79,14 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
         "pieces and comm_d do not match"
     );
 
-    let replica_id = generate_replica_id::<DefaultTreeHasher>(
+    let replica_id = generate_replica_id::<DefaultTreeHasher, _>(
         &prover_id,
         sector_id.into(),
         &ticket,
         data_tree.root(),
     );
 
-    let (tau, (p_aux, t_aux)) = StackedDrg::<DefaultTreeHasher>::replicate(
+    let (tau, (p_aux, t_aux)) = StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::replicate(
         &compound_public_params.vanilla_params,
         &replica_id,
         &mut data,
@@ -121,9 +126,9 @@ pub fn seal_commit<T: AsRef<Path>>(
         t_aux,
     } = pre_commit;
     let comm_r_safe = as_safe_commitment(&comm_r, "comm_r")?;
-    let comm_d_safe = as_safe_commitment(&comm_d, "comm_d")?;
+    let comm_d_safe = <DefaultPieceHasher as Hasher>::Domain::try_from_bytes(&comm_d)?;
 
-    let replica_id = generate_replica_id::<DefaultTreeHasher>(
+    let replica_id = generate_replica_id::<DefaultTreeHasher, _>(
         &prover_id,
         sector_id.into(),
         &ticket,
@@ -142,7 +147,8 @@ pub fn seal_commit<T: AsRef<Path>>(
         seed: seed_fr,
     };
 
-    let private_inputs = stacked::PrivateInputs::<DefaultTreeHasher> { p_aux, t_aux };
+    let private_inputs =
+        stacked::PrivateInputs::<DefaultTreeHasher, DefaultPieceHasher> { p_aux, t_aux };
 
     let groth_params = get_stacked_params(porep_config)?;
 
@@ -221,7 +227,7 @@ pub fn verify_seal(
     );
 
     let replica_id =
-        generate_replica_id::<DefaultTreeHasher>(&prover_id, sector_id.into(), &ticket, comm_d);
+        generate_replica_id::<DefaultTreeHasher, _>(&prover_id, sector_id.into(), &ticket, comm_d);
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: &setup_params(
@@ -235,12 +241,15 @@ pub fn verify_seal(
     let compound_public_params: compound_proof::PublicParams<
         '_,
         Bls12,
-        StackedDrg<'_, DefaultTreeHasher>,
+        StackedDrg<'_, DefaultTreeHasher, DefaultPieceHasher>,
     > = StackedCompound::setup(&compound_setup_params)?;
 
     let seed_fr = bytes_into_fr::<Bls12>(&seed).map(Into::into)?;
 
-    let public_inputs = stacked::PublicInputs::<<DefaultTreeHasher as Hasher>::Domain> {
+    let public_inputs = stacked::PublicInputs::<
+        <DefaultTreeHasher as Hasher>::Domain,
+        <DefaultPieceHasher as Hasher>::Domain,
+    > {
         replica_id,
         tau: Some(Tau { comm_r, comm_d }),
         seed: seed_fr,

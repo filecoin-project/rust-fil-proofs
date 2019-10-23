@@ -44,7 +44,7 @@ fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> Result<MmapMut, fail
 }
 
 fn dump_proof_bytes<H: Hasher>(
-    all_partition_proofs: &[Vec<stacked::Proof<H>>],
+    all_partition_proofs: &[Vec<stacked::Proof<H, Blake2sHasher>>],
 ) -> Result<(), failure::Error> {
     let file = OpenOptions::new()
         .write(true)
@@ -132,7 +132,7 @@ where
             layer_challenges: layer_challenges.clone(),
         };
 
-        let pp = StackedDrg::<H>::setup(&sp)?;
+        let pp = StackedDrg::<H, Blake2sHasher>::setup(&sp)?;
 
         let (pub_in, priv_in, d) = if *bench_only {
             (None, None, None)
@@ -146,9 +146,9 @@ where
                 return_value: (pub_inputs, priv_inputs),
             } = measure(|| {
                 let (tau, (p_aux, t_aux)) =
-                    StackedDrg::<H>::replicate(&pp, &replica_id, &mut data, None)?;
+                    StackedDrg::<H, Blake2sHasher>::replicate(&pp, &replica_id, &mut data, None)?;
 
-                let pb = stacked::PublicInputs::<H::Domain> {
+                let pb = stacked::PublicInputs::<H::Domain, <Blake2sHasher as Hasher>::Domain> {
                     replica_id,
                     seed,
                     tau: Some(tau.clone()),
@@ -189,8 +189,13 @@ where
                 wall_time: vanilla_proving_wall_time,
                 return_value: all_partition_proofs,
             } = measure(|| {
-                StackedDrg::<H>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, *partitions)
-                    .map_err(|err| err.into())
+                StackedDrg::<H, Blake2sHasher>::prove_all_partitions(
+                    &pp,
+                    &pub_inputs,
+                    &priv_inputs,
+                    *partitions,
+                )
+                .map_err(|err| err.into())
             })?;
 
             report.outputs.vanilla_proving_wall_time_us =
@@ -213,7 +218,7 @@ where
 
             for _ in 0..*samples {
                 let m = measure(|| {
-                    let verified = StackedDrg::<H>::verify_all_partitions(
+                    let verified = StackedDrg::<H, Blake2sHasher>::verify_all_partitions(
                         &pp,
                         &pub_inputs,
                         &all_partition_proofs,
@@ -260,7 +265,8 @@ where
         if let Some(data) = d {
             if *extract {
                 let m = measure(|| {
-                    StackedDrg::<H>::extract_all(&pp, &replica_id, &data).map_err(|err| err.into())
+                    StackedDrg::<H, Blake2sHasher>::extract_all(&pp, &replica_id, &data)
+                        .map_err(|err| err.into())
                 })?;
 
                 assert_ne!(&(*data), m.return_value.as_slice());
@@ -290,9 +296,9 @@ struct CircuitWorkMeasurement {
 }
 
 fn do_circuit_work<H: 'static + Hasher>(
-    pp: &<StackedDrg<H> as ProofScheme>::PublicParams,
-    pub_in: Option<<StackedDrg<H> as ProofScheme>::PublicInputs>,
-    priv_in: Option<<StackedDrg<H> as ProofScheme>::PrivateInputs>,
+    pp: &<StackedDrg<H, Blake2sHasher> as ProofScheme>::PublicParams,
+    pub_in: Option<<StackedDrg<H, Blake2sHasher> as ProofScheme>::PublicInputs>,
+    priv_in: Option<<StackedDrg<H, Blake2sHasher> as ProofScheme>::PrivateInputs>,
     params: &Params,
     report: &mut Report,
 ) -> Result<CircuitWorkMeasurement, failure::Error> {
@@ -316,7 +322,10 @@ fn do_circuit_work<H: 'static + Hasher>(
 
     if *bench || *circuit {
         let mut cs = MetricCS::<Bls12>::new();
-        StackedCompound::blank_circuit(&pp, &JJ_PARAMS).synthesize(&mut cs)?;
+        <StackedCompound as CompoundProof<_, StackedDrg<H, Blake2sHasher>, _>>::blank_circuit(
+            &pp, &JJ_PARAMS,
+        )
+        .synthesize(&mut cs)?;
 
         report.outputs.circuit_num_inputs = Some(cs.num_inputs() as u64);
         report.outputs.circuit_num_constraints = Some(cs.num_constraints() as u64);
@@ -333,7 +342,10 @@ fn do_circuit_work<H: 'static + Hasher>(
         // We should also allow the serialized vanilla proofs to be passed (as a file) to the example
         // and skip replication/vanilla-proving entirely.
         let gparams =
-            StackedCompound::groth_params(&compound_public_params.vanilla_params, &JJ_PARAMS)?;
+            <StackedCompound as CompoundProof<_, StackedDrg<H, Blake2sHasher>, _>>::groth_params(
+                &compound_public_params.vanilla_params,
+                &JJ_PARAMS,
+            )?;
 
         let multi_proof = {
             let FuncMeasurement {

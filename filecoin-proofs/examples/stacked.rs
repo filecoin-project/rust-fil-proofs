@@ -125,7 +125,7 @@ pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
     unsafe { MmapOptions::new().map_mut(&tmpfile).unwrap() }
 }
 
-fn dump_proof_bytes<H: Hasher>(all_partition_proofs: &[Vec<stacked::Proof<H>>]) {
+fn dump_proof_bytes<H: Hasher, G: Hasher>(all_partition_proofs: &[Vec<stacked::Proof<H, G>>]) {
     let file = OpenOptions::new()
         .write(true)
         .create(true)
@@ -180,7 +180,7 @@ fn do_the_work<H: 'static>(
 
     info!("running setup");
     start_profile("setup");
-    let pp = StackedDrg::<H>::setup(&sp).unwrap();
+    let pp = StackedDrg::<H, Blake2sHasher>::setup(&sp).unwrap();
     info!("setup complete");
     stop_profile();
 
@@ -200,9 +200,9 @@ fn do_the_work<H: 'static>(
 
         start_profile("replicate");
         let (tau, (p_aux, t_aux)) =
-            StackedDrg::<H>::replicate(&pp, &replica_id, &mut data, None).unwrap();
+            StackedDrg::<H, Blake2sHasher>::replicate(&pp, &replica_id, &mut data, None).unwrap();
         stop_profile();
-        let pub_inputs = stacked::PublicInputs::<H::Domain> {
+        let pub_inputs = stacked::PublicInputs::<H::Domain, <Blake2sHasher as Hasher>::Domain> {
             replica_id,
             tau: Some(tau.clone()),
             k: Some(0),
@@ -234,9 +234,13 @@ fn do_the_work<H: 'static>(
 
         let start = Instant::now();
         start_profile("prove");
-        let all_partition_proofs =
-            StackedDrg::<H>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, partitions)
-                .expect("failed to prove");
+        let all_partition_proofs = StackedDrg::<H, Blake2sHasher>::prove_all_partitions(
+            &pp,
+            &pub_inputs,
+            &priv_inputs,
+            partitions,
+        )
+        .expect("failed to prove");
         stop_profile();
         let vanilla_proving = start.elapsed();
         total_proving += vanilla_proving;
@@ -252,9 +256,12 @@ fn do_the_work<H: 'static>(
         start_profile("verify");
         for _ in 0..samples {
             let start = Instant::now();
-            let verified =
-                StackedDrg::<H>::verify_all_partitions(&pp, &pub_inputs, &all_partition_proofs)
-                    .expect("failed during verification");
+            let verified = StackedDrg::<H, Blake2sHasher>::verify_all_partitions(
+                &pp,
+                &pub_inputs,
+                &all_partition_proofs,
+            )
+            .expect("failed during verification");
             if !verified {
                 info!("Verification failed.");
             };
@@ -284,9 +291,11 @@ fn do_the_work<H: 'static>(
             info!("Performing circuit bench.");
             let mut cs = MetricCS::<Bls12>::new();
 
-            StackedCompound::blank_circuit(&pp, &JJ_PARAMS)
-                .synthesize(&mut cs)
-                .expect("failed to synthesize circuit");
+            <StackedCompound as CompoundProof<_, StackedDrg<H, Blake2sHasher>, _>>::blank_circuit(
+                &pp, &JJ_PARAMS,
+            )
+            .synthesize(&mut cs)
+            .expect("failed to synthesize circuit");
 
             info!("circuit_num_inputs: {}", cs.num_inputs());
             info!("circuit_num_constraints: {}", cs.num_constraints());
@@ -308,7 +317,7 @@ fn do_the_work<H: 'static>(
             // and skip replication/vanilla-proving entirely.
             info!("Performing circuit groth.");
             let gparams =
-                StackedCompound::groth_params(&compound_public_params.vanilla_params, &JJ_PARAMS)
+                <StackedCompound as CompoundProof<_, StackedDrg<H, Blake2sHasher>, _>>::groth_params(&compound_public_params.vanilla_params, &JJ_PARAMS)
                     .unwrap();
 
             let multi_proof = {
@@ -366,7 +375,8 @@ fn do_the_work<H: 'static>(
             let start = Instant::now();
             info!("Extracting.");
             start_profile("extract");
-            let decoded_data = StackedDrg::<H>::extract_all(&pp, &replica_id, &data).unwrap();
+            let decoded_data =
+                StackedDrg::<H, Blake2sHasher>::extract_all(&pp, &replica_id, &data).unwrap();
             stop_profile();
             let extracting = start.elapsed();
             info!("extracting_time: {:?}", extracting);
