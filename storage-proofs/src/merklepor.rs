@@ -1,12 +1,23 @@
 use std::marker::PhantomData;
 
-use crate::drgporep::DataProof;
+use serde::{Deserialize, Serialize};
+
 use crate::drgraph::graph_height;
 use crate::error::*;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DataProof<H: Hasher> {
+    #[serde(bound(
+        serialize = "MerkleProof<H>: Serialize",
+        deserialize = "MerkleProof<H>: Deserialize<'de>"
+    ))]
+    pub proof: MerkleProof<H>,
+    pub data: H::Domain,
+}
 
 /// The parameters shared between the prover and verifier.
 #[derive(Clone, Debug)]
@@ -58,9 +69,6 @@ impl<'a, H: Hasher> PrivateInputs<'a, H> {
     }
 }
 
-/// The proof that is returned from `prove`.
-pub type Proof<H> = DataProof<H>;
-
 #[derive(Debug)]
 pub struct SetupParams {
     pub leaves: usize,
@@ -78,7 +86,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for MerklePoR<H> {
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<H::Domain>;
     type PrivateInputs = PrivateInputs<'a, H>;
-    type Proof = Proof<H>;
+    type Proof = DataProof<H>;
     type Requirements = NoRequirements;
 
     fn setup(sp: &SetupParams) -> Result<PublicParams> {
@@ -102,7 +110,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for MerklePoR<H> {
             }
         }
 
-        Ok(Proof {
+        Ok(DataProof {
             proof: MerkleProof::new_from_proof(&tree.gen_proof(challenge)),
             data: priv_inputs.leaf,
         })
