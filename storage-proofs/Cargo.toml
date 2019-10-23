@@ -81,10 +81,6 @@ name = "drgraph"
 harness = false
 
 [[bench]]
-name = "sloth"
-harness = false
-
-[[bench]]
 name = "encode"
 harness = false
 

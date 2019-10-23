@@ -1,4 +1,3 @@
-use storage_proofs::drgporep::DrgParams;
 use storage_proofs::drgraph::{DefaultTreeHasher, BASE_DEGREE};
 use storage_proofs::hasher::PedersenHasher;
 use storage_proofs::proof::ProofScheme;
@@ -49,12 +48,10 @@ pub fn setup_params(sector_bytes: PaddedBytesAmount, partitions: usize) -> stack
     );
     let nodes = sector_bytes / 32;
     stacked::SetupParams {
-        drg: DrgParams {
-            nodes,
-            degree: BASE_DEGREE,
-            expansion_degree: EXP_DEGREE,
-            seed: DRG_SEED,
-        },
+        nodes,
+        degree: BASE_DEGREE,
+        expansion_degree: EXP_DEGREE,
+        seed: DRG_SEED,
         layer_challenges: challenges,
     }
 }

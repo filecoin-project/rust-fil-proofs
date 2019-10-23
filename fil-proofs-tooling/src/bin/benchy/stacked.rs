@@ -16,7 +16,6 @@ use storage_proofs::circuit::metric::MetricCS;
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::crypto::pedersen::JJ_PARAMS;
-use storage_proofs::drgporep;
 use storage_proofs::drgraph::*;
 use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
 use storage_proofs::porep::PoRep;
@@ -126,12 +125,10 @@ where
 
         let replica_id: H::Domain = rng.gen();
         let sp = stacked::SetupParams {
-            drg: drgporep::DrgParams {
-                nodes,
-                degree: BASE_DEGREE,
-                expansion_degree: EXP_DEGREE,
-                seed: new_seed(),
-            },
+            nodes,
+            degree: BASE_DEGREE,
+            expansion_degree: EXP_DEGREE,
+            seed: new_seed(),
             layer_challenges: layer_challenges.clone(),
         };
 

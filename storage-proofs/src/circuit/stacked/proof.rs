@@ -326,7 +326,6 @@ mod tests {
     use crate::circuit::test::*;
     use crate::compound_proof;
     use crate::crypto::pedersen::JJ_PARAMS;
-    use crate::drgporep;
     use crate::drgraph::{new_seed, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, Hasher, PedersenHasher};
@@ -357,12 +356,10 @@ mod tests {
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
         let sp = SetupParams {
-            drg: drgporep::DrgParams {
-                nodes,
-                degree,
-                expansion_degree,
-                seed: new_seed(),
-            },
+            nodes,
+            degree,
+            expansion_degree,
+            seed: new_seed(),
             layer_challenges: layer_challenges.clone(),
         };
 
@@ -486,12 +483,10 @@ mod tests {
         let setup_params = compound_proof::SetupParams {
             engine_params: &*JJ_PARAMS,
             vanilla_params: &SetupParams {
-                drg: drgporep::DrgParams {
-                    nodes,
-                    degree,
-                    expansion_degree,
-                    seed: new_seed(),
-                },
+                nodes,
+                degree,
+                expansion_degree,
+                seed: new_seed(),
                 layer_challenges: layer_challenges.clone(),
             },
             partitions: Some(partition_count),

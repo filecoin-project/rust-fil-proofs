@@ -26,7 +26,6 @@ use storage_proofs::circuit::metric::*;
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::crypto::pedersen::JJ_PARAMS;
-use storage_proofs::drgporep;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
@@ -172,12 +171,10 @@ fn do_the_work<H: 'static>(
 
     let replica_id: H::Domain = rng.gen();
     let sp = stacked::SetupParams {
-        drg: drgporep::DrgParams {
-            nodes,
-            degree: m,
-            expansion_degree,
-            seed: new_seed(),
-        },
+        nodes,
+        degree: m,
+        expansion_degree,
+        seed: new_seed(),
         layer_challenges: layer_challenges.clone(),
     };
 

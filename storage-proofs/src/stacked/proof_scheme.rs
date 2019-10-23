@@ -20,12 +20,8 @@ impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for StackedDrg<'c, H> {
     type Requirements = ChallengeRequirements;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
-        let graph = StackedBucketGraph::<H>::new_stacked(
-            sp.drg.nodes,
-            sp.drg.degree,
-            sp.drg.expansion_degree,
-            sp.drg.seed,
-        );
+        let graph =
+            StackedBucketGraph::<H>::new_stacked(sp.nodes, sp.degree, sp.expansion_degree, sp.seed);
 
         Ok(PublicParams::new(graph, sp.layer_challenges.clone()))
     }

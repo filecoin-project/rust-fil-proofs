@@ -5,7 +5,6 @@ use merkletree::store::Store;
 use paired::bls12_381::Fr;
 use serde::{Deserialize, Serialize};
 
-use crate::drgporep;
 use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
@@ -22,7 +21,17 @@ pub type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 
 #[derive(Debug)]
 pub struct SetupParams {
-    pub drg: drgporep::DrgParams,
+    // Number of nodes
+    pub nodes: usize,
+
+    // Base degree of DRG
+    pub degree: usize,
+
+    pub expansion_degree: usize,
+
+    // Random seed
+    pub seed: [u32; 7],
+
     pub layer_challenges: LayerChallenges,
 }
 

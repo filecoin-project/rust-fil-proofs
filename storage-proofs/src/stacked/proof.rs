@@ -526,7 +526,6 @@ mod tests {
     use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, XorShiftRng};
 
-    use crate::drgporep;
     use crate::drgraph::{new_seed, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
@@ -581,12 +580,10 @@ mod tests {
         let mut data_copy = data.clone();
 
         let sp = SetupParams {
-            drg: drgporep::DrgParams {
-                nodes,
-                degree: BASE_DEGREE,
-                expansion_degree: EXP_DEGREE,
-                seed: new_seed(),
-            },
+            nodes,
+            degree: BASE_DEGREE,
+            expansion_degree: EXP_DEGREE,
+            seed: new_seed(),
             layer_challenges: challenges.clone(),
         };
 
@@ -631,12 +628,10 @@ mod tests {
         let partitions = 2;
 
         let sp = SetupParams {
-            drg: drgporep::DrgParams {
-                nodes: n,
-                degree,
-                expansion_degree,
-                seed: new_seed(),
-            },
+            nodes: n,
+            degree,
+            expansion_degree,
+            seed: new_seed(),
             layer_challenges: challenges.clone(),
         };
 
@@ -681,12 +676,10 @@ mod tests {
         let nodes = 1024 * 1024 * 32 * 8; // This corresponds to 8GiB sectors (32-byte nodes)
         let layer_challenges = LayerChallenges::new(10, 333);
         let sp = SetupParams {
-            drg: drgporep::DrgParams {
-                nodes,
-                degree,
-                expansion_degree,
-                seed: new_seed(),
-            },
+            nodes,
+            degree,
+            expansion_degree,
+            seed: new_seed(),
             layer_challenges: layer_challenges.clone(),
         };
 
