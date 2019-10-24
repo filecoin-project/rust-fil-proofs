@@ -58,7 +58,8 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
         UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size as u64));
 
     // Create files for the staged and sealed sectors.
-    let staged_file = NamedTempFile::new().expect("could not create temp file for staged sector");
+    let mut staged_file =
+        NamedTempFile::new().expect("could not create temp file for staged sector");
 
     let sealed_file = NamedTempFile::new().expect("could not create temp file for sealed sector");
 
@@ -70,7 +71,9 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
 
     // Generate the data from which we will create a replica, we will then prove the continued
     // storage of that replica using the PoSt.
-    let piece_bytes: Vec<u8> = (0..sector_size).map(|_| rand::random::<u8>()).collect();
+    let piece_bytes: Vec<u8> = (0..usize::from(sector_size_unpadded_bytes_ammount))
+        .map(|_| rand::random::<u8>())
+        .collect();
 
     let mut piece_file = NamedTempFile::new()?;
     piece_file.write_all(&piece_bytes)?;
@@ -81,10 +84,9 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
         generate_piece_commitment(piece_file.as_file_mut(), sector_size_unpadded_bytes_ammount)?;
     piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
 
-    let mut staged_sector_file = NamedTempFile::new()?;
     add_piece(
         &mut piece_file,
-        &mut staged_sector_file,
+        &mut staged_file,
         sector_size_unpadded_bytes_ammount,
         &[],
     )?;
