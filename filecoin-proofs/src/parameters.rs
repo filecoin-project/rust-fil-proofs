@@ -4,7 +4,7 @@ use storage_proofs::proof::ProofScheme;
 use storage_proofs::rational_post::{self, RationalPoSt};
 use storage_proofs::stacked::{self, LayerChallenges, StackedDrg, EXP_DEGREE};
 
-use crate::constants::POREP_MINIMUM_CHALLENGES;
+use crate::constants::{DefaultPieceHasher, POREP_MINIMUM_CHALLENGES};
 use crate::types::{PaddedBytesAmount, PoStConfig};
 
 const POST_CHALLENGE_COUNT: usize = 30; // TODO: correct value
@@ -20,7 +20,11 @@ pub fn public_params(
     sector_bytes: PaddedBytesAmount,
     partitions: usize,
 ) -> stacked::PublicParams<DefaultTreeHasher> {
-    StackedDrg::<DefaultTreeHasher>::setup(&setup_params(sector_bytes, partitions)).unwrap()
+    StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::setup(&setup_params(
+        sector_bytes,
+        partitions,
+    ))
+    .unwrap()
 }
 
 pub fn post_public_params(post_config: PoStConfig) -> PostPublicParams {

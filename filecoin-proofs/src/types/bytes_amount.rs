@@ -9,13 +9,13 @@ pub struct PoStProofBytesAmount(pub usize);
 
 pub struct PoRepProofBytesAmount(pub usize);
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize, Eq, Ord)]
 pub struct UnpaddedByteIndex(pub u64);
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize, Eq, Ord)]
 pub struct UnpaddedBytesAmount(pub u64);
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize, Eq, Ord)]
 pub struct PaddedBytesAmount(pub u64);
 
 impl From<UnpaddedBytesAmount> for u64 {

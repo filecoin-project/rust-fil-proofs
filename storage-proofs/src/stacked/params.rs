@@ -85,14 +85,14 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub struct PublicInputs<T: Domain> {
+pub struct PublicInputs<T: Domain, S: Domain> {
     pub replica_id: T,
-    pub seed: Option<T>,
-    pub tau: Option<Tau<T>>,
+    pub seed: T,
+    pub tau: Option<Tau<T, S>>,
     pub k: Option<usize>,
 }
 
-impl<T: Domain> PublicInputs<T> {
+impl<T: Domain, S: Domain> PublicInputs<T, S> {
     pub fn challenges(
         &self,
         layer_challenges: &LayerChallenges,
@@ -102,17 +102,7 @@ impl<T: Domain> PublicInputs<T> {
     ) -> Vec<usize> {
         let k = partition_k.unwrap_or(0);
 
-        if let Some(ref seed) = self.seed {
-            layer_challenges.derive::<T>(layer, leaves, &self.replica_id, seed, k as u8)
-        } else {
-            layer_challenges.derive::<T>(
-                layer,
-                leaves,
-                &self.replica_id,
-                &self.tau.as_ref().expect("missing comm_r").comm_r,
-                k as u8,
-            )
-        }
+        layer_challenges.derive::<T>(layer, leaves, &self.replica_id, &self.seed, k as u8)
     }
 
     pub fn all_challenges(
@@ -123,32 +113,23 @@ impl<T: Domain> PublicInputs<T> {
     ) -> Vec<usize> {
         let k = partition_k.unwrap_or(0);
 
-        if let Some(ref seed) = self.seed {
-            layer_challenges.derive_all::<T>(leaves, &self.replica_id, seed, k as u8)
-        } else {
-            layer_challenges.derive_all::<T>(
-                leaves,
-                &self.replica_id,
-                &self.tau.as_ref().expect("missing comm_r").comm_r,
-                k as u8,
-            )
-        }
+        layer_challenges.derive_all::<T>(leaves, &self.replica_id, &self.seed, k as u8)
     }
 }
 
 #[derive(Debug)]
-pub struct PrivateInputs<H: Hasher> {
+pub struct PrivateInputs<H: Hasher, G: Hasher> {
     pub p_aux: PersistentAux<H::Domain>,
-    pub t_aux: TemporaryAux<H>,
+    pub t_aux: TemporaryAux<H, G>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Proof<H: Hasher> {
+pub struct Proof<H: Hasher, G: Hasher> {
     #[serde(bound(
-        serialize = "MerkleProof<H>: Serialize",
-        deserialize = "MerkleProof<H>: Deserialize<'de>"
+        serialize = "MerkleProof<G>: Serialize",
+        deserialize = "MerkleProof<G>: Deserialize<'de>"
     ))]
-    pub comm_d_proofs: MerkleProof<H>,
+    pub comm_d_proofs: MerkleProof<G>,
     #[serde(bound(
         serialize = "MerkleProof<H>: Serialize, ColumnProof<H>: Serialize",
         deserialize = "MerkleProof<H>: Deserialize<'de>, ColumnProof<H>: Deserialize<'de>"
@@ -167,7 +148,7 @@ pub struct Proof<H: Hasher> {
     pub encoding_proofs: Vec<EncodingProof<H>>,
 }
 
-impl<H: Hasher> Proof<H> {
+impl<H: Hasher, G: Hasher> Proof<H, G> {
     pub fn comm_r_last(&self) -> &H::Domain {
         self.comm_r_last_proof.root()
     }
@@ -184,7 +165,7 @@ impl<H: Hasher> Proof<H> {
     pub fn verify(
         &self,
         pub_params: &PublicParams<H>,
-        pub_inputs: &PublicInputs<<H as Hasher>::Domain>,
+        pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         challenge: usize,
         challenge_index: usize,
         graph: &StackedBucketGraph<H>,
@@ -257,7 +238,7 @@ impl<H: Hasher> Proof<H> {
             if expect_challenge {
                 check!(self.encoding_proofs.get(layer - 1).is_some());
                 let encoding_proof = &self.encoding_proofs[layer - 1];
-                check!(encoding_proof.verify(replica_id, encoded_node, decoded_node));
+                check!(encoding_proof.verify::<G>(replica_id, encoded_node, decoded_node));
             } else {
                 check!(self.encoding_proofs.get(layer - 1).is_none());
             }
@@ -317,22 +298,22 @@ impl<H: Hasher> ReplicaColumnProof<H> {
     }
 }
 
-impl<H: Hasher> Proof<H> {
+impl<H: Hasher, G: Hasher> Proof<H, G> {
     pub fn serialize(&self) -> Vec<u8> {
         unimplemented!();
     }
 }
 
-pub type TransformedLayers<H> = (
-    Tau<<H as Hasher>::Domain>,
+pub type TransformedLayers<H, G> = (
+    Tau<<H as Hasher>::Domain, <G as Hasher>::Domain>,
     PersistentAux<<H as Hasher>::Domain>,
-    TemporaryAux<H>,
+    TemporaryAux<H, G>,
 );
 
 /// Tau for a single parition.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Tau<D: Domain> {
-    pub comm_d: D,
+pub struct Tau<D: Domain, E: Domain> {
+    pub comm_d: E,
     pub comm_r: D,
 }
 
@@ -344,15 +325,15 @@ pub struct PersistentAux<D> {
 }
 
 #[derive(Debug)]
-pub struct TemporaryAux<H: Hasher> {
+pub struct TemporaryAux<H: Hasher, G: Hasher> {
     /// The encoded nodes for 1..layers.
     pub encodings: Encodings<H>,
-    pub tree_d: Tree<H>,
+    pub tree_d: Tree<G>,
     pub tree_r_last: Tree<H>,
     pub tree_c: Tree<H>,
 }
 
-impl<H: Hasher> TemporaryAux<H> {
+impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
     pub fn encoding_at_layer(&self, layer: usize) -> &DiskStore<H::Domain> {
         self.encodings.encoding_at_layer(layer)
     }
@@ -428,11 +409,11 @@ pub fn get_node<H: Hasher>(data: &[u8], index: usize) -> Result<H::Domain> {
 }
 
 /// Generate the replica id as expected for Stacked DRG.
-pub fn generate_replica_id<H: Hasher>(
+pub fn generate_replica_id<H: Hasher, T: AsRef<[u8]>>(
     prover_id: &[u8; 32],
     sector_id: u64,
     ticket: &[u8; 32],
-    comm_d: H::Domain,
+    comm_d: T,
 ) -> H::Domain {
     use blake2s_simd::Params as Blake2s;
 

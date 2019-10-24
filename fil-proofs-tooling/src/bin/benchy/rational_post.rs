@@ -1,16 +1,16 @@
 use std::collections::BTreeMap;
-use std::io::stdout;
+use std::io::{stdout, Seek, SeekFrom, Write};
 
 use fil_proofs_tooling::{measure, Metadata};
-use filecoin_proofs::fr32::write_padded;
-use filecoin_proofs::pieces::get_aligned_source;
 use filecoin_proofs::types::{
     PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, SectorSize,
     UnpaddedBytesAmount,
 };
-use filecoin_proofs::{generate_post, seal, verify_post, PrivateReplicaInfo, PublicReplicaInfo};
+use filecoin_proofs::{
+    add_piece, generate_piece_commitment, generate_post, seal_commit, seal_pre_commit, verify_post,
+    PrivateReplicaInfo, PublicReplicaInfo,
+};
 use log::info;
-use rand::random;
 use storage_proofs::sector::SectorId;
 use tempfile::NamedTempFile;
 
@@ -58,8 +58,7 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
         UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size as u64));
 
     // Create files for the staged and sealed sectors.
-    let mut staged_file =
-        NamedTempFile::new().expect("could not create temp file for staged sector");
+    let staged_file = NamedTempFile::new().expect("could not create temp file for staged sector");
 
     let sealed_file = NamedTempFile::new().expect("could not create temp file for sealed sector");
 
@@ -71,14 +70,26 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
 
     // Generate the data from which we will create a replica, we will then prove the continued
     // storage of that replica using the PoSt.
-    let data: Vec<u8> = (0..sector_size).map(|_| random()).collect();
+    let piece_bytes: Vec<u8> = (0..sector_size).map(|_| rand::random::<u8>()).collect();
 
-    // Write the aligned data to the staged sector file.
-    let (_, mut aligned_data) =
-        get_aligned_source(&data[..], &[], sector_size_unpadded_bytes_ammount);
+    let mut piece_file = NamedTempFile::new()?;
+    piece_file.write_all(&piece_bytes)?;
+    piece_file.as_file_mut().sync_all()?;
+    piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
 
-    write_padded(&mut aligned_data, &mut staged_file)
-        .expect("failed to write padded data to staged sector file");
+    let piece_info =
+        generate_piece_commitment(piece_file.as_file_mut(), sector_size_unpadded_bytes_ammount)?;
+    piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
+
+    let mut staged_sector_file = NamedTempFile::new()?;
+    add_piece(
+        &mut piece_file,
+        &mut staged_sector_file,
+        sector_size_unpadded_bytes_ammount,
+        &[],
+    )?;
+
+    let piece_infos = vec![piece_info];
 
     // Replicate the staged sector, write the replica file to `sealed_path`.
     let porep_config = PoRepConfig(SectorSize(sector_size as u64), N_PARTITIONS);
@@ -86,7 +97,7 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
     let sector_id = SectorId::from(SECTOR_ID);
     let ticket = [0u8; 32];
 
-    let seal_output = seal(
+    let seal_pre_commit_output = seal_pre_commit(
         porep_config,
         cache_dir.path(),
         staged_file.path(),
@@ -94,24 +105,33 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
         PROVER_ID,
         sector_id,
         ticket,
-        &[sector_size_unpadded_bytes_ammount],
-    )
-    .expect("failed to seal");
+        &piece_infos,
+    )?;
+
+    let seed = [0u8; 32];
+    let comm_r = seal_pre_commit_output.comm_r;
+    let p_aux = seal_pre_commit_output.p_aux.clone();
+
+    let _seal_commit_output = seal_commit(
+        porep_config,
+        cache_dir.path(),
+        PROVER_ID,
+        sector_id,
+        ticket,
+        seed,
+        seal_pre_commit_output,
+        &piece_infos,
+    )?;
 
     // Store the replica's private and publicly facing info for proving and verifying respectively.
     let mut pub_replica_info: BTreeMap<SectorId, PublicReplicaInfo> = BTreeMap::new();
     let mut priv_replica_info: BTreeMap<SectorId, PrivateReplicaInfo> = BTreeMap::new();
 
-    pub_replica_info.insert(sector_id, PublicReplicaInfo::new(seal_output.comm_r));
+    pub_replica_info.insert(sector_id, PublicReplicaInfo::new(comm_r));
 
     priv_replica_info.insert(
         sector_id,
-        PrivateReplicaInfo::new(
-            sealed_path_string,
-            seal_output.comm_r,
-            seal_output.p_aux,
-            cache_dir.into_path(),
-        ),
+        PrivateReplicaInfo::new(sealed_path_string, comm_r, p_aux, cache_dir.into_path()),
     );
 
     // Measure PoSt generation and verification.

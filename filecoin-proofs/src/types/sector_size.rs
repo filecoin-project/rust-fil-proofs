@@ -15,3 +15,9 @@ impl From<SectorSize> for PaddedBytesAmount {
         PaddedBytesAmount(x.0)
     }
 }
+
+impl From<SectorSize> for u64 {
+    fn from(x: SectorSize) -> Self {
+        x.0
+    }
+}

@@ -25,22 +25,23 @@ use crate::stacked::{
 use crate::util::{data_at_node, data_at_node_offset, NODE_SIZE};
 
 #[derive(Debug)]
-pub struct StackedDrg<'a, H: 'a + Hasher> {
+pub struct StackedDrg<'a, H: 'a + Hasher, G: 'a + Hasher> {
     _a: PhantomData<&'a H>,
+    _b: PhantomData<&'a G>,
 }
 
-impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
+impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn prove_layers(
         graph: &StackedBucketGraph<H>,
-        pub_inputs: &PublicInputs<<H as Hasher>::Domain>,
+        pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         _p_aux: &PersistentAux<H::Domain>,
-        t_aux: &TemporaryAux<H>,
+        t_aux: &TemporaryAux<H, G>,
         layer_challenges: &LayerChallenges,
         layers: usize,
         _total_layers: usize,
         partition_count: usize,
-    ) -> Result<Vec<Vec<Proof<H>>>> {
+    ) -> Result<Vec<Vec<Proof<H, G>>>> {
         assert!(layers > 0);
         assert_eq!(t_aux.encodings.len(), layers);
 
@@ -177,7 +178,7 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                                 };
 
                                 assert!(
-                                    proof.verify(
+                                    proof.verify::<G>(
                                         &pub_inputs.replica_id,
                                         &encoded_node,
                                         decoded_node
@@ -407,13 +408,25 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
         Ok((Encodings::<H>::new(encodings), column_hashes))
     }
 
+    fn build_tree<K: Hasher>(tree_data: &[u8]) -> Tree<K> {
+        trace!("building tree (size: {})", tree_data.len());
+
+        let leafs = tree_data.len() / NODE_SIZE;
+        assert_eq!(tree_data.len() % NODE_SIZE, 0);
+        MerkleTree::from_par_iter(
+            (0..leafs)
+                .into_par_iter()
+                .map(|i| get_node::<K>(tree_data, i).unwrap()),
+        )
+    }
+
     pub(crate) fn transform_and_replicate_layers(
         graph: &StackedBucketGraph<H>,
         layer_challenges: &LayerChallenges,
         replica_id: &<H as Hasher>::Domain,
         data: &mut [u8],
-        data_tree: Option<Tree<H>>,
-    ) -> Result<TransformedLayers<H>> {
+        data_tree: Option<Tree<G>>,
+    ) -> Result<TransformedLayers<H, G>> {
         trace!("transform_and_replicate_layers");
         let nodes_count = graph.size();
 
@@ -422,27 +435,17 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
         let layers = layer_challenges.layers();
         assert!(layers > 0);
 
-        let build_tree = |tree_data: &[u8]| {
-            trace!("building tree (size: {})", tree_data.len());
-
-            let leafs = tree_data.len() / NODE_SIZE;
-            assert_eq!(tree_data.len() % NODE_SIZE, 0);
-            MerkleTree::from_par_iter(
-                (0..leafs)
-                    .into_par_iter()
-                    .map(|i| get_node::<H>(tree_data, i).unwrap()),
-            )
-        };
-
         let (encodings, column_hashes, tree_d) = crossbeam::thread::scope(|s| {
             // Generate key layers.
             let h = s.spawn(|_| Self::generate_layers(graph, layer_challenges, replica_id, true));
 
             // Build the MerkleTree over the original data.
-            info!("building merkle tree for the original data");
             let tree_d = match data_tree {
                 Some(t) => t,
-                None => build_tree(&data),
+                None => {
+                    info!("building merkle tree for the original data");
+                    Self::build_tree::<G>(&data)
+                }
             };
 
             let (encodings, column_hashes) = h.join().unwrap().unwrap();
@@ -472,7 +475,7 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
 
                     // Construct the final replica commitment.
                     info!("building tree_r_last");
-                    build_tree(data)
+                    Self::build_tree::<H>(data)
                 });
 
                 // Build the tree for CommC
@@ -486,12 +489,12 @@ impl<'a, H: 'static + Hasher> StackedDrg<'a, H> {
                             column_hashes.len() * 32,
                         )
                     };
-                    build_tree(column_hashes_flat)
+                    Self::build_tree::<H>(column_hashes_flat)
                 });
 
-                let tree_c = tree_c_handle.join()?;
+                let tree_c: Tree<H> = tree_c_handle.join()?;
                 info!("tree_c done");
-                let tree_r_last = tree_r_last_handle.join()?;
+                let tree_r_last: Tree<H> = tree_r_last_handle.join()?;
                 info!("tree_r_last done");
 
                 // comm_r = H(comm_c || comm_r_last)
@@ -587,15 +590,16 @@ mod tests {
             layer_challenges: challenges.clone(),
         };
 
-        let pp = StackedDrg::<H>::setup(&sp).expect("setup failed");
+        let pp = StackedDrg::<H, Blake2sHasher>::setup(&sp).expect("setup failed");
 
-        StackedDrg::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None)
+        StackedDrg::<H, Blake2sHasher>::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None)
             .expect("replication failed");
 
         assert_ne!(data, data_copy);
 
-        let decoded_data = StackedDrg::<H>::extract_all(&pp, &replica_id, data_copy.as_mut_slice())
-            .expect("failed to extract data");
+        let decoded_data =
+            StackedDrg::<H, Blake2sHasher>::extract_all(&pp, &replica_id, data_copy.as_mut_slice())
+                .expect("failed to extract data");
 
         assert_eq!(data, decoded_data);
     }
@@ -635,28 +639,41 @@ mod tests {
             layer_challenges: challenges.clone(),
         };
 
-        let pp = StackedDrg::<H>::setup(&sp).expect("setup failed");
-        let (tau, (p_aux, t_aux)) =
-            StackedDrg::<H>::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None)
-                .expect("replication failed");
+        let pp = StackedDrg::<H, Blake2sHasher>::setup(&sp).expect("setup failed");
+        let (tau, (p_aux, t_aux)) = StackedDrg::<H, Blake2sHasher>::replicate(
+            &pp,
+            &replica_id,
+            data_copy.as_mut_slice(),
+            None,
+        )
+        .expect("replication failed");
         assert_ne!(data, data_copy);
 
-        let pub_inputs = PublicInputs::<H::Domain> {
+        let seed = rng.gen();
+
+        let pub_inputs = PublicInputs::<H::Domain, <Blake2sHasher as Hasher>::Domain> {
             replica_id,
-            seed: None,
+            seed,
             tau: Some(tau),
             k: None,
         };
 
         let priv_inputs = PrivateInputs { p_aux, t_aux };
 
-        let all_partition_proofs =
-            &StackedDrg::<H>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, partitions)
-                .expect("failed to generate partition proofs");
+        let all_partition_proofs = &StackedDrg::<H, Blake2sHasher>::prove_all_partitions(
+            &pp,
+            &pub_inputs,
+            &priv_inputs,
+            partitions,
+        )
+        .expect("failed to generate partition proofs");
 
-        let proofs_are_valid =
-            StackedDrg::<H>::verify_all_partitions(&pp, &pub_inputs, all_partition_proofs)
-                .expect("failed to verify partition proofs");
+        let proofs_are_valid = StackedDrg::<H, Blake2sHasher>::verify_all_partitions(
+            &pp,
+            &pub_inputs,
+            all_partition_proofs,
+        )
+        .expect("failed to verify partition proofs");
 
         assert!(proofs_are_valid);
     }
@@ -685,6 +702,6 @@ mod tests {
 
         // When this fails, the call to setup should panic, but seems to actually hang (i.e. neither return nor panic) for some reason.
         // When working as designed, the call to setup returns without error.
-        let _pp = StackedDrg::<PedersenHasher>::setup(&sp).expect("setup failed");
+        let _pp = StackedDrg::<PedersenHasher, Blake2sHasher>::setup(&sp).expect("setup failed");
     }
 }

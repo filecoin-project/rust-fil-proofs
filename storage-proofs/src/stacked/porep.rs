@@ -6,15 +6,15 @@ use crate::stacked::{
     proof::StackedDrg,
 };
 
-impl<'a, 'c, H: 'static + Hasher> PoRep<'a, H> for StackedDrg<'a, H> {
-    type Tau = Tau<<H as Hasher>::Domain>;
-    type ProverAux = (PersistentAux<H::Domain>, TemporaryAux<H>);
+impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for StackedDrg<'a, H, G> {
+    type Tau = Tau<<H as Hasher>::Domain, <G as Hasher>::Domain>;
+    type ProverAux = (PersistentAux<H::Domain>, TemporaryAux<H, G>);
 
     fn replicate(
         pp: &'a PublicParams<H>,
         replica_id: &H::Domain,
         data: &mut [u8],
-        data_tree: Option<Tree<H>>,
+        data_tree: Option<Tree<G>>,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let (tau, p_aux, t_aux) = Self::transform_and_replicate_layers(
             &pp.graph,

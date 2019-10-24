@@ -15,14 +15,14 @@ use crate::stacked::{
 };
 
 #[derive(Debug, Clone)]
-pub struct Proof<H: Hasher> {
-    pub comm_d_proof: InclusionPath<H>,
+pub struct Proof<H: Hasher, G: Hasher> {
+    pub comm_d_proof: InclusionPath<G>,
     pub comm_r_last_proof: InclusionPath<H>,
     pub replica_column_proof: ReplicaColumnProof<H>,
     pub encoding_proofs: Vec<EncodingProof>,
 }
 
-impl<H: Hasher> Proof<H> {
+impl<H: Hasher, G: Hasher> Proof<H, G> {
     /// Create an empty proof, used in `blank_circuit`s.
     pub fn empty(params: &PublicParams<H>, challenge_index: usize) -> Self {
         let layers = params.layer_challenges.layers();
@@ -123,8 +123,8 @@ impl<H: Hasher> Proof<H> {
     }
 }
 
-impl<H: Hasher> From<VanillaProof<H>> for Proof<H> {
-    fn from(vanilla_proof: VanillaProof<H>) -> Self {
+impl<H: Hasher, G: Hasher> From<VanillaProof<H, G>> for Proof<H, G> {
+    fn from(vanilla_proof: VanillaProof<H, G>) -> Self {
         let VanillaProof {
             comm_d_proofs,
             comm_r_last_proof,
@@ -150,7 +150,7 @@ pub struct InclusionPath<H: Hasher> {
 
 impl<H: Hasher> InclusionPath<H> {
     /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty(graph: &impl Graph<H>) -> Self {
+    pub fn empty<G: Hasher>(graph: &impl Graph<G>) -> Self {
         InclusionPath {
             value: None,
             auth_path: vec![None; graph.merkle_tree_depth() as usize],

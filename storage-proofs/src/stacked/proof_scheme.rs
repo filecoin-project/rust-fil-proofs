@@ -11,12 +11,12 @@ use crate::stacked::{
     proof::StackedDrg,
 };
 
-impl<'a, 'c, H: 'static + Hasher> ProofScheme<'a> for StackedDrg<'c, H> {
+impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for StackedDrg<'c, H, G> {
     type PublicParams = PublicParams<H>;
     type SetupParams = SetupParams;
-    type PublicInputs = PublicInputs<<H as Hasher>::Domain>;
-    type PrivateInputs = PrivateInputs<H>;
-    type Proof = Vec<Proof<H>>;
+    type PublicInputs = PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>;
+    type PrivateInputs = PrivateInputs<H, G>;
+    type Proof = Vec<Proof<H, G>>;
     type Requirements = ChallengeRequirements;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
