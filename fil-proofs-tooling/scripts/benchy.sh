@@ -52,4 +52,5 @@ if [[ ! $GTIME_EXIT_CODE -eq 0 || ! $JQ_EXIT_CODE -eq 0 ]]; then
     >&2 echo "<JQ_STDERR>"
     >&2 echo "$(cat $JQ_STDERR)"
     >&2 echo "</JQ_STDERR>"
+    exit 1
 fi
