@@ -1,10 +1,15 @@
+use std::fmt::{self, Debug, Formatter};
 use std::hash::Hasher as StdHasher;
 
+use bitvec::{BitVec, LittleEndian};
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::{PrimeField, PrimeFieldRepr};
 use fil_sapling_crypto::circuit::{boolean, num, pedersen_hash as pedersen_hash_circuit};
-use fil_sapling_crypto::jubjub::JubjubEngine;
-use fil_sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
+use fil_sapling_crypto::jubjub::{
+    edwards, read_exp_table_range, JubjubEngine, JubjubParams, PrimeOrder,
+    MAX_EXP_TABLE_SEGMENTS_IN_MEMORY,
+};
+use fil_sapling_crypto::pedersen_hash::{pedersen_hash, pedersen_hash_with_exp_table, Personalization};
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
@@ -12,8 +17,11 @@ use rand::{Rand, Rng};
 
 use crate::circuit::pedersen::pedersen_md_no_padding;
 use crate::crypto::{kdf, pedersen, sloth};
+use crate::crypto::pedersen::JJ_PARAMS;
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
+
+const N_BITS_PER_SEGMENT: usize = 189;
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PedersenHasher {}
@@ -45,33 +53,6 @@ impl Hasher for PedersenHasher {
         let ciphertext = Fr::from_repr(ciphertext.0).unwrap();
 
         sloth::decode::<Bls12>(&key, &ciphertext).into()
-    }
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct PedersenFunction(Fr);
-
-impl Default for PedersenFunction {
-    fn default() -> PedersenFunction {
-        PedersenFunction(Fr::from_repr(FrRepr::default()).expect("failed default"))
-    }
-}
-
-impl Hashable<PedersenFunction> for Fr {
-    fn hash(&self, state: &mut PedersenFunction) {
-        let mut bytes = Vec::with_capacity(32);
-        self.into_repr().write_le(&mut bytes).unwrap();
-        state.write(&bytes);
-    }
-}
-
-impl Hashable<PedersenFunction> for PedersenDomain {
-    fn hash(&self, state: &mut PedersenFunction) {
-        let mut bytes = Vec::with_capacity(32);
-        self.0
-            .write_le(&mut bytes)
-            .expect("Failed to write `FrRepr`");
-        state.write(&bytes);
     }
 }
 
@@ -196,10 +177,147 @@ impl Element for PedersenDomain {
     }
 }
 
+#[derive(Clone, PartialEq, Eq)]
+pub struct PedersenHashState {
+    curr_hash: edwards::CompressedPoint<Bls12, PrimeOrder>,
+    unhashed_bits: BitVec<LittleEndian, u8>,
+}
+
+impl Debug for PedersenHashState {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.debug_struct("PedersenHashState")
+            .field("curr_hash", &self.curr_hash)
+            .field("unhashed_bits", &self.unhashed_bits)
+            .finish()
+    }
+}
+
+impl Default for PedersenHashState {
+    fn default() -> PedersenHashState {
+        PedersenHashState {
+            curr_hash: edwards::Point::<Bls12, PrimeOrder>::zero().compress(),
+            unhashed_bits: BitVec::new(),
+        }
+    }
+}
+
+impl PedersenHashState {
+    fn new() -> PedersenHashState {
+        PedersenHashState::default()
+    }
+
+    fn update(
+        &mut self,
+        data: &[u8],
+        exp_table: &[Vec<Vec<edwards::Point<Bls12, PrimeOrder>>>],
+    ) {
+        let input_bits = BitVec::<LittleEndian, u8>::from(data);
+
+        let n_input_bits = input_bits.len();
+        let n_stored_bits = self.unhashed_bits.len();
+        let n_bits_total = n_input_bits + n_stored_bits;
+
+        if n_bits_total < N_BITS_PER_SEGMENT {
+            self.unhashed_bits.extend(input_bits);
+            return;
+        }
+
+        let n_bits_to_store = n_bits_total % N_BITS_PER_SEGMENT;
+        let n_bits_to_hash = n_bits_total - n_bits_to_store;
+
+        let bits_to_hash = self
+            .unhashed_bits
+            .iter()
+            .chain(input_bits.iter())
+            .take(n_bits_to_hash);
+
+        let digest = pedersen_hash_with_exp_table(
+            Personalization::None,
+            bits_to_hash,
+            exp_table,
+            &JJ_PARAMS,
+        );
+
+        self.curr_hash = self
+            .curr_hash
+            .decompress(&JJ_PARAMS)
+            .add(&digest, &JJ_PARAMS)
+            .compress();
+
+        let n_input_bits_hashed = n_input_bits - n_bits_to_store;
+        self.unhashed_bits = input_bits.iter().skip(n_input_bits_hashed).collect();
+    }
+
+    fn finalize(&mut self, exp_table: &[Vec<Vec<edwards::Point<Bls12, PrimeOrder>>>]) -> Fr {
+        let n_unhashed_bits = self.unhashed_bits.len();
+
+        if n_unhashed_bits == 0 {
+            return self.curr_hash.decompress(&JJ_PARAMS).into_xy().0;
+        }
+
+        let bits_to_hash = self.unhashed_bits.iter().take(n_unhashed_bits);
+
+        let segment_digest = pedersen_hash_with_exp_table(
+            Personalization::None,
+            bits_to_hash,
+            exp_table,
+            &JJ_PARAMS,
+        );
+
+        let curr_hash = self
+            .curr_hash
+            .decompress(&JJ_PARAMS)
+            .add(&segment_digest, &JJ_PARAMS);
+
+        let digest = curr_hash.into_xy().0;
+        self.curr_hash = curr_hash.compress();
+        digest
+    }
+
+    fn n_unhashed_bits(&self) -> usize {
+        self.unhashed_bits.len()
+    }
+
+    fn curr_hash(&self) -> &edwards::CompressedPoint<Bls12, PrimeOrder> {
+        &self.curr_hash
+    }
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct PedersenFunction {
+    states: Vec<PedersenHashState>,
+    next_segment: usize,
+    n_segments_remaining_in_exp_table: usize,
+    exp_table: Vec<Vec<Vec<edwards::Point<Bls12, PrimeOrder>>>>,
+    is_finalized: bool,
+}
+
+impl Default for PedersenFunction {
+    /// Creates a new `PedersenFunction` to hash a single preimage.
+    fn default() -> PedersenFunction {
+        PedersenFunction::new_batched(1)
+    }
+}
+
+impl Debug for PedersenFunction {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.debug_struct("PedersenFunction")
+            .field("states", &self.states)
+            .field("next_segment", &self.next_segment)
+            .field("is_finalized", &self.is_finalized)
+            .finish()
+    }
+}
+
 impl StdHasher for PedersenFunction {
     #[inline]
     fn write(&mut self, msg: &[u8]) {
-        self.0 = pedersen::pedersen(msg);
+        assert_eq!(
+            self.states.len(), 1,
+            "cannot call `write` when `PedersenFunction` is hashing multiple preimages"
+        );
+        self.update_all(&[msg]);
+        self.finalize_all();
     }
 
     #[inline]
@@ -243,12 +361,20 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
 impl LightAlgorithm<PedersenDomain> for PedersenFunction {
     #[inline]
     fn hash(&mut self) -> PedersenDomain {
-        self.0.into()
+        assert_eq!(
+            self.states.len(), 1,
+            "cannot call `hash` when `PedersenFunction` is hashing multiple preimages"
+        );
+        self.states[0].curr_hash().decompress(&JJ_PARAMS).into_xy().0.into()
     }
 
     #[inline]
     fn reset(&mut self) {
-        self.0 = Fr::from_repr(FrRepr::from(0)).expect("failed 0");
+        assert_eq!(
+            self.states.len(), 1,
+            "cannot call `reset` when `PedersenFunction` is hashing multiple preimages"
+        );
+        *self = PedersenFunction::default();
     }
 
     fn leaf(&mut self, leaf: PedersenDomain) -> PedersenDomain {
@@ -267,6 +393,154 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
             .into_xy()
             .0
             .into()
+    }
+}
+
+impl PedersenFunction {
+    /// Creates a new `PedersenFunction` to hash `batch_size` number of preimages.
+    pub fn new_batched(batch_size: usize) -> Self {
+        PedersenFunction {
+            states: (0..batch_size).map(|_| PedersenHashState::new()).collect(),
+            next_segment: 0,
+            n_segments_remaining_in_exp_table: 0,
+            exp_table: vec![],
+            is_finalized: false,
+        }
+    }
+
+    pub fn update_all(&mut self, updates: &[&[u8]]) {
+        assert!(
+            !self.is_finalized,
+            "cannot update a finalized Pedersen function"
+        );
+
+        if cfg!(test) {
+            let all_updates_are_the_same_size = updates
+                .iter()
+                .all(|update| update.len() == updates[0].len());
+
+            assert!(
+                all_updates_are_the_same_size,
+                "all preimage updates must contain the same number of bytes"
+            );
+        } else {
+            use crate::util::NODE_SIZE;
+
+            let all_updates_are_node_size = updates
+                .iter()
+                .all(|update| update.len() == NODE_SIZE);
+
+            assert!(all_updates_are_node_size, "all preimage updates must be size `NODE_SIZE`");
+        }
+
+        let n_unhashed_bits = self.states[0].n_unhashed_bits();
+        // let n_update_bits = NODE_SIZE * 8;
+        let n_update_bits = updates[0].len() * 8;
+        let n_bits_total = n_unhashed_bits + n_update_bits;
+        let n_segments_to_hash = n_bits_total / N_BITS_PER_SEGMENT;
+
+        // As an optimization, we always keep the first 5 segments of the exp-table in memory. If we
+        // can use the portion of the exp-table that is already in memory, we should, becuase
+        // reading the exp-table from disk is expensive.
+        let use_in_memory_exp_table = self.next_segment + n_segments_to_hash <= 5;
+
+        if use_in_memory_exp_table {
+            let exp_table = &JJ_PARAMS.pedersen_hash_exp_table()[self.next_segment..];
+            for (state, update) in self.states.iter_mut().zip(updates.iter()) {
+                state.update(update, exp_table);
+            }
+            self.next_segment += n_segments_to_hash;
+            return;
+        }
+
+        let must_read_exp_table = n_segments_to_hash > self.n_segments_remaining_in_exp_table;
+
+        if must_read_exp_table {
+            let exp_table_path = JJ_PARAMS.exp_table_path().as_ref().unwrap();
+            self.exp_table = read_exp_table_range(
+                self.next_segment,
+                MAX_EXP_TABLE_SEGMENTS_IN_MEMORY,
+                exp_table_path,
+            );
+            let n_segments_read = self.exp_table.len();
+            assert!(n_segments_read != 0, "ran out of segments in exp-table");
+            self.n_segments_remaining_in_exp_table = n_segments_read;
+        }
+
+        // Skip the previously used exp-table segments.
+        let exp_table_offset = self.exp_table.len() - self.n_segments_remaining_in_exp_table;
+        let exp_table = &self.exp_table[exp_table_offset..];
+
+        for (state, update) in self.states.iter_mut().zip(updates.iter()) {
+            state.update(update, exp_table);
+        }
+
+        self.next_segment += n_segments_to_hash;
+        self.n_segments_remaining_in_exp_table -= n_segments_to_hash;
+    }
+
+    #[allow(clippy::range_plus_one)]
+    pub fn finalize_all(&mut self) -> Vec<Fr> {
+        // Assume all states have the same number of unhashed bits remaining. If we have previously
+        // called `self.finalize_all()`, this value will be zero.
+        let n_unhashed_bits = self.states[0].n_unhashed_bits();
+
+        if n_unhashed_bits == 0 {
+            self.is_finalized = true;
+            return self
+                .states
+                .iter_mut()
+                .map(|state| state.finalize(&[]))
+                .collect();
+        }
+
+        let n_segments_to_hash =
+            (n_unhashed_bits as f32 / N_BITS_PER_SEGMENT as f32).ceil() as usize;
+
+        assert_eq!(
+            n_segments_to_hash, 1,
+            "called finalize_all with more than one segment's worth of outstanding data"
+        );
+
+        let must_read_exp_table = self.n_segments_remaining_in_exp_table == 0;
+
+        if must_read_exp_table {
+            let exp_table_path = JJ_PARAMS.exp_table_path().as_ref().unwrap();
+            self.exp_table = read_exp_table_range(self.next_segment, 1, exp_table_path);
+            let n_segments_read = self.exp_table.len();
+            assert!(n_segments_read == 1, "ran out of segments in exp-table");
+            self.n_segments_remaining_in_exp_table = 1;
+        }
+
+        let exp_table_offset = self.exp_table.len() - self.n_segments_remaining_in_exp_table;
+        let exp_table = &self.exp_table[exp_table_offset..exp_table_offset + 1];
+
+        let digests: Vec<Fr> = self
+            .states
+            .iter_mut()
+            .map(|state| state.finalize(exp_table))
+            .collect();
+
+        self.is_finalized = true;
+        digests
+    }
+}
+
+impl Hashable<PedersenFunction> for Fr {
+    fn hash(&self, state: &mut PedersenFunction) {
+        let mut bytes = Vec::with_capacity(32);
+        self.into_repr().write_le(&mut bytes).unwrap();
+        state.write(&bytes);
+    }
+}
+
+impl Hashable<PedersenFunction> for PedersenDomain {
+    fn hash(&self, state: &mut PedersenFunction) {
+        let mut bytes = Vec::with_capacity(32);
+        self.0
+            .write_le(&mut bytes)
+            .expect("Failed to write `FrRepr`");
+        state.write(&bytes);
     }
 }
 
@@ -338,7 +612,9 @@ mod tests {
     use super::*;
     use std::mem;
 
+    use fil_sapling_crypto::jubjub::JubjubBls12;
     use merkletree::hash::Hashable;
+    use rand::{thread_rng, Rng};
 
     use crate::merkle::MerkleTree;
 
@@ -452,5 +728,178 @@ mod tests {
             .expect("Failed to deserialize JSON string to `PedersenDomain`");
 
         assert_eq!(val, val_back);
+    }
+
+    // Asserts that using `PedersenFunction` in "updateable" mode (preimage data is fed in
+    // incrementally), returns the same digest as sapling's Pedersen hash (preimage data is supplied
+    // in full at the start of the hash function call).
+    #[test]
+    fn test_updateable_pedersen_hash() {
+        let mut rng = thread_rng();
+
+        // The max preimage size we test against is 118 bytes which is the largest preimage size
+        // hashable with 5 segments' worth of Pedersen params (5 segments * 189 bits/segment /
+        // 8 bits/byte = 118.125 max preimage bytes for 5 segments' worth of Pedersen params). 5
+        // segments' worth of Pedersen Hash params are always gauranteed to be in memory,
+        // therefore this test won't be slowed down by reading the exp-table file.
+        let preimage_byte_lens = [2usize, 20, 50, 100, 118];
+
+        for preimage_len in preimage_byte_lens.iter() {
+            let preimage: Vec<u8> = (0..*preimage_len).map(|_| rng.gen()).collect();
+
+            // Hash with the updateable Pedersen hash function.
+            let mut hasher = PedersenFunction::new_batched(1);
+            let preimage_len_half = preimage_len / 2;
+            hasher.update_all(&[&preimage[..preimage_len_half]]);
+            hasher.update_all(&[&preimage[preimage_len_half..]]);
+            let digest = hasher.finalize_all()[0];
+
+            // Hash with sapling's Pedersen hash function.
+            let bits = BitVec::<bitvec::LittleEndian, u8>::from(preimage.as_slice());
+            let expected_digest = pedersen_hash::<Bls12, _>(
+                Personalization::None,
+                bits.iter().take(8 * preimage_len),
+                &JJ_PARAMS,
+            )
+            .into_xy()
+            .0;
+
+            assert_eq!(digest, expected_digest);
+        }
+    }
+
+    // Asserts that hashing 3 preimages with a single `PedersenFunction` results in the same digest
+    // for each preimage as is returned by sapling's Pedersen hash function.
+    #[test]
+    fn test_batched_pedersen_function() {
+        let mut rng = thread_rng();
+        let preimage_byte_lens = [2usize, 20, 50, 100, 118];
+
+        for preimage_len in preimage_byte_lens.iter() {
+            let preimage_1: Vec<u8> = (0..*preimage_len).map(|_| rng.gen()).collect();
+            let preimage_2: Vec<u8> = (0..*preimage_len).map(|_| rng.gen()).collect();
+            let preimage_3: Vec<u8> = (0..*preimage_len).map(|_| rng.gen()).collect();
+
+            // Hash with the batched Pedersen hasher.
+            let mut hasher = PedersenFunction::new_batched(3);
+            hasher.update_all(&[&preimage_1, &preimage_2, &preimage_3]);
+            let digests = hasher.finalize_all();
+
+            // Hash each of the preimages separately using sapling's Pedersen hash.
+            let preimage_1_bits = BitVec::<bitvec::LittleEndian, u8>::from(preimage_1.as_slice());
+            let expected_digest_1 = pedersen_hash::<Bls12, _>(
+                Personalization::None,
+                preimage_1_bits.iter().take(8 * preimage_len),
+                &JJ_PARAMS,
+            )
+            .into_xy()
+            .0;
+            assert_eq!(digests[0], expected_digest_1);
+
+            let preimage_2_bits = BitVec::<bitvec::LittleEndian, u8>::from(preimage_2.as_slice());
+            let expected_digest_2 = pedersen_hash::<Bls12, _>(
+                Personalization::None,
+                preimage_2_bits.iter().take(8 * preimage_len),
+                &JJ_PARAMS,
+            )
+            .into_xy()
+            .0;
+            assert_eq!(digests[1], expected_digest_2);
+
+            let preimage_3_bits = BitVec::<bitvec::LittleEndian, u8>::from(preimage_3.as_slice());
+            let expected_digest_3 = pedersen_hash::<Bls12, _>(
+                Personalization::None,
+                preimage_3_bits.iter().take(8 * preimage_len),
+                &JJ_PARAMS,
+            )
+            .into_xy()
+            .0;
+            assert_eq!(digests[2], expected_digest_3);
+        }
+    }
+
+    // Asserts that Pedersen hashing using the batched updateable `PedersenFunction` yields the same
+    // digests for long preimages (preimages containing more than 5 segments worth of data) as
+    // sapling's Pedersen hash.
+    #[test]
+    fn test_batched_pedersen_function_with_long_preimage() {
+        // The max preimage size we can hash with 10 segments's worth of Pedersen params (10
+        // segments * 189 bits/segment / 8 bits/byte = 236.25 max preimage size in bytes for 10
+        // segments' worth of Pedersen params).
+        let preimage_byte_len = 236;
+
+        let mut rng = thread_rng();
+        let preimage_1: Vec<u8> = (0..preimage_byte_len).map(|_| rng.gen()).collect();
+        let preimage_2: Vec<u8> = (0..preimage_byte_len).map(|_| rng.gen()).collect();
+
+        // Hash with the batched updateable Pedersen hasher.
+        let mut hasher = PedersenFunction::new_batched(2);
+        hasher.update_all(&[&preimage_1[..100], &preimage_2[..100]]);
+        hasher.update_all(&[&preimage_1[100..200], &preimage_2[100..200]]);
+        hasher.update_all(&[&preimage_1[200..], &preimage_2[200..]]);
+        let digests = hasher.finalize_all();
+
+        // Hash the preimages individually with sapling's Pedersen hash.
+        let params = JubjubBls12::new_with_n_segments_and_window_size(10, 1, None);
+
+        let preimage_1_bits = BitVec::<bitvec::LittleEndian, u8>::from(preimage_1.as_slice());
+        let expected_digest_1 = pedersen_hash::<Bls12, _>(
+            Personalization::None,
+            preimage_1_bits.iter().take(8 * preimage_byte_len),
+            &params,
+        )
+        .into_xy()
+        .0;
+        assert_eq!(digests[0], expected_digest_1);
+
+        let preimage_2_bits = BitVec::<bitvec::LittleEndian, u8>::from(preimage_2.as_slice());
+        let expected_digest_2 = pedersen_hash::<Bls12, _>(
+            Personalization::None,
+            preimage_2_bits.iter().take(8 * preimage_byte_len),
+            &params,
+        )
+        .into_xy()
+        .0;
+        assert_eq!(digests[1], expected_digest_2);
+    }
+
+    // Asserts that updating `PedersenFunction` with any number of bytes results in the correct
+    // preimage.
+    #[test]
+    fn test_updateable_pedersen_hash_update_lengths() {
+        // The preimage length that we will test against is 210 bytes. This length is chosen because
+        // it is the summation of the integers 0..=20: 0 + 1 + 2 + ... + 20 = 210. Using a preimage
+        // length of 210 bytes allows us to do 21 updates of the hasher, each containing a unique
+        // number of bytes from the preimage (update lengths: 0, 1, 2, ..., 20 bytes); note that the
+        // first hasher update of zero bytes does nothing.
+        let n_updates = 20;
+        let preimage_byte_len = 210;
+
+        let mut rng = thread_rng();
+        let preimage: Vec<u8> = (0..preimage_byte_len).map(|_| rng.gen()).collect();
+
+        // Hash with `PedersenFunction`, updating it with 21 different sized subsets of the
+        // preimage.
+        let mut hasher = PedersenFunction::new_batched(1);
+        let mut n_bytes_hashed = 0;
+        for update_len in 0..=n_updates {
+            let update_bytes = &preimage[n_bytes_hashed..n_bytes_hashed + update_len];
+            hasher.update_all(&[update_bytes]);
+            n_bytes_hashed += update_len;
+        }
+        let digest = hasher.finalize_all()[0];
+
+        // Hash with sapling's Pedersen hash function.
+        let params = JubjubBls12::new_with_n_segments_and_window_size(9, 1, None);
+        let bits = BitVec::<bitvec::LittleEndian, u8>::from(preimage.as_slice());
+        let expected_digest = pedersen_hash::<Bls12, _>(
+            Personalization::None,
+            bits.iter().take(8 * preimage_byte_len),
+            &params,
+        )
+        .into_xy()
+        .0;
+
+        assert_eq!(digest, expected_digest);
     }
 }

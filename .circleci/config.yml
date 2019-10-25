@@ -48,7 +48,7 @@ jobs:
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (stable)
-          command: cargo +stable test --verbose --all
+          command: cargo +stable test --verbose --all -- --test-threads=1
           no_output_timeout: 15m
       - run:
           name: Prune the output files
@@ -77,7 +77,7 @@ jobs:
       - run:
           name: Test (stable) in release profile
           command: |
-            cargo +stable test --verbose --release --all
+            cargo +stable test --verbose --release --all -- --test-threads=1
             RUSTFLAGS="-D warnings" cargo +stable build --examples --release --all
   test_mem_trees:
     docker:
@@ -95,7 +95,7 @@ jobs:
       - run:
           name: Test (nightly) mem-trees feature
           command: |
-            cargo +$(cat rust-toolchain) test --verbose --release -p storage-proofs --features mem-trees -Z package-features
+            cargo +$(cat rust-toolchain) test --verbose --release -p storage-proofs --features mem-trees -Z package-features -- --test-threads=1
           environment:
             FIL_PROOFS_REPLICATED_TREES_DIR: replicated-disk-trees
 
@@ -148,7 +148,7 @@ jobs:
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (nightly)
-          command: cargo +$(cat rust-toolchain) test --verbose --all
+          command: cargo +$(cat rust-toolchain) test --verbose --all -- --test-threads=1
           no_output_timeout: 15m
 
   bench_nightly:
