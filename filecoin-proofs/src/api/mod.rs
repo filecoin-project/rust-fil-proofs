@@ -18,7 +18,7 @@ use crate::constants::{
 use crate::error;
 use crate::fr32::{write_padded, write_unpadded};
 use crate::parameters::public_params;
-use crate::pieces::get_aligned_source;
+use crate::pieces::{get_piece_alignment, sum_piece_bytes_with_alignment};
 use crate::types::{
     Commitment, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, ProverId, Ticket,
     UnpaddedByteIndex, UnpaddedBytesAmount,
@@ -77,37 +77,29 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     Ok(UnpaddedBytesAmount(written as u64))
 }
 
-// Takes a piece and the size of the piece and returns the comm_p.
+// Takes a piece and the size of it, and generates the commitment for it.
 pub fn generate_piece_commitment<T: std::io::Read>(
     unpadded_piece_file: T,
     unpadded_piece_size: UnpaddedBytesAmount,
 ) -> error::Result<PieceInfo> {
     let mut padded_piece_file = tempfile()?;
-    let unpadded_piece_size_with_alignment = add_piece(
+    add_piece(
         unpadded_piece_file,
         &mut padded_piece_file,
         unpadded_piece_size,
         &[],
-    )?;
-
-    let _ = padded_piece_file.seek(SeekFrom::Start(0))?;
-
-    let commitment =
-        generate_piece_commitment_bytes_from_source::<DefaultPieceHasher>(&mut padded_piece_file)?;
-
-    Ok(PieceInfo {
-        commitment,
-        size: unpadded_piece_size_with_alignment,
-    })
+    )
 }
 
-/// Write a piece. Returns the unpadded, but aligned size of the piece.
+/// Write a piece. Returns the `PieceInfo` for this piece.
+///
+/// The `target` should always be a `BufWriter` or other type of buffered writer.
 pub fn add_piece<R, W>(
     source: R,
-    target: W,
+    mut target: W,
     piece_size: UnpaddedBytesAmount,
     piece_lengths: &[UnpaddedBytesAmount],
-) -> error::Result<UnpaddedBytesAmount>
+) -> error::Result<PieceInfo>
 where
     R: Read,
     W: Read + Write + Seek,
@@ -124,15 +116,59 @@ where
         padded_piece_size,
     );
 
-    let (bytes_with_alignment, aligned_source) =
-        get_aligned_source(source, &piece_lengths, piece_size);
-    let written = write_padded(aligned_source, target)?;
+    // Calculate alignment.
+    let written_bytes = sum_piece_bytes_with_alignment(piece_lengths);
+    let piece_alignment = get_piece_alignment(written_bytes, piece_size);
+    let bytes_with_alignment = piece_alignment.sum(piece_size);
+
+    let mut written = 0;
+
+    // 1. write left alignment
+    {
+        let left_bytes: PaddedBytesAmount = piece_alignment.left_bytes.into();
+        for _ in 0..u64::from(left_bytes) as usize {
+            target.write_all(&[0])?;
+        }
+        written += u64::from(piece_alignment.left_bytes) as usize;
+    }
+
+    // 2. write actual data
+
+    // Save the current position of the target.
+    let start = target.seek(SeekFrom::Current(0))?;
+    let piece_written = write_padded(source, &mut target)?;
+    written += piece_written;
+
+    // 3. calculate piece commitemnt over the data
+
+    // Ensure we build the piece over the data we have actually written.
+    let piece_end = target.seek(SeekFrom::Current(0))?;
+    let _ = target.seek(SeekFrom::Start(start))?;
+    let commitment =
+        generate_piece_commitment_bytes_from_source::<DefaultPieceHasher>(&mut target)?;
+    // restore position
+    let _ = target.seek(SeekFrom::Start(piece_end))?;
+
+    // 4. write right alignment
+    {
+        let right_bytes: PaddedBytesAmount = piece_alignment.right_bytes.into();
+        for _ in 0..u64::from(right_bytes) as usize {
+            target.write_all(&[0])?;
+        }
+        written += u64::from(piece_alignment.right_bytes) as usize;
+    }
+
     ensure!(
         u64::from(bytes_with_alignment) == written as u64,
-        "Invalid write"
+        "Invalid write: {} != {}",
+        u64::from(bytes_with_alignment),
+        written,
     );
 
-    Ok(bytes_with_alignment)
+    Ok(PieceInfo {
+        commitment,
+        size: piece_size,
+    })
 }
 
 #[cfg(test)]
@@ -265,12 +301,8 @@ mod tests {
         piece_file.as_file_mut().sync_all()?;
         piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
 
-        let piece_info =
-            generate_piece_commitment(piece_file.as_file_mut(), number_of_bytes_in_piece)?;
-        piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
-
         let mut staged_sector_file = NamedTempFile::new()?;
-        add_piece(
+        let piece_info = add_piece(
             &mut piece_file,
             &mut staged_sector_file,
             number_of_bytes_in_piece,

@@ -63,7 +63,7 @@ pub fn verify_pieces(
         stack.shift_reduce(zero_padding(stack.peek().size));
     }
 
-    assert_eq!(stack.len(), 1);
+    assert_eq!(stack.len(), 1, "Failed to reduce stack");
 
     let comm_d_calculated = stack.pop().commitment;
 
@@ -264,8 +264,7 @@ pub fn get_aligned_source<T: Read>(
 ) -> (UnpaddedBytesAmount, impl Read) {
     let written_bytes = sum_piece_bytes_with_alignment(pieces);
     let piece_alignment = get_piece_alignment(written_bytes, piece_bytes);
-    let expected_num_bytes_written =
-        piece_alignment.left_bytes + piece_bytes + piece_alignment.right_bytes;
+    let expected_num_bytes_written = piece_alignment.sum(piece_bytes);
 
     (
         expected_num_bytes_written,
@@ -282,8 +281,6 @@ mod tests {
     use rand::{Rng, SeedableRng, XorShiftRng};
     use storage_proofs::drgraph::{new_seed, Graph, BASE_DEGREE};
     use storage_proofs::stacked::{StackedBucketGraph, EXP_DEGREE};
-
-    use std::io::{Seek, SeekFrom};
 
     #[test]
     fn test_get_piece_alignment() {
@@ -640,10 +637,7 @@ mod tests {
 
             let mut piece_file = std::io::Cursor::new(&mut piece_bytes);
 
-            let piece_info = crate::api::generate_piece_commitment(&mut piece_file, *piece_size)?;
-            piece_file.seek(SeekFrom::Start(0))?;
-
-            crate::api::add_piece(
+            let piece_info = crate::api::add_piece(
                 &mut piece_file,
                 &mut staged_sector_io,
                 *piece_size,

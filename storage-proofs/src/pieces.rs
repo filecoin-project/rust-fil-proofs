@@ -77,14 +77,9 @@ pub fn generate_piece_commitment_bytes_from_source<H: Hasher>(
 
     let mut buf = [0; NODE_SIZE];
 
-    loop {
-        let bytes_read = source.read(&mut buf)?;
-        total_bytes_read += bytes_read;
-        if bytes_read > 0 {
-            domain_data.push(<H::Domain as Domain>::try_from_bytes(&buf[..bytes_read])?);
-        } else {
-            break;
-        }
+    while let Ok(_) = source.read_exact(&mut buf) {
+        total_bytes_read += NODE_SIZE;
+        domain_data.push(<H::Domain as Domain>::try_from_bytes(&buf)?);
     }
 
     if total_bytes_read < NODE_SIZE {

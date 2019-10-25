@@ -179,7 +179,6 @@ impl Domain for Blake2sDomain {
 
     fn try_from_bytes(raw: &[u8]) -> Result<Self> {
         if raw.len() != 32 || u32::from(raw[31]) > Fr::NUM_BITS {
-            println!("{:?}", raw[31]);
             return Err(Error::InvalidInputSize);
         }
 
