@@ -7,6 +7,7 @@ mod column_proof;
 mod encoding_proof;
 mod graph;
 pub(crate) mod hash;
+mod labeling_proof;
 mod params;
 mod porep;
 mod proof;
@@ -22,3 +23,4 @@ pub use self::params::{
     ReplicaColumnProof, SetupParams, Tau, TemporaryAux,
 };
 pub use self::proof::StackedDrg;
+pub use labeling_proof::LabelingProof;

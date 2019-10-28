@@ -29,7 +29,7 @@ impl LayerChallenges {
         assert!(layer <= self.layers, "Layer too large");
 
         // TODO: proper tapering
-        if layer == 1 {
+        if layer == self.layers {
             self.max_count
         } else {
             self.max_count / 2

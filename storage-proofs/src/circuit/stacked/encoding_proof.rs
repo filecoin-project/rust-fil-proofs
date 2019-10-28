@@ -18,15 +18,10 @@ pub struct EncodingProof {
 
 impl EncodingProof {
     /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty<H: Hasher>(params: &PublicParams<H>, layer: usize) -> Self {
-        let degree = if layer == 1 {
-            params.graph.base_graph().degree()
-        } else {
-            params.graph.degree()
-        };
+    pub fn empty<H: Hasher>(params: &PublicParams<H>) -> Self {
         EncodingProof {
             node: None,
-            parents: vec![None; degree],
+            parents: vec![None; params.graph.degree()],
         }
     }
 
@@ -68,30 +63,7 @@ impl EncodingProof {
         )
     }
 
-    pub fn synthesize_key<CS: ConstraintSystem<Bls12>>(
-        self,
-        mut cs: CS,
-        params: &<Bls12 as JubjubEngine>::Params,
-        replica_id: &[Boolean],
-        exp_encoded_node: &num::AllocatedNum<Bls12>,
-    ) -> Result<(), SynthesisError> {
-        let EncodingProof { node, parents } = self;
-
-        let key = Self::create_key(
-            cs.namespace(|| "create_key"),
-            params,
-            replica_id,
-            node,
-            parents,
-        )?;
-
-        // enforce equality
-        constraint::equal(&mut cs, || "equality_key", &exp_encoded_node, &key);
-
-        Ok(())
-    }
-
-    pub fn synthesize_decoded<CS: ConstraintSystem<Bls12>>(
+    pub fn synthesize<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: CS,
         params: &<Bls12 as JubjubEngine>::Params,

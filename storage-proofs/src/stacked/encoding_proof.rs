@@ -44,16 +44,12 @@ impl<H: Hasher> EncodingProof<H> {
         &self,
         replica_id: &H::Domain,
         exp_encoded_node: &H::Domain,
-        decoded_node: Option<&G::Domain>,
+        decoded_node: &G::Domain,
     ) -> bool {
         let key = self.create_key(replica_id);
 
-        let encoded_node = if let Some(decoded_node) = decoded_node {
-            let fr: Fr = (*decoded_node).into();
-            encode(key, fr.into())
-        } else {
-            key
-        };
+        let fr: Fr = (*decoded_node).into();
+        let encoded_node = encode(key, fr.into());
 
         check_eq!(exp_encoded_node, &encoded_node);
 

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use merkletree::store::DiskStore;
@@ -12,8 +13,8 @@ use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::stacked::{
-    column::Column, column_proof::ColumnProof, encoding_proof::EncodingProof,
-    graph::StackedBucketGraph, hash::hash2, LayerChallenges,
+    column::Column, column_proof::ColumnProof, graph::StackedBucketGraph, hash::hash2,
+    EncodingProof, LabelingProof, LayerChallenges,
 };
 use crate::util::data_at_node;
 
@@ -141,11 +142,16 @@ pub struct Proof<H: Hasher, G: Hasher> {
     ))]
     pub replica_column_proofs: ReplicaColumnProof<H>,
     #[serde(bound(
+        serialize = "LabelingProof<H>: Serialize",
+        deserialize = "LabelingProof<H>: Deserialize<'de>"
+    ))]
+    /// Indexed by layer in 1..layers.
+    pub labeling_proofs: HashMap<usize, LabelingProof<H>>,
+    #[serde(bound(
         serialize = "EncodingProof<H>: Serialize",
         deserialize = "EncodingProof<H>: Deserialize<'de>"
     ))]
-    /// Indexed by layer in 1..layers.
-    pub encoding_proofs: Vec<EncodingProof<H>>,
+    pub encoding_proof: EncodingProof<H>,
 }
 
 impl<H: Hasher, G: Hasher> Proof<H, G> {
@@ -201,46 +207,43 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
 
         check!(self.verify_final_replica_layer(challenge));
 
-        check!(self.verify_encodings(replica_id, &pub_params.layer_challenges, challenge_index));
+        check!(self.verify_labels(replica_id, &pub_params.layer_challenges, challenge_index));
+
+        trace!("verify encoding");
+        check!(self.encoding_proof.verify::<G>(
+            replica_id,
+            self.comm_r_last_proof.leaf(),
+            self.comm_d_proofs.leaf()
+        ));
 
         true
     }
 
     /// Verify all encodings.
-    fn verify_encodings(
+    fn verify_labels(
         &self,
         replica_id: &H::Domain,
         layer_challenges: &LayerChallenges,
         challenge_index: usize,
     ) -> bool {
-        // Verify Encoding Layer 1..layers
+        // Verify Labels Layer 1..layers
         for layer in 1..=layer_challenges.layers() {
             let expect_challenge =
                 layer_challenges.include_challenge_at_layer(layer, challenge_index);
             trace!(
-                "verify encoding (layer: {} - expect_challenge: {})",
+                "verify labeling (layer: {} - expect_challenge: {})",
                 layer,
                 expect_challenge
             );
 
-            let (encoded_node, decoded_node) = if layer == layer_challenges.layers() {
-                (
-                    self.comm_r_last_proof.leaf(),
-                    Some(self.comm_d_proofs.leaf()),
-                )
-            } else {
-                (
-                    self.replica_column_proofs.c_x.get_node_at_layer(layer),
-                    None,
-                )
-            };
+            let labeled_node = self.replica_column_proofs.c_x.get_node_at_layer(layer);
 
             if expect_challenge {
-                check!(self.encoding_proofs.get(layer - 1).is_some());
-                let encoding_proof = &self.encoding_proofs[layer - 1];
-                check!(encoding_proof.verify::<G>(replica_id, encoded_node, decoded_node));
+                check!(self.labeling_proofs.contains_key(&layer));
+                let labeling_proof = &self.labeling_proofs.get(&layer).unwrap();
+                check!(labeling_proof.verify(replica_id, labeled_node));
             } else {
-                check!(self.encoding_proofs.get(layer - 1).is_none());
+                check!(self.labeling_proofs.get(&layer).is_none());
             }
         }
 
@@ -327,49 +330,49 @@ pub struct PersistentAux<D> {
 #[derive(Debug)]
 pub struct TemporaryAux<H: Hasher, G: Hasher> {
     /// The encoded nodes for 1..layers.
-    pub encodings: Encodings<H>,
+    pub labels: Labels<H>,
     pub tree_d: Tree<G>,
     pub tree_r_last: Tree<H>,
     pub tree_c: Tree<H>,
 }
 
 impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
-    pub fn encoding_at_layer(&self, layer: usize) -> &DiskStore<H::Domain> {
-        self.encodings.encoding_at_layer(layer)
+    pub fn labels_for_layer(&self, layer: usize) -> &DiskStore<H::Domain> {
+        self.labels.labels_for_layer(layer)
     }
 
-    pub fn domain_node_at_layer(&self, layer: usize, node_index: u32) -> Result<H::Domain> {
-        Ok(self.encoding_at_layer(layer).read_at(node_index as usize))
+    pub fn domain_node_at_layer(&self, layer: usize, node_index: u32) -> H::Domain {
+        self.labels_for_layer(layer).read_at(node_index as usize)
     }
 
     pub fn column(&self, column_index: u32) -> Result<Column<H>> {
-        self.encodings.column(column_index)
+        self.labels.column(column_index)
     }
 }
 
 #[derive(Debug)]
-pub struct Encodings<H: Hasher> {
-    encodings: Vec<DiskStore<H::Domain>>,
+pub struct Labels<H: Hasher> {
+    labels: Vec<DiskStore<H::Domain>>,
     _h: PhantomData<H>,
 }
 
-impl<H: Hasher> Encodings<H> {
-    pub fn new(encodings: Vec<DiskStore<H::Domain>>) -> Self {
-        Encodings {
-            encodings,
+impl<H: Hasher> Labels<H> {
+    pub fn new(labels: Vec<DiskStore<H::Domain>>) -> Self {
+        Labels {
+            labels,
             _h: PhantomData,
         }
     }
 
     pub fn len(&self) -> usize {
-        self.encodings.len()
+        self.labels.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.encodings.is_empty()
+        self.labels.is_empty()
     }
 
-    pub fn encoding_at_layer(&self, layer: usize) -> &DiskStore<H::Domain> {
+    pub fn labels_for_layer(&self, layer: usize) -> &DiskStore<H::Domain> {
         assert!(layer != 0, "Layer cannot be 0");
         assert!(
             layer <= self.layers(),
@@ -379,25 +382,25 @@ impl<H: Hasher> Encodings<H> {
         );
 
         let row_index = layer - 1;
-        &self.encodings[row_index]
+        &self.labels[row_index]
     }
 
-    /// Returns encoding on the last layer.
-    pub fn encoding_at_last_layer(&self) -> &DiskStore<H::Domain> {
-        &self.encodings[self.encodings.len() - 1]
+    /// Returns the labels on the last layer.
+    pub fn labels_for_last_layer(&self) -> &DiskStore<H::Domain> {
+        &self.labels[self.labels.len() - 1]
     }
 
     /// How many layers are available.
     fn layers(&self) -> usize {
-        self.encodings.len()
+        self.labels.len()
     }
 
     /// Build the column for the given node.
     pub fn column(&self, node: u32) -> Result<Column<H>> {
         let rows = self
-            .encodings
+            .labels
             .iter()
-            .map(|encoding| encoding.read_at(node as usize))
+            .map(|labels| labels.read_at(node as usize))
             .collect();
 
         Ok(Column::new(node, rows))
