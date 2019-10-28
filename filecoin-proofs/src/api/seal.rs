@@ -38,8 +38,24 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
     ticket: Ticket,
     piece_infos: &[PieceInfo],
 ) -> error::Result<SealPreCommitOutput> {
-    info!("seal_pre_commit:start");
+    info!("seal_pre_commit: start");
     let sector_bytes = usize::from(PaddedBytesAmount::from(porep_config));
+
+    if let Err(err) = std::fs::metadata(&in_path) {
+        return Err(format_err!(
+            "could not read in_path={:?} (err = {:?})",
+            in_path.as_ref(),
+            err
+        ));
+    }
+
+    if let Err(ref err) = std::fs::metadata(&out_path) {
+        return Err(format_err!(
+            "could not read out_path={:?} (err = {:?})",
+            in_path.as_ref(),
+            err
+        ));
+    }
 
     // Copy unsealed data to output location, where it will be sealed in place.
     fs::copy(&in_path, &out_path)?;
@@ -95,7 +111,7 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
 
     let comm_r = commitment_from_fr::<Bls12>(tau.comm_r.into());
 
-    info!("seal_pre_commit:end");
+    info!("seal_pre_commit: end");
 
     Ok(SealPreCommitOutput {
         comm_r,
