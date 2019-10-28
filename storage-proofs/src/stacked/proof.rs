@@ -1,15 +1,16 @@
 use std::marker::PhantomData;
 
-use blake2s_simd::Params as Blake2s;
 use merkletree::merkle::FromIndexedParallelIterator;
 use merkletree::store::DiskStore;
 use paired::bls12_381::Fr;
 use rayon::prelude::*;
 
 use crate::drgraph::Graph;
+use crate::drgraph::BASE_DEGREE;
 use crate::error::Result;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree, Store};
+use crate::stacked::EXP_DEGREE;
 use crate::stacked::{
     challenges::LayerChallenges,
     column::Column,
@@ -28,6 +29,12 @@ use crate::util::{data_at_node, data_at_node_offset, NODE_SIZE};
 pub struct StackedDrg<'a, H: 'a + Hasher, G: 'a + Hasher> {
     _a: PhantomData<&'a H>,
     _b: PhantomData<&'a G>,
+}
+
+macro_rules! node_at {
+    ($source:expr, $parent:expr) => {
+        data_at_node($source, $parent as usize).expect("invalid node");
+    };
 }
 
 impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
@@ -246,17 +253,11 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let mut encodings: Vec<DiskStore<H::Domain>> = Vec::with_capacity(layers);
 
         let layer_size = graph.size() * NODE_SIZE;
-        let mut parents = vec![0; graph.degree()];
+        let mut parents = [0u32; BASE_DEGREE + EXP_DEGREE];
         let mut encoding = vec![0u8; layer_size];
-
-        use crate::crypto::pedersen::Hasher as PedersenHasher;
-
         let mut exp_parents_data: Option<Vec<u8>> = None;
 
-        // setup hasher to reuse
-        let mut base_hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
-        // hash replica id
-        base_hasher.update(AsRef::<[u8]>::as_ref(replica_id));
+        use crate::crypto::pedersen::Hasher as PedersenHasher;
 
         enum Message {
             Init(usize, [u8; 32]),
@@ -306,52 +307,91 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             None
         };
 
+        // base parents
+        let mut base_parent0 = [0u8; 32];
+        let mut base_parent1 = [0u8; 32];
+        let mut base_parent2 = [0u8; 32];
+        let mut base_parent3 = [0u8; 32];
+        let mut base_parent4 = [0u8; 32];
+        let mut base_parent5 = [0u8; 32];
+
+        // exp parents
+        let mut exp_parent0 = [0u8; 32];
+        let mut exp_parent1 = [0u8; 32];
+        let mut exp_parent2 = [0u8; 32];
+        let mut exp_parent3 = [0u8; 32];
+        let mut exp_parent4 = [0u8; 32];
+        let mut exp_parent5 = [0u8; 32];
+        let mut exp_parent6 = [0u8; 32];
+        let mut exp_parent7 = [0u8; 32];
+
         for i in 0..layers {
             let layer = i + 1;
             info!("generating layer: {}", layer);
 
             for node in 0..graph.size() {
-                graph.parents(node, &mut parents);
-
                 // CreateKey inlined, to avoid borrow issues
 
-                let mut hasher = base_hasher.clone();
+                graph.parents(node, &mut parents);
 
                 // hash node id
-                let node_arr = (node as u64).to_le_bytes();
-                hasher.update(&node_arr);
+                // let node_arr = (node as u64).to_le_bytes();
+                // TODO: fix this
 
                 // hash parents for all non 0 nodes
                 if node > 0 {
-                    let base_parents_count = graph.base_graph().degree();
-
                     // Base parents
-                    for parent in parents.iter().take(base_parents_count) {
-                        let buf = data_at_node(&encoding, *parent as usize).expect("invalid node");
-                        hasher.update(buf);
-                    }
+                    base_parent0.copy_from_slice(node_at!(&encoding, parents[0]));
+                    base_parent1.copy_from_slice(node_at!(&encoding, parents[1]));
+                    base_parent2.copy_from_slice(node_at!(&encoding, parents[2]));
+                    base_parent3.copy_from_slice(node_at!(&encoding, parents[3]));
+                    base_parent4.copy_from_slice(node_at!(&encoding, parents[4]));
+                    base_parent5.copy_from_slice(node_at!(&encoding, parents[5]));
 
                     // Expander parents
                     // This will happen for all layers > 1
-                    if let Some(ref parents_data) = exp_parents_data {
-                        for parent in parents.iter().skip(base_parents_count) {
-                            let buf =
-                                data_at_node(parents_data, *parent as usize).expect("invalid node");
-                            hasher.update(&buf);
-                        }
+                    if let Some(ref pd) = exp_parents_data {
+                        exp_parent0.copy_from_slice(node_at!(&pd, parents[6]));
+                        exp_parent1.copy_from_slice(node_at!(&pd, parents[7]));
+                        exp_parent2.copy_from_slice(node_at!(&pd, parents[8]));
+                        exp_parent3.copy_from_slice(node_at!(&pd, parents[9]));
+                        exp_parent4.copy_from_slice(node_at!(&pd, parents[10]));
+                        exp_parent5.copy_from_slice(node_at!(&pd, parents[11]));
+                        exp_parent6.copy_from_slice(node_at!(&pd, parents[12]));
+                        exp_parent7.copy_from_slice(node_at!(&pd, parents[13]));
                     }
                 }
 
                 let start = data_at_node_offset(node);
                 let end = start + NODE_SIZE;
 
-                // finalize the key
-                let mut key = *hasher.finalize().as_array();
+                // hash it
+                let to_hash: [&[u8]; 14] = [
+                    AsRef::<[u8]>::as_ref(replica_id),
+                    // TODO: insert node
+                    &base_parent0,
+                    &base_parent1,
+                    &base_parent2,
+                    &base_parent3,
+                    &base_parent4,
+                    &base_parent5,
+                    &exp_parent0,
+                    &exp_parent1,
+                    &exp_parent2,
+                    &exp_parent3,
+                    &exp_parent4,
+                    &exp_parent5,
+                    &exp_parent6,
+                    // TODO: add &exp_parent7,
+                ];
+
+                let mut key = fil_blake2s::hash_nodes_14(&to_hash);
+
                 // strip last two bits, to ensure result is in Fr.
                 key[31] &= 0b0011_1111;
 
-                // store the newly generated key
-                encoding[start..end].copy_from_slice(&key[..]);
+                // store encoding
+                encoding[start..end].copy_from_slice(&key);
 
                 if with_hashing {
                     let sender_index = node / chunk_len;
