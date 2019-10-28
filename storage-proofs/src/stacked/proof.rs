@@ -325,6 +325,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let mut exp_parent6 = [0u8; 32];
         let mut exp_parent7 = [0u8; 32];
 
+        // node
+        let mut node_arr = [0u8; 32];
+
         for i in 0..layers {
             let layer = i + 1;
             info!("generating layer: {}", layer);
@@ -332,11 +335,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             for node in 0..graph.size() {
                 // CreateKey inlined, to avoid borrow issues
 
+                // node id
+                node_arr[..8].copy_from_slice(&(node as u64).to_le_bytes());
                 graph.parents(node, &mut parents);
-
-                // hash node id
-                // let node_arr = (node as u64).to_le_bytes();
-                // TODO: fix this
 
                 // hash parents for all non 0 nodes
                 if node > 0 {
@@ -369,6 +370,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 let to_hash: [&[u8]; 14] = [
                     AsRef::<[u8]>::as_ref(replica_id),
                     // TODO: insert node
+                    // &node_arr,
                     &base_parent0,
                     &base_parent1,
                     &base_parent2,
@@ -382,7 +384,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     &exp_parent4,
                     &exp_parent5,
                     &exp_parent6,
-                    // TODO: add &exp_parent7,
+                    // TODO: add last parent
+                    // &exp_parent7,
                 ];
 
                 let mut key = fil_blake2s::hash_nodes_14(&to_hash);
