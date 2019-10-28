@@ -589,15 +589,20 @@ pub fn extract_bits_and_shift(
     let input = &input[..BitByte::from_bits(extraction_offset + num_bits).bytes_needed()];
 
     // (2).
-    let mut output = if new_offset < extraction_offset {
-        // Shift right.
-        shift_bits(input, extraction_offset - new_offset, false)
-    } else if new_offset > extraction_offset {
-        // Shift left.
-        shift_bits(input, new_offset - extraction_offset, true)
-    } else {
-        // No shift needed, take the `input` as is.
-        input.to_vec()
+    use std::cmp::Ordering;
+    let mut output = match new_offset.cmp(&extraction_offset) {
+        Ordering::Less => {
+            // Shift right.
+            shift_bits(input, extraction_offset - new_offset, false)
+        }
+        Ordering::Greater => {
+            // Shift left.
+            shift_bits(input, new_offset - extraction_offset, true)
+        }
+        Ordering::Equal => {
+            // No shift needed, take the `input` as is.
+            input.to_vec()
+        }
     };
 
     // After the shift we may not need the last byte of the `output` (either

@@ -178,7 +178,7 @@ impl<H: Hasher> InclusionPath<H> {
     ) -> Result<(), SynthesisError> {
         let InclusionPath { auth_path, .. } = self;
 
-        let root = Root::from_allocated::<CS>(root.clone());
+        let root = Root::from_allocated::<CS>(root);
         let value = Root::from_allocated::<CS>(leaf);
         PoRCircuit::<Bls12, H>::synthesize(cs, params, value, auth_path, root, true)
     }

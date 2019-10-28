@@ -40,7 +40,7 @@ blake2b_simd = "0.5"
 blake2s_simd = "0.5"
 toml = "0.5"
 ff = "0.4.0"
-bellperson = "0.3"
+bellperson = "0.3.3"
 paired = { version = "0.15.1", features = ["serde"] }
 fil-sapling-crypto = "0.1.2"
 serde_json = "1.0"
@@ -51,7 +51,7 @@ crossbeam = "0.7.2"
 num_cpus = "1.10.1"
 
 [features]
-default = []
+default = ["gpu"]
 simd = []
 asm = ["sha2/sha2-asm"]
 mem-trees = []

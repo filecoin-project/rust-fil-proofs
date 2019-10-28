@@ -399,7 +399,7 @@ impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
     {
         let name = name_fn().into();
         let path = compute_path(&self.current_namespace, &name);
-        self.set_named_obj(path.clone(), NamedObject::Namespace);
+        self.set_named_obj(path, NamedObject::Namespace);
         self.current_namespace.push(name);
     }
 

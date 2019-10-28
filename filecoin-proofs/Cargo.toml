@@ -28,7 +28,7 @@ regex = "1"
 ff = "0.4.0"
 blake2b_simd = "0.5"
 phase21 = "0.3"
-bellperson = "0.3"
+bellperson = "0.3.3"
 paired = "0.15"
 fil-sapling-crypto = "0.1.2"
 clap = "2"
@@ -55,7 +55,7 @@ pretty_env_logger = "0.3.1"
 pretty_assertions = "0.6.1"
 
 [features]
-default = []
+default = ["gpu"]
 cpu-profile = []
 heap-profile = ["gperftools/heap"]
 simd = ["storage-proofs/simd"]

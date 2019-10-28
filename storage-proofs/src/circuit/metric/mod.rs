@@ -202,7 +202,7 @@ impl<E: Engine> ConstraintSystem<E> for MetricCS<E> {
         AR: Into<String>,
     {
         let path = compute_path(&self.current_namespace, &annotation().into());
-        self.aux.push(path.clone());
+        self.aux.push(path);
 
         Ok(Variable::new_unchecked(Index::Aux(self.aux.len() - 1)))
     }
@@ -214,7 +214,7 @@ impl<E: Engine> ConstraintSystem<E> for MetricCS<E> {
         AR: Into<String>,
     {
         let path = compute_path(&self.current_namespace, &annotation().into());
-        self.inputs.push(path.clone());
+        self.inputs.push(path);
 
         Ok(Variable::new_unchecked(Index::Input(self.inputs.len() - 1)))
     }
@@ -245,7 +245,7 @@ impl<E: Engine> ConstraintSystem<E> for MetricCS<E> {
     {
         let name = name_fn().into();
         let path = compute_path(&self.current_namespace, &name);
-        self.set_named_obj(path.clone(), NamedObject::Namespace);
+        self.set_named_obj(path, NamedObject::Namespace);
         self.current_namespace.push(name);
     }
 
