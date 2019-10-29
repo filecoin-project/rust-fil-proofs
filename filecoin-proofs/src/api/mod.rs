@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
+use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
 use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::hasher::Hasher;
 use storage_proofs::porep::PoRep;
@@ -39,6 +40,7 @@ use storage_proofs::pieces::generate_piece_commitment_bytes_from_source;
 #[allow(clippy::too_many_arguments)]
 pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     porep_config: PoRepConfig,
+    cache_path: T,
     sealed_path: T,
     output_path: T,
     prover_id: ProverId,
@@ -62,6 +64,15 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     let f_out = File::create(output_path)?;
     let mut buf_writer = BufWriter::new(f_out);
 
+    // MT for original data is always named tree-d, and it will be
+    // referenced later in the process as such.
+    let cache_dir = cache_path.as_ref().to_str().unwrap();
+    let config = StoreConfig::new(
+        cache_dir.to_string(),
+        "tree-d".to_string(),
+        DEFAULT_CACHED_ABOVE_BASE_LAYER,
+    );
+
     let unsealed = StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::extract_all(
         &public_params(
             PaddedBytesAmount::from(porep_config),
@@ -69,6 +80,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
         ),
         &replica_id,
         &data,
+        Some(config.clone()),
     )?;
 
     let written = write_unpadded(&unsealed, &mut buf_writer, offset.into(), num_bytes.into())?;

@@ -2,6 +2,7 @@ use std::fs::{self, OpenOptions};
 use std::path::Path;
 
 use memmap::MmapOptions;
+use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
 use paired::bls12_381::{Bls12, Fr};
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::stacked::StackedCompound;
@@ -11,7 +12,7 @@ use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::merkle::create_merkle_tree;
 use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
-use storage_proofs::stacked::{self, generate_replica_id, ChallengeRequirements, StackedDrg, Tau};
+use storage_proofs::stacked::{self, generate_replica_id, ChallengeRequirements, StackedDrg, Tau, TemporaryAuxCache};
 
 use crate::api::util::{as_safe_commitment, commitment_from_fr};
 use crate::caches::{get_stacked_params, get_stacked_verifying_key};
@@ -29,7 +30,7 @@ use crate::types::{
 #[allow(clippy::too_many_arguments)]
 pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
     porep_config: PoRepConfig,
-    _cache_path: R,
+    cache_path: R,
     in_path: T,
     out_path: S,
     prover_id: ProverId,
@@ -79,8 +80,18 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
         _,
     >>::setup(&compound_setup_params)?;
 
+    // MT for original data is always named tree-d, and it will be
+    // referenced later in the process as such.
+    let cache_dir = cache_path.as_ref().to_str().unwrap();
+    let config = StoreConfig::new(
+        cache_dir.to_string(),
+        "tree-d".to_string(),
+        DEFAULT_CACHED_ABOVE_BASE_LAYER,
+    );
+
     info!("building merkle tree for the original data");
     let data_tree = create_merkle_tree::<DefaultPieceHasher>(
+        Some(config.clone()),
         compound_public_params.vanilla_params.graph.size(),
         &data,
     )?;
@@ -105,6 +116,7 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
         &replica_id,
         &mut data,
         Some(data_tree),
+        Some(config),
     )?;
 
     let comm_r = commitment_from_fr::<Bls12>(tau.comm_r.into());
@@ -144,6 +156,11 @@ pub fn seal_commit<T: AsRef<Path>>(
         verify_pieces(&comm_d, piece_infos, porep_config.into())?,
         "pieces and comm_d do not match"
     );
+
+    // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
+    // elements based on the configs stored in TemporaryAux.
+    let t_aux: TemporaryAuxCache<DefaultTreeHasher, DefaultPieceHasher> =
+        TemporaryAuxCache::new(&t_aux);
 
     let comm_r_safe = as_safe_commitment(&comm_r, "comm_r")?;
     let comm_d_safe = <DefaultPieceHasher as Hasher>::Domain::try_from_bytes(&comm_d)?;

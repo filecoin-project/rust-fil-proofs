@@ -8,6 +8,7 @@ use failure::bail;
 use log::info;
 use memmap::MmapMut;
 use memmap::MmapOptions;
+use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
 use paired::bls12_381::Bls12;
 use rand::Rng;
 
@@ -21,6 +22,7 @@ use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::stacked::{
     self, ChallengeRequirements, LayerChallenges, StackedDrg, EXP_DEGREE,
+    TemporaryAuxCache
 };
 
 fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> Result<MmapMut, failure::Error> {
@@ -116,6 +118,16 @@ where
             ..
         } = &params;
 
+        // MT for original data is always named tree-d, and it will be
+        // referenced later in the process as such.
+        let cache_dir = tempfile::tempdir().unwrap();
+        let cache_path = cache_dir.as_ref().to_str().unwrap();
+        let config = StoreConfig::new(
+            cache_path.to_string(),
+            "tree-d".to_string(),
+            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+        );
+
         let mut total_proving_wall_time = Duration::new(0, 0);
         let mut total_proving_cpu_time = Duration::new(0, 0);
 
@@ -144,8 +156,13 @@ where
                 wall_time: replication_wall_time,
                 return_value: (pub_inputs, priv_inputs),
             } = measure(|| {
+<<<<<<< HEAD
                 let (tau, (p_aux, t_aux)) =
                     StackedDrg::<H, Sha256Hasher>::replicate(&pp, &replica_id, &mut data, None)?;
+=======
+                let (tau, (p_aux, t_aux)) = StackedDrg::<H, Blake2sHasher>::replicate(
+                    &pp, &replica_id, &mut data, None, Some(config.clone()))?;
+>>>>>>> Add DiskStore persistence of layer and merkle tree data across the
 
                 let pb = stacked::PublicInputs::<H::Domain, <Sha256Hasher as Hasher>::Domain> {
                     replica_id,
@@ -153,6 +170,10 @@ where
                     tau: Some(tau),
                     k: Some(0),
                 };
+
+                // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
+                // elements based on the configs stored in TemporaryAux.
+                let t_aux = TemporaryAuxCache::new(&t_aux);
 
                 let pv = stacked::PrivateInputs { p_aux, t_aux };
 
@@ -264,7 +285,7 @@ where
         if let Some(data) = d {
             if *extract {
                 let m = measure(|| {
-                    StackedDrg::<H, Sha256Hasher>::extract_all(&pp, &replica_id, &data)
+                    StackedDrg::<H, Sha256Hasher>::extract_all(&pp, &replica_id, &data, Some(config.clone()))
                         .map_err(|err| err.into())
                 })?;
 

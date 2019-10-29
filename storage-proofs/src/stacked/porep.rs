@@ -6,6 +6,8 @@ use crate::stacked::{
     proof::StackedDrg,
 };
 
+use merkletree::store::StoreConfig;
+
 impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for StackedDrg<'a, H, G> {
     type Tau = Tau<<H as Hasher>::Domain, <G as Hasher>::Domain>;
     type ProverAux = (PersistentAux<H::Domain>, TemporaryAux<H, G>);
@@ -15,6 +17,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
         replica_id: &H::Domain,
         data: &mut [u8],
         data_tree: Option<Tree<G>>,
+        config: Option<StoreConfig>,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let (tau, p_aux, t_aux) = Self::transform_and_replicate_layers(
             &pp.graph,
@@ -22,6 +25,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
             replica_id,
             data,
             data_tree,
+            config,
         )?;
 
         Ok((tau, (p_aux, t_aux)))
@@ -31,6 +35,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
         pp: &'b PublicParams<H>,
         replica_id: &'b <H as Hasher>::Domain,
         data: &'b [u8],
+        config: Option<StoreConfig>,
     ) -> Result<Vec<u8>> {
         let mut data = data.to_vec();
 
@@ -39,6 +44,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
             &pp.layer_challenges,
             replica_id,
             &mut data,
+            config,
         )?;
 
         Ok(data)

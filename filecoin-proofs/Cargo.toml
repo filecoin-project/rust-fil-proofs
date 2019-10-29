@@ -42,6 +42,8 @@ blake2s_simd = "0.5.8"
 hex = "0.4.0"
 tee = "0.1.0"
 os_pipe = "0.9.1"
+# FIXME: This should be an udpated release version.
+merkletree = { git = "https://github.com/filecoin-project/merkle_light", rev = "re-org" }
 
 [dependencies.reqwest]
 version = "0.9"
