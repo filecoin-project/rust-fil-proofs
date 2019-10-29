@@ -32,7 +32,9 @@ impl<H: Hasher> EncodingProof<H> {
         hasher.update(AsRef::<[u8]>::as_ref(replica_id));
 
         // node id
-        hasher.update(&(self.node as u64).to_le_bytes());
+        let mut node_bytes = [0u8; 32];
+        node_bytes[..8].copy_from_slice(&(self.node as u64).to_le_bytes());
+        hasher.update(&node_bytes);
 
         for parent in &self.parents {
             hasher.update(AsRef::<[u8]>::as_ref(parent));

@@ -23,7 +23,12 @@ where
     let mut ciphertexts = id.to_vec();
 
     if let Some(node) = node {
+        // this is 8 bytes
         ciphertexts.extend(node.to_bits_le());
+        // extend the padding to 32
+        for _ in 0..24 {
+            ciphertexts.push(Boolean::Constant(false));
+        }
     }
 
     for parent in parents.into_iter() {

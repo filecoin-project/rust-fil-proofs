@@ -490,7 +490,7 @@ mod hasher {
         let mut last_block: u32 = 0; // Finalization flag, !0 for last block
 
         // Prefetch each node value
-        assert_eq!(parents.len(), 14);
+        assert_eq!(parents.len(), 16);
         for parent in parents {
             _mm_prefetch(parent.as_ptr() as *const i8, _MM_HINT_T0);
         }
@@ -498,8 +498,8 @@ mod hasher {
         let mut curr_digest_0_3 = _mm_loadu_si128(digest.as_ptr() as *const __m128i);
         let mut curr_digest_4_7 = _mm_loadu_si128(digest.as_ptr().add(16) as *const __m128i);
 
-        // id + 13 parents, each value is 32B.  Uses 7 blocks
-        for i in 0..7 {
+        // id + node + 14 parents, each value is 32B.  Uses 8 blocks
+        for i in 0..8 {
             // set internal state
             let mut a = curr_digest_0_3;
             let mut b = curr_digest_4_7;
@@ -511,7 +511,7 @@ mod hasher {
 
             // Set for next iteration
             count += 64;
-            if i == 5 {
+            if i == 6 {
                 last_block = 0xFFFF_FFFF;
             }
 
@@ -574,7 +574,7 @@ mod hasher {
 }
 
 #[cfg(target_feature = "sse4.1")]
-pub fn hash_nodes_14(parents: &[&[u8]]) -> [u8; 32] {
+pub fn hash_nodes_16(parents: &[&[u8]]) -> [u8; 32] {
     let digest = &mut hasher::INITIAL_H.clone();
     unsafe {
         hasher::hash_nodes(parents, digest);
@@ -584,7 +584,7 @@ pub fn hash_nodes_14(parents: &[&[u8]]) -> [u8; 32] {
 }
 
 #[cfg(not(target_feature = "sse4.1"))]
-pub fn hash_nodes_14(parents: &[&[u8]]) -> [u8; 32] {
+pub fn hash_nodes_16(parents: &[&[u8]]) -> [u8; 32] {
     let mut s = blake2s_simd::Params::new().to_state();
     for parent in parents {
         s.update(parent);
@@ -605,6 +605,7 @@ mod tests {
             let mut rng: SmallRng = SeedableRng::seed_from_u64(1);
 
             let rep: [u8; 32] = rng.gen();
+            let node: [u8; 32] = rng.gen();
             let p0: [u8; 32] = rng.gen();
             let p1: [u8; 32] = rng.gen();
             let p2: [u8; 32] = rng.gen();
@@ -618,12 +619,14 @@ mod tests {
             let p10: [u8; 32] = rng.gen();
             let p11: [u8; 32] = rng.gen();
             let p12: [u8; 32] = rng.gen();
+            let p13: [u8; 32] = rng.gen();
 
-            let parents: [&[u8]; 14] = [
-                &rep, &p0, &p1, &p2, &p3, &p4, &p5, &p6, &p7, &p8, &p9, &p10, &p11, &p12,
+            let parents: [&[u8]; 16] = [
+                &rep, &node, &p0, &p1, &p2, &p3, &p4, &p5, &p6, &p7, &p8, &p9, &p10, &p11, &p12,
+                &p13,
             ];
 
-            let h1 = hash_nodes_14(&parents);
+            let h1 = hash_nodes_16(&parents);
 
             let mut s = blake2s_simd::Params::new().to_state();
             for parent in &parents {

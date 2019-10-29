@@ -367,10 +367,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 let end = start + NODE_SIZE;
 
                 // hash it
-                let to_hash: [&[u8]; 14] = [
+                let to_hash: [&[u8]; 16] = [
                     AsRef::<[u8]>::as_ref(replica_id),
-                    // TODO: insert node
-                    // &node_arr,
+                    &node_arr,
                     &base_parent0,
                     &base_parent1,
                     &base_parent2,
@@ -384,11 +383,19 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     &exp_parent4,
                     &exp_parent5,
                     &exp_parent6,
-                    // TODO: add last parent
-                    // &exp_parent7,
+                    &exp_parent7,
                 ];
 
-                let mut key = fil_blake2s::hash_nodes_14(&to_hash);
+                #[cfg(feature = "unchecked-degrees")]
+                let key = {
+                    let mut hasher = blake2s_simd::Params::default().to_state();
+                    for el in &to_hash {
+                        hasher.update(el);
+                    }
+                    *hasher.finalize().as_array()
+                };
+                #[cfg(not(feature = "unchecked-degrees"))]
+                let mut key = fil_blake2s::hash_nodes_16(&to_hash);
 
                 // strip last two bits, to ensure result is in Fr.
                 key[31] &= 0b0011_1111;
@@ -657,9 +664,9 @@ mod tests {
 
     fn test_prove_verify<H: 'static + Hasher>(n: usize, challenges: LayerChallenges) {
         // This will be called multiple times, only the first one succeeds, and that is ok.
-        // femme::pretty::Logger::new()
-        //     .start(log::LevelFilter::Trace)
-        //     .ok();
+        femme::pretty::Logger::new()
+            .start(log::LevelFilter::Trace)
+            .ok();
 
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 

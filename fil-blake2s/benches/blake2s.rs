@@ -10,6 +10,7 @@ fn blake2s_benchmark(b: &mut ::test::Bencher) {
     let mut rng: SmallRng = SeedableRng::seed_from_u64(1);
 
     let rep: [u8; 32] = rng.gen();
+    let node: [u8; 32] = rng.gen();
     let p0: [u8; 32] = rng.gen();
     let p1: [u8; 32] = rng.gen();
     let p2: [u8; 32] = rng.gen();
@@ -23,11 +24,12 @@ fn blake2s_benchmark(b: &mut ::test::Bencher) {
     let p10: [u8; 32] = rng.gen();
     let p11: [u8; 32] = rng.gen();
     let p12: [u8; 32] = rng.gen();
+    let p13: [u8; 32] = rng.gen();
 
     let parents: [&[u8]; 14] = [
-        &rep, &p0, &p1, &p2, &p3, &p4, &p5, &p6, &p7, &p8, &p9, &p10, &p11, &p12,
+        &rep, &node, &p0, &p1, &p2, &p3, &p4, &p5, &p6, &p7, &p8, &p9, &p10, &p11, &p12, &p13,
     ];
 
     b.bytes = 448;
-    b.iter(|| fil_blake2s::hash_nodes_14(&parents));
+    b.iter(|| fil_blake2s::hash_nodes_16(&parents));
 }
