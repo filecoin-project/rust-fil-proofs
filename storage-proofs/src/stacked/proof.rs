@@ -242,12 +242,15 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     }
 
     #[allow(clippy::type_complexity)]
+    #[cfg(not(feature = "unchecked-degrees"))]
     fn generate_layers(
         graph: &StackedBucketGraph<H>,
         layer_challenges: &LayerChallenges,
         replica_id: &<H as Hasher>::Domain,
         with_hashing: bool,
     ) -> Result<(Encodings<H>, Option<Vec<[u8; 32]>>)> {
+        assert_eq!(graph.degree(), BASE_DEGREE + EXP_DEGREE);
+
         info!("generate layers");
         let layers = layer_challenges.layers();
         let mut encodings: Vec<DiskStore<H::Domain>> = Vec::with_capacity(layers);
@@ -337,6 +340,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                 // node id
                 node_arr[..8].copy_from_slice(&(node as u64).to_le_bytes());
+
+                // get parents
                 graph.parents(node, &mut parents);
 
                 // hash parents for all non 0 nodes
@@ -367,35 +372,41 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 let end = start + NODE_SIZE;
 
                 // hash it
-                let to_hash: [&[u8]; 16] = [
-                    AsRef::<[u8]>::as_ref(replica_id),
-                    &node_arr,
-                    &base_parent0,
-                    &base_parent1,
-                    &base_parent2,
-                    &base_parent3,
-                    &base_parent4,
-                    &base_parent5,
-                    &exp_parent0,
-                    &exp_parent1,
-                    &exp_parent2,
-                    &exp_parent3,
-                    &exp_parent4,
-                    &exp_parent5,
-                    &exp_parent6,
-                    &exp_parent7,
-                ];
+                let mut key = if exp_parents_data.is_some() {
+                    let to_hash: [&[u8]; 16] = [
+                        AsRef::<[u8]>::as_ref(replica_id),
+                        &node_arr,
+                        &base_parent0,
+                        &base_parent1,
+                        &base_parent2,
+                        &base_parent3,
+                        &base_parent4,
+                        &base_parent5,
+                        &exp_parent0,
+                        &exp_parent1,
+                        &exp_parent2,
+                        &exp_parent3,
+                        &exp_parent4,
+                        &exp_parent5,
+                        &exp_parent6,
+                        &exp_parent7,
+                    ];
 
-                #[cfg(feature = "unchecked-degrees")]
-                let key = {
-                    let mut hasher = blake2s_simd::Params::default().to_state();
-                    for el in &to_hash {
-                        hasher.update(el);
-                    }
-                    *hasher.finalize().as_array()
+                    fil_blake2s::hash_nodes_16(&to_hash)
+                } else {
+                    let to_hash: [&[u8]; 8] = [
+                        AsRef::<[u8]>::as_ref(replica_id),
+                        &node_arr,
+                        &base_parent0,
+                        &base_parent1,
+                        &base_parent2,
+                        &base_parent3,
+                        &base_parent4,
+                        &base_parent5,
+                    ];
+
+                    fil_blake2s::hash_nodes_8(&to_hash)
                 };
-                #[cfg(not(feature = "unchecked-degrees"))]
-                let mut key = fil_blake2s::hash_nodes_16(&to_hash);
 
                 // strip last two bits, to ensure result is in Fr.
                 key[31] &= 0b0011_1111;

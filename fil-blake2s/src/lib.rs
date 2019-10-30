@@ -483,9 +483,8 @@ mod hasher {
         };
     }
 
-    #[cfg(target_feature = "sse4.1")]
     #[inline(always)]
-    unsafe fn blake2s(parents: &[&[u8]], digest: &mut [u8; 32]) {
+    unsafe fn blake2s_16(parents: &[&[u8]], digest: &mut [u8; 32]) {
         let mut count: i32 = 64; // Byte counter, increments by 64B
         let mut last_block: u32 = 0; // Finalization flag, !0 for last block
 
@@ -568,8 +567,96 @@ mod hasher {
         //println!("4_7 {:x?}", curr_digest_4_7);
     }
 
-    pub unsafe fn hash_nodes(parents: &[&[u8]], digest: &mut [u8; 32]) {
-        blake2s(parents, digest);
+    pub unsafe fn hash_nodes_16(parents: &[&[u8]], digest: &mut [u8; 32]) {
+        blake2s_16(parents, digest);
+    }
+
+    #[inline(always)]
+    unsafe fn blake2s_8(parents: &[&[u8]], digest: &mut [u8; 32]) {
+        let mut count: i32 = 64; // Byte counter, increments by 64B
+        let mut last_block: u32 = 0; // Finalization flag, !0 for last block
+
+        // Prefetch each node value
+        assert_eq!(parents.len(), 8);
+        for parent in parents {
+            _mm_prefetch(parent.as_ptr() as *const i8, _MM_HINT_T0);
+        }
+
+        let mut curr_digest_0_3 = _mm_loadu_si128(digest.as_ptr() as *const __m128i);
+        let mut curr_digest_4_7 = _mm_loadu_si128(digest.as_ptr().add(16) as *const __m128i);
+
+        // id + node + 6 parents, each value is 32B.  Uses 4 blocks
+        for i in 0..4 {
+            // set internal state
+            let mut a = curr_digest_0_3;
+            let mut b = curr_digest_4_7;
+            let mut c = _mm_loadu_si128(IV_0_3.as_ptr() as *const __m128i);
+            let mut d = _mm_xor_si128(
+                _mm_loadu_si128(IV_4_7.as_ptr() as *const __m128i),
+                _mm_setr_epi32(count, 0, last_block as i32, 0),
+            );
+
+            // Set for next iteration
+            count += 64;
+            if i == 2 {
+                last_block = 0xFFFF_FFFF;
+            }
+
+            // set message
+            let m0 = _mm_loadu_si128(parents[i * 2].as_ptr() as *const __m128i);
+            let m1 = _mm_loadu_si128(parents[i * 2].as_ptr().add(16) as *const __m128i);
+            let m2 = _mm_loadu_si128(parents[(i * 2) + 1].as_ptr() as *const __m128i);
+            let m3 = _mm_loadu_si128(parents[(i * 2) + 1].as_ptr().add(16) as *const __m128i);
+
+            // round 0
+            let m_i_0 = blake2s_first_msg::rnd_0(&m0, &m1, &m2, &m3);
+            let m_i_1 = blake2s_second_msg::rnd_0(&m0, &m1, &m2, &m3);
+            blake2s_g!(a, b, c, d, m_i_0, m_i_1);
+            diagonalize!(a, c, d);
+
+            // TODO - difference between these is 3ns/iter
+            //let m_i_0  = blake2s_third_msg::rnd_0(&m0, &m1, &m2, &m3);
+            //let m_i_1  = blake2s_fourth_msg::rnd_0(&m0, &m1, &m2, &m3);
+            let tmp_0 = _mm_shuffle_epi32(m2, _MM_SHUFFLE(3, 2, 0, 1));
+            let tmp_1 = _mm_shuffle_epi32(m3, _MM_SHUFFLE(0, 1, 3, 2));
+            let m_i_0 = _mm_blend_epi16(tmp_0, tmp_1, 0xC3);
+            let tmp_0 = _mm_blend_epi16(tmp_0, tmp_1, 0x3C);
+            let m_i_1 = _mm_shuffle_epi32(tmp_0, _MM_SHUFFLE(2, 3, 0, 1));
+
+            blake2s_g!(a, b, c, d, m_i_0, m_i_1);
+            undiagonalize!(a, c, d);
+
+            round!(a, b, c, d, m0, m1, m2, m3, rnd_1);
+            round!(a, b, c, d, m0, m1, m2, m3, rnd_2);
+            round!(a, b, c, d, m0, m1, m2, m3, rnd_3);
+            round!(a, b, c, d, m0, m1, m2, m3, rnd_4);
+            round!(a, b, c, d, m0, m1, m2, m3, rnd_5);
+            round!(a, b, c, d, m0, m1, m2, m3, rnd_6);
+            round!(a, b, c, d, m0, m1, m2, m3, rnd_7);
+            round!(a, b, c, d, m0, m1, m2, m3, rnd_8);
+            round!(a, b, c, d, m0, m1, m2, m3, rnd_9);
+
+            curr_digest_0_3 = {
+                let xor_vars = _mm_xor_si128(a, c);
+                let h = _mm_loadu_si128(digest.as_ptr() as *const __m128i);
+                _mm_xor_si128(h, xor_vars)
+            };
+
+            curr_digest_4_7 = {
+                let xor_vars = _mm_xor_si128(b, d);
+                let h = _mm_loadu_si128(digest.as_ptr().add(16) as *const __m128i);
+                _mm_xor_si128(h, xor_vars)
+            };
+
+            _mm_storeu_si128(digest.as_ptr() as *mut __m128i, curr_digest_0_3);
+            _mm_storeu_si128(digest.as_ptr().add(16) as *mut __m128i, curr_digest_4_7);
+        }
+        //println!("0_3 {:x?}", curr_digest_0_3);
+        //println!("4_7 {:x?}", curr_digest_4_7);
+    }
+
+    pub unsafe fn hash_nodes_8(parents: &[&[u8]], digest: &mut [u8; 32]) {
+        blake2s_8(parents, digest);
     }
 }
 
@@ -577,7 +664,7 @@ mod hasher {
 pub fn hash_nodes_16(parents: &[&[u8]]) -> [u8; 32] {
     let digest = &mut hasher::INITIAL_H.clone();
     unsafe {
-        hasher::hash_nodes(parents, digest);
+        hasher::hash_nodes_16(parents, digest);
     }
 
     *digest
@@ -585,6 +672,25 @@ pub fn hash_nodes_16(parents: &[&[u8]]) -> [u8; 32] {
 
 #[cfg(not(target_feature = "sse4.1"))]
 pub fn hash_nodes_16(parents: &[&[u8]]) -> [u8; 32] {
+    let mut s = blake2s_simd::Params::new().to_state();
+    for parent in parents {
+        s.update(parent);
+    }
+    *s.finalize().as_array()
+}
+
+#[cfg(target_feature = "sse4.1")]
+pub fn hash_nodes_8(parents: &[&[u8]]) -> [u8; 32] {
+    let digest = &mut hasher::INITIAL_H.clone();
+    unsafe {
+        hasher::hash_nodes_8(parents, digest);
+    }
+
+    *digest
+}
+
+#[cfg(not(target_feature = "sse4.1"))]
+pub fn hash_nodes_8(parents: &[&[u8]]) -> [u8; 32] {
     let mut s = blake2s_simd::Params::new().to_state();
     for parent in parents {
         s.update(parent);
@@ -600,7 +706,7 @@ mod tests {
     use rand::{Rng, SeedableRng};
 
     #[test]
-    fn test_consistency() {
+    fn test_consistency_hash_16() {
         for _ in 0..1000 {
             let mut rng: SmallRng = SeedableRng::seed_from_u64(1);
 
@@ -627,6 +733,34 @@ mod tests {
             ];
 
             let h1 = hash_nodes_16(&parents);
+
+            let mut s = blake2s_simd::Params::new().to_state();
+            for parent in &parents {
+                s.update(parent);
+            }
+            let h2 = *s.finalize().as_array();
+
+            assert_eq!(h1, h2);
+        }
+    }
+
+    #[test]
+    fn test_consistency_hash_8() {
+        for _ in 0..1000 {
+            let mut rng: SmallRng = SeedableRng::seed_from_u64(1);
+
+            let rep: [u8; 32] = rng.gen();
+            let node: [u8; 32] = rng.gen();
+            let p0: [u8; 32] = rng.gen();
+            let p1: [u8; 32] = rng.gen();
+            let p2: [u8; 32] = rng.gen();
+            let p3: [u8; 32] = rng.gen();
+            let p4: [u8; 32] = rng.gen();
+            let p5: [u8; 32] = rng.gen();
+
+            let parents: [&[u8]; 8] = [&rep, &node, &p0, &p1, &p2, &p3, &p4, &p5];
+
+            let h1 = hash_nodes_8(&parents);
 
             let mut s = blake2s_simd::Params::new().to_state();
             for parent in &parents {

@@ -77,7 +77,7 @@ jobs:
       - run:
           name: Test (stable) in release profile
           command: |
-            cargo +stable test --verbose --release --all
+            RUSTFLAGS="-C target-features=+sse4.1" cargo +stable test --verbose --release --all
             RUSTFLAGS="-D warnings" cargo +stable build --examples --release --all
   test_mem_trees:
     docker:

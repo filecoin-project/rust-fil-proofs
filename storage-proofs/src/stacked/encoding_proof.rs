@@ -3,8 +3,7 @@ use std::marker::PhantomData;
 use blake2s_simd::Params as Blake2s;
 use paired::bls12_381::Fr;
 
-use crate::fr32::bytes_into_fr_repr_safe;
-use crate::hasher::Hasher;
+use crate::hasher::{Domain, Hasher};
 use crate::stacked::encode::encode;
 use crate::util::NODE_SIZE;
 
@@ -40,7 +39,11 @@ impl<H: Hasher> EncodingProof<H> {
             hasher.update(AsRef::<[u8]>::as_ref(parent));
         }
 
-        bytes_into_fr_repr_safe(hasher.finalize().as_ref()).into()
+        let mut key = *hasher.finalize().as_array();
+        // strip last two bits, to ensure result is in Fr.
+        key[31] &= 0b0011_1111;
+
+        H::Domain::try_from_bytes(&key).expect("manually validated")
     }
 
     pub fn verify<G: Hasher>(
