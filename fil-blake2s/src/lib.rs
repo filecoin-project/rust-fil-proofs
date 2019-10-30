@@ -1,4 +1,3 @@
-#![feature(stdarch, stdsimd)]
 #![allow(
     clippy::cast_ptr_alignment,
     clippy::missing_safety_doc,
@@ -7,10 +6,17 @@
 
 #[cfg(target_feature = "sse4.1")]
 mod hasher {
+    /// A utility function for creating masks to use with Intel shuffle and
+    /// permute intrinsics.
+    /// Copied from https://doc.rust-lang.org/src/core/up/stdarch/crates/core_arch/src/x86/sse.rs.html#982-984
+    #[inline]
+    #[allow(non_snake_case)]
+    const fn _MM_SHUFFLE(z: u32, y: u32, x: u32, w: u32) -> i32 {
+        ((z << 6) | (y << 4) | (x << 2) | w) as i32
+    }
+
     #[cfg(target_arch = "x86_64")]
-    use core::arch::x86_64::_MM_SHUFFLE;
-    #[cfg(target_arch = "x86_64")]
-    use core::arch::x86_64::*;
+    use std::arch::x86_64::*;
 
     const IV_0_3: [u32; 4] = [0x6A09_E667, 0xBB67_AE85, 0x3C6E_F372, 0xA54F_F53A];
     const IV_4_7: [u32; 4] = [0x510E_527F, 0x9B05_688C, 0x1F83_D9AB, 0x5BE0_CD19];
@@ -29,9 +35,7 @@ mod hasher {
     ];
 
     mod blake2s_first_msg {
-        use core::arch::x86_64::_MM_SHUFFLE;
-        #[cfg(target_arch = "x86_64")]
-        use core::arch::x86_64::*;
+        use super::*;
 
         #[inline(always)]
         pub unsafe fn rnd_0(m0: &__m128i, m1: &__m128i, _m2: &__m128i, _m3: &__m128i) -> __m128i {
@@ -122,9 +126,7 @@ mod hasher {
     }
 
     mod blake2s_second_msg {
-        use core::arch::x86_64::_MM_SHUFFLE;
-        #[cfg(target_arch = "x86_64")]
-        use core::arch::x86_64::*;
+        use super::*;
 
         #[inline(always)]
         pub unsafe fn rnd_0(m0: &__m128i, m1: &__m128i, _m2: &__m128i, _m3: &__m128i) -> __m128i {
@@ -213,11 +215,10 @@ mod hasher {
     }
 
     mod blake2s_third_msg {
-        use core::arch::x86_64::_MM_SHUFFLE;
-        #[cfg(target_arch = "x86_64")]
-        use core::arch::x86_64::*;
+        use super::*;
 
         #[inline(always)]
+        #[allow(dead_code)]
         pub unsafe fn rnd_0(_m0: &__m128i, _m1: &__m128i, m2: &__m128i, m3: &__m128i) -> __m128i {
             let tmp_0 = _mm_shuffle_epi32(*m2, _MM_SHUFFLE(3, 2, 0, 1));
             let tmp_1 = _mm_shuffle_epi32(*m3, _MM_SHUFFLE(0, 1, 3, 2));
@@ -306,11 +307,10 @@ mod hasher {
     }
 
     mod blake2s_fourth_msg {
-        use core::arch::x86_64::_MM_SHUFFLE;
-        #[cfg(target_arch = "x86_64")]
-        use core::arch::x86_64::*;
+        use super::*;
 
         #[inline(always)]
+        #[allow(dead_code)]
         pub unsafe fn rnd_0(_m0: &__m128i, _m1: &__m128i, m2: &__m128i, m3: &__m128i) -> __m128i {
             // Could optimize by combining with third msg
             let tmp_0 = _mm_shuffle_epi32(*m2, _MM_SHUFFLE(2, 3, 1, 0)); // 10 11  9  8
