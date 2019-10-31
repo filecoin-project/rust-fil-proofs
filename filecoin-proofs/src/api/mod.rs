@@ -31,8 +31,6 @@ pub(crate) mod util;
 pub use self::post::*;
 pub use self::seal::*;
 
-pub use crate::pieces::verify_pieces;
-
 /// Unseals the sector at `sealed_path` and returns the bytes for a piece
 /// whose first (unpadded) byte begins at `offset` and ends at `offset` plus
 /// `num_bytes`, inclusive. Note that the entire sector is unsealed each time
@@ -148,7 +146,7 @@ mod tests {
     use tempfile::NamedTempFile;
 
     use crate::constants::{SECTOR_SIZE_ONE_KIB, SINGLE_PARTITION_PROOF_LEN};
-    use crate::types::{PieceInfo, PoStConfig, SectorSize};
+    use crate::types::{PoStConfig, SectorSize};
 
     #[test]
     fn test_verify_seal_fr32_validation() {
@@ -170,7 +168,6 @@ mod tests {
                 [0; 32],
                 [0; 32],
                 &[],
-                &[PieceInfo::default()],
             );
 
             if let Err(err) = result {
@@ -195,7 +192,6 @@ mod tests {
                 SectorId::from(0),
                 [0; 32],
                 [0; 32],
-                &[],
                 &[],
             );
 
@@ -313,6 +309,13 @@ mod tests {
             &piece_infos,
         )?;
 
+        let computed_comm_d = compute_comm_d(config, &piece_infos)?;
+
+        assert_eq!(
+            comm_d, computed_comm_d,
+            "Computed and expected comm_d don't match."
+        );
+
         let verified = verify_seal(
             config,
             comm_r,
@@ -322,7 +325,6 @@ mod tests {
             ticket,
             seed,
             &commit_output.proof,
-            &piece_infos,
         )?;
         assert!(verified, "failed to verify valid seal");
 
