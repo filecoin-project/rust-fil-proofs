@@ -20,6 +20,12 @@ pub fn verify_pieces(
     piece_infos: &[PieceInfo],
     sector_size: SectorSize,
 ) -> Result<bool> {
+    let comm_d_calculated = compute_comm_d(sector_size, piece_infos)?;
+
+    Ok(&comm_d_calculated == comm_d)
+}
+
+pub fn compute_comm_d(sector_size: SectorSize, piece_infos: &[PieceInfo]) -> Result<Commitment> {
     info!("verifying {} pieces", piece_infos.len());
     ensure!(!piece_infos.is_empty(), "Missing piece infos");
 
@@ -35,22 +41,26 @@ pub fn verify_pieces(
         .iter()
         .map(|info| u64::from(PaddedBytesAmount::from(info.size)))
         .sum();
-    if piece_size > u64::from(sector_size) {
-        return Ok(false);
-    }
+
+    ensure!(
+        piece_size <= u64::from(sector_size),
+        "Piece is larger than sector."
+    );
 
     let mut stack = Stack::new();
 
     let first = piece_infos.first().unwrap().clone();
-    if !u64::from(PaddedBytesAmount::from(first.size)).is_power_of_two() {
-        return Ok(false);
-    }
+    ensure!(
+        u64::from(PaddedBytesAmount::from(first.size)).is_power_of_two(),
+        "Piece size must be a power of 2."
+    );
     stack.shift(first);
 
     for piece_info in piece_infos.iter().skip(1) {
-        if !u64::from(PaddedBytesAmount::from(piece_info.size)).is_power_of_two() {
-            return Ok(false);
-        }
+        ensure!(
+            u64::from(PaddedBytesAmount::from(piece_info.size)).is_power_of_two(),
+            "Piece size must be a power of 2."
+        );
 
         while stack.peek().size < piece_info.size {
             stack.shift_reduce(zero_padding(stack.peek().size))
@@ -67,11 +77,7 @@ pub fn verify_pieces(
 
     let comm_d_calculated = stack.pop().commitment;
 
-    if &comm_d_calculated != comm_d {
-        return Ok(false);
-    }
-
-    Ok(true)
+    Ok(comm_d_calculated)
 }
 
 /// Stack used for piece reduction.

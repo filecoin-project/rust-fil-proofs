@@ -16,11 +16,12 @@ use storage_proofs::sector::SectorId;
 use storage_proofs::stacked::{self, generate_replica_id, ChallengeRequirements, StackedDrg, Tau};
 
 use crate::api::util::{as_safe_commitment, commitment_from_fr};
-use crate::api::verify_pieces;
 use crate::caches::{get_stacked_params, get_stacked_verifying_key};
 use crate::constants::{DefaultPieceHasher, POREP_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN};
 use crate::error;
 use crate::parameters::setup_params;
+pub use crate::pieces;
+pub use crate::pieces::verify_pieces;
 use crate::types::{
     Commitment, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, ProverId,
     SealCommitOutput, SealPreCommitOutput, Ticket,
@@ -141,6 +142,12 @@ pub fn seal_commit<T: AsRef<Path>>(
         p_aux,
         t_aux,
     } = pre_commit;
+
+    ensure!(
+        verify_pieces(&comm_d, piece_infos, porep_config.into())?,
+        "pieces and comm_d do not match"
+    );
+
     let comm_r_safe = as_safe_commitment(&comm_r, "comm_r")?;
     let comm_d_safe = <DefaultPieceHasher as Hasher>::Domain::try_from_bytes(&comm_d)?;
 
@@ -209,7 +216,6 @@ pub fn seal_commit<T: AsRef<Path>>(
             ticket,
             seed,
             &buf,
-            piece_infos,
         )
         .expect("post-seal verification sanity check failed"),
         "invalid seal generated, bad things have happened"
@@ -218,6 +224,13 @@ pub fn seal_commit<T: AsRef<Path>>(
     info!("seal_commit:end");
 
     Ok(SealCommitOutput { proof: buf })
+}
+
+pub fn compute_comm_d(
+    porep_config: PoRepConfig,
+    piece_infos: &[PieceInfo],
+) -> error::Result<Commitment> {
+    pieces::compute_comm_d(porep_config.0, piece_infos)
 }
 
 /// Verifies the output of some previously-run seal operation.
@@ -231,16 +244,10 @@ pub fn verify_seal(
     ticket: Ticket,
     seed: Ticket,
     proof_vec: &[u8],
-    piece_infos: &[PieceInfo],
 ) -> error::Result<bool> {
     let sector_bytes = PaddedBytesAmount::from(porep_config);
     let comm_r = as_safe_commitment(&comm_r_in, "comm_r")?;
     let comm_d = as_safe_commitment(&comm_d_in, "comm_d")?;
-
-    ensure!(
-        verify_pieces(&comm_d_in, piece_infos, porep_config.into())?,
-        "pieces and comm_d do not match"
-    );
 
     let replica_id =
         generate_replica_id::<DefaultTreeHasher, _>(&prover_id, sector_id.into(), &ticket, comm_d);
