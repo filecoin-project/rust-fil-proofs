@@ -3,7 +3,6 @@ use std::marker::PhantomData;
 
 use merkletree::store::DiskStore;
 use merkletree::store::Store;
-use paired::bls12_381::Fr;
 use serde::{Deserialize, Serialize};
 
 use crate::drgraph::Graph;
@@ -13,8 +12,8 @@ use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::stacked::{
-    column::Column, column_proof::ColumnProof, graph::StackedBucketGraph, hash::hash2,
-    EncodingProof, LabelingProof, LayerChallenges,
+    column::Column, column_proof::ColumnProof, graph::StackedBucketGraph, EncodingProof,
+    LabelingProof, LayerChallenges,
 };
 use crate::util::data_at_node;
 
@@ -163,10 +162,6 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
         self.replica_column_proofs.c_x.root()
     }
 
-    fn comm_r(&self) -> H::Domain {
-        Fr::from(hash2(self.comm_c(), self.comm_r_last())).into()
-    }
-
     /// Verify the full proof.
     pub fn verify(
         &self,
@@ -181,20 +176,11 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
         check!(challenge < graph.size());
         check!(pub_inputs.tau.is_some());
 
-        // just grabbing the first one
-        let actual_comm_r = self.comm_r();
-        let expected_comm_r = if let Some(ref tau) = pub_inputs.tau {
-            &tau.comm_r
-        } else {
-            return false;
-        };
-
-        check_eq!(expected_comm_r, &actual_comm_r);
-
         // Verify initial data layer
         trace!("verify initial data layer");
 
         check!(self.comm_d_proofs.proves_challenge(challenge));
+
         if let Some(ref tau) = pub_inputs.tau {
             check_eq!(self.comm_d_proofs.root(), &tau.comm_d);
         } else {
@@ -238,11 +224,10 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
                 expect_challenge
             );
 
-            let labeled_node = self.replica_column_proofs.c_x.get_node_at_layer(layer);
-
             if expect_challenge {
                 check!(self.labeling_proofs.contains_key(&layer));
                 let labeling_proof = &self.labeling_proofs.get(&layer).unwrap();
+                let labeled_node = self.replica_column_proofs.c_x.get_node_at_layer(layer);
                 check!(labeling_proof.verify(replica_id, labeled_node));
             } else {
                 check!(self.labeling_proofs.get(&layer).is_none());
