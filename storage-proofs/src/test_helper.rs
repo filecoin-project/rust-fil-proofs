@@ -54,7 +54,7 @@ pub fn fake_drgpoprep_proof<R: Rng>(
     // Part 2: replica data inputs
     // generate parent nodes
     let replica_parents: Vec<Fr> = (0..m).map(|_| rng.gen()).collect();
-    // run kdf for proverid, parent nodes
+    // run create_label for proverid, parent nodes
     let ciphertexts = replica_parents
         .iter()
         .fold(
@@ -68,7 +68,7 @@ pub fn fake_drgpoprep_proof<R: Rng>(
         )
         .unwrap();
 
-    let key = crypto::kdf::kdf(ciphertexts.as_slice(), m);
+    let key = crypto::create_label::create_label(ciphertexts.as_slice(), m);
     // run sloth(key, node)
 
     let replica_node: Fr = crypto::sloth::encode::<Bls12>(&key, &data_node);

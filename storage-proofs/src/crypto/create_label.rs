@@ -5,19 +5,19 @@ use sha2::{Digest, Sha256};
 use crate::fr32::bytes_into_fr_repr_safe;
 
 /// Key derivation function, based on pedersen hashing.
-pub fn kdf(data: &[u8], _m: usize) -> Fr {
+pub fn create_label(data: &[u8], _m: usize) -> Fr {
     let hash = Sha256::digest(data);
     Fr::from_repr(bytes_into_fr_repr_safe(hash.as_ref())).unwrap()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::kdf;
+    use super::create_label;
     use ff::PrimeField;
     use paired::bls12_381::{Fr, FrRepr};
 
     #[test]
-    fn kdf_valid_block_len() {
+    fn create_label_valid_block_len() {
         let m = 1;
         let size = 32 * (1 + m);
 
@@ -30,7 +30,7 @@ mod tests {
         ];
         let expected = Fr::from_repr(FrRepr(repr)).unwrap();
 
-        let res = kdf(&data, m);
+        let res = create_label(&data, m);
         assert_eq!(res, expected);
     }
 }

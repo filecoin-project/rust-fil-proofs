@@ -26,15 +26,7 @@ impl Hasher for Sha256Hasher {
         "Sha256Hasher".into()
     }
 
-    fn kdf(data: &[u8], m: usize) -> Self::Domain {
-        assert_eq!(
-            data.len(),
-            32 * (1 + m),
-            "invalid input length: data.len(): {} m: {}",
-            data.len(),
-            m
-        );
-
+    fn create_label(data: &[u8], _m: usize) -> Self::Domain {
         <Self::Function as HashFunction<Self::Domain>>::hash(data)
     }
 

@@ -23,7 +23,7 @@ impl<H: Hasher> LabelingProof<H> {
         }
     }
 
-    fn create_key(&self, replica_id: &H::Domain) -> H::Domain {
+    fn create_label(&self, replica_id: &H::Domain) -> H::Domain {
         let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
 
         // replica_id
@@ -39,9 +39,9 @@ impl<H: Hasher> LabelingProof<H> {
         bytes_into_fr_repr_safe(hasher.finalize().as_ref()).into()
     }
 
-    pub fn verify(&self, replica_id: &H::Domain, exp_labeled_node: &H::Domain) -> bool {
-        let key = self.create_key(replica_id);
-        check_eq!(exp_labeled_node, &key);
+    pub fn verify(&self, replica_id: &H::Domain, expected_label: &H::Domain) -> bool {
+        let label = self.create_label(replica_id);
+        check_eq!(expected_label, &label);
 
         true
     }

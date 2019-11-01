@@ -8,7 +8,7 @@ use fil_sapling_crypto::jubjub::JubjubEngine;
 use crate::circuit::uint64;
 
 /// Key derivation function.
-pub fn kdf<E, CS>(
+pub fn create_label<E, CS>(
     mut cs: CS,
     id: &[Boolean],
     parents: Vec<Vec<Boolean>>,
@@ -18,7 +18,7 @@ where
     E: JubjubEngine,
     CS: ConstraintSystem<E>,
 {
-    trace!("circuit: kdf");
+    trace!("circuit: create_label");
     // ciphertexts will become a buffer of the layout
     // id | node | encodedParentNode1 | encodedParentNode1 | ...
 
@@ -32,7 +32,7 @@ where
         ciphertexts.extend_from_slice(&parent);
     }
 
-    trace!("circuit: kdf: sha256");
+    trace!("circuit: create_label: sha256");
     let alloc_bits = sha256_circuit(cs.namespace(|| "hash"), &ciphertexts[..])?;
     let fr = if alloc_bits[0].get_value().is_some() {
         let be_bits = alloc_bits
@@ -68,7 +68,7 @@ mod tests {
     use rand::{Rng, SeedableRng, XorShiftRng};
 
     #[test]
-    fn kdf_circuit_no_node() {
+    fn create_label_circuit_no_node() {
         let mut cs = TestConstraintSystem::<Bls12>::new();
         let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
@@ -90,8 +90,13 @@ mod tests {
                 bytes_into_boolean_vec_be(&mut cs, Some(p.as_slice()), p.len()).unwrap()
             })
             .collect();
-        let out = kdf(cs.namespace(|| "kdf"), &id_bits, parents_bits.clone(), None)
-            .expect("key derivation function failed");
+        let out = create_label(
+            cs.namespace(|| "create_label"),
+            &id_bits,
+            parents_bits.clone(),
+            None,
+        )
+        .expect("key derivation function failed");
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
         assert_eq!(cs.num_constraints(), 292540);
@@ -101,7 +106,7 @@ mod tests {
             acc
         });
 
-        let expected = crypto::kdf::kdf(input_bytes.as_slice(), m);
+        let expected = crypto::create_label::create_label(input_bytes.as_slice(), m);
 
         assert_eq!(
             expected,
@@ -110,7 +115,7 @@ mod tests {
         );
     }
     #[test]
-    fn kdf_circuit_with_node() {
+    fn create_label_circuit_with_node() {
         let mut cs = TestConstraintSystem::<Bls12>::new();
         let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
@@ -136,8 +141,8 @@ mod tests {
         let node_raw = 123456789u64;
         let node = uint64::UInt64::constant(node_raw);
 
-        let out = kdf(
-            cs.namespace(|| "kdf"),
+        let out = create_label(
+            cs.namespace(|| "create_label"),
             &id_bits,
             parents_bits.clone(),
             Some(node),
@@ -154,7 +159,7 @@ mod tests {
             input_bytes.extend_from_slice(parent);
         }
 
-        let expected = crypto::kdf::kdf(input_bytes.as_slice(), m);
+        let expected = crypto::create_label::create_label(input_bytes.as_slice(), m);
 
         assert_eq!(
             expected,

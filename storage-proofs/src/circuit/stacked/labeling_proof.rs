@@ -3,7 +3,7 @@ use fil_sapling_crypto::circuit::{boolean::Boolean, num};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
-use crate::circuit::{constraint, kdf::kdf, uint64};
+use crate::circuit::{constraint, create_label::create_label, uint64};
 use crate::drgraph::Graph;
 use crate::hasher::Hasher;
 use crate::stacked::{LabelingProof as VanillaLabelingProof, PublicParams};
@@ -28,7 +28,7 @@ impl LabelingProof {
         }
     }
 
-    fn create_key<CS: ConstraintSystem<Bls12>>(
+    fn create_label<CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
         _params: &<Bls12 as JubjubEngine>::Params,
         replica_id: &[Boolean],
@@ -61,8 +61,8 @@ impl LabelingProof {
 
         let node_num = uint64::UInt64::alloc(cs.namespace(|| "node"), node)?;
 
-        kdf(
-            cs.namespace(|| "create_key"),
+        create_label(
+            cs.namespace(|| "create_label"),
             replica_id,
             parents_bits,
             Some(node_num),
@@ -78,8 +78,8 @@ impl LabelingProof {
     ) -> Result<(), SynthesisError> {
         let LabelingProof { node, parents } = self;
 
-        let key = Self::create_key(
-            cs.namespace(|| "create_key"),
+        let key = Self::create_label(
+            cs.namespace(|| "create_label"),
             params,
             replica_id,
             node,

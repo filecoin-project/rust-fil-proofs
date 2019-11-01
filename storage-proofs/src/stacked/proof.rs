@@ -15,7 +15,6 @@ use crate::merkle::{MerkleProof, MerkleTree, Store};
 use crate::stacked::{
     challenges::LayerChallenges,
     column::Column,
-    encoding_proof::EncodingProof,
     graph::StackedBucketGraph,
     hash::hash2,
     params::{

@@ -87,7 +87,7 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
         // verify encodings
         for (layer, proof) in labeling_proofs.into_iter() {
             let raw = replica_column_proof.c_x.get_node_at_layer(layer);
-            let encoded_node =
+            let labeled_node =
                 num::AllocatedNum::alloc(cs.namespace(|| format!("label_node_{}", layer)), || {
                     raw.map(Into::into)
                         .ok_or_else(|| SynthesisError::AssignmentMissing)
@@ -97,7 +97,7 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
                 cs.namespace(|| format!("labeling_proof_{}", layer)),
                 params,
                 replica_id,
-                &encoded_node,
+                &labeled_node,
             )?;
         }
 
