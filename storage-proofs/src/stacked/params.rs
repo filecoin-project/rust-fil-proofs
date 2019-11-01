@@ -203,7 +203,9 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
 
         // Verify replica column openings
         trace!("verify replica column openings");
-        check!(self.replica_column_proofs.verify());
+        let mut parents = vec![0; graph.degree()];
+        graph.parents(challenge, &mut parents);
+        check!(self.replica_column_proofs.verify(challenge, &parents));
 
         check!(self.verify_final_replica_layer(challenge));
 
@@ -279,22 +281,24 @@ pub struct ReplicaColumnProof<H: Hasher> {
 }
 
 impl<H: Hasher> ReplicaColumnProof<H> {
-    pub fn verify(&self) -> bool {
+    pub fn verify(&self, challenge: usize, parents: &[u32]) -> bool {
         let expected_comm_c = self.c_x.root();
 
         trace!("  verify c_x");
-        check!(self.c_x.verify());
+        check!(self.c_x.verify(challenge as u32, &expected_comm_c));
 
         trace!("  verify drg_parents");
-        for proof in &self.drg_parents {
-            check!(proof.verify());
-            check_eq!(expected_comm_c, proof.root());
+        for (proof, parent) in self.drg_parents.iter().zip(parents.iter()) {
+            check!(proof.verify(*parent, &expected_comm_c));
         }
 
         trace!("  verify exp_parents");
-        for proof in &self.exp_parents {
-            check!(proof.verify());
-            check_eq!(expected_comm_c, proof.root());
+        for (proof, parent) in self
+            .exp_parents
+            .iter()
+            .zip(parents.iter().skip(self.drg_parents.len()))
+        {
+            check!(proof.verify(*parent, &expected_comm_c));
         }
 
         true
