@@ -36,7 +36,7 @@ pub fn compute_comm_d(sector_size: SectorSize, piece_infos: &[PieceInfo]) -> Res
         "Too many pieces"
     );
 
-    // make sure the pice sizes are at most a sector size large
+    // make sure the piece sizes are at most a sector size large
     let piece_size: u64 = piece_infos
         .iter()
         .map(|info| u64::from(PaddedBytesAmount::from(info.size)))
