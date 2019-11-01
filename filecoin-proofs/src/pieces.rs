@@ -267,7 +267,7 @@ pub fn get_aligned_source<T: Read>(
     source: T,
     pieces: &[UnpaddedBytesAmount],
     piece_bytes: UnpaddedBytesAmount,
-) -> (UnpaddedBytesAmount, impl Read) {
+) -> (UnpaddedBytesAmount, PieceAlignment, impl Read) {
     let written_bytes = sum_piece_bytes_with_alignment(pieces);
     let piece_alignment = get_piece_alignment(written_bytes, piece_bytes);
     let expected_num_bytes_written =
@@ -275,6 +275,7 @@ pub fn get_aligned_source<T: Read>(
 
     (
         expected_num_bytes_written,
+        piece_alignment.clone(),
         with_alignment(source, piece_alignment),
     )
 }
