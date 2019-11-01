@@ -87,7 +87,7 @@ where
 #[derive(Debug, Clone)]
 pub struct PublicInputs<T: Domain, S: Domain> {
     pub replica_id: T,
-    pub seed: T,
+    pub seed: [u8; 32],
     pub tau: Option<Tau<T, S>>,
     pub k: Option<usize>,
 }

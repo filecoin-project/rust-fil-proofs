@@ -8,7 +8,6 @@ use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
-use storage_proofs::fr32::bytes_into_fr;
 use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::merkle::create_merkle_tree;
 use storage_proofs::porep::PoRep;
@@ -158,8 +157,6 @@ pub fn seal_commit<T: AsRef<Path>>(
         comm_d_safe,
     );
 
-    let seed_fr = bytes_into_fr::<Bls12>(&seed).map(Into::into)?;
-
     let public_inputs = stacked::PublicInputs {
         replica_id,
         tau: Some(stacked::Tau {
@@ -167,7 +164,7 @@ pub fn seal_commit<T: AsRef<Path>>(
             comm_r: comm_r_safe,
         }),
         k: None,
-        seed: seed_fr,
+        seed,
     };
 
     let private_inputs =
@@ -267,15 +264,13 @@ pub fn verify_seal(
         StackedDrg<'_, DefaultTreeHasher, DefaultPieceHasher>,
     > = StackedCompound::setup(&compound_setup_params)?;
 
-    let seed_fr = bytes_into_fr::<Bls12>(&seed).map(Into::into)?;
-
     let public_inputs = stacked::PublicInputs::<
         <DefaultTreeHasher as Hasher>::Domain,
         <DefaultPieceHasher as Hasher>::Domain,
     > {
         replica_id,
         tau: Some(Tau { comm_r, comm_d }),
-        seed: seed_fr,
+        seed,
         k: None,
     };
 

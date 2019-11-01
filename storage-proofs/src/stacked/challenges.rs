@@ -46,16 +46,10 @@ impl LayerChallenges {
         &self,
         leaves: usize,
         replica_id: &D,
-        commitment: &D,
+        seed: &[u8; 32],
         k: u8,
     ) -> Vec<usize> {
-        self.derive_internal(
-            self.challenges_count_all(),
-            leaves,
-            replica_id,
-            commitment,
-            k,
-        )
+        self.derive_internal(self.challenges_count_all(), leaves, replica_id, seed, k)
     }
 
     /// Derive a set of challenges, for the given inputs.
@@ -64,11 +58,11 @@ impl LayerChallenges {
         layer: usize,
         leaves: usize,
         replica_id: &D,
-        commitment: &D,
+        seed: &[u8; 32],
         k: u8,
     ) -> Vec<usize> {
         let challenges_count = self.challenges_count(layer);
-        self.derive_internal(challenges_count, leaves, replica_id, commitment, k)
+        self.derive_internal(challenges_count, leaves, replica_id, seed, k)
     }
 
     pub fn derive_internal<D: Domain>(
@@ -76,7 +70,7 @@ impl LayerChallenges {
         challenges_count: usize,
         leaves: usize,
         replica_id: &D,
-        commitment: &D,
+        seed: &[u8; 32],
         k: u8,
     ) -> Vec<usize> {
         assert!(leaves > 2, "Too few leaves: {}", leaves);
@@ -85,7 +79,7 @@ impl LayerChallenges {
             .map(|i| {
                 let mut bytes = replica_id.into_bytes();
                 let j = ((challenges_count * k as usize) + i) as u32;
-                bytes.extend(commitment.into_bytes());
+                bytes.extend_from_slice(seed);
 
                 // Unwraping here is safe, all hash domains are larger than 4 bytes (the size of a `u32`).
                 bytes.write_u32::<LittleEndian>(j).unwrap();
@@ -126,7 +120,7 @@ mod test {
         let leaves = 1 << 30;
         let mut rng = thread_rng();
         let replica_id: PedersenDomain = rng.gen();
-        let commitment: PedersenDomain = rng.gen();
+        let seed: [u8; 32] = rng.gen();
         let partitions = 5;
         let total_challenges = partitions * n;
 
@@ -135,8 +129,7 @@ mod test {
         for layer in 1..=layers {
             let mut histogram = HashMap::new();
             for k in 0..partitions {
-                let challenges =
-                    challenges.derive(layer, leaves, &replica_id, &commitment, k as u8);
+                let challenges = challenges.derive(layer, leaves, &replica_id, &seed, k as u8);
 
                 for challenge in challenges {
                     let counter = histogram.entry(challenge).or_insert(0);
@@ -164,7 +157,7 @@ mod test {
         let leaves = 1 << 30;
         let mut rng = thread_rng();
         let replica_id: PedersenDomain = rng.gen();
-        let commitment: PedersenDomain = rng.gen();
+        let seed: [u8; 32] = rng.gen();
         let partitions = 5;
         let layers = 100;
         let total_challenges = n * partitions;
@@ -174,7 +167,7 @@ mod test {
                 layer,
                 leaves,
                 &replica_id,
-                &commitment,
+                &seed,
                 0,
             );
             let many_partition_challenges = (0..partitions)
@@ -183,7 +176,7 @@ mod test {
                         layer,
                         leaves,
                         &replica_id,
-                        &commitment,
+                        &seed,
                         k as u8,
                     )
                 })
