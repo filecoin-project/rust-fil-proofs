@@ -7,13 +7,13 @@ use paired::bls12_381::Fr;
 use rayon::prelude::*;
 
 use crate::drgraph::Graph;
+use crate::encode::{decode, encode};
 use crate::error::Result;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree, Store};
 use crate::stacked::{
     challenges::LayerChallenges,
     column::Column,
-    encode::{decode, encode},
     encoding_proof::EncodingProof,
     graph::StackedBucketGraph,
     hash::hash2,

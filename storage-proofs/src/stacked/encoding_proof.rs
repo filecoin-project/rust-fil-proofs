@@ -3,9 +3,9 @@ use std::marker::PhantomData;
 use blake2s_simd::Params as Blake2s;
 use paired::bls12_381::Fr;
 
+use crate::encode::encode;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::Hasher;
-use crate::stacked::encode::encode;
 use crate::util::NODE_SIZE;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

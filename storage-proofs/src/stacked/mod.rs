@@ -4,7 +4,6 @@ mod macros;
 mod challenges;
 mod column;
 mod column_proof;
-mod encode;
 mod encoding_proof;
 mod graph;
 pub(crate) mod hash;
