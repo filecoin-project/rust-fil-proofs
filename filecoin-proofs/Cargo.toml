@@ -41,6 +41,8 @@ tar = "0.4.26"
 rayon = "1.1.0"
 blake2s_simd = "0.5.8"
 hex = "0.4.0"
+tee = "0.1.0"
+os_pipe = "0.9.1"
 
 [dependencies.reqwest]
 version = "0.9"
