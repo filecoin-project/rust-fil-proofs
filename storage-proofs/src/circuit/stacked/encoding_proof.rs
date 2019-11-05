@@ -3,7 +3,7 @@ use fil_sapling_crypto::circuit::{boolean::Boolean, num};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
-use crate::circuit::{constraint, kdf::kdf, stacked::encode::encode, uint64};
+use crate::circuit::{constraint, encode::encode, kdf::kdf, uint64};
 use crate::drgraph::Graph;
 use crate::hasher::Hasher;
 use crate::stacked::{EncodingProof as VanillaEncodingProof, PublicParams};

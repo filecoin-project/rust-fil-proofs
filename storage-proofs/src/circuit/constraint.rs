@@ -69,6 +69,53 @@ pub fn add<E: Engine, CS: ConstraintSystem<E>>(
     Ok(res)
 }
 
+pub fn sub<E: Engine, CS: ConstraintSystem<E>>(
+    mut cs: CS,
+    a: &num::AllocatedNum<E>,
+    b: &num::AllocatedNum<E>,
+) -> Result<num::AllocatedNum<E>, SynthesisError> {
+    let res = num::AllocatedNum::alloc(cs.namespace(|| "sub_num"), || {
+        let mut tmp = a
+            .get_value()
+            .ok_or_else(|| SynthesisError::AssignmentMissing)?;
+        tmp.sub_assign(
+            &b.get_value()
+                .ok_or_else(|| SynthesisError::AssignmentMissing)?,
+        );
+
+        Ok(tmp)
+    })?;
+
+    // a - b = res
+    difference(&mut cs, || "subtraction constraint", &a, &b, &res);
+
+    Ok(res)
+}
+
+/// Adds a constraint to CS, enforcing a difference relationship between the allocated numbers a, b, and difference.
+///
+/// a - b = difference
+pub fn difference<E: Engine, A, AR, CS: ConstraintSystem<E>>(
+    cs: &mut CS,
+    annotation: A,
+    a: &num::AllocatedNum<E>,
+    b: &num::AllocatedNum<E>,
+    difference: &num::AllocatedNum<E>,
+) where
+    A: FnOnce() -> AR,
+    AR: Into<String>,
+{
+    //    difference = a-b
+    // => difference + b = a
+    // => (difference + b) * 1 = a
+    cs.enforce(
+        annotation,
+        |lc| lc + difference.get_variable() + b.get_variable(),
+        |lc| lc + CS::one(),
+        |lc| lc + a.get_variable(),
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -90,6 +137,26 @@ mod tests {
 
             let mut tmp = a.get_value().unwrap().clone();
             tmp.add_assign(&b.get_value().unwrap());
+
+            assert_eq!(res.get_value().unwrap(), tmp);
+            assert!(cs.is_satisfied());
+        }
+    }
+
+    #[test]
+    fn sub_constraint() {
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        for _ in 0..100 {
+            let mut cs = TestConstraintSystem::<Bls12>::new();
+
+            let a = num::AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(rng.gen())).unwrap();
+            let b = num::AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(rng.gen())).unwrap();
+
+            let res = sub(cs.namespace(|| "a-b"), &a, &b).expect("subtraction failed");
+
+            let mut tmp = a.get_value().unwrap().clone();
+            tmp.sub_assign(&b.get_value().unwrap());
 
             assert_eq!(res.get_value().unwrap(), tmp);
             assert!(cs.is_satisfied());

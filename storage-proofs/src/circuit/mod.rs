@@ -1,5 +1,7 @@
 mod constraint;
 
+pub mod drgporep;
+pub mod encode;
 pub mod kdf;
 pub mod multi_proof;
 pub mod pedersen;
