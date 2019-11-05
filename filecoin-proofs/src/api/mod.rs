@@ -94,7 +94,7 @@ pub fn generate_piece_commitment<T: std::io::Read>(
 
     if n != piece_size {
         return Err(format_err!(
-            "wrote more bytes ({:?}) than expected ({:?}) when preprocessing",
+            "wrote ({:?}) but expected to write ({:?}) when preprocessing",
             n,
             piece_size
         ));
