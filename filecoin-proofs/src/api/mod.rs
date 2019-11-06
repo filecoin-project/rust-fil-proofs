@@ -90,11 +90,17 @@ pub fn generate_piece_commitment<T: std::io::Read>(
     let n = write_padded(source, &temp_piece_file)
         .map_err(|err| format_err!("failed to write and preprocess bytes: {:?}", err))?;
 
+    if n == 0 {
+        return Err(format_err!(
+            "generate_piece_commitment: read 0 bytes from source before EOF"
+        ));
+    }
+
     let n = UnpaddedBytesAmount(n as u64);
 
     if n != piece_size {
         return Err(format_err!(
-            "wrote more bytes ({:?}) than expected ({:?}) when preprocessing",
+            "wrote ({:?}) but expected to write ({:?}) when preprocessing",
             n,
             piece_size
         ));
@@ -177,6 +183,8 @@ where
 
     match (write_rslt, join_rslt) {
         (Ok(n), Ok(Ok(r))) => {
+            ensure!(n != 0, "add_piece: read 0 bytes before EOF from source");
+
             let n = UnpaddedBytesAmount(n as u64);
 
             ensure!(

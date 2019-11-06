@@ -52,14 +52,16 @@ pub fn compute_comm_d(sector_size: SectorSize, piece_infos: &[PieceInfo]) -> Res
     let first = piece_infos.first().unwrap().clone();
     ensure!(
         u64::from(PaddedBytesAmount::from(first.size)).is_power_of_two(),
-        "Piece size must be a power of 2."
+        "Piece size ({:?}) must be a power of 2.",
+        PaddedBytesAmount::from(first.size)
     );
     stack.shift(first);
 
     for piece_info in piece_infos.iter().skip(1) {
         ensure!(
             u64::from(PaddedBytesAmount::from(piece_info.size)).is_power_of_two(),
-            "Piece size must be a power of 2."
+            "Piece size ({:?}) must be a power of 2.",
+            PaddedBytesAmount::from(piece_info.size)
         );
 
         while stack.peek().size < piece_info.size {
@@ -660,8 +662,6 @@ mod tests {
             piece_infos.push(piece_info);
         }
         assert_eq!(staged_sector.len(), u64::from(sector_size) as usize);
-
-        // println!("{:?}", &piece_infos);
 
         let data_tree = graph.merkle_tree(&staged_sector)?;
         let comm_d_root: Fr = data_tree.root().into();
