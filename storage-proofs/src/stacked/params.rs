@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
+use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{Store, DiskStore, StoreConfig};
 use paired::bls12_381::Fr;
 use serde::{Deserialize, Serialize};
@@ -356,19 +357,19 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
         let tree_d_store: DiskStore<G::Domain> = DiskStore::new_from_disk(
             tree_d_size, t_aux.tree_d_config.clone()).unwrap();
         let tree_d: Tree<G> = MerkleTree::from_data_store(
-            tree_d_store, tree_d_size);
+            tree_d_store, get_merkle_tree_leafs(tree_d_size));
 
         let tree_c_size = t_aux.tree_c_config.size.unwrap();
         let tree_c_store: DiskStore<H::Domain> = DiskStore::new_from_disk(
             tree_c_size, t_aux.tree_c_config.clone()).unwrap();
         let tree_c: Tree<H> = MerkleTree::from_data_store(
-            tree_c_store, tree_c_size);
+            tree_c_store, get_merkle_tree_leafs(tree_c_size));
 
         let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
         let tree_r_last_store: DiskStore<H::Domain> = DiskStore::new_from_disk(
             tree_r_last_size, t_aux.tree_r_last_config.clone()).unwrap();
         let tree_r_last: Tree<H> = MerkleTree::from_data_store(
-            tree_r_last_store, tree_r_last_size);
+            tree_r_last_store, get_merkle_tree_leafs(tree_r_last_size));
 
         TemporaryAuxCache {
             labels: LabelsCache::new(&t_aux.labels),
