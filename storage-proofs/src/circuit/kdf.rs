@@ -1,4 +1,5 @@
 use bellperson::{ConstraintSystem, SynthesisError};
+use ff::PrimeField;
 use fil_sapling_crypto::circuit::boolean::Boolean;
 use fil_sapling_crypto::circuit::sha256::sha256 as sha256_circuit;
 use fil_sapling_crypto::circuit::{multipack, num};
@@ -23,23 +24,30 @@ where
     let mut ciphertexts = id.to_vec();
 
     if let Some(node) = node {
-        ciphertexts.extend(node.to_bits_le());
+        ciphertexts.extend_from_slice(&node.to_bits_le());
     }
 
     for parent in parents.into_iter() {
-        ciphertexts.extend(parent);
+        ciphertexts.extend_from_slice(&parent);
     }
 
     let alloc_bits = sha256_circuit(cs.namespace(|| "hash"), &ciphertexts[..])?;
-    let bits = alloc_bits
+    let be_bits = alloc_bits
         .iter()
         .map(|v| v.get_value())
         .map(|v| v.ok_or_else(|| SynthesisError::AssignmentMissing))
         .collect::<Result<Vec<bool>, _>>()?;
 
-    let frs = multipack::compute_multipacking::<E>(&bits);
+    let le_bits = be_bits
+        .chunks(8)
+        .flat_map(|chunk| chunk.into_iter().rev())
+        .copied()
+        .take(E::Fr::CAPACITY as usize)
+        .collect::<Vec<bool>>();
 
-    num::AllocatedNum::<E>::alloc(cs.namespace(|| "num"), || Ok(frs[0]))
+    let fr = multipack::compute_multipacking::<E>(&le_bits)[0];
+
+    num::AllocatedNum::<E>::alloc(cs.namespace(|| "result_num"), || Ok(fr))
 }
 
 #[cfg(test)]
@@ -48,7 +56,7 @@ mod tests {
     use crate::circuit::test::TestConstraintSystem;
     use crate::crypto;
     use crate::fr32::fr_into_bytes;
-    use crate::util::bytes_into_boolean_vec;
+    use crate::util::bytes_into_boolean_vec_be;
     use bellperson::ConstraintSystem;
     use fil_sapling_crypto::circuit::boolean::Boolean;
     use paired::bls12_381::Bls12;
@@ -66,7 +74,7 @@ mod tests {
 
         let id_bits: Vec<Boolean> = {
             let mut cs = cs.namespace(|| "id");
-            bytes_into_boolean_vec(&mut cs, Some(id.as_slice()), id.len()).unwrap()
+            bytes_into_boolean_vec_be(&mut cs, Some(id.as_slice()), id.len()).unwrap()
         };
         let parents_bits: Vec<Vec<Boolean>> = parents
             .clone()
@@ -74,7 +82,7 @@ mod tests {
             .enumerate()
             .map(|(i, p)| {
                 let mut cs = cs.namespace(|| format!("parents {}", i));
-                bytes_into_boolean_vec(&mut cs, Some(p.as_slice()), p.len()).unwrap()
+                bytes_into_boolean_vec_be(&mut cs, Some(p.as_slice()), p.len()).unwrap()
             })
             .collect();
         let out = kdf(cs.namespace(|| "kdf"), &id_bits, parents_bits.clone(), None)

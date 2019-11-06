@@ -1,6 +1,6 @@
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
-use fil_sapling_crypto::circuit::boolean::{self, Boolean};
+use fil_sapling_crypto::circuit::boolean::Boolean;
 use fil_sapling_crypto::circuit::{multipack, num};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
@@ -16,7 +16,7 @@ use crate::fr32::fr_into_bytes;
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
-use crate::util::{bytes_into_bits, bytes_into_boolean_vec};
+use crate::util::{bytes_into_bits_be, bytes_into_boolean_vec_be};
 use std::marker::PhantomData;
 
 /// DRG based Proof of Replication.
@@ -171,7 +171,7 @@ where
 
         let leaves = pub_params.graph.size();
 
-        let replica_id_bits = bytes_into_bits(&replica_id.into_bytes());
+        let replica_id_bits = bytes_into_bits_be(&replica_id.into_bytes());
 
         let packed_replica_id =
             multipack::compute_multipacking::<Bls12>(&replica_id_bits[0..Fr::CAPACITY as usize]);
@@ -406,12 +406,13 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for DrgPoRepCircuit<'a, E, H> {
 
         // get the replica_id in bits
         let replica_id_bits =
-            bytes_into_boolean_vec(cs.namespace(|| "replica_id_bits"), replica_id_bytes, 256)?;
+            bytes_into_boolean_vec_be(cs.namespace(|| "replica_id_bits"), replica_id_bytes, 256)?;
 
-        multipack::pack_into_inputs(
-            cs.namespace(|| "replica_id"),
-            &replica_id_bits[0..Fr::CAPACITY as usize],
-        )?;
+        let replica_node_num = num::AllocatedNum::alloc(cs.namespace(|| "replica_id_num"), || {
+            replica_id.ok_or_else(|| SynthesisError::AssignmentMissing)
+        })?;
+
+        replica_node_num.inputize(cs.namespace(|| "replica_id"))?;
 
         let replica_root_var = Root::Var(replica_root.allocated(cs.namespace(|| "replica_root"))?);
         let data_root_var = Root::Var(data_root.allocated(cs.namespace(|| "data_root"))?);
@@ -470,24 +471,25 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for DrgPoRepCircuit<'a, E, H> {
             {
                 let mut cs = cs.namespace(|| "encoding_checks");
                 // get the parents into bits
-                let parents_bits: Vec<Vec<Boolean>> = {
-                    replica_parents
-                        .iter()
-                        .enumerate()
-                        .map(|(i, val)| -> Result<Vec<Boolean>, SynthesisError> {
-                            let mut v = boolean::field_into_boolean_vec_le(
+                let parents_bits: Vec<Vec<Boolean>> = replica_parents
+                    .iter()
+                    .enumerate()
+                    .map(|(i, val)| match val {
+                        Some(val) => {
+                            let bytes = fr_into_bytes::<E>(val);
+                            bytes_into_boolean_vec_be(
                                 cs.namespace(|| format!("parents_{}_bits", i)),
-                                *val,
-                            )?;
-                            // sad padding is sad
-                            while v.len() < 256 {
-                                v.push(boolean::Boolean::Constant(false));
-                            }
-
-                            Ok(v)
-                        })
-                        .collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?
-                };
+                                Some(&bytes),
+                                256,
+                            )
+                        }
+                        None => bytes_into_boolean_vec_be(
+                            cs.namespace(|| format!("parents_{}_bits", i)),
+                            None,
+                            256,
+                        ),
+                    })
+                    .collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?;
 
                 // generate the encryption key
                 let key = kdf(cs.namespace(|| "kdf"), &replica_id_bits, parents_bits, None)?;
@@ -659,12 +661,12 @@ mod tests {
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
         assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 130957, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 149607, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
         assert_eq!(
-            cs.get_input(1, "drgporep/replica_id/input 0"),
+            cs.get_input(1, "drgporep/replica_id/input variable"),
             replica_id.unwrap()
         );
     }
@@ -696,7 +698,7 @@ mod tests {
         .expect("failed to synthesize circuit");
 
         assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 361789, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 380439, "wrong number of constraints");
     }
 
     #[test]

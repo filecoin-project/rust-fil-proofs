@@ -1,5 +1,6 @@
 mod constraint;
 
+pub mod boolean;
 pub mod drgporep;
 pub mod encode;
 pub mod kdf;

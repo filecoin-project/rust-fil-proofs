@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::circuit::{boolean::Boolean, num};
+use fil_sapling_crypto::circuit::num;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
@@ -12,11 +12,13 @@ use crate::circuit::{
 };
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::drgraph::{Graph, BASE_DEGREE};
+use crate::fr32::fr_into_bytes;
 use crate::hasher::Hasher;
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
 use crate::stacked::{StackedDrg, EXP_DEGREE};
+use crate::util::bytes_into_boolean_vec_be;
 
 /// Stacked DRG based Proof of Replication.
 ///
@@ -98,18 +100,14 @@ impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G
         }
 
         // Allocate replica_id
-        let replica_id_num = num::AllocatedNum::alloc(cs.namespace(|| "replica_id_num"), || {
-            replica_id
-                .map(Into::into)
-                .ok_or_else(|| SynthesisError::AssignmentMissing)
-        })?;
-
-        let mut replica_id_bits =
-            replica_id_num.into_bits_le(cs.namespace(|| "replica_id_bits"))?;
-        // pad
-        while replica_id_bits.len() % 8 > 0 {
-            replica_id_bits.push(Boolean::Constant(false));
-        }
+        let replica_id_fr: Option<Fr> = replica_id.map(Into::into);
+        let replica_id_bits = match replica_id_fr {
+            Some(val) => {
+                let bytes = fr_into_bytes::<Bls12>(&val);
+                bytes_into_boolean_vec_be(cs.namespace(|| "replica_id_bits"), Some(&bytes), 256)
+            }
+            None => bytes_into_boolean_vec_be(cs.namespace(|| "replica_id_bits"), None, 256),
+        }?;
 
         // Allocate comm_d as Fr
         let comm_d_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_d"), || {
