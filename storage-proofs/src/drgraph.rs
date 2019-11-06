@@ -1,8 +1,8 @@
 use std::cmp;
 use std::marker::PhantomData;
 
-use blake2s_simd::Params as Blake2s;
 use rand::{ChaChaRng, OsRng, Rng, SeedableRng};
+use sha2::{Digest, Sha256};
 
 use crate::error::*;
 use crate::fr32::bytes_into_fr_repr_safe;
@@ -61,7 +61,7 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
     fn seed(&self) -> [u32; 7];
 
     /// Creates the encoding key.
-    /// The algorithm for that is `Blake2s(id | encodedParentNode1 | encodedParentNode1 | ...)`.
+    /// The algorithm for that is `Sha256(id | encodedParentNode1 | encodedParentNode1 | ...)`.
     fn create_key(
         &self,
         id: &H::Domain,
@@ -112,18 +112,18 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
         base_parents_data: &[u8],
         _exp_parents_data: Option<&[u8]>,
     ) -> Result<Self::Key> {
-        let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
-        hasher.update(AsRef::<[u8]>::as_ref(id));
+        let mut hasher = Sha256::new();
+        hasher.input(AsRef::<[u8]>::as_ref(id));
 
         // The hash is about the parents, hence skip if a node doesn't have any parents
         if node != parents[0] as usize {
             for parent in parents.iter() {
                 let offset = data_at_node_offset(*parent as usize);
-                hasher.update(&base_parents_data[offset..offset + NODE_SIZE]);
+                hasher.input(&base_parents_data[offset..offset + NODE_SIZE]);
             }
         }
 
-        let hash = hasher.finalize();
+        let hash = hasher.result();
         Ok(bytes_into_fr_repr_safe(hash.as_ref()).into())
     }
 

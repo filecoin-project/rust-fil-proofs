@@ -1,10 +1,10 @@
 use std::marker::PhantomData;
 
-use blake2s_simd::Params as Blake2s;
 use byteorder::{LittleEndian, WriteBytesExt};
 use rayon::prelude::*;
 use serde::de::Deserialize;
 use serde::ser::Serialize;
+use sha2::{Digest, Sha256};
 
 use crate::drgraph::Graph;
 use crate::encode;
@@ -339,6 +339,8 @@ where
         pub_inputs: &Self::PublicInputs,
         proof: &Self::Proof,
     ) -> Result<bool> {
+        let mut hasher = Sha256::new();
+
         for i in 0..pub_inputs.challenges.len() {
             {
                 // This was verify_proof_meta.
@@ -392,15 +394,14 @@ where
             }
 
             let key = {
-                let mut hasher = Blake2s::new().hash_length(32).to_state();
                 let prover_bytes = pub_inputs.replica_id.expect("missing replica_id");
-                hasher.update(AsRef::<[u8]>::as_ref(&prover_bytes));
+                hasher.input(AsRef::<[u8]>::as_ref(&prover_bytes));
 
                 for p in proof.replica_parents[i].iter() {
-                    hasher.update(AsRef::<[u8]>::as_ref(&p.1.data));
+                    hasher.input(AsRef::<[u8]>::as_ref(&p.1.data));
                 }
 
-                let hash = hasher.finalize();
+                let hash = hasher.result_reset();
                 bytes_into_fr_repr_safe(hash.as_ref()).into()
             };
 
@@ -557,19 +558,19 @@ pub fn create_key_from_tree<H: Hasher>(
     parents: &[u32],
     tree: &MerkleTree<H::Domain, H::Function>,
 ) -> Result<H::Domain> {
-    let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
-    hasher.update(AsRef::<[u8]>::as_ref(&id));
+    let mut hasher = Sha256::new();
+    hasher.input(AsRef::<[u8]>::as_ref(&id));
 
     // The hash is about the parents, hence skip if a node doesn't have any parents
     if node != parents[0] as usize {
         let mut scratch: [u8; NODE_SIZE] = [0; NODE_SIZE];
         for parent in parents.iter() {
             tree.read_into(*parent as usize, &mut scratch);
-            hasher.update(&scratch);
+            hasher.input(&scratch);
         }
     }
 
-    let hash = hasher.finalize();
+    let hash = hasher.result();
     Ok(bytes_into_fr_repr_safe(hash.as_ref()).into())
 }
 

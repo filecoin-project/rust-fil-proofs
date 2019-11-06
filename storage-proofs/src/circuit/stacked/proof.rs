@@ -329,7 +329,7 @@ mod tests {
     use crate::crypto::pedersen::JJ_PARAMS;
     use crate::drgraph::{new_seed, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{Blake2sHasher, Hasher, PedersenHasher};
+    use crate::hasher::{Hasher, PedersenHasher, Sha256Hasher};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
     use crate::stacked::{
@@ -364,8 +364,8 @@ mod tests {
             layer_challenges: layer_challenges.clone(),
         };
 
-        let pp = StackedDrg::<PedersenHasher, Blake2sHasher>::setup(&sp).expect("setup failed");
-        let (tau, (p_aux, t_aux)) = StackedDrg::<PedersenHasher, Blake2sHasher>::replicate(
+        let pp = StackedDrg::<PedersenHasher, Sha256Hasher>::setup(&sp).expect("setup failed");
+        let (tau, (p_aux, t_aux)) = StackedDrg::<PedersenHasher, Sha256Hasher>::replicate(
             &pp,
             &replica_id.into(),
             data_copy.as_mut_slice(),
@@ -377,19 +377,19 @@ mod tests {
         let seed = rng.gen();
 
         let pub_inputs =
-            PublicInputs::<<PedersenHasher as Hasher>::Domain, <Blake2sHasher as Hasher>::Domain> {
+            PublicInputs::<<PedersenHasher as Hasher>::Domain, <Sha256Hasher as Hasher>::Domain> {
                 replica_id: replica_id.into(),
                 seed,
                 tau: Some(tau.into()),
                 k: None,
             };
 
-        let priv_inputs = PrivateInputs::<PedersenHasher, Blake2sHasher> {
+        let priv_inputs = PrivateInputs::<PedersenHasher, Sha256Hasher> {
             p_aux: p_aux.into(),
             t_aux: t_aux.into(),
         };
 
-        let proofs = StackedDrg::<PedersenHasher, Blake2sHasher>::prove_all_partitions(
+        let proofs = StackedDrg::<PedersenHasher, Sha256Hasher>::prove_all_partitions(
             &pp,
             &pub_inputs,
             &priv_inputs,
@@ -411,7 +411,7 @@ mod tests {
 
             StackedCompound::circuit(
             &pub_inputs,
-            <StackedCircuit<Bls12, PedersenHasher, Blake2sHasher> as CircuitComponent>::ComponentPrivateInputs::default(),
+            <StackedCircuit<Bls12, PedersenHasher, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
             &proofs[0],
             &pp,
             &JJ_PARAMS,
@@ -430,7 +430,7 @@ mod tests {
 
         StackedCompound::circuit(
             &pub_inputs,
-            <StackedCircuit<Bls12, PedersenHasher, Blake2sHasher> as CircuitComponent>::ComponentPrivateInputs::default(),
+            <StackedCircuit<Bls12, PedersenHasher, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
             &proofs[0],
             &pp,
             &JJ_PARAMS,
@@ -450,7 +450,7 @@ mod tests {
 
         let generated_inputs = <StackedCompound as CompoundProof<
             _,
-            StackedDrg<PedersenHasher, Blake2sHasher>,
+            StackedDrg<PedersenHasher, Sha256Hasher>,
             _,
         >>::generate_public_inputs(&pub_inputs, &pp, None);
         let expected_inputs = cs.get_inputs();
@@ -477,7 +477,7 @@ mod tests {
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn test_stacked_compound_blake2s() {
-        stacked_test_compound::<Blake2sHasher>();
+        stacked_test_compound::<Sha256Hasher>();
     }
 
     fn stacked_test_compound<H: 'static + Hasher>() {
@@ -522,13 +522,13 @@ mod tests {
 
         let seed = rng.gen();
 
-        let public_inputs = PublicInputs::<H::Domain, <Blake2sHasher as Hasher>::Domain> {
+        let public_inputs = PublicInputs::<H::Domain, <Sha256Hasher as Hasher>::Domain> {
             replica_id: replica_id.into(),
             seed,
             tau: Some(tau),
             k: None,
         };
-        let private_inputs = PrivateInputs::<H, Blake2sHasher> { p_aux, t_aux };
+        let private_inputs = PrivateInputs::<H, Sha256Hasher> { p_aux, t_aux };
 
         {
             let (circuit, inputs) =
@@ -556,7 +556,7 @@ mod tests {
                 StackedCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);
             let blank_circuit = <StackedCompound as CompoundProof<
                 _,
-                StackedDrg<H, Blake2sHasher>,
+                StackedDrg<H, Sha256Hasher>,
                 _,
             >>::blank_circuit(
                 &public_params.vanilla_params, &JJ_PARAMS
@@ -580,7 +580,7 @@ mod tests {
 
         let blank_groth_params = <StackedCompound as CompoundProof<
             _,
-            StackedDrg<H, Blake2sHasher>,
+            StackedDrg<H, Sha256Hasher>,
             _,
         >>::groth_params(&public_params.vanilla_params, &JJ_PARAMS)
         .expect("failed to generate groth params");

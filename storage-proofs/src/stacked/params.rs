@@ -15,7 +15,7 @@ use crate::stacked::{
     column::Column, column_proof::ColumnProof, encoding_proof::EncodingProof,
     graph::StackedBucketGraph, hash::hash2, LayerChallenges,
 };
-use crate::util::{data_at_node, NODE_SIZE};
+use crate::util::data_at_node;
 
 pub type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 
@@ -415,14 +415,14 @@ pub fn generate_replica_id<H: Hasher, T: AsRef<[u8]>>(
     ticket: &[u8; 32],
     comm_d: T,
 ) -> H::Domain {
-    use blake2s_simd::Params as Blake2s;
+    use sha2::{Digest, Sha256};
 
-    let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
+    let hash = Sha256::new()
+        .chain(prover_id)
+        .chain(&sector_id.to_le_bytes()[..])
+        .chain(ticket)
+        .chain(AsRef::<[u8]>::as_ref(&comm_d))
+        .result();
 
-    hasher.update(prover_id);
-    hasher.update(&sector_id.to_le_bytes()[..]);
-    hasher.update(ticket);
-    hasher.update(AsRef::<[u8]>::as_ref(&comm_d));
-
-    bytes_into_fr_repr_safe(hasher.finalize().as_ref()).into()
+    bytes_into_fr_repr_safe(hash.as_ref()).into()
 }

@@ -1,7 +1,6 @@
-use blake2s_simd::blake2s;
-use byteorder::{LittleEndian, WriteBytesExt};
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
+use sha2::{Digest, Sha256};
 
 use crate::hasher::Domain;
 
@@ -77,14 +76,14 @@ impl LayerChallenges {
 
         (0..challenges_count)
             .map(|i| {
-                let mut bytes = replica_id.into_bytes();
-                let j = ((challenges_count * k as usize) + i) as u32;
-                bytes.extend_from_slice(seed);
+                let j: u32 = ((challenges_count * k as usize) + i) as u32;
 
-                // Unwraping here is safe, all hash domains are larger than 4 bytes (the size of a `u32`).
-                bytes.write_u32::<LittleEndian>(j).unwrap();
+                let hash = Sha256::new()
+                    .chain(replica_id.into_bytes())
+                    .chain(seed)
+                    .chain(&j.to_le_bytes())
+                    .result();
 
-                let hash = blake2s(bytes.as_slice());
                 let big_challenge = BigUint::from_bytes_le(hash.as_ref());
 
                 // For now, we cannot try to prove the first or last node, so make sure the challenge

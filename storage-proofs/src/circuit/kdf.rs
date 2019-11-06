@@ -1,6 +1,6 @@
 use bellperson::{ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::circuit::blake2s::blake2s as blake2s_circuit;
 use fil_sapling_crypto::circuit::boolean::Boolean;
+use fil_sapling_crypto::circuit::sha256::sha256 as sha256_circuit;
 use fil_sapling_crypto::circuit::{multipack, num};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 
@@ -30,22 +30,16 @@ where
         ciphertexts.extend(parent);
     }
 
-    let personalization = vec![0u8; 8];
-    let alloc_bits = blake2s_circuit(cs.namespace(|| "hash"), &ciphertexts[..], &personalization)?;
-    let fr = match alloc_bits[0].get_value() {
-        Some(_) => {
-            let bits = alloc_bits
-                .iter()
-                .map(|v| v.get_value().unwrap())
-                .collect::<Vec<bool>>();
-            // TODO: figure out if we can avoid this
-            let frs = multipack::compute_multipacking::<E>(&bits);
-            Ok(frs[0])
-        }
-        None => Err(SynthesisError::AssignmentMissing),
-    };
+    let alloc_bits = sha256_circuit(cs.namespace(|| "hash"), &ciphertexts[..])?;
+    let bits = alloc_bits
+        .iter()
+        .map(|v| v.get_value())
+        .map(|v| v.ok_or_else(|| SynthesisError::AssignmentMissing))
+        .collect::<Result<Vec<bool>, _>>()?;
 
-    num::AllocatedNum::<E>::alloc(cs.namespace(|| "num"), || fr)
+    let frs = multipack::compute_multipacking::<E>(&bits);
+
+    num::AllocatedNum::<E>::alloc(cs.namespace(|| "num"), || Ok(frs[0]))
 }
 
 #[cfg(test)]
@@ -87,7 +81,7 @@ mod tests {
             .expect("key derivation function failed");
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_constraints(), 240282);
+        assert_eq!(cs.num_constraints(), 292540);
 
         let input_bytes = parents.iter().fold(id, |mut acc, parent| {
             acc.extend(parent);
