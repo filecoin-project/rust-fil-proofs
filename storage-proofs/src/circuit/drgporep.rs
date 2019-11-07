@@ -1,23 +1,25 @@
+use std::marker::PhantomData;
+
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use ff::PrimeField;
 use fil_sapling_crypto::circuit::boolean::Boolean;
-use fil_sapling_crypto::circuit::{multipack, num};
+use fil_sapling_crypto::circuit::num;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::circuit::constraint;
 use crate::circuit::encode;
 use crate::circuit::kdf::kdf;
+use crate::circuit::por::{PoRCircuit, PoRCompound};
 use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::drgporep::DrgPoRep;
 use crate::drgraph::Graph;
 use crate::fr32::fr_into_bytes;
+use crate::hasher::Hasher;
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
-use crate::util::{bytes_into_bits_be, bytes_into_boolean_vec_be};
-use std::marker::PhantomData;
+use crate::util::bytes_into_boolean_vec_be;
 
 /// DRG based Proof of Replication.
 ///
@@ -46,8 +48,6 @@ use std::marker::PhantomData;
 //    "drg-proof-of-replication",
 //    false
 //);
-use crate::circuit::por::{PoRCircuit, PoRCompound};
-use crate::hasher::{Domain, Hasher};
 
 pub struct DrgPoRepCircuit<'a, E: JubjubEngine, H: Hasher> {
     params: &'a E::Params,
@@ -171,18 +171,13 @@ where
 
         let leaves = pub_params.graph.size();
 
-        let replica_id_bits = bytes_into_bits_be(&replica_id.into_bytes());
-
-        let packed_replica_id =
-            multipack::compute_multipacking::<Bls12>(&replica_id_bits[0..Fr::CAPACITY as usize]);
-
         let por_pub_params = merklepor::PublicParams {
             leaves,
             private: pub_params.private,
         };
 
-        let mut input = Vec::new();
-        input.extend(packed_replica_id);
+        let mut input: Vec<Fr> = Vec::new();
+        input.push(replica_id.into());
 
         let mut parents = vec![0; pub_params.graph.degree()];
         for challenge in challenges {
@@ -390,23 +385,16 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for DrgPoRepCircuit<'a, E, H> {
         assert_eq!(self.replica_nodes_paths.len(), nodes);
         assert_eq!(self.replica_parents.len(), nodes);
         assert_eq!(self.replica_parents_paths.len(), nodes);
-
         assert_eq!(self.data_nodes_paths.len(), nodes);
 
-        let raw_bytes; // Need let here so borrow in match lives long enough.
-        let replica_id_bytes = match replica_id {
-            Some(replica_id) => {
-                raw_bytes = fr_into_bytes::<E>(&replica_id);
-                Some(raw_bytes.as_slice())
-            }
-            // Used in parameter generation or when circuit is created only for
-            // structure and input count.
-            None => None,
-        };
-
         // get the replica_id in bits
-        let replica_id_bits =
-            bytes_into_boolean_vec_be(cs.namespace(|| "replica_id_bits"), replica_id_bytes, 256)?;
+        let replica_id_bits = match replica_id {
+            Some(id) => {
+                let raw_bytes = fr_into_bytes::<E>(&id);
+                bytes_into_boolean_vec_be(cs.namespace(|| "replica_id_bits"), Some(&raw_bytes), 256)
+            }
+            None => bytes_into_boolean_vec_be(cs.namespace(|| "replica_id_bits"), None, 256),
+        }?;
 
         let replica_node_num = num::AllocatedNum::alloc(cs.namespace(|| "replica_id_num"), || {
             replica_id.ok_or_else(|| SynthesisError::AssignmentMissing)
@@ -669,6 +657,26 @@ mod tests {
             cs.get_input(1, "drgporep/replica_id/input variable"),
             replica_id.unwrap()
         );
+
+        let generated_inputs =
+            <DrgPoRepCompound<_, _> as CompoundProof<_, _, _>>::generate_public_inputs(
+                &pub_inputs,
+                &pp,
+                None,
+            );
+        let expected_inputs = cs.get_inputs();
+
+        for ((input, label), generated_input) in
+            expected_inputs.iter().skip(1).zip(generated_inputs.iter())
+        {
+            assert_eq!(input, generated_input, "{}", label);
+        }
+
+        assert_eq!(
+            generated_inputs.len(),
+            expected_inputs.len() - 1,
+            "inputs are not the same length"
+        );
     }
 
     #[test]
@@ -714,6 +722,10 @@ mod tests {
     }
 
     fn drgporep_test_compound<H: Hasher>() {
+        // femme::pretty::Logger::new()
+        //     .start(log::LevelFilter::Trace)
+        //     .ok();
+
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         let nodes = 5;
@@ -792,9 +804,29 @@ mod tests {
 
             let mut cs = TestConstraintSystem::new();
 
-            circuit.synthesize(&mut cs).expect("failed to synthesize");
+            circuit
+                .synthesize(&mut cs)
+                .expect("failed to synthesize test circuit");
             assert!(cs.is_satisfied());
             assert!(cs.verify(&inputs));
+
+            let blank_circuit = <DrgPoRepCompound<_, _> as CompoundProof<_, _, _>>::blank_circuit(
+                &public_params.vanilla_params,
+                &JJ_PARAMS,
+            );
+
+            let mut cs_blank = TestConstraintSystem::new();
+            blank_circuit
+                .synthesize(&mut cs_blank)
+                .expect("failed to synthesize blank circuit");
+
+            let a = cs_blank.pretty_print_list();
+
+            let b = cs.pretty_print_list();
+
+            for (i, (a, b)) in a.chunks(100).zip(b.chunks(100)).enumerate() {
+                assert_eq!(a, b, "failed at chunk {}", i);
+            }
         }
 
         {

@@ -18,6 +18,7 @@ where
     E: JubjubEngine,
     CS: ConstraintSystem<E>,
 {
+    trace!("circuit: kdf");
     // ciphertexts will become a buffer of the layout
     // id | node | encodedParentNode1 | encodedParentNode1 | ...
 
@@ -31,23 +32,27 @@ where
         ciphertexts.extend_from_slice(&parent);
     }
 
+    trace!("circuit: kdf: sha256");
     let alloc_bits = sha256_circuit(cs.namespace(|| "hash"), &ciphertexts[..])?;
-    let be_bits = alloc_bits
-        .iter()
-        .map(|v| v.get_value())
-        .map(|v| v.ok_or_else(|| SynthesisError::AssignmentMissing))
-        .collect::<Result<Vec<bool>, _>>()?;
+    let fr = if alloc_bits[0].get_value().is_some() {
+        let be_bits = alloc_bits
+            .iter()
+            .map(|v| v.get_value().unwrap())
+            .collect::<Vec<bool>>();
 
-    let le_bits = be_bits
-        .chunks(8)
-        .flat_map(|chunk| chunk.into_iter().rev())
-        .copied()
-        .take(E::Fr::CAPACITY as usize)
-        .collect::<Vec<bool>>();
+        let le_bits = be_bits
+            .chunks(8)
+            .flat_map(|chunk| chunk.iter().rev())
+            .copied()
+            .take(E::Fr::CAPACITY as usize)
+            .collect::<Vec<bool>>();
 
-    let fr = multipack::compute_multipacking::<E>(&le_bits)[0];
+        Ok(multipack::compute_multipacking::<E>(&le_bits)[0])
+    } else {
+        Err(SynthesisError::AssignmentMissing)
+    };
 
-    num::AllocatedNum::<E>::alloc(cs.namespace(|| "result_num"), || Ok(fr))
+    num::AllocatedNum::<E>::alloc(cs.namespace(|| "result_num"), || fr)
 }
 
 #[cfg(test)]

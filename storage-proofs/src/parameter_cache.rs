@@ -16,7 +16,7 @@ use std::time::Instant;
 use crate::error::Error::Unclassified;
 
 /// Bump this when circuits change to invalidate the cache.
-pub const VERSION: usize = 15;
+pub const VERSION: usize = 16;
 
 pub const PARAMETER_CACHE_ENV_VAR: &str = "FIL_PROOFS_PARAMETER_CACHE";
 
