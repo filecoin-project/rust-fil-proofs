@@ -23,6 +23,6 @@ pub const MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR: u64 =
 pub const MIN_PIECE_SIZE: UnpaddedBytesAmount = UnpaddedBytesAmount(127);
 
 /// The hasher used for creating comm_d.
-pub type DefaultPieceHasher = storage_proofs::hasher::Blake2sHasher;
+pub type DefaultPieceHasher = storage_proofs::hasher::Sha256Hasher;
 
 pub use storage_proofs::drgraph::DefaultTreeHasher;

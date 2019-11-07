@@ -8,7 +8,7 @@ use storage_proofs::circuit::pedersen::{pedersen_compression_num, pedersen_md_no
 use storage_proofs::circuit::test::TestConstraintSystem;
 use storage_proofs::crypto;
 use storage_proofs::crypto::pedersen::JJ_PARAMS;
-use storage_proofs::util::{bits_to_bytes, bytes_into_boolean_vec};
+use storage_proofs::util::{bits_to_bytes, bytes_into_boolean_vec, bytes_into_boolean_vec_be};
 
 fn blake2s_count(bytes: usize) -> Result<Report, failure::Error> {
     let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
@@ -39,6 +39,32 @@ fn blake2s_count(bytes: usize) -> Result<Report, failure::Error> {
 
     Ok(Report {
         hash_fn: "blake2s".into(),
+        bytes,
+        constraints: cs.num_constraints(),
+    })
+}
+
+fn sha256_count(bytes: usize) -> Result<Report, failure::Error> {
+    let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+    let mut cs = TestConstraintSystem::<Bls12>::new();
+    let mut data = vec![0u8; bytes];
+    rng.fill_bytes(&mut data);
+
+    let data_bits: Vec<Boolean> = {
+        let mut cs = cs.namespace(|| "data");
+        bytes_into_boolean_vec_be(&mut cs, Some(data.as_slice()), data.len()).unwrap()
+    };
+
+    let _out: Vec<bool> = scircuit::sha256::sha256(&mut cs, &data_bits)?
+        .into_iter()
+        .map(|b| b.get_value().unwrap())
+        .collect();
+
+    assert!(cs.is_satisfied(), "constraints not satisfied");
+
+    Ok(Report {
+        hash_fn: "sha256".into(),
         bytes,
         constraints: cs.num_constraints(),
     })
@@ -103,6 +129,10 @@ pub fn run() -> Result<(), failure::Error> {
         pedersen_count(64)?,
         pedersen_count(128)?,
         pedersen_count(256)?,
+        sha256_count(32)?,
+        sha256_count(64)?,
+        sha256_count(128)?,
+        sha256_count(256)?,
     ];
 
     // print reports
