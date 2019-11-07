@@ -400,8 +400,8 @@ mod tests {
 
         assert!(proofs_are_valid);
 
-        let expected_inputs = 20; // was 39 with "old" stacked all pedersen
-        let expected_constraints = 239_584; // was 432_312 with "old" stacked all pedersen
+        let expected_inputs = 20;
+        let expected_constraints = 329_930;
 
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.
