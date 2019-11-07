@@ -5,15 +5,7 @@ use sha2::{Digest, Sha256};
 use crate::fr32::bytes_into_fr_repr_safe;
 
 /// Key derivation function, based on pedersen hashing.
-pub fn kdf(data: &[u8], m: usize) -> Fr {
-    assert_eq!(
-        data.len(),
-        32 * (1 + m),
-        "invalid input length: data.len(): {} m: {}",
-        data.len(),
-        m
-    );
-
+pub fn kdf(data: &[u8], _m: usize) -> Fr {
     let hash = Sha256::digest(data);
     Fr::from_repr(bytes_into_fr_repr_safe(hash.as_ref())).unwrap()
 }
@@ -40,13 +32,5 @@ mod tests {
 
         let res = kdf(&data, m);
         assert_eq!(res, expected);
-    }
-
-    #[test]
-    #[should_panic]
-    fn kdf_invalid_block_len() {
-        let data = vec![2u8; 1234];
-
-        kdf(&data, 44);
     }
 }

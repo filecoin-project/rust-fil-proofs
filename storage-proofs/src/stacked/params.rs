@@ -419,7 +419,7 @@ pub fn generate_replica_id<H: Hasher, T: AsRef<[u8]>>(
 
     let hash = Sha256::new()
         .chain(prover_id)
-        .chain(&sector_id.to_le_bytes()[..])
+        .chain(&sector_id.to_be_bytes()[..])
         .chain(ticket)
         .chain(AsRef::<[u8]>::as_ref(&comm_d))
         .result();

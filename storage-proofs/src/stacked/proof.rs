@@ -318,7 +318,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 let mut hasher = base_hasher.clone();
 
                 // hash node id
-                let node_arr = (node as u64).to_le_bytes();
+                let node_arr = (node as u64).to_be_bytes();
                 hasher.input(&node_arr);
 
                 // hash parents for all non 0 nodes

@@ -31,7 +31,7 @@ impl<H: Hasher> EncodingProof<H> {
         hasher.input(AsRef::<[u8]>::as_ref(replica_id));
 
         // node id
-        hasher.input(&(self.node as u64).to_le_bytes());
+        hasher.input(&(self.node as u64).to_be_bytes());
 
         for parent in &self.parents {
             hasher.input(AsRef::<[u8]>::as_ref(parent));
