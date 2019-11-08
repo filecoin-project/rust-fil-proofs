@@ -1,10 +1,10 @@
 use std::marker::PhantomData;
 
-use blake2s_simd::Params as Blake2s;
 use merkletree::merkle::FromIndexedParallelIterator;
 use merkletree::store::DiskStore;
 use paired::bls12_381::Fr;
 use rayon::prelude::*;
+use sha2::{digest::generic_array::GenericArray, Digest, Sha256};
 
 use crate::drgraph::Graph;
 use crate::encode::{decode, encode};
@@ -254,13 +254,13 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let mut exp_parents_data: Option<Vec<u8>> = None;
 
         // setup hasher to reuse
-        let mut base_hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
+        let mut base_hasher = Sha256::new();
         // hash replica id
-        base_hasher.update(AsRef::<[u8]>::as_ref(replica_id));
+        base_hasher.input(AsRef::<[u8]>::as_ref(replica_id));
 
         enum Message {
-            Init(usize, [u8; 32]),
-            Hash(usize, [u8; 32]),
+            Init(usize, GenericArray<u8, <Sha256 as Digest>::OutputSize>),
+            Hash(usize, GenericArray<u8, <Sha256 as Digest>::OutputSize>),
             Done,
         }
 
@@ -318,8 +318,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 let mut hasher = base_hasher.clone();
 
                 // hash node id
-                let node_arr = (node as u64).to_le_bytes();
-                hasher.update(&node_arr);
+                let node_arr = (node as u64).to_be_bytes();
+                hasher.input(&node_arr);
 
                 // hash parents for all non 0 nodes
                 if node > 0 {
@@ -328,7 +328,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     // Base parents
                     for parent in parents.iter().take(base_parents_count) {
                         let buf = data_at_node(&encoding, *parent as usize).expect("invalid node");
-                        hasher.update(buf);
+                        hasher.input(buf);
                     }
 
                     // Expander parents
@@ -337,7 +337,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         for parent in parents.iter().skip(base_parents_count) {
                             let buf =
                                 data_at_node(parents_data, *parent as usize).expect("invalid node");
-                            hasher.update(&buf);
+                            hasher.input(&buf);
                         }
                     }
                 }
@@ -346,7 +346,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 let end = start + NODE_SIZE;
 
                 // finalize the key
-                let mut key = *hasher.finalize().as_array();
+                let mut key = hasher.result();
                 // strip last two bits, to ensure result is in Fr.
                 key[31] &= 0b0011_1111;
 

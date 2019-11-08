@@ -47,7 +47,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     ticket: Ticket,
     offset: UnpaddedByteIndex,
     num_bytes: UnpaddedBytesAmount,
-) -> error::Result<(UnpaddedBytesAmount)> {
+) -> error::Result<UnpaddedBytesAmount> {
     let comm_d =
         as_safe_commitment::<<DefaultPieceHasher as Hasher>::Domain, _>(&comm_d, "comm_d")?;
 

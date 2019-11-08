@@ -32,6 +32,10 @@ impl UInt64 {
         }
     }
 
+    pub fn get_value(&self) -> Option<u64> {
+        self.value
+    }
+
     /// Allocate a `UInt64` in the constraint system
     pub fn alloc<E, CS>(mut cs: CS, value: Option<u64>) -> Result<Self, SynthesisError>
     where

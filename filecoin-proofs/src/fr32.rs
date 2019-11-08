@@ -441,7 +441,7 @@ the unique bit `0`, that just *started* at that position but doesn't
 necessarily carry that value.)
 
 **/
-pub fn shift_bits(input: &[u8], amount: usize, is_left: bool) -> (Vec<u8>) {
+pub fn shift_bits(input: &[u8], amount: usize, is_left: bool) -> Vec<u8> {
     debug_assert!(amount >= 1);
     debug_assert!(amount <= 7);
 

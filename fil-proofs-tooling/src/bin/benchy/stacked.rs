@@ -44,7 +44,7 @@ fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> Result<MmapMut, fail
 }
 
 fn dump_proof_bytes<H: Hasher>(
-    all_partition_proofs: &[Vec<stacked::Proof<H, Blake2sHasher>>],
+    all_partition_proofs: &[Vec<stacked::Proof<H, Sha256Hasher>>],
 ) -> Result<(), failure::Error> {
     let file = OpenOptions::new()
         .write(true)
@@ -132,7 +132,7 @@ where
             layer_challenges: layer_challenges.clone(),
         };
 
-        let pp = StackedDrg::<H, Blake2sHasher>::setup(&sp)?;
+        let pp = StackedDrg::<H, Sha256Hasher>::setup(&sp)?;
 
         let (pub_in, priv_in, d) = if *bench_only {
             (None, None, None)
@@ -146,9 +146,9 @@ where
                 return_value: (pub_inputs, priv_inputs),
             } = measure(|| {
                 let (tau, (p_aux, t_aux)) =
-                    StackedDrg::<H, Blake2sHasher>::replicate(&pp, &replica_id, &mut data, None)?;
+                    StackedDrg::<H, Sha256Hasher>::replicate(&pp, &replica_id, &mut data, None)?;
 
-                let pb = stacked::PublicInputs::<H::Domain, <Blake2sHasher as Hasher>::Domain> {
+                let pb = stacked::PublicInputs::<H::Domain, <Sha256Hasher as Hasher>::Domain> {
                     replica_id,
                     seed,
                     tau: Some(tau),
@@ -189,7 +189,7 @@ where
                 wall_time: vanilla_proving_wall_time,
                 return_value: all_partition_proofs,
             } = measure(|| {
-                StackedDrg::<H, Blake2sHasher>::prove_all_partitions(
+                StackedDrg::<H, Sha256Hasher>::prove_all_partitions(
                     &pp,
                     &pub_inputs,
                     &priv_inputs,
@@ -218,7 +218,7 @@ where
 
             for _ in 0..*samples {
                 let m = measure(|| {
-                    let verified = StackedDrg::<H, Blake2sHasher>::verify_all_partitions(
+                    let verified = StackedDrg::<H, Sha256Hasher>::verify_all_partitions(
                         &pp,
                         &pub_inputs,
                         &all_partition_proofs,
@@ -265,7 +265,7 @@ where
         if let Some(data) = d {
             if *extract {
                 let m = measure(|| {
-                    StackedDrg::<H, Blake2sHasher>::extract_all(&pp, &replica_id, &data)
+                    StackedDrg::<H, Sha256Hasher>::extract_all(&pp, &replica_id, &data)
                         .map_err(|err| err.into())
                 })?;
 
@@ -296,9 +296,9 @@ struct CircuitWorkMeasurement {
 }
 
 fn do_circuit_work<H: 'static + Hasher>(
-    pp: &<StackedDrg<H, Blake2sHasher> as ProofScheme>::PublicParams,
-    pub_in: Option<<StackedDrg<H, Blake2sHasher> as ProofScheme>::PublicInputs>,
-    priv_in: Option<<StackedDrg<H, Blake2sHasher> as ProofScheme>::PrivateInputs>,
+    pp: &<StackedDrg<H, Sha256Hasher> as ProofScheme>::PublicParams,
+    pub_in: Option<<StackedDrg<H, Sha256Hasher> as ProofScheme>::PublicInputs>,
+    priv_in: Option<<StackedDrg<H, Sha256Hasher> as ProofScheme>::PrivateInputs>,
     params: &Params,
     report: &mut Report,
 ) -> Result<CircuitWorkMeasurement, failure::Error> {
@@ -322,7 +322,7 @@ fn do_circuit_work<H: 'static + Hasher>(
 
     if *bench || *circuit {
         let mut cs = MetricCS::<Bls12>::new();
-        <StackedCompound as CompoundProof<_, StackedDrg<H, Blake2sHasher>, _>>::blank_circuit(
+        <StackedCompound as CompoundProof<_, StackedDrg<H, Sha256Hasher>, _>>::blank_circuit(
             &pp, &JJ_PARAMS,
         )
         .synthesize(&mut cs)?;
@@ -342,7 +342,7 @@ fn do_circuit_work<H: 'static + Hasher>(
         // We should also allow the serialized vanilla proofs to be passed (as a file) to the example
         // and skip replication/vanilla-proving entirely.
         let gparams =
-            <StackedCompound as CompoundProof<_, StackedDrg<H, Blake2sHasher>, _>>::groth_params(
+            <StackedCompound as CompoundProof<_, StackedDrg<H, Sha256Hasher>, _>>::groth_params(
                 &compound_public_params.vanilla_params,
                 &JJ_PARAMS,
             )?;

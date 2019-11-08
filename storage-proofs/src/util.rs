@@ -30,6 +30,14 @@ pub fn bytes_into_bits(bytes: &[u8]) -> Vec<bool> {
         .collect()
 }
 
+/// Converts bytes into their bit representation, in big endian format.
+pub fn bytes_into_bits_be(bytes: &[u8]) -> Vec<bool> {
+    bytes
+        .iter()
+        .flat_map(|&byte| (0..8).rev().map(move |i| (byte >> i) & 1u8 == 1u8))
+        .collect()
+}
+
 /// Converts the bytes into a boolean vector, in little endian format.
 pub fn bytes_into_boolean_vec<E: Engine, CS: ConstraintSystem<E>>(
     mut cs: CS,
@@ -38,6 +46,31 @@ pub fn bytes_into_boolean_vec<E: Engine, CS: ConstraintSystem<E>>(
 ) -> Result<Vec<boolean::Boolean>, SynthesisError> {
     let values = match value {
         Some(value) => bytes_into_bits(value).into_iter().map(Some).collect(),
+        None => vec![None; size],
+    };
+
+    let bits = values
+        .into_iter()
+        .enumerate()
+        .map(|(i, b)| {
+            Ok(Boolean::from(AllocatedBit::alloc(
+                cs.namespace(|| format!("bit {}", i)),
+                b,
+            )?))
+        })
+        .collect::<Result<Vec<_>, SynthesisError>>()?;
+
+    Ok(bits)
+}
+
+/// Converts the bytes into a boolean vector, in big endian format.
+pub fn bytes_into_boolean_vec_be<E: Engine, CS: ConstraintSystem<E>>(
+    mut cs: CS,
+    value: Option<&[u8]>,
+    size: usize,
+) -> Result<Vec<boolean::Boolean>, SynthesisError> {
+    let values = match value {
+        Some(value) => bytes_into_bits_be(value).into_iter().map(Some).collect(),
         None => vec![None; size],
     };
 

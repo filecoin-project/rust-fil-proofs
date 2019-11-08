@@ -37,7 +37,7 @@ pub trait Domain:
 }
 
 pub trait HashFunction<T: Domain>:
-    Clone + ::std::fmt::Debug + Eq + Send + Sync + LightAlgorithm<T>
+    Clone + ::std::fmt::Debug + Send + Sync + LightAlgorithm<T>
 {
     fn hash(data: &[u8]) -> T;
 
