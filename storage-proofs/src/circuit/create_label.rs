@@ -1,8 +1,10 @@
+use bellperson::gadgets::{
+    boolean::Boolean,
+    sha256::sha256 as sha256_circuit,
+    {multipack, num},
+};
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::PrimeField;
-use fil_sapling_crypto::circuit::boolean::Boolean;
-use fil_sapling_crypto::circuit::sha256::sha256 as sha256_circuit;
-use fil_sapling_crypto::circuit::{multipack, num};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 
 use crate::circuit::uint64;
@@ -62,10 +64,11 @@ mod tests {
     use crate::crypto;
     use crate::fr32::fr_into_bytes;
     use crate::util::bytes_into_boolean_vec_be;
+    use bellperson::gadgets::boolean::Boolean;
     use bellperson::ConstraintSystem;
-    use fil_sapling_crypto::circuit::boolean::Boolean;
     use paired::bls12_381::Bls12;
-    use rand::{Rng, SeedableRng, XorShiftRng};
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
 
     #[test]
     fn create_label_circuit_no_node() {

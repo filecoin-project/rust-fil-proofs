@@ -1,5 +1,5 @@
+use bellperson::gadgets::boolean::{self, AllocatedBit, Boolean};
 use bellperson::{ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::circuit::boolean::{self, AllocatedBit, Boolean};
 use paired::Engine;
 
 use crate::error;
@@ -120,7 +120,8 @@ mod tests {
     use super::*;
     use crate::circuit::test::*;
     use paired::bls12_381::*;
-    use rand::{Rng, SeedableRng, XorShiftRng};
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
 
     #[test]
     fn test_bytes_into_boolean_vec() {

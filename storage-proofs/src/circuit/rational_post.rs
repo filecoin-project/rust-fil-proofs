@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
+use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::circuit::num;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
@@ -274,7 +274,8 @@ mod tests {
     use std::collections::BTreeMap;
 
     use ff::Field;
-    use rand::{Rng, SeedableRng, XorShiftRng};
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
 
     use crate::circuit::test::*;
     use crate::compound_proof;

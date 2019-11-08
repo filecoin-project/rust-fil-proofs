@@ -1,7 +1,7 @@
+use bellperson::gadgets::boolean::Boolean;
+use bellperson::gadgets::num;
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::Field;
-use fil_sapling_crypto::circuit::boolean::Boolean;
-use fil_sapling_crypto::circuit::num;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 
 use crate::circuit::pedersen::{pedersen_compression_num as pedersen, pedersen_md_no_padding};
@@ -92,10 +92,11 @@ where
 mod tests {
     use super::*;
 
+    use bellperson::gadgets::boolean::Boolean;
     use bellperson::ConstraintSystem;
-    use fil_sapling_crypto::circuit::boolean::Boolean;
     use paired::bls12_381::{Bls12, Fr};
-    use rand::{Rng, SeedableRng, XorShiftRng};
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
 
     use crate::circuit::test::TestConstraintSystem;
     use crate::crypto::pedersen::JJ_PARAMS;

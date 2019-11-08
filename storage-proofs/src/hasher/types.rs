@@ -1,10 +1,9 @@
+use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::circuit::{boolean, num};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
 use merkletree::merkle::Element;
 use paired::bls12_381::{Fr, FrRepr};
-use rand::Rand;
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 
@@ -23,7 +22,6 @@ pub trait Domain:
     + From<Fr>
     + From<FrRepr>
     + Into<Fr>
-    + Rand
     + Serialize
     + DeserializeOwned
     + Element
@@ -34,6 +32,8 @@ pub trait Domain:
     fn try_from_bytes(raw: &[u8]) -> Result<Self>;
     /// Write itself into the given slice, LittleEndian bytes.
     fn write_bytes(&self, _: &mut [u8]) -> Result<()>;
+
+    fn random<R: rand::RngCore>(rng: &mut R) -> Self;
 }
 
 pub trait HashFunction<T: Domain>:

@@ -581,7 +581,8 @@ mod tests {
     use memmap::MmapMut;
     use memmap::MmapOptions;
     use paired::bls12_381::Bls12;
-    use rand::{Rng, SeedableRng, XorShiftRng};
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
     use std::fs::File;
     use std::io::Write;
     use tempfile;

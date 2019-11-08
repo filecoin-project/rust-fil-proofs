@@ -1,5 +1,5 @@
+use bellperson::gadgets::boolean::{AllocatedBit, Boolean};
 use bellperson::{ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::circuit::boolean::{AllocatedBit, Boolean};
 use paired::Engine;
 
 /// Represents an interpretation of 64 `Boolean` objects as an unsigned integer.
@@ -160,7 +160,8 @@ impl UInt64 {
 mod test {
     use super::*;
 
-    use rand::{Rng, SeedableRng, XorShiftRng};
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
 
     #[test]
     fn test_uint64_from_bits_be() {

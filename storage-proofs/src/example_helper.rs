@@ -9,7 +9,8 @@ use clap::{self, App, Arg, SubCommand};
 use fil_sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
 use paired::bls12_381::Bls12;
 use pbr::ProgressBar;
-use rand::{Rng, SeedableRng, XorShiftRng};
+use rand::{Rng, SeedableRng};
+use rand_xorshift::XorShiftRng;
 
 use crate::circuit::bench::BenchCS;
 use crate::circuit::test::TestConstraintSystem;

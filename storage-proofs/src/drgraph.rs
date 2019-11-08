@@ -1,7 +1,8 @@
 use std::cmp;
 use std::marker::PhantomData;
 
-use rand::{ChaChaRng, OsRng, Rng, SeedableRng};
+use rand::{rngs::OsRng, Rng, SeedableRng};
+use rand_chacha::ChaChaRng;
 use sha2::{Digest, Sha256};
 
 use crate::error::*;

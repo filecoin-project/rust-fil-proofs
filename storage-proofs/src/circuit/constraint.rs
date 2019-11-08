@@ -1,6 +1,5 @@
-use bellperson::{ConstraintSystem, SynthesisError};
+use bellperson::{gadgets::num, ConstraintSystem, SynthesisError};
 use ff::Field;
-use fil_sapling_crypto::circuit::num;
 use paired::Engine;
 
 /// Adds a constraint to CS, enforcing an equality relationship between the allocated numbers a and b.
@@ -121,7 +120,8 @@ mod tests {
     use super::*;
     use crate::circuit::test::TestConstraintSystem;
     use paired::bls12_381::Bls12;
-    use rand::{Rng, SeedableRng, XorShiftRng};
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
 
     #[test]
     fn add_constraint() {

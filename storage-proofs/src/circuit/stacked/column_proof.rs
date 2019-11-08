@@ -1,5 +1,5 @@
+use bellperson::gadgets::num;
 use bellperson::{ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::circuit::num;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 

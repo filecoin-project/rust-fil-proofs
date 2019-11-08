@@ -2,14 +2,14 @@ use sha2::{Digest, Sha256};
 
 use std::hash::Hasher as StdHasher;
 
+use bellperson::gadgets::{boolean, multipack, num, sha256::sha256 as sha256_circuit};
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::{PrimeField, PrimeFieldRepr};
-use fil_sapling_crypto::circuit::{boolean, multipack, num, sha256::sha256 as sha256_circuit};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use merkletree::hash::{Algorithm, Hashable};
 use merkletree::merkle::Element;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
-use rand::{Rand, Rng};
+use rand::Rng;
 
 use super::{Domain, HashFunction, Hasher};
 use crate::crypto::sloth;
@@ -77,13 +77,6 @@ impl Sha256Domain {
     }
 }
 
-impl Rand for Sha256Domain {
-    fn rand<R: Rng>(rng: &mut R) -> Self {
-        // generating an Fr and converting it, to ensure we stay in the field
-        rng.gen::<Fr>().into()
-    }
-}
-
 impl AsRef<[u8]> for Sha256Domain {
     fn as_ref(&self) -> &[u8] {
         &self.0[..]
@@ -147,6 +140,11 @@ impl Domain for Sha256Domain {
         }
         dest[0..Sha256Domain::byte_len()].copy_from_slice(&self.0[..]);
         Ok(())
+    }
+
+    fn random<R: rand::RngCore>(rng: &mut R) -> Self {
+        // generating an Fr and converting it, to ensure we stay in the field
+        Fr::random(rng).into()
     }
 }
 
@@ -288,11 +286,12 @@ mod tests {
     use crate::crypto;
     use crate::fr32::fr_into_bytes;
     use crate::util::bytes_into_boolean_vec;
+    use bellperson::gadgets::boolean::Boolean;
     use bellperson::ConstraintSystem;
-    use fil_sapling_crypto::circuit::boolean::Boolean;
     use merkletree::hash::Algorithm;
     use paired::bls12_381::Bls12;
-    use rand::{Rng, SeedableRng, XorShiftRng};
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
 
     #[test]
     fn hash_leaf_circuit() {

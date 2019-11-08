@@ -282,7 +282,8 @@ mod tests {
     use bitvec::{self, BitVec};
     use ff::Field;
     use paired::bls12_381::Fr;
-    use rand::{Rng, SeedableRng, XorShiftRng};
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
 
     #[test]
     fn test_bit_vec_le() {
