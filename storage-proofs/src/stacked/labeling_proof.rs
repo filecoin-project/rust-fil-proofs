@@ -1,10 +1,9 @@
 use std::marker::PhantomData;
 
-use blake2s_simd::Params as Blake2s;
+use sha2::{Digest, Sha256};
 
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::Hasher;
-use crate::util::NODE_SIZE;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LabelingProof<H: Hasher> {
@@ -24,19 +23,19 @@ impl<H: Hasher> LabelingProof<H> {
     }
 
     fn create_label(&self, replica_id: &H::Domain) -> H::Domain {
-        let mut hasher = Blake2s::new().hash_length(NODE_SIZE).to_state();
+        let mut hasher = Sha256::new();
 
         // replica_id
-        hasher.update(AsRef::<[u8]>::as_ref(replica_id));
+        hasher.input(AsRef::<[u8]>::as_ref(replica_id));
 
         // node id
-        hasher.update(&(self.node as u64).to_le_bytes());
+        hasher.input(&(self.node as u64).to_be_bytes());
 
         for parent in &self.parents {
-            hasher.update(AsRef::<[u8]>::as_ref(parent));
+            hasher.input(AsRef::<[u8]>::as_ref(parent));
         }
 
-        bytes_into_fr_repr_safe(hasher.finalize().as_ref()).into()
+        bytes_into_fr_repr_safe(hasher.result().as_ref()).into()
     }
 
     pub fn verify(&self, replica_id: &H::Domain, expected_label: &H::Domain) -> bool {

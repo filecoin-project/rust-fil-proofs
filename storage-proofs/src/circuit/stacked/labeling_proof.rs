@@ -5,8 +5,10 @@ use paired::bls12_381::{Bls12, Fr};
 
 use crate::circuit::{constraint, create_label::create_label, uint64};
 use crate::drgraph::Graph;
+use crate::fr32::fr_into_bytes;
 use crate::hasher::Hasher;
 use crate::stacked::{LabelingProof as VanillaLabelingProof, PublicParams};
+use crate::util::bytes_into_boolean_vec_be;
 
 #[derive(Debug, Clone)]
 pub struct LabelingProof {
@@ -35,29 +37,26 @@ impl LabelingProof {
         node: Option<u64>,
         parents: Vec<Option<Fr>>,
     ) -> Result<num::AllocatedNum<Bls12>, SynthesisError> {
-        let parents_num = parents
-            .into_iter()
+        // get the parents into bits
+        let parents_bits: Vec<Vec<Boolean>> = parents
+            .iter()
             .enumerate()
-            .map(|(i, parent)| {
-                num::AllocatedNum::alloc(cs.namespace(|| format!("parent_{}_num", i)), || {
-                    parent
-                        .map(Into::into)
-                        .ok_or_else(|| SynthesisError::AssignmentMissing)
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let parents_bits = parents_num
-            .into_iter()
-            .enumerate()
-            .map(|(i, parent)| {
-                let mut bits =
-                    parent.into_bits_le(cs.namespace(|| format!("parent_{}_bits", i)))?;
-                while bits.len() % 8 > 0 {
-                    bits.push(Boolean::Constant(false));
+            .map(|(i, val)| match val {
+                Some(val) => {
+                    let bytes = fr_into_bytes::<Bls12>(val);
+                    bytes_into_boolean_vec_be(
+                        cs.namespace(|| format!("parents_{}_bits", i)),
+                        Some(&bytes),
+                        256,
+                    )
                 }
-                Ok(bits)
+                None => bytes_into_boolean_vec_be(
+                    cs.namespace(|| format!("parents_{}_bits", i)),
+                    None,
+                    256,
+                ),
             })
-            .collect::<Result<Vec<_>, SynthesisError>>()?;
+            .collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?;
 
         let node_num = uint64::UInt64::alloc(cs.namespace(|| "node"), node)?;
 

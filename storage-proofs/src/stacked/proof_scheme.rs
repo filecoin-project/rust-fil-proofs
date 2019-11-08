@@ -113,6 +113,15 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
                 // Validate for this challenge
                 let challenge = challenges[i];
 
+                // make sure all proofs have the same comm_c
+                if proof.comm_c() != proofs[0].comm_c() {
+                    return false;
+                }
+                // make sure all proofs have the same comm_r_last
+                if proof.comm_r_last() != proofs[0].comm_r_last() {
+                    return false;
+                }
+
                 proof.verify(pub_params, pub_inputs, challenge, i, graph)
             });
 
