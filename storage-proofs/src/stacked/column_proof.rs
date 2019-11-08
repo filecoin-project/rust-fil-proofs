@@ -22,13 +22,10 @@ pub struct ColumnProof<H: Hasher> {
 
 impl<H: Hasher> ColumnProof<H> {
     pub fn from_column(column: Column<H>, inclusion_proof: MerkleProof<H>) -> Self {
-        let res = ColumnProof {
+        ColumnProof {
             column,
             inclusion_proof,
-        };
-        debug_assert!(res.verify());
-
-        res
+        }
     }
 
     pub fn root(&self) -> &H::Domain {
@@ -52,10 +49,12 @@ impl<H: Hasher> ColumnProof<H> {
         self.column.hash()
     }
 
-    pub fn verify(&self) -> bool {
+    pub fn verify(&self, challenge: u32, expected_root: &H::Domain) -> bool {
         let c_i = self.column_hash();
 
+        check_eq!(self.inclusion_proof.root(), expected_root);
         check!(self.inclusion_proof.validate_data(c_i.as_ref()));
+        check!(self.inclusion_proof.validate(challenge as usize));
 
         true
     }

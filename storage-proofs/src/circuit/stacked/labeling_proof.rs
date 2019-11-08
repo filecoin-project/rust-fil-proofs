@@ -3,29 +3,34 @@ use fil_sapling_crypto::circuit::{boolean::Boolean, num};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
-use crate::circuit::{constraint, create_label::create_label as kdf, encode::encode, uint64};
+use crate::circuit::{constraint, create_label::create_label, uint64};
 use crate::drgraph::Graph;
 use crate::fr32::fr_into_bytes;
 use crate::hasher::Hasher;
-use crate::stacked::{EncodingProof as VanillaEncodingProof, PublicParams};
+use crate::stacked::{LabelingProof as VanillaLabelingProof, PublicParams};
 use crate::util::bytes_into_boolean_vec_be;
 
 #[derive(Debug, Clone)]
-pub struct EncodingProof {
+pub struct LabelingProof {
     node: Option<u64>,
     parents: Vec<Option<Fr>>,
 }
 
-impl EncodingProof {
+impl LabelingProof {
     /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty<H: Hasher>(params: &PublicParams<H>) -> Self {
-        EncodingProof {
+    pub fn empty<H: Hasher>(params: &PublicParams<H>, layer: usize) -> Self {
+        let degree = if layer == 1 {
+            params.graph.base_graph().degree()
+        } else {
+            params.graph.degree()
+        };
+        LabelingProof {
             node: None,
-            parents: vec![None; params.graph.degree()],
+            parents: vec![None; degree],
         }
     }
 
-    fn create_key<CS: ConstraintSystem<Bls12>>(
+    fn create_label<CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
         _params: &<Bls12 as JubjubEngine>::Params,
         replica_id: &[Boolean],
@@ -55,8 +60,8 @@ impl EncodingProof {
 
         let node_num = uint64::UInt64::alloc(cs.namespace(|| "node"), node)?;
 
-        kdf(
-            cs.namespace(|| "create_key"),
+        create_label(
+            cs.namespace(|| "create_label"),
             replica_id,
             parents_bits,
             Some(node_num),
@@ -69,37 +74,29 @@ impl EncodingProof {
         params: &<Bls12 as JubjubEngine>::Params,
         replica_id: &[Boolean],
         exp_encoded_node: &num::AllocatedNum<Bls12>,
-        decoded_node: &num::AllocatedNum<Bls12>,
     ) -> Result<(), SynthesisError> {
-        let EncodingProof { node, parents } = self;
+        let LabelingProof { node, parents } = self;
 
-        let key = Self::create_key(
-            cs.namespace(|| "create_key"),
+        let key = Self::create_label(
+            cs.namespace(|| "create_label"),
             params,
             replica_id,
             node,
             parents,
         )?;
 
-        let encoded_node = encode(cs.namespace(|| "encode"), &key, decoded_node)?;
-
         // enforce equality
-        constraint::equal(
-            &mut cs,
-            || "equality_encoded_node",
-            &exp_encoded_node,
-            &encoded_node,
-        );
+        constraint::equal(&mut cs, || "equality_key", &exp_encoded_node, &key);
 
         Ok(())
     }
 }
 
-impl<H: Hasher> From<VanillaEncodingProof<H>> for EncodingProof {
-    fn from(vanilla_proof: VanillaEncodingProof<H>) -> Self {
-        let VanillaEncodingProof { parents, node, .. } = vanilla_proof;
+impl<H: Hasher> From<VanillaLabelingProof<H>> for LabelingProof {
+    fn from(vanilla_proof: VanillaLabelingProof<H>) -> Self {
+        let VanillaLabelingProof { parents, node, .. } = vanilla_proof;
 
-        EncodingProof {
+        LabelingProof {
             node: Some(node),
             parents: parents.into_iter().map(|p| Some(p.into())).collect(),
         }

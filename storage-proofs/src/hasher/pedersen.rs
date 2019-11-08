@@ -11,7 +11,7 @@ use paired::bls12_381::{Bls12, Fr, FrRepr};
 use rand::{Rand, Rng};
 
 use crate::circuit::pedersen::pedersen_md_no_padding;
-use crate::crypto::{kdf, pedersen, sloth};
+use crate::crypto::{create_label, pedersen, sloth};
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
 
@@ -26,8 +26,8 @@ impl Hasher for PedersenHasher {
         "PedersenHasher".into()
     }
 
-    fn kdf(data: &[u8], m: usize) -> Self::Domain {
-        kdf::kdf(data, m).into()
+    fn create_label(data: &[u8], m: usize) -> Self::Domain {
+        create_label::create_label(data, m).into()
     }
 
     #[inline]

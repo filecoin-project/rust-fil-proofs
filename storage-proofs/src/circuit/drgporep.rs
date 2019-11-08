@@ -7,8 +7,8 @@ use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::circuit::constraint;
+use crate::circuit::create_label::create_label as kdf;
 use crate::circuit::encode;
-use crate::circuit::kdf::kdf;
 use crate::circuit::por::{PoRCircuit, PoRCompound};
 use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};

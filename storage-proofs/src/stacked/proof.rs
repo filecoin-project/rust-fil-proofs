@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use merkletree::merkle::FromIndexedParallelIterator;
@@ -14,13 +15,13 @@ use crate::merkle::{MerkleProof, MerkleTree, Store};
 use crate::stacked::{
     challenges::LayerChallenges,
     column::Column,
-    encoding_proof::EncodingProof,
     graph::StackedBucketGraph,
     hash::hash2,
     params::{
-        get_node, Encodings, PersistentAux, Proof, PublicInputs, ReplicaColumnProof, Tau,
+        get_node, Labels, PersistentAux, Proof, PublicInputs, ReplicaColumnProof, Tau,
         TemporaryAux, TransformedLayers, Tree,
     },
+    EncodingProof, LabelingProof,
 };
 use crate::util::{data_at_node, data_at_node_offset, NODE_SIZE};
 
@@ -43,7 +44,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         partition_count: usize,
     ) -> Result<Vec<Vec<Proof<H, G>>>> {
         assert!(layers > 0);
-        assert_eq!(t_aux.encodings.len(), layers);
+        assert_eq!(t_aux.labels.len(), layers);
 
         let graph_size = graph.size();
 
@@ -123,8 +124,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         let comm_r_last_proof =
                             MerkleProof::new_from_proof(&t_aux.tree_r_last.gen_proof(challenge));
 
-                        // Encoding Proof Layer 1..l
-                        let mut encoding_proofs = Vec::with_capacity(layers);
+                        // Labeling Proofs Layer 1..l
+                        let mut labeling_proofs = HashMap::with_capacity(layers);
+                        let mut encoding_proof = None;
 
                         for layer in 1..=layers {
                             let include_challenge =
@@ -140,14 +142,14 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                                 continue;
                             }
 
-                            let parents_data = if layer == 1 {
+                            let parents_data: Vec<H::Domain> = if layer == 1 {
                                 let mut parents = vec![0; graph.base_graph().degree()];
                                 graph.base_parents(challenge, &mut parents);
 
                                 parents
                                     .into_iter()
                                     .map(|parent| t_aux.domain_node_at_layer(layer, parent))
-                                    .collect::<Result<_>>()?
+                                    .collect()
                             } else {
                                 let mut parents = vec![0; graph.degree()];
                                 graph.parents(challenge, &mut parents);
@@ -165,36 +167,34 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                                             t_aux.domain_node_at_layer(layer - 1, parent)
                                         }
                                     })
-                                    .collect::<Result<_>>()?
+                                    .collect()
                             };
 
-                            let proof = EncodingProof::<H>::new(challenge as u64, parents_data);
+                            let proof =
+                                LabelingProof::<H>::new(challenge as u64, parents_data.clone());
 
                             {
-                                let (encoded_node, decoded_node) = if layer == layers {
-                                    (comm_r_last_proof.leaf(), Some(comm_d_proof.leaf()))
-                                } else {
-                                    (rpc.c_x.get_node_at_layer(layer), None)
-                                };
-
+                                let labeled_node = rpc.c_x.get_node_at_layer(layer);
                                 assert!(
-                                    proof.verify::<G>(
-                                        &pub_inputs.replica_id,
-                                        &encoded_node,
-                                        decoded_node
-                                    ),
+                                    proof.verify(&pub_inputs.replica_id, &labeled_node),
                                     "Invalid encoding proof generated"
                                 );
                             }
 
-                            encoding_proofs.push(proof);
+                            labeling_proofs.insert(layer, proof);
+
+                            if layer == layers {
+                                encoding_proof =
+                                    Some(EncodingProof::new(challenge as u64, parents_data));
+                            }
                         }
 
                         Ok(Proof {
                             comm_d_proofs: comm_d_proof,
                             replica_column_proofs: rpc,
                             comm_r_last_proof,
-                            encoding_proofs,
+                            labeling_proofs,
+                            encoding_proof: encoding_proof.expect("invalid tapering"),
                         })
                     })
                     .collect()
@@ -213,13 +213,13 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let layers = layer_challenges.layers();
         assert!(layers > 0);
 
-        // generate encodings
-        let (encodings, _) = Self::generate_layers(graph, layer_challenges, replica_id, false)?;
+        // generate labels
+        let (labels, _) = Self::generate_labels(graph, layer_challenges, replica_id, false)?;
 
-        let size = encodings.encoding_at_last_layer().len();
+        let size = labels.labels_for_last_layer().len();
 
-        for (key, encoded_node_bytes) in encodings
-            .encoding_at_last_layer()
+        for (key, encoded_node_bytes) in labels
+            .labels_for_last_layer()
             .read_range(0..size)
             .into_iter()
             .zip(data.chunks_mut(NODE_SIZE))
@@ -235,19 +235,19 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     }
 
     #[allow(clippy::type_complexity)]
-    fn generate_layers(
+    fn generate_labels(
         graph: &StackedBucketGraph<H>,
         layer_challenges: &LayerChallenges,
         replica_id: &<H as Hasher>::Domain,
         with_hashing: bool,
-    ) -> Result<(Encodings<H>, Option<Vec<[u8; 32]>>)> {
-        info!("generate layers");
+    ) -> Result<(Labels<H>, Option<Vec<[u8; 32]>>)> {
+        info!("generate labels");
         let layers = layer_challenges.layers();
-        let mut encodings: Vec<DiskStore<H::Domain>> = Vec::with_capacity(layers);
+        let mut labels: Vec<DiskStore<H::Domain>> = Vec::with_capacity(layers);
 
         let layer_size = graph.size() * NODE_SIZE;
         let mut parents = vec![0; graph.degree()];
-        let mut encoding = vec![0u8; layer_size];
+        let mut layer_labels = vec![0u8; layer_size];
 
         use crate::crypto::pedersen::Hasher as PedersenHasher;
 
@@ -266,7 +266,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         let graph_size = graph.size();
 
-        // 1 less, to account for the thread we are on, which is doign the encoding.
+        // 1 less, to account for the thread we are on.
         let chunks = std::cmp::min(graph_size / 4, num_cpus::get() - 1);
         let chunk_len = (graph_size as f64 / chunks as f64).ceil() as usize;
 
@@ -313,8 +313,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             for node in 0..graph.size() {
                 graph.parents(node, &mut parents);
 
-                // CreateKey inlined, to avoid borrow issues
-
                 let mut hasher = base_hasher.clone();
 
                 // hash node id
@@ -327,7 +325,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                     // Base parents
                     for parent in parents.iter().take(base_parents_count) {
-                        let buf = data_at_node(&encoding, *parent as usize).expect("invalid node");
+                        let buf =
+                            data_at_node(&layer_labels, *parent as usize).expect("invalid node");
                         hasher.input(buf);
                     }
 
@@ -351,7 +350,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 key[31] &= 0b0011_1111;
 
                 // store the newly generated key
-                encoding[start..end].copy_from_slice(&key[..]);
+                layer_labels[start..end].copy_from_slice(&key[..]);
 
                 if with_hashing {
                     let sender_index = node / chunk_len;
@@ -381,17 +380,17 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
             // NOTE: this means we currently keep 2x sector size around, to improve speed.
             if let Some(ref mut exp_parents_data) = exp_parents_data {
-                exp_parents_data.copy_from_slice(&encoding);
+                exp_parents_data.copy_from_slice(&layer_labels);
             } else {
-                exp_parents_data = Some(encoding.clone());
+                exp_parents_data = Some(layer_labels.clone());
             }
 
             // Write the result to disk to avoid keeping it in memory all the time.
-            encodings.push(DiskStore::new_from_slice(layer_size, &encoding)?);
+            labels.push(DiskStore::new_from_slice(layer_size, &layer_labels)?);
         }
 
         assert_eq!(
-            encodings.len(),
+            labels.len(),
             layers,
             "Invalid amount of layers encoded expected"
         );
@@ -404,8 +403,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 .collect()
         });
 
-        info!("Layers generated");
-        Ok((Encodings::<H>::new(encodings), column_hashes))
+        info!("Labels generated");
+        Ok((Labels::<H>::new(labels), column_hashes))
     }
 
     fn build_tree<K: Hasher>(tree_data: &[u8]) -> Tree<K> {
@@ -435,9 +434,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let layers = layer_challenges.layers();
         assert!(layers > 0);
 
-        let (encodings, column_hashes, tree_d) = crossbeam::thread::scope(|s| {
+        let (labels, column_hashes, tree_d) = crossbeam::thread::scope(|s| {
             // Generate key layers.
-            let h = s.spawn(|_| Self::generate_layers(graph, layer_challenges, replica_id, true));
+            let h = s.spawn(|_| Self::generate_labels(graph, layer_challenges, replica_id, true));
 
             // Build the MerkleTree over the original data.
             let tree_d = match data_tree {
@@ -448,10 +447,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 }
             };
 
-            let (encodings, column_hashes) = h.join().unwrap().unwrap();
+            let (labels, column_hashes) = h.join().unwrap().unwrap();
             let column_hashes = column_hashes.unwrap();
 
-            (encodings, column_hashes, tree_d)
+            (labels, column_hashes, tree_d)
         })?;
 
         let (tree_r_last, tree_c, comm_r): (Tree<H>, Tree<H>, H::Domain) =
@@ -459,9 +458,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 // Encode original data into the last layer.
                 let tree_r_last_handle = s.spawn(|_| {
                     info!("encoding data");
-                    let size = encodings.encoding_at_last_layer().len();
-                    encodings
-                        .encoding_at_last_layer()
+                    let size = labels.labels_for_last_layer().len();
+                    labels
+                        .labels_for_last_layer()
                         .read_range(0..size)
                         .into_par_iter()
                         .zip(data.par_chunks_mut(NODE_SIZE))
@@ -513,7 +512,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 comm_r_last: tree_r_last.root(),
             },
             TemporaryAux {
-                encodings,
+                labels,
                 tree_c,
                 tree_d,
                 tree_r_last,

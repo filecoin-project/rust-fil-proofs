@@ -1,3 +1,4 @@
+use paired::bls12_381::Fr;
 use rayon::prelude::*;
 
 use crate::drgraph::Graph;
@@ -7,6 +8,7 @@ use crate::proof::ProofScheme;
 use crate::stacked::{
     challenges::ChallengeRequirements,
     graph::StackedBucketGraph,
+    hash::hash2,
     params::{PrivateInputs, Proof, PublicInputs, PublicParams, SetupParams},
     proof::StackedDrg,
 };
@@ -78,12 +80,29 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
         // generate graphs
         let graph = &pub_params.graph;
 
+        let expected_comm_r = if let Some(ref tau) = pub_inputs.tau {
+            &tau.comm_r
+        } else {
+            return Ok(false);
+        };
+
         for (k, proofs) in partition_proofs.iter().enumerate() {
             trace!(
                 "verifying partition proof {}/{}",
                 k + 1,
                 partition_proofs.len()
             );
+
+            trace!("verify comm_r");
+            let actual_comm_r: H::Domain = {
+                let comm_c = proofs[0].comm_c();
+                let comm_r_last = proofs[0].comm_r_last();
+                Fr::from(hash2(comm_c, comm_r_last)).into()
+            };
+
+            if expected_comm_r != &actual_comm_r {
+                return Ok(false);
+            }
 
             let challenges =
                 pub_inputs.all_challenges(&pub_params.layer_challenges, graph.size(), Some(k));
@@ -93,6 +112,15 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
 
                 // Validate for this challenge
                 let challenge = challenges[i];
+
+                // make sure all proofs have the same comm_c
+                if proof.comm_c() != proofs[0].comm_c() {
+                    return false;
+                }
+                // make sure all proofs have the same comm_r_last
+                if proof.comm_r_last() != proofs[0].comm_r_last() {
+                    return false;
+                }
 
                 proof.verify(pub_params, pub_inputs, challenge, i, graph)
             });

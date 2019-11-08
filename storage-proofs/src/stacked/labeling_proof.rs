@@ -1,30 +1,28 @@
 use std::marker::PhantomData;
 
-use paired::bls12_381::Fr;
 use sha2::{Digest, Sha256};
 
-use crate::encode::encode;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::Hasher;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EncodingProof<H: Hasher> {
+pub struct LabelingProof<H: Hasher> {
     pub(crate) parents: Vec<H::Domain>,
     pub(crate) node: u64,
     #[serde(skip)]
     _h: PhantomData<H>,
 }
 
-impl<H: Hasher> EncodingProof<H> {
+impl<H: Hasher> LabelingProof<H> {
     pub fn new(node: u64, parents: Vec<H::Domain>) -> Self {
-        EncodingProof {
+        LabelingProof {
             node,
             parents,
             _h: PhantomData,
         }
     }
 
-    fn create_key(&self, replica_id: &H::Domain) -> H::Domain {
+    fn create_label(&self, replica_id: &H::Domain) -> H::Domain {
         let mut hasher = Sha256::new();
 
         // replica_id
@@ -40,18 +38,9 @@ impl<H: Hasher> EncodingProof<H> {
         bytes_into_fr_repr_safe(hasher.result().as_ref()).into()
     }
 
-    pub fn verify<G: Hasher>(
-        &self,
-        replica_id: &H::Domain,
-        exp_encoded_node: &H::Domain,
-        decoded_node: &G::Domain,
-    ) -> bool {
-        let key = self.create_key(replica_id);
-
-        let fr: Fr = (*decoded_node).into();
-        let encoded_node = encode(key, fr.into());
-
-        check_eq!(exp_encoded_node, &encoded_node);
+    pub fn verify(&self, replica_id: &H::Domain, expected_label: &H::Domain) -> bool {
+        let label = self.create_label(replica_id);
+        check_eq!(expected_label, &label);
 
         true
     }

@@ -5,7 +5,9 @@ use fil_sapling_crypto::circuit::{boolean::Boolean, num};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
-use crate::circuit::stacked::{column_proof::ColumnProof, encoding_proof::EncodingProof};
+use crate::circuit::stacked::{
+    column_proof::ColumnProof, encoding_proof::EncodingProof, labeling_proof::LabelingProof,
+};
 use crate::circuit::{por::PoRCircuit, variables::Root};
 use crate::drgraph::Graph;
 use crate::hasher::Hasher;
@@ -19,7 +21,8 @@ pub struct Proof<H: Hasher, G: Hasher> {
     pub comm_d_proof: InclusionPath<G>,
     pub comm_r_last_proof: InclusionPath<H>,
     pub replica_column_proof: ReplicaColumnProof<H>,
-    pub encoding_proofs: Vec<EncodingProof>,
+    pub labeling_proofs: Vec<(usize, LabelingProof)>,
+    pub encoding_proof: EncodingProof,
 }
 
 impl<H: Hasher, G: Hasher> Proof<H, G> {
@@ -27,22 +30,25 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
     pub fn empty(params: &PublicParams<H>, challenge_index: usize) -> Self {
         let layers = params.layer_challenges.layers();
 
-        let mut encoding_proofs = Vec::with_capacity(layers);
+        let mut labeling_proofs = Vec::with_capacity(layers);
         for layer in 1..=layers {
-            if !params
+            let include_challenge = params
                 .layer_challenges
-                .include_challenge_at_layer(layer, challenge_index)
-            {
+                .include_challenge_at_layer(layer, challenge_index);
+
+            if !include_challenge {
                 continue;
             }
 
-            encoding_proofs.push(EncodingProof::empty(params, layer));
+            labeling_proofs.push((layer, LabelingProof::empty(params, layer)));
         }
+
         Proof {
             comm_d_proof: InclusionPath::empty(&params.graph),
             comm_r_last_proof: InclusionPath::empty(&params.graph),
             replica_column_proof: ReplicaColumnProof::empty(params),
-            encoding_proofs,
+            labeling_proofs,
+            encoding_proof: EncodingProof::empty(params),
         }
     }
 
@@ -62,7 +68,8 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
             comm_d_proof,
             comm_r_last_proof,
             replica_column_proof,
-            encoding_proofs,
+            labeling_proofs,
+            encoding_proof,
         } = self;
 
         // verify initial data layer
@@ -78,35 +85,29 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
             comm_r_last_proof.alloc_value(cs.namespace(|| "comm_r_last_data_leaf"))?;
 
         // verify encodings
-        for (i, proof) in encoding_proofs.into_iter().enumerate() {
-            let layer = i + 1;
+        for (layer, proof) in labeling_proofs.into_iter() {
+            let raw = replica_column_proof.c_x.get_node_at_layer(layer);
+            let labeled_node =
+                num::AllocatedNum::alloc(cs.namespace(|| format!("label_node_{}", layer)), || {
+                    raw.map(Into::into)
+                        .ok_or_else(|| SynthesisError::AssignmentMissing)
+                })?;
 
-            if layer == layers {
-                proof.synthesize_decoded(
-                    cs.namespace(|| format!("encoding_proof_{}", layer)),
-                    params,
-                    replica_id,
-                    &comm_r_last_data_leaf,
-                    &comm_d_leaf,
-                )?;
-            } else {
-                let raw = replica_column_proof.c_x.get_node_at_layer(layer);
-                let encoded_node = num::AllocatedNum::alloc(
-                    cs.namespace(|| format!("enc_node_{}", layer)),
-                    || {
-                        raw.map(Into::into)
-                            .ok_or_else(|| SynthesisError::AssignmentMissing)
-                    },
-                )?;
-
-                proof.synthesize_key(
-                    cs.namespace(|| format!("encoding_proof_{}", layer)),
-                    params,
-                    replica_id,
-                    &encoded_node,
-                )?;
-            }
+            proof.synthesize(
+                cs.namespace(|| format!("labeling_proof_{}", layer)),
+                params,
+                replica_id,
+                &labeled_node,
+            )?;
         }
+
+        encoding_proof.synthesize(
+            cs.namespace(|| format!("encoding_proof_{}", layers)),
+            params,
+            replica_id,
+            &comm_r_last_data_leaf,
+            &comm_d_leaf,
+        )?;
 
         // verify replica column openings
         replica_column_proof.synthesize(cs.namespace(|| "replica_column_proof"), params, comm_c)?;
@@ -129,14 +130,23 @@ impl<H: Hasher, G: Hasher> From<VanillaProof<H, G>> for Proof<H, G> {
             comm_d_proofs,
             comm_r_last_proof,
             replica_column_proofs,
-            encoding_proofs,
+            labeling_proofs,
+            encoding_proof,
         } = vanilla_proof;
+
+        let mut labeling_proofs: Vec<_> = labeling_proofs
+            .into_iter()
+            .map(|(layer, p)| (layer, p.into()))
+            .collect();
+
+        labeling_proofs.sort_by_cached_key(|(k, _)| *k);
 
         Proof {
             comm_d_proof: comm_d_proofs.into(),
             comm_r_last_proof: comm_r_last_proof.into(),
             replica_column_proof: replica_column_proofs.into(),
-            encoding_proofs: encoding_proofs.into_iter().map(|p| p.into()).collect(),
+            labeling_proofs,
+            encoding_proof: encoding_proof.into(),
         }
     }
 }
