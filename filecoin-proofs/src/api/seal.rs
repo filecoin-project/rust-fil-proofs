@@ -160,7 +160,8 @@ pub fn seal_commit<T: AsRef<Path>>(
     // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
     // elements based on the configs stored in TemporaryAux.
     let t_aux: TemporaryAuxCache<DefaultTreeHasher, DefaultPieceHasher> =
-        TemporaryAuxCache::new(&t_aux);
+        TemporaryAuxCache::new(&t_aux)
+        .expect("failed to restore contents of t_aux");
 
     let comm_r_safe = as_safe_commitment(&comm_r, "comm_r")?;
     let comm_d_safe = <DefaultPieceHasher as Hasher>::Domain::try_from_bytes(&comm_d)?;

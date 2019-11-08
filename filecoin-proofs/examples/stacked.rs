@@ -225,7 +225,8 @@ fn do_the_work<H: 'static>(
 
         // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
         // elements based on the configs stored in TemporaryAux.
-        let t_aux: TemporaryAuxCache<H, Blake2sHasher> = TemporaryAuxCache::new(&t_aux);
+        let t_aux: TemporaryAuxCache<H, Blake2sHasher> = TemporaryAuxCache::new(&t_aux)
+            .expect("failed to restore contents of t_aux");
 
         let priv_inputs = stacked::PrivateInputs { p_aux, t_aux };
 

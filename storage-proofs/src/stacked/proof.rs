@@ -224,13 +224,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         assert!(layers > 0);
 
         // generate labels
-        let (labels, _) = Self::generate_labels(graph, layer_challenges, replica_id, false)?;
+        let (labels, _) = Self::generate_labels(graph, layer_challenges, replica_id, false, config.clone())?;
 
         let labels: LabelsCache<H> = LabelsCache::new(&labels);
         let size = merkletree::store::Store::len(labels.labels_for_last_layer());
-
-        let labels: LabelsCache<H> = LabelsCache::new(&labels);
-        let size = labels.label_at_last_layer().len();
 
         for (key, encoded_node_bytes) in labels
             .labels_for_last_layer()
@@ -260,7 +257,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let layers = layer_challenges.layers();
         // For now, we require it due to changes in encodings structure.
         assert!(config.is_some());
-        let mut encodings: Vec<StoreConfig> = Vec::with_capacity(layers);
+        let config = config.unwrap();
+        let mut labels: Vec<StoreConfig> = Vec::with_capacity(layers);
 
         let layer_size = graph.size() * NODE_SIZE;
         let mut parents = vec![0; graph.degree()];
@@ -403,13 +401,13 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             }
 
             // Write the result to disk to avoid keeping it in memory all the time.
-            let mut layer_config = config.clone().unwrap();
-            layer_config.id = format!("replica-{:?}-layer-{}", replica_id, layer);
-            layer_config.size = Some(layer_size);
+            let layer_config = StoreConfig::from_config(
+                &config, format!("replica-{:?}-layer-{}", replica_id, layer),
+                Some(layer_size));
 
             // Construct and persist the layer data.
             let _: DiskStore<H::Domain> = DiskStore::new_from_slice_with_config(
-                layer_size, &encoding, layer_config.clone())?;
+                layer_size, &layer_labels, layer_config.clone())?;
             trace!("Generated layer {} store with id {}", layer, layer_config.id);
 
             // Track the layer specific StoreConfig that allows later retrieval.
@@ -439,13 +437,12 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         let leafs = tree_data.len() / NODE_SIZE;
         assert_eq!(tree_data.len() % NODE_SIZE, 0);
-        if config.is_some() {
-            info!("building tree (size: {}) with id {}", tree_data.len(), config.clone().unwrap().id);
+        if let Some(config) = config {
             MerkleTree::from_par_iter_with_config(
                 (0..leafs)
                     .into_par_iter()
                     .map(|i| get_node::<K>(tree_data, i).unwrap()),
-                config.unwrap()
+                config
             )
         } else {
             MerkleTree::from_par_iter(
@@ -477,17 +474,18 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         // Generate all store configs that we need based on the
         // cache_path in the specified config.
-        assert!(config.is_some()); // FIXME: make not an Option
-        let mut tree_d_config = config.clone().unwrap();
-        let mut tree_r_last_config = config.clone().unwrap();
-        let mut tree_c_config = config.clone().unwrap();
-
-        tree_c_config.id = format!("tree-c-{:?}", replica_id);
-        tree_r_last_config.id = format!("tree-r-last-{:?}", replica_id);
+        assert!(config.is_some());
+        let config = config.unwrap();
+        let mut tree_d_config = StoreConfig::from_config(
+            &config, "tree-d".to_string(), None);
+        let mut tree_r_last_config = StoreConfig::from_config(
+            &config, format!("tree-r-last-{:?}", replica_id), None);
+        let mut tree_c_config = StoreConfig::from_config(
+            &config, format!("tree-c-{:?}", replica_id), None);
 
         let (label_configs, column_hashes, tree_d) = crossbeam::thread::scope(|s| {
             // Generate key layers.
-            let h = s.spawn(|_| Self::generate_labels(graph, layer_challenges, replica_id, true, config.clone()));
+            let h = s.spawn(|_| Self::generate_labels(graph, layer_challenges, replica_id, true, Some(config.clone())));
 
             // Build the MerkleTree over the original data (if needed).
             let tree_d = match data_tree {
@@ -539,9 +537,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 });
 
                 // Build the tree for CommC
-                let mut tree_c_config = config.clone().unwrap();
-                tree_c_config.id = format!("tree-c-{:?}", replica_id);
-
+                let tree_c_config = tree_c_config.clone();
                 let tree_c_handle = s.spawn(move |_| {
                     info!("building tree_c");
                     let column_hashes_flat = unsafe {
@@ -756,7 +752,8 @@ mod tests {
 
         // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
         // elements based on the configs stored in TemporaryAux.
-        let t_aux: TemporaryAuxCache<H, Blake2sHasher> = TemporaryAuxCache::new(&t_aux);
+        let t_aux: TemporaryAuxCache<H, Blake2sHasher> = TemporaryAuxCache::new(&t_aux)
+            .expect("failed to restore contents of t_aux");
 
         let priv_inputs = PrivateInputs { p_aux, t_aux };
 

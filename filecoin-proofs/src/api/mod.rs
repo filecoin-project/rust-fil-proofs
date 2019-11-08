@@ -390,7 +390,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    //#[ignore]
     fn test_seal_lifecycle() -> Result<(), failure::Error> {
         pretty_env_logger::try_init().ok();
 

@@ -156,13 +156,8 @@ where
                 wall_time: replication_wall_time,
                 return_value: (pub_inputs, priv_inputs),
             } = measure(|| {
-<<<<<<< HEAD
                 let (tau, (p_aux, t_aux)) =
-                    StackedDrg::<H, Sha256Hasher>::replicate(&pp, &replica_id, &mut data, None)?;
-=======
-                let (tau, (p_aux, t_aux)) = StackedDrg::<H, Blake2sHasher>::replicate(
-                    &pp, &replica_id, &mut data, None, Some(config.clone()))?;
->>>>>>> Add DiskStore persistence of layer and merkle tree data across the
+                    StackedDrg::<H, Sha256Hasher>::replicate(&pp, &replica_id, &mut data, None, Some(config.clone()))?;
 
                 let pb = stacked::PublicInputs::<H::Domain, <Sha256Hasher as Hasher>::Domain> {
                     replica_id,
@@ -173,7 +168,8 @@ where
 
                 // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
                 // elements based on the configs stored in TemporaryAux.
-                let t_aux = TemporaryAuxCache::new(&t_aux);
+                let t_aux = TemporaryAuxCache::new(&t_aux)
+                    .expect("failed to restore contents of t_aux");
 
                 let pv = stacked::PrivateInputs { p_aux, t_aux };
 
