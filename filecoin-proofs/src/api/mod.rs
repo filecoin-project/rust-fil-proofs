@@ -276,6 +276,7 @@ mod tests {
 
     use std::collections::BTreeMap;
     use std::io::{Seek, SeekFrom, Write};
+    use std::sync::Once;
 
     use ff::Field;
     use paired::bls12_381::{Bls12, Fr};
@@ -289,6 +290,13 @@ mod tests {
         SECTOR_SIZE_ONE_KIB, SINGLE_PARTITION_PROOF_LEN, WINDOW_SIZE_NODES_ONE_KIB,
     };
     use crate::types::{PoStConfig, SectorSize};
+
+    static INIT_LOGGER: Once = Once::new();
+    fn init_logger() {
+        INIT_LOGGER.call_once(|| {
+            fil_logger::init();
+        });
+    }
 
     #[test]
     fn test_verify_seal_fr32_validation() {
@@ -362,7 +370,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_verify_post_fr32_validation() {
-        pretty_env_logger::try_init().ok();
+        init_logger();
 
         let not_convertible_to_fr_bytes = [255; 32];
         let out = bytes_into_fr::<Bls12>(&not_convertible_to_fr_bytes);
@@ -408,7 +416,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_seal_lifecycle() -> Result<()> {
-        pretty_env_logger::try_init().ok();
+        init_logger();
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 

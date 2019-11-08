@@ -23,7 +23,7 @@ const ERROR_IPFS_COMMAND: &str = "failed to run ipfs";
 const ERROR_IPFS_PUBLISH: &str = "failed to publish via ipfs";
 
 pub fn main() {
-    pretty_env_logger::init_timed();
+    fil_logger::init();
 
     let matches = App::new("parampublish")
         .version("1.0")
