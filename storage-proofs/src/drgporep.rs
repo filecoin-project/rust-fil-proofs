@@ -641,17 +641,28 @@ mod tests {
             DEFAULT_CACHED_ABOVE_BASE_LAYER,
         );
 
-        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None, Some(config.clone()))
-            .expect("replication failed");
+        DrgPoRep::replicate(
+            &pp,
+            &replica_id,
+            &mut mmapped_data_copy,
+            None,
+            Some(config.clone()),
+        )
+        .expect("replication failed");
 
         let mut copied = vec![0; data.len()];
         copied.copy_from_slice(&mmapped_data_copy);
         assert_ne!(data, copied, "replication did not change data");
 
-        let decoded_data = DrgPoRep::extract_all(&pp, &replica_id, &mut mmapped_data_copy, Some(config.clone()))
-            .unwrap_or_else(|e| {
-                panic!("Failed to extract data from `DrgPoRep`: {}", e);
-            });
+        let decoded_data = DrgPoRep::extract_all(
+            &pp,
+            &replica_id,
+            &mut mmapped_data_copy,
+            Some(config.clone()),
+        )
+        .unwrap_or_else(|e| {
+            panic!("Failed to extract data from `DrgPoRep`: {}", e);
+        });
 
         assert_eq!(data, decoded_data.as_slice(), "failed to extract data");
     }
@@ -790,9 +801,14 @@ mod tests {
                 DEFAULT_CACHED_ABOVE_BASE_LAYER,
             );
 
-            let (tau, aux) =
-                DrgPoRep::<H, _>::replicate(&pp, &replica_id, &mut mmapped_data_copy, None, Some(config))
-                    .expect("replication failed");
+            let (tau, aux) = DrgPoRep::<H, _>::replicate(
+                &pp,
+                &replica_id,
+                &mut mmapped_data_copy,
+                None,
+                Some(config),
+            )
+            .expect("replication failed");
 
             let mut copied = vec![0; data.len()];
             copied.copy_from_slice(&mmapped_data_copy);

@@ -238,12 +238,12 @@ pub fn create_merkle_tree<H: Hasher>(
         H::Domain::try_from_bytes(d).expect("failed to convert node data to domain element")
     };
 
-    if config.is_some() {
-        Ok(MerkleTree::from_par_iter_with_config(
-            (0..size).into_par_iter().map(f), config.unwrap())
-        )
-    } else {
-        Ok(MerkleTree::from_par_iter((0..size).into_par_iter().map(f)))
+    match config {
+        Some(x) => Ok(MerkleTree::from_par_iter_with_config(
+            (0..size).into_par_iter().map(f),
+            x,
+        )),
+        None => Ok(MerkleTree::from_par_iter((0..size).into_par_iter().map(f))),
     }
 }
 

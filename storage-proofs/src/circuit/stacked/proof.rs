@@ -396,8 +396,7 @@ mod tests {
         // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
         // elements based on the configs stored in TemporaryAux.
         use crate::stacked::TemporaryAuxCache;
-        let t_aux = TemporaryAuxCache::new(&t_aux)
-            .expect("failed to restore contents of t_aux");
+        let t_aux = TemporaryAuxCache::new(&t_aux).expect("failed to restore contents of t_aux");
 
         let priv_inputs = PrivateInputs::<PedersenHasher, Sha256Hasher> {
             p_aux: p_aux.into(),
@@ -538,7 +537,7 @@ mod tests {
             &replica_id.into(),
             data_copy.as_mut_slice(),
             None,
-            Some(config)
+            Some(config),
         )
         .expect("replication failed");
 
@@ -556,8 +555,7 @@ mod tests {
         // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
         // elements based on the configs stored in TemporaryAux.
         use crate::stacked::TemporaryAuxCache;
-        let t_aux = TemporaryAuxCache::new(&t_aux)
-            .expect("failed to restore contents of t_aux");
+        let t_aux = TemporaryAuxCache::new(&t_aux).expect("failed to restore contents of t_aux");
 
         let private_inputs = PrivateInputs::<H, Sha256Hasher> { p_aux, t_aux };
 

@@ -769,7 +769,7 @@ mod tests {
             &replica_id.into(),
             data.as_mut_slice(),
             None,
-            Some(config)
+            Some(config),
         )
         .expect("failed to replicate");
 

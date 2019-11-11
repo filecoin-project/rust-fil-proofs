@@ -12,7 +12,9 @@ use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::merkle::create_merkle_tree;
 use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
-use storage_proofs::stacked::{self, generate_replica_id, ChallengeRequirements, StackedDrg, Tau, TemporaryAuxCache};
+use storage_proofs::stacked::{
+    self, generate_replica_id, ChallengeRequirements, StackedDrg, Tau, TemporaryAuxCache,
+};
 
 use crate::api::util::{as_safe_commitment, commitment_from_fr};
 use crate::caches::{get_stacked_params, get_stacked_verifying_key};
@@ -160,8 +162,7 @@ pub fn seal_commit<T: AsRef<Path>>(
     // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
     // elements based on the configs stored in TemporaryAux.
     let t_aux: TemporaryAuxCache<DefaultTreeHasher, DefaultPieceHasher> =
-        TemporaryAuxCache::new(&t_aux)
-        .expect("failed to restore contents of t_aux");
+        TemporaryAuxCache::new(&t_aux).expect("failed to restore contents of t_aux");
 
     let comm_r_safe = as_safe_commitment(&comm_r, "comm_r")?;
     let comm_d_safe = <DefaultPieceHasher as Hasher>::Domain::try_from_bytes(&comm_d)?;

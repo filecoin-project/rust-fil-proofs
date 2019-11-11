@@ -18,8 +18,8 @@ use crate::stacked::{
     graph::StackedBucketGraph,
     hash::hash2,
     params::{
-        get_node, Labels, PersistentAux, LabelsCache, Proof, PublicInputs, ReplicaColumnProof,
-        Tau, TemporaryAux, TemporaryAuxCache, TransformedLayers, Tree,
+        get_node, Labels, LabelsCache, PersistentAux, Proof, PublicInputs, ReplicaColumnProof, Tau,
+        TemporaryAux, TemporaryAuxCache, TransformedLayers, Tree,
     },
     EncodingProof, LabelingProof,
 };
@@ -224,7 +224,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         assert!(layers > 0);
 
         // generate labels
-        let (labels, _) = Self::generate_labels(graph, layer_challenges, replica_id, false, config.clone())?;
+        let (labels, _) =
+            Self::generate_labels(graph, layer_challenges, replica_id, false, config)?;
 
         let labels: LabelsCache<H> = LabelsCache::new(&labels);
         let size = merkletree::store::Store::len(labels.labels_for_last_layer());
@@ -402,13 +403,22 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
             // Write the result to disk to avoid keeping it in memory all the time.
             let layer_config = StoreConfig::from_config(
-                &config, format!("replica-{:?}-layer-{}", replica_id, layer),
-                Some(layer_size));
+                &config,
+                format!("replica-{:?}-layer-{}", replica_id, layer),
+                Some(layer_size),
+            );
 
             // Construct and persist the layer data.
             let _: DiskStore<H::Domain> = DiskStore::new_from_slice_with_config(
-                layer_size, &layer_labels, layer_config.clone())?;
-            trace!("Generated layer {} store with id {}", layer, layer_config.id);
+                layer_size,
+                &layer_labels,
+                layer_config.clone(),
+            )?;
+            trace!(
+                "Generated layer {} store with id {}",
+                layer,
+                layer_config.id
+            );
 
             // Track the layer specific StoreConfig that allows later retrieval.
             labels.push(layer_config);
@@ -442,7 +452,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 (0..leafs)
                     .into_par_iter()
                     .map(|i| get_node::<K>(tree_data, i).unwrap()),
-                config
+                config,
             )
         } else {
             MerkleTree::from_par_iter(
@@ -476,16 +486,23 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         // cache_path in the specified config.
         assert!(config.is_some());
         let config = config.unwrap();
-        let mut tree_d_config = StoreConfig::from_config(
-            &config, "tree-d".to_string(), None);
-        let mut tree_r_last_config = StoreConfig::from_config(
-            &config, format!("tree-r-last-{:?}", replica_id), None);
-        let mut tree_c_config = StoreConfig::from_config(
-            &config, format!("tree-c-{:?}", replica_id), None);
+        let mut tree_d_config = StoreConfig::from_config(&config, "tree-d".to_string(), None);
+        let mut tree_r_last_config =
+            StoreConfig::from_config(&config, format!("tree-r-last-{:?}", replica_id), None);
+        let mut tree_c_config =
+            StoreConfig::from_config(&config, format!("tree-c-{:?}", replica_id), None);
 
         let (label_configs, column_hashes, tree_d) = crossbeam::thread::scope(|s| {
             // Generate key layers.
-            let h = s.spawn(|_| Self::generate_labels(graph, layer_challenges, replica_id, true, Some(config.clone())));
+            let h = s.spawn(|_| {
+                Self::generate_labels(
+                    graph,
+                    layer_challenges,
+                    replica_id,
+                    true,
+                    Some(config.clone()),
+                )
+            });
 
             // Build the MerkleTree over the original data (if needed).
             let tree_d = match data_tree {
@@ -494,7 +511,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     assert_eq!(t.len(), 2 * (data.len() / NODE_SIZE) - 1);
 
                     t
-                },
+                }
                 None => {
                     trace!("building merkle tree for the original data");
 
@@ -548,7 +565,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                             column_hashes.len() * 32,
                         )
                     };
-                    Self::build_tree::<H>(column_hashes_flat, Some(tree_c_config.clone()))
+                    Self::build_tree::<H>(column_hashes_flat, Some(tree_c_config))
                 });
 
                 let tree_c: Tree<H> = tree_c_handle.join()?;
@@ -672,14 +689,24 @@ mod tests {
             DEFAULT_CACHED_ABOVE_BASE_LAYER,
         );
 
-        StackedDrg::<H, Blake2sHasher>::replicate(&pp, &replica_id, data_copy.as_mut_slice(), None, Some(config.clone()))
-            .expect("replication failed");
+        StackedDrg::<H, Blake2sHasher>::replicate(
+            &pp,
+            &replica_id,
+            data_copy.as_mut_slice(),
+            None,
+            Some(config.clone()),
+        )
+        .expect("replication failed");
 
         assert_ne!(data, data_copy);
 
-        let decoded_data =
-            StackedDrg::<H, Blake2sHasher>::extract_all(&pp, &replica_id, data_copy.as_mut_slice(), Some(config.clone()))
-                .expect("failed to extract data");
+        let decoded_data = StackedDrg::<H, Blake2sHasher>::extract_all(
+            &pp,
+            &replica_id,
+            data_copy.as_mut_slice(),
+            Some(config.clone()),
+        )
+        .expect("failed to extract data");
 
         assert_eq!(data, decoded_data);
     }
@@ -752,8 +779,8 @@ mod tests {
 
         // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
         // elements based on the configs stored in TemporaryAux.
-        let t_aux: TemporaryAuxCache<H, Blake2sHasher> = TemporaryAuxCache::new(&t_aux)
-            .expect("failed to restore contents of t_aux");
+        let t_aux: TemporaryAuxCache<H, Blake2sHasher> =
+            TemporaryAuxCache::new(&t_aux).expect("failed to restore contents of t_aux");
 
         let priv_inputs = PrivateInputs { p_aux, t_aux };
 
