@@ -120,12 +120,7 @@ where
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
         let cache_dir = tempfile::tempdir().unwrap();
-        let cache_path = cache_dir.as_ref().to_str().unwrap();
-        let config = StoreConfig::new(
-            cache_path.to_string(),
-            "tree-d".to_string(),
-            DEFAULT_CACHED_ABOVE_BASE_LAYER,
-        );
+        let config = StoreConfig::new(cache_dir.path(), "tree-d", DEFAULT_CACHED_ABOVE_BASE_LAYER);
 
         let mut total_proving_wall_time = Duration::new(0, 0);
         let mut total_proving_cpu_time = Duration::new(0, 0);

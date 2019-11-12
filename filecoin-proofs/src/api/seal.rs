@@ -84,10 +84,9 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
 
     // MT for original data is always named tree-d, and it will be
     // referenced later in the process as such.
-    let cache_dir = cache_path.as_ref().to_str().unwrap();
     let config = StoreConfig::new(
-        cache_dir.to_string(),
-        "tree-d".to_string(),
+        cache_path.as_ref(),
+        "tree-d",
         DEFAULT_CACHED_ABOVE_BASE_LAYER,
     );
 

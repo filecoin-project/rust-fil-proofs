@@ -634,12 +634,7 @@ mod tests {
         // referenced later in the process as such.
         use merkletree::store::DEFAULT_CACHED_ABOVE_BASE_LAYER;
         let cache_dir = tempfile::tempdir().unwrap();
-        let cache_path = cache_dir.as_ref().to_str().unwrap();
-        let config = StoreConfig::new(
-            cache_path.to_string(),
-            "tree-d".to_string(),
-            DEFAULT_CACHED_ABOVE_BASE_LAYER,
-        );
+        let config = StoreConfig::new(cache_dir.path(), "tree-d", DEFAULT_CACHED_ABOVE_BASE_LAYER);
 
         DrgPoRep::replicate(
             &pp,
@@ -709,12 +704,7 @@ mod tests {
         // referenced later in the process as such.
         use merkletree::store::DEFAULT_CACHED_ABOVE_BASE_LAYER;
         let cache_dir = tempfile::tempdir().unwrap();
-        let cache_path = cache_dir.as_ref().to_str().unwrap();
-        let config = StoreConfig::new(
-            cache_path.to_string(),
-            "tree-d".to_string(),
-            DEFAULT_CACHED_ABOVE_BASE_LAYER,
-        );
+        let config = StoreConfig::new(cache_dir.path(), "tree-d", DEFAULT_CACHED_ABOVE_BASE_LAYER);
 
         DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None, Some(config))
             .expect("replication failed");
@@ -794,12 +784,8 @@ mod tests {
             // referenced later in the process as such.
             use merkletree::store::DEFAULT_CACHED_ABOVE_BASE_LAYER;
             let cache_dir = tempfile::tempdir().unwrap();
-            let cache_path = cache_dir.as_ref().to_str().unwrap();
-            let config = StoreConfig::new(
-                cache_path.to_string(),
-                "tree-d".to_string(),
-                DEFAULT_CACHED_ABOVE_BASE_LAYER,
-            );
+            let config =
+                StoreConfig::new(cache_dir.path(), "tree-d", DEFAULT_CACHED_ABOVE_BASE_LAYER);
 
             let (tau, aux) = DrgPoRep::<H, _>::replicate(
                 &pp,
