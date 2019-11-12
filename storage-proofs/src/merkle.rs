@@ -14,7 +14,7 @@ use crate::hasher::{Domain, Hasher};
 use crate::util::{data_at_node, NODE_SIZE};
 
 // Reexport here, so we don't depend on merkletree directly in other places.
-pub use merkletree::merkle::next_pow2;
+//pub use merkletree::merkle::next_pow2;
 use merkletree::merkle::FromIndexedParallelIterator;
 pub use merkletree::store::Store;
 

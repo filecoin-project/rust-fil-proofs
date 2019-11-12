@@ -792,6 +792,7 @@ mod tests {
         assert!(proofs_are_valid);
     }
 
+#[cfg(not(feature = "mem-trees"))]
     table_tests! {
         prove_verify_fixed{
            prove_verify_fixed_32_4(4);
