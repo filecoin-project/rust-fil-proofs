@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use merkletree::merkle::get_merkle_tree_leafs;
-use merkletree::store::{DiskStore, Store, StoreConfig, VecStore};
+#[cfg(feature = "mem-trees")]
+use merkletree::store::VecStore;
+use merkletree::store::{DiskStore, Store, StoreConfig};
 use serde::{Deserialize, Serialize};
 
 use crate::drgraph::Graph;
