@@ -366,12 +366,7 @@ mod tests {
         // referenced later in the process as such.
         use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
         let cache_dir = tempfile::tempdir().unwrap();
-        let cache_path = cache_dir.as_ref().to_str().unwrap();
-        let config = StoreConfig::new(
-            cache_path.to_string(),
-            "tree-d".to_string(),
-            DEFAULT_CACHED_ABOVE_BASE_LAYER,
-        );
+        let config = StoreConfig::new(cache_dir.path(), "tree-d", DEFAULT_CACHED_ABOVE_BASE_LAYER);
 
         let pp = StackedDrg::<PedersenHasher, Sha256Hasher>::setup(&sp).expect("setup failed");
         let (tau, (p_aux, t_aux)) = StackedDrg::<PedersenHasher, Sha256Hasher>::replicate(
@@ -525,12 +520,7 @@ mod tests {
         // referenced later in the process as such.
         use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
         let cache_dir = tempfile::tempdir().unwrap();
-        let cache_path = cache_dir.as_ref().to_str().unwrap();
-        let config = StoreConfig::new(
-            cache_path.to_string(),
-            "tree-d".to_string(),
-            DEFAULT_CACHED_ABOVE_BASE_LAYER,
-        );
+        let config = StoreConfig::new(cache_dir.path(), "tree-d", DEFAULT_CACHED_ABOVE_BASE_LAYER);
 
         let public_params = StackedCompound::setup(&setup_params).expect("setup failed");
         let (tau, (p_aux, t_aux)) = StackedDrg::replicate(
