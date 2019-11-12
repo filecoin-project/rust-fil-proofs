@@ -64,21 +64,25 @@ mod tests {
     use crate::crypto;
     use crate::fr32::fr_into_bytes;
     use crate::util::bytes_into_boolean_vec_be;
+
     use bellperson::gadgets::boolean::Boolean;
     use bellperson::ConstraintSystem;
-    use paired::bls12_381::Bls12;
+    use ff::Field;
+    use paired::bls12_381::{Bls12, Fr};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
     #[test]
     fn create_label_circuit_no_node() {
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let m = 20;
 
-        let id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
-        let parents: Vec<Vec<u8>> = (0..m).map(|_| fr_into_bytes::<Bls12>(&rng.gen())).collect();
+        let id: Vec<u8> = fr_into_bytes::<Bls12>(&Fr::random(rng));
+        let parents: Vec<Vec<u8>> = (0..m)
+            .map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .collect();
 
         let id_bits: Vec<Boolean> = {
             let mut cs = cs.namespace(|| "id");
@@ -120,12 +124,14 @@ mod tests {
     #[test]
     fn create_label_circuit_with_node() {
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let m = 20;
 
-        let id: Vec<u8> = fr_into_bytes::<Bls12>(&rng.gen());
-        let parents: Vec<Vec<u8>> = (0..m).map(|_| fr_into_bytes::<Bls12>(&rng.gen())).collect();
+        let id: Vec<u8> = fr_into_bytes::<Bls12>(&Fr::random(rng));
+        let parents: Vec<Vec<u8>> = (0..m)
+            .map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .collect();
 
         let id_bits: Vec<Boolean> = {
             let mut cs = cs.namespace(|| "id");

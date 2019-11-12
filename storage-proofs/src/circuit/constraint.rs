@@ -119,19 +119,19 @@ pub fn difference<E: Engine, A, AR, CS: ConstraintSystem<E>>(
 mod tests {
     use super::*;
     use crate::circuit::test::TestConstraintSystem;
-    use paired::bls12_381::Bls12;
+    use paired::bls12_381::{Bls12, Fr};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
     #[test]
     fn add_constraint() {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         for _ in 0..100 {
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            let a = num::AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(rng.gen())).unwrap();
-            let b = num::AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(rng.gen())).unwrap();
+            let a = num::AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Fr::random(rng))).unwrap();
+            let b = num::AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(Fr::random(rng))).unwrap();
 
             let res = add(cs.namespace(|| "a+b"), &a, &b).expect("add failed");
 
@@ -145,13 +145,13 @@ mod tests {
 
     #[test]
     fn sub_constraint() {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         for _ in 0..100 {
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            let a = num::AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(rng.gen())).unwrap();
-            let b = num::AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(rng.gen())).unwrap();
+            let a = num::AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Fr::random(rng))).unwrap();
+            let b = num::AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(Fr::random(rng))).unwrap();
 
             let res = sub(cs.namespace(|| "a-b"), &a, &b).expect("subtraction failed");
 

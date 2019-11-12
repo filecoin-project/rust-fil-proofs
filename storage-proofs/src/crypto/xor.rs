@@ -29,7 +29,7 @@ mod tests {
 
     #[test]
     fn test_xor() {
-        let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
 
         for i in 0..10 {
             let key: Vec<u8> = (0..32).map(|_| rng.gen()).collect();

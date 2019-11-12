@@ -58,8 +58,8 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
     /// Returns the number of parents of each node in the graph.
     fn degree(&self) -> usize;
 
-    fn new(nodes: usize, base_degree: usize, expansion_degree: usize, seed: [u32; 7]) -> Self;
-    fn seed(&self) -> [u32; 7];
+    fn new(nodes: usize, base_degree: usize, expansion_degree: usize, seed: [u8; 28]) -> Self;
+    fn seed(&self) -> [u8; 28];
 
     /// Creates the encoding key.
     /// The algorithm for that is `Sha256(id | encodedParentNode1 | encodedParentNode1 | ...)`.
@@ -82,7 +82,7 @@ pub fn graph_height(size: usize) -> usize {
 pub struct BucketGraph<H: Hasher> {
     nodes: usize,
     base_degree: usize,
-    seed: [u32; 7],
+    seed: [u8; 28],
     _h: PhantomData<H>,
 }
 
@@ -147,10 +147,10 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
                 let m_prime = m - 1;
 
                 // seed = self.seed | node
-                let mut seed = [0u32; 8];
-                seed[0..7].copy_from_slice(&self.seed);
-                seed[7] = node as u32;
-                let mut rng = ChaChaRng::from_seed(&seed);
+                let mut seed = [0u8; 32];
+                seed[..28].copy_from_slice(&self.seed);
+                seed[28..].copy_from_slice(&(node as u32).to_le_bytes());
+                let mut rng = ChaChaRng::from_seed(seed);
 
                 for (k, parent) in parents.iter_mut().take(m_prime).enumerate() {
                     // Iterate over `m_prime` number of meta nodes for the i-th real node. Simulate
@@ -188,11 +188,11 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
         self.base_degree
     }
 
-    fn seed(&self) -> [u32; 7] {
+    fn seed(&self) -> [u8; 28] {
         self.seed
     }
 
-    fn new(nodes: usize, base_degree: usize, expansion_degree: usize, seed: [u32; 7]) -> Self {
+    fn new(nodes: usize, base_degree: usize, expansion_degree: usize, seed: [u8; 28]) -> Self {
         if !cfg!(feature = "unchecked-degrees") {
             assert_eq!(base_degree, BASE_DEGREE);
         }
@@ -208,8 +208,8 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
     }
 }
 
-pub fn new_seed() -> [u32; 7] {
-    OsRng::new().expect("Failed to create `OsRng`").gen()
+pub fn new_seed() -> [u8; 28] {
+    OsRng.gen()
 }
 
 #[cfg(test)]

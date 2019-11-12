@@ -2,7 +2,7 @@ use std::hash::Hasher as StdHasher;
 
 use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
-use ff::{PrimeField, PrimeFieldRepr};
+use ff::{Field, PrimeField, PrimeFieldRepr};
 use fil_sapling_crypto::circuit::pedersen_hash as pedersen_hash_circuit;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use fil_sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};

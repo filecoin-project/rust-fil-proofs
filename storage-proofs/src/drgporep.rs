@@ -48,7 +48,7 @@ pub struct DrgParams {
     pub expansion_degree: usize,
 
     // Random seed
-    pub seed: [u32; 7],
+    pub seed: [u8; 28],
 }
 
 #[derive(Debug, Clone)]
@@ -606,7 +606,7 @@ mod tests {
     }
 
     fn test_extract_all<H: Hasher>() {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let replica_id: H::Domain = rng.gen();
         let data = vec![2u8; 32 * 3];
@@ -657,7 +657,7 @@ mod tests {
     }
 
     fn test_extract<H: Hasher>() {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let replica_id: H::Domain = rng.gen();
         let nodes = 3;
@@ -725,7 +725,7 @@ mod tests {
 
         // The loop is here in case we need to retry because of an edge case in the test design.
         loop {
-            let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+            let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
             let degree = BASE_DEGREE;
             let expansion_degree = 0;
             let seed = new_seed();

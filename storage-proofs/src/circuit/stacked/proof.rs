@@ -137,7 +137,7 @@ impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G
         })?;
 
         // Allocate comm_r_last as booleans
-        let comm_r_last_bits = comm_r_last_num.into_bits_le(cs.namespace(|| "comm_r_last_bits"))?;
+        let comm_r_last_bits = comm_r_last_num.to_bits_le(cs.namespace(|| "comm_r_last_bits"))?;
 
         // Allocate comm_c as Fr
         let comm_c_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_c"), || {
@@ -147,7 +147,7 @@ impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G
         })?;
 
         // Allocate comm_c as booleans
-        let comm_c_bits = comm_c_num.into_bits_le(cs.namespace(|| "comm_c_bits"))?;
+        let comm_c_bits = comm_c_num.to_bits_le(cs.namespace(|| "comm_c_bits"))?;
 
         // Verify comm_r = H(comm_c || comm_r_last)
         {
@@ -347,11 +347,11 @@ mod tests {
         let num_layers = 2;
         let layer_challenges = LayerChallenges::new(num_layers, 1);
 
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let replica_id: Fr = rng.gen();
+        let replica_id: Fr = Fr::random(rng);
         let data: Vec<u8> = (0..nodes)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
@@ -487,11 +487,11 @@ mod tests {
         let layer_challenges = LayerChallenges::new(num_layers, 3);
         let partition_count = 1;
 
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let replica_id: Fr = rng.gen();
+        let replica_id: Fr = Fr::random(rng);
         let data: Vec<u8> = (0..nodes)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();

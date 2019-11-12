@@ -60,7 +60,7 @@ pub enum CSType {
 pub trait Example<'a, C: Circuit<Bls12>>: Default {
     /// The actual work.
     fn work_groth(&mut self, typ: CSType, data_size: usize, challenge_count: usize, m: usize) {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = data_size / 32;
         let tree_depth = (leaves as f64).log2().ceil() as usize;
@@ -156,7 +156,7 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
     }
 
     fn work_bench(&mut self, typ: CSType, data_size: usize, challenge_count: usize, m: usize) {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = data_size / 32;
         let tree_depth = (leaves as f64).log2().ceil() as usize;
@@ -201,7 +201,7 @@ pub trait Example<'a, C: Circuit<Bls12>>: Default {
     }
 
     fn work_circuit(&mut self, typ: CSType, data_size: usize, challenge_count: usize, m: usize) {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = data_size / 32;
         let tree_depth = (leaves as f64).log2().ceil() as usize;

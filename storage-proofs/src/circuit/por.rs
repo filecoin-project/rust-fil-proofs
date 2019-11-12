@@ -179,8 +179,8 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for PoRCircuit<'a, E, H> {
                     &cur_is_right,
                 )?;
 
-                let xl_bits = xl.into_bits_le(cs.namespace(|| "xl into bits"))?;
-                let xr_bits = xr.into_bits_le(cs.namespace(|| "xr into bits"))?;
+                let xl_bits = xl.to_bits_le(cs.namespace(|| "xl into bits"))?;
+                let xr_bits = xr.to_bits_le(cs.namespace(|| "xr into bits"))?;
 
                 // Compute the new subtree value
                 cur = H::Function::hash_leaf_circuit(
@@ -261,10 +261,10 @@ mod tests {
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn por_test_compound() {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let leaves = 6;
         let data: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
         let graph = BucketGraph::<PedersenHasher>::new(leaves, BASE_DEGREE, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
@@ -343,7 +343,7 @@ mod tests {
     }
 
     fn test_por_input_circuit_with_bls12_381<H: Hasher>(num_constraints: usize) {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 6;
 
@@ -351,7 +351,7 @@ mod tests {
             // -- Basic Setup
 
             let data: Vec<u8> = (0..leaves)
-                .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+                .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
                 .collect();
 
             let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed());
@@ -451,10 +451,10 @@ mod tests {
     }
 
     fn private_por_test_compound<H: Hasher>() {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let leaves = 6;
         let data: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
         let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed());
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
@@ -522,7 +522,7 @@ mod tests {
 
     #[test]
     fn test_private_por_input_circuit_with_bls12_381() {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 6;
 
@@ -530,7 +530,7 @@ mod tests {
             // -- Basic Setup
 
             let data: Vec<u8> = (0..leaves)
-                .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+                .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
                 .collect();
 
             let graph = BucketGraph::<PedersenHasher>::new(leaves, BASE_DEGREE, 0, new_seed());

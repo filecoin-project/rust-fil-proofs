@@ -77,7 +77,7 @@ where
             },
         )?;
         let mut row_bits =
-            row_num.into_bits_le(cs.namespace(|| format!("hash_single_column_row_{}_bits", i)))?;
+            row_num.to_bits_le(cs.namespace(|| format!("hash_single_column_row_{}_bits", i)))?;
         // pad to full bytes
         while row_bits.len() % 8 > 0 {
             row_bits.push(Boolean::Constant(false));
@@ -106,13 +106,13 @@ mod tests {
 
     #[test]
     fn test_hash2_circuit() {
-        let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         for _ in 0..10 {
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            let a_bytes = fr_into_bytes::<Bls12>(&rng.gen());
-            let b_bytes = fr_into_bytes::<Bls12>(&rng.gen());
+            let a_bytes = fr_into_bytes::<Bls12>(&Fr::random(rng));
+            let b_bytes = fr_into_bytes::<Bls12>(&Fr::random(rng));
 
             let a_bits: Vec<Boolean> = {
                 let mut cs = cs.namespace(|| "a");

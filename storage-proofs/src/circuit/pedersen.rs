@@ -1,6 +1,6 @@
 use bellperson::gadgets::{boolean::Boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::{jubjub::JubjubEngine, pedersen_hash};
+use fil_sapling_crypto::{circuit::pedersen_hash, jubjub::JubjubEngine};
 
 use crate::crypto::pedersen::PEDERSEN_BLOCK_SIZE;
 
@@ -69,7 +69,7 @@ pub fn pedersen_compression<E: JubjubEngine, CS: ConstraintSystem<E>>(
     bits: &[Boolean],
 ) -> Result<Vec<Boolean>, SynthesisError> {
     let h = pedersen_compression_num(cs.namespace(|| "compression"), params, bits)?;
-    let mut out = h.into_bits_le(cs.namespace(|| "h into bits"))?;
+    let mut out = h.to_bits_le(cs.namespace(|| "h into bits"))?;
 
     // needs padding, because x does not always translate to exactly 256 bits
     while out.len() < PEDERSEN_BLOCK_SIZE {
@@ -94,7 +94,7 @@ mod tests {
 
     #[test]
     fn test_pedersen_single_input_circut() {
-        let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
 
         let cases = [(32, 689), (64, 1376)];
 
@@ -129,7 +129,7 @@ mod tests {
 
     #[test]
     fn test_pedersen_md_input_circut() {
-        let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
 
         let cases = [
             (64, 1376),   // 64 bytes

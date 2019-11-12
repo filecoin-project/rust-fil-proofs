@@ -86,7 +86,7 @@ where
         nodes: usize,
         base_degree: usize,
         expansion_degree: usize,
-        seed: [u32; 7],
+        seed: [u8; 28],
     ) -> Self {
         if !cfg!(feature = "unchecked-degrees") {
             assert_eq!(base_degree, BASE_DEGREE, "Invalid base degree");
@@ -172,11 +172,11 @@ where
         debug_assert!(parents.len() == self.degree());
     }
 
-    fn seed(&self) -> [u32; 7] {
+    fn seed(&self) -> [u8; 28] {
         self.base_graph().seed()
     }
 
-    fn new(nodes: usize, base_degree: usize, expansion_degree: usize, seed: [u32; 7]) -> Self {
+    fn new(nodes: usize, base_degree: usize, expansion_degree: usize, seed: [u8; 28]) -> Self {
         Self::new_stacked(nodes, base_degree, expansion_degree, seed)
     }
 

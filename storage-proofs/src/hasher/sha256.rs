@@ -4,12 +4,12 @@ use std::hash::Hasher as StdHasher;
 
 use bellperson::gadgets::{boolean, multipack, num, sha256::sha256 as sha256_circuit};
 use bellperson::{ConstraintSystem, SynthesisError};
-use ff::{PrimeField, PrimeFieldRepr};
+use ff::{Field, PrimeField, PrimeFieldRepr};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use merkletree::hash::{Algorithm, Hashable};
 use merkletree::merkle::Element;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
-use rand::Rng;
+use rand::RngCore;
 
 use super::{Domain, HashFunction, Hasher};
 use crate::crypto::sloth;
@@ -142,7 +142,7 @@ impl Domain for Sha256Domain {
         Ok(())
     }
 
-    fn random<R: rand::RngCore>(rng: &mut R) -> Self {
+    fn random<R: RngCore>(rng: &mut R) -> Self {
         // generating an Fr and converting it, to ensure we stay in the field
         Fr::random(rng).into()
     }
