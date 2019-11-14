@@ -264,7 +264,8 @@ mod tests {
     use std::io::{Seek, SeekFrom, Write};
 
     use paired::bls12_381::Bls12;
-    use rand::{Rng, SeedableRng, XorShiftRng};
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
     use storage_proofs::fr32::bytes_into_fr;
     use tempfile::NamedTempFile;
 
@@ -368,7 +369,7 @@ mod tests {
     fn test_seal_lifecycle() -> Result<(), failure::Error> {
         pretty_env_logger::try_init().ok();
 
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let sector_size = SECTOR_SIZE_ONE_KIB;
 
