@@ -7,7 +7,7 @@ use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::hasher::Hasher;
 use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
-use storage_proofs::stacked::{generate_replica_id, StackedDrg};
+use storage_proofs::stacked::{generate_replica_id, CacheKey, StackedDrg};
 use tempfile::tempfile;
 
 use crate::api::util::as_safe_commitment;
@@ -66,7 +66,11 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
 
     // MT for original data is always named tree-d, and it will be
     // referenced later in the process as such.
-    let config = StoreConfig::new(cache_path, "tree-d", DEFAULT_CACHED_ABOVE_BASE_LAYER);
+    let config = StoreConfig::new(
+        cache_path,
+        CacheKey::CommDTree.to_string(),
+        DEFAULT_CACHED_ABOVE_BASE_LAYER,
+    );
 
     let unsealed = StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::extract_all(
         &public_params(

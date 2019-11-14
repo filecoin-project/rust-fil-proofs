@@ -34,7 +34,8 @@ use storage_proofs::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher, Sha2
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::stacked::{
-    self, ChallengeRequirements, LayerChallenges, StackedDrg, TemporaryAuxCache, EXP_DEGREE,
+    self, CacheKey, ChallengeRequirements, LayerChallenges, StackedDrg, TemporaryAuxCache,
+    EXP_DEGREE,
 };
 
 // We can only one of the profilers at a time, either CPU (`profile`)
@@ -193,7 +194,11 @@ fn do_the_work<H: 'static>(
     // MT for original data is always named tree-d, and it will be
     // referenced later in the process as such.
     let cache_dir = tempfile::tempdir().unwrap();
-    let config = StoreConfig::new(cache_dir.path(), "tree-d", DEFAULT_CACHED_ABOVE_BASE_LAYER);
+    let config = StoreConfig::new(
+        cache_dir.path(),
+        CacheKey::CommDTree.to_string(),
+        DEFAULT_CACHED_ABOVE_BASE_LAYER,
+    );
 
     let (pub_in, priv_in, d) = if bench_only {
         (None, None, None)

@@ -364,9 +364,14 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
+        use crate::stacked::CacheKey;
         use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
         let cache_dir = tempfile::tempdir().unwrap();
-        let config = StoreConfig::new(cache_dir.path(), "tree-d", DEFAULT_CACHED_ABOVE_BASE_LAYER);
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+        );
 
         let pp = StackedDrg::<PedersenHasher, Sha256Hasher>::setup(&sp).expect("setup failed");
         let (tau, (p_aux, t_aux)) = StackedDrg::<PedersenHasher, Sha256Hasher>::replicate(
@@ -518,9 +523,14 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
+        use crate::stacked::CacheKey;
         use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
         let cache_dir = tempfile::tempdir().unwrap();
-        let config = StoreConfig::new(cache_dir.path(), "tree-d", DEFAULT_CACHED_ABOVE_BASE_LAYER);
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+        );
 
         let public_params = StackedCompound::setup(&setup_params).expect("setup failed");
         let (tau, (p_aux, t_aux)) = StackedDrg::replicate(

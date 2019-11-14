@@ -13,7 +13,8 @@ use storage_proofs::merkle::create_merkle_tree;
 use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
 use storage_proofs::stacked::{
-    self, generate_replica_id, ChallengeRequirements, StackedDrg, Tau, TemporaryAuxCache,
+    self, generate_replica_id, CacheKey, ChallengeRequirements, StackedDrg, Tau, TemporaryAux,
+    TemporaryAuxCache,
 };
 
 use crate::api::util::{as_safe_commitment, commitment_from_fr};
@@ -86,7 +87,7 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
     // referenced later in the process as such.
     let config = StoreConfig::new(
         cache_path.as_ref(),
-        "tree-d",
+        CacheKey::CommDTree.to_string(),
         DEFAULT_CACHED_ABOVE_BASE_LAYER,
     );
 
@@ -160,7 +161,7 @@ pub fn seal_commit<T: AsRef<Path>>(
 
     // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
     // elements based on the configs stored in TemporaryAux.
-    let t_aux: TemporaryAuxCache<DefaultTreeHasher, DefaultPieceHasher> =
+    let t_aux_cache: TemporaryAuxCache<DefaultTreeHasher, DefaultPieceHasher> =
         TemporaryAuxCache::new(&t_aux).expect("failed to restore contents of t_aux");
 
     let comm_r_safe = as_safe_commitment(&comm_r, "comm_r")?;
@@ -183,8 +184,10 @@ pub fn seal_commit<T: AsRef<Path>>(
         seed,
     };
 
-    let private_inputs =
-        stacked::PrivateInputs::<DefaultTreeHasher, DefaultPieceHasher> { p_aux, t_aux };
+    let private_inputs = stacked::PrivateInputs::<DefaultTreeHasher, DefaultPieceHasher> {
+        p_aux,
+        t_aux: t_aux_cache,
+    };
 
     let groth_params = get_stacked_params(porep_config)?;
 
@@ -209,6 +212,9 @@ pub fn seal_commit<T: AsRef<Path>>(
         &private_inputs,
         &groth_params,
     )?;
+
+    // Delete cached MTs that are no longer needed.
+    TemporaryAux::<DefaultTreeHasher, DefaultPieceHasher>::delete(t_aux)?;
 
     let mut buf = Vec::with_capacity(
         SINGLE_PARTITION_PROOF_LEN * usize::from(PoRepProofPartitions::from(porep_config)),

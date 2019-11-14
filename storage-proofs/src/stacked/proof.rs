@@ -18,8 +18,8 @@ use crate::stacked::{
     graph::StackedBucketGraph,
     hash::hash2,
     params::{
-        get_node, Labels, LabelsCache, PersistentAux, Proof, PublicInputs, ReplicaColumnProof, Tau,
-        TemporaryAux, TemporaryAuxCache, TransformedLayers, Tree,
+        get_node, CacheKey, Labels, LabelsCache, PersistentAux, Proof, PublicInputs,
+        ReplicaColumnProof, Tau, TemporaryAux, TemporaryAuxCache, TransformedLayers, Tree,
     },
     EncodingProof, LabelingProof,
 };
@@ -486,11 +486,12 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         // cache_path in the specified config.
         assert!(config.is_some());
         let config = config.unwrap();
-        let mut tree_d_config = StoreConfig::from_config(&config, "tree-d", None);
+        let mut tree_d_config =
+            StoreConfig::from_config(&config, CacheKey::CommDTree.to_string(), None);
         let mut tree_r_last_config =
-            StoreConfig::from_config(&config, format!("tree-r-last-{:?}", replica_id), None);
+            StoreConfig::from_config(&config, CacheKey::CommRLastTree.to_string(), None);
         let mut tree_c_config =
-            StoreConfig::from_config(&config, format!("tree-c-{:?}", replica_id), None);
+            StoreConfig::from_config(&config, CacheKey::CommCTree.to_string(), None);
 
         let (label_configs, column_hashes, tree_d) = crossbeam::thread::scope(|s| {
             // Generate key layers.
@@ -682,7 +683,11 @@ mod tests {
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
         let cache_dir = tempfile::tempdir().unwrap();
-        let config = StoreConfig::new(cache_dir.path(), "tree-d", DEFAULT_CACHED_ABOVE_BASE_LAYER);
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+        );
 
         StackedDrg::<H, Blake2sHasher>::replicate(
             &pp,
@@ -745,7 +750,11 @@ mod tests {
         // referenced later in the process as such.
         use merkletree::store::DEFAULT_CACHED_ABOVE_BASE_LAYER;
         let cache_dir = tempfile::tempdir().unwrap();
-        let config = StoreConfig::new(cache_dir.path(), "tree-d", DEFAULT_CACHED_ABOVE_BASE_LAYER);
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+        );
 
         let pp = StackedDrg::<H, Blake2sHasher>::setup(&sp).expect("setup failed");
         let (tau, (p_aux, t_aux)) = StackedDrg::<H, Blake2sHasher>::replicate(

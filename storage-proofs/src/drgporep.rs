@@ -632,9 +632,14 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
+        use crate::stacked::CacheKey;
         use merkletree::store::DEFAULT_CACHED_ABOVE_BASE_LAYER;
         let cache_dir = tempfile::tempdir().unwrap();
-        let config = StoreConfig::new(cache_dir.path(), "tree-d", DEFAULT_CACHED_ABOVE_BASE_LAYER);
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+        );
 
         DrgPoRep::replicate(
             &pp,
@@ -702,9 +707,14 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
+        use crate::stacked::CacheKey;
         use merkletree::store::DEFAULT_CACHED_ABOVE_BASE_LAYER;
         let cache_dir = tempfile::tempdir().unwrap();
-        let config = StoreConfig::new(cache_dir.path(), "tree-d", DEFAULT_CACHED_ABOVE_BASE_LAYER);
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+        );
 
         DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None, Some(config))
             .expect("replication failed");
@@ -782,10 +792,14 @@ mod tests {
 
             // MT for original data is always named tree-d, and it will be
             // referenced later in the process as such.
+            use crate::stacked::CacheKey;
             use merkletree::store::DEFAULT_CACHED_ABOVE_BASE_LAYER;
             let cache_dir = tempfile::tempdir().unwrap();
-            let config =
-                StoreConfig::new(cache_dir.path(), "tree-d", DEFAULT_CACHED_ABOVE_BASE_LAYER);
+            let config = StoreConfig::new(
+                cache_dir.path(),
+                CacheKey::CommDTree.to_string(),
+                DEFAULT_CACHED_ABOVE_BASE_LAYER,
+            );
 
             let (tau, aux) = DrgPoRep::<H, _>::replicate(
                 &pp,

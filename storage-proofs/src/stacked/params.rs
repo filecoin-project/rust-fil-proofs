@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt;
 use std::marker::PhantomData;
 
 use merkletree::merkle::get_merkle_tree_leafs;
@@ -20,6 +21,23 @@ use crate::stacked::{
 use crate::util::data_at_node;
 
 pub type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
+
+#[derive(Debug)]
+pub enum CacheKey {
+    CommRLastTree,
+    CommCTree,
+    CommDTree,
+}
+
+impl fmt::Display for CacheKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            CacheKey::CommRLastTree => write!(f, "tree-r-last"),
+            CacheKey::CommCTree => write!(f, "tree-c"),
+            CacheKey::CommDTree => write!(f, "tree-d"),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct SetupParams {
@@ -318,7 +336,7 @@ pub struct PersistentAux<D> {
     pub comm_r_last: D,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemporaryAux<H: Hasher, G: Hasher> {
     /// The encoded nodes for 1..layers.
     pub labels: Labels<H>,
@@ -340,6 +358,30 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
     pub fn column(&self, column_index: u32) -> Result<Column<H>> {
         self.labels.column(column_index)
     }
+
+    #[cfg(not(feature = "mem-trees"))]
+    pub fn delete(t_aux: TemporaryAux<H, G>) -> Result<()> {
+        let tree_d_size = t_aux.tree_d_config.size.unwrap();
+        let tree_d_store: DiskStore<G::Domain> =
+            DiskStore::new_from_disk(tree_d_size, &t_aux.tree_d_config)?;
+        let tree_d: Tree<G> =
+            MerkleTree::from_data_store(tree_d_store, get_merkle_tree_leafs(tree_d_size));
+        tree_d.delete(t_aux.tree_d_config)?;
+
+        let tree_c_size = t_aux.tree_c_config.size.unwrap();
+        #[cfg(not(feature = "mem-trees"))]
+        let tree_c_store: DiskStore<H::Domain> =
+            DiskStore::new_from_disk(tree_c_size, &t_aux.tree_c_config)?;
+        let tree_c: Tree<H> =
+            MerkleTree::from_data_store(tree_c_store, get_merkle_tree_leafs(tree_c_size));
+        tree_c.delete(t_aux.tree_c_config)?;
+
+        for i in 0..t_aux.labels.labels.len() {
+            DiskStore::<H::Domain>::delete(t_aux.labels.labels[i].clone())?;
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -349,6 +391,7 @@ pub struct TemporaryAuxCache<H: Hasher, G: Hasher> {
     pub tree_d: Tree<G>,
     pub tree_r_last: Tree<H>,
     pub tree_c: Tree<H>,
+    pub t_aux: TemporaryAux<H, G>,
 }
 
 impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
@@ -388,6 +431,7 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
             tree_d,
             tree_r_last,
             tree_c,
+            t_aux: t_aux.clone(),
         })
     }
 
@@ -404,7 +448,7 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Labels<H: Hasher> {
     labels: Vec<StoreConfig>,
     _h: PhantomData<H>,

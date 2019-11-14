@@ -21,7 +21,8 @@ use storage_proofs::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher, Sha2
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::stacked::{
-    self, ChallengeRequirements, LayerChallenges, StackedDrg, TemporaryAuxCache, EXP_DEGREE,
+    self, CacheKey, ChallengeRequirements, LayerChallenges, StackedDrg, TemporaryAuxCache,
+    EXP_DEGREE,
 };
 
 fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> Result<MmapMut, failure::Error> {
@@ -120,7 +121,11 @@ where
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
         let cache_dir = tempfile::tempdir().unwrap();
-        let config = StoreConfig::new(cache_dir.path(), "tree-d", DEFAULT_CACHED_ABOVE_BASE_LAYER);
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+        );
 
         let mut total_proving_wall_time = Duration::new(0, 0);
         let mut total_proving_cpu_time = Duration::new(0, 0);
