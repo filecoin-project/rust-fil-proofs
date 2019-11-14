@@ -216,7 +216,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         // generate labels
         let (labels, _) = Self::generate_labels(graph, layer_challenges, replica_id, false)?;
 
-        let size = labels.labels_for_last_layer().len();
+        let size = Store::len(labels.labels_for_last_layer());
 
         for (key, encoded_node_bytes) in labels
             .labels_for_last_layer()
@@ -458,7 +458,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 // Encode original data into the last layer.
                 let tree_r_last_handle = s.spawn(|_| {
                     info!("encoding data");
-                    let size = labels.labels_for_last_layer().len();
+                    let size = Store::len(labels.labels_for_last_layer());
                     labels
                         .labels_for_last_layer()
                         .read_range(0..size)

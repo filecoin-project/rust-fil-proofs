@@ -7,7 +7,7 @@ use serde::de::Deserialize;
 use serde::ser::Serialize;
 use sha2::{Digest, Sha256};
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
@@ -143,9 +143,39 @@ impl<'a, H: 'a + Hasher> ElectionPoSt<'a, H> {
         seed: &[u8; 32],
     ) -> Result<Witness> {
         // 1. read the data for each challenge
-        // 2. hash the leafs, together with the seed
+        let mut data = Vec::with_capacity(POST_CHALLENGE_COUNT);
+        for challenge in pub_inputs.challenges {
+            let tree = match priv_inputs.trees.get(&challenge.sector) {
+                Some(tree) => tree,
+                None => {
+                    return Err(format_err!(
+                        "Missing tree (private input) for sector {}",
+                        challenge.sector
+                    )
+                    .into())
+                }
+            };
 
-        unimplemented!()
+            let mut challenge_data = [0u8; POST_CHALLENGED_NODES * NODE_SIZE];
+            let start = challenge.start as usize;
+            let end = start + POST_CHALLENGED_NODES;
+
+            tree.read_range_into(start, end, &mut challenge_data);
+
+            data.push(challenge_data);
+        }
+
+        // 2. hash the leafs, together with the seed
+        let mut hasher = Sha256::new();
+        hasher.input(&seed);
+        for chunk in &data {
+            hasher.input(&chunk[..]);
+        }
+
+        let mut ticket = [0u8; 32];
+        ticket.copy_from_slice(&hasher.result());
+
+        Ok(Witness { ticket, data })
     }
 
     pub fn generate_challenges(
