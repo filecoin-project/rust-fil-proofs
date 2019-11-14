@@ -24,18 +24,18 @@ regex = "1.1.6"
 commandspec = "0.12.2"
 chrono = { version = "0.4.7", features = ["serde"] }
 memmap = "0.7.0"
-bellperson = { version = ">=0.3.4", git = "https://github.com/filecoin-project/bellman", branch = "update-from-upstream" }
-paired = { version = "0.15.1", git = "https://github.com/filecoin-project/pairing", branch = "update-from-upstream" }
-fil-sapling-crypto = { version = "0.1.2", git = "https://github.com/filecoin-project/sapling-crypto", branch = "updates-from-upstream" }
+bellperson = "0.4.0"
+paired = "0.16.0"
+fil-sapling-crypto = "0.2.0"
 rand = "0.7"
 storage-proofs = { path = "../storage-proofs"}
 filecoin-proofs = { path = "../filecoin-proofs"}
 tempfile = "3.0.8"
-cpu-time = "0.1.0"
+cpu-time = "1.0.0"
 git2 = "0.10.1"
-heim = "0.0.7"
+heim = "0.0.8"
 futures-preview = "0.3.0-alpha.17"
-raw-cpuid = "6.1.0"
+raw-cpuid = "7.0.3"
 blake2s_simd = "0.5.6"
 pretty_env_logger = "0.3.1"
 log = "0.4.8"
