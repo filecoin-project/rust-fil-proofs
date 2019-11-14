@@ -578,10 +578,11 @@ pub fn create_key_from_tree<H: Hasher>(
 mod tests {
     use super::*;
 
+    use ff::Field;
     use memmap::MmapMut;
     use memmap::MmapOptions;
-    use paired::bls12_381::Bls12;
-    use rand::{Rng, SeedableRng};
+    use paired::bls12_381::{Bls12, Fr};
+    use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use std::fs::File;
     use std::io::Write;
@@ -608,7 +609,7 @@ mod tests {
     fn test_extract_all<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let replica_id: H::Domain = rng.gen();
+        let replica_id: H::Domain = H::Domain::random(rng);
         let data = vec![2u8; 32 * 3];
         // create a copy, so we can compare roundtrips
         let mut mmapped_data_copy = file_backed_mmap_from(&data);
@@ -659,7 +660,7 @@ mod tests {
     fn test_extract<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let replica_id: H::Domain = rng.gen();
+        let replica_id: H::Domain = H::Domain::random(rng);
         let nodes = 3;
         let data = vec![2u8; 32 * nodes];
 
@@ -730,9 +731,9 @@ mod tests {
             let expansion_degree = 0;
             let seed = new_seed();
 
-            let replica_id: H::Domain = rng.gen();
+            let replica_id: H::Domain = H::Domain::random(rng);
             let data: Vec<u8> = (0..nodes)
-                .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+                .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
                 .collect();
 
             // create a copy, so we can comare roundtrips

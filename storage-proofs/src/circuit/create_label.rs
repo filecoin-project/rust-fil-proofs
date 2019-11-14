@@ -69,7 +69,7 @@ mod tests {
     use bellperson::ConstraintSystem;
     use ff::Field;
     use paired::bls12_381::{Bls12, Fr};
-    use rand::{Rng, SeedableRng};
+    use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
     #[test]

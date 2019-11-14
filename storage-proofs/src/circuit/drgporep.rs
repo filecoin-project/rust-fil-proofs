@@ -519,7 +519,7 @@ mod tests {
     use crate::util::data_at_node;
 
     use ff::Field;
-    use rand::{Rng, SeedableRng};
+    use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
     #[test]

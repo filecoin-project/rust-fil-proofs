@@ -286,20 +286,22 @@ mod tests {
     use crate::crypto;
     use crate::fr32::fr_into_bytes;
     use crate::util::bytes_into_boolean_vec;
+
     use bellperson::gadgets::boolean::Boolean;
     use bellperson::ConstraintSystem;
+    use ff::Field;
     use merkletree::hash::Algorithm;
-    use paired::bls12_381::Bls12;
-    use rand::{Rng, SeedableRng};
+    use paired::bls12_381::{Bls12, Fr};
+    use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
     #[test]
     fn hash_leaf_circuit() {
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let left_fr = rng.gen();
-        let right_fr = rng.gen();
+        let left_fr = Fr::random(rng);
+        let right_fr = Fr::random(rng);
         let left: Vec<u8> = fr_into_bytes::<Bls12>(&left_fr);
         let right: Vec<u8> = fr_into_bytes::<Bls12>(&right_fr);
         let height = 1;

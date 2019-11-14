@@ -525,6 +525,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 mod tests {
     use super::*;
 
+    use ff::Field;
     use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
@@ -567,13 +568,13 @@ mod tests {
         //     .start(log::LevelFilter::Trace)
         //     .ok();
 
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-        let replica_id: H::Domain = rng.gen();
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+        let replica_id: H::Domain = H::Domain::random(rng);
         let nodes = 8;
 
         let data: Vec<u8> = (0..nodes)
             .flat_map(|_| {
-                let v: H::Domain = rng.gen();
+                let v: H::Domain = H::Domain::random(rng);
                 v.into_bytes()
             })
             .collect();
@@ -618,13 +619,13 @@ mod tests {
         //     .start(log::LevelFilter::Trace)
         //     .ok();
 
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
-        let replica_id: H::Domain = rng.gen();
+        let replica_id: H::Domain = H::Domain::random(rng);
         let data: Vec<u8> = (0..n)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
         // create a copy, so we can compare roundtrips

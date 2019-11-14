@@ -245,7 +245,7 @@ mod tests {
     use crate::proof::NoRequirements;
     use bellperson::gadgets::multipack;
     use ff::Field;
-    use rand::{Rng, SeedableRng};
+    use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
     use crate::circuit::test::*;

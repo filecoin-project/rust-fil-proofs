@@ -265,7 +265,7 @@ where
         nodes: usize,
         base_degree: usize,
         expansion_degree: usize,
-        seed: [u32; 7],
+        seed: [u8; 28],
     ) -> Self {
         Self::new(None, nodes, base_degree, expansion_degree, seed)
     }

@@ -126,7 +126,7 @@ mod tests {
     #[test]
     fn test_bytes_into_boolean_vec() {
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         for i in 0..100 {
             let data: Vec<u8> = (0..i + 10).map(|_| rng.gen()).collect();
@@ -174,7 +174,7 @@ mod tests {
             vec![true, false, false, false, false, false, false, false]
         );
 
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         for i in 10..100 {
             let bytes: Vec<u8> = (0..i).map(|_| rng.gen()).collect();

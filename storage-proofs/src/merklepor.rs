@@ -145,8 +145,9 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for MerklePoR<H> {
 mod tests {
     use super::*;
 
-    use paired::bls12_381::Bls12;
-    use rand::{Rng, SeedableRng};
+    use ff::Field;
+    use paired::bls12_381::{Bls12, Fr};
+    use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
@@ -156,7 +157,7 @@ mod tests {
     use crate::util::data_at_node;
 
     fn test_merklepor<H: Hasher>() {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let pub_params = PublicParams {
             leaves: 32,
@@ -164,7 +165,7 @@ mod tests {
         };
 
         let data: Vec<u8> = (0..32)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
         let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
@@ -214,7 +215,7 @@ mod tests {
         pub_inputs: &PublicInputs<H::Domain>,
         rng: &mut XorShiftRng,
     ) -> DataProof<H> {
-        let bogus_leaf: H::Domain = rng.gen();
+        let bogus_leaf: H::Domain = H::Domain::random(rng);
         let hashed_leaf = H::Function::hash_leaf(&bogus_leaf);
 
         DataProof {
@@ -228,7 +229,7 @@ mod tests {
     }
 
     fn test_merklepor_validates<H: Hasher>() {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let pub_params = PublicParams {
             leaves: 32,
@@ -236,7 +237,7 @@ mod tests {
         };
 
         let data: Vec<u8> = (0..32)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
         let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
@@ -272,7 +273,7 @@ mod tests {
     }
 
     fn test_merklepor_validates_challenge_identity<H: Hasher>() {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let pub_params = PublicParams {
             leaves: 32,
@@ -280,7 +281,7 @@ mod tests {
         };
 
         let data: Vec<u8> = (0..32)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
         let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
