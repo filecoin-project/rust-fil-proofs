@@ -43,8 +43,8 @@ fn preprocessing_benchmark(c: &mut Criterion) {
                 write_padded_unpadded_bench(tmpfile, data.clone());
             })
         })
-        .sample_size(2)
-        .throughput(|s| Throughput::Bytes(*s as u32))
+        .sample_size(10)
+        .throughput(|s| Throughput::Bytes(*s as u64))
         .warm_up_time(Duration::from_secs(1)),
     );
 }
