@@ -7,14 +7,15 @@ extern crate log;
 
 use chrono::Utc;
 use clap::{App, Arg};
+use ff::Field;
 #[cfg(feature = "heap-profile")]
 use gperftools::heap_profiler::HEAP_PROFILER;
 #[cfg(feature = "cpu-profile")]
 use gperftools::profiler::PROFILER;
 use memmap::MmapMut;
 use memmap::MmapOptions;
-use paired::bls12_381::Bls12;
-use rand::{Rng, SeedableRng, XorShiftRng};
+use paired::bls12_381::{Bls12, Fr};
+use rand::Rng;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::time::{Duration, Instant};
@@ -29,7 +30,7 @@ use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
-use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
+use storage_proofs::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher, Sha256Hasher};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::stacked::{
@@ -80,7 +81,8 @@ fn stop_profile() {
 fn stop_profile() {}
 
 fn _file_backed_mmap_from_random_bytes(n: usize, use_tmp: bool) -> MmapMut {
-    let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    let rng = &mut rand::thread_rng();
+
     let mut file: File = if use_tmp {
         tempfile::tempfile().unwrap()
     } else {
@@ -94,7 +96,8 @@ fn _file_backed_mmap_from_random_bytes(n: usize, use_tmp: bool) -> MmapMut {
     info!("generating fake data");
 
     for _ in 0..n {
-        file.write_all(&fr_into_bytes::<Bls12>(&rng.gen())).unwrap();
+        file.write_all(&fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .unwrap();
     }
 
     unsafe { MmapOptions::new().map_mut(&file).unwrap() }
@@ -152,7 +155,7 @@ fn do_the_work<H: 'static>(
 ) where
     H: Hasher,
 {
-    let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    let rng = &mut rand::thread_rng();
 
     let m = BASE_DEGREE;
     let expansion_degree = EXP_DEGREE;
@@ -169,7 +172,7 @@ fn do_the_work<H: 'static>(
 
     let nodes = data_size / 32;
 
-    let replica_id: H::Domain = rng.gen();
+    let replica_id: H::Domain = H::Domain::random(rng);
     let sp = stacked::SetupParams {
         nodes,
         degree: m,

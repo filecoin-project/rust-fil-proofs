@@ -253,7 +253,7 @@ pub fn create_merkle_tree<H: Hasher>(
 mod tests {
     use super::*;
 
-    use rand::{self, Rng};
+    use rand;
     use std::io::Write;
 
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
@@ -265,7 +265,7 @@ mod tests {
         let node_size = 32;
         let mut data = Vec::new();
         for _ in 0..10 {
-            let elt: H::Domain = rng.gen();
+            let elt: H::Domain = H::Domain::random(&mut rng);
             let bytes = H::Domain::into_bytes(&elt);
             data.write(&bytes).unwrap();
         }

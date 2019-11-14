@@ -288,7 +288,8 @@ mod tests {
     use crate::api::util::commitment_from_fr;
 
     use paired::bls12_381::{Bls12, Fr};
-    use rand::{Rng, SeedableRng, XorShiftRng};
+    use rand::{Rng, RngCore, SeedableRng};
+    use rand_xorshift::XorShiftRng;
     use storage_proofs::drgraph::{new_seed, Graph, BASE_DEGREE};
     use storage_proofs::stacked::{StackedBucketGraph, EXP_DEGREE};
 
@@ -351,7 +352,7 @@ mod tests {
 
     #[test]
     fn test_verify_simple_pieces() {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         //     g
         //   /  \
@@ -546,7 +547,7 @@ mod tests {
     fn test_verify_random_pieces() -> Result<()> {
         use crate::pieces::*;
 
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         for sector_size in &[
             SectorSize(4 * 128),
@@ -630,7 +631,7 @@ mod tests {
         piece_sizes: &[UnpaddedBytesAmount],
         sector_size: SectorSize,
     ) -> Result<([u8; 32], Vec<PieceInfo>)> {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d73, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let graph = StackedBucketGraph::<DefaultPieceHasher>::new_stacked(
             u64::from(sector_size) as usize / NODE_SIZE,
             BASE_DEGREE,

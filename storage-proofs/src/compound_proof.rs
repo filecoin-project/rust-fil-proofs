@@ -8,7 +8,7 @@ use crate::proof::ProofScheme;
 use crate::settings;
 use bellperson::{groth16, Circuit};
 use fil_sapling_crypto::jubjub::JubjubEngine;
-use rand::OsRng;
+use rand::rngs::OsRng;
 
 pub struct SetupParams<'a, 'b: 'a, E: JubjubEngine, S: ProofScheme<'a>>
 where
@@ -157,7 +157,7 @@ where
         params: &'a E::Params,
         groth_params: &groth16::Parameters<E>,
     ) -> Result<groth16::Proof<E>> {
-        let rng = &mut OsRng::new().expect("Failed to create `OsRng`");
+        let mut rng = OsRng;
 
         // We need to make the circuit repeatedly because we can't clone it.
         // Fortunately, doing so is cheap.
@@ -171,7 +171,7 @@ where
             )
         };
 
-        let groth_proof = groth16::create_random_proof(make_circuit(), groth_params, rng)?;
+        let groth_proof = groth16::create_random_proof(make_circuit(), groth_params, &mut rng)?;
 
         let mut proof_vec = vec![];
         groth_proof.write(&mut proof_vec)?;

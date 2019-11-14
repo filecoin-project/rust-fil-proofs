@@ -117,8 +117,8 @@ mod test {
 
         let challenges = LayerChallenges::new(layers, n);
         let leaves = 1 << 30;
-        let mut rng = thread_rng();
-        let replica_id: PedersenDomain = rng.gen();
+        let rng = &mut thread_rng();
+        let replica_id: PedersenDomain = PedersenDomain::random(rng);
         let seed: [u8; 32] = rng.gen();
         let partitions = 5;
         let total_challenges = partitions * n;
@@ -154,8 +154,8 @@ mod test {
     fn challenge_partition_equivalence() {
         let n = 40;
         let leaves = 1 << 30;
-        let mut rng = thread_rng();
-        let replica_id: PedersenDomain = rng.gen();
+        let rng = &mut thread_rng();
+        let replica_id: PedersenDomain = PedersenDomain::random(rng);
         let seed: [u8; 32] = rng.gen();
         let partitions = 5;
         let layers = 100;

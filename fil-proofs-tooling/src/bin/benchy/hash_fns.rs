@@ -1,9 +1,8 @@
+use bellperson::gadgets::boolean::Boolean;
 use bellperson::ConstraintSystem;
 use fil_proofs_tooling::metadata::Metadata;
-use fil_sapling_crypto::circuit as scircuit;
-use fil_sapling_crypto::circuit::boolean::Boolean;
 use paired::bls12_381::Bls12;
-use rand::{Rng, SeedableRng, XorShiftRng};
+use rand::RngCore;
 use storage_proofs::circuit::pedersen::{pedersen_compression_num, pedersen_md_no_padding};
 use storage_proofs::circuit::test::TestConstraintSystem;
 use storage_proofs::crypto;
@@ -11,7 +10,7 @@ use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::util::{bits_to_bytes, bytes_into_boolean_vec, bytes_into_boolean_vec_be};
 
 fn blake2s_count(bytes: usize) -> Result<Report, failure::Error> {
-    let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    let rng = &mut rand::thread_rng();
 
     let mut cs = TestConstraintSystem::<Bls12>::new();
     let mut data = vec![0u8; bytes];
@@ -23,10 +22,11 @@ fn blake2s_count(bytes: usize) -> Result<Report, failure::Error> {
     };
 
     let personalization = vec![0u8; 8];
-    let out: Vec<bool> = scircuit::blake2s::blake2s(&mut cs, &data_bits, &personalization)?
-        .into_iter()
-        .map(|b| b.get_value().unwrap())
-        .collect();
+    let out: Vec<bool> =
+        bellperson::gadgets::blake2s::blake2s(&mut cs, &data_bits, &personalization)?
+            .into_iter()
+            .map(|b| b.get_value().unwrap())
+            .collect();
 
     assert!(cs.is_satisfied(), "constraints not satisfied");
 
@@ -45,7 +45,7 @@ fn blake2s_count(bytes: usize) -> Result<Report, failure::Error> {
 }
 
 fn sha256_count(bytes: usize) -> Result<Report, failure::Error> {
-    let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    let mut rng = rand::thread_rng();
 
     let mut cs = TestConstraintSystem::<Bls12>::new();
     let mut data = vec![0u8; bytes];
@@ -56,7 +56,7 @@ fn sha256_count(bytes: usize) -> Result<Report, failure::Error> {
         bytes_into_boolean_vec_be(&mut cs, Some(data.as_slice()), data.len()).unwrap()
     };
 
-    let _out: Vec<bool> = scircuit::sha256::sha256(&mut cs, &data_bits)?
+    let _out: Vec<bool> = bellperson::gadgets::sha256::sha256(&mut cs, &data_bits)?
         .into_iter()
         .map(|b| b.get_value().unwrap())
         .collect();
@@ -71,7 +71,7 @@ fn sha256_count(bytes: usize) -> Result<Report, failure::Error> {
 }
 
 fn pedersen_count(bytes: usize) -> Result<Report, failure::Error> {
-    let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    let mut rng = rand::thread_rng();
 
     let mut cs = TestConstraintSystem::<Bls12>::new();
     let mut data = vec![0u8; bytes];

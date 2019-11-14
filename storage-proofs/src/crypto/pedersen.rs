@@ -282,7 +282,8 @@ mod tests {
     use bitvec::{self, BitVec};
     use ff::Field;
     use paired::bls12_381::Fr;
-    use rand::{Rng, SeedableRng, XorShiftRng};
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
 
     #[test]
     fn test_bit_vec_le() {
@@ -315,7 +316,7 @@ mod tests {
 
     #[test]
     fn test_pedersen_md_no_padding() {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         for i in 2..5 {
             let x: Vec<u8> = (0..i * 32).map(|_| rng.gen()).collect();
@@ -367,7 +368,7 @@ mod tests {
 
     #[test]
     fn test_pedersen_hasher_update() {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         for _ in 2..5 {
             let x: Vec<Vec<u8>> = (0..5)

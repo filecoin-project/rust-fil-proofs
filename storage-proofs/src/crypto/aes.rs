@@ -26,11 +26,12 @@ pub fn decode(key: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::{Rng, SeedableRng, XorShiftRng};
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
 
     #[test]
     fn test_aes() {
-        let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
 
         for i in 0..10 {
             let key: Vec<u8> = (0..32).map(|_| rng.gen()).collect();

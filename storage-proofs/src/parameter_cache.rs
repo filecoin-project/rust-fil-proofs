@@ -4,7 +4,8 @@ use bellperson::{groth16, Circuit};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use fs2::FileExt;
 use itertools::Itertools;
-use rand::{SeedableRng, XorShiftRng};
+use rand::SeedableRng;
+use rand_xorshift::XorShiftRng;
 use sha2::{Digest, Sha256};
 
 use std::env;
@@ -16,14 +17,16 @@ use std::time::Instant;
 use crate::error::Error::Unclassified;
 
 /// Bump this when circuits change to invalidate the cache.
-pub const VERSION: usize = 16;
+pub const VERSION: usize = 17;
 
 pub const PARAMETER_CACHE_ENV_VAR: &str = "FIL_PROOFS_PARAMETER_CACHE";
 
 pub const PARAMETER_CACHE_DIR: &str = "/var/tmp/filecoin-proof-parameters/";
 
 /// If this changes, parameters generated under different conditions may vary. Don't change it.
-pub const PARAMETER_RNG_SEED: [u32; 4] = [0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654];
+pub const PARAMETER_RNG_SEED: [u8; 16] = [
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+];
 
 pub const GROTH_PARAMETER_EXT: &str = "params";
 

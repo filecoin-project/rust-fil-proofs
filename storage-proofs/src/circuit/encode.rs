@@ -1,5 +1,5 @@
+use bellperson::gadgets::num;
 use bellperson::{ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::circuit::num;
 use paired::Engine;
 
 use crate::circuit::constraint;

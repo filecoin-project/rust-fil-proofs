@@ -1,11 +1,10 @@
 #[macro_use]
 extern crate criterion;
 
+use bellperson::gadgets::boolean::{self, Boolean};
 use bellperson::groth16::*;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use criterion::{black_box, Criterion, ParameterizedBenchmark};
-use fil_sapling_crypto::circuit as scircuit;
-use fil_sapling_crypto::circuit::boolean::{self, Boolean};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
@@ -36,7 +35,7 @@ where
 
         let cs = cs.namespace(|| "sha256");
 
-        let _res = scircuit::sha256::sha256(cs, &data)?;
+        let _res = bellperson::gadgets::sha256::sha256(cs, &data)?;
         Ok(())
     }
 }

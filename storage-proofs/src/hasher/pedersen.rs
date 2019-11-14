@@ -1,14 +1,14 @@
 use std::hash::Hasher as StdHasher;
 
+use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
-use ff::{PrimeField, PrimeFieldRepr};
-use fil_sapling_crypto::circuit::{boolean, num, pedersen_hash as pedersen_hash_circuit};
+use ff::{Field, PrimeField, PrimeFieldRepr};
+use fil_sapling_crypto::circuit::pedersen_hash as pedersen_hash_circuit;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use fil_sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
-use rand::{Rand, Rng};
 
 use crate::circuit::pedersen::pedersen_md_no_padding;
 use crate::crypto::{create_label, pedersen, sloth};
@@ -105,13 +105,6 @@ impl Default for PedersenDomain {
     }
 }
 
-impl Rand for PedersenDomain {
-    fn rand<R: Rng>(rng: &mut R) -> Self {
-        let fr: Fr = rng.gen();
-        PedersenDomain(fr.into_repr())
-    }
-}
-
 impl Ord for PedersenDomain {
     #[inline(always)]
     fn cmp(&self, other: &PedersenDomain) -> ::std::cmp::Ordering {
@@ -176,6 +169,11 @@ impl Domain for PedersenDomain {
     fn write_bytes(&self, dest: &mut [u8]) -> Result<()> {
         self.0.write_le(dest)?;
         Ok(())
+    }
+
+    fn random<R: rand::RngCore>(rng: &mut R) -> Self {
+        // generating an Fr and converting it, to ensure we stay in the field
+        Fr::random(rng).into()
     }
 }
 

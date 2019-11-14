@@ -2,8 +2,9 @@
 extern crate criterion;
 
 use criterion::{black_box, Criterion, ParameterizedBenchmark};
-use paired::bls12_381::Bls12;
-use rand::{thread_rng, Rng};
+use ff::Field;
+use paired::bls12_381::{Bls12, Fr};
+use rand::thread_rng;
 use storage_proofs::drgraph::{new_seed, Graph};
 use storage_proofs::fr32::fr_into_bytes;
 use storage_proofs::hasher::blake2s::Blake2sHasher;
@@ -23,10 +24,10 @@ struct Pregenerated<H: 'static + Hasher> {
 fn pregenerate_data<H: Hasher>(degree: usize) -> Pregenerated<H> {
     let mut rng = thread_rng();
     let data: Vec<u8> = (0..(degree + 1))
-        .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+        .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(&mut rng)))
         .collect();
     let parents: Vec<u32> = (0..degree as u32).map(|pos| pos).collect();
-    let replica_id: H::Domain = rng.gen();
+    let replica_id: H::Domain = H::Domain::random(&mut rng);
 
     let graph = StackedBucketGraph::<H>::new_stacked(degree + 1, degree, 0, new_seed());
 

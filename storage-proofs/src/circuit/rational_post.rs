@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
+use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::circuit::num;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
@@ -207,11 +207,11 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for RationalPoStCircuit<'a, E, H
             {
                 // Allocate comm_c as booleansn
                 let comm_c_bits =
-                    comm_c_num.into_bits_le(cs.namespace(|| format!("comm_c_{}_bits", i)))?;
+                    comm_c_num.to_bits_le(cs.namespace(|| format!("comm_c_{}_bits", i)))?;
 
                 // Allocate comm_r_last as booleans
                 let comm_r_last_bits = comm_r_last_num
-                    .into_bits_le(cs.namespace(|| format!("comm_r_last_{}_bits", i)))?;
+                    .to_bits_le(cs.namespace(|| format!("comm_r_last_{}_bits", i)))?;
 
                 let hash_num = hash2(
                     cs.namespace(|| format!("H_comm_c_comm_r_last_{}", i)),
@@ -274,14 +274,15 @@ mod tests {
     use std::collections::BTreeMap;
 
     use ff::Field;
-    use rand::{Rng, SeedableRng, XorShiftRng};
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
 
     use crate::circuit::test::*;
     use crate::compound_proof;
     use crate::crypto::pedersen::JJ_PARAMS;
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::pedersen::*;
+    use crate::hasher::{pedersen::*, Domain};
     use crate::proof::{NoRequirements, ProofScheme};
     use crate::rational_post::{self, derive_challenges, RationalPoSt};
     use crate::sector::OrderedSectorSet;
@@ -289,7 +290,7 @@ mod tests {
 
     #[test]
     fn test_rational_post_circuit_with_bls12_381() {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 32;
         let sector_size = leaves * 32;
@@ -301,10 +302,10 @@ mod tests {
         };
 
         let data1: Vec<u8> = (0..32)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
         let data2: Vec<u8> = (0..32)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
         let graph1 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed());
@@ -327,7 +328,10 @@ mod tests {
             .map(|c| comm_r_lasts_raw[u64::from(c.sector) as usize])
             .collect();
 
-        let comm_cs: Vec<PedersenDomain> = challenges.iter().map(|_c| rng.gen()).collect();
+        let comm_cs: Vec<PedersenDomain> = challenges
+            .iter()
+            .map(|_c| PedersenDomain::random(rng))
+            .collect();
 
         let comm_rs: Vec<PedersenDomain> = comm_cs
             .iter()
@@ -416,7 +420,7 @@ mod tests {
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn rational_post_test_compound() {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 32;
         let sector_size = leaves * 32;
@@ -435,10 +439,10 @@ mod tests {
             RationalPoStCompound::<PedersenHasher>::setup(&setup_params).expect("setup failed");
 
         let data1: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
         let data2: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
         let graph1 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed());
@@ -462,7 +466,10 @@ mod tests {
             .map(|c| comm_r_lasts_raw[u64::from(c.sector) as usize])
             .collect();
 
-        let comm_cs: Vec<PedersenDomain> = challenges.iter().map(|_c| rng.gen()).collect();
+        let comm_cs: Vec<PedersenDomain> = challenges
+            .iter()
+            .map(|_c| PedersenDomain::random(rng))
+            .collect();
 
         let comm_rs: Vec<PedersenDomain> = comm_cs
             .iter()

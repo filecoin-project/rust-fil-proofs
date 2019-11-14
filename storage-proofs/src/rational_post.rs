@@ -288,8 +288,10 @@ fn derive_challenge(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ff::Field;
     use paired::bls12_381::{Bls12, Fr};
-    use rand::{Rng, SeedableRng, XorShiftRng};
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
 
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
@@ -297,7 +299,7 @@ mod tests {
     use crate::merkle::make_proof_for_test;
 
     fn test_rational_post<H: Hasher>() {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 32;
         let sector_size = leaves * 32;
@@ -309,10 +311,10 @@ mod tests {
         };
 
         let data1: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
         let data2: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
         let graph1 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
@@ -351,7 +353,7 @@ mod tests {
             .map(|c| trees.get(&c.sector).unwrap().root())
             .collect::<Vec<_>>();
 
-        let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| rng.gen()).collect();
+        let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| H::Domain::random(rng)).collect();
 
         let comm_rs: Vec<H::Domain> = comm_cs
             .iter()
@@ -404,7 +406,7 @@ mod tests {
         pub_inputs: &PublicInputs<H::Domain>,
         rng: &mut XorShiftRng,
     ) -> MerkleProof<H> {
-        let bogus_leaf: H::Domain = rng.gen();
+        let bogus_leaf: H::Domain = H::Domain::random(rng);
         let hashed_leaf = H::Function::hash_leaf(&bogus_leaf);
 
         make_proof_for_test(
@@ -415,7 +417,7 @@ mod tests {
     }
 
     fn test_rational_post_validates<H: Hasher>() {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 32;
         let sector_size = leaves * 32;
@@ -426,7 +428,7 @@ mod tests {
         };
 
         let data: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
         let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
@@ -442,7 +444,7 @@ mod tests {
             derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
         let comm_r_lasts = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();
 
-        let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| rng.gen()).collect();
+        let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| H::Domain::random(rng)).collect();
 
         let comm_rs: Vec<H::Domain> = comm_cs
             .iter()
@@ -487,7 +489,7 @@ mod tests {
     }
 
     fn test_rational_post_validates_challenge_identity<H: Hasher>() {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 32;
         let sector_size = leaves * 32;
@@ -499,7 +501,7 @@ mod tests {
         };
 
         let data: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&rng.gen()))
+            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
         let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
@@ -521,7 +523,7 @@ mod tests {
             .map(|c| trees.get(&c.sector).unwrap().root())
             .collect::<Vec<_>>();
 
-        let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| rng.gen()).collect();
+        let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| H::Domain::random(rng)).collect();
 
         let comm_rs: Vec<H::Domain> = comm_cs
             .iter()
@@ -549,7 +551,7 @@ mod tests {
             derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
         let comm_r_lasts = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();
 
-        let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| rng.gen()).collect();
+        let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| H::Domain::random(rng)).collect();
 
         let comm_rs: Vec<H::Domain> = comm_cs
             .iter()

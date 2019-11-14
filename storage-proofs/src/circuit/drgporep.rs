@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 
+use bellperson::gadgets::boolean::Boolean;
+use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::circuit::boolean::Boolean;
-use fil_sapling_crypto::circuit::num;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
@@ -519,20 +519,21 @@ mod tests {
     use crate::util::data_at_node;
 
     use ff::Field;
-    use rand::{Rand, Rng, SeedableRng, XorShiftRng};
+    use rand::SeedableRng;
+    use rand_xorshift::XorShiftRng;
 
     #[test]
     fn drgporep_input_circuit_with_bls12_381() {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let nodes = 12;
         let degree = BASE_DEGREE;
         let challenge = 2;
 
-        let replica_id: Fr = rng.gen();
+        let replica_id: Fr = Fr::random(rng);
 
         let mut data: Vec<u8> = (0..nodes)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::rand(rng)))
+            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
         // TODO: don't clone everything
@@ -681,7 +682,7 @@ mod tests {
 
     #[test]
     fn drgporep_input_circuit_num_constraints() {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         // 1 GB
         let n = (1 << 30) / 32;
@@ -692,15 +693,15 @@ mod tests {
         DrgPoRepCircuit::<_, PedersenHasher>::synthesize(
             cs.namespace(|| "drgporep"),
             &JJ_PARAMS,
-            vec![Some(Fr::rand(rng)); 1],
-            vec![vec![Some((Fr::rand(rng), false)); tree_depth]; 1],
-            Root::Val(Some(Fr::rand(rng))),
-            vec![vec![Some(Fr::rand(rng)); m]; 1],
-            vec![vec![vec![Some((Fr::rand(rng), false)); tree_depth]; m]; 1],
-            vec![Some(Fr::rand(rng)); 1],
-            vec![vec![Some((Fr::rand(rng), false)); tree_depth]; 1],
-            Root::Val(Some(Fr::rand(rng))),
-            Some(Fr::rand(rng)),
+            vec![Some(Fr::random(rng)); 1],
+            vec![vec![Some((Fr::random(rng), false)); tree_depth]; 1],
+            Root::Val(Some(Fr::random(rng))),
+            vec![vec![Some(Fr::random(rng)); m]; 1],
+            vec![vec![vec![Some((Fr::random(rng), false)); tree_depth]; m]; 1],
+            vec![Some(Fr::random(rng)); 1],
+            vec![vec![Some((Fr::random(rng), false)); tree_depth]; 1],
+            Root::Val(Some(Fr::random(rng))),
+            Some(Fr::random(rng)),
             false,
         )
         .expect("failed to synthesize circuit");
@@ -726,15 +727,15 @@ mod tests {
         //     .start(log::LevelFilter::Trace)
         //     .ok();
 
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let nodes = 5;
         let degree = BASE_DEGREE;
         let challenges = vec![1, 3];
 
-        let replica_id: Fr = rng.gen();
+        let replica_id: Fr = Fr::random(rng);
         let mut data: Vec<u8> = (0..nodes)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::rand(rng)))
+            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
         // Only generate seed once. It would be bad if we used different seeds in the same test.

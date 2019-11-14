@@ -9,7 +9,7 @@ use log::info;
 use memmap::MmapMut;
 use memmap::MmapOptions;
 use paired::bls12_381::Bls12;
-use rand::{Rng, SeedableRng, XorShiftRng};
+use rand::Rng;
 
 use fil_proofs_tooling::{measure, FuncMeasurement, Metadata};
 use storage_proofs::circuit::metric::MetricCS;
@@ -17,7 +17,7 @@ use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::drgraph::*;
-use storage_proofs::hasher::{Blake2sHasher, Hasher, PedersenHasher, Sha256Hasher};
+use storage_proofs::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher, Sha256Hasher};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::stacked::{
@@ -120,10 +120,10 @@ where
         let mut total_proving_wall_time = Duration::new(0, 0);
         let mut total_proving_cpu_time = Duration::new(0, 0);
 
-        let rng = &mut XorShiftRng::from_seed([0x3dbe_6259, 0x8d31_3d76, 0x3237_db17, 0xe5bc_0654]);
+        let rng = &mut rand::thread_rng();
         let nodes = data_size / 32;
 
-        let replica_id: H::Domain = rng.gen();
+        let replica_id = H::Domain::random(rng);
         let sp = stacked::SetupParams {
             nodes,
             degree: BASE_DEGREE,

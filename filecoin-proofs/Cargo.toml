@@ -12,7 +12,7 @@ readme = "README.md"
 storage-proofs = { version = "^0.6", path = "../storage-proofs" }
 bitvec = "0.5"
 chrono = "0.4"
-rand = "0.4"
+rand = "0.7"
 failure = "0.1"
 lazy_static = "1.2"
 memmap = "0.7"
@@ -21,16 +21,15 @@ pbr = "1.0"
 tempfile = "3"
 byteorder = "1"
 itertools = "0.8"
-serde_cbor = "0.9.0"
+serde_cbor = "0.10.2"
 serde = { version = "1", features = ["rc", "derive"] }
 serde_json = "1.0"
 regex = "1"
-ff = "0.4.0"
+ff = "0.5.0"
 blake2b_simd = "0.5"
-phase21 = "0.3"
-bellperson = ">=0.3.4"
-paired = "0.15"
-fil-sapling-crypto = "0.1.2"
+bellperson = "0.4.0"
+paired = "0.16.0"
+fil-sapling-crypto = "0.2.0"
 clap = "2"
 log = "0.4.7"
 pretty_env_logger = "0.3.0"
@@ -51,10 +50,11 @@ features = ["default-tls-vendored"]
 
 [dev-dependencies]
 gperftools = "0.2"
-criterion = "0.2"
+criterion = "0.3"
 rexpect = "0.3.0"
 pretty_env_logger = "0.3.1"
 pretty_assertions = "0.6.1"
+rand_xorshift = "0.2.0"
 
 [features]
 default = ["gpu"]
@@ -62,7 +62,7 @@ cpu-profile = []
 heap-profile = ["gperftools/heap"]
 simd = ["storage-proofs/simd"]
 asm = ["storage-proofs/asm"]
-gpu = ["storage-proofs/gpu", "bellperson/gpu", "fil-sapling-crypto/gpu", "phase21/gpu"]
+gpu = ["storage-proofs/gpu", "bellperson/gpu", "fil-sapling-crypto/gpu"]
 
 [[bench]]
 name = "preprocessing"

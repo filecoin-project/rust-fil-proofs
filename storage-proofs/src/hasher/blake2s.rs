@@ -1,15 +1,15 @@
 use std::fmt;
 use std::hash::Hasher as StdHasher;
 
+use bellperson::gadgets::{blake2s as blake2s_circuit, boolean, multipack, num};
 use bellperson::{ConstraintSystem, SynthesisError};
 use blake2s_simd::{Hash as Blake2sHash, Params as Blake2s, State};
-use ff::{PrimeField, PrimeFieldRepr};
-use fil_sapling_crypto::circuit::{blake2s as blake2s_circuit, boolean, multipack, num};
+use ff::{Field, PrimeField, PrimeFieldRepr};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use merkletree::hash::{Algorithm, Hashable};
 use merkletree::merkle::Element;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
-use rand::{Rand, Rng};
+use rand::RngCore;
 
 use super::{Domain, HashFunction, Hasher};
 use crate::crypto::sloth;
@@ -105,13 +105,6 @@ impl Blake2sDomain {
     }
 }
 
-impl Rand for Blake2sDomain {
-    fn rand<R: Rng>(rng: &mut R) -> Self {
-        // generating an Fr and converting it, to ensure we stay in the field
-        rng.gen::<Fr>().into()
-    }
-}
-
 impl AsRef<[u8]> for Blake2sDomain {
     fn as_ref(&self) -> &[u8] {
         &self.0[..]
@@ -194,6 +187,11 @@ impl Domain for Blake2sDomain {
         }
         dest[0..32].copy_from_slice(&self.0[..]);
         Ok(())
+    }
+
+    fn random<R: RngCore>(rng: &mut R) -> Self {
+        // generating an Fr and converting it, to ensure we stay in the field
+        Fr::random(rng).into()
     }
 }
 

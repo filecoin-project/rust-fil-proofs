@@ -1002,7 +1002,8 @@ mod tests {
     use super::*;
     use itertools::Itertools;
     use paired::bls12_381::Bls12;
-    use rand::{Rng, SeedableRng, XorShiftRng};
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
     use std::io::Cursor;
     use storage_proofs::fr32::bytes_into_fr;
 
@@ -1025,7 +1026,7 @@ mod tests {
         // Length of the data vector we'll be extracting from.
         let len = 20;
 
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
 
         // TODO: Evaluate designing a scattered pattered of `pos` and `num_bits`
@@ -1056,7 +1057,7 @@ mod tests {
     #[test]
     fn test_bit_shifts() {
         let len = 5;
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         for amount in 1..8 {
             for left in [true, false].iter() {
@@ -1323,7 +1324,7 @@ mod tests {
     // different lengths of raw data at different offset, check integrity.
     #[test]
     fn test_read_write_padded_offset() {
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let len = 1016;
         let mut data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();

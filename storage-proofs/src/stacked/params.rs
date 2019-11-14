@@ -30,7 +30,7 @@ pub struct SetupParams {
     pub expansion_degree: usize,
 
     // Random seed
-    pub seed: [u32; 7],
+    pub seed: [u8; 28],
 
     pub layer_challenges: LayerChallenges,
 }

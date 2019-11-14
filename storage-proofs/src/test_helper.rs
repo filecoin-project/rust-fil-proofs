@@ -1,4 +1,4 @@
-use ff::{BitIterator, PrimeField, PrimeFieldRepr};
+use ff::{BitIterator, Field, PrimeField, PrimeFieldRepr};
 use fil_sapling_crypto::pedersen_hash;
 use paired::bls12_381::{Bls12, Fr};
 use rand::Rng;
@@ -43,17 +43,17 @@ pub fn fake_drgpoprep_proof<R: Rng>(
     m: usize,
     challenge_count: usize,
 ) -> FakeDrgParams {
-    let replica_id: Fr = rng.gen();
+    let replica_id = Fr::random(rng);
     let challenge = m + 1;
     // Part 1: original data inputs
     // generate a leaf
-    let data_node: Fr = rng.gen();
+    let data_node = Fr::random(rng);
     // generate a fake merkle tree for the leaf and get commD
     let (data_node_path, data_root) = random_merkle_path_with_value(rng, tree_depth, &data_node, 0);
 
     // Part 2: replica data inputs
     // generate parent nodes
-    let replica_parents: Vec<Fr> = (0..m).map(|_| rng.gen()).collect();
+    let replica_parents: Vec<Fr> = (0..m).map(|_| Fr::random(rng)).collect();
     // run create_label for proverid, parent nodes
     let ciphertexts = replica_parents
         .iter()
@@ -78,7 +78,7 @@ pub fn fake_drgpoprep_proof<R: Rng>(
     leaves.push(data_node);
     // ensure we have an even number of leaves
     if m + 1 % 2 != 0 {
-        leaves.push(rng.gen());
+        leaves.push(Fr::random(rng));
     }
 
     // get commR
@@ -137,7 +137,7 @@ pub fn random_merkle_path_with_value<R: Rng>(
     value: &Fr,
     offset: usize,
 ) -> (Vec<Option<(Fr, bool)>>, Fr) {
-    let auth_path: Vec<Option<(Fr, bool)>> = vec![Some((rng.gen(), rng.gen())); tree_depth];
+    let auth_path: Vec<Option<(Fr, bool)>> = vec![Some((Fr::random(rng), rng.gen())); tree_depth];
 
     let mut cur = if offset == 0 {
         let bytes = fr_into_bytes::<Bls12>(&value);
@@ -179,7 +179,7 @@ pub fn random_merkle_path<R: Rng>(
     rng: &mut R,
     tree_depth: usize,
 ) -> (Vec<Option<(Fr, bool)>>, Fr, Fr) {
-    let value: Fr = rng.gen();
+    let value = Fr::random(rng);
 
     let (path, root) = random_merkle_path_with_value(rng, tree_depth, &value, 0);
 
