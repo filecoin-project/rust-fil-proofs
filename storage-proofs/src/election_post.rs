@@ -59,11 +59,11 @@ pub struct PrivateInputs<'a, H: 'a + Hasher> {
 }
 
 /// The witness data, that is needed for ticket generation.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Witness {
     pub ticket: [u8; 32],
     /// The data, in the order of the provided challenges.
-    pub data: Vec<[u8; POST_CHALLENGED_NODES * NODE_SIZE]>,
+    pub data: Vec<Vec<u8>>,
 }
 
 impl fmt::Debug for Witness {
@@ -156,7 +156,7 @@ impl<'a, H: 'a + Hasher> ElectionPoSt<'a, H> {
                 }
             };
 
-            let mut challenge_data = [0u8; POST_CHALLENGED_NODES * NODE_SIZE];
+            let mut challenge_data = vec![0u8; POST_CHALLENGED_NODES * NODE_SIZE];
             let start = challenge.start as usize;
             let end = start + POST_CHALLENGED_NODES;
 

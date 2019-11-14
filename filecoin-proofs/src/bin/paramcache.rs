@@ -7,13 +7,13 @@ use paired::bls12_381::Bls12;
 use filecoin_proofs::constants::*;
 use filecoin_proofs::parameters::{post_public_params, public_params};
 use filecoin_proofs::types::*;
-use storage_proofs::circuit::rational_post::{RationalPoStCircuit, RationalPoStCompound};
+use storage_proofs::circuit::election_post::{ElectionPoStCircuit, ElectionPoStCompound};
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::crypto::pedersen::JJ_PARAMS;
+use storage_proofs::election_post::ElectionPoSt;
 use storage_proofs::hasher::pedersen::PedersenHasher;
 use storage_proofs::parameter_cache::CacheableParameters;
-use storage_proofs::rational_post::RationalPoSt;
 use storage_proofs::stacked::StackedDrg;
 
 const POREP_PROOF_PARTITION_CHOICES: [PoRepProofPartitions; 1] = [PoRepProofPartitions(2)];
@@ -73,40 +73,40 @@ fn cache_post_params(post_config: PoStConfig) {
     let post_public_params = post_public_params(post_config);
 
     {
-        let post_circuit: RationalPoStCircuit<Bls12, PedersenHasher> =
-            <RationalPoStCompound<PedersenHasher> as CompoundProof<
+        let post_circuit: ElectionPoStCircuit<Bls12, PedersenHasher> =
+            <ElectionPoStCompound<PedersenHasher> as CompoundProof<
                 Bls12,
-                RationalPoSt<PedersenHasher>,
-                RationalPoStCircuit<Bls12, PedersenHasher>,
+                ElectionPoSt<PedersenHasher>,
+                ElectionPoStCircuit<Bls12, PedersenHasher>,
             >>::blank_circuit(&post_public_params, &JJ_PARAMS);
-        let _ = <RationalPoStCompound<PedersenHasher>>::get_param_metadata(
+        let _ = <ElectionPoStCompound<PedersenHasher>>::get_param_metadata(
             post_circuit,
             &post_public_params,
         )
         .expect("failed to get metadata");
     }
     {
-        let post_circuit: RationalPoStCircuit<Bls12, PedersenHasher> =
-            <RationalPoStCompound<PedersenHasher> as CompoundProof<
+        let post_circuit: ElectionPoStCircuit<Bls12, PedersenHasher> =
+            <ElectionPoStCompound<PedersenHasher> as CompoundProof<
                 Bls12,
-                RationalPoSt<PedersenHasher>,
-                RationalPoStCircuit<Bls12, PedersenHasher>,
+                ElectionPoSt<PedersenHasher>,
+                ElectionPoStCircuit<Bls12, PedersenHasher>,
             >>::blank_circuit(&post_public_params, &JJ_PARAMS);
-        let _ = <RationalPoStCompound<PedersenHasher>>::get_groth_params(
+        let _ = <ElectionPoStCompound<PedersenHasher>>::get_groth_params(
             post_circuit,
             &post_public_params,
         )
         .expect("failed to get groth params");
     }
     {
-        let post_circuit: RationalPoStCircuit<Bls12, PedersenHasher> =
-            <RationalPoStCompound<PedersenHasher> as CompoundProof<
+        let post_circuit: ElectionPoStCircuit<Bls12, PedersenHasher> =
+            <ElectionPoStCompound<PedersenHasher> as CompoundProof<
                 Bls12,
-                RationalPoSt<PedersenHasher>,
-                RationalPoStCircuit<Bls12, PedersenHasher>,
+                ElectionPoSt<PedersenHasher>,
+                ElectionPoStCircuit<Bls12, PedersenHasher>,
             >>::blank_circuit(&post_public_params, &JJ_PARAMS);
 
-        let _ = <RationalPoStCompound<PedersenHasher>>::get_verifying_key(
+        let _ = <ElectionPoStCompound<PedersenHasher>>::get_verifying_key(
             post_circuit,
             &post_public_params,
         )
