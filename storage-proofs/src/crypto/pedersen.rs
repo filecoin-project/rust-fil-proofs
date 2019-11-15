@@ -7,12 +7,23 @@ use crate::fr32::bytes_into_frs;
 use crate::settings;
 
 lazy_static! {
-    pub static ref JJ_PARAMS: JubjubBls12 = JubjubBls12::new_with_window_size(
-        settings::SETTINGS
-            .lock()
-            .unwrap()
-            .pedersen_hash_exp_window_size
-    );
+    pub static ref JJ_PARAMS: JubjubBls12 = {
+        let settings = settings::SETTINGS.lock().unwrap();
+        let n_segments = settings.pedersen_hash_segments;
+        let window_size = settings.pedersen_hash_exp_window_size;
+
+        let exp_table_path = format!(
+            "/tmp/filecoin-pedersen-params/exp_table_s{}_w{}",
+            n_segments, window_size
+        );
+
+        JubjubBls12::new_with_n_segments_and_window_size(
+            n_segments,
+            window_size,
+            Some(&exp_table_path),
+        )
+        .expect("failed to write exp-table")
+    };
 }
 
 pub const PEDERSEN_BLOCK_SIZE: usize = 256;
