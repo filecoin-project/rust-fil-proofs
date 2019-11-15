@@ -369,7 +369,6 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
         tree_d.delete(t_aux.tree_d_config)?;
 
         let tree_c_size = t_aux.tree_c_config.size.unwrap();
-        #[cfg(not(feature = "mem-trees"))]
         let tree_c_store: DiskStore<H::Domain> =
             DiskStore::new_from_disk(tree_c_size, &t_aux.tree_c_config)?;
         let tree_c: Tree<H> =
