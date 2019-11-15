@@ -23,7 +23,7 @@ use crate::types::{
 };
 use std::path::PathBuf;
 
-pub use storage_proofs::election_post::{WinningTicket, Witness};
+pub use storage_proofs::election_post::{Candidate, Winner};
 
 /// The minimal information required about a replica, in order to be able to generate
 /// a PoSt over it.
@@ -148,13 +148,13 @@ impl PublicReplicaInfo {
 
 pub const CHALLENGE_COUNT_DENOMINATOR: f64 = 25.;
 
-/// Generates a proof-of-spacetime witness for ElectionPoSt.
-pub fn generate_witness(
+/// Generates a proof-of-spacetime candidate for ElectionPoSt.
+pub fn generate_candidates(
     post_config: PoStConfig,
-    challenge_seed: &ChallengeSeed,
+    randomness: &ChallengeSeed,
     replicas: &BTreeMap<SectorId, PrivateReplicaInfo>,
     prover_id: ProverId,
-) -> error::Result<Vec<Witness>> {
+) -> error::Result<Vec<Candidate>> {
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
@@ -178,11 +178,8 @@ pub fn generate_witness(
     let challenged_sectors_count =
         (active_sector_count as f64 / CHALLENGE_COUNT_DENOMINATOR).ceil() as usize;
 
-    let challenged_sectors = election_post::generate_sector_challenges(
-        challenge_seed,
-        challenged_sectors_count,
-        &sectors,
-    )?;
+    let challenged_sectors =
+        election_post::generate_sector_challenges(randomness, challenged_sectors_count, &sectors)?;
 
     // Match the replicas to the challenges, as these are the only ones required.
     let challenged_replicas: Vec<_> = challenged_sectors
@@ -231,25 +228,30 @@ pub fn generate_witness(
         })
         .collect::<Result<_, _>>()?;
 
-    let witness = election_post::generate_witness::<DefaultTreeHasher>(
+    let candidates = election_post::generate_candidates::<DefaultTreeHasher>(
         &public_params.vanilla_params,
         &challenged_sectors,
         &borrowed_trees,
         &prover_id,
-        challenge_seed,
+        randomness,
     )?;
 
-    Ok(witness)
+    Ok(candidates)
 }
 
 pub type SnarkProof = Vec<u8>;
 
+/// Generates a ticket from a partial_ticket.
+pub fn finalize_ticket(partial_ticket: &[u8; 32]) -> [u8; 32] {
+    election_post::finalize_ticket(partial_ticket)
+}
+
 /// Generates a proof-of-spacetime.
 pub fn generate_post(
     post_config: PoStConfig,
-    challenge_seed: &ChallengeSeed,
+    randomness: &ChallengeSeed,
     replicas: &BTreeMap<SectorId, PrivateReplicaInfo>,
-    winning_tickets: Vec<WinningTicket>,
+    winners: Vec<Winner>,
     prover_id: ProverId,
 ) -> error::Result<Vec<SnarkProof>> {
     let sector_count = replicas.len() as u64;
@@ -265,30 +267,26 @@ pub fn generate_post(
     let sector_size = u64::from(PaddedBytesAmount::from(post_config));
     let groth_params = get_post_params(post_config)?;
 
-    let mut proofs = Vec::with_capacity(winning_tickets.len());
-    for ticket in &winning_tickets {
-        let replica = match replicas.get(&ticket.sector_id) {
+    let mut proofs = Vec::with_capacity(winners.len());
+    for winner in &winners {
+        let replica = match replicas.get(&winner.sector_id) {
             Some(replica) => replica,
             None => {
                 return Err(format_err!(
                     "Missing replica for sector: {}",
-                    ticket.sector_id
+                    winner.sector_id
                 ))
             }
         };
         let tree = replica.merkle_tree(sector_size)?;
 
-        let challenges = election_post::generate_leaf_challenges(
-            challenge_seed,
-            ticket.sector_challenge_index,
-            sector_size,
-        );
-
         let comm_r = replica.safe_comm_r()?;
         let pub_inputs = election_post::PublicInputs {
-            challenges,
+            randomness: *randomness,
             comm_r,
-            sector_id: ticket.sector_id,
+            sector_id: winner.sector_id,
+            partial_ticket: winner.partial_ticket,
+            sector_challenge_index: winner.sector_challenge_index,
             prover_id,
         };
 
@@ -308,11 +306,6 @@ pub fn generate_post(
         drop(priv_inputs);
         drop(pub_inputs);
 
-        // generate vanilla proof
-        //
-        // - inclusions proofs of all challenged leafs in all challenged ranges
-        // - correct generation of the ticket from the partial_ticket (add this to the witness)
-        //
         // generate snark proof
         // - verify inclusion proofs
         // - verify the partial_ticket is correctly generated (pedersen hash)
@@ -325,7 +318,7 @@ pub fn generate_post(
 /// Verifies a proof-of-spacetime.
 pub fn verify_post(
     post_config: PoStConfig,
-    challenge_seed: &ChallengeSeed,
+    randomness: &ChallengeSeed,
     proof: &[u8],
     replicas: &BTreeMap<SectorId, PublicReplicaInfo>,
 ) -> error::Result<bool> {
@@ -361,7 +354,7 @@ pub fn verify_post(
 
     // let challenges = ElectionPoSt::<DefaultTreeHasher>::generate_challenges(
     //     &public_params.vanilla_params,
-    //     challenge_seed,
+    //     randomness,
     //     &sectors,
     //     &faults,
     // )?;

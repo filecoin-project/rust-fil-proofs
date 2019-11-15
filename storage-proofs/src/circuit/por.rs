@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use bellperson::gadgets::{boolean, multipack, num};
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::jubjub::{JubjubBls12, JubjubEngine};
+use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::circuit::constraint;
