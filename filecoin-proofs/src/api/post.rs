@@ -180,7 +180,7 @@ pub fn generate_witness(
     let challenged_sectors_count =
         (active_sector_count as f64 / CHALLENGE_COUNT_DENOMINATOR).ceil() as usize;
 
-    let challenged_sectors = ElectionPoSt::<DefaultTreeHasher>::generate_sector_challenges(
+    let challenged_sectors = election_post::generate_sector_challenges(
         challenge_seed,
         challenged_sectors_count,
         &sectors,
@@ -233,7 +233,7 @@ pub fn generate_witness(
         })
         .collect::<Result<_, _>>()?;
 
-    let witness = ElectionPoSt::<DefaultTreeHasher>::generate_witness(
+    let witness = election_post::generate_witness::<DefaultTreeHasher>(
         &public_params.vanilla_params,
         &challenged_sectors,
         &borrowed_trees,
