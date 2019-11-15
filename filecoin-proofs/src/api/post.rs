@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::Read;
 
@@ -18,7 +18,9 @@ use crate::api::util::as_safe_commitment;
 use crate::caches::{get_post_params, get_post_verifying_key};
 use crate::error;
 use crate::parameters::{post_setup_params, public_params};
-use crate::types::{ChallengeSeed, Commitment, PaddedBytesAmount, PersistentAux, PoStConfig, Tree};
+use crate::types::{
+    ChallengeSeed, Commitment, PaddedBytesAmount, PersistentAux, PoStConfig, ProverId, Tree,
+};
 use std::path::PathBuf;
 
 pub use storage_proofs::election_post::Witness;
@@ -144,14 +146,15 @@ impl PublicReplicaInfo {
     }
 }
 
+pub const CHALLENGE_COUNT_DENOMINATOR: f64 = 25.;
+
 /// Generates a proof-of-spacetime witness for ElectionPoSt.
-/// Accepts as input a challenge seed, configuration struct, and a vector of
-/// sealed sector file-path plus CommR tuples, as well as a list of faults.
 pub fn generate_witness(
     post_config: PoStConfig,
     challenge_seed: &ChallengeSeed,
     replicas: &BTreeMap<SectorId, PrivateReplicaInfo>,
-) -> error::Result<Witness> {
+    prover_id: ProverId,
+) -> error::Result<HashMap<SectorId, Witness>> {
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
         vanilla_params: &vanilla_params,
@@ -170,34 +173,29 @@ pub fn generate_witness(
     let sectors = replicas.keys().copied().collect();
     let faults = replicas
         .iter()
-        .filter_map(
-            |(id, replica)| {
-                if replica.is_fault {
-                    Some(*id)
-                } else {
-                    None
-                }
-            },
-        )
-        .collect();
+        .filter(|(_id, replica)| if replica.is_fault { true } else { false })
+        .count();
 
-    let challenges = ElectionPoSt::<DefaultTreeHasher>::generate_challenges(
-        &public_params.vanilla_params,
+    let active_sector_count = sector_count - faults as u64;
+    let challenged_sectors_count =
+        (active_sector_count as f64 / CHALLENGE_COUNT_DENOMINATOR).ceil() as usize;
+
+    let challenged_sectors = ElectionPoSt::<DefaultTreeHasher>::generate_sector_challenges(
         challenge_seed,
+        challenged_sectors_count,
         &sectors,
-        &faults,
     )?;
 
     // Match the replicas to the challenges, as these are the only ones required.
-    let challenged_replicas: Vec<_> = challenges
+    let challenged_replicas: Vec<_> = challenged_sectors
         .iter()
         .map(|c| {
-            if let Some(replica) = replicas.get(&c.sector) {
-                Ok((c.sector, replica))
+            if let Some(replica) = replicas.get(c) {
+                Ok((c, replica))
             } else {
                 Err(format_err!(
                     "Invalid challenge generated: {}, only {} sectors are being proven",
-                    c.sector,
+                    c,
                     sector_count
                 ))
             }
@@ -214,7 +212,7 @@ pub fn generate_witness(
 
     let unique_trees_res: Vec<_> = unique_challenged_replicas
         .into_par_iter()
-        .map(|(id, replica)| replica.merkle_tree(sector_size).map(|tree| (id, tree)))
+        .map(|(id, replica)| replica.merkle_tree(sector_size).map(|tree| (*id, tree)))
         .collect();
 
     // resolve results
@@ -225,7 +223,7 @@ pub fn generate_witness(
         .iter()
         .map(|(id, _)| {
             if let Some(tree) = unique_trees.get(id) {
-                Ok((*id, tree))
+                Ok((**id, tree))
             } else {
                 Err(format_err!(
                     "Bug: Failed to generate merkle tree for {} sector",
@@ -235,38 +233,11 @@ pub fn generate_witness(
         })
         .collect::<Result<_, _>>()?;
 
-    // Construct the list of actual commitments
-    let comm_rs: Vec<_> = challenged_replicas
-        .iter()
-        .map(|(_id, replica)| replica.safe_comm_r())
-        .collect::<Result<_, _>>()?;
-
-    let comm_cs: Vec<_> = challenged_replicas
-        .iter()
-        .map(|(_id, replica)| replica.safe_comm_c())
-        .collect::<Result<_, _>>()?;
-
-    let comm_r_lasts: Vec<_> = challenged_replicas
-        .iter()
-        .map(|(_id, replica)| replica.safe_comm_r_last())
-        .collect::<Result<_, _>>()?;
-
-    let pub_inputs = election_post::PublicInputs {
-        challenges: &challenges,
-        comm_rs: &comm_rs,
-        faults: &faults,
-    };
-
-    let priv_inputs = election_post::PrivateInputs::<DefaultTreeHasher> {
-        trees: &borrowed_trees,
-        comm_cs: &comm_cs,
-        comm_r_lasts: &comm_r_lasts,
-    };
-
     let witness = ElectionPoSt::<DefaultTreeHasher>::generate_witness(
         &public_params.vanilla_params,
-        &pub_inputs,
-        &priv_inputs,
+        &challenged_sectors,
+        &borrowed_trees,
+        &prover_id,
         challenge_seed,
     )?;
 
@@ -281,124 +252,125 @@ pub fn generate_post(
     challenge_seed: &ChallengeSeed,
     replicas: &BTreeMap<SectorId, PrivateReplicaInfo>,
 ) -> error::Result<Vec<u8>> {
-    let vanilla_params = post_setup_params(post_config);
-    let setup_params = compound_proof::SetupParams {
-        vanilla_params: &vanilla_params,
-        engine_params: &*JJ_PARAMS,
-        partitions: None,
-    };
-    let public_params: compound_proof::PublicParams<
-        _,
-        election_post::ElectionPoSt<DefaultTreeHasher>,
-    > = ElectionPoStCompound::setup(&setup_params)?;
+    // let vanilla_params = post_setup_params(post_config);
+    // let setup_params = compound_proof::SetupParams {
+    //     vanilla_params: &vanilla_params,
+    //     engine_params: &*JJ_PARAMS,
+    //     partitions: None,
+    // };
+    // let public_params: compound_proof::PublicParams<
+    //     _,
+    //     election_post::ElectionPoSt<DefaultTreeHasher>,
+    // > = ElectionPoStCompound::setup(&setup_params)?;
 
-    let sector_count = replicas.len() as u64;
-    ensure!(sector_count > 0, "Must supply at least one replica");
-    let sector_size = u64::from(PaddedBytesAmount::from(post_config));
+    // let sector_count = replicas.len() as u64;
+    // ensure!(sector_count > 0, "Must supply at least one replica");
+    // let sector_size = u64::from(PaddedBytesAmount::from(post_config));
 
-    let sectors = replicas.keys().copied().collect();
-    let faults = replicas
-        .iter()
-        .filter_map(
-            |(id, replica)| {
-                if replica.is_fault {
-                    Some(*id)
-                } else {
-                    None
-                }
-            },
-        )
-        .collect();
+    // let sectors = replicas.keys().copied().collect();
+    // let faults = replicas
+    //     .iter()
+    //     .filter_map(
+    //         |(id, replica)| {
+    //             if replica.is_fault {
+    //                 Some(*id)
+    //             } else {
+    //                 None
+    //             }
+    //         },
+    //     )
+    //     .collect();
 
-    let challenges = ElectionPoSt::<DefaultTreeHasher>::generate_challenges(
-        &public_params.vanilla_params,
-        challenge_seed,
-        &sectors,
-        &faults,
-    )?;
+    // let challenges = ElectionPoSt::<DefaultTreeHasher>::generate_challenges(
+    //     &public_params.vanilla_params,
+    //     challenge_seed,
+    //     &sectors,
+    //     &faults,
+    // )?;
 
-    // Match the replicas to the challenges, as these are the only ones required.
-    let challenged_replicas: Vec<_> = challenges
-        .iter()
-        .map(|c| {
-            if let Some(replica) = replicas.get(&c.sector) {
-                Ok((c.sector, replica))
-            } else {
-                Err(format_err!(
-                    "Invalid challenge generated: {}, only {} sectors are being proven",
-                    c.sector,
-                    sector_count
-                ))
-            }
-        })
-        .collect::<Result<_, _>>()?;
+    // // Match the replicas to the challenges, as these are the only ones required.
+    // let challenged_replicas: Vec<_> = challenges
+    //     .iter()
+    //     .map(|c| {
+    //         if let Some(replica) = replicas.get(&c.sector) {
+    //             Ok((c.sector, replica))
+    //         } else {
+    //             Err(format_err!(
+    //                 "Invalid challenge generated: {}, only {} sectors are being proven",
+    //                 c.sector,
+    //                 sector_count
+    //             ))
+    //         }
+    //     })
+    //     .collect::<Result<_, _>>()?;
 
-    // Generate merkle trees for the challenged replicas.
-    // Merkle trees should be generated only once, not multiple times if the same sector is challenged
-    // multiple times, so we build a HashMap of trees.
+    // // Generate merkle trees for the challenged replicas.
+    // // Merkle trees should be generated only once, not multiple times if the same sector is challenged
+    // // multiple times, so we build a HashMap of trees.
 
-    let mut unique_challenged_replicas = challenged_replicas.clone();
-    unique_challenged_replicas.sort_unstable(); // dedup requires a sorted list
-    unique_challenged_replicas.dedup();
+    // let mut unique_challenged_replicas = challenged_replicas.clone();
+    // unique_challenged_replicas.sort_unstable(); // dedup requires a sorted list
+    // unique_challenged_replicas.dedup();
 
-    let unique_trees_res: Vec<_> = unique_challenged_replicas
-        .into_par_iter()
-        .map(|(id, replica)| replica.merkle_tree(sector_size).map(|tree| (id, tree)))
-        .collect();
+    // let unique_trees_res: Vec<_> = unique_challenged_replicas
+    //     .into_par_iter()
+    //     .map(|(id, replica)| replica.merkle_tree(sector_size).map(|tree| (id, tree)))
+    //     .collect();
 
-    // resolve results
-    let unique_trees: BTreeMap<SectorId, Tree> =
-        unique_trees_res.into_iter().collect::<Result<_, _>>()?;
+    // // resolve results
+    // let unique_trees: BTreeMap<SectorId, Tree> =
+    //     unique_trees_res.into_iter().collect::<Result<_, _>>()?;
 
-    let borrowed_trees: BTreeMap<SectorId, &Tree> = challenged_replicas
-        .iter()
-        .map(|(id, _)| {
-            if let Some(tree) = unique_trees.get(id) {
-                Ok((*id, tree))
-            } else {
-                Err(format_err!(
-                    "Bug: Failed to generate merkle tree for {} sector",
-                    id
-                ))
-            }
-        })
-        .collect::<Result<_, _>>()?;
+    // let borrowed_trees: BTreeMap<SectorId, &Tree> = challenged_replicas
+    //     .iter()
+    //     .map(|(id, _)| {
+    //         if let Some(tree) = unique_trees.get(id) {
+    //             Ok((*id, tree))
+    //         } else {
+    //             Err(format_err!(
+    //                 "Bug: Failed to generate merkle tree for {} sector",
+    //                 id
+    //             ))
+    //         }
+    //     })
+    //     .collect::<Result<_, _>>()?;
 
-    // Construct the list of actual commitments
-    let comm_rs: Vec<_> = challenged_replicas
-        .iter()
-        .map(|(_id, replica)| replica.safe_comm_r())
-        .collect::<Result<_, _>>()?;
+    // // Construct the list of actual commitments
+    // let comm_rs: Vec<_> = challenged_replicas
+    //     .iter()
+    //     .map(|(_id, replica)| replica.safe_comm_r())
+    //     .collect::<Result<_, _>>()?;
 
-    let comm_cs: Vec<_> = challenged_replicas
-        .iter()
-        .map(|(_id, replica)| replica.safe_comm_c())
-        .collect::<Result<_, _>>()?;
+    // let comm_cs: Vec<_> = challenged_replicas
+    //     .iter()
+    //     .map(|(_id, replica)| replica.safe_comm_c())
+    //     .collect::<Result<_, _>>()?;
 
-    let comm_r_lasts: Vec<_> = challenged_replicas
-        .iter()
-        .map(|(_id, replica)| replica.safe_comm_r_last())
-        .collect::<Result<_, _>>()?;
+    // let comm_r_lasts: Vec<_> = challenged_replicas
+    //     .iter()
+    //     .map(|(_id, replica)| replica.safe_comm_r_last())
+    //     .collect::<Result<_, _>>()?;
 
-    let pub_inputs = election_post::PublicInputs {
-        challenges: &challenges,
-        comm_rs: &comm_rs,
-        faults: &faults,
-    };
+    // let pub_inputs = election_post::PublicInputs {
+    //     challenges: &challenges,
+    //     comm_rs: &comm_rs,
+    //     faults: &faults,
+    // };
 
-    let priv_inputs = election_post::PrivateInputs::<DefaultTreeHasher> {
-        trees: &borrowed_trees,
-        comm_cs: &comm_cs,
-        comm_r_lasts: &comm_r_lasts,
-    };
+    // let priv_inputs = election_post::PrivateInputs::<DefaultTreeHasher> {
+    //     trees: &borrowed_trees,
+    //     comm_cs: &comm_cs,
+    //     comm_r_lasts: &comm_r_lasts,
+    // };
 
-    let groth_params = get_post_params(post_config)?;
+    // let groth_params = get_post_params(post_config)?;
 
-    let proof =
-        ElectionPoStCompound::prove(&public_params, &pub_inputs, &priv_inputs, &groth_params)?;
-    let proof_bytes = proof.to_vec();
+    // let proof =
+    //     ElectionPoStCompound::prove(&public_params, &pub_inputs, &priv_inputs, &groth_params)?;
+    // let proof_bytes = proof.to_vec();
 
-    Ok(proof_bytes)
+    // Ok(proof_bytes)
+    unimplemented!()
 }
 
 /// Verifies a proof-of-spacetime.
@@ -408,72 +380,74 @@ pub fn verify_post(
     proof: &[u8],
     replicas: &BTreeMap<SectorId, PublicReplicaInfo>,
 ) -> error::Result<bool> {
-    let sector_count = replicas.len() as u64;
-    ensure!(sector_count > 0, "Must supply at least one replica");
+    // let sector_count = replicas.len() as u64;
+    // ensure!(sector_count > 0, "Must supply at least one replica");
 
-    let vanilla_params = post_setup_params(post_config);
+    // let vanilla_params = post_setup_params(post_config);
 
-    let sectors = replicas.keys().copied().collect();
-    let faults = replicas
-        .iter()
-        .filter_map(
-            |(id, replica)| {
-                if replica.is_fault {
-                    Some(*id)
-                } else {
-                    None
-                }
-            },
-        )
-        .collect();
+    // let sectors = replicas.keys().copied().collect();
+    // let faults = replicas
+    //     .iter()
+    //     .filter_map(
+    //         |(id, replica)| {
+    //             if replica.is_fault {
+    //                 Some(*id)
+    //             } else {
+    //                 None
+    //             }
+    //         },
+    //     )
+    //     .collect();
 
-    let setup_params = compound_proof::SetupParams {
-        vanilla_params: &vanilla_params,
-        engine_params: &*JJ_PARAMS,
-        partitions: None,
-    };
+    // let setup_params = compound_proof::SetupParams {
+    //     vanilla_params: &vanilla_params,
+    //     engine_params: &*JJ_PARAMS,
+    //     partitions: None,
+    // };
 
-    let public_params: compound_proof::PublicParams<
-        _,
-        election_post::ElectionPoSt<DefaultTreeHasher>,
-    > = ElectionPoStCompound::setup(&setup_params)?;
+    // let public_params: compound_proof::PublicParams<
+    //     _,
+    //     election_post::ElectionPoSt<DefaultTreeHasher>,
+    // > = ElectionPoStCompound::setup(&setup_params)?;
 
-    let challenges = ElectionPoSt::<DefaultTreeHasher>::generate_challenges(
-        &public_params.vanilla_params,
-        challenge_seed,
-        &sectors,
-        &faults,
-    )?;
+    // let challenges = ElectionPoSt::<DefaultTreeHasher>::generate_challenges(
+    //     &public_params.vanilla_params,
+    //     challenge_seed,
+    //     &sectors,
+    //     &faults,
+    // )?;
 
-    // Match the replicas to the challenges, as these are the only ones required.
-    let comm_rs: Vec<_> = challenges
-        .iter()
-        .map(|c| {
-            if let Some(replica) = replicas.get(&c.sector) {
-                replica.safe_comm_r()
-            } else {
-                Err(format_err!(
-                    "Invalid challenge generated: {}, only {} sectors are being proven",
-                    c.sector,
-                    sector_count
-                ))
-            }
-        })
-        .collect::<Result<_, _>>()?;
+    // // Match the replicas to the challenges, as these are the only ones required.
+    // let comm_rs: Vec<_> = challenges
+    //     .iter()
+    //     .map(|c| {
+    //         if let Some(replica) = replicas.get(&c.sector) {
+    //             replica.safe_comm_r()
+    //         } else {
+    //             Err(format_err!(
+    //                 "Invalid challenge generated: {}, only {} sectors are being proven",
+    //                 c.sector,
+    //                 sector_count
+    //             ))
+    //         }
+    //     })
+    //     .collect::<Result<_, _>>()?;
 
-    let public_inputs = election_post::PublicInputs::<<DefaultTreeHasher as Hasher>::Domain> {
-        challenges: &challenges,
-        comm_rs: &comm_rs,
-        faults: &faults,
-    };
+    // let public_inputs = election_post::PublicInputs::<<DefaultTreeHasher as Hasher>::Domain> {
+    //     challenges: &challenges,
+    //     comm_rs: &comm_rs,
+    //     faults: &faults,
+    // };
 
-    let verifying_key = get_post_verifying_key(post_config)?;
+    // let verifying_key = get_post_verifying_key(post_config)?;
 
-    let proof = MultiProof::new_from_reader(None, &proof[..], &verifying_key)?;
+    // let proof = MultiProof::new_from_reader(None, &proof[..], &verifying_key)?;
 
-    let is_valid =
-        ElectionPoStCompound::verify(&public_params, &public_inputs, &proof, &NoRequirements)?;
+    // let is_valid =
+    //     ElectionPoStCompound::verify(&public_params, &public_inputs, &proof, &NoRequirements)?;
 
-    // Since callers may rely on previous mocked success, just pretend verification succeeded, for now.
-    Ok(is_valid)
+    // // Since callers may rely on previous mocked success, just pretend verification succeeded, for now.
+    // Ok(is_valid)
+
+    unimplemented!()
 }

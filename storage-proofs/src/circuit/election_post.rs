@@ -288,251 +288,251 @@ mod tests {
     use crate::sector::OrderedSectorSet;
     use crate::stacked::hash::hash2;
 
-    #[test]
-    fn test_election_post_circuit_with_bls12_381() {
-        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+    // #[test]
+    // fn test_election_post_circuit_with_bls12_381() {
+    //     let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 32;
-        let sector_size = leaves * 32;
-        let challenges_count = 2;
+    //     let leaves = 32;
+    //     let sector_size = leaves * 32;
+    //     let challenges_count = 2;
 
-        let pub_params = election_post::PublicParams { sector_size };
+    //     let pub_params = election_post::PublicParams { sector_size };
 
-        let data1: Vec<u8> = (0..32)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
-            .collect();
-        let data2: Vec<u8> = (0..32)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
-            .collect();
+    //     let data1: Vec<u8> = (0..32)
+    //         .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+    //         .collect();
+    //     let data2: Vec<u8> = (0..32)
+    //         .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+    //         .collect();
 
-        let graph1 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed());
-        let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
+    //     let graph1 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed());
+    //     let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
 
-        let graph2 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed());
-        let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
+    //     let graph2 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed());
+    //     let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
 
-        let faults = OrderedSectorSet::new();
-        let mut sectors = OrderedSectorSet::new();
-        sectors.insert(0.into());
-        sectors.insert(1.into());
+    //     let faults = OrderedSectorSet::new();
+    //     let mut sectors = OrderedSectorSet::new();
+    //     sectors.insert(0.into());
+    //     sectors.insert(1.into());
 
-        let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
-        let challenges = ElectionPoSt::<PedersenHasher>::generate_challenges(
-            &pub_params,
-            &seed,
-            &sectors,
-            &faults,
-        )
-        .unwrap();
-        let comm_r_lasts_raw = vec![tree1.root(), tree2.root()];
-        let comm_r_lasts: Vec<_> = challenges
-            .iter()
-            .map(|c| comm_r_lasts_raw[u64::from(c.sector) as usize])
-            .collect();
+    //     let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
+    //     let challenges = ElectionPoSt::<PedersenHasher>::generate_challenges(
+    //         &pub_params,
+    //         &seed,
+    //         &sectors,
+    //         &faults,
+    //     )
+    //     .unwrap();
+    //     let comm_r_lasts_raw = vec![tree1.root(), tree2.root()];
+    //     let comm_r_lasts: Vec<_> = challenges
+    //         .iter()
+    //         .map(|c| comm_r_lasts_raw[u64::from(c.sector) as usize])
+    //         .collect();
 
-        let comm_cs: Vec<PedersenDomain> = challenges
-            .iter()
-            .map(|_c| PedersenDomain::random(rng))
-            .collect();
+    //     let comm_cs: Vec<PedersenDomain> = challenges
+    //         .iter()
+    //         .map(|_c| PedersenDomain::random(rng))
+    //         .collect();
 
-        let comm_rs: Vec<PedersenDomain> = comm_cs
-            .iter()
-            .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| hash2(comm_c, comm_r_last).into())
-            .collect();
+    //     let comm_rs: Vec<PedersenDomain> = comm_cs
+    //         .iter()
+    //         .zip(comm_r_lasts.iter())
+    //         .map(|(comm_c, comm_r_last)| hash2(comm_c, comm_r_last).into())
+    //         .collect();
 
-        let pub_inputs = election_post::PublicInputs {
-            challenges: &challenges,
-            faults: &faults,
-            comm_rs: &comm_rs,
-        };
+    //     let pub_inputs = election_post::PublicInputs {
+    //         challenges: &challenges,
+    //         faults: &faults,
+    //         comm_rs: &comm_rs,
+    //     };
 
-        let mut trees = BTreeMap::new();
-        trees.insert(0.into(), &tree1);
-        trees.insert(1.into(), &tree2);
+    //     let mut trees = BTreeMap::new();
+    //     trees.insert(0.into(), &tree1);
+    //     trees.insert(1.into(), &tree2);
 
-        let priv_inputs = election_post::PrivateInputs::<PedersenHasher> {
-            trees: &trees,
-            comm_cs: &comm_cs,
-            comm_r_lasts: &comm_r_lasts,
-        };
+    //     let priv_inputs = election_post::PrivateInputs::<PedersenHasher> {
+    //         trees: &trees,
+    //         comm_cs: &comm_cs,
+    //         comm_r_lasts: &comm_r_lasts,
+    //     };
 
-        let proof = ElectionPoSt::<PedersenHasher>::prove(&pub_params, &pub_inputs, &priv_inputs)
-            .expect("proving failed");
+    //     let proof = ElectionPoSt::<PedersenHasher>::prove(&pub_params, &pub_inputs, &priv_inputs)
+    //         .expect("proving failed");
 
-        let is_valid = ElectionPoSt::<PedersenHasher>::verify(&pub_params, &pub_inputs, &proof)
-            .expect("verification failed");
-        assert!(is_valid);
+    //     let is_valid = ElectionPoSt::<PedersenHasher>::verify(&pub_params, &pub_inputs, &proof)
+    //         .expect("verification failed");
+    //     assert!(is_valid);
 
-        // actual circuit test
+    //     // actual circuit test
 
-        let paths: Vec<_> = proof
-            .paths()
-            .iter()
-            .map(|p| {
-                p.iter()
-                    .map(|v| Some((v.0.into(), v.1)))
-                    .collect::<Vec<_>>()
-            })
-            .collect();
-        let leafs: Vec<_> = proof.leafs().iter().map(|l| Some((**l).into())).collect();
+    //     let paths: Vec<_> = proof
+    //         .paths()
+    //         .iter()
+    //         .map(|p| {
+    //             p.iter()
+    //                 .map(|v| Some((v.0.into(), v.1)))
+    //                 .collect::<Vec<_>>()
+    //         })
+    //         .collect();
+    //     let leafs: Vec<_> = proof.leafs().iter().map(|l| Some((**l).into())).collect();
 
-        let mut cs = TestConstraintSystem::<Bls12>::new();
+    //     let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        let instance = ElectionPoStCircuit::<_, PedersenHasher> {
-            params: &*JJ_PARAMS,
-            leafs,
-            paths,
-            comm_rs: comm_rs.iter().copied().map(|c| Some(c.into())).collect(),
-            comm_cs: comm_cs.into_iter().map(|c| Some(c.into())).collect(),
-            comm_r_lasts: comm_r_lasts.into_iter().map(|c| Some(c.into())).collect(),
-            _h: PhantomData,
-        };
+    //     let instance = ElectionPoStCircuit::<_, PedersenHasher> {
+    //         params: &*JJ_PARAMS,
+    //         leafs,
+    //         paths,
+    //         comm_rs: comm_rs.iter().copied().map(|c| Some(c.into())).collect(),
+    //         comm_cs: comm_cs.into_iter().map(|c| Some(c.into())).collect(),
+    //         comm_r_lasts: comm_r_lasts.into_iter().map(|c| Some(c.into())).collect(),
+    //         _h: PhantomData,
+    //     };
 
-        instance
-            .synthesize(&mut cs)
-            .expect("failed to synthesize circuit");
+    //     instance
+    //         .synthesize(&mut cs)
+    //         .expect("failed to synthesize circuit");
 
-        assert!(cs.is_satisfied(), "constraints not satisfied");
+    //     assert!(cs.is_satisfied(), "constraints not satisfied");
 
-        assert_eq!(cs.num_inputs(), 5, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 16_496, "wrong number of constraints");
-        assert_eq!(cs.get_input(0, "ONE"), Fr::one());
+    //     assert_eq!(cs.num_inputs(), 5, "wrong number of inputs");
+    //     assert_eq!(cs.num_constraints(), 16_496, "wrong number of constraints");
+    //     assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
-        let generated_inputs = ElectionPoStCompound::<PedersenHasher>::generate_public_inputs(
-            &pub_inputs,
-            &pub_params,
-            None,
-        );
-        let expected_inputs = cs.get_inputs();
+    //     let generated_inputs = ElectionPoStCompound::<PedersenHasher>::generate_public_inputs(
+    //         &pub_inputs,
+    //         &pub_params,
+    //         None,
+    //     );
+    //     let expected_inputs = cs.get_inputs();
 
-        for ((input, label), generated_input) in
-            expected_inputs.iter().skip(1).zip(generated_inputs.iter())
-        {
-            assert_eq!(input, generated_input, "{}", label);
-        }
+    //     for ((input, label), generated_input) in
+    //         expected_inputs.iter().skip(1).zip(generated_inputs.iter())
+    //     {
+    //         assert_eq!(input, generated_input, "{}", label);
+    //     }
 
-        assert_eq!(
-            generated_inputs.len(),
-            expected_inputs.len() - 1,
-            "inputs are not the same length"
-        );
-    }
+    //     assert_eq!(
+    //         generated_inputs.len(),
+    //         expected_inputs.len() - 1,
+    //         "inputs are not the same length"
+    //     );
+    // }
 
-    #[ignore] // Slow test – run only when compiled for release.
-    #[test]
-    fn election_post_test_compound() {
-        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+    // #[ignore] // Slow test – run only when compiled for release.
+    // #[test]
+    // fn election_post_test_compound() {
+    //     let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 32;
-        let sector_size = leaves * 32;
-        let challenges_count = 2;
+    //     let leaves = 32;
+    //     let sector_size = leaves * 32;
+    //     let challenges_count = 2;
 
-        let setup_params = compound_proof::SetupParams {
-            vanilla_params: &election_post::SetupParams { sector_size },
-            engine_params: &*JJ_PARAMS,
-            partitions: None,
-        };
+    //     let setup_params = compound_proof::SetupParams {
+    //         vanilla_params: &election_post::SetupParams { sector_size },
+    //         engine_params: &*JJ_PARAMS,
+    //         partitions: None,
+    //     };
 
-        let pub_params =
-            ElectionPoStCompound::<PedersenHasher>::setup(&setup_params).expect("setup failed");
+    //     let pub_params =
+    //         ElectionPoStCompound::<PedersenHasher>::setup(&setup_params).expect("setup failed");
 
-        let data1: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
-            .collect();
-        let data2: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
-            .collect();
+    //     let data1: Vec<u8> = (0..leaves)
+    //         .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+    //         .collect();
+    //     let data2: Vec<u8> = (0..leaves)
+    //         .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+    //         .collect();
 
-        let graph1 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed());
-        let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
+    //     let graph1 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed());
+    //     let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
 
-        let graph2 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed());
-        let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
+    //     let graph2 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed());
+    //     let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
 
-        let faults = OrderedSectorSet::new();
-        let mut sectors = OrderedSectorSet::new();
-        sectors.insert(0.into());
-        sectors.insert(1.into());
+    //     let faults = OrderedSectorSet::new();
+    //     let mut sectors = OrderedSectorSet::new();
+    //     sectors.insert(0.into());
+    //     sectors.insert(1.into());
 
-        let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
-        let challenges = ElectionPoSt::<PedersenHasher>::generate_challenges(
-            &pub_params.vanilla_params,
-            &seed,
-            &sectors,
-            &faults,
-        )
-        .unwrap();
+    //     let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
+    //     let challenges = ElectionPoSt::<PedersenHasher>::generate_challenges(
+    //         &pub_params.vanilla_params,
+    //         &seed,
+    //         &sectors,
+    //         &faults,
+    //     )
+    //     .unwrap();
 
-        let comm_r_lasts_raw = vec![tree1.root(), tree2.root()];
-        let comm_r_lasts: Vec<_> = challenges
-            .iter()
-            .map(|c| comm_r_lasts_raw[u64::from(c.sector) as usize])
-            .collect();
+    //     let comm_r_lasts_raw = vec![tree1.root(), tree2.root()];
+    //     let comm_r_lasts: Vec<_> = challenges
+    //         .iter()
+    //         .map(|c| comm_r_lasts_raw[u64::from(c.sector) as usize])
+    //         .collect();
 
-        let comm_cs: Vec<PedersenDomain> = challenges
-            .iter()
-            .map(|_c| PedersenDomain::random(rng))
-            .collect();
+    //     let comm_cs: Vec<PedersenDomain> = challenges
+    //         .iter()
+    //         .map(|_c| PedersenDomain::random(rng))
+    //         .collect();
 
-        let comm_rs: Vec<PedersenDomain> = comm_cs
-            .iter()
-            .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| hash2(comm_c, comm_r_last).into())
-            .collect();
+    //     let comm_rs: Vec<PedersenDomain> = comm_cs
+    //         .iter()
+    //         .zip(comm_r_lasts.iter())
+    //         .map(|(comm_c, comm_r_last)| hash2(comm_c, comm_r_last).into())
+    //         .collect();
 
-        let pub_inputs = election_post::PublicInputs {
-            challenges: &challenges,
-            faults: &faults,
-            comm_rs: &comm_rs,
-        };
+    //     let pub_inputs = election_post::PublicInputs {
+    //         challenges: &challenges,
+    //         faults: &faults,
+    //         comm_rs: &comm_rs,
+    //     };
 
-        let mut trees = BTreeMap::new();
-        trees.insert(0.into(), &tree1);
-        trees.insert(1.into(), &tree2);
+    //     let mut trees = BTreeMap::new();
+    //     trees.insert(0.into(), &tree1);
+    //     trees.insert(1.into(), &tree2);
 
-        let priv_inputs = election_post::PrivateInputs::<PedersenHasher> {
-            trees: &trees,
-            comm_r_lasts: &comm_r_lasts,
-            comm_cs: &comm_cs,
-        };
+    //     let priv_inputs = election_post::PrivateInputs::<PedersenHasher> {
+    //         trees: &trees,
+    //         comm_r_lasts: &comm_r_lasts,
+    //         comm_cs: &comm_cs,
+    //     };
 
-        let gparams = ElectionPoStCompound::<PedersenHasher>::groth_params(
-            &pub_params.vanilla_params,
-            &JJ_PARAMS,
-        )
-        .expect("failed to create groth params");
+    //     let gparams = ElectionPoStCompound::<PedersenHasher>::groth_params(
+    //         &pub_params.vanilla_params,
+    //         &JJ_PARAMS,
+    //     )
+    //     .expect("failed to create groth params");
 
-        let proof = ElectionPoStCompound::<PedersenHasher>::prove(
-            &pub_params,
-            &pub_inputs,
-            &priv_inputs,
-            &gparams,
-        )
-        .expect("proving failed");
+    //     let proof = ElectionPoStCompound::<PedersenHasher>::prove(
+    //         &pub_params,
+    //         &pub_inputs,
+    //         &priv_inputs,
+    //         &gparams,
+    //     )
+    //     .expect("proving failed");
 
-        let (circuit, inputs) = ElectionPoStCompound::<PedersenHasher>::circuit_for_test(
-            &pub_params,
-            &pub_inputs,
-            &priv_inputs,
-        );
+    //     let (circuit, inputs) = ElectionPoStCompound::<PedersenHasher>::circuit_for_test(
+    //         &pub_params,
+    //         &pub_inputs,
+    //         &priv_inputs,
+    //     );
 
-        {
-            let mut cs = TestConstraintSystem::new();
+    //     {
+    //         let mut cs = TestConstraintSystem::new();
 
-            circuit.synthesize(&mut cs).expect("failed to synthesize");
-            assert!(cs.is_satisfied());
-            assert!(cs.verify(&inputs));
-        }
+    //         circuit.synthesize(&mut cs).expect("failed to synthesize");
+    //         assert!(cs.is_satisfied());
+    //         assert!(cs.verify(&inputs));
+    //     }
 
-        let verified = ElectionPoStCompound::<PedersenHasher>::verify(
-            &pub_params,
-            &pub_inputs,
-            &proof,
-            &NoRequirements,
-        )
-        .expect("failed while verifying");
+    //     let verified = ElectionPoStCompound::<PedersenHasher>::verify(
+    //         &pub_params,
+    //         &pub_inputs,
+    //         &proof,
+    //         &NoRequirements,
+    //     )
+    //     .expect("failed while verifying");
 
-        assert!(verified);
-    }
+    //     assert!(verified);
+    // }
 }
