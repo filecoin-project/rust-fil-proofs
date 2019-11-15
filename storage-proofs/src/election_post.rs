@@ -7,7 +7,7 @@ use serde::de::Deserialize;
 use serde::ser::Serialize;
 use sha2::{Digest, Sha256};
 
-use crate::crypto::pedersen::Hasher as PedersenHasher;
+use crate::crypto::pedersen::{pedersen_md_no_padding_bits, Bits};
 use crate::drgraph::graph_height;
 use crate::error::Result;
 use crate::hasher::{Domain, Hasher};
@@ -19,7 +19,7 @@ use crate::stacked::hash::hash2;
 use crate::util::NODE_SIZE;
 
 pub const POST_CHALLENGE_COUNT: usize = 8;
-pub const POST_CHALLENGED_NODES: usize = 128;
+pub const POST_CHALLENGED_NODES: usize = 16;
 
 #[derive(Debug, Clone)]
 pub struct SetupParams {
@@ -72,7 +72,7 @@ pub struct Candidate {
     pub sector_challenge_index: u64,
 
     /// The data, in the order of the provided challenges.
-    pub data: Vec<Vec<u8>>,
+    pub data: Vec<u8>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -101,16 +101,7 @@ impl fmt::Debug for Candidate {
             .field("partial_ticket", &hex::encode(&self.partial_ticket))
             .field("ticket", &hex::encode(&self.ticket))
             .field("sector_challenge_index", &self.sector_challenge_index)
-            .field(
-                "data",
-                &format!(
-                    "{:?}",
-                    self.data
-                        .iter()
-                        .map(|v| hex::encode(&v[..]))
-                        .collect::<Vec<_>>()
-                ),
-            )
+            .field("data", &hex::encode(&self.data))
             .finish()
     }
 }
@@ -158,9 +149,9 @@ where
 }
 
 pub fn generate_candidates<H: Hasher>(
-    pub_params: &PublicParams,
+    sector_size: u64,
     challenged_sectors: &[SectorId],
-    trees: &BTreeMap<SectorId, &MerkleTree<H::Domain, H::Function>>,
+    trees: &BTreeMap<SectorId, MerkleTree<H::Domain, H::Function>>,
     prover_id: &[u8; 32],
     randomness: &[u8; 32],
 ) -> Result<Vec<Candidate>> {
@@ -177,7 +168,7 @@ pub fn generate_candidates<H: Hasher>(
         };
 
         candidates.push(generate_candidate::<H>(
-            pub_params,
+            sector_size,
             tree,
             prover_id,
             *sector_id,
@@ -190,7 +181,7 @@ pub fn generate_candidates<H: Hasher>(
 }
 
 fn generate_candidate<H: Hasher>(
-    pub_params: &PublicParams,
+    sector_size: u64,
     tree: &MerkleTree<H::Domain, H::Function>,
     prover_id: &[u8; 32],
     sector_id: SectorId,
@@ -198,38 +189,32 @@ fn generate_candidate<H: Hasher>(
     sector_challenge_index: u64,
 ) -> Result<Candidate> {
     // 1. read the data for each challenge
-    let mut data = Vec::with_capacity(POST_CHALLENGE_COUNT);
+    let mut data = vec![0u8; POST_CHALLENGE_COUNT * POST_CHALLENGED_NODES * NODE_SIZE];
     for n in 0..POST_CHALLENGE_COUNT {
-        let challenge_start = generate_leaf_challenge(
-            randomness,
-            sector_challenge_index,
-            n as u64,
-            pub_params.sector_size,
-        );
+        let challenge_start =
+            generate_leaf_challenge(randomness, sector_challenge_index, n as u64, sector_size);
 
-        let mut challenge_data = vec![0u8; POST_CHALLENGED_NODES * NODE_SIZE];
         let start = challenge_start as usize;
         let end = start + POST_CHALLENGED_NODES;
 
-        tree.read_range_into(start, end, &mut challenge_data);
-
-        data.push(challenge_data);
+        tree.read_range_into(
+            start,
+            end,
+            &mut data[n * POST_CHALLENGED_NODES * NODE_SIZE
+                ..(n + 1) * POST_CHALLENGED_NODES * NODE_SIZE],
+        );
     }
 
     // 2. Ticket generation
 
     // partial_ticket = pedersen(randomness | data | prover_id | sector_id)
+    let sector_id_bytes = u64::from(sector_id).to_le_bytes();
+    let list: [&[u8]; 4] = [&randomness[..], &data, &prover_id[..], &sector_id_bytes[..]];
+    let bits = Bits::new_many(list.into_iter());
 
-    let mut hasher = PedersenHasher::new(&randomness[..]);
-    for chunk in &data {
-        hasher.update(&chunk[..]);
-    }
-    hasher.update(&prover_id[..]);
-    hasher.update(&u64::from(sector_id).to_le_bytes()[..]);
-
-    let partial_ticket_hash = hasher.finalize_bytes();
+    let partial_ticket_hash: H::Domain = pedersen_md_no_padding_bits(bits).into();
     let mut partial_ticket = [0u8; 32];
-    partial_ticket.copy_from_slice(&partial_ticket_hash);
+    partial_ticket.copy_from_slice(AsRef::<[u8]>::as_ref(&partial_ticket_hash));
 
     // ticket = sha256(partial_ticket)
     let ticket = finalize_ticket(&partial_ticket);
@@ -418,12 +403,98 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
                     return Ok(false);
                 }
 
-                if !merkle_proof.validate(challenged_leaf_start as usize) {
+                if !merkle_proof.validate(challenged_leaf_start as usize + i) {
                     return Ok(false);
                 }
             }
         }
 
         Ok(true)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ff::Field;
+    use paired::bls12_381::{Bls12, Fr};
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
+
+    use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
+    use crate::fr32::fr_into_bytes;
+    use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+
+    fn test_election_post<H: Hasher>() {
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+
+        let leaves = 32;
+        let sector_size = leaves * 32;
+
+        let pub_params = PublicParams { sector_size };
+
+        let randomness: [u8; 32] = rng.gen();
+        let prover_id: [u8; 32] = rng.gen();
+
+        let mut sectors: Vec<SectorId> = Vec::new();
+        let mut trees = BTreeMap::new();
+        for i in 0..5 {
+            sectors.push(i.into());
+            let data: Vec<u8> = (0..leaves)
+                .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+                .collect();
+
+            let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
+            let tree = graph.merkle_tree(data.as_slice()).unwrap();
+            trees.insert(i.into(), tree);
+        }
+
+        let candidates =
+            generate_candidates::<H>(sector_size, &sectors, &trees, &prover_id, &randomness)
+                .unwrap();
+
+        let candidate = &candidates[0];
+        let tree = trees.remove(&candidate.sector_id).unwrap();
+        let comm_r_last = tree.root();
+        let comm_c = H::Domain::random(rng);
+        let comm_r = Fr::from(hash2(comm_c, comm_r_last)).into();
+
+        let pub_inputs = PublicInputs {
+            randomness,
+            sector_id: candidate.sector_id,
+            prover_id,
+            comm_r,
+            partial_ticket: candidate.partial_ticket,
+            sector_challenge_index: 0,
+        };
+
+        let priv_inputs = PrivateInputs::<H> {
+            tree,
+            comm_c,
+            comm_r_last,
+        };
+
+        let proof = ElectionPoSt::<H>::prove(&pub_params, &pub_inputs, &priv_inputs)
+            .expect("proving failed");
+
+        let is_valid = ElectionPoSt::<H>::verify(&pub_params, &pub_inputs, &proof)
+            .expect("verification failed");
+
+        assert!(is_valid);
+    }
+
+    #[test]
+    fn election_post_pedersen() {
+        test_election_post::<PedersenHasher>();
+    }
+
+    #[test]
+    fn election_post_sha256() {
+        test_election_post::<Sha256Hasher>();
+    }
+
+    #[test]
+    fn election_post_blake2s() {
+        test_election_post::<Blake2sHasher>();
     }
 }

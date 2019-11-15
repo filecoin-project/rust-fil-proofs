@@ -211,27 +211,12 @@ pub fn generate_candidates(
         .collect();
 
     // resolve results
-    let unique_trees: BTreeMap<SectorId, Tree> =
-        unique_trees_res.into_iter().collect::<Result<_, _>>()?;
-
-    let borrowed_trees: BTreeMap<SectorId, &Tree> = challenged_replicas
-        .iter()
-        .map(|(id, _)| {
-            if let Some(tree) = unique_trees.get(id) {
-                Ok((**id, tree))
-            } else {
-                Err(format_err!(
-                    "Bug: Failed to generate merkle tree for {} sector",
-                    id
-                ))
-            }
-        })
-        .collect::<Result<_, _>>()?;
+    let trees: BTreeMap<SectorId, Tree> = unique_trees_res.into_iter().collect::<Result<_, _>>()?;
 
     let candidates = election_post::generate_candidates::<DefaultTreeHasher>(
-        &public_params.vanilla_params,
+        public_params.vanilla_params.sector_size,
         &challenged_sectors,
-        &borrowed_trees,
+        &trees,
         &prover_id,
         randomness,
     )?;
