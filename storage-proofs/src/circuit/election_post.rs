@@ -10,6 +10,7 @@ use crate::circuit::por::{PoRCircuit, PoRCompound};
 use crate::circuit::stacked::hash::hash2;
 use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
+use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph;
 use crate::election_post::{self, ElectionPoSt};
 use crate::hasher::Hasher;
@@ -63,33 +64,34 @@ where
         pub_params: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
         _partition_k: Option<usize>,
     ) -> Vec<Fr> {
-        let mut inputs = Vec::new();
+        unimplemented!();
+        // let mut inputs = Vec::new();
 
-        let por_pub_params = merklepor::PublicParams {
-            leaves: (pub_params.sector_size as usize / NODE_SIZE),
-            private: true,
-        };
+        // let por_pub_params = merklepor::PublicParams {
+        //     leaves: (pub_params.sector_size as usize / NODE_SIZE),
+        //     private: true,
+        // };
 
-        assert_eq!(
-            pub_in.challenges.len(),
-            pub_in.comm_rs.len(),
-            "Missmatch in challenges and comm_rs"
-        );
+        // assert_eq!(
+        //     pub_in.challenges.len(),
+        //     pub_in.comm_rs.len(),
+        //     "Missmatch in challenges and comm_rs"
+        // );
 
-        for (challenge, comm_r) in pub_in.challenges.iter().zip(pub_in.comm_rs.iter()) {
-            inputs.push((*comm_r).into());
+        // for (challenge, comm_r) in pub_in.challenges.iter().zip(pub_in.comm_rs.iter()) {
+        //     inputs.push((*comm_r).into());
 
-            let por_pub_inputs = merklepor::PublicInputs {
-                commitment: None,
-                challenge: challenge.start as usize,
-            };
-            let por_inputs =
-                PoRCompound::<H>::generate_public_inputs(&por_pub_inputs, &por_pub_params, None);
+        //     let por_pub_inputs = merklepor::PublicInputs {
+        //         commitment: None,
+        //         challenge: challenge.start as usize,
+        //     };
+        //     let por_inputs =
+        //         PoRCompound::<H>::generate_public_inputs(&por_pub_inputs, &por_pub_params, None);
 
-            inputs.extend(por_inputs);
-        }
+        //     inputs.extend(por_inputs);
+        // }
 
-        inputs
+        // inputs
     }
 
     fn circuit(
@@ -97,47 +99,46 @@ where
         _priv_in: <ElectionPoStCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::Proof,
         _pub_params: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
-        engine_params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> ElectionPoStCircuit<'a, Bls12, H> {
-        let comm_rs: Vec<_> = pub_in.comm_rs.iter().map(|c| Some((*c).into())).collect();
-        let comm_cs: Vec<_> = vanilla_proof
-            .comm_cs
-            .iter()
-            .map(|c| Some((*c).into()))
-            .collect();
+        unimplemented!();
+        // let comm_rs: Vec<_> = pub_in.comm_rs.iter().map(|c| Some((*c).into())).collect();
+        // let comm_cs: Vec<_> = vanilla_proof
+        //     .comm_cs
+        //     .iter()
+        //     .map(|c| Some((*c).into()))
+        //     .collect();
 
-        let comm_r_lasts: Vec<_> = vanilla_proof
-            .commitments()
-            .into_iter()
-            .map(|c| Some((*c).into()))
-            .collect();
+        // let comm_r_lasts: Vec<_> = vanilla_proof
+        //     .commitments()
+        //     .into_iter()
+        //     .map(|c| Some((*c).into()))
+        //     .collect();
 
-        let leafs: Vec<_> = vanilla_proof
-            .leafs()
-            .iter()
-            .map(|c| Some((**c).into()))
-            .collect();
+        // let leafs: Vec<_> = vanilla_proof
+        //     .leafs()
+        //     .iter()
+        //     .map(|c| Some((**c).into()))
+        //     .collect();
 
-        let paths: Vec<Vec<_>> = vanilla_proof
-            .paths()
-            .iter()
-            .map(|v| v.iter().map(|p| Some(((*p).0.into(), p.1))).collect())
-            .collect();
+        // let paths: Vec<Vec<_>> = vanilla_proof
+        //     .paths()
+        //     .iter()
+        //     .map(|v| v.iter().map(|p| Some(((*p).0.into(), p.1))).collect())
+        //     .collect();
 
-        ElectionPoStCircuit {
-            params: engine_params,
-            leafs,
-            comm_rs,
-            comm_cs,
-            comm_r_lasts,
-            paths,
-            _h: PhantomData,
-        }
+        // ElectionPoStCircuit {
+        //     params: engine_params,
+        //     leafs,
+        //     comm_rs,
+        //     comm_cs,
+        //     comm_r_lasts,
+        //     paths,
+        //     _h: PhantomData,
+        // }
     }
 
     fn blank_circuit(
         pub_params: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
-        params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> ElectionPoStCircuit<'a, Bls12, H> {
         let challenges_count = election_post::POST_CHALLENGE_COUNT;
         let height = drgraph::graph_height(pub_params.sector_size as usize / NODE_SIZE);
@@ -149,7 +150,7 @@ where
         let paths = vec![vec![None; height]; challenges_count];
 
         ElectionPoStCircuit {
-            params,
+            params: &*JJ_PARAMS,
             comm_rs,
             comm_cs,
             comm_r_lasts,

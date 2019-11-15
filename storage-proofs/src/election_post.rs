@@ -45,32 +45,59 @@ impl ParameterSetMetadata for PublicParams {
 }
 
 #[derive(Debug, Clone)]
-pub struct PublicInputs<'a, T: 'a + Domain> {
-    /// The challenges, which leafs to prove.
-    pub challenges: &'a [Challenge],
-    pub faults: &'a OrderedSectorSet,
-    pub comm_rs: &'a [T],
+pub struct PublicInputs<T: Domain> {
+    /// The challenges, which leaf ranges to prove.
+    pub challenges: Vec<u64>,
+    pub sector_id: SectorId,
+    pub prover_id: [u8; 32],
+    pub comm_r: T,
 }
 
 #[derive(Debug, Clone)]
-pub struct PrivateInputs<'a, H: 'a + Hasher> {
-    pub trees: &'a BTreeMap<SectorId, &'a MerkleTree<H::Domain, H::Function>>,
-    pub comm_cs: &'a [H::Domain],
-    pub comm_r_lasts: &'a [H::Domain],
+pub struct PrivateInputs<H: Hasher> {
+    pub tree: MerkleTree<H::Domain, H::Function>,
+    pub comm_c: H::Domain,
+    pub comm_r_last: H::Domain,
 }
 
 /// The witness data, that is needed for ticket generation.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Witness {
+    pub sector_id: SectorId,
+    pub partial_ticket: [u8; 32],
     pub ticket: [u8; 32],
+    pub sector_challenge_index: u64,
+
     /// The data, in the order of the provided challenges.
     pub data: Vec<Vec<u8>>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct WinningTicket {
+    pub sector_id: SectorId,
+    pub partial_ticket: [u8; 32],
+    pub ticket: [u8; 32],
+    pub sector_challenge_index: u64,
+}
+
+impl fmt::Debug for WinningTicket {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WinningTicket")
+            .field("sector_id", &self.sector_id)
+            .field("partial_ticket", &hex::encode(&self.partial_ticket))
+            .field("ticket", &hex::encode(&self.ticket))
+            .field("sector_challenge_index", &self.sector_challenge_index)
+            .finish()
+    }
 }
 
 impl fmt::Debug for Witness {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Witness")
+            .field("sector_id", &self.sector_id)
+            .field("partial_ticket", &hex::encode(&self.partial_ticket))
             .field("ticket", &hex::encode(&self.ticket))
+            .field("sector_challenge_index", &self.sector_challenge_index)
             .field(
                 "data",
                 &format!(
@@ -142,10 +169,10 @@ pub fn generate_witness<H: Hasher>(
     trees: &BTreeMap<SectorId, &MerkleTree<H::Domain, H::Function>>,
     prover_id: &[u8; 32],
     seed: &[u8; 32],
-) -> Result<HashMap<SectorId, Witness>> {
-    let mut res = HashMap::with_capacity(challenged_sectors.len());
+) -> Result<Vec<Witness>> {
+    let mut res = Vec::with_capacity(challenged_sectors.len());
 
-    for sector_id in challenged_sectors {
+    for (sector_challenge_index, sector_id) in challenged_sectors.iter().enumerate() {
         let tree = match trees.get(sector_id) {
             Some(tree) => tree,
             None => {
@@ -155,8 +182,15 @@ pub fn generate_witness<H: Hasher>(
             }
         };
 
-        let witness = generate_single_witness::<H>(pub_params, tree, prover_id, *sector_id, seed)?;
-        res.insert(*sector_id, witness);
+        let witness = generate_single_witness::<H>(
+            pub_params,
+            tree,
+            prover_id,
+            *sector_id,
+            seed,
+            sector_challenge_index as u64,
+        )?;
+        res.push(witness);
     }
 
     Ok(res)
@@ -168,11 +202,17 @@ fn generate_single_witness<H: Hasher>(
     prover_id: &[u8; 32],
     sector_id: SectorId,
     seed: &[u8; 32],
+    sector_challenge_index: u64,
 ) -> Result<Witness> {
     // 1. read the data for each challenge
     let mut data = Vec::with_capacity(POST_CHALLENGE_COUNT);
     for n in 0..POST_CHALLENGE_COUNT {
-        let challenge_start = generate_challenge(seed, n as u64, pub_params.sector_size);
+        let challenge_start = generate_leaf_challenge(
+            seed,
+            sector_challenge_index,
+            n as u64,
+            pub_params.sector_size,
+        );
 
         let mut challenge_data = vec![0u8; POST_CHALLENGED_NODES * NODE_SIZE];
         let start = challenge_start as usize;
@@ -194,14 +234,22 @@ fn generate_single_witness<H: Hasher>(
     hasher.update(&prover_id[..]);
     hasher.update(&u64::from(sector_id).to_le_bytes()[..]);
 
-    let partial_ticket = hasher.finalize_bytes();
+    let partial_ticket_hash = hasher.finalize_bytes();
+    let mut partial_ticket = [0u8; 32];
+    partial_ticket.copy_from_slice(&partial_ticket_hash);
 
     // ticket = sha256(partial_ticket)
     let ticket_hash = Sha256::digest(&partial_ticket);
     let mut ticket = [0u8; 32];
     ticket.copy_from_slice(&ticket_hash[..]);
 
-    Ok(Witness { ticket, data })
+    Ok(Witness {
+        sector_challenge_index,
+        sector_id,
+        partial_ticket,
+        ticket,
+        data,
+    })
 }
 
 pub fn generate_sector_challenges(
@@ -239,8 +287,34 @@ pub fn generate_sector_challenge(
     Ok(sector)
 }
 
+/// Generate all challenged leaf ranges for a single sector, such that the range fits into the sector.
+pub fn generate_leaf_challenges(
+    seed: &[u8; 32],
+    sector_challenge_index: u64,
+    sector_size: u64,
+) -> Vec<u64> {
+    let mut challenges = Vec::with_capacity(POST_CHALLENGE_COUNT);
+
+    for leaf_challenge_index in 0..POST_CHALLENGE_COUNT {
+        let challenge = generate_leaf_challenge(
+            seed,
+            sector_challenge_index,
+            leaf_challenge_index as u64,
+            sector_size,
+        );
+        challenges.push(challenge)
+    }
+
+    challenges
+}
+
 /// Generates challenge, such that the range fits into the sector.
-pub fn generate_challenge(seed: &[u8; 32], n: u64, sector_size: u64) -> u64 {
+pub fn generate_leaf_challenge(
+    seed: &[u8; 32],
+    sector_challenge_index: u64,
+    leaf_challenge_index: u64,
+    sector_size: u64,
+) -> u64 {
     assert!(
         sector_size > POST_CHALLENGED_NODES as u64 * NODE_SIZE as u64,
         "sector size {} is too small",
@@ -249,7 +323,8 @@ pub fn generate_challenge(seed: &[u8; 32], n: u64, sector_size: u64) -> u64 {
 
     let mut hasher = Sha256::new();
     hasher.input(&seed[..]);
-    hasher.input(&n.to_le_bytes()[..]);
+    hasher.input(&sector_challenge_index.to_le_bytes()[..]);
+    hasher.input(&leaf_challenge_index.to_le_bytes()[..]);
     let hash = hasher.result();
 
     let leaf_challenge = LittleEndian::read_u64(&hash.as_ref()[..8]);
@@ -262,8 +337,8 @@ pub fn generate_challenge(seed: &[u8; 32], n: u64, sector_size: u64) -> u64 {
 impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
-    type PublicInputs = PublicInputs<'a, H::Domain>;
-    type PrivateInputs = PrivateInputs<'a, H>;
+    type PublicInputs = PublicInputs<H::Domain>;
+    type PrivateInputs = PrivateInputs<H>;
     type Proof = Proof<H>;
     type Requirements = NoRequirements;
 

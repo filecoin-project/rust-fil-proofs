@@ -10,7 +10,6 @@ use filecoin_proofs::types::*;
 use storage_proofs::circuit::election_post::{ElectionPoStCircuit, ElectionPoStCompound};
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::CompoundProof;
-use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::election_post::ElectionPoSt;
 use storage_proofs::hasher::pedersen::PedersenHasher;
 use storage_proofs::parameter_cache::CacheableParameters;
@@ -42,7 +41,7 @@ fn cache_porep_params(porep_config: PoRepConfig) {
             _,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
-        >>::blank_circuit(&public_params, &JJ_PARAMS);
+        >>::blank_circuit(&public_params);
         let _ = StackedCompound::get_param_metadata(circuit, &public_params);
     }
     {
@@ -50,7 +49,7 @@ fn cache_porep_params(porep_config: PoRepConfig) {
             _,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
-        >>::blank_circuit(&public_params, &JJ_PARAMS);
+        >>::blank_circuit(&public_params);
         let _ = StackedCompound::get_groth_params(circuit, &public_params);
     }
     {
@@ -58,7 +57,7 @@ fn cache_porep_params(porep_config: PoRepConfig) {
             _,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
-        >>::blank_circuit(&public_params, &JJ_PARAMS);
+        >>::blank_circuit(&public_params);
         let _ = StackedCompound::get_verifying_key(circuit, &public_params);
     }
 }
@@ -78,7 +77,7 @@ fn cache_post_params(post_config: PoStConfig) {
                 Bls12,
                 ElectionPoSt<PedersenHasher>,
                 ElectionPoStCircuit<Bls12, PedersenHasher>,
-            >>::blank_circuit(&post_public_params, &JJ_PARAMS);
+            >>::blank_circuit(&post_public_params);
         let _ = <ElectionPoStCompound<PedersenHasher>>::get_param_metadata(
             post_circuit,
             &post_public_params,
@@ -91,7 +90,7 @@ fn cache_post_params(post_config: PoStConfig) {
                 Bls12,
                 ElectionPoSt<PedersenHasher>,
                 ElectionPoStCircuit<Bls12, PedersenHasher>,
-            >>::blank_circuit(&post_public_params, &JJ_PARAMS);
+            >>::blank_circuit(&post_public_params);
         let _ = <ElectionPoStCompound<PedersenHasher>>::get_groth_params(
             post_circuit,
             &post_public_params,
@@ -104,7 +103,7 @@ fn cache_post_params(post_config: PoStConfig) {
                 Bls12,
                 ElectionPoSt<PedersenHasher>,
                 ElectionPoStCircuit<Bls12, PedersenHasher>,
-            >>::blank_circuit(&post_public_params, &JJ_PARAMS);
+            >>::blank_circuit(&post_public_params);
 
         let _ = <ElectionPoStCompound<PedersenHasher>>::get_verifying_key(
             post_circuit,

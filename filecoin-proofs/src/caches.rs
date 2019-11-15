@@ -9,7 +9,6 @@ use storage_proofs::circuit::election_post::ElectionPoStCircuit;
 use storage_proofs::circuit::election_post::ElectionPoStCompound;
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::CompoundProof;
-use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::election_post::ElectionPoSt;
 use storage_proofs::stacked::StackedDrg;
@@ -98,7 +97,7 @@ pub fn get_stacked_params(
             _,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
-        >>::groth_params(&public_params, &JJ_PARAMS)
+        >>::groth_params(&public_params)
         .map_err(Into::into)
     };
 
@@ -119,7 +118,7 @@ pub fn get_post_params(post_config: PoStConfig) -> error::Result<Arc<groth16::Pa
             Bls12,
             ElectionPoSt<DefaultTreeHasher>,
             ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
-        >>::groth_params(&post_public_params, &JJ_PARAMS)
+        >>::groth_params(&post_public_params)
         .map_err(Into::into)
     };
 
@@ -142,10 +141,10 @@ pub fn get_stacked_verifying_key(
 
     let vk_generator = || {
         <StackedCompound as CompoundProof<
-            _,
+            Bls12,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
-        >>::verifying_key(&public_params, &JJ_PARAMS)
+        >>::verifying_key(&public_params)
         .map_err(Into::into)
     };
 
@@ -166,7 +165,7 @@ pub fn get_post_verifying_key(post_config: PoStConfig) -> error::Result<Arc<Bls1
             Bls12,
             ElectionPoSt<DefaultTreeHasher>,
             ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
-        >>::verifying_key(&post_public_params, &JJ_PARAMS)
+        >>::verifying_key(&post_public_params)
         .map_err(Into::into)
     };
 

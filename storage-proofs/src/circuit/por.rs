@@ -8,6 +8,7 @@ use paired::bls12_381::{Bls12, Fr};
 use crate::circuit::constraint;
 use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
+use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph::graph_height;
 use crate::hasher::{HashFunction, Hasher};
 use crate::merklepor::MerklePoR;
@@ -69,7 +70,6 @@ where
         _component_private_inputs: <PoRCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
         proof: &'b <MerklePoR<H> as ProofScheme<'a>>::Proof,
         public_params: &'b <MerklePoR<H> as ProofScheme<'a>>::PublicParams,
-        engine_params: &'a JubjubBls12,
     ) -> PoRCircuit<'a, Bls12, H> {
         let (root, private) = match (*public_inputs).commitment {
             None => (Root::Val(Some(proof.proof.root.into())), true),
@@ -80,7 +80,7 @@ where
         assert_eq!(private, public_params.private);
 
         PoRCircuit::<Bls12, H> {
-            params: engine_params,
+            params: &*JJ_PARAMS,
             value: Root::Val(Some(proof.data.into())),
             auth_path: proof.proof.as_options(),
             root,
@@ -91,10 +91,9 @@ where
 
     fn blank_circuit(
         public_params: &<MerklePoR<H> as ProofScheme<'a>>::PublicParams,
-        params: &'a JubjubBls12,
     ) -> PoRCircuit<'a, Bls12, H> {
         PoRCircuit::<Bls12, H> {
-            params,
+            params: &*JJ_PARAMS,
             value: Root::Val(None),
             auth_path: vec![None; graph_height(public_params.leaves)],
             root: Root::Val(None),
@@ -276,11 +275,10 @@ mod tests {
             };
 
             let setup_params = compound_proof::SetupParams {
-                vanilla_params: &merklepor::SetupParams {
+                vanilla_params: merklepor::SetupParams {
                     leaves,
                     private: false,
                 },
-                engine_params: &*JJ_PARAMS,
                 partitions: None,
             };
             let public_params =
@@ -295,11 +293,9 @@ mod tests {
                 &tree,
             );
 
-            let gparams = PoRCompound::<PedersenHasher>::groth_params(
-                &public_params.vanilla_params,
-                setup_params.engine_params,
-            )
-            .expect("failed to generate groth params");
+            let gparams =
+                PoRCompound::<PedersenHasher>::groth_params(&public_params.vanilla_params)
+                    .expect("failed to generate groth params");
 
             let proof = PoRCompound::<PedersenHasher>::prove(
                 &public_params,
@@ -466,11 +462,10 @@ mod tests {
             };
 
             let setup_params = compound_proof::SetupParams {
-                vanilla_params: &merklepor::SetupParams {
+                vanilla_params: merklepor::SetupParams {
                     leaves,
                     private: true,
                 },
-                engine_params: &*JJ_PARAMS,
                 partitions: None,
             };
             let public_params = PoRCompound::<H>::setup(&setup_params).expect("setup failed");
@@ -484,11 +479,8 @@ mod tests {
                 &tree,
             );
 
-            let groth_params = PoRCompound::<H>::groth_params(
-                &public_params.vanilla_params,
-                setup_params.engine_params,
-            )
-            .expect("failed to generate groth params");
+            let groth_params = PoRCompound::<H>::groth_params(&public_params.vanilla_params)
+                .expect("failed to generate groth params");
 
             let proof = PoRCompound::<H>::prove(
                 &public_params,

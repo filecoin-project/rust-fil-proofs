@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Read;
 
@@ -23,7 +23,7 @@ use crate::types::{
 };
 use std::path::PathBuf;
 
-pub use storage_proofs::election_post::Witness;
+pub use storage_proofs::election_post::{WinningTicket, Witness};
 
 /// The minimal information required about a replica, in order to be able to generate
 /// a PoSt over it.
@@ -154,15 +154,13 @@ pub fn generate_witness(
     challenge_seed: &ChallengeSeed,
     replicas: &BTreeMap<SectorId, PrivateReplicaInfo>,
     prover_id: ProverId,
-) -> error::Result<HashMap<SectorId, Witness>> {
+) -> error::Result<Vec<Witness>> {
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
-        vanilla_params: &vanilla_params,
-        engine_params: &*JJ_PARAMS,
+        vanilla_params,
         partitions: None,
     };
     let public_params: compound_proof::PublicParams<
-        _,
         election_post::ElectionPoSt<DefaultTreeHasher>,
     > = ElectionPoStCompound::setup(&setup_params)?;
 
@@ -244,133 +242,84 @@ pub fn generate_witness(
     Ok(witness)
 }
 
+pub type SnarkProof = Vec<u8>;
+
 /// Generates a proof-of-spacetime.
-/// Accepts as input a challenge seed, configuration struct, and a vector of
-/// sealed sector file-path plus CommR tuples, as well as a list of faults.
 pub fn generate_post(
     post_config: PoStConfig,
     challenge_seed: &ChallengeSeed,
     replicas: &BTreeMap<SectorId, PrivateReplicaInfo>,
-) -> error::Result<Vec<u8>> {
-    // let vanilla_params = post_setup_params(post_config);
-    // let setup_params = compound_proof::SetupParams {
-    //     vanilla_params: &vanilla_params,
-    //     engine_params: &*JJ_PARAMS,
-    //     partitions: None,
-    // };
-    // let public_params: compound_proof::PublicParams<
-    //     _,
-    //     election_post::ElectionPoSt<DefaultTreeHasher>,
-    // > = ElectionPoStCompound::setup(&setup_params)?;
+    winning_tickets: Vec<WinningTicket>,
+    prover_id: ProverId,
+) -> error::Result<Vec<SnarkProof>> {
+    let sector_count = replicas.len() as u64;
+    ensure!(sector_count > 0, "Must supply at least one replica");
 
-    // let sector_count = replicas.len() as u64;
-    // ensure!(sector_count > 0, "Must supply at least one replica");
-    // let sector_size = u64::from(PaddedBytesAmount::from(post_config));
+    let vanilla_params = post_setup_params(post_config);
+    let setup_params = compound_proof::SetupParams {
+        vanilla_params,
+        partitions: None,
+    };
+    let pub_params: compound_proof::PublicParams<election_post::ElectionPoSt<DefaultTreeHasher>> =
+        ElectionPoStCompound::setup(&setup_params)?;
+    let sector_size = u64::from(PaddedBytesAmount::from(post_config));
+    let groth_params = get_post_params(post_config)?;
 
-    // let sectors = replicas.keys().copied().collect();
-    // let faults = replicas
-    //     .iter()
-    //     .filter_map(
-    //         |(id, replica)| {
-    //             if replica.is_fault {
-    //                 Some(*id)
-    //             } else {
-    //                 None
-    //             }
-    //         },
-    //     )
-    //     .collect();
+    let mut proofs = Vec::with_capacity(winning_tickets.len());
+    for ticket in &winning_tickets {
+        let replica = match replicas.get(&ticket.sector_id) {
+            Some(replica) => replica,
+            None => {
+                return Err(format_err!(
+                    "Missing replica for sector: {}",
+                    ticket.sector_id
+                ))
+            }
+        };
+        let tree = replica.merkle_tree(sector_size)?;
 
-    // let challenges = ElectionPoSt::<DefaultTreeHasher>::generate_challenges(
-    //     &public_params.vanilla_params,
-    //     challenge_seed,
-    //     &sectors,
-    //     &faults,
-    // )?;
+        let challenges = election_post::generate_leaf_challenges(
+            challenge_seed,
+            ticket.sector_challenge_index,
+            sector_size,
+        );
 
-    // // Match the replicas to the challenges, as these are the only ones required.
-    // let challenged_replicas: Vec<_> = challenges
-    //     .iter()
-    //     .map(|c| {
-    //         if let Some(replica) = replicas.get(&c.sector) {
-    //             Ok((c.sector, replica))
-    //         } else {
-    //             Err(format_err!(
-    //                 "Invalid challenge generated: {}, only {} sectors are being proven",
-    //                 c.sector,
-    //                 sector_count
-    //             ))
-    //         }
-    //     })
-    //     .collect::<Result<_, _>>()?;
+        let comm_r = replica.safe_comm_r()?;
+        let pub_inputs = election_post::PublicInputs {
+            challenges,
+            comm_r,
+            sector_id: ticket.sector_id,
+            prover_id,
+        };
 
-    // // Generate merkle trees for the challenged replicas.
-    // // Merkle trees should be generated only once, not multiple times if the same sector is challenged
-    // // multiple times, so we build a HashMap of trees.
+        let comm_c = replica.safe_comm_c()?;
+        let comm_r_last = replica.safe_comm_r_last()?;
+        let priv_inputs = election_post::PrivateInputs::<DefaultTreeHasher> {
+            tree,
+            comm_c,
+            comm_r_last,
+        };
 
-    // let mut unique_challenged_replicas = challenged_replicas.clone();
-    // unique_challenged_replicas.sort_unstable(); // dedup requires a sorted list
-    // unique_challenged_replicas.dedup();
+        let proof =
+            ElectionPoStCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)?;
+        proofs.push(proof.to_vec());
+        drop(proof);
 
-    // let unique_trees_res: Vec<_> = unique_challenged_replicas
-    //     .into_par_iter()
-    //     .map(|(id, replica)| replica.merkle_tree(sector_size).map(|tree| (id, tree)))
-    //     .collect();
+        drop(priv_inputs);
+        drop(pub_inputs);
 
-    // // resolve results
-    // let unique_trees: BTreeMap<SectorId, Tree> =
-    //     unique_trees_res.into_iter().collect::<Result<_, _>>()?;
+        // generate vanilla proof
+        //
+        // - inclusions proofs of all challenged leafs in all challenged ranges
+        // - correct generation of the ticket from the partial_ticket (add this to the witness)
+        //
+        // generate snark proof
+        // - verify inclusion proofs
+        // - verify the partial_ticket is correctly generated (pedersen hash)
+        // - verify H(comm_c | )
+    }
 
-    // let borrowed_trees: BTreeMap<SectorId, &Tree> = challenged_replicas
-    //     .iter()
-    //     .map(|(id, _)| {
-    //         if let Some(tree) = unique_trees.get(id) {
-    //             Ok((*id, tree))
-    //         } else {
-    //             Err(format_err!(
-    //                 "Bug: Failed to generate merkle tree for {} sector",
-    //                 id
-    //             ))
-    //         }
-    //     })
-    //     .collect::<Result<_, _>>()?;
-
-    // // Construct the list of actual commitments
-    // let comm_rs: Vec<_> = challenged_replicas
-    //     .iter()
-    //     .map(|(_id, replica)| replica.safe_comm_r())
-    //     .collect::<Result<_, _>>()?;
-
-    // let comm_cs: Vec<_> = challenged_replicas
-    //     .iter()
-    //     .map(|(_id, replica)| replica.safe_comm_c())
-    //     .collect::<Result<_, _>>()?;
-
-    // let comm_r_lasts: Vec<_> = challenged_replicas
-    //     .iter()
-    //     .map(|(_id, replica)| replica.safe_comm_r_last())
-    //     .collect::<Result<_, _>>()?;
-
-    // let pub_inputs = election_post::PublicInputs {
-    //     challenges: &challenges,
-    //     comm_rs: &comm_rs,
-    //     faults: &faults,
-    // };
-
-    // let priv_inputs = election_post::PrivateInputs::<DefaultTreeHasher> {
-    //     trees: &borrowed_trees,
-    //     comm_cs: &comm_cs,
-    //     comm_r_lasts: &comm_r_lasts,
-    // };
-
-    // let groth_params = get_post_params(post_config)?;
-
-    // let proof =
-    //     ElectionPoStCompound::prove(&public_params, &pub_inputs, &priv_inputs, &groth_params)?;
-    // let proof_bytes = proof.to_vec();
-
-    // Ok(proof_bytes)
-    unimplemented!()
+    Ok(proofs)
 }
 
 /// Verifies a proof-of-spacetime.

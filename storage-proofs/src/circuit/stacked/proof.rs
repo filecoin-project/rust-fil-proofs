@@ -11,6 +11,7 @@ use crate::circuit::{
     stacked::{hash::hash2, params::Proof},
 };
 use crate::compound_proof::{CircuitComponent, CompoundProof};
+use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph::{Graph, BASE_DEGREE};
 use crate::fr32::fr_into_bytes;
 use crate::hasher::Hasher;
@@ -269,7 +270,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         _component_private_inputs: <StackedCircuit<'a, Bls12, H, G> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &'b <StackedDrg<H, G> as ProofScheme>::Proof,
         public_params: &'b <StackedDrg<H, G> as ProofScheme>::PublicParams,
-        engine_params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> StackedCircuit<'a, Bls12, H, G> {
         assert!(
             !vanilla_proof.is_empty(),
@@ -286,7 +286,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         assert!(vanilla_proof.iter().all(|p| p.comm_c() == &comm_c));
 
         StackedCircuit {
-            params: engine_params,
+            params: &*JJ_PARAMS,
             public_params: public_params.clone(),
             replica_id: Some(public_inputs.replica_id),
             comm_d: public_inputs.tau.as_ref().map(|t| t.comm_d),
@@ -300,10 +300,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
 
     fn blank_circuit(
         public_params: &<StackedDrg<H, G> as ProofScheme>::PublicParams,
-        params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> StackedCircuit<'a, Bls12, H, G> {
         StackedCircuit {
-            params,
+            params: &*JJ_PARAMS,
             public_params: public_params.clone(),
             replica_id: None,
             comm_d: None,
@@ -409,12 +408,11 @@ mod tests {
             let mut cs = MetricCS::<Bls12>::new();
 
             StackedCompound::circuit(
-            &pub_inputs,
-            <StackedCircuit<Bls12, PedersenHasher, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
-            &proofs[0],
-            &pp,
-            &JJ_PARAMS,
-        )
+                &pub_inputs,
+                <StackedCircuit<Bls12, PedersenHasher, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
+                &proofs[0],
+                &pp,
+            )
             .synthesize(&mut cs.namespace(|| "stacked drgporep"))
             .expect("failed to synthesize circuit");
 
@@ -432,7 +430,6 @@ mod tests {
             <StackedCircuit<Bls12, PedersenHasher, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
             &proofs[0],
             &pp,
-            &JJ_PARAMS,
         )
         .synthesize(&mut cs.namespace(|| "stacked drgporep"))
         .expect("failed to synthesize circuit");
@@ -497,8 +494,7 @@ mod tests {
         let mut data_copy = data.clone();
 
         let setup_params = compound_proof::SetupParams {
-            engine_params: &*JJ_PARAMS,
-            vanilla_params: &SetupParams {
+            vanilla_params: SetupParams {
                 nodes,
                 degree,
                 expansion_degree,
@@ -557,9 +553,7 @@ mod tests {
                 _,
                 StackedDrg<H, Sha256Hasher>,
                 _,
-            >>::blank_circuit(
-                &public_params.vanilla_params, &JJ_PARAMS
-            );
+            >>::blank_circuit(&public_params.vanilla_params);
 
             let mut cs_blank = TestConstraintSystem::new();
             blank_circuit
@@ -577,12 +571,11 @@ mod tests {
             }
         }
 
-        let blank_groth_params = <StackedCompound as CompoundProof<
-            _,
-            StackedDrg<H, Sha256Hasher>,
-            _,
-        >>::groth_params(&public_params.vanilla_params, &JJ_PARAMS)
-        .expect("failed to generate groth params");
+        let blank_groth_params =
+            <StackedCompound as CompoundProof<_, StackedDrg<H, Sha256Hasher>, _>>::groth_params(
+                &public_params.vanilla_params,
+            )
+            .expect("failed to generate groth params");
 
         let proof = StackedCompound::prove(
             &public_params,
