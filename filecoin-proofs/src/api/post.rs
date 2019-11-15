@@ -301,15 +301,6 @@ pub fn generate_post(
         let proof =
             ElectionPoStCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)?;
         proofs.push(proof.to_vec());
-        drop(proof);
-
-        drop(priv_inputs);
-        drop(pub_inputs);
-
-        // generate snark proof
-        // - verify inclusion proofs
-        // - verify the partial_ticket is correctly generated (pedersen hash)
-        // - verify H(comm_c | )
     }
 
     Ok(proofs)

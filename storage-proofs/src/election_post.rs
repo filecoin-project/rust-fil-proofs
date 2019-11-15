@@ -8,12 +8,14 @@ use serde::ser::Serialize;
 use sha2::{Digest, Sha256};
 
 use crate::crypto::pedersen::Hasher as PedersenHasher;
+use crate::drgraph::graph_height;
 use crate::error::Result;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::sector::*;
+use crate::stacked::hash::hash2;
 use crate::util::NODE_SIZE;
 
 pub const POST_CHALLENGE_COUNT: usize = 8;
@@ -121,6 +123,7 @@ pub struct Proof<H: Hasher> {
     ))]
     inclusion_proofs: Vec<MerkleProof<H>>,
     pub ticket: [u8; 32],
+    pub comm_c: H::Domain,
 }
 
 impl<H: Hasher> Proof<H> {
@@ -372,6 +375,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
         Ok(Proof {
             inclusion_proofs,
             ticket,
+            comm_c: priv_inputs.comm_c,
         })
     }
 
@@ -380,6 +384,46 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
         pub_inputs: &Self::PublicInputs,
         proof: &Self::Proof,
     ) -> Result<bool> {
-        unimplemented!();
+        let sector_size = pub_params.sector_size;
+
+        // verify that H(Comm_c || Comm_r_last) == Comm_R
+        // comm_r_last is the root of the proof
+        let comm_r_last = proof.inclusion_proofs[0].root();
+        let comm_c = proof.comm_c;
+        let comm_r = &pub_inputs.comm_r;
+
+        if AsRef::<[u8]>::as_ref(&hash2(comm_c, comm_r_last)) != AsRef::<[u8]>::as_ref(comm_r) {
+            return Ok(false);
+        }
+
+        for n in 0..POST_CHALLENGE_COUNT {
+            let challenged_leaf_start = generate_leaf_challenge(
+                &pub_inputs.randomness,
+                pub_inputs.sector_challenge_index,
+                n as u64,
+                sector_size,
+            );
+            for i in 0..POST_CHALLENGED_NODES {
+                let merkle_proof = &proof.inclusion_proofs[n * POST_CHALLENGED_NODES + i];
+
+                // validate all comm_r_lasts match
+                if merkle_proof.root() != comm_r_last {
+                    return Ok(false);
+                }
+
+                // validate the path length
+                if graph_height(pub_params.sector_size as usize / NODE_SIZE)
+                    != merkle_proof.path().len()
+                {
+                    return Ok(false);
+                }
+
+                if !merkle_proof.validate(challenged_leaf_start as usize) {
+                    return Ok(false);
+                }
+            }
+        }
+
+        Ok(true)
     }
 }
