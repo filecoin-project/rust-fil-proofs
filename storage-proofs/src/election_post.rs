@@ -3,6 +3,7 @@ use std::fmt;
 use std::marker::PhantomData;
 
 use byteorder::{ByteOrder, LittleEndian};
+use paired::bls12_381::{Bls12, Fr};
 use serde::de::Deserialize;
 use serde::ser::Serialize;
 use sha2::{Digest, Sha256};
@@ -10,6 +11,7 @@ use sha2::{Digest, Sha256};
 use crate::crypto::pedersen::{pedersen_md_no_padding_bits, Bits};
 use crate::drgraph::graph_height;
 use crate::error::Result;
+use crate::fr32::fr_into_bytes;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
@@ -52,7 +54,7 @@ pub struct PublicInputs<T: Domain> {
     pub sector_id: SectorId,
     pub prover_id: [u8; 32],
     pub comm_r: T,
-    pub partial_ticket: [u8; 32],
+    pub partial_ticket: Fr,
     pub sector_challenge_index: u64,
 }
 
@@ -67,7 +69,7 @@ pub struct PrivateInputs<H: Hasher> {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Candidate {
     pub sector_id: SectorId,
-    pub partial_ticket: [u8; 32],
+    pub partial_ticket: Fr,
     pub ticket: [u8; 32],
     pub sector_challenge_index: u64,
 }
@@ -76,7 +78,7 @@ impl fmt::Debug for Candidate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Candidate")
             .field("sector_id", &self.sector_id)
-            .field("partial_ticket", &hex::encode(&self.partial_ticket))
+            .field("partial_ticket", &self.partial_ticket)
             .field("ticket", &hex::encode(&self.ticket))
             .field("sector_challenge_index", &self.sector_challenge_index)
             .finish()
@@ -100,6 +102,10 @@ impl<H: Hasher> Proof<H> {
             .iter()
             .map(MerkleProof::leaf)
             .collect()
+    }
+
+    pub fn comm_r_last(&self) -> H::Domain {
+        *self.inclusion_proofs[0].root()
     }
 
     pub fn commitments(&self) -> Vec<&H::Domain> {
@@ -185,13 +191,12 @@ fn generate_candidate<H: Hasher>(
     // 2. Ticket generation
 
     // partial_ticket = pedersen(randomness | data | prover_id | sector_id)
-    let sector_id_bytes = u64::from(sector_id).to_le_bytes();
+    let mut sector_id_bytes = [0u8; 32];
+    sector_id_bytes[..8].copy_from_slice(&u64::from(sector_id).to_le_bytes()[..]);
     let list: [&[u8]; 4] = [&randomness[..], &data, &prover_id[..], &sector_id_bytes[..]];
-    let bits = Bits::new_many(list.into_iter());
+    let bits = Bits::new_many(list.iter());
 
-    let partial_ticket_hash: H::Domain = pedersen_md_no_padding_bits(bits).into();
-    let mut partial_ticket = [0u8; 32];
-    partial_ticket.copy_from_slice(AsRef::<[u8]>::as_ref(&partial_ticket_hash));
+    let partial_ticket = pedersen_md_no_padding_bits(bits);
 
     // ticket = sha256(partial_ticket)
     let ticket = finalize_ticket(&partial_ticket);
@@ -204,8 +209,9 @@ fn generate_candidate<H: Hasher>(
     })
 }
 
-pub fn finalize_ticket(partial_ticket: &[u8; 32]) -> [u8; 32] {
-    let ticket_hash = Sha256::digest(&partial_ticket[..]);
+pub fn finalize_ticket(partial_ticket: &Fr) -> [u8; 32] {
+    let bytes = fr_into_bytes::<Bls12>(partial_ticket);
+    let ticket_hash = Sha256::digest(&bytes);
     let mut ticket = [0u8; 32];
     ticket.copy_from_slice(&ticket_hash[..]);
     ticket

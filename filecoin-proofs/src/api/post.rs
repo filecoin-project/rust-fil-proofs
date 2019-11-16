@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Read;
 
+use paired::bls12_381::Bls12;
 use rayon::prelude::*;
 use storage_proofs::circuit::election_post::ElectionPoStCompound;
 use storage_proofs::circuit::multi_proof::MultiProof;
@@ -9,6 +10,7 @@ use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
 use storage_proofs::election_post;
 use storage_proofs::error::Error;
+use storage_proofs::fr32::bytes_into_fr;
 use storage_proofs::hasher::Hasher;
 use storage_proofs::proof::NoRequirements;
 use storage_proofs::sector::*;
@@ -170,7 +172,7 @@ pub fn generate_candidates(
     let sectors = replicas.keys().copied().collect();
     let faults = replicas
         .iter()
-        .filter(|(_id, replica)| if replica.is_fault { true } else { false })
+        .filter(|(_id, replica)| replica.is_fault)
         .count();
 
     let active_sector_count = sector_count - faults as u64;
@@ -226,8 +228,10 @@ pub fn generate_candidates(
 pub type SnarkProof = Vec<u8>;
 
 /// Generates a ticket from a partial_ticket.
-pub fn finalize_ticket(partial_ticket: &[u8; 32]) -> [u8; 32] {
-    election_post::finalize_ticket(partial_ticket)
+pub fn finalize_ticket(partial_ticket: &[u8; 32]) -> error::Result<[u8; 32]> {
+    let partial_ticket = bytes_into_fr::<Bls12>(partial_ticket)
+        .map_err(|err| format_err!("Invalid partial_ticket: {:?}", err))?;
+    Ok(election_post::finalize_ticket(&partial_ticket))
 }
 
 /// Generates a proof-of-spacetime.

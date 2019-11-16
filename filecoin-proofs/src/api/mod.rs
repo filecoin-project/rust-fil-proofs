@@ -263,7 +263,8 @@ mod tests {
     use std::collections::BTreeMap;
     use std::io::{Seek, SeekFrom, Write};
 
-    use paired::bls12_381::Bls12;
+    use ff::Field;
+    use paired::bls12_381::{Bls12, Fr};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use storage_proofs::election_post::Candidate;
@@ -346,7 +347,7 @@ mod tests {
         );
         let winner = Candidate {
             sector_id: 1.into(),
-            partial_ticket: [0; 32],
+            partial_ticket: Fr::zero(),
             ticket: [0; 32],
             sector_challenge_index: 0,
         };

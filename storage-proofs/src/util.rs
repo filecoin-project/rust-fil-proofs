@@ -30,6 +30,14 @@ pub fn bytes_into_bits(bytes: &[u8]) -> Vec<bool> {
         .collect()
 }
 
+/// Converts bytes into their bit representation, in little endian format.
+pub fn bytes_into_bits_opt(bytes: &[u8]) -> Vec<Option<bool>> {
+    bytes
+        .iter()
+        .flat_map(|&byte| (0..8).map(move |i| Some((byte >> i) & 1u8 == 1u8)))
+        .collect()
+}
+
 /// Converts bytes into their bit representation, in big endian format.
 pub fn bytes_into_bits_be(bytes: &[u8]) -> Vec<bool> {
     bytes
