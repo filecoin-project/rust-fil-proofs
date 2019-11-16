@@ -6,9 +6,8 @@ use rayon::prelude::*;
 use storage_proofs::circuit::election_post::ElectionPoStCompound;
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
-use storage_proofs::election_post::{self, ElectionPoSt};
+use storage_proofs::election_post;
 use storage_proofs::error::Error;
 use storage_proofs::hasher::Hasher;
 use storage_proofs::proof::NoRequirements;
@@ -24,6 +23,8 @@ use crate::types::{
 use std::path::PathBuf;
 
 pub use storage_proofs::election_post::{Candidate, Winner};
+
+pub const CHALLENGE_COUNT_DENOMINATOR: f64 = 25.;
 
 /// The minimal information required about a replica, in order to be able to generate
 /// a PoSt over it.
@@ -145,8 +146,6 @@ impl PublicReplicaInfo {
         as_safe_commitment(&self.comm_r, "comm_r")
     }
 }
-
-pub const CHALLENGE_COUNT_DENOMINATOR: f64 = 25.;
 
 /// Generates a proof-of-spacetime candidate for ElectionPoSt.
 pub fn generate_candidates(
@@ -295,77 +294,55 @@ pub fn generate_post(
 pub fn verify_post(
     post_config: PoStConfig,
     randomness: &ChallengeSeed,
-    proof: &[u8],
+    proofs: &[Vec<u8>],
     replicas: &BTreeMap<SectorId, PublicReplicaInfo>,
+    winners: &[Winner],
+    prover_id: ProverId,
 ) -> error::Result<bool> {
-    // let sector_count = replicas.len() as u64;
-    // ensure!(sector_count > 0, "Must supply at least one replica");
+    let sector_count = replicas.len() as u64;
+    ensure!(sector_count > 0, "Must supply at least one replica");
+    ensure!(
+        winners.len() == proofs.len(),
+        "Missmatch between winners and proofs"
+    );
 
-    // let vanilla_params = post_setup_params(post_config);
+    let vanilla_params = post_setup_params(post_config);
+    let setup_params = compound_proof::SetupParams {
+        vanilla_params,
+        partitions: None,
+    };
+    let pub_params: compound_proof::PublicParams<election_post::ElectionPoSt<DefaultTreeHasher>> =
+        ElectionPoStCompound::setup(&setup_params)?;
 
-    // let sectors = replicas.keys().copied().collect();
-    // let faults = replicas
-    //     .iter()
-    //     .filter_map(
-    //         |(id, replica)| {
-    //             if replica.is_fault {
-    //                 Some(*id)
-    //             } else {
-    //                 None
-    //             }
-    //         },
-    //     )
-    //     .collect();
+    let verifying_key = get_post_verifying_key(post_config)?;
+    for (proof, winner) in proofs.iter().zip(winners.iter()) {
+        let replica = match replicas.get(&winner.sector_id) {
+            Some(replica) => replica,
+            None => {
+                return Err(format_err!(
+                    "Missing replica for sector: {}",
+                    winner.sector_id
+                ))
+            }
+        };
+        let comm_r = replica.safe_comm_r()?;
 
-    // let setup_params = compound_proof::SetupParams {
-    //     vanilla_params: &vanilla_params,
-    //     engine_params: &*JJ_PARAMS,
-    //     partitions: None,
-    // };
+        let proof = MultiProof::new_from_reader(None, &proof[..], &verifying_key)?;
+        let pub_inputs = election_post::PublicInputs {
+            randomness: *randomness,
+            comm_r,
+            sector_id: winner.sector_id,
+            partial_ticket: winner.partial_ticket,
+            sector_challenge_index: winner.sector_challenge_index,
+            prover_id,
+        };
 
-    // let public_params: compound_proof::PublicParams<
-    //     _,
-    //     election_post::ElectionPoSt<DefaultTreeHasher>,
-    // > = ElectionPoStCompound::setup(&setup_params)?;
+        let is_valid =
+            ElectionPoStCompound::verify(&pub_params, &pub_inputs, &proof, &NoRequirements)?;
+        if !is_valid {
+            return Ok(false);
+        }
+    }
 
-    // let challenges = ElectionPoSt::<DefaultTreeHasher>::generate_challenges(
-    //     &public_params.vanilla_params,
-    //     randomness,
-    //     &sectors,
-    //     &faults,
-    // )?;
-
-    // // Match the replicas to the challenges, as these are the only ones required.
-    // let comm_rs: Vec<_> = challenges
-    //     .iter()
-    //     .map(|c| {
-    //         if let Some(replica) = replicas.get(&c.sector) {
-    //             replica.safe_comm_r()
-    //         } else {
-    //             Err(format_err!(
-    //                 "Invalid challenge generated: {}, only {} sectors are being proven",
-    //                 c.sector,
-    //                 sector_count
-    //             ))
-    //         }
-    //     })
-    //     .collect::<Result<_, _>>()?;
-
-    // let public_inputs = election_post::PublicInputs::<<DefaultTreeHasher as Hasher>::Domain> {
-    //     challenges: &challenges,
-    //     comm_rs: &comm_rs,
-    //     faults: &faults,
-    // };
-
-    // let verifying_key = get_post_verifying_key(post_config)?;
-
-    // let proof = MultiProof::new_from_reader(None, &proof[..], &verifying_key)?;
-
-    // let is_valid =
-    //     ElectionPoStCompound::verify(&public_params, &public_inputs, &proof, &NoRequirements)?;
-
-    // // Since callers may rely on previous mocked success, just pretend verification succeeded, for now.
-    // Ok(is_valid)
-
-    unimplemented!()
+    Ok(true)
 }

@@ -358,7 +358,7 @@ where
 ///
 impl<'a, H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        let params = &*JJ_PARAMS;
+        let params = self.params;
 
         let replica_id = self.replica_id;
         let replica_root = self.replica_root;

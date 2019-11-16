@@ -6,7 +6,6 @@ use paired::bls12_381::{Bls12, Fr};
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
 use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::merkle::create_merkle_tree;

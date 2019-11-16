@@ -266,6 +266,7 @@ mod tests {
     use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
+    use storage_proofs::election_post::Winner;
     use storage_proofs::fr32::bytes_into_fr;
     use tempfile::NamedTempFile;
 
@@ -343,12 +344,20 @@ mod tests {
             1.into(),
             PublicReplicaInfo::new(not_convertible_to_fr_bytes),
         );
+        let winner = Winner {
+            sector_id: 1.into(),
+            partial_ticket: [0; 32],
+            ticket: [0; 32],
+            sector_challenge_index: 0,
+        };
 
         let result = verify_post(
             PoStConfig(SectorSize(SECTOR_SIZE_ONE_KIB)),
             &[0; 32],
-            &vec![0; SINGLE_PARTITION_PROOF_LEN],
+            &[vec![0u8; SINGLE_PARTITION_PROOF_LEN]][..],
             &replicas,
+            &[winner][..],
+            [0; 32],
         );
 
         if let Err(err) = result {

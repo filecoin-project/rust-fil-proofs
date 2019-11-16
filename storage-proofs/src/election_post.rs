@@ -83,6 +83,17 @@ pub struct Winner {
     pub sector_challenge_index: u64,
 }
 
+impl From<Candidate> for Winner {
+    fn from(c: Candidate) -> Self {
+        Winner {
+            sector_id: c.sector_id,
+            partial_ticket: c.partial_ticket,
+            ticket: c.ticket,
+            sector_challenge_index: c.sector_challenge_index,
+        }
+    }
+}
+
 impl fmt::Debug for Winner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Winner")
