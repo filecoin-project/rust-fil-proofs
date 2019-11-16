@@ -336,7 +336,10 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_verify_post_fr32_validation() {
+        pretty_env_logger::try_init().ok();
+
         let not_convertible_to_fr_bytes = [255; 32];
         let out = bytes_into_fr::<Bls12>(&not_convertible_to_fr_bytes);
         assert!(out.is_err(), "tripwire");

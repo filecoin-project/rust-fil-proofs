@@ -161,21 +161,6 @@ To check that it's working you can inspect the replication log to find `using pa
 
 (You can also verify if the cache is working by inspecting the time each layer takes to encode, `encoding, layer:` in the log, where the first two layers, forward and reverse, will take more time than the rest to populate the cache while the remaining 8 should see a considerable time drop.)
 
-In the most extreme case, to reduce time at the cost of *a lot* of memory consumption you can turn on the feature that stores MTs on memory (`mem-trees`) instead of on disk (the default) to generate them all on RAM and avoid disk I/O (if the HW doesn't have enough RAM to handle the MTs, roughly 20x the sector size, this won't have the desired effect as the OS will start backing them on disk anyway). For example, to run the `stacked` example with this feature turned on you'd need to indicate so to `cargo`,
-
-```
-# NEEDS TO BE RUN INSIDE `storage-proofs\` directory
-# for the `--features` to take effect.
-cargo run                                                                     \
-  -p filecoin-proofs                                                          \
-  --release                                                                   \
-  --example stacked                                                            \
-  --features                                                                  \
-    mem-trees                                                                 \
-    --                                                                        \
-    --size 1048576
-```
-
 **Speed Optimized Pedersen Hashing** - we use Pedersen hashing to generate Merkle Trees and verify Merkle proofs. Batched Pedersen hashing has the property that we can pre-compute known intermediary values intrinsic to the Pedersen hashing process that will be reused across hashes in the batch. By pre-computing and cacheing these intermediary values, we decrease the runtime per Pedersen hash at the cost of increasing memory usage. We optimize for this speed-memory trade-off by varying the cache size via a Pedersen Hash parameter known as the "window-size". This window-size parameter is configured via the [`pedersen_hash_exp_window_size` setting in `storage-proofs`](https://github.com/filecoin-project/rust-fil-proofs/blob/master/storage-proofs/src/settings.rs). By default, Bellman has a cache size of 256 values (a window-size of 8 bits), we increase the cache size to 65,536 values (a window-size of 16 bits) which results in a roughly 40% decrease in Pedersen Hash runtime at the cost of a 9% increase in memory usage. See the [Pedersen cache issue](https://github.com/filecoin-project/rust-fil-proofs/issues/697) for more benchmarks and expected performance effects.
 
 ### Memory
