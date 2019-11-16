@@ -266,7 +266,7 @@ mod tests {
     use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
-    use storage_proofs::election_post::Winner;
+    use storage_proofs::election_post::Candidate;
     use storage_proofs::fr32::bytes_into_fr;
     use tempfile::NamedTempFile;
 
@@ -344,7 +344,7 @@ mod tests {
             1.into(),
             PublicReplicaInfo::new(not_convertible_to_fr_bytes),
         );
-        let winner = Winner {
+        let winner = Candidate {
             sector_id: 1.into(),
             partial_ticket: [0; 32],
             ticket: [0; 32],

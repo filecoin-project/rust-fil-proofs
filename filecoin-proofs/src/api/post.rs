@@ -22,7 +22,7 @@ use crate::types::{
 };
 use std::path::PathBuf;
 
-pub use storage_proofs::election_post::{Candidate, Winner};
+pub use storage_proofs::election_post::Candidate;
 
 pub const CHALLENGE_COUNT_DENOMINATOR: f64 = 25.;
 
@@ -235,7 +235,7 @@ pub fn generate_post(
     post_config: PoStConfig,
     randomness: &ChallengeSeed,
     replicas: &BTreeMap<SectorId, PrivateReplicaInfo>,
-    winners: Vec<Winner>,
+    winners: Vec<Candidate>,
     prover_id: ProverId,
 ) -> error::Result<Vec<SnarkProof>> {
     let sector_count = replicas.len() as u64;
@@ -296,7 +296,7 @@ pub fn verify_post(
     randomness: &ChallengeSeed,
     proofs: &[Vec<u8>],
     replicas: &BTreeMap<SectorId, PublicReplicaInfo>,
-    winners: &[Winner],
+    winners: &[Candidate],
     prover_id: ProverId,
 ) -> error::Result<bool> {
     let sector_count = replicas.len() as u64;

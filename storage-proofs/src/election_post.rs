@@ -70,39 +70,6 @@ pub struct Candidate {
     pub partial_ticket: [u8; 32],
     pub ticket: [u8; 32],
     pub sector_challenge_index: u64,
-
-    /// The data, in the order of the provided challenges.
-    pub data: Vec<u8>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct Winner {
-    pub sector_id: SectorId,
-    pub partial_ticket: [u8; 32],
-    pub ticket: [u8; 32],
-    pub sector_challenge_index: u64,
-}
-
-impl From<Candidate> for Winner {
-    fn from(c: Candidate) -> Self {
-        Winner {
-            sector_id: c.sector_id,
-            partial_ticket: c.partial_ticket,
-            ticket: c.ticket,
-            sector_challenge_index: c.sector_challenge_index,
-        }
-    }
-}
-
-impl fmt::Debug for Winner {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Winner")
-            .field("sector_id", &self.sector_id)
-            .field("partial_ticket", &hex::encode(&self.partial_ticket))
-            .field("ticket", &hex::encode(&self.ticket))
-            .field("sector_challenge_index", &self.sector_challenge_index)
-            .finish()
-    }
 }
 
 impl fmt::Debug for Candidate {
@@ -112,7 +79,6 @@ impl fmt::Debug for Candidate {
             .field("partial_ticket", &hex::encode(&self.partial_ticket))
             .field("ticket", &hex::encode(&self.ticket))
             .field("sector_challenge_index", &self.sector_challenge_index)
-            .field("data", &hex::encode(&self.data))
             .finish()
     }
 }
@@ -235,7 +201,6 @@ fn generate_candidate<H: Hasher>(
         sector_id,
         partial_ticket,
         ticket,
-        data,
     })
 }
 

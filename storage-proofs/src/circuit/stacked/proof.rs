@@ -323,7 +323,6 @@ mod tests {
     use crate::circuit::metric::*;
     use crate::circuit::test::*;
     use crate::compound_proof;
-    use crate::crypto::pedersen::JJ_PARAMS;
     use crate::drgraph::{new_seed, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Hasher, PedersenHasher, Sha256Hasher};
