@@ -91,7 +91,7 @@ impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G
             ..
         } = self;
 
-        let graph = &public_params.graph;
+        let graph = &public_params.window_graph;
         let params = &self.params;
         // In most cases (the exception being during testing) we want to ensure that the base and
         // expansion degrees are the optimal values.
@@ -206,7 +206,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         pub_params: &<StackedDrg<H, G> as ProofScheme>::PublicParams,
         k: Option<usize>,
     ) -> Vec<Fr> {
-        let graph = &pub_params.graph;
+        let graph = &pub_params.window_graph;
 
         let mut inputs = Vec::new();
 

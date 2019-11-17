@@ -16,6 +16,7 @@ impl LayerChallenges {
     pub const fn new(layers: usize, max_count: usize) -> Self {
         LayerChallenges { layers, max_count }
     }
+
     pub fn layers(&self) -> usize {
         self.layers
     }

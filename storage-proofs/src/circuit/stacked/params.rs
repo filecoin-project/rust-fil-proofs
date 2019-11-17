@@ -44,8 +44,8 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
         }
 
         Proof {
-            comm_d_proof: InclusionPath::empty(&params.graph),
-            comm_r_last_proof: InclusionPath::empty(&params.graph),
+            comm_d_proof: InclusionPath::empty(&params.window_graph),
+            comm_r_last_proof: InclusionPath::empty(&params.window_graph),
             replica_column_proof: ReplicaColumnProof::empty(params),
             labeling_proofs,
             encoding_proof: EncodingProof::empty(params),
@@ -218,8 +218,11 @@ impl<H: Hasher> ReplicaColumnProof<H> {
     pub fn empty(params: &PublicParams<H>) -> Self {
         ReplicaColumnProof {
             c_x: ColumnProof::empty(params),
-            drg_parents: vec![ColumnProof::empty(params); params.graph.base_graph().degree()],
-            exp_parents: vec![ColumnProof::empty(params); params.graph.expansion_degree()],
+            drg_parents: vec![
+                ColumnProof::empty(params);
+                params.window_graph.base_graph().degree()
+            ],
+            exp_parents: vec![ColumnProof::empty(params); params.window_graph.expansion_degree()],
         }
     }
 

@@ -10,7 +10,7 @@ use crate::stacked::{
     graph::StackedBucketGraph,
     hash::hash2,
     params::{PrivateInputs, Proof, PublicInputs, PublicParams, SetupParams},
-    proof::StackedDrg,
+    proof::{StackedDrg, WINDOW_SIZE_NODES},
 };
 
 impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for StackedDrg<'c, H, G> {
@@ -22,10 +22,21 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
     type Requirements = ChallengeRequirements;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
-        let graph =
+        let window_graph = StackedBucketGraph::<H>::new_stacked(
+            sp.nodes / WINDOW_SIZE_NODES,
+            sp.degree,
+            sp.expansion_degree,
+            sp.seed,
+        );
+
+        let wrapper_graph =
             StackedBucketGraph::<H>::new_stacked(sp.nodes, sp.degree, sp.expansion_degree, sp.seed);
 
-        Ok(PublicParams::new(graph, sp.layer_challenges.clone()))
+        Ok(PublicParams::new(
+            window_graph,
+            wrapper_graph,
+            sp.layer_challenges.clone(),
+        ))
     }
 
     fn prove<'b>(
@@ -59,7 +70,8 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
         assert!(partition_count > 0);
 
         Self::prove_layers(
-            &pub_params.graph,
+            &pub_params.window_graph,
+            &pub_params.wrapper_graph,
             pub_inputs,
             &priv_inputs.p_aux,
             &priv_inputs.t_aux,
@@ -78,7 +90,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
         trace!("verify_all_partitions");
 
         // generate graphs
-        let graph = &pub_params.graph;
+        let graph = &pub_params.window_graph;
 
         let expected_comm_r = if let Some(ref tau) = pub_inputs.tau {
             &tau.comm_r

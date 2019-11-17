@@ -28,6 +28,7 @@ pub enum CacheKey {
     TAux,
     CommDTree,
     CommCTree,
+    CommQTree,
     CommRLastTree,
 }
 
@@ -38,6 +39,7 @@ impl fmt::Display for CacheKey {
             CacheKey::TAux => write!(f, "t_aux"),
             CacheKey::CommDTree => write!(f, "tree-d"),
             CacheKey::CommCTree => write!(f, "tree-c"),
+            CacheKey::CommQTree => write!(f, "tree-q"),
             CacheKey::CommRLastTree => write!(f, "tree-r-last"),
         }
     }
@@ -70,7 +72,8 @@ pub struct PublicParams<H>
 where
     H: 'static + Hasher,
 {
-    pub graph: StackedBucketGraph<H>,
+    pub window_graph: StackedBucketGraph<H>,
+    pub wrapper_graph: StackedBucketGraph<H>,
     pub layer_challenges: LayerChallenges,
     _h: PhantomData<H>,
 }
@@ -79,9 +82,14 @@ impl<H> PublicParams<H>
 where
     H: Hasher,
 {
-    pub fn new(graph: StackedBucketGraph<H>, layer_challenges: LayerChallenges) -> Self {
+    pub fn new(
+        window_graph: StackedBucketGraph<H>,
+        wrapper_graph: StackedBucketGraph<H>,
+        layer_challenges: LayerChallenges,
+    ) -> Self {
         PublicParams {
-            graph,
+            window_graph,
+            wrapper_graph,
             layer_challenges,
             _h: PhantomData,
         }
@@ -94,14 +102,15 @@ where
 {
     fn identifier(&self) -> String {
         format!(
-            "layered_drgporep::PublicParams{{ graph: {}, challenges: {:?} }}",
-            self.graph.identifier(),
+            "layered_drgporep::PublicParams{{ window_graph: {}, wrapper_graph: {}, challenges: {:?} }}",
+            self.window_graph.identifier(),
+            self.wrapper_graph.identifier(),
             self.layer_challenges,
         )
     }
 
     fn sector_size(&self) -> u64 {
-        self.graph.sector_size()
+        self.wrapper_graph.sector_size()
     }
 }
 
@@ -110,7 +119,11 @@ where
     H: Hasher,
 {
     fn from(other: &PublicParams<H>) -> PublicParams<H> {
-        PublicParams::new(other.graph.clone(), other.layer_challenges.clone())
+        PublicParams::new(
+            other.window_graph.clone(),
+            other.wrapper_graph.clone(),
+            other.layer_challenges.clone(),
+        )
     }
 }
 
@@ -343,6 +356,7 @@ pub struct Tau<D: Domain, E: Domain> {
 #[derive(Default, Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PersistentAux<D> {
     pub comm_c: D,
+    pub comm_q: D,
     pub comm_r_last: D,
 }
 
@@ -353,6 +367,7 @@ pub struct TemporaryAux<H: Hasher, G: Hasher> {
     pub tree_d_config: StoreConfig,
     pub tree_r_last_config: StoreConfig,
     pub tree_c_config: StoreConfig,
+    pub tree_q_config: StoreConfig,
     pub _g: PhantomData<G>,
 }
 
@@ -398,6 +413,7 @@ pub struct TemporaryAuxCache<H: Hasher, G: Hasher> {
     /// The encoded nodes for 1..layers.
     pub labels: LabelsCache<H>,
     pub tree_d: Tree<G>,
+    pub tree_q: Tree<H>,
     pub tree_r_last: Tree<H>,
     pub tree_c: Tree<H>,
     pub t_aux: TemporaryAux<H, G>,
@@ -435,11 +451,22 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
         let tree_r_last: Tree<H> =
             MerkleTree::from_data_store(tree_r_last_store, get_merkle_tree_leafs(tree_r_last_size));
 
+        let tree_q_size = t_aux.tree_q_config.size.unwrap();
+        #[cfg(not(feature = "mem-trees"))]
+        let tree_q_store: DiskStore<H::Domain> =
+            DiskStore::new_from_disk(tree_q_size, &t_aux.tree_q_config)?;
+        #[cfg(feature = "mem-trees")]
+        let tree_q_store: VecStore<H::Domain> =
+            VecStore::new_with_config(tree_q_size, t_aux.tree_q_config.clone())?;
+        let tree_q: Tree<H> =
+            MerkleTree::from_data_store(tree_q_store, get_merkle_tree_leafs(tree_q_size));
+
         Ok(TemporaryAuxCache {
             labels: LabelsCache::new(&t_aux.labels),
             tree_d,
             tree_r_last,
             tree_c,
+            tree_q,
             t_aux: t_aux.clone(),
         })
     }
@@ -528,6 +555,13 @@ pub struct LabelsCache<H: Hasher> {
 }
 
 impl<H: Hasher> LabelsCache<H> {
+    pub fn from_stores(labels: Vec<DiskStore<H::Domain>>) -> Self {
+        LabelsCache {
+            labels,
+            _h: PhantomData,
+        }
+    }
+
     pub fn new(labels: &Labels<H>) -> Self {
         let mut disk_store_labels: Vec<DiskStore<H::Domain>> = Vec::with_capacity(labels.len());
         for i in 0..labels.len() {

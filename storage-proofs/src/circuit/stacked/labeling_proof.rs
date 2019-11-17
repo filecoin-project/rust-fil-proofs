@@ -20,9 +20,9 @@ impl LabelingProof {
     /// Create an empty proof, used in `blank_circuit`s.
     pub fn empty<H: Hasher>(params: &PublicParams<H>, layer: usize) -> Self {
         let degree = if layer == 1 {
-            params.graph.base_graph().degree()
+            params.window_graph.base_graph().degree()
         } else {
-            params.graph.degree()
+            params.window_graph.degree()
         };
         LabelingProof {
             node: None,

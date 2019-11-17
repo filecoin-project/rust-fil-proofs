@@ -67,11 +67,13 @@ pub trait PoRep<'a, H: Hasher, G: Hasher>: ProofScheme<'a> {
         replica: &[u8],
         config: Option<StoreConfig>,
     ) -> Result<Vec<u8>>;
+
     fn extract(
         pub_params: &'a Self::PublicParams,
         replica_id: &H::Domain,
         replica: &[u8],
         node: usize,
+        config: Option<StoreConfig>,
     ) -> Result<Vec<u8>>;
 }
 

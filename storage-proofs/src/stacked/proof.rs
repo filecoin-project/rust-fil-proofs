@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
+use std::sync::Mutex;
 
 use merkletree::merkle::FromIndexedParallelIterator;
 use merkletree::store::{DiskStore, StoreConfig};
 use paired::bls12_381::Fr;
 use rayon::prelude::*;
-use sha2::{digest::generic_array::GenericArray, Digest, Sha256};
+use sha2::{Digest, Sha256};
 
 use crate::drgraph::Graph;
 use crate::encode::{decode, encode};
@@ -16,7 +17,7 @@ use crate::stacked::{
     challenges::LayerChallenges,
     column::Column,
     graph::StackedBucketGraph,
-    hash::hash2,
+    hash::hash3,
     params::{
         get_node, CacheKey, Labels, LabelsCache, PersistentAux, Proof, PublicInputs,
         ReplicaColumnProof, Tau, TemporaryAux, TemporaryAuxCache, TransformedLayers, Tree,
@@ -24,6 +25,9 @@ use crate::stacked::{
     EncodingProof, LabelingProof,
 };
 use crate::util::{data_at_node, data_at_node_offset, NODE_SIZE};
+
+pub const WINDOW_SIZE_BYTES: usize = 4 * 1024;
+pub const WINDOW_SIZE_NODES: usize = WINDOW_SIZE_BYTES / NODE_SIZE;
 
 #[derive(Debug)]
 pub struct StackedDrg<'a, H: 'a + Hasher, G: 'a + Hasher> {
@@ -35,6 +39,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn prove_layers(
         graph: &StackedBucketGraph<H>,
+        wrapper_graph: &StackedBucketGraph<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         p_aux: &PersistentAux<H::Domain>,
         t_aux: &TemporaryAuxCache<H, G>,
@@ -211,123 +216,51 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             .collect()
     }
 
-    pub(crate) fn extract_and_invert_transform_layers(
-        graph: &StackedBucketGraph<H>,
+    pub(crate) fn extract_all_windows(
+        window_graph: &StackedBucketGraph<H>,
         layer_challenges: &LayerChallenges,
         replica_id: &<H as Hasher>::Domain,
         data: &mut [u8],
         config: Option<StoreConfig>,
     ) -> Result<()> {
-        trace!("extract_and_invert_transform_layers");
+        trace!("extract_all_windows");
 
         let layers = layer_challenges.layers();
         assert!(layers > 0);
 
-        // generate labels
-        let (labels, _, _) =
-            Self::generate_labels(graph, layer_challenges, replica_id, false, config)?;
+        assert_eq!(data.len() % WINDOW_SIZE_BYTES, 0, "invalid data size");
 
-        let size = merkletree::store::Store::len(labels.labels_for_last_layer());
-
-        for (key, encoded_node_bytes) in labels
-            .labels_for_last_layer()
-            .read_range(0..size)
-            .into_iter()
-            .zip(data.chunks_mut(NODE_SIZE))
-        {
-            let encoded_node = H::Domain::try_from_bytes(encoded_node_bytes)?;
-            let data_node = decode::<H::Domain>(key, encoded_node);
-
-            // store result in the data
-            encoded_node_bytes.copy_from_slice(AsRef::<[u8]>::as_ref(&data_node));
-        }
+        data.par_chunks_mut(WINDOW_SIZE_BYTES)
+            .for_each(|data_chunk| {
+                Self::extract_single_window(window_graph, layers, replica_id, data_chunk);
+            });
 
         Ok(())
     }
 
-    #[allow(clippy::type_complexity)]
-    fn generate_labels(
-        graph: &StackedBucketGraph<H>,
-        layer_challenges: &LayerChallenges,
+    pub(crate) fn extract_single_window(
+        window_graph: &StackedBucketGraph<H>,
+        layers: usize,
         replica_id: &<H as Hasher>::Domain,
-        with_hashing: bool,
-        config: Option<StoreConfig>,
-    ) -> Result<(LabelsCache<H>, Labels<H>, Option<Vec<[u8; 32]>>)> {
-        info!("generate labels");
-        let layers = layer_challenges.layers();
-        // For now, we require it due to changes in encodings structure.
-        assert!(config.is_some());
-        let config = config.unwrap();
-        let mut labels: Vec<DiskStore<H::Domain>> = Vec::with_capacity(layers);
-        let mut label_configs: Vec<StoreConfig> = Vec::with_capacity(layers);
+        data_chunk: &mut [u8],
+    ) {
+        trace!("extract_single_window");
 
-        let layer_size = graph.size() * NODE_SIZE;
-        let mut parents = vec![0; graph.degree()];
-        let mut layer_labels = vec![0u8; layer_size];
-
-        use crate::crypto::pedersen::Hasher as PedersenHasher;
-
+        let mut layer_labels = vec![0u8; WINDOW_SIZE_BYTES];
+        let mut parents = vec![0; window_graph.degree()];
         let mut exp_parents_data: Option<Vec<u8>> = None;
 
         // setup hasher to reuse
         let mut base_hasher = Sha256::new();
+
         // hash replica id
         base_hasher.input(AsRef::<[u8]>::as_ref(replica_id));
 
-        enum Message {
-            Init(usize, GenericArray<u8, <Sha256 as Digest>::OutputSize>),
-            Hash(usize, GenericArray<u8, <Sha256 as Digest>::OutputSize>),
-            Done,
-        }
-
-        let graph_size = graph.size();
-
-        // 1 less, to account for the thread we are on.
-        let chunks = std::cmp::min(graph_size / 4, num_cpus::get() - 1);
-        let chunk_len = (graph_size as f64 / chunks as f64).ceil() as usize;
-
-        // Construct column hashes on a background thread.
-        let cs_handle = if with_hashing {
-            info!("hashing columns with {} chunks", chunks);
-            let handles = (0..chunks)
-                .map(|i| {
-                    let (sender, receiver) = crossbeam::channel::unbounded();
-                    let handle = std::thread::spawn(move || {
-                        let mut column_hashes = Vec::with_capacity(chunk_len);
-                        loop {
-                            match receiver.recv().unwrap() {
-                                Message::Init(_node, ref hash) => {
-                                    column_hashes.push(PedersenHasher::new(hash))
-                                }
-                                Message::Hash(node, ref hash) => {
-                                    column_hashes[node - i * chunk_len].update(hash)
-                                }
-                                Message::Done => {
-                                    trace!("Finalizing column commitments {}", i);
-                                    return column_hashes
-                                        .into_iter()
-                                        .map(|h| h.finalize_bytes())
-                                        .collect::<Vec<[u8; 32]>>();
-                                }
-                            }
-                        }
-                    });
-
-                    (handle, sender)
-                })
-                .collect::<Vec<_>>();
-
-            Some(handles)
-        } else {
-            None
-        };
-
-        for i in 0..layers {
-            let layer = i + 1;
+        for layer in 1..=layers {
             info!("generating layer: {}", layer);
 
-            for node in 0..graph.size() {
-                graph.parents(node, &mut parents);
+            for node in 0..window_graph.size() {
+                window_graph.parents(node, &mut parents);
 
                 let mut hasher = base_hasher.clone();
 
@@ -337,7 +270,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                 // hash parents for all non 0 nodes
                 if node > 0 {
-                    let base_parents_count = graph.base_graph().degree();
+                    let base_parents_count = window_graph.base_graph().degree();
 
                     // Base parents
                     for parent in parents.iter().take(base_parents_count) {
@@ -366,87 +299,156 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 key[31] &= 0b0011_1111;
 
                 // store the newly generated key
-                layer_labels[start..end].copy_from_slice(&key[..]);
-
-                if with_hashing {
-                    let sender_index = node / chunk_len;
-                    let sender = &cs_handle.as_ref().unwrap()[sender_index].1;
-                    if layer == 1 {
-                        // Initialize hashes on layer 1.
-                        sender
-                            .send(Message::Init(node, key))
-                            .expect("failed to init hasher");
-                    } else {
-                        // Update hashes for all other layers.
-                        sender
-                            .send(Message::Hash(node, key))
-                            .expect("failed to update hasher");
-                    }
+                if layer < layers {
+                    layer_labels[start..end].copy_from_slice(&key[..]);
+                } else {
+                    // on the last layer we encode the data
+                    let keyd = H::Domain::try_from_bytes(&key).unwrap();
+                    let data_node = H::Domain::try_from_bytes(
+                        &data_chunk[node * NODE_SIZE..(node + 1) * NODE_SIZE],
+                    )
+                    .unwrap();
+                    let encoded_node = decode::<H::Domain>(keyd, data_node);
+                    data_chunk[node * NODE_SIZE..(node + 1) * NODE_SIZE].copy_from_slice(AsRef::<
+                        [u8],
+                    >::as_ref(
+                        &encoded_node,
+                    ));
                 }
             }
 
-            if with_hashing && layer == layers {
-                // Finalize column hashes.
-                for (_, sender) in cs_handle.as_ref().unwrap().iter() {
-                    sender
-                        .send(Message::Done)
-                        .expect("failed to finalize hasher");
-                }
-            }
-
-            // NOTE: this means we currently keep 2x sector size around, to improve speed.
             if let Some(ref mut exp_parents_data) = exp_parents_data {
                 exp_parents_data.copy_from_slice(&layer_labels);
             } else {
                 exp_parents_data = Some(layer_labels.clone());
             }
-
-            // Write the result to disk to avoid keeping it in memory all the time.
-            let layer_config =
-                StoreConfig::from_config(&config, CacheKey::label_layer(layer), Some(layer_size));
-
-            // Construct and persist the layer data.
-            let layer_store: DiskStore<H::Domain> = DiskStore::new_from_slice_with_config(
-                layer_size,
-                &layer_labels,
-                layer_config.clone(),
-            )?;
-            trace!(
-                "Generated layer {} store with id {}",
-                layer,
-                layer_config.id
-            );
-
-            // Track the layer specific store and StoreConfig for later retrieval.
-            labels.push(layer_store);
-            label_configs.push(layer_config);
         }
+    }
 
-        assert_eq!(
-            labels.len(),
-            layers,
-            "Invalid amount of layers encoded expected"
-        );
+    fn encode_all_windows(
+        graph: &StackedBucketGraph<H>,
+        layers: usize,
+        replica_id: &<H as Hasher>::Domain,
+        data: &mut [u8],
+        config: StoreConfig,
+    ) -> Result<(LabelsCache<H>, Labels<H>)> {
+        trace!("encode_all_windows");
 
-        // Collect the column hashes from the spawned threads.
-        let column_hashes = cs_handle.map(|handles| {
-            handles
-                .into_iter()
-                .flat_map(|(h, _)| h.join().unwrap())
-                .collect()
-        });
+        let layer_size = data.len();
+        let num_windows = layer_size / WINDOW_SIZE_BYTES;
+
+        let labels: Vec<Mutex<(DiskStore<_>, _)>> = (0..layers - 1)
+            .map(|layer| -> Result<_> {
+                let layer_config = StoreConfig::from_config(
+                    &config,
+                    CacheKey::label_layer(layer),
+                    Some(layer_size),
+                );
+
+                let layer_store: DiskStore<H::Domain> =
+                    DiskStore::new_with_config(layer_size, layer_config.clone())?;
+
+                let r = Mutex::new((layer_store, layer_config));
+                Ok(r)
+            })
+            .collect::<Result<_>>()?;
+
+        (0..num_windows)
+            .into_par_iter()
+            .zip(data.par_chunks_mut(WINDOW_SIZE_BYTES))
+            .for_each(|(window_index, data_chunk)| {
+                let mut layer_labels = vec![0u8; WINDOW_SIZE_BYTES];
+                let mut parents = vec![0; graph.degree()];
+                let mut exp_parents_data: Option<Vec<u8>> = None;
+
+                // setup hasher to reuse
+                let mut base_hasher = Sha256::new();
+
+                // hash replica id
+                base_hasher.input(AsRef::<[u8]>::as_ref(replica_id));
+
+                for layer in 1..=layers {
+                    info!("generating layer: {}", layer);
+
+                    for node in 0..graph.size() {
+                        graph.parents(node, &mut parents);
+
+                        let mut hasher = base_hasher.clone();
+
+                        // hash node id
+                        let node_arr = (node as u64).to_be_bytes();
+                        hasher.input(&node_arr);
+
+                        // hash parents for all non 0 nodes
+                        if node > 0 {
+                            let base_parents_count = graph.base_graph().degree();
+
+                            // Base parents
+                            for parent in parents.iter().take(base_parents_count) {
+                                let buf = data_at_node(&layer_labels, *parent as usize)
+                                    .expect("invalid node");
+                                hasher.input(buf);
+                            }
+
+                            // Expander parents
+                            // This will happen for all layers > 1
+                            if let Some(ref parents_data) = exp_parents_data {
+                                for parent in parents.iter().skip(base_parents_count) {
+                                    let buf = data_at_node(parents_data, *parent as usize)
+                                        .expect("invalid node");
+                                    hasher.input(&buf);
+                                }
+                            }
+                        }
+
+                        let start = data_at_node_offset(node);
+                        let end = start + NODE_SIZE;
+
+                        // finalize the key
+                        let mut key = hasher.result();
+                        // strip last two bits, to ensure result is in Fr.
+                        key[31] &= 0b0011_1111;
+
+                        // store the newly generated key
+                        if layer < layers {
+                            layer_labels[start..end].copy_from_slice(&key[..]);
+                        } else {
+                            // on the last layer we encode the data
+                            let keyd = H::Domain::try_from_bytes(&key).unwrap();
+                            let data_node = H::Domain::try_from_bytes(
+                                &data_chunk[node * NODE_SIZE..(node + 1) * NODE_SIZE],
+                            )
+                            .unwrap();
+                            let encoded_node = encode(keyd, data_node);
+                            data_chunk[node * NODE_SIZE..(node + 1) * NODE_SIZE]
+                                .copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
+                        }
+                    }
+
+                    if let Some(ref mut exp_parents_data) = exp_parents_data {
+                        exp_parents_data.copy_from_slice(&layer_labels);
+                    } else {
+                        exp_parents_data = Some(layer_labels.clone());
+                    }
+
+                    if layer < layers {
+                        // write result to disk
+                        labels[layer - 1]
+                            .lock()
+                            .unwrap()
+                            .0
+                            .copy_from_slice(&layer_labels, window_index * WINDOW_SIZE_BYTES);
+                    }
+                }
+            });
 
         info!("Labels generated");
+
+        let (labels, configs) = labels.into_iter().map(|v| v.into_inner().unwrap()).unzip();
+
         Ok((
-            LabelsCache::<H> {
-                labels,
-                _h: PhantomData,
-            },
-            Labels::<H> {
-                labels: label_configs,
-                _h: PhantomData,
-            },
-            column_hashes,
+            LabelsCache::<H>::from_stores(labels),
+            Labels::<H>::new(configs),
         ))
     }
 
@@ -471,11 +473,45 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         }
     }
 
-    // FIXME: Could simplify by removing the data_tree Option since
-    // we're passing the StoreConfig option which allows access to it
-    // now.
+    fn build_column_hashes(
+        layers: usize,
+        layer_size: usize,
+        labels: &LabelsCache<H>,
+    ) -> Result<Vec<[u8; 32]>> {
+        let num_windows = layer_size / WINDOW_SIZE_BYTES;
+
+        let mut hashes = Vec::with_capacity(WINDOW_SIZE_NODES);
+
+        // TODO: parallelize
+        for i in 0..WINDOW_SIZE_NODES {
+            let first_label = labels.labels_for_layer(1).read_at(i);
+            let mut hasher =
+                crate::crypto::pedersen::Hasher::new(AsRef::<[u8]>::as_ref(&first_label));
+
+            for window_index in 0..num_windows {
+                for layer in 1..layers {
+                    if window_index == 0 && layer == 1 {
+                        // first label
+                        continue;
+                    }
+
+                    let label = labels
+                        .labels_for_layer(layer)
+                        .read_at(i + window_index * WINDOW_SIZE_NODES);
+
+                    hasher.update(AsRef::<[u8]>::as_ref(&label));
+                }
+            }
+
+            hashes.push(hasher.finalize_bytes());
+        }
+
+        Ok(hashes)
+    }
+
     pub(crate) fn transform_and_replicate_layers(
-        graph: &StackedBucketGraph<H>,
+        window_graph: &StackedBucketGraph<H>,
+        wrapper_graph: &StackedBucketGraph<H>,
         layer_challenges: &LayerChallenges,
         replica_id: &<H as Hasher>::Domain,
         data: &mut [u8],
@@ -483,9 +519,11 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         config: Option<StoreConfig>,
     ) -> Result<TransformedLayers<H, G>> {
         trace!("transform_and_replicate_layers");
-        let nodes_count = graph.size();
+        let window_nodes_count = window_graph.size();
+        assert_eq!(data.len(), window_nodes_count * WINDOW_SIZE_BYTES);
 
-        assert_eq!(data.len(), nodes_count * NODE_SIZE);
+        let wrapper_nodes_count = wrapper_graph.size();
+        assert_eq!(data.len(), wrapper_nodes_count * NODE_SIZE);
 
         let layers = layer_challenges.layers();
         assert!(layers > 0);
@@ -499,97 +537,90 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let mut tree_r_last_config =
             StoreConfig::from_config(&config, CacheKey::CommRLastTree.to_string(), None);
         let mut tree_c_config =
+            StoreConfig::from_config(&config, CacheKey::CommQTree.to_string(), None);
+        let mut tree_q_config =
             StoreConfig::from_config(&config, CacheKey::CommCTree.to_string(), None);
 
-        let (labels, label_configs, column_hashes, tree_d) = crossbeam::thread::scope(|s| {
-            // Generate key layers.
-            let h = s.spawn(|_| {
-                Self::generate_labels(
-                    graph,
-                    layer_challenges,
-                    replica_id,
-                    true,
-                    Some(config.clone()),
+        // Build the MerkleTree over the original data (if needed).
+        let tree_d = match data_tree {
+            Some(t) => {
+                trace!("using existing original data merkle tree");
+                assert_eq!(t.len(), 2 * (data.len() / NODE_SIZE) - 1);
+
+                t
+            }
+            None => {
+                trace!("building merkle tree for the original data");
+
+                Self::build_tree::<G>(&data, Some(tree_d_config.clone()))
+            }
+        };
+
+        let (labels, label_configs) = Self::encode_all_windows(
+            window_graph,
+            layer_challenges.layers(),
+            replica_id,
+            data,
+            config.clone(),
+        )?;
+
+        // construct column hashes
+        let column_hashes =
+            Self::build_column_hashes(layer_challenges.layers(), data.len(), &labels)?;
+
+        let tree_q: Tree<H> = Self::build_tree::<H>(&data, Some(tree_q_config.clone()));
+
+        let tree_r_last: Tree<H> =
+            MerkleTree::from_par_iter((0..wrapper_nodes_count).into_par_iter().map(|node| {
+                // 1 Wrapping Layer
+
+                let mut hasher = Sha256::new();
+                hasher.input(AsRef::<[u8]>::as_ref(replica_id));
+                hasher.input(&(node as u64).to_be_bytes()[..]);
+
+                // Only expansion parents
+                let mut exp_parents = vec![0; wrapper_graph.expansion_degree()];
+                wrapper_graph.expanded_parents(node, &mut exp_parents);
+
+                let wrapper_layer = &data;
+                for parent in &exp_parents {
+                    hasher.input(
+                        data_at_node(wrapper_layer, *parent as usize).expect("invalid node math"),
+                    );
+                }
+
+                // finalize key
+                let mut val = hasher.result();
+                // strip last two bits, to ensure result is in Fr.
+                val[31] &= 0b0011_1111;
+
+                H::Domain::try_from_bytes(&val).expect("invalid node created")
+            }));
+
+        let tree_c: Tree<H> = {
+            info!("building tree_c");
+            let column_hashes_flat = unsafe {
+                // Column_hashes is of type Vec<[u8; 32]>, so this is safe to do.
+                // We do this to avoid unnecessary allocations.
+                std::slice::from_raw_parts(
+                    column_hashes.as_ptr() as *const _,
+                    column_hashes.len() * 32,
                 )
-            });
-
-            // Build the MerkleTree over the original data (if needed).
-            let tree_d = match data_tree {
-                Some(t) => {
-                    trace!("using existing original data merkle tree");
-                    assert_eq!(t.len(), 2 * (data.len() / NODE_SIZE) - 1);
-
-                    t
-                }
-                None => {
-                    trace!("building merkle tree for the original data");
-
-                    Self::build_tree::<G>(&data, Some(tree_d_config.clone()))
-                }
             };
+            Self::build_tree::<H>(column_hashes_flat, Some(tree_c_config.clone()))
+        };
 
-            trace!("Retrieved MT for original data");
-            let (labels, label_configs, column_hashes) = h.join().unwrap().unwrap();
-            let column_hashes = column_hashes.unwrap();
-
-            (labels, label_configs, column_hashes, tree_d)
-        })?;
-
-        let (tree_r_last, tree_c, comm_r): (Tree<H>, Tree<H>, H::Domain) =
-            crossbeam::thread::scope(|s| -> Result<_> {
-                // Encode original data into the last layer.
-                let tree_r_last_handle = s.spawn(|_| {
-                    info!("encoding data");
-                    let size = Store::len(labels.labels_for_last_layer());
-                    labels
-                        .labels_for_last_layer()
-                        .read_range(0..size)
-                        .into_par_iter()
-                        .zip(data.par_chunks_mut(NODE_SIZE))
-                        .for_each(|(key, data_node_bytes)| {
-                            let data_node = H::Domain::try_from_bytes(data_node_bytes).unwrap();
-                            let encoded_node = encode::<H::Domain>(key, data_node);
-
-                            // Store the result in the place of the original data.
-                            data_node_bytes.copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
-                        });
-
-                    // Construct the final replica commitment.
-                    info!("building tree_r_last");
-                    Self::build_tree::<H>(data, Some(tree_r_last_config.clone()))
-                });
-
-                // Build the tree for CommC
-                let tree_c_config = tree_c_config.clone();
-                let tree_c_handle = s.spawn(move |_| {
-                    info!("building tree_c");
-                    let column_hashes_flat = unsafe {
-                        // Column_hashes is of type Vec<[u8; 32]>, so this is safe to do.
-                        // We do this to avoid unnecessary allocations.
-                        std::slice::from_raw_parts(
-                            column_hashes.as_ptr() as *const _,
-                            column_hashes.len() * 32,
-                        )
-                    };
-                    Self::build_tree::<H>(column_hashes_flat, Some(tree_c_config))
-                });
-
-                let tree_c: Tree<H> = tree_c_handle.join()?;
-                info!("tree_c done");
-                let tree_r_last: Tree<H> = tree_r_last_handle.join()?;
-                info!("tree_r_last done");
-
-                // comm_r = H(comm_c || comm_r_last)
-                let comm_r: H::Domain = Fr::from(hash2(tree_c.root(), tree_r_last.root())).into();
-
-                Ok((tree_r_last, tree_c, comm_r))
-            })??;
+        // comm_r = H(comm_c || comm_q || comm_r_last)
+        let comm_r: H::Domain =
+            Fr::from(hash3(tree_c.root(), tree_q.root(), tree_r_last.root())).into();
 
         assert_eq!(tree_d.len(), tree_r_last.len());
-        assert_eq!(tree_d.len(), tree_c.len());
+        assert_eq!(tree_d.len(), tree_q.len());
+
         tree_d_config.size = Some(tree_d.len());
         tree_r_last_config.size = Some(tree_r_last.len());
         tree_c_config.size = Some(tree_c.len());
+        tree_q_config.size = Some(tree_q.len());
 
         Ok((
             Tau {
@@ -598,6 +629,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             },
             PersistentAux {
                 comm_c: tree_c.root(),
+                comm_q: tree_q.root(),
                 comm_r_last: tree_r_last.root(),
             },
             TemporaryAux {
@@ -605,6 +637,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 tree_d_config,
                 tree_r_last_config,
                 tree_c_config,
+                tree_q_config,
                 _g: PhantomData,
             },
         ))
@@ -616,6 +649,7 @@ mod tests {
     use super::*;
 
     use ff::Field;
+    use merkletree::store::DEFAULT_CACHED_ABOVE_BASE_LAYER;
     use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
@@ -654,15 +688,13 @@ mod tests {
     }
 
     fn test_extract_all<H: 'static + Hasher>() {
-        use merkletree::store::DEFAULT_CACHED_ABOVE_BASE_LAYER;
-
         // femme::pretty::Logger::new()
         //     .start(log::LevelFilter::Trace)
         //     .ok();
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let replica_id: H::Domain = H::Domain::random(rng);
-        let nodes = 8;
+        let nodes = 8 * 32;
 
         let data: Vec<u8> = (0..nodes)
             .flat_map(|_| {
@@ -716,6 +748,87 @@ mod tests {
         assert_eq!(data, decoded_data);
     }
 
+    #[test]
+    fn extract_node_pedersen() {
+        test_extract_node::<PedersenHasher>();
+    }
+
+    #[test]
+    fn extract_node_sha256() {
+        test_extract_node::<Sha256Hasher>();
+    }
+
+    #[test]
+    fn extract_node_blake2s() {
+        test_extract_node::<Blake2sHasher>();
+    }
+
+    fn test_extract_node<H: 'static + Hasher>() {
+        // femme::pretty::Logger::new()
+        //     .start(log::LevelFilter::Trace)
+        //     .ok();
+
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+        let replica_id: H::Domain = H::Domain::random(rng);
+        let nodes = 8 * 32;
+
+        let data: Vec<u8> = (0..nodes)
+            .flat_map(|_| {
+                let v: H::Domain = H::Domain::random(rng);
+                v.into_bytes()
+            })
+            .collect();
+        let challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
+
+        // create a copy, so we can compare roundtrips
+        let mut data_copy = data.clone();
+
+        let sp = SetupParams {
+            nodes,
+            degree: BASE_DEGREE,
+            expansion_degree: EXP_DEGREE,
+            seed: new_seed(),
+            layer_challenges: challenges.clone(),
+        };
+
+        let pp = StackedDrg::<H, Blake2sHasher>::setup(&sp).expect("setup failed");
+
+        // MT for original data is always named tree-d, and it will be
+        // referenced later in the process as such.
+        let cache_dir = tempfile::tempdir().unwrap();
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+        );
+
+        StackedDrg::<H, Blake2sHasher>::replicate(
+            &pp,
+            &replica_id,
+            data_copy.as_mut_slice(),
+            None,
+            Some(config.clone()),
+        )
+        .expect("replication failed");
+
+        assert_ne!(data, data_copy);
+
+        // extract parts
+        for node in 0..nodes {
+            println!("decoding node {}", node);
+            let decoded_node = StackedDrg::<H, Blake2sHasher>::extract(
+                &pp,
+                &replica_id,
+                &data_copy,
+                node,
+                Some(config.clone()),
+            )
+            .expect("failed to extract data");
+
+            assert_eq!(data_at_node(&data, node).unwrap(), &decoded_node[..]);
+        }
+    }
+
     fn prove_verify_fixed(n: usize) {
         let challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
 
@@ -753,7 +866,6 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        use merkletree::store::DEFAULT_CACHED_ABOVE_BASE_LAYER;
         let cache_dir = tempfile::tempdir().unwrap();
         let config = StoreConfig::new(
             cache_dir.path(),

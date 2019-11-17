@@ -21,7 +21,7 @@ impl EncodingProof {
     pub fn empty<H: Hasher>(params: &PublicParams<H>) -> Self {
         EncodingProof {
             node: None,
-            parents: vec![None; params.graph.degree()],
+            parents: vec![None; params.window_graph.degree()],
         }
     }
 

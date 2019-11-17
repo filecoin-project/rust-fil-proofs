@@ -21,7 +21,7 @@ impl<H: Hasher> ColumnProof<H> {
     pub fn empty(params: &PublicParams<H>) -> Self {
         ColumnProof {
             column: Column::empty(params),
-            inclusion_path: InclusionPath::empty(&params.graph),
+            inclusion_path: InclusionPath::empty(&params.window_graph),
         }
     }
 
