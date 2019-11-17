@@ -203,15 +203,15 @@ jobs:
             cat stacked-benchmarks.json
           no_output_timeout: 60m
       - run:
-          name: Run Rational PoST benchmarks using a 1GiB sector
+          name: Run Election PoST benchmarks using a 1GiB sector
           command: |
-            ./fil-proofs-tooling/scripts/benchy-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" rational-post --size=$((1024*1024)) > rational-post-benchmarks.json
-            cat rational-post-benchmarks.json
+            ./fil-proofs-tooling/scripts/benchy-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" election-post --size=$((1024*1024)) > election-post-benchmarks.json
+            cat election-post-benchmarks.json
           no_output_timeout: 60m
       - run:
           name: Aggregate benchmarks into single JSON document
           command: |
-            ./fil-proofs-tooling/scripts/aggregate-benchmarks.sh stacked-benchmarks.json micro-benchmarks.json hash-constraints.json rational-post-benchmarks.json > aggregated-benchmarks.json
+            ./fil-proofs-tooling/scripts/aggregate-benchmarks.sh stacked-benchmarks.json micro-benchmarks.json hash-constraints.json election-post-benchmarks.json > aggregated-benchmarks.json
             cat aggregated-benchmarks.json
       - store_artifacts:
           path: stacked-benchmarks.json
