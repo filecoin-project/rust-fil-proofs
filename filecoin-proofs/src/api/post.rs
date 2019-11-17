@@ -83,8 +83,9 @@ impl PrivateReplicaInfo {
             let f_in = File::open(&self.access)?;
             let metadata = f_in.metadata()?;
             let store_size = metadata.len() as usize;
+            let elems = store_size / std::mem::size_of::<PedersenDomain>();
 
-            store_size / std::mem::size_of::<PedersenDomain>()
+            2 * elems - 1
         };
         let mut config = StoreConfig::new(
             &self.cache_dir,
