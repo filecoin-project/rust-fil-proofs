@@ -23,7 +23,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
         let window_graph = StackedBucketGraph::<H>::new_stacked(
-            sp.nodes / WINDOW_SIZE_NODES,
+            WINDOW_SIZE_NODES,
             sp.degree,
             sp.expansion_degree,
             sp.seed,

@@ -49,7 +49,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         partition_count: usize,
     ) -> Result<Vec<Vec<Proof<H, G>>>> {
         assert!(layers > 0);
-        assert_eq!(t_aux.labels.len(), layers);
+        assert_eq!(t_aux.labels.len(), layers - 1);
 
         let graph_size = graph.size();
 
@@ -257,7 +257,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         base_hasher.input(AsRef::<[u8]>::as_ref(replica_id));
 
         for layer in 1..=layers {
-            info!("generating layer: {}", layer);
+            trace!("generating layer: {}", layer);
 
             for node in 0..window_graph.size() {
                 window_graph.parents(node, &mut parents);
@@ -334,6 +334,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     ) -> Result<(LabelsCache<H>, Labels<H>)> {
         trace!("encode_all_windows");
 
+        assert_eq!(graph.size(), WINDOW_SIZE_NODES);
+
         let layer_size = data.len();
         let num_windows = layer_size / WINDOW_SIZE_BYTES;
 
@@ -368,7 +370,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 base_hasher.input(AsRef::<[u8]>::as_ref(replica_id));
 
                 for layer in 1..=layers {
-                    info!("generating layer: {}", layer);
+                    trace!("generating layer: {}", layer);
 
                     for node in 0..graph.size() {
                         graph.parents(node, &mut parents);
@@ -401,8 +403,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                             }
                         }
 
-                        let start = data_at_node_offset(node);
-                        let end = start + NODE_SIZE;
+                        let start = node * NODE_SIZE;
+                        let end = (node + 1) * NODE_SIZE;
 
                         // finalize the key
                         let mut key = hasher.result();
@@ -415,12 +417,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         } else {
                             // on the last layer we encode the data
                             let keyd = H::Domain::try_from_bytes(&key).unwrap();
-                            let data_node = H::Domain::try_from_bytes(
-                                &data_chunk[node * NODE_SIZE..(node + 1) * NODE_SIZE],
-                            )
-                            .unwrap();
+                            let data_node =
+                                H::Domain::try_from_bytes(&data_chunk[start..end]).unwrap();
                             let encoded_node = encode(keyd, data_node);
-                            data_chunk[node * NODE_SIZE..(node + 1) * NODE_SIZE]
+                            data_chunk[start..end]
                                 .copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
                         }
                     }
@@ -441,8 +441,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     }
                 }
             });
-
-        info!("Labels generated");
 
         let (labels, configs) = labels.into_iter().map(|v| v.into_inner().unwrap()).unzip();
 
@@ -480,31 +478,31 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     ) -> Result<Vec<[u8; 32]>> {
         let num_windows = layer_size / WINDOW_SIZE_BYTES;
 
-        let mut hashes = Vec::with_capacity(WINDOW_SIZE_NODES);
+        let hashes = (0..WINDOW_SIZE_NODES)
+            .into_par_iter()
+            .map(|i| {
+                let first_label = labels.labels_for_layer(1).read_at(i);
+                let mut hasher =
+                    crate::crypto::pedersen::Hasher::new(AsRef::<[u8]>::as_ref(&first_label));
 
-        // TODO: parallelize
-        for i in 0..WINDOW_SIZE_NODES {
-            let first_label = labels.labels_for_layer(1).read_at(i);
-            let mut hasher =
-                crate::crypto::pedersen::Hasher::new(AsRef::<[u8]>::as_ref(&first_label));
+                for window_index in 0..num_windows {
+                    for layer in 1..layers {
+                        if window_index == 0 && layer == 1 {
+                            // first label
+                            continue;
+                        }
 
-            for window_index in 0..num_windows {
-                for layer in 1..layers {
-                    if window_index == 0 && layer == 1 {
-                        // first label
-                        continue;
+                        let label = labels
+                            .labels_for_layer(layer)
+                            .read_at(i + window_index * WINDOW_SIZE_NODES);
+
+                        hasher.update(AsRef::<[u8]>::as_ref(&label));
                     }
-
-                    let label = labels
-                        .labels_for_layer(layer)
-                        .read_at(i + window_index * WINDOW_SIZE_NODES);
-
-                    hasher.update(AsRef::<[u8]>::as_ref(&label));
                 }
-            }
 
-            hashes.push(hasher.finalize_bytes());
-        }
+                hasher.finalize_bytes()
+            })
+            .collect();
 
         Ok(hashes)
     }
@@ -519,8 +517,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         config: Option<StoreConfig>,
     ) -> Result<TransformedLayers<H, G>> {
         trace!("transform_and_replicate_layers");
-        let window_nodes_count = window_graph.size();
-        assert_eq!(data.len(), window_nodes_count * WINDOW_SIZE_BYTES);
+        assert_eq!(window_graph.size(), WINDOW_SIZE_NODES);
 
         let wrapper_nodes_count = wrapper_graph.size();
         assert_eq!(data.len(), wrapper_nodes_count * NODE_SIZE);
@@ -551,11 +548,11 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             }
             None => {
                 trace!("building merkle tree for the original data");
-
                 Self::build_tree::<G>(&data, Some(tree_d_config.clone()))
             }
         };
 
+        info!("encoding {} windows", data.len() / WINDOW_SIZE_BYTES);
         let (labels, label_configs) = Self::encode_all_windows(
             window_graph,
             layer_challenges.layers(),
@@ -563,13 +560,15 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             data,
             config.clone(),
         )?;
-
         // construct column hashes
+        info!("building column hashes");
         let column_hashes =
             Self::build_column_hashes(layer_challenges.layers(), data.len(), &labels)?;
 
+        info!("building tree_q");
         let tree_q: Tree<H> = Self::build_tree::<H>(&data, Some(tree_q_config.clone()));
 
+        info!("building tree_r_last");
         let tree_r_last: Tree<H> =
             MerkleTree::from_par_iter((0..wrapper_nodes_count).into_par_iter().map(|node| {
                 // 1 Wrapping Layer
@@ -597,8 +596,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 H::Domain::try_from_bytes(&val).expect("invalid node created")
             }));
 
+        info!("building tree_c");
         let tree_c: Tree<H> = {
-            info!("building tree_c");
             let column_hashes_flat = unsafe {
                 // Column_hashes is of type Vec<[u8; 32]>, so this is safe to do.
                 // We do this to avoid unnecessary allocations.

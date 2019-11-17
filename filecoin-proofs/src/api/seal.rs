@@ -96,7 +96,7 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
     info!("building merkle tree for the original data");
     let data_tree = create_merkle_tree::<DefaultPieceHasher>(
         Some(config.clone()),
-        compound_public_params.vanilla_params.graph.size(),
+        compound_public_params.vanilla_params.wrapper_graph.size(),
         &data,
     )?;
 
