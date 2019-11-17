@@ -1,14 +1,9 @@
-use paired::bls12_381::Fr;
-use rayon::prelude::*;
-
-use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::hasher::Hasher;
 use crate::proof::ProofScheme;
 use crate::stacked::{
     challenges::ChallengeRequirements,
     graph::StackedBucketGraph,
-    hash::hash2,
     params::{PrivateInputs, Proof, PublicInputs, PublicParams, SetupParams},
     proof::{StackedDrg, WINDOW_SIZE_NODES},
 };
@@ -69,17 +64,24 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
         trace!("prove_all_partitions");
         assert!(partition_count > 0);
 
-        Self::prove_layers(
-            &pub_params.window_graph,
-            &pub_params.wrapper_graph,
-            pub_inputs,
-            &priv_inputs.p_aux,
-            &priv_inputs.t_aux,
-            &pub_params.layer_challenges,
-            pub_params.layer_challenges.layers(),
-            pub_params.layer_challenges.layers(),
-            partition_count,
-        )
+        let layers = pub_params.layer_challenges.layers();
+        assert!(layers > 0);
+        assert_eq!(priv_inputs.t_aux.labels.len(), layers - 1);
+
+        (0..partition_count)
+            .map(|k| {
+                trace!("proving partition {}/{}", k + 1, partition_count);
+                Self::prove_single_partition(
+                    &pub_params.window_graph,
+                    &pub_params.wrapper_graph,
+                    pub_inputs,
+                    &priv_inputs.t_aux,
+                    &pub_params.layer_challenges,
+                    layers,
+                    k,
+                )
+            })
+            .collect()
     }
 
     fn verify_all_partitions(
@@ -88,9 +90,6 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
         partition_proofs: &[Self::Proof],
     ) -> Result<bool> {
         trace!("verify_all_partitions");
-
-        // generate graphs
-        let graph = &pub_params.window_graph;
 
         let expected_comm_r = if let Some(ref tau) = pub_inputs.tau {
             &tau.comm_r
@@ -104,42 +103,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
                 k + 1,
                 partition_proofs.len()
             );
-
-            trace!("verify comm_r");
-            let actual_comm_r: H::Domain = {
-                let comm_c = proofs[0].comm_c();
-                let comm_r_last = proofs[0].comm_r_last();
-                Fr::from(hash2(comm_c, comm_r_last)).into()
-            };
-
-            if expected_comm_r != &actual_comm_r {
-                return Ok(false);
-            }
-
-            let challenges =
-                pub_inputs.all_challenges(&pub_params.layer_challenges, graph.size(), Some(k));
-
-            let valid = proofs.par_iter().enumerate().all(|(i, proof)| {
-                trace!("verify challenge {}/{}", i + 1, challenges.len());
-
-                // Validate for this challenge
-                let challenge = challenges[i];
-
-                // make sure all proofs have the same comm_c
-                if proof.comm_c() != proofs[0].comm_c() {
-                    return false;
-                }
-                // make sure all proofs have the same comm_r_last
-                if proof.comm_r_last() != proofs[0].comm_r_last() {
-                    return false;
-                }
-
-                proof.verify(pub_params, pub_inputs, challenge, i, graph)
-            });
-
-            if !valid {
-                return Ok(false);
-            }
+            Self::verify_single_partition(pub_params, pub_inputs, proofs, expected_comm_r, k)?;
         }
 
         Ok(true)
