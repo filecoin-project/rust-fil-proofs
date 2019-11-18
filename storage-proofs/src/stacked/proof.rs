@@ -81,7 +81,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         t_aux: &TemporaryAuxCache<H, G>,
         layer_challenges: &LayerChallenges,
-        layers: usize,
+        _layers: usize,
         k: usize,
     ) -> Result<Proof<H, G>> {
         // Sanity checks on restored trees.
@@ -145,13 +145,13 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         challenge: usize,
         challenge_index: usize,
         window_index: usize,
-        wrapper_graph: &StackedBucketGraph<H>,
+        window_graph: &StackedBucketGraph<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         t_aux: &TemporaryAuxCache<H, G>,
         layer_challenges: &LayerChallenges,
     ) -> Result<WindowProof<H, G>> {
         trace!(" challenge {} ({})", challenge, challenge_index);
-        assert!(challenge < wrapper_graph.size(), "Invalid challenge");
+        assert!(challenge < window_graph.size(), "Invalid challenge");
         assert!(challenge > 0, "Invalid challenge");
 
         let layers = layer_challenges.layers();
@@ -160,7 +160,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let comm_d_proof = MerkleProof::new_from_proof(&t_aux.tree_d.gen_proof(challenge));
 
         // Stacked replica column openings
-        let replica_column_proof = Self::prove_replica_column(challenge, wrapper_graph, t_aux)?;
+        let replica_column_proof = Self::prove_replica_column(challenge, window_graph, t_aux)?;
 
         trace!("q openings");
         let comm_q_proof = MerkleProof::new_from_proof(&t_aux.tree_q.gen_proof(challenge));
@@ -178,24 +178,37 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 include_challenge
             );
             // Due to tapering for some layers and some challenges we do not
-            // create an encoding proof.
+            // create a proof.
             if !include_challenge {
                 continue;
             }
 
-            // TODO: correct encoding proof
-            let (labeling_proof, e) = Self::create_labeling_proof(
-                challenge,
-                window_index,
-                layer,
-                wrapper_graph,
-                layer_challenges,
-                t_aux,
-                &pub_inputs.replica_id,
-                &replica_column_proof,
-            )?;
-            labeling_proofs.insert(layer, labeling_proof);
-            encoding_proof = e;
+            let parents_data =
+                Self::get_parents_data_for_challenge(challenge, layer, window_graph, t_aux)?;
+
+            if layer < layers {
+                let proof = LabelingProof::<H>::new(
+                    window_index as u64,
+                    challenge as u64,
+                    parents_data.clone(),
+                );
+
+                {
+                    let labeled_node = replica_column_proof.c_x.get_node_at_layer(layer);
+                    assert!(
+                        proof.verify(&pub_inputs.replica_id, &labeled_node),
+                        "Invalid labeling proof generated"
+                    );
+                }
+
+                labeling_proofs.insert(layer, proof);
+            } else {
+                encoding_proof = Some(EncodingProof::new(
+                    window_index as u64,
+                    challenge as u64,
+                    parents_data,
+                ));
+            }
         }
 
         Ok(WindowProof {
@@ -213,15 +226,13 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         challenge_index: usize,
         window_index: usize,
         wrapper_graph: &StackedBucketGraph<H>,
-        pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
+        _pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         t_aux: &TemporaryAuxCache<H, G>,
-        layer_challenges: &LayerChallenges,
+        _layer_challenges: &LayerChallenges,
     ) -> Result<WrapperProof<H>> {
         trace!(" challenge {} ({})", challenge, challenge_index);
         assert!(challenge < wrapper_graph.size(), "Invalid challenge");
         assert!(challenge > 0, "Invalid challenge");
-
-        let layers = layer_challenges.layers();
 
         // Final replica layer openings
         trace!("final replica layer openings");
@@ -284,17 +295,12 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         })
     }
 
-    fn create_labeling_proof(
+    fn get_parents_data_for_challenge(
         challenge: usize,
-        window_index: usize,
         layer: usize,
         graph: &StackedBucketGraph<H>,
-        layer_challenges: &LayerChallenges,
         t_aux: &TemporaryAuxCache<H, G>,
-        replica_id: &H::Domain,
-        replica_column_proof: &ReplicaColumnProof<H>,
-    ) -> Result<(LabelingProof<H>, Option<EncodingProof<H>>)> {
-        let layers = layer_challenges.layers();
+    ) -> Result<Vec<H::Domain>> {
         let parents_data: Vec<H::Domain> = if layer == 1 {
             let mut parents = vec![0; graph.base_graph().degree()];
             graph.base_parents(challenge, &mut parents);
@@ -323,25 +329,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 .collect()
         };
 
-        let proof =
-            LabelingProof::<H>::new(window_index as u64, challenge as u64, parents_data.clone());
-
-        {
-            let labeled_node = replica_column_proof.c_x.get_node_at_layer(layer);
-            assert!(
-                proof.verify(replica_id, &labeled_node),
-                "Invalid encoding proof generated"
-            );
-        }
-
-        if layer == layers {
-            return Ok((
-                proof,
-                Some(EncodingProof::new(challenge as u64, parents_data)),
-            ));
-        }
-
-        Ok((proof, None))
+        Ok(parents_data)
     }
 
     pub(crate) fn verify_single_partition(
@@ -492,9 +480,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 let end = start + NODE_SIZE;
 
                 // store the newly generated key
-                if layer < layers {
-                    layer_labels[start..end].copy_from_slice(&key[..]);
-                } else {
+                layer_labels[start..end].copy_from_slice(&key[..]);
+
+                if layer == layers {
                     // on the last layer we encode the data
                     let keyd = H::Domain::try_from_bytes(&key).unwrap();
                     let data_node = H::Domain::try_from_bytes(
@@ -532,7 +520,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let layer_size = data.len();
         let num_windows = layer_size / WINDOW_SIZE_BYTES;
 
-        let labels: Vec<Mutex<(DiskStore<_>, _)>> = (0..layers - 1)
+        let labels: Vec<Mutex<(DiskStore<_>, _)>> = (0..layers)
             .map(|layer| -> Result<_> {
                 let layer_config = StoreConfig::from_config(
                     &config,
@@ -583,14 +571,12 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         exp_parents_data = Some(layer_labels.clone());
                     }
 
-                    if layer < layers {
-                        // write result to disk
-                        labels[layer - 1]
-                            .lock()
-                            .unwrap()
-                            .0
-                            .copy_from_slice(&layer_labels, window_index * WINDOW_SIZE_BYTES);
-                    }
+                    // write result to disk
+                    labels[layer - 1]
+                        .lock()
+                        .unwrap()
+                        .0
+                        .copy_from_slice(&layer_labels, window_index * WINDOW_SIZE_BYTES);
                 }
             });
 
@@ -629,9 +615,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             let end = (node + 1) * NODE_SIZE;
 
             // store the newly generated key
-            if layer < layers {
-                layer_labels[start..end].copy_from_slice(&key[..]);
-            } else {
+            layer_labels[start..end].copy_from_slice(&key[..]);
+
+            if layer == layers {
                 // on the last layer we encode the data
                 let keyd = H::Domain::try_from_bytes(&key).unwrap();
                 let data_node = H::Domain::try_from_bytes(&data_chunk[start..end]).unwrap();
@@ -1160,7 +1146,7 @@ mod tests {
     #[cfg(not(feature = "mem-trees"))]
     table_tests! {
         prove_verify_fixed{
-           prove_verify_fixed_32_4(4);
+           prove_verify_fixed_32_4(8 * 32);
         }
     }
 

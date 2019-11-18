@@ -341,7 +341,7 @@ mod tests {
     #[cfg(not(feature = "mem-trees"))]
     #[test]
     fn stacked_input_circuit_with_bls12_381() {
-        let nodes = 5;
+        let nodes = 8 * 32;
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
         let num_layers = 2;
@@ -495,7 +495,7 @@ mod tests {
     }
 
     fn stacked_test_compound<H: 'static + Hasher>() {
-        let nodes = 5;
+        let nodes = 8 * 32;
         let degree = 3;
         let expansion_degree = 2;
         let num_layers = 2;

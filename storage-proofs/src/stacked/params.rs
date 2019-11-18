@@ -240,10 +240,10 @@ impl<H: Hasher> WrapperProof<H> {
     /// Verify the full proof.
     pub fn verify<G: Hasher>(
         &self,
-        pub_params: &PublicParams<H>,
+        _pub_params: &PublicParams<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         challenge: usize,
-        challenge_index: usize,
+        _challenge_index: usize,
         wrapper_graph: &StackedBucketGraph<H>,
         comm_q: &H::Domain,
     ) -> bool {
@@ -259,7 +259,7 @@ impl<H: Hasher> WrapperProof<H> {
         let mut parents = vec![0; wrapper_graph.expansion_degree()];
         wrapper_graph.expanded_parents(challenge, &mut parents);
 
-        for (proof, parent) in self.comm_q_parents_proofs.iter().zip(parents.iter()) {
+        for (proof, _parent) in self.comm_q_parents_proofs.iter().zip(parents.iter()) {
             check_eq!(proof.root(), comm_q);
             check!(proof.validate(challenge));
             // TODO: do we need to check for a relationship to `parent`?
@@ -308,12 +308,7 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
         trace!("verify initial q data layer");
 
         check!(self.comm_q_proof.proves_challenge(challenge));
-
-        if let Some(ref tau) = pub_inputs.tau {
-            check_eq!(self.comm_q_proof.root(), comm_q);
-        } else {
-            return false;
-        }
+        check_eq!(self.comm_q_proof.root(), comm_q);
 
         // Verify replica column openings
         trace!("verify replica column openings");
@@ -324,7 +319,11 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
         check!(self.verify_labels(replica_id, &pub_params.layer_challenges, challenge_index));
 
         trace!("verify encoding");
-        // TODO: encoding proof
+        check!(self.encoding_proof.verify::<G>(
+            replica_id,
+            self.comm_q_proof.leaf(),
+            self.comm_d_proof.leaf()
+        ));
 
         true
     }

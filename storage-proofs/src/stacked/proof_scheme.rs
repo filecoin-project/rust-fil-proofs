@@ -66,7 +66,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
 
         let layers = pub_params.layer_challenges.layers();
         assert!(layers > 0);
-        assert_eq!(priv_inputs.t_aux.labels.len(), layers - 1);
+        assert_eq!(priv_inputs.t_aux.labels.len(), layers);
 
         (0..partition_count)
             .map(|k| {
