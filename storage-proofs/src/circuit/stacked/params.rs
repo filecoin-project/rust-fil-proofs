@@ -51,7 +51,7 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
 
         let labeling_proofs = (0..num_windows)
             .map(|_| {
-                (1..=layers)
+                (1..layers)
                     .map(|layer| (layer, LabelingProof::empty(params, layer)))
                     .collect()
             })
@@ -76,6 +76,7 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
         comm_c: &num::AllocatedNum<Bls12>,
         comm_q: &num::AllocatedNum<Bls12>,
         replica_id: &[Boolean],
+        layers: usize,
     ) -> Result<(), SynthesisError> {
         let WindowProof {
             comm_d_proofs,
@@ -114,10 +115,15 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
         }
 
         // verify labels
-        for (i, labeling_proofs) in labeling_proofs.into_iter().enumerate() {
-            let mut cs = cs.namespace(|| format!("labeling_proof_{}", i));
+        for (window_index, labeling_proofs) in labeling_proofs.into_iter().enumerate() {
+            let mut cs = cs.namespace(|| format!("labeling_proof_{}", window_index));
+            assert_eq!(labeling_proofs.len(), layers - 1);
+
             for (layer, proof) in labeling_proofs.into_iter() {
-                let raw = replica_column_proof.c_x.get_node_at_layer(i, layer);
+                let raw = replica_column_proof
+                    .c_x
+                    .get_node_at_layer(window_index, layer);
+
                 let labeled_node = num::AllocatedNum::alloc(
                     cs.namespace(|| format!("label_node_{}", layer)),
                     || {

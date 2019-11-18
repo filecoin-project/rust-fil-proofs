@@ -21,15 +21,10 @@ use crate::hasher::Hasher;
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
-use crate::stacked::{StackedDrg, EXP_DEGREE};
+use crate::stacked::{StackedDrg, EXP_DEGREE, WINDOW_SIZE_BYTES, WINDOW_SIZE_NODES};
 use crate::util::bytes_into_boolean_vec_be;
 
 /// Stacked DRG based Proof of Replication.
-///
-/// # Fields
-///
-/// * `params` - parameters for the curve
-///
 pub struct StackedCircuit<'a, E: JubjubEngine, H: 'static + Hasher, G: 'static + Hasher> {
     params: &'a E::Params,
     public_params: <StackedDrg<'a, H, G> as ProofScheme<'a>>::PublicParams,
@@ -106,6 +101,8 @@ impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G
 
         let graph = &public_params.window_graph;
         let params = &self.params;
+        let layers = public_params.layer_challenges.layers();
+
         // In most cases (the exception being during testing) we want to ensure that the base and
         // expansion degrees are the optimal values.
         if !cfg!(feature = "unchecked-degrees") {
@@ -200,6 +197,7 @@ impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G
                 &comm_c_num,
                 &comm_q_num,
                 &replica_id_bits,
+                layers,
             )?;
         }
 
@@ -277,20 +275,20 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         let window_challenges =
             pub_in.all_challenges(&pub_params.layer_challenges, window_graph.size(), k);
 
-        for challenge in window_challenges.into_iter() {
-            // comm_d_proof
-            inputs.extend(generate_inclusion_inputs::<G>(
-                &window_por_params,
-                k,
-                challenge,
-            ));
+        let num_windows = pub_params.sector_size() as usize / WINDOW_SIZE_BYTES;
 
-            // comm_q_proof
-            inputs.extend(generate_inclusion_inputs::<H>(
-                &window_por_params,
-                k,
-                challenge,
-            ));
+        for challenge in window_challenges.into_iter() {
+            for window_index in 0..num_windows {
+                // comm_d_proof
+                let c = window_index * WINDOW_SIZE_NODES + challenge;
+                inputs.extend(generate_inclusion_inputs::<G>(&wrapper_por_params, k, c));
+            }
+
+            for window_index in 0..num_windows {
+                // comm_q_proof
+                let c = window_index * WINDOW_SIZE_NODES + challenge;
+                inputs.extend(generate_inclusion_inputs::<H>(&wrapper_por_params, k, c));
+            }
 
             // replica column proof
             {
@@ -435,7 +433,7 @@ mod tests {
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
         let num_layers = 2;
-        let layer_challenges = LayerChallenges::new(num_layers, 1);
+        let layer_challenges = LayerChallenges::new(num_layers, 2);
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
@@ -508,8 +506,8 @@ mod tests {
 
         assert!(proofs_are_valid);
 
-        let expected_inputs = 28;
-        let expected_constraints = 1_080_450;
+        let expected_inputs = 57;
+        let expected_constraints = 3_542_531;
 
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.
