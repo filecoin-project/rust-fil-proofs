@@ -24,6 +24,7 @@ use storage_proofs::stacked::{
     self, CacheKey, ChallengeRequirements, LayerChallenges, StackedDrg, TemporaryAuxCache,
     EXP_DEGREE,
 };
+use tempfile::TempDir;
 
 fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> Result<MmapMut, failure::Error> {
     let file: File = if use_tmp {
@@ -89,7 +90,10 @@ impl From<Params> for Inputs {
     }
 }
 
-fn generate_report<H: 'static>(params: Params) -> Result<Report, failure::Error>
+fn generate_report<H: 'static>(
+    params: Params,
+    cache_dir: &TempDir,
+) -> Result<Report, failure::Error>
 where
     H: Hasher,
 {
@@ -120,7 +124,6 @@ where
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        let cache_dir = tempfile::tempdir().unwrap();
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
@@ -514,10 +517,12 @@ pub fn run(opts: RunOpts) -> Result<(), failure::Error> {
 
     info!("Benchy Stacked: {:?}", &params);
 
+    let cache_dir = tempfile::tempdir().unwrap();
+
     let report = match params.hasher.as_ref() {
-        "pedersen" => generate_report::<PedersenHasher>(params)?,
-        "sha256" => generate_report::<Sha256Hasher>(params)?,
-        "blake2s" => generate_report::<Blake2sHasher>(params)?,
+        "pedersen" => generate_report::<PedersenHasher>(params, &cache_dir)?,
+        "sha256" => generate_report::<Sha256Hasher>(params, &cache_dir)?,
+        "blake2s" => generate_report::<Blake2sHasher>(params, &cache_dir)?,
         _ => bail!("invalid hasher: {}", params.hasher),
     };
 

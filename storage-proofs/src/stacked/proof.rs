@@ -224,10 +224,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         assert!(layers > 0);
 
         // generate labels
-        let (labels, _) =
+        let (labels, _, _) =
             Self::generate_labels(graph, layer_challenges, replica_id, false, config)?;
 
-        let labels: LabelsCache<H> = LabelsCache::new(&labels);
         let size = merkletree::store::Store::len(labels.labels_for_last_layer());
 
         for (key, encoded_node_bytes) in labels
@@ -253,13 +252,14 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         replica_id: &<H as Hasher>::Domain,
         with_hashing: bool,
         config: Option<StoreConfig>,
-    ) -> Result<(Labels<H>, Option<Vec<[u8; 32]>>)> {
+    ) -> Result<(LabelsCache<H>, Labels<H>, Option<Vec<[u8; 32]>>)> {
         info!("generate labels");
         let layers = layer_challenges.layers();
         // For now, we require it due to changes in encodings structure.
         assert!(config.is_some());
         let config = config.unwrap();
-        let mut labels: Vec<StoreConfig> = Vec::with_capacity(layers);
+        let mut labels: Vec<DiskStore<H::Domain>> = Vec::with_capacity(layers);
+        let mut label_configs: Vec<StoreConfig> = Vec::with_capacity(layers);
 
         let layer_size = graph.size() * NODE_SIZE;
         let mut parents = vec![0; graph.degree()];
@@ -402,14 +402,11 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             }
 
             // Write the result to disk to avoid keeping it in memory all the time.
-            let layer_config = StoreConfig::from_config(
-                &config,
-                format!("replica-{:?}-layer-{}", replica_id, layer),
-                Some(layer_size),
-            );
+            let layer_config =
+                StoreConfig::from_config(&config, CacheKey::label_layer(layer), Some(layer_size));
 
             // Construct and persist the layer data.
-            let _: DiskStore<H::Domain> = DiskStore::new_from_slice_with_config(
+            let layer_store: DiskStore<H::Domain> = DiskStore::new_from_slice_with_config(
                 layer_size,
                 &layer_labels,
                 layer_config.clone(),
@@ -420,8 +417,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 layer_config.id
             );
 
-            // Track the layer specific StoreConfig that allows later retrieval.
-            labels.push(layer_config);
+            // Track the layer specific store and StoreConfig for later retrieval.
+            labels.push(layer_store);
+            label_configs.push(layer_config);
         }
 
         assert_eq!(
@@ -439,7 +437,17 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         });
 
         info!("Labels generated");
-        Ok((Labels::<H>::new(labels), column_hashes))
+        Ok((
+            LabelsCache::<H> {
+                labels,
+                _h: PhantomData,
+            },
+            Labels::<H> {
+                labels: label_configs,
+                _h: PhantomData,
+            },
+            column_hashes,
+        ))
     }
 
     fn build_tree<K: Hasher>(tree_data: &[u8], config: Option<StoreConfig>) -> Tree<K> {
@@ -493,7 +501,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let mut tree_c_config =
             StoreConfig::from_config(&config, CacheKey::CommCTree.to_string(), None);
 
-        let (label_configs, column_hashes, tree_d) = crossbeam::thread::scope(|s| {
+        let (labels, label_configs, column_hashes, tree_d) = crossbeam::thread::scope(|s| {
             // Generate key layers.
             let h = s.spawn(|_| {
                 Self::generate_labels(
@@ -521,14 +529,11 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             };
 
             trace!("Retrieved MT for original data");
-            let (label_configs, column_hashes) = h.join().unwrap().unwrap();
+            let (labels, label_configs, column_hashes) = h.join().unwrap().unwrap();
             let column_hashes = column_hashes.unwrap();
 
-            (label_configs, column_hashes, tree_d)
+            (labels, label_configs, column_hashes, tree_d)
         })?;
-
-        // Convert label_configs from a Vec<StoreConfig> to a Vec<DiskStore<H::Domain>>
-        let labels: LabelsCache<H> = LabelsCache::new(&label_configs);
 
         let (tree_r_last, tree_c, comm_r): (Tree<H>, Tree<H>, H::Domain) =
             crossbeam::thread::scope(|s| -> Result<_> {

@@ -22,24 +22,31 @@ use crate::util::data_at_node;
 
 pub type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum CacheKey {
-    CommRLastTree,
-    CommCTree,
     CommDTree,
+    CommCTree,
+    CommRLastTree,
 }
 
 impl fmt::Display for CacheKey {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            CacheKey::CommRLastTree => write!(f, "tree-r-last"),
-            CacheKey::CommCTree => write!(f, "tree-c"),
             CacheKey::CommDTree => write!(f, "tree-d"),
+            CacheKey::CommCTree => write!(f, "tree-c"),
+            CacheKey::CommRLastTree => write!(f, "tree-r-last"),
         }
     }
 }
 
 #[derive(Debug, Clone)]
+impl CacheKey {
+    pub fn label_layer(layer: usize) -> String {
+        format!("layer-{}", layer)
+    }
+}
+
+#[derive(Debug)]
 pub struct SetupParams {
     // Number of nodes
     pub nodes: usize,
@@ -449,8 +456,8 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Labels<H: Hasher> {
-    labels: Vec<StoreConfig>,
-    _h: PhantomData<H>,
+    pub labels: Vec<StoreConfig>,
+    pub _h: PhantomData<H>,
 }
 
 impl<H: Hasher> Labels<H> {
@@ -513,8 +520,8 @@ impl<H: Hasher> Labels<H> {
 
 #[derive(Debug)]
 pub struct LabelsCache<H: Hasher> {
-    labels: Vec<DiskStore<H::Domain>>,
-    _h: PhantomData<H>,
+    pub labels: Vec<DiskStore<H::Domain>>,
+    pub _h: PhantomData<H>,
 }
 
 impl<H: Hasher> LabelsCache<H> {

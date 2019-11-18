@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::fs::File;
 
 use paired::bls12_381::Bls12;
 use merkletree::merkle::{get_merkle_tree_leafs, MerkleTree};
@@ -78,12 +77,9 @@ impl PrivateReplicaInfo {
     }
 
     /// Generate the merkle tree of this particular replica.
-    pub fn merkle_tree(&self, _sector_size: u64) -> Result<Tree, Error> {
+    pub fn merkle_tree(&self, sector_size: u64) -> Result<Tree, Error> {
         let tree_size = {
-            let f_in = File::open(&self.access)?;
-            let metadata = f_in.metadata()?;
-            let store_size = metadata.len() as usize;
-            let elems = store_size / std::mem::size_of::<PedersenDomain>();
+            let elems = sector_size as usize / std::mem::size_of::<PedersenDomain>();
 
             2 * elems - 1
         };
