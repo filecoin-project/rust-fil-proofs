@@ -46,7 +46,6 @@ impl<H: Hasher> ColumnProof<H> {
 
         constraint::equal(&mut cs, || "enforce column_hash = leaf", &c_i, &leaf_num);
 
-        // TODO: currently allocating the leaf twice, inclusion path should take the already allocated leaf.
         inclusion_path.synthesize(
             cs.namespace(|| "column_proof_all_inclusion"),
             params,

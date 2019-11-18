@@ -8,14 +8,14 @@ use crate::hasher::Hasher;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LabelingProof<H: Hasher> {
     pub(crate) parents: Vec<H::Domain>,
-    pub(crate) window_index: u64,
+    pub(crate) window_index: Option<u64>,
     pub(crate) node: u64,
     #[serde(skip)]
     _h: PhantomData<H>,
 }
 
 impl<H: Hasher> LabelingProof<H> {
-    pub fn new(window_index: u64, node: u64, parents: Vec<H::Domain>) -> Self {
+    pub fn new(window_index: Option<u64>, node: u64, parents: Vec<H::Domain>) -> Self {
         LabelingProof {
             node,
             window_index,
@@ -30,8 +30,10 @@ impl<H: Hasher> LabelingProof<H> {
         // replica_id
         hasher.input(AsRef::<[u8]>::as_ref(replica_id));
 
-        // window index
-        hasher.input(&self.window_index.to_be_bytes());
+        if let Some(w) = self.window_index {
+            // window index
+            hasher.input(&w.to_be_bytes());
+        }
 
         // node id
         hasher.input(&self.node.to_be_bytes());

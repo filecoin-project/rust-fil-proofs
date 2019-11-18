@@ -14,6 +14,7 @@ pub fn create_label<E, CS>(
     mut cs: CS,
     id: &[Boolean],
     parents: Vec<Vec<Boolean>>,
+    window_index: Option<uint64::UInt64>,
     node: Option<uint64::UInt64>,
 ) -> Result<num::AllocatedNum<E>, SynthesisError>
 where
@@ -25,6 +26,10 @@ where
     // id | node | encodedParentNode1 | encodedParentNode1 | ...
 
     let mut ciphertexts = id.to_vec();
+
+    if let Some(window_index) = window_index {
+        ciphertexts.extend_from_slice(&window_index.to_bits_be());
+    }
 
     if let Some(node) = node {
         ciphertexts.extend_from_slice(&node.to_bits_be());
@@ -102,6 +107,7 @@ mod tests {
             &id_bits,
             parents_bits.clone(),
             None,
+            None,
         )
         .expect("key derivation function failed");
 
@@ -147,13 +153,16 @@ mod tests {
             })
             .collect();
 
+        let window_index_raw = 12u64;
         let node_raw = 123456789u64;
+        let window_index = uint64::UInt64::constant(window_index_raw);
         let node = uint64::UInt64::constant(node_raw);
 
         let out = create_label(
             cs.namespace(|| "create_label"),
             &id_bits,
             parents_bits.clone(),
+            Some(window_index),
             Some(node),
         )
         .expect("key derivation function failed");
@@ -162,6 +171,7 @@ mod tests {
         assert_eq!(cs.num_constraints(), 292540);
 
         let mut input_bytes = id.to_vec();
+        input_bytes.extend_from_slice(&window_index_raw.to_be_bytes());
         input_bytes.extend_from_slice(&node_raw.to_be_bytes());
 
         for parent in &parents {

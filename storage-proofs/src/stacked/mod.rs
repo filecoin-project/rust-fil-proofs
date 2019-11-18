@@ -20,7 +20,8 @@ pub use self::encoding_proof::EncodingProof;
 pub use self::graph::{StackedBucketGraph, StackedGraph, EXP_DEGREE};
 pub use self::params::{
     generate_replica_id, CacheKey, PersistentAux, PrivateInputs, Proof, PublicInputs, PublicParams,
-    ReplicaColumnProof, SetupParams, Tau, TemporaryAux, TemporaryAuxCache,
+    ReplicaColumnProof, SetupParams, Tau, TemporaryAux, TemporaryAuxCache, WindowProof,
+    WrapperProof,
 };
-pub use self::proof::StackedDrg;
+pub use self::proof::{StackedDrg, WINDOW_SIZE_BYTES, WINDOW_SIZE_NODES};
 pub use labeling_proof::LabelingProof;

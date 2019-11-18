@@ -103,7 +103,9 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
                 k + 1,
                 partition_proofs.len()
             );
-            Self::verify_single_partition(pub_params, pub_inputs, proof, expected_comm_r, k)?;
+            if !Self::verify_single_partition(pub_params, pub_inputs, proof, expected_comm_r, k)? {
+                return Ok(false);
+            }
         }
 
         Ok(true)

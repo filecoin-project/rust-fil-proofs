@@ -8,7 +8,10 @@ use paired::bls12_381::{Bls12, Fr};
 use crate::circuit::por::PoRCompound;
 use crate::circuit::{
     constraint,
-    stacked::{hash::hash2, params::Proof},
+    stacked::{
+        hash::hash3,
+        params::{Proof, WindowProof, WrapperProof},
+    },
 };
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
@@ -34,10 +37,10 @@ pub struct StackedCircuit<'a, E: JubjubEngine, H: 'static + Hasher, G: 'static +
     comm_d: Option<G::Domain>,
     comm_r: Option<H::Domain>,
     comm_r_last: Option<H::Domain>,
+    comm_q: Option<H::Domain>,
     comm_c: Option<H::Domain>,
-
-    // one proof per challenge
-    proofs: Vec<Proof<H, G>>,
+    window_proofs: Vec<WindowProof<H, G>>,
+    wrapper_proofs: Vec<WrapperProof<H>>,
 
     _e: PhantomData<E>,
 }
@@ -55,22 +58,30 @@ impl<'a, H: Hasher, G: 'static + Hasher> StackedCircuit<'a, Bls12, H, G> {
         replica_id: Option<H::Domain>,
         comm_d: Option<G::Domain>,
         comm_r: Option<H::Domain>,
-        comm_r_last: Option<H::Domain>,
-        comm_c: Option<H::Domain>,
-        proofs: Vec<Proof<H, G>>,
+        proof: Proof<H, G>,
     ) -> Result<(), SynthesisError>
     where
         CS: ConstraintSystem<Bls12>,
     {
+        let Proof {
+            window_proofs,
+            wrapper_proofs,
+            comm_c,
+            comm_r_last,
+            comm_q,
+        } = proof;
+
         let circuit = StackedCircuit::<'a, Bls12, H, G> {
             params,
             public_params,
             replica_id,
             comm_d,
             comm_r,
-            comm_r_last,
-            comm_c,
-            proofs,
+            comm_c: comm_c.map(Into::into),
+            comm_q: comm_q.map(Into::into),
+            comm_r_last: comm_r_last.map(Into::into),
+            window_proofs,
+            wrapper_proofs,
             _e: PhantomData,
         };
 
@@ -82,12 +93,14 @@ impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let StackedCircuit {
             public_params,
-            proofs,
             replica_id,
-            comm_r,
             comm_d,
+            comm_r,
+            window_proofs,
+            wrapper_proofs,
             comm_r_last,
             comm_c,
+            comm_q,
             ..
         } = self;
 
@@ -150,32 +163,51 @@ impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G
         // Allocate comm_c as booleans
         let comm_c_bits = comm_c_num.to_bits_le(cs.namespace(|| "comm_c_bits"))?;
 
-        // Verify comm_r = H(comm_c || comm_r_last)
+        // Allocate comm_q as Fr
+        let comm_q_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_q"), || {
+            comm_q
+                .map(Into::into)
+                .ok_or_else(|| SynthesisError::AssignmentMissing)
+        })?;
+
+        // Allocate comm_q as booleans
+        let comm_q_bits = comm_q_num.to_bits_le(cs.namespace(|| "comm_q_bits"))?;
+
+        // Verify comm_r = H(comm_c || comm_q || comm_r_last)
         {
-            let hash_num = hash2(
-                cs.namespace(|| "H_comm_c_comm_r_last"),
+            let hash_num = hash3(
+                cs.namespace(|| "H_comm_c_comm_q_comm_r_last"),
                 params,
                 &comm_c_bits,
+                &comm_q_bits,
                 &comm_r_last_bits,
             )?;
 
             // Check actual equality
             constraint::equal(
                 cs,
-                || "enforce comm_r = H(comm_c || comm_r_last)",
+                || "enforce comm_r = H(comm_c || comm_q || comm_r_last)",
                 &comm_r_num,
                 &hash_num,
             );
         }
 
-        for (i, proof) in proofs.into_iter().enumerate() {
+        for (i, proof) in window_proofs.into_iter().enumerate() {
             proof.synthesize(
-                &mut cs.namespace(|| format!("challenge_{}", i)),
+                &mut cs.namespace(|| format!("window_proof_challenge_{}", i)),
                 &self.params,
-                public_params.layer_challenges.layers(),
                 &comm_d_num,
                 &comm_c_num,
-                &comm_r_last_num,
+                &comm_q_num,
+                &replica_id_bits,
+            )?;
+        }
+
+        for (i, proof) in wrapper_proofs.into_iter().enumerate() {
+            proof.synthesize(
+                &mut cs.namespace(|| format!("wrapper_proof_challenge_{}", i)),
+                &self.params,
+                &comm_q_num,
                 &replica_id_bits,
             )?;
         }
@@ -271,48 +303,52 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         vanilla_proof: &'b <StackedDrg<H, G> as ProofScheme>::Proof,
         public_params: &'b <StackedDrg<H, G> as ProofScheme>::PublicParams,
     ) -> StackedCircuit<'a, Bls12, H, G> {
-        unimplemented!();
-
-        //     !vanilla_proof.is_empty(),
-        //     "Cannot create a circuit with no vanilla proofs"
-        // );
-
-        // let comm_r_last = *vanilla_proof[0].comm_r_last();
-        // let comm_c = *vanilla_proof[0].comm_c();
-
-        // // ensure consistency
-        // assert!(vanilla_proof
-        //     .iter()
-        //     .all(|p| p.comm_r_last() == &comm_r_last));
-        // assert!(vanilla_proof.iter().all(|p| p.comm_c() == &comm_c));
-
-        // StackedCircuit {
-        //     params: &*JJ_PARAMS,
-        //     public_params: public_params.clone(),
-        //     replica_id: Some(public_inputs.replica_id),
-        //     comm_d: public_inputs.tau.as_ref().map(|t| t.comm_d),
-        //     comm_r: public_inputs.tau.as_ref().map(|t| t.comm_r),
-        //     comm_r_last: Some(comm_r_last),
-        //     comm_c: Some(comm_c),
-        //     proofs: vanilla_proof.iter().cloned().map(|p| p.into()).collect(),
-        //     _e: PhantomData,
-        // }
+        StackedCircuit {
+            params: &*JJ_PARAMS,
+            public_params: public_params.clone(),
+            replica_id: Some(public_inputs.replica_id),
+            comm_d: public_inputs.tau.as_ref().map(|t| t.comm_d),
+            comm_r: public_inputs.tau.as_ref().map(|t| t.comm_r),
+            comm_r_last: Some(vanilla_proof.comm_r_last),
+            comm_c: Some(vanilla_proof.comm_c),
+            comm_q: Some(vanilla_proof.comm_q),
+            window_proofs: vanilla_proof
+                .window_proofs
+                .iter()
+                .cloned()
+                .map(Into::into)
+                .collect(),
+            wrapper_proofs: vanilla_proof
+                .wrapper_proofs
+                .iter()
+                .cloned()
+                .map(Into::into)
+                .collect(),
+            _e: PhantomData,
+        }
     }
 
     fn blank_circuit(
         public_params: &<StackedDrg<H, G> as ProofScheme>::PublicParams,
     ) -> StackedCircuit<'a, Bls12, H, G> {
+        let window_proofs = (0..public_params.layer_challenges.challenges_count_all())
+            .map(|challenge_index| WindowProof::empty(public_params, challenge_index))
+            .collect();
+        let wrapper_proofs = (0..public_params.layer_challenges.challenges_count_all())
+            .map(|challenge_index| WrapperProof::empty(public_params, challenge_index))
+            .collect();
+
         StackedCircuit {
             params: &*JJ_PARAMS,
             public_params: public_params.clone(),
             replica_id: None,
             comm_d: None,
             comm_r: None,
-            comm_r_last: None,
+            window_proofs,
+            wrapper_proofs,
             comm_c: None,
-            proofs: (0..public_params.layer_challenges.challenges_count_all())
-                .map(|challenge_index| Proof::empty(public_params, challenge_index))
-                .collect(),
+            comm_q: None,
+            comm_r_last: None,
             _e: PhantomData,
         }
     }
@@ -340,7 +376,11 @@ mod tests {
 
     #[cfg(not(feature = "mem-trees"))]
     #[test]
-    fn stacked_input_circuit_with_bls12_381() {
+    fn stacked_input_circuit() {
+        femme::pretty::Logger::new()
+            .start(log::LevelFilter::Trace)
+            .ok();
+
         let nodes = 8 * 32;
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
@@ -418,8 +458,8 @@ mod tests {
 
         assert!(proofs_are_valid);
 
-        let expected_inputs = 20;
-        let expected_constraints = 649_106;
+        let expected_inputs = 28;
+        let expected_constraints = 1_080_450;
 
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.

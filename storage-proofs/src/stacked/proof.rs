@@ -45,6 +45,7 @@ fn get_drg_parents_columns<H: Hasher, G: Hasher>(
     graph: &StackedBucketGraph<H>,
     t_aux: &TemporaryAuxCache<H, G>,
     x: usize,
+    layer_size: usize,
 ) -> Result<Vec<Column<H>>> {
     let base_degree = graph.base_graph().degree();
 
@@ -54,7 +55,7 @@ fn get_drg_parents_columns<H: Hasher, G: Hasher>(
     graph.base_parents(x, &mut parents);
 
     for parent in &parents {
-        columns.push(t_aux.column(*parent)?);
+        columns.push(t_aux.column(*parent, layer_size)?);
     }
 
     debug_assert!(columns.len() == base_degree);
@@ -66,11 +67,15 @@ fn get_exp_parents_columns<H: Hasher, G: Hasher>(
     graph: &StackedBucketGraph<H>,
     t_aux: &TemporaryAuxCache<H, G>,
     x: usize,
+    layer_size: usize,
 ) -> Result<Vec<Column<H>>> {
     let mut parents = vec![0; graph.expansion_degree()];
     graph.expanded_parents(x, &mut parents);
 
-    parents.iter().map(|parent| t_aux.column(*parent)).collect()
+    parents
+        .iter()
+        .map(|parent| t_aux.column(*parent, layer_size))
+        .collect()
 }
 
 impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
@@ -90,6 +95,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         // Derive the set of challenges we are proving over.
 
+        let layer_size = wrapper_graph.size() * NODE_SIZE;
+
         // TODO: make window and wrapper challengs have different number of challenges
         let window_challenges =
             pub_inputs.all_challenges(layer_challenges, window_graph.size(), Some(k));
@@ -107,22 +114,21 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     pub_inputs,
                     t_aux,
                     layer_challenges,
+                    layer_size,
                 )
             })
             .collect::<Result<_>>()?;
 
         let wrapper_challenges =
-            pub_inputs.all_challenges(layer_challenges, window_graph.size(), Some(k));
+            pub_inputs.all_challenges(layer_challenges, wrapper_graph.size(), Some(k));
 
         let wrapper_proofs: Vec<_> = wrapper_challenges
             .into_par_iter()
             .enumerate()
             .map(|(challenge_index, challenge)| {
-                let window_index = get_window_index(challenge);
                 Self::prove_wrapper_challenge(
                     challenge,
                     challenge_index,
-                    window_index,
                     wrapper_graph,
                     pub_inputs,
                     t_aux,
@@ -149,7 +155,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         t_aux: &TemporaryAuxCache<H, G>,
         layer_challenges: &LayerChallenges,
+        layer_size: usize,
     ) -> Result<WindowProof<H, G>> {
+        assert!(challenge < WINDOW_SIZE_NODES);
+
         trace!(" challenge {} ({})", challenge, challenge_index);
         assert!(challenge < window_graph.size(), "Invalid challenge");
         assert!(challenge > 0, "Invalid challenge");
@@ -160,7 +169,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let comm_d_proof = MerkleProof::new_from_proof(&t_aux.tree_d.gen_proof(challenge));
 
         // Stacked replica column openings
-        let replica_column_proof = Self::prove_replica_column(challenge, window_graph, t_aux)?;
+        let replica_column_proof =
+            Self::prove_replica_column(challenge, window_graph, t_aux, layer_size)?;
 
         trace!("q openings");
         let comm_q_proof = MerkleProof::new_from_proof(&t_aux.tree_q.gen_proof(challenge));
@@ -170,25 +180,14 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let mut encoding_proof = None;
 
         for layer in 1..=layers {
-            let include_challenge =
-                layer_challenges.include_challenge_at_layer(layer, challenge_index);
-            trace!(
-                "  encoding proof layer {} (include: {})",
-                layer,
-                include_challenge
-            );
-            // Due to tapering for some layers and some challenges we do not
-            // create a proof.
-            if !include_challenge {
-                continue;
-            }
+            trace!("  encoding proof layer {}", layer,);
 
             let parents_data =
                 Self::get_parents_data_for_challenge(challenge, layer, window_graph, t_aux)?;
 
             if layer < layers {
                 let proof = LabelingProof::<H>::new(
-                    window_index as u64,
+                    Some(window_index as u64),
                     challenge as u64,
                     parents_data.clone(),
                 );
@@ -224,7 +223,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     fn prove_wrapper_challenge(
         challenge: usize,
         challenge_index: usize,
-        window_index: usize,
         wrapper_graph: &StackedBucketGraph<H>,
         _pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         t_aux: &TemporaryAuxCache<H, G>,
@@ -255,8 +253,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             .iter()
             .map(|p| t_aux.tree_q.read_at(*p as usize))
             .collect();
-        let labeling_proof =
-            LabelingProof::<H>::new(window_index as u64, challenge as u64, parents_data);
+        let labeling_proof = LabelingProof::<H>::new(None, challenge as u64, parents_data);
 
         Ok(WrapperProof {
             comm_r_last_proof,
@@ -269,21 +266,26 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         challenge: usize,
         graph: &StackedBucketGraph<H>,
         t_aux: &TemporaryAuxCache<H, G>,
+        layer_size: usize,
     ) -> Result<ReplicaColumnProof<H>> {
+        assert!(challenge < WINDOW_SIZE_NODES);
+
         // All labels in C_X
         trace!("  c_x");
-        let c_x = t_aux.column(challenge as u32)?.into_proof(&t_aux.tree_c);
+        let c_x = t_aux
+            .column(challenge as u32, layer_size)?
+            .into_proof(&t_aux.tree_c);
 
         // All labels in the DRG parents.
         trace!("  drg_parents");
-        let drg_parents = get_drg_parents_columns(graph, t_aux, challenge)?
+        let drg_parents = get_drg_parents_columns(graph, t_aux, challenge, layer_size)?
             .into_iter()
             .map(|column| column.into_proof(&t_aux.tree_c))
             .collect::<Vec<_>>();
 
         // Labels for the expander parents
         trace!("  exp_parents");
-        let exp_parents = get_exp_parents_columns(graph, t_aux, challenge)?
+        let exp_parents = get_exp_parents_columns(graph, t_aux, challenge, layer_size)?
             .into_iter()
             .map(|column| column.into_proof(&t_aux.tree_c))
             .collect::<Vec<_>>();
@@ -339,6 +341,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         expected_comm_r: &H::Domain,
         k: usize,
     ) -> Result<bool> {
+        info!("verifying partition {}", k);
         let window_graph = &pub_params.window_graph;
         let wrapper_graph = &pub_params.wrapper_graph;
 
@@ -387,8 +390,12 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     i,
                     window_graph,
                     comm_q,
+                    comm_c,
                 )
             });
+        if !window_valid {
+            return Ok(false);
+        }
 
         let wrapper_valid = proof
             .wrapper_proofs
@@ -408,8 +415,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     comm_q,
                 )
             });
-
-        Ok(window_valid && wrapper_valid)
+        Ok(wrapper_valid)
     }
 
     pub(crate) fn extract_all_windows(
