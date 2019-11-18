@@ -126,28 +126,29 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
 
 impl<H: Hasher, G: Hasher> From<VanillaProof<H, G>> for Proof<H, G> {
     fn from(vanilla_proof: VanillaProof<H, G>) -> Self {
-        let VanillaProof {
-            comm_d_proofs,
-            comm_r_last_proof,
-            replica_column_proofs,
-            labeling_proofs,
-            encoding_proof,
-        } = vanilla_proof;
+        unimplemented!()
+        // let VanillaProof {
+        //     comm_d_proofs,
+        //     comm_r_last_proof,
+        //     replica_column_proofs,
+        //     labeling_proofs,
+        //     encoding_proof,
+        // } = vanilla_proof;
 
-        let mut labeling_proofs: Vec<_> = labeling_proofs
-            .into_iter()
-            .map(|(layer, p)| (layer, p.into()))
-            .collect();
+        // let mut labeling_proofs: Vec<_> = labeling_proofs
+        //     .into_iter()
+        //     .map(|(layer, p)| (layer, p.into()))
+        //     .collect();
 
-        labeling_proofs.sort_by_cached_key(|(k, _)| *k);
+        // labeling_proofs.sort_by_cached_key(|(k, _)| *k);
 
-        Proof {
-            comm_d_proof: comm_d_proofs.into(),
-            comm_r_last_proof: comm_r_last_proof.into(),
-            replica_column_proof: replica_column_proofs.into(),
-            labeling_proofs,
-            encoding_proof: encoding_proof.into(),
-        }
+        // Proof {
+        //     comm_d_proof: comm_d_proofs.into(),
+        //     comm_r_last_proof: comm_r_last_proof.into(),
+        //     replica_column_proof: replica_column_proofs.into(),
+        //     labeling_proofs,
+        //     encoding_proof: encoding_proof.into(),
+        // }
     }
 }
 

@@ -13,7 +13,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>;
     type PrivateInputs = PrivateInputs<H, G>;
-    type Proof = Vec<Proof<H, G>>;
+    type Proof = Proof<H, G>;
     type Requirements = ChallengeRequirements;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
@@ -97,13 +97,13 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
             return Ok(false);
         };
 
-        for (k, proofs) in partition_proofs.iter().enumerate() {
+        for (k, proof) in partition_proofs.iter().enumerate() {
             trace!(
                 "verifying partition proof {}/{}",
                 k + 1,
                 partition_proofs.len()
             );
-            Self::verify_single_partition(pub_params, pub_inputs, proofs, expected_comm_r, k)?;
+            Self::verify_single_partition(pub_params, pub_inputs, proof, expected_comm_r, k)?;
         }
 
         Ok(true)

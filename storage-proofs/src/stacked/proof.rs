@@ -18,10 +18,11 @@ use crate::stacked::{
     challenges::LayerChallenges,
     column::Column,
     graph::StackedBucketGraph,
-    hash::{hash2, hash3},
+    hash::hash3,
     params::{
         get_node, CacheKey, Labels, LabelsCache, PersistentAux, Proof, PublicInputs, PublicParams,
         ReplicaColumnProof, Tau, TemporaryAux, TemporaryAuxCache, TransformedLayers, Tree,
+        WindowProof, WrapperProof,
     },
     EncodingProof, LabelingProof,
 };
@@ -34,6 +35,10 @@ pub const WINDOW_SIZE_NODES: usize = WINDOW_SIZE_BYTES / NODE_SIZE;
 pub struct StackedDrg<'a, H: 'a + Hasher, G: 'a + Hasher> {
     _a: PhantomData<&'a H>,
     _b: PhantomData<&'a G>,
+}
+
+fn get_window_index(node: usize) -> usize {
+    node / WINDOW_SIZE_NODES
 }
 
 fn get_drg_parents_columns<H: Hasher, G: Hasher>(
@@ -71,67 +76,94 @@ fn get_exp_parents_columns<H: Hasher, G: Hasher>(
 impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn prove_single_partition(
-        graph: &StackedBucketGraph<H>,
+        window_graph: &StackedBucketGraph<H>,
         wrapper_graph: &StackedBucketGraph<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         t_aux: &TemporaryAuxCache<H, G>,
         layer_challenges: &LayerChallenges,
         layers: usize,
         k: usize,
-    ) -> Result<Vec<Proof<H, G>>> {
-        let graph_size = graph.size();
-
+    ) -> Result<Proof<H, G>> {
         // Sanity checks on restored trees.
         assert!(pub_inputs.tau.is_some());
         assert_eq!(pub_inputs.tau.as_ref().unwrap().comm_d, t_aux.tree_d.root());
 
         // Derive the set of challenges we are proving over.
-        let challenges = pub_inputs.all_challenges(layer_challenges, graph_size, Some(k));
 
-        // Stacked commitment specifics
-        challenges
+        // TODO: make window and wrapper challengs have different number of challenges
+        let window_challenges =
+            pub_inputs.all_challenges(layer_challenges, window_graph.size(), Some(k));
+
+        let window_proofs: Vec<_> = window_challenges
             .into_par_iter()
             .enumerate()
             .map(|(challenge_index, challenge)| {
-                Self::prove_single_challenge(
+                let window_index = get_window_index(challenge);
+                Self::prove_window_challenge(
                     challenge,
                     challenge_index,
-                    graph,
+                    window_index,
+                    window_graph,
+                    pub_inputs,
+                    t_aux,
+                    layer_challenges,
+                )
+            })
+            .collect::<Result<_>>()?;
+
+        let wrapper_challenges =
+            pub_inputs.all_challenges(layer_challenges, window_graph.size(), Some(k));
+
+        let wrapper_proofs: Vec<_> = wrapper_challenges
+            .into_par_iter()
+            .enumerate()
+            .map(|(challenge_index, challenge)| {
+                let window_index = get_window_index(challenge);
+                Self::prove_wrapper_challenge(
+                    challenge,
+                    challenge_index,
+                    window_index,
                     wrapper_graph,
                     pub_inputs,
                     t_aux,
                     layer_challenges,
-                    layers,
                 )
             })
-            .collect()
+            .collect::<Result<_>>()?;
+
+        Ok(Proof {
+            window_proofs,
+            wrapper_proofs,
+            comm_c: t_aux.tree_c.root(),
+            comm_q: t_aux.tree_q.root(),
+            comm_r_last: t_aux.tree_r_last.root(),
+        })
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn prove_single_challenge(
+    fn prove_window_challenge(
         challenge: usize,
         challenge_index: usize,
-        graph: &StackedBucketGraph<H>,
+        window_index: usize,
         wrapper_graph: &StackedBucketGraph<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         t_aux: &TemporaryAuxCache<H, G>,
         layer_challenges: &LayerChallenges,
-        layers: usize,
-    ) -> Result<Proof<H, G>> {
+    ) -> Result<WindowProof<H, G>> {
         trace!(" challenge {} ({})", challenge, challenge_index);
-        assert!(challenge < graph.size(), "Invalid challenge");
+        assert!(challenge < wrapper_graph.size(), "Invalid challenge");
         assert!(challenge > 0, "Invalid challenge");
+
+        let layers = layer_challenges.layers();
 
         // Initial data layer openings (c_X in Comm_D)
         let comm_d_proof = MerkleProof::new_from_proof(&t_aux.tree_d.gen_proof(challenge));
 
         // Stacked replica column openings
-        let replica_column_proof = Self::prove_replica_column(challenge, graph, t_aux)?;
+        let replica_column_proof = Self::prove_replica_column(challenge, wrapper_graph, t_aux)?;
 
-        // Final replica layer openings
-        trace!("final replica layer openings");
-        let comm_r_last_proof =
-            MerkleProof::new_from_proof(&t_aux.tree_r_last.gen_proof(challenge));
+        trace!("q openings");
+        let comm_q_proof = MerkleProof::new_from_proof(&t_aux.tree_q.gen_proof(challenge));
 
         // Labeling Proofs Layer 1..l
         let mut labeling_proofs = HashMap::with_capacity(layers);
@@ -151,10 +183,12 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 continue;
             }
 
+            // TODO: correct encoding proof
             let (labeling_proof, e) = Self::create_labeling_proof(
                 challenge,
+                window_index,
                 layer,
-                graph,
+                wrapper_graph,
                 layer_challenges,
                 t_aux,
                 &pub_inputs.replica_id,
@@ -164,12 +198,59 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             encoding_proof = e;
         }
 
-        Ok(Proof {
-            comm_d_proofs: comm_d_proof,
-            replica_column_proofs: replica_column_proof,
-            comm_r_last_proof,
+        Ok(WindowProof {
+            comm_d_proof,
+            comm_q_proof,
+            replica_column_proof,
             labeling_proofs,
             encoding_proof: encoding_proof.expect("invalid tapering"),
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn prove_wrapper_challenge(
+        challenge: usize,
+        challenge_index: usize,
+        window_index: usize,
+        wrapper_graph: &StackedBucketGraph<H>,
+        pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
+        t_aux: &TemporaryAuxCache<H, G>,
+        layer_challenges: &LayerChallenges,
+    ) -> Result<WrapperProof<H>> {
+        trace!(" challenge {} ({})", challenge, challenge_index);
+        assert!(challenge < wrapper_graph.size(), "Invalid challenge");
+        assert!(challenge > 0, "Invalid challenge");
+
+        let layers = layer_challenges.layers();
+
+        // Final replica layer openings
+        trace!("final replica layer openings");
+        let comm_r_last_proof =
+            MerkleProof::new_from_proof(&t_aux.tree_r_last.gen_proof(challenge));
+
+        trace!("comm_q_parents proof");
+        let mut parents = vec![0; wrapper_graph.expansion_degree()];
+        wrapper_graph.expanded_parents(challenge, &mut parents);
+
+        let mut comm_q_parents_proofs = Vec::with_capacity(parents.len());
+        for parent in &parents {
+            comm_q_parents_proofs.push(MerkleProof::new_from_proof(
+                &t_aux.tree_q.gen_proof(*parent as usize),
+            ));
+        }
+
+        trace!("labeling proof");
+        let parents_data: Vec<_> = parents
+            .iter()
+            .map(|p| t_aux.tree_q.read_at(*p as usize))
+            .collect();
+        let labeling_proof =
+            LabelingProof::<H>::new(window_index as u64, challenge as u64, parents_data);
+
+        Ok(WrapperProof {
+            comm_r_last_proof,
+            comm_q_parents_proofs,
+            labeling_proof,
         })
     }
 
@@ -205,6 +286,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
     fn create_labeling_proof(
         challenge: usize,
+        window_index: usize,
         layer: usize,
         graph: &StackedBucketGraph<H>,
         layer_challenges: &LayerChallenges,
@@ -241,7 +323,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 .collect()
         };
 
-        let proof = LabelingProof::<H>::new(challenge as u64, parents_data.clone());
+        let proof =
+            LabelingProof::<H>::new(window_index as u64, challenge as u64, parents_data.clone());
 
         {
             let labeled_node = replica_column_proof.c_x.get_node_at_layer(layer);
@@ -264,45 +347,81 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     pub(crate) fn verify_single_partition(
         pub_params: &PublicParams<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
-        proofs: &[Proof<H, G>],
+        proof: &Proof<H, G>,
         expected_comm_r: &H::Domain,
         k: usize,
     ) -> Result<bool> {
-        let graph = &pub_params.window_graph;
+        let window_graph = &pub_params.window_graph;
+        let wrapper_graph = &pub_params.wrapper_graph;
+
+        let comm_c = &proof.comm_c;
+        let comm_q = &proof.comm_q;
+        let comm_r_last = &proof.comm_r_last;
 
         trace!("verify comm_r");
-        let actual_comm_r: H::Domain = {
-            let comm_c = proofs[0].comm_c();
-            let comm_r_last = proofs[0].comm_r_last();
-            Fr::from(hash2(comm_c, comm_r_last)).into()
-        };
+        let actual_comm_r: H::Domain = Fr::from(hash3(comm_c, comm_q, comm_r_last)).into();
 
         if expected_comm_r != &actual_comm_r {
             return Ok(false);
         }
 
-        let challenges =
-            pub_inputs.all_challenges(&pub_params.layer_challenges, graph.size(), Some(k));
+        let window_challenges =
+            pub_inputs.all_challenges(&pub_params.layer_challenges, window_graph.size(), Some(k));
+        let wrapper_challenges =
+            pub_inputs.all_challenges(&pub_params.layer_challenges, wrapper_graph.size(), Some(k));
 
-        let valid = proofs.par_iter().enumerate().all(|(i, proof)| {
-            trace!("verify challenge {}/{}", i + 1, challenges.len());
-
-            // Validate for this challenge
-            let challenge = challenges[i];
-
+        for window_proof in &proof.window_proofs {
             // make sure all proofs have the same comm_c
-            if proof.comm_c() != proofs[0].comm_c() {
-                return false;
+            if window_proof.comm_c() != comm_c {
+                return Ok(false);
             }
+        }
+        for wrapper_proof in &proof.wrapper_proofs {
             // make sure all proofs have the same comm_r_last
-            if proof.comm_r_last() != proofs[0].comm_r_last() {
-                return false;
+            if wrapper_proof.comm_r_last() != comm_r_last {
+                return Ok(false);
             }
+        }
 
-            proof.verify(pub_params, pub_inputs, challenge, i, graph)
-        });
+        let window_valid = proof
+            .window_proofs
+            .par_iter()
+            .enumerate()
+            .all(|(i, proof)| {
+                trace!("verify challenge {}/{}", i + 1, window_challenges.len());
 
-        Ok(valid)
+                // Validate for this challenge
+                let window_challenge = window_challenges[i];
+                proof.verify(
+                    pub_params,
+                    pub_inputs,
+                    window_challenge,
+                    i,
+                    window_graph,
+                    comm_q,
+                )
+            });
+
+        let wrapper_valid = proof
+            .wrapper_proofs
+            .par_iter()
+            .enumerate()
+            .all(|(i, proof)| {
+                trace!("verify challenge {}/{}", i + 1, wrapper_challenges.len());
+
+                // Validate for this challenge
+                let wrapper_challenge = wrapper_challenges[i];
+                proof.verify::<G>(
+                    pub_params,
+                    pub_inputs,
+                    wrapper_challenge,
+                    i,
+                    wrapper_graph,
+                    comm_q,
+                )
+            });
+
+        Ok(window_valid && wrapper_valid)
     }
 
     pub(crate) fn extract_all_windows(

@@ -271,31 +271,32 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         vanilla_proof: &'b <StackedDrg<H, G> as ProofScheme>::Proof,
         public_params: &'b <StackedDrg<H, G> as ProofScheme>::PublicParams,
     ) -> StackedCircuit<'a, Bls12, H, G> {
-        assert!(
-            !vanilla_proof.is_empty(),
-            "Cannot create a circuit with no vanilla proofs"
-        );
+        unimplemented!();
 
-        let comm_r_last = *vanilla_proof[0].comm_r_last();
-        let comm_c = *vanilla_proof[0].comm_c();
+        //     !vanilla_proof.is_empty(),
+        //     "Cannot create a circuit with no vanilla proofs"
+        // );
 
-        // ensure consistency
-        assert!(vanilla_proof
-            .iter()
-            .all(|p| p.comm_r_last() == &comm_r_last));
-        assert!(vanilla_proof.iter().all(|p| p.comm_c() == &comm_c));
+        // let comm_r_last = *vanilla_proof[0].comm_r_last();
+        // let comm_c = *vanilla_proof[0].comm_c();
 
-        StackedCircuit {
-            params: &*JJ_PARAMS,
-            public_params: public_params.clone(),
-            replica_id: Some(public_inputs.replica_id),
-            comm_d: public_inputs.tau.as_ref().map(|t| t.comm_d),
-            comm_r: public_inputs.tau.as_ref().map(|t| t.comm_r),
-            comm_r_last: Some(comm_r_last),
-            comm_c: Some(comm_c),
-            proofs: vanilla_proof.iter().cloned().map(|p| p.into()).collect(),
-            _e: PhantomData,
-        }
+        // // ensure consistency
+        // assert!(vanilla_proof
+        //     .iter()
+        //     .all(|p| p.comm_r_last() == &comm_r_last));
+        // assert!(vanilla_proof.iter().all(|p| p.comm_c() == &comm_c));
+
+        // StackedCircuit {
+        //     params: &*JJ_PARAMS,
+        //     public_params: public_params.clone(),
+        //     replica_id: Some(public_inputs.replica_id),
+        //     comm_d: public_inputs.tau.as_ref().map(|t| t.comm_d),
+        //     comm_r: public_inputs.tau.as_ref().map(|t| t.comm_r),
+        //     comm_r_last: Some(comm_r_last),
+        //     comm_c: Some(comm_c),
+        //     proofs: vanilla_proof.iter().cloned().map(|p| p.into()).collect(),
+        //     _e: PhantomData,
+        // }
     }
 
     fn blank_circuit(

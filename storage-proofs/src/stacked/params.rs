@@ -169,20 +169,37 @@ pub struct PrivateInputs<H: Hasher, G: Hasher> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proof<H: Hasher, G: Hasher> {
     #[serde(bound(
+        serialize = "WindowProof<H, G>: Serialize",
+        deserialize = "WindowProof<H, G>: Deserialize<'de>"
+    ))]
+    pub window_proofs: Vec<WindowProof<H, G>>,
+    #[serde(bound(
+        serialize = "WrapperProof<H>: Serialize",
+        deserialize = "WrapperProof<H>: Deserialize<'de>"
+    ))]
+    pub wrapper_proofs: Vec<WrapperProof<H>>,
+    pub comm_c: H::Domain,
+    pub comm_q: H::Domain,
+    pub comm_r_last: H::Domain,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WindowProof<H: Hasher, G: Hasher> {
+    #[serde(bound(
         serialize = "MerkleProof<G>: Serialize",
         deserialize = "MerkleProof<G>: Deserialize<'de>"
     ))]
-    pub comm_d_proofs: MerkleProof<G>,
+    pub comm_d_proof: MerkleProof<G>,
     #[serde(bound(
         serialize = "MerkleProof<H>: Serialize, ColumnProof<H>: Serialize",
         deserialize = "MerkleProof<H>: Deserialize<'de>, ColumnProof<H>: Deserialize<'de>"
     ))]
-    pub comm_r_last_proof: MerkleProof<H>,
+    pub comm_q_proof: MerkleProof<H>,
     #[serde(bound(
         serialize = "ReplicaColumnProof<H>: Serialize",
         deserialize = "ReplicaColumnProof<H>: Deserialize<'de>"
     ))]
-    pub replica_column_proofs: ReplicaColumnProof<H>,
+    pub replica_column_proof: ReplicaColumnProof<H>,
     #[serde(bound(
         serialize = "LabelingProof<H>: Serialize",
         deserialize = "LabelingProof<H>: Deserialize<'de>"
@@ -196,13 +213,69 @@ pub struct Proof<H: Hasher, G: Hasher> {
     pub encoding_proof: EncodingProof<H>,
 }
 
-impl<H: Hasher, G: Hasher> Proof<H, G> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WrapperProof<H: Hasher> {
+    #[serde(bound(
+        serialize = "MerkleProof<H>: Serialize, ColumnProof<H>: Serialize",
+        deserialize = "MerkleProof<H>: Deserialize<'de>, ColumnProof<H>: Deserialize<'de>"
+    ))]
+    pub comm_r_last_proof: MerkleProof<H>,
+    #[serde(bound(
+        serialize = "MerkleProof<H>: Serialize, ColumnProof<H>: Serialize",
+        deserialize = "MerkleProof<H>: Deserialize<'de>, ColumnProof<H>: Deserialize<'de>"
+    ))]
+    pub comm_q_parents_proofs: Vec<MerkleProof<H>>,
+    #[serde(bound(
+        serialize = "LabelingProof<H>: Serialize",
+        deserialize = "LabelingProof<H>: Deserialize<'de>"
+    ))]
+    pub labeling_proof: LabelingProof<H>,
+}
+
+impl<H: Hasher> WrapperProof<H> {
     pub fn comm_r_last(&self) -> &H::Domain {
         self.comm_r_last_proof.root()
     }
 
+    /// Verify the full proof.
+    pub fn verify<G: Hasher>(
+        &self,
+        pub_params: &PublicParams<H>,
+        pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
+        challenge: usize,
+        challenge_index: usize,
+        wrapper_graph: &StackedBucketGraph<H>,
+        comm_q: &H::Domain,
+    ) -> bool {
+        let replica_id = &pub_inputs.replica_id;
+
+        check!(challenge < wrapper_graph.size());
+        check!(pub_inputs.tau.is_some());
+
+        trace!("verify final replica layer openings");
+        check!(self.comm_r_last_proof.proves_challenge(challenge));
+
+        trace!("verify comm_q_parents");
+        let mut parents = vec![0; wrapper_graph.expansion_degree()];
+        wrapper_graph.expanded_parents(challenge, &mut parents);
+
+        for (proof, parent) in self.comm_q_parents_proofs.iter().zip(parents.iter()) {
+            check_eq!(proof.root(), comm_q);
+            check!(proof.validate(challenge));
+            // TODO: do we need to check for a relationship to `parent`?
+        }
+
+        trace!("verify labeling");
+        let labeled_node = self.comm_r_last_proof.leaf();
+        check!(self.labeling_proof.verify(replica_id, labeled_node));
+
+        true
+    }
+}
+
+impl<H: Hasher, G: Hasher> WindowProof<H, G> {
     pub fn comm_c(&self) -> &H::Domain {
-        self.replica_column_proofs.c_x.root()
+        self.replica_column_proof.c_x.root()
     }
 
     /// Verify the full proof.
@@ -212,40 +285,46 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         challenge: usize,
         challenge_index: usize,
-        graph: &StackedBucketGraph<H>,
+        window_graph: &StackedBucketGraph<H>,
+        comm_q: &H::Domain,
     ) -> bool {
         let replica_id = &pub_inputs.replica_id;
 
-        check!(challenge < graph.size());
+        check!(challenge < window_graph.size());
         check!(pub_inputs.tau.is_some());
 
         // Verify initial data layer
         trace!("verify initial data layer");
 
-        check!(self.comm_d_proofs.proves_challenge(challenge));
+        check!(self.comm_d_proof.proves_challenge(challenge));
 
         if let Some(ref tau) = pub_inputs.tau {
-            check_eq!(self.comm_d_proofs.root(), &tau.comm_d);
+            check_eq!(self.comm_d_proof.root(), &tau.comm_d);
+        } else {
+            return false;
+        }
+
+        // Verify q data layer
+        trace!("verify initial q data layer");
+
+        check!(self.comm_q_proof.proves_challenge(challenge));
+
+        if let Some(ref tau) = pub_inputs.tau {
+            check_eq!(self.comm_q_proof.root(), comm_q);
         } else {
             return false;
         }
 
         // Verify replica column openings
         trace!("verify replica column openings");
-        let mut parents = vec![0; graph.degree()];
-        graph.parents(challenge, &mut parents);
-        check!(self.replica_column_proofs.verify(challenge, &parents));
-
-        check!(self.verify_final_replica_layer(challenge));
+        let mut parents = vec![0; window_graph.degree()];
+        window_graph.parents(challenge, &mut parents);
+        check!(self.replica_column_proof.verify(challenge, &parents));
 
         check!(self.verify_labels(replica_id, &pub_params.layer_challenges, challenge_index));
 
         trace!("verify encoding");
-        check!(self.encoding_proof.verify::<G>(
-            replica_id,
-            self.comm_r_last_proof.leaf(),
-            self.comm_d_proofs.leaf()
-        ));
+        // TODO: encoding proof
 
         true
     }
@@ -270,20 +349,12 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
             if expect_challenge {
                 check!(self.labeling_proofs.contains_key(&layer));
                 let labeling_proof = &self.labeling_proofs.get(&layer).unwrap();
-                let labeled_node = self.replica_column_proofs.c_x.get_node_at_layer(layer);
+                let labeled_node = self.replica_column_proof.c_x.get_node_at_layer(layer);
                 check!(labeling_proof.verify(replica_id, labeled_node));
             } else {
                 check!(self.labeling_proofs.get(&layer).is_none());
             }
         }
-
-        true
-    }
-
-    /// Verify final replica layer openings
-    fn verify_final_replica_layer(&self, challenge: usize) -> bool {
-        trace!("verify final replica layer openings");
-        check!(self.comm_r_last_proof.proves_challenge(challenge));
 
         true
     }
@@ -330,12 +401,6 @@ impl<H: Hasher> ReplicaColumnProof<H> {
         }
 
         true
-    }
-}
-
-impl<H: Hasher, G: Hasher> Proof<H, G> {
-    pub fn serialize(&self) -> Vec<u8> {
-        unimplemented!();
     }
 }
 
