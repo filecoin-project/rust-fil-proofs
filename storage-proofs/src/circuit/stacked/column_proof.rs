@@ -25,8 +25,8 @@ impl<H: Hasher> ColumnProof<H> {
         }
     }
 
-    pub fn get_node_at_layer(&self, layer: usize) -> &Option<Fr> {
-        self.column.get_node_at_layer(layer)
+    pub fn get_node_at_layer(&self, window_index: usize, layer: usize) -> &Option<Fr> {
+        self.column.get_node_at_layer(window_index, layer)
     }
 
     pub fn synthesize<CS: ConstraintSystem<Bls12>>(

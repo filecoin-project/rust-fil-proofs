@@ -427,9 +427,9 @@ mod tests {
     #[cfg(not(feature = "mem-trees"))]
     #[test]
     fn stacked_input_circuit() {
-        femme::pretty::Logger::new()
-            .start(log::LevelFilter::Trace)
-            .ok();
+        // femme::pretty::Logger::new()
+        //     .start(log::LevelFilter::Trace)
+        //     .ok();
 
         let nodes = 8 * 32;
         let degree = BASE_DEGREE;

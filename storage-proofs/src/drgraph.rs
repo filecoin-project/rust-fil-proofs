@@ -98,7 +98,7 @@ impl<H: Hasher> ParameterSetMetadata for BucketGraph<H> {
     }
 
     fn sector_size(&self) -> u64 {
-        (self.nodes * 32) as u64
+        (self.nodes * NODE_SIZE) as u64
     }
 }
 

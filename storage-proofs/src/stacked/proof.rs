@@ -37,10 +37,6 @@ pub struct StackedDrg<'a, H: 'a + Hasher, G: 'a + Hasher> {
     _b: PhantomData<&'a G>,
 }
 
-fn get_window_index(node: usize) -> usize {
-    node / WINDOW_SIZE_NODES
-}
-
 fn get_drg_parents_columns<H: Hasher, G: Hasher>(
     graph: &StackedBucketGraph<H>,
     t_aux: &TemporaryAuxCache<H, G>,
@@ -102,14 +98,13 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             pub_inputs.all_challenges(layer_challenges, window_graph.size(), Some(k));
 
         let window_proofs: Vec<_> = window_challenges
-            .into_par_iter()
+            // .into_par_iter()
+            .into_iter()
             .enumerate()
             .map(|(challenge_index, challenge)| {
-                let window_index = get_window_index(challenge);
                 Self::prove_window_challenge(
                     challenge,
                     challenge_index,
-                    window_index,
                     window_graph,
                     pub_inputs,
                     t_aux,
@@ -123,7 +118,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             pub_inputs.all_challenges(layer_challenges, wrapper_graph.size(), Some(k));
 
         let wrapper_proofs: Vec<_> = wrapper_challenges
-            .into_par_iter()
+            // .into_par_iter()
+            .into_iter()
             .enumerate()
             .map(|(challenge_index, challenge)| {
                 Self::prove_wrapper_challenge(
@@ -150,7 +146,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     fn prove_window_challenge(
         challenge: usize,
         challenge_index: usize,
-        window_index: usize,
         window_graph: &StackedBucketGraph<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         t_aux: &TemporaryAuxCache<H, G>,
@@ -164,58 +159,77 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         assert!(challenge > 0, "Invalid challenge");
 
         let layers = layer_challenges.layers();
+        let num_windows = layer_size / WINDOW_SIZE_BYTES;
 
         // Initial data layer openings (c_X in Comm_D)
-        let comm_d_proof = MerkleProof::new_from_proof(&t_aux.tree_d.gen_proof(challenge));
+        let comm_d_proofs = (0..num_windows)
+            .map(|_| MerkleProof::new_from_proof(&t_aux.tree_d.gen_proof(challenge)))
+            .collect();
 
         // Stacked replica column openings
         let replica_column_proof =
             Self::prove_replica_column(challenge, window_graph, t_aux, layer_size)?;
 
         trace!("q openings");
-        let comm_q_proof = MerkleProof::new_from_proof(&t_aux.tree_q.gen_proof(challenge));
+        let comm_q_proofs = (0..num_windows)
+            .map(|_| MerkleProof::new_from_proof(&t_aux.tree_q.gen_proof(challenge)))
+            .collect();
 
-        // Labeling Proofs Layer 1..l
-        let mut labeling_proofs = HashMap::with_capacity(layers);
-        let mut encoding_proof = None;
+        let mut encoding_proofs = Vec::with_capacity(num_windows);
+        let labeling_proofs = (0..num_windows)
+            .map(|window_index| {
+                // Labeling Proofs Layer 1..l
+                let mut labeling_proofs = HashMap::with_capacity(layers);
 
-        for layer in 1..=layers {
-            trace!("  encoding proof layer {}", layer,);
+                for layer in 1..=layers {
+                    let parents_data = Self::get_parents_data_for_challenge(
+                        window_index,
+                        challenge,
+                        layer,
+                        window_graph,
+                        t_aux,
+                    )?;
 
-            let parents_data =
-                Self::get_parents_data_for_challenge(challenge, layer, window_graph, t_aux)?;
+                    if layer < layers {
+                        trace!("  labeling proof window: {}, layer {}", window_index, layer);
+                        let proof = LabelingProof::<H>::new(
+                            Some(window_index as u64),
+                            challenge as u64,
+                            parents_data.clone(),
+                        );
 
-            if layer < layers {
-                let proof = LabelingProof::<H>::new(
-                    Some(window_index as u64),
-                    challenge as u64,
-                    parents_data.clone(),
-                );
+                        {
+                            let expected_labeled_node = replica_column_proof
+                                .c_x
+                                .get_node_at_layer(window_index, layer);
 
-                {
-                    let labeled_node = replica_column_proof.c_x.get_node_at_layer(layer);
-                    assert!(
-                        proof.verify(&pub_inputs.replica_id, &labeled_node),
-                        "Invalid labeling proof generated"
-                    );
+                            assert!(
+                                proof.verify(&pub_inputs.replica_id, &expected_labeled_node),
+                                "Invalid labeling proof generated"
+                            );
+                        }
+
+                        labeling_proofs.insert(layer, proof);
+                    } else {
+                        // if layer == layers {
+                        trace!("  encoding proof window: {}, layer {}", window_index, layer);
+                        encoding_proofs.push(EncodingProof::new(
+                            window_index as u64,
+                            challenge as u64,
+                            parents_data,
+                        ));
+                    }
                 }
-
-                labeling_proofs.insert(layer, proof);
-            } else {
-                encoding_proof = Some(EncodingProof::new(
-                    window_index as u64,
-                    challenge as u64,
-                    parents_data,
-                ));
-            }
-        }
+                Ok(labeling_proofs)
+            })
+            .collect::<Result<_>>()?;
 
         Ok(WindowProof {
-            comm_d_proof,
-            comm_q_proof,
+            comm_d_proofs,
+            comm_q_proofs,
             replica_column_proof,
             labeling_proofs,
-            encoding_proof: encoding_proof.expect("invalid tapering"),
+            encoding_proofs,
         })
     }
 
@@ -298,6 +312,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     }
 
     fn get_parents_data_for_challenge(
+        window_index: usize,
         challenge: usize,
         layer: usize,
         graph: &StackedBucketGraph<H>,
@@ -309,7 +324,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
             parents
                 .into_iter()
-                .map(|parent| t_aux.domain_node_at_layer(layer, parent))
+                .map(|parent| {
+                    let index = window_index as u32 * WINDOW_SIZE_NODES as u32 + parent;
+                    t_aux.domain_node_at_layer(layer, index)
+                })
                 .collect()
         } else {
             let mut parents = vec![0; graph.degree()];
@@ -320,12 +338,13 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 .into_iter()
                 .enumerate()
                 .map(|(i, parent)| {
+                    let index = window_index as u32 * WINDOW_SIZE_NODES as u32 + parent;
                     if i < base_parents_count {
                         // parents data for base parents is from the current layer
-                        t_aux.domain_node_at_layer(layer, parent)
+                        t_aux.domain_node_at_layer(layer, index)
                     } else {
                         // parents data for exp parents is from the previous layer
-                        t_aux.domain_node_at_layer(layer - 1, parent)
+                        t_aux.domain_node_at_layer(layer - 1, index)
                     }
                 })
                 .collect()
@@ -582,7 +601,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         .lock()
                         .unwrap()
                         .0
-                        .copy_from_slice(&layer_labels, window_index * WINDOW_SIZE_BYTES);
+                        .copy_from_slice(&layer_labels, window_index * WINDOW_SIZE_NODES);
                 }
             });
 
@@ -687,7 +706,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                 let label = labels
                     .labels_for_layer(layer)
-                    .read_at(column_index + window_index * WINDOW_SIZE_NODES);
+                    .read_at(window_index * WINDOW_SIZE_NODES + column_index);
 
                 hasher.update(AsRef::<[u8]>::as_ref(&label));
             }
@@ -1070,9 +1089,9 @@ mod tests {
 
     fn test_prove_verify<H: 'static + Hasher>(n: usize, challenges: LayerChallenges) {
         // This will be called multiple times, only the first one succeeds, and that is ok.
-        // femme::pretty::Logger::new()
-        //     .start(log::LevelFilter::Trace)
-        //     .ok();
+        femme::pretty::Logger::new()
+            .start(log::LevelFilter::Trace)
+            .ok();
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 

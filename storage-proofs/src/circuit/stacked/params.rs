@@ -12,9 +12,10 @@ use crate::circuit::{por::PoRCircuit, variables::Root};
 use crate::drgraph::Graph;
 use crate::hasher::Hasher;
 use crate::merkle::MerkleProof;
+use crate::parameter_cache::ParameterSetMetadata;
 use crate::stacked::{
     Proof as VanillaProof, PublicParams, ReplicaColumnProof as VanillaReplicaColumnProof,
-    WindowProof as VanillaWindowProof, WrapperProof as VanillaWrapperProof,
+    WindowProof as VanillaWindowProof, WrapperProof as VanillaWrapperProof, WINDOW_SIZE_BYTES,
 };
 
 #[derive(Debug, Clone)]
@@ -28,11 +29,11 @@ pub struct Proof<H: Hasher, G: Hasher> {
 
 #[derive(Debug, Clone)]
 pub struct WindowProof<H: Hasher, G: Hasher> {
-    pub comm_d_proof: InclusionPath<G>,
-    pub comm_q_proof: InclusionPath<H>,
+    pub comm_d_proofs: Vec<InclusionPath<G>>,
+    pub comm_q_proofs: Vec<InclusionPath<H>>,
     pub replica_column_proof: ReplicaColumnProof<H>,
-    pub labeling_proofs: Vec<(usize, LabelingProof)>,
-    pub encoding_proof: EncodingProof,
+    pub labeling_proofs: Vec<Vec<(usize, LabelingProof)>>,
+    pub encoding_proofs: Vec<EncodingProof>,
 }
 
 #[derive(Debug, Clone)]
@@ -46,18 +47,22 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
     /// Create an empty proof, used in `blank_circuit`s.
     pub fn empty(params: &PublicParams<H>, _challenge_index: usize) -> Self {
         let layers = params.layer_challenges.layers();
+        let num_windows = params.sector_size() as usize / WINDOW_SIZE_BYTES;
 
-        let mut labeling_proofs = Vec::with_capacity(layers - 1);
-        for layer in 1..layers {
-            labeling_proofs.push((layer, LabelingProof::empty(params, layer)));
-        }
+        let labeling_proofs = (0..num_windows)
+            .map(|_| {
+                (1..=layers)
+                    .map(|layer| (layer, LabelingProof::empty(params, layer)))
+                    .collect()
+            })
+            .collect();
 
         WindowProof {
-            comm_d_proof: InclusionPath::empty(&params.wrapper_graph),
-            comm_q_proof: InclusionPath::empty(&params.wrapper_graph),
+            comm_d_proofs: vec![InclusionPath::empty(&params.wrapper_graph); num_windows],
+            comm_q_proofs: vec![InclusionPath::empty(&params.wrapper_graph); num_windows],
             replica_column_proof: ReplicaColumnProof::empty(params),
             labeling_proofs,
-            encoding_proof: EncodingProof::empty(params),
+            encoding_proofs: vec![EncodingProof::empty(params); num_windows],
         }
     }
 
@@ -73,55 +78,76 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
         replica_id: &[Boolean],
     ) -> Result<(), SynthesisError> {
         let WindowProof {
-            comm_d_proof,
-            comm_q_proof,
+            comm_d_proofs,
+            comm_q_proofs,
             replica_column_proof,
             labeling_proofs,
-            encoding_proof,
+            encoding_proofs,
         } = self;
 
         // verify initial data layer
-        let comm_d_leaf = comm_d_proof.alloc_value(cs.namespace(|| "comm_d_leaf"))?;
-        comm_d_proof.synthesize(
-            cs.namespace(|| "comm_d_inclusion"),
-            params,
-            comm_d.clone(),
-            comm_d_leaf.clone(),
-        )?;
-
-        // verify q data layer
-        let comm_q_leaf = comm_q_proof.alloc_value(cs.namespace(|| "comm_q_leaf"))?;
-        comm_q_proof.synthesize(
-            cs.namespace(|| "comm_q_inclusion"),
-            params,
-            comm_q.clone(),
-            comm_q_leaf.clone(),
-        )?;
-
-        // verify labels
-        for (layer, proof) in labeling_proofs.into_iter() {
-            let raw = replica_column_proof.c_x.get_node_at_layer(layer);
-            let labeled_node =
-                num::AllocatedNum::alloc(cs.namespace(|| format!("label_node_{}", layer)), || {
-                    raw.map(Into::into)
-                        .ok_or_else(|| SynthesisError::AssignmentMissing)
-                })?;
-
-            proof.synthesize(
-                cs.namespace(|| format!("labeling_proof_{}", layer)),
+        let mut comm_d_leafs = Vec::new();
+        for (i, comm_d_proof) in comm_d_proofs.into_iter().enumerate() {
+            let comm_d_leaf =
+                comm_d_proof.alloc_value(cs.namespace(|| format!("comm_d_leaf_{}", i)))?;
+            comm_d_proof.synthesize(
+                cs.namespace(|| format!("comm_d_inclusion_{}", i)),
                 params,
-                replica_id,
-                &labeled_node,
+                comm_d.clone(),
+                comm_d_leaf.clone(),
             )?;
+            comm_d_leafs.push(comm_d_leaf);
         }
 
-        encoding_proof.synthesize(
-            cs.namespace(|| "encoding_proof"),
-            params,
-            replica_id,
-            &comm_q_leaf,
-            &comm_d_leaf,
-        )?;
+        // verify q data layer
+        let mut comm_q_leafs = Vec::new();
+        for (i, comm_q_proof) in comm_q_proofs.into_iter().enumerate() {
+            let comm_q_leaf =
+                comm_q_proof.alloc_value(cs.namespace(|| format!("comm_q_leaf_{}", i)))?;
+            comm_q_proof.synthesize(
+                cs.namespace(|| format!("comm_q_inclusion_{}", i)),
+                params,
+                comm_q.clone(),
+                comm_q_leaf.clone(),
+            )?;
+            comm_q_leafs.push(comm_q_leaf);
+        }
+
+        // verify labels
+        for (i, labeling_proofs) in labeling_proofs.into_iter().enumerate() {
+            let mut cs = cs.namespace(|| format!("labeling_proof_{}", i));
+            for (layer, proof) in labeling_proofs.into_iter() {
+                let raw = replica_column_proof.c_x.get_node_at_layer(i, layer);
+                let labeled_node = num::AllocatedNum::alloc(
+                    cs.namespace(|| format!("label_node_{}", layer)),
+                    || {
+                        raw.map(Into::into)
+                            .ok_or_else(|| SynthesisError::AssignmentMissing)
+                    },
+                )?;
+
+                proof.synthesize(
+                    cs.namespace(|| format!("labeling_proof_{}", layer)),
+                    params,
+                    replica_id,
+                    &labeled_node,
+                )?;
+            }
+        }
+
+        for (i, (encoding_proof, (comm_q_leaf, comm_d_leaf))) in encoding_proofs
+            .into_iter()
+            .zip(comm_q_leafs.iter().zip(comm_d_leafs.iter()))
+            .enumerate()
+        {
+            encoding_proof.synthesize(
+                cs.namespace(|| format!("encoding_proof_{}", i)),
+                params,
+                replica_id,
+                comm_q_leaf,
+                comm_d_leaf,
+            )?;
+        }
 
         // verify replica column openings
         replica_column_proof.synthesize(cs.namespace(|| "replica_column_proof"), params, comm_c)?;
@@ -210,26 +236,31 @@ impl<H: Hasher, G: Hasher> From<VanillaProof<H, G>> for Proof<H, G> {
 impl<H: Hasher, G: Hasher> From<VanillaWindowProof<H, G>> for WindowProof<H, G> {
     fn from(vanilla_proof: VanillaWindowProof<H, G>) -> Self {
         let VanillaWindowProof {
-            comm_d_proof,
-            comm_q_proof,
+            comm_d_proofs,
+            comm_q_proofs,
             replica_column_proof,
             labeling_proofs,
-            encoding_proof,
+            encoding_proofs,
         } = vanilla_proof;
 
-        let mut labeling_proofs: Vec<_> = labeling_proofs
+        let labeling_proofs: Vec<_> = labeling_proofs
             .into_iter()
-            .map(|(layer, p)| (layer, p.into()))
+            .map(|proof| {
+                let mut p = proof
+                    .into_iter()
+                    .map(|(layer, p)| (layer, p.into()))
+                    .collect::<Vec<(_, _)>>();
+                p.sort_by_cached_key(|(k, _)| *k);
+                p
+            })
             .collect();
 
-        labeling_proofs.sort_by_cached_key(|(k, _)| *k);
-
         WindowProof {
-            comm_d_proof: comm_d_proof.into(),
-            comm_q_proof: comm_q_proof.into(),
+            comm_d_proofs: comm_d_proofs.into_iter().map(Into::into).collect(),
+            comm_q_proofs: comm_q_proofs.into_iter().map(Into::into).collect(),
             replica_column_proof: replica_column_proof.into(),
             labeling_proofs,
-            encoding_proof: encoding_proof.into(),
+            encoding_proofs: encoding_proofs.into_iter().map(Into::into).collect(),
         }
     }
 }

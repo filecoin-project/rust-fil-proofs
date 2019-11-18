@@ -176,16 +176,18 @@ pub struct Proof<H: Hasher, G: Hasher> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WindowProof<H: Hasher, G: Hasher> {
+    /// One proof for every window.
     #[serde(bound(
         serialize = "MerkleProof<G>: Serialize",
         deserialize = "MerkleProof<G>: Deserialize<'de>"
     ))]
-    pub comm_d_proof: MerkleProof<G>,
+    pub comm_d_proofs: Vec<MerkleProof<G>>,
+    /// One proof for every window.
     #[serde(bound(
         serialize = "MerkleProof<H>: Serialize, ColumnProof<H>: Serialize",
         deserialize = "MerkleProof<H>: Deserialize<'de>, ColumnProof<H>: Deserialize<'de>"
     ))]
-    pub comm_q_proof: MerkleProof<H>,
+    pub comm_q_proofs: Vec<MerkleProof<H>>,
     #[serde(bound(
         serialize = "ReplicaColumnProof<H>: Serialize",
         deserialize = "ReplicaColumnProof<H>: Deserialize<'de>"
@@ -195,13 +197,15 @@ pub struct WindowProof<H: Hasher, G: Hasher> {
         serialize = "LabelingProof<H>: Serialize",
         deserialize = "LabelingProof<H>: Deserialize<'de>"
     ))]
+    /// One proof for every window.
     /// Indexed by layer in 1..layers.
-    pub labeling_proofs: HashMap<usize, LabelingProof<H>>,
+    pub labeling_proofs: Vec<HashMap<usize, LabelingProof<H>>>,
+    /// One proof for every window.
     #[serde(bound(
         serialize = "EncodingProof<H>: Serialize",
         deserialize = "EncodingProof<H>: Deserialize<'de>"
     ))]
-    pub encoding_proof: EncodingProof<H>,
+    pub encoding_proofs: Vec<EncodingProof<H>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -287,19 +291,21 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
         // Verify initial data layer
         trace!("verify initial data layer");
 
-        check!(self.comm_d_proof.proves_challenge(challenge));
-
-        if let Some(ref tau) = pub_inputs.tau {
-            check_eq!(self.comm_d_proof.root(), &tau.comm_d);
-        } else {
-            return false;
+        for comm_d_proof in &self.comm_d_proofs {
+            check!(comm_d_proof.proves_challenge(challenge));
+            if let Some(ref tau) = pub_inputs.tau {
+                check_eq!(comm_d_proof.root(), &tau.comm_d);
+            } else {
+                return false;
+            }
         }
 
         // Verify q data layer
         trace!("verify initial q data layer");
-
-        check!(self.comm_q_proof.proves_challenge(challenge));
-        check_eq!(self.comm_q_proof.root(), comm_q);
+        for comm_q_proof in &self.comm_q_proofs {
+            check!(comm_q_proof.proves_challenge(challenge));
+            check_eq!(comm_q_proof.root(), comm_q);
+        }
 
         // Verify replica column openings
         trace!("verify replica column openings");
@@ -309,35 +315,44 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
             .replica_column_proof
             .verify(challenge, &parents, comm_c));
 
-        check!(self.verify_labels(replica_id, &pub_params.layer_challenges, challenge_index));
+        check!(self.verify_labels(replica_id));
 
         trace!("verify encoding");
-        check!(self.encoding_proof.verify::<G>(
-            replica_id,
-            self.comm_q_proof.leaf(),
-            self.comm_d_proof.leaf()
-        ));
+        for (encoding_proof, (comm_q_proof, comm_d_proof)) in self
+            .encoding_proofs
+            .iter()
+            .zip(self.comm_q_proofs.iter().zip(self.comm_d_proofs.iter()))
+        {
+            check!(encoding_proof.verify::<G>(
+                replica_id,
+                comm_q_proof.leaf(),
+                comm_d_proof.leaf()
+            ));
+        }
 
         true
     }
 
-    /// Verify all labels.
-    fn verify_labels(
-        &self,
-        replica_id: &H::Domain,
-        layer_challenges: &LayerChallenges,
-        _challenge_index: usize,
-    ) -> bool {
-        // Verify Labels Layer 1..layers
-        for layer in 1..layer_challenges.layers() {
-            trace!("verify labeling (layer: {})", layer,);
+    /// Verify all encodings.
+    fn verify_labels(&self, replica_id: &H::Domain) -> bool {
+        for (window_index, labeling_proofs) in self.labeling_proofs.iter().enumerate() {
+            // Verify Labels Layer 1..layers
+            for (layer, proof) in labeling_proofs.iter() {
+                trace!(
+                    "verify labeling (layer: {}, window: {}",
+                    layer,
+                    window_index
+                );
+                check_eq!(window_index as u64, proof.window_index.unwrap());
 
-            check!(self.labeling_proofs.contains_key(&layer));
-            let labeling_proof = &self.labeling_proofs.get(&layer).unwrap();
-            let labeled_node = self.replica_column_proof.c_x.get_node_at_layer(layer);
-            check!(labeling_proof.verify(replica_id, labeled_node));
+                let expected_labeled_node = self
+                    .replica_column_proof
+                    .c_x
+                    .get_node_at_layer(window_index, *layer);
+
+                check!(proof.verify(replica_id, expected_labeled_node));
+            }
         }
-
         true
     }
 }
@@ -426,8 +441,8 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
         Ok(self.labels_for_layer(layer).read_at(node_index as usize))
     }
 
-    pub fn column(&self, column_index: u32) -> Result<Column<H>> {
-        self.labels.column(column_index)
+    pub fn column(&self, layers: usize, column_index: u32) -> Result<Column<H>> {
+        self.labels.column(layers, column_index)
     }
 
     #[cfg(not(feature = "mem-trees"))]
@@ -579,7 +594,7 @@ impl<H: Hasher> Labels<H> {
     }
 
     /// Build the column for the given node.
-    pub fn column(&self, node: u32) -> Result<Column<H>> {
+    pub fn column(&self, layers: usize, node: u32) -> Result<Column<H>> {
         let rows = self
             .labels
             .iter()
@@ -590,7 +605,7 @@ impl<H: Hasher> Labels<H> {
             })
             .collect();
 
-        Ok(Column::new(node, rows))
+        Ok(Column::new(node, layers, rows))
     }
 }
 
@@ -662,13 +677,16 @@ impl<H: Hasher> LabelsCache<H> {
                 self.labels
                     .iter()
                     .take(len - 1) // skip last one
-                    .map(move |labels| {
-                        labels.read_at(node as usize + window_index * WINDOW_SIZE_NODES)
+                    .enumerate()
+                    .map(move |(layer, labels)| {
+                        let l = labels.read_at(window_index * WINDOW_SIZE_NODES + node as usize);
+                        info!("({}:{}:{}) {:?}", window_index, node, layer, &l);
+                        l
                     })
             })
             .collect();
 
-        Ok(Column::new(node, rows))
+        Ok(Column::new(node, len - 1, rows))
     }
 }
 

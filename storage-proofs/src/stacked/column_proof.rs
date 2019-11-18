@@ -36,12 +36,12 @@ impl<H: Hasher> ColumnProof<H> {
         &self.column
     }
 
-    pub fn get_node_at_layer(&self, layer: usize) -> &H::Domain {
-        self.column().get_node_at_layer(layer)
+    pub fn get_node_at_layer(&self, window_index: usize, layer: usize) -> &H::Domain {
+        self.column().get_node_at_layer(window_index, layer)
     }
 
-    pub fn get_verified_node_at_layer(&self, layer: usize) -> IncludedNode<H> {
-        let value = self.get_node_at_layer(layer);
+    pub fn get_verified_node_at_layer(&self, window_index: usize, layer: usize) -> IncludedNode<H> {
+        let value = self.get_node_at_layer(window_index, layer);
         IncludedNode::new(*value)
     }
 
