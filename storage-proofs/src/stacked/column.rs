@@ -45,12 +45,7 @@ impl<H: Hasher> Column<H> {
     pub fn get_node_at_layer(&self, window_index: usize, layer: usize) -> &H::Domain {
         assert!(layer > 0, "layer must be greater than 0");
         let row_layer_index = layer - 1;
-
         let index = window_index * self.layers + row_layer_index;
-        info!(
-            "get_node_at_layer: {} - {} - {} - {} - {}",
-            window_index, self.layers, row_layer_index, layer, index
-        );
 
         &self.rows[index]
     }

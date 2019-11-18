@@ -278,7 +278,7 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
         pub_params: &PublicParams<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         challenge: usize,
-        challenge_index: usize,
+        _challenge_index: usize,
         window_graph: &StackedBucketGraph<H>,
         comm_q: &H::Domain,
         comm_c: &H::Domain,
@@ -288,11 +288,17 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
         check!(challenge < window_graph.size());
         check!(pub_inputs.tau.is_some());
 
+        let num_windows = pub_params.sector_size() as usize / WINDOW_SIZE_BYTES;
+        check_eq!(self.comm_d_proofs.len(), num_windows);
+        check_eq!(self.comm_q_proofs.len(), num_windows);
+        check_eq!(self.encoding_proofs.len(), num_windows);
+
         // Verify initial data layer
         trace!("verify initial data layer");
 
-        for comm_d_proof in &self.comm_d_proofs {
-            check!(comm_d_proof.proves_challenge(challenge));
+        for (window_index, comm_d_proof) in self.comm_d_proofs.iter().enumerate() {
+            let c = window_index * WINDOW_SIZE_NODES + challenge;
+            check!(comm_d_proof.proves_challenge(c));
             if let Some(ref tau) = pub_inputs.tau {
                 check_eq!(comm_d_proof.root(), &tau.comm_d);
             } else {
@@ -301,9 +307,10 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
         }
 
         // Verify q data layer
-        trace!("verify initial q data layer");
-        for comm_q_proof in &self.comm_q_proofs {
-            check!(comm_q_proof.proves_challenge(challenge));
+        trace!("verify q data layer");
+        for (window_index, comm_q_proof) in self.comm_q_proofs.iter().enumerate() {
+            let c = window_index * WINDOW_SIZE_NODES + challenge;
+            check!(comm_q_proof.proves_challenge(c));
             check_eq!(comm_q_proof.root(), comm_q);
         }
 
@@ -315,7 +322,7 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
             .replica_column_proof
             .verify(challenge, &parents, comm_c));
 
-        check!(self.verify_labels(replica_id));
+        check!(self.verify_labels(replica_id, pub_params.layer_challenges.layers()));
 
         trace!("verify encoding");
         for (encoding_proof, (comm_q_proof, comm_d_proof)) in self
@@ -326,7 +333,7 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
             check!(encoding_proof.verify::<G>(
                 replica_id,
                 comm_q_proof.leaf(),
-                comm_d_proof.leaf()
+                comm_d_proof.leaf(),
             ));
         }
 
@@ -334,9 +341,10 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
     }
 
     /// Verify all encodings.
-    fn verify_labels(&self, replica_id: &H::Domain) -> bool {
+    fn verify_labels(&self, replica_id: &H::Domain, layers: usize) -> bool {
         for (window_index, labeling_proofs) in self.labeling_proofs.iter().enumerate() {
             // Verify Labels Layer 1..layers
+            check_eq!(labeling_proofs.len(), layers - 1);
             for (layer, proof) in labeling_proofs.iter() {
                 trace!(
                     "verify labeling (layer: {}, window: {}",

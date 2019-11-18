@@ -98,8 +98,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             pub_inputs.all_challenges(layer_challenges, window_graph.size(), Some(k));
 
         let window_proofs: Vec<_> = window_challenges
-            // .into_par_iter()
-            .into_iter()
+            .into_par_iter()
             .enumerate()
             .map(|(challenge_index, challenge)| {
                 Self::prove_window_challenge(
@@ -118,8 +117,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             pub_inputs.all_challenges(layer_challenges, wrapper_graph.size(), Some(k));
 
         let wrapper_proofs: Vec<_> = wrapper_challenges
-            // .into_par_iter()
-            .into_iter()
+            .into_par_iter()
             .enumerate()
             .map(|(challenge_index, challenge)| {
                 Self::prove_wrapper_challenge(
@@ -154,7 +152,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     ) -> Result<WindowProof<H, G>> {
         assert!(challenge < WINDOW_SIZE_NODES);
 
-        trace!(" challenge {} ({})", challenge, challenge_index);
+        trace!("challenge {} ({})", challenge, challenge_index);
         assert!(challenge < window_graph.size(), "Invalid challenge");
         assert!(challenge > 0, "Invalid challenge");
 
@@ -163,7 +161,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         // Initial data layer openings (c_X in Comm_D)
         let comm_d_proofs = (0..num_windows)
-            .map(|_| MerkleProof::new_from_proof(&t_aux.tree_d.gen_proof(challenge)))
+            .map(|window_index| {
+                let c = window_index * WINDOW_SIZE_NODES + challenge;
+                MerkleProof::new_from_proof(&t_aux.tree_d.gen_proof(c))
+            })
             .collect();
 
         // Stacked replica column openings
@@ -172,7 +173,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         trace!("q openings");
         let comm_q_proofs = (0..num_windows)
-            .map(|_| MerkleProof::new_from_proof(&t_aux.tree_q.gen_proof(challenge)))
+            .map(|window_index| {
+                let c = window_index * WINDOW_SIZE_NODES + challenge;
+                MerkleProof::new_from_proof(&t_aux.tree_q.gen_proof(c))
+            })
             .collect();
 
         let mut encoding_proofs = Vec::with_capacity(num_windows);
@@ -191,7 +195,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     )?;
 
                     if layer < layers {
-                        trace!("  labeling proof window: {}, layer {}", window_index, layer);
+                        trace!("labeling proof window: {}, layer {}", window_index, layer);
                         let proof = LabelingProof::<H>::new(
                             Some(window_index as u64),
                             challenge as u64,
@@ -211,8 +215,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                         labeling_proofs.insert(layer, proof);
                     } else {
-                        // if layer == layers {
-                        trace!("  encoding proof window: {}, layer {}", window_index, layer);
+                        trace!("encoding proof window: {}, layer {}", window_index, layer);
                         encoding_proofs.push(EncodingProof::new(
                             window_index as u64,
                             challenge as u64,

@@ -4,7 +4,6 @@ use sha2::{Digest, Sha256};
 
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::Hasher;
-use crate::stacked::WINDOW_SIZE_NODES;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LabelingProof<H: Hasher> {
@@ -47,10 +46,6 @@ impl<H: Hasher> LabelingProof<H> {
     }
 
     pub fn verify(&self, replica_id: &H::Domain, expected_label: &H::Domain) -> bool {
-        info!(
-            "label verify {:?} {} {:?}",
-            self.window_index, self.node, expected_label
-        );
         let label = self.create_label(replica_id);
         check_eq!(expected_label, &label);
 
