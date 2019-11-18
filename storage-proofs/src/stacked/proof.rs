@@ -517,19 +517,21 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         &data_chunk[node * NODE_SIZE..(node + 1) * NODE_SIZE],
                     )
                     .unwrap();
-                    let encoded_node = decode::<H::Domain>(keyd, data_node);
+                    let decoded_node = decode::<H::Domain>(keyd, data_node);
                     data_chunk[node * NODE_SIZE..(node + 1) * NODE_SIZE].copy_from_slice(AsRef::<
                         [u8],
                     >::as_ref(
-                        &encoded_node,
+                        &decoded_node,
                     ));
                 }
             }
 
-            if let Some(ref mut exp_parents_data) = exp_parents_data {
-                exp_parents_data.copy_from_slice(&layer_labels);
-            } else {
-                exp_parents_data = Some(layer_labels.clone());
+            if layer < layers {
+                if let Some(ref mut exp_parents_data) = exp_parents_data {
+                    exp_parents_data.copy_from_slice(&layer_labels);
+                } else {
+                    exp_parents_data = Some(layer_labels.clone());
+                }
             }
         }
     }
@@ -593,12 +595,13 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         window_index,
                     );
 
-                    if let Some(ref mut exp_parents_data) = exp_parents_data {
-                        exp_parents_data.copy_from_slice(&layer_labels);
-                    } else {
-                        exp_parents_data = Some(layer_labels.clone());
+                    if layer < layers {
+                        if let Some(ref mut exp_parents_data) = exp_parents_data {
+                            exp_parents_data.copy_from_slice(&layer_labels);
+                        } else {
+                            exp_parents_data = Some(layer_labels.clone());
+                        }
                     }
-
                     // write result to disk
                     labels[layer - 1]
                         .lock()
@@ -1092,9 +1095,9 @@ mod tests {
 
     fn test_prove_verify<H: 'static + Hasher>(n: usize, challenges: LayerChallenges) {
         // This will be called multiple times, only the first one succeeds, and that is ok.
-        femme::pretty::Logger::new()
-            .start(log::LevelFilter::Trace)
-            .ok();
+        // femme::pretty::Logger::new()
+        //     .start(log::LevelFilter::Trace)
+        //     .ok();
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
