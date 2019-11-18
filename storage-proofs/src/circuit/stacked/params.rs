@@ -98,7 +98,7 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
             comm_q_leaf.clone(),
         )?;
 
-        // verify encodings
+        // verify labels
         for (layer, proof) in labeling_proofs.into_iter() {
             let raw = replica_column_proof.c_x.get_node_at_layer(layer);
             let labeled_node =

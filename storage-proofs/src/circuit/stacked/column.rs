@@ -17,6 +17,7 @@ pub struct Column {
 impl<H: Hasher> From<VanillaColumn<H>> for Column {
     fn from(other: VanillaColumn<H>) -> Self {
         let VanillaColumn { index, rows, .. } = other;
+        assert!(!rows.is_empty(), "rows must not be empty");
 
         Column {
             index: Some(index),
@@ -29,7 +30,7 @@ impl Column {
     /// Create an empty `Column`, used in `blank_circuit`s.
     pub fn empty<H: Hasher>(params: &PublicParams<H>) -> Self {
         let num_windows = params.sector_size() as usize / WINDOW_SIZE_BYTES;
-        let num_rows = params.layer_challenges.layers() - 1 * num_windows;
+        let num_rows = (params.layer_challenges.layers() - 1) * num_windows;
 
         Column {
             index: None,
@@ -39,6 +40,7 @@ impl Column {
 
     pub fn get_node_at_layer(&self, layer: usize) -> &Option<Fr> {
         assert!(layer > 0, "layer must be greater than 0");
+        assert!(!self.rows.is_empty(), "rows must not be empty");
         let row_index = layer - 1;
         &self.rows[row_index]
     }

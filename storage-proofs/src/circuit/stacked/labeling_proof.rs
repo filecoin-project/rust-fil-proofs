@@ -27,7 +27,7 @@ impl LabelingProof {
             params.window_graph.degree()
         };
         LabelingProof {
-            window_index: None,
+            window_index: Some(None),
             node: None,
             parents: vec![None; degree],
         }

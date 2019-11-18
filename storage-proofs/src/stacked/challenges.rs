@@ -12,7 +12,10 @@ pub struct LayerChallenges {
 }
 
 impl LayerChallenges {
-    pub const fn new(layers: usize, max_count: usize) -> Self {
+    pub fn new(layers: usize, max_count: usize) -> Self {
+        assert!(layers > 1, "layers must be at least 2");
+        assert!(max_count > 0, "there must be at least 1 challenge");
+
         LayerChallenges { layers, max_count }
     }
 

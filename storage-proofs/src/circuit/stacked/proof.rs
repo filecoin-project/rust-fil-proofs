@@ -229,6 +229,19 @@ impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata> CacheableParameter
     }
 }
 
+fn generate_inclusion_inputs<H: Hasher>(
+    por_params: &merklepor::PublicParams,
+    k: Option<usize>,
+    c: usize,
+) -> Vec<Fr> {
+    let pub_inputs = merklepor::PublicInputs::<H::Domain> {
+        challenge: c,
+        commitment: None,
+    };
+
+    PoRCompound::<H>::generate_public_inputs(&pub_inputs, por_params, k)
+}
+
 impl<'a, H: 'static + Hasher, G: 'static + Hasher>
     CompoundProof<'a, Bls12, StackedDrg<'a, H, G>, StackedCircuit<'a, Bls12, H, G>>
     for StackedCompound
@@ -238,7 +251,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         pub_params: &<StackedDrg<H, G> as ProofScheme>::PublicParams,
         k: Option<usize>,
     ) -> Vec<Fr> {
-        let graph = &pub_params.window_graph;
+        let window_graph = &pub_params.window_graph;
+        let wrapper_graph = &pub_params.wrapper_graph;
 
         let mut inputs = Vec::new();
 
@@ -248,50 +262,86 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         let comm_r = pub_in.tau.as_ref().expect("missing tau").comm_r;
         inputs.push(comm_r.into());
 
-        let por_params = merklepor::MerklePoR::<H>::setup(&merklepor::SetupParams {
-            leaves: graph.size(),
+        let window_por_params = merklepor::MerklePoR::<H>::setup(&merklepor::SetupParams {
+            leaves: window_graph.size(),
             private: true,
         })
         .expect("setup failed");
 
-        let generate_inclusion_inputs = |c: usize| {
-            let pub_inputs = merklepor::PublicInputs::<H::Domain> {
-                challenge: c,
-                commitment: None,
-            };
+        let wrapper_por_params = merklepor::MerklePoR::<H>::setup(&merklepor::SetupParams {
+            leaves: wrapper_graph.size(),
+            private: true,
+        })
+        .expect("setup failed");
 
-            PoRCompound::<H>::generate_public_inputs(&pub_inputs, &por_params, k)
-        };
+        let window_challenges =
+            pub_in.all_challenges(&pub_params.layer_challenges, window_graph.size(), k);
 
-        let all_challenges = pub_in.all_challenges(&pub_params.layer_challenges, graph.size(), k);
-
-        for challenge in all_challenges.into_iter() {
+        for challenge in window_challenges.into_iter() {
             // comm_d_proof
-            inputs.extend(generate_inclusion_inputs(challenge));
+            inputs.extend(generate_inclusion_inputs::<G>(
+                &window_por_params,
+                k,
+                challenge,
+            ));
+
+            // comm_q_proof
+            inputs.extend(generate_inclusion_inputs::<H>(
+                &window_por_params,
+                k,
+                challenge,
+            ));
 
             // replica column proof
             {
                 // c_x
-                inputs.extend(generate_inclusion_inputs(challenge));
+                inputs.extend(generate_inclusion_inputs::<H>(
+                    &window_por_params,
+                    k,
+                    challenge,
+                ));
 
                 // drg parents
-                let mut drg_parents = vec![0; graph.base_graph().degree()];
-                graph.base_graph().parents(challenge, &mut drg_parents);
+                let mut drg_parents = vec![0; window_graph.base_graph().degree()];
+                window_graph
+                    .base_graph()
+                    .parents(challenge, &mut drg_parents);
 
                 for parent in drg_parents.into_iter() {
-                    inputs.extend(generate_inclusion_inputs(parent as usize));
+                    inputs.extend(generate_inclusion_inputs::<H>(
+                        &window_por_params,
+                        k,
+                        parent as usize,
+                    ));
                 }
 
                 // exp parents
-                let mut exp_parents = vec![0; graph.expansion_degree()];
-                graph.expanded_parents(challenge, &mut exp_parents);
+                let mut exp_parents = vec![0; window_graph.expansion_degree()];
+                window_graph.expanded_parents(challenge, &mut exp_parents);
                 for parent in exp_parents.into_iter() {
-                    inputs.extend(generate_inclusion_inputs(parent as usize));
+                    inputs.extend(generate_inclusion_inputs::<H>(
+                        &window_por_params,
+                        k,
+                        parent as usize,
+                    ));
                 }
             }
+        }
 
-            // final replica layer
-            inputs.extend(generate_inclusion_inputs(challenge));
+        let wrapper_challenges =
+            pub_in.all_challenges(&pub_params.layer_challenges, wrapper_graph.size(), k);
+
+        for challenge in wrapper_challenges.into_iter() {
+            // comm_q_parents
+            let mut exp_parents = vec![0; wrapper_graph.expansion_degree()];
+            wrapper_graph.expanded_parents(challenge, &mut exp_parents);
+            for parent in exp_parents.into_iter() {
+                inputs.extend(generate_inclusion_inputs::<H>(
+                    &wrapper_por_params,
+                    k,
+                    parent as usize,
+                ));
+            }
         }
 
         inputs
@@ -509,17 +559,16 @@ mod tests {
         >>::generate_public_inputs(&pub_inputs, &pp, None);
         let expected_inputs = cs.get_inputs();
 
-        for ((input, label), generated_input) in
-            expected_inputs.iter().skip(1).zip(generated_inputs.iter())
-        {
-            assert_eq!(input, generated_input, "{}", label);
-        }
-
         assert_eq!(
             generated_inputs.len(),
             expected_inputs.len() - 1,
             "inputs are not the same length"
         );
+        for ((input, label), generated_input) in
+            expected_inputs.iter().skip(1).zip(generated_inputs.iter())
+        {
+            assert_eq!(input, generated_input, "{}", label);
+        }
     }
 
     #[test]

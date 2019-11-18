@@ -652,7 +652,11 @@ impl<H: Hasher> LabelsCache<H> {
         assert!((node as usize) < WINDOW_SIZE_NODES);
 
         let len = self.layers();
+        assert!(len > 1, "invalid layer number");
+
         let num_windows = layer_size / WINDOW_SIZE_BYTES;
+        assert!(num_windows > 0, "invalid number of windows");
+
         let rows = (0..num_windows)
             .flat_map(|window_index| {
                 self.labels
