@@ -46,7 +46,7 @@ fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> Result<MmapMut, fail
 }
 
 fn dump_proof_bytes<H: Hasher>(
-    all_partition_proofs: &[Vec<stacked::Proof<H, Sha256Hasher>>],
+    all_partition_proofs: &[stacked::Proof<H, Sha256Hasher>],
 ) -> Result<(), failure::Error> {
     let file = OpenOptions::new()
         .write(true)
