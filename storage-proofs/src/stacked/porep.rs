@@ -70,6 +70,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
             pp.layer_challenges.layers(),
             replica_id,
             &mut window,
+            window_start_index,
         );
 
         let node_window_index = node % WINDOW_SIZE_NODES;
