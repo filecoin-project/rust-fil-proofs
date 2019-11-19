@@ -22,6 +22,7 @@ use crate::util::NODE_SIZE;
 
 pub const POST_CHALLENGE_COUNT: usize = 8;
 pub const POST_CHALLENGED_NODES: usize = 16;
+pub const CHALLENGE_COUNT_DENOMINATOR: f64 = 25.;
 
 #[derive(Debug, Clone)]
 pub struct SetupParams {
@@ -217,11 +218,17 @@ pub fn finalize_ticket(partial_ticket: &Fr) -> [u8; 32] {
     ticket
 }
 
+pub fn is_valid_sector_challenge_index(sector_count: usize, index: u64) -> bool {
+    let max = (sector_count as f64 / CHALLENGE_COUNT_DENOMINATOR).ceil() as u64;
+    index < max
+}
+
 pub fn generate_sector_challenges(
     randomness: &[u8; 32],
-    challenge_count: usize,
     sectors: &OrderedSectorSet,
 ) -> Result<Vec<SectorId>> {
+    let challenge_count = (sectors.len() as f64 / CHALLENGE_COUNT_DENOMINATOR).ceil() as usize;
+
     let mut challenges = Vec::with_capacity(challenge_count);
 
     for n in 0..challenge_count as usize {

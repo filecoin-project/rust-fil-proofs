@@ -26,8 +26,6 @@ use std::path::PathBuf;
 
 pub use storage_proofs::election_post::Candidate;
 
-pub const CHALLENGE_COUNT_DENOMINATOR: f64 = 25.;
-
 /// The minimal information required about a replica, in order to be able to generate
 /// a PoSt over it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -38,8 +36,6 @@ pub struct PrivateReplicaInfo {
     comm_r: Commitment,
     /// Persistent Aux.
     aux: PersistentAux,
-    /// Is this sector marked as a fault?
-    is_fault: bool,
     /// Contains sector-specific (e.g. merkle trees) assets
     cache_dir: PathBuf,
 }
@@ -62,22 +58,6 @@ impl PrivateReplicaInfo {
             access,
             comm_r,
             aux,
-            is_fault: false,
-            cache_dir,
-        }
-    }
-
-    pub fn new_faulty(
-        access: String,
-        comm_r: Commitment,
-        aux: PersistentAux,
-        cache_dir: PathBuf,
-    ) -> Self {
-        PrivateReplicaInfo {
-            access,
-            comm_r,
-            aux,
-            is_fault: true,
             cache_dir,
         }
     }
@@ -113,8 +93,6 @@ impl PrivateReplicaInfo {
 pub struct PublicReplicaInfo {
     /// The replica commitment.
     comm_r: Commitment,
-    /// Is this sector marked as a fault?
-    is_fault: bool,
 }
 
 impl std::cmp::Ord for PublicReplicaInfo {
@@ -131,17 +109,7 @@ impl std::cmp::PartialOrd for PublicReplicaInfo {
 
 impl PublicReplicaInfo {
     pub fn new(comm_r: Commitment) -> Self {
-        PublicReplicaInfo {
-            comm_r,
-            is_fault: false,
-        }
-    }
-
-    pub fn new_faulty(comm_r: Commitment) -> Self {
-        PublicReplicaInfo {
-            comm_r,
-            is_fault: true,
-        }
+        PublicReplicaInfo { comm_r }
     }
 
     pub fn safe_comm_r(&self) -> Result<<DefaultTreeHasher as Hasher>::Domain, failure::Error> {
@@ -170,17 +138,8 @@ pub fn generate_candidates(
     let sector_size = u64::from(PaddedBytesAmount::from(post_config));
 
     let sectors = replicas.keys().copied().collect();
-    let faults = replicas
-        .iter()
-        .filter(|(_id, replica)| replica.is_fault)
-        .count();
 
-    let active_sector_count = sector_count - faults as u64;
-    let challenged_sectors_count =
-        (active_sector_count as f64 / CHALLENGE_COUNT_DENOMINATOR).ceil() as usize;
-
-    let challenged_sectors =
-        election_post::generate_sector_challenges(randomness, challenged_sectors_count, &sectors)?;
+    let challenged_sectors = election_post::generate_sector_challenges(randomness, &sectors)?;
 
     // Match the replicas to the challenges, as these are the only ones required.
     let challenged_replicas: Vec<_> = challenged_sectors
@@ -310,6 +269,7 @@ pub fn verify_post(
         "Missmatch between winners and proofs"
     );
 
+    let sectors = replicas.keys().copied().collect();
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
@@ -330,6 +290,22 @@ pub fn verify_post(
             }
         };
         let comm_r = replica.safe_comm_r()?;
+
+        if !election_post::is_valid_sector_challenge_index(
+            sector_count as usize,
+            winner.sector_challenge_index,
+        ) {
+            return Ok(false);
+        }
+
+        let expected_sector_id = election_post::generate_sector_challenge(
+            randomness,
+            winner.sector_challenge_index as usize,
+            &sectors,
+        )?;
+        if expected_sector_id != winner.sector_id {
+            return Ok(false);
+        }
 
         let proof = MultiProof::new_from_reader(None, &proof[..], &verifying_key)?;
         let pub_inputs = election_post::PublicInputs {
