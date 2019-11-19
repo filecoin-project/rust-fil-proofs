@@ -66,6 +66,7 @@ fn parse_criterion_out(s: impl AsRef<str>) -> Result<Vec<CriterionResult>, failu
     let median_re = make_detail_re("median");
     let med_abs_dev_re = make_detail_re(r"med\. abs\. dev\.");
 
+    #[allow(clippy::type_complexity)]
     let mut current: Option<(
         String,
         Option<u32>,

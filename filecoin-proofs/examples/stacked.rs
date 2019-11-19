@@ -129,7 +129,7 @@ pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
     unsafe { MmapOptions::new().map_mut(&tmpfile).unwrap() }
 }
 
-fn dump_proof_bytes<H: Hasher, G: Hasher>(all_partition_proofs: &[Vec<stacked::Proof<H, G>>]) {
+fn dump_proof_bytes<H: Hasher, G: Hasher>(all_partition_proofs: &[stacked::Proof<H, G>]) {
     let file = OpenOptions::new()
         .write(true)
         .create(true)

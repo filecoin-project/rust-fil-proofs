@@ -278,7 +278,6 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
         pub_params: &PublicParams<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         challenge: usize,
-        _challenge_index: usize,
         window_graph: &StackedBucketGraph<H>,
         comm_q: &H::Domain,
         comm_c: &H::Domain,
@@ -295,36 +294,27 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
 
         // Verify initial data layer
         trace!("verify initial data layer");
-
-        for (window_index, comm_d_proof) in self.comm_d_proofs.iter().enumerate() {
-            let c = window_index * WINDOW_SIZE_NODES + challenge;
-            check!(comm_d_proof.proves_challenge(c));
-            if let Some(ref tau) = pub_inputs.tau {
-                check_eq!(comm_d_proof.root(), &tau.comm_d);
-            } else {
-                return false;
-            }
-        }
+        check!(self.verify_comm_d_proofs(challenge, pub_inputs));
 
         // Verify q data layer
         trace!("verify q data layer");
-        for (window_index, comm_q_proof) in self.comm_q_proofs.iter().enumerate() {
-            let c = window_index * WINDOW_SIZE_NODES + challenge;
-            check!(comm_q_proof.proves_challenge(c));
-            check_eq!(comm_q_proof.root(), comm_q);
-        }
+        check!(self.verify_comm_q_proofs(challenge, comm_q));
 
         // Verify replica column openings
         trace!("verify replica column openings");
-        let mut parents = vec![0; window_graph.degree()];
-        window_graph.parents(challenge, &mut parents);
         check!(self
             .replica_column_proof
-            .verify(challenge, &parents, comm_c));
+            .verify(challenge, &pub_params.window_graph, comm_c));
 
         check!(self.verify_labels(replica_id, pub_params.layer_challenges.layers()));
 
         trace!("verify encoding");
+        check!(self.verify_encoding_proofs(replica_id));
+
+        true
+    }
+
+    fn verify_encoding_proofs(&self, replica_id: &H::Domain) -> bool {
         for (encoding_proof, (comm_q_proof, comm_d_proof)) in self
             .encoding_proofs
             .iter()
@@ -336,7 +326,33 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
                 comm_d_proof.leaf(),
             ));
         }
+        true
+    }
 
+    fn verify_comm_d_proofs(
+        &self,
+        challenge: usize,
+        pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
+    ) -> bool {
+        for (window_index, comm_d_proof) in self.comm_d_proofs.iter().enumerate() {
+            let c = window_index * WINDOW_SIZE_NODES + challenge;
+            check!(comm_d_proof.proves_challenge(c));
+            if let Some(ref tau) = pub_inputs.tau {
+                check_eq!(comm_d_proof.root(), &tau.comm_d);
+            } else {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    fn verify_comm_q_proofs(&self, challenge: usize, comm_q: &H::Domain) -> bool {
+        for (window_index, comm_q_proof) in self.comm_q_proofs.iter().enumerate() {
+            let c = window_index * WINDOW_SIZE_NODES + challenge;
+            check!(comm_q_proof.proves_challenge(c));
+            check_eq!(comm_q_proof.root(), comm_q);
+        }
         true
     }
 
@@ -385,7 +401,15 @@ pub struct ReplicaColumnProof<H: Hasher> {
 }
 
 impl<H: Hasher> ReplicaColumnProof<H> {
-    pub fn verify(&self, challenge: usize, parents: &[u32], expected_comm_c: &H::Domain) -> bool {
+    pub fn verify(
+        &self,
+        challenge: usize,
+        window_graph: &StackedBucketGraph<H>,
+        expected_comm_c: &H::Domain,
+    ) -> bool {
+        let mut parents = vec![0; window_graph.degree()];
+        window_graph.parents(challenge, &mut parents);
+
         trace!("  verify c_x");
         check_eq!(self.c_x.root(), expected_comm_c);
         check!(self.c_x.verify(challenge as u32, &expected_comm_c));

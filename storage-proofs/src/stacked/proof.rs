@@ -409,7 +409,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     pub_params,
                     pub_inputs,
                     window_challenge,
-                    i,
                     window_graph,
                     comm_q,
                     comm_c,
@@ -619,6 +618,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         ))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn encode_window_layer(
         layer: usize,
         layers: usize,

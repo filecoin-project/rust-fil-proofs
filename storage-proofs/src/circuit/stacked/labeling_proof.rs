@@ -13,6 +13,7 @@ use crate::util::bytes_into_boolean_vec_be;
 #[derive(Debug, Clone)]
 pub struct LabelingProof {
     // outer option is if a window index is used, inner is for the circuit
+    #[allow(clippy::option_option)]
     window_index: Option<Option<u64>>,
     node: Option<u64>,
     parents: Vec<Option<Fr>>,
@@ -43,6 +44,7 @@ impl LabelingProof {
         }
     }
 
+    #[allow(clippy::option_option)]
     fn create_label<CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
         _params: &<Bls12 as JubjubEngine>::Params,
