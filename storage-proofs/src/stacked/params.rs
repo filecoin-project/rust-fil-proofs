@@ -43,14 +43,13 @@ impl fmt::Display for CacheKey {
     }
 }
 
-#[derive(Debug, Clone)]
 impl CacheKey {
     pub fn label_layer(layer: usize) -> String {
         format!("layer-{}", layer)
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SetupParams {
     // Number of nodes
     pub nodes: usize,

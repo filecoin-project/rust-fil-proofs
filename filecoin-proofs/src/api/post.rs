@@ -5,13 +5,13 @@ use std::io::prelude::*;
 use bincode::deserialize;
 use merkletree::merkle::{get_merkle_tree_leafs, MerkleTree};
 use merkletree::store::{DiskStore, Store, StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
+use paired::bls12_381::Bls12;
 use rayon::prelude::*;
 use storage_proofs::circuit::election_post::ElectionPoStCompound;
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
+use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::election_post;
-use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::error::Error;
 use storage_proofs::fr32::bytes_into_fr;
 use storage_proofs::hasher::Hasher;
@@ -23,7 +23,9 @@ use crate::api::util::as_safe_commitment;
 use crate::caches::{get_post_params, get_post_verifying_key};
 use crate::error;
 use crate::parameters::post_setup_params;
-use crate::types::{ChallengeSeed, Commitment, PaddedBytesAmount, PersistentAux, PoStConfig, Tree};
+use crate::types::{
+    ChallengeSeed, Commitment, PaddedBytesAmount, PersistentAux, PoStConfig, ProverId, Tree,
+};
 use std::path::PathBuf;
 
 pub use storage_proofs::election_post::Candidate;
@@ -93,7 +95,8 @@ impl PrivateReplicaInfo {
     /// Generate the merkle tree of this particular replica.
     pub fn merkle_tree(&self, sector_size: u64) -> Result<Tree, Error> {
         let tree_size = {
-            let elems = sector_size as usize / std::mem::size_of::<PedersenDomain>();
+            let elems =
+                sector_size as usize / std::mem::size_of::<<DefaultTreeHasher as Hasher>::Domain>();
 
             2 * elems - 1
         };
@@ -103,7 +106,8 @@ impl PrivateReplicaInfo {
             DEFAULT_CACHED_ABOVE_BASE_LAYER,
         );
         config.size = Some(tree_size);
-        let tree_d_store: DiskStore<PedersenDomain> = DiskStore::new_from_disk(tree_size, &config)?;
+        let tree_d_store: DiskStore<<DefaultTreeHasher as Hasher>::Domain> =
+            DiskStore::new_from_disk(tree_size, &config)?;
         let tree_d: Tree =
             MerkleTree::from_data_store(tree_d_store, get_merkle_tree_leafs(tree_size));
 
