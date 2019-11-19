@@ -1,12 +1,13 @@
 #[macro_use]
 extern crate log;
 
-use clap::{App, Arg};
+use clap::{values_t, App, Arg};
 use paired::bls12_381::Bls12;
 
 use filecoin_proofs::constants::*;
 use filecoin_proofs::parameters::{post_public_params, public_params};
 use filecoin_proofs::types::*;
+use std::collections::HashSet;
 use storage_proofs::circuit::election_post::{ElectionPoStCircuit, ElectionPoStCompound};
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::CompoundProof;
@@ -121,28 +122,31 @@ pub fn main() {
         .version("0.1")
         .about("Generate and persist Groth parameters and verifying keys")
         .arg(
-            Arg::with_name("test-only")
-                .long("test-only")
-                .help("generate only Groth parameters and keys useful for testing")
-                .takes_value(false),
+            Arg::with_name("params-for-sector-sizes")
+                .short("z")
+                .long("params-for-sector-sizes")
+                .conflicts_with("all")
+                .require_delimiter(true)
+                .value_delimiter(",")
+                .multiple(true)
+                .help("A comma-separated list of sector sizes, in bytes, for which Groth parameters will be generated")
         )
         .get_matches();
 
-    let test_only: bool = matches.is_present("test-only");
-
-    let smallest = vec![SECTOR_SIZE_ONE_KIB];
-
-    let sizes: &[u64] = if test_only {
-        &smallest
+    let sizes: HashSet<u64> = if matches.is_present("params-for-sector-sizes") {
+        values_t!(matches.values_of("params-for-sector-sizes"), u64)
+            .unwrap()
+            .into_iter()
+            .collect()
     } else {
-        &PUBLISHED_SECTOR_SIZES
+        PUBLISHED_SECTOR_SIZES.iter().cloned().collect()
     };
 
     for size in sizes {
-        cache_post_params(PoStConfig(SectorSize(*size)));
+        cache_post_params(PoStConfig(SectorSize(size)));
 
         for p in &POREP_PROOF_PARTITION_CHOICES {
-            cache_porep_params(PoRepConfig(SectorSize(*size), *p));
+            cache_porep_params(PoRepConfig(SectorSize(size), *p));
         }
     }
 }
