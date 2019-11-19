@@ -365,7 +365,9 @@ workflows:
             - cargo_fetch
           filters:
             branches:
-              only: master
+              only:
+                - master
+                - feat/win-porep
       - build_linux_release:
           requires:
             - cargo_fetch
