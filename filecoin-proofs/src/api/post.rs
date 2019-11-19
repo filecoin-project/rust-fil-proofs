@@ -149,7 +149,7 @@ impl PublicReplicaInfo {
     }
 }
 
-/// Generates a proof-of-spacetime candidate for ElectionPoSt.
+/// Generates proof-of-spacetime candidates for ElectionPoSt.
 pub fn generate_candidates(
     post_config: PoStConfig,
     randomness: &ChallengeSeed,

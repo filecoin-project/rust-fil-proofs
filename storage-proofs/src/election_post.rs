@@ -294,9 +294,10 @@ pub fn generate_leaf_challenge(
 
     let leaf_challenge = LittleEndian::read_u64(&hash.as_ref()[..8]);
 
-    let sector_part = leaf_challenge % (sector_size / (POST_CHALLENGED_NODES * NODE_SIZE) as u64);
+    let challenged_range_index =
+        leaf_challenge % (sector_size / (POST_CHALLENGED_NODES * NODE_SIZE) as u64);
 
-    sector_part * POST_CHALLENGED_NODES as u64
+    challenged_range_index * POST_CHALLENGED_NODES as u64
 }
 
 impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
