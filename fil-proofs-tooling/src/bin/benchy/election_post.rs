@@ -1,9 +1,6 @@
 use std::collections::BTreeMap;
-use std::fs::File;
-use std::io::prelude::*;
 use std::io::{stdout, Seek, SeekFrom, Write};
 
-use bincode::deserialize;
 use fil_proofs_tooling::{measure, Metadata};
 use filecoin_proofs::types::{
     PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, SectorSize,
@@ -15,7 +12,6 @@ use filecoin_proofs::{
 };
 use log::info;
 use storage_proofs::sector::SectorId;
-use storage_proofs::stacked::CacheKey;
 use tempfile::NamedTempFile;
 
 // The seed for the rng used to generate which sectors to challenge.
@@ -118,15 +114,6 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
     let seed = [0u8; 32];
     let comm_r = seal_pre_commit_output.comm_r;
 
-    // Retrieve p_aux.
-    let p_aux = {
-        let mut p_aux_bytes = vec![];
-        let mut f_p_aux = File::open(CacheKey::PAux.to_string())?;
-        f_p_aux.read_to_end(&mut p_aux_bytes)?;
-
-        deserialize(&p_aux_bytes)
-    }?;
-
     let _seal_commit_output = seal_commit(
         porep_config,
         cache_dir.path(),
@@ -146,7 +133,7 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
 
     priv_replica_info.insert(
         sector_id,
-        PrivateReplicaInfo::new(sealed_path_string, comm_r, p_aux, cache_dir.into_path()),
+        PrivateReplicaInfo::new(sealed_path_string, comm_r, cache_dir.into_path())?,
     );
 
     // Measure PoSt generation and verification.

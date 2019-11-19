@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
+use std::fs::File;
+use std::io::prelude::*;
 
-use paired::bls12_381::Bls12;
+use bincode::deserialize;
 use merkletree::merkle::{get_merkle_tree_leafs, MerkleTree};
 use merkletree::store::{DiskStore, Store, StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
 use rayon::prelude::*;
@@ -53,13 +55,25 @@ impl std::cmp::PartialOrd for PrivateReplicaInfo {
 }
 
 impl PrivateReplicaInfo {
-    pub fn new(access: String, comm_r: Commitment, aux: PersistentAux, cache_dir: PathBuf) -> Self {
-        PrivateReplicaInfo {
+    pub fn new(
+        access: String,
+        comm_r: Commitment,
+        cache_dir: PathBuf,
+    ) -> Result<Self, failure::Error> {
+        let aux = {
+            let mut aux_bytes = vec![];
+            let mut f_aux = File::open(cache_dir.join(CacheKey::PAux.to_string()))?;
+            f_aux.read_to_end(&mut aux_bytes)?;
+
+            deserialize(&aux_bytes)
+        }?;
+
+        Ok(PrivateReplicaInfo {
             access,
             comm_r,
             aux,
             cache_dir,
-        }
+        })
     }
 
     pub fn safe_comm_r(&self) -> Result<<DefaultTreeHasher as Hasher>::Domain, failure::Error> {
