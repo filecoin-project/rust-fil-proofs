@@ -122,10 +122,11 @@ where
 {
     fn identifier(&self) -> String {
         format!(
-            "layered_drgporep::PublicParams{{ window_graph: {}, wrapper_graph: {}, config: {:?} }}",
+            "layered_drgporep::PublicParams{{ window_graph: {}, wrapper_graph: {}, config: {:?}, window_size: {} }}",
             self.window_graph.identifier(),
             self.wrapper_graph.identifier(),
             self.config,
+            self.window_size,
         )
     }
 
