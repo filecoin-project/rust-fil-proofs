@@ -267,24 +267,6 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for ElectionPoStCircuit<'a, E, H
             partial_ticket_bits.push(bit_alloc);
         }
 
-        // data
-        for (i, leaf) in leafs.iter().enumerate() {
-            let bits = match *leaf {
-                Some(leaf) => {
-                    let bytes = fr_into_bytes::<E>(&leaf);
-                    bytes_into_bits_opt(&bytes)
-                }
-                None => vec![None; 32 * 8],
-            };
-            for (j, bit) in bits.into_iter().enumerate() {
-                let bit_alloc = Boolean::from(AllocatedBit::alloc(
-                    cs.namespace(|| format!("data_bit_{}_{}", j, i)),
-                    bit,
-                )?);
-                partial_ticket_bits.push(bit_alloc);
-            }
-        }
-
         // prover_id
         for (i, bit) in self.prover_id.iter().enumerate() {
             let bit_alloc = Boolean::from(AllocatedBit::alloc(
@@ -301,6 +283,24 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for ElectionPoStCircuit<'a, E, H
         // pad to pedersen_md blocksize
         while partial_ticket_bits.len() % crate::crypto::pedersen::PEDERSEN_BLOCK_SIZE != 0 {
             partial_ticket_bits.push(Boolean::Constant(false));
+        }
+
+        // data
+        for (i, leaf) in leafs.iter().enumerate() {
+            let bits = match *leaf {
+                Some(leaf) => {
+                    let bytes = fr_into_bytes::<E>(&leaf);
+                    bytes_into_bits_opt(&bytes)
+                }
+                None => vec![None; 32 * 8],
+            };
+            for (j, bit) in bits.into_iter().enumerate() {
+                let bit_alloc = Boolean::from(AllocatedBit::alloc(
+                    cs.namespace(|| format!("data_bit_{}_{}", j, i)),
+                    bit,
+                )?);
+                partial_ticket_bits.push(bit_alloc);
+            }
         }
 
         // hash it

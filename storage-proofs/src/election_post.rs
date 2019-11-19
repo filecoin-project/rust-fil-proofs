@@ -193,7 +193,7 @@ fn generate_candidate<H: Hasher>(
     // partial_ticket = pedersen(randomness | data | prover_id | sector_id)
     let mut sector_id_bytes = [0u8; 32];
     sector_id_bytes[..8].copy_from_slice(&u64::from(sector_id).to_le_bytes()[..]);
-    let list: [&[u8]; 4] = [&randomness[..], &data, &prover_id[..], &sector_id_bytes[..]];
+    let list: [&[u8]; 4] = [&randomness[..], &prover_id[..], &sector_id_bytes[..], &data];
     let bits = Bits::new_many(list.iter());
 
     let partial_ticket = pedersen_md_no_padding_bits(bits);
