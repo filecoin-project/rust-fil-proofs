@@ -269,6 +269,7 @@ pub fn verify_post(
         "Missmatch between winners and proofs"
     );
 
+    let sectors = replicas.keys().copied().collect();
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
@@ -294,6 +295,15 @@ pub fn verify_post(
             sector_count as usize,
             winner.sector_challenge_index,
         ) {
+            return Ok(false);
+        }
+
+        let expected_sector_id = election_post::generate_sector_challenge(
+            randomness,
+            winner.sector_challenge_index as usize,
+            &sectors,
+        )?;
+        if expected_sector_id != winner.sector_id {
             return Ok(false);
         }
 
