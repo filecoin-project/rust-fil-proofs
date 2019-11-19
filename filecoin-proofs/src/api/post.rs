@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::prelude::*;
+use std::path::PathBuf;
 
 use bincode::deserialize;
 use merkletree::merkle::{get_merkle_tree_leafs, MerkleTree};
@@ -24,9 +25,8 @@ use crate::caches::{get_post_params, get_post_verifying_key};
 use crate::error;
 use crate::parameters::post_setup_params;
 use crate::types::{
-    ChallengeSeed, Commitment, PaddedBytesAmount, PersistentAux, PoStConfig, ProverId, Tree,
+    ChallengeSeed, Commitment, PersistentAux, PoStConfig, ProverId, SectorSize, Tree,
 };
-use std::path::PathBuf;
 
 pub use storage_proofs::election_post::Candidate;
 
@@ -93,7 +93,8 @@ impl PrivateReplicaInfo {
     }
 
     /// Generate the merkle tree of this particular replica.
-    pub fn merkle_tree(&self, sector_size: u64) -> Result<Tree, Error> {
+    pub fn merkle_tree(&self, sector_size: SectorSize) -> Result<Tree, Error> {
+        let sector_size = u64::from(sector_size);
         let tree_size = {
             let elems =
                 sector_size as usize / std::mem::size_of::<<DefaultTreeHasher as Hasher>::Domain>();
@@ -164,7 +165,6 @@ pub fn generate_candidates(
 
     let sector_count = replicas.len() as u64;
     ensure!(sector_count > 0, "Must supply at least one replica");
-    let sector_size = u64::from(PaddedBytesAmount::from(post_config));
 
     let sectors = replicas.keys().copied().collect();
 
@@ -197,7 +197,11 @@ pub fn generate_candidates(
 
     let unique_trees_res: Vec<_> = unique_challenged_replicas
         .into_par_iter()
-        .map(|(id, replica)| replica.merkle_tree(sector_size).map(|tree| (*id, tree)))
+        .map(|(id, replica)| {
+            replica
+                .merkle_tree(post_config.sector_size)
+                .map(|tree| (*id, tree))
+        })
         .collect();
 
     // resolve results
@@ -241,7 +245,6 @@ pub fn generate_post(
     };
     let pub_params: compound_proof::PublicParams<election_post::ElectionPoSt<DefaultTreeHasher>> =
         ElectionPoStCompound::setup(&setup_params)?;
-    let sector_size = u64::from(PaddedBytesAmount::from(post_config));
     let groth_params = get_post_params(post_config)?;
 
     let mut proofs = Vec::with_capacity(winners.len());
@@ -255,7 +258,7 @@ pub fn generate_post(
                 ))
             }
         };
-        let tree = replica.merkle_tree(sector_size)?;
+        let tree = replica.merkle_tree(post_config.sector_size)?;
 
         let comm_r = replica.safe_comm_r()?;
         let pub_inputs = election_post::PublicInputs {

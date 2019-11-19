@@ -21,7 +21,7 @@ use crate::hasher::Hasher;
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
-use crate::stacked::{StackedDrg, EXP_DEGREE, WINDOW_SIZE_BYTES, WINDOW_SIZE_NODES};
+use crate::stacked::{StackedDrg, EXP_DEGREE};
 use crate::util::bytes_into_boolean_vec_be;
 
 /// Stacked DRG based Proof of Replication.
@@ -275,18 +275,18 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         let window_challenges =
             pub_in.all_challenges(&pub_params.config.window_challenges, window_graph.size(), k);
 
-        let num_windows = pub_params.sector_size() as usize / WINDOW_SIZE_BYTES;
+        let num_windows = pub_params.num_windows();
 
         for challenge in window_challenges.into_iter() {
             for window_index in 0..num_windows {
                 // comm_d_proof
-                let c = window_index * WINDOW_SIZE_NODES + challenge;
+                let c = window_index * pub_params.window_size_nodes() + challenge;
                 inputs.extend(generate_inclusion_inputs::<G>(&wrapper_por_params, k, c));
             }
 
             for window_index in 0..num_windows {
                 // comm_q_proof
-                let c = window_index * WINDOW_SIZE_NODES + challenge;
+                let c = window_index * pub_params.window_size_nodes() + challenge;
                 inputs.extend(generate_inclusion_inputs::<H>(&wrapper_por_params, k, c));
             }
 
@@ -457,6 +457,7 @@ mod tests {
             expansion_degree,
             seed: new_seed(),
             config: config.clone(),
+            window_size_nodes: nodes / 2,
         };
 
         // MT for original data is always named tree-d, and it will be
@@ -613,6 +614,7 @@ mod tests {
                 expansion_degree,
                 seed: new_seed(),
                 config: config.clone(),
+                window_size_nodes: nodes / 2,
             },
             partitions: Some(partition_count),
         };

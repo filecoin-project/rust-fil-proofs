@@ -12,10 +12,9 @@ use crate::circuit::{por::PoRCircuit, variables::Root};
 use crate::drgraph::Graph;
 use crate::hasher::Hasher;
 use crate::merkle::MerkleProof;
-use crate::parameter_cache::ParameterSetMetadata;
 use crate::stacked::{
     Proof as VanillaProof, PublicParams, ReplicaColumnProof as VanillaReplicaColumnProof,
-    WindowProof as VanillaWindowProof, WrapperProof as VanillaWrapperProof, WINDOW_SIZE_BYTES,
+    WindowProof as VanillaWindowProof, WrapperProof as VanillaWrapperProof,
 };
 
 #[derive(Debug, Clone)]
@@ -47,7 +46,7 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
     /// Create an empty proof, used in `blank_circuit`s.
     pub fn empty(params: &PublicParams<H>, _challenge_index: usize) -> Self {
         let layers = params.config.window_challenges.layers();
-        let num_windows = params.sector_size() as usize / WINDOW_SIZE_BYTES;
+        let num_windows = params.num_windows();
 
         let labeling_proofs = (0..num_windows)
             .map(|_| {

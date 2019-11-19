@@ -34,7 +34,7 @@ use storage_proofs::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher, Sha2
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::stacked::{
-    self, CacheKey, ChallengeRequirements, StackedDrg, TemporaryAuxCache, EXP_DEGREE,
+    self, CacheKey, ChallengeRequirements, StackedConfig, StackedDrg, TemporaryAuxCache, EXP_DEGREE,
 };
 
 // We can only one of the profilers at a time, either CPU (`profile`)
@@ -179,6 +179,7 @@ fn do_the_work<H: 'static>(
         expansion_degree,
         seed: new_seed(),
         config: config.clone(),
+        window_size_nodes: nodes / 4,
     };
 
     info!("running setup");

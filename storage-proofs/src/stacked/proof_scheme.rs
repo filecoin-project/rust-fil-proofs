@@ -5,7 +5,7 @@ use crate::stacked::{
     challenges::ChallengeRequirements,
     graph::StackedBucketGraph,
     params::{PrivateInputs, Proof, PublicInputs, PublicParams, SetupParams},
-    proof::{StackedDrg, WINDOW_SIZE_NODES},
+    proof::StackedDrg,
 };
 
 impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for StackedDrg<'c, H, G> {
@@ -18,7 +18,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
         let window_graph = StackedBucketGraph::<H>::new_stacked(
-            WINDOW_SIZE_NODES,
+            sp.window_size_nodes,
             sp.degree,
             sp.expansion_degree,
             sp.seed,
@@ -31,6 +31,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
             window_graph,
             wrapper_graph,
             sp.config.clone(),
+            sp.window_size_nodes,
         ))
     }
 
@@ -71,15 +72,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
         (0..partition_count)
             .map(|k| {
                 trace!("proving partition {}/{}", k + 1, partition_count);
-                Self::prove_single_partition(
-                    &pub_params.config,
-                    &pub_params.window_graph,
-                    &pub_params.wrapper_graph,
-                    pub_inputs,
-                    &priv_inputs.t_aux,
-                    layers,
-                    k,
-                )
+                Self::prove_single_partition(&pub_params, pub_inputs, &priv_inputs.t_aux, k)
             })
             .collect()
     }

@@ -21,10 +21,12 @@ pub type PostPublicParams = election_post::PublicParams;
 pub fn public_params(
     sector_bytes: PaddedBytesAmount,
     partitions: usize,
+    window_size_nodes: usize,
 ) -> stacked::PublicParams<DefaultTreeHasher> {
     StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::setup(&setup_params(
         sector_bytes,
         partitions,
+        window_size_nodes,
     ))
     .unwrap()
 }
@@ -41,7 +43,11 @@ pub fn post_setup_params(post_config: PoStConfig) -> PostSetupParams {
     }
 }
 
-pub fn setup_params(sector_bytes: PaddedBytesAmount, partitions: usize) -> stacked::SetupParams {
+pub fn setup_params(
+    sector_bytes: PaddedBytesAmount,
+    window_size_nodes: usize,
+    partitions: usize,
+) -> stacked::SetupParams {
     let sector_bytes = usize::from(sector_bytes);
 
     let window_challenges = select_challenges(partitions, POREP_WINDOW_MINIMUM_CHALLENGES, LAYERS);
@@ -58,6 +64,14 @@ pub fn setup_params(sector_bytes: PaddedBytesAmount, partitions: usize) -> stack
         "sector_bytes ({}) must be a multiple of 32",
         sector_bytes,
     );
+
+    assert!(
+        sector_bytes % window_size_nodes * 32 == 0,
+        "sector_bytes ({}) must be a multiple of the window size ({})",
+        sector_bytes,
+        window_size_nodes * 32
+    );
+
     let nodes = sector_bytes / 32;
     stacked::SetupParams {
         nodes,
@@ -65,6 +79,7 @@ pub fn setup_params(sector_bytes: PaddedBytesAmount, partitions: usize) -> stack
         expansion_degree: EXP_DEGREE,
         seed: DRG_SEED,
         config,
+        window_size_nodes,
     }
 }
 

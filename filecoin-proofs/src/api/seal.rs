@@ -77,6 +77,7 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
         vanilla_params: setup_params(
             PaddedBytesAmount::from(porep_config),
             usize::from(PoRepProofPartitions::from(porep_config)),
+            porep_config.window_size_nodes,
         ),
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };
@@ -219,6 +220,7 @@ pub fn seal_commit<T: AsRef<Path>>(
         vanilla_params: setup_params(
             PaddedBytesAmount::from(porep_config),
             usize::from(PoRepProofPartitions::from(porep_config)),
+            porep_config.window_size_nodes,
         ),
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };
@@ -267,7 +269,7 @@ pub fn compute_comm_d(
     porep_config: PoRepConfig,
     piece_infos: &[PieceInfo],
 ) -> error::Result<Commitment> {
-    pieces::compute_comm_d(porep_config.0, piece_infos)
+    pieces::compute_comm_d(porep_config.sector_size, piece_infos)
 }
 
 /// Verifies the output of some previously-run seal operation.
@@ -293,6 +295,7 @@ pub fn verify_seal(
         vanilla_params: setup_params(
             PaddedBytesAmount::from(porep_config),
             usize::from(PoRepProofPartitions::from(porep_config)),
+            porep_config.window_size_nodes,
         ),
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };

@@ -8,12 +8,15 @@ use storage_proofs::parameter_cache::{self, CacheableParameters};
 use crate::types::*;
 
 #[derive(Clone, Copy, Debug)]
-pub struct PoStConfig(pub SectorSize);
+pub struct PoStConfig {
+    pub sector_size: SectorSize,
+    pub window_size_nodes: usize,
+}
 
 impl From<PoStConfig> for PaddedBytesAmount {
     fn from(x: PoStConfig) -> Self {
         match x {
-            PoStConfig(s) => PaddedBytesAmount::from(s),
+            PoStConfig { sector_size, .. } => PaddedBytesAmount::from(sector_size),
         }
     }
 }
@@ -21,7 +24,7 @@ impl From<PoStConfig> for PaddedBytesAmount {
 impl From<PoStConfig> for UnpaddedBytesAmount {
     fn from(x: PoStConfig) -> Self {
         match x {
-            PoStConfig(s) => PaddedBytesAmount::from(s).into(),
+            PoStConfig { sector_size, .. } => PaddedBytesAmount::from(sector_size).into(),
         }
     }
 }

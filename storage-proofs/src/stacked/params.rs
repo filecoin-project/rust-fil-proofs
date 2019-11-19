@@ -15,13 +15,10 @@ use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::stacked::{
-    column::Column,
-    column_proof::ColumnProof,
-    graph::StackedBucketGraph,
-    proof::{StackedConfig, WINDOW_SIZE_BYTES, WINDOW_SIZE_NODES},
+    column::Column, column_proof::ColumnProof, graph::StackedBucketGraph, proof::StackedConfig,
     EncodingProof, LabelingProof, LayerChallenges,
 };
-use crate::util::data_at_node;
+use crate::util::{data_at_node, NODE_SIZE};
 
 pub type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 
@@ -56,16 +53,16 @@ impl CacheKey {
 
 #[derive(Debug, Clone)]
 pub struct SetupParams {
-    // Number of nodes
+    /// Number of nodes.
     pub nodes: usize,
-
-    // Base degree of DRG
+    /// Base degree of DRG.
     pub degree: usize,
-
+    /// Degree of th expander graph .
     pub expansion_degree: usize,
-
-    // Random seed
+    /// Random seed
     pub seed: [u8; 28],
+    /// Size of a window in nodes.
+    pub window_size_nodes: usize,
 
     pub config: StackedConfig,
 }
@@ -78,6 +75,8 @@ where
     pub config: StackedConfig,
     pub window_graph: StackedBucketGraph<H>,
     pub wrapper_graph: StackedBucketGraph<H>,
+    /// Window size in nodes.
+    pub window_size: usize,
     _h: PhantomData<H>,
 }
 
@@ -89,13 +88,31 @@ where
         window_graph: StackedBucketGraph<H>,
         wrapper_graph: StackedBucketGraph<H>,
         config: StackedConfig,
+        window_size: usize,
     ) -> Self {
         PublicParams {
             window_graph,
             wrapper_graph,
             config,
+            window_size,
             _h: PhantomData,
         }
+    }
+
+    pub fn window_size_nodes(&self) -> usize {
+        self.window_size
+    }
+
+    pub fn window_size_bytes(&self) -> usize {
+        self.window_size * NODE_SIZE
+    }
+
+    pub fn num_windows(&self) -> usize {
+        self.wrapper_graph.sector_size() as usize / self.window_size_bytes()
+    }
+
+    pub fn layer_size(&self) -> usize {
+        self.wrapper_graph.size() * NODE_SIZE
     }
 }
 
@@ -126,6 +143,7 @@ where
             other.window_graph.clone(),
             other.wrapper_graph.clone(),
             other.config.clone(),
+            other.window_size,
         )
     }
 }
@@ -235,10 +253,8 @@ impl<H: Hasher> WrapperProof<H> {
     /// Verify the full proof.
     pub fn verify<G: Hasher>(
         &self,
-        _pub_params: &PublicParams<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         challenge: usize,
-        _challenge_index: usize,
         wrapper_graph: &StackedBucketGraph<H>,
         comm_q: &H::Domain,
     ) -> bool {
@@ -278,27 +294,27 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
         pub_params: &PublicParams<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         challenge: usize,
-        window_graph: &StackedBucketGraph<H>,
         comm_q: &H::Domain,
         comm_c: &H::Domain,
     ) -> bool {
+        let window_graph = &pub_params.window_graph;
         let replica_id = &pub_inputs.replica_id;
 
         check!(challenge < window_graph.size());
         check!(pub_inputs.tau.is_some());
 
-        let num_windows = pub_params.sector_size() as usize / WINDOW_SIZE_BYTES;
+        let num_windows = pub_params.num_windows();
         check_eq!(self.comm_d_proofs.len(), num_windows);
         check_eq!(self.comm_q_proofs.len(), num_windows);
         check_eq!(self.encoding_proofs.len(), num_windows);
 
         // Verify initial data layer
         trace!("verify initial data layer");
-        check!(self.verify_comm_d_proofs(challenge, pub_inputs));
+        check!(self.verify_comm_d_proofs(challenge, pub_params, pub_inputs));
 
         // Verify q data layer
         trace!("verify q data layer");
-        check!(self.verify_comm_q_proofs(challenge, comm_q));
+        check!(self.verify_comm_q_proofs(pub_params, challenge, comm_q));
 
         // Verify replica column openings
         trace!("verify replica column openings");
@@ -332,10 +348,11 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
     fn verify_comm_d_proofs(
         &self,
         challenge: usize,
+        pub_params: &PublicParams<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
     ) -> bool {
         for (window_index, comm_d_proof) in self.comm_d_proofs.iter().enumerate() {
-            let c = window_index * WINDOW_SIZE_NODES + challenge;
+            let c = window_index * pub_params.window_size_nodes() + challenge;
             check!(comm_d_proof.proves_challenge(c));
             if let Some(ref tau) = pub_inputs.tau {
                 check_eq!(comm_d_proof.root(), &tau.comm_d);
@@ -347,9 +364,14 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
         true
     }
 
-    fn verify_comm_q_proofs(&self, challenge: usize, comm_q: &H::Domain) -> bool {
+    fn verify_comm_q_proofs(
+        &self,
+        pub_params: &PublicParams<H>,
+        challenge: usize,
+        comm_q: &H::Domain,
+    ) -> bool {
         for (window_index, comm_q_proof) in self.comm_q_proofs.iter().enumerate() {
-            let c = window_index * WINDOW_SIZE_NODES + challenge;
+            let c = window_index * pub_params.window_size_nodes() + challenge;
             check!(comm_q_proof.proves_challenge(c));
             check_eq!(comm_q_proof.root(), comm_q);
         }
@@ -572,8 +594,8 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
         self.labels_for_layer(layer).read_at(node_index as usize)
     }
 
-    pub fn column(&self, column_index: u32, layer_size: usize) -> Result<Column<H>> {
-        self.labels.column(column_index, layer_size)
+    pub fn column(&self, column_index: u32, pub_params: &PublicParams<H>) -> Result<Column<H>> {
+        self.labels.column(column_index, pub_params)
     }
 }
 
@@ -695,13 +717,13 @@ impl<H: Hasher> LabelsCache<H> {
     }
 
     /// Build the column for the given node.
-    pub fn column(&self, node: u32, layer_size: usize) -> Result<Column<H>> {
-        assert!((node as usize) < WINDOW_SIZE_NODES);
+    pub fn column(&self, node: u32, pub_params: &PublicParams<H>) -> Result<Column<H>> {
+        assert!((node as usize) < pub_params.window_size_nodes());
 
         let len = self.layers();
         assert!(len > 1, "invalid layer number");
 
-        let num_windows = layer_size / WINDOW_SIZE_BYTES;
+        let num_windows = pub_params.num_windows();
         assert!(num_windows > 0, "invalid number of windows");
 
         let rows = (0..num_windows)
@@ -711,7 +733,8 @@ impl<H: Hasher> LabelsCache<H> {
                     .take(len - 1) // skip last one
                     .enumerate()
                     .map(move |(layer, labels)| {
-                        let l = labels.read_at(window_index * WINDOW_SIZE_NODES + node as usize);
+                        let l = labels
+                            .read_at(window_index * pub_params.window_size_nodes() + node as usize);
                         info!("({}:{}:{}) {:?}", window_index, node, layer, &l);
                         l
                     })

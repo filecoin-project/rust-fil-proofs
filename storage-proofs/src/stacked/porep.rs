@@ -3,7 +3,7 @@ use crate::hasher::Hasher;
 use crate::porep::PoRep;
 use crate::stacked::{
     params::{PersistentAux, PublicParams, Tau, TemporaryAux, Tree},
-    proof::{StackedDrg, WINDOW_SIZE_BYTES, WINDOW_SIZE_NODES},
+    proof::StackedDrg,
 };
 use crate::util::NODE_SIZE;
 
@@ -20,15 +20,8 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
         data_tree: Option<Tree<G>>,
         config: Option<StoreConfig>,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
-        let (tau, p_aux, t_aux) = Self::transform_and_replicate_layers(
-            &pp.window_graph,
-            &pp.wrapper_graph,
-            &pp.config,
-            replica_id,
-            data,
-            data_tree,
-            config,
-        )?;
+        let (tau, p_aux, t_aux) =
+            Self::transform_and_replicate_layers(pp, replica_id, data, data_tree, config)?;
 
         Ok((tau, (p_aux, t_aux)))
     }
@@ -41,7 +34,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
     ) -> Result<Vec<u8>> {
         let mut data = data.to_vec();
 
-        Self::extract_all_windows(&pp.window_graph, &pp.config, replica_id, &mut data, config)?;
+        Self::extract_all_windows(pp, replica_id, &mut data, config)?;
 
         Ok(data)
     }
@@ -54,20 +47,14 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
         _config: Option<StoreConfig>,
     ) -> Result<Vec<u8>> {
         // grab the window for this node
-        let window_start_index = node / WINDOW_SIZE_NODES;
-        let window_start = window_start_index * WINDOW_SIZE_BYTES;
-        let window_end = (window_start_index + 1) * WINDOW_SIZE_BYTES;
+        let window_start_index = node / pp.window_size_nodes();
+        let window_start = window_start_index * pp.window_size_bytes();
+        let window_end = (window_start_index + 1) * pp.window_size_bytes();
         let mut window = data[window_start..window_end].to_vec();
 
-        Self::extract_single_window(
-            &pp.window_graph,
-            pp.config.layers(),
-            replica_id,
-            &mut window,
-            window_start_index,
-        );
+        Self::extract_single_window(pp, replica_id, &mut window, window_start_index);
 
-        let node_window_index = node % WINDOW_SIZE_NODES;
+        let node_window_index = node % pp.window_size_nodes();
         let start = node_window_index * NODE_SIZE;
         let end = (node_window_index + 1) * NODE_SIZE;
         let node = window[start..end].to_vec();

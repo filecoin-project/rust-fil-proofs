@@ -61,6 +61,7 @@ fn dump_proof_bytes<H: Hasher>(
 #[derive(Clone, Debug)]
 struct Params {
     samples: usize,
+    window_size_nodes: usize,
     data_size: usize,
     config: StackedConfig,
     partitions: usize,
@@ -118,6 +119,7 @@ where
             use_tmp,
             dump_proofs,
             bench_only,
+            window_size_nodes,
             ..
         } = &params;
 
@@ -142,6 +144,7 @@ where
             expansion_degree: EXP_DEGREE,
             seed: new_seed(),
             config: config.clone(),
+            window_size_nodes: *window_size_nodes,
         };
 
         let pp = StackedDrg::<H, Sha256Hasher>::setup(&sp)?;
@@ -347,6 +350,7 @@ fn do_circuit_work<H: 'static + Hasher>(
     };
 
     if *bench || *circuit {
+        info!("Generating blank circuit");
         let mut cs = MetricCS::<Bls12>::new();
         <StackedCompound as CompoundProof<_, StackedDrg<H, Sha256Hasher>, _>>::blank_circuit(&pp)
             .synthesize(&mut cs)?;
@@ -356,6 +360,7 @@ fn do_circuit_work<H: 'static + Hasher>(
     }
 
     if *groth {
+        info!("Generating Groth Proof");
         let pub_inputs = pub_in.expect("missing public inputs");
         let priv_inputs = priv_in.expect("missing private inputs");
 
@@ -483,6 +488,7 @@ impl Report {
 pub struct RunOpts {
     pub bench: bool,
     pub bench_only: bool,
+    pub window_size_nodes: usize,
     pub window_challenges: usize,
     pub wrapper_challenges: usize,
     pub circuit: bool,
@@ -512,6 +518,7 @@ pub fn run(opts: RunOpts) -> Result<(), failure::Error> {
         circuit: opts.circuit,
         extract: opts.extract,
         hasher: opts.hasher,
+        window_size_nodes: opts.window_size_nodes,
         samples: 5,
     };
 

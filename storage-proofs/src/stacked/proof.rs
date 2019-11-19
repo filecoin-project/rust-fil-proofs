@@ -28,9 +28,6 @@ use crate::stacked::{
 };
 use crate::util::{data_at_node, data_at_node_offset, NODE_SIZE};
 
-pub const WINDOW_SIZE_BYTES: usize = 4 * 1024;
-pub const WINDOW_SIZE_NODES: usize = WINDOW_SIZE_BYTES / NODE_SIZE;
-
 #[derive(Debug)]
 pub struct StackedDrg<'a, H: 'a + Hasher, G: 'a + Hasher> {
     _a: PhantomData<&'a H>,
@@ -41,7 +38,7 @@ fn get_drg_parents_columns<H: Hasher, G: Hasher>(
     graph: &StackedBucketGraph<H>,
     t_aux: &TemporaryAuxCache<H, G>,
     x: usize,
-    layer_size: usize,
+    pub_params: &PublicParams<H>,
 ) -> Result<Vec<Column<H>>> {
     let base_degree = graph.base_graph().degree();
 
@@ -51,7 +48,7 @@ fn get_drg_parents_columns<H: Hasher, G: Hasher>(
     graph.base_parents(x, &mut parents);
 
     for parent in &parents {
-        columns.push(t_aux.column(*parent, layer_size)?);
+        columns.push(t_aux.column(*parent, pub_params)?);
     }
 
     debug_assert!(columns.len() == base_degree);
@@ -63,14 +60,14 @@ fn get_exp_parents_columns<H: Hasher, G: Hasher>(
     graph: &StackedBucketGraph<H>,
     t_aux: &TemporaryAuxCache<H, G>,
     x: usize,
-    layer_size: usize,
+    pub_params: &PublicParams<H>,
 ) -> Result<Vec<Column<H>>> {
     let mut parents = vec![0; graph.expansion_degree()];
     graph.expanded_parents(x, &mut parents);
 
     parents
         .iter()
-        .map(|parent| t_aux.column(*parent, layer_size))
+        .map(|parent| t_aux.column(*parent, pub_params))
         .collect()
 }
 
@@ -97,12 +94,9 @@ impl StackedConfig {
 impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn prove_single_partition(
-        config: &StackedConfig,
-        window_graph: &StackedBucketGraph<H>,
-        wrapper_graph: &StackedBucketGraph<H>,
+        pub_params: &PublicParams<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         t_aux: &TemporaryAuxCache<H, G>,
-        _layers: usize,
         k: usize,
     ) -> Result<Proof<H, G>> {
         // Sanity checks on restored trees.
@@ -110,8 +104,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         assert_eq!(pub_inputs.tau.as_ref().unwrap().comm_d, t_aux.tree_d.root());
 
         // Derive the set of challenges we are proving over.
-
-        let layer_size = wrapper_graph.size() * NODE_SIZE;
+        let config = &pub_params.config;
+        let window_graph = &pub_params.window_graph;
+        let wrapper_graph = &pub_params.wrapper_graph;
 
         let window_challenges =
             pub_inputs.all_challenges(&config.window_challenges, window_graph.size(), Some(k));
@@ -123,11 +118,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 Self::prove_window_challenge(
                     challenge,
                     challenge_index,
-                    window_graph,
+                    pub_params,
                     pub_inputs,
                     t_aux,
-                    &config.window_challenges,
-                    layer_size,
                 )
             })
             .collect::<Result<_>>()?;
@@ -139,14 +132,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             .into_par_iter()
             .enumerate()
             .map(|(challenge_index, challenge)| {
-                Self::prove_wrapper_challenge(
-                    challenge,
-                    challenge_index,
-                    wrapper_graph,
-                    pub_inputs,
-                    t_aux,
-                    &config.wrapper_challenges,
-                )
+                Self::prove_wrapper_challenge(challenge, challenge_index, wrapper_graph, t_aux)
             })
             .collect::<Result<_>>()?;
 
@@ -163,37 +149,36 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     fn prove_window_challenge(
         challenge: usize,
         challenge_index: usize,
-        window_graph: &StackedBucketGraph<H>,
+        pub_params: &PublicParams<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         t_aux: &TemporaryAuxCache<H, G>,
-        layer_challenges: &LayerChallenges,
-        layer_size: usize,
     ) -> Result<WindowProof<H, G>> {
-        assert!(challenge < WINDOW_SIZE_NODES);
+        let window_graph = &pub_params.window_graph;
+        let layer_challenges = &pub_params.config.window_challenges;
+        assert!(challenge < pub_params.window_size_nodes());
 
         trace!("challenge {} ({})", challenge, challenge_index);
         assert!(challenge < window_graph.size(), "Invalid challenge");
         assert!(challenge > 0, "Invalid challenge");
 
         let layers = layer_challenges.layers();
-        let num_windows = layer_size / WINDOW_SIZE_BYTES;
+        let num_windows = pub_params.num_windows();
 
         // Initial data layer openings (c_X in Comm_D)
         let comm_d_proofs = (0..num_windows)
             .map(|window_index| {
-                let c = window_index * WINDOW_SIZE_NODES + challenge;
+                let c = window_index * pub_params.window_size_nodes() + challenge;
                 MerkleProof::new_from_proof(&t_aux.tree_d.gen_proof(c))
             })
             .collect();
 
         // Stacked replica column openings
-        let replica_column_proof =
-            Self::prove_replica_column(challenge, window_graph, t_aux, layer_size)?;
+        let replica_column_proof = Self::prove_replica_column(pub_params, challenge, t_aux)?;
 
         trace!("q openings");
         let comm_q_proofs = (0..num_windows)
             .map(|window_index| {
-                let c = window_index * WINDOW_SIZE_NODES + challenge;
+                let c = window_index * pub_params.window_size_nodes() + challenge;
                 MerkleProof::new_from_proof(&t_aux.tree_q.gen_proof(c))
             })
             .collect();
@@ -206,10 +191,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                 for layer in 1..=layers {
                     let parents_data = Self::get_parents_data_for_challenge(
+                        pub_params,
                         window_index,
                         challenge,
                         layer,
-                        window_graph,
                         t_aux,
                     )?;
 
@@ -260,9 +245,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         challenge: usize,
         challenge_index: usize,
         wrapper_graph: &StackedBucketGraph<H>,
-        _pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         t_aux: &TemporaryAuxCache<H, G>,
-        _layer_challenges: &LayerChallenges,
     ) -> Result<WrapperProof<H>> {
         trace!(" challenge {} ({})", challenge, challenge_index);
         assert!(challenge < wrapper_graph.size(), "Invalid challenge");
@@ -299,29 +282,29 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     }
 
     fn prove_replica_column(
+        pub_params: &PublicParams<H>,
         challenge: usize,
-        graph: &StackedBucketGraph<H>,
         t_aux: &TemporaryAuxCache<H, G>,
-        layer_size: usize,
     ) -> Result<ReplicaColumnProof<H>> {
-        assert!(challenge < WINDOW_SIZE_NODES);
+        assert!(challenge < pub_params.window_size_nodes());
+        let graph = &pub_params.window_graph;
 
         // All labels in C_X
         trace!("  c_x");
         let c_x = t_aux
-            .column(challenge as u32, layer_size)?
+            .column(challenge as u32, pub_params)?
             .into_proof(&t_aux.tree_c);
 
         // All labels in the DRG parents.
         trace!("  drg_parents");
-        let drg_parents = get_drg_parents_columns(graph, t_aux, challenge, layer_size)?
+        let drg_parents = get_drg_parents_columns(graph, t_aux, challenge, pub_params)?
             .into_iter()
             .map(|column| column.into_proof(&t_aux.tree_c))
             .collect::<Vec<_>>();
 
         // Labels for the expander parents
         trace!("  exp_parents");
-        let exp_parents = get_exp_parents_columns(graph, t_aux, challenge, layer_size)?
+        let exp_parents = get_exp_parents_columns(graph, t_aux, challenge, pub_params)?
             .into_iter()
             .map(|column| column.into_proof(&t_aux.tree_c))
             .collect::<Vec<_>>();
@@ -334,12 +317,14 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     }
 
     fn get_parents_data_for_challenge(
+        pub_params: &PublicParams<H>,
         window_index: usize,
         challenge: usize,
         layer: usize,
-        graph: &StackedBucketGraph<H>,
         t_aux: &TemporaryAuxCache<H, G>,
     ) -> Result<Vec<H::Domain>> {
+        let graph = &pub_params.window_graph;
+
         let parents_data: Vec<H::Domain> = if layer == 1 {
             let mut parents = vec![0; graph.base_graph().degree()];
             graph.base_parents(challenge, &mut parents);
@@ -347,7 +332,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             parents
                 .into_iter()
                 .map(|parent| {
-                    let index = window_index as u32 * WINDOW_SIZE_NODES as u32 + parent;
+                    let index =
+                        window_index as u32 * pub_params.window_size_nodes() as u32 + parent;
                     t_aux.domain_node_at_layer(layer, index)
                 })
                 .collect()
@@ -360,7 +346,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 .into_iter()
                 .enumerate()
                 .map(|(i, parent)| {
-                    let index = window_index as u32 * WINDOW_SIZE_NODES as u32 + parent;
+                    let index =
+                        window_index as u32 * pub_params.window_size_nodes() as u32 + parent;
                     if i < base_parents_count {
                         // parents data for base parents is from the current layer
                         t_aux.domain_node_at_layer(layer, index)
@@ -430,14 +417,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                 // Validate for this challenge
                 let window_challenge = window_challenges[i];
-                proof.verify(
-                    pub_params,
-                    pub_inputs,
-                    window_challenge,
-                    window_graph,
-                    comm_q,
-                    comm_c,
-                )
+                proof.verify(pub_params, pub_inputs, window_challenge, comm_q, comm_c)
             });
         if !window_valid {
             return Ok(false);
@@ -452,57 +432,48 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                 // Validate for this challenge
                 let wrapper_challenge = wrapper_challenges[i];
-                proof.verify::<G>(
-                    pub_params,
-                    pub_inputs,
-                    wrapper_challenge,
-                    i,
-                    wrapper_graph,
-                    comm_q,
-                )
+                proof.verify::<G>(pub_inputs, wrapper_challenge, wrapper_graph, comm_q)
             });
         Ok(wrapper_valid)
     }
 
     pub(crate) fn extract_all_windows(
-        window_graph: &StackedBucketGraph<H>,
-        sconfig: &StackedConfig,
+        pub_params: &PublicParams<H>,
         replica_id: &<H as Hasher>::Domain,
         data: &mut [u8],
         _config: Option<StoreConfig>,
     ) -> Result<()> {
         trace!("extract_all_windows");
 
-        let layers = sconfig.layers();
+        let layers = pub_params.config.layers();
         assert!(layers > 0);
 
-        assert_eq!(data.len() % WINDOW_SIZE_BYTES, 0, "invalid data size");
-
-        data.par_chunks_mut(WINDOW_SIZE_BYTES).enumerate().for_each(
-            |(window_index, data_chunk)| {
-                Self::extract_single_window(
-                    window_graph,
-                    layers,
-                    replica_id,
-                    data_chunk,
-                    window_index,
-                );
-            },
+        assert_eq!(
+            data.len() % pub_params.window_size_bytes(),
+            0,
+            "invalid data size"
         );
+
+        data.par_chunks_mut(pub_params.window_size_bytes())
+            .enumerate()
+            .for_each(|(window_index, data_chunk)| {
+                Self::extract_single_window(pub_params, replica_id, data_chunk, window_index);
+            });
 
         Ok(())
     }
 
     pub(crate) fn extract_single_window(
-        window_graph: &StackedBucketGraph<H>,
-        layers: usize,
+        pub_params: &PublicParams<H>,
         replica_id: &<H as Hasher>::Domain,
         data_chunk: &mut [u8],
         window_index: usize,
     ) {
         trace!("extract_single_window");
+        let window_graph = &pub_params.window_graph;
+        let layers = pub_params.config.layers();
 
-        let mut layer_labels = vec![0u8; WINDOW_SIZE_BYTES];
+        let mut layer_labels = vec![0u8; pub_params.window_size_bytes()];
         let mut parents = vec![0; window_graph.degree()];
         let mut exp_parents_data: Option<Vec<u8>> = None;
 
@@ -561,18 +532,19 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     }
 
     fn encode_all_windows(
-        window_graph: &StackedBucketGraph<H>,
-        layers: usize,
+        pub_params: &PublicParams<H>,
         replica_id: &<H as Hasher>::Domain,
         data: &mut [u8],
         config: StoreConfig,
     ) -> Result<(LabelsCache<H>, Labels<H>)> {
         trace!("encode_all_windows");
+        let window_graph = &pub_params.window_graph;
+        let layers = pub_params.config.layers();
 
-        assert_eq!(window_graph.size(), WINDOW_SIZE_NODES);
+        assert_eq!(window_graph.size(), pub_params.window_size_nodes());
 
         let layer_size = data.len();
-        let num_windows = layer_size / WINDOW_SIZE_BYTES;
+        let num_windows = pub_params.num_windows();
 
         let labels: Vec<Mutex<(DiskStore<_>, _)>> = (0..layers)
             .map(|layer| -> Result<_> {
@@ -592,9 +564,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         (0..num_windows)
             .into_par_iter()
-            .zip(data.par_chunks_mut(WINDOW_SIZE_BYTES))
+            .zip(data.par_chunks_mut(pub_params.window_size_bytes()))
             .for_each(|(window_index, data_chunk)| {
-                let mut layer_labels = vec![0u8; WINDOW_SIZE_BYTES];
+                let mut layer_labels = vec![0u8; pub_params.window_size_bytes()];
                 let mut parents = vec![0; window_graph.degree()];
                 let mut exp_parents_data: Option<Vec<u8>> = None;
 
@@ -627,11 +599,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         }
                     }
                     // write result to disk
-                    labels[layer - 1]
-                        .lock()
-                        .unwrap()
-                        .0
-                        .copy_from_slice(&layer_labels, window_index * WINDOW_SIZE_NODES);
+                    labels[layer - 1].lock().unwrap().0.copy_from_slice(
+                        &layer_labels,
+                        window_index * pub_params.window_size_nodes(),
+                    );
                 }
             });
 
@@ -705,25 +676,24 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     }
 
     fn build_column_hashes(
-        layers: usize,
-        layer_size: usize,
+        pub_params: &PublicParams<H>,
         labels: &LabelsCache<H>,
     ) -> Result<Vec<[u8; 32]>> {
-        let hashes = (0..WINDOW_SIZE_NODES)
+        let hashes = (0..pub_params.window_size_nodes())
             .into_par_iter()
-            .map(|i| Self::build_column_hash(i, layers, layer_size, labels))
+            .map(|i| Self::build_column_hash(pub_params, i, labels))
             .collect();
 
         Ok(hashes)
     }
 
     fn build_column_hash(
+        pub_params: &PublicParams<H>,
         column_index: usize,
-        layers: usize,
-        layer_size: usize,
         labels: &LabelsCache<H>,
     ) -> [u8; 32] {
-        let num_windows = layer_size / WINDOW_SIZE_BYTES;
+        let num_windows = pub_params.num_windows();
+        let layers = pub_params.config.layers();
 
         let first_label = labels.labels_for_layer(1).read_at(column_index);
         let mut hasher = crate::crypto::pedersen::Hasher::new(AsRef::<[u8]>::as_ref(&first_label));
@@ -737,7 +707,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                 let label = labels
                     .labels_for_layer(layer)
-                    .read_at(window_index * WINDOW_SIZE_NODES + column_index);
+                    .read_at(window_index * pub_params.window_size_nodes() + column_index);
 
                 hasher.update(AsRef::<[u8]>::as_ref(&label));
             }
@@ -747,27 +717,27 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     }
 
     pub(crate) fn transform_and_replicate_layers(
-        window_graph: &StackedBucketGraph<H>,
-        wrapper_graph: &StackedBucketGraph<H>,
-        sconfig: &StackedConfig,
+        pub_params: &PublicParams<H>,
         replica_id: &<H as Hasher>::Domain,
         data: &mut [u8],
         data_tree: Option<Tree<G>>,
         config: Option<StoreConfig>,
     ) -> Result<TransformedLayers<H, G>> {
         trace!("transform_and_replicate_layers");
-        assert_eq!(window_graph.size(), WINDOW_SIZE_NODES);
+        let window_graph = &pub_params.window_graph;
+        let wrapper_graph = &pub_params.wrapper_graph;
+
+        assert_eq!(window_graph.size(), pub_params.window_size_nodes());
 
         let wrapper_nodes_count = wrapper_graph.size();
         assert_eq!(data.len(), wrapper_nodes_count * NODE_SIZE);
 
-        let layers = sconfig.layers();
+        let layers = pub_params.config.layers();
         assert!(layers > 0);
 
         // Generate all store configs that we need based on the
         // cache_path in the specified config.
-        assert!(config.is_some());
-        let config = config.unwrap();
+        let config = config.expect("missing config");
         let mut tree_d_config =
             StoreConfig::from_config(&config, CacheKey::CommDTree.to_string(), None);
         let mut tree_r_last_config =
@@ -791,19 +761,17 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             }
         };
 
-        info!("encoding {} windows", data.len() / WINDOW_SIZE_BYTES);
+        info!(
+            "encoding {} windows",
+            data.len() / pub_params.window_size_bytes()
+        );
 
-        let (labels, label_configs) = Self::encode_all_windows(
-            window_graph,
-            sconfig.layers(),
-            replica_id,
-            data,
-            config.clone(),
-        )?;
+        let (labels, label_configs) =
+            Self::encode_all_windows(pub_params, replica_id, data, config.clone())?;
 
         // construct column hashes
         info!("building column hashes");
-        let column_hashes = Self::build_column_hashes(sconfig.layers(), data.len(), &labels)?;
+        let column_hashes = Self::build_column_hashes(pub_params, &labels)?;
 
         info!("building tree_q");
         let tree_q: Tree<H> = Self::build_tree::<H>(&data, Some(tree_q_config.clone()));
@@ -995,6 +963,7 @@ mod tests {
             expansion_degree: EXP_DEGREE,
             seed: new_seed(),
             config: config.clone(),
+            window_size_nodes: nodes / 2,
         };
 
         let pp = StackedDrg::<H, Blake2sHasher>::setup(&sp).expect("setup failed");
@@ -1071,6 +1040,7 @@ mod tests {
             expansion_degree: EXP_DEGREE,
             seed: new_seed(),
             config: config.clone(),
+            window_size_nodes: nodes / 2,
         };
 
         let pp = StackedDrg::<H, Blake2sHasher>::setup(&sp).expect("setup failed");
@@ -1144,6 +1114,7 @@ mod tests {
             expansion_degree,
             seed: new_seed(),
             config: config.clone(),
+            window_size_nodes: n / 2,
         };
 
         // MT for original data is always named tree-d, and it will be
@@ -1221,6 +1192,7 @@ mod tests {
             expansion_degree,
             seed: new_seed(),
             config: config.clone(),
+            window_size_nodes: nodes / 2,
         };
 
         // When this fails, the call to setup should panic, but seems to actually hang (i.e. neither return nor panic) for some reason.

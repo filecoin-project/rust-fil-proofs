@@ -76,6 +76,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
         &public_params(
             PaddedBytesAmount::from(porep_config),
             usize::from(PoRepProofPartitions::from(porep_config)),
+            porep_config.window_size_nodes,
         ),
         &replica_id,
         &data,
@@ -282,7 +283,9 @@ mod tests {
     use storage_proofs::fr32::bytes_into_fr;
     use tempfile::NamedTempFile;
 
-    use crate::constants::{SECTOR_SIZE_ONE_KIB, SINGLE_PARTITION_PROOF_LEN};
+    use crate::constants::{
+        SECTOR_SIZE_ONE_KIB, SINGLE_PARTITION_PROOF_LEN, WINDOW_SIZE_NODES_ONE_KIB,
+    };
     use crate::types::{PoStConfig, SectorSize};
 
     #[test]
@@ -297,7 +300,11 @@ mod tests {
 
         {
             let result = verify_seal(
-                PoRepConfig(SectorSize(SECTOR_SIZE_ONE_KIB), PoRepProofPartitions(2)),
+                PoRepConfig {
+                    sector_size: SectorSize(SECTOR_SIZE_ONE_KIB),
+                    partitions: PoRepProofPartitions(2),
+                    window_size_nodes: WINDOW_SIZE_NODES_ONE_KIB,
+                },
                 not_convertible_to_fr_bytes,
                 convertible_to_fr_bytes,
                 [0; 32],
@@ -322,7 +329,11 @@ mod tests {
 
         {
             let result = verify_seal(
-                PoRepConfig(SectorSize(SECTOR_SIZE_ONE_KIB), PoRepProofPartitions(2)),
+                PoRepConfig {
+                    sector_size: SectorSize(SECTOR_SIZE_ONE_KIB),
+                    partitions: PoRepProofPartitions(2),
+                    window_size_nodes: WINDOW_SIZE_NODES_ONE_KIB,
+                },
                 convertible_to_fr_bytes,
                 not_convertible_to_fr_bytes,
                 [0; 32],
@@ -367,7 +378,10 @@ mod tests {
         };
 
         let result = verify_post(
-            PoStConfig(SectorSize(SECTOR_SIZE_ONE_KIB)),
+            PoStConfig {
+                sector_size: SectorSize(SECTOR_SIZE_ONE_KIB),
+                window_size_nodes: WINDOW_SIZE_NODES_ONE_KIB,
+            },
             &[0; 32],
             1,
             &[vec![0u8; SINGLE_PARTITION_PROOF_LEN]][..],
@@ -397,6 +411,7 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let sector_size = SECTOR_SIZE_ONE_KIB;
+        let window_size_nodes = WINDOW_SIZE_NODES_ONE_KIB;
 
         let number_of_bytes_in_piece =
             UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size.clone()));
@@ -425,7 +440,11 @@ mod tests {
         let piece_infos = vec![piece_info];
 
         let sealed_sector_file = NamedTempFile::new()?;
-        let config = PoRepConfig(SectorSize(sector_size.clone()), PoRepProofPartitions(2));
+        let config = PoRepConfig {
+            sector_size: SectorSize(sector_size.clone()),
+            partitions: PoRepProofPartitions(2),
+            window_size_nodes,
+        };
 
         let cache_dir = tempfile::tempdir().unwrap();
         let prover_id = rng.gen();

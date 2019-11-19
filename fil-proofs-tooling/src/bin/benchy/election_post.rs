@@ -52,7 +52,7 @@ impl Report {
     }
 }
 
-pub fn run(sector_size: usize) -> Result<(), failure::Error> {
+pub fn run(sector_size: usize, window_size_nodes: usize) -> Result<(), failure::Error> {
     info!("Benchy Election PoSt: sector-size={}", sector_size);
 
     let sector_size_unpadded_bytes_ammount =
@@ -95,7 +95,11 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
     let piece_infos = vec![piece_info];
 
     // Replicate the staged sector, write the replica file to `sealed_path`.
-    let porep_config = PoRepConfig(SectorSize(sector_size as u64), N_PARTITIONS);
+    let porep_config = PoRepConfig {
+        sector_size: SectorSize(sector_size as u64),
+        partitions: N_PARTITIONS,
+        window_size_nodes,
+    };
     let cache_dir = tempfile::tempdir().unwrap();
     let sector_id = SectorId::from(SECTOR_ID);
     let ticket = [0u8; 32];
@@ -137,7 +141,10 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
     );
 
     // Measure PoSt generation and verification.
-    let post_config = PoStConfig(SectorSize(sector_size as u64));
+    let post_config = PoStConfig {
+        sector_size: SectorSize(sector_size as u64),
+        window_size_nodes,
+    };
 
     let challenge_count = 1u64;
 

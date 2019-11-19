@@ -5,8 +5,7 @@ use paired::bls12_381::{Bls12, Fr};
 
 use crate::circuit::stacked::hash::hash_single_column;
 use crate::hasher::Hasher;
-use crate::parameter_cache::ParameterSetMetadata;
-use crate::stacked::{Column as VanillaColumn, PublicParams, WINDOW_SIZE_BYTES};
+use crate::stacked::{Column as VanillaColumn, PublicParams};
 
 #[derive(Debug, Clone)]
 pub struct Column {
@@ -37,7 +36,7 @@ impl<H: Hasher> From<VanillaColumn<H>> for Column {
 impl Column {
     /// Create an empty `Column`, used in `blank_circuit`s.
     pub fn empty<H: Hasher>(params: &PublicParams<H>) -> Self {
-        let num_windows = params.sector_size() as usize / WINDOW_SIZE_BYTES;
+        let num_windows = params.num_windows();
         let layers = params.config.window_challenges.layers() - 1;
         let num_rows = layers * num_windows;
 
