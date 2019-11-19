@@ -175,15 +175,14 @@ jobs:
       - checkout
       - attach_workspace:
           at: "."
-      - restore_cache:
-          keys:
-            - cargo-v13-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
-      - restore_cache:
-          keys:
-            - parameter-cache-{{ .Revision }}
       - run:
           name: Install jq
           command: apt-get install time jq -yqq
+      - run:
+          name: Ensure existence of Groth parameters and keys on remote host
+          command: |
+            ./fil-proofs-tooling/scripts/paramcache-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" "$((1024*1024*1024))"
+          no_output_timeout: 60m
       - run:
           name: Run hash-constraints benchmarks on remote host
           command: |
