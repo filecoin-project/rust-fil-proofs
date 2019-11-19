@@ -30,6 +30,7 @@ pub mod compound_proof;
 pub mod crypto;
 pub mod drgporep;
 pub mod drgraph;
+pub mod election_post;
 mod encode;
 pub mod error;
 pub mod fr32;

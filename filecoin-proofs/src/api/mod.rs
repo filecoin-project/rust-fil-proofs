@@ -263,9 +263,11 @@ mod tests {
     use std::collections::BTreeMap;
     use std::io::{Seek, SeekFrom, Write};
 
-    use paired::bls12_381::Bls12;
+    use ff::Field;
+    use paired::bls12_381::{Bls12, Fr};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
+    use storage_proofs::election_post::Candidate;
     use storage_proofs::fr32::bytes_into_fr;
     use tempfile::NamedTempFile;
 
@@ -334,7 +336,10 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_verify_post_fr32_validation() {
+        pretty_env_logger::try_init().ok();
+
         let not_convertible_to_fr_bytes = [255; 32];
         let out = bytes_into_fr::<Bls12>(&not_convertible_to_fr_bytes);
         assert!(out.is_err(), "tripwire");
@@ -343,12 +348,20 @@ mod tests {
             1.into(),
             PublicReplicaInfo::new(not_convertible_to_fr_bytes),
         );
+        let winner = Candidate {
+            sector_id: 1.into(),
+            partial_ticket: Fr::zero(),
+            ticket: [0; 32],
+            sector_challenge_index: 0,
+        };
 
         let result = verify_post(
             PoStConfig(SectorSize(SECTOR_SIZE_ONE_KIB)),
             &[0; 32],
-            &vec![0; SINGLE_PARTITION_PROOF_LEN],
+            &[vec![0u8; SINGLE_PARTITION_PROOF_LEN]][..],
             &replicas,
+            &[winner][..],
+            [0; 32],
         );
 
         if let Err(err) = result {

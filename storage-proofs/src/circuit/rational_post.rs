@@ -10,6 +10,7 @@ use crate::circuit::por::{PoRCircuit, PoRCompound};
 use crate::circuit::stacked::hash::hash2;
 use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
+use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph;
 use crate::hasher::Hasher;
 use crate::merklepor;
@@ -97,7 +98,6 @@ where
         _priv_in: <RationalPoStCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &<RationalPoSt<'a, H> as ProofScheme<'a>>::Proof,
         _pub_params: &<RationalPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
-        engine_params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> RationalPoStCircuit<'a, Bls12, H> {
         let comm_rs: Vec<_> = pub_in.comm_rs.iter().map(|c| Some((*c).into())).collect();
         let comm_cs: Vec<_> = vanilla_proof
@@ -125,7 +125,7 @@ where
             .collect();
 
         RationalPoStCircuit {
-            params: engine_params,
+            params: &*JJ_PARAMS,
             leafs,
             comm_rs,
             comm_cs,
@@ -137,7 +137,6 @@ where
 
     fn blank_circuit(
         pub_params: &<RationalPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
-        params: &'a <Bls12 as JubjubEngine>::Params,
     ) -> RationalPoStCircuit<'a, Bls12, H> {
         let challenges_count = pub_params.challenges_count;
         let height = drgraph::graph_height(pub_params.sector_size as usize / NODE_SIZE);
@@ -149,7 +148,7 @@ where
         let paths = vec![vec![None; height]; challenges_count];
 
         RationalPoStCircuit {
-            params,
+            params: &*JJ_PARAMS,
             comm_rs,
             comm_cs,
             comm_r_lasts,
@@ -427,11 +426,10 @@ mod tests {
         let challenges_count = 2;
 
         let setup_params = compound_proof::SetupParams {
-            vanilla_params: &rational_post::SetupParams {
+            vanilla_params: rational_post::SetupParams {
                 sector_size,
                 challenges_count,
             },
-            engine_params: &*JJ_PARAMS,
             partitions: None,
         };
 
@@ -493,11 +491,9 @@ mod tests {
             comm_cs: &comm_cs,
         };
 
-        let gparams = RationalPoStCompound::<PedersenHasher>::groth_params(
-            &pub_params.vanilla_params,
-            &JJ_PARAMS,
-        )
-        .expect("failed to create groth params");
+        let gparams =
+            RationalPoStCompound::<PedersenHasher>::groth_params(&pub_params.vanilla_params)
+                .expect("failed to create groth params");
 
         let proof = RationalPoStCompound::<PedersenHasher>::prove(
             &pub_params,

@@ -17,19 +17,9 @@ pub use merkletree::merkle::next_pow2;
 use merkletree::merkle::FromIndexedParallelIterator;
 pub use merkletree::store::Store;
 
-#[cfg(not(feature = "mem-trees"))]
 type DiskStore<E> = merkletree::store::DiskStore<E>;
-#[cfg(not(feature = "mem-trees"))]
 pub type MerkleTree<T, A> = merkle::MerkleTree<T, A, DiskStore<T>>;
-#[cfg(not(feature = "mem-trees"))]
 pub type MerkleStore<T> = DiskStore<T>;
-
-#[cfg(feature = "mem-trees")]
-type VecStore<E> = merkletree::store::VecStore<E>;
-#[cfg(feature = "mem-trees")]
-pub type MerkleTree<T, A> = merkle::MerkleTree<T, A, VecStore<T>>;
-#[cfg(feature = "mem-trees")]
-pub type MerkleStore<T> = VecStore<T>;
 
 /// Representation of a merkle proof.
 /// Each element in the `path` vector consists of a tuple `(hash, is_right)`, with `hash` being the the hash of the node at the current level and `is_right` a boolean indicating if the path is taking the right path.

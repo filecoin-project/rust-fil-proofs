@@ -7,7 +7,7 @@ use serde::ser::Serialize;
 /// The ProofScheme trait provides the methods that any proof scheme needs to implement.
 pub trait ProofScheme<'a> {
     type PublicParams: Clone;
-    type SetupParams;
+    type SetupParams: Clone;
     type PublicInputs: Clone;
     type PrivateInputs;
     type Proof: Clone + Serialize + DeserializeOwned;
@@ -18,16 +18,16 @@ pub trait ProofScheme<'a> {
     fn setup(_: &Self::SetupParams) -> Result<Self::PublicParams>;
 
     /// prove generates and returns a proof from public parameters, public inputs, and private inputs.
-    fn prove<'b>(
-        _: &'b Self::PublicParams,
-        _: &'b Self::PublicInputs,
-        _: &'b Self::PrivateInputs,
+    fn prove(
+        _: &Self::PublicParams,
+        _: &Self::PublicInputs,
+        _: &Self::PrivateInputs,
     ) -> Result<Self::Proof>;
 
-    fn prove_all_partitions<'b>(
-        pub_params: &'b Self::PublicParams,
-        pub_in: &'b Self::PublicInputs,
-        priv_in: &'b Self::PrivateInputs,
+    fn prove_all_partitions(
+        pub_params: &Self::PublicParams,
+        pub_in: &Self::PublicInputs,
+        priv_in: &Self::PrivateInputs,
         partition_count: usize,
     ) -> Result<Vec<Self::Proof>> {
         info!("groth_proof_count: {}", partition_count);

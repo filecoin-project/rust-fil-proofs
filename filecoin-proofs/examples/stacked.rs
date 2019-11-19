@@ -26,7 +26,6 @@ use bellperson::Circuit;
 use storage_proofs::circuit::metric::*;
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::drgraph::*;
 use storage_proofs::example_helper::prettyb;
 use storage_proofs::fr32::fr_into_bytes;
@@ -287,7 +286,6 @@ fn do_the_work<H: 'static>(
     if circuit || groth || bench {
         let compound_public_params = compound_proof::PublicParams {
             vanilla_params: pp.clone(),
-            engine_params: &*JJ_PARAMS,
             partitions: Some(partitions),
         };
         if circuit || bench {
@@ -295,7 +293,7 @@ fn do_the_work<H: 'static>(
             let mut cs = MetricCS::<Bls12>::new();
 
             <StackedCompound as CompoundProof<_, StackedDrg<H, Blake2sHasher>, _>>::blank_circuit(
-                &pp, &JJ_PARAMS,
+                &pp,
             )
             .synthesize(&mut cs)
             .expect("failed to synthesize circuit");
@@ -320,7 +318,7 @@ fn do_the_work<H: 'static>(
             // and skip replication/vanilla-proving entirely.
             info!("Performing circuit groth.");
             let gparams =
-                <StackedCompound as CompoundProof<_, StackedDrg<H, Blake2sHasher>, _>>::groth_params(&compound_public_params.vanilla_params, &JJ_PARAMS)
+                <StackedCompound as CompoundProof<_, StackedDrg<H, Blake2sHasher>, _>>::groth_params(&compound_public_params.vanilla_params)
                     .unwrap();
 
             let multi_proof = {

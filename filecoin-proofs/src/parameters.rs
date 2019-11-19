@@ -1,13 +1,10 @@
 use storage_proofs::drgraph::{DefaultTreeHasher, BASE_DEGREE};
-use storage_proofs::hasher::PedersenHasher;
+use storage_proofs::election_post::{self, ElectionPoSt};
 use storage_proofs::proof::ProofScheme;
-use storage_proofs::rational_post::{self, RationalPoSt};
 use storage_proofs::stacked::{self, LayerChallenges, StackedDrg, EXP_DEGREE};
 
 use crate::constants::{DefaultPieceHasher, POREP_MINIMUM_CHALLENGES};
 use crate::types::{PaddedBytesAmount, PoStConfig};
-
-const POST_CHALLENGE_COUNT: usize = 30; // TODO: correct value
 
 const LAYERS: usize = 4; // TODO: 10;
 
@@ -16,8 +13,8 @@ const DRG_SEED: [u8; 28] = [
     26, 27,
 ]; // Arbitrary, need a theory for how to vary this over time.
 
-type PostSetupParams = rational_post::SetupParams;
-pub type PostPublicParams = rational_post::PublicParams;
+type PostSetupParams = election_post::SetupParams;
+pub type PostPublicParams = election_post::PublicParams;
 
 pub fn public_params(
     sector_bytes: PaddedBytesAmount,
@@ -31,14 +28,13 @@ pub fn public_params(
 }
 
 pub fn post_public_params(post_config: PoStConfig) -> PostPublicParams {
-    RationalPoSt::<PedersenHasher>::setup(&post_setup_params(post_config)).unwrap()
+    ElectionPoSt::<DefaultTreeHasher>::setup(&post_setup_params(post_config)).unwrap()
 }
 
 pub fn post_setup_params(post_config: PoStConfig) -> PostSetupParams {
     let size = PaddedBytesAmount::from(post_config);
 
-    rational_post::SetupParams {
-        challenges_count: POST_CHALLENGE_COUNT,
+    election_post::SetupParams {
         sector_size: size.into(),
     }
 }

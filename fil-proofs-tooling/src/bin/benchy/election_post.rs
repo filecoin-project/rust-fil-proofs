@@ -7,8 +7,8 @@ use filecoin_proofs::types::{
     UnpaddedBytesAmount,
 };
 use filecoin_proofs::{
-    add_piece, generate_piece_commitment, generate_post, seal_commit, seal_pre_commit, verify_post,
-    PrivateReplicaInfo, PublicReplicaInfo,
+    add_piece, generate_candidates, generate_piece_commitment, generate_post, seal_commit,
+    seal_pre_commit, verify_post, PrivateReplicaInfo, PublicReplicaInfo,
 };
 use log::info;
 use storage_proofs::sector::SectorId;
@@ -30,6 +30,7 @@ struct Inputs {
 #[derive(Serialize)]
 #[serde(rename_all = "kebab-case")]
 struct Outputs {
+    candidates_cpu_time_ms: u64,
     proving_cpu_time_ms: u64,
     proving_wall_time_ms: u64,
     verifying_wall_time_ms: u64,
@@ -52,7 +53,7 @@ impl Report {
 }
 
 pub fn run(sector_size: usize) -> Result<(), failure::Error> {
-    info!("Benchy Rational PoSt: sector-size={}", sector_size);
+    info!("Benchy Election PoSt: sector-size={}", sector_size);
 
     let sector_size_unpadded_bytes_ammount =
         UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size as u64));
@@ -139,21 +140,52 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
     // Measure PoSt generation and verification.
     let post_config = PoStConfig(SectorSize(sector_size as u64));
 
-    let gen_post_measurement =
-        measure(|| generate_post(post_config, &CHALLENGE_SEED, &priv_replica_info))
-            .expect("failed to generate PoSt");
+    let gen_candidates_measurement = measure(|| {
+        generate_candidates(post_config, &CHALLENGE_SEED, &priv_replica_info, PROVER_ID)
+    })
+    .expect("failed to generate post candidates");
+
+    let candidates = &gen_candidates_measurement.return_value;
+
+    let gen_post_measurement = measure(|| {
+        generate_post(
+            post_config,
+            &CHALLENGE_SEED,
+            &priv_replica_info,
+            candidates
+                .iter()
+                .cloned()
+                .map(Into::into)
+                .collect::<Vec<_>>(),
+            PROVER_ID,
+        )
+    })
+    .expect("failed to generate PoSt");
 
     let proof = &gen_post_measurement.return_value;
 
-    let verify_post_measurement =
-        measure(|| verify_post(post_config, &CHALLENGE_SEED, proof, &pub_replica_info))
-            .expect("failed to verify PoSt");
+    let verify_post_measurement = measure(|| {
+        verify_post(
+            post_config,
+            &CHALLENGE_SEED,
+            proof,
+            &pub_replica_info,
+            &candidates
+                .iter()
+                .cloned()
+                .map(Into::into)
+                .collect::<Vec<_>>(),
+            PROVER_ID,
+        )
+    })
+    .expect("failed to verify PoSt");
 
     // Create a JSON serializable report that we print to stdout (that will later be parsed using
     // the CLI JSON parser `jq`).
     let report = Report {
         inputs: Inputs { sector_size },
         outputs: Outputs {
+            candidates_cpu_time_ms: gen_candidates_measurement.cpu_time.as_millis() as u64,
             proving_cpu_time_ms: gen_post_measurement.cpu_time.as_millis() as u64,
             proving_wall_time_ms: gen_post_measurement.wall_time.as_millis() as u64,
             verifying_cpu_time_ms: verify_post_measurement.cpu_time.as_millis() as u64,

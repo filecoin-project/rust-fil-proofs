@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use paired::bls12_381::Bls12;
-use storage_proofs::circuit::rational_post::{RationalPoStCircuit, RationalPoStCompound};
+use storage_proofs::circuit::election_post::{ElectionPoStCircuit, ElectionPoStCompound};
 use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::parameter_cache::{self, CacheableParameters};
 
@@ -31,9 +31,9 @@ impl PoStConfig {
     pub fn get_cache_identifier(self) -> String {
         let params = crate::parameters::post_public_params(self);
 
-        <RationalPoStCompound<DefaultTreeHasher> as CacheableParameters<
+        <ElectionPoStCompound<DefaultTreeHasher> as CacheableParameters<
             Bls12,
-            RationalPoStCircuit<_, DefaultTreeHasher>,
+            ElectionPoStCircuit<_, DefaultTreeHasher>,
             _,
         >>::cache_identifier(&params)
     }
