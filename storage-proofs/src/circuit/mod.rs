@@ -2,6 +2,7 @@ mod constraint;
 
 pub mod create_label;
 pub mod drgporep;
+pub mod election_post;
 pub mod encode;
 pub mod multi_proof;
 pub mod pedersen;

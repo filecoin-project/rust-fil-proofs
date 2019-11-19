@@ -6,7 +6,6 @@ use paired::bls12_381::{Bls12, Fr};
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
 use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::merkle::create_merkle_tree;
@@ -67,11 +66,10 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
     let mut data = unsafe { MmapOptions::new().map_mut(&f_data).unwrap() };
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: &setup_params(
+        vanilla_params: setup_params(
             PaddedBytesAmount::from(porep_config),
             usize::from(PoRepProofPartitions::from(porep_config)),
         ),
-        engine_params: &(*JJ_PARAMS),
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };
 
@@ -178,11 +176,10 @@ pub fn seal_commit<T: AsRef<Path>>(
     );
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: &setup_params(
+        vanilla_params: setup_params(
             PaddedBytesAmount::from(porep_config),
             usize::from(PoRepProofPartitions::from(porep_config)),
         ),
-        engine_params: &(*JJ_PARAMS),
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };
 
@@ -250,17 +247,15 @@ pub fn verify_seal(
         generate_replica_id::<DefaultTreeHasher, _>(&prover_id, sector_id.into(), &ticket, comm_d);
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: &setup_params(
+        vanilla_params: setup_params(
             PaddedBytesAmount::from(porep_config),
             usize::from(PoRepProofPartitions::from(porep_config)),
         ),
-        engine_params: &(*JJ_PARAMS),
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };
 
     let compound_public_params: compound_proof::PublicParams<
         '_,
-        Bls12,
         StackedDrg<'_, DefaultTreeHasher, DefaultPieceHasher>,
     > = StackedCompound::setup(&compound_setup_params)?;
 

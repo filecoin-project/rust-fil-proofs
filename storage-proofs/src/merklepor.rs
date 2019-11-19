@@ -69,7 +69,7 @@ impl<'a, H: Hasher> PrivateInputs<'a, H> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct SetupParams {
     pub leaves: usize,
     pub private: bool,

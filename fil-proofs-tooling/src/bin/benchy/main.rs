@@ -3,8 +3,8 @@ extern crate serde;
 
 use clap::{value_t, App, Arg, SubCommand};
 
+mod election_post;
 mod hash_fns;
-mod rational_post;
 mod stacked;
 
 fn main() {
@@ -89,8 +89,8 @@ fn main() {
                         .help("Extract data after proving and verifying.")
                 );
 
-    let rational_post_cmd = SubCommand::with_name("rational-post")
-        .about("Benchmark Rational PoST")
+    let election_post_cmd = SubCommand::with_name("election-post")
+        .about("Benchmark Election PoST")
         .arg(
             Arg::with_name("size")
                 .long("size")
@@ -105,7 +105,7 @@ fn main() {
     let matches = App::new("benchy")
         .version("0.1")
         .subcommand(stacked_cmd)
-        .subcommand(rational_post_cmd)
+        .subcommand(election_post_cmd)
         .subcommand(hash_cmd)
         .get_matches();
 
@@ -132,11 +132,11 @@ fn main() {
                 })
                 .expect("stacked failed");
         }
-        ("rational-post", Some(m)) => {
+        ("election-post", Some(m)) => {
             let sector_size_kibs = value_t!(m, "size", usize)
                 .expect("could not convert `size` CLI argument to `usize`");
             let sector_size = sector_size_kibs * 1024;
-            rational_post::run(sector_size).expect("rational-post failed");
+            election_post::run(sector_size).expect("election-post failed");
         }
         ("hash-constraints", Some(_m)) => {
             hash_fns::run().expect("hash-constraints failed");

@@ -15,7 +15,6 @@ use fil_proofs_tooling::{measure, FuncMeasurement, Metadata};
 use storage_proofs::circuit::metric::MetricCS;
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::drgraph::*;
 use storage_proofs::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher, Sha256Hasher};
 use storage_proofs::porep::PoRep;
@@ -316,16 +315,13 @@ fn do_circuit_work<H: 'static + Hasher>(
 
     let compound_public_params = compound_proof::PublicParams {
         vanilla_params: pp.clone(),
-        engine_params: &*JJ_PARAMS,
         partitions: Some(*partitions),
     };
 
     if *bench || *circuit {
         let mut cs = MetricCS::<Bls12>::new();
-        <StackedCompound as CompoundProof<_, StackedDrg<H, Sha256Hasher>, _>>::blank_circuit(
-            &pp, &JJ_PARAMS,
-        )
-        .synthesize(&mut cs)?;
+        <StackedCompound as CompoundProof<_, StackedDrg<H, Sha256Hasher>, _>>::blank_circuit(&pp)
+            .synthesize(&mut cs)?;
 
         report.outputs.circuit_num_inputs = Some(cs.num_inputs() as u64);
         report.outputs.circuit_num_constraints = Some(cs.num_constraints() as u64);
@@ -344,7 +340,6 @@ fn do_circuit_work<H: 'static + Hasher>(
         let gparams =
             <StackedCompound as CompoundProof<_, StackedDrg<H, Sha256Hasher>, _>>::groth_params(
                 &compound_public_params.vanilla_params,
-                &JJ_PARAMS,
             )?;
 
         let multi_proof = {

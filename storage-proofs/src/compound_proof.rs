@@ -10,20 +10,15 @@ use bellperson::{groth16, Circuit};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use rand::rngs::OsRng;
 
-pub struct SetupParams<'a, 'b: 'a, E: JubjubEngine, S: ProofScheme<'a>>
-where
-    <S as ProofScheme<'a>>::SetupParams: 'b,
-    E::Params: Sync,
-{
-    pub vanilla_params: &'b <S as ProofScheme<'a>>::SetupParams,
-    pub engine_params: &'a E::Params,
+#[derive(Clone)]
+pub struct SetupParams<'a, S: ProofScheme<'a>> {
+    pub vanilla_params: <S as ProofScheme<'a>>::SetupParams,
     pub partitions: Option<usize>,
 }
 
 #[derive(Clone)]
-pub struct PublicParams<'a, E: JubjubEngine, S: ProofScheme<'a>> {
+pub struct PublicParams<'a, S: ProofScheme<'a>> {
     pub vanilla_params: S::PublicParams,
-    pub engine_params: &'a E::Params,
     pub partitions: Option<usize>,
 }
 
@@ -48,18 +43,17 @@ where
     Self: CacheableParameters<E, C, S::PublicParams>,
 {
     // setup is equivalent to ProofScheme::setup.
-    fn setup<'b>(sp: &SetupParams<'a, 'b, E, S>) -> Result<PublicParams<'a, E, S>>
+    fn setup(sp: &SetupParams<'a, S>) -> Result<PublicParams<'a, S>>
     where
         E::Params: Sync,
     {
         Ok(PublicParams {
-            vanilla_params: S::setup(sp.vanilla_params)?,
-            engine_params: sp.engine_params,
+            vanilla_params: S::setup(&sp.vanilla_params)?,
             partitions: sp.partitions,
         })
     }
 
-    fn partition_count(public_params: &PublicParams<'a, E, S>) -> usize {
+    fn partition_count(public_params: &PublicParams<'a, S>) -> usize {
         match public_params.partitions {
             None => 1,
             Some(0) => panic!("cannot specify zero partitions"),
@@ -69,9 +63,9 @@ where
 
     /// prove is equivalent to ProofScheme::prove.
     fn prove<'b>(
-        pub_params: &'b PublicParams<'a, E, S>,
-        pub_in: &'b S::PublicInputs,
-        priv_in: &'b S::PrivateInputs,
+        pub_params: &PublicParams<'a, S>,
+        pub_in: &S::PublicInputs,
+        priv_in: &S::PrivateInputs,
         groth_params: &'b groth16::Parameters<E>,
     ) -> Result<MultiProof<'b, E>>
     where
@@ -104,7 +98,6 @@ where
                         pub_in,
                         &vanilla_proof,
                         &pub_params.vanilla_params,
-                        &pub_params.engine_params,
                         groth_params,
                     )
                 })
@@ -115,10 +108,10 @@ where
     }
 
     // verify is equivalent to ProofScheme::verify.
-    fn verify(
-        public_params: &PublicParams<'a, E, S>,
+    fn verify<'b>(
+        public_params: &PublicParams<'a, S>,
         public_inputs: &S::PublicInputs,
-        multi_proof: &MultiProof<E>,
+        multi_proof: &MultiProof<'b, E>,
         requirements: &S::Requirements,
     ) -> Result<bool> {
         let vanilla_public_params = &public_params.vanilla_params;
@@ -150,11 +143,10 @@ where
     /// groth proof from it. It returns a groth proof.
     /// circuit_proof is used internally and should neither be called nor implemented outside of
     /// default trait methods.
-    fn circuit_proof<'b>(
+    fn circuit_proof(
         pub_in: &S::PublicInputs,
         vanilla_proof: &S::Proof,
-        pub_params: &'b S::PublicParams,
-        params: &'a E::Params,
+        pub_params: &S::PublicParams,
         groth_params: &groth16::Parameters<E>,
     ) -> Result<groth16::Proof<E>> {
         let mut rng = OsRng;
@@ -167,7 +159,6 @@ where
                 C::ComponentPrivateInputs::default(),
                 &vanilla_proof,
                 &pub_params,
-                &params,
             )
         };
 
@@ -198,33 +189,20 @@ where
         component_private_inputs: C::ComponentPrivateInputs,
         vanilla_proof: &S::Proof,
         public_param: &S::PublicParams,
-        engine_params: &'a E::Params,
     ) -> C;
 
-    fn blank_circuit(public_params: &S::PublicParams, engine_params: &'a E::Params) -> C;
+    fn blank_circuit(public_params: &S::PublicParams) -> C;
 
-    fn groth_params(
-        public_params: &S::PublicParams,
-        engine_params: &'a E::Params,
-    ) -> Result<groth16::Parameters<E>> {
-        Self::get_groth_params(
-            Self::blank_circuit(public_params, engine_params),
-            public_params,
-        )
+    fn groth_params(public_params: &S::PublicParams) -> Result<groth16::Parameters<E>> {
+        Self::get_groth_params(Self::blank_circuit(public_params), public_params)
     }
 
-    fn verifying_key(
-        public_params: &S::PublicParams,
-        engine_params: &'a E::Params,
-    ) -> Result<groth16::VerifyingKey<E>> {
-        Self::get_verifying_key(
-            Self::blank_circuit(public_params, engine_params),
-            public_params,
-        )
+    fn verifying_key(public_params: &S::PublicParams) -> Result<groth16::VerifyingKey<E>> {
+        Self::get_verifying_key(Self::blank_circuit(public_params), public_params)
     }
 
     fn circuit_for_test(
-        public_parameters: &PublicParams<'a, E, S>,
+        public_parameters: &PublicParams<'a, S>,
         public_inputs: &S::PublicInputs,
         private_inputs: &S::PrivateInputs,
     ) -> (C, Vec<E::Fr>) {
@@ -257,7 +235,6 @@ where
             C::ComponentPrivateInputs::default(),
             &vanilla_proofs[0],
             vanilla_params,
-            &public_parameters.engine_params,
         );
 
         (circuit, inputs)

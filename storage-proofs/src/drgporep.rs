@@ -30,7 +30,7 @@ pub struct PrivateInputs<'a, H: 'a + Hasher> {
     pub tree_r: &'a MerkleTree<H::Domain, H::Function>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct SetupParams {
     pub drg: DrgParams,
     pub private: bool,

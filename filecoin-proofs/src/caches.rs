@@ -5,14 +5,12 @@ use std::sync::Mutex;
 use bellperson::groth16;
 use paired::bls12_381::Bls12;
 
-use storage_proofs::circuit::rational_post::RationalPoStCircuit;
-use storage_proofs::circuit::rational_post::RationalPoStCompound;
+use storage_proofs::circuit::election_post::ElectionPoStCircuit;
+use storage_proofs::circuit::election_post::ElectionPoStCompound;
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::CompoundProof;
-use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::drgraph::DefaultTreeHasher;
-use storage_proofs::hasher::PedersenHasher;
-use storage_proofs::rational_post::RationalPoSt;
+use storage_proofs::election_post::ElectionPoSt;
 use storage_proofs::stacked::StackedDrg;
 
 use crate::constants::DefaultPieceHasher;
@@ -99,7 +97,7 @@ pub fn get_stacked_params(
             _,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
-        >>::groth_params(&public_params, &JJ_PARAMS)
+        >>::groth_params(&public_params)
         .map_err(Into::into)
     };
 
@@ -116,11 +114,11 @@ pub fn get_post_params(post_config: PoStConfig) -> error::Result<Arc<groth16::Pa
     let post_public_params = post_public_params(post_config);
 
     let parameters_generator = || {
-        <RationalPoStCompound<PedersenHasher> as CompoundProof<
+        <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
             Bls12,
-            RationalPoSt<PedersenHasher>,
-            RationalPoStCircuit<Bls12, PedersenHasher>,
-        >>::groth_params(&post_public_params, &JJ_PARAMS)
+            ElectionPoSt<DefaultTreeHasher>,
+            ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
+        >>::groth_params(&post_public_params)
         .map_err(Into::into)
     };
 
@@ -143,10 +141,10 @@ pub fn get_stacked_verifying_key(
 
     let vk_generator = || {
         <StackedCompound as CompoundProof<
-            _,
+            Bls12,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
-        >>::verifying_key(&public_params, &JJ_PARAMS)
+        >>::verifying_key(&public_params)
         .map_err(Into::into)
     };
 
@@ -163,11 +161,11 @@ pub fn get_post_verifying_key(post_config: PoStConfig) -> error::Result<Arc<Bls1
     let post_public_params = post_public_params(post_config);
 
     let vk_generator = || {
-        <RationalPoStCompound<PedersenHasher> as CompoundProof<
+        <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
             Bls12,
-            RationalPoSt<PedersenHasher>,
-            RationalPoStCircuit<Bls12, PedersenHasher>,
-        >>::verifying_key(&post_public_params, &JJ_PARAMS)
+            ElectionPoSt<DefaultTreeHasher>,
+            ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
+        >>::verifying_key(&post_public_params)
         .map_err(Into::into)
     };
 

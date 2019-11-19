@@ -19,7 +19,7 @@ use crate::util::data_at_node;
 
 pub type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SetupParams {
     // Number of nodes
     pub nodes: usize,
