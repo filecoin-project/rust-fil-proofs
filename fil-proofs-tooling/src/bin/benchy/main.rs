@@ -20,12 +20,20 @@ fn main() {
                         .takes_value(true),
                 )
                 .arg(
-                    Arg::with_name("challenges")
-                        .long("challenges")
-                        .help("How many challenges to execute")
+                    Arg::with_name("wrapper-challenges")
+                        .long("wrapper-challenges")
+                        .help("How many wrapper challenges to execute")
                         .default_value("1")
                         .takes_value(true),
                 )
+                .arg(
+                    Arg::with_name("window-challenges")
+                        .long("window-challenges")
+                        .help("How many window challenges to execute")
+                        .default_value("1")
+                        .takes_value(true),
+                )
+
                 .arg(
                     Arg::with_name("hasher")
                         .long("hasher")
@@ -117,7 +125,8 @@ fn main() {
                     stacked::run(stacked::RunOpts {
                         bench: m.is_present("bench"),
                         bench_only: m.is_present("bench-only"),
-                        challenges: value_t!(m, "challenges", usize)?,
+                        window_challenges: value_t!(m, "window-challenges", usize)?,
+                        wrapper_challenges: value_t!(m, "wrapper-challenges", usize)?,
                         circuit: m.is_present("circuit"),
                         dump: m.is_present("dump"),
                         extract: m.is_present("extract"),

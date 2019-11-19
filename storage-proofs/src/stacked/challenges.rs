@@ -8,15 +8,15 @@ use crate::hasher::Domain;
 pub struct LayerChallenges {
     /// How many layers we are generating challenges for.
     layers: usize,
-    max_count: usize,
+    count: usize,
 }
 
 impl LayerChallenges {
-    pub fn new(layers: usize, max_count: usize) -> Self {
+    pub fn new(layers: usize, count: usize) -> Self {
         assert!(layers > 1, "layers must be at least 2");
-        assert!(max_count > 0, "there must be at least 1 challenge");
+        assert!(count > 0, "there must be at least 1 challenge");
 
-        LayerChallenges { layers, max_count }
+        LayerChallenges { layers, count }
     }
 
     pub fn layers(&self) -> usize {
@@ -24,7 +24,7 @@ impl LayerChallenges {
     }
 
     pub fn challenges_count_all(&self) -> usize {
-        self.max_count
+        self.count
     }
 
     /// Derive all challenges.

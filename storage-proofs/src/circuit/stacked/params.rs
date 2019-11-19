@@ -46,7 +46,7 @@ pub struct WrapperProof<H: Hasher> {
 impl<H: Hasher, G: Hasher> WindowProof<H, G> {
     /// Create an empty proof, used in `blank_circuit`s.
     pub fn empty(params: &PublicParams<H>, _challenge_index: usize) -> Self {
-        let layers = params.layer_challenges.layers();
+        let layers = params.config.window_challenges.layers();
         let num_windows = params.sector_size() as usize / WINDOW_SIZE_BYTES;
 
         let labeling_proofs = (0..num_windows)

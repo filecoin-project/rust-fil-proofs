@@ -21,7 +21,9 @@ use storage_proofs::stacked::{
 
 use crate::api::util::{as_safe_commitment, commitment_from_fr};
 use crate::caches::{get_stacked_params, get_stacked_verifying_key};
-use crate::constants::{DefaultPieceHasher, POREP_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN};
+use crate::constants::{
+    DefaultPieceHasher, POREP_WINDOW_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN,
+};
 use crate::error;
 use crate::parameters::setup_params;
 pub use crate::pieces;
@@ -328,7 +330,7 @@ pub fn verify_seal(
         &public_inputs,
         &proof,
         &ChallengeRequirements {
-            minimum_challenges: POREP_MINIMUM_CHALLENGES,
+            minimum_challenges: POREP_WINDOW_MINIMUM_CHALLENGES, // TODO: what do we want here?
         },
     )
     .map_err(Into::into)

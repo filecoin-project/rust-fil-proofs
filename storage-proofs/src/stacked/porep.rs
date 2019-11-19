@@ -23,7 +23,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
         let (tau, p_aux, t_aux) = Self::transform_and_replicate_layers(
             &pp.window_graph,
             &pp.wrapper_graph,
-            &pp.layer_challenges,
+            &pp.config,
             replica_id,
             data,
             data_tree,
@@ -41,13 +41,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
     ) -> Result<Vec<u8>> {
         let mut data = data.to_vec();
 
-        Self::extract_all_windows(
-            &pp.window_graph,
-            &pp.layer_challenges,
-            replica_id,
-            &mut data,
-            config,
-        )?;
+        Self::extract_all_windows(&pp.window_graph, &pp.config, replica_id, &mut data, config)?;
 
         Ok(data)
     }
@@ -67,7 +61,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
 
         Self::extract_single_window(
             &pp.window_graph,
-            pp.layer_challenges.layers(),
+            pp.config.layers(),
             replica_id,
             &mut window,
             window_start_index,

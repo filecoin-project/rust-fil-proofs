@@ -23,5 +23,5 @@ pub use self::params::{
     ReplicaColumnProof, SetupParams, Tau, TemporaryAux, TemporaryAuxCache, WindowProof,
     WrapperProof,
 };
-pub use self::proof::{StackedDrg, WINDOW_SIZE_BYTES, WINDOW_SIZE_NODES};
+pub use self::proof::{StackedConfig, StackedDrg, WINDOW_SIZE_BYTES, WINDOW_SIZE_NODES};
 pub use labeling_proof::LabelingProof;

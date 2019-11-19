@@ -30,7 +30,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
         Ok(PublicParams::new(
             window_graph,
             wrapper_graph,
-            sp.layer_challenges.clone(),
+            sp.config.clone(),
         ))
     }
 
@@ -64,7 +64,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
         trace!("prove_all_partitions");
         assert!(partition_count > 0);
 
-        let layers = pub_params.layer_challenges.layers();
+        let layers = pub_params.config.layers();
         assert!(layers > 0);
         assert_eq!(priv_inputs.t_aux.labels.len(), layers);
 
@@ -72,11 +72,11 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
             .map(|k| {
                 trace!("proving partition {}/{}", k + 1, partition_count);
                 Self::prove_single_partition(
+                    &pub_params.config,
                     &pub_params.window_graph,
                     &pub_params.wrapper_graph,
                     pub_inputs,
                     &priv_inputs.t_aux,
-                    &pub_params.layer_challenges,
                     layers,
                     k,
                 )
@@ -125,8 +125,16 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
         requirements: &ChallengeRequirements,
         partitions: usize,
     ) -> bool {
-        let partition_challenges = public_params.layer_challenges.challenges_count_all();
+        let window_challenges = public_params
+            .config
+            .window_challenges
+            .challenges_count_all();
+        let wrapper_challenges = public_params
+            .config
+            .wrapper_challenges
+            .challenges_count_all();
 
-        partition_challenges * partitions >= requirements.minimum_challenges
+        window_challenges * partitions >= requirements.minimum_challenges
+            && wrapper_challenges * partitions >= requirements.minimum_challenges
     }
 }

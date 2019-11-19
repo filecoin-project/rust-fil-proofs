@@ -74,14 +74,34 @@ fn get_exp_parents_columns<H: Hasher, G: Hasher>(
         .collect()
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StackedConfig {
+    pub window_challenges: LayerChallenges,
+    pub wrapper_challenges: LayerChallenges,
+}
+
+impl StackedConfig {
+    pub fn new(layers: usize, window_count: usize, wrapper_count: usize) -> Self {
+        StackedConfig {
+            window_challenges: LayerChallenges::new(layers, window_count),
+            wrapper_challenges: LayerChallenges::new(layers, wrapper_count),
+        }
+    }
+
+    pub fn layers(&self) -> usize {
+        // they are both the same
+        self.window_challenges.layers()
+    }
+}
+
 impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn prove_single_partition(
+        config: &StackedConfig,
         window_graph: &StackedBucketGraph<H>,
         wrapper_graph: &StackedBucketGraph<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         t_aux: &TemporaryAuxCache<H, G>,
-        layer_challenges: &LayerChallenges,
         _layers: usize,
         k: usize,
     ) -> Result<Proof<H, G>> {
@@ -93,9 +113,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         let layer_size = wrapper_graph.size() * NODE_SIZE;
 
-        // TODO: make window and wrapper challengs have different number of challenges
         let window_challenges =
-            pub_inputs.all_challenges(layer_challenges, window_graph.size(), Some(k));
+            pub_inputs.all_challenges(&config.window_challenges, window_graph.size(), Some(k));
 
         let window_proofs: Vec<_> = window_challenges
             .into_par_iter()
@@ -107,14 +126,14 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     window_graph,
                     pub_inputs,
                     t_aux,
-                    layer_challenges,
+                    &config.window_challenges,
                     layer_size,
                 )
             })
             .collect::<Result<_>>()?;
 
         let wrapper_challenges =
-            pub_inputs.all_challenges(layer_challenges, wrapper_graph.size(), Some(k));
+            pub_inputs.all_challenges(&config.wrapper_challenges, wrapper_graph.size(), Some(k));
 
         let wrapper_proofs: Vec<_> = wrapper_challenges
             .into_par_iter()
@@ -126,7 +145,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     wrapper_graph,
                     pub_inputs,
                     t_aux,
-                    layer_challenges,
+                    &config.wrapper_challenges,
                 )
             })
             .collect::<Result<_>>()?;
@@ -378,10 +397,16 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             return Ok(false);
         }
 
-        let window_challenges =
-            pub_inputs.all_challenges(&pub_params.layer_challenges, window_graph.size(), Some(k));
-        let wrapper_challenges =
-            pub_inputs.all_challenges(&pub_params.layer_challenges, wrapper_graph.size(), Some(k));
+        let window_challenges = pub_inputs.all_challenges(
+            &pub_params.config.window_challenges,
+            window_graph.size(),
+            Some(k),
+        );
+        let wrapper_challenges = pub_inputs.all_challenges(
+            &pub_params.config.wrapper_challenges,
+            wrapper_graph.size(),
+            Some(k),
+        );
 
         for window_proof in &proof.window_proofs {
             // make sure all proofs have the same comm_c
@@ -441,14 +466,14 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
     pub(crate) fn extract_all_windows(
         window_graph: &StackedBucketGraph<H>,
-        layer_challenges: &LayerChallenges,
+        sconfig: &StackedConfig,
         replica_id: &<H as Hasher>::Domain,
         data: &mut [u8],
-        config: Option<StoreConfig>,
+        _config: Option<StoreConfig>,
     ) -> Result<()> {
         trace!("extract_all_windows");
 
-        let layers = layer_challenges.layers();
+        let layers = sconfig.layers();
         assert!(layers > 0);
 
         assert_eq!(data.len() % WINDOW_SIZE_BYTES, 0, "invalid data size");
@@ -724,7 +749,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     pub(crate) fn transform_and_replicate_layers(
         window_graph: &StackedBucketGraph<H>,
         wrapper_graph: &StackedBucketGraph<H>,
-        layer_challenges: &LayerChallenges,
+        sconfig: &StackedConfig,
         replica_id: &<H as Hasher>::Domain,
         data: &mut [u8],
         data_tree: Option<Tree<G>>,
@@ -736,7 +761,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let wrapper_nodes_count = wrapper_graph.size();
         assert_eq!(data.len(), wrapper_nodes_count * NODE_SIZE);
 
-        let layers = layer_challenges.layers();
+        let layers = sconfig.layers();
         assert!(layers > 0);
 
         // Generate all store configs that we need based on the
@@ -767,17 +792,18 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         };
 
         info!("encoding {} windows", data.len() / WINDOW_SIZE_BYTES);
+
         let (labels, label_configs) = Self::encode_all_windows(
             window_graph,
-            layer_challenges.layers(),
+            sconfig.layers(),
             replica_id,
             data,
             config.clone(),
         )?;
+
         // construct column hashes
         info!("building column hashes");
-        let column_hashes =
-            Self::build_column_hashes(layer_challenges.layers(), data.len(), &labels)?;
+        let column_hashes = Self::build_column_hashes(sconfig.layers(), data.len(), &labels)?;
 
         info!("building tree_q");
         let tree_q: Tree<H> = Self::build_tree::<H>(&data, Some(tree_q_config.clone()));
@@ -958,7 +984,7 @@ mod tests {
                 v.into_bytes()
             })
             .collect();
-        let challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
+        let config = StackedConfig::new(DEFAULT_STACKED_LAYERS, 5, 8);
 
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
@@ -968,7 +994,7 @@ mod tests {
             degree: BASE_DEGREE,
             expansion_degree: EXP_DEGREE,
             seed: new_seed(),
-            layer_challenges: challenges.clone(),
+            config: config.clone(),
         };
 
         let pp = StackedDrg::<H, Blake2sHasher>::setup(&sp).expect("setup failed");
@@ -1034,7 +1060,7 @@ mod tests {
                 v.into_bytes()
             })
             .collect();
-        let challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
+        let config = StackedConfig::new(DEFAULT_STACKED_LAYERS, 5, 8);
 
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
@@ -1044,7 +1070,7 @@ mod tests {
             degree: BASE_DEGREE,
             expansion_degree: EXP_DEGREE,
             seed: new_seed(),
-            layer_challenges: challenges.clone(),
+            config: config.clone(),
         };
 
         let pp = StackedDrg::<H, Blake2sHasher>::setup(&sp).expect("setup failed");
@@ -1086,14 +1112,14 @@ mod tests {
     }
 
     fn prove_verify_fixed(n: usize) {
-        let challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
+        let config = StackedConfig::new(DEFAULT_STACKED_LAYERS, 5, 8);
 
-        test_prove_verify::<PedersenHasher>(n, challenges.clone());
-        test_prove_verify::<Sha256Hasher>(n, challenges.clone());
-        test_prove_verify::<Blake2sHasher>(n, challenges.clone());
+        test_prove_verify::<PedersenHasher>(n, config.clone());
+        test_prove_verify::<Sha256Hasher>(n, config.clone());
+        test_prove_verify::<Blake2sHasher>(n, config.clone());
     }
 
-    fn test_prove_verify<H: 'static + Hasher>(n: usize, challenges: LayerChallenges) {
+    fn test_prove_verify<H: 'static + Hasher>(n: usize, config: StackedConfig) {
         // This will be called multiple times, only the first one succeeds, and that is ok.
         // femme::pretty::Logger::new()
         //     .start(log::LevelFilter::Trace)
@@ -1117,7 +1143,7 @@ mod tests {
             degree,
             expansion_degree,
             seed: new_seed(),
-            layer_challenges: challenges.clone(),
+            config: config.clone(),
         };
 
         // MT for original data is always named tree-d, and it will be
@@ -1188,13 +1214,13 @@ mod tests {
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
         let nodes = 1024 * 1024 * 32 * 8; // This corresponds to 8GiB sectors (32-byte nodes)
-        let layer_challenges = LayerChallenges::new(10, 333);
+        let config = StackedConfig::new(10, 333, 444);
         let sp = SetupParams {
             nodes,
             degree,
             expansion_degree,
             seed: new_seed(),
-            layer_challenges: layer_challenges.clone(),
+            config: config.clone(),
         };
 
         // When this fails, the call to setup should panic, but seems to actually hang (i.e. neither return nor panic) for some reason.

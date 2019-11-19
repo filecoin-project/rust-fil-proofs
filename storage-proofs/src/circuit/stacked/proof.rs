@@ -101,7 +101,7 @@ impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G
 
         let graph = &public_params.window_graph;
         let params = &self.params;
-        let layers = public_params.layer_challenges.layers();
+        let layers = public_params.config.layers();
 
         // In most cases (the exception being during testing) we want to ensure that the base and
         // expansion degrees are the optimal values.
@@ -273,7 +273,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         .expect("setup failed");
 
         let window_challenges =
-            pub_in.all_challenges(&pub_params.layer_challenges, window_graph.size(), k);
+            pub_in.all_challenges(&pub_params.config.window_challenges, window_graph.size(), k);
 
         let num_windows = pub_params.sector_size() as usize / WINDOW_SIZE_BYTES;
 
@@ -326,8 +326,11 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
             }
         }
 
-        let wrapper_challenges =
-            pub_in.all_challenges(&pub_params.layer_challenges, wrapper_graph.size(), k);
+        let wrapper_challenges = pub_in.all_challenges(
+            &pub_params.config.wrapper_challenges,
+            wrapper_graph.size(),
+            k,
+        );
 
         for challenge in wrapper_challenges.into_iter() {
             // comm_q_parents
@@ -379,10 +382,16 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
     fn blank_circuit(
         public_params: &<StackedDrg<H, G> as ProofScheme>::PublicParams,
     ) -> StackedCircuit<'a, Bls12, H, G> {
-        let window_proofs = (0..public_params.layer_challenges.challenges_count_all())
+        let window_proofs = (0..public_params
+            .config
+            .window_challenges
+            .challenges_count_all())
             .map(|challenge_index| WindowProof::empty(public_params, challenge_index))
             .collect();
-        let wrapper_proofs = (0..public_params.layer_challenges.challenges_count_all())
+        let wrapper_proofs = (0..public_params
+            .config
+            .wrapper_challenges
+            .challenges_count_all())
             .map(|challenge_index| WrapperProof::empty(public_params, challenge_index))
             .collect();
 
@@ -414,8 +423,7 @@ mod tests {
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
     use crate::stacked::{
-        ChallengeRequirements, LayerChallenges, PrivateInputs, PublicInputs, SetupParams,
-        EXP_DEGREE,
+        ChallengeRequirements, PrivateInputs, PublicInputs, SetupParams, StackedConfig, EXP_DEGREE,
     };
 
     use ff::Field;
@@ -433,7 +441,7 @@ mod tests {
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
         let num_layers = 2;
-        let layer_challenges = LayerChallenges::new(num_layers, 2);
+        let config = StackedConfig::new(num_layers, 2, 3);
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
@@ -448,7 +456,7 @@ mod tests {
             degree,
             expansion_degree,
             seed: new_seed(),
-            layer_challenges: layer_challenges.clone(),
+            config: config.clone(),
         };
 
         // MT for original data is always named tree-d, and it will be
@@ -506,8 +514,8 @@ mod tests {
 
         assert!(proofs_are_valid);
 
-        let expected_inputs = 57;
-        let expected_constraints = 3_542_531;
+        let expected_inputs = 65;
+        let expected_constraints = 3_762_730;
 
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.
@@ -586,7 +594,7 @@ mod tests {
         let degree = 3;
         let expansion_degree = 2;
         let num_layers = 2;
-        let layer_challenges = LayerChallenges::new(num_layers, 3);
+        let config = StackedConfig::new(num_layers, 3, 2);
         let partition_count = 1;
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
@@ -604,7 +612,7 @@ mod tests {
                 degree,
                 expansion_degree,
                 seed: new_seed(),
-                layer_challenges: layer_challenges.clone(),
+                config: config.clone(),
             },
             partitions: Some(partition_count),
         };

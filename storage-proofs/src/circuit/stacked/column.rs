@@ -38,7 +38,7 @@ impl Column {
     /// Create an empty `Column`, used in `blank_circuit`s.
     pub fn empty<H: Hasher>(params: &PublicParams<H>) -> Self {
         let num_windows = params.sector_size() as usize / WINDOW_SIZE_BYTES;
-        let layers = params.layer_challenges.layers() - 1;
+        let layers = params.config.window_challenges.layers() - 1;
         let num_rows = layers * num_windows;
 
         Column {

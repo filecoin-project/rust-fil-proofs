@@ -18,7 +18,7 @@ use crate::stacked::{
     column::Column,
     column_proof::ColumnProof,
     graph::StackedBucketGraph,
-    proof::{WINDOW_SIZE_BYTES, WINDOW_SIZE_NODES},
+    proof::{StackedConfig, WINDOW_SIZE_BYTES, WINDOW_SIZE_NODES},
     EncodingProof, LabelingProof, LayerChallenges,
 };
 use crate::util::data_at_node;
@@ -67,7 +67,7 @@ pub struct SetupParams {
     // Random seed
     pub seed: [u8; 28],
 
-    pub layer_challenges: LayerChallenges,
+    pub config: StackedConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -75,9 +75,9 @@ pub struct PublicParams<H>
 where
     H: 'static + Hasher,
 {
+    pub config: StackedConfig,
     pub window_graph: StackedBucketGraph<H>,
     pub wrapper_graph: StackedBucketGraph<H>,
-    pub layer_challenges: LayerChallenges,
     _h: PhantomData<H>,
 }
 
@@ -88,12 +88,12 @@ where
     pub fn new(
         window_graph: StackedBucketGraph<H>,
         wrapper_graph: StackedBucketGraph<H>,
-        layer_challenges: LayerChallenges,
+        config: StackedConfig,
     ) -> Self {
         PublicParams {
             window_graph,
             wrapper_graph,
-            layer_challenges,
+            config,
             _h: PhantomData,
         }
     }
@@ -105,10 +105,10 @@ where
 {
     fn identifier(&self) -> String {
         format!(
-            "layered_drgporep::PublicParams{{ window_graph: {}, wrapper_graph: {}, challenges: {:?} }}",
+            "layered_drgporep::PublicParams{{ window_graph: {}, wrapper_graph: {}, config: {:?} }}",
             self.window_graph.identifier(),
             self.wrapper_graph.identifier(),
-            self.layer_challenges,
+            self.config,
         )
     }
 
@@ -125,7 +125,7 @@ where
         PublicParams::new(
             other.window_graph.clone(),
             other.wrapper_graph.clone(),
-            other.layer_challenges.clone(),
+            other.config.clone(),
         )
     }
 }
@@ -306,7 +306,7 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
             .replica_column_proof
             .verify(challenge, &pub_params.window_graph, comm_c));
 
-        check!(self.verify_labels(replica_id, pub_params.layer_challenges.layers()));
+        check!(self.verify_labels(replica_id, pub_params.config.layers()));
 
         trace!("verify encoding");
         check!(self.verify_encoding_proofs(replica_id));

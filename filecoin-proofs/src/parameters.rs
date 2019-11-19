@@ -1,9 +1,11 @@
 use storage_proofs::drgraph::{DefaultTreeHasher, BASE_DEGREE};
 use storage_proofs::election_post::{self, ElectionPoSt};
 use storage_proofs::proof::ProofScheme;
-use storage_proofs::stacked::{self, LayerChallenges, StackedDrg, EXP_DEGREE};
+use storage_proofs::stacked::{self, LayerChallenges, StackedConfig, StackedDrg, EXP_DEGREE};
 
-use crate::constants::{DefaultPieceHasher, POREP_MINIMUM_CHALLENGES};
+use crate::constants::{
+    DefaultPieceHasher, POREP_WINDOW_MINIMUM_CHALLENGES, POREP_WRAPPER_MINIMUM_CHALLENGES,
+};
 use crate::types::{PaddedBytesAmount, PoStConfig};
 
 const LAYERS: usize = 4; // TODO: 10;
@@ -42,7 +44,14 @@ pub fn post_setup_params(post_config: PoStConfig) -> PostSetupParams {
 pub fn setup_params(sector_bytes: PaddedBytesAmount, partitions: usize) -> stacked::SetupParams {
     let sector_bytes = usize::from(sector_bytes);
 
-    let challenges = select_challenges(partitions, POREP_MINIMUM_CHALLENGES, LAYERS);
+    let window_challenges = select_challenges(partitions, POREP_WINDOW_MINIMUM_CHALLENGES, LAYERS);
+    let wrapper_challenges =
+        select_challenges(partitions, POREP_WRAPPER_MINIMUM_CHALLENGES, LAYERS);
+
+    let config = StackedConfig {
+        window_challenges,
+        wrapper_challenges,
+    };
 
     assert!(
         sector_bytes % 32 == 0,
@@ -55,7 +64,7 @@ pub fn setup_params(sector_bytes: PaddedBytesAmount, partitions: usize) -> stack
         degree: BASE_DEGREE,
         expansion_degree: EXP_DEGREE,
         seed: DRG_SEED,
-        layer_challenges: challenges,
+        config,
     }
 }
 
@@ -77,13 +86,14 @@ fn select_challenges(
 mod tests {
     use super::*;
 
-    use crate::constants::POREP_MINIMUM_CHALLENGES;
+    use crate::constants::POREP_WRAPPER_MINIMUM_CHALLENGES;
     use crate::types::PoRepProofPartitions;
 
     #[test]
     fn partition_layer_challenges_test() {
         let f = |partitions| {
-            select_challenges(partitions, POREP_MINIMUM_CHALLENGES, LAYERS).challenges_count_all()
+            select_challenges(partitions, POREP_WRAPPER_MINIMUM_CHALLENGES, LAYERS)
+                .challenges_count_all()
         };
         // Update to ensure all supported PoRepProofPartitions options are represented here.
         assert_eq!(6, f(usize::from(PoRepProofPartitions(2))));

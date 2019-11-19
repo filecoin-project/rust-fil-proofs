@@ -34,8 +34,7 @@ use storage_proofs::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher, Sha2
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::stacked::{
-    self, CacheKey, ChallengeRequirements, LayerChallenges, StackedDrg, TemporaryAuxCache,
-    EXP_DEGREE,
+    self, CacheKey, ChallengeRequirements, StackedDrg, TemporaryAuxCache, EXP_DEGREE,
 };
 
 // We can only one of the profilers at a time, either CPU (`profile`)
@@ -144,7 +143,7 @@ fn dump_proof_bytes<H: Hasher, G: Hasher>(all_partition_proofs: &[stacked::Proof
 
 fn do_the_work<H: 'static>(
     data_size: usize,
-    layer_challenges: LayerChallenges,
+    config: StackedConfig,
     partitions: usize,
     circuit: bool,
     groth: bool,
@@ -164,8 +163,8 @@ fn do_the_work<H: 'static>(
     info!("data size: {}", prettyb(data_size));
     info!("m: {}", m);
     info!("expansion_degree: {}", expansion_degree);
-    info!("layer_challenges: {:?}", layer_challenges);
-    info!("layers: {}", layer_challenges.layers());
+    info!("config: {:?}", config);
+    info!("layers: {}", config.layers());
     info!("partitions: {}", partitions);
     info!("circuit: {:?}", circuit);
     info!("groth: {:?}", groth);
@@ -179,7 +178,7 @@ fn do_the_work<H: 'static>(
         degree: m,
         expansion_degree,
         seed: new_seed(),
-        layer_challenges: layer_challenges.clone(),
+        config: config.clone(),
     };
 
     info!("running setup");
@@ -494,7 +493,8 @@ fn main() {
         .get_matches();
 
     let data_size = value_t!(matches, "size", usize).unwrap() * 1024;
-    let challenge_count = value_t!(matches, "challenges", usize).unwrap();
+    let window_challenge_count = value_t!(matches, "window-challenges", usize).unwrap();
+    let wrapper_challenge_count = value_t!(matches, "wrapper-challenges", usize).unwrap();
     let hasher = value_t!(matches, "hasher", String).unwrap();
     let layers = value_t!(matches, "layers", usize).unwrap();
     let partitions = value_t!(matches, "partitions", usize).unwrap();
@@ -506,14 +506,14 @@ fn main() {
     let circuit = matches.is_present("circuit");
     let extract = matches.is_present("extract");
 
-    let challenges = LayerChallenges::new(layers, challenge_count);
+    let config = StackedConfig::new(layers, window_challenge_count, wrapper_challenge_count);
 
     info!("hasher: {}", hasher);
     match hasher.as_ref() {
         "pedersen" => {
             do_the_work::<PedersenHasher>(
                 data_size,
-                challenges,
+                config,
                 partitions,
                 circuit,
                 groth,
@@ -527,7 +527,7 @@ fn main() {
         "sha256" => {
             do_the_work::<Sha256Hasher>(
                 data_size,
-                challenges,
+                config,
                 partitions,
                 circuit,
                 groth,
@@ -541,7 +541,7 @@ fn main() {
         "blake2s" => {
             do_the_work::<Blake2sHasher>(
                 data_size,
-                challenges,
+                config,
                 partitions,
                 circuit,
                 groth,
