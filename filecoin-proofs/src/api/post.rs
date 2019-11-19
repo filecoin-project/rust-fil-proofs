@@ -294,7 +294,7 @@ pub fn verify_post(
         };
         let comm_r = replica.safe_comm_r()?;
 
-        if &challenged_sectors[winner.sector_challenge_index as usize] != &winner.sector_id {
+        if challenged_sectors[winner.sector_challenge_index as usize] != winner.sector_id {
             return Ok(false);
         }
 
