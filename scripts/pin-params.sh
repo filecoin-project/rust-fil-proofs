@@ -1,11 +1,20 @@
 #!/usr/bin/env bash
+# set -x
 set -Eeuo pipefail
 
 # pin-params.sh
 #
-# - Add the directory of params to the local ipfs node
-# - Grab the CID for the previous params from proofs.filecoin.io
-# - Add the old params as a `prev` dir to the new params dir to keep them around.
+# Adds param files to local repo, links them with previous versions, pin them
+# to ipfs-cluster, and update the published dnslink...
+#
+# Before you run it:
+# - Clear out /var/tmp/filecoin-proof-parameters
+# - Create the latest params with `cargo run --release --bin paramcache`
+#
+# What it does:
+# - Add /var/tmp/filecoin-proof-parameters to the local ipfs node
+# - Copy the previous params from proofs.filecoin.io to the local ipfs mfs
+# - Link the last 3 version in a directory in the local ipfs mfs and grab the cid
 # - Pin the new cid on cluster
 # - Publish the new cid as a dnslink to proofs.filecoin.io
 # - The gateways will pin the new dir by checking proofs.filecoin.io hourly.
@@ -54,34 +63,53 @@ else
 fi
 
 CLUSTER_HOST="/dnsaddr/cluster.ipfs.io"
-CLUSTER_PRIMARY="/dns4/cluster0.fsn.dwebops.pub/udp/4001/quic/p2p/QmUEMvxS2e7iDrereVYc5SWPauXPyNwxcy9BXZrC1QTcHE"
+CLUSTER_PRIMARY="/dns4/cluster0.fsn.dwebops.pub/tcp/4001/p2p/QmUEMvxS2e7iDrereVYc5SWPauXPyNwxcy9BXZrC1QTcHE"
 CLUSTER_PIN_NAME="filecoin-proof-parameters-$VERSION"
 DNSLINK_DOMAIN="proofs.filecoin.io"
 
 # Pin to ipfs
 ROOT_CID=$(ipfs add --quieter --recursive $INPUT_DIR)
-echo "ok! root cid is $ROOT_CID"
+echo "ok! root cid for $VERSION is $ROOT_CID"
 
-echo "linking to previous version..."
+echo "linking in previous versions..."
+
+# Connect to cluster to speed up discovery
+ipfs swarm connect $CLUSTER_PRIMARY
+
 # trim off the /ipfs prefix, so it's consistent with the other vars
 PREV_CID=$(ipfs dns $DNSLINK_DOMAIN | cut -c 7-)
 
-# Add a `prev` dir to the new params dir that links back to the older params
-LINKED_CID=$(ipfs object patch add-link $ROOT_CID prev $PREV_CID)
-
-# guard against multiple runs with no change...
-# if we remove the `prev` dir from the last published PREV_CID and it matches
-# the current ROOT_DIR, then dont nest it inside itself again.
-if ipfs object stat $PREV_CID/prev > /dev/null; then
-  PREV_ROOT_CID=$(ipfs object patch rm-link $PREV_CID prev)
-  if [[ $PREV_ROOT_CID == "$ROOT_CID" ]]; then
-    LINKED_CID=$PREV_CID
-    echo "linked cid is already published, re-using $PREV_CID"
-    echo "continuing to ensure $PREV_CID is pinned to cluster"
+# this is needed becuase ipfs files rm -f errors if the file doesn't exist
+function removeMfsDir () {
+  if ipfs files stat $1 &> /dev/null; then
+    ipfs files rm -r $1
   fi
-fi
+}
 
+# Reset and create matching dir in the mfs with the previous published dir cid in it.
+removeMfsDir $INPUT_DIR
+ipfs files mkdir -p "$(dirname $INPUT_DIR)"
+ipfs files cp /ipfs/$PREV_CID $INPUT_DIR
+
+# remove folder for current version if it already exists...
+removeMfsDir $INPUT_DIR/$VERSION
+ipfs files cp /ipfs/$ROOT_CID $INPUT_DIR/$VERSION
+
+# move things around till we have the last 3 versions in the mfs mirror world version of the $INPUT_DIR
+TMP_MFS_DIR=/var/tmp/pin-params
+removeMfsDir $TMP_MFS_DIR
+ipfs files mkdir -p $TMP_MFS_DIR
+
+# copy just the last 3 versions to a tmp dir
+ipfs files ls $INPUT_DIR | cut -c 2- | sort -n | tail -3 | xargs -I {} ipfs files cp $INPUT_DIR/v{} $TMP_MFS_DIR/v{}
+# reset the working dir and copy the last 3 versions back
+ipfs files rm -r $INPUT_DIR
+ipfs files cp $TMP_MFS_DIR $INPUT_DIR
+ipfs files rm -r $TMP_MFS_DIR
+
+LINKED_CID=$(ipfs files stat --format="<hash>" $INPUT_DIR)
 echo "ok! linked cid is $LINKED_CID"
+
 echo "pinning linked cid to cluster..."
 
 # Connect to cluster to speed up discovery
@@ -96,6 +124,6 @@ ipfs-cluster-ctl \
   --wait
 
 # Publist the new cid to the dnslink
-npx dnslink-dnsimple --domain proofs.filecoin.io --link "/ipfs/$LINKED_CID"
+npx dnslink-dnsimple --domain $DNSLINK_DOMAIN --link "/ipfs/$LINKED_CID"
 
 echo "done!"
