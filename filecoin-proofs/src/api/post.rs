@@ -111,12 +111,12 @@ impl PrivateReplicaInfo {
             DEFAULT_CACHED_ABOVE_BASE_LAYER,
         );
         config.size = Some(tree_size);
-        let tree_d_store: DiskStore<<DefaultTreeHasher as Hasher>::Domain> =
+        let tree_r_last_store: DiskStore<<DefaultTreeHasher as Hasher>::Domain> =
             DiskStore::new_from_disk(tree_size, &config)?;
-        let tree_d: Tree =
-            MerkleTree::from_data_store(tree_d_store, get_merkle_tree_leafs(tree_size));
+        let tree_r_last: Tree =
+            MerkleTree::from_data_store(tree_r_last_store, get_merkle_tree_leafs(tree_size));
 
-        Ok(tree_d)
+        Ok(tree_r_last)
     }
 }
 
