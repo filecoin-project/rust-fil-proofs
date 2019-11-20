@@ -2,8 +2,8 @@ use storage_proofs::util::NODE_SIZE;
 
 use crate::types::UnpaddedBytesAmount;
 
-pub const POREP_WINDOW_MINIMUM_CHALLENGES: usize = 12; // FIXME:x
-pub const POREP_WRAPPER_MINIMUM_CHALLENGES: usize = 12; // FIXME:
+pub const POREP_WINDOW_MINIMUM_CHALLENGES: usize = 1; // FIXME:
+pub const POREP_WRAPPER_MINIMUM_CHALLENGES: usize = 1; // FIXME:
 
 pub const SINGLE_PARTITION_PROOF_LEN: usize = 192;
 

@@ -732,12 +732,9 @@ impl<H: Hasher> LabelsCache<H> {
                 self.labels
                     .iter()
                     .take(len - 1) // skip last one
-                    .enumerate()
-                    .map(move |(layer, labels)| {
-                        let l = labels
-                            .read_at(window_index * pub_params.window_size_nodes() + node as usize);
-                        info!("({}:{}:{}) {:?}", window_index, node, layer, &l);
-                        l
+                    .map(move |labels| {
+                        labels
+                            .read_at(window_index * pub_params.window_size_nodes() + node as usize)
                     })
             })
             .collect();

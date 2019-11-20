@@ -74,15 +74,15 @@ where
         let partitions = Self::partition_count(pub_params);
         let partition_count = Self::partition_count(pub_params);
 
+        // This will always run at least once, since there cannot be zero partitions.
+        assert!(partition_count > 0);
+
         let vanilla_proofs =
             S::prove_all_partitions(&pub_params.vanilla_params, &pub_in, priv_in, partitions)?;
 
         let sanity_check =
             S::verify_all_partitions(&pub_params.vanilla_params, &pub_in, &vanilla_proofs)?;
         assert!(sanity_check, "sanity check failed");
-
-        // This will always run at least once, since there cannot be zero partitions.
-        assert!(partition_count > 0);
 
         // Use a custom pool for this, so we can control the number of threads being used.
         let pool = rayon::ThreadPoolBuilder::new()
