@@ -45,8 +45,8 @@ pub fn post_setup_params(post_config: PoStConfig) -> PostSetupParams {
 
 pub fn setup_params(
     sector_bytes: PaddedBytesAmount,
-    window_size_nodes: usize,
     partitions: usize,
+    window_size_nodes: usize,
 ) -> stacked::SetupParams {
     let sector_bytes = usize::from(sector_bytes);
 

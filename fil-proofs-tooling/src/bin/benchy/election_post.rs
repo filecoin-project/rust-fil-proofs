@@ -53,7 +53,11 @@ impl Report {
 }
 
 pub fn run(sector_size: usize, window_size_nodes: usize) -> Result<(), failure::Error> {
-    info!("Benchy Election PoSt: sector-size={}", sector_size);
+    info!(
+        "Benchy Election PoSt: sector-size={} - window_size={}",
+        sector_size,
+        window_size_nodes * 32
+    );
 
     let sector_size_unpadded_bytes_ammount =
         UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size as u64));
