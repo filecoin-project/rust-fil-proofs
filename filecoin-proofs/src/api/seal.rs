@@ -1,7 +1,10 @@
-use std::fs::{self, OpenOptions};
+use std::fs::{self, File, OpenOptions};
+use std::io::prelude::*;
 use std::path::Path;
 
+use bincode::{deserialize, serialize};
 use memmap::MmapOptions;
+use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
 use paired::bls12_381::{Bls12, Fr};
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::stacked::StackedCompound;
@@ -11,7 +14,10 @@ use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::merkle::create_merkle_tree;
 use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
-use storage_proofs::stacked::{self, generate_replica_id, ChallengeRequirements, StackedDrg, Tau};
+use storage_proofs::stacked::{
+    self, generate_replica_id, CacheKey, ChallengeRequirements, StackedDrg, Tau, TemporaryAux,
+    TemporaryAuxCache,
+};
 
 use crate::api::util::{as_safe_commitment, commitment_from_fr};
 use crate::caches::{get_stacked_params, get_stacked_verifying_key};
@@ -29,7 +35,7 @@ use crate::types::{
 #[allow(clippy::too_many_arguments)]
 pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
     porep_config: PoRepConfig,
-    _cache_path: R,
+    cache_path: R,
     in_path: T,
     out_path: S,
     prover_id: ProverId,
@@ -79,8 +85,17 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
         _,
     >>::setup(&compound_setup_params)?;
 
+    // MT for original data is always named tree-d, and it will be
+    // referenced later in the process as such.
+    let config = StoreConfig::new(
+        cache_path.as_ref(),
+        CacheKey::CommDTree.to_string(),
+        DEFAULT_CACHED_ABOVE_BASE_LAYER,
+    );
+
     info!("building merkle tree for the original data");
     let data_tree = create_merkle_tree::<DefaultPieceHasher>(
+        Some(config.clone()),
         compound_public_params.vanilla_params.graph.size(),
         &data,
     )?;
@@ -105,25 +120,30 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
         &replica_id,
         &mut data,
         Some(data_tree),
+        Some(config),
     )?;
 
     let comm_r = commitment_from_fr::<Bls12>(tau.comm_r.into());
 
     info!("seal_pre_commit: end");
 
-    Ok(SealPreCommitOutput {
-        comm_r,
-        comm_d,
-        p_aux,
-        t_aux,
-    })
+    // Persist p_aux and t_aux here
+    let mut f_p_aux = File::create(cache_path.as_ref().join(CacheKey::PAux.to_string()))?;
+    let p_aux_bytes = serialize(&p_aux)?;
+    f_p_aux.write_all(&p_aux_bytes)?;
+
+    let mut f_t_aux = File::create(cache_path.as_ref().join(CacheKey::TAux.to_string()))?;
+    let t_aux_bytes = serialize(&t_aux)?;
+    f_t_aux.write_all(&t_aux_bytes)?;
+
+    Ok(SealPreCommitOutput { comm_r, comm_d })
 }
 
 /// Generates a proof for the pre committed sector.
 #[allow(clippy::too_many_arguments)]
 pub fn seal_commit<T: AsRef<Path>>(
     porep_config: PoRepConfig,
-    _cache_path: T,
+    cache_path: T,
     prover_id: ProverId,
     sector_id: SectorId,
     ticket: Ticket,
@@ -133,17 +153,33 @@ pub fn seal_commit<T: AsRef<Path>>(
 ) -> error::Result<SealCommitOutput> {
     info!("seal_commit:start");
 
-    let SealPreCommitOutput {
-        comm_d,
-        comm_r,
-        p_aux,
-        t_aux,
-    } = pre_commit;
+    let SealPreCommitOutput { comm_d, comm_r } = pre_commit;
 
     ensure!(
         verify_pieces(&comm_d, piece_infos, porep_config.into())?,
         "pieces and comm_d do not match"
     );
+
+    let p_aux = {
+        let mut p_aux_bytes = vec![];
+        let mut f_p_aux = File::open(cache_path.as_ref().join(CacheKey::PAux.to_string()))?;
+        f_p_aux.read_to_end(&mut p_aux_bytes)?;
+
+        deserialize(&p_aux_bytes)
+    }?;
+
+    let t_aux = {
+        let mut t_aux_bytes = vec![];
+        let mut f_t_aux = File::open(cache_path.as_ref().join(CacheKey::TAux.to_string()))?;
+        f_t_aux.read_to_end(&mut t_aux_bytes)?;
+
+        deserialize(&t_aux_bytes)
+    }?;
+
+    // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
+    // elements based on the configs stored in TemporaryAux.
+    let t_aux_cache: TemporaryAuxCache<DefaultTreeHasher, DefaultPieceHasher> =
+        TemporaryAuxCache::new(&t_aux).expect("failed to restore contents of t_aux");
 
     let comm_r_safe = as_safe_commitment(&comm_r, "comm_r")?;
     let comm_d_safe = <DefaultPieceHasher as Hasher>::Domain::try_from_bytes(&comm_d)?;
@@ -165,8 +201,10 @@ pub fn seal_commit<T: AsRef<Path>>(
         seed,
     };
 
-    let private_inputs =
-        stacked::PrivateInputs::<DefaultTreeHasher, DefaultPieceHasher> { p_aux, t_aux };
+    let private_inputs = stacked::PrivateInputs::<DefaultTreeHasher, DefaultPieceHasher> {
+        p_aux,
+        t_aux: t_aux_cache,
+    };
 
     let groth_params = get_stacked_params(porep_config)?;
 
@@ -191,6 +229,9 @@ pub fn seal_commit<T: AsRef<Path>>(
         &private_inputs,
         &groth_params,
     )?;
+
+    // Delete cached MTs that are no longer needed.
+    TemporaryAux::<DefaultTreeHasher, DefaultPieceHasher>::delete(t_aux)?;
 
     let mut buf = Vec::with_capacity(
         SINGLE_PARTITION_PROOF_LEN * usize::from(PoRepProofPartitions::from(porep_config)),

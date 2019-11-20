@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use merkletree::hash::Algorithm;
 use merkletree::merkle;
 use merkletree::proof;
+use merkletree::store::StoreConfig;
 use paired::bls12_381::Fr;
 use rayon::prelude::*;
 
@@ -13,7 +14,6 @@ use crate::hasher::{Domain, Hasher};
 use crate::util::{data_at_node, NODE_SIZE};
 
 // Reexport here, so we don't depend on merkletree directly in other places.
-pub use merkletree::merkle::next_pow2;
 use merkletree::merkle::FromIndexedParallelIterator;
 pub use merkletree::store::Store;
 
@@ -219,6 +219,7 @@ fn path_index<T: Domain>(path: &[(T, bool)]) -> usize {
 
 /// Construct a new merkle tree.
 pub fn create_merkle_tree<H: Hasher>(
+    config: Option<StoreConfig>,
     size: usize,
     data: &[u8],
 ) -> Result<MerkleTree<H::Domain, H::Function>> {
@@ -236,7 +237,13 @@ pub fn create_merkle_tree<H: Hasher>(
         H::Domain::try_from_bytes(d).expect("failed to convert node data to domain element")
     };
 
-    Ok(MerkleTree::from_par_iter((0..size).into_par_iter().map(f)))
+    match config {
+        Some(x) => Ok(MerkleTree::from_par_iter_with_config(
+            (0..size).into_par_iter().map(f),
+            x,
+        )),
+        None => Ok(MerkleTree::from_par_iter((0..size).into_par_iter().map(f))),
+    }
 }
 
 #[cfg(test)]

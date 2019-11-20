@@ -113,7 +113,6 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
 
     let seed = [0u8; 32];
     let comm_r = seal_pre_commit_output.comm_r;
-    let p_aux = seal_pre_commit_output.p_aux.clone();
 
     let _seal_commit_output = seal_commit(
         porep_config,
@@ -134,7 +133,7 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
 
     priv_replica_info.insert(
         sector_id,
-        PrivateReplicaInfo::new(sealed_path_string, comm_r, p_aux, cache_dir.into_path()),
+        PrivateReplicaInfo::new(sealed_path_string, comm_r, cache_dir.into_path())?,
     );
 
     // Measure PoSt generation and verification.
