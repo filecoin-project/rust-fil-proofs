@@ -8,6 +8,7 @@ use failure::bail;
 use log::info;
 use memmap::MmapMut;
 use memmap::MmapOptions;
+use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
 use paired::bls12_381::Bls12;
 use rand::Rng;
 
@@ -20,8 +21,10 @@ use storage_proofs::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher, Sha2
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::stacked::{
-    self, ChallengeRequirements, LayerChallenges, StackedDrg, EXP_DEGREE,
+    self, CacheKey, ChallengeRequirements, LayerChallenges, StackedDrg, TemporaryAuxCache,
+    EXP_DEGREE,
 };
+use tempfile::TempDir;
 
 fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> Result<MmapMut, failure::Error> {
     let file: File = if use_tmp {
@@ -87,7 +90,10 @@ impl From<Params> for Inputs {
     }
 }
 
-fn generate_report<H: 'static>(params: Params) -> Result<Report, failure::Error>
+fn generate_report<H: 'static>(
+    params: Params,
+    cache_dir: &TempDir,
+) -> Result<Report, failure::Error>
 where
     H: Hasher,
 {
@@ -115,6 +121,14 @@ where
             bench_only,
             ..
         } = &params;
+
+        // MT for original data is always named tree-d, and it will be
+        // referenced later in the process as such.
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+        );
 
         let mut total_proving_wall_time = Duration::new(0, 0);
         let mut total_proving_cpu_time = Duration::new(0, 0);
@@ -144,8 +158,13 @@ where
                 wall_time: replication_wall_time,
                 return_value: (pub_inputs, priv_inputs),
             } = measure(|| {
-                let (tau, (p_aux, t_aux)) =
-                    StackedDrg::<H, Sha256Hasher>::replicate(&pp, &replica_id, &mut data, None)?;
+                let (tau, (p_aux, t_aux)) = StackedDrg::<H, Sha256Hasher>::replicate(
+                    &pp,
+                    &replica_id,
+                    &mut data,
+                    None,
+                    Some(config.clone()),
+                )?;
 
                 let pb = stacked::PublicInputs::<H::Domain, <Sha256Hasher as Hasher>::Domain> {
                     replica_id,
@@ -153,6 +172,11 @@ where
                     tau: Some(tau),
                     k: Some(0),
                 };
+
+                // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
+                // elements based on the configs stored in TemporaryAux.
+                let t_aux =
+                    TemporaryAuxCache::new(&t_aux).expect("failed to restore contents of t_aux");
 
                 let pv = stacked::PrivateInputs { p_aux, t_aux };
 
@@ -264,8 +288,13 @@ where
         if let Some(data) = d {
             if *extract {
                 let m = measure(|| {
-                    StackedDrg::<H, Sha256Hasher>::extract_all(&pp, &replica_id, &data)
-                        .map_err(|err| err.into())
+                    StackedDrg::<H, Sha256Hasher>::extract_all(
+                        &pp,
+                        &replica_id,
+                        &data,
+                        Some(config.clone()),
+                    )
+                    .map_err(|err| err.into())
                 })?;
 
                 assert_ne!(&(*data), m.return_value.as_slice());
@@ -488,10 +517,12 @@ pub fn run(opts: RunOpts) -> Result<(), failure::Error> {
 
     info!("Benchy Stacked: {:?}", &params);
 
+    let cache_dir = tempfile::tempdir().unwrap();
+
     let report = match params.hasher.as_ref() {
-        "pedersen" => generate_report::<PedersenHasher>(params)?,
-        "sha256" => generate_report::<Sha256Hasher>(params)?,
-        "blake2s" => generate_report::<Blake2sHasher>(params)?,
+        "pedersen" => generate_report::<PedersenHasher>(params, &cache_dir)?,
+        "sha256" => generate_report::<Sha256Hasher>(params, &cache_dir)?,
+        "blake2s" => generate_report::<Blake2sHasher>(params, &cache_dir)?,
         _ => bail!("invalid hasher: {}", params.hasher),
     };
 

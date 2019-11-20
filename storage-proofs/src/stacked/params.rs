@@ -1,8 +1,11 @@
 use std::collections::HashMap;
+use std::fmt;
 use std::marker::PhantomData;
 
-use merkletree::store::DiskStore;
-use merkletree::store::Store;
+use merkletree::merkle::get_merkle_tree_leafs;
+#[cfg(feature = "mem-trees")]
+use merkletree::store::VecStore;
+use merkletree::store::{DiskStore, Store, StoreConfig};
 use serde::{Deserialize, Serialize};
 
 use crate::drgraph::Graph;
@@ -18,6 +21,33 @@ use crate::stacked::{
 use crate::util::data_at_node;
 
 pub type Tree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
+
+#[derive(Debug, Copy, Clone)]
+pub enum CacheKey {
+    PAux,
+    TAux,
+    CommDTree,
+    CommCTree,
+    CommRLastTree,
+}
+
+impl fmt::Display for CacheKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            CacheKey::PAux => write!(f, "p_aux"),
+            CacheKey::TAux => write!(f, "t_aux"),
+            CacheKey::CommDTree => write!(f, "tree-d"),
+            CacheKey::CommCTree => write!(f, "tree-c"),
+            CacheKey::CommRLastTree => write!(f, "tree-r-last"),
+        }
+    }
+}
+
+impl CacheKey {
+    pub fn label_layer(layer: usize) -> String {
+        format!("layer-{}", layer)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct SetupParams {
@@ -120,7 +150,7 @@ impl<T: Domain, S: Domain> PublicInputs<T, S> {
 #[derive(Debug)]
 pub struct PrivateInputs<H: Hasher, G: Hasher> {
     pub p_aux: PersistentAux<H::Domain>,
-    pub t_aux: TemporaryAux<H, G>,
+    pub t_aux: TemporaryAuxCache<H, G>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -207,7 +237,7 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
         true
     }
 
-    /// Verify all encodings.
+    /// Verify all labels.
     fn verify_labels(
         &self,
         replica_id: &H::Domain,
@@ -316,16 +346,104 @@ pub struct PersistentAux<D> {
     pub comm_r_last: D,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemporaryAux<H: Hasher, G: Hasher> {
     /// The encoded nodes for 1..layers.
     pub labels: Labels<H>,
-    pub tree_d: Tree<G>,
-    pub tree_r_last: Tree<H>,
-    pub tree_c: Tree<H>,
+    pub tree_d_config: StoreConfig,
+    pub tree_r_last_config: StoreConfig,
+    pub tree_c_config: StoreConfig,
+    pub _g: PhantomData<G>,
 }
 
 impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
+    pub fn labels_for_layer(&self, layer: usize) -> DiskStore<H::Domain> {
+        self.labels.labels_for_layer(layer)
+    }
+
+    pub fn domain_node_at_layer(&self, layer: usize, node_index: u32) -> Result<H::Domain> {
+        Ok(self.labels_for_layer(layer).read_at(node_index as usize))
+    }
+
+    pub fn column(&self, column_index: u32) -> Result<Column<H>> {
+        self.labels.column(column_index)
+    }
+
+    #[cfg(not(feature = "mem-trees"))]
+    pub fn delete(t_aux: TemporaryAux<H, G>) -> Result<()> {
+        let tree_d_size = t_aux.tree_d_config.size.unwrap();
+        let tree_d_store: DiskStore<G::Domain> =
+            DiskStore::new_from_disk(tree_d_size, &t_aux.tree_d_config)?;
+        let tree_d: Tree<G> =
+            MerkleTree::from_data_store(tree_d_store, get_merkle_tree_leafs(tree_d_size));
+        tree_d.delete(t_aux.tree_d_config)?;
+
+        let tree_c_size = t_aux.tree_c_config.size.unwrap();
+        let tree_c_store: DiskStore<H::Domain> =
+            DiskStore::new_from_disk(tree_c_size, &t_aux.tree_c_config)?;
+        let tree_c: Tree<H> =
+            MerkleTree::from_data_store(tree_c_store, get_merkle_tree_leafs(tree_c_size));
+        tree_c.delete(t_aux.tree_c_config)?;
+
+        for i in 0..t_aux.labels.labels.len() {
+            DiskStore::<H::Domain>::delete(t_aux.labels.labels[i].clone())?;
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct TemporaryAuxCache<H: Hasher, G: Hasher> {
+    /// The encoded nodes for 1..layers.
+    pub labels: LabelsCache<H>,
+    pub tree_d: Tree<G>,
+    pub tree_r_last: Tree<H>,
+    pub tree_c: Tree<H>,
+    pub t_aux: TemporaryAux<H, G>,
+}
+
+impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
+    pub fn new(t_aux: &TemporaryAux<H, G>) -> Result<Self> {
+        let tree_d_size = t_aux.tree_d_config.size.unwrap();
+        #[cfg(not(feature = "mem-trees"))]
+        let tree_d_store: DiskStore<G::Domain> =
+            DiskStore::new_from_disk(tree_d_size, &t_aux.tree_d_config)?;
+        #[cfg(feature = "mem-trees")]
+        let tree_d_store: VecStore<G::Domain> =
+            VecStore::new_with_config(tree_d_size, t_aux.tree_d_config.clone())?;
+        let tree_d: Tree<G> =
+            MerkleTree::from_data_store(tree_d_store, get_merkle_tree_leafs(tree_d_size));
+
+        let tree_c_size = t_aux.tree_c_config.size.unwrap();
+        #[cfg(not(feature = "mem-trees"))]
+        let tree_c_store: DiskStore<H::Domain> =
+            DiskStore::new_from_disk(tree_c_size, &t_aux.tree_c_config)?;
+        #[cfg(feature = "mem-trees")]
+        let tree_c_store: VecStore<H::Domain> =
+            VecStore::new_with_config(tree_c_size, t_aux.tree_c_config.clone())?;
+        let tree_c: Tree<H> =
+            MerkleTree::from_data_store(tree_c_store, get_merkle_tree_leafs(tree_c_size));
+
+        let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
+        #[cfg(not(feature = "mem-trees"))]
+        let tree_r_last_store: DiskStore<H::Domain> =
+            DiskStore::new_from_disk(tree_r_last_size, &t_aux.tree_r_last_config)?;
+        #[cfg(feature = "mem-trees")]
+        let tree_r_last_store: VecStore<H::Domain> =
+            VecStore::new_with_config(tree_r_last_size, t_aux.tree_r_last_config.clone())?;
+        let tree_r_last: Tree<H> =
+            MerkleTree::from_data_store(tree_r_last_store, get_merkle_tree_leafs(tree_r_last_size));
+
+        Ok(TemporaryAuxCache {
+            labels: LabelsCache::new(&t_aux.labels),
+            tree_d,
+            tree_r_last,
+            tree_c,
+            t_aux: t_aux.clone(),
+        })
+    }
+
     pub fn labels_for_layer(&self, layer: usize) -> &DiskStore<H::Domain> {
         self.labels.labels_for_layer(layer)
     }
@@ -339,14 +457,14 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Labels<H: Hasher> {
-    labels: Vec<DiskStore<H::Domain>>,
-    _h: PhantomData<H>,
+    pub labels: Vec<StoreConfig>,
+    pub _h: PhantomData<H>,
 }
 
 impl<H: Hasher> Labels<H> {
-    pub fn new(labels: Vec<DiskStore<H::Domain>>) -> Self {
+    pub fn new(labels: Vec<StoreConfig>) -> Self {
         Labels {
             labels,
             _h: PhantomData,
@@ -359,6 +477,71 @@ impl<H: Hasher> Labels<H> {
 
     pub fn is_empty(&self) -> bool {
         self.labels.is_empty()
+    }
+
+    pub fn labels_for_layer(&self, layer: usize) -> DiskStore<H::Domain> {
+        assert!(layer != 0, "Layer cannot be 0");
+        assert!(
+            layer <= self.layers(),
+            "Layer {} is not available (only {} layers available)",
+            layer,
+            self.layers()
+        );
+
+        let row_index = layer - 1;
+        let config = self.labels[row_index].clone();
+        assert!(config.size.is_some());
+
+        DiskStore::new_from_disk(config.size.unwrap(), &config).unwrap()
+    }
+
+    /// Returns label for the last layer.
+    pub fn labels_for_last_layer(&self) -> DiskStore<H::Domain> {
+        self.labels_for_layer(self.labels.len() - 1)
+    }
+
+    /// How many layers are available.
+    fn layers(&self) -> usize {
+        self.labels.len()
+    }
+
+    /// Build the column for the given node.
+    pub fn column(&self, node: u32) -> Result<Column<H>> {
+        let rows = self
+            .labels
+            .iter()
+            .map(|label| {
+                assert!(label.size.is_some());
+                let store = DiskStore::new_from_disk(label.size.unwrap(), &label).unwrap();
+                store.read_at(node as usize)
+            })
+            .collect();
+
+        Ok(Column::new(node, rows))
+    }
+}
+
+#[derive(Debug)]
+pub struct LabelsCache<H: Hasher> {
+    pub labels: Vec<DiskStore<H::Domain>>,
+    pub _h: PhantomData<H>,
+}
+
+impl<H: Hasher> LabelsCache<H> {
+    pub fn new(labels: &Labels<H>) -> Self {
+        let mut disk_store_labels: Vec<DiskStore<H::Domain>> = Vec::with_capacity(labels.len());
+        for i in 0..labels.len() {
+            disk_store_labels.push(labels.labels_for_layer(i + 1));
+        }
+
+        LabelsCache {
+            labels: disk_store_labels,
+            _h: PhantomData,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.labels.len()
     }
 
     pub fn labels_for_layer(&self, layer: usize) -> &DiskStore<H::Domain> {

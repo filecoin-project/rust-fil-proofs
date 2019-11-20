@@ -33,8 +33,6 @@ pub type Tree = MerkleTree<PedersenDomain, <PedersenHasher as Hasher>::Function>
 pub struct SealPreCommitOutput {
     pub comm_r: Commitment,
     pub comm_d: Commitment,
-    pub p_aux: PersistentAux,
-    pub t_aux: TemporaryAux,
 }
 
 #[derive(Clone, Debug)]

@@ -34,7 +34,7 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
 
     /// Builds a merkle tree based on the given data.
     fn merkle_tree<'a>(&self, data: &'a [u8]) -> Result<MerkleTree<H::Domain, H::Function>> {
-        create_merkle_tree::<H>(self.size(), data)
+        create_merkle_tree::<H>(None, self.size(), data)
     }
 
     /// Returns the merkle tree depth.

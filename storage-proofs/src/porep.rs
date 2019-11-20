@@ -3,6 +3,8 @@ use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::merkle::MerkleTree;
 use crate::proof::ProofScheme;
 
+use merkletree::store::StoreConfig;
+
 #[derive(Debug)]
 pub struct PublicParams {
     pub time: usize,
@@ -56,12 +58,14 @@ pub trait PoRep<'a, H: Hasher, G: Hasher>: ProofScheme<'a> {
         replica_id: &H::Domain,
         data: &mut [u8],
         data_tree: Option<MerkleTree<G::Domain, G::Function>>,
+        config: Option<StoreConfig>,
     ) -> Result<(Self::Tau, Self::ProverAux)>;
 
     fn extract_all(
         pub_params: &'a Self::PublicParams,
         replica_id: &H::Domain,
         replica: &[u8],
+        config: Option<StoreConfig>,
     ) -> Result<Vec<u8>>;
     fn extract(
         pub_params: &'a Self::PublicParams,

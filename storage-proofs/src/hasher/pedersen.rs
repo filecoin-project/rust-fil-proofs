@@ -9,13 +9,14 @@ use fil_sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
+use serde::{Deserialize, Serialize};
 
 use crate::circuit::pedersen::pedersen_md_no_padding;
 use crate::crypto::{create_label, pedersen, sloth};
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
 
-#[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Default, Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PedersenHasher {}
 
 impl Hasher for PedersenHasher {

@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use byteorder::{LittleEndian, WriteBytesExt};
+use merkletree::store::StoreConfig;
 use rayon::prelude::*;
 use serde::de::Deserialize;
 use serde::ser::Serialize;
@@ -435,6 +436,7 @@ where
         replica_id: &H::Domain,
         data: &mut [u8],
         data_tree: Option<MerkleTree<H::Domain, H::Function>>,
+        _config: Option<StoreConfig>,
     ) -> Result<(porep::Tau<H::Domain>, porep::ProverAux<H>)> {
         let tree_d = match data_tree {
             Some(tree) => tree,
@@ -476,6 +478,7 @@ where
         pp: &'b Self::PublicParams,
         replica_id: &'b H::Domain,
         data: &'b [u8],
+        _config: Option<StoreConfig>,
     ) -> Result<Vec<u8>> {
         decode(&pp.graph, replica_id, data, None)
     }
@@ -627,17 +630,39 @@ mod tests {
 
         let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).expect("setup failed");
 
-        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
-            .expect("replication failed");
+        // MT for original data is always named tree-d, and it will be
+        // referenced later in the process as such.
+        use crate::stacked::CacheKey;
+        use merkletree::store::DEFAULT_CACHED_ABOVE_BASE_LAYER;
+        let cache_dir = tempfile::tempdir().unwrap();
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+        );
+
+        DrgPoRep::replicate(
+            &pp,
+            &replica_id,
+            &mut mmapped_data_copy,
+            None,
+            Some(config.clone()),
+        )
+        .expect("replication failed");
 
         let mut copied = vec![0; data.len()];
         copied.copy_from_slice(&mmapped_data_copy);
         assert_ne!(data, copied, "replication did not change data");
 
-        let decoded_data = DrgPoRep::extract_all(&pp, &replica_id, &mut mmapped_data_copy)
-            .unwrap_or_else(|e| {
-                panic!("Failed to extract data from `DrgPoRep`: {}", e);
-            });
+        let decoded_data = DrgPoRep::extract_all(
+            &pp,
+            &replica_id,
+            &mut mmapped_data_copy,
+            Some(config.clone()),
+        )
+        .unwrap_or_else(|e| {
+            panic!("Failed to extract data from `DrgPoRep`: {}", e);
+        });
 
         assert_eq!(data, decoded_data.as_slice(), "failed to extract data");
     }
@@ -680,7 +705,18 @@ mod tests {
 
         let pp = DrgPoRep::<H, BucketGraph<H>>::setup(&sp).expect("setup failed");
 
-        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
+        // MT for original data is always named tree-d, and it will be
+        // referenced later in the process as such.
+        use crate::stacked::CacheKey;
+        use merkletree::store::DEFAULT_CACHED_ABOVE_BASE_LAYER;
+        let cache_dir = tempfile::tempdir().unwrap();
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+        );
+
+        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None, Some(config))
             .expect("replication failed");
 
         let mut copied = vec![0; data.len()];
@@ -754,9 +790,25 @@ mod tests {
 
             let pp = DrgPoRep::<H, BucketGraph<_>>::setup(&sp).expect("setup failed");
 
-            let (tau, aux) =
-                DrgPoRep::<H, _>::replicate(&pp, &replica_id, &mut mmapped_data_copy, None)
-                    .expect("replication failed");
+            // MT for original data is always named tree-d, and it will be
+            // referenced later in the process as such.
+            use crate::stacked::CacheKey;
+            use merkletree::store::DEFAULT_CACHED_ABOVE_BASE_LAYER;
+            let cache_dir = tempfile::tempdir().unwrap();
+            let config = StoreConfig::new(
+                cache_dir.path(),
+                CacheKey::CommDTree.to_string(),
+                DEFAULT_CACHED_ABOVE_BASE_LAYER,
+            );
+
+            let (tau, aux) = DrgPoRep::<H, _>::replicate(
+                &pp,
+                &replica_id,
+                &mut mmapped_data_copy,
+                None,
+                Some(config),
+            )
+            .expect("replication failed");
 
             let mut copied = vec![0; data.len()];
             copied.copy_from_slice(&mmapped_data_copy);

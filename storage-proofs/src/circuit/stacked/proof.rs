@@ -337,6 +337,7 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
+    #[cfg(not(feature = "mem-trees"))]
     #[test]
     fn stacked_input_circuit_with_bls12_381() {
         let nodes = 5;
@@ -361,12 +362,24 @@ mod tests {
             layer_challenges: layer_challenges.clone(),
         };
 
+        // MT for original data is always named tree-d, and it will be
+        // referenced later in the process as such.
+        use crate::stacked::CacheKey;
+        use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
+        let cache_dir = tempfile::tempdir().unwrap();
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+        );
+
         let pp = StackedDrg::<PedersenHasher, Sha256Hasher>::setup(&sp).expect("setup failed");
         let (tau, (p_aux, t_aux)) = StackedDrg::<PedersenHasher, Sha256Hasher>::replicate(
             &pp,
             &replica_id.into(),
             data_copy.as_mut_slice(),
             None,
+            Some(config),
         )
         .expect("replication failed");
         assert_ne!(data, data_copy);
@@ -380,6 +393,11 @@ mod tests {
                 tau: Some(tau.into()),
                 k: None,
             };
+
+        // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
+        // elements based on the configs stored in TemporaryAux.
+        use crate::stacked::TemporaryAuxCache;
+        let t_aux = TemporaryAuxCache::new(&t_aux).expect("failed to restore contents of t_aux");
 
         let priv_inputs = PrivateInputs::<PedersenHasher, Sha256Hasher> {
             p_aux: p_aux.into(),
@@ -503,12 +521,24 @@ mod tests {
             partitions: Some(partition_count),
         };
 
+        // MT for original data is always named tree-d, and it will be
+        // referenced later in the process as such.
+        use crate::stacked::CacheKey;
+        use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
+        let cache_dir = tempfile::tempdir().unwrap();
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+        );
+
         let public_params = StackedCompound::setup(&setup_params).expect("setup failed");
         let (tau, (p_aux, t_aux)) = StackedDrg::replicate(
             &public_params.vanilla_params,
             &replica_id.into(),
             data_copy.as_mut_slice(),
             None,
+            Some(config),
         )
         .expect("replication failed");
 
@@ -522,6 +552,12 @@ mod tests {
             tau: Some(tau),
             k: None,
         };
+
+        // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
+        // elements based on the configs stored in TemporaryAux.
+        use crate::stacked::TemporaryAuxCache;
+        let t_aux = TemporaryAuxCache::new(&t_aux).expect("failed to restore contents of t_aux");
+
         let private_inputs = PrivateInputs::<H, Sha256Hasher> { p_aux, t_aux };
 
         {

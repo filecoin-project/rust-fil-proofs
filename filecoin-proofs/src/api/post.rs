@@ -1,24 +1,28 @@
 use std::collections::BTreeMap;
 use std::fs::File;
-use std::io::Read;
+use std::io::prelude::*;
 
+use bincode::deserialize;
+use merkletree::merkle::{get_merkle_tree_leafs, MerkleTree};
+use merkletree::store::{DiskStore, Store, StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
 use paired::bls12_381::Bls12;
 use rayon::prelude::*;
 use storage_proofs::circuit::election_post::ElectionPoStCompound;
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
+use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::election_post;
 use storage_proofs::error::Error;
 use storage_proofs::fr32::bytes_into_fr;
 use storage_proofs::hasher::Hasher;
 use storage_proofs::proof::NoRequirements;
 use storage_proofs::sector::*;
+use storage_proofs::stacked::CacheKey;
 
 use crate::api::util::as_safe_commitment;
 use crate::caches::{get_post_params, get_post_verifying_key};
 use crate::error;
-use crate::parameters::{post_setup_params, public_params};
+use crate::parameters::post_setup_params;
 use crate::types::{
     ChallengeSeed, Commitment, PaddedBytesAmount, PersistentAux, PoStConfig, ProverId, Tree,
 };
@@ -53,13 +57,25 @@ impl std::cmp::PartialOrd for PrivateReplicaInfo {
 }
 
 impl PrivateReplicaInfo {
-    pub fn new(access: String, comm_r: Commitment, aux: PersistentAux, cache_dir: PathBuf) -> Self {
-        PrivateReplicaInfo {
+    pub fn new(
+        access: String,
+        comm_r: Commitment,
+        cache_dir: PathBuf,
+    ) -> Result<Self, failure::Error> {
+        let aux = {
+            let mut aux_bytes = vec![];
+            let mut f_aux = File::open(cache_dir.join(CacheKey::PAux.to_string()))?;
+            f_aux.read_to_end(&mut aux_bytes)?;
+
+            deserialize(&aux_bytes)
+        }?;
+
+        Ok(PrivateReplicaInfo {
             access,
             comm_r,
             aux,
             cache_dir,
-        }
+        })
     }
 
     pub fn safe_comm_r(&self) -> Result<<DefaultTreeHasher as Hasher>::Domain, failure::Error> {
@@ -78,12 +94,24 @@ impl PrivateReplicaInfo {
 
     /// Generate the merkle tree of this particular replica.
     pub fn merkle_tree(&self, sector_size: u64) -> Result<Tree, Error> {
-        let mut f_in = File::open(&self.access)?;
-        let mut data = Vec::new();
-        f_in.read_to_end(&mut data)?;
+        let tree_size = {
+            let elems =
+                sector_size as usize / std::mem::size_of::<<DefaultTreeHasher as Hasher>::Domain>();
 
-        let bytes = PaddedBytesAmount(sector_size as u64);
-        public_params(bytes, 1).graph.merkle_tree(&data)
+            2 * elems - 1
+        };
+        let mut config = StoreConfig::new(
+            &self.cache_dir,
+            CacheKey::CommRLastTree.to_string(),
+            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+        );
+        config.size = Some(tree_size);
+        let tree_d_store: DiskStore<<DefaultTreeHasher as Hasher>::Domain> =
+            DiskStore::new_from_disk(tree_size, &config)?;
+        let tree_d: Tree =
+            MerkleTree::from_data_store(tree_d_store, get_merkle_tree_leafs(tree_size));
+
+        Ok(tree_d)
     }
 }
 

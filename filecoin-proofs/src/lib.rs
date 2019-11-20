@@ -7,6 +7,8 @@ extern crate failure;
 #[macro_use]
 extern crate log;
 
+extern crate bincode;
+
 mod api;
 mod caches;
 
