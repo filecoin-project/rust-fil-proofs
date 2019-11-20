@@ -86,6 +86,10 @@ impl PrivateReplicaInfo {
         Ok(self.aux.comm_c)
     }
 
+    pub fn safe_comm_q(&self) -> Result<<DefaultTreeHasher as Hasher>::Domain, failure::Error> {
+        Ok(self.aux.comm_q)
+    }
+
     pub fn safe_comm_r_last(
         &self,
     ) -> Result<<DefaultTreeHasher as Hasher>::Domain, failure::Error> {
@@ -271,10 +275,12 @@ pub fn generate_post(
         };
 
         let comm_c = replica.safe_comm_c()?;
+        let comm_q = replica.safe_comm_q()?;
         let comm_r_last = replica.safe_comm_r_last()?;
         let priv_inputs = election_post::PrivateInputs::<DefaultTreeHasher> {
             tree,
             comm_c,
+            comm_q,
             comm_r_last,
         };
 
