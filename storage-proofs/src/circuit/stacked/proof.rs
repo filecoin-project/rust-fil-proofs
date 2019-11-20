@@ -430,7 +430,6 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
-    #[cfg(not(feature = "mem-trees"))]
     #[test]
     fn stacked_input_circuit() {
         // femme::pretty::Logger::new()

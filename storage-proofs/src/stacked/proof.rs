@@ -777,8 +777,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let tree_q: Tree<H> = Self::build_tree::<H>(&data, Some(tree_q_config.clone()));
 
         info!("building tree_r_last");
-        let tree_r_last: Tree<H> =
-            MerkleTree::from_par_iter((0..wrapper_nodes_count).into_par_iter().map(|node| {
+        let tree_r_last: Tree<H> = MerkleTree::from_par_iter_with_config(
+            (0..wrapper_nodes_count).into_par_iter().map(|node| {
                 // 1 Wrapping Layer
 
                 let mut hasher = Sha256::new();
@@ -802,7 +802,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 val[31] &= 0b0011_1111;
 
                 H::Domain::try_from_bytes(&val).expect("invalid node created")
-            }));
+            }),
+            tree_r_last_config.clone(),
+        );
 
         info!("building tree_c");
         let tree_c: Tree<H> = {
@@ -1171,7 +1173,6 @@ mod tests {
         assert!(proofs_are_valid);
     }
 
-    #[cfg(not(feature = "mem-trees"))]
     table_tests! {
         prove_verify_fixed{
            prove_verify_fixed_32_4(8 * 32);
