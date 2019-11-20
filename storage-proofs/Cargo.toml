@@ -15,7 +15,7 @@ bench = false
 bitvec = "0.5"
 rand = "0.7"
 libc = "0.2"
-merkletree = { git = "https://github.com/filecoin-project/merkle_light", branch = "fix-short-read" }
+merkletree = "0.12.2"
 failure = "0.1"
 byteorder = "1"
 config = "0.9.3"
