@@ -149,6 +149,7 @@ impl PublicReplicaInfo {
 pub fn generate_candidates(
     post_config: PoStConfig,
     randomness: &ChallengeSeed,
+    challenge_count: u64,
     replicas: &BTreeMap<SectorId, PrivateReplicaInfo>,
     prover_id: ProverId,
 ) -> error::Result<Vec<Candidate>> {
@@ -167,7 +168,8 @@ pub fn generate_candidates(
 
     let sectors = replicas.keys().copied().collect();
 
-    let challenged_sectors = election_post::generate_sector_challenges(randomness, &sectors)?;
+    let challenged_sectors =
+        election_post::generate_sector_challenges(randomness, challenge_count, &sectors)?;
 
     // Match the replicas to the challenges, as these are the only ones required.
     let challenged_replicas: Vec<_> = challenged_sectors
@@ -285,6 +287,7 @@ pub fn generate_post(
 pub fn verify_post(
     post_config: PoStConfig,
     randomness: &ChallengeSeed,
+    challenge_count: u64,
     proofs: &[Vec<u8>],
     replicas: &BTreeMap<SectorId, PublicReplicaInfo>,
     winners: &[Candidate],
@@ -320,7 +323,7 @@ pub fn verify_post(
         let comm_r = replica.safe_comm_r()?;
 
         if !election_post::is_valid_sector_challenge_index(
-            sector_count as usize,
+            challenge_count,
             winner.sector_challenge_index,
         ) {
             return Ok(false);

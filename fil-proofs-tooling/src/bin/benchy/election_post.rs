@@ -139,8 +139,16 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
     // Measure PoSt generation and verification.
     let post_config = PoStConfig(SectorSize(sector_size as u64));
 
+    let challenge_count = 1u64;
+
     let gen_candidates_measurement = measure(|| {
-        generate_candidates(post_config, &CHALLENGE_SEED, &priv_replica_info, PROVER_ID)
+        generate_candidates(
+            post_config,
+            &CHALLENGE_SEED,
+            challenge_count,
+            &priv_replica_info,
+            PROVER_ID,
+        )
     })
     .expect("failed to generate post candidates");
 
@@ -167,6 +175,7 @@ pub fn run(sector_size: usize) -> Result<(), failure::Error> {
         verify_post(
             post_config,
             &CHALLENGE_SEED,
+            challenge_count,
             proof,
             &pub_replica_info,
             &candidates

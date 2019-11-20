@@ -369,6 +369,7 @@ mod tests {
         let result = verify_post(
             PoStConfig(SectorSize(SECTOR_SIZE_ONE_KIB)),
             &[0; 32],
+            1,
             &[vec![0u8; SINGLE_PARTITION_PROOF_LEN]][..],
             &replicas,
             &[winner][..],
