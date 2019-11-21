@@ -48,7 +48,7 @@ jobs:
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (stable)
-          command: cargo +stable test --verbose --all
+          command: cargo +stable test --verbose --all -- --test-threads=10
           no_output_timeout: 15m
       - run:
           name: Prune the output files
@@ -77,7 +77,7 @@ jobs:
       - run:
           name: Test (stable) in release profile
           command: |
-            cargo +stable test --verbose --release --all
+            cargo +stable test --verbose --release --all -- --test-threads=10
             RUSTFLAGS="-D warnings" cargo +stable build --examples --release --all
 
   test_ignored_release:
@@ -129,7 +129,7 @@ jobs:
             - parameter-cache-{{ .Revision }}
       - run:
           name: Test (nightly)
-          command: cargo +$(cat rust-toolchain) test --verbose --all
+          command: cargo +$(cat rust-toolchain) test --verbose --all -- --test-threads=10
           no_output_timeout: 15m
 
   bench_nightly:

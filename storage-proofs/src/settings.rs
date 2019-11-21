@@ -30,7 +30,7 @@ impl Default for Settings {
             num_proving_threads: 1,
             replicated_trees_dir: "".into(),
             pedersen_hash_exp_window_size: 8,
-            pedersen_hash_segments: 10,
+            pedersen_hash_segments: 5,
         }
     }
 }
