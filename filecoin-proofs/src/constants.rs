@@ -2,25 +2,21 @@ use storage_proofs::util::NODE_SIZE;
 
 use crate::types::UnpaddedBytesAmount;
 
-pub const POREP_WINDOW_MINIMUM_CHALLENGES: usize = 1; // FIXME:
+pub const POREP_WINDOW_MINIMUM_CHALLENGES: usize = 2; // FIXME:
 pub const POREP_WRAPPER_MINIMUM_CHALLENGES: usize = 1; // FIXME:
 
 pub const SINGLE_PARTITION_PROOF_LEN: usize = 192;
 
 pub const SECTOR_SIZE_ONE_KIB: u64 = 1024;
-
 pub const SECTOR_SIZE_16_MIB: u64 = 1 << 24;
-
 pub const SECTOR_SIZE_256_MIB: u64 = 1 << 28;
-
 pub const SECTOR_SIZE_1_GIB: u64 = 1 << 30;
 
+// Window sizes, picked to match expected perf characteristics. Not finalized.
+
 pub const WINDOW_SIZE_NODES_ONE_KIB: usize = 512 / NODE_SIZE;
-
 pub const WINDOW_SIZE_NODES_16_MIB: usize = (4 * 1024 * 1024) / NODE_SIZE;
-
 pub const WINDOW_SIZE_NODES_256_MIB: usize = (8 * 1024 * 1024) / NODE_SIZE;
-
 pub const WINDOW_SIZE_NODES_1_GIB: usize = (64 * 1024 * 1024) / NODE_SIZE;
 
 pub const MINIMUM_RESERVED_LEAVES_FOR_PIECE_IN_SECTOR: u64 = 4;

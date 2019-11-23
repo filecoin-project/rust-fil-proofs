@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
 use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::hasher::Hasher;
-use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
 use storage_proofs::stacked::{generate_replica_id, CacheKey, StackedDrg};
 use tempfile::tempfile;
@@ -71,16 +70,19 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
         CacheKey::CommDTree.to_string(),
         DEFAULT_CACHED_ABOVE_BASE_LAYER,
     );
+    let pp = public_params(
+        PaddedBytesAmount::from(porep_config),
+        usize::from(PoRepProofPartitions::from(porep_config)),
+        porep_config.window_size_nodes,
+    );
 
-    let unsealed = StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::extract_all(
-        &public_params(
-            PaddedBytesAmount::from(porep_config),
-            usize::from(PoRepProofPartitions::from(porep_config)),
-            porep_config.window_size_nodes,
-        ),
+    let unsealed = StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::extract_range(
+        &pp,
         &replica_id,
         &data,
         Some(config),
+        offset.into(),
+        num_bytes.into(),
     )?;
 
     let written = write_unpadded(&unsealed, &mut buf_writer, offset.into(), num_bytes.into())?;

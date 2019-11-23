@@ -183,6 +183,7 @@ impl<H: Hasher> WrapperProof<H> {
         mut cs: CS,
         params: &<Bls12 as JubjubEngine>::Params,
         comm_q: &num::AllocatedNum<Bls12>,
+        comm_r_last: num::AllocatedNum<Bls12>,
         replica_id: &[Boolean],
     ) -> Result<(), SynthesisError> {
         let WrapperProof {
@@ -193,6 +194,13 @@ impl<H: Hasher> WrapperProof<H> {
 
         let comm_r_last_data_leaf =
             comm_r_last_proof.alloc_value(cs.namespace(|| "comm_r_last_data_leaf"))?;
+
+        comm_r_last_proof.synthesize(
+            cs.namespace(|| "comm_r_last_proof"),
+            params,
+            comm_r_last,
+            comm_r_last_data_leaf.clone(),
+        )?;
 
         // verify comm_q_parents
         for (i, proof) in comm_q_parents_proofs.into_iter().enumerate() {

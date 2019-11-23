@@ -463,6 +463,76 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         Ok(())
     }
 
+    pub fn extract_range(
+        pp: &PublicParams<H>,
+        replica_id: &<H as Hasher>::Domain,
+        data: &[u8],
+        _config: Option<StoreConfig>,
+        offset: usize,
+        num_bytes: usize,
+    ) -> Result<Vec<u8>> {
+        if offset % NODE_SIZE != 0 {
+            return Err(format_err!("Invalid offset, must be a multiple of {}", NODE_SIZE).into());
+        }
+
+        if num_bytes % NODE_SIZE != 0 {
+            return Err(
+                format_err!("Invalid num_bytes, must be a multiple of {}", NODE_SIZE).into(),
+            );
+        }
+
+        // determine the first window needed to be decoded
+        let first_window_index = offset / pp.window_size_bytes();
+
+        // offset into the first window
+        let first_window_offset = offset % pp.window_size_bytes();
+
+        // length of the last window
+        let last_window_len = if (num_bytes + first_window_offset) % pp.window_size_bytes() > 0 {
+            (num_bytes + first_window_offset) % pp.window_size_bytes()
+        } else {
+            pp.window_size_bytes()
+        };
+
+        // determine the number of windows need to be decoded
+        let num_windows = (num_bytes as f64 / pp.window_size_bytes() as f64).ceil() as usize;
+
+        let mut result = vec![0u8; num_bytes];
+
+        // buffer to hold the current window being decoded
+        let mut window = vec![0u8; pp.window_size_bytes()];
+
+        // iterate over all windows that need to be decoded
+        for (i, current_window_index) in
+            (first_window_index..first_window_index + num_windows).enumerate()
+        {
+            // grab the window
+            let window_start = current_window_index * pp.window_size_bytes();
+            let window_end = window_start + pp.window_size_bytes();
+
+            window.copy_from_slice(&data[window_start..window_end]);
+
+            Self::extract_single_window(pp, replica_id, &mut window, current_window_index);
+
+            let w_start = if i == 0 { first_window_offset } else { 0 };
+            let w_end = if i == num_windows - 1 {
+                last_window_len
+            } else {
+                pp.window_size_bytes()
+            };
+
+            let start = if i == 0 {
+                (i * pp.window_size_bytes())
+            } else {
+                (i * pp.window_size_bytes()) - first_window_offset
+            };
+            let end = w_end - w_start;
+            result[start..end].copy_from_slice(&window[w_start..w_end]);
+        }
+
+        Ok(result)
+    }
+
     pub(crate) fn extract_single_window(
         pub_params: &PublicParams<H>,
         replica_id: &<H as Hasher>::Domain,
@@ -767,7 +837,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         );
 
         let (labels, label_configs) =
-            Self::encode_all_windows(pub_params, replica_id, data, config.clone())?;
+            Self::encode_all_windows(pub_params, replica_id, data, config)?;
 
         // construct column hashes
         info!("building column hashes");
@@ -1002,21 +1072,21 @@ mod tests {
     }
 
     #[test]
-    fn extract_node_pedersen() {
-        test_extract_node::<PedersenHasher>();
+    fn extract_nodes_pedersen() {
+        test_extract_nodes::<PedersenHasher>();
     }
 
     #[test]
-    fn extract_node_sha256() {
-        test_extract_node::<Sha256Hasher>();
+    fn extract_nodes_sha256() {
+        test_extract_nodes::<Sha256Hasher>();
     }
 
     #[test]
-    fn extract_node_blake2s() {
-        test_extract_node::<Blake2sHasher>();
+    fn extract_nodes_blake2s() {
+        test_extract_nodes::<Blake2sHasher>();
     }
 
-    fn test_extract_node<H: 'static + Hasher>() {
+    fn test_extract_nodes<H: 'static + Hasher>() {
         // femme::pretty::Logger::new()
         //     .start(log::LevelFilter::Trace)
         //     .ok();
@@ -1080,6 +1150,24 @@ mod tests {
             .expect("failed to extract data");
 
             assert_eq!(data_at_node(&data, node).unwrap(), &decoded_node[..]);
+        }
+
+        for (start, len) in &[(0, 2), (1, 2), (2, 7), (3, 4), (3, 7), (4, 8), (0, 8)] {
+            println!("decoding {} - {}", start, len);
+            let nodes = StackedDrg::<H, Blake2sHasher>::extract_range(
+                &pp,
+                &replica_id,
+                &data_copy,
+                Some(config.clone()),
+                *start * NODE_SIZE,
+                *len * NODE_SIZE,
+            )
+            .expect("failed to extract data");
+
+            assert_eq!(nodes.len(), *len * NODE_SIZE);
+            for (i, node) in nodes.chunks(NODE_SIZE).enumerate() {
+                assert_eq!(data_at_node(&data, i + start).unwrap(), &node[..]);
+            }
         }
     }
 

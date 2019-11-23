@@ -8,7 +8,7 @@ use crate::constants::{
 };
 use crate::types::{PaddedBytesAmount, PoStConfig};
 
-const LAYERS: usize = 4; // TODO: 10;
+const LAYERS: usize = 4; // TODO: correct params;
 
 const DRG_SEED: [u8; 28] = [
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
@@ -101,15 +101,11 @@ fn select_challenges(
 mod tests {
     use super::*;
 
-    use crate::constants::POREP_WRAPPER_MINIMUM_CHALLENGES;
     use crate::types::PoRepProofPartitions;
 
     #[test]
     fn partition_layer_challenges_test() {
-        let f = |partitions| {
-            select_challenges(partitions, POREP_WRAPPER_MINIMUM_CHALLENGES, LAYERS)
-                .challenges_count_all()
-        };
+        let f = |partitions| select_challenges(partitions, 12, LAYERS).challenges_count_all();
         // Update to ensure all supported PoRepProofPartitions options are represented here.
         assert_eq!(6, f(usize::from(PoRepProofPartitions(2))));
 

@@ -62,8 +62,8 @@ pub struct PublicInputs<T: Domain> {
 pub struct PrivateInputs<H: Hasher> {
     pub tree: MerkleTree<H::Domain, H::Function>,
     pub comm_c: H::Domain,
-    pub comm_r_last: H::Domain,
     pub comm_q: H::Domain,
+    pub comm_r_last: H::Domain,
 }
 
 /// The candidate data, that is needed for ticket generation.

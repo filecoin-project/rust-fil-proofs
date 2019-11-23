@@ -139,7 +139,7 @@ pub fn main() {
             .unwrap()
             .into_iter()
             .map(|v| {
-                let parts = v.split(":").take(2).collect::<Vec<_>>();
+                let parts = v.split(':').take(2).collect::<Vec<_>>();
                 assert_eq!(
                     parts.len(),
                     2,

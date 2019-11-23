@@ -44,20 +44,11 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
         replica_id: &<H as Hasher>::Domain,
         data: &[u8],
         node: usize,
-        _config: Option<StoreConfig>,
+        config: Option<StoreConfig>,
     ) -> Result<Vec<u8>> {
-        // grab the window for this node
-        let window_start_index = node / pp.window_size_nodes();
-        let window_start = window_start_index * pp.window_size_bytes();
-        let window_end = (window_start_index + 1) * pp.window_size_bytes();
-        let mut window = data[window_start..window_end].to_vec();
-
-        Self::extract_single_window(pp, replica_id, &mut window, window_start_index);
-
-        let node_window_index = node % pp.window_size_nodes();
-        let start = node_window_index * NODE_SIZE;
-        let end = (node_window_index + 1) * NODE_SIZE;
-        let node = window[start..end].to_vec();
+        let start = node * NODE_SIZE;
+        let num_bytes = NODE_SIZE;
+        let node = Self::extract_range(pp, replica_id, &data, config, start, num_bytes)?;
 
         Ok(node)
     }

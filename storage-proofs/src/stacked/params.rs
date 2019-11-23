@@ -249,7 +249,6 @@ impl<H: Hasher> WrapperProof<H> {
         self.comm_r_last_proof.root()
     }
 
-    /// Verify the full proof.
     pub fn verify<G: Hasher>(
         &self,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,

@@ -206,6 +206,7 @@ impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G
                 &mut cs.namespace(|| format!("wrapper_proof_challenge_{}", i)),
                 &self.params,
                 &comm_q_num,
+                comm_r_last_num.clone(),
                 &replica_id_bits,
             )?;
         }
@@ -333,6 +334,13 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         );
 
         for challenge in wrapper_challenges.into_iter() {
+            // comm_r_last
+            inputs.extend(generate_inclusion_inputs::<H>(
+                &wrapper_por_params,
+                k,
+                challenge,
+            ));
+
             // comm_q_parents
             let mut exp_parents = vec![0; wrapper_graph.expansion_degree()];
             wrapper_graph.expanded_parents(challenge, &mut exp_parents);
@@ -514,8 +522,8 @@ mod tests {
 
         assert!(proofs_are_valid);
 
-        let expected_inputs = 65;
-        let expected_constraints = 3_762_730;
+        let expected_inputs = 68;
+        let expected_constraints = 3_795_712;
 
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.
