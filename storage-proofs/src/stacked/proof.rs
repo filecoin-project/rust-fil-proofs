@@ -1082,7 +1082,7 @@ mod tests {
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let replica_id: H::Domain = H::Domain::random(rng);
-        let nodes = 8 * 32;
+        let nodes = 4 * 32;
 
         let data: Vec<u8> = (0..nodes)
             .flat_map(|_| {
