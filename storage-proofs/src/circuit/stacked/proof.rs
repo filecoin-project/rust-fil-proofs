@@ -591,11 +591,11 @@ mod tests {
         stacked_test_compound::<PedersenHasher>();
     }
 
-    #[test]
-    #[ignore] // Slow test – run only when compiled for release.
-    fn test_stacked_compound_blake2s() {
-        stacked_test_compound::<Sha256Hasher>();
-    }
+    // #[test]
+    // #[ignore] // Slow test – run only when compiled for release.
+    // fn test_stacked_compound_sha256() {
+    //     stacked_test_compound::<Sha256Hasher>();
+    // }
 
     fn stacked_test_compound<H: 'static + Hasher>() {
         let nodes = 8 * 32;
