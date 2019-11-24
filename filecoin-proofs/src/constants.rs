@@ -16,8 +16,8 @@ pub const SECTOR_SIZE_1_GIB: u64 = 1 << 30;
 
 pub const WINDOW_SIZE_NODES_ONE_KIB: usize = 512 / NODE_SIZE;
 pub const WINDOW_SIZE_NODES_16_MIB: usize = (4 * 1024 * 1024) / NODE_SIZE;
-pub const WINDOW_SIZE_NODES_256_MIB: usize = (8 * 1024 * 1024) / NODE_SIZE;
-pub const WINDOW_SIZE_NODES_1_GIB: usize = (64 * 1024 * 1024) / NODE_SIZE;
+pub const WINDOW_SIZE_NODES_256_MIB: usize = (64 * 1024 * 1024) / NODE_SIZE;
+pub const WINDOW_SIZE_NODES_1_GIB: usize = (128 * 1024 * 1024) / NODE_SIZE;
 
 pub const MINIMUM_RESERVED_LEAVES_FOR_PIECE_IN_SECTOR: u64 = 4;
 
