@@ -158,11 +158,9 @@ impl Domain for PedersenDomain {
     }
 
     fn try_from_bytes(raw: &[u8]) -> Result<Self> {
-        if raw.len() != PedersenDomain::byte_len() {
-            return Err(Error::BadFrBytes);
-        }
+        ensure!(raw.len() == PedersenDomain::byte_len(), Error::BadFrBytes);
         let mut res: FrRepr = Default::default();
-        res.read_le(raw).map_err(|_| Error::BadFrBytes)?;
+        res.read_le(raw)?;
 
         Ok(PedersenDomain(res))
     }

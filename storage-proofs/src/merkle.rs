@@ -223,9 +223,10 @@ pub fn create_merkle_tree<H: Hasher>(
     size: usize,
     data: &[u8],
 ) -> Result<MerkleTree<H::Domain, H::Function>> {
-    if data.len() != (NODE_SIZE * size) as usize {
-        return Err(Error::InvalidMerkleTreeArgs(data.len(), NODE_SIZE, size));
-    }
+    ensure!(
+        data.len() == (NODE_SIZE * size) as usize,
+        Error::InvalidMerkleTreeArgs(data.len(), NODE_SIZE, size)
+    );
 
     let f = |i| {
         let d = data_at_node(&data, i).expect("data_at_node math failed");

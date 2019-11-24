@@ -1,5 +1,5 @@
+use anyhow::{anyhow, Result};
 use chrono::{DateTime, TimeZone, Utc};
-use failure::Error;
 use git2::Repository;
 use serde::Serialize;
 
@@ -13,7 +13,7 @@ pub struct Metadata<T> {
 }
 
 impl<T> Metadata<T> {
-    pub fn wrap(benchmarks: T) -> Result<Self, failure::Error> {
+    pub fn wrap(benchmarks: T) -> Result<Self> {
         Ok(Metadata {
             git: GitMetadata::new()?,
             system: SystemMetadata::new()?,
@@ -31,7 +31,7 @@ pub struct GitMetadata {
 }
 
 impl GitMetadata {
-    pub fn new() -> Result<Self, Error> {
+    pub fn new() -> Result<Self> {
         let repo_path = if let Ok(mdir) = std::env::var("CARGO_MANIFEST_DIR") {
             std::path::Path::new(&mdir).into()
         } else {
@@ -66,19 +66,17 @@ pub struct SystemMetadata {
 }
 
 impl SystemMetadata {
-    pub fn new() -> Result<Self, Error> {
+    pub fn new() -> Result<Self> {
         let host = futures::executor::block_on(heim::host::platform())
-            .map_err(|_| failure::format_err!("Failed to retrieve host information"))?;
+            .map_err(|_| anyhow!("Failed to retrieve host information"))?;
 
         let memory = futures::executor::block_on(heim::memory::memory())
-            .map_err(|_| failure::format_err!("Failed to retrieve memory information"))?;
-        let cpu_logical =
-            futures::executor::block_on(heim::cpu::logical_count()).map_err(|_| {
-                failure::format_err!("Failed to retrieve cpu logical count information")
-            })?;
+            .map_err(|_| anyhow!("Failed to retrieve memory information"))?;
+        let cpu_logical = futures::executor::block_on(heim::cpu::logical_count())
+            .map_err(|_| anyhow!("Failed to retrieve cpu logical count information"))?;
+
         let cpu_physical = futures::executor::block_on(heim::cpu::physical_count())
-            .map_err(|_| failure::format_err!("Failed to retrieve cpu physical count information"))?
-            .unwrap_or_default();
+            .map_err(|_| anyhow!("Failed to retrieve cpu physical count information"))?;
 
         let cpuid = raw_cpuid::CpuId::new();
         let processor = cpuid
@@ -108,7 +106,7 @@ impl SystemMetadata {
                 .map(|info| format!("{:?}", info))
                 .unwrap_or_default(),
             processor_cores_logical: cpu_logical,
-            processor_cores_physical: cpu_physical,
+            processor_cores_physical: cpu_physical.unwrap_or_default(),
             memory_total_bytes: memory.total().get::<uom::si::information::byte>(),
         })
     }

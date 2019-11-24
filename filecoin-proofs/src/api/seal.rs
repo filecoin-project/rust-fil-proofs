@@ -2,6 +2,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::prelude::*;
 use std::path::Path;
 
+use anyhow::Result;
 use bincode::{deserialize, serialize};
 use memmap::MmapOptions;
 use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
@@ -24,7 +25,6 @@ use crate::caches::{get_stacked_params, get_stacked_verifying_key};
 use crate::constants::{
     DefaultPieceHasher, POREP_WINDOW_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN,
 };
-use crate::error;
 use crate::parameters::setup_params;
 pub use crate::pieces;
 pub use crate::pieces::verify_pieces;
@@ -44,7 +44,7 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
     sector_id: SectorId,
     ticket: Ticket,
     piece_infos: &[PieceInfo],
-) -> error::Result<SealPreCommitOutput> {
+) -> Result<SealPreCommitOutput> {
     info!("seal_pre_commit: start");
     let sector_bytes = usize::from(PaddedBytesAmount::from(porep_config));
 
@@ -153,7 +153,7 @@ pub fn seal_commit<T: AsRef<Path>>(
     seed: Ticket,
     pre_commit: SealPreCommitOutput,
     piece_infos: &[PieceInfo],
-) -> error::Result<SealCommitOutput> {
+) -> Result<SealCommitOutput> {
     info!("seal_commit:start");
 
     let SealPreCommitOutput { comm_d, comm_r } = pre_commit;
@@ -265,10 +265,7 @@ pub fn seal_commit<T: AsRef<Path>>(
     Ok(SealCommitOutput { proof: buf })
 }
 
-pub fn compute_comm_d(
-    porep_config: PoRepConfig,
-    piece_infos: &[PieceInfo],
-) -> error::Result<Commitment> {
+pub fn compute_comm_d(porep_config: PoRepConfig, piece_infos: &[PieceInfo]) -> Result<Commitment> {
     pieces::compute_comm_d(porep_config.sector_size, piece_infos)
 }
 
@@ -283,7 +280,7 @@ pub fn verify_seal(
     ticket: Ticket,
     seed: Ticket,
     proof_vec: &[u8],
-) -> error::Result<bool> {
+) -> Result<bool> {
     let sector_bytes = PaddedBytesAmount::from(porep_config);
     let comm_r = as_safe_commitment(&comm_r_in, "comm_r")?;
     let comm_d = as_safe_commitment(&comm_d_in, "comm_d")?;

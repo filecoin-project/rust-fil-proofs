@@ -171,10 +171,10 @@ impl Domain for Blake2sDomain {
     }
 
     fn try_from_bytes(raw: &[u8]) -> Result<Self> {
-        if raw.len() != 32 || u32::from(raw[31]) > Fr::NUM_BITS {
-            println!("{:?}", raw[31]);
-            return Err(Error::InvalidInputSize);
-        }
+        ensure!(
+            raw.len() == 32 && u32::from(raw[31]) <= Fr::NUM_BITS,
+            Error::InvalidInputSize
+        );
 
         let mut res = Blake2sDomain::default();
         res.0.copy_from_slice(&raw[0..32]);
@@ -182,9 +182,7 @@ impl Domain for Blake2sDomain {
     }
 
     fn write_bytes(&self, dest: &mut [u8]) -> Result<()> {
-        if dest.len() < 32 {
-            return Err(Error::InvalidInputSize);
-        }
+        ensure!(dest.len() >= 32, Error::InvalidInputSize);
         dest[0..32].copy_from_slice(&self.0[..]);
         Ok(())
     }

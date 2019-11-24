@@ -52,7 +52,7 @@ impl Report {
     }
 }
 
-pub fn run(sector_size: usize, window_size_nodes: usize) -> Result<(), failure::Error> {
+pub fn run(sector_size: usize, window_size_nodes: usize) -> anyhow::Result<()> {
     info!(
         "Benchy Election PoSt: sector-size={} - window_size={}",
         sector_size,

@@ -471,18 +471,17 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         offset: usize,
         num_bytes: usize,
     ) -> Result<Vec<u8>> {
-        if offset + num_bytes > data.len() {
-            return Err(format_err!("Out of bounds").into());
-        }
-        if offset % NODE_SIZE != 0 {
-            return Err(format_err!("Invalid offset, must be a multiple of {}", NODE_SIZE).into());
-        }
-
-        if num_bytes % NODE_SIZE != 0 {
-            return Err(
-                format_err!("Invalid num_bytes, must be a multiple of {}", NODE_SIZE).into(),
-            );
-        }
+        ensure!(offset + num_bytes <= data.len(), "Out of bounds");
+        ensure!(
+            offset % NODE_SIZE == 0,
+            "Invalid offset, must be a multiple of {}",
+            NODE_SIZE
+        );
+        ensure!(
+            num_bytes % NODE_SIZE == 0,
+            "Invalid num_bytes, must be a multiple of {}",
+            NODE_SIZE
+        );
 
         // determine the first window needed to be decoded
         let first_window_index = offset / pp.window_size_bytes();
@@ -514,7 +513,12 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         // remove elements at the end
         decoded.truncate(num_bytes);
 
-        assert_eq!(decoded.len(), num_bytes);
+        ensure!(
+            decoded.len() == num_bytes,
+            "Internal error: expected {} == {}",
+            decoded.len(),
+            num_bytes
+        );
 
         Ok(decoded)
     }

@@ -1,5 +1,6 @@
 use std::time::{Duration, Instant};
 
+use anyhow::Result;
 use cpu_time::ProcessTime;
 
 pub struct FuncMeasurement<T> {
@@ -8,9 +9,9 @@ pub struct FuncMeasurement<T> {
     pub return_value: T,
 }
 
-pub fn measure<T, F>(f: F) -> Result<FuncMeasurement<T>, failure::Error>
+pub fn measure<T, F>(f: F) -> Result<FuncMeasurement<T>>
 where
-    F: FnOnce() -> Result<T, failure::Error>,
+    F: FnOnce() -> Result<T>,
 {
     let cpu_time_start = ProcessTime::now();
     let wall_start_time = Instant::now();

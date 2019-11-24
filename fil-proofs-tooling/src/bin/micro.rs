@@ -1,14 +1,15 @@
 #[macro_use]
 extern crate commandspec;
 #[macro_use]
-extern crate failure;
+extern crate anyhow;
 #[macro_use]
 extern crate serde;
 
-use regex::Regex;
 use std::io::{self, BufRead};
 
+use anyhow::Result;
 use fil_proofs_tooling::metadata::Metadata;
+use regex::Regex;
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -47,7 +48,7 @@ fn make_detail_re(name: &str) -> Regex {
 }
 
 /// Parses the output of `cargo bench -p storage-proofs --bench <benchmark> -- --verbose --colors never`.
-fn parse_criterion_out(s: impl AsRef<str>) -> Result<Vec<CriterionResult>, failure::Error> {
+fn parse_criterion_out(s: impl AsRef<str>) -> Result<Vec<CriterionResult>> {
     let mut res = Vec::new();
 
     let start_re = Regex::new(r"^Benchmarking ([^:]+)$").expect("invalid regex");
@@ -258,7 +259,7 @@ fn time_to_us(s: &str) -> f64 {
     (normalized * 10000.0).round() / 10000.0
 }
 
-fn run_benches(mut args: Vec<String>) -> Result<(), failure::Error> {
+fn run_benches(mut args: Vec<String>) -> Result<()> {
     let is_verbose = if let Some(index) = args.iter().position(|a| a.as_str() == "--verbose") {
         args.remove(index);
         true
@@ -271,7 +272,8 @@ fn run_benches(mut args: Vec<String>) -> Result<(), failure::Error> {
         cargo bench -p storage-proofs {args} -- --verbose --color never
     ",
         args = args
-    )?;
+    )
+    .map_err(|err| anyhow!("{:?}", err))?;
 
     let process = cmd.stdout(std::process::Stdio::piped()).spawn()?;
 

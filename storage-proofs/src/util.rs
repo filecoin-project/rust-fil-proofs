@@ -15,9 +15,10 @@ pub fn data_at_node_offset(v: usize) -> usize {
 pub fn data_at_node(data: &[u8], v: usize) -> error::Result<&[u8]> {
     let offset = data_at_node_offset(v);
 
-    if offset + NODE_SIZE > data.len() {
-        return Err(error::Error::OutOfBounds(offset + NODE_SIZE, data.len()));
-    }
+    ensure!(
+        offset + NODE_SIZE <= data.len(),
+        error::Error::OutOfBounds(offset + NODE_SIZE, data.len())
+    );
 
     Ok(&data[offset..offset + NODE_SIZE])
 }

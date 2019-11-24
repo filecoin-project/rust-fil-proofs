@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::path::PathBuf;
 
+use anyhow::Result;
 use bincode::deserialize;
 use merkletree::merkle::{get_merkle_tree_leafs, MerkleTree};
 use merkletree::store::{DiskStore, Store, StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
@@ -13,7 +14,6 @@ use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::election_post;
-use storage_proofs::error::Error;
 use storage_proofs::fr32::bytes_into_fr;
 use storage_proofs::hasher::Hasher;
 use storage_proofs::proof::NoRequirements;
@@ -22,7 +22,6 @@ use storage_proofs::stacked::CacheKey;
 
 use crate::api::util::as_safe_commitment;
 use crate::caches::{get_post_params, get_post_verifying_key};
-use crate::error;
 use crate::parameters::post_setup_params;
 use crate::types::{
     ChallengeSeed, Commitment, PersistentAux, PoStConfig, ProverId, SectorSize, Tree,
@@ -57,11 +56,7 @@ impl std::cmp::PartialOrd for PrivateReplicaInfo {
 }
 
 impl PrivateReplicaInfo {
-    pub fn new(
-        access: String,
-        comm_r: Commitment,
-        cache_dir: PathBuf,
-    ) -> Result<Self, failure::Error> {
+    pub fn new(access: String, comm_r: Commitment, cache_dir: PathBuf) -> Result<Self> {
         let aux = {
             let mut aux_bytes = vec![];
             let mut f_aux = File::open(cache_dir.join(CacheKey::PAux.to_string()))?;
@@ -78,26 +73,24 @@ impl PrivateReplicaInfo {
         })
     }
 
-    pub fn safe_comm_r(&self) -> Result<<DefaultTreeHasher as Hasher>::Domain, failure::Error> {
+    pub fn safe_comm_r(&self) -> Result<<DefaultTreeHasher as Hasher>::Domain> {
         as_safe_commitment(&self.comm_r, "comm_r")
     }
 
-    pub fn safe_comm_c(&self) -> Result<<DefaultTreeHasher as Hasher>::Domain, failure::Error> {
+    pub fn safe_comm_c(&self) -> Result<<DefaultTreeHasher as Hasher>::Domain> {
         Ok(self.aux.comm_c)
     }
 
-    pub fn safe_comm_q(&self) -> Result<<DefaultTreeHasher as Hasher>::Domain, failure::Error> {
+    pub fn safe_comm_q(&self) -> Result<<DefaultTreeHasher as Hasher>::Domain> {
         Ok(self.aux.comm_q)
     }
 
-    pub fn safe_comm_r_last(
-        &self,
-    ) -> Result<<DefaultTreeHasher as Hasher>::Domain, failure::Error> {
+    pub fn safe_comm_r_last(&self) -> Result<<DefaultTreeHasher as Hasher>::Domain> {
         Ok(self.aux.comm_r_last)
     }
 
     /// Generate the merkle tree of this particular replica.
-    pub fn merkle_tree(&self, sector_size: SectorSize) -> Result<Tree, Error> {
+    pub fn merkle_tree(&self, sector_size: SectorSize) -> Result<Tree> {
         let sector_size = u64::from(sector_size);
         let tree_size = {
             let elems =
@@ -145,7 +138,7 @@ impl PublicReplicaInfo {
         PublicReplicaInfo { comm_r }
     }
 
-    pub fn safe_comm_r(&self) -> Result<<DefaultTreeHasher as Hasher>::Domain, failure::Error> {
+    pub fn safe_comm_r(&self) -> Result<<DefaultTreeHasher as Hasher>::Domain> {
         as_safe_commitment(&self.comm_r, "comm_r")
     }
 }
@@ -157,7 +150,7 @@ pub fn generate_candidates(
     challenge_count: u64,
     replicas: &BTreeMap<SectorId, PrivateReplicaInfo>,
     prover_id: ProverId,
-) -> error::Result<Vec<Candidate>> {
+) -> Result<Vec<Candidate>> {
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
@@ -225,7 +218,7 @@ pub fn generate_candidates(
 pub type SnarkProof = Vec<u8>;
 
 /// Generates a ticket from a partial_ticket.
-pub fn finalize_ticket(partial_ticket: &[u8; 32]) -> error::Result<[u8; 32]> {
+pub fn finalize_ticket(partial_ticket: &[u8; 32]) -> Result<[u8; 32]> {
     let partial_ticket = bytes_into_fr::<Bls12>(partial_ticket)
         .map_err(|err| format_err!("Invalid partial_ticket: {:?}", err))?;
     Ok(election_post::finalize_ticket(&partial_ticket))
@@ -238,7 +231,7 @@ pub fn generate_post(
     replicas: &BTreeMap<SectorId, PrivateReplicaInfo>,
     winners: Vec<Candidate>,
     prover_id: ProverId,
-) -> error::Result<Vec<SnarkProof>> {
+) -> Result<Vec<SnarkProof>> {
     let sector_count = replicas.len() as u64;
     ensure!(sector_count > 0, "Must supply at least one replica");
 
@@ -301,7 +294,7 @@ pub fn verify_post(
     replicas: &BTreeMap<SectorId, PublicReplicaInfo>,
     winners: &[Candidate],
     prover_id: ProverId,
-) -> error::Result<bool> {
+) -> Result<bool> {
     let sector_count = replicas.len() as u64;
     ensure!(sector_count > 0, "Must supply at least one replica");
     ensure!(

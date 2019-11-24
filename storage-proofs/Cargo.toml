@@ -15,8 +15,7 @@ bench = false
 bitvec = "0.5"
 rand = "0.7"
 libc = "0.2"
-merkletree = "0.12.2"
-failure = "0.1"
+merkletree = { version = "0.12.2", git = "https://github.com/filecoin-project/merkle_light", branch = "errors" }
 byteorder = "1"
 config = "0.9.3"
 crossbeam-utils = "0.6"
@@ -53,6 +52,8 @@ rand_xorshift = "0.2.0"
 rand_chacha = "0.2.1"
 hex = "0.4.0"
 generic-array = "0.12"
+anyhow = "1.0.23"
+thiserror = "1.0.6"
 
 [features]
 default = ["gpu"]

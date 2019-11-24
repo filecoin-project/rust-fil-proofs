@@ -179,7 +179,7 @@ fn invalid_json_produces_error() -> Result<(), FailureError> {
         .build();
 
     session.exp_string("fatal error: JSON file")?;
-    session.exp_string("did not parse correctly: expected value at line 1 column 1")?;
+    session.exp_string("did not parse correctly")?;
 
     Ok(())
 }

@@ -2,9 +2,9 @@ use std::fs::{File, OpenOptions};
 use std::time::Duration;
 use std::{io, u32};
 
+use anyhow::bail;
 use bellperson::Circuit;
 use chrono::Utc;
-use failure::bail;
 use log::info;
 use memmap::MmapMut;
 use memmap::MmapOptions;
@@ -25,7 +25,7 @@ use storage_proofs::stacked::{
 };
 use tempfile::TempDir;
 
-fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> Result<MmapMut, failure::Error> {
+fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> anyhow::Result<MmapMut> {
     let file: File = if use_tmp {
         tempfile::tempfile().unwrap()
     } else {
@@ -46,7 +46,7 @@ fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> Result<MmapMut, fail
 
 fn dump_proof_bytes<H: Hasher>(
     all_partition_proofs: &[stacked::Proof<H, Sha256Hasher>],
-) -> Result<(), failure::Error> {
+) -> anyhow::Result<()> {
     let file = OpenOptions::new()
         .write(true)
         .create(true)
@@ -90,10 +90,7 @@ impl From<Params> for Inputs {
     }
 }
 
-fn generate_report<H: 'static>(
-    params: Params,
-    cache_dir: &TempDir,
-) -> Result<Report, failure::Error>
+fn generate_report<H: 'static>(params: Params, cache_dir: &TempDir) -> anyhow::Result<Report>
 where
     H: Hasher,
 {
@@ -220,7 +217,6 @@ where
                     &priv_inputs,
                     *partitions,
                 )
-                .map_err(|err| err.into())
             })?;
 
             report.outputs.vanilla_proving_wall_time_us =
@@ -296,7 +292,6 @@ where
                         &data,
                         Some(store_config.clone()),
                     )
-                    .map_err(|err| err.into())
                 })?;
 
                 assert_ne!(&(*data), m.return_value.as_slice());
@@ -331,7 +326,7 @@ fn do_circuit_work<H: 'static + Hasher>(
     priv_in: Option<<StackedDrg<H, Sha256Hasher> as ProofScheme>::PrivateInputs>,
     params: &Params,
     report: &mut Report,
-) -> Result<CircuitWorkMeasurement, failure::Error> {
+) -> anyhow::Result<CircuitWorkMeasurement> {
     let mut proving_wall_time = Duration::new(0, 0);
     let mut proving_cpu_time = Duration::new(0, 0);
 
@@ -382,7 +377,6 @@ fn do_circuit_work<H: 'static + Hasher>(
                 return_value,
             } = measure(|| {
                 StackedCompound::prove(&compound_public_params, &pub_inputs, &priv_inputs, &gparams)
-                    .map_err(|err| err.into())
             })?;
             proving_wall_time += wall_time;
             proving_cpu_time += cpu_time;
@@ -405,7 +399,6 @@ fn do_circuit_work<H: 'static + Hasher>(
                             minimum_challenges: 1,
                         },
                     )
-                    .map_err(|err| err.into())
                 })?;
 
                 // If one verification fails, result becomes permanently false.
@@ -503,7 +496,7 @@ pub struct RunOpts {
     pub size: usize,
 }
 
-pub fn run(opts: RunOpts) -> Result<(), failure::Error> {
+pub fn run(opts: RunOpts) -> anyhow::Result<()> {
     let config = StackedConfig::new(opts.layers, opts.window_challenges, opts.wrapper_challenges);
 
     let params = Params {

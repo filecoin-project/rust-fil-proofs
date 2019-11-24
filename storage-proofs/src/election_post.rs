@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 
 use crate::crypto::pedersen::{pedersen_md_no_padding_bits, Bits};
 use crate::drgraph::graph_height;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::fr32::fr_into_bytes;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
@@ -145,11 +145,7 @@ pub fn generate_candidates<H: Hasher>(
     for (sector_challenge_index, sector_id) in challenged_sectors.iter().enumerate() {
         let tree = match trees.get(sector_id) {
             Some(tree) => tree,
-            None => {
-                return Err(
-                    format_err!("Missing tree (private input) for sector {}", sector_id,).into(),
-                )
-            }
+            None => bail!(Error::MissingPrivateInput("tree", (*sector_id).into())),
         };
 
         candidates.push(generate_candidate::<H>(

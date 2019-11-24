@@ -8,9 +8,9 @@ use std::process::exit;
 use std::process::Command;
 use std::{fs, io};
 
+use anyhow::{bail, ensure, Context, Result};
 use clap::{values_t, App, Arg, ArgMatches};
 use env_proxy;
-use failure::err_msg;
 use flate2::read::GzDecoder;
 use itertools::Itertools;
 use pbr::{ProgressBar, Units};
@@ -133,20 +133,19 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
         println!("using JSON file: {:?}", json_path);
 
         if !json_path.exists() {
-            return Err(err_msg(format!(
+            bail!(
                 "JSON file '{}' does not exist",
                 &json_path.to_str().unwrap_or("")
-            )));
+            );
         }
 
         let file = File::open(&json_path)?;
         let reader = BufReader::new(file);
 
-        serde_json::from_reader(reader).map_err(|err| {
-            failure::format_err!(
-                "JSON file '{}' did not parse correctly: {}",
+        serde_json::from_reader(reader).with_context(|| {
+            format!(
+                "JSON file '{}' did not parse correctly",
                 &json_path.to_str().unwrap_or(""),
-                err,
             )
         })?
     } else {
@@ -250,7 +249,7 @@ fn fetch(matches: &ArgMatches) -> Result<()> {
             println!();
 
             if !retry || !choose("try again?") {
-                return Err(err_msg("some files failed to be fetched. try again, or run paramcache to generate locally"));
+                bail!("some files failed to be fetched. try again, or run paramcache to generate locally");
             }
         }
     }
@@ -330,7 +329,7 @@ fn download_file(url: Url, target: impl AsRef<Path>, is_verbose: bool) -> Result
                 .and_then(|ct_len| ct_len.parse().ok())
                 .unwrap_or(0)
         } else {
-            return Err(failure::err_msg("failed to download file"));
+            bail!("failed to download file: {}", url);
         }
     };
 
@@ -396,7 +395,7 @@ fn download_file_with_ipget(
         io::stderr().write_all(&output.stderr)?;
     }
 
-    failure::ensure!(
+    ensure!(
         output.status.success(),
         "failed to download {}",
         target.as_ref().display()
@@ -463,21 +462,17 @@ fn invalidate_parameter_file(filename: &str) -> Result<()> {
     let target_parameter_file_path =
         parameter_file_path.with_file_name(format!("{}-invalid-digest", filename));
 
-    if parameter_file_path.exists() {
-        rename(parameter_file_path, target_parameter_file_path)?;
-        Ok(())
-    } else {
-        Err(err_msg(ERROR_PARAMETER_FILE))
-    }
+    ensure!(parameter_file_path.exists(), ERROR_PARAMETER_FILE);
+    rename(parameter_file_path, target_parameter_file_path)?;
+
+    Ok(())
 }
 
 fn parameter_map_lookup<'a>(
     parameter_map: &'a ParameterMap,
     filename: &str,
 ) -> Result<&'a ParameterData> {
-    if parameter_map.contains_key(filename) {
-        Ok(parameter_map.get(filename).unwrap())
-    } else {
-        Err(err_msg(ERROR_PARAMETER_ID))
-    }
+    ensure!(parameter_map.contains_key(filename), ERROR_PARAMETER_ID);
+
+    Ok(parameter_map.get(filename).unwrap())
 }

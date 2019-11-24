@@ -3,7 +3,7 @@
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
-extern crate failure;
+extern crate anyhow;
 #[macro_use]
 extern crate log;
 
@@ -13,7 +13,6 @@ mod api;
 mod caches;
 
 pub mod constants;
-pub mod error;
 pub mod fr32;
 pub mod param;
 pub mod parameters;

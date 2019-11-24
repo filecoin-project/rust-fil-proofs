@@ -14,8 +14,6 @@ use std::io::{self, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use crate::error::Error::Unclassified;
-
 /// Bump this when circuits change to invalidate the cache.
 pub const VERSION: usize = 18;
 
@@ -138,10 +136,7 @@ fn ensure_ancestor_dirs_exist(cache_entry_path: PathBuf) -> Result<PathBuf> {
             }
         }
     } else {
-        return Err(Unclassified(format!(
-            "{:?} has no parent directory",
-            cache_entry_path
-        )));
+        bail!("{:?} has no parent directory", cache_entry_path);
     }
 
     Ok(cache_entry_path)
@@ -246,12 +241,10 @@ fn read_cached_params<E: JubjubEngine>(
 ) -> Result<groth16::Parameters<E>> {
     info!("checking cache_path: {:?} for parameters", cache_entry_path);
     with_exclusive_read_lock(cache_entry_path, |mut f| {
-        Parameters::read(&mut f, false)
-            .map_err(Error::from)
-            .map(|value| {
-                info!("read parameters from cache {:?} ", cache_entry_path);
-                value
-            })
+        let params = Parameters::read(&mut f, false)?;
+        info!("read parameters from cache {:?} ", cache_entry_path);
+
+        Ok(params)
     })
 }
 
@@ -263,24 +256,20 @@ fn read_cached_verifying_key<E: JubjubEngine>(
         cache_entry_path
     );
     with_exclusive_read_lock(cache_entry_path, |mut file| {
-        groth16::VerifyingKey::read(&mut file)
-            .map_err(Error::from)
-            .map(|value| {
-                info!("read verifying key from cache {:?} ", cache_entry_path);
-                value
-            })
+        let key = groth16::VerifyingKey::read(&mut file)?;
+        info!("read verifying key from cache {:?} ", cache_entry_path);
+
+        Ok(key)
     })
 }
 
 fn read_cached_metadata(cache_entry_path: &PathBuf) -> Result<CacheEntryMetadata> {
     info!("checking cache_path: {:?} for metadata", cache_entry_path);
     with_exclusive_read_lock(cache_entry_path, |file| {
-        serde_json::from_reader(file)
-            .map_err(Error::from)
-            .map(|value| {
-                info!("read metadata from cache {:?} ", cache_entry_path);
-                value
-            })
+        let value = serde_json::from_reader(file)?;
+        info!("read metadata from cache {:?} ", cache_entry_path);
+
+        Ok(value)
     })
 }
 
@@ -289,12 +278,10 @@ fn write_cached_metadata(
     value: CacheEntryMetadata,
 ) -> Result<CacheEntryMetadata> {
     with_exclusive_lock(cache_entry_path, |file| {
-        serde_json::to_writer(file, &value)
-            .map_err(Error::from)
-            .map(|_| {
-                info!("wrote metadata to cache {:?} ", cache_entry_path);
-                value
-            })
+        serde_json::to_writer(file, &value)?;
+        info!("wrote metadata to cache {:?} ", cache_entry_path);
+
+        Ok(value)
     })
 }
 
@@ -303,10 +290,10 @@ fn write_cached_verifying_key<E: JubjubEngine>(
     value: groth16::VerifyingKey<E>,
 ) -> Result<groth16::VerifyingKey<E>> {
     with_exclusive_lock(cache_entry_path, |file| {
-        value.write(file).map_err(Error::from).map(|_| {
-            info!("wrote verifying key to cache {:?} ", cache_entry_path);
-            value
-        })
+        value.write(file)?;
+        info!("wrote verifying key to cache {:?} ", cache_entry_path);
+
+        Ok(value)
     })
 }
 
@@ -315,10 +302,10 @@ fn write_cached_params<E: JubjubEngine>(
     value: groth16::Parameters<E>,
 ) -> Result<groth16::Parameters<E>> {
     with_exclusive_lock(cache_entry_path, |file| {
-        value.write(file).map_err(Error::from).map(|_| {
-            info!("wrote groth parameters to cache {:?} ", cache_entry_path);
-            value
-        })
+        value.write(file)?;
+        info!("wrote groth parameters to cache {:?} ", cache_entry_path);
+
+        Ok(value)
     })
 }
 

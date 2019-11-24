@@ -26,13 +26,14 @@ pub type Fr32Ary = [u8; 32];
 // Takes a slice of bytes and returns an Fr if byte slice is exactly 32 bytes and does not overflow.
 // Otherwise, returns a BadFrBytesError.
 pub fn bytes_into_fr<E: Engine>(bytes: &[u8]) -> Result<E::Fr> {
-    if bytes.len() != 32 {
-        return Err(Error::BadFrBytes);
-    }
-    let mut fr_repr = <<<E as ScalarEngine>::Fr as PrimeField>::Repr as Default>::default();
-    fr_repr.read_le(bytes).map_err(|_| Error::BadFrBytes)?;
+    ensure!(bytes.len() == 32, Error::BadFrBytes);
 
-    E::Fr::from_repr(fr_repr).map_err(|_| Error::BadFrBytes)
+    let mut fr_repr = <<<E as ScalarEngine>::Fr as PrimeField>::Repr as Default>::default();
+    fr_repr
+        .read_le(bytes)
+        .map_err(|_| anyhow!(Error::BadFrBytes))?;
+
+    E::Fr::from_repr(fr_repr).map_err(|_| Error::BadFrBytes.into())
 }
 
 #[inline]

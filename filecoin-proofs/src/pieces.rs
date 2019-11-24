@@ -2,6 +2,7 @@ use std::io::Cursor;
 use std::io::Read;
 use std::iter::Iterator;
 
+use anyhow::Result;
 use storage_proofs::hasher::{HashFunction, Hasher};
 use storage_proofs::util::NODE_SIZE;
 
@@ -9,7 +10,6 @@ use crate::constants::{
     DefaultPieceHasher,
     MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
 };
-use crate::error::Result;
 use crate::types::{
     Commitment, PaddedBytesAmount, PieceInfo, SectorSize, UnpaddedByteIndex, UnpaddedBytesAmount,
 };

@@ -105,9 +105,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for MerklePoR<H> {
         let tree = priv_inputs.tree;
 
         if let Some(ref commitment) = pub_inputs.commitment {
-            if commitment != &tree.root() {
-                return Err(Error::InvalidCommitment);
-            }
+            ensure!(commitment == &tree.root(), Error::InvalidCommitment);
         }
 
         Ok(DataProof {

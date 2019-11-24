@@ -22,12 +22,10 @@ impl PieceSpec {
     /// in leaf units.
     /// Proof size is a number of elements (size same as one leaf) provided in the variable part of a PieceInclusionProof.
     pub fn compute_packing(&self, tree_len: usize) -> Result<(Vec<(usize, usize)>, usize)> {
-        if !self.is_aligned(tree_len) {
-            Err(Error::UnalignedPiece)
-        } else {
-            let packing_list = vec![(0, self.number_of_leaves)];
-            Ok((packing_list, self.proof_length(tree_len)))
-        }
+        ensure!(self.is_aligned(tree_len), Error::UnalignedPiece);
+
+        let packing_list = vec![(0, self.number_of_leaves)];
+        Ok((packing_list, self.proof_length(tree_len)))
     }
 
     pub fn is_aligned(&self, tree_len: usize) -> bool {
@@ -87,11 +85,10 @@ pub fn generate_piece_commitment_bytes_from_source<H: Hasher>(
         }
     }
 
-    if total_bytes_read < NODE_SIZE {
-        return Err(Error::Unclassified(
-            "insufficient data to generate piece commitment".to_string(),
-        ));
-    }
+    ensure!(
+        total_bytes_read >= NODE_SIZE,
+        "insufficient data to generate piece commitment"
+    );
 
     let mut comm_p_bytes = [0; NODE_SIZE];
     let comm_p = compute_piece_commitment::<H>(&domain_data);

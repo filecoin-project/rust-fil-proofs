@@ -9,7 +9,7 @@ use storage_proofs::crypto;
 use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::util::{bits_to_bytes, bytes_into_boolean_vec, bytes_into_boolean_vec_be};
 
-fn blake2s_count(bytes: usize) -> Result<Report, failure::Error> {
+fn blake2s_count(bytes: usize) -> anyhow::Result<Report> {
     let rng = &mut rand::thread_rng();
 
     let mut cs = TestConstraintSystem::<Bls12>::new();
@@ -44,7 +44,7 @@ fn blake2s_count(bytes: usize) -> Result<Report, failure::Error> {
     })
 }
 
-fn sha256_count(bytes: usize) -> Result<Report, failure::Error> {
+fn sha256_count(bytes: usize) -> anyhow::Result<Report> {
     let mut rng = rand::thread_rng();
 
     let mut cs = TestConstraintSystem::<Bls12>::new();
@@ -70,7 +70,7 @@ fn sha256_count(bytes: usize) -> Result<Report, failure::Error> {
     })
 }
 
-fn pedersen_count(bytes: usize) -> Result<Report, failure::Error> {
+fn pedersen_count(bytes: usize) -> anyhow::Result<Report> {
     let mut rng = rand::thread_rng();
 
     let mut cs = TestConstraintSystem::<Bls12>::new();
@@ -119,7 +119,7 @@ struct Report {
     bytes: usize,
 }
 
-pub fn run() -> Result<(), failure::Error> {
+pub fn run() -> anyhow::Result<()> {
     let reports = vec![
         blake2s_count(32)?,
         blake2s_count(64)?,
