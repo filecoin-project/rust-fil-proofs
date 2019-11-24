@@ -21,12 +21,12 @@ impl<H: Hasher> ColumnProof<H> {
     pub fn empty(params: &PublicParams<H>) -> Self {
         ColumnProof {
             column: Column::empty(params),
-            inclusion_path: InclusionPath::empty(&params.graph),
+            inclusion_path: InclusionPath::empty(&params.window_graph),
         }
     }
 
-    pub fn get_node_at_layer(&self, layer: usize) -> &Option<Fr> {
-        self.column.get_node_at_layer(layer)
+    pub fn get_node_at_layer(&self, window_index: usize, layer: usize) -> &Option<Fr> {
+        self.column.get_node_at_layer(window_index, layer)
     }
 
     pub fn synthesize<CS: ConstraintSystem<Bls12>>(
@@ -46,7 +46,6 @@ impl<H: Hasher> ColumnProof<H> {
 
         constraint::equal(&mut cs, || "enforce column_hash = leaf", &c_i, &leaf_num);
 
-        // TODO: currently allocating the leaf twice, inclusion path should take the already allocated leaf.
         inclusion_path.synthesize(
             cs.namespace(|| "column_proof_all_inclusion"),
             params,

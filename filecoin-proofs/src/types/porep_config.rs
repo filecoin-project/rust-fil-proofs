@@ -9,12 +9,16 @@ use crate::constants::DefaultPieceHasher;
 use crate::types::*;
 
 #[derive(Clone, Copy, Debug)]
-pub struct PoRepConfig(pub SectorSize, pub PoRepProofPartitions);
+pub struct PoRepConfig {
+    pub sector_size: SectorSize,
+    pub partitions: PoRepProofPartitions,
+    pub window_size_nodes: usize,
+}
 
 impl From<PoRepConfig> for PaddedBytesAmount {
     fn from(x: PoRepConfig) -> Self {
         match x {
-            PoRepConfig(s, _) => PaddedBytesAmount::from(s),
+            PoRepConfig { sector_size, .. } => PaddedBytesAmount::from(sector_size),
         }
     }
 }
@@ -22,7 +26,7 @@ impl From<PoRepConfig> for PaddedBytesAmount {
 impl From<PoRepConfig> for UnpaddedBytesAmount {
     fn from(x: PoRepConfig) -> Self {
         match x {
-            PoRepConfig(s, _) => PaddedBytesAmount::from(s).into(),
+            PoRepConfig { sector_size, .. } => PaddedBytesAmount::from(sector_size).into(),
         }
     }
 }
@@ -30,22 +34,26 @@ impl From<PoRepConfig> for UnpaddedBytesAmount {
 impl From<PoRepConfig> for PoRepProofPartitions {
     fn from(x: PoRepConfig) -> Self {
         match x {
-            PoRepConfig(_, p) => p,
+            PoRepConfig { partitions, .. } => partitions,
         }
     }
 }
 
 impl From<PoRepConfig> for SectorSize {
     fn from(cfg: PoRepConfig) -> Self {
-        let PoRepConfig(size, _) = cfg;
-        size
+        let PoRepConfig { sector_size, .. } = cfg;
+        sector_size
     }
 }
 
 impl PoRepConfig {
     /// Returns the cache identifier as used by `storage-proofs::paramater_cache`.
     pub fn get_cache_identifier(&self) -> String {
-        let params = crate::parameters::public_params(self.0.into(), self.1.into());
+        let params = crate::parameters::public_params(
+            self.sector_size.into(),
+            self.partitions.into(),
+            self.window_size_nodes,
+        );
 
         <StackedCompound as CacheableParameters<
             Bls12,

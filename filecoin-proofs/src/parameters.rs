@@ -1,12 +1,14 @@
 use storage_proofs::drgraph::{DefaultTreeHasher, BASE_DEGREE};
 use storage_proofs::election_post::{self, ElectionPoSt};
 use storage_proofs::proof::ProofScheme;
-use storage_proofs::stacked::{self, LayerChallenges, StackedDrg, EXP_DEGREE};
+use storage_proofs::stacked::{self, LayerChallenges, StackedConfig, StackedDrg, EXP_DEGREE};
 
-use crate::constants::{DefaultPieceHasher, POREP_MINIMUM_CHALLENGES};
+use crate::constants::{
+    DefaultPieceHasher, POREP_WINDOW_MINIMUM_CHALLENGES, POREP_WRAPPER_MINIMUM_CHALLENGES,
+};
 use crate::types::{PaddedBytesAmount, PoStConfig};
 
-const LAYERS: usize = 4; // TODO: 10;
+const LAYERS: usize = 4; // TODO: correct params;
 
 const DRG_SEED: [u8; 28] = [
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
@@ -19,10 +21,12 @@ pub type PostPublicParams = election_post::PublicParams;
 pub fn public_params(
     sector_bytes: PaddedBytesAmount,
     partitions: usize,
+    window_size_nodes: usize,
 ) -> stacked::PublicParams<DefaultTreeHasher> {
     StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::setup(&setup_params(
         sector_bytes,
         partitions,
+        window_size_nodes,
     ))
     .unwrap()
 }
@@ -39,23 +43,43 @@ pub fn post_setup_params(post_config: PoStConfig) -> PostSetupParams {
     }
 }
 
-pub fn setup_params(sector_bytes: PaddedBytesAmount, partitions: usize) -> stacked::SetupParams {
+pub fn setup_params(
+    sector_bytes: PaddedBytesAmount,
+    partitions: usize,
+    window_size_nodes: usize,
+) -> stacked::SetupParams {
     let sector_bytes = usize::from(sector_bytes);
 
-    let challenges = select_challenges(partitions, POREP_MINIMUM_CHALLENGES, LAYERS);
+    let window_challenges = select_challenges(partitions, POREP_WINDOW_MINIMUM_CHALLENGES, LAYERS);
+    let wrapper_challenges =
+        select_challenges(partitions, POREP_WRAPPER_MINIMUM_CHALLENGES, LAYERS);
+
+    let config = StackedConfig {
+        window_challenges,
+        wrapper_challenges,
+    };
 
     assert!(
         sector_bytes % 32 == 0,
         "sector_bytes ({}) must be a multiple of 32",
         sector_bytes,
     );
+
+    assert!(
+        sector_bytes % window_size_nodes * 32 == 0,
+        "sector_bytes ({}) must be a multiple of the window size ({})",
+        sector_bytes,
+        window_size_nodes * 32
+    );
+
     let nodes = sector_bytes / 32;
     stacked::SetupParams {
         nodes,
         degree: BASE_DEGREE,
         expansion_degree: EXP_DEGREE,
         seed: DRG_SEED,
-        layer_challenges: challenges,
+        config,
+        window_size_nodes,
     }
 }
 
@@ -77,14 +101,11 @@ fn select_challenges(
 mod tests {
     use super::*;
 
-    use crate::constants::POREP_MINIMUM_CHALLENGES;
     use crate::types::PoRepProofPartitions;
 
     #[test]
     fn partition_layer_challenges_test() {
-        let f = |partitions| {
-            select_challenges(partitions, POREP_MINIMUM_CHALLENGES, LAYERS).challenges_count_all()
-        };
+        let f = |partitions| select_challenges(partitions, 12, LAYERS).challenges_count_all();
         // Update to ensure all supported PoRepProofPartitions options are represented here.
         assert_eq!(6, f(usize::from(PoRepProofPartitions(2))));
 

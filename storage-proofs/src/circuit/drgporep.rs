@@ -465,7 +465,13 @@ impl<'a, H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
                     .collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?;
 
                 // generate the encryption key
-                let key = kdf(cs.namespace(|| "kdf"), &replica_id_bits, parents_bits, None)?;
+                let key = kdf(
+                    cs.namespace(|| "kdf"),
+                    &replica_id_bits,
+                    parents_bits,
+                    None,
+                    None,
+                )?;
 
                 let replica_node_num =
                     num::AllocatedNum::alloc(cs.namespace(|| "replica_node"), || {

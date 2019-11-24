@@ -18,11 +18,11 @@ use storage_proofs::stacked::StackedDrg;
 
 const POREP_PROOF_PARTITION_CHOICES: [PoRepProofPartitions; 1] = [PoRepProofPartitions(2)];
 
-const PUBLISHED_SECTOR_SIZES: [u64; 4] = [
-    SECTOR_SIZE_ONE_KIB,
-    SECTOR_SIZE_16_MIB,
-    SECTOR_SIZE_256_MIB,
-    SECTOR_SIZE_1_GIB,
+const PUBLISHED_SECTOR_SIZES: [(u64, usize); 4] = [
+    (SECTOR_SIZE_ONE_KIB, WINDOW_SIZE_NODES_ONE_KIB),
+    (SECTOR_SIZE_16_MIB, WINDOW_SIZE_NODES_16_MIB),
+    (SECTOR_SIZE_256_MIB, WINDOW_SIZE_NODES_256_MIB),
+    (SECTOR_SIZE_1_GIB, WINDOW_SIZE_NODES_1_GIB),
 ];
 
 fn cache_porep_params(porep_config: PoRepConfig) {
@@ -35,6 +35,7 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
+        porep_config.window_size_nodes,
     );
 
     {
@@ -133,20 +134,36 @@ pub fn main() {
         )
         .get_matches();
 
-    let sizes: HashSet<u64> = if matches.is_present("params-for-sector-sizes") {
-        values_t!(matches.values_of("params-for-sector-sizes"), u64)
+    let sizes: HashSet<(u64, usize)> = if matches.is_present("params-for-sector-sizes") {
+        values_t!(matches.values_of("params-for-sector-sizes"), String)
             .unwrap()
             .into_iter()
+            .map(|v| {
+                let parts = v.split(':').take(2).collect::<Vec<_>>();
+                assert_eq!(
+                    parts.len(),
+                    2,
+                    "invalid param, expecting sector_size:window_size_nodes"
+                );
+                (parts[0].parse().unwrap(), parts[1].parse().unwrap())
+            })
             .collect()
     } else {
         PUBLISHED_SECTOR_SIZES.iter().cloned().collect()
     };
 
-    for size in sizes {
-        cache_post_params(PoStConfig(SectorSize(size)));
+    for (sector_size, window_size_nodes) in sizes {
+        cache_post_params(PoStConfig {
+            sector_size: SectorSize(sector_size),
+            window_size_nodes,
+        });
 
         for p in &POREP_PROOF_PARTITION_CHOICES {
-            cache_porep_params(PoRepConfig(SectorSize(size), *p));
+            cache_porep_params(PoRepConfig {
+                sector_size: SectorSize(sector_size),
+                partitions: *p,
+                window_size_nodes,
+            });
         }
     }
 }

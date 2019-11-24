@@ -488,6 +488,7 @@ where
         replica_id: &H::Domain,
         data: &[u8],
         node: usize,
+        _config: Option<StoreConfig>,
     ) -> Result<Vec<u8>> {
         Ok(decode_block(&pp.graph, replica_id, data, None, node)?.into_bytes())
     }
@@ -716,16 +717,28 @@ mod tests {
             DEFAULT_CACHED_ABOVE_BASE_LAYER,
         );
 
-        DrgPoRep::replicate(&pp, &replica_id, &mut mmapped_data_copy, None, Some(config))
-            .expect("replication failed");
+        DrgPoRep::replicate(
+            &pp,
+            &replica_id,
+            &mut mmapped_data_copy,
+            None,
+            Some(config.clone()),
+        )
+        .expect("replication failed");
 
         let mut copied = vec![0; data.len()];
         copied.copy_from_slice(&mmapped_data_copy);
         assert_ne!(data, copied, "replication did not change data");
 
         for i in 0..nodes {
-            let decoded_data = DrgPoRep::extract(&pp, &replica_id, &mmapped_data_copy, i)
-                .expect("failed to extract node data from PoRep");
+            let decoded_data = DrgPoRep::extract(
+                &pp,
+                &replica_id,
+                &mmapped_data_copy,
+                i,
+                Some(config.clone()),
+            )
+            .expect("failed to extract node data from PoRep");
 
             let original_data = data_at_node(&data, i).unwrap();
 

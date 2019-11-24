@@ -90,6 +90,7 @@ pub fn get_stacked_params(
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
+        porep_config.window_size_nodes,
     );
 
     let parameters_generator = || {
@@ -137,6 +138,7 @@ pub fn get_stacked_verifying_key(
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
+        porep_config.window_size_nodes,
     );
 
     let vk_generator = || {

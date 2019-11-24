@@ -181,7 +181,7 @@ jobs:
       - run:
           name: Ensure existence of Groth parameters and keys on remote host
           command: |
-            ./fil-proofs-tooling/scripts/paramcache-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" "-z=$((1024*1024*1024))"
+            ./fil-proofs-tooling/scripts/paramcache-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" "-z=$((1024*1024*1024)):$(((128*1024*1024)/32))"
           no_output_timeout: 60m
       - run:
           name: Run hash-constraints benchmarks on remote host
@@ -365,7 +365,8 @@ workflows:
             - cargo_fetch
           filters:
             branches:
-              only: master
+              only:
+                - master
       - build_linux_release:
           requires:
             - cargo_fetch

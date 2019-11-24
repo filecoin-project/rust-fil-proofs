@@ -21,7 +21,9 @@ use storage_proofs::stacked::{
 
 use crate::api::util::{as_safe_commitment, commitment_from_fr};
 use crate::caches::{get_stacked_params, get_stacked_verifying_key};
-use crate::constants::{DefaultPieceHasher, POREP_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN};
+use crate::constants::{
+    DefaultPieceHasher, POREP_WINDOW_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN,
+};
 use crate::error;
 use crate::parameters::setup_params;
 pub use crate::pieces;
@@ -75,6 +77,7 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
         vanilla_params: setup_params(
             PaddedBytesAmount::from(porep_config),
             usize::from(PoRepProofPartitions::from(porep_config)),
+            porep_config.window_size_nodes,
         ),
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };
@@ -96,7 +99,7 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
     info!("building merkle tree for the original data");
     let data_tree = create_merkle_tree::<DefaultPieceHasher>(
         Some(config.clone()),
-        compound_public_params.vanilla_params.graph.size(),
+        compound_public_params.vanilla_params.wrapper_graph.size(),
         &data,
     )?;
 
@@ -217,6 +220,7 @@ pub fn seal_commit<T: AsRef<Path>>(
         vanilla_params: setup_params(
             PaddedBytesAmount::from(porep_config),
             usize::from(PoRepProofPartitions::from(porep_config)),
+            porep_config.window_size_nodes,
         ),
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };
@@ -265,7 +269,7 @@ pub fn compute_comm_d(
     porep_config: PoRepConfig,
     piece_infos: &[PieceInfo],
 ) -> error::Result<Commitment> {
-    pieces::compute_comm_d(porep_config.0, piece_infos)
+    pieces::compute_comm_d(porep_config.sector_size, piece_infos)
 }
 
 /// Verifies the output of some previously-run seal operation.
@@ -291,6 +295,7 @@ pub fn verify_seal(
         vanilla_params: setup_params(
             PaddedBytesAmount::from(porep_config),
             usize::from(PoRepProofPartitions::from(porep_config)),
+            porep_config.window_size_nodes,
         ),
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };
@@ -328,7 +333,7 @@ pub fn verify_seal(
         &public_inputs,
         &proof,
         &ChallengeRequirements {
-            minimum_challenges: POREP_MINIMUM_CHALLENGES,
+            minimum_challenges: POREP_WINDOW_MINIMUM_CHALLENGES, // TODO: what do we want here?
         },
     )
     .map_err(Into::into)

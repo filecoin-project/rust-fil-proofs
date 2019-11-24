@@ -35,6 +35,41 @@ where
     hash1(cs.namespace(|| "hash2"), params, &values)
 }
 
+/// Hash three elements together.
+pub fn hash3<E, CS>(
+    mut cs: CS,
+    params: &E::Params,
+    first: &[Boolean],
+    second: &[Boolean],
+    third: &[Boolean],
+) -> Result<num::AllocatedNum<E>, SynthesisError>
+where
+    E: JubjubEngine,
+    CS: ConstraintSystem<E>,
+{
+    let mut values = Vec::new();
+    values.extend_from_slice(first);
+
+    // pad to full bytes
+    while values.len() % 8 > 0 {
+        values.push(Boolean::Constant(false));
+    }
+
+    values.extend_from_slice(second);
+    // pad to full bytes
+    while values.len() % 8 > 0 {
+        values.push(Boolean::Constant(false));
+    }
+
+    values.extend_from_slice(third);
+    // pad to full bytes
+    while values.len() % 8 > 0 {
+        values.push(Boolean::Constant(false));
+    }
+
+    hash1(cs.namespace(|| "hash3"), params, &values)
+}
+
 /// Hash a list of bits.
 pub fn hash1<E, CS>(
     mut cs: CS,

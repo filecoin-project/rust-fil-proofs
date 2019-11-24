@@ -21,8 +21,7 @@ use storage_proofs::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher, Sha2
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::stacked::{
-    self, CacheKey, ChallengeRequirements, LayerChallenges, StackedDrg, TemporaryAuxCache,
-    EXP_DEGREE,
+    self, CacheKey, ChallengeRequirements, StackedConfig, StackedDrg, TemporaryAuxCache, EXP_DEGREE,
 };
 use tempfile::TempDir;
 
@@ -46,7 +45,7 @@ fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> Result<MmapMut, fail
 }
 
 fn dump_proof_bytes<H: Hasher>(
-    all_partition_proofs: &[Vec<stacked::Proof<H, Sha256Hasher>>],
+    all_partition_proofs: &[stacked::Proof<H, Sha256Hasher>],
 ) -> Result<(), failure::Error> {
     let file = OpenOptions::new()
         .write(true)
@@ -62,8 +61,9 @@ fn dump_proof_bytes<H: Hasher>(
 #[derive(Clone, Debug)]
 struct Params {
     samples: usize,
+    window_size_nodes: usize,
     data_size: usize,
-    layer_challenges: LayerChallenges,
+    config: StackedConfig,
     partitions: usize,
     circuit: bool,
     groth: bool,
@@ -82,10 +82,10 @@ impl From<Params> for Inputs {
             partitions: p.partitions,
             hasher: p.hasher.clone(),
             samples: p.samples,
-            layers: p.layer_challenges.layers(),
-            partition_challenges: p.layer_challenges.challenges_count_all(),
-            total_challenges: p.layer_challenges.challenges_count_all() * p.partitions,
-            layer_challenges: p.layer_challenges,
+            layers: p.config.layers(),
+            partition_challenges: p.config.window_challenges.challenges_count_all(),
+            total_challenges: p.config.window_challenges.challenges_count_all() * p.partitions,
+            config: p.config,
         }
     }
 }
@@ -110,7 +110,7 @@ where
         let Params {
             samples,
             data_size,
-            layer_challenges,
+            config,
             partitions,
             circuit,
             groth,
@@ -119,12 +119,13 @@ where
             use_tmp,
             dump_proofs,
             bench_only,
+            window_size_nodes,
             ..
         } = &params;
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        let config = StoreConfig::new(
+        let store_config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
             DEFAULT_CACHED_ABOVE_BASE_LAYER,
@@ -142,7 +143,8 @@ where
             degree: BASE_DEGREE,
             expansion_degree: EXP_DEGREE,
             seed: new_seed(),
-            layer_challenges: layer_challenges.clone(),
+            config: config.clone(),
+            window_size_nodes: *window_size_nodes,
         };
 
         let pp = StackedDrg::<H, Sha256Hasher>::setup(&sp)?;
@@ -163,7 +165,7 @@ where
                     &replica_id,
                     &mut data,
                     None,
-                    Some(config.clone()),
+                    Some(store_config.clone()),
                 )?;
 
                 let pb = stacked::PublicInputs::<H::Domain, <Sha256Hasher as Hasher>::Domain> {
@@ -292,7 +294,7 @@ where
                         &pp,
                         &replica_id,
                         &data,
-                        Some(config.clone()),
+                        Some(store_config.clone()),
                     )
                     .map_err(|err| err.into())
                 })?;
@@ -348,6 +350,7 @@ fn do_circuit_work<H: 'static + Hasher>(
     };
 
     if *bench || *circuit {
+        info!("Generating blank circuit");
         let mut cs = MetricCS::<Bls12>::new();
         <StackedCompound as CompoundProof<_, StackedDrg<H, Sha256Hasher>, _>>::blank_circuit(&pp)
             .synthesize(&mut cs)?;
@@ -357,6 +360,7 @@ fn do_circuit_work<H: 'static + Hasher>(
     }
 
     if *groth {
+        info!("Generating Groth Proof");
         let pub_inputs = pub_in.expect("missing public inputs");
         let priv_inputs = priv_in.expect("missing private inputs");
 
@@ -438,7 +442,7 @@ struct Inputs {
     layers: usize,
     partition_challenges: usize,
     total_challenges: usize,
-    layer_challenges: LayerChallenges,
+    config: StackedConfig,
 }
 
 #[derive(Serialize, Default)]
@@ -484,7 +488,9 @@ impl Report {
 pub struct RunOpts {
     pub bench: bool,
     pub bench_only: bool,
-    pub challenges: usize,
+    pub window_size_nodes: usize,
+    pub window_challenges: usize,
+    pub wrapper_challenges: usize,
     pub circuit: bool,
     pub dump: bool,
     pub extract: bool,
@@ -498,10 +504,10 @@ pub struct RunOpts {
 }
 
 pub fn run(opts: RunOpts) -> Result<(), failure::Error> {
-    let layer_challenges = LayerChallenges::new(opts.layers, opts.challenges);
+    let config = StackedConfig::new(opts.layers, opts.window_challenges, opts.wrapper_challenges);
 
     let params = Params {
-        layer_challenges,
+        config,
         data_size: opts.size * 1024,
         partitions: opts.partitions,
         use_tmp: !opts.no_tmp,
@@ -512,6 +518,7 @@ pub fn run(opts: RunOpts) -> Result<(), failure::Error> {
         circuit: opts.circuit,
         extract: opts.extract,
         hasher: opts.hasher,
+        window_size_nodes: opts.window_size_nodes,
         samples: 5,
     };
 
