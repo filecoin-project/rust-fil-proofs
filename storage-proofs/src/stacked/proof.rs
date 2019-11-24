@@ -490,14 +490,14 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         // offset into the first window
         let first_window_offset = offset % pp.window_size_bytes();
 
-        // determine the number of windows need to be decoded
-        let num_windows =
+        // determine the last window needed to be decoded
+        let last_window_index =
             ((offset + num_bytes) as f64 / pp.window_size_bytes() as f64).ceil() as usize;
 
         let mut decoded: Vec<u8> = data
             .par_chunks(pp.window_size_bytes())
             .enumerate()
-            .take(num_windows)
+            .take(last_window_index)
             .skip(first_window_index)
             .flat_map(|(window_index, chunk)| {
                 let mut decoded_chunk = chunk.to_vec();
