@@ -20,8 +20,8 @@ use crate::sector::*;
 use crate::stacked::hash::hash3;
 use crate::util::NODE_SIZE;
 
-pub const POST_CHALLENGE_COUNT: usize = 8;
-pub const POST_CHALLENGED_NODES: usize = 16;
+pub const POST_CHALLENGE_COUNT: usize = 66;
+pub const POST_CHALLENGED_NODES: usize = 1;
 
 #[derive(Debug, Clone)]
 pub struct SetupParams {
@@ -38,8 +38,10 @@ pub struct PublicParams {
 impl ParameterSetMetadata for PublicParams {
     fn identifier(&self) -> String {
         format!(
-            "ElectionPoSt::PublicParams{{sector_size: {}}}",
+            "ElectionPoSt::PublicParams{{sector_size: {}, count: {}, nodes: {}}}",
             self.sector_size(),
+            POST_CHALLENGE_COUNT,
+            POST_CHALLENGED_NODES,
         )
     }
 
