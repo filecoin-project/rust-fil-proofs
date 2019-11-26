@@ -117,7 +117,7 @@ fn cache_post_params(post_config: PoStConfig) {
 
 // Run this from the command-line to pre-generate the groth parameters used by the API.
 pub fn main() {
-    pretty_env_logger::init_timed();
+    fil_logger::init();
 
     let matches = App::new("paramcache")
         .version("0.1")

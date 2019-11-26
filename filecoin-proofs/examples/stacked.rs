@@ -415,7 +415,7 @@ fn do_the_work<H: 'static>(
 }
 
 fn main() {
-    pretty_env_logger::init_timed();
+    fil_logger::init();
 
     let matches = App::new(stringify!("DrgPoRep Vanilla Bench"))
         .version("1.0")

@@ -100,13 +100,13 @@ For development purposes we have an (experimental) support for CPU and memory pr
 
 For better logging with backtraces on errors, developers should use `expects` rather than `expect` on `Result<T, E>` and `Option<T>`.
 
-The crate use [`log`](https://crates.io/crates/log) for logging, which by default does not log at all. In order to log output crates like [`pretty_env_logger`](https://crates.io/crates/pretty_env_logger) can be used.
+The crate use [`log`](https://crates.io/crates/log) for logging, which by default does not log at all. In order to log output crates like [`fil_logger`](https://crates.io/crates/fil_logger) can be used.
 
 For example
 
 ```rust
 fn main() {
-    pretty_env_logger::init();
+    fil_logger::init();
 }
 ```
 
