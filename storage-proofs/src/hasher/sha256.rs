@@ -126,18 +126,22 @@ impl Domain for Sha256Domain {
     }
 
     fn try_from_bytes(raw: &[u8]) -> Result<Self> {
-        if raw.len() != Sha256Domain::byte_len() {
-            return Err(Error::InvalidInputSize);
-        }
+        ensure!(
+            raw.len() == Sha256Domain::byte_len(),
+            Error::InvalidInputSize
+        );
+
         let mut res = Sha256Domain::default();
         res.0.copy_from_slice(&raw[0..Sha256Domain::byte_len()]);
         Ok(res)
     }
 
     fn write_bytes(&self, dest: &mut [u8]) -> Result<()> {
-        if dest.len() < Sha256Domain::byte_len() {
-            return Err(Error::InvalidInputSize);
-        }
+        ensure!(
+            dest.len() >= Sha256Domain::byte_len(),
+            Error::InvalidInputSize
+        );
+
         dest[0..Sha256Domain::byte_len()].copy_from_slice(&self.0[..]);
         Ok(())
     }

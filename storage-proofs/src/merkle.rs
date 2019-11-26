@@ -223,9 +223,10 @@ pub fn create_merkle_tree<H: Hasher>(
     size: usize,
     data: &[u8],
 ) -> Result<MerkleTree<H::Domain, H::Function>> {
-    if data.len() != (NODE_SIZE * size) as usize {
-        return Err(Error::InvalidMerkleTreeArgs(data.len(), NODE_SIZE, size));
-    }
+    ensure!(
+        data.len() == (NODE_SIZE * size) as usize,
+        Error::InvalidMerkleTreeArgs(data.len(), NODE_SIZE, size)
+    );
 
     let f = |i| {
         let d = data_at_node(&data, i).expect("data_at_node math failed");
@@ -238,11 +239,8 @@ pub fn create_merkle_tree<H: Hasher>(
     };
 
     match config {
-        Some(x) => Ok(MerkleTree::from_par_iter_with_config(
-            (0..size).into_par_iter().map(f),
-            x,
-        )),
-        None => Ok(MerkleTree::from_par_iter((0..size).into_par_iter().map(f))),
+        Some(x) => MerkleTree::from_par_iter_with_config((0..size).into_par_iter().map(f), x),
+        None => MerkleTree::from_par_iter((0..size).into_par_iter().map(f)),
     }
 }
 
@@ -269,7 +267,7 @@ mod tests {
 
         let tree = g.merkle_tree(data.as_slice()).unwrap();
         for i in 0..10 {
-            let proof = tree.gen_proof(i);
+            let proof = tree.gen_proof(i).unwrap();
 
             assert!(proof.validate::<H::Function>());
             let len = proof.lemma().len();

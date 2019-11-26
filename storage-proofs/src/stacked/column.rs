@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use crate::error::Result;
 use crate::hasher::pedersen::PedersenDomain;
 use crate::hasher::Hasher;
 use crate::merkle::MerkleProof;
@@ -51,8 +52,9 @@ impl<H: Hasher> Column<H> {
     }
 
     /// Create a column proof for this column.
-    pub fn into_proof(self, tree_c: &Tree<H>) -> ColumnProof<H> {
-        let inclusion_proof = MerkleProof::new_from_proof(&tree_c.gen_proof(self.index() as usize));
-        ColumnProof::<H>::from_column(self, inclusion_proof)
+    pub fn into_proof(self, tree_c: &Tree<H>) -> Result<ColumnProof<H>> {
+        let inclusion_proof =
+            MerkleProof::new_from_proof(&tree_c.gen_proof(self.index() as usize)?);
+        Ok(ColumnProof::<H>::from_column(self, inclusion_proof))
     }
 }

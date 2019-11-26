@@ -282,10 +282,10 @@ where
             let tree_d = &priv_inputs.tree_d;
             let tree_r = &priv_inputs.tree_r;
 
-            let data = tree_r.read_at(challenge);
+            let data = tree_r.read_at(challenge)?;
 
             replica_nodes.push(DataProof {
-                proof: MerkleProof::new_from_proof(&tree_r.gen_proof(challenge)),
+                proof: MerkleProof::new_from_proof(&tree_r.gen_proof(challenge)?),
                 data,
             });
 
@@ -295,17 +295,17 @@ where
 
             for p in &parents {
                 replica_parentsi.push((*p, {
-                    let proof = tree_r.gen_proof(*p as usize);
+                    let proof = tree_r.gen_proof(*p as usize)?;
                     DataProof {
                         proof: MerkleProof::new_from_proof(&proof),
-                        data: tree_r.read_at(*p as usize),
+                        data: tree_r.read_at(*p as usize)?,
                     }
                 }));
             }
 
             replica_parents.push(replica_parentsi);
 
-            let node_proof = tree_d.gen_proof(challenge);
+            let node_proof = tree_d.gen_proof(challenge)?;
 
             {
                 // TODO: use this again, I can't make lifetimes work though atm and I do not know why
@@ -320,7 +320,7 @@ where
                     &pub_inputs.replica_id.expect("missing replica_id"),
                     tree_r,
                     challenge,
-                    tree_r.read_at(challenge),
+                    tree_r.read_at(challenge)?,
                     &parents,
                 )?;
                 data_nodes.push(DataProof {
@@ -569,7 +569,7 @@ pub fn create_key_from_tree<H: Hasher>(
     if node != parents[0] as usize {
         let mut scratch: [u8; NODE_SIZE] = [0; NODE_SIZE];
         for parent in parents.iter() {
-            tree.read_into(*parent as usize, &mut scratch);
+            tree.read_into(*parent as usize, &mut scratch)?;
             hasher.input(&scratch);
         }
     }

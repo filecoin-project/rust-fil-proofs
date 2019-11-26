@@ -105,13 +105,11 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for MerklePoR<H> {
         let tree = priv_inputs.tree;
 
         if let Some(ref commitment) = pub_inputs.commitment {
-            if commitment != &tree.root() {
-                return Err(Error::InvalidCommitment);
-            }
+            ensure!(commitment == &tree.root(), Error::InvalidCommitment);
         }
 
         Ok(DataProof {
-            proof: MerkleProof::new_from_proof(&tree.gen_proof(challenge)),
+            proof: MerkleProof::new_from_proof(&tree.gen_proof(challenge)?),
             data: priv_inputs.leaf,
         })
     }

@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use anyhow::Result;
 use bellperson::groth16;
 use paired::bls12_381::Bls12;
-
 use storage_proofs::circuit::election_post::ElectionPoStCircuit;
 use storage_proofs::circuit::election_post::ElectionPoStCompound;
 use storage_proofs::circuit::stacked::StackedCompound;
@@ -14,7 +14,6 @@ use storage_proofs::election_post::ElectionPoSt;
 use storage_proofs::stacked::StackedDrg;
 
 use crate::constants::DefaultPieceHasher;
-use crate::error;
 use crate::parameters::{post_public_params, public_params};
 use crate::types::*;
 
@@ -34,9 +33,9 @@ pub fn cache_lookup<F, G>(
     cache_ref: &Mutex<Cache<G>>,
     identifier: String,
     generator: F,
-) -> error::Result<Arc<G>>
+) -> Result<Arc<G>>
 where
-    F: FnOnce() -> error::Result<G>,
+    F: FnOnce() -> Result<G>,
     G: Send + Sync,
 {
     info!("trying parameters memory cache for: {}", &identifier);
@@ -62,31 +61,23 @@ where
 }
 
 #[inline]
-pub fn lookup_groth_params<F>(
-    identifier: String,
-    generator: F,
-) -> error::Result<Arc<Bls12GrothParams>>
+pub fn lookup_groth_params<F>(identifier: String, generator: F) -> Result<Arc<Bls12GrothParams>>
 where
-    F: FnOnce() -> error::Result<Bls12GrothParams>,
+    F: FnOnce() -> Result<Bls12GrothParams>,
 {
     cache_lookup(&*GROTH_PARAM_MEMORY_CACHE, identifier, generator)
 }
 
 #[inline]
-pub fn lookup_verifying_key<F>(
-    identifier: String,
-    generator: F,
-) -> error::Result<Arc<Bls12VerifyingKey>>
+pub fn lookup_verifying_key<F>(identifier: String, generator: F) -> Result<Arc<Bls12VerifyingKey>>
 where
-    F: FnOnce() -> error::Result<Bls12VerifyingKey>,
+    F: FnOnce() -> Result<Bls12VerifyingKey>,
 {
     let vk_identifier = format!("{}-verifying-key", &identifier);
     cache_lookup(&*VERIFYING_KEY_MEMORY_CACHE, vk_identifier, generator)
 }
 
-pub fn get_stacked_params(
-    porep_config: PoRepConfig,
-) -> error::Result<Arc<groth16::Parameters<Bls12>>> {
+pub fn get_stacked_params(porep_config: PoRepConfig) -> Result<Arc<groth16::Parameters<Bls12>>> {
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
@@ -111,7 +102,7 @@ pub fn get_stacked_params(
     )?)
 }
 
-pub fn get_post_params(post_config: PoStConfig) -> error::Result<Arc<groth16::Parameters<Bls12>>> {
+pub fn get_post_params(post_config: PoStConfig) -> Result<Arc<groth16::Parameters<Bls12>>> {
     let post_public_params = post_public_params(post_config);
 
     let parameters_generator = || {
@@ -132,9 +123,7 @@ pub fn get_post_params(post_config: PoStConfig) -> error::Result<Arc<groth16::Pa
     )?)
 }
 
-pub fn get_stacked_verifying_key(
-    porep_config: PoRepConfig,
-) -> error::Result<Arc<Bls12VerifyingKey>> {
+pub fn get_stacked_verifying_key(porep_config: PoRepConfig) -> Result<Arc<Bls12VerifyingKey>> {
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
@@ -159,7 +148,7 @@ pub fn get_stacked_verifying_key(
     )?)
 }
 
-pub fn get_post_verifying_key(post_config: PoStConfig) -> error::Result<Arc<Bls12VerifyingKey>> {
+pub fn get_post_verifying_key(post_config: PoStConfig) -> Result<Arc<Bls12VerifyingKey>> {
     let post_public_params = post_public_params(post_config);
 
     let vk_generator = || {

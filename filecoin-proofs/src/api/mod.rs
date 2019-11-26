@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
+use anyhow::Result;
 use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
 use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::hasher::Hasher;
@@ -14,7 +15,6 @@ use crate::constants::{
     DefaultPieceHasher,
     MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
 };
-use crate::error;
 use crate::fr32::{write_padded, write_unpadded};
 use crate::parameters::public_params;
 use crate::pieces::get_aligned_source;
@@ -48,7 +48,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     ticket: Ticket,
     offset: UnpaddedByteIndex,
     num_bytes: UnpaddedBytesAmount,
-) -> error::Result<UnpaddedBytesAmount> {
+) -> Result<UnpaddedBytesAmount> {
     let comm_d =
         as_safe_commitment::<<DefaultPieceHasher as Hasher>::Domain, _>(&comm_d, "comm_d")?;
 
@@ -95,7 +95,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
 pub fn generate_piece_commitment<T: std::io::Read>(
     source: T,
     piece_size: UnpaddedBytesAmount,
-) -> error::Result<PieceInfo> {
+) -> Result<PieceInfo> {
     ensure_piece_size(piece_size)?;
 
     let mut temp_piece_file = tempfile()?;
@@ -148,7 +148,7 @@ pub fn add_piece<R, W>(
     target: W,
     piece_size: UnpaddedBytesAmount,
     piece_lengths: &[UnpaddedBytesAmount],
-) -> error::Result<(UnpaddedBytesAmount, Commitment)>
+) -> Result<(UnpaddedBytesAmount, Commitment)>
 where
     R: Read,
     W: Read + Write + Seek,
@@ -233,7 +233,7 @@ where
     }
 }
 
-fn ensure_piece_size(piece_size: UnpaddedBytesAmount) -> error::Result<()> {
+fn ensure_piece_size(piece_size: UnpaddedBytesAmount) -> Result<()> {
     ensure!(
         piece_size >= UnpaddedBytesAmount(MINIMUM_PIECE_SIZE),
         "Piece must be at least {} bytes",
@@ -262,7 +262,7 @@ pub fn write_and_preprocess<R, W>(
     source: R,
     target: W,
     piece_size: UnpaddedBytesAmount,
-) -> error::Result<(UnpaddedBytesAmount, Commitment)>
+) -> Result<(UnpaddedBytesAmount, Commitment)>
 where
     R: Read,
     W: Read + Write + Seek,
@@ -407,7 +407,7 @@ mod tests {
 
     #[test]
     #[ignore]
-    fn test_seal_lifecycle() -> Result<(), failure::Error> {
+    fn test_seal_lifecycle() -> Result<()> {
         pretty_env_logger::try_init().ok();
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);

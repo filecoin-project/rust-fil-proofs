@@ -158,11 +158,9 @@ impl Domain for PedersenDomain {
     }
 
     fn try_from_bytes(raw: &[u8]) -> Result<Self> {
-        if raw.len() != PedersenDomain::byte_len() {
-            return Err(Error::BadFrBytes);
-        }
+        ensure!(raw.len() == PedersenDomain::byte_len(), Error::BadFrBytes);
         let mut res: FrRepr = Default::default();
-        res.read_le(raw).map_err(|_| Error::BadFrBytes)?;
+        res.read_le(raw)?;
 
         Ok(PedersenDomain(res))
     }
@@ -346,7 +344,7 @@ mod tests {
         let values = ["hello", "world", "you", "two"];
         let t = MerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter());
 
-        let p = t.gen_proof(0); // create a proof for the first value = "hello"
+        let p = t.gen_proof(0).unwrap(); // create a proof for the first value = "hello"
         assert_eq!(*p.path(), vec![true, true]);
         assert_eq!(p.validate::<PedersenFunction>(), true);
     }
@@ -370,24 +368,24 @@ mod tests {
             })
             .collect();
 
-        assert_eq!(t.read_at(0), leaves[0]);
-        assert_eq!(t.read_at(1), leaves[1]);
-        assert_eq!(t.read_at(2), leaves[2]);
-        assert_eq!(t.read_at(3), leaves[3]);
+        assert_eq!(t.read_at(0).unwrap(), leaves[0]);
+        assert_eq!(t.read_at(1).unwrap(), leaves[1]);
+        assert_eq!(t.read_at(2).unwrap(), leaves[2]);
+        assert_eq!(t.read_at(3).unwrap(), leaves[3]);
 
         let i1 = a.node(leaves[0], leaves[1], 0);
         a.reset();
         let i2 = a.node(leaves[2], leaves[3], 0);
         a.reset();
 
-        assert_eq!(t.read_at(4), i1);
-        assert_eq!(t.read_at(5), i2);
+        assert_eq!(t.read_at(4).unwrap(), i1);
+        assert_eq!(t.read_at(5).unwrap(), i2);
 
         let root = a.node(i1, i2, 1);
         a.reset();
 
         assert_eq!(
-            t.read_at(0).0,
+            t.read_at(0).unwrap().0,
             FrRepr([
                 8141980337328041169,
                 4041086031096096197,
@@ -402,10 +400,10 @@ mod tests {
             11576422143286805197,
             2687080719931344767,
         ]);
-        let actual = t.read_at(6).0;
+        let actual = t.read_at(6).unwrap().0;
 
         assert_eq!(actual, expected);
-        assert_eq!(t.read_at(6), root);
+        assert_eq!(t.read_at(6).unwrap(), root);
     }
 
     #[test]

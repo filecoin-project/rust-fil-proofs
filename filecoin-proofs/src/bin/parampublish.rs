@@ -1,5 +1,5 @@
 #[macro_use]
-extern crate failure;
+extern crate anyhow;
 
 use std::collections::BTreeMap;
 use std::fs::{read_dir, File};
@@ -9,8 +9,8 @@ use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
 
+use anyhow::Result;
 use clap::{App, Arg, ArgMatches};
-use failure::err_msg;
 use itertools::Itertools;
 
 use filecoin_proofs::param::*;
@@ -184,11 +184,9 @@ fn publish_parameter_file(ipfs_bin_path: &str, filename: &str) -> Result<String>
         .output()
         .expect(ERROR_IPFS_COMMAND);
 
-    if !output.status.success() {
-        Err(err_msg(ERROR_IPFS_PUBLISH))
-    } else {
-        Ok(String::from_utf8(output.stdout)?.trim().to_string())
-    }
+    ensure!(output.status.success(), ERROR_IPFS_PUBLISH);
+
+    Ok(String::from_utf8(output.stdout)?.trim().to_string())
 }
 
 fn write_parameter_map_to_disk<P: AsRef<Path>>(

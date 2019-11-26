@@ -3,12 +3,9 @@
 #![allow(clippy::type_repetition_in_bounds)]
 
 #[macro_use]
-extern crate failure;
+extern crate anyhow;
 #[macro_use]
 extern crate lazy_static;
-#[cfg(test)]
-#[macro_use]
-extern crate proptest;
 #[macro_use]
 extern crate clap;
 #[macro_use]
@@ -19,6 +16,9 @@ extern crate serde;
 #[cfg(test)]
 #[macro_use]
 extern crate pretty_assertions;
+#[cfg(test)]
+#[macro_use]
+extern crate proptest;
 
 #[macro_use]
 pub mod test_helper;

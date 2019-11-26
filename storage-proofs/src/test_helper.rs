@@ -93,7 +93,7 @@ pub fn fake_drgpoprep_proof<R: Rng>(
     let replica_parents_paths: Vec<_> = (0..m)
         .map(|i| {
             let subtree_proof =
-                MerkleProof::<PedersenHasher>::new_from_proof(&subtree.gen_proof(i));
+                MerkleProof::<PedersenHasher>::new_from_proof(&subtree.gen_proof(i).unwrap());
             let mut subtree_path = subtree_proof.as_options();
             subtree_path.extend(remaining_path.clone());
             subtree_path
@@ -102,7 +102,7 @@ pub fn fake_drgpoprep_proof<R: Rng>(
 
     let replica_node_path = {
         let subtree_proof =
-            MerkleProof::<PedersenHasher>::new_from_proof(&subtree.gen_proof(challenge));
+            MerkleProof::<PedersenHasher>::new_from_proof(&subtree.gen_proof(challenge).unwrap());
         let mut subtree_path = subtree_proof.as_options();
         subtree_path.extend(&remaining_path);
         subtree_path

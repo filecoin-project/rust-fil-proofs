@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 
 use crate::crypto::pedersen::{pedersen_md_no_padding_bits, Bits};
 use crate::drgraph::graph_height;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::fr32::fr_into_bytes;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
@@ -145,11 +145,7 @@ pub fn generate_candidates<H: Hasher>(
     for (sector_challenge_index, sector_id) in challenged_sectors.iter().enumerate() {
         let tree = match trees.get(sector_id) {
             Some(tree) => tree,
-            None => {
-                return Err(
-                    format_err!("Missing tree (private input) for sector {}", sector_id,).into(),
-                )
-            }
+            None => bail!(Error::MissingPrivateInput("tree", (*sector_id).into())),
         };
 
         candidates.push(generate_candidate::<H>(
@@ -187,7 +183,7 @@ fn generate_candidate<H: Hasher>(
             end,
             &mut data[n * POST_CHALLENGED_NODES * NODE_SIZE
                 ..(n + 1) * POST_CHALLENGED_NODES * NODE_SIZE],
-        );
+        )?;
     }
 
     // 2. Ticket generation
@@ -338,10 +334,12 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
                     sector_size,
                 );
                 (0..POST_CHALLENGED_NODES).map(move |i| {
-                    MerkleProof::new_from_proof(&tree.gen_proof(challenged_leaf_start as usize + i))
+                    Ok(MerkleProof::new_from_proof(
+                        &tree.gen_proof(challenged_leaf_start as usize + i)?,
+                    ))
                 })
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>>>()?;
 
         // 2. correct generation of the ticket from the partial_ticket (add this to the candidate)
         let ticket = finalize_ticket(&pub_inputs.partial_ticket);

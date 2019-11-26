@@ -4,18 +4,15 @@ use std::fs::File;
 use std::io::{stdin, stdout, Write};
 use std::path::{Path, PathBuf};
 
+use anyhow::{Context, Result};
 use blake2b_simd::State as Blake2b;
-use failure::Error;
-use failure::Error as FailureError;
 use serde::{Deserialize, Serialize};
-
 use storage_proofs::parameter_cache::{
     parameter_cache_dir, CacheEntryMetadata, PARAMETER_METADATA_EXT,
 };
 
 const ERROR_STRING: &str = "invalid string";
 
-pub type Result<T> = ::std::result::Result<T, Error>;
 pub type ParameterMap = BTreeMap<String, ParameterData>;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -78,13 +75,12 @@ pub fn parameter_id_to_metadata_map<S: AsRef<str>>(
 
     for filename in filenames {
         if has_extension(PathBuf::from(filename.as_ref()), PARAMETER_METADATA_EXT) {
-            let file = File::open(get_full_path_for_file_within_cache(filename.as_ref()))
-                .map_err(FailureError::from)?;
+            let file = File::open(get_full_path_for_file_within_cache(filename.as_ref()))?;
 
-            let meta = serde_json::from_reader(file).map_err(FailureError::from)?;
+            let meta = serde_json::from_reader(file)?;
 
             let p_id = filename_to_parameter_id(PathBuf::from(filename.as_ref()))
-                .ok_or_else(|| format_err!("could not map filename to parameter id"))?;
+                .context("could not map filename to parameter id")?;
 
             map.insert(p_id, meta);
         }

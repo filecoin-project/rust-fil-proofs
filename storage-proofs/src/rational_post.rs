@@ -146,15 +146,13 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
                 let challenged_leaf = challenge.leaf;
 
                 if let Some(tree) = priv_inputs.trees.get(&challenge.sector) {
-                    if comm_r_last != &tree.root() {
-                        return Err(Error::InvalidCommitment);
-                    }
+                    ensure!(comm_r_last == &tree.root(), Error::InvalidCommitment);
 
                     Ok(MerkleProof::new_from_proof(
-                        &tree.gen_proof(challenged_leaf as usize),
+                        &tree.gen_proof(challenged_leaf as usize)?,
                     ))
                 } else {
-                    Err(Error::MalformedInput)
+                    bail!(Error::MalformedInput);
                 }
             })
             .collect::<Result<Vec<_>>>()?;
@@ -172,13 +170,15 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
     ) -> Result<bool> {
         let challenges = pub_inputs.challenges;
 
-        if challenges.len() != pub_inputs.comm_rs.len() as usize {
-            return Err(Error::MalformedInput);
-        }
+        ensure!(
+            challenges.len() == pub_inputs.comm_rs.len() as usize,
+            Error::MalformedInput
+        );
 
-        if challenges.len() != proof.inclusion_proofs.len() {
-            return Err(Error::MalformedInput);
-        }
+        ensure!(
+            challenges.len() == proof.inclusion_proofs.len(),
+            Error::MalformedInput
+        );
 
         // validate each proof
         for (((merkle_proof, challenge), comm_r), comm_c) in proof
@@ -231,7 +231,7 @@ pub fn derive_challenges(
     sectors: &OrderedSectorSet,
     seed: &[u8],
     faults: &OrderedSectorSet,
-) -> std::result::Result<Vec<Challenge>, failure::Error> {
+) -> Result<Vec<Challenge>> {
     (0..challenge_count)
         .map(|n| {
             let mut attempt = 0;
