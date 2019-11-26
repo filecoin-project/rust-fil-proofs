@@ -183,7 +183,7 @@ fn generate_candidate<H: Hasher>(
             end,
             &mut data[n * POST_CHALLENGED_NODES * NODE_SIZE
                 ..(n + 1) * POST_CHALLENGED_NODES * NODE_SIZE],
-        );
+        )?;
     }
 
     // 2. Ticket generation
@@ -334,10 +334,12 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
                     sector_size,
                 );
                 (0..POST_CHALLENGED_NODES).map(move |i| {
-                    MerkleProof::new_from_proof(&tree.gen_proof(challenged_leaf_start as usize + i))
+                    Ok(MerkleProof::new_from_proof(
+                        &tree.gen_proof(challenged_leaf_start as usize + i)?,
+                    ))
                 })
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>>>()?;
 
         // 2. correct generation of the ticket from the partial_ticket (add this to the candidate)
         let ticket = finalize_ticket(&pub_inputs.partial_ticket);

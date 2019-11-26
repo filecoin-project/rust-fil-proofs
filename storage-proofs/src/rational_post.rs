@@ -149,7 +149,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
                     ensure!(comm_r_last == &tree.root(), Error::InvalidCommitment);
 
                     Ok(MerkleProof::new_from_proof(
-                        &tree.gen_proof(challenged_leaf as usize),
+                        &tree.gen_proof(challenged_leaf as usize)?,
                     ))
                 } else {
                     bail!(Error::MalformedInput);

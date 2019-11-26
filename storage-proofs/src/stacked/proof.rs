@@ -168,9 +168,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let comm_d_proofs = (0..num_windows)
             .map(|window_index| {
                 let c = window_index * pub_params.window_size_nodes() + challenge;
-                MerkleProof::new_from_proof(&t_aux.tree_d.gen_proof(c))
+                Ok(MerkleProof::new_from_proof(&t_aux.tree_d.gen_proof(c)?))
             })
-            .collect();
+            .collect::<Result<_>>()?;
 
         // Stacked replica column openings
         let replica_column_proof = Self::prove_replica_column(pub_params, challenge, t_aux)?;
@@ -179,9 +179,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let comm_q_proofs = (0..num_windows)
             .map(|window_index| {
                 let c = window_index * pub_params.window_size_nodes() + challenge;
-                MerkleProof::new_from_proof(&t_aux.tree_q.gen_proof(c))
+                Ok(MerkleProof::new_from_proof(&t_aux.tree_q.gen_proof(c)?))
             })
-            .collect();
+            .collect::<Result<_>>()?;
 
         let mut encoding_proofs = Vec::with_capacity(num_windows);
         let labeling_proofs = (0..num_windows)
@@ -254,7 +254,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         // Final replica layer openings
         trace!("final replica layer openings");
         let comm_r_last_proof =
-            MerkleProof::new_from_proof(&t_aux.tree_r_last.gen_proof(challenge));
+            MerkleProof::new_from_proof(&t_aux.tree_r_last.gen_proof(challenge)?);
 
         trace!("comm_q_parents proof");
         let mut parents = vec![0; wrapper_graph.expansion_degree()];
@@ -263,7 +263,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let mut comm_q_parents_proofs = Vec::with_capacity(parents.len());
         for parent in &parents {
             comm_q_parents_proofs.push(MerkleProof::new_from_proof(
-                &t_aux.tree_q.gen_proof(*parent as usize),
+                &t_aux.tree_q.gen_proof(*parent as usize)?,
             ));
         }
 
@@ -271,7 +271,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let parents_data: Vec<_> = parents
             .iter()
             .map(|p| t_aux.tree_q.read_at(*p as usize))
-            .collect();
+            .collect::<Result<_>>()?;
         let labeling_proof = LabelingProof::<H>::new(None, challenge as u64, parents_data);
 
         Ok(WrapperProof {
@@ -293,21 +293,21 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         trace!("  c_x");
         let c_x = t_aux
             .column(challenge as u32, pub_params)?
-            .into_proof(&t_aux.tree_c);
+            .into_proof(&t_aux.tree_c)?;
 
         // All labels in the DRG parents.
         trace!("  drg_parents");
         let drg_parents = get_drg_parents_columns(graph, t_aux, challenge, pub_params)?
             .into_iter()
             .map(|column| column.into_proof(&t_aux.tree_c))
-            .collect::<Vec<_>>();
+            .collect::<Result<_>>()?;
 
         // Labels for the expander parents
         trace!("  exp_parents");
         let exp_parents = get_exp_parents_columns(graph, t_aux, challenge, pub_params)?
             .into_iter()
             .map(|column| column.into_proof(&t_aux.tree_c))
-            .collect::<Vec<_>>();
+            .collect::<Result<_>>()?;
 
         Ok(ReplicaColumnProof {
             c_x,
@@ -336,7 +336,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         window_index as u32 * pub_params.window_size_nodes() as u32 + parent;
                     t_aux.domain_node_at_layer(layer, index)
                 })
-                .collect()
+                .collect::<Result<_>>()?
         } else {
             let mut parents = vec![0; graph.degree()];
             graph.parents(challenge, &mut parents);
@@ -356,7 +356,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         t_aux.domain_node_at_layer(layer - 1, index)
                     }
                 })
-                .collect()
+                .collect::<Result<_>>()?
         };
 
         Ok(parents_data)
@@ -625,7 +625,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         (0..num_windows)
             .into_par_iter()
             .zip(data.par_chunks_mut(pub_params.window_size_bytes()))
-            .for_each(|(window_index, data_chunk)| {
+            .try_for_each(|(window_index, data_chunk)| -> Result<()> {
                 let mut layer_labels = vec![0u8; pub_params.window_size_bytes()];
                 let mut parents = vec![0; window_graph.degree()];
                 let mut exp_parents_data: Option<Vec<u8>> = None;
@@ -662,9 +662,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     labels[layer - 1].lock().unwrap().0.copy_from_slice(
                         &layer_labels,
                         window_index * pub_params.window_size_nodes(),
-                    );
+                    )?;
                 }
-            });
+                Ok(())
+            })?;
 
         let (labels, configs) = labels.into_iter().map(|v| v.into_inner().unwrap()).unzip();
 
@@ -714,7 +715,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         }
     }
 
-    fn build_tree<K: Hasher>(tree_data: &[u8], config: Option<StoreConfig>) -> Tree<K> {
+    fn build_tree<K: Hasher>(tree_data: &[u8], config: Option<StoreConfig>) -> Result<Tree<K>> {
         trace!("building tree (size: {})", tree_data.len());
 
         let leafs = tree_data.len() / NODE_SIZE;
@@ -739,23 +740,21 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         pub_params: &PublicParams<H>,
         labels: &LabelsCache<H>,
     ) -> Result<Vec<[u8; 32]>> {
-        let hashes = (0..pub_params.window_size_nodes())
+        (0..pub_params.window_size_nodes())
             .into_par_iter()
             .map(|i| Self::build_column_hash(pub_params, i, labels))
-            .collect();
-
-        Ok(hashes)
+            .collect()
     }
 
     fn build_column_hash(
         pub_params: &PublicParams<H>,
         column_index: usize,
         labels: &LabelsCache<H>,
-    ) -> [u8; 32] {
+    ) -> Result<[u8; 32]> {
         let num_windows = pub_params.num_windows();
         let layers = pub_params.config.layers();
 
-        let first_label = labels.labels_for_layer(1).read_at(column_index);
+        let first_label = labels.labels_for_layer(1).read_at(column_index)?;
         let mut hasher = crate::crypto::pedersen::Hasher::new(AsRef::<[u8]>::as_ref(&first_label));
 
         for window_index in 0..num_windows {
@@ -767,13 +766,13 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                 let label = labels
                     .labels_for_layer(layer)
-                    .read_at(window_index * pub_params.window_size_nodes() + column_index);
+                    .read_at(window_index * pub_params.window_size_nodes() + column_index)?;
 
                 hasher.update(AsRef::<[u8]>::as_ref(&label));
             }
         }
 
-        hasher.finalize_bytes()
+        Ok(hasher.finalize_bytes())
     }
 
     pub(crate) fn transform_and_replicate_layers(
@@ -817,7 +816,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             }
             None => {
                 trace!("building merkle tree for the original data");
-                Self::build_tree::<G>(&data, Some(tree_d_config.clone()))
+                Self::build_tree::<G>(&data, Some(tree_d_config.clone()))?
             }
         };
 
@@ -834,7 +833,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let column_hashes = Self::build_column_hashes(pub_params, &labels)?;
 
         info!("building tree_q");
-        let tree_q: Tree<H> = Self::build_tree::<H>(&data, Some(tree_q_config.clone()));
+        let tree_q: Tree<H> = Self::build_tree::<H>(&data, Some(tree_q_config.clone()))?;
 
         info!("building tree_r_last");
         let tree_r_last: Tree<H> = MerkleTree::from_par_iter_with_config(
@@ -864,7 +863,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 H::Domain::try_from_bytes(&val).expect("invalid node created")
             }),
             tree_r_last_config.clone(),
-        );
+        )?;
 
         info!("building tree_c");
         let tree_c: Tree<H> = {
@@ -876,7 +875,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     column_hashes.len() * 32,
                 )
             };
-            Self::build_tree::<H>(column_hashes_flat, Some(tree_c_config.clone()))
+            Self::build_tree::<H>(column_hashes_flat, Some(tree_c_config.clone()))?
         };
 
         // comm_r = H(comm_c || comm_q || comm_r_last)

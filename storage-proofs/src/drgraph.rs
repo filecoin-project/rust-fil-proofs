@@ -290,7 +290,7 @@ mod tests {
 
         let mmapped = &mmap_from(&data);
         let tree = g.merkle_tree(mmapped).unwrap();
-        let proof = tree.gen_proof(2);
+        let proof = tree.gen_proof(2).unwrap();
 
         assert!(proof.validate::<H::Function>());
     }
