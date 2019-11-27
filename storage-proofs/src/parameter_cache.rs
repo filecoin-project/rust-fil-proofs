@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 /// Bump this when circuits change to invalidate the cache.
-pub const VERSION: usize = 18;
+pub const VERSION: usize = 19;
 
 pub const PARAMETER_CACHE_ENV_VAR: &str = "FIL_PROOFS_PARAMETER_CACHE";
 

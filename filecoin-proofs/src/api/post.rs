@@ -151,6 +151,8 @@ pub fn generate_candidates(
     replicas: &BTreeMap<SectorId, PrivateReplicaInfo>,
     prover_id: ProverId,
 ) -> Result<Vec<Candidate>> {
+    info!("generate_candidates:start");
+
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
@@ -212,6 +214,8 @@ pub fn generate_candidates(
         randomness,
     )?;
 
+    info!("generate_candidates:finish");
+
     Ok(candidates)
 }
 
@@ -232,6 +236,8 @@ pub fn generate_post(
     winners: Vec<Candidate>,
     prover_id: ProverId,
 ) -> Result<Vec<SnarkProof>> {
+    info!("generate_post:start");
+
     let sector_count = replicas.len() as u64;
     ensure!(sector_count > 0, "Must supply at least one replica");
 
@@ -282,6 +288,8 @@ pub fn generate_post(
         proofs.push(proof.to_vec());
     }
 
+    info!("generate_post:finish");
+
     Ok(proofs)
 }
 
@@ -295,6 +303,8 @@ pub fn verify_post(
     winners: &[Candidate],
     prover_id: ProverId,
 ) -> Result<bool> {
+    info!("verify_post:start");
+
     let sector_count = replicas.len() as u64;
     ensure!(sector_count > 0, "Must supply at least one replica");
     ensure!(
@@ -356,6 +366,8 @@ pub fn verify_post(
             return Ok(false);
         }
     }
+
+    info!("verify_post:finish");
 
     Ok(true)
 }

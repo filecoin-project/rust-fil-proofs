@@ -77,8 +77,11 @@ where
         // This will always run at least once, since there cannot be zero partitions.
         assert!(partition_count > 0);
 
+        info!("vanilla_proof:start");
         let vanilla_proofs =
             S::prove_all_partitions(&pub_params.vanilla_params, &pub_in, priv_in, partitions)?;
+
+        info!("vanilla_proof:finish");
 
         let sanity_check =
             S::verify_all_partitions(&pub_params.vanilla_params, &pub_in, &vanilla_proofs)?;
@@ -90,6 +93,7 @@ where
             .build()
             .expect("failed to build thread pool");
 
+        info!("snark_proof:start");
         let groth_proofs: Result<Vec<_>> = pool.install(|| {
             vanilla_proofs
                 .par_iter()
@@ -103,6 +107,7 @@ where
                 })
                 .collect()
         });
+        info!("snark_proof:finish");
 
         Ok(MultiProof::new(groth_proofs?, &groth_params.vk))
     }
