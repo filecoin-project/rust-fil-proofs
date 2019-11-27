@@ -71,7 +71,7 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
     // Zero-pad the data to the requested size by extending the underlying file if needed.
     f_data.set_len(sector_bytes as u64)?;
 
-    let mut data = unsafe { MmapOptions::new().map_mut(&f_data).unwrap() };
+    let mut data = unsafe { MmapOptions::new().map_mut(&f_data)? };
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: setup_params(
