@@ -472,16 +472,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         num_bytes: usize,
     ) -> Result<Vec<u8>> {
         ensure!(offset + num_bytes <= data.len(), "Out of bounds");
-        ensure!(
-            offset % NODE_SIZE == 0,
-            "Invalid offset, must be a multiple of {}",
-            NODE_SIZE
-        );
-        ensure!(
-            num_bytes % NODE_SIZE == 0,
-            "Invalid num_bytes, must be a multiple of {}",
-            NODE_SIZE
-        );
 
         // determine the first window needed to be decoded
         let first_window_index = offset / pp.window_size_bytes();
