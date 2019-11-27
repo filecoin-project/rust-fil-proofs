@@ -76,13 +76,16 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
         porep_config.window_size_nodes,
     );
 
+    let offset_padded: PaddedBytesAmount = UnpaddedBytesAmount::from(offset).into();
+    let num_bytes_padded: PaddedBytesAmount = num_bytes.into();
+
     let unsealed = StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::extract_range(
         &pp,
         &replica_id,
         &data,
         Some(config),
-        offset.into(),
-        num_bytes.into(),
+        offset_padded.into(),
+        num_bytes_padded.into(),
     )?;
 
     let written = write_unpadded(&unsealed, &mut buf_writer, offset.into(), num_bytes.into())?;

@@ -60,6 +60,12 @@ impl From<UnpaddedBytesAmount> for UnpaddedByteIndex {
     }
 }
 
+impl From<UnpaddedByteIndex> for UnpaddedBytesAmount {
+    fn from(n: UnpaddedByteIndex) -> Self {
+        UnpaddedBytesAmount(n.0)
+    }
+}
+
 impl From<UnpaddedByteIndex> for u64 {
     fn from(n: UnpaddedByteIndex) -> Self {
         n.0
