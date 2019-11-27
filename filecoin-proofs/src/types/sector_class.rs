@@ -4,20 +4,12 @@ use crate::types::*;
 pub struct SectorClass {
     pub sector_size: SectorSize,
     pub partitions: PoRepProofPartitions,
-    pub window_size_nodes: usize,
 }
 
 impl From<SectorClass> for PoStConfig {
     fn from(x: SectorClass) -> Self {
         match x {
-            SectorClass {
-                sector_size,
-                window_size_nodes,
-                ..
-            } => PoStConfig {
-                sector_size,
-                window_size_nodes,
-            },
+            SectorClass { sector_size, .. } => PoStConfig { sector_size },
         }
     }
 }
@@ -28,11 +20,9 @@ impl From<SectorClass> for PoRepConfig {
             SectorClass {
                 sector_size,
                 partitions,
-                window_size_nodes,
             } => PoRepConfig {
                 sector_size,
                 partitions,
-                window_size_nodes,
             },
         }
     }

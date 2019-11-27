@@ -73,7 +73,6 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     let pp = public_params(
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
-        porep_config.window_size_nodes,
     );
 
     let offset_padded: PaddedBytesAmount = UnpaddedBytesAmount::from(offset).into();
@@ -289,9 +288,7 @@ mod tests {
     use storage_proofs::fr32::bytes_into_fr;
     use tempfile::NamedTempFile;
 
-    use crate::constants::{
-        SECTOR_SIZE_ONE_KIB, SINGLE_PARTITION_PROOF_LEN, WINDOW_SIZE_NODES_ONE_KIB,
-    };
+    use crate::constants::{SECTOR_SIZE_ONE_KIB, SINGLE_PARTITION_PROOF_LEN};
     use crate::types::{PoStConfig, SectorSize};
 
     static INIT_LOGGER: Once = Once::new();
@@ -316,7 +313,6 @@ mod tests {
                 PoRepConfig {
                     sector_size: SectorSize(SECTOR_SIZE_ONE_KIB),
                     partitions: PoRepProofPartitions(2),
-                    window_size_nodes: WINDOW_SIZE_NODES_ONE_KIB,
                 },
                 not_convertible_to_fr_bytes,
                 convertible_to_fr_bytes,
@@ -345,7 +341,6 @@ mod tests {
                 PoRepConfig {
                     sector_size: SectorSize(SECTOR_SIZE_ONE_KIB),
                     partitions: PoRepProofPartitions(2),
-                    window_size_nodes: WINDOW_SIZE_NODES_ONE_KIB,
                 },
                 convertible_to_fr_bytes,
                 not_convertible_to_fr_bytes,
@@ -393,7 +388,6 @@ mod tests {
         let result = verify_post(
             PoStConfig {
                 sector_size: SectorSize(SECTOR_SIZE_ONE_KIB),
-                window_size_nodes: WINDOW_SIZE_NODES_ONE_KIB,
             },
             &[0; 32],
             1,
@@ -424,7 +418,6 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let sector_size = SECTOR_SIZE_ONE_KIB;
-        let window_size_nodes = WINDOW_SIZE_NODES_ONE_KIB;
 
         let number_of_bytes_in_piece =
             UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size.clone()));
@@ -456,7 +449,6 @@ mod tests {
         let config = PoRepConfig {
             sector_size: SectorSize(sector_size.clone()),
             partitions: PoRepProofPartitions(2),
-            window_size_nodes,
         };
 
         let cache_dir = tempfile::tempdir().unwrap();

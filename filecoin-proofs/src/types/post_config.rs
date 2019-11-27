@@ -10,7 +10,6 @@ use crate::types::*;
 #[derive(Clone, Copy, Debug)]
 pub struct PoStConfig {
     pub sector_size: SectorSize,
-    pub window_size_nodes: usize,
 }
 
 impl From<PoStConfig> for PaddedBytesAmount {

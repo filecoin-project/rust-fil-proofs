@@ -112,13 +112,6 @@ fn main() {
                 .required(true)
                 .help("The data size in KiB")
                 .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("window-size")
-                .long("window-size")
-                .help("The window size in bytes")
-                .default_value("4096")
-                .takes_value(true),
         );
 
     let hash_cmd = SubCommand::with_name("hash-constraints")
@@ -164,10 +157,7 @@ fn main() {
             let sector_size_kibs = value_t!(m, "size", usize)
                 .expect("could not convert `size` CLI argument to `usize`");
             let sector_size = sector_size_kibs * 1024;
-            let window_size_bytes = value_t!(m, "window-size", usize)
-                .expect("could not convert `window-size` CLI argument to `usize`");
-            let window_size_nodes = window_size_bytes / 32;
-            election_post::run(sector_size, window_size_nodes).expect("election-post failed");
+            election_post::run(sector_size).expect("election-post failed");
         }
         ("hash-constraints", Some(_m)) => {
             hash_fns::run().expect("hash-constraints failed");
