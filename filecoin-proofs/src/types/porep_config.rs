@@ -12,7 +12,6 @@ use crate::types::*;
 pub struct PoRepConfig {
     pub sector_size: SectorSize,
     pub partitions: PoRepProofPartitions,
-    pub window_size_nodes: usize,
 }
 
 impl From<PoRepConfig> for PaddedBytesAmount {
@@ -49,11 +48,8 @@ impl From<PoRepConfig> for SectorSize {
 impl PoRepConfig {
     /// Returns the cache identifier as used by `storage-proofs::paramater_cache`.
     pub fn get_cache_identifier(&self) -> String {
-        let params = crate::parameters::public_params(
-            self.sector_size.into(),
-            self.partitions.into(),
-            self.window_size_nodes,
-        );
+        let params =
+            crate::parameters::public_params(self.sector_size.into(), self.partitions.into());
 
         <StackedCompound as CacheableParameters<
             Bls12,

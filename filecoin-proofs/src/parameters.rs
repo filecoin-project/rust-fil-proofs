@@ -1,3 +1,4 @@
+use anyhow::Result;
 use storage_proofs::drgraph::{DefaultTreeHasher, BASE_DEGREE};
 use storage_proofs::election_post::{self, ElectionPoSt};
 use storage_proofs::proof::ProofScheme;
@@ -21,14 +22,24 @@ pub type PostPublicParams = election_post::PublicParams;
 pub fn public_params(
     sector_bytes: PaddedBytesAmount,
     partitions: usize,
-    window_size_nodes: usize,
 ) -> stacked::PublicParams<DefaultTreeHasher> {
     StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::setup(&setup_params(
         sector_bytes,
         partitions,
-        window_size_nodes,
     ))
     .unwrap()
+}
+
+pub fn window_size_nodes_for_sector_bytes(sector_size: PaddedBytesAmount) -> Result<usize> {
+    use crate::constants::*;
+
+    match u64::from(sector_size) {
+        SECTOR_SIZE_ONE_KIB => Ok(WINDOW_SIZE_NODES_ONE_KIB),
+        SECTOR_SIZE_16_MIB => Ok(WINDOW_SIZE_NODES_16_MIB),
+        SECTOR_SIZE_256_MIB => Ok(WINDOW_SIZE_NODES_256_MIB),
+        SECTOR_SIZE_1_GIB => Ok(WINDOW_SIZE_NODES_1_GIB),
+        _ => Err(anyhow!("Unknown sector size {:?}", sector_size)),
+    }
 }
 
 pub fn post_public_params(post_config: PoStConfig) -> PostPublicParams {
@@ -43,16 +54,12 @@ pub fn post_setup_params(post_config: PoStConfig) -> PostSetupParams {
     }
 }
 
-pub fn setup_params(
-    sector_bytes: PaddedBytesAmount,
-    partitions: usize,
-    window_size_nodes: usize,
-) -> stacked::SetupParams {
-    let sector_bytes = usize::from(sector_bytes);
-
+pub fn setup_params(sector_bytes: PaddedBytesAmount, partitions: usize) -> stacked::SetupParams {
     let window_challenges = select_challenges(partitions, POREP_WINDOW_MINIMUM_CHALLENGES, LAYERS);
     let wrapper_challenges =
         select_challenges(partitions, POREP_WRAPPER_MINIMUM_CHALLENGES, LAYERS);
+    let window_size_nodes = window_size_nodes_for_sector_bytes(sector_bytes).unwrap();
+    let sector_bytes = usize::from(sector_bytes);
 
     let config = StackedConfig {
         window_challenges,
