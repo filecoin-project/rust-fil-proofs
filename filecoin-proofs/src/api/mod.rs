@@ -73,7 +73,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     let pp = public_params(
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
-    );
+    )?;
 
     let offset_padded: PaddedBytesAmount = UnpaddedBytesAmount::from(offset).into();
     let num_bytes_padded: PaddedBytesAmount = num_bytes.into();

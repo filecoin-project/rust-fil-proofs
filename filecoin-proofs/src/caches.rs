@@ -81,7 +81,7 @@ pub fn get_stacked_params(porep_config: PoRepConfig) -> Result<Arc<groth16::Para
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
-    );
+    )?;
 
     let parameters_generator = || {
         <StackedCompound as CompoundProof<
@@ -102,7 +102,7 @@ pub fn get_stacked_params(porep_config: PoRepConfig) -> Result<Arc<groth16::Para
 }
 
 pub fn get_post_params(post_config: PoStConfig) -> Result<Arc<groth16::Parameters<Bls12>>> {
-    let post_public_params = post_public_params(post_config);
+    let post_public_params = post_public_params(post_config)?;
 
     let parameters_generator = || {
         <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
@@ -126,7 +126,7 @@ pub fn get_stacked_verifying_key(porep_config: PoRepConfig) -> Result<Arc<Bls12V
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
-    );
+    )?;
 
     let vk_generator = || {
         <StackedCompound as CompoundProof<
@@ -147,7 +147,7 @@ pub fn get_stacked_verifying_key(porep_config: PoRepConfig) -> Result<Arc<Bls12V
 }
 
 pub fn get_post_verifying_key(post_config: PoStConfig) -> Result<Arc<Bls12VerifyingKey>> {
-    let post_public_params = post_public_params(post_config);
+    let post_public_params = post_public_params(post_config)?;
 
     let vk_generator = || {
         <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<

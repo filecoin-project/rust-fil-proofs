@@ -35,7 +35,8 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
-    );
+    )
+    .unwrap();
 
     {
         let circuit = <StackedCompound as CompoundProof<
@@ -70,7 +71,7 @@ fn cache_post_params(post_config: PoStConfig) {
         n
     );
 
-    let post_public_params = post_public_params(post_config);
+    let post_public_params = post_public_params(post_config).unwrap();
 
     {
         let post_circuit: ElectionPoStCircuit<Bls12, PedersenHasher> =
