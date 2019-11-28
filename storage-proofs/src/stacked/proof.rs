@@ -101,7 +101,14 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     ) -> Result<Proof<H, G>> {
         // Sanity checks on restored trees.
         assert!(pub_inputs.tau.is_some());
-        assert_eq!(pub_inputs.tau.as_ref().unwrap().comm_d, t_aux.tree_d.root());
+        assert_eq!(
+            pub_inputs
+                .tau
+                .as_ref()
+                .ok_or_else(|| anyhow!("no tau in inputs"))?
+                .comm_d,
+            t_aux.tree_d.root()
+        );
 
         // Derive the set of challenges we are proving over.
         let config = &pub_params.config;
@@ -456,9 +463,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         data.par_chunks_mut(pub_params.window_size_bytes())
             .enumerate()
-            .for_each(|(window_index, data_chunk)| {
-                Self::extract_single_window(pub_params, replica_id, data_chunk, window_index);
-            });
+            .try_for_each(|(window_index, data_chunk)| {
+                Self::extract_single_window(pub_params, replica_id, data_chunk, window_index)
+            })?;
 
         Ok(())
     }
@@ -490,7 +497,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             .skip(first_window_index)
             .flat_map(|(window_index, chunk)| {
                 let mut decoded_chunk = chunk.to_vec();
-                Self::extract_single_window(pp, replica_id, &mut decoded_chunk, window_index);
+                // TODO replace unwrap with proper error handling
+                Self::extract_single_window(pp, replica_id, &mut decoded_chunk, window_index)
+                    .unwrap();
                 decoded_chunk
             })
             .collect();
@@ -518,7 +527,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         replica_id: &<H as Hasher>::Domain,
         data_chunk: &mut [u8],
         window_index: usize,
-    ) {
+    ) -> Result<()> {
         trace!("extract_single_window");
         let window_graph = &pub_params.window_graph;
         let layers = pub_params.config.layers();
@@ -557,11 +566,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                 if layer == layers {
                     // on the last layer we encode the data
-                    let keyd = H::Domain::try_from_bytes(&key).unwrap();
+                    let keyd = H::Domain::try_from_bytes(&key)?;
                     let data_node = H::Domain::try_from_bytes(
                         &data_chunk[node * NODE_SIZE..(node + 1) * NODE_SIZE],
-                    )
-                    .unwrap();
+                    )?;
                     let decoded_node = decode::<H::Domain>(keyd, data_node);
                     data_chunk[node * NODE_SIZE..(node + 1) * NODE_SIZE].copy_from_slice(AsRef::<
                         [u8],
@@ -579,6 +587,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 }
             }
         }
+
+        Ok(())
     }
 
     fn label_encode_all_windows(
@@ -639,7 +649,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         &mut layer_labels,
                         data_chunk,
                         window_index,
-                    );
+                    )?;
 
                     if layer < layers {
                         if let Some(ref mut exp_parents_data) = exp_parents_data {
@@ -676,7 +686,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         layer_labels: &mut [u8],
         data_chunk: &mut [u8],
         window_index: usize,
-    ) {
+    ) -> Result<()> {
         for node in 0..window_graph.size() {
             window_graph.parents(node, parents);
 
@@ -697,12 +707,14 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
             if layer == layers {
                 // on the last layer we encode the data
-                let keyd = H::Domain::try_from_bytes(&key).unwrap();
-                let data_node = H::Domain::try_from_bytes(&data_chunk[start..end]).unwrap();
+                let keyd = H::Domain::try_from_bytes(&key)?;
+                let data_node = H::Domain::try_from_bytes(&data_chunk[start..end])?;
                 let encoded_node = encode(keyd, data_node);
                 data_chunk[start..end].copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
             }
         }
+
+        Ok(())
     }
 
     fn build_tree<K: Hasher>(tree_data: &[u8], config: Option<StoreConfig>) -> Result<Tree<K>> {
@@ -714,6 +726,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             MerkleTree::from_par_iter_with_config(
                 (0..leafs)
                     .into_par_iter()
+                    // TODO proper error handling instead of `unwrap()`
                     .map(|i| get_node::<K>(tree_data, i).unwrap()),
                 config,
             )
@@ -721,6 +734,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             MerkleTree::from_par_iter(
                 (0..leafs)
                     .into_par_iter()
+                    // TODO proper error handling instead of `unwrap()`
                     .map(|i| get_node::<K>(tree_data, i).unwrap()),
             )
         }
