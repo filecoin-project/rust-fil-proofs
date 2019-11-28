@@ -32,20 +32,20 @@ impl Hasher for PedersenHasher {
     }
 
     #[inline]
-    fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain) -> Self::Domain {
+    fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain) -> Result<Self::Domain> {
         // Unrapping here is safe; `Fr` elements and hash domain elements are the same byte length.
-        let key = Fr::from_repr(key.0).unwrap();
-        let ciphertext = Fr::from_repr(ciphertext.0).unwrap();
-        sloth::encode::<Bls12>(&key, &ciphertext).into()
+        let key = Fr::from_repr(key.0)?;
+        let ciphertext = Fr::from_repr(ciphertext.0)?;
+        Ok(sloth::encode::<Bls12>(&key, &ciphertext).into())
     }
 
     #[inline]
-    fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain) -> Self::Domain {
+    fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain) -> Result<Self::Domain> {
         // Unrapping here is safe; `Fr` elements and hash domain elements are the same byte length.
-        let key = Fr::from_repr(key.0).unwrap();
-        let ciphertext = Fr::from_repr(ciphertext.0).unwrap();
+        let key = Fr::from_repr(key.0)?;
+        let ciphertext = Fr::from_repr(ciphertext.0)?;
 
-        sloth::decode::<Bls12>(&key, &ciphertext).into()
+        Ok(sloth::decode::<Bls12>(&key, &ciphertext).into())
     }
 }
 
