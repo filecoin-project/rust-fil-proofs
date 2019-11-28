@@ -188,6 +188,7 @@
 //! Great, now if you're happy, grab the Groth16 `Parameters` with
 //! `params.params()`, so that you can interact with the bellman APIs
 //! just as before.
+#![deny(clippy::all, clippy::perf, clippy::correctness)]
 
 use std::{
     fs::File,
@@ -339,7 +340,7 @@ pub struct MPCParameters {
 impl PartialEq for MPCParameters {
     fn eq(&self, other: &MPCParameters) -> bool {
         self.params == other.params
-            && &self.cs_hash[..] == &other.cs_hash[..]
+            && self.cs_hash[..] == other.cs_hash[..]
             && self.contributions == other.contributions
     }
 }
@@ -482,6 +483,7 @@ impl MPCParameters {
         let mut b_g1 = vec![G1::zero(); assembly.num_inputs + assembly.num_aux];
         let mut b_g2 = vec![G2::zero(); assembly.num_inputs + assembly.num_aux];
 
+        #[allow(clippy::too_many_arguments)]
         fn eval(
             // Lagrange coefficients for tau
             coeffs_g1: Arc<Vec<G1Affine>>,
@@ -607,8 +609,8 @@ impl MPCParameters {
 
         let vk = VerifyingKey {
             alpha_g1: alpha,
-            beta_g1: beta_g1,
-            beta_g2: beta_g2,
+            beta_g1,
+            beta_g2,
             gamma_g2: G2Affine::one(),
             delta_g1: G1Affine::one(),
             delta_g2: G2Affine::one(),
@@ -616,7 +618,7 @@ impl MPCParameters {
         };
 
         let params = Parameters {
-            vk: vk,
+            vk,
             h: Arc::new(h),
             l: Arc::new(l.into_iter().map(|e| e.into_affine()).collect()),
 
@@ -654,8 +656,8 @@ impl MPCParameters {
         cs_hash.copy_from_slice(h.as_ref());
 
         Ok(MPCParameters {
-            params: params,
-            cs_hash: cs_hash,
+            params,
+            cs_hash,
             contributions: vec![],
         })
     }
@@ -794,7 +796,7 @@ impl MPCParameters {
         }
 
         // cs_hash should be the same
-        if &initial_params.cs_hash[..] != &self.cs_hash[..] {
+        if initial_params.cs_hash[..] != self.cs_hash[..] {
             return Err(());
         }
 
@@ -1021,7 +1023,7 @@ impl PartialEq for PublicKey {
             && self.s == other.s
             && self.s_delta == other.s_delta
             && self.r_delta == other.r_delta
-            && &self.transcript[..] == &other.transcript[..]
+            && self.transcript[..] == other.transcript[..]
     }
 }
 
@@ -1034,7 +1036,7 @@ pub fn verify_contribution(before: &MPCParameters, after: &MPCParameters) -> Res
     }
 
     // None of the previous transformations should change
-    if &before.contributions[..] != &after.contributions[0..before.contributions.len()] {
+    if before.contributions[..] != after.contributions[0..before.contributions.len()] {
         return Err(());
     }
 
@@ -1077,7 +1079,7 @@ pub fn verify_contribution(before: &MPCParameters, after: &MPCParameters) -> Res
     }
 
     // cs_hash should be the same
-    if &before.cs_hash[..] != &after.cs_hash[..] {
+    if before.cs_hash[..] != after.cs_hash[..] {
         return Err(());
     }
 
@@ -1266,12 +1268,12 @@ fn keypair<R: Rng>(rng: &mut R, current: &MPCParameters) -> (PublicKey, PrivateK
     (
         PublicKey {
             delta_after: current.params.vk.delta_g1.mul(delta).into_affine(),
-            s: s,
-            s_delta: s_delta,
-            r_delta: r_delta,
-            transcript: transcript,
+            s,
+            s_delta,
+            r_delta,
+            transcript,
         },
-        PrivateKey { delta: delta },
+        PrivateKey { delta },
     )
 }
 
@@ -1305,7 +1307,7 @@ impl<W: Write> HashWriter<W> {
     /// Construct a new `HashWriter` given an existing `writer` by value.
     pub fn new(writer: W) -> Self {
         HashWriter {
-            writer: writer,
+            writer,
             hasher: Blake2b::new(),
         }
     }
@@ -1339,10 +1341,10 @@ impl<W: Write> Write for HashWriter<W> {
 /// and so doesn't implement `PartialEq` for `[T; 64]`
 pub fn contains_contribution(contributions: &[[u8; 64]], my_contribution: &[u8; 64]) -> bool {
     for contrib in contributions {
-        if &contrib[..] == &my_contribution[..] {
+        if contrib[..] == my_contribution[..] {
             return true;
         }
     }
 
-    return false;
+    false
 }
