@@ -11,10 +11,6 @@
 //! a field element.
 //!
 //! ```rust
-//! extern crate paired;
-//! extern crate bellperson;
-//! extern crate ff;
-//!
 //! use paired::Engine;
 //! use ff::Field;
 //! use bellperson::{
@@ -85,8 +81,6 @@
 //! let's create some parameters and make some proofs.
 //!
 //! ```rust,ignore
-//! extern crate rand;
-//!
 //! use paired::bls12_381::{Bls12, Fr};
 //! use bellperson::groth16::{
 //!     generate_random_parameters,
@@ -152,8 +146,6 @@
 //! for our circuit:
 //!
 //! ```rust,ignore
-//! extern crate phase21;
-//!
 //! let mut params = phase21::MPCParameters::new(CubeRoot {
 //!     cube_root: None
 //! }).unwrap();
@@ -196,17 +188,6 @@
 //! Great, now if you're happy, grab the Groth16 `Parameters` with
 //! `params.params()`, so that you can interact with the bellman APIs
 //! just as before.
-
-extern crate bellperson;
-extern crate blake2b_simd;
-extern crate byteorder;
-extern crate crossbeam;
-extern crate ff;
-extern crate groupy;
-extern crate num_cpus;
-extern crate paired;
-extern crate rand;
-extern crate rand_chacha;
 
 use std::{
     fs::File,
@@ -1194,7 +1175,7 @@ fn same_ratio<G1: PairingCurveAffine>(g1: (G1, G1), g2: (G1::Pair, G1::Pair)) ->
 /// ... with high probability.
 fn merge_pairs<G: CurveAffine>(v1: &[G], v2: &[G]) -> (G, G) {
     use rand::thread_rng;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Mutex;
 
     assert_eq!(v1.len(), v2.len());
 
@@ -1330,7 +1311,7 @@ impl<W: Write> HashWriter<W> {
     }
 
     /// Destroy this writer and return the hash of what was written.
-    pub fn into_hash(mut self) -> [u8; 64] {
+    pub fn into_hash(self) -> [u8; 64] {
         let mut tmp = [0u8; 64];
         tmp.copy_from_slice(self.hasher.finalize().as_ref());
         tmp
