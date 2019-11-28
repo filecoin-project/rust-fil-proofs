@@ -27,8 +27,8 @@ impl Hasher for PedersenHasher {
         "PedersenHasher".into()
     }
 
-    fn create_label(data: &[u8], m: usize) -> Self::Domain {
-        create_label::create_label(data, m).into()
+    fn create_label(data: &[u8], m: usize) -> Result<Self::Domain> {
+        Ok(create_label::create_label(data, m)?.into())
     }
 
     #[inline]

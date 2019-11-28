@@ -119,7 +119,7 @@ mod tests {
             acc
         });
 
-        let expected = crypto::create_label::create_label(input_bytes.as_slice(), m);
+        let expected = crypto::create_label::create_label(input_bytes.as_slice(), m).unwrap();
 
         assert_eq!(
             expected,
@@ -178,7 +178,7 @@ mod tests {
             input_bytes.extend_from_slice(parent);
         }
 
-        let expected = crypto::create_label::create_label(input_bytes.as_slice(), m);
+        let expected = crypto::create_label::create_label(input_bytes.as_slice(), m).unwrap();
 
         assert_eq!(
             expected,

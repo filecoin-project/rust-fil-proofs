@@ -26,7 +26,7 @@ impl Hasher for Blake2sHasher {
         "Blake2sHasher".into()
     }
 
-    fn create_label(data: &[u8], m: usize) -> Self::Domain {
+    fn create_label(data: &[u8], m: usize) -> Result<Self::Domain> {
         assert_eq!(
             data.len(),
             32 * (1 + m),
@@ -35,7 +35,7 @@ impl Hasher for Blake2sHasher {
             m
         );
 
-        <Self::Function as HashFunction<Self::Domain>>::hash(data)
+        Ok(<Self::Function as HashFunction<Self::Domain>>::hash(data))
     }
 
     fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain) -> Self::Domain {
