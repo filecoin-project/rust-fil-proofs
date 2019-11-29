@@ -37,12 +37,12 @@ pub fn bytes_into_fr<E: Engine>(bytes: &[u8]) -> Result<E::Fr> {
 }
 
 #[inline]
-pub fn trim_bytes_to_fr_safe(r: &[u8]) -> Vec<u8> {
-    assert_eq!(r.len(), 32);
+pub fn trim_bytes_to_fr_safe(r: &[u8]) -> Result<Vec<u8>> {
+    ensure!(r.len() == 32, Error::BadFrBytes);
     let mut res = r[..32].to_vec();
     // strip last two bits, to ensure result is in Fr.
     res[31] &= 0b0011_1111;
-    res
+    Ok(res)
 }
 
 #[inline]

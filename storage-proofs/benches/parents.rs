@@ -41,12 +41,12 @@ fn stop_profile() {}
 
 fn pregenerate_graph<H: Hasher>(size: usize) -> StackedBucketGraph<H> {
     let seed = [1u8; 28];
-    StackedBucketGraph::<H>::new_stacked(size, BASE_DEGREE, EXP_DEGREE, seed)
+    StackedBucketGraph::<H>::new_stacked(size, BASE_DEGREE, EXP_DEGREE, seed).unwrap()
 }
 
 fn parents_loop<H: Hasher, G: Graph<H>>(graph: &G, parents: &mut [u32]) {
     (0..graph.size())
-        .map(|node| graph.parents(node, parents))
+        .map(|node| graph.parents(node, parents).unwrap())
         .collect()
 }
 

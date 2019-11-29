@@ -646,7 +646,7 @@ mod tests {
             BASE_DEGREE,
             EXP_DEGREE,
             new_seed(),
-        );
+        )?;
 
         let mut staged_sector = Vec::with_capacity(u64::from(sector_size) as usize);
         let mut staged_sector_io = std::io::Cursor::new(&mut staged_sector);

@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use sha2::{Digest, Sha256};
 
+use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::Hasher;
 
@@ -45,10 +46,10 @@ impl<H: Hasher> LabelingProof<H> {
         bytes_into_fr_repr_safe(hasher.result().as_ref()).into()
     }
 
-    pub fn verify(&self, replica_id: &H::Domain, expected_label: &H::Domain) -> bool {
+    pub fn verify(&self, replica_id: &H::Domain, expected_label: &H::Domain) -> Result<bool> {
         let label = self.create_label(replica_id);
         check_eq!(expected_label, &label);
 
-        true
+        Ok(true)
     }
 }

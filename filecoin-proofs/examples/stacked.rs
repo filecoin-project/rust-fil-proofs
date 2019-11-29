@@ -507,7 +507,8 @@ fn main() {
     let circuit = matches.is_present("circuit");
     let extract = matches.is_present("extract");
 
-    let config = StackedConfig::new(layers, window_challenge_count, wrapper_challenge_count);
+    let config =
+        StackedConfig::new(layers, window_challenge_count, wrapper_challenge_count).unwrap();
 
     info!("hasher: {}", hasher);
     match hasher.as_ref() {

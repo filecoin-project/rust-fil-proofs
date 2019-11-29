@@ -122,19 +122,16 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
         pub_inputs: &'b Self::PublicInputs,
         priv_inputs: &'b Self::PrivateInputs,
     ) -> Result<Self::Proof> {
-        assert_eq!(
-            pub_inputs.challenges.len(),
-            pub_inputs.comm_rs.len(),
+        ensure!(
+            pub_inputs.challenges.len() == pub_inputs.comm_rs.len(),
             "mismatched challenges and comm_rs"
         );
-        assert_eq!(
-            pub_inputs.challenges.len(),
-            priv_inputs.comm_cs.len(),
+        ensure!(
+            pub_inputs.challenges.len() == priv_inputs.comm_cs.len(),
             "mismatched challenges and comm_cs"
         );
-        assert_eq!(
-            pub_inputs.challenges.len(),
-            priv_inputs.comm_r_lasts.len(),
+        ensure!(
+            pub_inputs.challenges.len() == priv_inputs.comm_r_lasts.len(),
             "mismatched challenges and comm_r_lasts"
         );
         let challenges = pub_inputs.challenges;
@@ -317,8 +314,8 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
-        let graph1 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
-        let graph2 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
+        let graph1 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
+        let graph2 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
         let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
 
@@ -431,7 +428,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
-        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
+        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
 
@@ -504,7 +501,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
-        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
+        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
         let mut faults = OrderedSectorSet::new();

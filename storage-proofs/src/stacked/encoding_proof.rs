@@ -4,6 +4,7 @@ use paired::bls12_381::Fr;
 use sha2::{Digest, Sha256};
 
 use crate::encode::encode;
+use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::Hasher;
 
@@ -50,7 +51,7 @@ impl<H: Hasher> EncodingProof<H> {
         replica_id: &H::Domain,
         exp_encoded_node: &H::Domain,
         decoded_node: &G::Domain,
-    ) -> bool {
+    ) -> Result<bool> {
         let key = self.create_key(replica_id);
 
         let fr: Fr = (*decoded_node).into();
@@ -58,6 +59,6 @@ impl<H: Hasher> EncodingProof<H> {
 
         check_eq!(exp_encoded_node, &encoded_node);
 
-        true
+        Ok(true)
     }
 }

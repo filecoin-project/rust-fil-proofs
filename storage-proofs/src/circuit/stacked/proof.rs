@@ -16,6 +16,7 @@ use crate::circuit::{
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph::{Graph, BASE_DEGREE};
+use crate::error::Result;
 use crate::fr32::fr_into_bytes;
 use crate::hasher::Hasher;
 use crate::merklepor;
@@ -232,7 +233,7 @@ fn generate_inclusion_inputs<H: Hasher>(
     por_params: &merklepor::PublicParams,
     k: Option<usize>,
     c: usize,
-) -> Vec<Fr> {
+) -> Result<Vec<Fr>> {
     let pub_inputs = merklepor::PublicInputs::<H::Domain> {
         challenge: c,
         commitment: None,
@@ -249,7 +250,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         pub_in: &<StackedDrg<H, G> as ProofScheme>::PublicInputs,
         pub_params: &<StackedDrg<H, G> as ProofScheme>::PublicParams,
         k: Option<usize>,
-    ) -> Vec<Fr> {
+    ) -> Result<Vec<Fr>> {
         let window_graph = &pub_params.window_graph;
         let wrapper_graph = &pub_params.wrapper_graph;
 
@@ -274,7 +275,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         .expect("setup failed");
 
         let window_challenges =
-            pub_in.all_challenges(&pub_params.config.window_challenges, window_graph.size(), k);
+            pub_in.all_challenges(&pub_params.config.window_challenges, window_graph.size(), k)?;
 
         let num_windows = pub_params.num_windows();
 
@@ -282,13 +283,13 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
             for window_index in 0..num_windows {
                 // comm_d_proof
                 let c = window_index * pub_params.window_size_nodes() + challenge;
-                inputs.extend(generate_inclusion_inputs::<G>(&wrapper_por_params, k, c));
+                inputs.extend(generate_inclusion_inputs::<G>(&wrapper_por_params, k, c)?);
             }
 
             for window_index in 0..num_windows {
                 // comm_q_proof
                 let c = window_index * pub_params.window_size_nodes() + challenge;
-                inputs.extend(generate_inclusion_inputs::<H>(&wrapper_por_params, k, c));
+                inputs.extend(generate_inclusion_inputs::<H>(&wrapper_por_params, k, c)?);
             }
 
             // replica column proof
@@ -298,31 +299,31 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
                     &window_por_params,
                     k,
                     challenge,
-                ));
+                )?);
 
                 // drg parents
                 let mut drg_parents = vec![0; window_graph.base_graph().degree()];
                 window_graph
                     .base_graph()
-                    .parents(challenge, &mut drg_parents);
+                    .parents(challenge, &mut drg_parents)?;
 
                 for parent in drg_parents.into_iter() {
                     inputs.extend(generate_inclusion_inputs::<H>(
                         &window_por_params,
                         k,
                         parent as usize,
-                    ));
+                    )?);
                 }
 
                 // exp parents
                 let mut exp_parents = vec![0; window_graph.expansion_degree()];
-                window_graph.expanded_parents(challenge, &mut exp_parents);
+                window_graph.expanded_parents(challenge, &mut exp_parents)?;
                 for parent in exp_parents.into_iter() {
                     inputs.extend(generate_inclusion_inputs::<H>(
                         &window_por_params,
                         k,
                         parent as usize,
-                    ));
+                    )?);
                 }
             }
         }
@@ -331,7 +332,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
             &pub_params.config.wrapper_challenges,
             wrapper_graph.size(),
             k,
-        );
+        )?;
 
         for challenge in wrapper_challenges.into_iter() {
             // comm_r_last
@@ -339,21 +340,21 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
                 &wrapper_por_params,
                 k,
                 challenge,
-            ));
+            )?);
 
             // comm_q_parents
             let mut exp_parents = vec![0; wrapper_graph.expansion_degree()];
-            wrapper_graph.expanded_parents(challenge, &mut exp_parents);
+            wrapper_graph.expanded_parents(challenge, &mut exp_parents)?;
             for parent in exp_parents.into_iter() {
                 inputs.extend(generate_inclusion_inputs::<H>(
                     &wrapper_por_params,
                     k,
                     parent as usize,
-                ));
+                )?);
             }
         }
 
-        inputs
+        Ok(inputs)
     }
 
     fn circuit<'b>(
@@ -361,8 +362,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         _component_private_inputs: <StackedCircuit<'a, Bls12, H, G> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &'b <StackedDrg<H, G> as ProofScheme>::Proof,
         public_params: &'b <StackedDrg<H, G> as ProofScheme>::PublicParams,
-    ) -> StackedCircuit<'a, Bls12, H, G> {
-        StackedCircuit {
+    ) -> Result<StackedCircuit<'a, Bls12, H, G>> {
+        Ok(StackedCircuit {
             params: &*JJ_PARAMS,
             public_params: public_params.clone(),
             replica_id: Some(public_inputs.replica_id),
@@ -384,7 +385,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
                 .map(Into::into)
                 .collect(),
             _e: PhantomData,
-        }
+        })
     }
 
     fn blank_circuit(
@@ -448,7 +449,7 @@ mod tests {
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
         let num_layers = 2;
-        let config = StackedConfig::new(num_layers, 2, 3);
+        let config = StackedConfig::new(num_layers, 2, 3).unwrap();
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
@@ -535,6 +536,7 @@ mod tests {
                 &proofs[0],
                 &pp,
             )
+            .expect("failed to create circuit")
             .synthesize(&mut cs.namespace(|| "stacked drgporep"))
             .expect("failed to synthesize circuit");
 
@@ -553,6 +555,7 @@ mod tests {
             &proofs[0],
             &pp,
         )
+        .expect("failed to create circuit")
         .synthesize(&mut cs.namespace(|| "stacked drgporep"))
         .expect("failed to synthesize circuit");
 
@@ -570,7 +573,8 @@ mod tests {
             _,
             StackedDrg<PedersenHasher, Sha256Hasher>,
             _,
-        >>::generate_public_inputs(&pub_inputs, &pp, None);
+        >>::generate_public_inputs(&pub_inputs, &pp, None)
+        .unwrap();
         let expected_inputs = cs.get_inputs();
 
         assert_eq!(
@@ -602,7 +606,7 @@ mod tests {
         let degree = 3;
         let expansion_degree = 2;
         let num_layers = 2;
-        let config = StackedConfig::new(num_layers, 3, 2);
+        let config = StackedConfig::new(num_layers, 3, 2).unwrap();
         let partition_count = 1;
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
@@ -667,7 +671,8 @@ mod tests {
 
         {
             let (circuit, inputs) =
-                StackedCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);
+                StackedCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs)
+                    .unwrap();
 
             let mut cs = TestConstraintSystem::new();
 
@@ -688,7 +693,8 @@ mod tests {
         // Use this to debug differences between blank and regular circuit generation.
         {
             let (circuit1, _inputs) =
-                StackedCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);
+                StackedCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs)
+                    .unwrap();
             let blank_circuit = <StackedCompound as CompoundProof<
                 _,
                 StackedDrg<H, Sha256Hasher>,

@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::marker::PhantomData;
 
+use anyhow::ensure;
 use byteorder::{ByteOrder, LittleEndian};
 use paired::bls12_381::{Bls12, Fr};
 use serde::de::Deserialize;
@@ -175,7 +176,7 @@ fn generate_candidate<H: Hasher>(
     let mut data = vec![0u8; POST_CHALLENGE_COUNT * POST_CHALLENGED_NODES * NODE_SIZE];
     for n in 0..POST_CHALLENGE_COUNT {
         let challenge_start =
-            generate_leaf_challenge(randomness, sector_challenge_index, n as u64, sector_size);
+            generate_leaf_challenge(randomness, sector_challenge_index, n as u64, sector_size)?;
 
         let start = challenge_start as usize;
         let end = start + POST_CHALLENGED_NODES;
@@ -261,7 +262,7 @@ pub fn generate_leaf_challenges(
     randomness: &[u8; 32],
     sector_challenge_index: u64,
     sector_size: u64,
-) -> Vec<u64> {
+) -> Result<Vec<u64>> {
     let mut challenges = Vec::with_capacity(POST_CHALLENGE_COUNT);
 
     for leaf_challenge_index in 0..POST_CHALLENGE_COUNT {
@@ -270,11 +271,11 @@ pub fn generate_leaf_challenges(
             sector_challenge_index,
             leaf_challenge_index as u64,
             sector_size,
-        );
+        )?;
         challenges.push(challenge)
     }
 
-    challenges
+    Ok(challenges)
 }
 
 /// Generates challenge, such that the range fits into the sector.
@@ -283,8 +284,8 @@ pub fn generate_leaf_challenge(
     sector_challenge_index: u64,
     leaf_challenge_index: u64,
     sector_size: u64,
-) -> u64 {
-    assert!(
+) -> Result<u64> {
+    ensure!(
         sector_size > POST_CHALLENGED_NODES as u64 * NODE_SIZE as u64,
         "sector size {} is too small",
         sector_size
@@ -301,7 +302,7 @@ pub fn generate_leaf_challenge(
     let challenged_range_index =
         leaf_challenge % (sector_size / (POST_CHALLENGED_NODES * NODE_SIZE) as u64);
 
-    challenged_range_index * POST_CHALLENGED_NODES as u64
+    Ok(challenged_range_index * POST_CHALLENGED_NODES as u64)
 }
 
 impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
@@ -328,13 +329,15 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
         let sector_size = pub_params.sector_size;
 
         let inclusion_proofs = (0..POST_CHALLENGE_COUNT)
+            // TODO replace unwrap with proper error handling
             .flat_map(|n| {
                 let challenged_leaf_start = generate_leaf_challenge(
                     &pub_inputs.randomness,
                     pub_inputs.sector_challenge_index,
                     n as u64,
                     sector_size,
-                );
+                )
+                .unwrap();
                 (0..POST_CHALLENGED_NODES).map(move |i| {
                     Ok(MerkleProof::new_from_proof(
                         &tree.gen_proof(challenged_leaf_start as usize + i)?,
@@ -380,7 +383,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
                 pub_inputs.sector_challenge_index,
                 n as u64,
                 sector_size,
-            );
+            )?;
             for i in 0..POST_CHALLENGED_NODES {
                 let merkle_proof = &proof.inclusion_proofs[n * POST_CHALLENGED_NODES + i];
 
@@ -437,7 +440,7 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
                 .collect();
 
-            let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
+            let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
             let tree = graph.merkle_tree(data.as_slice()).unwrap();
             trees.insert(i.into(), tree);
         }

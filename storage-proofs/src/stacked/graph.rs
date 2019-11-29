@@ -36,27 +36,41 @@ impl ParentCache {
         }
     }
 
-    pub fn contains(&self, node: u32) -> bool {
-        assert!(node < self.cache_entries);
-        self.cache[node as usize].is_some()
+    pub fn contains(&self, node: u32) -> Result<bool> {
+        ensure!(
+            node < self.cache_entries,
+            "Cache does not contain node ({}).",
+            node
+        );
+        Ok(self.cache[node as usize].is_some())
     }
 
-    pub fn read<F, T>(&self, node: u32, mut cb: F) -> T
+    pub fn read<F, T>(&self, node: u32, mut cb: F) -> Result<T>
     where
         F: FnMut(Option<&Vec<u32>>) -> T,
     {
-        assert!(node < self.cache_entries);
-        cb(self.cache[node as usize].as_ref())
+        ensure!(
+            node < self.cache_entries,
+            "Cache does not contain node ({}).",
+            node
+        );
+        Ok(cb(self.cache[node as usize].as_ref()))
     }
 
-    pub fn write(&mut self, node: u32, parents: Vec<u32>) {
-        assert!(node < self.cache_entries);
+    pub fn write(&mut self, node: u32, parents: Vec<u32>) -> Result<()> {
+        ensure!(
+            node < self.cache_entries,
+            "Cache does not contain node ({}).",
+            node
+        );
 
         let old_value = std::mem::replace(&mut self.cache[node as usize], Some(parents));
 
         debug_assert_eq!(old_value, None);
         // We shouldn't be rewriting entries (with most likely the same values),
         // this would be a clear indication of a bug.
+
+        Ok(())
     }
 }
 
@@ -87,17 +101,17 @@ where
         base_degree: usize,
         expansion_degree: usize,
         seed: [u8; 28],
-    ) -> Self {
+    ) -> Result<Self> {
         if !cfg!(feature = "unchecked-degrees") {
-            assert_eq!(base_degree, BASE_DEGREE, "Invalid base degree");
-            assert_eq!(expansion_degree, EXP_DEGREE, "Invalid expansion degree");
+            ensure!(base_degree == BASE_DEGREE, "Invalid base degree");
+            ensure!(expansion_degree == EXP_DEGREE, "Invalid expansion degree");
         }
 
         let use_cache = settings::SETTINGS.lock().unwrap().maximize_caching;
 
         let base_graph = match base_graph {
             Some(graph) => graph,
-            None => G::new(nodes, base_degree, 0, seed),
+            None => G::new(nodes, base_degree, 0, seed)?,
         };
         let bg_id = base_graph.identifier();
 
@@ -115,7 +129,10 @@ where
 
         if use_cache {
             info!("using parents cache of unlimited size",);
-            assert!(nodes <= std::u32::MAX as usize);
+            ensure!(
+                nodes <= std::u32::MAX as usize,
+                "Number of nodes must be less than 2^32."
+            );
 
             if !PARENT_CACHE.read().unwrap().contains_key(&res.id) {
                 PARENT_CACHE
@@ -125,7 +142,7 @@ where
             }
         }
 
-        res
+        Ok(res)
     }
 }
 
@@ -159,24 +176,30 @@ where
     }
 
     #[inline]
-    fn parents(&self, raw_node: usize, parents: &mut [u32]) {
-        self.base_parents(raw_node, &mut parents[..self.base_graph().degree()]);
+    fn parents(&self, raw_node: usize, parents: &mut [u32]) -> Result<()> {
+        self.base_parents(raw_node, &mut parents[..self.base_graph().degree()])?;
 
         // expanded_parents takes raw_node
         self.expanded_parents(
             raw_node,
             &mut parents
                 [self.base_graph().degree()..self.base_graph().degree() + self.expansion_degree()],
-        );
+        )?;
 
         debug_assert!(parents.len() == self.degree());
+        Ok(())
     }
 
     fn seed(&self) -> [u8; 28] {
         self.base_graph().seed()
     }
 
-    fn new(nodes: usize, base_degree: usize, expansion_degree: usize, seed: [u8; 28]) -> Self {
+    fn new(
+        nodes: usize,
+        base_degree: usize,
+        expansion_degree: usize,
+        seed: [u8; 28],
+    ) -> Result<Self> {
         Self::new_stacked(nodes, base_degree, expansion_degree, seed)
     }
 
@@ -242,15 +265,15 @@ where
     // Read the `node` entry in the parents cache (which may not exist) for
     // the current direction set in the graph and return a copy of it (or
     // `None` to signal a cache miss).
-    fn contains_parents_cache(&self, node: usize) -> bool {
+    fn contains_parents_cache(&self, node: usize) -> Result<bool> {
         if self.use_cache {
             if let Some(ref cache) = PARENT_CACHE.read().unwrap().get(&self.id) {
                 cache.contains(node as u32)
             } else {
-                false
+                Ok(false)
             }
         } else {
-            false
+            Ok(false)
         }
     }
 
@@ -266,7 +289,7 @@ where
         base_degree: usize,
         expansion_degree: usize,
         seed: [u8; 28],
-    ) -> Self {
+    ) -> Result<Self> {
         Self::new(None, nodes, base_degree, expansion_degree, seed)
     }
 
@@ -278,22 +301,23 @@ where
         self.expansion_degree
     }
 
-    pub fn base_parents(&self, raw_node: usize, parents: &mut [u32]) {
-        self.base_graph().parents(raw_node, parents);
+    pub fn base_parents(&self, raw_node: usize, parents: &mut [u32]) -> Result<()> {
+        self.base_graph().parents(raw_node, parents)
     }
 
     /// Assign `self.expansion_degree` parents to `node` using an invertible permutation
     /// that is applied one way for the forward layers and one way for the reversed
     /// ones.
     #[inline]
-    pub fn expanded_parents(&self, node: usize, parents: &mut [u32]) {
+    pub fn expanded_parents(&self, node: usize, parents: &mut [u32]) -> Result<()> {
         if !self.use_cache {
             // No cache usage, generate on demand.
-            return self.generate_expanded_parents(node, parents);
+            self.generate_expanded_parents(node, parents);
+            return Ok(());
         }
 
         // Check if we need to fill the cache.
-        if !self.contains_parents_cache(node) {
+        if !self.contains_parents_cache(node)? {
             // Cache is empty so we need to generate the parents.
             let mut parents = vec![0; self.expansion_degree()];
             self.generate_expanded_parents(node, &mut parents);
@@ -303,7 +327,7 @@ where
             let cache = cache_lock
                 .get_mut(&self.id)
                 .expect("Invalid cache construction");
-            cache.write(node as u32, parents);
+            cache.write(node as u32, parents)?;
         }
 
         // We made sure the cache is filled above, now we can return the value.
@@ -314,7 +338,9 @@ where
 
         cache.read(node as u32, |cache_parents| {
             parents.copy_from_slice(cache_parents.expect("Invalid cache construction"));
-        });
+        })?;
+
+        Ok(())
     }
 }
 

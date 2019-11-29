@@ -497,7 +497,7 @@ pub struct RunOpts {
 }
 
 pub fn run(opts: RunOpts) -> anyhow::Result<()> {
-    let config = StackedConfig::new(opts.layers, opts.window_challenges, opts.wrapper_challenges);
+    let config = StackedConfig::new(opts.layers, opts.window_challenges, opts.wrapper_challenges)?;
 
     let params = Params {
         config,

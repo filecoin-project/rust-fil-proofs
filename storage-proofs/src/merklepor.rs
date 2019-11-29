@@ -166,7 +166,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
-        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
+        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {
@@ -238,7 +238,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
-        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
+        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {
@@ -282,7 +282,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
-        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed());
+        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {

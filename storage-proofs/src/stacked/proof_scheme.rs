@@ -22,10 +22,14 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
             sp.degree,
             sp.expansion_degree,
             sp.seed,
-        );
+        )?;
 
-        let wrapper_graph =
-            StackedBucketGraph::<H>::new_stacked(sp.nodes, sp.degree, sp.expansion_degree, sp.seed);
+        let wrapper_graph = StackedBucketGraph::<H>::new_stacked(
+            sp.nodes,
+            sp.degree,
+            sp.expansion_degree,
+            sp.seed,
+        )?;
 
         Ok(PublicParams::new(
             window_graph,
@@ -48,7 +52,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
         // Because partition proofs require a common setup, the general ProofScheme implementation,
         // which makes use of `ProofScheme::prove` cannot be used here. Instead, we need to prove all
         // partitions in one pass, as implemented by `prove_all_partitions` below.
-        assert!(
+        ensure!(
             k < 1,
             "It is a programmer error to call StackedDrg::prove with more than one partition."
         );
@@ -63,11 +67,14 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
         partition_count: usize,
     ) -> Result<Vec<Self::Proof>> {
         trace!("prove_all_partitions");
-        assert!(partition_count > 0);
+        ensure!(partition_count > 0, "There must be partitions.");
 
         let layers = pub_params.config.layers();
-        assert!(layers > 0);
-        assert_eq!(priv_inputs.t_aux.labels.len(), layers);
+        ensure!(layers > 0, "No layer found.");
+        ensure!(
+            priv_inputs.t_aux.labels.len() == layers,
+            "t_aux must match the number of layers"
+        );
 
         (0..partition_count)
             .map(|k| {

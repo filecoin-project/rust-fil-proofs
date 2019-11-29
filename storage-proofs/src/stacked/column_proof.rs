@@ -1,6 +1,7 @@
 use serde::de::Deserialize;
 use serde::ser::Serialize;
 
+use crate::error::Result;
 use crate::hasher::pedersen::PedersenDomain;
 use crate::hasher::Hasher;
 use crate::merkle::{IncludedNode, MerkleProof};
@@ -36,26 +37,30 @@ impl<H: Hasher> ColumnProof<H> {
         &self.column
     }
 
-    pub fn get_node_at_layer(&self, window_index: usize, layer: usize) -> &H::Domain {
+    pub fn get_node_at_layer(&self, window_index: usize, layer: usize) -> Result<&H::Domain> {
         self.column().get_node_at_layer(window_index, layer)
     }
 
-    pub fn get_verified_node_at_layer(&self, window_index: usize, layer: usize) -> IncludedNode<H> {
-        let value = self.get_node_at_layer(window_index, layer);
-        IncludedNode::new(*value)
+    pub fn get_verified_node_at_layer(
+        &self,
+        window_index: usize,
+        layer: usize,
+    ) -> Result<IncludedNode<H>> {
+        let value = self.get_node_at_layer(window_index, layer)?;
+        Ok(IncludedNode::new(*value))
     }
 
     pub fn column_hash(&self) -> PedersenDomain {
         self.column.hash()
     }
 
-    pub fn verify(&self, challenge: u32, expected_root: &H::Domain) -> bool {
+    pub fn verify(&self, challenge: u32, expected_root: &H::Domain) -> Result<bool> {
         let c_i = self.column_hash();
 
         check_eq!(self.inclusion_proof.root(), expected_root);
         check!(self.inclusion_proof.validate_data(c_i.as_ref()));
         check!(self.inclusion_proof.validate(challenge as usize));
 
-        true
+        Ok(true)
     }
 }

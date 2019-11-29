@@ -12,7 +12,7 @@ pub fn decode(key: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>> {
 
 fn xor(key: &[u8], input: &[u8]) -> Result<Vec<u8>> {
     let key_len = key.len();
-    assert_eq!(key_len, 32);
+    ensure!(key_len == 32, "Key must be 32 bytes.");
 
     Ok(input
         .iter()

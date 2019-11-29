@@ -10,6 +10,7 @@ use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph::graph_height;
+use crate::error::Result;
 use crate::hasher::{HashFunction, Hasher};
 use crate::merklepor::MerklePoR;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
@@ -70,23 +71,25 @@ where
         _component_private_inputs: <PoRCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
         proof: &'b <MerklePoR<H> as ProofScheme<'a>>::Proof,
         public_params: &'b <MerklePoR<H> as ProofScheme<'a>>::PublicParams,
-    ) -> PoRCircuit<'a, Bls12, H> {
+    ) -> Result<PoRCircuit<'a, Bls12, H>> {
         let (root, private) = match (*public_inputs).commitment {
             None => (Root::Val(Some(proof.proof.root.into())), true),
             Some(commitment) => (Root::Val(Some(commitment.into())), false),
         };
 
-        // Ensure inputs are consistent with public params.
-        assert_eq!(private, public_params.private);
+        ensure!(
+            private == public_params.private,
+            "Inputs must be consistent with public params"
+        );
 
-        PoRCircuit::<Bls12, H> {
+        Ok(PoRCircuit::<Bls12, H> {
             params: &*JJ_PARAMS,
             value: Root::Val(Some(proof.data.into())),
             auth_path: proof.proof.as_options(),
             root,
             private,
             _h: Default::default(),
-        }
+        })
     }
 
     fn blank_circuit(
@@ -106,7 +109,7 @@ where
         pub_inputs: &<MerklePoR<H> as ProofScheme<'a>>::PublicInputs,
         pub_params: &<MerklePoR<H> as ProofScheme<'a>>::PublicParams,
         _k: Option<usize>,
-    ) -> Vec<Fr> {
+    ) -> Result<Vec<Fr>> {
         let auth_path_bits = challenge_into_auth_path_bits(pub_inputs.challenge, pub_params.leaves);
         let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
 
@@ -114,13 +117,13 @@ where
         inputs.extend(packed_auth_path);
 
         if let Some(commitment) = pub_inputs.commitment {
-            assert!(!pub_params.private);
+            ensure!(!pub_params.private, "Params must be public");
             inputs.push(commitment.into());
         } else {
-            assert!(pub_params.private);
+            ensure!(pub_params.private, "Params must be private");
         }
 
-        inputs
+        Ok(inputs)
     }
 }
 
@@ -265,7 +268,7 @@ mod tests {
         let data: Vec<u8> = (0..leaves)
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
-        let graph = BucketGraph::<PedersenHasher>::new(leaves, BASE_DEGREE, 0, new_seed());
+        let graph = BucketGraph::<PedersenHasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
         for i in 0..3 {
@@ -318,7 +321,8 @@ mod tests {
                 &public_params,
                 &public_inputs,
                 &private_inputs,
-            );
+            )
+            .unwrap();
 
             let mut cs = TestConstraintSystem::new();
 
@@ -350,7 +354,7 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
                 .collect();
 
-            let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed());
+            let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
             let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
             // -- MerklePoR
@@ -452,7 +456,7 @@ mod tests {
         let data: Vec<u8> = (0..leaves)
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
-        let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed());
+        let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
         for i in 0..3 {
@@ -495,7 +499,8 @@ mod tests {
                     &public_params,
                     &public_inputs,
                     &private_inputs,
-                );
+                )
+                .unwrap();
 
                 let mut cs = TestConstraintSystem::new();
 
@@ -525,7 +530,8 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
                 .collect();
 
-            let graph = BucketGraph::<PedersenHasher>::new(leaves, BASE_DEGREE, 0, new_seed());
+            let graph =
+                BucketGraph::<PedersenHasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
             let tree = graph.merkle_tree(data.as_slice()).unwrap();
 
             // -- MerklePoR

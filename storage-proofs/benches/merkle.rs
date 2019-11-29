@@ -26,7 +26,8 @@ fn merkle_benchmark(c: &mut Criterion) {
                     BASE_DEGREE,
                     EXP_DEGREE,
                     new_seed(),
-                );
+                )
+                .unwrap();
 
                 b.iter(|| black_box(graph.merkle_tree(&data).unwrap()))
             },
@@ -40,7 +41,8 @@ fn merkle_benchmark(c: &mut Criterion) {
                 BASE_DEGREE,
                 EXP_DEGREE,
                 new_seed(),
-            );
+            )
+            .unwrap();
 
             b.iter(|| black_box(graph.merkle_tree(&data).unwrap()))
         })
