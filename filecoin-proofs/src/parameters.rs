@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{ensure, Result};
 use storage_proofs::drgraph::{DefaultTreeHasher, BASE_DEGREE};
 use storage_proofs::election_post::{self, ElectionPoSt};
 use storage_proofs::proof::ProofScheme;
@@ -68,13 +68,13 @@ pub fn setup_params(
         wrapper_challenges,
     };
 
-    assert!(
+    ensure!(
         sector_bytes % 32 == 0,
         "sector_bytes ({}) must be a multiple of 32",
         sector_bytes,
     );
 
-    assert!(
+    ensure!(
         sector_bytes % window_size_nodes * 32 == 0,
         "sector_bytes ({}) must be a multiple of the window size ({})",
         sector_bytes,
