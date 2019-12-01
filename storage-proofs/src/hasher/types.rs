@@ -73,9 +73,9 @@ pub trait Hasher: Clone + ::std::fmt::Debug + Eq + Default + Send + Sync {
     type Domain: Domain + LightHashable<Self::Function> + AsRef<Self::Domain>;
     type Function: HashFunction<Self::Domain>;
 
-    fn create_label(data: &[u8], m: usize) -> Self::Domain;
-    fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain) -> Self::Domain;
-    fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain) -> Self::Domain;
+    fn create_label(data: &[u8], m: usize) -> Result<Self::Domain>;
+    fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain) -> Result<Self::Domain>;
+    fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain) -> Result<Self::Domain>;
 
     fn name() -> String;
 }

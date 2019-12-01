@@ -388,6 +388,7 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
                     layer,
                     window_index
                 );
+                check!(proof.window_index.is_some());
                 check_eq!(window_index as u64, proof.window_index.unwrap());
 
                 let expected_labeled_node = self
@@ -486,12 +487,12 @@ pub struct TemporaryAux<H: Hasher, G: Hasher> {
 }
 
 impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
-    pub fn labels_for_layer(&self, layer: usize) -> DiskStore<H::Domain> {
+    pub fn labels_for_layer(&self, layer: usize) -> Result<DiskStore<H::Domain>> {
         self.labels.labels_for_layer(layer)
     }
 
     pub fn domain_node_at_layer(&self, layer: usize, node_index: u32) -> Result<H::Domain> {
-        Ok(self.labels_for_layer(layer).read_at(node_index as usize)?)
+        Ok(self.labels_for_layer(layer)?.read_at(node_index as usize)?)
     }
 
     pub fn column(&self, layers: usize, column_index: u32) -> Result<Column<H>> {
@@ -501,7 +502,10 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
     pub fn delete(t_aux: TemporaryAux<H, G>) -> Result<()> {
         // TODO: once optimized, compact tree_r_last to only store the top part of the tree.
 
-        let tree_d_size = t_aux.tree_d_config.size.unwrap();
+        let tree_d_size = t_aux
+            .tree_d_config
+            .size
+            .ok_or_else(|| anyhow!("tree_d config has no size"))?;
         let tree_d_store: DiskStore<G::Domain> =
             DiskStore::new_from_disk(tree_d_size, &t_aux.tree_d_config).context("tree_d")?;
         let tree_d: Tree<G> =
@@ -509,7 +513,10 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
                 .context("tree_d")?;
         tree_d.delete(t_aux.tree_d_config).context("tree_d")?;
 
-        let tree_c_size = t_aux.tree_c_config.size.unwrap();
+        let tree_c_size = t_aux
+            .tree_c_config
+            .size
+            .ok_or_else(|| anyhow!("tree_c config has no size"))?;
         let tree_c_store: DiskStore<H::Domain> =
             DiskStore::new_from_disk(tree_c_size, &t_aux.tree_c_config).context("tree_c")?;
         let tree_c: Tree<H> =
@@ -517,7 +524,10 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
                 .context("tree_c")?;
         tree_c.delete(t_aux.tree_c_config).context("tree_c")?;
 
-        let tree_q_size = t_aux.tree_q_config.size.unwrap();
+        let tree_q_size = t_aux
+            .tree_q_config
+            .size
+            .ok_or_else(|| anyhow!("tree_q config has no size"))?;
         let tree_q_store: DiskStore<H::Domain> =
             DiskStore::new_from_disk(tree_q_size, &t_aux.tree_q_config).context("tree_q")?;
         let tree_q: Tree<H> =
@@ -549,37 +559,50 @@ pub struct TemporaryAuxCache<H: Hasher, G: Hasher> {
 impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
     pub fn new(t_aux: &TemporaryAux<H, G>) -> Result<Self> {
         trace!("restoring tree_d");
-        let tree_d_size = t_aux.tree_d_config.size.unwrap();
+        let tree_d_size = t_aux
+            .tree_d_config
+            .size
+            .ok_or_else(|| anyhow!("tree_d config has no size"))?;
         let tree_d_store: DiskStore<G::Domain> =
-            DiskStore::new_from_disk(tree_d_size, &t_aux.tree_d_config)?;
+            DiskStore::new_from_disk(tree_d_size, &t_aux.tree_d_config).context("tree_d")?;
         let tree_d: Tree<G> =
             MerkleTree::from_data_store(tree_d_store, get_merkle_tree_leafs(tree_d_size))?;
 
         trace!("restoring tree_c");
-        let tree_c_size = t_aux.tree_c_config.size.unwrap();
+        let tree_c_size = t_aux
+            .tree_c_config
+            .size
+            .ok_or_else(|| anyhow!("tree_c config has no size"))?;
         let tree_c_store: DiskStore<H::Domain> =
-            DiskStore::new_from_disk(tree_c_size, &t_aux.tree_c_config)?;
+            DiskStore::new_from_disk(tree_c_size, &t_aux.tree_c_config).context("tree_c")?;
         let tree_c: Tree<H> =
             MerkleTree::from_data_store(tree_c_store, get_merkle_tree_leafs(tree_c_size))?;
 
         trace!("restoring tree_r_last");
-        let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
+        let tree_r_last_size = t_aux
+            .tree_r_last_config
+            .size
+            .ok_or_else(|| anyhow!("tree_r config has no size"))?;
         let tree_r_last_store: DiskStore<H::Domain> =
-            DiskStore::new_from_disk(tree_r_last_size, &t_aux.tree_r_last_config)?;
+            DiskStore::new_from_disk(tree_r_last_size, &t_aux.tree_r_last_config)
+                .context("tree_r")?;
         let tree_r_last: Tree<H> = MerkleTree::from_data_store(
             tree_r_last_store,
             get_merkle_tree_leafs(tree_r_last_size),
         )?;
 
         trace!("restoring tree_q");
-        let tree_q_size = t_aux.tree_q_config.size.unwrap();
+        let tree_q_size = t_aux
+            .tree_q_config
+            .size
+            .ok_or_else(|| anyhow!("tree_q config has no size"))?;
         let tree_q_store: DiskStore<H::Domain> =
-            DiskStore::new_from_disk(tree_q_size, &t_aux.tree_q_config)?;
+            DiskStore::new_from_disk(tree_q_size, &t_aux.tree_q_config).context("tree_q")?;
         let tree_q: Tree<H> =
             MerkleTree::from_data_store(tree_q_store, get_merkle_tree_leafs(tree_q_size))?;
 
         Ok(TemporaryAuxCache {
-            labels: LabelsCache::new(&t_aux.labels),
+            labels: LabelsCache::new(&t_aux.labels)?,
             tree_d,
             tree_r_last,
             tree_c,
@@ -623,7 +646,7 @@ impl<H: Hasher> Labels<H> {
         self.labels.is_empty()
     }
 
-    pub fn labels_for_layer(&self, layer: usize) -> DiskStore<H::Domain> {
+    pub fn labels_for_layer(&self, layer: usize) -> Result<DiskStore<H::Domain>> {
         assert!(layer != 0, "Layer cannot be 0");
         assert!(
             layer <= self.layers(),
@@ -636,11 +659,11 @@ impl<H: Hasher> Labels<H> {
         let config = self.labels[row_index].clone();
         assert!(config.size.is_some());
 
-        DiskStore::new_from_disk(config.size.unwrap(), &config).unwrap()
+        DiskStore::new_from_disk(config.size.unwrap(), &config)
     }
 
     /// Returns label for the last layer.
-    pub fn labels_for_last_layer(&self) -> DiskStore<H::Domain> {
+    pub fn labels_for_last_layer(&self) -> Result<DiskStore<H::Domain>> {
         self.labels_for_layer(self.labels.len() - 1)
     }
 
@@ -656,7 +679,7 @@ impl<H: Hasher> Labels<H> {
             .iter()
             .map(|label| {
                 assert!(label.size.is_some());
-                let store = DiskStore::new_from_disk(label.size.unwrap(), &label).unwrap();
+                let store = DiskStore::new_from_disk(label.size.unwrap(), &label)?;
                 store.read_at(node as usize)
             })
             .collect::<Result<_>>()?;
@@ -679,16 +702,16 @@ impl<H: Hasher> LabelsCache<H> {
         }
     }
 
-    pub fn new(labels: &Labels<H>) -> Self {
+    pub fn new(labels: &Labels<H>) -> Result<Self> {
         let mut disk_store_labels: Vec<DiskStore<H::Domain>> = Vec::with_capacity(labels.len());
         for i in 0..labels.len() {
-            disk_store_labels.push(labels.labels_for_layer(i + 1));
+            disk_store_labels.push(labels.labels_for_layer(i + 1)?);
         }
 
-        LabelsCache {
+        Ok(LabelsCache {
             labels: disk_store_labels,
             _h: PhantomData,
-        }
+        })
     }
 
     pub fn len(&self) -> usize {

@@ -54,7 +54,7 @@ fn encode_single_node<H: Hasher>(
 
     let node_data = H::Domain::try_from_bytes(&data[start..end]).unwrap();
     let key_data = H::Domain::try_from_bytes(&key).unwrap();
-    let encoded = H::sloth_encode(&key_data, &node_data);
+    let encoded = H::sloth_encode(&key_data, &node_data).unwrap();
     encoded.write_bytes(&mut data[start..end]).unwrap();
 }
 

@@ -26,21 +26,21 @@ impl Hasher for Sha256Hasher {
         "Sha256Hasher".into()
     }
 
-    fn create_label(data: &[u8], _m: usize) -> Self::Domain {
-        <Self::Function as HashFunction<Self::Domain>>::hash(data)
+    fn create_label(data: &[u8], _m: usize) -> Result<Self::Domain> {
+        Ok(<Self::Function as HashFunction<Self::Domain>>::hash(data))
     }
 
-    fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain) -> Self::Domain {
+    fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain) -> Result<Self::Domain> {
         // TODO: validate this is how sloth should work in this case
         let k = (*key).into();
         let c = (*ciphertext).into();
 
-        sloth::encode::<Bls12>(&k, &c).into()
+        Ok(sloth::encode::<Bls12>(&k, &c).into())
     }
 
-    fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain) -> Self::Domain {
+    fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain) -> Result<Self::Domain> {
         // TODO: validate this is how sloth should work in this case
-        sloth::decode::<Bls12>(&(*key).into(), &(*ciphertext).into()).into()
+        Ok(sloth::decode::<Bls12>(&(*key).into(), &(*ciphertext).into()).into())
     }
 }
 
@@ -223,8 +223,8 @@ impl HashFunction<Sha256Domain> for Sha256Function {
         let fr = if alloc_bits[0].get_value().is_some() {
             let be_bits = alloc_bits
                 .iter()
-                .map(|v| v.get_value().unwrap())
-                .collect::<Vec<bool>>();
+                .map(|v| v.get_value().ok_or(SynthesisError::AssignmentMissing))
+                .collect::<std::result::Result<Vec<bool>, SynthesisError>>()?;
 
             let le_bits = be_bits
                 .chunks(8)

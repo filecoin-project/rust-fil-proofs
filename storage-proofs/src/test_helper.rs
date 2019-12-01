@@ -68,7 +68,7 @@ pub fn fake_drgpoprep_proof<R: Rng>(
         )
         .unwrap();
 
-    let key = crypto::create_label::create_label(ciphertexts.as_slice(), m);
+    let key = crypto::create_label::create_label(ciphertexts.as_slice(), m).unwrap();
     // run sloth(key, node)
 
     let replica_node: Fr = crypto::sloth::encode::<Bls12>(&key, &data_node);

@@ -26,7 +26,7 @@ impl Hasher for Blake2sHasher {
         "Blake2sHasher".into()
     }
 
-    fn create_label(data: &[u8], m: usize) -> Self::Domain {
+    fn create_label(data: &[u8], m: usize) -> Result<Self::Domain> {
         assert_eq!(
             data.len(),
             32 * (1 + m),
@@ -35,20 +35,20 @@ impl Hasher for Blake2sHasher {
             m
         );
 
-        <Self::Function as HashFunction<Self::Domain>>::hash(data)
+        Ok(<Self::Function as HashFunction<Self::Domain>>::hash(data))
     }
 
-    fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain) -> Self::Domain {
+    fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain) -> Result<Self::Domain> {
         // TODO: validate this is how sloth should work in this case
         let k = (*key).into();
         let c = (*ciphertext).into();
 
-        sloth::encode::<Bls12>(&k, &c).into()
+        Ok(sloth::encode::<Bls12>(&k, &c).into())
     }
 
-    fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain) -> Self::Domain {
+    fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain) -> Result<Self::Domain> {
         // TODO: validate this is how sloth should work in this case
-        sloth::decode::<Bls12>(&(*key).into(), &(*ciphertext).into()).into()
+        Ok(sloth::decode::<Bls12>(&(*key).into(), &(*ciphertext).into()).into())
     }
 }
 
@@ -247,8 +247,8 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
             Some(_) => {
                 let bits = alloc_bits
                     .iter()
-                    .map(|v| v.get_value().unwrap())
-                    .collect::<Vec<bool>>();
+                    .map(|v| v.get_value().ok_or(SynthesisError::AssignmentMissing))
+                    .collect::<std::result::Result<Vec<bool>, SynthesisError>>()?;
                 // TODO: figure out if we can avoid this
                 let frs = multipack::compute_multipacking::<E>(&bits);
                 Ok(frs[0])

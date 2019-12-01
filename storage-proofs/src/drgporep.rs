@@ -459,7 +459,7 @@ where
             let end = start + NODE_SIZE;
 
             let node_data = H::Domain::try_from_bytes(&data[start..end])?;
-            let encoded = H::sloth_encode(key.as_ref(), &node_data);
+            let encoded = H::sloth_encode(key.as_ref(), &node_data)?;
 
             encoded.write_bytes(&mut data[start..end])?;
         }

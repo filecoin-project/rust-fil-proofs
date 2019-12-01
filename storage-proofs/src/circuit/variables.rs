@@ -1,5 +1,7 @@
 use std::fmt;
 
+use anyhow::Result;
+
 use bellperson::gadgets::num::AllocatedNum;
 use bellperson::{ConstraintSystem, SynthesisError};
 use paired::Engine;
@@ -39,8 +41,8 @@ impl<E: Engine> Root<E> {
         }
     }
 
-    pub fn var<CS: ConstraintSystem<E>>(cs: CS, fr: E::Fr) -> Self {
-        Root::Var(AllocatedNum::alloc(cs, || Ok(fr)).unwrap())
+    pub fn var<CS: ConstraintSystem<E>>(cs: CS, fr: E::Fr) -> Result<Self> {
+        Ok(Root::Var(AllocatedNum::alloc(cs, || Ok(fr))?))
     }
 
     pub fn is_some(&self) -> bool {

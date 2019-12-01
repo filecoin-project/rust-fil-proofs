@@ -44,8 +44,8 @@ where
     let fr = if alloc_bits[0].get_value().is_some() {
         let be_bits = alloc_bits
             .iter()
-            .map(|v| v.get_value().unwrap())
-            .collect::<Vec<bool>>();
+            .map(|v| v.get_value().ok_or(SynthesisError::AssignmentMissing))
+            .collect::<Result<Vec<bool>, SynthesisError>>()?;
 
         let le_bits = be_bits
             .chunks(8)
@@ -119,7 +119,7 @@ mod tests {
             acc
         });
 
-        let expected = crypto::create_label::create_label(input_bytes.as_slice(), m);
+        let expected = crypto::create_label::create_label(input_bytes.as_slice(), m).unwrap();
 
         assert_eq!(
             expected,
@@ -178,7 +178,7 @@ mod tests {
             input_bytes.extend_from_slice(parent);
         }
 
-        let expected = crypto::create_label::create_label(input_bytes.as_slice(), m);
+        let expected = crypto::create_label::create_label(input_bytes.as_slice(), m).unwrap();
 
         assert_eq!(
             expected,

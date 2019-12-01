@@ -22,12 +22,11 @@ pub type PostPublicParams = election_post::PublicParams;
 pub fn public_params(
     sector_bytes: PaddedBytesAmount,
     partitions: usize,
-) -> stacked::PublicParams<DefaultTreeHasher> {
+) -> Result<stacked::PublicParams<DefaultTreeHasher>> {
     StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::setup(&setup_params(
         sector_bytes,
         partitions,
-    ))
-    .unwrap()
+    )?)
 }
 
 pub fn window_size_nodes_for_sector_bytes(sector_size: PaddedBytesAmount) -> Result<usize> {
@@ -42,8 +41,8 @@ pub fn window_size_nodes_for_sector_bytes(sector_size: PaddedBytesAmount) -> Res
     }
 }
 
-pub fn post_public_params(post_config: PoStConfig) -> PostPublicParams {
-    ElectionPoSt::<DefaultTreeHasher>::setup(&post_setup_params(post_config)).unwrap()
+pub fn post_public_params(post_config: PoStConfig) -> Result<PostPublicParams> {
+    ElectionPoSt::<DefaultTreeHasher>::setup(&post_setup_params(post_config))
 }
 
 pub fn post_setup_params(post_config: PoStConfig) -> PostSetupParams {
@@ -54,7 +53,10 @@ pub fn post_setup_params(post_config: PoStConfig) -> PostSetupParams {
     }
 }
 
-pub fn setup_params(sector_bytes: PaddedBytesAmount, partitions: usize) -> stacked::SetupParams {
+pub fn setup_params(
+    sector_bytes: PaddedBytesAmount,
+    partitions: usize,
+) -> Result<stacked::SetupParams> {
     let window_challenges = select_challenges(partitions, POREP_WINDOW_MINIMUM_CHALLENGES, LAYERS);
     let wrapper_challenges =
         select_challenges(partitions, POREP_WRAPPER_MINIMUM_CHALLENGES, LAYERS);
@@ -80,14 +82,14 @@ pub fn setup_params(sector_bytes: PaddedBytesAmount, partitions: usize) -> stack
     );
 
     let nodes = sector_bytes / 32;
-    stacked::SetupParams {
+    Ok(stacked::SetupParams {
         nodes,
         degree: BASE_DEGREE,
         expansion_degree: EXP_DEGREE,
         seed: DRG_SEED,
         config,
         window_size_nodes,
-    }
+    })
 }
 
 fn select_challenges(
