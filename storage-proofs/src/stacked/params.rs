@@ -533,7 +533,6 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
         let tree_q: Tree<H> =
             MerkleTree::from_data_store(tree_q_store, get_merkle_tree_leafs(tree_q_size))
                 .context("tree_q")?;
-
         tree_q.delete(t_aux.tree_q_config).context("tree_q")?;
 
         for i in 0..t_aux.labels.labels.len() {
