@@ -806,9 +806,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let mut tree_r_last_config =
             StoreConfig::from_config(&config, CacheKey::CommRLastTree.to_string(), None);
         let mut tree_c_config =
-            StoreConfig::from_config(&config, CacheKey::CommQTree.to_string(), None);
-        let mut tree_q_config =
             StoreConfig::from_config(&config, CacheKey::CommCTree.to_string(), None);
+        let mut tree_q_config =
+            StoreConfig::from_config(&config, CacheKey::CommQTree.to_string(), None);
 
         // Build the MerkleTree over the original data (if needed).
         let tree_d = match data_tree {
