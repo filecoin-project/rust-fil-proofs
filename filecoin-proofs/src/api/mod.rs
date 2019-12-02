@@ -87,7 +87,10 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
         num_bytes_padded.into(),
     )?;
 
-    let written = write_unpadded(&unsealed, &mut buf_writer, offset.into(), num_bytes.into())?;
+    // If the call to `extract_range` was successful, the `unsealed` vector must
+    // have a length which equals `num_bytes_padded`. The byte at its 0-index
+    // byte will be the the byte at index `offset_padded` in the sealed sector.
+    let written = write_unpadded(&unsealed, &mut buf_writer, 0, num_bytes.into())?;
 
     Ok(UnpaddedBytesAmount(written as u64))
 }
@@ -446,6 +449,7 @@ mod tests {
         let piece_infos = vec![piece_info];
 
         let sealed_sector_file = NamedTempFile::new()?;
+        let mut unseal_file = NamedTempFile::new()?;
         let config = PoRepConfig {
             sector_size: SectorSize(sector_size.clone()),
             partitions: PoRepProofPartitions(2),
@@ -481,6 +485,27 @@ mod tests {
             pre_commit_output,
             &piece_infos,
         )?;
+
+        let _ = get_unsealed_range(
+            config,
+            cache_dir.path(),
+            &sealed_sector_file.path(),
+            &unseal_file.path(),
+            prover_id,
+            sector_id,
+            comm_d,
+            ticket,
+            UnpaddedByteIndex(508),
+            UnpaddedBytesAmount(508),
+        )?;
+
+        let mut contents = vec![];
+        assert!(
+            unseal_file.read_to_end(&mut contents).is_ok(),
+            "failed to populate buffer with unsealed bytes"
+        );
+        assert_eq!(contents.len(), 508);
+        assert_eq!(&piece_bytes[508..], &contents[..]);
 
         let computed_comm_d = compute_comm_d(config, &piece_infos)?;
 
