@@ -274,7 +274,7 @@ where
             (Some(pub_inputs), Some(priv_inputs), Some(data))
         };
 
-        if *circuit || *groth || *bench {
+        if *circuit || *groth || *bench || *bench_only {
             let CircuitWorkMeasurement {
                 cpu_time,
                 wall_time,
@@ -336,6 +336,7 @@ fn do_circuit_work<H: 'static + Hasher>(
         circuit,
         groth,
         bench,
+        bench_only,
         ..
     } = params;
 
@@ -344,7 +345,7 @@ fn do_circuit_work<H: 'static + Hasher>(
         partitions: Some(*partitions),
     };
 
-    if *bench || *circuit {
+    if *bench || *circuit || *bench_only {
         info!("Generating blank circuit");
         let mut cs = MetricCS::<Bls12>::new();
         <StackedCompound as CompoundProof<_, StackedDrg<H, Sha256Hasher>, _>>::blank_circuit(&pp)
