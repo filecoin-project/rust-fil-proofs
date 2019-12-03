@@ -5,7 +5,3 @@ members = [
   "storage-proofs",
   "fil-proofs-tooling",
 ]
-
-
-[patch.crates-io]
-bellperson = { path = "../../../opensource/bellperson" }
