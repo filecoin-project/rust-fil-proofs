@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{anyhow, Context, Result};
 use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
 use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::hasher::Hasher;
@@ -108,11 +108,11 @@ pub fn generate_piece_commitment<T: std::io::Read>(
     let mut temp_piece_file = tempfile()?;
 
     // send the source through the preprocessor, writing output to temp file
-    let n = write_padded(source, &temp_piece_file)
-        .map_err(|err| format_err!("failed to write and preprocess bytes: {:?}", err))?;
+    let n =
+        write_padded(source, &temp_piece_file).context("failed to write and preprocess bytes")?;
 
     if n == 0 {
-        return Err(format_err!(
+        return Err(anyhow!(
             "generate_piece_commitment: read 0 bytes from source before EOF"
         ));
     }
@@ -120,7 +120,7 @@ pub fn generate_piece_commitment<T: std::io::Read>(
     let n = UnpaddedBytesAmount(n as u64);
 
     if n != piece_size {
-        return Err(format_err!(
+        return Err(anyhow!(
             "wrote ({:?}) but expected to write ({:?}) when preprocessing",
             n,
             piece_size
@@ -163,8 +163,7 @@ where
         get_aligned_source(source, &piece_lengths, piece_size);
 
     // allows us to tee the source byte stream
-    let (mut pipe_r, pipe_w) =
-        os_pipe::pipe().map_err(|err| format_err!("failed to create pipe: {:?}", err))?;
+    let (mut pipe_r, pipe_w) = os_pipe::pipe().context("failed to create pipe")?;
 
     // all bytes read from the TeeReader are written to its writer, no bytes
     // will be read from the TeeReader before they are written to its writer
@@ -178,7 +177,7 @@ where
         // discard n left-alignment bytes
         let n = alignment.left_bytes.into();
         io::copy(&mut pipe_r.by_ref().take(n), &mut io::sink())
-            .map_err(|err| format_err!("failed to skip alignment bytes: {:?}", err))?;
+            .context("failed to skip alignment bytes")?;
 
         // generate commitment for piece bytes
         let result =
@@ -186,18 +185,17 @@ where
 
         // drain the remaining bytes (all alignment) from the reader
         std::io::copy(&mut pipe_r.by_ref(), &mut io::sink())
-            .map_err(|err| format_err!("failed to drain reader: {:?}", err))
+            .context("failed to drain reader")
             .and_then(|_| result)
     });
 
     // send the source through the preprocessor, writing output to target
-    let write_rslt = write_padded(tee_r, target)
-        .map_err(|err| format_err!("failed to write and preprocess bytes: {:?}", err));
+    let write_rslt = write_padded(tee_r, target).context("failed to write and preprocess bytes");
 
     // block until piece commitment-generating thread returns
     let join_rslt = t_handle
         .join()
-        .map_err(|err| format_err!("join piece commitment-generating thread failed: {:?}", err));
+        .map_err(|err| anyhow!("join piece commitment-generating thread failed: {:?}", err));
 
     match (write_rslt, join_rslt) {
         (Ok(n), Ok(Ok(r))) => {
@@ -215,7 +213,7 @@ where
             Ok((n, r.commitment))
         }
         (Ok(n), Ok(Err(err))) => {
-            let e = format_err!(
+            let e = anyhow!(
                 "wrote {:?} to target but then failed to generate piece commitment: {:?}",
                 n,
                 err
@@ -223,7 +221,7 @@ where
             Err(e)
         }
         (Ok(n), Err(err)) => {
-            let e = format_err!(
+            let e = anyhow!(
                 "wrote {:?} to target but then failed to generate piece commitment: {:?}",
                 n,
                 err
@@ -231,7 +229,7 @@ where
             Err(e)
         }
         (Err(err), _) => {
-            let e = format_err!("failed to write and preprocess: {:?}", err);
+            let e = anyhow!("failed to write and preprocess: {:?}", err);
             Err(e)
         }
     }

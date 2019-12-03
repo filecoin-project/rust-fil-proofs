@@ -48,21 +48,11 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
     info!("seal_pre_commit: start");
     let sector_bytes = usize::from(PaddedBytesAmount::from(porep_config));
 
-    if let Err(err) = std::fs::metadata(&in_path) {
-        return Err(format_err!(
-            "could not read in_path={:?} (err = {:?})",
-            in_path.as_ref(),
-            err
-        ));
-    }
+    std::fs::metadata(&in_path)
+        .with_context(|| format!("could not read in_path={:?})", in_path.as_ref()))?;
 
-    if let Err(ref err) = std::fs::metadata(&out_path) {
-        return Err(format_err!(
-            "could not read out_path={:?} (err = {:?})",
-            in_path.as_ref(),
-            err
-        ));
-    }
+    std::fs::metadata(&out_path)
+        .with_context(|| format!("could not read out_path={:?}", out_path.as_ref()))?;
 
     // Copy unsealed data to output location, where it will be sealed in place.
     fs::copy(&in_path, &out_path)?;
