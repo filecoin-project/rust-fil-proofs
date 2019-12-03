@@ -688,14 +688,14 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             }));
 
 
-            let column_hashes: Vec<[u8; 32]> = recv.into_iter().try_fold(
+            let column_hashes: Vec<[u8; 32]> = recv.into_iter().take(num_windows).try_fold(
                 vec![PedersenHasher::empty(); pub_params.window_size_nodes()],
                 |mut hashers: Vec<PedersenHasher>, hashes: Result<Vec<[u8; 32]>>| -> Result<Vec<PedersenHasher>> {
                     info!("hashing window");
                     hashers.par_iter_mut().zip(hashes?.par_iter()).for_each(|(hasher, hash)| {
                         hasher.update(&hash[..]);
                     });
-
+                    info!("done hashing window");
                     Ok(hashers)
                 }
             )?.into_iter().map(|h| h.finalize_bytes()).collect();
