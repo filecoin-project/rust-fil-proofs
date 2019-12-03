@@ -42,6 +42,7 @@ uom = "0.25.0"
 merkletree = "0.13.0"
 bincode = "1.1.2"
 anyhow = "1.0.23"
+gperftools = "0.2.0"
 
 [features]
 default = ["gpu"]

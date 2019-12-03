@@ -596,7 +596,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         replica_id: &<H as Hasher>::Domain,
         data: &mut [u8],
         config: StoreConfig,
-    ) -> Result<(LabelsCache<H>, Labels<H>)> {
+    ) -> Result<(LabelsCache<H>, Labels<H>, Vec<[u8; 32]>)> {
         trace!("encode_all_windows");
         let window_graph = &pub_params.window_graph;
         let layers = pub_params.config.layers();
@@ -622,56 +622,91 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             })
             .collect::<Result<_>>()?;
 
-        (0..num_windows)
+
+        use crate::crypto::pedersen::Hasher as PedersenHasher;
+
+        let iter = (0..num_windows)
             .into_par_iter()
             .zip(data.par_chunks_mut(pub_params.window_size_bytes()))
-            .try_for_each(|(window_index, data_chunk)| -> Result<()> {
-                let mut layer_labels = vec![0u8; pub_params.window_size_bytes()];
-                let mut parents = vec![0; window_graph.degree()];
-                let mut exp_parents_data: Option<Vec<u8>> = None;
+            .map(
+                |(window_index, data_chunk)| -> Result<Vec<[u8; 32]>> {
+                    let mut layer_labels = vec![0u8; pub_params.window_size_bytes()];
+                    let mut parents = vec![0; window_graph.degree()];
+                    let mut exp_parents_data: Option<Vec<u8>> = None;
 
-                // setup hasher to reuse
-                let mut base_hasher = Sha256::new();
+                    let mut column_hashers = vec![PedersenHasher::empty(); pub_params.window_size_nodes()];
 
-                // hash replica id
-                base_hasher.input(AsRef::<[u8]>::as_ref(replica_id));
+                    // setup hasher to reuse
+                    let mut base_hasher = Sha256::new();
 
-                for layer in 1..=layers {
-                    trace!("generating layer: {}", layer);
+                    // hash replica id
+                    base_hasher.input(AsRef::<[u8]>::as_ref(replica_id));
 
-                    Self::label_encode_window_layer(
-                        layer,
-                        layers,
-                        window_graph,
-                        base_hasher.clone(),
-                        &mut parents,
-                        exp_parents_data.as_ref(),
-                        &mut layer_labels,
-                        data_chunk,
-                        window_index,
-                    )?;
+                    for layer in 1..=layers {
+                        trace!("generating layer: {}", layer);
 
-                    if layer < layers {
-                        if let Some(ref mut exp_parents_data) = exp_parents_data {
-                            exp_parents_data.copy_from_slice(&layer_labels);
-                        } else {
-                            exp_parents_data = Some(layer_labels.clone());
+                        Self::label_encode_window_layer(
+                            layer,
+                            layers,
+                            window_graph,
+                            base_hasher.clone(),
+                            &mut parents,
+                            exp_parents_data.as_ref(),
+                            &mut layer_labels,
+                            data_chunk,
+                            window_index,
+                        )?;
+
+                        for (node, hasher) in layer_labels.chunks(NODE_SIZE).zip(column_hashers.iter_mut()) {
+                            hasher.update(node);
                         }
+
+                        if layer < layers {
+                            if let Some(ref mut exp_parents_data) = exp_parents_data {
+                                exp_parents_data.copy_from_slice(&layer_labels);
+                            } else {
+                                exp_parents_data = Some(layer_labels.clone());
+                            }
+                        }
+                        // write result to disk
+                        labels[layer - 1].lock().unwrap().0.copy_from_slice(
+                            &layer_labels,
+                            window_index * pub_params.window_size_nodes(),
+                        )?;
                     }
-                    // write result to disk
-                    labels[layer - 1].lock().unwrap().0.copy_from_slice(
-                        &layer_labels,
-                        window_index * pub_params.window_size_nodes(),
-                    )?;
+
+                    let hashes = column_hashers.into_iter().map(|h| h.finalize_bytes()).collect::<Vec<_>>();
+                    Ok(hashes)
                 }
-                Ok(())
-            })?;
+            );
+
+        let (send, recv) = crossbeam::channel::bounded(1);
+        let column_hashes: Vec<[u8; 32]> = crossbeam::scope(|s| -> Result<Vec<[u8; 32]>> {
+            s.spawn(|_| iter.for_each(|el| {
+                let _ = send.send(el).unwrap();
+            }));
+
+
+            let column_hashes: Vec<[u8; 32]> = recv.into_iter().try_fold(
+                vec![PedersenHasher::empty(); pub_params.window_size_nodes()],
+                |mut hashers: Vec<PedersenHasher>, hashes: Result<Vec<[u8; 32]>>| -> Result<Vec<PedersenHasher>> {
+                    for (hasher, hash) in hashers.iter_mut().zip(hashes?.iter()) {
+                        hasher.update(&hash[..]);
+                    }
+
+                    Ok(hashers)
+                }
+            )?.into_iter().map(|h| h.finalize_bytes()).collect();
+
+            Ok(column_hashes)
+        }).map_err(|err| anyhow!("{:?}", err))??;
 
         let (labels, configs) = labels.into_iter().map(|v| v.into_inner().unwrap()).unzip();
 
         Ok((
             LabelsCache::<H>::from_stores(labels),
             Labels::<H>::new(configs),
+            column_hashes
         ))
     }
 
@@ -829,12 +864,12 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             data.len() / pub_params.window_size_bytes()
         );
 
-        let (labels, label_configs) =
+        let (labels, label_configs, column_hashes) =
             Self::label_encode_all_windows(pub_params, replica_id, data, config)?;
 
         // construct column hashes
-        info!("building column hashes");
-        let column_hashes = Self::build_column_hashes(pub_params, &labels)?;
+        // info!("building column hashes");
+        // let column_hashes = Self::build_column_hashes(pub_params, &labels)?;
 
         info!("building tree_q");
         let tree_q: Tree<H> = Self::build_tree::<H>(&data, Some(tree_q_config.clone()))?;

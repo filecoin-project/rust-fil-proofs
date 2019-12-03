@@ -68,19 +68,35 @@ where
 #[derive(Debug, Clone)]
 pub struct Hasher {
     curr: [u8; 32],
+    is_empty: bool,
 }
 
 impl Hasher {
     pub fn new(data: &[u8]) -> Self {
-        assert_eq!(data.len(), 32);
-        let mut curr = [0u8; 32];
-        curr.copy_from_slice(data);
+        let mut hasher = Hasher::empty();
+        hasher.update(data);
+        hasher
+    }
 
-        Hasher { curr }
+    pub fn from_array(data: [u8; 32]) -> Self {
+        Hasher { curr: data, is_empty: false }
+    }
+
+    pub fn empty() -> Self {
+        Hasher {
+            curr: [0u8; 32],
+            is_empty: true,
+        }
     }
 
     pub fn update(&mut self, data: &[u8]) {
         assert_eq!(data.len(), 32);
+
+        if self.is_empty {
+            self.curr.copy_from_slice(data);
+            self.is_empty = false;
+            return;
+        }
 
         let parts = [&self.curr, data];
         let data = Bits::new_many(parts.iter());
@@ -91,7 +107,8 @@ impl Hasher {
     }
 
     pub fn finalize_bytes(self) -> [u8; 32] {
-        let Hasher { curr } = self;
+        let Hasher { curr, is_empty } = self;
+        assert!(!is_empty);
         curr
     }
 
