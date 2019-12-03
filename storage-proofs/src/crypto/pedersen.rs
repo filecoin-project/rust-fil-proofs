@@ -1,6 +1,6 @@
 use ff::PrimeFieldRepr;
 use fil_sapling_crypto::jubjub::JubjubBls12;
-use fil_sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
+use fil_sapling_crypto::pedersen_hash::Personalization;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 
 use crate::error::Result;
@@ -24,9 +24,15 @@ pub fn pedersen(data: &[u8]) -> Fr {
 }
 
 pub fn pedersen_bits<'a, S: Iterator<Item = &'a [u8]>>(data: Bits<&'a [u8], S>) -> Fr {
-    pedersen_hash::<Bls12, _>(Personalization::None, data, &JJ_PARAMS)
-        .into_xy()
-        .0
+    let digest = if cfg!(target_arch = "x86_64") {
+        use fil_sapling_crypto::pedersen_hash::pedersen_hash_bls12_381_with_precomp;
+        pedersen_hash_bls12_381_with_precomp::<_>(Personalization::None, data, &JJ_PARAMS)
+    } else {
+        use fil_sapling_crypto::pedersen_hash::pedersen_hash;
+        pedersen_hash::<Bls12, _>(Personalization::None, data, &JJ_PARAMS)
+    };
+
+    digest.into_xy().0
 }
 
 /// Pedersen hashing for inputs that have length mulitple of the block size `256`. Based on pedersen hashes and a Merkle-Damgard construction.
@@ -62,8 +68,15 @@ fn pedersen_compression_bits<T>(bits: T) -> FrRepr
 where
     T: IntoIterator<Item = bool>,
 {
-    let (x, _) = pedersen_hash::<Bls12, _>(Personalization::None, bits, &JJ_PARAMS).into_xy();
-    x.into()
+    let digest = if cfg!(target_arch = "x86_64") {
+        use fil_sapling_crypto::pedersen_hash::pedersen_hash_bls12_381_with_precomp;
+        pedersen_hash_bls12_381_with_precomp::<_>(Personalization::None, bits, &JJ_PARAMS)
+    } else {
+        use fil_sapling_crypto::pedersen_hash::pedersen_hash;
+        pedersen_hash::<Bls12, _>(Personalization::None, bits, &JJ_PARAMS)
+    };
+
+    digest.into_xy().0.into()
 }
 
 #[derive(Debug, Clone)]

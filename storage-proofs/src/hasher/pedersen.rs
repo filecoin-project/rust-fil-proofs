@@ -5,7 +5,7 @@ use bellperson::{ConstraintSystem, SynthesisError};
 use ff::{Field, PrimeField, PrimeFieldRepr};
 use fil_sapling_crypto::circuit::pedersen_hash as pedersen_hash_circuit;
 use fil_sapling_crypto::jubjub::JubjubEngine;
-use fil_sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
+use fil_sapling_crypto::pedersen_hash::Personalization;
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
@@ -260,10 +260,19 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
     ) -> PedersenDomain {
         let node_bits = NodeBits::new(&(left.0).0[..], &(right.0).0[..]);
 
-        pedersen_hash::<Bls12, _>(Personalization::None, node_bits, &pedersen::JJ_PARAMS)
-            .into_xy()
-            .0
-            .into()
+        let digest = if cfg!(target_arch = "x86_64") {
+            use fil_sapling_crypto::pedersen_hash::pedersen_hash_bls12_381_with_precomp;
+            pedersen_hash_bls12_381_with_precomp::<_>(
+                Personalization::None,
+                node_bits,
+                &pedersen::JJ_PARAMS,
+            )
+        } else {
+            use fil_sapling_crypto::pedersen_hash::pedersen_hash;
+            pedersen_hash::<Bls12, _>(Personalization::None, node_bits, &pedersen::JJ_PARAMS)
+        };
+
+        digest.into_xy().0.into()
     }
 }
 

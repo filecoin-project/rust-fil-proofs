@@ -1,5 +1,5 @@
 use ff::{BitIterator, Field, PrimeField, PrimeFieldRepr};
-use fil_sapling_crypto::pedersen_hash;
+use fil_sapling_crypto::pedersen_hash::Personalization;
 use paired::bls12_381::{Bls12, Fr};
 use rand::Rng;
 
@@ -161,15 +161,29 @@ pub fn random_merkle_path_with_value<R: Rng>(
         lhs.reverse();
         rhs.reverse();
 
-        cur = pedersen_hash::pedersen_hash::<Bls12, _>(
-            pedersen_hash::Personalization::None,
-            lhs.into_iter()
-                .take(Fr::NUM_BITS as usize)
-                .chain(rhs.into_iter().take(Fr::NUM_BITS as usize)),
-            &crypto::pedersen::JJ_PARAMS,
-        )
-        .into_xy()
-        .0;
+        cur = if cfg!(target_arch = "x86_64") {
+            use fil_sapling_crypto::pedersen_hash::pedersen_hash_bls12_381_with_precomp;
+            pedersen_hash_bls12_381_with_precomp::<_>(
+                Personalization::None,
+                lhs.into_iter()
+                    .take(Fr::NUM_BITS as usize)
+                    .chain(rhs.into_iter().take(Fr::NUM_BITS as usize)),
+                &crypto::pedersen::JJ_PARAMS,
+            )
+            .into_xy()
+            .0
+        } else {
+            use fil_sapling_crypto::pedersen_hash::pedersen_hash;
+            pedersen_hash::<Bls12, _>(
+                Personalization::None,
+                lhs.into_iter()
+                    .take(Fr::NUM_BITS as usize)
+                    .chain(rhs.into_iter().take(Fr::NUM_BITS as usize)),
+                &crypto::pedersen::JJ_PARAMS,
+            )
+            .into_xy()
+            .0
+        };
     }
 
     (auth_path, cur)
