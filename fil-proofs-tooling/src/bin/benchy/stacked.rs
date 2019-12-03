@@ -13,7 +13,7 @@ use paired::bls12_381::Bls12;
 use rand::Rng;
 
 use fil_proofs_tooling::{measure, FuncMeasurement, Metadata};
-use storage_proofs::circuit::metric::MetricCS;
+use storage_proofs::circuit::bench::BenchCS;
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgraph::*;
@@ -346,13 +346,14 @@ fn do_circuit_work<H: 'static + Hasher>(
     };
 
     if *bench || *circuit || *bench_only {
-        info!("Generating blank circuit");
-        let mut cs = MetricCS::<Bls12>::new();
+        info!("Generating blank circuit: start");
+        let mut cs = BenchCS::<Bls12>::new();
         <StackedCompound as CompoundProof<_, StackedDrg<H, Sha256Hasher>, _>>::blank_circuit(&pp)
             .synthesize(&mut cs)?;
 
         report.outputs.circuit_num_inputs = Some(cs.num_inputs() as u64);
         report.outputs.circuit_num_constraints = Some(cs.num_constraints() as u64);
+        info!("Generating blank circuit: done");
     }
 
     if *groth {

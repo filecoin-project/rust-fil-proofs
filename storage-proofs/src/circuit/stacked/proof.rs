@@ -422,6 +422,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::circuit::bench::*;
     use crate::circuit::metric::*;
     use crate::circuit::test::*;
     use crate::compound_proof;
@@ -528,6 +529,27 @@ mod tests {
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.
             let mut cs = MetricCS::<Bls12>::new();
+
+            StackedCompound::circuit(
+                &pub_inputs,
+                <StackedCircuit<Bls12, PedersenHasher, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
+                &proofs[0],
+                &pp,
+            )
+            .synthesize(&mut cs.namespace(|| "stacked drgporep"))
+            .expect("failed to synthesize circuit");
+
+            assert_eq!(cs.num_inputs(), expected_inputs, "wrong number of inputs");
+            assert_eq!(
+                cs.num_constraints(),
+                expected_constraints,
+                "wrong number of constraints"
+            );
+        }
+
+        {
+            // Verify that BenchCS returns the same metrics as TestConstraintSystem.
+            let mut cs = BenchCS::<Bls12>::new();
 
             StackedCompound::circuit(
                 &pub_inputs,
