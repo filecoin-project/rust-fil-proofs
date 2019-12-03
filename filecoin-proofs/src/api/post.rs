@@ -285,7 +285,7 @@ pub fn generate_post(
 
         let proof =
             ElectionPoStCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)?;
-        proofs.push(proof.to_vec());
+        proofs.push(proof.to_vec()?);
     }
 
     info!("generate_post:finish");

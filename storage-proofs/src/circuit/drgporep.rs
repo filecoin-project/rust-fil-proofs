@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use anyhow::Context;
 use bellperson::gadgets::boolean::Boolean;
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
@@ -150,7 +151,7 @@ where
         // in PublicInputs.
         _k: Option<usize>,
     ) -> Result<Vec<Fr>> {
-        let replica_id = pub_in.replica_id.expect("missing replica id");
+        let replica_id = pub_in.replica_id.context("missing replica id")?;
         let challenges = &pub_in.challenges;
 
         ensure!(
@@ -240,8 +241,8 @@ where
 
         let (data_root, replica_root) = if is_private {
             (
-                component_private_inputs.comm_d.expect("is_private"),
-                component_private_inputs.comm_r.expect("is_private"),
+                component_private_inputs.comm_d.context("is_private")?,
+                component_private_inputs.comm_r.context("is_private")?,
             )
         } else {
             (

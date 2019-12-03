@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use anyhow::Context;
 use byteorder::{LittleEndian, WriteBytesExt};
 use merkletree::store::StoreConfig;
 use rayon::prelude::*;
@@ -317,7 +318,7 @@ where
                 // )?;
 
                 let extracted = decode_domain_block::<H>(
-                    &pub_inputs.replica_id.expect("missing replica_id"),
+                    &pub_inputs.replica_id.context("missing replica_id")?,
                     tree_r,
                     challenge,
                     tree_r.read_at(challenge)?,
@@ -395,7 +396,7 @@ where
             }
 
             let key = {
-                let prover_bytes = pub_inputs.replica_id.expect("missing replica_id");
+                let prover_bytes = pub_inputs.replica_id.context("missing replica_id")?;
                 hasher.input(AsRef::<[u8]>::as_ref(&prover_bytes));
 
                 for p in proof.replica_parents[i].iter() {

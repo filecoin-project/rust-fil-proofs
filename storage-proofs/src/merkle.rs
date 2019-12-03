@@ -229,6 +229,7 @@ pub fn create_merkle_tree<H: Hasher>(
     );
 
     let f = |i| {
+        // TODO Replace `expect()` with `context()` (problem is the parallel iterator)
         let d = data_at_node(&data, i).expect("data_at_node math failed");
         // TODO/FIXME: This can panic. FOR NOW, let's leave this since we're experimenting with
         // optimization paths. However, we need to ensure that bad input will not lead to a panic

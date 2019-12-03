@@ -1,5 +1,6 @@
 use crate::error::*;
 
+use anyhow::Context;
 use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 use ff::{PrimeField, PrimeFieldRepr, ScalarEngine};
 use paired::bls12_381::FrRepr;
@@ -29,9 +30,7 @@ pub fn bytes_into_fr<E: Engine>(bytes: &[u8]) -> Result<E::Fr> {
     ensure!(bytes.len() == 32, Error::BadFrBytes);
 
     let mut fr_repr = <<<E as ScalarEngine>::Fr as PrimeField>::Repr as Default>::default();
-    fr_repr
-        .read_le(bytes)
-        .map_err(|_| anyhow!(Error::BadFrBytes))?;
+    fr_repr.read_le(bytes).context(Error::BadFrBytes)?;
 
     E::Fr::from_repr(fr_repr).map_err(|_| Error::BadFrBytes.into())
 }

@@ -1,5 +1,6 @@
 use rayon::prelude::*;
 
+use anyhow::Context;
 use bellperson::{groth16, Circuit};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use rand::{rngs::OsRng, RngCore};
@@ -92,7 +93,7 @@ where
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(settings::SETTINGS.lock().unwrap().num_proving_threads)
             .build()
-            .expect("failed to build thread pool");
+            .context("failed to build thread pool")?;
 
         info!("snark_proof:start");
         let groth_proofs: Result<Vec<_>> = pool.install(|| {
@@ -226,7 +227,7 @@ where
             private_inputs,
             partition_count,
         )
-        .expect("failed to generate partition proofs");
+        .context("failed to generate partition proofs")?;
 
         ensure!(
             vanilla_proofs.len() == partition_count,
@@ -235,7 +236,7 @@ where
 
         let partitions_are_verified =
             S::verify_all_partitions(vanilla_params, &public_inputs, &vanilla_proofs)
-                .expect("failed to verify partition proofs");
+                .context("failed to verify partition proofs")?;
 
         ensure!(partitions_are_verified, "Vanilla proof didn't verify.");
 

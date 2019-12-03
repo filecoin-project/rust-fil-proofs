@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
+use anyhow::Context;
+
 use crate::crypto::feistel::{self, FeistelPrecomputed};
 use crate::drgraph::{BucketGraph, Graph, BASE_DEGREE};
 use crate::error::Result;
@@ -47,14 +49,14 @@ impl ParentCache {
 
     pub fn read<F, T>(&self, node: u32, mut cb: F) -> Result<T>
     where
-        F: FnMut(Option<&Vec<u32>>) -> T,
+        F: FnMut(Option<&Vec<u32>>) -> Result<T>,
     {
         ensure!(
             node < self.cache_entries,
             "Cache does not contain node ({}).",
             node
         );
-        Ok(cb(self.cache[node as usize].as_ref()))
+        Ok(cb(self.cache[node as usize].as_ref())?)
     }
 
     pub fn write(&mut self, node: u32, parents: Vec<u32>) -> Result<()> {
@@ -326,7 +328,7 @@ where
             let mut cache_lock = PARENT_CACHE.write().unwrap();
             let cache = cache_lock
                 .get_mut(&self.id)
-                .expect("Invalid cache construction");
+                .context("Invalid cache construction")?;
             cache.write(node as u32, parents)?;
         }
 
@@ -334,10 +336,11 @@ where
         let cache_lock = PARENT_CACHE.read().unwrap();
         let cache = cache_lock
             .get(&self.id)
-            .expect("Invalid cache construction");
+            .context("Invalid cache construction")?;
 
-        cache.read(node as u32, |cache_parents| {
-            parents.copy_from_slice(cache_parents.expect("Invalid cache construction"));
+        cache.read(node as u32, |cache_parents| -> Result<_> {
+            parents.copy_from_slice(cache_parents.context("Invalid cache construction")?);
+            Ok(())
         })?;
 
         Ok(())

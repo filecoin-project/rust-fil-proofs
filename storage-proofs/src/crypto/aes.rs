@@ -1,4 +1,5 @@
 use aes::Aes256;
+use anyhow::{ensure, Context};
 use block_modes::block_padding::ZeroPadding;
 use block_modes::{BlockMode, Cbc};
 
@@ -7,19 +8,19 @@ use crate::error::Result;
 const IV: [u8; 16] = [0u8; 16];
 
 pub fn encode(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>> {
-    assert_eq!(key.len(), 32, "invalid key length");
+    ensure!(key.len() == 32, "invalid key length");
 
-    let mode = Cbc::<Aes256, ZeroPadding>::new_var(key, &IV).expect("invalid key");
+    let mode = Cbc::<Aes256, ZeroPadding>::new_var(key, &IV).context("invalid key")?;
 
     Ok(mode.encrypt_vec(plaintext))
 }
 
 pub fn decode(key: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>> {
-    assert_eq!(key.len(), 32, "invalid key length");
+    ensure!(key.len() == 32, "invalid key length");
 
-    let mode = Cbc::<Aes256, ZeroPadding>::new_var(key, &IV).expect("invalid key");
+    let mode = Cbc::<Aes256, ZeroPadding>::new_var(key, &IV).context("invalid key")?;
 
-    let res = mode.decrypt_vec(ciphertext).expect("failed to decrypt");
+    let res = mode.decrypt_vec(ciphertext).context("failed to decrypt")?;
     Ok(res)
 }
 
