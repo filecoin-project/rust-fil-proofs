@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{ensure, Result};
 use storage_proofs::drgraph::{DefaultTreeHasher, BASE_DEGREE};
 use storage_proofs::election_post::{self, ElectionPoSt};
 use storage_proofs::proof::ProofScheme;
@@ -57,10 +57,10 @@ pub fn setup_params(
     sector_bytes: PaddedBytesAmount,
     partitions: usize,
 ) -> Result<stacked::SetupParams> {
-    let window_challenges = select_challenges(partitions, POREP_WINDOW_MINIMUM_CHALLENGES, LAYERS);
+    let window_challenges = select_challenges(partitions, POREP_WINDOW_MINIMUM_CHALLENGES, LAYERS)?;
     let wrapper_challenges =
-        select_challenges(partitions, POREP_WRAPPER_MINIMUM_CHALLENGES, LAYERS);
-    let window_size_nodes = window_size_nodes_for_sector_bytes(sector_bytes).unwrap();
+        select_challenges(partitions, POREP_WRAPPER_MINIMUM_CHALLENGES, LAYERS)?;
+    let window_size_nodes = window_size_nodes_for_sector_bytes(sector_bytes)?;
     let sector_bytes = usize::from(sector_bytes);
 
     let config = StackedConfig {
@@ -68,13 +68,13 @@ pub fn setup_params(
         wrapper_challenges,
     };
 
-    assert!(
+    ensure!(
         sector_bytes % 32 == 0,
         "sector_bytes ({}) must be a multiple of 32",
         sector_bytes,
     );
 
-    assert!(
+    ensure!(
         sector_bytes % window_size_nodes * 32 == 0,
         "sector_bytes ({}) must be a multiple of the window size ({})",
         sector_bytes,
@@ -96,14 +96,14 @@ fn select_challenges(
     partitions: usize,
     minimum_total_challenges: usize,
     layers: usize,
-) -> LayerChallenges {
+) -> Result<LayerChallenges> {
     let mut count = 1;
-    let mut guess = LayerChallenges::new(layers, count);
+    let mut guess = LayerChallenges::new(layers, count)?;
     while partitions * guess.challenges_count_all() < minimum_total_challenges {
         count += 1;
-        guess = LayerChallenges::new(layers, count);
+        guess = LayerChallenges::new(layers, count)?;
     }
-    guess
+    Ok(guess)
 }
 
 #[cfg(test)]
@@ -114,7 +114,11 @@ mod tests {
 
     #[test]
     fn partition_layer_challenges_test() {
-        let f = |partitions| select_challenges(partitions, 12, LAYERS).challenges_count_all();
+        let f = |partitions| {
+            select_challenges(partitions, 12, LAYERS)
+                .unwrap()
+                .challenges_count_all()
+        };
         // Update to ensure all supported PoRepProofPartitions options are represented here.
         assert_eq!(6, f(usize::from(PoRepProofPartitions(2))));
 

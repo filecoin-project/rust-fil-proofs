@@ -10,7 +10,7 @@ fn drgraph(c: &mut Criterion) {
         .iter()
         .map(|n| {
             (
-                BucketGraph::<PedersenHasher>::new(*n, BASE_DEGREE, 0, new_seed()),
+                BucketGraph::<PedersenHasher>::new(*n, BASE_DEGREE, 0, new_seed()).unwrap(),
                 2,
             )
         })
@@ -22,7 +22,7 @@ fn drgraph(c: &mut Criterion) {
             |b, (graph, i)| {
                 b.iter(|| {
                     let mut parents = vec![0; 6];
-                    black_box(graph.parents(*i, &mut parents));
+                    black_box(graph.parents(*i, &mut parents).unwrap());
                 })
             },
             params,

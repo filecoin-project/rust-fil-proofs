@@ -18,6 +18,7 @@ use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph;
 use crate::election_post::{self, ElectionPoSt};
+use crate::error::Result;
 use crate::fr32::fr_into_bytes;
 use crate::hasher::Hasher;
 use crate::merklepor;
@@ -75,7 +76,7 @@ where
         pub_inputs: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::PublicInputs,
         pub_params: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
         _partition_k: Option<usize>,
-    ) -> Vec<Fr> {
+    ) -> Result<Vec<Fr>> {
         let mut inputs = Vec::new();
 
         let por_pub_params = merklepor::PublicParams {
@@ -95,7 +96,7 @@ where
                 pub_inputs.sector_challenge_index,
                 n as u64,
                 pub_params.sector_size,
-            );
+            )?;
             for i in 0..election_post::POST_CHALLENGED_NODES {
                 let por_pub_inputs = merklepor::PublicInputs {
                     commitment: None,
@@ -105,7 +106,7 @@ where
                     &por_pub_inputs,
                     &por_pub_params,
                     None,
-                );
+                )?;
 
                 inputs.extend(por_inputs);
             }
@@ -114,7 +115,7 @@ where
         // 3. Inputs for verifying partial_ticket generation
         inputs.push(pub_inputs.partial_ticket);
 
-        inputs
+        Ok(inputs)
     }
 
     fn circuit(
@@ -122,7 +123,7 @@ where
         _priv_in: <ElectionPoStCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::Proof,
         _pub_params: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
-    ) -> ElectionPoStCircuit<'a, Bls12, H> {
+    ) -> Result<ElectionPoStCircuit<'a, Bls12, H>> {
         let comm_r = pub_in.comm_r.into();
         let comm_c = vanilla_proof.comm_c.into();
         let comm_q = vanilla_proof.comm_q.into();
@@ -140,7 +141,7 @@ where
             .map(|v| v.iter().map(|p| Some(((*p).0.into(), p.1))).collect())
             .collect();
 
-        ElectionPoStCircuit {
+        Ok(ElectionPoStCircuit {
             params: &*JJ_PARAMS,
             leafs,
             comm_r: Some(comm_r),
@@ -153,7 +154,7 @@ where
             prover_id: bytes_into_bits_opt(&pub_in.prover_id[..]),
             sector_id: Some(u64::from(pub_in.sector_id)),
             _h: PhantomData,
-        }
+        })
     }
 
     fn blank_circuit(
@@ -388,7 +389,7 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
                 .collect();
 
-            let graph = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed());
+            let graph = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
             let tree = graph.merkle_tree(data.as_slice()).unwrap();
             trees.insert(i.into(), tree);
         }
@@ -476,7 +477,8 @@ mod tests {
             &pub_inputs,
             &pub_params,
             None,
-        );
+        )
+        .unwrap();
         let expected_inputs = cs.get_inputs();
 
         for ((input, label), generated_input) in
@@ -515,7 +517,7 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
                 .collect();
 
-            let graph = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed());
+            let graph = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
             let tree = graph.merkle_tree(data.as_slice()).unwrap();
             trees.insert(i.into(), tree);
         }
@@ -557,7 +559,8 @@ mod tests {
 
         {
             let (circuit, inputs) =
-                ElectionPoStCompound::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs);
+                ElectionPoStCompound::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs)
+                    .unwrap();
 
             let mut cs = TestConstraintSystem::new();
 
@@ -578,7 +581,8 @@ mod tests {
         // Use this to debug differences between blank and regular circuit generation.
         {
             let (circuit1, _inputs) =
-                ElectionPoStCompound::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs);
+                ElectionPoStCompound::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs)
+                    .unwrap();
             let blank_circuit =
                 ElectionPoStCompound::<PedersenHasher>::blank_circuit(&pub_params.vanilla_params);
 

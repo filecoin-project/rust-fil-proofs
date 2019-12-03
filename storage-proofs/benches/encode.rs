@@ -29,7 +29,7 @@ fn pregenerate_data<H: Hasher>(degree: usize) -> Pregenerated<H> {
     let parents: Vec<u32> = (0..degree as u32).map(|pos| pos).collect();
     let replica_id: H::Domain = H::Domain::random(&mut rng);
 
-    let graph = StackedBucketGraph::<H>::new_stacked(degree + 1, degree, 0, new_seed());
+    let graph = StackedBucketGraph::<H>::new_stacked(degree + 1, degree, 0, new_seed()).unwrap();
 
     Pregenerated {
         data,

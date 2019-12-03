@@ -12,6 +12,7 @@ use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph;
+use crate::error::Result;
 use crate::hasher::Hasher;
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
@@ -63,7 +64,7 @@ where
         pub_in: &<RationalPoSt<'a, H> as ProofScheme<'a>>::PublicInputs,
         pub_params: &<RationalPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
         _partition_k: Option<usize>,
-    ) -> Vec<Fr> {
+    ) -> Result<Vec<Fr>> {
         let mut inputs = Vec::new();
 
         let por_pub_params = merklepor::PublicParams {
@@ -71,9 +72,8 @@ where
             private: true,
         };
 
-        assert_eq!(
-            pub_in.challenges.len(),
-            pub_in.comm_rs.len(),
+        ensure!(
+            pub_in.challenges.len() == pub_in.comm_rs.len(),
             "Missmatch in challenges and comm_rs"
         );
 
@@ -85,12 +85,12 @@ where
                 challenge: challenge.leaf as usize,
             };
             let por_inputs =
-                PoRCompound::<H>::generate_public_inputs(&por_pub_inputs, &por_pub_params, None);
+                PoRCompound::<H>::generate_public_inputs(&por_pub_inputs, &por_pub_params, None)?;
 
             inputs.extend(por_inputs);
         }
 
-        inputs
+        Ok(inputs)
     }
 
     fn circuit(
@@ -98,7 +98,7 @@ where
         _priv_in: <RationalPoStCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &<RationalPoSt<'a, H> as ProofScheme<'a>>::Proof,
         _pub_params: &<RationalPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
-    ) -> RationalPoStCircuit<'a, Bls12, H> {
+    ) -> Result<RationalPoStCircuit<'a, Bls12, H>> {
         let comm_rs: Vec<_> = pub_in.comm_rs.iter().map(|c| Some((*c).into())).collect();
         let comm_cs: Vec<_> = vanilla_proof
             .comm_cs
@@ -124,7 +124,7 @@ where
             .map(|v| v.iter().map(|p| Some(((*p).0.into(), p.1))).collect())
             .collect();
 
-        RationalPoStCircuit {
+        Ok(RationalPoStCircuit {
             params: &*JJ_PARAMS,
             leafs,
             comm_rs,
@@ -132,7 +132,7 @@ where
             comm_r_lasts,
             paths,
             _h: PhantomData,
-        }
+        })
     }
 
     fn blank_circuit(
@@ -307,10 +307,10 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
-        let graph1 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed());
+        let graph1 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
 
-        let graph2 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed());
+        let graph2 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
 
         let faults = OrderedSectorSet::new();
@@ -400,7 +400,8 @@ mod tests {
             &pub_inputs,
             &pub_params,
             None,
-        );
+        )
+        .unwrap();
         let expected_inputs = cs.get_inputs();
 
         for ((input, label), generated_input) in
@@ -443,10 +444,10 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
-        let graph1 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed());
+        let graph1 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
 
-        let graph2 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed());
+        let graph2 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
 
         let faults = OrderedSectorSet::new();
@@ -507,7 +508,8 @@ mod tests {
             &pub_params,
             &pub_inputs,
             &priv_inputs,
-        );
+        )
+        .unwrap();
 
         {
             let mut cs = TestConstraintSystem::new();

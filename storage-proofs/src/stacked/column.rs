@@ -15,18 +15,21 @@ pub struct Column<H: Hasher> {
 }
 
 impl<H: Hasher> Column<H> {
-    pub fn new(index: u32, layers: usize, rows: Vec<H::Domain>) -> Self {
-        assert_eq!(rows.len() % layers, 0);
+    pub fn new(index: u32, layers: usize, rows: Vec<H::Domain>) -> Result<Self> {
+        ensure!(
+            rows.len() % layers == 0,
+            "Rows must be a multiple of layers."
+        );
 
-        Column {
+        Ok(Column {
             index,
             rows,
             layers,
             _h: PhantomData,
-        }
+        })
     }
 
-    pub fn with_capacity(index: u32, layers: usize, capacity: usize) -> Self {
+    pub fn with_capacity(index: u32, layers: usize, capacity: usize) -> Result<Self> {
         Column::new(index, layers, Vec::with_capacity(capacity))
     }
 
@@ -43,12 +46,12 @@ impl<H: Hasher> Column<H> {
         hash_single_column(&self.rows[..])
     }
 
-    pub fn get_node_at_layer(&self, window_index: usize, layer: usize) -> &H::Domain {
-        assert!(layer > 0, "layer must be greater than 0");
+    pub fn get_node_at_layer(&self, window_index: usize, layer: usize) -> Result<&H::Domain> {
+        ensure!(layer > 0, "layer must be greater than 0");
         let row_layer_index = layer - 1;
         let index = window_index * self.layers + row_layer_index;
 
-        &self.rows[index]
+        Ok(&self.rows[index])
     }
 
     /// Create a column proof for this column.

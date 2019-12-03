@@ -1,3 +1,4 @@
+use crate::error::Result;
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
 use sha2::{Digest, Sha256};
@@ -12,11 +13,11 @@ pub struct LayerChallenges {
 }
 
 impl LayerChallenges {
-    pub fn new(layers: usize, count: usize) -> Self {
-        assert!(layers > 1, "layers must be at least 2");
-        assert!(count > 0, "there must be at least 1 challenge");
+    pub fn new(layers: usize, count: usize) -> Result<Self> {
+        ensure!(layers > 1, "layers must be at least 2");
+        ensure!(count > 0, "there must be at least 1 challenge");
 
-        LayerChallenges { layers, count }
+        Ok(LayerChallenges { layers, count })
     }
 
     pub fn layers(&self) -> usize {
@@ -34,7 +35,7 @@ impl LayerChallenges {
         replica_id: &D,
         seed: &[u8; 32],
         k: u8,
-    ) -> Vec<usize> {
+    ) -> Result<Vec<usize>> {
         self.derive_internal(self.challenges_count_all(), leaves, replica_id, seed, k)
     }
 
@@ -45,10 +46,10 @@ impl LayerChallenges {
         replica_id: &D,
         seed: &[u8; 32],
         k: u8,
-    ) -> Vec<usize> {
-        assert!(leaves > 2, "Too few leaves: {}", leaves);
+    ) -> Result<Vec<usize>> {
+        ensure!(leaves > 2, "Too few leaves: {}", leaves);
 
-        (0..challenges_count)
+        let derived = (0..challenges_count)
             .map(|i| {
                 let j: u32 = ((challenges_count * k as usize) + i) as u32;
 
@@ -68,7 +69,8 @@ impl LayerChallenges {
                     .expect("`big_mod_challenge` exceeds size of `usize`");
                 big_mod_challenge + 1
             })
-            .collect()
+            .collect();
+        Ok(derived)
     }
 }
 
@@ -89,7 +91,7 @@ mod test {
         let n = 200;
         let layers = 100;
 
-        let challenges = LayerChallenges::new(layers, n);
+        let challenges = LayerChallenges::new(layers, n).unwrap();
         let leaves = 1 << 30;
         let rng = &mut thread_rng();
         let replica_id: PedersenDomain = PedersenDomain::random(rng);
@@ -137,10 +139,15 @@ mod test {
 
         for _ in 1..=layers {
             let one_partition_challenges = LayerChallenges::new(layers, total_challenges)
-                .derive_all(leaves, &replica_id, &seed, 0);
+                .unwrap()
+                .derive_all(leaves, &replica_id, &seed, 0)
+                .unwrap();
             let many_partition_challenges = (0..partitions)
                 .flat_map(|k| {
-                    LayerChallenges::new(layers, n).derive_all(leaves, &replica_id, &seed, k as u8)
+                    LayerChallenges::new(layers, n)
+                        .unwrap()
+                        .derive_all(leaves, &replica_id, &seed, k as u8)
+                        .unwrap()
                 })
                 .collect::<Vec<_>>();
 

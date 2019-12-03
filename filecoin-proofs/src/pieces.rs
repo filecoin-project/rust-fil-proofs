@@ -65,17 +65,17 @@ pub fn compute_comm_d(sector_size: SectorSize, piece_infos: &[PieceInfo]) -> Res
         );
 
         while stack.peek().size < piece_info.size {
-            stack.shift_reduce(zero_padding(stack.peek().size))
+            stack.shift_reduce(zero_padding(stack.peek().size)?)?
         }
 
-        stack.shift_reduce(piece_info.clone());
+        stack.shift_reduce(piece_info.clone())?;
     }
 
     while stack.len() > 1 {
-        stack.shift_reduce(zero_padding(stack.peek().size));
+        stack.shift_reduce(zero_padding(stack.peek().size)?)?;
     }
 
-    assert_eq!(stack.len(), 1);
+    ensure!(stack.len() == 1, "Stack size ({}) must be 1.", stack.len());
 
     let comm_d_calculated = stack.pop().commitment;
 
@@ -111,29 +111,30 @@ impl Stack {
         self.0.pop().expect("empty stack popped")
     }
 
-    pub fn reduce1(&mut self) -> bool {
+    pub fn reduce1(&mut self) -> Result<bool> {
         if self.len() < 2 {
-            return false;
+            return Ok(false);
         }
 
         if self.peek().size == self.peek2().size {
             let right = self.pop();
             let left = self.pop();
-            let joined = join_piece_infos(left, right);
+            let joined = join_piece_infos(left, right)?;
             self.shift(joined);
-            return true;
+            return Ok(true);
         }
 
-        false
+        Ok(false)
     }
 
-    pub fn reduce(&mut self) {
-        while self.reduce1() {}
+    pub fn reduce(&mut self) -> Result<()> {
+        while self.reduce1()? {}
+        Ok(())
     }
 
-    pub fn shift_reduce(&mut self, piece: PieceInfo) {
+    pub fn shift_reduce(&mut self, piece: PieceInfo) -> Result<()> {
         self.shift(piece);
-        self.reduce();
+        self.reduce()
     }
 
     pub fn len(&self) -> usize {
@@ -142,7 +143,7 @@ impl Stack {
 }
 
 /// Create a padding `PieceInfo` of size `size`.
-fn zero_padding(size: UnpaddedBytesAmount) -> PieceInfo {
+fn zero_padding(size: UnpaddedBytesAmount) -> Result<PieceInfo> {
     let padded_size: PaddedBytesAmount = size.into();
     let mut commitment = [0u8; 32];
 
@@ -157,19 +158,27 @@ fn zero_padding(size: UnpaddedBytesAmount) -> PieceInfo {
         hashed_size *= 2;
     }
 
-    assert_eq!(hashed_size, u64::from(padded_size));
+    ensure!(
+        hashed_size == u64::from(padded_size),
+        "Hashed size must equal padded size"
+    );
 
-    PieceInfo { size, commitment }
+    Ok(PieceInfo { size, commitment })
 }
 
 /// Join two equally sized `PieceInfo`s together, by hashing them and adding their sizes.
-fn join_piece_infos(mut left: PieceInfo, right: PieceInfo) -> PieceInfo {
-    assert_eq!(left.size, right.size);
+fn join_piece_infos(mut left: PieceInfo, right: PieceInfo) -> Result<PieceInfo> {
+    ensure!(
+        left.size == right.size,
+        "Piece sizes must be equal (left: {:?}, right: {:?})",
+        left.size,
+        right.size
+    );
     let h = piece_hash(&left.commitment, &right.commitment);
 
     left.commitment.copy_from_slice(AsRef::<[u8]>::as_ref(&h));
     left.size = left.size + right.size;
-    left
+    Ok(left)
 }
 
 fn piece_hash(a: &[u8], b: &[u8]) -> <DefaultPieceHasher as Hasher>::Domain {
@@ -436,7 +445,7 @@ mod tests {
         // ]
 
         let sector_size = SectorSize(32 * 128);
-        let pad = zero_padding(UnpaddedBytesAmount(127));
+        let pad = zero_padding(UnpaddedBytesAmount(127)).unwrap();
 
         let pieces = vec![
             PieceInfo {
@@ -637,7 +646,7 @@ mod tests {
             BASE_DEGREE,
             EXP_DEGREE,
             new_seed(),
-        );
+        )?;
 
         let mut staged_sector = Vec::with_capacity(u64::from(sector_size) as usize);
         let mut staged_sector_io = std::io::Cursor::new(&mut staged_sector);

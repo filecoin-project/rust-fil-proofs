@@ -253,7 +253,7 @@ where
             sp.drg.degree,
             sp.drg.expansion_degree,
             sp.drg.seed,
-        );
+        )?;
 
         Ok(PublicParams::new(graph, sp.private, sp.challenges_count))
     }
@@ -264,7 +264,7 @@ where
         priv_inputs: &'b Self::PrivateInputs,
     ) -> Result<Self::Proof> {
         let len = pub_inputs.challenges.len();
-        assert!(
+        ensure!(
             len <= pub_params.challenges_count,
             "too many challenges {} > {}",
             len,
@@ -277,7 +277,7 @@ where
 
         for i in 0..len {
             let challenge = pub_inputs.challenges[i] % pub_params.graph.size();
-            assert_ne!(challenge, 0, "cannot prove the first node");
+            ensure!(challenge != 0, "cannot prove the first node");
 
             let tree_d = &priv_inputs.tree_d;
             let tree_r = &priv_inputs.tree_r;
@@ -290,7 +290,7 @@ where
             });
 
             let mut parents = vec![0; pub_params.graph.degree()];
-            pub_params.graph.parents(challenge, &mut parents);
+            pub_params.graph.parents(challenge, &mut parents)?;
             let mut replica_parentsi = Vec::with_capacity(parents.len());
 
             for p in &parents {
@@ -360,7 +360,7 @@ where
                 let mut expected_parents = vec![0; pub_params.graph.degree()];
                 pub_params
                     .graph
-                    .parents(pub_inputs.challenges[i], &mut expected_parents);
+                    .parents(pub_inputs.challenges[i], &mut expected_parents)?;
                 if proof.replica_parents[i].len() != expected_parents.len() {
                     println!(
                         "proof parents were not the same length as in public parameters: {} != {}",
@@ -382,7 +382,7 @@ where
             }
 
             let challenge = pub_inputs.challenges[i] % pub_params.graph.size();
-            assert_ne!(challenge, 0, "cannot prove the first node");
+            ensure!(challenge != 0, "cannot prove the first node");
 
             if !proof.replica_nodes[i].proof.validate(challenge) {
                 return Ok(false);
@@ -453,7 +453,7 @@ where
 
         let mut parents = vec![0; graph.degree()];
         for node in 0..graph.size() {
-            graph.parents(node, &mut parents);
+            graph.parents(node, &mut parents)?;
             let key = graph.create_key(replica_id, node, &parents, data, None)?;
             let start = data_at_node_offset(node);
             let end = start + NODE_SIZE;
@@ -531,7 +531,7 @@ where
     G: Graph<H>,
 {
     let mut parents = vec![0; graph.degree()];
-    graph.parents(v, &mut parents);
+    graph.parents(v, &mut parents)?;
     let key = graph.create_key(replica_id, v, &parents, &data, exp_parents_data)?;
     let node_data = H::Domain::try_from_bytes(&data_at_node(data, v)?)?;
 

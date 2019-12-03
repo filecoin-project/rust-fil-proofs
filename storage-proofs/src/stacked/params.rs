@@ -162,7 +162,7 @@ impl<T: Domain, S: Domain> PublicInputs<T, S> {
         layer_challenges: &LayerChallenges,
         leaves: usize,
         partition_k: Option<usize>,
-    ) -> Vec<usize> {
+    ) -> Result<Vec<usize>> {
         let k = partition_k.unwrap_or(0);
 
         layer_challenges.derive_all::<T>(leaves, &self.replica_id, &self.seed, k as u8)
@@ -256,7 +256,7 @@ impl<H: Hasher> WrapperProof<H> {
         challenge: usize,
         wrapper_graph: &StackedBucketGraph<H>,
         comm_q: &H::Domain,
-    ) -> bool {
+    ) -> Result<bool> {
         let replica_id = &pub_inputs.replica_id;
 
         check!(challenge < wrapper_graph.size());
@@ -267,7 +267,7 @@ impl<H: Hasher> WrapperProof<H> {
 
         trace!("verify comm_q_parents");
         let mut parents = vec![0; wrapper_graph.expansion_degree()];
-        wrapper_graph.expanded_parents(challenge, &mut parents);
+        wrapper_graph.expanded_parents(challenge, &mut parents)?;
 
         for (proof, parent) in self.comm_q_parents_proofs.iter().zip(parents.iter()) {
             check_eq!(proof.root(), comm_q);
@@ -276,9 +276,9 @@ impl<H: Hasher> WrapperProof<H> {
 
         trace!("verify labeling");
         let labeled_node = self.comm_r_last_proof.leaf();
-        check!(self.labeling_proof.verify(replica_id, labeled_node));
+        check!(self.labeling_proof.verify(replica_id, labeled_node)?);
 
-        true
+        Ok(true)
     }
 }
 
@@ -295,7 +295,7 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
         challenge: usize,
         comm_q: &H::Domain,
         comm_c: &H::Domain,
-    ) -> bool {
+    ) -> Result<bool> {
         let window_graph = &pub_params.window_graph;
         let replica_id = &pub_inputs.replica_id;
 
@@ -309,27 +309,27 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
 
         // Verify initial data layer
         trace!("verify initial data layer");
-        check!(self.verify_comm_d_proofs(challenge, pub_params, pub_inputs));
+        check!(self.verify_comm_d_proofs(challenge, pub_params, pub_inputs)?);
 
         // Verify q data layer
         trace!("verify q data layer");
-        check!(self.verify_comm_q_proofs(pub_params, challenge, comm_q));
+        check!(self.verify_comm_q_proofs(pub_params, challenge, comm_q)?);
 
         // Verify replica column openings
         trace!("verify replica column openings");
         check!(self
             .replica_column_proof
-            .verify(challenge, &pub_params.window_graph, comm_c));
+            .verify(challenge, &pub_params.window_graph, comm_c)?);
 
-        check!(self.verify_labels(replica_id, pub_params.config.layers()));
+        check!(self.verify_labels(replica_id, pub_params.config.layers())?);
 
         trace!("verify encoding");
-        check!(self.verify_encoding_proofs(replica_id));
+        check!(self.verify_encoding_proofs(replica_id)?);
 
-        true
+        Ok(true)
     }
 
-    fn verify_encoding_proofs(&self, replica_id: &H::Domain) -> bool {
+    fn verify_encoding_proofs(&self, replica_id: &H::Domain) -> Result<bool> {
         for (encoding_proof, (comm_q_proof, comm_d_proof)) in self
             .encoding_proofs
             .iter()
@@ -339,9 +339,9 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
                 replica_id,
                 comm_q_proof.leaf(),
                 comm_d_proof.leaf(),
-            ));
+            )?);
         }
-        true
+        Ok(true)
     }
 
     fn verify_comm_d_proofs(
@@ -349,18 +349,18 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
         challenge: usize,
         pub_params: &PublicParams<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
-    ) -> bool {
+    ) -> Result<bool> {
         for (window_index, comm_d_proof) in self.comm_d_proofs.iter().enumerate() {
             let c = window_index * pub_params.window_size_nodes() + challenge;
             check!(comm_d_proof.proves_challenge(c));
             if let Some(ref tau) = pub_inputs.tau {
                 check_eq!(comm_d_proof.root(), &tau.comm_d);
             } else {
-                return false;
+                return Ok(false);
             }
         }
 
-        true
+        Ok(true)
     }
 
     fn verify_comm_q_proofs(
@@ -368,17 +368,17 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
         pub_params: &PublicParams<H>,
         challenge: usize,
         comm_q: &H::Domain,
-    ) -> bool {
+    ) -> Result<bool> {
         for (window_index, comm_q_proof) in self.comm_q_proofs.iter().enumerate() {
             let c = window_index * pub_params.window_size_nodes() + challenge;
             check!(comm_q_proof.proves_challenge(c));
             check_eq!(comm_q_proof.root(), comm_q);
         }
-        true
+        Ok(true)
     }
 
     /// Verify all encodings.
-    fn verify_labels(&self, replica_id: &H::Domain, layers: usize) -> bool {
+    fn verify_labels(&self, replica_id: &H::Domain, layers: usize) -> Result<bool> {
         for (window_index, labeling_proofs) in self.labeling_proofs.iter().enumerate() {
             // Verify Labels Layer 1..layers
             check_eq!(labeling_proofs.len(), layers - 1);
@@ -394,12 +394,12 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
                 let expected_labeled_node = self
                     .replica_column_proof
                     .c_x
-                    .get_node_at_layer(window_index, *layer);
+                    .get_node_at_layer(window_index, *layer)?;
 
-                check!(proof.verify(replica_id, expected_labeled_node));
+                check!(proof.verify(replica_id, expected_labeled_node)?);
             }
         }
-        true
+        Ok(true)
     }
 }
 
@@ -428,17 +428,17 @@ impl<H: Hasher> ReplicaColumnProof<H> {
         challenge: usize,
         window_graph: &StackedBucketGraph<H>,
         expected_comm_c: &H::Domain,
-    ) -> bool {
+    ) -> Result<bool> {
         let mut parents = vec![0; window_graph.degree()];
-        window_graph.parents(challenge, &mut parents);
+        window_graph.parents(challenge, &mut parents)?;
 
         trace!("  verify c_x");
         check_eq!(self.c_x.root(), expected_comm_c);
-        check!(self.c_x.verify(challenge as u32, &expected_comm_c));
+        check!(self.c_x.verify(challenge as u32, &expected_comm_c)?);
 
         trace!("  verify drg_parents");
         for (proof, parent) in self.drg_parents.iter().zip(parents.iter()) {
-            check!(proof.verify(*parent, &expected_comm_c));
+            check!(proof.verify(*parent, &expected_comm_c)?);
         }
 
         trace!("  verify exp_parents");
@@ -447,10 +447,10 @@ impl<H: Hasher> ReplicaColumnProof<H> {
             .iter()
             .zip(parents.iter().skip(self.drg_parents.len()))
         {
-            check!(proof.verify(*parent, &expected_comm_c));
+            check!(proof.verify(*parent, &expected_comm_c)?);
         }
 
-        true
+        Ok(true)
     }
 }
 
@@ -610,12 +610,12 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
         })
     }
 
-    pub fn labels_for_layer(&self, layer: usize) -> &DiskStore<H::Domain> {
+    pub fn labels_for_layer(&self, layer: usize) -> Result<&DiskStore<H::Domain>> {
         self.labels.labels_for_layer(layer)
     }
 
     pub fn domain_node_at_layer(&self, layer: usize, node_index: u32) -> Result<H::Domain> {
-        self.labels_for_layer(layer).read_at(node_index as usize)
+        self.labels_for_layer(layer)?.read_at(node_index as usize)
     }
 
     pub fn column(&self, column_index: u32, pub_params: &PublicParams<H>) -> Result<Column<H>> {
@@ -646,8 +646,8 @@ impl<H: Hasher> Labels<H> {
     }
 
     pub fn labels_for_layer(&self, layer: usize) -> Result<DiskStore<H::Domain>> {
-        assert!(layer != 0, "Layer cannot be 0");
-        assert!(
+        ensure!(layer != 0, "Layer cannot be 0");
+        ensure!(
             layer <= self.layers(),
             "Layer {} is not available (only {} layers available)",
             layer,
@@ -656,7 +656,7 @@ impl<H: Hasher> Labels<H> {
 
         let row_index = layer - 1;
         let config = self.labels[row_index].clone();
-        assert!(config.size.is_some());
+        ensure!(config.size.is_some(), "There needs to be a config.");
 
         DiskStore::new_from_disk(config.size.unwrap(), &config)
     }
@@ -677,13 +677,13 @@ impl<H: Hasher> Labels<H> {
             .labels
             .iter()
             .map(|label| {
-                assert!(label.size.is_some());
+                ensure!(label.size.is_some(), "Label must have a size.");
                 let store = DiskStore::new_from_disk(label.size.unwrap(), &label)?;
                 store.read_at(node as usize)
             })
             .collect::<Result<_>>()?;
 
-        Ok(Column::new(node, layers, rows))
+        Column::new(node, layers, rows)
     }
 }
 
@@ -717,9 +717,9 @@ impl<H: Hasher> LabelsCache<H> {
         self.labels.len()
     }
 
-    pub fn labels_for_layer(&self, layer: usize) -> &DiskStore<H::Domain> {
-        assert!(layer != 0, "Layer cannot be 0");
-        assert!(
+    pub fn labels_for_layer(&self, layer: usize) -> Result<&DiskStore<H::Domain>> {
+        ensure!(layer != 0, "Layer cannot be 0");
+        ensure!(
             layer <= self.layers(),
             "Layer {} is not available (only {} layers available)",
             layer,
@@ -727,7 +727,7 @@ impl<H: Hasher> LabelsCache<H> {
         );
 
         let row_index = layer - 1;
-        &self.labels[row_index]
+        Ok(&self.labels[row_index])
     }
 
     /// Returns the labels on the last layer.
@@ -742,13 +742,16 @@ impl<H: Hasher> LabelsCache<H> {
 
     /// Build the column for the given node.
     pub fn column(&self, node: u32, pub_params: &PublicParams<H>) -> Result<Column<H>> {
-        assert!((node as usize) < pub_params.window_size_nodes());
+        ensure!(
+            (node as usize) < pub_params.window_size_nodes(),
+            "Node must be small than window size."
+        );
 
         let len = self.layers();
-        assert!(len > 1, "invalid layer number");
+        ensure!(len > 1, "invalid layer number");
 
         let num_windows = pub_params.num_windows();
-        assert!(num_windows > 0, "invalid number of windows");
+        ensure!(num_windows > 0, "invalid number of windows");
 
         let rows = (0..num_windows)
             .flat_map(|window_index| {
@@ -762,7 +765,7 @@ impl<H: Hasher> LabelsCache<H> {
             })
             .collect::<Result<_>>()?;
 
-        Ok(Column::new(node, len - 1, rows))
+        Column::new(node, len - 1, rows)
     }
 }
 

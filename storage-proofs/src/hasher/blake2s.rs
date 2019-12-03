@@ -27,9 +27,8 @@ impl Hasher for Blake2sHasher {
     }
 
     fn create_label(data: &[u8], m: usize) -> Result<Self::Domain> {
-        assert_eq!(
-            data.len(),
-            32 * (1 + m),
+        ensure!(
+            data.len() == 32 * (1 + m),
             "invalid input length: data.len(): {} m: {}",
             data.len(),
             m

@@ -2,7 +2,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::prelude::*;
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use bincode::{deserialize, serialize};
 use memmap::MmapOptions;
 use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
@@ -243,20 +243,17 @@ pub fn seal_commit<T: AsRef<Path>>(
 
     // Verification is cheap when parameters are cached,
     // and it is never correct to return a proof which does not verify.
-    assert!(
-        verify_seal(
-            porep_config,
-            comm_r,
-            comm_d,
-            prover_id,
-            sector_id,
-            ticket,
-            seed,
-            &buf,
-        )
-        .expect("post-seal verification sanity check failed"),
-        "invalid seal generated, bad things have happened"
-    );
+    verify_seal(
+        porep_config,
+        comm_r,
+        comm_d,
+        prover_id,
+        sector_id,
+        ticket,
+        seed,
+        &buf,
+    )
+    .context("post-seal verification sanity check failed")?;
 
     info!("seal_commit:end");
 

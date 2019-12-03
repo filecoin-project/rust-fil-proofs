@@ -22,13 +22,13 @@ impl PieceSpec {
     /// in leaf units.
     /// Proof size is a number of elements (size same as one leaf) provided in the variable part of a PieceInclusionProof.
     pub fn compute_packing(&self, tree_len: usize) -> Result<(Vec<(usize, usize)>, usize)> {
-        ensure!(self.is_aligned(tree_len), Error::UnalignedPiece);
+        ensure!(self.is_aligned(tree_len)?, Error::UnalignedPiece);
 
         let packing_list = vec![(0, self.number_of_leaves)];
         Ok((packing_list, self.proof_length(tree_len)))
     }
 
-    pub fn is_aligned(&self, tree_len: usize) -> bool {
+    pub fn is_aligned(&self, tree_len: usize) -> Result<bool> {
         piece_is_aligned(self.position, self.number_of_leaves, tree_len)
     }
 
@@ -100,10 +100,10 @@ pub fn generate_piece_commitment_bytes_from_source<H: Hasher>(
 ////////////////////////////////////////////////////////////////////////////////
 // Utility
 
-pub fn piece_is_aligned(position: usize, length: usize, tree_len: usize) -> bool {
-    let capacity_at_pos = subtree_capacity(position, tree_len);
+pub fn piece_is_aligned(position: usize, length: usize, tree_len: usize) -> Result<bool> {
+    let capacity_at_pos = subtree_capacity(position, tree_len)?;
 
-    capacity_at_pos.is_power_of_two() && capacity_at_pos >= length
+    Ok(capacity_at_pos.is_power_of_two() && capacity_at_pos >= length)
 }
 
 fn height_for_length(n: usize) -> usize {
@@ -114,8 +114,8 @@ fn height_for_length(n: usize) -> usize {
     }
 }
 
-fn subtree_capacity(pos: usize, total: usize) -> usize {
-    assert!(pos < total, "position must be less than tree capacity");
+fn subtree_capacity(pos: usize, total: usize) -> Result<usize> {
+    ensure!(pos < total, "position must be less than tree capacity");
 
     let mut capacity = 1;
     // If tree is not 'full', then pos 0 will have subtree_capacity greater than size of tree.
@@ -125,7 +125,7 @@ fn subtree_capacity(pos: usize, total: usize) -> usize {
         capacity *= 2;
         cursor >>= 1;
     }
-    capacity
+    Ok(capacity)
 }
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -136,22 +136,22 @@ mod tests {
 
     #[test]
     fn test_subtree_capacity() {
-        assert_eq!(subtree_capacity(0, 16), 16);
-        assert_eq!(subtree_capacity(1, 16), 1);
-        assert_eq!(subtree_capacity(2, 16), 2);
-        assert_eq!(subtree_capacity(3, 16), 1);
-        assert_eq!(subtree_capacity(4, 16), 4);
-        assert_eq!(subtree_capacity(5, 16), 1);
-        assert_eq!(subtree_capacity(6, 16), 2);
-        assert_eq!(subtree_capacity(7, 16), 1);
-        assert_eq!(subtree_capacity(8, 16), 8);
-        assert_eq!(subtree_capacity(9, 16), 1);
-        assert_eq!(subtree_capacity(10, 16), 2);
-        assert_eq!(subtree_capacity(11, 16), 1);
-        assert_eq!(subtree_capacity(12, 16), 4);
-        assert_eq!(subtree_capacity(13, 16), 1);
-        assert_eq!(subtree_capacity(14, 16), 2);
-        assert_eq!(subtree_capacity(15, 16), 1);
+        assert_eq!(subtree_capacity(0, 16).unwrap(), 16);
+        assert_eq!(subtree_capacity(1, 16).unwrap(), 1);
+        assert_eq!(subtree_capacity(2, 16).unwrap(), 2);
+        assert_eq!(subtree_capacity(3, 16).unwrap(), 1);
+        assert_eq!(subtree_capacity(4, 16).unwrap(), 4);
+        assert_eq!(subtree_capacity(5, 16).unwrap(), 1);
+        assert_eq!(subtree_capacity(6, 16).unwrap(), 2);
+        assert_eq!(subtree_capacity(7, 16).unwrap(), 1);
+        assert_eq!(subtree_capacity(8, 16).unwrap(), 8);
+        assert_eq!(subtree_capacity(9, 16).unwrap(), 1);
+        assert_eq!(subtree_capacity(10, 16).unwrap(), 2);
+        assert_eq!(subtree_capacity(11, 16).unwrap(), 1);
+        assert_eq!(subtree_capacity(12, 16).unwrap(), 4);
+        assert_eq!(subtree_capacity(13, 16).unwrap(), 1);
+        assert_eq!(subtree_capacity(14, 16).unwrap(), 2);
+        assert_eq!(subtree_capacity(15, 16).unwrap(), 1);
     }
 
     #[test]

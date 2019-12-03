@@ -75,7 +75,7 @@ where
         let partition_count = Self::partition_count(pub_params);
 
         // This will always run at least once, since there cannot be zero partitions.
-        assert!(partition_count > 0);
+        ensure!(partition_count > 0, "There must be partitions");
 
         info!("vanilla_proof:start");
         let vanilla_proofs =
@@ -85,7 +85,7 @@ where
 
         let sanity_check =
             S::verify_all_partitions(&pub_params.vanilla_params, &pub_in, &vanilla_proofs)?;
-        assert!(sanity_check, "sanity check failed");
+        ensure!(sanity_check, "sanity check failed");
 
         // Use a custom pool for this, so we can control the number of threads being used.
         let pool = rayon::ThreadPoolBuilder::new()
@@ -135,7 +135,7 @@ where
 
         for (k, circuit_proof) in multi_proof.circuit_proofs.iter().enumerate() {
             let inputs =
-                Self::generate_public_inputs(public_inputs, vanilla_public_params, Some(k));
+                Self::generate_public_inputs(public_inputs, vanilla_public_params, Some(k))?;
 
             if !groth16::verify_proof(&pvk, &circuit_proof, inputs.as_slice())? {
                 return Ok(false);
@@ -167,7 +167,7 @@ where
             )
         };
 
-        let groth_proof = groth16::create_random_proof(make_circuit(), groth_params, &mut rng)?;
+        let groth_proof = groth16::create_random_proof(make_circuit()?, groth_params, &mut rng)?;
 
         let mut proof_vec = vec![];
         groth_proof.write(&mut proof_vec)?;
@@ -183,7 +183,7 @@ where
         pub_in: &S::PublicInputs,
         pub_params: &S::PublicParams,
         partition_k: Option<usize>,
-    ) -> Vec<E::Fr>;
+    ) -> Result<Vec<E::Fr>>;
 
     /// circuit constructs an instance of this CompoundProof's bellperson::Circuit.
     /// circuit takes PublicInputs, PublicParams, and Proof from this CompoundProof's proof::ProofScheme (S)
@@ -194,7 +194,7 @@ where
         component_private_inputs: C::ComponentPrivateInputs,
         vanilla_proof: &S::Proof,
         public_param: &S::PublicParams,
-    ) -> C;
+    ) -> Result<C>;
 
     fn blank_circuit(public_params: &S::PublicParams) -> C;
 
@@ -210,7 +210,7 @@ where
         public_parameters: &PublicParams<'a, S>,
         public_inputs: &S::PublicInputs,
         private_inputs: &S::PrivateInputs,
-    ) -> (C, Vec<E::Fr>) {
+    ) -> Result<(C, Vec<E::Fr>)> {
         let vanilla_params = &public_parameters.vanilla_params;
         let partition_count = partitions::partition_count(public_parameters.partitions);
         let vanilla_proofs = S::prove_all_partitions(
@@ -221,27 +221,30 @@ where
         )
         .expect("failed to generate partition proofs");
 
-        assert_eq!(vanilla_proofs.len(), partition_count);
+        ensure!(
+            vanilla_proofs.len() == partition_count,
+            "Vanilla proofs didn't match number of partitions."
+        );
 
         let partitions_are_verified =
             S::verify_all_partitions(vanilla_params, &public_inputs, &vanilla_proofs)
                 .expect("failed to verify partition proofs");
 
-        assert!(partitions_are_verified, "vanilla proof didn't verify");
+        ensure!(partitions_are_verified, "Vanilla proof didn't verify.");
 
         // Some(0) because we only return a circuit and inputs for the first partition.
         // It would be more thorough to return all, though just checking one is probably
         // fine for verifying circuit construction.
         let partition_pub_in = S::with_partition(public_inputs.clone(), Some(0));
-        let inputs = Self::generate_public_inputs(&partition_pub_in, vanilla_params, Some(0));
+        let inputs = Self::generate_public_inputs(&partition_pub_in, vanilla_params, Some(0))?;
 
         let circuit = Self::circuit(
             &partition_pub_in,
             C::ComponentPrivateInputs::default(),
             &vanilla_proofs[0],
             vanilla_params,
-        );
+        )?;
 
-        (circuit, inputs)
+        Ok((circuit, inputs))
     }
 }

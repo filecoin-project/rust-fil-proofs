@@ -45,7 +45,7 @@ fn get_drg_parents_columns<H: Hasher, G: Hasher>(
     let mut columns = Vec::with_capacity(base_degree);
 
     let mut parents = vec![0; base_degree];
-    graph.base_parents(x, &mut parents);
+    graph.base_parents(x, &mut parents)?;
 
     for parent in &parents {
         columns.push(t_aux.column(*parent, pub_params)?);
@@ -63,7 +63,7 @@ fn get_exp_parents_columns<H: Hasher, G: Hasher>(
     pub_params: &PublicParams<H>,
 ) -> Result<Vec<Column<H>>> {
     let mut parents = vec![0; graph.expansion_degree()];
-    graph.expanded_parents(x, &mut parents);
+    graph.expanded_parents(x, &mut parents)?;
 
     parents
         .iter()
@@ -78,11 +78,11 @@ pub struct StackedConfig {
 }
 
 impl StackedConfig {
-    pub fn new(layers: usize, window_count: usize, wrapper_count: usize) -> Self {
-        StackedConfig {
-            window_challenges: LayerChallenges::new(layers, window_count),
-            wrapper_challenges: LayerChallenges::new(layers, wrapper_count),
-        }
+    pub fn new(layers: usize, window_count: usize, wrapper_count: usize) -> Result<Self> {
+        Ok(StackedConfig {
+            window_challenges: LayerChallenges::new(layers, window_count)?,
+            wrapper_challenges: LayerChallenges::new(layers, wrapper_count)?,
+        })
     }
 
     pub fn layers(&self) -> usize {
@@ -100,14 +100,15 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         k: usize,
     ) -> Result<Proof<H, G>> {
         // Sanity checks on restored trees.
-        assert!(pub_inputs.tau.is_some());
-        assert_eq!(
+        ensure!(pub_inputs.tau.is_some(), "no tau in inputs");
+        ensure!(
             pub_inputs
                 .tau
                 .as_ref()
                 .ok_or_else(|| anyhow!("no tau in inputs"))?
-                .comm_d,
-            t_aux.tree_d.root()
+                .comm_d
+                == t_aux.tree_d.root(),
+            "comm_d must equal the tree_d root"
         );
 
         // Derive the set of challenges we are proving over.
@@ -116,7 +117,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let wrapper_graph = &pub_params.wrapper_graph;
 
         let window_challenges =
-            pub_inputs.all_challenges(&config.window_challenges, window_graph.size(), Some(k));
+            pub_inputs.all_challenges(&config.window_challenges, window_graph.size(), Some(k))?;
 
         let window_proofs: Vec<_> = window_challenges
             .into_par_iter()
@@ -133,7 +134,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             .collect::<Result<_>>()?;
 
         let wrapper_challenges =
-            pub_inputs.all_challenges(&config.wrapper_challenges, wrapper_graph.size(), Some(k));
+            pub_inputs.all_challenges(&config.wrapper_challenges, wrapper_graph.size(), Some(k))?;
 
         let wrapper_proofs: Vec<_> = wrapper_challenges
             .into_par_iter()
@@ -162,11 +163,14 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     ) -> Result<WindowProof<H, G>> {
         let window_graph = &pub_params.window_graph;
         let layer_challenges = &pub_params.config.window_challenges;
-        assert!(challenge < pub_params.window_size_nodes());
+        ensure!(
+            challenge < pub_params.window_size_nodes(),
+            "Invalide challenge"
+        );
 
         trace!("challenge {} ({})", challenge, challenge_index);
-        assert!(challenge < window_graph.size(), "Invalid challenge");
-        assert!(challenge > 0, "Invalid challenge");
+        ensure!(challenge < window_graph.size(), "Invalid challenge");
+        ensure!(challenge > 0, "Invalid challenge");
 
         let layers = layer_challenges.layers();
         let num_windows = pub_params.num_windows();
@@ -216,10 +220,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         {
                             let expected_labeled_node = replica_column_proof
                                 .c_x
-                                .get_node_at_layer(window_index, layer);
+                                .get_node_at_layer(window_index, layer)?;
 
-                            assert!(
-                                proof.verify(&pub_inputs.replica_id, &expected_labeled_node),
+                            ensure!(
+                                proof.verify(&pub_inputs.replica_id, &expected_labeled_node)?,
                                 "Invalid labeling proof generated"
                             );
                         }
@@ -255,8 +259,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         t_aux: &TemporaryAuxCache<H, G>,
     ) -> Result<WrapperProof<H>> {
         trace!(" challenge {} ({})", challenge, challenge_index);
-        assert!(challenge < wrapper_graph.size(), "Invalid challenge");
-        assert!(challenge > 0, "Invalid challenge");
+        ensure!(challenge < wrapper_graph.size(), "Invalid challenge");
+        ensure!(challenge > 0, "Invalid challenge");
 
         // Final replica layer openings
         trace!("final replica layer openings");
@@ -265,7 +269,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         trace!("comm_q_parents proof");
         let mut parents = vec![0; wrapper_graph.expansion_degree()];
-        wrapper_graph.expanded_parents(challenge, &mut parents);
+        wrapper_graph.expanded_parents(challenge, &mut parents)?;
 
         let mut comm_q_parents_proofs = Vec::with_capacity(parents.len());
         for parent in &parents {
@@ -293,7 +297,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         challenge: usize,
         t_aux: &TemporaryAuxCache<H, G>,
     ) -> Result<ReplicaColumnProof<H>> {
-        assert!(challenge < pub_params.window_size_nodes());
+        ensure!(
+            challenge < pub_params.window_size_nodes(),
+            "Invalid challenge"
+        );
         let graph = &pub_params.window_graph;
 
         // All labels in C_X
@@ -334,7 +341,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         let parents_data: Vec<H::Domain> = if layer == 1 {
             let mut parents = vec![0; graph.base_graph().degree()];
-            graph.base_parents(challenge, &mut parents);
+            graph.base_parents(challenge, &mut parents)?;
 
             parents
                 .into_iter()
@@ -346,7 +353,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 .collect::<Result<_>>()?
         } else {
             let mut parents = vec![0; graph.degree()];
-            graph.parents(challenge, &mut parents);
+            graph.parents(challenge, &mut parents)?;
             let base_parents_count = graph.base_graph().degree();
 
             parents
@@ -395,12 +402,12 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             &pub_params.config.window_challenges,
             window_graph.size(),
             Some(k),
-        );
+        )?;
         let wrapper_challenges = pub_inputs.all_challenges(
             &pub_params.config.wrapper_challenges,
             wrapper_graph.size(),
             Some(k),
-        );
+        )?;
 
         for window_proof in &proof.window_proofs {
             // make sure all proofs have the same comm_c
@@ -424,7 +431,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                 // Validate for this challenge
                 let window_challenge = window_challenges[i];
-                proof.verify(pub_params, pub_inputs, window_challenge, comm_q, comm_c)
+                // TODO replace unwrap with proper error handling
+                proof
+                    .verify(pub_params, pub_inputs, window_challenge, comm_q, comm_c)
+                    .unwrap()
             });
         if !window_valid {
             return Ok(false);
@@ -439,7 +449,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                 // Validate for this challenge
                 let wrapper_challenge = wrapper_challenges[i];
-                proof.verify::<G>(pub_inputs, wrapper_challenge, wrapper_graph, comm_q)
+                // TODO replace unwrap with proper error handling
+                proof
+                    .verify::<G>(pub_inputs, wrapper_challenge, wrapper_graph, comm_q)
+                    .unwrap()
             });
         Ok(wrapper_valid)
     }
@@ -453,11 +466,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         trace!("extract_all_windows");
 
         let layers = pub_params.config.layers();
-        assert!(layers > 0);
+        ensure!(layers > 0, "No layer found.");
 
-        assert_eq!(
-            data.len() % pub_params.window_size_bytes(),
-            0,
+        ensure!(
+            data.len() % pub_params.window_size_bytes() == 0,
             "invalid data size"
         );
 
@@ -546,7 +558,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             trace!("generating layer: {}", layer);
 
             for node in 0..window_graph.size() {
-                window_graph.parents(node, &mut parents);
+                window_graph.parents(node, &mut parents)?;
 
                 let key = create_key(
                     window_graph,
@@ -601,7 +613,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let window_graph = &pub_params.window_graph;
         let layers = pub_params.config.layers();
 
-        assert_eq!(window_graph.size(), pub_params.window_size_nodes());
+        ensure!(
+            window_graph.size() == pub_params.window_size_nodes(),
+            "Invalid window size."
+        );
 
         let layer_size = data.len();
         let num_windows = pub_params.num_windows();
@@ -688,7 +703,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         window_index: usize,
     ) -> Result<()> {
         for node in 0..window_graph.size() {
-            window_graph.parents(node, parents);
+            window_graph.parents(node, parents)?;
 
             let key = create_key(
                 window_graph,
@@ -721,7 +736,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         trace!("building tree (size: {})", tree_data.len());
 
         let leafs = tree_data.len() / NODE_SIZE;
-        assert_eq!(tree_data.len() % NODE_SIZE, 0);
+        ensure!(tree_data.len() % NODE_SIZE == 0, "Invalid tree data.");
         if let Some(config) = config {
             MerkleTree::from_par_iter_with_config(
                 (0..leafs)
@@ -758,8 +773,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let num_windows = pub_params.num_windows();
         let layers = pub_params.config.layers();
 
-        let first_label = labels.labels_for_layer(1).read_at(column_index)?;
-        let mut hasher = crate::crypto::pedersen::Hasher::new(AsRef::<[u8]>::as_ref(&first_label));
+        let first_label = labels.labels_for_layer(1)?.read_at(column_index)?;
+        let mut hasher = crate::crypto::pedersen::Hasher::new(AsRef::<[u8]>::as_ref(&first_label))?;
 
         for window_index in 0..num_windows {
             for layer in 1..layers {
@@ -769,10 +784,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 }
 
                 let label = labels
-                    .labels_for_layer(layer)
+                    .labels_for_layer(layer)?
                     .read_at(window_index * pub_params.window_size_nodes() + column_index)?;
 
-                hasher.update(AsRef::<[u8]>::as_ref(&label));
+                hasher.update(AsRef::<[u8]>::as_ref(&label))?;
             }
         }
 
@@ -790,13 +805,19 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let window_graph = &pub_params.window_graph;
         let wrapper_graph = &pub_params.wrapper_graph;
 
-        assert_eq!(window_graph.size(), pub_params.window_size_nodes());
+        ensure!(
+            window_graph.size() == pub_params.window_size_nodes(),
+            "Invalid window size."
+        );
 
         let wrapper_nodes_count = wrapper_graph.size();
-        assert_eq!(data.len(), wrapper_nodes_count * NODE_SIZE);
+        ensure!(
+            data.len() == wrapper_nodes_count * NODE_SIZE,
+            "Invalid data size."
+        );
 
         let layers = pub_params.config.layers();
-        assert!(layers > 0);
+        ensure!(layers > 0, "No layer found.");
 
         // Generate all store configs that we need based on the
         // cache_path in the specified config.
@@ -814,7 +835,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let tree_d = match data_tree {
             Some(t) => {
                 trace!("using existing original data merkle tree");
-                assert_eq!(t.len(), 2 * (data.len() / NODE_SIZE) - 1);
+                ensure!(
+                    t.len() == 2 * (data.len() / NODE_SIZE) - 1,
+                    "Invalid data tree."
+                );
 
                 t
             }
@@ -850,7 +874,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                 // Only expansion parents
                 let mut exp_parents = vec![0; wrapper_graph.expansion_degree()];
-                wrapper_graph.expanded_parents(node, &mut exp_parents);
+                // TODO Do proper error handling and not just `expect()`.
+                wrapper_graph
+                    .expanded_parents(node, &mut exp_parents)
+                    .expect("cannot expand parents");
 
                 let wrapper_layer = &data;
                 for parent in &exp_parents {
@@ -886,8 +913,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let comm_r: H::Domain =
             Fr::from(hash3(tree_c.root(), tree_q.root(), tree_r_last.root())).into();
 
-        assert_eq!(tree_d.len(), tree_r_last.len());
-        assert_eq!(tree_d.len(), tree_q.len());
+        ensure!(tree_d.len() == tree_r_last.len(), "Invalid tree_r.");
+        ensure!(tree_d.len() == tree_q.len(), "Invlaid tree_q.");
 
         tree_d_config.size = Some(tree_d.len());
         tree_r_last_config.size = Some(tree_r_last.len());
@@ -980,7 +1007,7 @@ mod tests {
 
     #[test]
     fn test_calculate_fixed_challenges() {
-        let layer_challenges = LayerChallenges::new(10, 333);
+        let layer_challenges = LayerChallenges::new(10, 333).unwrap();
         let expected = 333;
 
         let calculated_count = layer_challenges.challenges_count_all();
@@ -1017,7 +1044,7 @@ mod tests {
                 v.into_bytes()
             })
             .collect();
-        let config = StackedConfig::new(DEFAULT_STACKED_LAYERS, 5, 8);
+        let config = StackedConfig::new(DEFAULT_STACKED_LAYERS, 5, 8).unwrap();
 
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
@@ -1097,7 +1124,7 @@ mod tests {
                 v.into_bytes()
             })
             .collect();
-        let config = StackedConfig::new(DEFAULT_STACKED_LAYERS, 5, 8);
+        let config = StackedConfig::new(DEFAULT_STACKED_LAYERS, 5, 8).unwrap();
 
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
@@ -1161,7 +1188,7 @@ mod tests {
     }
 
     fn prove_verify_fixed(n: usize) {
-        let config = StackedConfig::new(DEFAULT_STACKED_LAYERS, 5, 8);
+        let config = StackedConfig::new(DEFAULT_STACKED_LAYERS, 5, 8).unwrap();
 
         test_prove_verify::<PedersenHasher>(n, config.clone());
         test_prove_verify::<Sha256Hasher>(n, config.clone());
@@ -1263,7 +1290,7 @@ mod tests {
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
         let nodes = 1024 * 1024 * 32 * 8; // This corresponds to 8GiB sectors (32-byte nodes)
-        let config = StackedConfig::new(10, 333, 444);
+        let config = StackedConfig::new(10, 333, 444).unwrap();
         let sp = SetupParams {
             nodes,
             degree,

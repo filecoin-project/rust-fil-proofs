@@ -1,6 +1,7 @@
 use std::cmp::min;
 use std::io::{self, Error, ErrorKind, Read, Seek, SeekFrom, Write};
 
+use anyhow::{ensure, Result};
 use bitvec::{BitVec, LittleEndian};
 
 /** PaddingMap represents a mapping between data and its padded equivalent.
@@ -255,16 +256,24 @@ impl BitByte {
 }
 
 impl PaddingMap {
-    pub fn new(data_bits: usize, element_bits: usize) -> PaddingMap {
+    pub fn new(data_bits: usize, element_bits: usize) -> Result<PaddingMap> {
         // Check that we add less than 1 byte of padding (sub-byte padding).
-        assert!(element_bits - data_bits <= 7);
+        ensure!(
+            element_bits - data_bits <= 7,
+            "Padding (num bits: {}) must be less than 1 byte.",
+            element_bits - data_bits
+        );
         // Check that the element is byte aligned.
-        assert_eq!(element_bits % 8, 0);
+        ensure!(
+            element_bits % 8 == 0,
+            "Element (num bits: {}) must be byte aligned.",
+            element_bits
+        );
 
-        PaddingMap {
+        Ok(PaddingMap {
             data_bits,
             element_bits,
-        }
+        })
     }
 
     pub fn pad(&self, bits_out: &mut BitVecLEu8) {

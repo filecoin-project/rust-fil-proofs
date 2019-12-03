@@ -255,7 +255,7 @@ mod tests {
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
 
     fn merklepath<H: Hasher>() {
-        let g = BucketGraph::<H>::new(10, BASE_DEGREE, 0, new_seed());
+        let g = BucketGraph::<H>::new(10, BASE_DEGREE, 0, new_seed()).unwrap();
         let mut rng = rand::thread_rng();
         let node_size = 32;
         let mut data = Vec::new();

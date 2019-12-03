@@ -3,6 +3,7 @@ use fil_sapling_crypto::jubjub::JubjubBls12;
 use fil_sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 
+use crate::error::Result;
 use crate::fr32::bytes_into_frs;
 use crate::settings;
 
@@ -71,16 +72,16 @@ pub struct Hasher {
 }
 
 impl Hasher {
-    pub fn new(data: &[u8]) -> Self {
-        assert_eq!(data.len(), 32);
+    pub fn new(data: &[u8]) -> Result<Self> {
+        ensure!(data.len() == 32, "Data must be 32 bytes.");
         let mut curr = [0u8; 32];
         curr.copy_from_slice(data);
 
-        Hasher { curr }
+        Ok(Hasher { curr })
     }
 
-    pub fn update(&mut self, data: &[u8]) {
-        assert_eq!(data.len(), 32);
+    pub fn update(&mut self, data: &[u8]) -> Result<()> {
+        ensure!(data.len() == 32, "Data must be 32 bytes.");
 
         let parts = [&self.curr, data];
         let data = Bits::new_many(parts.iter());
@@ -88,6 +89,7 @@ impl Hasher {
 
         x.write_le(std::io::Cursor::new(&mut self.curr[..]))
             .expect("failed to write result");
+        Ok(())
     }
 
     pub fn finalize_bytes(self) -> [u8; 32] {
@@ -95,11 +97,11 @@ impl Hasher {
         curr
     }
 
-    pub fn finalize(self) -> Fr {
+    pub fn finalize(self) -> Result<Fr> {
         let frs =
             bytes_into_frs::<Bls12>(&self.curr).expect("pedersen must generate valid fr elements");
-        assert_eq!(frs.len(), 1);
-        frs[0]
+        ensure!(frs.len() == 1, "There must be a single fr element.");
+        Ok(frs[0])
     }
 }
 
@@ -377,12 +379,12 @@ mod tests {
             let flat: Vec<u8> = x.iter().flatten().copied().collect();
             let hashed = pedersen_md_no_padding(&flat);
 
-            let mut hasher = Hasher::new(&x[0]);
+            let mut hasher = Hasher::new(&x[0]).unwrap();
             for k in 1..5 {
-                hasher.update(&x[k]);
+                hasher.update(&x[k]).unwrap();
             }
 
-            let hasher_final = hasher.finalize();
+            let hasher_final = hasher.finalize().unwrap();
 
             assert_eq!(hashed, hasher_final);
         }
