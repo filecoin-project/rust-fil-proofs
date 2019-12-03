@@ -596,7 +596,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         replica_id: &<H as Hasher>::Domain,
         data: &mut [u8],
         config: StoreConfig,
-    ) -> Result<(LabelsCache<H>, Labels<H>, Vec<[u8; 32]>)> {
+    ) -> Result<(Labels<H>, Vec<[u8; 32]>)> {
         trace!("encode_all_windows");
         let window_graph = &pub_params.window_graph;
         let layers = pub_params.config.layers();
@@ -657,9 +657,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                             window_index,
                         )?;
 
-                        for (node, hasher) in layer_labels.chunks(NODE_SIZE).zip(column_hashers.iter_mut()) {
+                        layer_labels.par_chunks(NODE_SIZE).zip(column_hashers.par_iter_mut()).for_each(|(node, hasher)| {
                             hasher.update(node);
-                        }
+                        });
 
                         if layer < layers {
                             if let Some(ref mut exp_parents_data) = exp_parents_data {
@@ -701,10 +701,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             Ok(column_hashes)
         }).map_err(|err| anyhow!("{:?}", err))??;
 
-        let (labels, configs) = labels.into_iter().map(|v| v.into_inner().unwrap()).unzip();
+        let configs = labels.into_iter().map(|v| v.into_inner().unwrap().1).collect();
 
         Ok((
-            LabelsCache::<H>::from_stores(labels),
+            // LabelsCache::<H>::from_stores(labels),
             Labels::<H>::new(configs),
             column_hashes
         ))
@@ -864,7 +864,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             data.len() / pub_params.window_size_bytes()
         );
 
-        let (labels, label_configs, column_hashes) =
+        let (label_configs, column_hashes) =
             Self::label_encode_all_windows(pub_params, replica_id, data, config)?;
 
         // construct column hashes
