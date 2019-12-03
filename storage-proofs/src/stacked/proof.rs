@@ -683,6 +683,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let (send, recv) = crossbeam::channel::bounded(1);
         let column_hashes: Vec<[u8; 32]> = crossbeam::scope(|s| -> Result<Vec<[u8; 32]>> {
             s.spawn(|_| iter.for_each(|el| {
+                info!("sending element");
                 let _ = send.send(el).unwrap();
             }));
 
@@ -690,14 +691,16 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             let column_hashes: Vec<[u8; 32]> = recv.into_iter().try_fold(
                 vec![PedersenHasher::empty(); pub_params.window_size_nodes()],
                 |mut hashers: Vec<PedersenHasher>, hashes: Result<Vec<[u8; 32]>>| -> Result<Vec<PedersenHasher>> {
-                    for (hasher, hash) in hashers.iter_mut().zip(hashes?.iter()) {
+                    info!("hashing window");
+                    hashers.par_iter_mut().zip(hashes?.par_iter()).for_each(|(hasher, hash)| {
                         hasher.update(&hash[..]);
-                    }
+                    });
 
                     Ok(hashers)
                 }
             )?.into_iter().map(|h| h.finalize_bytes()).collect();
 
+            info!("done hashing columns");
             Ok(column_hashes)
         }).map_err(|err| anyhow!("{:?}", err))??;
 
