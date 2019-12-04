@@ -1,6 +1,8 @@
 use std::marker::PhantomData;
 
+use log::trace;
 use paired::bls12_381::Fr;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::encode::encode;

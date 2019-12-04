@@ -1,15 +1,10 @@
-#[macro_use]
-extern crate commandspec;
-#[macro_use]
-extern crate anyhow;
-#[macro_use]
-extern crate serde;
-
 use std::io::{self, BufRead};
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
+use commandspec::command;
 use fil_proofs_tooling::metadata::Metadata;
 use regex::Regex;
+use serde::Serialize;
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]

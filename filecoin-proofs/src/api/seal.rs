@@ -2,8 +2,9 @@ use std::fs::{self, File, OpenOptions};
 use std::io::prelude::*;
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::{ensure, Context, Result};
 use bincode::{deserialize, serialize};
+use log::info;
 use memmap::MmapOptions;
 use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
 use paired::bls12_381::{Bls12, Fr};

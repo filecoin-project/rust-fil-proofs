@@ -2,7 +2,8 @@ use std::io::Cursor;
 use std::io::Read;
 use std::iter::Iterator;
 
-use anyhow::{Context, Result};
+use anyhow::{ensure, Context, Result};
+use log::info;
 use storage_proofs::hasher::{HashFunction, Hasher};
 use storage_proofs::util::NODE_SIZE;
 

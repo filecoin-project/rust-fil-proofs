@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 use std::fmt;
 
 use byteorder::ByteOrder;
+use serde::{Deserialize, Serialize};
 
 /// An ordered set of `SectorId`s.
 pub type OrderedSectorSet = BTreeSet<SectorId>;

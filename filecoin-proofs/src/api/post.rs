@@ -3,8 +3,9 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, ensure, Context, Result};
 use bincode::deserialize;
+use log::info;
 use merkletree::merkle::{get_merkle_tree_leafs, MerkleTree};
 use merkletree::store::{DiskStore, Store, StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
 use paired::bls12_381::Bls12;

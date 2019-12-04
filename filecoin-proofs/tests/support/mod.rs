@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::{env, thread};
 
+use failure::format_err;
 use filecoin_proofs::param::ParameterData;
 use rexpect::session::PtyBashSession;
 use rexpect::spawn_bash;

@@ -1,7 +1,4 @@
-#[macro_use]
-extern crate criterion;
-
-use criterion::{black_box, Criterion, ParameterizedBenchmark};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
 use storage_proofs::drgraph::*;
 use storage_proofs::hasher::pedersen::*;
 

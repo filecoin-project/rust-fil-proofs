@@ -3,6 +3,7 @@ use bellperson::ConstraintSystem;
 use fil_proofs_tooling::metadata::Metadata;
 use paired::bls12_381::Bls12;
 use rand::RngCore;
+use serde::Serialize;
 use storage_proofs::circuit::pedersen::{pedersen_compression_num, pedersen_md_no_padding};
 use storage_proofs::circuit::test::TestConstraintSystem;
 use storage_proofs::crypto;

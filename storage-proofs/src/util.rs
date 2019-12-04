@@ -1,3 +1,4 @@
+use anyhow::ensure;
 use bellperson::gadgets::boolean::{self, AllocatedBit, Boolean};
 use bellperson::{ConstraintSystem, SynthesisError};
 use paired::Engine;

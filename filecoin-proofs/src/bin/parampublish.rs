@@ -1,6 +1,3 @@
-#[macro_use]
-extern crate anyhow;
-
 use std::collections::BTreeMap;
 use std::fs::{read_dir, File};
 use std::io;
@@ -9,7 +6,7 @@ use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
 
-use anyhow::{Context, Result};
+use anyhow::{ensure, Context, Result};
 use clap::{App, Arg, ArgMatches};
 use itertools::Itertools;
 

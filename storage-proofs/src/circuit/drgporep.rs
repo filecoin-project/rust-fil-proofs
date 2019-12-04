@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use anyhow::Context;
+use anyhow::{ensure, Context};
 use bellperson::gadgets::boolean::Boolean;
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};

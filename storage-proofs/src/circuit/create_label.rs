@@ -6,6 +6,7 @@ use bellperson::gadgets::{
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::PrimeField;
 use fil_sapling_crypto::jubjub::JubjubEngine;
+use log::trace;
 
 use crate::circuit::uint64;
 

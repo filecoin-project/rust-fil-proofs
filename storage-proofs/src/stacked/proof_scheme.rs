@@ -1,3 +1,6 @@
+use anyhow::ensure;
+use log::trace;
+
 use crate::error::Result;
 use crate::hasher::Hasher;
 use crate::proof::ProofScheme;

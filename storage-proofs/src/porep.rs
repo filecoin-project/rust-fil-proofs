@@ -4,6 +4,7 @@ use crate::merkle::MerkleTree;
 use crate::proof::ProofScheme;
 
 use merkletree::store::StoreConfig;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
 pub struct PublicParams {

@@ -1,5 +1,8 @@
 use std::marker::PhantomData;
 
+use anyhow::ensure;
+use serde::{Deserialize, Serialize};
+
 use crate::error::Result;
 use crate::hasher::pedersen::PedersenDomain;
 use crate::hasher::Hasher;

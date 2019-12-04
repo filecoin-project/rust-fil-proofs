@@ -1,10 +1,13 @@
 use crate::error::*;
+use anyhow::bail;
 use bellperson::groth16::Parameters;
 use bellperson::{groth16, Circuit};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use fs2::FileExt;
 use itertools::Itertools;
+use log::info;
 use rand::RngCore;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use std::env;

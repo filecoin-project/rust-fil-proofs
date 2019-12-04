@@ -1,17 +1,12 @@
-#[macro_use]
-extern crate clap;
-#[cfg(any(feature = "cpu-profile", feature = "heap-profile"))]
-extern crate gperftools;
-#[macro_use]
-extern crate log;
-
 use chrono::Utc;
+use clap::value_t;
 use clap::{App, Arg};
 use ff::Field;
 #[cfg(feature = "heap-profile")]
 use gperftools::heap_profiler::HEAP_PROFILER;
 #[cfg(feature = "cpu-profile")]
 use gperftools::profiler::PROFILER;
+use log::{info, warn};
 use memmap::MmapMut;
 use memmap::MmapOptions;
 use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};

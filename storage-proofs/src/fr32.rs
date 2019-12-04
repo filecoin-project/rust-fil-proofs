@@ -1,6 +1,6 @@
 use crate::error::*;
 
-use anyhow::Context;
+use anyhow::{ensure, Context};
 use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 use ff::{PrimeField, PrimeFieldRepr, ScalarEngine};
 use paired::bls12_381::FrRepr;

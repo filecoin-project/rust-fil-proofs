@@ -2,12 +2,11 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::marker::PhantomData;
 
-use anyhow::{ensure, Context};
+use anyhow::{bail, ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
 use paired::bls12_381::{Bls12, Fr};
 use rayon::prelude::*;
-use serde::de::Deserialize;
-use serde::ser::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::crypto::pedersen::{pedersen_md_no_padding_bits, Bits};

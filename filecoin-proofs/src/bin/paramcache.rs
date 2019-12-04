@@ -1,7 +1,5 @@
-#[macro_use]
-extern crate log;
-
 use clap::{values_t, App, Arg};
+use log::info;
 use paired::bls12_381::Bls12;
 use rand::{rngs::OsRng, SeedableRng};
 use rand_xorshift::XorShiftRng;

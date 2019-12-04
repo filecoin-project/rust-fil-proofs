@@ -1,11 +1,8 @@
-#[macro_use]
-extern crate criterion;
-
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::time::Duration;
 
-use criterion::{Criterion, ParameterizedBenchmark, Throughput};
+use criterion::{criterion_group, criterion_main, Criterion, ParameterizedBenchmark, Throughput};
 use filecoin_proofs::fr32::{write_padded, write_unpadded};
 use rand::{thread_rng, Rng};
 

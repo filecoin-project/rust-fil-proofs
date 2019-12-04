@@ -1,7 +1,4 @@
-#[macro_use]
-extern crate criterion;
-
-use criterion::{black_box, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use ff::Field;
 use paired::bls12_381::{Bls12, Fr};
 use rand::thread_rng;

@@ -2,12 +2,14 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::Mutex;
 
-use anyhow::Context;
+use anyhow::{ensure, Context};
 use generic_array::GenericArray;
+use log::{info, trace};
 use merkletree::merkle::FromIndexedParallelIterator;
 use merkletree::store::{DiskStore, StoreConfig};
 use paired::bls12_381::Fr;
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::drgraph::Graph;
