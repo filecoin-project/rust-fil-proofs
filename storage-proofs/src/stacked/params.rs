@@ -15,7 +15,7 @@ use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::stacked::{
     column::Column, column_proof::ColumnProof, graph::StackedBucketGraph, proof::StackedConfig,
-    EncodingProof, LabelingProof, LayerChallenges,
+    EncodingProof, LabelingProof, LayerChallenges, OPENINGS_PER_WINDOW,
 };
 use crate::util::{data_at_node, NODE_SIZE};
 
@@ -302,10 +302,9 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
         check!(challenge < window_graph.size());
         check!(pub_inputs.tau.is_some());
 
-        let num_windows = pub_params.num_windows();
-        check_eq!(self.comm_d_proofs.len(), num_windows);
-        check_eq!(self.comm_q_proofs.len(), num_windows);
-        check_eq!(self.encoding_proofs.len(), num_windows);
+        check_eq!(self.comm_d_proofs.len(), OPENINGS_PER_WINDOW);
+        check_eq!(self.comm_q_proofs.len(), OPENINGS_PER_WINDOW);
+        check_eq!(self.encoding_proofs.len(), OPENINGS_PER_WINDOW);
 
         // Verify initial data layer
         trace!("verify initial data layer");

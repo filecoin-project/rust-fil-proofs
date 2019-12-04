@@ -22,7 +22,7 @@ use crate::hasher::Hasher;
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
-use crate::stacked::{StackedDrg, EXP_DEGREE};
+use crate::stacked::{StackedDrg, EXP_DEGREE, OPENINGS_PER_WINDOW};
 use crate::util::bytes_into_boolean_vec_be;
 
 /// Stacked DRG based Proof of Replication.
@@ -277,16 +277,14 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         let window_challenges =
             pub_in.all_challenges(&pub_params.config.window_challenges, window_graph.size(), k)?;
 
-        let num_windows = pub_params.num_windows();
-
         for challenge in window_challenges.into_iter() {
-            for window_index in 0..num_windows {
+            for window_index in 0..OPENINGS_PER_WINDOW {
                 // comm_d_proof
                 let c = window_index * pub_params.window_size_nodes() + challenge;
                 inputs.extend(generate_inclusion_inputs::<G>(&wrapper_por_params, k, c)?);
             }
 
-            for window_index in 0..num_windows {
+            for window_index in 0..OPENINGS_PER_WINDOW {
                 // comm_q_proof
                 let c = window_index * pub_params.window_size_nodes() + challenge;
                 inputs.extend(generate_inclusion_inputs::<H>(&wrapper_por_params, k, c)?);
@@ -524,8 +522,8 @@ mod tests {
 
         assert!(proofs_are_valid);
 
-        let expected_inputs = 68;
-        let expected_constraints = 3_795_712;
+        let expected_inputs = 64;
+        let expected_constraints = 2_411_074;
 
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.
@@ -558,7 +556,7 @@ mod tests {
                 <StackedCircuit<Bls12, PedersenHasher, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
                 &proofs[0],
                 &pp,
-            )
+            ).unwrap()
             .synthesize(&mut cs.namespace(|| "stacked drgporep"))
             .expect("failed to synthesize circuit");
 

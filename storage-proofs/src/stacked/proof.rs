@@ -24,7 +24,7 @@ use crate::stacked::{
         ReplicaColumnProof, Tau, TemporaryAux, TemporaryAuxCache, TransformedLayers, Tree,
         WindowProof, WrapperProof,
     },
-    EncodingProof, LabelingProof,
+    EncodingProof, LabelingProof, OPENINGS_PER_WINDOW,
 };
 use crate::util::{data_at_node, data_at_node_offset, NODE_SIZE};
 
@@ -176,7 +176,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let num_windows = pub_params.num_windows();
 
         // Initial data layer openings (c_X in Comm_D)
-        let comm_d_proofs = (0..num_windows)
+        let comm_d_proofs = (0..OPENINGS_PER_WINDOW)
             .map(|window_index| {
                 let c = window_index * pub_params.window_size_nodes() + challenge;
                 Ok(MerkleProof::new_from_proof(&t_aux.tree_d.gen_proof(c)?))
@@ -187,7 +187,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let replica_column_proof = Self::prove_replica_column(pub_params, challenge, t_aux)?;
 
         trace!("q openings");
-        let comm_q_proofs = (0..num_windows)
+        let comm_q_proofs = (0..OPENINGS_PER_WINDOW)
             .map(|window_index| {
                 let c = window_index * pub_params.window_size_nodes() + challenge;
                 Ok(MerkleProof::new_from_proof(&t_aux.tree_q.gen_proof(c)?))
@@ -195,7 +195,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             .collect::<Result<_>>()?;
 
         let mut encoding_proofs = Vec::with_capacity(num_windows);
-        let labeling_proofs = (0..num_windows)
+        let labeling_proofs = (0..OPENINGS_PER_WINDOW)
             .map(|window_index| {
                 // Labeling Proofs Layer 1..l
                 let mut labeling_proofs = HashMap::with_capacity(layers);
@@ -409,12 +409,21 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             Some(k),
         )?;
 
+        if proof.window_proofs.len() != window_challenges.len() {
+            return Ok(false);
+        }
+
+        if proof.wrapper_proofs.len() != wrapper_challenges.len() {
+            return Ok(false);
+        }
+
         for window_proof in &proof.window_proofs {
             // make sure all proofs have the same comm_c
             if window_proof.comm_c() != comm_c {
                 return Ok(false);
             }
         }
+
         for wrapper_proof in &proof.wrapper_proofs {
             // make sure all proofs have the same comm_r_last
             if wrapper_proof.comm_r_last() != comm_r_last {

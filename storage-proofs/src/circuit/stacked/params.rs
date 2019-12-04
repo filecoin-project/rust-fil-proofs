@@ -14,7 +14,7 @@ use crate::hasher::Hasher;
 use crate::merkle::MerkleProof;
 use crate::stacked::{
     Proof as VanillaProof, PublicParams, ReplicaColumnProof as VanillaReplicaColumnProof,
-    WindowProof as VanillaWindowProof, WrapperProof as VanillaWrapperProof,
+    WindowProof as VanillaWindowProof, WrapperProof as VanillaWrapperProof, OPENINGS_PER_WINDOW,
 };
 
 #[derive(Debug, Clone)]
@@ -46,9 +46,8 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
     /// Create an empty proof, used in `blank_circuit`s.
     pub fn empty(params: &PublicParams<H>, _challenge_index: usize) -> Self {
         let layers = params.config.window_challenges.layers();
-        let num_windows = params.num_windows();
 
-        let labeling_proofs = (0..num_windows)
+        let labeling_proofs = (0..OPENINGS_PER_WINDOW)
             .map(|_| {
                 (1..layers)
                     .map(|layer| (layer, LabelingProof::empty(params, layer)))
@@ -57,11 +56,11 @@ impl<H: Hasher, G: Hasher> WindowProof<H, G> {
             .collect();
 
         WindowProof {
-            comm_d_proofs: vec![InclusionPath::empty(&params.wrapper_graph); num_windows],
-            comm_q_proofs: vec![InclusionPath::empty(&params.wrapper_graph); num_windows],
+            comm_d_proofs: vec![InclusionPath::empty(&params.wrapper_graph); OPENINGS_PER_WINDOW],
+            comm_q_proofs: vec![InclusionPath::empty(&params.wrapper_graph); OPENINGS_PER_WINDOW],
             replica_column_proof: ReplicaColumnProof::empty(params),
             labeling_proofs,
-            encoding_proofs: vec![EncodingProof::empty(params); num_windows],
+            encoding_proofs: vec![EncodingProof::empty(params); OPENINGS_PER_WINDOW],
         }
     }
 
