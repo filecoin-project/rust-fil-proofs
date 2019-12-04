@@ -340,7 +340,7 @@ fn do_the_work<H: 'static>(
             // and skip replication/vanilla-proving entirely.
             info!("Performing circuit groth.");
             let gparams =
-                <StackedCompound as CompoundProof<_, StackedDrg<H, Blake2sHasher>, _>>::groth_params(&compound_public_params.vanilla_params)
+                <StackedCompound as CompoundProof<_, StackedDrg<H, Blake2sHasher>, _>>::groth_params::<rand::rngs::OsRng>(None, &compound_public_params.vanilla_params)
                     .unwrap();
 
             let multi_proof = {

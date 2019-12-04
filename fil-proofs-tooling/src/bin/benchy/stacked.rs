@@ -361,16 +361,13 @@ fn do_circuit_work<H: 'static + Hasher>(
         let pub_inputs = pub_in.expect("missing public inputs");
         let priv_inputs = priv_in.expect("missing private inputs");
 
-        // TODO: The time measured for Groth proving also includes parameter loading (which can be long)
-        // and vanilla proving, which may also be.
-        // For now, analysis should note and subtract out these times.
         // We should implement a method of CompoundProof, which will skip vanilla proving.
         // We should also allow the serialized vanilla proofs to be passed (as a file) to the example
         // and skip replication/vanilla-proving entirely.
         let gparams =
-            <StackedCompound as CompoundProof<_, StackedDrg<H, Sha256Hasher>, _>>::groth_params(
-                &compound_public_params.vanilla_params,
-            )?;
+            <StackedCompound as CompoundProof<_, StackedDrg<H, Sha256Hasher>, _>>::groth_params::<
+                rand::rngs::OsRng,
+            >(None, &compound_public_params.vanilla_params)?;
 
         let multi_proof = {
             let FuncMeasurement {

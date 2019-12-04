@@ -492,9 +492,11 @@ mod tests {
             comm_cs: &comm_cs,
         };
 
-        let gparams =
-            RationalPoStCompound::<PedersenHasher>::groth_params(&pub_params.vanilla_params)
-                .expect("failed to create groth params");
+        let gparams = RationalPoStCompound::<PedersenHasher>::groth_params(
+            Some(rng),
+            &pub_params.vanilla_params,
+        )
+        .expect("failed to create groth params");
 
         let proof = RationalPoStCompound::<PedersenHasher>::prove(
             &pub_params,

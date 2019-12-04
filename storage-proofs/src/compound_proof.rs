@@ -1,14 +1,15 @@
 use rayon::prelude::*;
 
+use bellperson::{groth16, Circuit};
+use fil_sapling_crypto::jubjub::JubjubEngine;
+use rand::{rngs::OsRng, RngCore};
+
 use crate::circuit::multi_proof::MultiProof;
 use crate::error::Result;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::partitions;
 use crate::proof::ProofScheme;
 use crate::settings;
-use bellperson::{groth16, Circuit};
-use fil_sapling_crypto::jubjub::JubjubEngine;
-use rand::rngs::OsRng;
 
 #[derive(Clone)]
 pub struct SetupParams<'a, S: ProofScheme<'a>> {
@@ -198,12 +199,18 @@ where
 
     fn blank_circuit(public_params: &S::PublicParams) -> C;
 
-    fn groth_params(public_params: &S::PublicParams) -> Result<groth16::Parameters<E>> {
-        Self::get_groth_params(Self::blank_circuit(public_params), public_params)
+    fn groth_params<R: RngCore>(
+        rng: Option<&mut R>,
+        public_params: &S::PublicParams,
+    ) -> Result<groth16::Parameters<E>> {
+        Self::get_groth_params(rng, Self::blank_circuit(public_params), public_params)
     }
 
-    fn verifying_key(public_params: &S::PublicParams) -> Result<groth16::VerifyingKey<E>> {
-        Self::get_verifying_key(Self::blank_circuit(public_params), public_params)
+    fn verifying_key<R: RngCore>(
+        rng: Option<&mut R>,
+        public_params: &S::PublicParams,
+    ) -> Result<groth16::VerifyingKey<E>> {
+        Self::get_verifying_key(rng, Self::blank_circuit(public_params), public_params)
     }
 
     fn circuit_for_test(

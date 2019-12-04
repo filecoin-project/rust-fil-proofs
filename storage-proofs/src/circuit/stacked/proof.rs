@@ -737,11 +737,12 @@ mod tests {
             }
         }
 
-        let blank_groth_params =
-            <StackedCompound as CompoundProof<_, StackedDrg<H, Sha256Hasher>, _>>::groth_params(
-                &public_params.vanilla_params,
-            )
-            .expect("failed to generate groth params");
+        let blank_groth_params = <StackedCompound as CompoundProof<
+            _,
+            StackedDrg<H, Sha256Hasher>,
+            _,
+        >>::groth_params(Some(rng), &public_params.vanilla_params)
+        .expect("failed to generate groth params");
 
         let proof = StackedCompound::prove(
             &public_params,
