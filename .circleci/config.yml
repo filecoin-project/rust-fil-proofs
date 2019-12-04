@@ -274,7 +274,7 @@ jobs:
       - run: cargo fetch
       - run:
           name: Test (nightly, Darwin)
-          command: cargo +$(cat rust-toolchain) test --verbose --all
+          command: cargo +$(cat rust-toolchain) test --release --verbose --all
           no_output_timeout: 15m
 
   validate_commit_msg:
