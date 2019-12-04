@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 # pin-params.sh
 #
-# - Add the directory of params to the local ipfs node
+# - Post the directory of params to cluster.ipfs.io
 # - Grab the CID for the previous params from proofs.filecoin.io
 # - Add the old params as a `prev` dir to the new params dir to keep them around.
 # - Pin the new cid on cluster
@@ -54,48 +54,20 @@ else
 fi
 
 CLUSTER_HOST="/dnsaddr/cluster.ipfs.io"
-CLUSTER_PRIMARY="/dns4/cluster0.fsn.dwebops.pub/udp/4001/quic/p2p/QmUEMvxS2e7iDrereVYc5SWPauXPyNwxcy9BXZrC1QTcHE"
 CLUSTER_PIN_NAME="filecoin-proof-parameters-$VERSION"
 DNSLINK_DOMAIN="proofs.filecoin.io"
 
-# Pin to ipfs
-ROOT_CID=$(ipfs add --quieter --recursive $INPUT_DIR)
-echo "ok! root cid is $ROOT_CID"
-
-echo "linking to previous version..."
-# trim off the /ipfs prefix, so it's consistent with the other vars
-PREV_CID=$(ipfs dns $DNSLINK_DOMAIN | cut -c 7-)
-
-# Add a `prev` dir to the new params dir that links back to the older params
-LINKED_CID=$(ipfs object patch add-link $ROOT_CID prev $PREV_CID)
-
-# guard against multiple runs with no change...
-# if we remove the `prev` dir from the last published PREV_CID and it matches
-# the current ROOT_DIR, then dont nest it inside itself again.
-if ipfs object stat $PREV_CID/prev > /dev/null; then
-  PREV_ROOT_CID=$(ipfs object patch rm-link $PREV_CID prev)
-  if [[ $PREV_ROOT_CID == "$ROOT_CID" ]]; then
-    LINKED_CID=$PREV_CID
-    echo "linked cid is already published, re-using $PREV_CID"
-    echo "continuing to ensure $PREV_CID is pinned to cluster"
-  fi
-fi
-
-echo "ok! linked cid is $LINKED_CID"
-echo "pinning linked cid to cluster..."
-
-# Connect to cluster to speed up discovery
-ipfs swarm connect $CLUSTER_PRIMARY
-
-# Ask cluster to fetch the linked cid from us
-ipfs-cluster-ctl \
+# Pin to cluster
+ROOT_CID=$(ipfs-cluster-ctl \
   --host $CLUSTER_HOST \
   --basic-auth $CLUSTER_TOKEN \
-  pin add $LINKED_CID \
+  add --quieter \
   --name $CLUSTER_PIN_NAME \
-  --wait
+  --recursive $INPUT_DIR )
+
+echo "ok! root cid is $ROOT_CID"
 
 # Publist the new cid to the dnslink
-npx dnslink-dnsimple --domain proofs.filecoin.io --link "/ipfs/$LINKED_CID"
+npx dnslink-dnsimple --domain $DNSLINK_DOMAIN --link "/ipfs/$ROOT_CID"
 
 echo "done!"
