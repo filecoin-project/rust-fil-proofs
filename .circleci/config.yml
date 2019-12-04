@@ -253,29 +253,7 @@ jobs:
           name: Run cargo clippy
           command: cargo clippy --all
 
-  build_linux_release:
-    docker:
-      - image: filecoin/rust:latest
-    working_directory: /mnt/crate
-    resource_class: 2xlarge
-    steps:
-      - checkout
-      - attach_workspace:
-          at: "."
-      - restore_cache:
-          keys:
-            - cargo-v13-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
-      - run:
-          name: Build (release)
-          command: cargo +$(cat rust-toolchain) build --release --verbose --all
-      - run:
-          name: Install jq
-          command: apt-get install jq -yqq
-      - run:
-          name: Run publish-release.sh
-          command: bash ./scripts/publish-release.sh
-
-  build_darwin_release:
+  test_nightly_darwin:
     macos:
       xcode: "10.0.0"
     working_directory: ~/crate
@@ -285,7 +263,6 @@ jobs:
           name: Configure environment variables
           command: |
             echo 'export PATH="${HOME}/.cargo/bin:${HOME}/.bin:${PATH}"' >> $BASH_ENV
-            echo 'export CIRCLE_ARTIFACTS="/tmp"' >> $BASH_ENV
       - checkout
       - run:
           name: Install Rust
@@ -296,18 +273,9 @@ jobs:
       - run: cargo update
       - run: cargo fetch
       - run:
-          name: Build (release)
-          command: cargo +$(cat rust-toolchain) build --release --verbose --all
-      - run:
-          name: Install jq
-          command: |
-            mkdir $HOME/.bin
-            curl --location https://github.com/stedolan/jq/releases/download/jq-1.6/jq-osx-amd64 --output $HOME/.bin/jq
-            chmod +x $HOME/.bin/jq
-      - run:
-          name: Run publish-release.sh
-          command: bash ./scripts/publish-release.sh
-
+          name: Test (nightly, Darwin)
+          command: cargo +$(cat rust-toolchain) test --verbose --all
+          no_output_timeout: 15m
 
   validate_commit_msg:
     docker:
@@ -360,6 +328,7 @@ workflows:
           requires:
             - cargo_fetch
       - validate_commit_msg
+      - test_nightly_darwin
       - metrics_capture:
           requires:
             - cargo_fetch
@@ -367,19 +336,3 @@ workflows:
             branches:
               only:
                 - master
-      - build_linux_release:
-          requires:
-            - cargo_fetch
-          filters:
-            branches:
-              only:
-                - master
-                - /hotfix.*/
-      - build_darwin_release:
-          requires:
-            - cargo_fetch
-          filters:
-            branches:
-              only:
-                - master
-                - /hotfix.*/
