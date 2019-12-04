@@ -214,13 +214,9 @@ where
         let id = Self::cache_identifier(pub_params);
 
         let generate = || -> Result<groth16::VerifyingKey<E>> {
-            if let Some(rng) = rng {
-                let groth_params = Self::get_groth_params(Some(rng), circuit, pub_params)?;
-                info!("Getting verifying key. (id: {})", &id);
-                Ok(groth_params.vk)
-            } else {
-                bail!("No cached verifiying key found for {}", id);
-            }
+            let groth_params = Self::get_groth_params(rng, circuit, pub_params)?;
+            info!("Getting verifying key. (id: {})", &id);
+            Ok(groth_params.vk)
         };
 
         // generate (or load) verifying key

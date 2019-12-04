@@ -76,12 +76,10 @@ fn cache_porep_params(is_predictable: bool, porep_config: PoRepConfig) {
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
         >>::blank_circuit(&public_params);
+
         let _ = if is_predictable {
-            StackedCompound::get_verifying_key(
-                Some(&mut XorShiftRng::from_seed(SEED)),
-                circuit,
-                &public_params,
-            )
+            let rando: Option<&mut OsRng> = None;
+            StackedCompound::get_verifying_key(rando, circuit, &public_params)
         } else {
             StackedCompound::get_verifying_key(Some(&mut OsRng), circuit, &public_params)
         }
@@ -142,8 +140,9 @@ fn cache_post_params(is_predictable: bool, post_config: PoStConfig) {
             >>::blank_circuit(&post_public_params);
 
         let _ = if is_predictable {
+            let rando: Option<&mut OsRng> = None;
             <ElectionPoStCompound<PedersenHasher>>::get_verifying_key(
-                Some(&mut XorShiftRng::from_seed(SEED)),
+                rando,
                 post_circuit,
                 &post_public_params,
             )
