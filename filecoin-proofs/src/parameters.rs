@@ -37,6 +37,7 @@ pub fn window_size_nodes_for_sector_bytes(sector_size: PaddedBytesAmount) -> Res
         SECTOR_SIZE_16_MIB => Ok(WINDOW_SIZE_NODES_16_MIB),
         SECTOR_SIZE_256_MIB => Ok(WINDOW_SIZE_NODES_256_MIB),
         SECTOR_SIZE_1_GIB => Ok(WINDOW_SIZE_NODES_1_GIB),
+        SECTOR_SIZE_32_GIB => Ok(WINDOW_SIZE_NODES_32_GIB),
         _ => Err(anyhow!("Unknown sector size {:?}", sector_size)),
     }
 }

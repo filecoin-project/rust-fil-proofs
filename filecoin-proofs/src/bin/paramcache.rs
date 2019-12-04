@@ -18,13 +18,14 @@ use storage_proofs::hasher::pedersen::PedersenHasher;
 use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::stacked::StackedDrg;
 
-const POREP_PROOF_PARTITION_CHOICES: [PoRepProofPartitions; 1] = [PoRepProofPartitions(2)];
+const POREP_PROOF_PARTITION_CHOICES: [PoRepProofPartitions; 1] = [PoRepProofPartitions(10)];
 
-const PUBLISHED_SECTOR_SIZES: [u64; 4] = [
+const PUBLISHED_SECTOR_SIZES: [u64; 5] = [
     SECTOR_SIZE_ONE_KIB,
     SECTOR_SIZE_16_MIB,
     SECTOR_SIZE_256_MIB,
     SECTOR_SIZE_1_GIB,
+    SECTOR_SIZE_32_GIB,
 ];
 
 const SEED: [u8; 16] = [
