@@ -7,7 +7,9 @@ jobs:
     working_directory: /mnt/crate
     resource_class: 2xlarge
     steps:
+      - configure_environment_variables
       - checkout
+      - obtain_filecoin_parameters
       - run:
           name: Calculate dependencies
           command: cargo generate-lockfile
@@ -37,6 +39,7 @@ jobs:
     working_directory: /mnt/crate
     resource_class: 2xlarge
     steps:
+      - configure_environment_variables
       - checkout
       - attach_workspace:
           at: "."
@@ -67,6 +70,7 @@ jobs:
     working_directory: /mnt/crate
     resource_class: 2xlarge
     steps:
+      - configure_environment_variables
       - checkout
       - attach_workspace:
           at: "."
@@ -92,6 +96,7 @@ jobs:
         type: string
         default: ""
     steps:
+      - configure_environment_variables
       - checkout
       - attach_workspace:
           at: "."
@@ -118,6 +123,7 @@ jobs:
     working_directory: /mnt/crate
     resource_class: 2xlarge
     steps:
+      - configure_environment_variables
       - checkout
       - attach_workspace:
           at: "."
@@ -138,6 +144,7 @@ jobs:
     working_directory: /mnt/crate
     resource_class: 2xlarge
     steps:
+      - configure_environment_variables
       - checkout
       - attach_workspace:
           at: "."
@@ -227,6 +234,7 @@ jobs:
     working_directory: /mnt/crate
     resource_class: 2xlarge
     steps:
+      - configure_environment_variables
       - checkout
       - attach_workspace:
           at: "."
@@ -243,6 +251,7 @@ jobs:
     working_directory: /mnt/crate
     resource_class: 2xlarge
     steps:
+      - configure_environment_variables
       - checkout
       - attach_workspace:
           at: "."
@@ -252,22 +261,21 @@ jobs:
       - run:
           name: Run cargo clippy
           command: cargo clippy --all
-
   test_nightly_darwin:
     macos:
       xcode: "10.0.0"
     working_directory: ~/crate
     resource_class: large
     steps:
-      - run:
-          name: Configure environment variables
-          command: |
-            echo 'export PATH="${HOME}/.cargo/bin:${HOME}/.bin:${PATH}"' >> $BASH_ENV
+      - configure_environment_variables
       - checkout
       - run:
           name: Install Rust
           command: |
             curl https://sh.rustup.rs -sSf | sh -s -- -y
+      - run:
+          name: Install pkg-config and md5sum
+          command: HOMEBREW_NO_AUTO_UPDATE=1 brew install md5sha1sum
       - run: rustup install $(cat rust-toolchain)
       - run: rustup default $(cat rust-toolchain)
       - run: cargo update
@@ -282,6 +290,7 @@ jobs:
       - image: circleci/node:latest
     resource_class: xlarge
     steps:
+      - configure_environment_variables
       - checkout
       - attach_workspace:
           at: "."
@@ -292,6 +301,38 @@ jobs:
           name: Validate Commit Messages
           command: |
               npx commitlint --extends @commitlint/config-angular --from origin/master --to $CIRCLE_SHA1
+commands:
+  obtain_filecoin_parameters:
+    steps:
+      - configure_environment_variables
+      - run:
+          name: Compute parameters.json checksum
+          command: md5sum filecoin-proofs/parameters.json | cut -c1-8 > checksum.txt
+      - restore_cache:
+          keys:
+            - proof-params-{{ checksum "filecoin-proofs/parameters.json" }}-{{ arch }}
+      - run:
+          name: Build paramcache if it doesn't already exist
+          command: |
+            set -x; test -f ~/paramcache.awesome \
+            || (cargo build --release --all && find . -type f -name paramcache | xargs -I {} mv {} ~/paramcache.awesome)
+      - run:
+          name: Obtain filecoin groth parameters
+          command: ~/paramcache.awesome --params-for-sector-sizes='1024'
+          no_output_timeout: 60m
+      - save_cache:
+          key: proof-params-{{ checksum "filecoin-proofs/parameters.json" }}-{{ arch }}
+          paths:
+            - "~/paramcache.awesome"
+            - "~/filecoin-proof-parameters/"
+  configure_environment_variables:
+    steps:
+      - run:
+          name: Configure environment variables
+          command: |
+            echo 'export FIL_PROOFS_PARAMETER_CACHE="${HOME}/filecoin-proof-parameters/"' >> $BASH_ENV
+            echo 'export PATH="${HOME}/.cargo/bin:${PATH}"' >> $BASH_ENV
+            echo 'export RUST_LOG=info' >> $BASH_ENV
 
 workflows:
   version: 2.1
