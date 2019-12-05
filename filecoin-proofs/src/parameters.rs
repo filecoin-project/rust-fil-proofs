@@ -111,8 +111,6 @@ fn select_challenges(
 mod tests {
     use super::*;
 
-    use crate::constants::DEFAULT_POREP_PROOF_PARTITIONS;
-
     #[test]
     fn partition_layer_challenges_test() {
         let f = |partitions| {
@@ -121,7 +119,7 @@ mod tests {
                 .challenges_count_all()
         };
         // Update to ensure all supported PoRepProofPartitions options are represented here.
-        assert_eq!(6, f(usize::from(DEFAULT_POREP_PROOF_PARTITIONS)));
+        assert_eq!(6, f(usize::from(crate::PoRepProofPartitions(2))));
 
         assert_eq!(12, f(1));
         assert_eq!(6, f(2));
