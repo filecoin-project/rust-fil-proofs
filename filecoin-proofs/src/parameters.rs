@@ -37,6 +37,7 @@ pub fn window_size_nodes_for_sector_bytes(sector_size: PaddedBytesAmount) -> Res
         SECTOR_SIZE_16_MIB => Ok(WINDOW_SIZE_NODES_16_MIB),
         SECTOR_SIZE_256_MIB => Ok(WINDOW_SIZE_NODES_256_MIB),
         SECTOR_SIZE_1_GIB => Ok(WINDOW_SIZE_NODES_1_GIB),
+        SECTOR_SIZE_32_GIB => Ok(WINDOW_SIZE_NODES_32_GIB),
         _ => Err(anyhow!("Unknown sector size {:?}", sector_size)),
     }
 }
@@ -110,8 +111,6 @@ fn select_challenges(
 mod tests {
     use super::*;
 
-    use crate::types::PoRepProofPartitions;
-
     #[test]
     fn partition_layer_challenges_test() {
         let f = |partitions| {
@@ -120,7 +119,7 @@ mod tests {
                 .challenges_count_all()
         };
         // Update to ensure all supported PoRepProofPartitions options are represented here.
-        assert_eq!(6, f(usize::from(PoRepProofPartitions(2))));
+        assert_eq!(6, f(usize::from(crate::PoRepProofPartitions(2))));
 
         assert_eq!(12, f(1));
         assert_eq!(6, f(2));

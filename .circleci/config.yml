@@ -277,9 +277,6 @@ jobs:
       - run: rustup default $(cat rust-toolchain)
       - run: cargo update
       - run: cargo fetch
-      - restore_parameter_cache
-      - ensure_filecoin_parameters
-      - save_parameter_cache
       - run:
           name: Test (nightly, Darwin)
           command: cargo +$(cat rust-toolchain) test --release --verbose --all
@@ -312,12 +309,12 @@ commands:
             || (cargo build --release --all && find . -type f -name paramcache | xargs -I {} mv {} ~/paramcache.awesome)
       - run:
           name: Obtain filecoin groth parameters
-          command: ~/paramcache.awesome --params-for-sector-sizes='1024'
+          command: ~/paramcache.awesome --params-for-sector-sizes='1024' --predictable
           no_output_timeout: 60m
   save_parameter_cache:
     steps:
       - save_cache:
-          key: proof-params-{{ checksum "filecoin-proofs/parameters.json" }}-{{ arch }}
+          key: proof-params-b-{{ checksum "filecoin-proofs/parameters.json" }}-{{ arch }}
           paths:
             - "~/paramcache.awesome"
             - "~/filecoin-proof-parameters/"
@@ -326,7 +323,7 @@ commands:
       - configure_environment_variables
       - restore_cache:
           keys:
-            - proof-params-{{ checksum "filecoin-proofs/parameters.json" }}-{{ arch }}
+            - proof-params-b-{{ checksum "filecoin-proofs/parameters.json" }}-{{ arch }}
   configure_environment_variables:
     steps:
       - run:

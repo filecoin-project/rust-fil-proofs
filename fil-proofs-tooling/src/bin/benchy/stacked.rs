@@ -13,7 +13,7 @@ use paired::bls12_381::Bls12;
 use rand::Rng;
 
 use fil_proofs_tooling::{measure, FuncMeasurement, Metadata};
-use storage_proofs::circuit::metric::MetricCS;
+use storage_proofs::circuit::bench::BenchCS;
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgraph::*;
@@ -274,7 +274,7 @@ where
             (Some(pub_inputs), Some(priv_inputs), Some(data))
         };
 
-        if *circuit || *groth || *bench {
+        if *circuit || *groth || *bench || *bench_only {
             let CircuitWorkMeasurement {
                 cpu_time,
                 wall_time,
@@ -336,6 +336,7 @@ fn do_circuit_work<H: 'static + Hasher>(
         circuit,
         groth,
         bench,
+        bench_only,
         ..
     } = params;
 
@@ -344,14 +345,15 @@ fn do_circuit_work<H: 'static + Hasher>(
         partitions: Some(*partitions),
     };
 
-    if *bench || *circuit {
-        info!("Generating blank circuit");
-        let mut cs = MetricCS::<Bls12>::new();
+    if *bench || *circuit || *bench_only {
+        info!("Generating blank circuit: start");
+        let mut cs = BenchCS::<Bls12>::new();
         <StackedCompound as CompoundProof<_, StackedDrg<H, Sha256Hasher>, _>>::blank_circuit(&pp)
             .synthesize(&mut cs)?;
 
         report.outputs.circuit_num_inputs = Some(cs.num_inputs() as u64);
         report.outputs.circuit_num_constraints = Some(cs.num_constraints() as u64);
+        info!("Generating blank circuit: done");
     }
 
     if *groth {
@@ -359,16 +361,13 @@ fn do_circuit_work<H: 'static + Hasher>(
         let pub_inputs = pub_in.expect("missing public inputs");
         let priv_inputs = priv_in.expect("missing private inputs");
 
-        // TODO: The time measured for Groth proving also includes parameter loading (which can be long)
-        // and vanilla proving, which may also be.
-        // For now, analysis should note and subtract out these times.
         // We should implement a method of CompoundProof, which will skip vanilla proving.
         // We should also allow the serialized vanilla proofs to be passed (as a file) to the example
         // and skip replication/vanilla-proving entirely.
         let gparams =
-            <StackedCompound as CompoundProof<_, StackedDrg<H, Sha256Hasher>, _>>::groth_params(
-                &compound_public_params.vanilla_params,
-            )?;
+            <StackedCompound as CompoundProof<_, StackedDrg<H, Sha256Hasher>, _>>::groth_params::<
+                rand::rngs::OsRng,
+            >(None, &compound_public_params.vanilla_params)?;
 
         let multi_proof = {
             let FuncMeasurement {

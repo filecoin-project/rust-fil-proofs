@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::io::{stdout, Seek, SeekFrom, Write};
 
 use fil_proofs_tooling::{measure, Metadata};
+use filecoin_proofs::constants::DEFAULT_POREP_PROOF_PARTITIONS;
 use filecoin_proofs::types::{
     PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, SectorSize,
     UnpaddedBytesAmount,
@@ -19,7 +20,7 @@ const CHALLENGE_SEED: [u8; 32] = [0; 32];
 
 const PROVER_ID: [u8; 32] = [0; 32];
 const SECTOR_ID: u64 = 0;
-const N_PARTITIONS: PoRepProofPartitions = PoRepProofPartitions(1);
+const N_PARTITIONS: PoRepProofPartitions = DEFAULT_POREP_PROOF_PARTITIONS;
 
 #[derive(Serialize)]
 #[serde(rename_all = "kebab-case")]

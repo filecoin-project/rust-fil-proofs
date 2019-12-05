@@ -4,8 +4,7 @@ use bellperson::{groth16, Circuit};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use fs2::FileExt;
 use itertools::Itertools;
-use rand::SeedableRng;
-use rand_xorshift::XorShiftRng;
+use rand::RngCore;
 use sha2::{Digest, Sha256};
 
 use std::env;
@@ -15,21 +14,12 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 /// Bump this when circuits change to invalidate the cache.
-pub const VERSION: usize = 19;
+pub const VERSION: usize = 20;
 
 pub const PARAMETER_CACHE_ENV_VAR: &str = "FIL_PROOFS_PARAMETER_CACHE";
-
 pub const PARAMETER_CACHE_DIR: &str = "/var/tmp/filecoin-proof-parameters/";
-
-/// If this changes, parameters generated under different conditions may vary. Don't change it.
-pub const PARAMETER_RNG_SEED: [u8; 16] = [
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
-];
-
 pub const GROTH_PARAMETER_EXT: &str = "params";
-
 pub const PARAMETER_METADATA_EXT: &str = "meta";
-
 pub const VERIFYING_KEY_EXT: &str = "vk";
 
 #[derive(Debug)]
@@ -188,21 +178,27 @@ where
             .or_else(|_| write_cached_metadata(&meta_path, Self::cache_meta(pub_params)))
     }
 
-    fn get_groth_params(circuit: C, pub_params: &P) -> Result<groth16::Parameters<E>> {
-        // Always seed the rng identically so parameter generation will be deterministic.
+    fn get_groth_params<R: RngCore>(
+        rng: Option<&mut R>,
+        circuit: C,
+        pub_params: &P,
+    ) -> Result<groth16::Parameters<E>> {
         let id = Self::cache_identifier(pub_params);
 
-        let generate = || {
-            let rng = &mut XorShiftRng::from_seed(PARAMETER_RNG_SEED);
-            info!("Actually generating groth params. (id: {})", &id);
-            let start = Instant::now();
-            let parameters = groth16::generate_random_parameters::<E, _, _>(circuit, rng);
-            let generation_time = start.elapsed();
-            info!(
-                "groth_parameter_generation_time: {:?} (id: {})",
-                generation_time, &id
-            );
-            parameters
+        let generate = || -> Result<_> {
+            if let Some(rng) = rng {
+                info!("Actually generating groth params. (id: {})", &id);
+                let start = Instant::now();
+                let parameters = groth16::generate_random_parameters::<E, _, _>(circuit, rng)?;
+                let generation_time = start.elapsed();
+                info!(
+                    "groth_parameter_generation_time: {:?} (id: {})",
+                    generation_time, &id
+                );
+                Ok(parameters)
+            } else {
+                bail!("No cached parameters found for {}", id);
+            }
         };
 
         // generate (or load) Groth parameters
@@ -210,11 +206,15 @@ where
         read_cached_params(&cache_path).or_else(|_| write_cached_params(&cache_path, generate()?))
     }
 
-    fn get_verifying_key(circuit: C, pub_params: &P) -> Result<groth16::VerifyingKey<E>> {
+    fn get_verifying_key<R: RngCore>(
+        rng: Option<&mut R>,
+        circuit: C,
+        pub_params: &P,
+    ) -> Result<groth16::VerifyingKey<E>> {
         let id = Self::cache_identifier(pub_params);
 
         let generate = || -> Result<groth16::VerifyingKey<E>> {
-            let groth_params = Self::get_groth_params(circuit, pub_params)?;
+            let groth_params = Self::get_groth_params(rng, circuit, pub_params)?;
             info!("Getting verifying key. (id: {})", &id);
             Ok(groth_params.vk)
         };

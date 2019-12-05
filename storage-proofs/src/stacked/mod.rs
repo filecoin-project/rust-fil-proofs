@@ -13,6 +13,8 @@ mod porep;
 mod proof;
 mod proof_scheme;
 
+pub const OPENINGS_PER_WINDOW: usize = 1;
+
 pub use self::challenges::{ChallengeRequirements, LayerChallenges};
 pub use self::column::Column;
 pub use self::column_proof::ColumnProof;
