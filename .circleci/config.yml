@@ -277,9 +277,6 @@ jobs:
       - run: rustup default $(cat rust-toolchain)
       - run: cargo update
       - run: cargo fetch
-      - restore_parameter_cache
-      - ensure_filecoin_parameters
-      - save_parameter_cache
       - run:
           name: Test (nightly, Darwin)
           command: cargo +$(cat rust-toolchain) test --release --verbose --all
