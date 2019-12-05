@@ -7,6 +7,8 @@ pub const POREP_WRAPPER_MINIMUM_CHALLENGES: usize = 50; // 5 challenges per part
 
 pub const SINGLE_PARTITION_PROOF_LEN: usize = 192;
 
+pub const DEFAULT_POREP_PROOF_PARTITIONS: PoRepProofPartitions = PoRepProofPartitions(10);
+
 pub const SECTOR_SIZE_ONE_KIB: u64 = 1024;
 pub const SECTOR_SIZE_16_MIB: u64 = 1 << 24;
 pub const SECTOR_SIZE_256_MIB: u64 = 1 << 28;
@@ -33,4 +35,5 @@ pub const MIN_PIECE_SIZE: UnpaddedBytesAmount = UnpaddedBytesAmount(127);
 /// The hasher used for creating comm_d.
 pub type DefaultPieceHasher = storage_proofs::hasher::Sha256Hasher;
 
+use crate::PoRepProofPartitions;
 pub use storage_proofs::drgraph::DefaultTreeHasher;

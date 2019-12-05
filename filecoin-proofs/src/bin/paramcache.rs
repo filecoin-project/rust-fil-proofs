@@ -18,8 +18,6 @@ use storage_proofs::hasher::pedersen::PedersenHasher;
 use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::stacked::StackedDrg;
 
-const POREP_PROOF_PARTITION_CHOICES: [PoRepProofPartitions; 1] = [PoRepProofPartitions(10)];
-
 const PUBLISHED_SECTOR_SIZES: [u64; 5] = [
     SECTOR_SIZE_ONE_KIB,
     SECTOR_SIZE_16_MIB,
@@ -199,14 +197,12 @@ pub fn main() {
             },
         );
 
-        for p in &POREP_PROOF_PARTITION_CHOICES {
-            cache_porep_params(
-                is_predictable,
-                PoRepConfig {
-                    sector_size: SectorSize(sector_size),
-                    partitions: *p,
-                },
-            );
-        }
+        cache_porep_params(
+            is_predictable,
+            PoRepConfig {
+                sector_size: SectorSize(sector_size),
+                partitions: DEFAULT_POREP_PROOF_PARTITIONS,
+            },
+        );
     }
 }
