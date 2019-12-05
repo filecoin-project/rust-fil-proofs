@@ -147,6 +147,15 @@ fn get_tree_size(sector_size: SectorSize) -> usize {
 }
 
 /// Generates proof-of-spacetime candidates for ElectionPoSt.
+///
+/// # Arguments
+///
+/// * `post_config` - post config that contains the sector size of each sector that we are
+/// generating this post for.
+/// * `randomness` - randomness used to generate sector challenges.
+/// * `challenge_count` - the number sector challenges in this post.
+/// * `replicas` - each sector's sector-id and associated replica info.
+/// * `prover_id` - the prover-id that is generating this post.
 pub fn generate_candidates(
     post_config: PoStConfig,
     randomness: &ChallengeSeed,
@@ -235,6 +244,15 @@ pub fn finalize_ticket(partial_ticket: &[u8; 32]) -> Result<[u8; 32]> {
 }
 
 /// Generates a proof-of-spacetime.
+///
+/// # Arguments
+///
+/// * `post_config` - post config that contains the sector size of each sector that we are
+/// generating this post for.
+/// * `randomness` - randomness used to generate sector challenges.
+/// * `replicas` - each sector's sector-id and associated replica info.
+/// * `winners` - a vector containing each winning ticket.
+/// * `prover_id` - the prover-id that is generating this post.
 pub fn generate_post(
     post_config: PoStConfig,
     randomness: &ChallengeSeed,
@@ -305,6 +323,17 @@ pub fn generate_post(
 }
 
 /// Verifies a proof-of-spacetime.
+///
+/// # Arguments
+///
+/// * `post_config` - post config that contains the sector size of each sector that this post was
+/// generated for.
+/// * `randomness` - the randomness used to generate the sector challenges.
+/// * `challenge_count` - the number of sector challenges in this post.
+/// * `proofs` - each winning ticket's serialized circuit proof.
+/// * `replicas` - each sector's sector-id and associated replica info.
+/// * `winners` - a vector containing each winning ticket.
+/// * `prover_id` - the prover-id that generated this post.
 pub fn verify_post(
     post_config: PoStConfig,
     randomness: &ChallengeSeed,
