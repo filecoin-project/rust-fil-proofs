@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::Mutex;
 
+use anyhow::Context;
 use generic_array::GenericArray;
 use merkletree::merkle::FromIndexedParallelIterator;
 use merkletree::store::{DiskStore, StoreConfig};
@@ -102,12 +103,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         // Sanity checks on restored trees.
         ensure!(pub_inputs.tau.is_some(), "no tau in inputs");
         ensure!(
-            pub_inputs
-                .tau
-                .as_ref()
-                .ok_or_else(|| anyhow!("no tau in inputs"))?
-                .comm_d
-                == t_aux.tree_d.root(),
+            pub_inputs.tau.as_ref().context("no tau in inputs")?.comm_d == t_aux.tree_d.root(),
             "comm_d must equal the tree_d root"
         );
 
@@ -577,7 +573,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     &layer_labels,
                     window_index,
                     node,
-                );
+                )?;
 
                 let start = data_at_node_offset(node);
                 let end = start + NODE_SIZE;
@@ -722,7 +718,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 &layer_labels,
                 window_index,
                 node,
-            );
+            )?;
             let start = node * NODE_SIZE;
             let end = (node + 1) * NODE_SIZE;
 
@@ -830,7 +826,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         // Generate all store configs that we need based on the
         // cache_path in the specified config.
-        let config = config.expect("missing config");
+        let config = config.context("missing config")?;
         let mut tree_d_config =
             StoreConfig::from_config(&config, CacheKey::CommDTree.to_string(), None);
         let mut tree_r_last_config =
@@ -890,6 +886,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                 let wrapper_layer = &data;
                 for parent in &exp_parents {
+                    // TODO Do proper error handling and not just `expect()`.
                     hasher.input(
                         data_at_node(wrapper_layer, *parent as usize).expect("invalid node math"),
                     );
@@ -900,6 +897,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 // strip last two bits, to ensure result is in Fr.
                 val[31] &= 0b0011_1111;
 
+                // TODO Do proper error handling and not just `expect()`.
                 H::Domain::try_from_bytes(&val).expect("invalid node created")
             }),
             tree_r_last_config.clone(),
@@ -960,7 +958,7 @@ fn create_key<H: Hasher>(
     layer_labels: &[u8],
     window_index: usize,
     node: usize,
-) -> GenericArray<u8, <Sha256 as Digest>::OutputSize> {
+) -> Result<GenericArray<u8, <Sha256 as Digest>::OutputSize>> {
     // hash window_index
     hasher.input(&(window_index as u64).to_be_bytes());
 
@@ -973,7 +971,7 @@ fn create_key<H: Hasher>(
 
         // Base parents
         for parent in parents.iter().take(base_parents_count) {
-            let buf = data_at_node(&layer_labels, *parent as usize).expect("invalid node");
+            let buf = data_at_node(&layer_labels, *parent as usize).context("invalid node")?;
             hasher.input(buf);
         }
 
@@ -981,7 +979,7 @@ fn create_key<H: Hasher>(
         // This will happen for all layers > 1
         if let Some(ref parents_data) = exp_parents_data {
             for parent in parents.iter().skip(base_parents_count) {
-                let buf = data_at_node(parents_data, *parent as usize).expect("invalid node");
+                let buf = data_at_node(parents_data, *parent as usize).context("invalid node")?;
                 hasher.input(&buf);
             }
         }
@@ -992,7 +990,7 @@ fn create_key<H: Hasher>(
     // strip last two bits, to ensure result is in Fr.
     key[31] &= 0b0011_1111;
 
-    key
+    Ok(key)
 }
 
 #[cfg(test)]

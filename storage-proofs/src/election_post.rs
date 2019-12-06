@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::marker::PhantomData;
 
-use anyhow::ensure;
+use anyhow::{ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
 use paired::bls12_381::{Bls12, Fr};
 use serde::de::Deserialize;
@@ -252,7 +252,7 @@ pub fn generate_sector_challenge(
     let sector = *sectors
         .iter()
         .nth(sector_index)
-        .expect("invalid challenge generated");
+        .context("invalid challenge generated")?;
 
     Ok(sector)
 }

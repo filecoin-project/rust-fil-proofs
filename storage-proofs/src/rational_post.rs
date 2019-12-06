@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashSet};
 use std::marker::PhantomData;
 
+use anyhow::Context;
 use byteorder::{ByteOrder, LittleEndian};
 use serde::de::Deserialize;
 use serde::ser::Serialize;
@@ -234,7 +235,7 @@ pub fn derive_challenges(
             let mut attempt = 0;
             let mut attempted_sectors = HashSet::new();
             loop {
-                let c = derive_challenge(seed, n as u64, attempt, sector_size, sectors);
+                let c = derive_challenge(seed, n as u64, attempt, sector_size, sectors)?;
 
                 // check for faulty sector
                 if !faults.contains(&c.sector) {
@@ -260,7 +261,7 @@ fn derive_challenge(
     attempt: u64,
     sector_size: u64,
     sectors: &OrderedSectorSet,
-) -> Challenge {
+) -> Result<Challenge> {
     let mut data = seed.to_vec();
     data.extend_from_slice(&n.to_le_bytes()[..]);
     data.extend_from_slice(&attempt.to_le_bytes()[..]);
@@ -274,12 +275,12 @@ fn derive_challenge(
     let sector = *sectors
         .iter()
         .nth(sector_index)
-        .expect("invalid challenge generated");
+        .context("invalid challenge generated")?;
 
-    Challenge {
+    Ok(Challenge {
         sector,
         leaf: leaf_challenge % (sector_size / NODE_SIZE as u64),
-    }
+    })
 }
 
 #[cfg(test)]

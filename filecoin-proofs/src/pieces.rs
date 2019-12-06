@@ -2,7 +2,7 @@ use std::io::Cursor;
 use std::io::Read;
 use std::iter::Iterator;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use storage_proofs::hasher::{HashFunction, Hasher};
 use storage_proofs::util::NODE_SIZE;
 
@@ -77,7 +77,7 @@ pub fn compute_comm_d(sector_size: SectorSize, piece_infos: &[PieceInfo]) -> Res
 
     ensure!(stack.len() == 1, "Stack size ({}) must be 1.", stack.len());
 
-    let comm_d_calculated = stack.pop().commitment;
+    let comm_d_calculated = stack.pop()?.commitment;
 
     Ok(comm_d_calculated)
 }
@@ -107,8 +107,8 @@ impl Stack {
     }
 
     /// Pop the last element of the stack.
-    pub fn pop(&mut self) -> PieceInfo {
-        self.0.pop().expect("empty stack popped")
+    pub fn pop(&mut self) -> Result<PieceInfo> {
+        self.0.pop().context("empty stack popped")
     }
 
     pub fn reduce1(&mut self) -> Result<bool> {
@@ -117,8 +117,8 @@ impl Stack {
         }
 
         if self.peek().size == self.peek2().size {
-            let right = self.pop();
-            let left = self.pop();
+            let right = self.pop()?;
+            let left = self.pop()?;
             let joined = join_piece_infos(left, right)?;
             self.shift(joined);
             return Ok(true);

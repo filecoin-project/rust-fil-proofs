@@ -1,6 +1,7 @@
 use bellperson::groth16;
 
 use crate::error::Result;
+use anyhow::Context;
 use paired::Engine;
 use std::io::{self, Read, Write};
 
@@ -43,9 +44,9 @@ impl<'a, E: Engine> MultiProof<'a, E> {
         Ok(())
     }
 
-    pub fn to_vec(&self) -> Vec<u8> {
+    pub fn to_vec(&self) -> Result<Vec<u8>> {
         let mut out = Vec::new();
-        self.write(&mut out).expect("known allocation target");
-        out
+        self.write(&mut out).context("known allocation target")?;
+        Ok(out)
     }
 }

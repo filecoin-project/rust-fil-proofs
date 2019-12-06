@@ -97,9 +97,8 @@ pub fn choose_from<S: AsRef<str>>(
     let mut chosen_filenames: Vec<String> = vec![];
 
     for filename in filenames.iter() {
-        let sector_size = lookup(filename.as_ref()).ok_or_else(|| {
-            format_err!("no sector size found for filename {}", filename.as_ref())
-        })?;
+        let sector_size = lookup(filename.as_ref())
+            .with_context(|| format!("no sector size found for filename {}", filename.as_ref()))?;
 
         let msg = format!("(sector size: {}B) {}", sector_size, filename.as_ref());
 

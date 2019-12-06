@@ -1,3 +1,4 @@
+use anyhow::Context;
 use ff::PrimeFieldRepr;
 use fil_sapling_crypto::jubjub::JubjubBls12;
 use fil_sapling_crypto::pedersen_hash::Personalization;
@@ -101,7 +102,7 @@ impl Hasher {
         let x = pedersen_compression_bits(data);
 
         x.write_le(std::io::Cursor::new(&mut self.curr[..]))
-            .expect("failed to write result");
+            .context("failed to write result")?;
         Ok(())
     }
 
@@ -111,8 +112,8 @@ impl Hasher {
     }
 
     pub fn finalize(self) -> Result<Fr> {
-        let frs =
-            bytes_into_frs::<Bls12>(&self.curr).expect("pedersen must generate valid fr elements");
+        let frs = bytes_into_frs::<Bls12>(&self.curr)
+            .context("pedersen must generate valid fr elements")?;
         ensure!(frs.len() == 1, "There must be a single fr element.");
         Ok(frs[0])
     }

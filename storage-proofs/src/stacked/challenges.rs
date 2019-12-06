@@ -1,8 +1,9 @@
-use crate::error::Result;
+use anyhow::Context;
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
 use sha2::{Digest, Sha256};
 
+use crate::error::Result;
 use crate::hasher::Domain;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,7 +50,7 @@ impl LayerChallenges {
     ) -> Result<Vec<usize>> {
         ensure!(leaves > 2, "Too few leaves: {}", leaves);
 
-        let derived = (0..challenges_count)
+        (0..challenges_count)
             .map(|i| {
                 let j: u32 = ((challenges_count * k as usize) + i) as u32;
 
@@ -66,11 +67,10 @@ impl LayerChallenges {
                 let big_mod_challenge = big_challenge % (leaves - 1);
                 let big_mod_challenge = big_mod_challenge
                     .to_usize()
-                    .expect("`big_mod_challenge` exceeds size of `usize`");
-                big_mod_challenge + 1
+                    .context("`big_mod_challenge` exceeds size of `usize`")?;
+                Ok(big_mod_challenge + 1)
             })
-            .collect();
-        Ok(derived)
+            .collect()
     }
 }
 

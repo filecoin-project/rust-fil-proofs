@@ -504,7 +504,7 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
         let tree_d_size = t_aux
             .tree_d_config
             .size
-            .ok_or_else(|| anyhow!("tree_d config has no size"))?;
+            .context("tree_d config has no size")?;
         let tree_d_store: DiskStore<G::Domain> =
             DiskStore::new_from_disk(tree_d_size, &t_aux.tree_d_config).context("tree_d")?;
         let tree_d: Tree<G> =
@@ -515,7 +515,7 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
         let tree_c_size = t_aux
             .tree_c_config
             .size
-            .ok_or_else(|| anyhow!("tree_c config has no size"))?;
+            .context("tree_c config has no size")?;
         let tree_c_store: DiskStore<H::Domain> =
             DiskStore::new_from_disk(tree_c_size, &t_aux.tree_c_config).context("tree_c")?;
         let tree_c: Tree<H> =
@@ -526,7 +526,7 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
         let tree_q_size = t_aux
             .tree_q_config
             .size
-            .ok_or_else(|| anyhow!("tree_q config has no size"))?;
+            .context("tree_q config has no size")?;
         let tree_q_store: DiskStore<H::Domain> =
             DiskStore::new_from_disk(tree_q_size, &t_aux.tree_q_config).context("tree_q")?;
         let tree_q: Tree<H> =
@@ -560,7 +560,7 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
         let tree_d_size = t_aux
             .tree_d_config
             .size
-            .ok_or_else(|| anyhow!("tree_d config has no size"))?;
+            .context("tree_d config has no size")?;
         let tree_d_store: DiskStore<G::Domain> =
             DiskStore::new_from_disk(tree_d_size, &t_aux.tree_d_config).context("tree_d")?;
         let tree_d: Tree<G> =
@@ -570,7 +570,7 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
         let tree_c_size = t_aux
             .tree_c_config
             .size
-            .ok_or_else(|| anyhow!("tree_c config has no size"))?;
+            .context("tree_c config has no size")?;
         let tree_c_store: DiskStore<H::Domain> =
             DiskStore::new_from_disk(tree_c_size, &t_aux.tree_c_config).context("tree_c")?;
         let tree_c: Tree<H> =
@@ -580,7 +580,7 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
         let tree_r_last_size = t_aux
             .tree_r_last_config
             .size
-            .ok_or_else(|| anyhow!("tree_r config has no size"))?;
+            .context("tree_r config has no size")?;
         let tree_r_last_store: DiskStore<H::Domain> =
             DiskStore::new_from_disk(tree_r_last_size, &t_aux.tree_r_last_config)
                 .context("tree_r")?;
@@ -593,7 +593,7 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
         let tree_q_size = t_aux
             .tree_q_config
             .size
-            .ok_or_else(|| anyhow!("tree_q config has no size"))?;
+            .context("tree_q config has no size")?;
         let tree_q_store: DiskStore<H::Domain> =
             DiskStore::new_from_disk(tree_q_size, &t_aux.tree_q_config).context("tree_q")?;
         let tree_q: Tree<H> =
@@ -769,7 +769,7 @@ impl<H: Hasher> LabelsCache<H> {
 }
 
 pub fn get_node<H: Hasher>(data: &[u8], index: usize) -> Result<H::Domain> {
-    H::Domain::try_from_bytes(data_at_node(data, index).expect("invalid node math"))
+    H::Domain::try_from_bytes(data_at_node(data, index).context("invalid node math")?)
 }
 
 /// Generate the replica id as expected for Stacked DRG.
