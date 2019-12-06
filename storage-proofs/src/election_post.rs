@@ -326,8 +326,9 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
         let sector_size = pub_params.sector_size;
 
         let inclusion_proofs = (0..POST_CHALLENGE_COUNT)
-            // TODO replace unwrap with proper error handling
+            .into_par_iter()
             .flat_map(|n| {
+                // TODO: replace unwrap with proper error handling
                 let challenged_leaf_start = generate_leaf_challenge(
                     &pub_inputs.randomness,
                     pub_inputs.sector_challenge_index,
@@ -335,7 +336,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
                     sector_size,
                 )
                 .unwrap();
-                (0..POST_CHALLENGED_NODES).map(move |i| {
+                (0..POST_CHALLENGED_NODES).into_par_iter().map(move |i| {
                     Ok(MerkleProof::new_from_proof(
                         &tree.gen_proof(challenged_leaf_start as usize + i)?,
                     ))

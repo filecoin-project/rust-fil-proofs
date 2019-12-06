@@ -259,38 +259,46 @@ pub fn generate_post(
     let tree_leafs = get_merkle_tree_leafs(tree_size);
 
     let mut proofs = Vec::with_capacity(winners.len());
-    for winner in &winners {
-        let replica = match replicas.get(&winner.sector_id) {
-            Some(replica) => replica,
-            None => {
-                return Err(format_err!(
-                    "Missing replica for sector: {}",
-                    winner.sector_id
-                ))
-            }
-        };
-        let tree = replica.merkle_tree(tree_size, tree_leafs)?;
 
-        let comm_r = replica.safe_comm_r()?;
-        let pub_inputs = election_post::PublicInputs {
-            randomness: *randomness,
-            comm_r,
-            sector_id: winner.sector_id,
-            partial_ticket: winner.partial_ticket,
-            sector_challenge_index: winner.sector_challenge_index,
-            prover_id,
-        };
+    let inputs: Vec<_> = winners
+        .par_iter()
+        .map(|winner| {
+            let replica = match replicas.get(&winner.sector_id) {
+                Some(replica) => replica,
+                None => {
+                    return Err(format_err!(
+                        "Missing replica for sector: {}",
+                        winner.sector_id
+                    ))
+                }
+            };
+            let tree = replica.merkle_tree(tree_size, tree_leafs)?;
 
-        let comm_c = replica.safe_comm_c()?;
-        let comm_q = replica.safe_comm_q()?;
-        let comm_r_last = replica.safe_comm_r_last()?;
-        let priv_inputs = election_post::PrivateInputs::<DefaultTreeHasher> {
-            tree,
-            comm_c,
-            comm_q,
-            comm_r_last,
-        };
+            let comm_r = replica.safe_comm_r()?;
+            let pub_inputs = election_post::PublicInputs {
+                randomness: *randomness,
+                comm_r,
+                sector_id: winner.sector_id,
+                partial_ticket: winner.partial_ticket,
+                sector_challenge_index: winner.sector_challenge_index,
+                prover_id,
+            };
 
+            let comm_c = replica.safe_comm_c()?;
+            let comm_q = replica.safe_comm_q()?;
+            let comm_r_last = replica.safe_comm_r_last()?;
+            let priv_inputs = election_post::PrivateInputs::<DefaultTreeHasher> {
+                tree,
+                comm_c,
+                comm_q,
+                comm_r_last,
+            };
+
+            Ok((pub_inputs, priv_inputs))
+        })
+        .collect::<Result<_>>()?;
+
+    for (pub_inputs, priv_inputs) in &inputs {
         let proof =
             ElectionPoStCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)?;
         proofs.push(proof.to_vec()?);
