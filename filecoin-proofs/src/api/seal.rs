@@ -157,6 +157,8 @@ pub fn seal_commit<T: AsRef<Path>>(
 
     let SealPreCommitOutput { comm_d, comm_r } = pre_commit;
 
+    ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
+    ensure!(comm_r != [0; 32], "Invalid all zero commitment (comm_r)");
     ensure!(
         verify_pieces(&comm_d, piece_infos, porep_config.into())?,
         "pieces and comm_d do not match"
@@ -276,6 +278,9 @@ pub fn verify_seal(
     seed: Ticket,
     proof_vec: &[u8],
 ) -> Result<bool> {
+    ensure!(comm_d_in != [0; 32], "Invalid all zero commitment (comm_d)");
+    ensure!(comm_r_in != [0; 32], "Invalid all zero commitment (comm_r)");
+
     let sector_bytes = PaddedBytesAmount::from(porep_config);
     let comm_r = as_safe_commitment(&comm_r_in, "comm_r")?;
     let comm_d = as_safe_commitment(&comm_d_in, "comm_d")?;

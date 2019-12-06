@@ -382,15 +382,14 @@ mod tests {
         let mut g = [0u8; 32];
         let h = piece_hash(&e, &f);
         g.copy_from_slice(h.as_ref());
+        let a = PieceInfo::new(a, UnpaddedBytesAmount(127)).unwrap();
+        let b = PieceInfo::new(b, UnpaddedBytesAmount(127)).unwrap();
+        let c = PieceInfo::new(c, UnpaddedBytesAmount(127)).unwrap();
+        let d = PieceInfo::new(d, UnpaddedBytesAmount(127)).unwrap();
 
-        let a = PieceInfo::new(a, UnpaddedBytesAmount(127));
-        let b = PieceInfo::new(b, UnpaddedBytesAmount(127));
-        let c = PieceInfo::new(c, UnpaddedBytesAmount(127));
-        let d = PieceInfo::new(d, UnpaddedBytesAmount(127));
-
-        let e = PieceInfo::new(e, UnpaddedBytesAmount(254));
-        let f = PieceInfo::new(f, UnpaddedBytesAmount(254));
-        let g = PieceInfo::new(g, UnpaddedBytesAmount(508));
+        let e = PieceInfo::new(e, UnpaddedBytesAmount(254)).unwrap();
+        let f = PieceInfo::new(f, UnpaddedBytesAmount(254)).unwrap();
+        let g = PieceInfo::new(g, UnpaddedBytesAmount(508)).unwrap();
 
         let sector_size = SectorSize(4 * 128);
         let comm_d = g.commitment;

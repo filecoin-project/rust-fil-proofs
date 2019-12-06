@@ -57,6 +57,8 @@ impl std::cmp::PartialOrd for PrivateReplicaInfo {
 
 impl PrivateReplicaInfo {
     pub fn new(access: String, comm_r: Commitment, cache_dir: PathBuf) -> Result<Self> {
+        ensure!(comm_r != [0; 32], "Invalid all zero commitment (comm_r)");
+
         let aux = {
             let mut aux_bytes = vec![];
             let mut f_aux = File::open(cache_dir.join(CacheKey::PAux.to_string()))?;
@@ -134,8 +136,9 @@ impl std::cmp::PartialOrd for PublicReplicaInfo {
 }
 
 impl PublicReplicaInfo {
-    pub fn new(comm_r: Commitment) -> Self {
-        PublicReplicaInfo { comm_r }
+    pub fn new(comm_r: Commitment) -> Result<Self> {
+        ensure!(comm_r != [0; 32], "Invalid all zero commitment (comm_r)");
+        Ok(PublicReplicaInfo { comm_r })
     }
 
     pub fn safe_comm_r(&self) -> Result<<DefaultTreeHasher as Hasher>::Domain> {

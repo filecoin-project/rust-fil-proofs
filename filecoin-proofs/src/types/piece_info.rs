@@ -1,5 +1,7 @@
 use std::fmt;
 
+use anyhow::Result;
+
 use crate::types::{Commitment, UnpaddedBytesAmount};
 
 #[derive(Clone, Default, PartialEq, Eq)]
@@ -18,7 +20,8 @@ impl fmt::Debug for PieceInfo {
 }
 
 impl PieceInfo {
-    pub fn new(commitment: Commitment, size: UnpaddedBytesAmount) -> Self {
-        PieceInfo { commitment, size }
+    pub fn new(commitment: Commitment, size: UnpaddedBytesAmount) -> Result<Self> {
+        ensure!(commitment != [0; 32], "Invalid all zero commitment");
+        Ok(PieceInfo { commitment, size })
     }
 }
