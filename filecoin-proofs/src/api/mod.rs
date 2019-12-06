@@ -49,6 +49,8 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     offset: UnpaddedByteIndex,
     num_bytes: UnpaddedBytesAmount,
 ) -> Result<UnpaddedBytesAmount> {
+    ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
+
     let comm_d =
         as_safe_commitment::<<DefaultPieceHasher as Hasher>::Domain, _>(&comm_d, "comm_d")?;
 
@@ -130,10 +132,7 @@ pub fn generate_piece_commitment<T: std::io::Read>(
     let commitment =
         generate_piece_commitment_bytes_from_source::<DefaultPieceHasher>(&mut temp_piece_file)?;
 
-    Ok(PieceInfo {
-        commitment,
-        size: piece_size,
-    })
+    PieceInfo::new(commitment, piece_size)
 }
 
 /// Computes a NUL-byte prefix and/or suffix for `source` using the provided
@@ -329,7 +328,7 @@ mod tests {
             );
 
             if let Err(err) = result {
-                let needle = "Invalid commitment (comm_r)";
+                let needle = "Invalid all zero commitment";
                 let haystack = format!("{}", err);
 
                 assert!(
@@ -357,7 +356,7 @@ mod tests {
             );
 
             if let Err(err) = result {
-                let needle = "Invalid commitment (comm_d)";
+                let needle = "Invalid all zero commitment";
                 let haystack = format!("{}", err);
 
                 assert!(
@@ -381,7 +380,7 @@ mod tests {
         let mut replicas = BTreeMap::new();
         replicas.insert(
             1.into(),
-            PublicReplicaInfo::new(not_convertible_to_fr_bytes),
+            PublicReplicaInfo::new(not_convertible_to_fr_bytes).unwrap(),
         );
         let winner = Candidate {
             sector_id: 1.into(),

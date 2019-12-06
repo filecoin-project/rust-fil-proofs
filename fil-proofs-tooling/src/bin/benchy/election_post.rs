@@ -133,7 +133,7 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
     let mut pub_replica_info: BTreeMap<SectorId, PublicReplicaInfo> = BTreeMap::new();
     let mut priv_replica_info: BTreeMap<SectorId, PrivateReplicaInfo> = BTreeMap::new();
 
-    pub_replica_info.insert(sector_id, PublicReplicaInfo::new(comm_r));
+    pub_replica_info.insert(sector_id, PublicReplicaInfo::new(comm_r)?);
 
     priv_replica_info.insert(
         sector_id,
