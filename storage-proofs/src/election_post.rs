@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use anyhow::{ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
 use paired::bls12_381::{Bls12, Fr};
+use rayon::prelude::*;
 use serde::de::Deserialize;
 use serde::ser::Serialize;
 use sha2::{Digest, Sha256};
@@ -143,25 +144,25 @@ pub fn generate_candidates<H: Hasher>(
     prover_id: &[u8; 32],
     randomness: &[u8; 32],
 ) -> Result<Vec<Candidate>> {
-    let mut candidates = Vec::with_capacity(challenged_sectors.len());
+    challenged_sectors
+        .par_iter()
+        .enumerate()
+        .map(|(sector_challenge_index, sector_id)| {
+            let tree = match trees.get(sector_id) {
+                Some(tree) => tree,
+                None => bail!(Error::MissingPrivateInput("tree", (*sector_id).into())),
+            };
 
-    for (sector_challenge_index, sector_id) in challenged_sectors.iter().enumerate() {
-        let tree = match trees.get(sector_id) {
-            Some(tree) => tree,
-            None => bail!(Error::MissingPrivateInput("tree", (*sector_id).into())),
-        };
-
-        candidates.push(generate_candidate::<H>(
-            sector_size,
-            tree,
-            prover_id,
-            *sector_id,
-            randomness,
-            sector_challenge_index as u64,
-        )?);
-    }
-
-    Ok(candidates)
+            generate_candidate::<H>(
+                sector_size,
+                tree,
+                prover_id,
+                *sector_id,
+                randomness,
+                sector_challenge_index as u64,
+            )
+        })
+        .collect()
 }
 
 fn generate_candidate<H: Hasher>(
@@ -227,14 +228,10 @@ pub fn generate_sector_challenges(
     challenge_count: u64,
     sectors: &OrderedSectorSet,
 ) -> Result<Vec<SectorId>> {
-    let mut challenges = Vec::with_capacity(challenge_count as usize);
-
-    for n in 0..challenge_count as usize {
-        let sector = generate_sector_challenge(randomness, n, sectors)?;
-        challenges.push(sector);
-    }
-
-    Ok(challenges)
+    (0..challenge_count)
+        .into_par_iter()
+        .map(|n| generate_sector_challenge(randomness, n as usize, sectors))
+        .collect()
 }
 
 pub fn generate_sector_challenge(
