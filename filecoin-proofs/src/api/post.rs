@@ -92,14 +92,7 @@ impl PrivateReplicaInfo {
     }
 
     /// Generate the merkle tree of this particular replica.
-    pub fn merkle_tree(&self, sector_size: SectorSize) -> Result<Tree> {
-        let sector_size = u64::from(sector_size);
-        let tree_size = {
-            let elems =
-                sector_size as usize / std::mem::size_of::<<DefaultTreeHasher as Hasher>::Domain>();
-
-            2 * elems - 1
-        };
+    pub fn merkle_tree(&self, tree_size: usize, tree_leafs: usize) -> Result<Tree> {
         let mut config = StoreConfig::new(
             &self.cache_dir,
             CacheKey::CommRLastTree.to_string(),
@@ -108,8 +101,7 @@ impl PrivateReplicaInfo {
         config.size = Some(tree_size);
         let tree_r_last_store: DiskStore<<DefaultTreeHasher as Hasher>::Domain> =
             DiskStore::new_from_disk(tree_size, &config)?;
-        let tree_r_last: Tree =
-            MerkleTree::from_data_store(tree_r_last_store, get_merkle_tree_leafs(tree_size))?;
+        let tree_r_last: Tree = MerkleTree::from_data_store(tree_r_last_store, tree_leafs)?;
 
         Ok(tree_r_last)
     }
@@ -144,6 +136,13 @@ impl PublicReplicaInfo {
     pub fn safe_comm_r(&self) -> Result<<DefaultTreeHasher as Hasher>::Domain> {
         as_safe_commitment(&self.comm_r, "comm_r")
     }
+}
+
+fn get_tree_size(sector_size: SectorSize) -> usize {
+    let sector_size = u64::from(sector_size);
+    let elems = sector_size as usize / std::mem::size_of::<<DefaultTreeHasher as Hasher>::Domain>();
+
+    2 * elems - 1
 }
 
 /// Generates proof-of-spacetime candidates for ElectionPoSt.
@@ -197,11 +196,14 @@ pub fn generate_candidates(
     unique_challenged_replicas.sort_unstable(); // dedup requires a sorted list
     unique_challenged_replicas.dedup();
 
+    let tree_size = get_tree_size(post_config.sector_size);
+    let tree_leafs = get_merkle_tree_leafs(tree_size);
+
     let unique_trees_res: Vec<_> = unique_challenged_replicas
         .into_par_iter()
         .map(|(id, replica)| {
             replica
-                .merkle_tree(post_config.sector_size)
+                .merkle_tree(tree_size, tree_leafs)
                 .map(|tree| (*id, tree))
         })
         .collect();
@@ -253,39 +255,50 @@ pub fn generate_post(
         ElectionPoStCompound::setup(&setup_params)?;
     let groth_params = get_post_params(post_config)?;
 
+    let tree_size = get_tree_size(post_config.sector_size);
+    let tree_leafs = get_merkle_tree_leafs(tree_size);
+
     let mut proofs = Vec::with_capacity(winners.len());
-    for winner in &winners {
-        let replica = match replicas.get(&winner.sector_id) {
-            Some(replica) => replica,
-            None => {
-                return Err(format_err!(
-                    "Missing replica for sector: {}",
-                    winner.sector_id
-                ))
-            }
-        };
-        let tree = replica.merkle_tree(post_config.sector_size)?;
 
-        let comm_r = replica.safe_comm_r()?;
-        let pub_inputs = election_post::PublicInputs {
-            randomness: *randomness,
-            comm_r,
-            sector_id: winner.sector_id,
-            partial_ticket: winner.partial_ticket,
-            sector_challenge_index: winner.sector_challenge_index,
-            prover_id,
-        };
+    let inputs: Vec<_> = winners
+        .par_iter()
+        .map(|winner| {
+            let replica = match replicas.get(&winner.sector_id) {
+                Some(replica) => replica,
+                None => {
+                    return Err(format_err!(
+                        "Missing replica for sector: {}",
+                        winner.sector_id
+                    ))
+                }
+            };
+            let tree = replica.merkle_tree(tree_size, tree_leafs)?;
 
-        let comm_c = replica.safe_comm_c()?;
-        let comm_q = replica.safe_comm_q()?;
-        let comm_r_last = replica.safe_comm_r_last()?;
-        let priv_inputs = election_post::PrivateInputs::<DefaultTreeHasher> {
-            tree,
-            comm_c,
-            comm_q,
-            comm_r_last,
-        };
+            let comm_r = replica.safe_comm_r()?;
+            let pub_inputs = election_post::PublicInputs {
+                randomness: *randomness,
+                comm_r,
+                sector_id: winner.sector_id,
+                partial_ticket: winner.partial_ticket,
+                sector_challenge_index: winner.sector_challenge_index,
+                prover_id,
+            };
 
+            let comm_c = replica.safe_comm_c()?;
+            let comm_q = replica.safe_comm_q()?;
+            let comm_r_last = replica.safe_comm_r_last()?;
+            let priv_inputs = election_post::PrivateInputs::<DefaultTreeHasher> {
+                tree,
+                comm_c,
+                comm_q,
+                comm_r_last,
+            };
+
+            Ok((pub_inputs, priv_inputs))
+        })
+        .collect::<Result<_>>()?;
+
+    for (pub_inputs, priv_inputs) in &inputs {
         let proof =
             ElectionPoStCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)?;
         proofs.push(proof.to_vec()?);
