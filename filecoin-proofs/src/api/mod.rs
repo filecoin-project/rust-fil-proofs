@@ -132,10 +132,7 @@ pub fn generate_piece_commitment<T: std::io::Read>(
     let commitment =
         generate_piece_commitment_bytes_from_source::<DefaultPieceHasher>(&mut temp_piece_file)?;
 
-    Ok(PieceInfo {
-        commitment,
-        size: piece_size,
-    })
+    PieceInfo::new(commitment, piece_size)
 }
 
 /// Computes a NUL-byte prefix and/or suffix for `source` using the provided

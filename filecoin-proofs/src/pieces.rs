@@ -163,7 +163,7 @@ fn zero_padding(size: UnpaddedBytesAmount) -> Result<PieceInfo> {
         "Hashed size must equal padded size"
     );
 
-    Ok(PieceInfo { size, commitment })
+    PieceInfo::new(commitment, size)
 }
 
 /// Join two equally sized `PieceInfo`s together, by hashing them and adding their sizes.
@@ -447,50 +447,26 @@ mod tests {
         let pad = zero_padding(UnpaddedBytesAmount(127)).unwrap();
 
         let pieces = vec![
-            PieceInfo {
-                commitment: [1u8; 32],
-                size: UnpaddedBytesAmount(1 * 127),
-            },
-            PieceInfo {
-                commitment: [2u8; 32],
-                size: UnpaddedBytesAmount(4 * 127),
-            },
-            PieceInfo {
-                commitment: [3u8; 32],
-                size: UnpaddedBytesAmount(2 * 127),
-            },
-            PieceInfo {
-                commitment: [4u8; 32],
-                size: UnpaddedBytesAmount(8 * 127),
-            },
+            PieceInfo::new([1u8; 32], UnpaddedBytesAmount(1 * 127)).unwrap(),
+            PieceInfo::new([2u8; 32], UnpaddedBytesAmount(4 * 127)).unwrap(),
+            PieceInfo::new([3u8; 32], UnpaddedBytesAmount(2 * 127)).unwrap(),
+            PieceInfo::new([4u8; 32], UnpaddedBytesAmount(8 * 127)).unwrap(),
         ];
 
         let padded_pieces = vec![
-            PieceInfo {
-                commitment: [1u8; 32],
-                size: UnpaddedBytesAmount(1 * 127),
-            },
+            PieceInfo::new([1u8; 32], UnpaddedBytesAmount(1 * 127)).unwrap(),
             pad.clone(),
             pad.clone(),
             pad.clone(),
-            PieceInfo {
-                commitment: [2u8; 32],
-                size: UnpaddedBytesAmount(4 * 127),
-            },
-            PieceInfo {
-                commitment: [3u8; 32],
-                size: UnpaddedBytesAmount(2 * 127),
-            },
+            PieceInfo::new([2u8; 32], UnpaddedBytesAmount(4 * 127)).unwrap(),
+            PieceInfo::new([3u8; 32], UnpaddedBytesAmount(2 * 127)).unwrap(),
             pad.clone(),
             pad.clone(),
             pad.clone(),
             pad.clone(),
             pad.clone(),
             pad.clone(),
-            PieceInfo {
-                commitment: [4u8; 32],
-                size: UnpaddedBytesAmount(8 * 127),
-            },
+            PieceInfo::new([4u8; 32], UnpaddedBytesAmount(8 * 127)).unwrap(),
             pad.clone(),
             pad.clone(),
             pad.clone(),
