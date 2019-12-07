@@ -631,11 +631,11 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 let layer_config = StoreConfig::from_config(
                     &config,
                     CacheKey::label_layer(layer),
-                    Some(layer_size),
+                    Some(layer_size / NODE_SIZE),
                 );
 
                 let layer_store: DiskStore<H::Domain> =
-                    DiskStore::new_with_config(layer_size, layer_config.clone())?;
+                    DiskStore::new_with_config(layer_size / NODE_SIZE, layer_config.clone())?;
 
                 let r = Mutex::new((layer_store, layer_config));
                 Ok(r)
