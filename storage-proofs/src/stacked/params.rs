@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::marker::PhantomData;
+use std::path::Path;
 
 use anyhow::Context;
 use merkletree::merkle::get_merkle_tree_leafs;
@@ -486,6 +487,23 @@ pub struct TemporaryAux<H: Hasher, G: Hasher> {
 }
 
 impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
+    pub fn with_cache_path<P: AsRef<Path>>(&self, cache_path: P) -> Self {
+        let mut res = self.clone();
+
+        for (layer, label) in res.labels.labels.iter_mut().enumerate() {
+            label.path = cache_path.as_ref().join(CacheKey::label_layer(layer));
+        }
+
+        res.tree_d_config.path = cache_path.as_ref().join(CacheKey::CommDTree.to_string());
+        res.tree_r_last_config.path = cache_path
+            .as_ref()
+            .join(CacheKey::CommRLastTree.to_string());
+        res.tree_c_config.path = cache_path.as_ref().join(CacheKey::CommCTree.to_string());
+        res.tree_q_config.path = cache_path.as_ref().join(CacheKey::CommQTree.to_string());
+
+        res
+    }
+
     pub fn labels_for_layer(&self, layer: usize) -> Result<DiskStore<H::Domain>> {
         self.labels.labels_for_layer(layer)
     }

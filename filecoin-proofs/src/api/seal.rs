@@ -172,13 +172,16 @@ pub fn seal_commit<T: AsRef<Path>>(
         deserialize(&p_aux_bytes)
     }?;
 
-    let t_aux = {
+    let t_aux_base: TemporaryAux<_, _> = {
         let mut t_aux_bytes = vec![];
         let mut f_t_aux = File::open(cache_path.as_ref().join(CacheKey::TAux.to_string()))?;
         f_t_aux.read_to_end(&mut t_aux_bytes)?;
 
         deserialize(&t_aux_bytes)
     }?;
+
+    // Switch t_aux to the passed in cache_path
+    let t_aux = t_aux_base.with_cache_path(cache_path);
 
     // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
     // elements based on the configs stored in TemporaryAux.
