@@ -487,21 +487,14 @@ pub struct TemporaryAux<H: Hasher, G: Hasher> {
 }
 
 impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
-    pub fn with_cache_path<P: AsRef<Path>>(&self, cache_path: P) -> Self {
-        let mut res = self.clone();
-
-        for (layer, label) in res.labels.labels.iter_mut().enumerate() {
-            label.path = cache_path.as_ref().join(CacheKey::label_layer(layer));
+    pub fn set_cache_path<P: AsRef<Path>>(&mut self, cache_path: P) {
+        for label in self.labels.labels.iter_mut() {
+            label.path = cache_path.as_ref().to_path_buf();
         }
-
-        res.tree_d_config.path = cache_path.as_ref().join(CacheKey::CommDTree.to_string());
-        res.tree_r_last_config.path = cache_path
-            .as_ref()
-            .join(CacheKey::CommRLastTree.to_string());
-        res.tree_c_config.path = cache_path.as_ref().join(CacheKey::CommCTree.to_string());
-        res.tree_q_config.path = cache_path.as_ref().join(CacheKey::CommQTree.to_string());
-
-        res
+        self.tree_d_config.path = cache_path.as_ref().to_path_buf();
+        self.tree_r_last_config.path = cache_path.as_ref().to_path_buf();
+        self.tree_c_config.path = cache_path.as_ref().to_path_buf();
+        self.tree_q_config.path = cache_path.as_ref().to_path_buf();
     }
 
     pub fn labels_for_layer(&self, layer: usize) -> Result<DiskStore<H::Domain>> {
