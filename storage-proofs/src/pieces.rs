@@ -1,3 +1,4 @@
+use anyhow::ensure;
 use itertools::Itertools;
 use merkletree::merkle::{self, next_pow2};
 use merkletree::store::VecStore;

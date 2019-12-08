@@ -12,6 +12,7 @@ use filecoin_proofs::{
     seal_pre_commit, verify_post, PrivateReplicaInfo, PublicReplicaInfo,
 };
 use log::info;
+use serde::Serialize;
 use storage_proofs::sector::SectorId;
 use tempfile::NamedTempFile;
 

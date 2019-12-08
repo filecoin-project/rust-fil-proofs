@@ -1,6 +1,7 @@
-use anyhow::Context;
+use anyhow::{ensure, Context};
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::error::Result;

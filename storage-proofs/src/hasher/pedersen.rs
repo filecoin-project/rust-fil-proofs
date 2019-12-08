@@ -1,5 +1,6 @@
 use std::hash::Hasher as StdHasher;
 
+use anyhow::ensure;
 use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::{Field, PrimeField, PrimeFieldRepr};

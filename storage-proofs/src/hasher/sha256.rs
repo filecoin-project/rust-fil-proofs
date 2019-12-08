@@ -2,6 +2,7 @@ use sha2::{Digest, Sha256};
 
 use std::hash::Hasher as StdHasher;
 
+use anyhow::ensure;
 use bellperson::gadgets::{boolean, multipack, num, sha256::sha256 as sha256_circuit};
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::{Field, PrimeField, PrimeFieldRepr};
@@ -10,6 +11,7 @@ use merkletree::hash::{Algorithm, Hashable};
 use merkletree::merkle::Element;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 use rand::RngCore;
+use serde::{Deserialize, Serialize};
 
 use super::{Domain, HashFunction, Hasher};
 use crate::crypto::sloth;

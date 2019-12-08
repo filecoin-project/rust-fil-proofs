@@ -1,6 +1,8 @@
 use std::sync::Mutex;
 
 use config::{Config, ConfigError, Environment, File};
+use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
 
 lazy_static! {
     pub static ref SETTINGS: Mutex<Settings> =

@@ -1,5 +1,3 @@
-extern crate rexpect;
-
 use std::collections::HashSet;
 use std::iter::FromIterator;
 

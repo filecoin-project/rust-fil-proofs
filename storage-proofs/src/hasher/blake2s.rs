@@ -1,6 +1,7 @@
 use std::fmt;
 use std::hash::Hasher as StdHasher;
 
+use anyhow::ensure;
 use bellperson::gadgets::{blake2s as blake2s_circuit, boolean, multipack, num};
 use bellperson::{ConstraintSystem, SynthesisError};
 use blake2s_simd::{Hash as Blake2sHash, Params as Blake2s, State};
@@ -10,6 +11,7 @@ use merkletree::hash::{Algorithm, Hashable};
 use merkletree::merkle::Element;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 use rand::RngCore;
+use serde::{Deserialize, Serialize};
 
 use super::{Domain, HashFunction, Hasher};
 use crate::crypto::sloth;

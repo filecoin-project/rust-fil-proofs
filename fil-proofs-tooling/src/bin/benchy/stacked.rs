@@ -11,6 +11,7 @@ use memmap::MmapOptions;
 use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
 use paired::bls12_381::Bls12;
 use rand::Rng;
+use serde::Serialize;
 
 use fil_proofs_tooling::{measure, FuncMeasurement, Metadata};
 use storage_proofs::circuit::bench::BenchCS;

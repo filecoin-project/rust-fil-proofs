@@ -3,8 +3,9 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{anyhow, ensure, Context, Result};
 use bincode::deserialize;
+use log::info;
 use merkletree::merkle::{get_merkle_tree_leafs, MerkleTree};
 use merkletree::store::{DiskStore, Store, StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
 use paired::bls12_381::Bls12;
@@ -179,7 +180,7 @@ pub fn generate_candidates(
             if let Some(replica) = replicas.get(c) {
                 Ok((c, replica))
             } else {
-                Err(format_err!(
+                Err(anyhow!(
                     "Invalid challenge generated: {}, only {} sectors are being proven",
                     c,
                     sector_count
@@ -228,8 +229,8 @@ pub type SnarkProof = Vec<u8>;
 
 /// Generates a ticket from a partial_ticket.
 pub fn finalize_ticket(partial_ticket: &[u8; 32]) -> Result<[u8; 32]> {
-    let partial_ticket = bytes_into_fr::<Bls12>(partial_ticket)
-        .map_err(|err| format_err!("Invalid partial_ticket: {:?}", err))?;
+    let partial_ticket =
+        bytes_into_fr::<Bls12>(partial_ticket).context("Invalid partial_ticket")?;
     Ok(election_post::finalize_ticket(&partial_ticket))
 }
 
@@ -263,15 +264,9 @@ pub fn generate_post(
     let inputs: Vec<_> = winners
         .par_iter()
         .map(|winner| {
-            let replica = match replicas.get(&winner.sector_id) {
-                Some(replica) => replica,
-                None => {
-                    return Err(format_err!(
-                        "Missing replica for sector: {}",
-                        winner.sector_id
-                    ))
-                }
-            };
+            let replica = replicas
+                .get(&winner.sector_id)
+                .with_context(|| format!("Missing replica for sector: {}", winner.sector_id))?;
             let tree = replica.merkle_tree(tree_size, tree_leafs)?;
 
             let comm_r = replica.safe_comm_r()?;
@@ -339,15 +334,9 @@ pub fn verify_post(
 
     let verifying_key = get_post_verifying_key(post_config)?;
     for (proof, winner) in proofs.iter().zip(winners.iter()) {
-        let replica = match replicas.get(&winner.sector_id) {
-            Some(replica) => replica,
-            None => {
-                return Err(format_err!(
-                    "Missing replica for sector: {}",
-                    winner.sector_id
-                ))
-            }
-        };
+        let replica = replicas
+            .get(&winner.sector_id)
+            .with_context(|| format!("Missing replica for sector: {}", winner.sector_id))?;
         let comm_r = replica.safe_comm_r()?;
 
         if !election_post::is_valid_sector_challenge_index(

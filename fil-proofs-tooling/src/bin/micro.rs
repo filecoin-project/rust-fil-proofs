@@ -1,15 +1,10 @@
-#[macro_use]
-extern crate commandspec;
-#[macro_use]
-extern crate anyhow;
-#[macro_use]
-extern crate serde;
-
 use std::io::{self, BufRead};
 
-use anyhow::Result;
+use anyhow::{anyhow, Context, Result};
+use commandspec::command;
 use fil_proofs_tooling::metadata::Metadata;
 use regex::Regex;
+use serde::Serialize;
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -277,9 +272,7 @@ fn run_benches(mut args: Vec<String>) -> Result<()> {
 
     let process = cmd.stdout(std::process::Stdio::piped()).spawn()?;
 
-    let stdout = process
-        .stdout
-        .ok_or_else(|| format_err!("Failed to capture stdout"))?;
+    let stdout = process.stdout.context("Failed to capture stdout")?;
 
     let reader = std::io::BufReader::new(stdout);
     let mut stdout = String::new();
@@ -296,7 +289,7 @@ fn run_benches(mut args: Vec<String>) -> Result<()> {
 
     let wrapped = Metadata::wrap(parsed_results)?;
 
-    serde_json::to_writer(io::stdout(), &wrapped).expect("cannot write report-JSON to stdout");
+    serde_json::to_writer(io::stdout(), &wrapped).context("cannot write report-JSON to stdout")?;
 
     Ok(())
 }

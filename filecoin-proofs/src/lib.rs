@@ -1,14 +1,5 @@
 #![deny(clippy::all, clippy::perf, clippy::correctness)]
 
-#[macro_use]
-extern crate lazy_static;
-#[macro_use]
-extern crate anyhow;
-#[macro_use]
-extern crate log;
-
-extern crate bincode;
-
 mod api;
 mod caches;
 
@@ -24,10 +15,6 @@ pub mod types;
 pub use api::*;
 pub use constants::SINGLE_PARTITION_PROOF_LEN;
 pub use types::*;
-
-#[cfg(test)]
-#[macro_use]
-extern crate pretty_assertions;
 
 #[cfg(test)]
 pub(crate) const TEST_SEED: [u8; 16] = [

@@ -1,7 +1,8 @@
-use anyhow::Context;
+use anyhow::{ensure, Context};
 use ff::PrimeFieldRepr;
 use fil_sapling_crypto::jubjub::JubjubBls12;
 use fil_sapling_crypto::pedersen_hash::Personalization;
+use lazy_static::lazy_static;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 
 use crate::error::Result;

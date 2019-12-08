@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use paired::bls12_381::Bls12;
 use paired::Engine;
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes};
@@ -10,13 +10,9 @@ pub(crate) fn as_safe_commitment<H: Domain, T: AsRef<str>>(
     comm: &Commitment,
     commitment_name: T,
 ) -> Result<H> {
-    bytes_into_fr::<Bls12>(comm).map(Into::into).map_err(|err| {
-        format_err!(
-            "Invalid commitment ({}): {:?}",
-            commitment_name.as_ref(),
-            err
-        )
-    })
+    bytes_into_fr::<Bls12>(comm)
+        .map(Into::into)
+        .with_context(|| format!("Invalid commitment ({})", commitment_name.as_ref(),))
 }
 
 pub(crate) fn commitment_from_fr<E: Engine>(fr: E::Fr) -> Commitment {

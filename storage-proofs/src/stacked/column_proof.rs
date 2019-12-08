@@ -1,5 +1,5 @@
-use serde::de::Deserialize;
-use serde::ser::Serialize;
+use log::trace;
+use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
 use crate::hasher::pedersen::PedersenDomain;

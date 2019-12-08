@@ -3,7 +3,8 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::path::Path;
 
-use anyhow::Context;
+use anyhow::{ensure, Context};
+use log::trace;
 use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{DiskStore, Store, StoreConfig};
 use serde::{Deserialize, Serialize};

@@ -1,8 +1,9 @@
 use rayon::prelude::*;
 
-use anyhow::Context;
+use anyhow::{ensure, Context};
 use bellperson::{groth16, Circuit};
 use fil_sapling_crypto::jubjub::JubjubEngine;
+use log::info;
 use rand::{rngs::OsRng, RngCore};
 
 use crate::circuit::multi_proof::MultiProof;

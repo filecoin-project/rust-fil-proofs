@@ -1,7 +1,4 @@
-#[macro_use]
-extern crate criterion;
-
-use criterion::{black_box, Criterion, ParameterizedBenchmark};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
 use rand::{thread_rng, Rng};
 use storage_proofs::drgraph::{new_seed, Graph, BASE_DEGREE};
 use storage_proofs::hasher::blake2s::Blake2sHasher;

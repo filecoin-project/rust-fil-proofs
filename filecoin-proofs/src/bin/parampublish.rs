@@ -1,6 +1,3 @@
-#[macro_use]
-extern crate anyhow;
-
 use std::collections::BTreeMap;
 use std::fs::{read_dir, File};
 use std::io;
@@ -9,7 +6,7 @@ use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
 
-use anyhow::Result;
+use anyhow::{ensure, Context, Result};
 use clap::{App, Arg, ArgMatches};
 use itertools::Itertools;
 
@@ -107,11 +104,11 @@ fn publish(matches: &ArgMatches) -> Result<()> {
 
         for filename in filenames {
             let id = filename_to_parameter_id(&filename)
-                .ok_or_else(|| format_err!("failed to parse id from file name {}", filename))?;
+                .with_context(|| format!("failed to parse id from file name {}", filename))?;
 
             let meta: &CacheEntryMetadata = meta_map
                 .get(&id)
-                .ok_or_else(|| format_err!("no metadata found for parameter id {}", id))?;
+                .with_context(|| format!("no metadata found for parameter id {}", id))?;
 
             println!("publishing: {}", filename);
             print!("publishing to ipfs... ");

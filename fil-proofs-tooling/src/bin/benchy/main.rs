@@ -1,6 +1,3 @@
-#[macro_use]
-extern crate serde;
-
 use clap::{value_t, App, Arg, SubCommand};
 
 mod election_post;

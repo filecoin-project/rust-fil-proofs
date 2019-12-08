@@ -1,8 +1,10 @@
 use std::time::Instant;
 
-use crate::error::Result;
+use log::info;
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
+
+use crate::error::Result;
 
 /// The ProofScheme trait provides the methods that any proof scheme needs to implement.
 pub trait ProofScheme<'a> {

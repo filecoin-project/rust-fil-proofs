@@ -2,12 +2,14 @@
 
 use std::marker::PhantomData;
 
+use anyhow::ensure;
 use merkletree::hash::Algorithm;
 use merkletree::merkle;
 use merkletree::proof;
 use merkletree::store::StoreConfig;
 use paired::bls12_381::Fr;
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 
 use crate::error::*;
 use crate::hasher::{Domain, Hasher};
@@ -157,11 +159,11 @@ impl<H: Hasher> MerkleProof<H> {
         let mut out = Vec::new();
 
         for (hash, is_right) in &self.path {
-            out.extend(hash.serialize());
+            out.extend(Domain::serialize(hash));
             out.push(*is_right as u8);
         }
-        out.extend(self.leaf().serialize());
-        out.extend(self.root().serialize());
+        out.extend(Domain::serialize(self.leaf()));
+        out.extend(Domain::serialize(self.root()));
 
         out
     }

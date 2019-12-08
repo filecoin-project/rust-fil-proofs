@@ -1,9 +1,4 @@
-#[macro_use]
-extern crate criterion;
-#[cfg(feature = "cpu-profile")]
-extern crate gperftools;
-
-use criterion::{black_box, Criterion, ParameterizedBenchmark};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
 use storage_proofs::drgraph::{Graph, BASE_DEGREE};
 use storage_proofs::hasher::blake2s::Blake2sHasher;
 use storage_proofs::hasher::pedersen::PedersenHasher;

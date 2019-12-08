@@ -1,6 +1,6 @@
 use std::fmt;
 
-use anyhow::Result;
+use anyhow::{ensure, Result};
 
 use crate::types::{Commitment, UnpaddedBytesAmount};
 

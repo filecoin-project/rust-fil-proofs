@@ -1,11 +1,10 @@
 use std::marker::PhantomData;
 
-use anyhow::Context;
+use anyhow::{ensure, Context};
 use byteorder::{LittleEndian, WriteBytesExt};
 use merkletree::store::StoreConfig;
 use rayon::prelude::*;
-use serde::de::Deserialize;
-use serde::ser::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::drgraph::Graph;
