@@ -488,13 +488,14 @@ pub struct TemporaryAux<H: Hasher, G: Hasher> {
 
 impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
     pub fn set_cache_path<P: AsRef<Path>>(&mut self, cache_path: P) {
+        let cp = cache_path.as_ref().to_path_buf();
         for label in self.labels.labels.iter_mut() {
-            label.path = cache_path.as_ref().to_path_buf();
+            label.path = cp.clone();
         }
-        self.tree_d_config.path = cache_path.as_ref().to_path_buf();
-        self.tree_r_last_config.path = cache_path.as_ref().to_path_buf();
-        self.tree_c_config.path = cache_path.as_ref().to_path_buf();
-        self.tree_q_config.path = cache_path.as_ref().to_path_buf();
+        self.tree_d_config.path = cp.clone();
+        self.tree_r_last_config.path = cp.clone();
+        self.tree_c_config.path = cp.clone();
+        self.tree_q_config.path = cp;
     }
 
     pub fn labels_for_layer(&self, layer: usize) -> Result<DiskStore<H::Domain>> {
