@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::marker::PhantomData;
+use std::path::Path;
 
 use anyhow::Context;
 use merkletree::merkle::get_merkle_tree_leafs;
@@ -486,6 +487,17 @@ pub struct TemporaryAux<H: Hasher, G: Hasher> {
 }
 
 impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
+    pub fn set_cache_path<P: AsRef<Path>>(&mut self, cache_path: P) {
+        let cp = cache_path.as_ref().to_path_buf();
+        for label in self.labels.labels.iter_mut() {
+            label.path = cp.clone();
+        }
+        self.tree_d_config.path = cp.clone();
+        self.tree_r_last_config.path = cp.clone();
+        self.tree_c_config.path = cp.clone();
+        self.tree_q_config.path = cp;
+    }
+
     pub fn labels_for_layer(&self, layer: usize) -> Result<DiskStore<H::Domain>> {
         self.labels.labels_for_layer(layer)
     }
@@ -556,7 +568,8 @@ pub struct TemporaryAuxCache<H: Hasher, G: Hasher> {
 
 impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
     pub fn new(t_aux: &TemporaryAux<H, G>) -> Result<Self> {
-        trace!("restoring tree_d");
+        trace!("restoring tree_d from {:?}", &t_aux.tree_d_config);
+
         let tree_d_size = t_aux
             .tree_d_config
             .size
@@ -566,7 +579,7 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
         let tree_d: Tree<G> =
             MerkleTree::from_data_store(tree_d_store, get_merkle_tree_leafs(tree_d_size))?;
 
-        trace!("restoring tree_c");
+        trace!("restoring tree_c from {:?}", &t_aux.tree_c_config);
         let tree_c_size = t_aux
             .tree_c_config
             .size
@@ -576,7 +589,7 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
         let tree_c: Tree<H> =
             MerkleTree::from_data_store(tree_c_store, get_merkle_tree_leafs(tree_c_size))?;
 
-        trace!("restoring tree_r_last");
+        trace!("restoring tree_r_last from {:?}", &t_aux.tree_r_last_config);
         let tree_r_last_size = t_aux
             .tree_r_last_config
             .size
@@ -589,7 +602,7 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
             get_merkle_tree_leafs(tree_r_last_size),
         )?;
 
-        trace!("restoring tree_q");
+        trace!("restoring tree_q from {:?}", &t_aux.tree_q_config);
         let tree_q_size = t_aux
             .tree_q_config
             .size
