@@ -635,11 +635,9 @@ mod tests {
                 assert_eq!(a, b, "failed at chunk {}", i);
             }
         }
-        let blank_groth_params = ElectionPoStCompound::<PedersenHasher>::groth_params(
-            Some(rng),
-            &pub_params.vanilla_params,
-        )
-        .expect("failed to generate groth params");
+        let blank_groth_params =
+            ElectionPoStCompound::<PedersenHasher>::groth_params(&pub_params.vanilla_params)
+                .expect("failed to generate groth params");
 
         let proof = ElectionPoStCompound::prove(
             &pub_params,

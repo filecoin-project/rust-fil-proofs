@@ -19,7 +19,7 @@ use crate::constants::DefaultPieceHasher;
 use crate::parameters::{post_public_params, public_params};
 use crate::types::*;
 
-type Bls12GrothParams = groth16::Parameters<Bls12>;
+type Bls12GrothParams = groth16::MappedParameters<Bls12>;
 pub type Bls12VerifyingKey = groth16::VerifyingKey<Bls12>;
 
 type Cache<G> = HashMap<String, Arc<G>>;
@@ -79,7 +79,7 @@ where
     cache_lookup(&*VERIFYING_KEY_MEMORY_CACHE, vk_identifier, generator)
 }
 
-pub fn get_stacked_params(porep_config: PoRepConfig) -> Result<Arc<groth16::Parameters<Bls12>>> {
+pub fn get_stacked_params(porep_config: PoRepConfig) -> Result<Arc<Bls12GrothParams>> {
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
@@ -90,7 +90,7 @@ pub fn get_stacked_params(porep_config: PoRepConfig) -> Result<Arc<groth16::Para
             _,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
-        >>::groth_params::<rand::rngs::OsRng>(None, &public_params)
+        >>::groth_params(&public_params)
         .map_err(Into::into)
     };
 
@@ -103,7 +103,7 @@ pub fn get_stacked_params(porep_config: PoRepConfig) -> Result<Arc<groth16::Para
     )?)
 }
 
-pub fn get_post_params(post_config: PoStConfig) -> Result<Arc<groth16::Parameters<Bls12>>> {
+pub fn get_post_params(post_config: PoStConfig) -> Result<Arc<Bls12GrothParams>> {
     let post_public_params = post_public_params(post_config)?;
 
     let parameters_generator = || {
@@ -111,7 +111,7 @@ pub fn get_post_params(post_config: PoStConfig) -> Result<Arc<groth16::Parameter
             Bls12,
             ElectionPoSt<DefaultTreeHasher>,
             ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
-        >>::groth_params::<rand::rngs::OsRng>(None, &post_public_params)
+        >>::groth_params(&post_public_params)
         .map_err(Into::into)
     };
 
@@ -135,7 +135,7 @@ pub fn get_stacked_verifying_key(porep_config: PoRepConfig) -> Result<Arc<Bls12V
             Bls12,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
-        >>::verifying_key::<rand::rngs::OsRng>(None, &public_params)
+        >>::verifying_key(&public_params)
         .map_err(Into::into)
     };
 
@@ -156,7 +156,7 @@ pub fn get_post_verifying_key(post_config: PoStConfig) -> Result<Arc<Bls12Verify
             Bls12,
             ElectionPoSt<DefaultTreeHasher>,
             ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
-        >>::verifying_key::<rand::rngs::OsRng>(None, &post_public_params)
+        >>::verifying_key(&post_public_params)
         .map_err(Into::into)
     };
 

@@ -1,8 +1,6 @@
 use clap::{values_t, App, Arg};
 use log::info;
 use paired::bls12_381::Bls12;
-use rand::{rngs::OsRng, SeedableRng};
-use rand_xorshift::XorShiftRng;
 
 use filecoin_proofs::constants::*;
 use filecoin_proofs::parameters::{post_public_params, public_params};
@@ -24,11 +22,7 @@ const PUBLISHED_SECTOR_SIZES: [u64; 5] = [
     SECTOR_SIZE_32_GIB,
 ];
 
-const SEED: [u8; 16] = [
-    0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
-];
-
-fn cache_porep_params(is_predictable: bool, porep_config: PoRepConfig) {
+fn cache_porep_params(porep_config: PoRepConfig) {
     let n = u64::from(PaddedBytesAmount::from(porep_config));
     info!(
         "begin PoRep parameter-cache check/populate routine for {}-byte sectors",
@@ -55,16 +49,8 @@ fn cache_porep_params(is_predictable: bool, porep_config: PoRepConfig) {
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
         >>::blank_circuit(&public_params);
-        let _ = if is_predictable {
-            StackedCompound::get_groth_params(
-                Some(&mut XorShiftRng::from_seed(SEED)),
-                circuit,
-                &public_params,
-            )
-        } else {
-            StackedCompound::get_groth_params(Some(&mut OsRng), circuit, &public_params)
-        }
-        .expect("failed to get groth params");
+        StackedCompound::get_groth_params(circuit, &public_params)
+            .expect("failed to get groth params");
     }
     {
         let circuit = <StackedCompound as CompoundProof<
@@ -73,17 +59,12 @@ fn cache_porep_params(is_predictable: bool, porep_config: PoRepConfig) {
             _,
         >>::blank_circuit(&public_params);
 
-        let _ = if is_predictable {
-            let rando: Option<&mut OsRng> = None;
-            StackedCompound::get_verifying_key(rando, circuit, &public_params)
-        } else {
-            StackedCompound::get_verifying_key(Some(&mut OsRng), circuit, &public_params)
-        }
-        .expect("failed to get verifying key");
+        StackedCompound::get_verifying_key(circuit, &public_params)
+            .expect("failed to get verifying key");
     }
 }
 
-fn cache_post_params(is_predictable: bool, post_config: PoStConfig) {
+fn cache_post_params(post_config: PoStConfig) {
     let n = u64::from(PaddedBytesAmount::from(post_config));
     info!(
         "begin PoSt parameter-cache check/populate routine for {}-byte sectors",
@@ -112,20 +93,8 @@ fn cache_post_params(is_predictable: bool, post_config: PoStConfig) {
                 ElectionPoSt<PedersenHasher>,
                 ElectionPoStCircuit<Bls12, PedersenHasher>,
             >>::blank_circuit(&post_public_params);
-        let _ = if is_predictable {
-            <ElectionPoStCompound<PedersenHasher>>::get_groth_params(
-                Some(&mut XorShiftRng::from_seed(SEED)),
-                post_circuit,
-                &post_public_params,
-            )
-        } else {
-            <ElectionPoStCompound<PedersenHasher>>::get_groth_params(
-                Some(&mut OsRng),
-                post_circuit,
-                &post_public_params,
-            )
-        }
-        .expect("failed to get groth params");
+        <ElectionPoStCompound<PedersenHasher>>::get_groth_params(post_circuit, &post_public_params)
+            .expect("failed to get groth params");
     }
     {
         let post_circuit: ElectionPoStCircuit<Bls12, PedersenHasher> =
@@ -135,20 +104,10 @@ fn cache_post_params(is_predictable: bool, post_config: PoStConfig) {
                 ElectionPoStCircuit<Bls12, PedersenHasher>,
             >>::blank_circuit(&post_public_params);
 
-        let _ = if is_predictable {
-            let rando: Option<&mut OsRng> = None;
-            <ElectionPoStCompound<PedersenHasher>>::get_verifying_key(
-                rando,
-                post_circuit,
-                &post_public_params,
-            )
-        } else {
-            <ElectionPoStCompound<PedersenHasher>>::get_verifying_key(
-                Some(&mut OsRng),
-                post_circuit,
-                &post_public_params,
-            )
-        }
+        <ElectionPoStCompound<PedersenHasher>>::get_verifying_key(
+            post_circuit,
+            &post_public_params,
+        )
         .expect("failed to get verifying key");
     }
 }
@@ -191,18 +150,14 @@ pub fn main() {
         PUBLISHED_SECTOR_SIZES.iter().cloned().collect()
     };
 
-    let is_predictable = matches.is_present("predictable");
     let only_election_post = matches.is_present("only-election-post");
 
     for sector_size in sizes {
-        cache_post_params(
-            is_predictable,
-            PoStConfig {
-                sector_size: SectorSize(sector_size),
-                challenge_count: POST_CHALLENGE_COUNT,
-                challenged_nodes: POST_CHALLENGED_NODES,
-            },
-        );
+        cache_post_params(PoStConfig {
+            sector_size: SectorSize(sector_size),
+            challenge_count: POST_CHALLENGE_COUNT,
+            challenged_nodes: POST_CHALLENGED_NODES,
+        });
 
         if !only_election_post {
             cache_porep_params(
