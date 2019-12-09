@@ -82,7 +82,7 @@ pub fn fake_drgpoprep_proof<R: Rng>(
     }
 
     // get commR
-    let subtree = MerkleTree::<PedersenDomain, PedersenFunction>::from_data(leaves);
+    let subtree = MerkleTree::<PedersenDomain, PedersenFunction>::from_data(leaves).unwrap();
     let subtree_root: Fr = subtree.root().into();
     let subtree_depth = subtree.height() - 1; // .height() inludes the leaf
     let remaining_depth = tree_depth - subtree_depth;

@@ -108,16 +108,16 @@ pub fn generate_piece_commitment<T: std::io::Read>(
     let mut temp_piece_file = tempfile()?;
 
     // send the source through the preprocessor, writing output to temp file
-    let n =
-        write_padded(source, &temp_piece_file).context("failed to write and preprocess bytes")?;
+    let n = UnpaddedBytesAmount(
+        write_padded(source, &temp_piece_file).context("failed to write and preprocess bytes")?
+            as u64,
+    );
 
-    if n == 0 {
+    if n == UnpaddedBytesAmount(0) {
         return Err(anyhow!(
             "generate_piece_commitment: read 0 bytes from source before EOF"
         ));
     }
-
-    let n = UnpaddedBytesAmount(n as u64);
 
     if n != piece_size {
         return Err(anyhow!(
@@ -129,8 +129,10 @@ pub fn generate_piece_commitment<T: std::io::Read>(
 
     temp_piece_file.seek(SeekFrom::Start(0))?;
 
-    let commitment =
-        generate_piece_commitment_bytes_from_source::<DefaultPieceHasher>(&mut temp_piece_file)?;
+    let commitment = generate_piece_commitment_bytes_from_source::<DefaultPieceHasher>(
+        &mut temp_piece_file,
+        PaddedBytesAmount::from(n).into(),
+    )?;
 
     PieceInfo::new(commitment, piece_size)
 }

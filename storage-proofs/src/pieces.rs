@@ -1,12 +1,12 @@
-use anyhow::ensure;
-use itertools::Itertools;
-use merkletree::merkle::{self, next_pow2};
-use merkletree::store::VecStore;
 use std::io::Read;
+
+use anyhow::ensure;
+use merkletree::merkle::next_pow2;
 
 use crate::error::*;
 use crate::fr32::Fr32Ary;
 use crate::hasher::{Domain, Hasher};
+use crate::merkle::MerkleTree;
 use crate::util::NODE_SIZE;
 
 /// `position`, `length` are in H::Domain units
@@ -43,56 +43,28 @@ impl PieceSpec {
     }
 }
 
-fn create_piece_tree<H: Hasher>(
-    data: &[H::Domain],
-) -> merkle::MerkleTree<H::Domain, H::Function, VecStore<H::Domain>> {
-    let data_size = data.len();
-    // We need to compute comm_p as a merkle root over power-of-two-sized data.
-    let tree_size = next_pow2(data_size);
-
-    // If actual data is less than tree size, pad it with zeroes.
-    //if data_size < tree_size {
-    // NOTE: this assumes that `H::Domain::default()` corresponds to zeroed input.
-    // This matters because padding may have been applied at the byte level, using zero bytes.
-    merkle::MerkleTree::<H::Domain, H::Function, VecStore<H::Domain>>::new(
-        data.iter()
-            .cloned()
-            .pad_using(tree_size, |_| H::Domain::default()),
-    )
-}
-
-/// Compute `comm_p` from a slice of Domain elements.
-/// `comm_p` is the merkle root of a piece, zero-padded to fill a complete binary sub-tree.
-fn compute_piece_commitment<H: Hasher>(data: &[H::Domain]) -> H::Domain {
-    create_piece_tree::<H>(data).root()
-}
-
 /// Generate `comm_p` from a source and return it as bytes.
 pub fn generate_piece_commitment_bytes_from_source<H: Hasher>(
     source: &mut dyn Read,
+    padded_piece_size: usize,
 ) -> Result<Fr32Ary> {
-    let mut domain_data = Vec::new();
-    let mut total_bytes_read = 0;
+    ensure!(padded_piece_size > 32, "piece is too small");
+    ensure!(padded_piece_size % 32 == 0, "piece is not valid size");
 
     let mut buf = [0; NODE_SIZE];
+    use std::io::BufReader;
 
-    loop {
-        let bytes_read = source.read(&mut buf)?;
-        total_bytes_read += bytes_read;
-        if bytes_read > 0 {
-            domain_data.push(<H::Domain as Domain>::try_from_bytes(&buf[..bytes_read])?);
-        } else {
-            break;
-        }
-    }
+    let mut reader = BufReader::new(source);
 
-    ensure!(
-        total_bytes_read >= NODE_SIZE,
-        "insufficient data to generate piece commitment"
-    );
+    let parts = (padded_piece_size as f64 / NODE_SIZE as f64).ceil() as usize;
+
+    let tree = MerkleTree::<H::Domain, H::Function>::try_from_iter((0..parts).map(|_| {
+        reader.read_exact(&mut buf)?;
+        <H::Domain as Domain>::try_from_bytes(&buf)
+    }))?;
 
     let mut comm_p_bytes = [0; NODE_SIZE];
-    let comm_p = compute_piece_commitment::<H>(&domain_data);
+    let comm_p = tree.root();
     comm_p.write_bytes(&mut comm_p_bytes)?;
 
     Ok(comm_p_bytes)
@@ -159,14 +131,15 @@ mod tests {
     fn test_generate_piece_commitment_bytes_from_source() -> Result<()> {
         let some_bytes: Vec<u8> = vec![0; 64];
         let mut some_bytes_slice: &[u8] = &some_bytes;
-        generate_piece_commitment_bytes_from_source::<PedersenHasher>(&mut some_bytes_slice)
+        generate_piece_commitment_bytes_from_source::<PedersenHasher>(&mut some_bytes_slice, 64)
             .expect("threshold for sufficient bytes is 32");
 
         let not_enough_bytes: Vec<u8> = vec![0; 7];
         let mut not_enough_bytes_slice: &[u8] = &not_enough_bytes;
         assert!(
             generate_piece_commitment_bytes_from_source::<PedersenHasher>(
-                &mut not_enough_bytes_slice
+                &mut not_enough_bytes_slice,
+                7
             )
             .is_err(),
             "insufficient bytes should error out"
