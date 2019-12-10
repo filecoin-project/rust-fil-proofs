@@ -469,8 +469,8 @@ mod tests {
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
-        assert_eq!(cs.num_inputs(), 69, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 549_549, "wrong number of constraints");
+        assert_eq!(cs.num_inputs(), 43, "wrong number of inputs");
+        assert_eq!(cs.num_constraints(), 335_127, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
         let generated_inputs = ElectionPoStCompound::<PedersenHasher>::generate_public_inputs(

@@ -21,7 +21,7 @@ use crate::sector::*;
 use crate::stacked::hash::hash3;
 use crate::util::NODE_SIZE;
 
-pub const POST_CHALLENGE_COUNT: usize = 66;
+pub const POST_CHALLENGE_COUNT: usize = 40;
 pub const POST_CHALLENGED_NODES: usize = 1;
 
 #[derive(Debug, Clone)]
