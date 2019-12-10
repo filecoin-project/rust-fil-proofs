@@ -17,7 +17,7 @@ mod encode;
 pub mod error;
 pub mod fr32;
 pub mod hasher;
-pub mod measure;
+pub mod measurements;
 pub mod merkle;
 pub mod merklepor;
 pub mod parameter_cache;

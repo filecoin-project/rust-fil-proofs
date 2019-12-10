@@ -16,7 +16,8 @@ use crate::drgraph::Graph;
 use crate::encode::{decode, encode};
 use crate::error::Result;
 use crate::hasher::{Domain, Hasher};
-use crate::measure::measure_log;
+use crate::measurements::measure_op;
+use crate::measurements::Operation::{GenerateTreeC, GenerateTreeRLast};
 use crate::merkle::{MerkleProof, MerkleTree, Store};
 use crate::stacked::{
     challenges::LayerChallenges,
@@ -872,41 +873,44 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let tree_q: Tree<H> = Self::build_tree::<H>(&data, Some(tree_q_config.clone()))?;
 
         info!("building tree_r_last");
-        let tree_r_last: Tree<H> = MerkleTree::from_par_iter_with_config(
-            (0..wrapper_nodes_count).into_par_iter().map(|node| {
-                // 1 Wrapping Layer
+        let tree_r_last: Tree<H> = measure_op(GenerateTreeRLast, || {
+            MerkleTree::from_par_iter_with_config(
+                (0..wrapper_nodes_count).into_par_iter().map(|node| {
+                    // 1 Wrapping Layer
 
-                let mut hasher = Sha256::new();
-                hasher.input(AsRef::<[u8]>::as_ref(replica_id));
-                hasher.input(&(node as u64).to_be_bytes()[..]);
+                    let mut hasher = Sha256::new();
+                    hasher.input(AsRef::<[u8]>::as_ref(replica_id));
+                    hasher.input(&(node as u64).to_be_bytes()[..]);
 
-                // Only expansion parents
-                let mut exp_parents = vec![0; wrapper_graph.expansion_degree()];
-                // TODO Do proper error handling and not just `expect()`.
-                wrapper_graph
-                    .expanded_parents(node, &mut exp_parents)
-                    .expect("cannot expand parents");
-
-                let wrapper_layer = &data;
-                for parent in &exp_parents {
+                    // Only expansion parents
+                    let mut exp_parents = vec![0; wrapper_graph.expansion_degree()];
                     // TODO Do proper error handling and not just `expect()`.
-                    hasher.input(
-                        data_at_node(wrapper_layer, *parent as usize).expect("invalid node math"),
-                    );
-                }
+                    wrapper_graph
+                        .expanded_parents(node, &mut exp_parents)
+                        .expect("cannot expand parents");
 
-                // finalize key
-                let mut val = hasher.result();
-                // strip last two bits, to ensure result is in Fr.
-                val[31] &= 0b0011_1111;
+                    let wrapper_layer = &data;
+                    for parent in &exp_parents {
+                        // TODO Do proper error handling and not just `expect()`.
+                        hasher.input(
+                            data_at_node(wrapper_layer, *parent as usize)
+                                .expect("invalid node math"),
+                        );
+                    }
 
-                // TODO Do proper error handling and not just `expect()`.
-                H::Domain::try_from_bytes(&val).expect("invalid node created")
-            }),
-            tree_r_last_config.clone(),
-        )?;
+                    // finalize key
+                    let mut val = hasher.result();
+                    // strip last two bits, to ensure result is in Fr.
+                    val[31] &= 0b0011_1111;
 
-        let tree_c = measure_log("building tree_c", || {
+                    // TODO Do proper error handling and not just `expect()`.
+                    H::Domain::try_from_bytes(&val).expect("invalid node created")
+                }),
+                tree_r_last_config.clone(),
+            )
+        })?;
+
+        let tree_c = measure_op(GenerateTreeC, || {
             let tree_c: Tree<H> = {
                 let column_hashes_flat = unsafe {
                     // Column_hashes is of type Vec<[u8; 32]>, so this is safe to do.

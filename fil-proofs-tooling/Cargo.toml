@@ -46,3 +46,5 @@ anyhow = "1.0.23"
 [features]
 default = ["gpu"]
 gpu = ["storage-proofs/gpu", "filecoin-proofs/gpu", "bellperson/gpu", "fil-sapling-crypto/gpu"]
+measurements = ["storage-proofs/measurements"]
+
