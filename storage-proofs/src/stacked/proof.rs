@@ -16,6 +16,7 @@ use crate::drgraph::Graph;
 use crate::encode::{decode, encode};
 use crate::error::Result;
 use crate::hasher::{Domain, Hasher};
+use crate::measure::measure_log;
 use crate::merkle::{MerkleProof, MerkleTree, Store};
 use crate::stacked::{
     challenges::LayerChallenges,
@@ -905,18 +906,21 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             tree_r_last_config.clone(),
         )?;
 
-        info!("building tree_c");
-        let tree_c: Tree<H> = {
-            let column_hashes_flat = unsafe {
-                // Column_hashes is of type Vec<[u8; 32]>, so this is safe to do.
-                // We do this to avoid unnecessary allocations.
-                std::slice::from_raw_parts(
-                    column_hashes.as_ptr() as *const _,
-                    column_hashes.len() * 32,
-                )
+        let tree_c = measure_log("building tree_c", || {
+            let tree_c: Tree<H> = {
+                let column_hashes_flat = unsafe {
+                    // Column_hashes is of type Vec<[u8; 32]>, so this is safe to do.
+                    // We do this to avoid unnecessary allocations.
+                    std::slice::from_raw_parts(
+                        column_hashes.as_ptr() as *const _,
+                        column_hashes.len() * 32,
+                    )
+                };
+                Self::build_tree::<H>(column_hashes_flat, Some(tree_c_config.clone()))?
             };
-            Self::build_tree::<H>(column_hashes_flat, Some(tree_c_config.clone()))?
-        };
+
+            Ok(tree_c)
+        })?;
 
         // comm_r = H(comm_c || comm_q || comm_r_last)
         let comm_r: H::Domain =

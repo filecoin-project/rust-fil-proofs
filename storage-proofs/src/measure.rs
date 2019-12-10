@@ -11,11 +11,11 @@ where
 
     let x = f()?;
 
-    let cpu_time = cpu_time_start.elapsed().as_secs();
-    let wall_time = wall_start_time.elapsed().as_secs();
+    let cpu_time = cpu_time_start.elapsed().as_millis();
+    let wall_time = wall_start_time.elapsed().as_millis();
 
     info!(
-        "operation: {}, cpu_time_secs: {}, wall_time_secs: {}",
+        "operation: {}, cpu_time_ms: {}, wall_time_ms: {}",
         label, cpu_time, wall_time
     );
 
