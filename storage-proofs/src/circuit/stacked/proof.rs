@@ -460,8 +460,9 @@ mod tests {
         let mut data_copy = data.clone();
         let sp = SetupParams {
             nodes,
-            degree,
-            expansion_degree,
+            window_drg_degree: degree,
+            window_expansion_degree: expansion_degree,
+            wrapper_expansion_degree: expansion_degree,
             seed: new_seed(),
             config: config.clone(),
             window_size_nodes: nodes / 2,
@@ -641,8 +642,9 @@ mod tests {
         let setup_params = compound_proof::SetupParams {
             vanilla_params: SetupParams {
                 nodes,
-                degree,
-                expansion_degree,
+                window_drg_degree: degree,
+                window_expansion_degree: expansion_degree,
+                wrapper_expansion_degree: expansion_degree,
                 seed: new_seed(),
                 config: config.clone(),
                 window_size_nodes: nodes / 2,

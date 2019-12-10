@@ -16,6 +16,10 @@ use crate::drgraph::Graph;
 use crate::encode::{decode, encode};
 use crate::error::Result;
 use crate::hasher::{Domain, Hasher};
+use crate::measurements::measure_op;
+use crate::measurements::Operation::{
+    CommD, EncodeWindowTimeAll, GenerateTreeC, GenerateTreeRLast, WindowCommLeavesTime,
+};
 use crate::merkle::{MerkleProof, MerkleTree, Store};
 use crate::stacked::{
     challenges::LayerChallenges,
@@ -839,7 +843,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             StoreConfig::from_config(&config, CacheKey::CommQTree.to_string(), None);
 
         // Build the MerkleTree over the original data (if needed).
-        let tree_d = match data_tree {
+        let tree_d = measure_op(CommD, || match data_tree {
             Some(t) => {
                 trace!("using existing original data merkle tree");
                 ensure!(
@@ -847,66 +851,71 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     "Invalid data tree."
                 );
 
-                t
+                Ok(t)
             }
             None => {
                 trace!("building merkle tree for the original data");
-                Self::build_tree::<G>(&data, Some(tree_d_config.clone()))?
+                Ok(Self::build_tree::<G>(&data, Some(tree_d_config.clone()))?)
             }
-        };
+        })?;
 
         info!(
             "encoding {} windows",
             data.len() / pub_params.window_size_bytes()
         );
 
-        let (labels, label_configs) =
-            Self::label_encode_all_windows(pub_params, replica_id, data, config)?;
+        let (labels, label_configs) = measure_op(EncodeWindowTimeAll, || {
+            Self::label_encode_all_windows(pub_params, replica_id, data, config)
+        })?;
 
         // construct column hashes
         info!("building column hashes");
-        let column_hashes = Self::build_column_hashes(pub_params, &labels)?;
+        let column_hashes = measure_op(WindowCommLeavesTime, || {
+            Self::build_column_hashes(pub_params, &labels)
+        })?;
 
         info!("building tree_q");
         let tree_q: Tree<H> = Self::build_tree::<H>(&data, Some(tree_q_config.clone()))?;
 
         info!("building tree_r_last");
-        let tree_r_last: Tree<H> = MerkleTree::from_par_iter_with_config(
-            (0..wrapper_nodes_count).into_par_iter().map(|node| {
-                // 1 Wrapping Layer
+        let tree_r_last: Tree<H> = measure_op(GenerateTreeRLast, || {
+            MerkleTree::from_par_iter_with_config(
+                (0..wrapper_nodes_count).into_par_iter().map(|node| {
+                    // 1 Wrapping Layer
 
-                let mut hasher = Sha256::new();
-                hasher.input(AsRef::<[u8]>::as_ref(replica_id));
-                hasher.input(&(node as u64).to_be_bytes()[..]);
+                    let mut hasher = Sha256::new();
+                    hasher.input(AsRef::<[u8]>::as_ref(replica_id));
+                    hasher.input(&(node as u64).to_be_bytes()[..]);
 
-                // Only expansion parents
-                let mut exp_parents = vec![0; wrapper_graph.expansion_degree()];
-                // TODO Do proper error handling and not just `expect()`.
-                wrapper_graph
-                    .expanded_parents(node, &mut exp_parents)
-                    .expect("cannot expand parents");
-
-                let wrapper_layer = &data;
-                for parent in &exp_parents {
+                    // Only expansion parents
+                    let mut exp_parents = vec![0; wrapper_graph.expansion_degree()];
                     // TODO Do proper error handling and not just `expect()`.
-                    hasher.input(
-                        data_at_node(wrapper_layer, *parent as usize).expect("invalid node math"),
-                    );
-                }
+                    wrapper_graph
+                        .expanded_parents(node, &mut exp_parents)
+                        .expect("cannot expand parents");
 
-                // finalize key
-                let mut val = hasher.result();
-                // strip last two bits, to ensure result is in Fr.
-                val[31] &= 0b0011_1111;
+                    let wrapper_layer = &data;
+                    for parent in &exp_parents {
+                        // TODO Do proper error handling and not just `expect()`.
+                        hasher.input(
+                            data_at_node(wrapper_layer, *parent as usize)
+                                .expect("invalid node math"),
+                        );
+                    }
 
-                // TODO Do proper error handling and not just `expect()`.
-                H::Domain::try_from_bytes(&val).expect("invalid node created")
-            }),
-            tree_r_last_config.clone(),
-        )?;
+                    // finalize key
+                    let mut val = hasher.result();
+                    // strip last two bits, to ensure result is in Fr.
+                    val[31] &= 0b0011_1111;
 
-        info!("building tree_c");
-        let tree_c: Tree<H> = {
+                    // TODO Do proper error handling and not just `expect()`.
+                    H::Domain::try_from_bytes(&val).expect("invalid node created")
+                }),
+                tree_r_last_config.clone(),
+            )
+        })?;
+
+        let tree_c = measure_op(GenerateTreeC, || {
             let column_hashes_flat = unsafe {
                 // Column_hashes is of type Vec<[u8; 32]>, so this is safe to do.
                 // We do this to avoid unnecessary allocations.
@@ -915,8 +924,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     column_hashes.len() * 32,
                 )
             };
-            Self::build_tree::<H>(column_hashes_flat, Some(tree_c_config.clone()))?
-        };
+            Self::build_tree::<H>(column_hashes_flat, Some(tree_c_config.clone()))
+        })?;
 
         // comm_r = H(comm_c || comm_q || comm_r_last)
         let comm_r: H::Domain =
@@ -952,7 +961,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     }
 }
 
-fn create_key<H: Hasher>(
+pub fn create_key<H: Hasher>(
     window_graph: &StackedBucketGraph<H>,
     mut hasher: Sha256,
     parents: &[u32],
@@ -1060,8 +1069,9 @@ mod tests {
 
         let sp = SetupParams {
             nodes,
-            degree: BASE_DEGREE,
-            expansion_degree: EXP_DEGREE,
+            window_drg_degree: BASE_DEGREE,
+            window_expansion_degree: EXP_DEGREE,
+            wrapper_expansion_degree: EXP_DEGREE,
             seed: new_seed(),
             config: config.clone(),
             window_size_nodes: nodes / 2,
@@ -1140,8 +1150,9 @@ mod tests {
 
         let sp = SetupParams {
             nodes,
-            degree: BASE_DEGREE,
-            expansion_degree: EXP_DEGREE,
+            window_drg_degree: BASE_DEGREE,
+            window_expansion_degree: EXP_DEGREE,
+            wrapper_expansion_degree: EXP_DEGREE,
             seed: new_seed(),
             config: config.clone(),
             window_size_nodes: nodes / 4,
@@ -1225,8 +1236,9 @@ mod tests {
 
         let sp = SetupParams {
             nodes: n,
-            degree,
-            expansion_degree,
+            window_drg_degree: degree,
+            window_expansion_degree: expansion_degree,
+            wrapper_expansion_degree: expansion_degree,
             seed: new_seed(),
             config: config.clone(),
             window_size_nodes: n / 2,
@@ -1302,8 +1314,9 @@ mod tests {
         let config = StackedConfig::new(10, 333, 444).unwrap();
         let sp = SetupParams {
             nodes,
-            degree,
-            expansion_degree,
+            window_drg_degree: degree,
+            window_expansion_degree: expansion_degree,
+            wrapper_expansion_degree: expansion_degree,
             seed: new_seed(),
             config: config.clone(),
             window_size_nodes: nodes / 2,

@@ -42,7 +42,10 @@ uom = "0.26"
 merkletree = "0.14.0"
 bincode = "1.1.2"
 anyhow = "1.0.23"
+ff = "0.5.0"
+rand_xorshift = "0.2.0"
 
 [features]
-default = ["gpu"]
+default = ["gpu", "measurements"]
 gpu = ["storage-proofs/gpu", "filecoin-proofs/gpu", "bellperson/gpu", "fil-sapling-crypto/gpu"]
+measurements = ["storage-proofs/measurements"]

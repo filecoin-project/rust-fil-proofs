@@ -1,8 +1,11 @@
 use std::collections::BTreeMap;
 use std::io::{stdout, Seek, SeekFrom, Write};
+use std::sync::atomic::Ordering;
 
 use fil_proofs_tooling::{measure, Metadata};
-use filecoin_proofs::constants::DEFAULT_POREP_PROOF_PARTITIONS;
+use filecoin_proofs::constants::{
+    DEFAULT_POREP_PROOF_PARTITIONS, POST_CHALLENGED_NODES, POST_CHALLENGE_COUNT,
+};
 use filecoin_proofs::types::{
     PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, SectorSize,
     UnpaddedBytesAmount,
@@ -16,12 +19,9 @@ use serde::Serialize;
 use storage_proofs::sector::SectorId;
 use tempfile::NamedTempFile;
 
-// The seed for the rng used to generate which sectors to challenge.
-const CHALLENGE_SEED: [u8; 32] = [0; 32];
+use crate::shared::{CHALLENGE_COUNT, PROVER_ID, RANDOMNESS, TICKET_BYTES};
 
-const PROVER_ID: [u8; 32] = [0; 32];
 const SECTOR_ID: u64 = 0;
-const N_PARTITIONS: PoRepProofPartitions = DEFAULT_POREP_PROOF_PARTITIONS;
 
 #[derive(Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -99,11 +99,10 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
     // Replicate the staged sector, write the replica file to `sealed_path`.
     let porep_config = PoRepConfig {
         sector_size: SectorSize(sector_size as u64),
-        partitions: N_PARTITIONS,
+        partitions: PoRepProofPartitions(DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed)),
     };
     let cache_dir = tempfile::tempdir().unwrap();
     let sector_id = SectorId::from(SECTOR_ID);
-    let ticket = [0u8; 32];
 
     let seal_pre_commit_output = seal_pre_commit(
         porep_config,
@@ -112,7 +111,7 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
         sealed_file.path(),
         PROVER_ID,
         sector_id,
-        ticket,
+        TICKET_BYTES,
         &piece_infos,
     )?;
 
@@ -124,7 +123,7 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
         cache_dir.path(),
         PROVER_ID,
         sector_id,
-        ticket,
+        TICKET_BYTES,
         seed,
         seal_pre_commit_output,
         &piece_infos,
@@ -144,15 +143,15 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
     // Measure PoSt generation and verification.
     let post_config = PoStConfig {
         sector_size: SectorSize(sector_size as u64),
+        challenge_count: POST_CHALLENGE_COUNT,
+        challenged_nodes: POST_CHALLENGED_NODES,
     };
-
-    let challenge_count = 1u64;
 
     let gen_candidates_measurement = measure(|| {
         generate_candidates(
             post_config,
-            &CHALLENGE_SEED,
-            challenge_count,
+            &RANDOMNESS,
+            CHALLENGE_COUNT,
             &priv_replica_info,
             PROVER_ID,
         )
@@ -164,7 +163,7 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
     let gen_post_measurement = measure(|| {
         generate_post(
             post_config,
-            &CHALLENGE_SEED,
+            &RANDOMNESS,
             &priv_replica_info,
             candidates
                 .iter()
@@ -181,8 +180,8 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
     let verify_post_measurement = measure(|| {
         verify_post(
             post_config,
-            &CHALLENGE_SEED,
-            challenge_count,
+            &RANDOMNESS,
+            CHALLENGE_COUNT,
             proof,
             &pub_replica_info,
             &candidates

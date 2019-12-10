@@ -317,6 +317,7 @@ mod tests {
 
     use std::collections::BTreeMap;
     use std::io::{Seek, SeekFrom, Write};
+    use std::sync::atomic::Ordering;
     use std::sync::Once;
 
     use ff::Field;
@@ -353,7 +354,9 @@ mod tests {
             let result = verify_seal(
                 PoRepConfig {
                     sector_size: SectorSize(SECTOR_SIZE_ONE_KIB),
-                    partitions: DEFAULT_POREP_PROOF_PARTITIONS,
+                    partitions: PoRepProofPartitions(
+                        DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed),
+                    ),
                 },
                 not_convertible_to_fr_bytes,
                 convertible_to_fr_bytes,
@@ -381,7 +384,9 @@ mod tests {
             let result = verify_seal(
                 PoRepConfig {
                     sector_size: SectorSize(SECTOR_SIZE_ONE_KIB),
-                    partitions: DEFAULT_POREP_PROOF_PARTITIONS,
+                    partitions: PoRepProofPartitions(
+                        DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed),
+                    ),
                 },
                 convertible_to_fr_bytes,
                 not_convertible_to_fr_bytes,
@@ -429,6 +434,8 @@ mod tests {
         let result = verify_post(
             PoStConfig {
                 sector_size: SectorSize(SECTOR_SIZE_ONE_KIB),
+                challenge_count: crate::constants::POST_CHALLENGE_COUNT,
+                challenged_nodes: crate::constants::POST_CHALLENGED_NODES,
             },
             &[0; 32],
             1,
@@ -490,7 +497,9 @@ mod tests {
         let mut unseal_file = NamedTempFile::new()?;
         let config = PoRepConfig {
             sector_size: SectorSize(sector_size.clone()),
-            partitions: DEFAULT_POREP_PROOF_PARTITIONS,
+            partitions: PoRepProofPartitions(
+                DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed),
+            ),
         };
 
         let cache_dir = tempfile::tempdir().unwrap();

@@ -53,6 +53,7 @@ hex = "0.4.0"
 generic-array = "0.12"
 anyhow = "1.0.23"
 thiserror = "1.0.6"
+cpu-time = "1.0.0"
 
 [features]
 default = ["gpu"]
@@ -61,6 +62,7 @@ asm = ["sha2/sha2-asm"]
 big-sector-sizes-bench = []
 unchecked-degrees = []
 gpu = ["bellperson/gpu", "fil-sapling-crypto/gpu"]
+measurements = ["unchecked-degrees"]
 
 [dev-dependencies]
 proptest = "0.7"
@@ -101,4 +103,8 @@ harness = false
 
 [[bench]]
 name = "merkle"
+harness = false
+
+[[bench]]
+name = "misc"
 harness = false
