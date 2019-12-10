@@ -17,7 +17,9 @@ use crate::encode::{decode, encode};
 use crate::error::Result;
 use crate::hasher::{Domain, Hasher};
 use crate::measurements::measure_op;
-use crate::measurements::Operation::{GenerateTreeC, GenerateTreeRLast};
+use crate::measurements::Operation::{
+    CommD, EncodeWindowTimeAll, GenerateTreeC, GenerateTreeRLast, WindowCommLeavesTime,
+};
 use crate::merkle::{MerkleProof, MerkleTree, Store};
 use crate::stacked::{
     challenges::LayerChallenges,
@@ -841,7 +843,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             StoreConfig::from_config(&config, CacheKey::CommQTree.to_string(), None);
 
         // Build the MerkleTree over the original data (if needed).
-        let tree_d = match data_tree {
+        let tree_d = measure_op(CommD, || match data_tree {
             Some(t) => {
                 trace!("using existing original data merkle tree");
                 ensure!(
@@ -849,25 +851,30 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     "Invalid data tree."
                 );
 
-                t
+                Ok(t)
             }
             None => {
                 trace!("building merkle tree for the original data");
-                Self::build_tree::<G>(&data, Some(tree_d_config.clone()))?
+                Ok(Self::build_tree::<G>(&data, Some(tree_d_config.clone()))?)
             }
-        };
+        })?;
 
         info!(
             "encoding {} windows",
             data.len() / pub_params.window_size_bytes()
         );
 
-        let (labels, label_configs) =
-            Self::label_encode_all_windows(pub_params, replica_id, data, config)?;
+        let (labels, label_configs) = measure_op(EncodeWindowTimeAll, || {
+            Ok(Self::label_encode_all_windows(
+                pub_params, replica_id, data, config,
+            )?)
+        })?;
 
         // construct column hashes
         info!("building column hashes");
-        let column_hashes = Self::build_column_hashes(pub_params, &labels)?;
+        let column_hashes = measure_op(WindowCommLeavesTime, || {
+            Ok(Self::build_column_hashes(pub_params, &labels)?)
+        })?;
 
         info!("building tree_q");
         let tree_q: Tree<H> = Self::build_tree::<H>(&data, Some(tree_q_config.clone()))?;
@@ -911,19 +918,18 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         })?;
 
         let tree_c = measure_op(GenerateTreeC, || {
-            let tree_c: Tree<H> = {
-                let column_hashes_flat = unsafe {
-                    // Column_hashes is of type Vec<[u8; 32]>, so this is safe to do.
-                    // We do this to avoid unnecessary allocations.
-                    std::slice::from_raw_parts(
-                        column_hashes.as_ptr() as *const _,
-                        column_hashes.len() * 32,
-                    )
-                };
-                Self::build_tree::<H>(column_hashes_flat, Some(tree_c_config.clone()))?
+            let column_hashes_flat = unsafe {
+                // Column_hashes is of type Vec<[u8; 32]>, so this is safe to do.
+                // We do this to avoid unnecessary allocations.
+                std::slice::from_raw_parts(
+                    column_hashes.as_ptr() as *const _,
+                    column_hashes.len() * 32,
+                )
             };
-
-            Ok(tree_c)
+            Ok(Self::build_tree::<H>(
+                column_hashes_flat,
+                Some(tree_c_config.clone()),
+            )?)
         })?;
 
         // comm_r = H(comm_c || comm_q || comm_r_last)

@@ -350,6 +350,26 @@ fn augment_with_op_measurements(mut report: &mut Report) {
                 report.outputs.tree_r_last_cpu_time_ms = Some(m.cpu_time.as_millis() as u64);
                 report.outputs.tree_r_last_wall_time_ms = Some(m.cpu_time.as_millis() as u64);
             }
+            Operation::CommD => {
+                report.outputs.comm_d_cpu_time_ms = Some(m.cpu_time.as_millis() as u64);
+                report.outputs.comm_d_wall_time_ms = Some(m.cpu_time.as_millis() as u64);
+            }
+            Operation::EncodeWindowTimeAll => {
+                report.outputs.encode_window_time_all_cpu_time_ms =
+                    Some(m.cpu_time.as_millis() as u64);
+                report.outputs.encode_window_time_all_wall_time_ms =
+                    Some(m.cpu_time.as_millis() as u64);
+            }
+            Operation::WindowCommLeavesTime => {
+                report.outputs.window_comm_leaves_time_cpu_time_ms =
+                    Some(m.cpu_time.as_millis() as u64);
+                report.outputs.window_comm_leaves_time_wall_time_ms =
+                    Some(m.cpu_time.as_millis() as u64);
+            }
+            Operation::PorepCommitTime => {
+                report.outputs.porep_commit_time_cpu_time_ms = Some(m.cpu_time.as_millis() as u64);
+                report.outputs.porep_commit_time_wall_time_ms = Some(m.cpu_time.as_millis() as u64);
+            }
         }
     }
 }
@@ -391,7 +411,7 @@ fn do_circuit_work<H: 'static + Hasher>(
             .synthesize(&mut cs)?;
 
         report.outputs.circuit_num_inputs = Some(cs.num_inputs() as u64);
-        report.outputs.circuit_num_constraints = Some(cs.num_constraints() as u64);
+        report.outputs.circuit_num_constraints = Some(cs.num_constraints() as u64); // < porep_snark_partition_constraints
         info!("Generating blank circuit: done");
     }
 
@@ -503,6 +523,14 @@ struct Outputs {
     vanilla_verification_wall_time_us: Option<u64>,
     verifying_cpu_time_avg_ms: Option<u64>,
     verifying_wall_time_avg_ms: Option<u64>,
+    comm_d_cpu_time_ms: Option<u64>,
+    comm_d_wall_time_ms: Option<u64>,
+    encode_window_time_all_cpu_time_ms: Option<u64>,
+    encode_window_time_all_wall_time_ms: Option<u64>,
+    window_comm_leaves_time_cpu_time_ms: Option<u64>,
+    window_comm_leaves_time_wall_time_ms: Option<u64>,
+    porep_commit_time_cpu_time_ms: Option<u64>,
+    porep_commit_time_wall_time_ms: Option<u64>,
 }
 
 #[derive(Serialize)]

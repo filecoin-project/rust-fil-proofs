@@ -1,5 +1,7 @@
 use crate::error::Result;
 use crate::hasher::Hasher;
+use crate::measurements::measure_op;
+use crate::measurements::Operation::PorepCommitTime;
 use crate::porep::PoRep;
 use crate::stacked::{
     params::{PersistentAux, PublicParams, Tau, TemporaryAux, Tree},
@@ -20,8 +22,11 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
         data_tree: Option<Tree<G>>,
         config: Option<StoreConfig>,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
-        let (tau, p_aux, t_aux) =
-            Self::transform_and_replicate_layers(pp, replica_id, data, data_tree, config)?;
+        let (tau, p_aux, t_aux) = measure_op(PorepCommitTime, || {
+            Ok(Self::transform_and_replicate_layers(
+                pp, replica_id, data, data_tree, config,
+            )?)
+        })?;
 
         Ok((tau, (p_aux, t_aux)))
     }

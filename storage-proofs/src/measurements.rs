@@ -40,6 +40,10 @@ pub struct OpMeasurement {
 pub enum Operation {
     GenerateTreeC,
     GenerateTreeRLast,
+    CommD,
+    EncodeWindowTimeAll,
+    WindowCommLeavesTime,
+    PorepCommitTime,
 }
 
 #[cfg(feature = "metrics")]
