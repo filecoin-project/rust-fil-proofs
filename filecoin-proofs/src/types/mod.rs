@@ -29,7 +29,7 @@ pub type ProverId = [u8; 32];
 pub type Ticket = [u8; 32];
 pub type Tree = MerkleTree<PedersenDomain, <PedersenHasher as Hasher>::Function>;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct SealPreCommitOutput {
     pub comm_r: Commitment,
     pub comm_d: Commitment,
