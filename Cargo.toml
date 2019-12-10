@@ -5,3 +5,6 @@ members = [
   "storage-proofs",
   "fil-proofs-tooling",
 ]
+
+[patch.crates-io]
+bellperson = { git = "https://github.com/finalitylabs/bellman", branch="fil-lock" }
