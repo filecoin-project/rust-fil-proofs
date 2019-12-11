@@ -72,8 +72,8 @@ pub const DEFAULT_POREP_PROOF_PARTITIONS: PoRepProofPartitions = PoRepProofParti
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SectorInfo {
-    size: u64,
-    window_size: usize,
+    pub size: u64,
+    pub window_size: usize,
 }
 
 impl SectorInfo {

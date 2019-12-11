@@ -13,11 +13,12 @@ use crate::shared::{
     create_replicas, prove_replicas, CommitReplicaOutput, PreCommitReplicaOutput, CHALLENGE_COUNT,
     PROVER_ID, RANDOMNESS,
 };
+use filecoin_proofs::constants::SectorInfo;
 
 #[derive(Default, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct FlarpInputs {
-    //    window_size_mib: usize,
+    window_size_bytes: usize,
     sector_size_bytes: usize,
     //    drg_parents: usize,
     //    expander_parents: usize,
@@ -129,7 +130,23 @@ fn augment_with_op_measurements(mut output: &mut FlarpOutputs) {
     }
 }
 
+fn configure_global_config(inputs: &FlarpInputs) {
+    let mut x = filecoin_proofs::constants::DEFAULT_WINDOWS
+        .write()
+        .expect("failed to acquire write lock on DEFAULT_WINDOWS");
+
+    x.insert(
+        inputs.sector_size_bytes as u64,
+        SectorInfo {
+            size: inputs.sector_size_bytes as u64,
+            window_size: inputs.window_size_bytes,
+        },
+    );
+}
+
 pub fn run(inputs: FlarpInputs, skip_seal_proof: bool, skip_post_proof: bool) -> FlarpOutputs {
+    configure_global_config(&inputs);
+
     let mut outputs = FlarpOutputs::default();
 
     let sector_size = SectorSize(inputs.sector_size_bytes as u64);
