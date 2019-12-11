@@ -95,8 +95,8 @@ pub struct FlarpOutputs {
     porep_proof_gen_wall_time_ms: u64,
     post_finalize_ticket_cpu_time_ms: u64,
     post_finalize_ticket_time_ms: u64,
-    post_inclusion_proofs_cpu_time_ms: u64,
-    post_inclusion_proofs_time_ms: u64,
+    epost_inclusions_cpu_time_ms: u64,
+    epost_inclusions_wall_time_ms: u64,
     post_partial_ticket_hash_cpu_time_ms: u64,
     post_partial_ticket_hash_time_ms: u64,
     post_proof_gen_cpu_time_ms: u64,
@@ -160,8 +160,8 @@ fn augment_with_op_measurements(mut output: &mut FlarpOutputs) {
                 output.porep_commit_time_wall_time_ms = wall_time;
             }
             PostInclusionProofs => {
-                output.post_inclusion_proofs_cpu_time_ms = cpu_time;
-                output.post_inclusion_proofs_time_ms = wall_time;
+                output.epost_inclusions_cpu_time_ms = cpu_time;
+                output.epost_inclusions_wall_time_ms = wall_time;
             }
             PostFinalizeTicket => {
                 output.post_finalize_ticket_cpu_time_ms = cpu_time;
