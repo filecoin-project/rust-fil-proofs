@@ -12,7 +12,6 @@ use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
 use paired::bls12_381::Bls12;
 use rand::Rng;
 use serde::Serialize;
-use tempfile::TempDir;
 
 use fil_proofs_tooling::{measure, FuncMeasurement, Metadata};
 use storage_proofs::circuit::bench::BenchCS;
@@ -20,15 +19,12 @@ use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgraph::*;
 use storage_proofs::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher, Sha256Hasher};
-#[cfg(feature = "metrics")]
-use storage_proofs::measurements::Operation;
-#[cfg(feature = "metrics")]
-use storage_proofs::measurements::OP_MEASUREMENTS;
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::stacked::{
     self, CacheKey, ChallengeRequirements, StackedConfig, StackedDrg, TemporaryAuxCache, EXP_DEGREE,
 };
+use tempfile::TempDir;
 
 fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> anyhow::Result<MmapMut> {
     let file: File = if use_tmp {
@@ -317,61 +313,7 @@ where
     report.outputs.total_report_wall_time_ms = total_wall_time.as_millis() as u64;
     report.outputs.total_report_cpu_time_ms = total_cpu_time.as_millis() as u64;
 
-    augment_with_op_measurements(&mut report);
-
     Ok(report)
-}
-
-#[cfg(not(feature = "metrics"))]
-fn augment_with_op_measurements(mut _report: &mut Report) {}
-
-#[cfg(feature = "metrics")]
-fn augment_with_op_measurements(mut report: &mut Report) {
-    // drop the tx side of the channel, causing the iterator to yield None
-    // see also: https://doc.rust-lang.org/src/std/sync/mpsc/mod.rs.html#368
-    OP_MEASUREMENTS
-        .0
-        .lock()
-        .expect("failed to acquire mutex")
-        .take();
-
-    let measurements = OP_MEASUREMENTS
-        .1
-        .lock()
-        .expect("failed to acquire lock on rx side of perf channel");
-
-    for m in measurements.iter() {
-        match m.name {
-            Operation::GenerateTreeC => {
-                report.outputs.generate_tree_c_cpu_time_ms = Some(m.cpu_time.as_millis() as u64);
-                report.outputs.generate_tree_c_wall_time_ms = Some(m.cpu_time.as_millis() as u64);
-            }
-            Operation::GenerateTreeRLast => {
-                report.outputs.tree_r_last_cpu_time_ms = Some(m.cpu_time.as_millis() as u64);
-                report.outputs.tree_r_last_wall_time_ms = Some(m.cpu_time.as_millis() as u64);
-            }
-            Operation::CommD => {
-                report.outputs.comm_d_cpu_time_ms = Some(m.cpu_time.as_millis() as u64);
-                report.outputs.comm_d_wall_time_ms = Some(m.cpu_time.as_millis() as u64);
-            }
-            Operation::EncodeWindowTimeAll => {
-                report.outputs.encode_window_time_all_cpu_time_ms =
-                    Some(m.cpu_time.as_millis() as u64);
-                report.outputs.encode_window_time_all_wall_time_ms =
-                    Some(m.cpu_time.as_millis() as u64);
-            }
-            Operation::WindowCommLeavesTime => {
-                report.outputs.window_comm_leaves_time_cpu_time_ms =
-                    Some(m.cpu_time.as_millis() as u64);
-                report.outputs.window_comm_leaves_time_wall_time_ms =
-                    Some(m.cpu_time.as_millis() as u64);
-            }
-            Operation::PorepCommitTime => {
-                report.outputs.porep_commit_time_cpu_time_ms = Some(m.cpu_time.as_millis() as u64);
-                report.outputs.porep_commit_time_wall_time_ms = Some(m.cpu_time.as_millis() as u64);
-            }
-        }
-    }
 }
 
 struct CircuitWorkMeasurement {
@@ -411,7 +353,7 @@ fn do_circuit_work<H: 'static + Hasher>(
             .synthesize(&mut cs)?;
 
         report.outputs.circuit_num_inputs = Some(cs.num_inputs() as u64);
-        report.outputs.circuit_num_constraints = Some(cs.num_constraints() as u64); // < porep_snark_partition_constraints
+        report.outputs.circuit_num_constraints = Some(cs.num_constraints() as u64);
         info!("Generating blank circuit: done");
     }
 
@@ -505,32 +447,20 @@ struct Outputs {
     circuit_num_inputs: Option<u64>,
     extracting_cpu_time_ms: Option<u64>,
     extracting_wall_time_ms: Option<u64>,
-    generate_tree_c_cpu_time_ms: Option<u64>,
-    generate_tree_c_wall_time_ms: Option<u64>,
-    replication_cpu_time_ms: Option<u64>,
-    replication_cpu_time_ns_per_byte: Option<u64>,
     replication_wall_time_ms: Option<u64>,
+    replication_cpu_time_ms: Option<u64>,
     replication_wall_time_ns_per_byte: Option<u64>,
-    total_proving_cpu_time_ms: Option<u64>,
-    total_proving_wall_time_ms: Option<u64>,
+    replication_cpu_time_ns_per_byte: Option<u64>,
     total_report_cpu_time_ms: u64,
     total_report_wall_time_ms: u64,
-    tree_r_last_cpu_time_ms: Option<u64>,
-    tree_r_last_wall_time_ms: Option<u64>,
+    total_proving_cpu_time_ms: Option<u64>,
+    total_proving_wall_time_ms: Option<u64>,
     vanilla_proving_cpu_time_us: Option<u64>,
     vanilla_proving_wall_time_us: Option<u64>,
-    vanilla_verification_cpu_time_us: Option<u64>,
     vanilla_verification_wall_time_us: Option<u64>,
-    verifying_cpu_time_avg_ms: Option<u64>,
+    vanilla_verification_cpu_time_us: Option<u64>,
     verifying_wall_time_avg_ms: Option<u64>,
-    comm_d_cpu_time_ms: Option<u64>,
-    comm_d_wall_time_ms: Option<u64>,
-    encode_window_time_all_cpu_time_ms: Option<u64>,
-    encode_window_time_all_wall_time_ms: Option<u64>,
-    window_comm_leaves_time_cpu_time_ms: Option<u64>,
-    window_comm_leaves_time_wall_time_ms: Option<u64>,
-    porep_commit_time_cpu_time_ms: Option<u64>,
-    porep_commit_time_wall_time_ms: Option<u64>,
+    verifying_cpu_time_avg_ms: Option<u64>,
 }
 
 #[derive(Serialize)]
