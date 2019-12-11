@@ -46,6 +46,14 @@ struct Outputs {
     generate_tree_c_wall_time_ms: u64,
     tree_r_last_cpu_time_ms: u64,
     tree_r_last_wall_time_ms: u64,
+    comm_d_cpu_time_ms: u64,
+    comm_d_wall_time_ms: u64,
+    encode_window_time_all_cpu_time_ms: u64,
+    encode_window_time_all_wall_time_ms: u64,
+    window_comm_leaves_time_cpu_time_ms: u64,
+    window_comm_leaves_time_wall_time_ms: u64,
+    porep_commit_time_cpu_time_ms: u64,
+    porep_commit_time_wall_time_ms: u64,
 }
 
 #[derive(Serialize)]
@@ -82,6 +90,22 @@ fn augment_with_op_measurements(mut report: &mut Report) {
             Operation::GenerateTreeRLast => {
                 report.outputs.tree_r_last_cpu_time_ms = m.cpu_time.as_millis() as u64;
                 report.outputs.tree_r_last_wall_time_ms = m.cpu_time.as_millis() as u64;
+            }
+            Operation::CommD => {
+                report.outputs.comm_d_cpu_time_ms = m.cpu_time.as_millis() as u64;
+                report.outputs.comm_d_wall_time_ms = m.cpu_time.as_millis() as u64;
+            }
+            Operation::EncodeWindowTimeAll => {
+                report.outputs.encode_window_time_all_cpu_time_ms = m.cpu_time.as_millis() as u64;
+                report.outputs.encode_window_time_all_wall_time_ms = m.cpu_time.as_millis() as u64;
+            }
+            Operation::WindowCommLeavesTime => {
+                report.outputs.window_comm_leaves_time_cpu_time_ms = m.cpu_time.as_millis() as u64;
+                report.outputs.window_comm_leaves_time_wall_time_ms = m.cpu_time.as_millis() as u64;
+            }
+            Operation::PorepCommitTime => {
+                report.outputs.porep_commit_time_cpu_time_ms = m.cpu_time.as_millis() as u64;
+                report.outputs.porep_commit_time_wall_time_ms = m.cpu_time.as_millis() as u64;
             }
         }
     }
@@ -233,7 +257,7 @@ pub fn run(sector_size_bytes: usize) -> anyhow::Result<()> {
     //        "generated PoSt was invalid"
     //    );
 
-    let mut report = Report {
+    let mut report: Report = Report {
         inputs: Inputs {
             sector_size_bytes: sector_size_bytes as u64,
         },
@@ -244,6 +268,14 @@ pub fn run(sector_size_bytes: usize) -> anyhow::Result<()> {
             generate_tree_c_wall_time_ms: 0,
             tree_r_last_cpu_time_ms: 0,
             tree_r_last_wall_time_ms: 0,
+            comm_d_cpu_time_ms: 0,
+            comm_d_wall_time_ms: 0,
+            encode_window_time_all_cpu_time_ms: 0,
+            encode_window_time_all_wall_time_ms: 0,
+            window_comm_leaves_time_cpu_time_ms: 0,
+            window_comm_leaves_time_wall_time_ms: 0,
+            porep_commit_time_cpu_time_ms: 0,
+            porep_commit_time_wall_time_ms: 0,
         },
     };
 
