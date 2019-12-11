@@ -1,7 +1,9 @@
 use std::io::{stdout, Seek, SeekFrom, Write};
 
 use fil_proofs_tooling::{measure, FuncMeasurement, Metadata};
-use filecoin_proofs::constants::DEFAULT_POREP_PROOF_PARTITIONS;
+use filecoin_proofs::constants::{
+    DEFAULT_POREP_PROOF_PARTITIONS, POST_CHALLENGED_NODES, POST_CHALLENGE_COUNT,
+};
 use filecoin_proofs::types::{
     PaddedBytesAmount, PoRepConfig, PoStConfig, SectorSize, UnpaddedBytesAmount,
 };
@@ -247,6 +249,8 @@ pub fn run(sector_size_bytes: usize) -> anyhow::Result<()> {
     // Measure PoSt generation and verification.
     let post_config = PoStConfig {
         sector_size: SectorSize(sector_size_bytes as u64),
+        challenge_count: POST_CHALLENGE_COUNT,
+        challenged_nodes: POST_CHALLENGED_NODES,
     };
 
     let _gen_candidates_measurement = measure(|| {
