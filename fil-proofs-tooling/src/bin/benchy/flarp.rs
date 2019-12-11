@@ -1,5 +1,5 @@
 use bellperson::Circuit;
-use fil_proofs_tooling::measure;
+use fil_proofs_tooling::{measure, Metadata};
 use filecoin_proofs::generate_candidates;
 use filecoin_proofs::types::{PoStConfig, SectorSize};
 use paired::bls12_381::Bls12;
@@ -19,6 +19,13 @@ use crate::shared::{
     PROVER_ID, RANDOMNESS,
 };
 use filecoin_proofs::constants::SectorInfo;
+
+#[derive(Default, Debug, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct FlarpReport {
+    inputs: FlarpInputs,
+    outputs: FlarpOutputs,
+}
 
 #[derive(Default, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -150,7 +157,11 @@ fn configure_global_config(inputs: &FlarpInputs) {
     );
 }
 
-pub fn run(inputs: FlarpInputs, skip_seal_proof: bool, skip_post_proof: bool) -> FlarpOutputs {
+pub fn run(
+    inputs: FlarpInputs,
+    skip_seal_proof: bool,
+    skip_post_proof: bool,
+) -> Metadata<FlarpReport> {
     configure_global_config(&inputs);
 
     let mut outputs = FlarpOutputs::default();
@@ -250,7 +261,7 @@ pub fn run(inputs: FlarpInputs, skip_seal_proof: bool, skip_post_proof: bool) ->
     augment_with_op_measurements(&mut outputs);
     outputs.circuits = run_measure_circuits(&inputs);
 
-    outputs
+    Metadata::wrap(FlarpReport { inputs, outputs }).expect("failed to retrieve metadata")
 }
 
 #[derive(Default, Debug, Serialize)]
