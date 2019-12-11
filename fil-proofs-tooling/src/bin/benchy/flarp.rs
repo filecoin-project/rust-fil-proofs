@@ -65,6 +65,7 @@ pub struct FlarpOutputs {
     post_read_challenged_range_time_ms: u64,
     post_partial_ticket_hash_cpu_time_ms: u64,
     post_partial_ticket_hash_time_ms: u64,
+    circuits: CircuitOutputs,
 }
 
 #[cfg(not(feature = "measurements"))]
@@ -247,11 +248,12 @@ pub fn run(inputs: FlarpInputs, skip_seal_proof: bool, skip_post_proof: bool) ->
     outputs.encoding_cpu_time_ms = encoding_cpu_time_ms;
 
     augment_with_op_measurements(&mut outputs);
+    outputs.circuits = run_measure_circuits(&inputs);
 
     outputs
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Default, Debug, Serialize)]
 struct CircuitOutputs {
     // porep_snark_partition_constraints
     pub porep_constraints: usize,
