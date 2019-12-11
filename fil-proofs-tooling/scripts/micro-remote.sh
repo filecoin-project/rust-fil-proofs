@@ -4,6 +4,7 @@ set -e
 
 CMDS=$(cat <<EOF
 cd \$(mktemp -d)
+to_clean=\$(pwd)
 git clone https://github.com/filecoin-project/rust-fil-proofs.git
 cd rust-fil-proofs
 git checkout -q $1
@@ -11,6 +12,8 @@ git checkout -q $1
     ./fil-proofs-tooling/scripts/with-lock.sh 42 /tmp/benchmark \
     ./fil-proofs-tooling/scripts/with-dots.sh \
     ./fil-proofs-tooling/scripts/micro.sh ${@:3}
+cd /tmp
+rm -rf \$to_clean
 EOF
 )
 
