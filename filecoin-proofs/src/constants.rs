@@ -12,6 +12,9 @@ pub const SECTOR_SIZE_256_MIB: u64 = 1 << 28;
 pub const SECTOR_SIZE_1_GIB: u64 = 1 << 30;
 pub const SECTOR_SIZE_32_GIB: u64 = 1 << 35;
 
+pub const POST_CHALLENGE_COUNT: usize = 40;
+pub const POST_CHALLENGED_NODES: usize = 1;
+
 lazy_static! {
     pub static ref DEFAULT_WINDOWS: RwLock<HashMap<u64, SectorInfo>> = RwLock::new({
         let mut m = HashMap::new();

@@ -90,14 +90,14 @@ where
 
         // 2. Inputs for verifying inclusion paths
 
-        for n in 0..election_post::POST_CHALLENGE_COUNT {
+        for n in 0..pub_params.challenge_count {
             let challenged_leaf_start = election_post::generate_leaf_challenge(
+                &pub_params,
                 &pub_inputs.randomness,
                 pub_inputs.sector_challenge_index,
                 n as u64,
-                pub_params.sector_size,
             )?;
-            for i in 0..election_post::POST_CHALLENGED_NODES {
+            for i in 0..pub_params.challenged_nodes {
                 let por_pub_inputs = merklepor::PublicInputs {
                     commitment: None,
                     challenge: challenged_leaf_start as usize + i,
@@ -160,8 +160,7 @@ where
     fn blank_circuit(
         pub_params: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
     ) -> ElectionPoStCircuit<'a, Bls12, H> {
-        let challenges_count =
-            election_post::POST_CHALLENGED_NODES * election_post::POST_CHALLENGE_COUNT;
+        let challenges_count = pub_params.challenged_nodes * pub_params.challenge_count;
         let height = drgraph::graph_height(pub_params.sector_size as usize / NODE_SIZE);
 
         let leafs = vec![None; challenges_count];
@@ -196,10 +195,6 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for ElectionPoStCircuit<'a, E, H
         let partial_ticket = self.partial_ticket;
 
         assert_eq!(paths.len(), leafs.len());
-        assert_eq!(
-            paths.len(),
-            election_post::POST_CHALLENGED_NODES * election_post::POST_CHALLENGE_COUNT
-        );
 
         // 1. Verify comm_r
 
@@ -379,7 +374,11 @@ mod tests {
         let randomness: [u8; 32] = rng.gen();
         let prover_id: [u8; 32] = rng.gen();
 
-        let pub_params = election_post::PublicParams { sector_size };
+        let pub_params = election_post::PublicParams {
+            sector_size,
+            challenge_count: 40,
+            challenged_nodes: 1,
+        };
 
         let mut sectors: Vec<SectorId> = Vec::new();
         let mut trees = BTreeMap::new();
@@ -395,7 +394,7 @@ mod tests {
         }
 
         let candidates = election_post::generate_candidates::<PedersenHasher>(
-            sector_size,
+            &pub_params,
             &sectors,
             &trees,
             &prover_id,
@@ -505,7 +504,11 @@ mod tests {
         let prover_id: [u8; 32] = rng.gen();
 
         let setup_params = compound_proof::SetupParams {
-            vanilla_params: election_post::SetupParams { sector_size },
+            vanilla_params: election_post::SetupParams {
+                sector_size,
+                challenge_count: 40,
+                challenged_nodes: 1,
+            },
             partitions: None,
         };
 
@@ -522,8 +525,11 @@ mod tests {
             trees.insert(i.into(), tree);
         }
 
+        let pub_params =
+            ElectionPoStCompound::<PedersenHasher>::setup(&setup_params).expect("setup failed");
+
         let candidates = election_post::generate_candidates::<PedersenHasher>(
-            sector_size,
+            &pub_params.vanilla_params,
             &sectors,
             &trees,
             &prover_id,
@@ -553,9 +559,6 @@ mod tests {
             comm_q,
             comm_r_last,
         };
-
-        let pub_params =
-            ElectionPoStCompound::<PedersenHasher>::setup(&setup_params).expect("setup failed");
 
         {
             let (circuit, inputs) =

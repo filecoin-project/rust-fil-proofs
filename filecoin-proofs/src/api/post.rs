@@ -222,7 +222,7 @@ pub fn generate_candidates(
     let trees: BTreeMap<SectorId, Tree> = unique_trees_res.into_iter().collect::<Result<_, _>>()?;
 
     let candidates = election_post::generate_candidates::<DefaultTreeHasher>(
-        public_params.vanilla_params.sector_size,
+        &public_params.vanilla_params,
         &challenged_sectors,
         &trees,
         &prover_id,

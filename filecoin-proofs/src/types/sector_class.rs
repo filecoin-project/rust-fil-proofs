@@ -6,14 +6,6 @@ pub struct SectorClass {
     pub partitions: PoRepProofPartitions,
 }
 
-impl From<SectorClass> for PoStConfig {
-    fn from(x: SectorClass) -> Self {
-        match x {
-            SectorClass { sector_size, .. } => PoStConfig { sector_size },
-        }
-    }
-}
-
 impl From<SectorClass> for PoRepConfig {
     fn from(x: SectorClass) -> Self {
         match x {

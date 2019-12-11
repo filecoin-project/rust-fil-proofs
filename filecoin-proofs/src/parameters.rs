@@ -46,6 +46,8 @@ pub fn post_setup_params(post_config: PoStConfig) -> PostSetupParams {
 
     election_post::SetupParams {
         sector_size: size.into(),
+        challenge_count: crate::constants::POST_CHALLENGE_COUNT,
+        challenged_nodes: crate::constants::POST_CHALLENGED_NODES,
     }
 }
 

@@ -21,19 +21,20 @@ use crate::sector::*;
 use crate::stacked::hash::hash3;
 use crate::util::NODE_SIZE;
 
-pub const POST_CHALLENGE_COUNT: usize = 40;
-pub const POST_CHALLENGED_NODES: usize = 1;
-
 #[derive(Debug, Clone)]
 pub struct SetupParams {
     /// Size of the sector in bytes.
     pub sector_size: u64,
+    pub challenge_count: usize,
+    pub challenged_nodes: usize,
 }
 
 #[derive(Debug, Clone)]
 pub struct PublicParams {
     /// Size of the sector in bytes.
     pub sector_size: u64,
+    pub challenge_count: usize,
+    pub challenged_nodes: usize,
 }
 
 impl ParameterSetMetadata for PublicParams {
@@ -41,8 +42,8 @@ impl ParameterSetMetadata for PublicParams {
         format!(
             "ElectionPoSt::PublicParams{{sector_size: {}, count: {}, nodes: {}}}",
             self.sector_size(),
-            POST_CHALLENGE_COUNT,
-            POST_CHALLENGED_NODES,
+            self.challenge_count,
+            self.challenged_nodes,
         )
     }
 
@@ -137,7 +138,7 @@ where
 }
 
 pub fn generate_candidates<H: Hasher>(
-    sector_size: u64,
+    pub_params: &PublicParams,
     challenged_sectors: &[SectorId],
     trees: &BTreeMap<SectorId, MerkleTree<H::Domain, H::Function>>,
     prover_id: &[u8; 32],
@@ -153,7 +154,7 @@ pub fn generate_candidates<H: Hasher>(
             };
 
             generate_candidate::<H>(
-                sector_size,
+                pub_params,
                 tree,
                 prover_id,
                 *sector_id,
@@ -165,7 +166,7 @@ pub fn generate_candidates<H: Hasher>(
 }
 
 fn generate_candidate<H: Hasher>(
-    sector_size: u64,
+    pub_params: &PublicParams,
     tree: &MerkleTree<H::Domain, H::Function>,
     prover_id: &[u8; 32],
     sector_id: SectorId,
@@ -173,19 +174,19 @@ fn generate_candidate<H: Hasher>(
     sector_challenge_index: u64,
 ) -> Result<Candidate> {
     // 1. read the data for each challenge
-    let mut data = vec![0u8; POST_CHALLENGE_COUNT * POST_CHALLENGED_NODES * NODE_SIZE];
-    for n in 0..POST_CHALLENGE_COUNT {
+    let mut data = vec![0u8; pub_params.challenge_count * pub_params.challenged_nodes * NODE_SIZE];
+    for n in 0..pub_params.challenge_count {
         let challenge_start =
-            generate_leaf_challenge(randomness, sector_challenge_index, n as u64, sector_size)?;
+            generate_leaf_challenge(pub_params, randomness, sector_challenge_index, n as u64)?;
 
         let start = challenge_start as usize;
-        let end = start + POST_CHALLENGED_NODES;
+        let end = start + pub_params.challenged_nodes;
 
         tree.read_range_into(
             start,
             end,
-            &mut data[n * POST_CHALLENGED_NODES * NODE_SIZE
-                ..(n + 1) * POST_CHALLENGED_NODES * NODE_SIZE],
+            &mut data[n * pub_params.challenged_nodes * NODE_SIZE
+                ..(n + 1) * pub_params.challenged_nodes * NODE_SIZE],
         )?;
     }
 
@@ -255,18 +256,19 @@ pub fn generate_sector_challenge(
 
 /// Generate all challenged leaf ranges for a single sector, such that the range fits into the sector.
 pub fn generate_leaf_challenges(
+    pub_params: &PublicParams,
     randomness: &[u8; 32],
     sector_challenge_index: u64,
-    sector_size: u64,
+    challenge_count: usize,
 ) -> Result<Vec<u64>> {
-    let mut challenges = Vec::with_capacity(POST_CHALLENGE_COUNT);
+    let mut challenges = Vec::with_capacity(challenge_count);
 
-    for leaf_challenge_index in 0..POST_CHALLENGE_COUNT {
+    for leaf_challenge_index in 0..challenge_count {
         let challenge = generate_leaf_challenge(
+            pub_params,
             randomness,
             sector_challenge_index,
             leaf_challenge_index as u64,
-            sector_size,
         )?;
         challenges.push(challenge)
     }
@@ -276,15 +278,15 @@ pub fn generate_leaf_challenges(
 
 /// Generates challenge, such that the range fits into the sector.
 pub fn generate_leaf_challenge(
+    pub_params: &PublicParams,
     randomness: &[u8; 32],
     sector_challenge_index: u64,
     leaf_challenge_index: u64,
-    sector_size: u64,
 ) -> Result<u64> {
     ensure!(
-        sector_size > POST_CHALLENGED_NODES as u64 * NODE_SIZE as u64,
+        pub_params.sector_size > pub_params.challenged_nodes as u64 * NODE_SIZE as u64,
         "sector size {} is too small",
-        sector_size
+        pub_params.sector_size
     );
 
     let mut hasher = Sha256::new();
@@ -295,10 +297,10 @@ pub fn generate_leaf_challenge(
 
     let leaf_challenge = LittleEndian::read_u64(&hash.as_ref()[..8]);
 
-    let challenged_range_index =
-        leaf_challenge % (sector_size / (POST_CHALLENGED_NODES * NODE_SIZE) as u64);
+    let challenged_range_index = leaf_challenge
+        % (pub_params.sector_size / (pub_params.challenged_nodes * NODE_SIZE) as u64);
 
-    Ok(challenged_range_index * POST_CHALLENGED_NODES as u64)
+    Ok(challenged_range_index * pub_params.challenged_nodes as u64)
 }
 
 impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
@@ -312,6 +314,8 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
         Ok(PublicParams {
             sector_size: sp.sector_size,
+            challenge_count: sp.challenge_count,
+            challenged_nodes: sp.challenged_nodes,
         })
     }
 
@@ -322,24 +326,25 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
     ) -> Result<Self::Proof> {
         // 1. Inclusions proofs of all challenged leafs in all challenged ranges
         let tree = &priv_inputs.tree;
-        let sector_size = pub_params.sector_size;
 
-        let inclusion_proofs = (0..POST_CHALLENGE_COUNT)
+        let inclusion_proofs = (0..pub_params.challenge_count)
             .into_par_iter()
             .flat_map(|n| {
                 // TODO: replace unwrap with proper error handling
                 let challenged_leaf_start = generate_leaf_challenge(
+                    pub_params,
                     &pub_inputs.randomness,
                     pub_inputs.sector_challenge_index,
                     n as u64,
-                    sector_size,
                 )
                 .unwrap();
-                (0..POST_CHALLENGED_NODES).into_par_iter().map(move |i| {
-                    Ok(MerkleProof::new_from_proof(
-                        &tree.gen_proof(challenged_leaf_start as usize + i)?,
-                    ))
-                })
+                (0..pub_params.challenged_nodes)
+                    .into_par_iter()
+                    .map(move |i| {
+                        Ok(MerkleProof::new_from_proof(
+                            &tree.gen_proof(challenged_leaf_start as usize + i)?,
+                        ))
+                    })
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -359,8 +364,6 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
         pub_inputs: &Self::PublicInputs,
         proof: &Self::Proof,
     ) -> Result<bool> {
-        let sector_size = pub_params.sector_size;
-
         // verify that H(Comm_c || comm_q || Comm_r_last) == Comm_R
         // comm_r_last is the root of the proof
         let comm_r_last = proof.inclusion_proofs[0].root();
@@ -374,15 +377,15 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
             return Ok(false);
         }
 
-        for n in 0..POST_CHALLENGE_COUNT {
+        for n in 0..pub_params.challenge_count {
             let challenged_leaf_start = generate_leaf_challenge(
+                pub_params,
                 &pub_inputs.randomness,
                 pub_inputs.sector_challenge_index,
                 n as u64,
-                sector_size,
             )?;
-            for i in 0..POST_CHALLENGED_NODES {
-                let merkle_proof = &proof.inclusion_proofs[n * POST_CHALLENGED_NODES + i];
+            for i in 0..pub_params.challenged_nodes {
+                let merkle_proof = &proof.inclusion_proofs[n * pub_params.challenged_nodes + i];
 
                 // validate all comm_r_lasts match
                 if merkle_proof.root() != comm_r_last {
@@ -424,7 +427,11 @@ mod tests {
         let leaves = 32;
         let sector_size = leaves * 32;
 
-        let pub_params = PublicParams { sector_size };
+        let pub_params = PublicParams {
+            sector_size,
+            challenge_count: 40,
+            challenged_nodes: 1,
+        };
 
         let randomness: [u8; 32] = rng.gen();
         let prover_id: [u8; 32] = rng.gen();
@@ -443,7 +450,7 @@ mod tests {
         }
 
         let candidates =
-            generate_candidates::<H>(sector_size, &sectors, &trees, &prover_id, &randomness)
+            generate_candidates::<H>(&pub_params, &sectors, &trees, &prover_id, &randomness)
                 .unwrap();
 
         let candidate = &candidates[0];
