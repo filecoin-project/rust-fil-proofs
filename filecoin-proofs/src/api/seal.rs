@@ -35,6 +35,17 @@ use crate::types::{
 };
 
 /// Seals the staged sector at `in_path` in place, saving the resulting replica to `out_path`.
+///
+/// # Arguments
+///
+/// * `porep_config` - porep configuration containing the number of bytes in this sector.
+/// * `cache_path` - path to a directory in which the sector data's Merkle Tree can be written.
+/// * `in_path` - the path where the unsealed sector data is read.
+/// * `out_path` - the path where the sealed sector data will be written.
+/// * `prover_id` - the prover-id that is sealing this sector.
+/// * `sector_id` - the sector-id of this sector.
+/// * `ticket` - the ticket that will be used to generate this sector's replica-id.
+/// * `piece_infos` - each piece's info (number of bytes and commitment) in this sector.
 #[allow(clippy::too_many_arguments)]
 pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
     porep_config: PoRepConfig,
@@ -133,6 +144,17 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
 }
 
 /// Generates a proof for the pre committed sector.
+///
+/// # Arguments
+///
+/// * `porep_config` - porep configuration containing the number of bytes in this sector.
+/// * `cache_path` - path to a directory in which the sector data's Merkle Tree can be written.
+/// * `prover_id` - the prover-id that is sealing the sector.
+/// * `sector_id` - the sector-id of this sector.
+/// * `ticket` - the ticket that will be used to generate this sector's replica-id.
+/// * `seed` - the seed used to derive the porep challenges.
+/// * `pre_commit` - commitments to the sector data and its replica.
+/// * `piece_infos` - each piece's info (number of bytes and commitment) in this sector.
 #[allow(clippy::too_many_arguments)]
 pub fn seal_commit<T: AsRef<Path>>(
     porep_config: PoRepConfig,
@@ -257,11 +279,28 @@ pub fn seal_commit<T: AsRef<Path>>(
     Ok(SealCommitOutput { proof: buf })
 }
 
+/// Computes a sectors's `comm_d` given its pieces.
+///
+/// # Arguments
+///
+/// * `porep_config` - this sector's porep config that contains the number of bytes in the sector.
+/// * `piece_infos` - the piece info (commitment and byte length) for each piece in this sector.
 pub fn compute_comm_d(porep_config: PoRepConfig, piece_infos: &[PieceInfo]) -> Result<Commitment> {
     pieces::compute_comm_d(porep_config.sector_size, piece_infos)
 }
 
 /// Verifies the output of some previously-run seal operation.
+///
+/// # Arguments
+///
+/// * `porep_config` - this sector's porep config that contains the number of bytes in this sector.
+/// * `comm_r_in` - commitment to the sector's replica (`comm_r`).
+/// * `comm_d_in` - commitment to the sector's data (`comm_d`).
+/// * `prover_id` - the prover-id that sealed this sector.
+/// * `sector_id` - this sector's sector-id.
+/// * `ticket` - the ticket that was used to generate this sector's replica-id.
+/// * `seed` - the seed used to derive the porep challenges.
+/// * `proof_vec` - the porep circuit proof serialized into a vector of bytes.
 #[allow(clippy::too_many_arguments)]
 pub fn verify_seal(
     porep_config: PoRepConfig,

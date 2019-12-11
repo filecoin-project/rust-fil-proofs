@@ -175,6 +175,11 @@ pub fn main() {
                 .long("predictable")
                 .help("When set the paramters will be seeded with a fixed value.")
         )
+        .arg(
+            Arg::with_name("only-election-post")
+                .long("only-election-post")
+                .help("Only generate parameters for election-post")
+        )
         .get_matches();
 
     let sizes: HashSet<u64> = if matches.is_present("params-for-sector-sizes") {
@@ -187,6 +192,8 @@ pub fn main() {
     };
 
     let is_predictable = matches.is_present("predictable");
+    let only_election_post = matches.is_present("only-election-post");
+
     for sector_size in sizes {
         cache_post_params(
             is_predictable,
@@ -195,12 +202,14 @@ pub fn main() {
             },
         );
 
-        cache_porep_params(
-            is_predictable,
-            PoRepConfig {
-                sector_size: SectorSize(sector_size),
-                partitions: DEFAULT_POREP_PROOF_PARTITIONS,
-            },
-        );
+        if !only_election_post {
+            cache_porep_params(
+                is_predictable,
+                PoRepConfig {
+                    sector_size: SectorSize(sector_size),
+                    partitions: DEFAULT_POREP_PROOF_PARTITIONS,
+                },
+            );
+        }
     }
 }

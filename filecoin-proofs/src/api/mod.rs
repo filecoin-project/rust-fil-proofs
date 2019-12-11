@@ -36,6 +36,19 @@ use storage_proofs::pieces::generate_piece_commitment_bytes_from_source;
 /// whose first (unpadded) byte begins at `offset` and ends at `offset` plus
 /// `num_bytes`, inclusive. Note that the entire sector is unsealed each time
 /// this function is called.
+///
+/// # Arguments
+///
+/// * `porep_config` - porep configuration containing the sector size.
+/// * `cache_path` - path to the directory in which the sector data's Merkle Tree is written.
+/// * `sealed_path` - path to the sealed sector file that we will unseal and read a byte range.
+/// * `output_path` - path to a file that we will write the requested byte range to.
+/// * `prover_id` - the prover-id that sealed the sector.
+/// * `sector_id` - the sector-id of the sealed sector.
+/// * `comm_d` - the commitment to the sector's data.
+/// * `ticket` - the ticket that was used to generate the sector's replica-id.
+/// * `offset` - the byte index in the unsealed sector of the first byte that we want to read.
+/// * `num_bytes` - the number of bytes that we want to read.
 #[allow(clippy::too_many_arguments)]
 pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     porep_config: PoRepConfig,
@@ -97,8 +110,14 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     Ok(UnpaddedBytesAmount(written as u64))
 }
 
-// Generates a piece commitment for the provided byte source. Returns an error
-// if the byte source produced more than `piece_size` bytes.
+/// Generates a piece commitment for the provided byte source. Returns an error
+/// if the byte source produced more than `piece_size` bytes.
+///
+/// # Arguments
+///
+/// * `source` - a readable source of unprocessed piece bytes. The piece's commitment will be
+/// generated for the bytes read from the source plus any added padding.
+/// * `piece_size` - the number of unpadded user-bytes which can be read from source before EOF.
 pub fn generate_piece_commitment<T: std::io::Read>(
     source: T,
     piece_size: UnpaddedBytesAmount,
@@ -149,6 +168,13 @@ pub fn generate_piece_commitment<T: std::io::Read>(
 /// wastes ($SIZESECTORSIZE/2)-$MINIMUM_PIECE_SIZE space. This function will be
 /// deprecated in favor of `write_and_preprocess`, and miners will be prevented
 /// from sealing sectors containing more than $TOOMUCH alignment bytes.
+///
+/// # Arguments
+///
+/// * `source` - a readable source of unprocessed piece bytes.
+/// * `target` - a writer where we will write the processed piece bytes.
+/// * `piece_size` - the number of unpadded user-bytes which can be read from source before EOF.
+/// * `piece_lengths` - the number of bytes for each previous piece in the sector.
 pub fn add_piece<R, W>(
     source: R,
     target: W,
@@ -262,6 +288,12 @@ fn ensure_piece_size(piece_size: UnpaddedBytesAmount) -> Result<()> {
 /// `target`; it is the caller's responsibility to ensure properly sized
 /// and ordered writes to `target` such that `source`-bytes occupy whole
 /// subtrees of the final merkle tree built over `target`.
+///
+/// # Arguments
+///
+/// * `source` - a readable source of unprocessed piece bytes.
+/// * `target` - a writer where we will write the processed piece bytes.
+/// * `piece_size` - the number of unpadded user-bytes which can be read from source before EOF.
 pub fn write_and_preprocess<R, W>(
     source: R,
     target: W,
