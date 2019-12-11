@@ -104,3 +104,7 @@ harness = false
 [[bench]]
 name = "merkle"
 harness = false
+
+[[bench]]
+name = "misc"
+harness = false
