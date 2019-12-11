@@ -14,6 +14,7 @@ use crate::drgraph::graph_height;
 use crate::error::{Error, Result};
 use crate::fr32::fr_into_bytes;
 use crate::hasher::{Domain, Hasher};
+use crate::measurements::{measure_op, Operation};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
@@ -182,12 +183,14 @@ fn generate_candidate<H: Hasher>(
         let start = challenge_start as usize;
         let end = start + pub_params.challenged_nodes;
 
-        tree.read_range_into(
-            start,
-            end,
-            &mut data[n * pub_params.challenged_nodes * NODE_SIZE
-                ..(n + 1) * pub_params.challenged_nodes * NODE_SIZE],
-        )?;
+        measure_op(Operation::PostReadChallengedRange, || {
+            tree.read_range_into(
+                start,
+                end,
+                &mut data[n * pub_params.challenged_nodes * NODE_SIZE
+                    ..(n + 1) * pub_params.challenged_nodes * NODE_SIZE],
+            )
+        })?;
     }
 
     // 2. Ticket generation
@@ -198,7 +201,9 @@ fn generate_candidate<H: Hasher>(
     let list: [&[u8]; 4] = [&randomness[..], &prover_id[..], &sector_id_bytes[..], &data];
     let bits = Bits::new_many(list.iter());
 
-    let partial_ticket = pedersen_md_no_padding_bits(bits);
+    let partial_ticket = measure_op(Operation::PostPartialTicketHash, || {
+        pedersen_md_no_padding_bits(bits)
+    });
 
     // ticket = sha256(partial_ticket)
     let ticket = finalize_ticket(&partial_ticket);
@@ -327,29 +332,33 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
         // 1. Inclusions proofs of all challenged leafs in all challenged ranges
         let tree = &priv_inputs.tree;
 
-        let inclusion_proofs = (0..pub_params.challenge_count)
-            .into_par_iter()
-            .flat_map(|n| {
-                // TODO: replace unwrap with proper error handling
-                let challenged_leaf_start = generate_leaf_challenge(
-                    pub_params,
-                    &pub_inputs.randomness,
-                    pub_inputs.sector_challenge_index,
-                    n as u64,
-                )
-                .unwrap();
-                (0..pub_params.challenged_nodes)
-                    .into_par_iter()
-                    .map(move |i| {
-                        Ok(MerkleProof::new_from_proof(
-                            &tree.gen_proof(challenged_leaf_start as usize + i)?,
-                        ))
-                    })
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let inclusion_proofs = measure_op(Operation::PostInclusionProofs, || {
+            (0..pub_params.challenge_count)
+                .into_par_iter()
+                .flat_map(|n| {
+                    // TODO: replace unwrap with proper error handling
+                    let challenged_leaf_start = generate_leaf_challenge(
+                        pub_params,
+                        &pub_inputs.randomness,
+                        pub_inputs.sector_challenge_index,
+                        n as u64,
+                    )
+                    .unwrap();
+                    (0..pub_params.challenged_nodes)
+                        .into_par_iter()
+                        .map(move |i| {
+                            Ok(MerkleProof::new_from_proof(
+                                &tree.gen_proof(challenged_leaf_start as usize + i)?,
+                            ))
+                        })
+                })
+                .collect::<Result<Vec<_>>>()
+        })?;
 
         // 2. correct generation of the ticket from the partial_ticket (add this to the candidate)
-        let ticket = finalize_ticket(&pub_inputs.partial_ticket);
+        let ticket = measure_op(Operation::PostFinalizeTicket, || {
+            finalize_ticket(&pub_inputs.partial_ticket)
+        });
 
         Ok(Proof {
             inclusion_proofs,
