@@ -3,6 +3,7 @@ use clap::{value_t, App, Arg, SubCommand};
 mod election_post;
 mod flarp;
 mod hash_fns;
+mod shared;
 mod stacked;
 
 fn main() {
