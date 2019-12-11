@@ -21,6 +21,12 @@ use crate::shared::{
 use filecoin_proofs::constants::SectorInfo;
 use std::sync::atomic::Ordering::Relaxed;
 
+/*
+cat config.json \
+    jq 'def round: . + 0.5 | floor; . | { "post_challenges": .["post_challenges"] | round, "window_size_bytes": .["window_size_bytes"] | round, "sector_size_bytes": .["sector_size_bytes"] | round, "drg_parents": .["drg_parents"] | round, "expander_parents": .["expander_parents"] | round, "graph_name": .["graph_name"] | round, "graph_parents": .["graph_parents"] | round, "porep_challenges": .["porep_challenges"] | round, "stacked_layers": .["stacked_layers"] | round, "wrapper_parents": .["wrapper_parents"] | round, "wrapper_parents_all": .["wrapper_parents_all"] | round }' \
+    | RUST_BACKTRACE=1 RUST_LOG=info cargo run --release --package fil-proofs-tooling --bin=benchy  -- flarp
+*/
+
 #[derive(Default, Debug, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct FlarpReport {
@@ -35,12 +41,9 @@ pub struct FlarpInputs {
     sector_size_bytes: usize,
     drg_parents: usize,
     expander_parents: usize,
-    //    graph_parents: usize,
     porep_challenges: usize,
     post_challenges: usize,
     post_challenged_nodes: usize,
-    //    proofs_block_fraction: usize,
-    //    regeneration_fraction: usize,
     stacked_layers: usize,
     //    wrapper_parents_all: usize,
 }
