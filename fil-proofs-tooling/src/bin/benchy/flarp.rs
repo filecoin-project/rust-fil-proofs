@@ -435,7 +435,6 @@ fn measure_kdf_circuit(i: &FlarpInputs) -> usize {
         bytes_into_boolean_vec_be(&mut cs, Some(id.as_slice()), id.len()).unwrap()
     };
     let parents_bits: Vec<Vec<Boolean>> = parents
-        .clone()
         .iter()
         .enumerate()
         .map(|(i, p)| {
@@ -445,7 +444,7 @@ fn measure_kdf_circuit(i: &FlarpInputs) -> usize {
         .collect();
 
     let window_index_raw = 12u64;
-    let node_raw = 123456789u64;
+    let node_raw = 123_456_789u64;
     let window_index = uint64::UInt64::constant(window_index_raw);
     let node = uint64::UInt64::constant(node_raw);
 
