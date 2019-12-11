@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 
 use fil_proofs_tooling::measure;
-use filecoin_proofs::constants::{POST_CHALLENGED_NODES, POST_CHALLENGE_COUNT};
 use filecoin_proofs::generate_candidates;
 use filecoin_proofs::types::{PoStConfig, SectorSize};
 #[cfg(feature = "measurements")]
@@ -24,7 +23,8 @@ pub struct FlarpInputs {
     //    expander_parents: usize,
     //    graph_parents: usize,
     //    porep_challenges: usize,
-    //    post_challenges: usize,
+    post_challenges: usize,
+    post_challenged_nodes: usize,
     //    proofs_block_fraction: usize,
     //    regeneration_fraction: usize,
     //    stacked_layers: usize,
@@ -164,8 +164,8 @@ pub fn run(inputs: FlarpInputs, skip_seal_proof: bool, skip_post_proof: bool) ->
         // Measure PoSt generation and verification.
         let post_config = PoStConfig {
             sector_size,
-            challenge_count: POST_CHALLENGE_COUNT,
-            challenged_nodes: POST_CHALLENGED_NODES,
+            challenge_count: inputs.post_challenges,
+            challenged_nodes: inputs.post_challenged_nodes,
         };
 
         let _gen_candidates_measurement = measure(|| {
