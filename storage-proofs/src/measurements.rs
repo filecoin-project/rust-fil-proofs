@@ -44,17 +44,21 @@ pub enum Operation {
     EncodeWindowTimeAll,
     WindowCommLeavesTime,
     PorepCommitTime,
+    PostInclusionProofs,
+    PostFinalizeTicket,
+    PostReadChallengedRange,
+    PostPartialTicketHash,
 }
 
 #[cfg(feature = "measurements")]
-pub fn measure_op<T, F>(op: Operation, f: F) -> anyhow::Result<T>
+pub fn measure_op<T, F>(op: Operation, f: F) -> T
 where
-    F: FnOnce() -> anyhow::Result<T>,
+    F: FnOnce() -> T,
 {
     let cpu_time_start = ProcessTime::now();
     let wall_start_time = Instant::now();
 
-    let x = f()?;
+    let x = f();
 
     let opt_tx = OP_MEASUREMENTS
         .0
@@ -71,13 +75,13 @@ where
             .expect("failed to send to perf channel");
     }
 
-    Ok(x)
+    x
 }
 
 #[cfg(not(feature = "measurements"))]
-pub fn measure_op<T, F>(_: Operation, f: F) -> anyhow::Result<T>
+pub fn measure_op<T, F>(_: Operation, f: F) -> T
 where
-    F: FnOnce() -> anyhow::Result<T>,
+    F: FnOnce() -> T,
 {
     f()
 }

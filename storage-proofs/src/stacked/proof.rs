@@ -865,15 +865,13 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         );
 
         let (labels, label_configs) = measure_op(EncodeWindowTimeAll, || {
-            Ok(Self::label_encode_all_windows(
-                pub_params, replica_id, data, config,
-            )?)
+            Self::label_encode_all_windows(pub_params, replica_id, data, config)
         })?;
 
         // construct column hashes
         info!("building column hashes");
         let column_hashes = measure_op(WindowCommLeavesTime, || {
-            Ok(Self::build_column_hashes(pub_params, &labels)?)
+            Self::build_column_hashes(pub_params, &labels)
         })?;
 
         info!("building tree_q");
@@ -926,10 +924,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     column_hashes.len() * 32,
                 )
             };
-            Ok(Self::build_tree::<H>(
-                column_hashes_flat,
-                Some(tree_c_config.clone()),
-            )?)
+            Self::build_tree::<H>(column_hashes_flat, Some(tree_c_config.clone()))
         })?;
 
         // comm_r = H(comm_c || comm_q || comm_r_last)

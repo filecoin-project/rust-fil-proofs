@@ -23,9 +23,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
         config: Option<StoreConfig>,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let (tau, p_aux, t_aux) = measure_op(PorepCommitTime, || {
-            Ok(Self::transform_and_replicate_layers(
-                pp, replica_id, data, data_tree, config,
-            )?)
+            Self::transform_and_replicate_layers(pp, replica_id, data, data_tree, config)
         })?;
 
         Ok((tau, (p_aux, t_aux)))

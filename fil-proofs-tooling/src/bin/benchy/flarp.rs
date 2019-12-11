@@ -25,13 +25,13 @@ const PROVER_ID: [u8; 32] = [0; 32];
 const RANDOMNESS: [u8; 32] = [0; 32];
 const TICKET_BYTES: [u8; 32] = [1; 32];
 
-#[derive(Serialize)]
+#[derive(Default, Debug, Serialize)]
 #[serde(rename_all = "kebab-case")]
 struct Inputs {
     sector_size_bytes: u64,
 }
 
-#[derive(Serialize)]
+#[derive(Default, Debug, Serialize)]
 #[serde(rename_all = "kebab-case")]
 struct Outputs {
     encoding_cpu_time_ms: u64,
@@ -50,6 +50,14 @@ struct Outputs {
     window_comm_leaves_time_wall_time_ms: u64,
     porep_commit_time_cpu_time_ms: u64,
     porep_commit_time_wall_time_ms: u64,
+    post_inclusion_proofs_cpu_time_ms: u64,
+    post_inclusion_proofs_time_ms: u64,
+    post_finalize_ticket_cpu_time_ms: u64,
+    post_finalize_ticket_time_ms: u64,
+    post_read_challenged_range_cpu_time_ms: u64,
+    post_read_challenged_range_time_ms: u64,
+    post_partial_ticket_hash_cpu_time_ms: u64,
+    post_partial_ticket_hash_time_ms: u64,
 }
 
 #[derive(Serialize)]
@@ -78,31 +86,50 @@ fn augment_with_op_measurements(mut report: &mut Report) {
         .expect("failed to acquire lock on rx side of perf channel");
 
     for m in measurements.iter() {
+        use Operation::*;
+        let cpu_time = m.cpu_time.as_millis() as u64;
+        let wall_time = m.wall_time.as_millis() as u64;
+
         match m.op {
-            Operation::GenerateTreeC => {
-                report.outputs.generate_tree_c_cpu_time_ms = m.cpu_time.as_millis() as u64;
-                report.outputs.generate_tree_c_wall_time_ms = m.wall_time.as_millis() as u64;
+            GenerateTreeC => {
+                report.outputs.generate_tree_c_cpu_time_ms = cpu_time;
+                report.outputs.generate_tree_c_wall_time_ms = wall_time;
             }
-            Operation::GenerateTreeRLast => {
-                report.outputs.tree_r_last_cpu_time_ms = m.cpu_time.as_millis() as u64;
-                report.outputs.tree_r_last_wall_time_ms = m.wall_time.as_millis() as u64;
+            GenerateTreeRLast => {
+                report.outputs.tree_r_last_cpu_time_ms = cpu_time;
+                report.outputs.tree_r_last_wall_time_ms = wall_time;
             }
-            Operation::CommD => {
-                report.outputs.comm_d_cpu_time_ms = m.cpu_time.as_millis() as u64;
-                report.outputs.comm_d_wall_time_ms = m.wall_time.as_millis() as u64;
+            CommD => {
+                report.outputs.comm_d_cpu_time_ms = cpu_time;
+                report.outputs.comm_d_wall_time_ms = wall_time;
             }
-            Operation::EncodeWindowTimeAll => {
-                report.outputs.encode_window_time_all_cpu_time_ms = m.cpu_time.as_millis() as u64;
-                report.outputs.encode_window_time_all_wall_time_ms = m.wall_time.as_millis() as u64;
+            EncodeWindowTimeAll => {
+                report.outputs.encode_window_time_all_cpu_time_ms = cpu_time;
+                report.outputs.encode_window_time_all_wall_time_ms = wall_time;
             }
-            Operation::WindowCommLeavesTime => {
-                report.outputs.window_comm_leaves_time_cpu_time_ms = m.cpu_time.as_millis() as u64;
-                report.outputs.window_comm_leaves_time_wall_time_ms =
-                    m.wall_time.as_millis() as u64;
+            WindowCommLeavesTime => {
+                report.outputs.window_comm_leaves_time_cpu_time_ms = cpu_time;
+                report.outputs.window_comm_leaves_time_wall_time_ms = wall_time;
             }
-            Operation::PorepCommitTime => {
-                report.outputs.porep_commit_time_cpu_time_ms = m.cpu_time.as_millis() as u64;
-                report.outputs.porep_commit_time_wall_time_ms = m.wall_time.as_millis() as u64;
+            PorepCommitTime => {
+                report.outputs.porep_commit_time_cpu_time_ms = cpu_time;
+                report.outputs.porep_commit_time_wall_time_ms = wall_time;
+            }
+            PostInclusionProofs => {
+                report.outputs.post_inclusion_proofs_cpu_time_ms = cpu_time;
+                report.outputs.post_inclusion_proofs_time_ms = wall_time;
+            }
+            PostFinalizeTicket => {
+                report.outputs.post_finalize_ticket_cpu_time_ms = cpu_time;
+                report.outputs.post_finalize_ticket_time_ms = wall_time;
+            }
+            PostReadChallengedRange => {
+                report.outputs.post_read_challenged_range_cpu_time_ms = cpu_time;
+                report.outputs.post_read_challenged_range_time_ms = wall_time;
+            }
+            PostPartialTicketHash => {
+                report.outputs.post_partial_ticket_hash_cpu_time_ms = cpu_time;
+                report.outputs.post_partial_ticket_hash_time_ms = wall_time;
             }
         }
     }
@@ -338,28 +365,17 @@ pub fn run(sector_size_bytes: usize) -> anyhow::Result<()> {
     //        "generated PoSt was invalid"
     //    );
 
+    let mut outputs = Outputs::default();
+    outputs.porep_proof_gen_cpu_time_ms = seal_commit.measurement.cpu_time.as_millis() as u64;
+    outputs.porep_proof_gen_wall_time_ms = seal_commit.measurement.wall_time.as_millis() as u64;
+    outputs.encoding_wall_time_ms = encoding_wall_time_ms;
+    outputs.encoding_cpu_time_ms = encoding_cpu_time_ms;
+
     let mut report: Report = Report {
         inputs: Inputs {
             sector_size_bytes: sector_size_bytes as u64,
         },
-        outputs: Outputs {
-            encoding_wall_time_ms,
-            encoding_cpu_time_ms,
-            generate_tree_c_cpu_time_ms: 0,
-            generate_tree_c_wall_time_ms: 0,
-            tree_r_last_cpu_time_ms: 0,
-            tree_r_last_wall_time_ms: 0,
-            comm_d_cpu_time_ms: 0,
-            comm_d_wall_time_ms: 0,
-            porep_proof_gen_cpu_time_ms: seal_commit.measurement.cpu_time.as_millis() as u64,
-            porep_proof_gen_wall_time_ms: seal_commit.measurement.wall_time.as_millis() as u64,
-            encode_window_time_all_cpu_time_ms: 0,
-            encode_window_time_all_wall_time_ms: 0,
-            window_comm_leaves_time_cpu_time_ms: 0,
-            window_comm_leaves_time_wall_time_ms: 0,
-            porep_commit_time_cpu_time_ms: 0,
-            porep_commit_time_wall_time_ms: 0,
-        },
+        outputs,
     };
 
     augment_with_op_measurements(&mut report);
