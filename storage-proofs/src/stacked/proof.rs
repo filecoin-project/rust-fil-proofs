@@ -961,7 +961,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     }
 }
 
-fn create_key<H: Hasher>(
+pub fn create_key<H: Hasher>(
     window_graph: &StackedBucketGraph<H>,
     mut hasher: Sha256,
     parents: &[u32],

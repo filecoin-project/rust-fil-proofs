@@ -25,5 +25,5 @@ pub use self::params::{
     ReplicaColumnProof, SetupParams, Tau, TemporaryAux, TemporaryAuxCache, WindowProof,
     WrapperProof,
 };
-pub use self::proof::{StackedConfig, StackedDrg};
+pub use self::proof::{create_key, StackedConfig, StackedDrg};
 pub use labeling_proof::LabelingProof;
