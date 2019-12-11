@@ -1,3 +1,5 @@
+use std::sync::atomic::Ordering;
+
 use anyhow::{anyhow, ensure, Result};
 use storage_proofs::drgraph::{DefaultTreeHasher, BASE_DEGREE};
 use storage_proofs::election_post::{self, ElectionPoSt};
@@ -5,11 +7,9 @@ use storage_proofs::proof::ProofScheme;
 use storage_proofs::stacked::{self, LayerChallenges, StackedConfig, StackedDrg, EXP_DEGREE};
 
 use crate::constants::{
-    DefaultPieceHasher, POREP_WINDOW_MINIMUM_CHALLENGES, POREP_WRAPPER_MINIMUM_CHALLENGES,
+    DefaultPieceHasher, LAYERS, POREP_WINDOW_MINIMUM_CHALLENGES, POREP_WRAPPER_MINIMUM_CHALLENGES,
 };
 use crate::types::{PaddedBytesAmount, PoStConfig};
-
-const LAYERS: usize = 4; // TODO: correct params;
 
 const DRG_SEED: [u8; 28] = [
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
@@ -55,9 +55,16 @@ pub fn setup_params(
     sector_bytes: PaddedBytesAmount,
     partitions: usize,
 ) -> Result<stacked::SetupParams> {
-    let window_challenges = select_challenges(partitions, POREP_WINDOW_MINIMUM_CHALLENGES, LAYERS)?;
-    let wrapper_challenges =
-        select_challenges(partitions, POREP_WRAPPER_MINIMUM_CHALLENGES, LAYERS)?;
+    let window_challenges = select_challenges(
+        partitions,
+        POREP_WINDOW_MINIMUM_CHALLENGES.load(Ordering::Relaxed),
+        LAYERS.load(Ordering::Relaxed),
+    )?;
+    let wrapper_challenges = select_challenges(
+        partitions,
+        POREP_WRAPPER_MINIMUM_CHALLENGES.load(Ordering::Relaxed),
+        LAYERS.load(Ordering::Relaxed),
+    )?;
     let window_size_nodes = window_size_nodes_for_sector_bytes(sector_bytes)?;
     let sector_bytes = usize::from(sector_bytes);
 
@@ -111,7 +118,7 @@ mod tests {
     #[test]
     fn partition_layer_challenges_test() {
         let f = |partitions| {
-            select_challenges(partitions, 12, LAYERS)
+            select_challenges(partitions, 12, LAYERS.load(Ordering::Relaxed))
                 .unwrap()
                 .challenges_count_all()
         };

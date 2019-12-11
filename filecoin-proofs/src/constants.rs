@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::RwLock;
+use std::sync::{atomic::AtomicUsize, RwLock};
 
 use lazy_static::lazy_static;
 use storage_proofs::util::NODE_SIZE;
@@ -16,6 +16,12 @@ pub const POST_CHALLENGE_COUNT: usize = 40;
 pub const POST_CHALLENGED_NODES: usize = 1;
 
 lazy_static! {
+    pub static ref LAYERS: AtomicUsize = AtomicUsize::new(4);
+    // 5 challenges per partition
+    pub static ref POREP_WINDOW_MINIMUM_CHALLENGES: AtomicUsize = AtomicUsize::new(50);
+    // 5 challenges per partition
+    pub static ref POREP_WRAPPER_MINIMUM_CHALLENGES: AtomicUsize = AtomicUsize::new(50);
+
     pub static ref DEFAULT_WINDOWS: RwLock<HashMap<u64, SectorInfo>> = RwLock::new({
         let mut m = HashMap::new();
         m.insert(
@@ -57,9 +63,6 @@ lazy_static! {
         m
     });
 }
-
-pub const POREP_WINDOW_MINIMUM_CHALLENGES: usize = 50; // 5 challenges per partition
-pub const POREP_WRAPPER_MINIMUM_CHALLENGES: usize = 50; // 5 challenges per partition
 
 pub const SINGLE_PARTITION_PROOF_LEN: usize = 192;
 
