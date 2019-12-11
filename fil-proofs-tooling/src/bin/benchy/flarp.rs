@@ -33,10 +33,10 @@ pub struct FlarpReport {
 pub struct FlarpInputs {
     window_size_bytes: usize,
     sector_size_bytes: usize,
-    //    drg_parents: usize,
-    //    expander_parents: usize,
+    drg_parents: usize,
+    expander_parents: usize,
     //    graph_parents: usize,
-    //    porep_challenges: usize,
+    porep_challenges: usize,
     post_challenges: usize,
     post_challenged_nodes: usize,
     //    proofs_block_fraction: usize,
@@ -44,11 +44,6 @@ pub struct FlarpInputs {
     stacked_layers: usize,
     //    wrapper_parents_all: usize,
 }
-
-// drg_parents is part of the setup parameters for PoRep
-// expander_parents is part of the setup parameters for PoRep
-// wrapper_parents_all: dunno
-// graph_parents: dunno
 
 #[derive(Default, Debug, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -163,6 +158,12 @@ fn configure_global_config(inputs: &FlarpInputs) {
     );
 
     filecoin_proofs::constants::LAYERS.store(inputs.stacked_layers, Relaxed);
+    filecoin_proofs::constants::EXP_DEGREE.store(inputs.expander_parents, Relaxed);
+    filecoin_proofs::constants::BASE_DEGREE.store(inputs.drg_parents, Relaxed);
+    filecoin_proofs::constants::POREP_WINDOW_MINIMUM_CHALLENGES
+        .store(inputs.porep_challenges, Relaxed);
+    filecoin_proofs::constants::POREP_WRAPPER_MINIMUM_CHALLENGES
+        .store(inputs.porep_challenges, Relaxed);
 }
 
 pub fn run(
