@@ -1,7 +1,7 @@
 use bellperson::Circuit;
 use fil_proofs_tooling::{measure, Metadata};
 use filecoin_proofs::types::{PoStConfig, SectorSize};
-use filecoin_proofs::{generate_candidates, verify_post};
+use filecoin_proofs::{generate_candidates, generate_post, verify_post};
 use paired::bls12_381::Bls12;
 use serde::{Deserialize, Serialize};
 use storage_proofs::circuit::bench::BenchCS;
@@ -16,7 +16,7 @@ use storage_proofs::sector::SectorId;
 
 use crate::shared::{
     create_replicas, prove_replicas, CommitReplicaOutput, PreCommitReplicaOutput, CHALLENGE_COUNT,
-    PROVER_ID, RANDOMNESS,
+    CHALLENGE_SEED, PROVER_ID, RANDOMNESS,
 };
 use filecoin_proofs::constants::SectorInfo;
 use std::sync::atomic::Ordering::Relaxed;
@@ -50,30 +50,34 @@ pub struct FlarpInputs {
 
 #[derive(Default, Debug, Serialize)]
 pub struct FlarpOutputs {
-    encoding_cpu_time_ms: u64,
-    encoding_wall_time_ms: u64,
-    generate_tree_c_cpu_time_ms: u64,
-    generate_tree_c_wall_time_ms: u64,
-    porep_proof_gen_cpu_time_ms: u64,
-    porep_proof_gen_wall_time_ms: u64,
-    tree_r_last_cpu_time_ms: u64,
-    tree_r_last_wall_time_ms: u64,
     comm_d_cpu_time_ms: u64,
     comm_d_wall_time_ms: u64,
     encode_window_time_all_cpu_time_ms: u64,
     encode_window_time_all_wall_time_ms: u64,
-    window_comm_leaves_time_cpu_time_ms: u64,
-    window_comm_leaves_time_wall_time_ms: u64,
+    encoding_cpu_time_ms: u64,
+    encoding_wall_time_ms: u64,
+    epost_cpu_time_ms: u64,
+    epost_wall_time_ms: u64,
+    generate_tree_c_cpu_time_ms: u64,
+    generate_tree_c_wall_time_ms: u64,
     porep_commit_time_cpu_time_ms: u64,
     porep_commit_time_wall_time_ms: u64,
-    post_inclusion_proofs_cpu_time_ms: u64,
-    post_inclusion_proofs_time_ms: u64,
+    porep_proof_gen_cpu_time_ms: u64,
+    porep_proof_gen_wall_time_ms: u64,
     post_finalize_ticket_cpu_time_ms: u64,
     post_finalize_ticket_time_ms: u64,
-    post_read_challenged_range_cpu_time_ms: u64,
-    post_read_challenged_range_time_ms: u64,
+    post_inclusion_proofs_cpu_time_ms: u64,
+    post_inclusion_proofs_time_ms: u64,
     post_partial_ticket_hash_cpu_time_ms: u64,
     post_partial_ticket_hash_time_ms: u64,
+    post_proof_gen_cpu_time_ms: u64,
+    post_proof_gen_wall_time_ms: u64,
+    post_read_challenged_range_cpu_time_ms: u64,
+    post_read_challenged_range_time_ms: u64,
+    tree_r_last_cpu_time_ms: u64,
+    tree_r_last_wall_time_ms: u64,
+    window_comm_leaves_time_cpu_time_ms: u64,
+    window_comm_leaves_time_wall_time_ms: u64,
     #[serde(flatten)]
     circuits: CircuitOutputs,
 }
@@ -219,7 +223,7 @@ pub fn run(
                 post_config,
                 &RANDOMNESS,
                 CHALLENGE_COUNT,
-                &vec![(sector_id, replica_info.private_replica_info)]
+                &vec![(sector_id, replica_info.private_replica_info.clone())]
                     .into_iter()
                     .collect(),
                 PROVER_ID,
@@ -227,13 +231,18 @@ pub fn run(
         })
         .expect("failed to generate post candidates");
 
+        outputs.epost_cpu_time_ms = gen_candidates_measurement.cpu_time.as_millis() as u64;
+        outputs.epost_wall_time_ms = gen_candidates_measurement.wall_time.as_millis() as u64;
+
         let candidates = &gen_candidates_measurement.return_value;
 
         let gen_post_measurement = measure(|| {
             generate_post(
                 post_config,
                 &CHALLENGE_SEED,
-                &priv_replica_info,
+                &vec![(sector_id, replica_info.private_replica_info.clone())]
+                    .into_iter()
+                    .collect(),
                 candidates
                     .iter()
                     .cloned()
@@ -244,13 +253,18 @@ pub fn run(
         })
         .expect("failed to generate PoSt");
 
+        outputs.post_proof_gen_cpu_time_ms = gen_post_measurement.cpu_time.as_millis() as u64;
+        outputs.post_proof_gen_wall_time_ms = gen_post_measurement.wall_time.as_millis() as u64;
+
         let verify_post_measurement = measure(|| {
             verify_post(
                 post_config,
                 &CHALLENGE_SEED,
                 CHALLENGE_COUNT,
                 &gen_post_measurement.return_value,
-                &pub_replica_info,
+                &vec![(sector_id, replica_info.public_replica_info.clone())]
+                    .into_iter()
+                    .collect(),
                 &candidates
                     .iter()
                     .cloned()

@@ -12,6 +12,7 @@ use filecoin_proofs::{
 use storage_proofs::sector::SectorId;
 
 pub(super) const CHALLENGE_COUNT: u64 = 1;
+pub(super) const CHALLENGE_SEED: [u8; 32] = [3; 32];
 pub(super) const PROVER_ID: [u8; 32] = [0; 32];
 pub(super) const RANDOMNESS: [u8; 32] = [0; 32];
 pub(super) const TICKET_BYTES: [u8; 32] = [1; 32];
