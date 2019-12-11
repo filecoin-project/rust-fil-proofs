@@ -44,7 +44,7 @@ bincode = "1.1.2"
 anyhow = "1.0.23"
 
 [features]
-default = ["gpu"]
+default = ["gpu", "measurements"]
 gpu = ["storage-proofs/gpu", "filecoin-proofs/gpu", "bellperson/gpu", "fil-sapling-crypto/gpu"]
 measurements = ["storage-proofs/measurements"]
 
