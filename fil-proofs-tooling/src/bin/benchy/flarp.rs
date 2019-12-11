@@ -1,8 +1,12 @@
 use bellperson::Circuit;
 use fil_proofs_tooling::{measure, Metadata};
 use filecoin_proofs::generate_candidates;
+use filecoin_proofs::types::PaddedBytesAmount;
+use filecoin_proofs::types::*;
 use filecoin_proofs::types::{PoStConfig, SectorSize};
+use log::info;
 use paired::bls12_381::Bls12;
+use rand_xorshift::XorShiftRng;
 use serde::{Deserialize, Serialize};
 use storage_proofs::circuit::bench::BenchCS;
 use storage_proofs::compound_proof::CompoundProof;
@@ -26,6 +30,10 @@ cat config.json \
     jq 'def round: . + 0.5 | floor; . | { "post_challenges": .["post_challenges"] | round, "window_size_bytes": .["window_size_bytes"] | round, "sector_size_bytes": .["sector_size_bytes"] | round, "drg_parents": .["drg_parents"] | round, "expander_parents": .["expander_parents"] | round, "graph_name": .["graph_name"] | round, "graph_parents": .["graph_parents"] | round, "porep_challenges": .["porep_challenges"] | round, "stacked_layers": .["stacked_layers"] | round, "wrapper_parents": .["wrapper_parents"] | round, "wrapper_parents_all": .["wrapper_parents_all"] | round }' \
     | RUST_BACKTRACE=1 RUST_LOG=info cargo run --release --package fil-proofs-tooling --bin=benchy  -- flarp
 */
+
+const SEED: [u8; 16] = [
+    0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
+];
 
 #[derive(Default, Debug, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -176,6 +184,7 @@ pub fn run(
     skip_post_proof: bool,
 ) -> Metadata<FlarpReport> {
     configure_global_config(&inputs);
+    generate_params(&inputs);
 
     let mut outputs = FlarpOutputs::default();
 
@@ -351,8 +360,8 @@ fn measure_post_circuit(i: &FlarpInputs) -> usize {
 
     let post_config = PoStConfig {
         sector_size: SectorSize(i.sector_size_bytes as u64),
-        challenge_count: 40,
-        challenged_nodes: 1,
+        challenge_count: i.post_challenges,
+        challenged_nodes: i.post_challenged_nodes,
     };
 
     let vanilla_params = post_setup_params(post_config);
@@ -415,4 +424,116 @@ fn measure_kdf_circuit(i: &FlarpInputs) -> usize {
     .expect("key derivation function failed");
 
     cs.num_constraints()
+}
+
+fn generate_params(i: &FlarpInputs) {
+    info!("generating params: porep");
+
+    cache_porep_params(PoRepConfig {
+        sector_size: SectorSize(i.sector_size_bytes),
+        partitions: 10, // TODO: use from inputs
+    });
+
+    info!("generating params: post");
+    cache_post_params(PoStConfig {
+        sector_size: SectorSize(i.sector_size_bytes),
+        challenge_count: i.post_challenges,
+        challenged_nodes: i.post_challenged_nodes,
+    });
+}
+
+fn cache_porep_params(porep_config: PoRepConfig) {
+    use filecoin_proofs::parameters::public_params;
+    use storage_proofs::circuit::stacked::StackedCompound;
+    use storage_proofs::stacked::StackedDrg;
+
+    let n = u64::from(PaddedBytesAmount::from(porep_config));
+    let public_params = public_params(
+        PaddedBytesAmount::from(porep_config),
+        usize::from(PoRepProofPartitions::from(porep_config)),
+    )
+    .unwrap();
+
+    {
+        let circuit = <StackedCompound as CompoundProof<
+            _,
+            StackedDrg<PedersenHasher, Sha256Hasher>,
+            _,
+        >>::blank_circuit(&public_params);
+        StackedCompound::get_param_metadata(circuit, &public_params);
+    }
+    {
+        let circuit = <StackedCompound as CompoundProof<
+            _,
+            StackedDrg<PedersenHasher, Sha256Hasher>,
+            _,
+        >>::blank_circuit(&public_params);
+        StackedCompound::get_groth_params(
+            Some(&mut XorShiftRng::from_seed(SEED)),
+            circuit,
+            &public_params,
+        )
+        .expect("failed to get groth params");
+    }
+    {
+        let circuit = <StackedCompound as CompoundProof<
+            _,
+            StackedDrg<PedersenHasher, Sha256Hasher>,
+            _,
+        >>::blank_circuit(&public_params);
+
+        let rando: Option<&mut XorShiftRng> = None;
+        StackedCompound::get_verifying_key(rando, circuit, &public_params)
+            .expect("failed to get verifying key");
+    }
+}
+
+fn cache_post_params(post_config: PoStConfig) {
+    let n = u64::from(PaddedBytesAmount::from(post_config));
+
+    let post_public_params = post_public_params(post_config).unwrap();
+
+    {
+        let post_circuit: ElectionPoStCircuit<Bls12, PedersenHasher> =
+            <ElectionPoStCompound<PedersenHasher> as CompoundProof<
+                Bls12,
+                ElectionPoSt<PedersenHasher>,
+                ElectionPoStCircuit<Bls12, PedersenHasher>,
+            >>::blank_circuit(&post_public_params);
+        let _ = <ElectionPoStCompound<PedersenHasher>>::get_param_metadata(
+            post_circuit,
+            &post_public_params,
+        )
+        .expect("failed to get metadata");
+    }
+    {
+        let post_circuit: ElectionPoStCircuit<Bls12, PedersenHasher> =
+            <ElectionPoStCompound<PedersenHasher> as CompoundProof<
+                Bls12,
+                ElectionPoSt<PedersenHasher>,
+                ElectionPoStCircuit<Bls12, PedersenHasher>,
+            >>::blank_circuit(&post_public_params);
+        <ElectionPoStCompound<PedersenHasher>>::get_groth_params(
+            Some(&mut XorShiftRng::from_seed(SEED)),
+            post_circuit,
+            &post_public_params,
+        )
+        .expect("failed to get groth params");
+    }
+    {
+        let post_circuit: ElectionPoStCircuit<Bls12, PedersenHasher> =
+            <ElectionPoStCompound<PedersenHasher> as CompoundProof<
+                Bls12,
+                ElectionPoSt<PedersenHasher>,
+                ElectionPoStCircuit<Bls12, PedersenHasher>,
+            >>::blank_circuit(&post_public_params);
+
+        let rando: Option<&mut OsRng> = None;
+        <ElectionPoStCompound<PedersenHasher>>::get_verifying_key(
+            rando,
+            post_circuit,
+            &post_public_params,
+        )
+        .expect("failed to get verifying key");
+    }
 }
