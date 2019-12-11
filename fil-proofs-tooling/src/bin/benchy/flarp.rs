@@ -1,7 +1,7 @@
 use bellperson::Circuit;
 use fil_proofs_tooling::{measure, Metadata};
-use filecoin_proofs::generate_candidates;
 use filecoin_proofs::types::{PoStConfig, SectorSize};
+use filecoin_proofs::{generate_candidates, verify_post};
 use paired::bls12_381::Bls12;
 use serde::{Deserialize, Serialize};
 use storage_proofs::circuit::bench::BenchCS;
@@ -22,7 +22,7 @@ use filecoin_proofs::constants::SectorInfo;
 use std::sync::atomic::Ordering::Relaxed;
 
 /*
-echo '{ "post_challenged_nodes": XXX, "window_size_bytes": XXX, "sector_size_bytes": XXX, "!*wrapping_variant": true, "drg_parents": XXX, "expander_parents": XXX, "graph_name": "Chung", "graph_parents": XXX, "porep_challenges": XXX, "post_challenges": XXX, "proofs_block_fraction": 0.3, "regeneration_fraction": 0.1315051, "stacked_layers": 1.807693, "wrapper_lookup_with_mtree": 78643.2, "wrapper_parents": 100, "wrapper_parents_all": 819200, "construction": "Chung_wrappingVariant" }' > config.json
+echo '{ "drg_parents": 8, "expander_parents": 8, "graph_parents": 8, "porep_challenges": 5, "post_challenged_nodes": 1, "post_challenges": 20, "sector_size_bytes": 1024, "stacked_layers": 4, "window_size_bytes": 512, "wrapper_parents_all": 8 }' > config.json
 
 cat config.json \
     | jq 'def round: . + 0.5 | floor; . | { "post_challenged_nodes": .["post_challenged_nodes"] | round, "post_challenges": .["post_challenges"] | round, "window_size_bytes": .["window_size_bytes"] | round, "sector_size_bytes": .["sector_size_bytes"] | round, "drg_parents": .["drg_parents"] | round, "expander_parents": .["expander_parents"] | round, "graph_parents": .["graph_parents"] | round, "porep_challenges": .["porep_challenges"] | round, "stacked_layers": .["stacked_layers"] | round, "wrapper_parents": .["wrapper_parents"] | round, "wrapper_parents_all": .["wrapper_parents_all"] | round }'\
@@ -154,19 +154,19 @@ fn configure_global_config(inputs: &FlarpInputs) {
     x.insert(
         inputs.sector_size_bytes as u64,
         SectorInfo {
-            size: inputs.sector_size_bytes as u64,
-            window_size: inputs.window_size_bytes,
+            size: inputs.sector_size_bytes as u64, // 1024
+            window_size: inputs.window_size_bytes, // 512
         },
     );
 
-    filecoin_proofs::constants::LAYERS.store(inputs.stacked_layers, Relaxed);
-    filecoin_proofs::constants::WRAPPER_EXP_DEGREE.store(inputs.wrapper_parents_all, Relaxed);
-    filecoin_proofs::constants::WINDOW_EXP_DEGREE.store(inputs.expander_parents, Relaxed);
-    filecoin_proofs::constants::WINDOW_DRG_DEGREE.store(inputs.drg_parents, Relaxed);
+    filecoin_proofs::constants::LAYERS.store(inputs.stacked_layers, Relaxed); // 4
+    filecoin_proofs::constants::WRAPPER_EXP_DEGREE.store(inputs.wrapper_parents_all, Relaxed); // 8
+    filecoin_proofs::constants::WINDOW_EXP_DEGREE.store(inputs.expander_parents, Relaxed); // 8
+    filecoin_proofs::constants::WINDOW_DRG_DEGREE.store(inputs.drg_parents, Relaxed); // 8
     filecoin_proofs::constants::POREP_WINDOW_MINIMUM_CHALLENGES
-        .store(inputs.porep_challenges, Relaxed);
+        .store(inputs.porep_challenges, Relaxed); // 50
     filecoin_proofs::constants::POREP_WRAPPER_MINIMUM_CHALLENGES
-        .store(inputs.porep_challenges, Relaxed);
+        .store(inputs.porep_challenges, Relaxed); // 50
 }
 
 pub fn run(
@@ -214,7 +214,7 @@ pub fn run(
             challenged_nodes: inputs.post_challenged_nodes,
         };
 
-        let _gen_candidates_measurement = measure(|| {
+        let gen_candidates_measurement = measure(|| {
             generate_candidates(
                 post_config,
                 &RANDOMNESS,
@@ -227,44 +227,44 @@ pub fn run(
         })
         .expect("failed to generate post candidates");
 
-        //    let candidates = &gen_candidates_measurement.return_value;
-        //
-        //    let gen_post_measurement = measure(|| {
-        //        generate_post(
-        //            post_config,
-        //            &CHALLENGE_SEED,
-        //            &priv_replica_info,
-        //            candidates
-        //                .iter()
-        //                .cloned()
-        //                .map(Into::into)
-        //                .collect::<Vec<_>>(),
-        //            PROVER_ID,
-        //        )
-        //    })
-        //    .expect("failed to generate PoSt");
-        //
-        //    let verify_post_measurement = measure(|| {
-        //        verify_post(
-        //            post_config,
-        //            &CHALLENGE_SEED,
-        //            CHALLENGE_COUNT,
-        //            &gen_post_measurement.return_value,
-        //            &pub_replica_info,
-        //            &candidates
-        //                .iter()
-        //                .cloned()
-        //                .map(Into::into)
-        //                .collect::<Vec<_>>(),
-        //            PROVER_ID,
-        //        )
-        //    })
-        //    .expect("verify_post function returned an error");
-        //
-        //    assert!(
-        //        verify_post_measurement.return_value,
-        //        "generated PoSt was invalid"
-        //    );
+        let candidates = &gen_candidates_measurement.return_value;
+
+        let gen_post_measurement = measure(|| {
+            generate_post(
+                post_config,
+                &CHALLENGE_SEED,
+                &priv_replica_info,
+                candidates
+                    .iter()
+                    .cloned()
+                    .map(Into::into)
+                    .collect::<Vec<_>>(),
+                PROVER_ID,
+            )
+        })
+        .expect("failed to generate PoSt");
+
+        let verify_post_measurement = measure(|| {
+            verify_post(
+                post_config,
+                &CHALLENGE_SEED,
+                CHALLENGE_COUNT,
+                &gen_post_measurement.return_value,
+                &pub_replica_info,
+                &candidates
+                    .iter()
+                    .cloned()
+                    .map(Into::into)
+                    .collect::<Vec<_>>(),
+                PROVER_ID,
+            )
+        })
+        .expect("verify_post function returned an error");
+
+        assert!(
+            verify_post_measurement.return_value,
+            "generated PoSt was invalid"
+        );
     }
 
     outputs.encoding_wall_time_ms = encoding_wall_time_ms;
