@@ -19,6 +19,7 @@ use crate::shared::{
     PROVER_ID, RANDOMNESS,
 };
 use filecoin_proofs::constants::SectorInfo;
+use std::sync::atomic::Ordering::Relaxed;
 
 #[derive(Default, Debug, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -40,10 +41,14 @@ pub struct FlarpInputs {
     post_challenged_nodes: usize,
     //    proofs_block_fraction: usize,
     //    regeneration_fraction: usize,
-    //    stacked_layers: usize,
-    //    wrapper_lookup_with_mtree: usize,
+    stacked_layers: usize,
     //    wrapper_parents_all: usize,
 }
+
+// drg_parents is part of the setup parameters for PoRep
+// expander_parents is part of the setup parameters for PoRep
+// wrapper_parents_all: dunno
+// graph_parents: dunno
 
 #[derive(Default, Debug, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -156,6 +161,8 @@ fn configure_global_config(inputs: &FlarpInputs) {
             window_size: inputs.window_size_bytes,
         },
     );
+
+    filecoin_proofs::constants::LAYERS.store(inputs.stacked_layers, Relaxed);
 }
 
 pub fn run(
