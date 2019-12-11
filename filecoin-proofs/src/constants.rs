@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{atomic::AtomicUsize, RwLock};
+use std::sync::{atomic::AtomicU8, atomic::AtomicUsize, RwLock};
 
 use lazy_static::lazy_static;
 use storage_proofs::util::NODE_SIZE;
@@ -25,6 +25,7 @@ lazy_static! {
     pub static ref WINDOW_DRG_DEGREE: AtomicUsize = AtomicUsize::new(storage_proofs::drgraph::BASE_DEGREE);
     pub static ref WINDOW_EXP_DEGREE: AtomicUsize = AtomicUsize::new(storage_proofs::stacked::EXP_DEGREE);
     pub static ref WRAPPER_EXP_DEGREE: AtomicUsize = AtomicUsize::new(storage_proofs::stacked::EXP_DEGREE);
+    pub static ref DEFAULT_POREP_PROOF_PARTITIONS: AtomicU8 = AtomicU8::new(10);
 
     pub static ref DEFAULT_WINDOWS: RwLock<HashMap<u64, SectorInfo>> = RwLock::new({
         let mut m = HashMap::new();
@@ -70,8 +71,6 @@ lazy_static! {
 
 pub const SINGLE_PARTITION_PROOF_LEN: usize = 192;
 
-pub const DEFAULT_POREP_PROOF_PARTITIONS: PoRepProofPartitions = PoRepProofPartitions(10);
-
 // TODO: cfg out
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,5 +96,4 @@ pub const MIN_PIECE_SIZE: UnpaddedBytesAmount = UnpaddedBytesAmount(127);
 /// The hasher used for creating comm_d.
 pub type DefaultPieceHasher = storage_proofs::hasher::Sha256Hasher;
 
-use crate::PoRepProofPartitions;
 pub use storage_proofs::drgraph::DefaultTreeHasher;

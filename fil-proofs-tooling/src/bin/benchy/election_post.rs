@@ -15,6 +15,7 @@ use filecoin_proofs::{
 };
 use log::info;
 use serde::Serialize;
+use std::sync::atomic::Ordering;
 use storage_proofs::sector::SectorId;
 use tempfile::NamedTempFile;
 
@@ -23,7 +24,6 @@ const CHALLENGE_SEED: [u8; 32] = [0; 32];
 
 const PROVER_ID: [u8; 32] = [0; 32];
 const SECTOR_ID: u64 = 0;
-const N_PARTITIONS: PoRepProofPartitions = DEFAULT_POREP_PROOF_PARTITIONS;
 
 #[derive(Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -101,7 +101,7 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
     // Replicate the staged sector, write the replica file to `sealed_path`.
     let porep_config = PoRepConfig {
         sector_size: SectorSize(sector_size as u64),
-        partitions: N_PARTITIONS,
+        partitions: PoRepProofPartitions(DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed)),
     };
     let cache_dir = tempfile::tempdir().unwrap();
     let sector_id = SectorId::from(SECTOR_ID);

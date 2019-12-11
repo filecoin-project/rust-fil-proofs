@@ -7,8 +7,10 @@ use filecoin_proofs::constants::DEFAULT_POREP_PROOF_PARTITIONS;
 use filecoin_proofs::types::{PaddedBytesAmount, PoRepConfig, SectorSize, UnpaddedBytesAmount};
 use filecoin_proofs::{
     add_piece, generate_piece_commitment, seal_commit, seal_pre_commit, PieceInfo,
-    PrivateReplicaInfo, PublicReplicaInfo, SealCommitOutput, SealPreCommitOutput,
+    PoRepProofPartitions, PrivateReplicaInfo, PublicReplicaInfo, SealCommitOutput,
+    SealPreCommitOutput,
 };
+use std::sync::atomic::Ordering;
 use storage_proofs::sector::SectorId;
 
 pub(super) const CHALLENGE_COUNT: u64 = 1;
@@ -68,7 +70,7 @@ pub fn create_replicas(
 
     let porep_config = PoRepConfig {
         sector_size,
-        partitions: DEFAULT_POREP_PROOF_PARTITIONS,
+        partitions: PoRepProofPartitions(DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed)),
     };
 
     let mut out: std::collections::BTreeMap<SectorId, PreCommitReplicaOutput> = Default::default();

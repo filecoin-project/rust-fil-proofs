@@ -31,16 +31,29 @@ use crate::shared::{
     create_replicas, prove_replicas, CommitReplicaOutput, PreCommitReplicaOutput, CHALLENGE_COUNT,
     CHALLENGE_SEED, PROVER_ID, RANDOMNESS,
 };
+use std::sync::atomic::Ordering;
 
 const SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
 ];
 
 /*
-echo '{ "drg_parents": 8, "expander_parents": 8, "graph_parents": 8, "porep_challenges": 5, "post_challenged_nodes": 1, "post_challenges": 20, "sector_size_bytes": 1024, "stacked_layers": 4, "window_size_bytes": 512, "wrapper_parents_all": 8 }' > config.json
+echo '{
+    "drg_parents": 6,
+    "expander_parents": 8,
+    "graph_parents": 8,
+    "porep_challenges": 50,
+    "porep_partitions": 10,
+    "post_challenged_nodes": 1,
+    "post_challenges": 20,
+    "sector_size_bytes": 1024,
+    "stacked_layers": 4,
+    "window_size_bytes": 512,
+    "wrapper_parents_all": 8
+}' > config.json
 
 cat config.json \
-    | jq 'def round: . + 0.5 | floor; . | { "post_challenged_nodes": .["post_challenged_nodes"] | round, "post_challenges": .["post_challenges"] | round, "window_size_bytes": .["window_size_bytes"] | round, "sector_size_bytes": .["sector_size_bytes"] | round, "drg_parents": .["drg_parents"] | round, "expander_parents": .["expander_parents"] | round, "graph_parents": .["graph_parents"] | round, "porep_challenges": .["porep_challenges"] | round, "stacked_layers": .["stacked_layers"] | round, "wrapper_parents": .["wrapper_parents"] | round, "wrapper_parents_all": .["wrapper_parents_all"] | round }'\
+    | jq 'def round: . + 0.5 | floor; . | { "porep_partitions": .["porep_partitions"] | round, { "post_challenged_nodes": .["post_challenged_nodes"] | round, "post_challenges": .["post_challenges"] | round, "window_size_bytes": .["window_size_bytes"] | round, "sector_size_bytes": .["sector_size_bytes"] | round, "drg_parents": .["drg_parents"] | round, "expander_parents": .["expander_parents"] | round, "graph_parents": .["graph_parents"] | round, "porep_challenges": .["porep_challenges"] | round, "stacked_layers": .["stacked_layers"] | round, "wrapper_parents": .["wrapper_parents"] | round, "wrapper_parents_all": .["wrapper_parents_all"] | round }'\
     | RUST_BACKTRACE=1 RUST_LOG=info cargo run --release --package fil-proofs-tooling --bin=benchy  -- flarp
 */
 
@@ -57,6 +70,7 @@ pub struct FlarpInputs {
     drg_parents: usize,
     expander_parents: usize,
     porep_challenges: usize,
+    porep_partitions: u8,
     post_challenges: usize,
     post_challenged_nodes: usize,
     stacked_layers: usize,
@@ -179,6 +193,8 @@ fn configure_global_config(inputs: &FlarpInputs) {
     );
 
     filecoin_proofs::constants::LAYERS.store(inputs.stacked_layers, Relaxed); // 4
+    filecoin_proofs::constants::DEFAULT_POREP_PROOF_PARTITIONS
+        .store(inputs.porep_partitions, Relaxed); // 10
     filecoin_proofs::constants::WRAPPER_EXP_DEGREE.store(inputs.wrapper_parents_all, Relaxed); // 8
     filecoin_proofs::constants::WINDOW_EXP_DEGREE.store(inputs.expander_parents, Relaxed); // 8
     filecoin_proofs::constants::WINDOW_DRG_DEGREE.store(inputs.drg_parents, Relaxed); // 8
@@ -447,10 +463,9 @@ fn measure_kdf_circuit(i: &FlarpInputs) -> usize {
 
 fn generate_params(i: &FlarpInputs) {
     info!("generating params: porep");
-
     cache_porep_params(PoRepConfig {
         sector_size: SectorSize(i.sector_size_bytes as u64),
-        partitions: DEFAULT_POREP_PROOF_PARTITIONS, // TODO: use from inputs
+        partitions: PoRepProofPartitions(DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed)),
     });
 
     info!("generating params: post");

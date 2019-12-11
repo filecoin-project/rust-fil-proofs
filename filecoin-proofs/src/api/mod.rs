@@ -326,6 +326,7 @@ mod tests {
         DEFAULT_POREP_PROOF_PARTITIONS, SECTOR_SIZE_ONE_KIB, SINGLE_PARTITION_PROOF_LEN,
     };
     use crate::types::{PoStConfig, SectorSize};
+    use std::sync::atomic::Ordering;
 
     static INIT_LOGGER: Once = Once::new();
     fn init_logger() {
@@ -348,7 +349,9 @@ mod tests {
             let result = verify_seal(
                 PoRepConfig {
                     sector_size: SectorSize(SECTOR_SIZE_ONE_KIB),
-                    partitions: DEFAULT_POREP_PROOF_PARTITIONS,
+                    partitions: PoRepProofPartitions(
+                        DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed),
+                    ),
                 },
                 not_convertible_to_fr_bytes,
                 convertible_to_fr_bytes,
@@ -376,7 +379,9 @@ mod tests {
             let result = verify_seal(
                 PoRepConfig {
                     sector_size: SectorSize(SECTOR_SIZE_ONE_KIB),
-                    partitions: DEFAULT_POREP_PROOF_PARTITIONS,
+                    partitions: PoRepProofPartitions(
+                        DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed),
+                    ),
                 },
                 convertible_to_fr_bytes,
                 not_convertible_to_fr_bytes,
@@ -487,7 +492,9 @@ mod tests {
         let mut unseal_file = NamedTempFile::new()?;
         let config = PoRepConfig {
             sector_size: SectorSize(sector_size.clone()),
-            partitions: DEFAULT_POREP_PROOF_PARTITIONS,
+            partitions: PoRepProofPartitions(
+                DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed),
+            ),
         };
 
         let cache_dir = tempfile::tempdir().unwrap();

@@ -8,6 +8,7 @@ use filecoin_proofs::constants::*;
 use filecoin_proofs::parameters::{post_public_params, public_params};
 use filecoin_proofs::types::*;
 use std::collections::HashSet;
+use std::sync::atomic::Ordering;
 use storage_proofs::circuit::election_post::{ElectionPoStCircuit, ElectionPoStCompound};
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::CompoundProof;
@@ -209,7 +210,9 @@ pub fn main() {
                 is_predictable,
                 PoRepConfig {
                     sector_size: SectorSize(sector_size),
-                    partitions: DEFAULT_POREP_PROOF_PARTITIONS,
+                    partitions: PoRepProofPartitions(
+                        DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed),
+                    ),
                 },
             );
         }
