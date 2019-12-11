@@ -1,6 +1,7 @@
 use clap::{value_t, App, Arg, SubCommand};
 
 mod election_post;
+mod flarp;
 mod hash_fns;
 mod stacked;
 
@@ -114,11 +115,20 @@ fn main() {
     let hash_cmd = SubCommand::with_name("hash-constraints")
         .about("Benchmark hash function inside of a circuit");
 
+    let flarp_cmd = SubCommand::with_name("flarp").about("Benchmark flarp").arg(
+        Arg::with_name("size")
+            .long("size")
+            .required(true)
+            .help("The data size in KiB")
+            .takes_value(true),
+    );
+
     let matches = App::new("benchy")
         .version("0.1")
         .subcommand(stacked_cmd)
         .subcommand(election_post_cmd)
         .subcommand(hash_cmd)
+        .subcommand(flarp_cmd)
         .get_matches();
 
     match matches.subcommand() {
@@ -158,6 +168,12 @@ fn main() {
         }
         ("hash-constraints", Some(_m)) => {
             hash_fns::run().expect("hash-constraints failed");
+        }
+        ("flarp", Some(m)) => {
+            let sector_size_kibs = value_t!(m, "size", usize)
+                .expect("could not convert `size` CLI argument to `usize`");
+            let sector_size = sector_size_kibs * 1024;
+            flarp::run(sector_size).expect("flarp test failed");
         }
         _ => panic!("carnation"),
     }
