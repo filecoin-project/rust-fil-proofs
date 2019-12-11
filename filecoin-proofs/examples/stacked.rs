@@ -170,8 +170,9 @@ fn do_the_work<H: 'static>(
     let replica_id: H::Domain = H::Domain::random(rng);
     let sp = stacked::SetupParams {
         nodes,
-        degree: m,
-        expansion_degree,
+        window_drg_degree: m,
+        window_expansion_degree: expansion_degree,
+        wrapper_expansion_degree: expansion_degree,
         seed: new_seed(),
         config: config.clone(),
         window_size_nodes: nodes / 4,

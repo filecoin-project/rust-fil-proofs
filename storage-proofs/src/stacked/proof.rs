@@ -1069,8 +1069,9 @@ mod tests {
 
         let sp = SetupParams {
             nodes,
-            degree: BASE_DEGREE,
-            expansion_degree: EXP_DEGREE,
+            window_drg_degree: BASE_DEGREE,
+            window_expansion_degree: EXP_DEGREE,
+            wrapper_expansion_degree: EXP_DEGREE,
             seed: new_seed(),
             config: config.clone(),
             window_size_nodes: nodes / 2,
@@ -1149,8 +1150,9 @@ mod tests {
 
         let sp = SetupParams {
             nodes,
-            degree: BASE_DEGREE,
-            expansion_degree: EXP_DEGREE,
+            window_drg_degree: BASE_DEGREE,
+            window_expansion_degree: EXP_DEGREE,
+            wrapper_expansion_degree: EXP_DEGREE,
             seed: new_seed(),
             config: config.clone(),
             window_size_nodes: nodes / 4,
@@ -1234,8 +1236,9 @@ mod tests {
 
         let sp = SetupParams {
             nodes: n,
-            degree,
-            expansion_degree,
+            window_drg_degree: degree,
+            window_expansion_degree: expansion_degree,
+            wrapper_expansion_degree: expansion_degree,
             seed: new_seed(),
             config: config.clone(),
             window_size_nodes: n / 2,
@@ -1311,8 +1314,9 @@ mod tests {
         let config = StackedConfig::new(10, 333, 444).unwrap();
         let sp = SetupParams {
             nodes,
-            degree,
-            expansion_degree,
+            window_drg_degree: degree,
+            window_expansion_degree: expansion_degree,
+            wrapper_expansion_degree: expansion_degree,
             seed: new_seed(),
             config: config.clone(),
             window_size_nodes: nodes / 2,

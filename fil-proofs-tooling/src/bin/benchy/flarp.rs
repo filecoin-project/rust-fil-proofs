@@ -316,8 +316,9 @@ fn measure_porep_circuit(i: &FlarpInputs) -> usize {
     let layers = 4;
     let window_challenge_count = 50;
     let wrapper_challenge_count = 50;
-    let degree = 6;
-    let expansion_degree = 8;
+    let window_drg_degree = 6;
+    let window_expansion_degree = 8;
+    let wrapper_expansion_degree = 8;
     let window_size_nodes = 512 / 32;
     let nodes = i.sector_size_bytes / 32;
 
@@ -326,8 +327,9 @@ fn measure_porep_circuit(i: &FlarpInputs) -> usize {
 
     let sp = SetupParams {
         nodes,
-        degree,
-        expansion_degree,
+        window_drg_degree,
+        window_expansion_degree,
+        wrapper_expansion_degree,
         seed: new_seed(),
         config,
         window_size_nodes,
@@ -407,7 +409,7 @@ fn measure_kdf_circuit(_i: &FlarpInputs) -> usize {
     storage_proofs::circuit::create_label::create_label(
         cs.namespace(|| "create_label"),
         &id_bits,
-        parents_bits.clone(),
+        parents_bits,
         Some(window_index),
         Some(node),
     )

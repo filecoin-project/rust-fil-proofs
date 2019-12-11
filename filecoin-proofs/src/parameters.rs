@@ -7,8 +7,8 @@ use storage_proofs::proof::ProofScheme;
 use storage_proofs::stacked::{self, LayerChallenges, StackedConfig, StackedDrg};
 
 use crate::constants::{
-    DefaultPieceHasher, BASE_DEGREE, EXP_DEGREE, LAYERS, POREP_WINDOW_MINIMUM_CHALLENGES,
-    POREP_WRAPPER_MINIMUM_CHALLENGES,
+    DefaultPieceHasher, LAYERS, POREP_WINDOW_MINIMUM_CHALLENGES, POREP_WRAPPER_MINIMUM_CHALLENGES,
+    WINDOW_DRG_DEGREE, WINDOW_EXP_DEGREE, WRAPPER_EXP_DEGREE,
 };
 use crate::types::{PaddedBytesAmount, PoStConfig};
 
@@ -90,8 +90,9 @@ pub fn setup_params(
     let nodes = sector_bytes / 32;
     Ok(stacked::SetupParams {
         nodes,
-        degree: BASE_DEGREE.load(Ordering::Relaxed),
-        expansion_degree: EXP_DEGREE.load(Ordering::Relaxed),
+        window_drg_degree: WINDOW_DRG_DEGREE.load(Ordering::Relaxed),
+        window_expansion_degree: WINDOW_EXP_DEGREE.load(Ordering::Relaxed),
+        wrapper_expansion_degree: WRAPPER_EXP_DEGREE.load(Ordering::Relaxed),
         seed: DRG_SEED,
         config,
         window_size_nodes,

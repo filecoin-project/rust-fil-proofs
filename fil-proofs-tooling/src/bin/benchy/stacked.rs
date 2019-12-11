@@ -138,8 +138,9 @@ where
         let replica_id = H::Domain::random(rng);
         let sp = stacked::SetupParams {
             nodes,
-            degree: BASE_DEGREE,
-            expansion_degree: EXP_DEGREE,
+            window_drg_degree: BASE_DEGREE,
+            window_expansion_degree: EXP_DEGREE,
+            wrapper_expansion_degree: EXP_DEGREE,
             seed: new_seed(),
             config: config.clone(),
             window_size_nodes: *window_size_nodes,
