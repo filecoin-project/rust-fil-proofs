@@ -329,7 +329,11 @@ fn augment_with_op_measurements(mut _report: &mut Report) {}
 fn augment_with_op_measurements(mut report: &mut Report) {
     // drop the tx side of the channel, causing the iterator to yield None
     // see also: https://doc.rust-lang.org/src/std/sync/mpsc/mod.rs.html#368
-    *OP_MEASUREMENTS.0.lock().expect("failed to acquire mutex") = None;
+    OP_MEASUREMENTS
+        .0
+        .lock()
+        .expect("failed to acquire mutex")
+        .take();
 
     let measurements = OP_MEASUREMENTS
         .1
