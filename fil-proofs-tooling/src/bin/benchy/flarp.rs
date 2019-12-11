@@ -16,9 +16,8 @@ use crate::shared::{
     create_replicas, prove_replicas, CommitReplicaOutput, PreCommitReplicaOutput, CHALLENGE_COUNT,
     PROVER_ID, RANDOMNESS,
 };
-use std::path::Path;
 
-#[derive(Default, Debug, Serialize)]
+#[derive(Default, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct FlarpInputs {
     //    window_size_mib: usize,
@@ -221,7 +220,7 @@ pub fn run(inputs: FlarpInputs) -> anyhow::Result<()> {
     //        "generated PoSt was invalid"
     //    );
 
-    let mut outputs = Outputs::default();
+    let mut outputs = FlarpOutputs::default();
     outputs.porep_proof_gen_cpu_time_ms = seal_commit.measurement.cpu_time.as_millis() as u64;
     outputs.porep_proof_gen_wall_time_ms = seal_commit.measurement.wall_time.as_millis() as u64;
     outputs.encoding_wall_time_ms = encoding_wall_time_ms;

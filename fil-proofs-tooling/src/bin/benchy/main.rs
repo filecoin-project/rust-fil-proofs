@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use crate::flarp::FlarpInputs;
 use clap::{value_t, App, Arg, SubCommand};
 use std::io::stdin;
@@ -189,7 +187,7 @@ fn main() {
         ("hash-constraints", Some(_m)) => {
             hash_fns::run().expect("hash-constraints failed");
         }
-        ("flarp", Some(m)) => {
+        ("flarp", Some(_)) => {
             let inputs: FlarpInputs = serde_json::from_reader(stdin())
                 .expect("failed to deserialize stdin to FlarpInputs");
 
