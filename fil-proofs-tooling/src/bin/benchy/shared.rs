@@ -56,17 +56,17 @@ pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> (NamedTempFile, PieceIn
 }
 
 pub fn create_replicas(
-    sector_size_bytes: usize,
+    sector_size: SectorSize,
     qty_sectors: usize,
 ) -> (
     PoRepConfig,
     std::collections::BTreeMap<SectorId, PreCommitReplicaOutput>,
 ) {
     let sector_size_unpadded_bytes_ammount =
-        UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size_bytes as u64));
+        UnpaddedBytesAmount::from(PaddedBytesAmount::from(sector_size));
 
     let porep_config = PoRepConfig {
-        sector_size: SectorSize(sector_size_bytes as u64),
+        sector_size,
         partitions: DEFAULT_POREP_PROOF_PARTITIONS,
     };
 
@@ -89,7 +89,7 @@ pub fn create_replicas(
             .expect("file name is not a UTF-8 string");
 
         let (mut piece_file, piece_info) = create_piece(UnpaddedBytesAmount::from(
-            PaddedBytesAmount(sector_size_bytes as u64),
+            PaddedBytesAmount::from(sector_size),
         ));
 
         add_piece(

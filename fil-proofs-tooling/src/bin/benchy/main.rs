@@ -1,4 +1,8 @@
+use std::path::PathBuf;
+
+use crate::flarp::FlarpInputs;
 use clap::{value_t, App, Arg, SubCommand};
+use std::io::stdin;
 
 mod election_post;
 mod flarp;
@@ -116,13 +120,28 @@ fn main() {
     let hash_cmd = SubCommand::with_name("hash-constraints")
         .about("Benchmark hash function inside of a circuit");
 
-    let flarp_cmd = SubCommand::with_name("flarp").about("Benchmark flarp").arg(
-        Arg::with_name("size")
-            .long("size")
-            .required(true)
-            .help("The data size in KiB")
-            .takes_value(true),
-    );
+    /*
+
+    window sizes
+    post challenge count
+    post challenged nodes
+
+    */
+
+    let flarp_cmd = SubCommand::with_name("flarp")
+        .about("Benchmark flarp")
+        .arg(
+            Arg::with_name("skip-seal-proof")
+                .long("skip-seal-proof")
+                .takes_value(false)
+                .help("skip generation (and verification) of seal proof"),
+        )
+        .arg(
+            Arg::with_name("skip-post-proof")
+                .long("skip-post-proof")
+                .takes_value(false)
+                .help("skip generation (and verification) of PoSt proof"),
+        );
 
     let matches = App::new("benchy")
         .version("0.1")
@@ -171,10 +190,10 @@ fn main() {
             hash_fns::run().expect("hash-constraints failed");
         }
         ("flarp", Some(m)) => {
-            let sector_size_kibs = value_t!(m, "size", usize)
-                .expect("could not convert `size` CLI argument to `usize`");
-            let sector_size = sector_size_kibs * 1024;
-            flarp::run(sector_size).expect("flarp test failed");
+            let inputs: FlarpInputs = serde_json::from_reader(stdin())
+                .expect("failed to deserialize stdin to FlarpInputs");
+
+            flarp::run(inputs).expect("flarp test failed");
         }
         _ => panic!("carnation"),
     }
