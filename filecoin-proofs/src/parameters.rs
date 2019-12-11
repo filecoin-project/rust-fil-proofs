@@ -30,15 +30,10 @@ pub fn public_params(
 }
 
 pub fn window_size_nodes_for_sector_bytes(sector_size: PaddedBytesAmount) -> Result<usize> {
-    use crate::constants::*;
-
-    match u64::from(sector_size) {
-        SECTOR_SIZE_ONE_KIB => Ok(WINDOW_SIZE_NODES_ONE_KIB),
-        SECTOR_SIZE_16_MIB => Ok(WINDOW_SIZE_NODES_16_MIB),
-        SECTOR_SIZE_256_MIB => Ok(WINDOW_SIZE_NODES_256_MIB),
-        SECTOR_SIZE_1_GIB => Ok(WINDOW_SIZE_NODES_1_GIB),
-        SECTOR_SIZE_32_GIB => Ok(WINDOW_SIZE_NODES_32_GIB),
-        _ => Err(anyhow!("Unknown sector size {:?}", sector_size)),
+    use crate::constants::DEFAULT_WINDOWS;
+    match DEFAULT_WINDOWS.read().unwrap().get(&u64::from(sector_size)) {
+        Some(info) => Ok(info.window_size_nodes()),
+        None => Err(anyhow!("Unknown sector size {:?}", sector_size)),
     }
 }
 
