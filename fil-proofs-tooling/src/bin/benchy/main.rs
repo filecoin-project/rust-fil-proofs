@@ -1,6 +1,6 @@
 use crate::flarp::FlarpInputs;
 use clap::{value_t, App, Arg, SubCommand};
-use std::io::stdin;
+use std::io::{stdin, stdout};
 
 mod election_post;
 mod flarp;
@@ -187,11 +187,18 @@ fn main() {
         ("hash-constraints", Some(_m)) => {
             hash_fns::run().expect("hash-constraints failed");
         }
-        ("flarp", Some(_)) => {
+        ("flarp", Some(m)) => {
             let inputs: FlarpInputs = serde_json::from_reader(stdin())
                 .expect("failed to deserialize stdin to FlarpInputs");
 
-            flarp::run(inputs).expect("flarp test failed");
+            let outputs = flarp::run(
+                inputs,
+                m.is_present("skip-seal-proof"),
+                m.is_present("skip-post-proof"),
+            );
+
+            serde_json::to_writer(stdout(), &outputs)
+                .expect("failed to write FlarpOutput to stdout")
         }
         _ => panic!("carnation"),
     }
