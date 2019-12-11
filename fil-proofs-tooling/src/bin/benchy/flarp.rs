@@ -1,13 +1,13 @@
 use std::io::{stdout, Seek, SeekFrom, Write};
 
-use fil_proofs_tooling::{measure, Metadata};
+use fil_proofs_tooling::{measure, FuncMeasurement, Metadata};
 use filecoin_proofs::constants::DEFAULT_POREP_PROOF_PARTITIONS;
 use filecoin_proofs::types::{
     PaddedBytesAmount, PoRepConfig, PoStConfig, SectorSize, UnpaddedBytesAmount,
 };
 use filecoin_proofs::{
-    add_piece, generate_candidates, generate_piece_commitment, seal_pre_commit, PrivateReplicaInfo,
-    PublicReplicaInfo,
+    add_piece, generate_candidates, generate_piece_commitment, seal_pre_commit, PieceInfo,
+    PrivateReplicaInfo, PublicReplicaInfo, SealCommitOutput, SealPreCommitOutput,
 };
 use serde::Serialize;
 use storage_proofs::sector::SectorId;
@@ -111,96 +111,137 @@ fn augment_with_op_measurements(mut report: &mut Report) {
     }
 }
 
-pub fn run(sector_size_bytes: usize) -> anyhow::Result<()> {
-    let sector_id = SectorId::from(SECTOR_ID);
+struct CreateReplicaOutput {
+    seal_pre_commit: FuncMeasurement<SealPreCommitOutput>,
+    private_replica_info: PrivateReplicaInfo,
+    public_replica_info: PublicReplicaInfo,
+}
 
-    let sector_size_unpadded_bytes_ammount =
-        UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size_bytes as u64));
-
-    // Create files for the staged and sealed sectors.
-    let mut staged_file =
-        NamedTempFile::new().expect("could not create temp file for staged sector");
-
-    let sealed_file = NamedTempFile::new().expect("could not create temp file for sealed sector");
-
-    let sealed_path_string = sealed_file
-        .path()
-        .to_str()
-        .expect("file name is not a UTF-8 string")
-        .to_string();
-
-    // Generate the data from which we will create a replica, we will then prove the continued
-    // storage of that replica using the PoSt.
-    let piece_bytes: Vec<u8> = (0..usize::from(sector_size_unpadded_bytes_ammount))
+fn create_piece(piece_bytes: UnpaddedBytesAmount) -> (NamedTempFile, PieceInfo) {
+    let buf: Vec<u8> = (0..usize::from(piece_bytes))
         .map(|_| rand::random::<u8>())
         .collect();
 
-    let mut piece_file = NamedTempFile::new()?;
-    piece_file.write_all(&piece_bytes)?;
-    piece_file.as_file_mut().sync_all()?;
-    piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
+    let mut file = NamedTempFile::new().expect("failed to create piece file");
 
-    let piece_info =
-        generate_piece_commitment(piece_file.as_file_mut(), sector_size_unpadded_bytes_ammount)?;
-    piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
+    file.write_all(&buf)
+        .expect("failed to write buffer to piece file");
 
-    add_piece(
-        &mut piece_file,
-        &mut staged_file,
-        sector_size_unpadded_bytes_ammount,
-        &[],
-    )?;
+    file.as_file_mut()
+        .sync_all()
+        .expect("failed to sync piece file");
 
-    let piece_infos = vec![piece_info];
+    file.as_file_mut()
+        .seek(SeekFrom::Start(0))
+        .expect("failed to seek to beginning of piece file");
 
-    // Replicate the staged sector, write the replica file to `sealed_path`.
+    let info = generate_piece_commitment(file.as_file_mut(), piece_bytes)
+        .expect("failed to generate piece commitment");
+
+    file.as_file_mut()
+        .seek(SeekFrom::Start(0))
+        .expect("failed to seek to beginning of piece file");
+
+    (file, info)
+}
+
+fn create_replicas(
+    sector_size_bytes: usize,
+    qty_sectors: usize,
+) -> (
+    PoRepConfig,
+    std::collections::BTreeMap<SectorId, CreateReplicaOutput>,
+) {
+    let sector_size_unpadded_bytes_ammount =
+        UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size_bytes as u64));
+
     let porep_config = PoRepConfig {
         sector_size: SectorSize(sector_size_bytes as u64),
         partitions: DEFAULT_POREP_PROOF_PARTITIONS,
     };
-    let cache_dir = tempfile::tempdir().unwrap();
 
-    let seal_pre_commit_output = measure(|| {
-        seal_pre_commit(
-            porep_config,
-            cache_dir.path(),
-            staged_file.path(),
-            sealed_file.path(),
-            PROVER_ID,
-            sector_id,
-            TICKET_BYTES,
-            &piece_infos,
+    let mut out: std::collections::BTreeMap<SectorId, CreateReplicaOutput> = Default::default();
+
+    for _ in 0..qty_sectors {
+        let sector_id = SectorId::from(rand::random::<u64>());
+
+        let cache_dir = tempfile::tempdir().expect("failed to create cache dir");
+
+        let mut staged_file =
+            NamedTempFile::new().expect("could not create temp file for staged sector");
+
+        let sealed_file =
+            NamedTempFile::new().expect("could not create temp file for sealed sector");
+
+        let sealed_path_string = sealed_file
+            .path()
+            .to_str()
+            .expect("file name is not a UTF-8 string");
+
+        let (mut piece_file, piece_info) = create_piece(UnpaddedBytesAmount::from(
+            PaddedBytesAmount(sector_size_bytes as u64),
+        ));
+
+        add_piece(
+            &mut piece_file,
+            &mut staged_file,
+            sector_size_unpadded_bytes_ammount,
+            &[],
         )
-    })?;
+        .expect("failed to add piece to staged sector");
 
-    let comm_r = seal_pre_commit_output.return_value.comm_r;
+        let seal_pre_commit_output = measure(|| {
+            seal_pre_commit(
+                porep_config,
+                cache_dir.path(),
+                staged_file.path(),
+                sealed_file.path(),
+                PROVER_ID,
+                sector_id,
+                TICKET_BYTES,
+                &vec![piece_info],
+            )
+        })
+        .expect("seal_pre_commit produced an error");
 
-    //    let _seal_commit_output = measure(|| {
-    //        seal_commit(
-    //            porep_config,
-    //            cache_dir.path(),
-    //            PROVER_ID,
-    //            sector_id,
-    //            TICKET_BYTES,
-    //            SEED_BYTES,
-    //            seal_pre_commit_output.return_value,
-    //            &piece_infos,
-    //        )
-    //    })?;
+        let priv_info = PrivateReplicaInfo::new(
+            sealed_path_string.to_string(),
+            seal_pre_commit_output.return_value.comm_r,
+            cache_dir.into_path(),
+        )
+        .expect("failed to create PrivateReplicaInfo");
 
-    // Store the replica's private and publicly facing info for proving and verifying respectively.
-    let mut pub_replica_info: std::collections::BTreeMap<SectorId, PublicReplicaInfo> =
-        std::collections::BTreeMap::new();
+        let pub_info = PublicReplicaInfo::new(seal_pre_commit_output.return_value.comm_r)
+            .expect("failed to create PublicReplicaInfo");
 
-    let mut priv_replica_info: std::collections::BTreeMap<SectorId, PrivateReplicaInfo> =
-        std::collections::BTreeMap::new();
+        out.insert(
+            sector_id,
+            CreateReplicaOutput {
+                seal_pre_commit: seal_pre_commit_output,
+                private_replica_info: priv_info,
+                public_replica_info: pub_info,
+            },
+        );
+    }
 
-    pub_replica_info.insert(sector_id, PublicReplicaInfo::new(comm_r)?);
+    (porep_config, out)
+}
 
-    priv_replica_info.insert(
-        sector_id,
-        PrivateReplicaInfo::new(sealed_path_string, comm_r, cache_dir.into_path())?,
-    );
+pub fn run(sector_size_bytes: usize) -> anyhow::Result<()> {
+    let (cfg, mut created) = create_replicas(sector_size_bytes, 1);
+
+    let sector_id: SectorId = created
+        .keys()
+        .nth(0)
+        .expect("create_replicas produced no replicas")
+        .clone();
+
+    let replica_info: CreateReplicaOutput = created
+        .remove(&sector_id)
+        .expect("failed to get replica from map");
+
+    let encoding_wall_time_ms = replica_info.seal_pre_commit.wall_time.as_millis() as u64;
+    let encoding_cpu_time_ms = replica_info.seal_pre_commit.cpu_time.as_millis() as u64;
 
     // Measure PoSt generation and verification.
     let post_config = PoStConfig {
@@ -212,7 +253,9 @@ pub fn run(sector_size_bytes: usize) -> anyhow::Result<()> {
             post_config,
             &CHALLENGE_SEED,
             CHALLENGE_COUNT,
-            &priv_replica_info,
+            &vec![(sector_id, replica_info.private_replica_info)]
+                .into_iter()
+                .collect(),
             PROVER_ID,
         )
     })
@@ -262,8 +305,8 @@ pub fn run(sector_size_bytes: usize) -> anyhow::Result<()> {
             sector_size_bytes: sector_size_bytes as u64,
         },
         outputs: Outputs {
-            encoding_wall_time_ms: seal_pre_commit_output.wall_time.as_millis() as u64,
-            encoding_cpu_time_ms: seal_pre_commit_output.cpu_time.as_millis() as u64,
+            encoding_wall_time_ms,
+            encoding_cpu_time_ms,
             generate_tree_c_cpu_time_ms: 0,
             generate_tree_c_wall_time_ms: 0,
             tree_r_last_cpu_time_ms: 0,
