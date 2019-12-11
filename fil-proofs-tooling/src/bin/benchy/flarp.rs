@@ -8,8 +8,8 @@ use filecoin_proofs::types::{
     PaddedBytesAmount, PoRepConfig, PoStConfig, SectorSize, UnpaddedBytesAmount,
 };
 use filecoin_proofs::{
-    add_piece, generate_candidates, generate_piece_commitment, seal_pre_commit, PieceInfo,
-    PrivateReplicaInfo, PublicReplicaInfo, SealCommitOutput, SealPreCommitOutput,
+    add_piece, generate_candidates, generate_piece_commitment, seal_commit, seal_pre_commit,
+    PieceInfo, PrivateReplicaInfo, PublicReplicaInfo, SealCommitOutput, SealPreCommitOutput,
 };
 use serde::Serialize;
 use storage_proofs::sector::SectorId;
@@ -21,16 +21,8 @@ use storage_proofs::measurements::Operation;
 use storage_proofs::measurements::OP_MEASUREMENTS;
 
 const CHALLENGE_COUNT: u64 = 1;
-
-// The seed for the rng used to generate which sectors to challenge.
-const CHALLENGE_SEED: [u8; 32] = [0; 32];
-
 const PROVER_ID: [u8; 32] = [0; 32];
-
-const SECTOR_ID: u64 = 42;
-
-//const SEED_BYTES: [u8; 32] = [0u8; 32];
-
+const RANDOMNESS: [u8; 32] = [0; 32];
 const TICKET_BYTES: [u8; 32] = [1; 32];
 
 #[derive(Serialize)]
@@ -46,6 +38,8 @@ struct Outputs {
     encoding_wall_time_ms: u64,
     generate_tree_c_cpu_time_ms: u64,
     generate_tree_c_wall_time_ms: u64,
+    porep_proof_gen_cpu_time_ms: u64,
+    porep_proof_gen_wall_time_ms: u64,
     tree_r_last_cpu_time_ms: u64,
     tree_r_last_wall_time_ms: u64,
     comm_d_cpu_time_ms: u64,
@@ -114,10 +108,15 @@ fn augment_with_op_measurements(mut report: &mut Report) {
     }
 }
 
-struct CreateReplicaOutput {
-    seal_pre_commit: FuncMeasurement<SealPreCommitOutput>,
+struct PreCommitReplicaOutput {
+    piece_info: Vec<PieceInfo>,
     private_replica_info: PrivateReplicaInfo,
     public_replica_info: PublicReplicaInfo,
+    measurement: FuncMeasurement<SealPreCommitOutput>,
+}
+
+struct CommitReplicaOutput {
+    measurement: FuncMeasurement<SealCommitOutput>,
 }
 
 fn create_piece(piece_bytes: UnpaddedBytesAmount) -> (NamedTempFile, PieceInfo) {
@@ -153,7 +152,7 @@ fn create_replicas(
     qty_sectors: usize,
 ) -> (
     PoRepConfig,
-    std::collections::BTreeMap<SectorId, CreateReplicaOutput>,
+    std::collections::BTreeMap<SectorId, PreCommitReplicaOutput>,
 ) {
     let sector_size_unpadded_bytes_ammount =
         UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size_bytes as u64));
@@ -163,7 +162,7 @@ fn create_replicas(
         partitions: DEFAULT_POREP_PROOF_PARTITIONS,
     };
 
-    let mut out: std::collections::BTreeMap<SectorId, CreateReplicaOutput> = Default::default();
+    let mut out: std::collections::BTreeMap<SectorId, PreCommitReplicaOutput> = Default::default();
 
     for _ in 0..qty_sectors {
         let sector_id = SectorId::from(rand::random::<u64>());
@@ -202,7 +201,7 @@ fn create_replicas(
                 PROVER_ID,
                 sector_id,
                 TICKET_BYTES,
-                &vec![piece_info],
+                &vec![piece_info.clone()],
             )
         })
         .expect("seal_pre_commit produced an error");
@@ -219,8 +218,9 @@ fn create_replicas(
 
         out.insert(
             sector_id,
-            CreateReplicaOutput {
-                seal_pre_commit: seal_pre_commit_output,
+            PreCommitReplicaOutput {
+                piece_info: vec![piece_info],
+                measurement: seal_pre_commit_output,
                 private_replica_info: priv_info,
                 public_replica_info: pub_info,
             },
@@ -230,8 +230,37 @@ fn create_replicas(
     (porep_config, out)
 }
 
+fn prove_replicas(
+    cfg: PoRepConfig,
+    input: &std::collections::BTreeMap<SectorId, PreCommitReplicaOutput>,
+) -> std::collections::BTreeMap<SectorId, CommitReplicaOutput> {
+    let mut out: std::collections::BTreeMap<SectorId, CommitReplicaOutput> = Default::default();
+
+    for (k, v) in input.iter() {
+        let m = measure(|| {
+            seal_commit(
+                cfg,
+                v.private_replica_info.cache_dir_path(),
+                PROVER_ID,
+                *k,
+                TICKET_BYTES,
+                RANDOMNESS,
+                v.measurement.return_value.clone(),
+                &v.piece_info,
+            )
+        })
+        .expect("failed to prove sector");
+
+        out.insert(*k, CommitReplicaOutput { measurement: m });
+    }
+
+    out
+}
+
 pub fn run(sector_size_bytes: usize) -> anyhow::Result<()> {
     let (cfg, mut created) = create_replicas(sector_size_bytes, 1);
+
+    let mut proved = prove_replicas(cfg, &created);
 
     let sector_id: SectorId = created
         .keys()
@@ -239,12 +268,16 @@ pub fn run(sector_size_bytes: usize) -> anyhow::Result<()> {
         .expect("create_replicas produced no replicas")
         .clone();
 
-    let replica_info: CreateReplicaOutput = created
+    let replica_info: PreCommitReplicaOutput = created
         .remove(&sector_id)
         .expect("failed to get replica from map");
 
-    let encoding_wall_time_ms = replica_info.seal_pre_commit.wall_time.as_millis() as u64;
-    let encoding_cpu_time_ms = replica_info.seal_pre_commit.cpu_time.as_millis() as u64;
+    let seal_commit: CommitReplicaOutput = proved
+        .remove(&sector_id)
+        .expect("failed to get seal commit from map");
+
+    let encoding_wall_time_ms = replica_info.measurement.wall_time.as_millis() as u64;
+    let encoding_cpu_time_ms = replica_info.measurement.cpu_time.as_millis() as u64;
 
     // Measure PoSt generation and verification.
     let post_config = PoStConfig {
@@ -256,7 +289,7 @@ pub fn run(sector_size_bytes: usize) -> anyhow::Result<()> {
     let _gen_candidates_measurement = measure(|| {
         generate_candidates(
             post_config,
-            &CHALLENGE_SEED,
+            &RANDOMNESS,
             CHALLENGE_COUNT,
             &vec![(sector_id, replica_info.private_replica_info)]
                 .into_iter()
@@ -318,6 +351,8 @@ pub fn run(sector_size_bytes: usize) -> anyhow::Result<()> {
             tree_r_last_wall_time_ms: 0,
             comm_d_cpu_time_ms: 0,
             comm_d_wall_time_ms: 0,
+            porep_proof_gen_cpu_time_ms: seal_commit.measurement.cpu_time.as_millis() as u64,
+            porep_proof_gen_wall_time_ms: seal_commit.measurement.wall_time.as_millis() as u64,
             encode_window_time_all_cpu_time_ms: 0,
             encode_window_time_all_wall_time_ms: 0,
             window_comm_leaves_time_cpu_time_ms: 0,

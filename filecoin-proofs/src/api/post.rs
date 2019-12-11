@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::prelude::*;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, ensure, Context, Result};
 use bincode::deserialize;
@@ -74,6 +74,10 @@ impl PrivateReplicaInfo {
             aux,
             cache_dir,
         })
+    }
+
+    pub fn cache_dir_path(&self) -> &Path {
+        self.cache_dir.as_path()
     }
 
     pub fn safe_comm_r(&self) -> Result<<DefaultTreeHasher as Hasher>::Domain> {
