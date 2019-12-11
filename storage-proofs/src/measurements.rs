@@ -1,21 +1,21 @@
-#[cfg(feature = "metrics")]
+#[cfg(feature = "measurements")]
 use std::sync::mpsc::{channel, Receiver, Sender};
-#[cfg(feature = "metrics")]
+#[cfg(feature = "measurements")]
 use std::sync::Mutex;
-#[cfg(not(feature = "metrics"))]
+#[cfg(not(feature = "measurements"))]
 use std::time::Duration;
-#[cfg(feature = "metrics")]
+#[cfg(feature = "measurements")]
 use std::time::{Duration, Instant};
 
-#[cfg(feature = "metrics")]
+#[cfg(feature = "measurements")]
 use cpu_time::ProcessTime;
 
 use serde::Serialize;
 
-#[cfg(feature = "metrics")]
+#[cfg(feature = "measurements")]
 use lazy_static::lazy_static;
 
-#[cfg(feature = "metrics")]
+#[cfg(feature = "measurements")]
 lazy_static! {
     pub static ref OP_MEASUREMENTS: (
         Mutex<Option<Sender<OpMeasurement>>>,
@@ -46,7 +46,7 @@ pub enum Operation {
     PorepCommitTime,
 }
 
-#[cfg(feature = "metrics")]
+#[cfg(feature = "measurements")]
 pub fn measure_op<T, F>(op: Operation, f: F) -> anyhow::Result<T>
 where
     F: FnOnce() -> anyhow::Result<T>,
@@ -74,7 +74,7 @@ where
     Ok(x)
 }
 
-#[cfg(not(feature = "metrics"))]
+#[cfg(not(feature = "measurements"))]
 pub fn measure_op<T, F>(_: Operation, f: F) -> anyhow::Result<T>
 where
     F: FnOnce() -> anyhow::Result<T>,

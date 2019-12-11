@@ -6,12 +6,17 @@ use filecoin_proofs::types::{
     PaddedBytesAmount, PoRepConfig, PoStConfig, SectorSize, UnpaddedBytesAmount,
 };
 use filecoin_proofs::{
-    add_piece, generate_candidates, generate_piece_commitment, generate_post, seal_commit,
-    seal_pre_commit, verify_post, PrivateReplicaInfo, PublicReplicaInfo,
+    add_piece, generate_candidates, generate_piece_commitment, seal_pre_commit, PrivateReplicaInfo,
+    PublicReplicaInfo,
 };
 use serde::Serialize;
 use storage_proofs::sector::SectorId;
 use tempfile::NamedTempFile;
+
+#[cfg(feature = "measurements")]
+use storage_proofs::measurements::Operation;
+#[cfg(feature = "measurements")]
+use storage_proofs::measurements::OP_MEASUREMENTS;
 
 const CHALLENGE_COUNT: u64 = 1;
 
@@ -22,7 +27,7 @@ const PROVER_ID: [u8; 32] = [0; 32];
 
 const SECTOR_ID: u64 = 42;
 
-const SEED_BYTES: [u8; 32] = [0u8; 32];
+//const SEED_BYTES: [u8; 32] = [0u8; 32];
 
 const TICKET_BYTES: [u8; 32] = [1; 32];
 
@@ -35,8 +40,12 @@ struct Inputs {
 #[derive(Serialize)]
 #[serde(rename_all = "kebab-case")]
 struct Outputs {
-    encoding_wall_time_ms: u64,
     encoding_cpu_time_ms: u64,
+    encoding_wall_time_ms: u64,
+    generate_tree_c_cpu_time_ms: u64,
+    generate_tree_c_wall_time_ms: u64,
+    tree_r_last_cpu_time_ms: u64,
+    tree_r_last_wall_time_ms: u64,
 }
 
 #[derive(Serialize)]
@@ -44,6 +53,38 @@ struct Outputs {
 struct Report {
     inputs: Inputs,
     outputs: Outputs,
+}
+
+#[cfg(not(feature = "measurements"))]
+fn augment_with_op_measurements(mut _report: &mut Report) {}
+
+#[cfg(feature = "measurements")]
+fn augment_with_op_measurements(mut report: &mut Report) {
+    // drop the tx side of the channel, causing the iterator to yield None
+    // see also: https://doc.rust-lang.org/src/std/sync/mpsc/mod.rs.html#368
+    OP_MEASUREMENTS
+        .0
+        .lock()
+        .expect("failed to acquire mutex")
+        .take();
+
+    let measurements = OP_MEASUREMENTS
+        .1
+        .lock()
+        .expect("failed to acquire lock on rx side of perf channel");
+
+    for m in measurements.iter() {
+        match m.op {
+            Operation::GenerateTreeC => {
+                report.outputs.generate_tree_c_cpu_time_ms = m.cpu_time.as_millis() as u64;
+                report.outputs.generate_tree_c_wall_time_ms = m.cpu_time.as_millis() as u64;
+            }
+            Operation::GenerateTreeRLast => {
+                report.outputs.tree_r_last_cpu_time_ms = m.cpu_time.as_millis() as u64;
+                report.outputs.tree_r_last_wall_time_ms = m.cpu_time.as_millis() as u64;
+            }
+        }
+    }
 }
 
 pub fn run(sector_size_bytes: usize) -> anyhow::Result<()> {
@@ -110,18 +151,18 @@ pub fn run(sector_size_bytes: usize) -> anyhow::Result<()> {
 
     let comm_r = seal_pre_commit_output.return_value.comm_r;
 
-    let _seal_commit_output = measure(|| {
-        seal_commit(
-            porep_config,
-            cache_dir.path(),
-            PROVER_ID,
-            sector_id,
-            TICKET_BYTES,
-            SEED_BYTES,
-            seal_pre_commit_output.return_value,
-            &piece_infos,
-        )
-    })?;
+    //    let _seal_commit_output = measure(|| {
+    //        seal_commit(
+    //            porep_config,
+    //            cache_dir.path(),
+    //            PROVER_ID,
+    //            sector_id,
+    //            TICKET_BYTES,
+    //            SEED_BYTES,
+    //            seal_pre_commit_output.return_value,
+    //            &piece_infos,
+    //        )
+    //    })?;
 
     // Store the replica's private and publicly facing info for proving and verifying respectively.
     let mut pub_replica_info: std::collections::BTreeMap<SectorId, PublicReplicaInfo> =
@@ -142,7 +183,7 @@ pub fn run(sector_size_bytes: usize) -> anyhow::Result<()> {
         sector_size: SectorSize(sector_size_bytes as u64),
     };
 
-    let gen_candidates_measurement = measure(|| {
+    let _gen_candidates_measurement = measure(|| {
         generate_candidates(
             post_config,
             &CHALLENGE_SEED,
@@ -153,54 +194,60 @@ pub fn run(sector_size_bytes: usize) -> anyhow::Result<()> {
     })
     .expect("failed to generate post candidates");
 
-    let candidates = &gen_candidates_measurement.return_value;
+    //    let candidates = &gen_candidates_measurement.return_value;
+    //
+    //    let gen_post_measurement = measure(|| {
+    //        generate_post(
+    //            post_config,
+    //            &CHALLENGE_SEED,
+    //            &priv_replica_info,
+    //            candidates
+    //                .iter()
+    //                .cloned()
+    //                .map(Into::into)
+    //                .collect::<Vec<_>>(),
+    //            PROVER_ID,
+    //        )
+    //    })
+    //    .expect("failed to generate PoSt");
+    //
+    //    let verify_post_measurement = measure(|| {
+    //        verify_post(
+    //            post_config,
+    //            &CHALLENGE_SEED,
+    //            CHALLENGE_COUNT,
+    //            &gen_post_measurement.return_value,
+    //            &pub_replica_info,
+    //            &candidates
+    //                .iter()
+    //                .cloned()
+    //                .map(Into::into)
+    //                .collect::<Vec<_>>(),
+    //            PROVER_ID,
+    //        )
+    //    })
+    //    .expect("verify_post function returned an error");
+    //
+    //    assert!(
+    //        verify_post_measurement.return_value,
+    //        "generated PoSt was invalid"
+    //    );
 
-    let gen_post_measurement = measure(|| {
-        generate_post(
-            post_config,
-            &CHALLENGE_SEED,
-            &priv_replica_info,
-            candidates
-                .iter()
-                .cloned()
-                .map(Into::into)
-                .collect::<Vec<_>>(),
-            PROVER_ID,
-        )
-    })
-    .expect("failed to generate PoSt");
-
-    let verify_post_measurement = measure(|| {
-        verify_post(
-            post_config,
-            &CHALLENGE_SEED,
-            CHALLENGE_COUNT,
-            &gen_post_measurement.return_value,
-            &pub_replica_info,
-            &candidates
-                .iter()
-                .cloned()
-                .map(Into::into)
-                .collect::<Vec<_>>(),
-            PROVER_ID,
-        )
-    })
-    .expect("verify_post function returned an error");
-
-    assert!(
-        verify_post_measurement.return_value,
-        "generated PoSt was invalid"
-    );
-
-    let report = Report {
+    let mut report = Report {
         inputs: Inputs {
             sector_size_bytes: sector_size_bytes as u64,
         },
         outputs: Outputs {
-            encoding_wall_time_ms: 0,
-            encoding_cpu_time_ms: 0,
+            encoding_wall_time_ms: seal_pre_commit_output.wall_time.as_millis() as u64,
+            encoding_cpu_time_ms: seal_pre_commit_output.cpu_time.as_millis() as u64,
+            generate_tree_c_cpu_time_ms: 0,
+            generate_tree_c_wall_time_ms: 0,
+            tree_r_last_cpu_time_ms: 0,
+            tree_r_last_wall_time_ms: 0,
         },
     };
+
+    augment_with_op_measurements(&mut report);
 
     let wrapped = Metadata::wrap(&report).expect("failed to retrieve metadata");
     serde_json::to_writer(stdout(), &wrapped).expect("cannot write report JSON to stdout");
