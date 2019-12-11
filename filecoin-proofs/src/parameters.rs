@@ -1,13 +1,14 @@
 use std::sync::atomic::Ordering;
 
 use anyhow::{anyhow, ensure, Result};
-use storage_proofs::drgraph::{DefaultTreeHasher, BASE_DEGREE};
+use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::election_post::{self, ElectionPoSt};
 use storage_proofs::proof::ProofScheme;
-use storage_proofs::stacked::{self, LayerChallenges, StackedConfig, StackedDrg, EXP_DEGREE};
+use storage_proofs::stacked::{self, LayerChallenges, StackedConfig, StackedDrg};
 
 use crate::constants::{
-    DefaultPieceHasher, LAYERS, POREP_WINDOW_MINIMUM_CHALLENGES, POREP_WRAPPER_MINIMUM_CHALLENGES,
+    DefaultPieceHasher, BASE_DEGREE, EXP_DEGREE, LAYERS, POREP_WINDOW_MINIMUM_CHALLENGES,
+    POREP_WRAPPER_MINIMUM_CHALLENGES,
 };
 use crate::types::{PaddedBytesAmount, PoStConfig};
 
@@ -89,8 +90,8 @@ pub fn setup_params(
     let nodes = sector_bytes / 32;
     Ok(stacked::SetupParams {
         nodes,
-        degree: BASE_DEGREE,
-        expansion_degree: EXP_DEGREE,
+        degree: BASE_DEGREE.load(Ordering::Relaxed),
+        expansion_degree: EXP_DEGREE.load(Ordering::Relaxed),
         seed: DRG_SEED,
         config,
         window_size_nodes,

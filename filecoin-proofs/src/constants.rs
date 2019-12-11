@@ -22,6 +22,9 @@ lazy_static! {
     // 5 challenges per partition
     pub static ref POREP_WRAPPER_MINIMUM_CHALLENGES: AtomicUsize = AtomicUsize::new(50);
 
+    pub static ref BASE_DEGREE: AtomicUsize = AtomicUsize::new(storage_proofs::drgraph::BASE_DEGREE);
+    pub static ref EXP_DEGREE: AtomicUsize = AtomicUsize::new(storage_proofs::stacked::EXP_DEGREE);
+
     pub static ref DEFAULT_WINDOWS: RwLock<HashMap<u64, SectorInfo>> = RwLock::new({
         let mut m = HashMap::new();
         m.insert(
