@@ -83,6 +83,15 @@ fn kdf_benchmark(c: &mut Criterion) {
                 graph,
             } = pregenerate_data::<PedersenHasher>(*degree);
             b.iter(|| black_box(graph.create_key(&replica_id, *degree, &parents, &mut data, None)))
+        })
+        .with_function("sha256", |b, degree| {
+            let Pregenerated {
+                mut data,
+                parents,
+                replica_id,
+                graph,
+            } = pregenerate_data::<Sha256Hasher>(*degree);
+            b.iter(|| black_box(graph.create_key(&replica_id, *degree, &parents, &mut data, None)))
         }),
     );
 }

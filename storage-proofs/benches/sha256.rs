@@ -66,7 +66,7 @@ fn sha256_circuit_benchmark(c: &mut Criterion) {
     )
     .unwrap();
 
-    let params = vec![32];
+    let params = vec![32, 64];
 
     c.bench(
         "hash-sha256-circuit",
