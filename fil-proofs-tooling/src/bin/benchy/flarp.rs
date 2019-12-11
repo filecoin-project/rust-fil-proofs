@@ -1,12 +1,17 @@
-use serde::{Deserialize, Serialize};
-
+use bellperson::Circuit;
 use fil_proofs_tooling::measure;
 use filecoin_proofs::generate_candidates;
 use filecoin_proofs::types::{PoStConfig, SectorSize};
+use paired::bls12_381::Bls12;
+use serde::{Deserialize, Serialize};
+use storage_proofs::circuit::bench::BenchCS;
+use storage_proofs::compound_proof::CompoundProof;
+use storage_proofs::hasher::{PedersenHasher, Sha256Hasher};
 #[cfg(feature = "measurements")]
 use storage_proofs::measurements::Operation;
 #[cfg(feature = "measurements")]
 use storage_proofs::measurements::OP_MEASUREMENTS;
+use storage_proofs::proof::ProofScheme;
 use storage_proofs::sector::SectorId;
 
 use crate::shared::{
@@ -244,4 +249,89 @@ pub fn run(inputs: FlarpInputs, skip_seal_proof: bool, skip_post_proof: bool) ->
     augment_with_op_measurements(&mut outputs);
 
     outputs
+}
+
+#[derive(Debug, Serialize)]
+struct CircuitOutputs {
+    // porep_snark_partition_constraints
+    pub porep_constraints: usize,
+    // post_snark_constraints
+    pub post_constraints: usize,
+    // replica_inclusion (constraints: single merkle path pedersen)
+    // data_inclusion (constraints: sha merklepath)
+    // window_inclusion (constraints: merkle inclusion path in comm_c)
+    // ticket_constraints - (skip)
+    // replica_inclusion (constraints: single merkle path pedersen)
+    // column_leaf_hash_constraints - (64 byte * stacked layers) pedersen_md
+    // kdf_constraints
+    // merkle_tree_datahash_constraints - sha2 constraints 64
+    // merkle_tree_hash_constraints - 64 byte pedersen
+    // ticket_proofs (constraints: pedersen_md inside the election post)
+}
+
+fn run_measure_circuits(i: &FlarpInputs) -> CircuitOutputs {
+    let porep_constraints = measure_porep_circuit(i);
+    let post_constraints = measure_post_circuit(i);
+
+    CircuitOutputs {
+        porep_constraints,
+        post_constraints,
+    }
+}
+
+fn measure_porep_circuit(i: &FlarpInputs) -> usize {
+    use storage_proofs::circuit::stacked::StackedCompound;
+    use storage_proofs::drgraph::new_seed;
+    use storage_proofs::stacked::{SetupParams, StackedConfig, StackedDrg};
+
+    // TODO: pull from inputs
+    let layers = 4;
+    let window_challenge_count = 50;
+    let wrapper_challenge_count = 50;
+    let degree = 6;
+    let expansion_degree = 8;
+    let window_size_nodes = 512 / 32;
+    let nodes = i.sector_size_bytes / 32;
+
+    let config =
+        StackedConfig::new(layers, window_challenge_count, wrapper_challenge_count).unwrap();
+
+    let sp = SetupParams {
+        nodes,
+        degree,
+        expansion_degree,
+        seed: new_seed(),
+        config,
+        window_size_nodes,
+    };
+
+    let pp = StackedDrg::<PedersenHasher, Sha256Hasher>::setup(&sp).unwrap();
+
+    let mut cs = BenchCS::<Bls12>::new();
+    <StackedCompound as CompoundProof<_, StackedDrg<PedersenHasher, Sha256Hasher>, _>>::blank_circuit(&pp)
+        .synthesize(&mut cs).unwrap();
+
+    cs.num_constraints()
+}
+
+fn measure_post_circuit(i: &FlarpInputs) -> usize {
+    use filecoin_proofs::parameters::post_setup_params;
+    use storage_proofs::circuit::election_post::ElectionPoStCompound;
+    use storage_proofs::election_post;
+
+    let post_config = PoStConfig {
+        sector_size: SectorSize(i.sector_size_bytes as u64),
+        challenge_count: 40,
+        challenged_nodes: 1,
+    };
+
+    let vanilla_params = post_setup_params(post_config);
+    let pp = election_post::ElectionPoSt::<PedersenHasher>::setup(&vanilla_params).unwrap();
+
+    let mut cs = BenchCS::<Bls12>::new();
+    ElectionPoStCompound::<PedersenHasher>::blank_circuit(&pp)
+        .synthesize(&mut cs)
+        .unwrap();
+
+    cs.num_constraints()
 }
