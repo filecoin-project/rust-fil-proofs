@@ -118,14 +118,6 @@ fn main() {
     let hash_cmd = SubCommand::with_name("hash-constraints")
         .about("Benchmark hash function inside of a circuit");
 
-    /*
-
-    window sizes
-    post challenge count
-    post challenged nodes
-
-    */
-
     let flarp_cmd = SubCommand::with_name("flarp")
         .about("Benchmark flarp")
         .arg(

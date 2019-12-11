@@ -22,20 +22,20 @@ use filecoin_proofs::constants::SectorInfo;
 use std::sync::atomic::Ordering::Relaxed;
 
 /*
+echo '{ "post_challenged_nodes": XXX, "window_size_bytes": XXX, "sector_size_bytes": XXX, "!*wrapping_variant": true, "drg_parents": XXX, "expander_parents": XXX, "graph_name": "Chung", "graph_parents": XXX, "porep_challenges": XXX, "post_challenges": XXX, "proofs_block_fraction": 0.3, "regeneration_fraction": 0.1315051, "stacked_layers": 1.807693, "wrapper_lookup_with_mtree": 78643.2, "wrapper_parents": 100, "wrapper_parents_all": 819200, "construction": "Chung_wrappingVariant" }' > config.json
+
 cat config.json \
-    jq 'def round: . + 0.5 | floor; . | { "post_challenges": .["post_challenges"] | round, "window_size_bytes": .["window_size_bytes"] | round, "sector_size_bytes": .["sector_size_bytes"] | round, "drg_parents": .["drg_parents"] | round, "expander_parents": .["expander_parents"] | round, "graph_name": .["graph_name"] | round, "graph_parents": .["graph_parents"] | round, "porep_challenges": .["porep_challenges"] | round, "stacked_layers": .["stacked_layers"] | round, "wrapper_parents": .["wrapper_parents"] | round, "wrapper_parents_all": .["wrapper_parents_all"] | round }' \
+    | jq 'def round: . + 0.5 | floor; . | { "post_challenged_nodes": .["post_challenged_nodes"] | round, "post_challenges": .["post_challenges"] | round, "window_size_bytes": .["window_size_bytes"] | round, "sector_size_bytes": .["sector_size_bytes"] | round, "drg_parents": .["drg_parents"] | round, "expander_parents": .["expander_parents"] | round, "graph_parents": .["graph_parents"] | round, "porep_challenges": .["porep_challenges"] | round, "stacked_layers": .["stacked_layers"] | round, "wrapper_parents": .["wrapper_parents"] | round, "wrapper_parents_all": .["wrapper_parents_all"] | round }'\
     | RUST_BACKTRACE=1 RUST_LOG=info cargo run --release --package fil-proofs-tooling --bin=benchy  -- flarp
 */
 
 #[derive(Default, Debug, Serialize)]
-#[serde(rename_all = "kebab-case")]
 pub struct FlarpReport {
     inputs: FlarpInputs,
     outputs: FlarpOutputs,
 }
 
 #[derive(Default, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "kebab-case")]
 pub struct FlarpInputs {
     window_size_bytes: usize,
     sector_size_bytes: usize,
@@ -49,7 +49,6 @@ pub struct FlarpInputs {
 }
 
 #[derive(Default, Debug, Serialize)]
-#[serde(rename_all = "kebab-case")]
 pub struct FlarpOutputs {
     encoding_cpu_time_ms: u64,
     encoding_wall_time_ms: u64,
