@@ -45,7 +45,7 @@ pub struct FlarpInputs {
     post_challenges: usize,
     post_challenged_nodes: usize,
     stacked_layers: usize,
-    //    wrapper_parents_all: usize,
+    wrapper_parents_all: usize,
 }
 
 #[derive(Default, Debug, Serialize)]
@@ -161,8 +161,9 @@ fn configure_global_config(inputs: &FlarpInputs) {
     );
 
     filecoin_proofs::constants::LAYERS.store(inputs.stacked_layers, Relaxed);
-    filecoin_proofs::constants::EXP_DEGREE.store(inputs.expander_parents, Relaxed);
-    filecoin_proofs::constants::BASE_DEGREE.store(inputs.drg_parents, Relaxed);
+    filecoin_proofs::constants::WRAPPER_EXP_DEGREE.store(inputs.wrapper_parents_all, Relaxed);
+    filecoin_proofs::constants::WINDOW_EXP_DEGREE.store(inputs.expander_parents, Relaxed);
+    filecoin_proofs::constants::WINDOW_DRG_DEGREE.store(inputs.drg_parents, Relaxed);
     filecoin_proofs::constants::POREP_WINDOW_MINIMUM_CHALLENGES
         .store(inputs.porep_challenges, Relaxed);
     filecoin_proofs::constants::POREP_WRAPPER_MINIMUM_CHALLENGES
@@ -312,14 +313,13 @@ fn measure_porep_circuit(i: &FlarpInputs) -> usize {
     use storage_proofs::drgraph::new_seed;
     use storage_proofs::stacked::{SetupParams, StackedConfig, StackedDrg};
 
-    // TODO: pull from inputs
-    let layers = 4;
-    let window_challenge_count = 50;
-    let wrapper_challenge_count = 50;
-    let window_drg_degree = 6;
-    let window_expansion_degree = 8;
-    let wrapper_expansion_degree = 8;
-    let window_size_nodes = 512 / 32;
+    let layers = i.stacked_layers;
+    let window_challenge_count = i.porep_challenges;
+    let wrapper_challenge_count = i.porep_challenges;
+    let window_drg_degree = i.drg_parents;
+    let window_expansion_degree = i.expander_parents;
+    let wrapper_expansion_degree = i.wrapper_parents_all;
+    let window_size_nodes = i.window_size_bytes / 32;
     let nodes = i.sector_size_bytes / 32;
 
     let config =
@@ -366,7 +366,7 @@ fn measure_post_circuit(i: &FlarpInputs) -> usize {
     cs.num_constraints()
 }
 
-fn measure_kdf_circuit(_i: &FlarpInputs) -> usize {
+fn measure_kdf_circuit(i: &FlarpInputs) -> usize {
     use bellperson::gadgets::boolean::Boolean;
     use bellperson::ConstraintSystem;
     use ff::Field;
@@ -379,8 +379,7 @@ fn measure_kdf_circuit(_i: &FlarpInputs) -> usize {
     let mut cs = BenchCS::<Bls12>::new();
     let rng = &mut thread_rng();
 
-    // TODO: pull from inputs
-    let parents = 20;
+    let parents = i.drg_parents + i.expander_parents;
 
     let id: Vec<u8> = fr_into_bytes::<Bls12>(&Fr::random(rng));
     let parents: Vec<Vec<u8>> = (0..parents)
