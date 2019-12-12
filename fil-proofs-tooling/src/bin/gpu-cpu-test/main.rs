@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
-use std::process::{Child, Command, Stdio};
+use std::process::{self, Child, Command, Stdio};
 use std::str;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
@@ -37,8 +37,9 @@ pub fn colored_with_thread(
     let level = record.level();
     write!(
         writer,
-        "{} {} {} {} > {}",
+        "{} {} {} {} {} > {}",
         now.now().format("%Y-%m-%dT%H:%M:%S%.3f"),
+        process::id(),
         thread::current()
             .name()
             .unwrap_or(&format!("{:?}", thread::current().id())),
