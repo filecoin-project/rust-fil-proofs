@@ -32,7 +32,7 @@ pub fn get_full_path_for_file_within_cache(filename: &str) -> PathBuf {
 // Produces a BLAKE2b checksum for a file within the cache
 pub fn get_digest_for_file_within_cache(filename: &str) -> Result<String> {
     let path = get_full_path_for_file_within_cache(filename);
-    let mut file = File::open(path)?;
+    let mut file = File::open(&path).with_context(|| format!("could not open path={:?}", path))?;
     let mut hasher = Blake2b::new();
 
     std::io::copy(&mut file, &mut hasher)?;
@@ -75,7 +75,9 @@ pub fn parameter_id_to_metadata_map<S: AsRef<str>>(
 
     for filename in filenames {
         if has_extension(PathBuf::from(filename.as_ref()), PARAMETER_METADATA_EXT) {
-            let file = File::open(get_full_path_for_file_within_cache(filename.as_ref()))?;
+            let file_path = get_full_path_for_file_within_cache(filename.as_ref());
+            let file = File::open(&file_path)
+                .with_context(|| format!("could not open path={:?}", file_path))?;
 
             let meta = serde_json::from_reader(file)?;
 

@@ -70,12 +70,14 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     let replica_id =
         generate_replica_id::<DefaultTreeHasher, _>(&prover_id, sector_id.into(), &ticket, comm_d);
 
-    let f_in = File::open(sealed_path)?;
+    let f_in = File::open(&sealed_path)
+        .with_context(|| format!("could not open sealed_path={:?}", sealed_path.as_ref()))?;
     let mut data = Vec::new();
     f_in.take(u64::from(PaddedBytesAmount::from(porep_config)))
         .read_to_end(&mut data)?;
 
-    let f_out = File::create(output_path)?;
+    let f_out = File::create(&output_path)
+        .with_context(|| format!("could not create output_path={:?}", output_path.as_ref()))?;
     let mut buf_writer = BufWriter::new(f_out);
 
     // MT for original data is always named tree-d, and it will be
@@ -105,7 +107,8 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     // If the call to `extract_range` was successful, the `unsealed` vector must
     // have a length which equals `num_bytes_padded`. The byte at its 0-index
     // byte will be the the byte at index `offset_padded` in the sealed sector.
-    let written = write_unpadded(&unsealed, &mut buf_writer, 0, num_bytes.into())?;
+    let written = write_unpadded(&unsealed, &mut buf_writer, 0, num_bytes.into())
+        .with_context(|| format!("could not write to output_path={:?}", output_path.as_ref()))?;
 
     Ok(UnpaddedBytesAmount(written as u64))
 }
@@ -146,7 +149,9 @@ pub fn generate_piece_commitment<T: std::io::Read>(
         ));
     }
 
-    temp_piece_file.seek(SeekFrom::Start(0))?;
+    temp_piece_file
+        .seek(SeekFrom::Start(0))
+        .with_context(|| format!("could not seek in temp_piece_file={:?}", temp_piece_file))?;
 
     let commitment = generate_piece_commitment_bytes_from_source::<DefaultPieceHasher>(
         &mut temp_piece_file,
