@@ -1,10 +1,12 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::process::{Child, Command, Stdio};
+use std::str;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use bellperson::gpu;
-use clap::{value_t, App, Arg};
+use clap::{arg_enum, value_t, App, Arg};
 use filecoin_proofs::{Candidate, PrivateReplicaInfo};
 use log::{debug, info, trace};
 use storage_proofs::sector::SectorId;
@@ -12,6 +14,14 @@ use storage_proofs::sector::SectorId;
 mod election_post;
 
 const TIMEOUT: u64 = 5 * 60;
+
+arg_enum! {
+    #[derive(Debug)]
+    pub enum Mode {
+        Threads,
+        Processes,
+    }
+}
 
 #[derive(Debug)]
 pub struct RunInfo {
@@ -99,42 +109,7 @@ fn spawn_thread(
     (tx, handler)
 }
 
-fn main() {
-    flexi_logger::Logger::with_env()
-        .format(colored_with_thread)
-        .start()
-        .expect("Initializing logger failed. Was another logger already initialized?");
-
-    let matches = App::new("gpu-cpu-test")
-        .version("0.1")
-        .about("Tests if moving proofs from GPU to CPU works")
-        .arg(
-            Arg::with_name("parallel")
-                .long("parallel")
-                .help("Run proofs in parallel.")
-                .default_value("true"),
-        )
-        .arg(
-            Arg::with_name("gpu-stealing")
-                .long("gpu-stealing")
-                .help("Force high priority proof on the GPU and let low priority one continue on CPU.")
-                .default_value("true"),
-        )
-        .get_matches();
-
-    let parallel = value_t!(matches, "parallel", bool).unwrap();
-    if parallel {
-        info!("Running high and low priority proofs in parallel")
-    } else {
-        info!("Running high priority proofs only")
-    }
-    let gpu_stealing = value_t!(matches, "gpu-stealing", bool).unwrap();
-    if gpu_stealing {
-        info!("Force low piority proofs to CPU")
-    } else {
-        info!("Let everyone queue up to run on GPU")
-    }
-
+fn threads_mode(parallel: bool, gpu_stealing: bool) {
     // All channels we send a termination message to
     let mut senders = Vec::new();
     // All thread handles that get terminated
@@ -179,6 +154,111 @@ fn main() {
                 .to_string();
             let run_info = handler.join().unwrap();
             info!("Thread {} info: {:?}", thread_name, run_info);
+            // Also print it, so that we can get that information in processes mode
+            print!("Thread {} info: {:?}", thread_name, run_info);
+        }
+    }
+}
+
+fn processes_mode(parallel: bool, gpu_stealing: bool) {
+    let mut children = HashMap::new();
+
+    // Put each process into it's own scope (the other one is due to the if statement)
+    {
+        let child = spawn_process("high", gpu_stealing);
+        children.insert("high", child);
+    }
+
+    if parallel {
+        let child = spawn_process("low", false);
+        children.insert("low", child);
+    }
+
+    // Wait for all processes to finish and log their output
+    for (name, child) in children {
+        let output = child.wait_with_output().unwrap();
+        info!(
+            "Process {} info: {}",
+            name,
+            str::from_utf8(&output.stdout).unwrap()
+        );
+    }
+}
+
+fn spawn_process(name: &str, gpu_stealing: bool) -> Child {
+    // Runs this this programm again in it's own process, but this time it is spawning a single
+    // thread to run the actual proof.
+    Command::new("cargo")
+        .arg("run")
+        .arg("--release")
+        .args(&["--bin", "gpu-cpu-test"])
+        .arg("--")
+        .args(&["--gpu-stealing", &gpu_stealing.to_string()])
+        .args(&["--parallel", "false"])
+        .args(&["--mode", "threads"])
+        // Print logging to the main process stderr
+        .stderr(Stdio::inherit())
+        // Use the stdout to return a result
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect(&format!("failed to execute process {}", name))
+}
+
+fn main() {
+    flexi_logger::Logger::with_env()
+        .format(colored_with_thread)
+        .start()
+        .expect("Initializing logger failed. Was another logger already initialized?");
+
+    let matches = App::new("gpu-cpu-test")
+        .version("0.1")
+        .about("Tests if moving proofs from GPU to CPU works")
+        .arg(
+            Arg::with_name("parallel")
+                .long("parallel")
+                .help("Run proofs in parallel.")
+                .default_value("true"),
+        )
+        .arg(
+            Arg::with_name("gpu-stealing")
+                .long("gpu-stealing")
+                .help("Force high priority proof on the GPU and let low priority one continue on CPU.")
+                .default_value("true"),
+        )
+        .arg(
+            Arg::with_name("mode")
+              .long("mode")
+              .help("Whether to run with threads or processes.")
+               .possible_values(&["threads", "processes"])
+               .case_insensitive(true)
+               .default_value("threads"),
+        )
+        .get_matches();
+
+    let parallel = value_t!(matches, "parallel", bool).unwrap();
+    if parallel {
+        info!("Running high and low priority proofs in parallel")
+    } else {
+        info!("Running high priority proofs only")
+    }
+    let gpu_stealing = value_t!(matches, "gpu-stealing", bool).unwrap();
+    if gpu_stealing {
+        info!("Force low piority proofs to CPU")
+    } else {
+        info!("Let everyone queue up to run on GPU")
+    }
+    let mode = value_t!(matches, "mode", Mode).unwrap_or_else(|e| e.exit());
+    match mode {
+        Mode::Threads => info!("Using threads"),
+        Mode::Processes => info!("Using processes"),
+    }
+
+    match mode {
+        Mode::Threads => {
+            threads_mode(parallel, gpu_stealing);
+        }
+        Mode::Processes => {
+            processes_mode(parallel, gpu_stealing);
         }
     }
 }
