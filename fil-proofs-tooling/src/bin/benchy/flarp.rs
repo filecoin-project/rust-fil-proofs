@@ -287,30 +287,6 @@ pub fn run(
 
         outputs.post_proof_gen_cpu_time_ms = gen_post_measurement.cpu_time.as_millis() as u64;
         outputs.post_proof_gen_wall_time_ms = gen_post_measurement.wall_time.as_millis() as u64;
-
-        let verify_post_measurement = measure(|| {
-            verify_post(
-                post_config,
-                &RANDOMNESS,
-                CHALLENGE_COUNT,
-                &gen_post_measurement.return_value,
-                &vec![(sector_id, replica_info.public_replica_info.clone())]
-                    .into_iter()
-                    .collect(),
-                &candidates
-                    .iter()
-                    .cloned()
-                    .map(Into::into)
-                    .collect::<Vec<_>>(),
-                PROVER_ID,
-            )
-        })
-        .expect("verify_post function returned an error");
-
-        assert!(
-            verify_post_measurement.return_value,
-            "generated PoSt was invalid"
-        );
     }
 
     outputs.encoding_wall_time_ms = encoding_wall_time_ms;
