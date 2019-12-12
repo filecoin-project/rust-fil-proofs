@@ -62,8 +62,12 @@ impl PrivateReplicaInfo {
 
         let aux = {
             let mut aux_bytes = vec![];
-            let mut f_aux = File::open(cache_dir.join(CacheKey::PAux.to_string()))?;
-            f_aux.read_to_end(&mut aux_bytes)?;
+            let f_aux_path = cache_dir.join(CacheKey::PAux.to_string());
+            let mut f_aux = File::open(&f_aux_path)
+                .with_context(|| format!("could not open path={:?}", f_aux_path))?;
+            f_aux
+                .read_to_end(&mut aux_bytes)
+                .with_context(|| format!("could not read from path={:?}", f_aux_path))?;
 
             deserialize(&aux_bytes)
         }?;

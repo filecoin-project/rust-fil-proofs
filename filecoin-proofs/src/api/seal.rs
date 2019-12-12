@@ -60,20 +60,34 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
     info!("seal_pre_commit: start");
     let sector_bytes = usize::from(PaddedBytesAmount::from(porep_config));
 
-    std::fs::metadata(&in_path)
+    fs::metadata(&in_path)
         .with_context(|| format!("could not read in_path={:?})", in_path.as_ref()))?;
 
-    std::fs::metadata(&out_path)
+    fs::metadata(&out_path)
         .with_context(|| format!("could not read out_path={:?}", out_path.as_ref()))?;
 
     // Copy unsealed data to output location, where it will be sealed in place.
-    fs::copy(&in_path, &out_path)?;
-    let f_data = OpenOptions::new().read(true).write(true).open(&out_path)?;
+    fs::copy(&in_path, &out_path).with_context(|| {
+        format!(
+            "could not copy in_path={:?} to out_path={:?}",
+            in_path.as_ref(),
+            out_path.as_ref()
+        )
+    })?;
+    let f_data = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&out_path)
+        .with_context(|| format!("could not open out_path={:?}", out_path.as_ref()))?;
 
     // Zero-pad the data to the requested size by extending the underlying file if needed.
     f_data.set_len(sector_bytes as u64)?;
 
-    let mut data = unsafe { MmapOptions::new().map_mut(&f_data)? };
+    let mut data = unsafe {
+        MmapOptions::new()
+            .map_mut(&f_data)
+            .with_context(|| format!("could mmap out_path={:?}", out_path.as_ref()))?
+    };
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: setup_params(
@@ -132,13 +146,21 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
     info!("seal_pre_commit: end");
 
     // Persist p_aux and t_aux here
-    let mut f_p_aux = File::create(cache_path.as_ref().join(CacheKey::PAux.to_string()))?;
+    let p_aux_path = cache_path.as_ref().join(CacheKey::PAux.to_string());
+    let mut f_p_aux = File::create(&p_aux_path)
+        .with_context(|| format!("could not create file p_aux={:?}", p_aux_path))?;
     let p_aux_bytes = serialize(&p_aux)?;
-    f_p_aux.write_all(&p_aux_bytes)?;
+    f_p_aux
+        .write_all(&p_aux_bytes)
+        .with_context(|| format!("could not write to file p_aux={:?}", p_aux_path))?;
 
-    let mut f_t_aux = File::create(cache_path.as_ref().join(CacheKey::TAux.to_string()))?;
+    let t_aux_path = cache_path.as_ref().join(CacheKey::TAux.to_string());
+    let mut f_t_aux = File::create(&t_aux_path)
+        .with_context(|| format!("could not create file t_aux={:?}", t_aux_path))?;
     let t_aux_bytes = serialize(&t_aux)?;
-    f_t_aux.write_all(&t_aux_bytes)?;
+    f_t_aux
+        .write_all(&t_aux_bytes)
+        .with_context(|| format!("could not write to file t_aux={:?}", t_aux_path))?;
 
     Ok(SealPreCommitOutput { comm_r, comm_d })
 }
@@ -179,7 +201,9 @@ pub fn seal_commit<T: AsRef<Path>>(
 
     let p_aux = {
         let mut p_aux_bytes = vec![];
-        let mut f_p_aux = File::open(cache_path.as_ref().join(CacheKey::PAux.to_string()))?;
+        let p_aux_path = cache_path.as_ref().join(CacheKey::PAux.to_string());
+        let mut f_p_aux = File::open(&p_aux_path)
+            .with_context(|| format!("could not open file p_aux={:?}", p_aux_path))?;
         f_p_aux.read_to_end(&mut p_aux_bytes)?;
 
         deserialize(&p_aux_bytes)
@@ -187,7 +211,9 @@ pub fn seal_commit<T: AsRef<Path>>(
 
     let t_aux = {
         let mut t_aux_bytes = vec![];
-        let mut f_t_aux = File::open(cache_path.as_ref().join(CacheKey::TAux.to_string()))?;
+        let t_aux_path = cache_path.as_ref().join(CacheKey::TAux.to_string());
+        let mut f_t_aux = File::open(&t_aux_path)
+            .with_context(|| format!("could not open file t_aux={:?}", t_aux_path))?;
         f_t_aux.read_to_end(&mut t_aux_bytes)?;
 
         let mut res: TemporaryAux<_, _> = deserialize(&t_aux_bytes)?;
