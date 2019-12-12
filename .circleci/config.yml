@@ -176,7 +176,7 @@ jobs:
             mkdir -p ~/.ssh/
             if [[ ! -f ~/.ssh/known_hosts ]] || ! grep "${BENCHMARK_SERVER_IP_ADDR}" ~/.ssh/known_hosts; then
               echo "
-            ${BENCHMARK_SERVER_RSA_FINGERPRINT}
+            ${BENCHMARK_SERVER_KNOWN_HOSTS_ENTRY}
               " >> ~/.ssh/known_hosts
             fi
       - checkout
