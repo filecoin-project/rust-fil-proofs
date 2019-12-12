@@ -29,7 +29,7 @@ use storage_proofs::sector::SectorId;
 
 use crate::shared::{
     create_replicas, prove_replicas, CommitReplicaOutput, PreCommitReplicaOutput, CHALLENGE_COUNT,
-    CHALLENGE_SEED, PROVER_ID, RANDOMNESS,
+    PROVER_ID, RANDOMNESS,
 };
 use std::sync::atomic::Ordering;
 
@@ -271,7 +271,7 @@ pub fn run(
         let gen_post_measurement = measure(|| {
             generate_post(
                 post_config,
-                &CHALLENGE_SEED,
+                &RANDOMNESS,
                 &vec![(sector_id, replica_info.private_replica_info.clone())]
                     .into_iter()
                     .collect(),
@@ -291,7 +291,7 @@ pub fn run(
         let verify_post_measurement = measure(|| {
             verify_post(
                 post_config,
-                &CHALLENGE_SEED,
+                &RANDOMNESS,
                 CHALLENGE_COUNT,
                 &gen_post_measurement.return_value,
                 &vec![(sector_id, replica_info.public_replica_info.clone())]
