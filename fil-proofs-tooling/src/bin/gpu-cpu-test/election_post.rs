@@ -7,10 +7,9 @@ use filecoin_proofs::types::{
     PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig,
     SealPreCommitOutput, SectorSize, UnpaddedBytesAmount,
 };
-use filecoin_proofs::Candidate;
 use filecoin_proofs::{
     add_piece, generate_candidates, generate_piece_commitment, generate_post, seal_commit,
-    seal_pre_commit, PrivateReplicaInfo,
+    seal_pre_commit, Candidate, PrivateReplicaInfo,
 };
 use storage_proofs::sector::SectorId;
 use tempfile::NamedTempFile;

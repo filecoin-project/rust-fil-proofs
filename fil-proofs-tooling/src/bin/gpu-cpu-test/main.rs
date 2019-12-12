@@ -1,17 +1,20 @@
-use std::sync::mpsc::{self, TryRecvError};
+use std::collections::BTreeMap;
+use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use bellperson::gpu;
 use clap::{value_t, App, Arg};
+use filecoin_proofs::{Candidate, PrivateReplicaInfo};
 use log::{debug, info, trace};
+use storage_proofs::sector::SectorId;
 
 mod election_post;
 
 const TIMEOUT: u64 = 5 * 60;
 
 #[derive(Debug)]
-struct RunInfo {
+pub struct RunInfo {
     elapsed: Duration,
     iterations: u8,
 }
@@ -33,6 +36,67 @@ pub fn colored_with_thread(
         record.module_path().unwrap_or("<unnamed>"),
         record.args(),
     )
+}
+
+fn thread_fun(
+    rx: Receiver<()>,
+    gpu_stealing: bool,
+    priv_replica_infos: &BTreeMap<SectorId, PrivateReplicaInfo>,
+    candidates: &[Candidate],
+) -> RunInfo {
+    let timing = Instant::now();
+    let mut iteration = 0;
+    while iteration < std::u8::MAX {
+        info!("high iter {}", iteration);
+
+        // This is the higher priority proof, get it on the GPU even if there is one running
+        // already there
+        if gpu_stealing {
+            let gpu_lock = gpu::acquire_gpu().unwrap();
+            info!("Trying to acquire GPU lock");
+            while !gpu::gpu_is_available().unwrap_or(false) {
+                thread::sleep(Duration::from_millis(100));
+                trace!("Trying to acquire GPU lock");
+            }
+            debug!("Acquired GPU lock, dropping it again");
+            gpu::drop_acquire_lock(gpu_lock);
+        }
+
+        // Run the actual proof
+        election_post::do_generate_post(&priv_replica_infos, &candidates);
+
+        // Waiting for this thread to be killed
+        match rx.try_recv() {
+            Ok(_) | Err(TryRecvError::Disconnected) => {
+                debug!("High priority proofs received kill message");
+                break;
+            }
+            Err(TryRecvError::Empty) => (),
+        }
+        iteration += 1;
+    }
+    RunInfo {
+        elapsed: timing.elapsed(),
+        iterations: iteration,
+    }
+}
+
+fn spawn_thread(
+    name: &str,
+    gpu_stealing: bool,
+    priv_replica_infos: BTreeMap<SectorId, PrivateReplicaInfo>,
+    candidates: Vec<Candidate>,
+) -> (Sender<()>, thread::JoinHandle<RunInfo>) {
+    let (tx, rx) = mpsc::channel();
+
+    let thread_config = thread::Builder::new().name(name.to_string());
+    let handler = thread_config
+        .spawn(move || -> RunInfo {
+            thread_fun(rx, gpu_stealing, &priv_replica_infos, &candidates)
+        })
+        .expect("Could not spawn thread");
+
+    (tx, handler)
 }
 
 fn main() {
@@ -80,90 +144,22 @@ fn main() {
     let priv_replica_info = election_post::generate_priv_replica_info_fixture();
     let candidates = election_post::generate_candidates_fixture(&priv_replica_info);
 
-    // Put each proof into it's own scope (the other one is due to the if statement
+    // Put each proof into it's own scope (the other one is due to the if statement)
     {
-        let priv_replica_info_clone = priv_replica_info.clone();
-        let candidates_clone = candidates.clone();
-
-        let (high_tx, high_rx) = mpsc::channel();
-        senders.push(high_tx);
-
-        let high_timing = Instant::now();
-        let thread_config = thread::Builder::new().name("HighPrio".to_string());
-        let high_handler = thread_config
-            .spawn(move || -> RunInfo {
-                let mut iteration = 0;
-                while iteration < std::u8::MAX {
-                    info!("high iter {}", iteration);
-
-                    // This is the higher priority proof, get it on the GPU even if there is one running
-                    // already there
-                    if gpu_stealing {
-                        let gpu_lock = gpu::acquire_gpu().unwrap();
-                        info!("Trying to acquire GPU lock");
-                        while !gpu::gpu_is_available().unwrap_or(false) {
-                            thread::sleep(Duration::from_millis(100));
-                            trace!("Trying to acquire GPU lock");
-                        }
-                        debug!("Acquired GPU lock, dropping it again");
-                        gpu::drop_acquire_lock(gpu_lock);
-                    }
-
-                    // Run the actual proof
-                    election_post::do_generate_post(&priv_replica_info_clone, &candidates_clone);
-
-                    // Waiting for this thread to be killed
-                    match high_rx.try_recv() {
-                        Ok(_) | Err(TryRecvError::Disconnected) => {
-                            debug!("High priority proofs received kill message");
-                            break;
-                        }
-                        Err(TryRecvError::Empty) => (),
-                    }
-                    iteration += 1;
-                }
-                RunInfo {
-                    elapsed: high_timing.elapsed(),
-                    iterations: iteration,
-                }
-            })
-            .expect("cannot spawn high priority proofs thread");
-        threads.push(Some(high_handler));
+        let (tx, handler) = spawn_thread(
+            "high",
+            gpu_stealing,
+            priv_replica_info.clone(),
+            candidates.clone(),
+        );
+        senders.push(tx);
+        threads.push(Some(handler));
     }
 
     if parallel {
-        let priv_replica_info_clone = priv_replica_info;
-        let candidates_clone = candidates;
-
-        let (low_tx, low_rx) = mpsc::channel();
-        senders.push(low_tx);
-
-        let low_timing = Instant::now();
-        let thread_config = thread::Builder::new().name("LowPrio".to_string());
-        let low_handler = thread_config
-            .spawn(move || -> RunInfo {
-                let mut iteration = 0;
-                while iteration < std::u8::MAX {
-                    info!("low iter {}", iteration);
-
-                    election_post::do_generate_post(&priv_replica_info_clone, &candidates_clone);
-
-                    match low_rx.try_recv() {
-                        Ok(_) | Err(TryRecvError::Disconnected) => {
-                            debug!("Low priority proofs received kill message");
-                            break;
-                        }
-                        Err(TryRecvError::Empty) => (),
-                    }
-                    iteration += 1;
-                }
-                RunInfo {
-                    elapsed: low_timing.elapsed(),
-                    iterations: iteration,
-                }
-            })
-            .expect("cannot spawn low priority proofs thread");
-        threads.push(Some(low_handler));
+        let (tx, handler) = spawn_thread("low", false, priv_replica_info, candidates);
+        senders.push(tx);
+        threads.push(Some(handler));
     }
 
     // Terminate all threads after that amount of time
