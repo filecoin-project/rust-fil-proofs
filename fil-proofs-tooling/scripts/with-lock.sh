@@ -8,9 +8,9 @@ shift 2
 
 # Check to make sure that the process which owns the lock, if one exists, is
 # still alive. If the process is not alive, release the lock.
-for lockdir_pid in $(find $lockdir -type f -exec basename {} \; 2> /dev/null)
+for lockdir_pid in $(find "$lockdir" -type f -exec basename {} \; 2> /dev/null)
 do
-    if ! ps -p ${lockdir_pid} > /dev/null
+    if ! ps -p "${lockdir_pid}" > /dev/null
     then
         (>&2 echo "cleaning up leaked lock (pid=${lockdir_pid}, path=${lockdir})")
         rm -rf "${lockdir}"
@@ -32,5 +32,5 @@ then
     "$@"
 else
     (>&2 echo "failed to acquire lock (path=${lockdir})")
-    exit $failure_code
+    exit "$failure_code"
 fi
