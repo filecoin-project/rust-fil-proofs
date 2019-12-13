@@ -13,7 +13,9 @@ set -e
 _one_day_from_now=\$((\$(date +%s) + 86400))
 _metrics_dir=/tmp/metrics/\$_one_day_from_now
 
-find /tmp/metrics/ -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | xargs -I {} bash -c 'if (({} < \$(date +%s))) ; then rm -rf /tmp/metrics/{} ; fi' 2> /dev/null
+# Find and prune any stale metrics directories.
+find /tmp/metrics/ -maxdepth 1 -mindepth 1 -type d -printf "%f\n" \
+    | xargs -I {} bash -c 'if (({} < \$(date +%s))) ; then rm -rf /tmp/metrics/{} ; fi' 2> /dev/null
 
 git clone -b $1 --single-branch https://github.com/filecoin-project/rust-fil-proofs.git \$_metrics_dir || true
 
