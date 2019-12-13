@@ -194,25 +194,25 @@ jobs:
       - run:
           name: Run hash-constraints benchmarks on remote host
           command: |
-            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" ./fil-proofs-tooling/scripts/benchy-remote.sh hash-constraints > hash-constraints.json
+            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" ./fil-proofs-tooling/scripts/benchy.sh hash-constraints > hash-constraints.json
             cat hash-constraints.json
           no_output_timeout: 60m
       - run:
           name: Run micro benchmarks
           command: |
-            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" ./fil-proofs-tooling/scripts/micro-remote.sh > micro-benchmarks.json
+            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" ./fil-proofs-tooling/scripts/micro.sh > micro-benchmarks.json
             cat micro-benchmarks.json
           no_output_timeout: 60m
       - run:
           name: Run stacked benchmarks using 1GiB sectors
           command: |
-            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" ./fil-proofs-tooling/scripts/benchy-remote.sh stacked --size=$((2*1024*1024)) > stacked-benchmarks.json
+            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" ./fil-proofs-tooling/scripts/benchy.sh stacked --size=$((2*1024*1024)) > stacked-benchmarks.json
             cat stacked-benchmarks.json
           no_output_timeout: 60m
       - run:
           name: Run Election PoST benchmarks using a 1GiB sector
           command: |
-            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" ./fil-proofs-tooling/scripts/benchy-remote.sh election-post --size=$((2*1024*1024)) > election-post-benchmarks.json
+            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" ./fil-proofs-tooling/scripts/benchy.sh election-post --size=$((2*1024*1024)) > election-post-benchmarks.json
             cat election-post-benchmarks.json
           no_output_timeout: 60m
       - run:
