@@ -227,6 +227,5 @@ criterion_group!(
     pedersen_benchmark,
     pedersen_md_benchmark,
     pedersen_circuit_benchmark,
-    pedersen_md_circuit_benchmark
 );
 criterion_main!(benches);

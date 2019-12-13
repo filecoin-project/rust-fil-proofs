@@ -58,14 +58,6 @@ fn sha256_benchmark(c: &mut Criterion) {
 fn sha256_circuit_benchmark(c: &mut Criterion) {
     let mut rng1 = thread_rng();
 
-    let groth_params = generate_random_parameters::<Bls12, _, _>(
-        Sha256Example {
-            data: &vec![None; 256],
-        },
-        &mut rng1,
-    )
-    .unwrap();
-
     let params = vec![32, 64];
 
     c.bench(
@@ -73,6 +65,14 @@ fn sha256_circuit_benchmark(c: &mut Criterion) {
         ParameterizedBenchmark::new(
             "create-proof",
             move |b, bytes| {
+                let groth_params = generate_random_parameters::<Bls12, _, _>(
+                    Sha256Example {
+                        data: &vec![None; *bytes as usize * 8],
+                    },
+                    &mut rng1,
+                )
+                .unwrap();
+
                 let mut rng = thread_rng();
                 let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
 
