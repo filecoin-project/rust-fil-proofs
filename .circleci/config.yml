@@ -383,3 +383,4 @@ workflows:
             branches:
               only:
                 - master
+                - fix/metrics-capture-cleanup
