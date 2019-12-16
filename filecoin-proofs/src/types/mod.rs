@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::hasher::Hasher;
-use storage_proofs::merkle::MerkleTree;
+use storage_proofs::merkle::{LCMerkleTree, MerkleTree};
 use storage_proofs::stacked;
 
 mod bytes_amount;
@@ -29,6 +29,7 @@ pub type TemporaryAux = stacked::TemporaryAux<PedersenHasher, crate::constants::
 pub type ProverId = [u8; 32];
 pub type Ticket = [u8; 32];
 pub type Tree = MerkleTree<PedersenDomain, <PedersenHasher as Hasher>::Function>;
+pub type LCTree = LCMerkleTree<PedersenDomain, <PedersenHasher as Hasher>::Function>;
 
 #[derive(Debug, Clone)]
 pub struct SealPreCommitOutput {

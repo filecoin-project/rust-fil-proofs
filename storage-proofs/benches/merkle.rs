@@ -26,7 +26,7 @@ fn merkle_benchmark(c: &mut Criterion) {
                 )
                 .unwrap();
 
-                b.iter(|| black_box(graph.merkle_tree(&data).unwrap()))
+                b.iter(|| black_box(graph.merkle_tree(None, &data).unwrap()))
             },
             params,
         )
@@ -41,7 +41,7 @@ fn merkle_benchmark(c: &mut Criterion) {
             )
             .unwrap();
 
-            b.iter(|| black_box(graph.merkle_tree(&data).unwrap()))
+            b.iter(|| black_box(graph.merkle_tree(None, &data).unwrap()))
         })
         .sample_size(20),
     );

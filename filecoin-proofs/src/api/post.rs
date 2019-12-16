@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, ensure, Context, Result};
 use bincode::deserialize;
 use log::info;
-use merkletree::merkle::{get_merkle_tree_leafs, MerkleTree};
-use merkletree::store::{DiskStore, Store, StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
+use merkletree::merkle::get_merkle_tree_leafs;
+use merkletree::store::{LevelCacheStore, Store, StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
 use paired::bls12_381::Bls12;
 use rayon::prelude::*;
 use storage_proofs::circuit::election_post::ElectionPoStCompound;
@@ -24,7 +24,7 @@ use storage_proofs::stacked::CacheKey;
 use crate::api::util::{as_safe_commitment, get_tree_size};
 use crate::caches::{get_post_params, get_post_verifying_key};
 use crate::parameters::post_setup_params;
-use crate::types::{ChallengeSeed, Commitment, PersistentAux, PoStConfig, ProverId, Tree};
+use crate::types::{ChallengeSeed, Commitment, LCTree, PersistentAux, PoStConfig, ProverId, Tree};
 
 pub use storage_proofs::election_post::Candidate;
 
@@ -95,16 +95,17 @@ impl PrivateReplicaInfo {
     }
 
     /// Generate the merkle tree of this particular replica.
-    pub fn merkle_tree(&self, tree_size: usize, tree_leafs: usize) -> Result<Tree> {
+    pub fn merkle_tree(&self, tree_size: usize, tree_leafs: usize) -> Result<LCTree> {
         let mut config = StoreConfig::new(
             &self.cache_dir,
             CacheKey::CommRLastTree.to_string(),
             DEFAULT_CACHED_ABOVE_BASE_LAYER,
         );
         config.size = Some(tree_size);
-        let tree_r_last_store: DiskStore<<DefaultTreeHasher as Hasher>::Domain> =
-            DiskStore::new_from_disk(tree_size, &config)?;
-        let tree_r_last: Tree = MerkleTree::from_data_store(tree_r_last_store, tree_leafs)?;
+        let tree_r_last_store: LevelCacheStore<<DefaultTreeHasher as Hasher>::Domain, _> =
+            LevelCacheStore::new_from_disk(tree_size, &config)?;
+        let tree_r_last: LCTree =
+            merkletree::merkle::MerkleTree::from_data_store(tree_r_last_store, tree_leafs)?;
 
         Ok(tree_r_last)
     }
@@ -214,7 +215,8 @@ pub fn generate_candidates(
         .collect();
 
     // resolve results
-    let trees: BTreeMap<SectorId, Tree> = unique_trees_res.into_iter().collect::<Result<_, _>>()?;
+    let trees: BTreeMap<SectorId, LCTree> =
+        unique_trees_res.into_iter().collect::<Result<_, _>>()?;
 
     let candidates = election_post::generate_candidates::<DefaultTreeHasher>(
         &public_params.vanilla_params,

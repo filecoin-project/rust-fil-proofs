@@ -309,10 +309,10 @@ mod tests {
             .collect();
 
         let graph1 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
+        let tree1 = graph1.merkle_tree(None, data1.as_slice()).unwrap();
 
         let graph2 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
+        let tree2 = graph2.merkle_tree(None, data2.as_slice()).unwrap();
 
         let faults = OrderedSectorSet::new();
         let mut sectors = OrderedSectorSet::new();
@@ -446,10 +446,10 @@ mod tests {
             .collect();
 
         let graph1 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
+        let tree1 = graph1.merkle_tree(None, data1.as_slice()).unwrap();
 
         let graph2 = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
+        let tree2 = graph2.merkle_tree(None, data2.as_slice()).unwrap();
 
         let faults = OrderedSectorSet::new();
         let mut sectors = OrderedSectorSet::new();

@@ -270,7 +270,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
         let graph = BucketGraph::<PedersenHasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree = graph.merkle_tree(data.as_slice()).unwrap();
+        let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
 
         for i in 0..3 {
             let public_inputs = merklepor::PublicInputs {
@@ -358,7 +358,7 @@ mod tests {
                 .collect();
 
             let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-            let tree = graph.merkle_tree(data.as_slice()).unwrap();
+            let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
 
             // -- MerklePoR
 
@@ -460,7 +460,7 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
         let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree = graph.merkle_tree(data.as_slice()).unwrap();
+        let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
 
         for i in 0..3 {
             let public_inputs = merklepor::PublicInputs {
@@ -536,7 +536,7 @@ mod tests {
 
             let graph =
                 BucketGraph::<PedersenHasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-            let tree = graph.merkle_tree(data.as_slice()).unwrap();
+            let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
 
             // -- MerklePoR
 

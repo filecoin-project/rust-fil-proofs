@@ -105,7 +105,7 @@ where
         let config = StoreConfig::new(
             cache_path.as_ref(),
             CacheKey::CommDTree.to_string(),
-            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+            StoreConfig::default_cached_above_base_layer(sector_bytes),
         );
         let data_tree = create_merkle_tree::<DefaultPieceHasher>(
             Some(config.clone()),

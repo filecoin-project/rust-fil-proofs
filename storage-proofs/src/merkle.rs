@@ -6,7 +6,7 @@ use anyhow::ensure;
 use merkletree::hash::Algorithm;
 use merkletree::merkle;
 use merkletree::proof;
-use merkletree::store::StoreConfig;
+use merkletree::store::{LevelCacheStore, StoreConfig};
 use paired::bls12_381::Fr;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -21,6 +21,7 @@ pub use merkletree::store::Store;
 
 type DiskStore<E> = merkletree::store::DiskStore<E>;
 pub type MerkleTree<T, A> = merkle::MerkleTree<T, A, DiskStore<T>>;
+pub type LCMerkleTree<T, A> = merkle::MerkleTree<T, A, LevelCacheStore<T, std::fs::File>>;
 pub type MerkleStore<T> = DiskStore<T>;
 
 /// Representation of a merkle proof.
@@ -247,6 +248,34 @@ pub fn create_merkle_tree<H: Hasher>(
     }
 }
 
+/// Construct a new level cache merkle tree.
+pub fn create_lcmerkle_tree<H: Hasher>(
+    config: Option<StoreConfig>,
+    size: usize,
+    data: &[u8],
+) -> Result<LCMerkleTree<H::Domain, H::Function>> {
+    ensure!(
+        data.len() == (NODE_SIZE * size) as usize,
+        Error::InvalidMerkleTreeArgs(data.len(), NODE_SIZE, size)
+    );
+
+    let f = |i| {
+        // TODO Replace `expect()` with `context()` (problem is the parallel iterator)
+        let d = data_at_node(&data, i).expect("data_at_node math failed");
+        // TODO/FIXME: This can panic. FOR NOW, let's leave this since we're experimenting with
+        // optimization paths. However, we need to ensure that bad input will not lead to a panic
+        // that isn't caught by the FPS API.
+        // Unfortunately, it's not clear how to perform this error-handling in the parallel
+        // iterator case.
+        H::Domain::try_from_bytes(d).expect("failed to convert node data to domain element")
+    };
+
+    match config {
+        Some(x) => LCMerkleTree::from_par_iter_with_config((0..size).into_par_iter().map(f), x),
+        None => LCMerkleTree::from_par_iter((0..size).into_par_iter().map(f)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -268,7 +297,7 @@ mod tests {
             data.write(&bytes).unwrap();
         }
 
-        let tree = g.merkle_tree(data.as_slice()).unwrap();
+        let tree = g.merkle_tree(None, data.as_slice()).unwrap();
         for i in 0..10 {
             let proof = tree.gen_proof(i).unwrap();
 

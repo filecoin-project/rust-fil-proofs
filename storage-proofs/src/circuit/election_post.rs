@@ -352,6 +352,8 @@ mod tests {
 
     #[test]
     fn test_election_post_circuit() {
+        use merkletree::store::{StoreConfig, StoreConfigDataVersion};
+
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 32;
@@ -368,6 +370,16 @@ mod tests {
 
         let mut sectors: Vec<SectorId> = Vec::new();
         let mut trees = BTreeMap::new();
+
+        // Construct and store an MT using a named DiskStore.
+        let temp_dir = tempdir::TempDir::new("level_cache_tree_v1").unwrap();
+        let temp_path = temp_dir.path();
+        let config = StoreConfig::new(
+            &temp_path,
+            String::from("test-lc-tree-v1"),
+            2, //DEFAULT_CACHED_ABOVE_BASE_LAYER,
+        );
+
         for i in 0..5 {
             sectors.push(i.into());
             let data: Vec<u8> = (0..leaves)
@@ -375,8 +387,21 @@ mod tests {
                 .collect();
 
             let graph = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
-            let tree = graph.merkle_tree(data.as_slice()).unwrap();
-            trees.insert(i.into(), tree);
+
+            let cur_config =
+                StoreConfig::from_config(&config, format!("test-lc-tree-v1-{}", i), None);
+            let mut tree = graph
+                .merkle_tree(Some(cur_config.clone()), data.as_slice())
+                .unwrap();
+            let c = tree
+                .compact(cur_config.clone(), StoreConfigDataVersion::One as u32)
+                .unwrap();
+            assert_eq!(c, true);
+
+            let lctree = graph
+                .lcmerkle_tree(Some(cur_config), data.as_slice())
+                .unwrap();
+            trees.insert(i.into(), lctree);
         }
 
         let candidates = election_post::generate_candidates::<PedersenHasher>(
@@ -479,6 +504,8 @@ mod tests {
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn election_post_test_compound() {
+        use merkletree::store::{StoreConfig, StoreConfigDataVersion};
+
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 32;
@@ -497,6 +524,16 @@ mod tests {
 
         let mut sectors: Vec<SectorId> = Vec::new();
         let mut trees = BTreeMap::new();
+
+        // Construct and store an MT using a named DiskStore.
+        let temp_dir = tempdir::TempDir::new("level_cache_tree_v1").unwrap();
+        let temp_path = temp_dir.path();
+        let config = StoreConfig::new(
+            &temp_path,
+            String::from("test-lc-tree-v1"),
+            2, //DEFAULT_CACHED_ABOVE_BASE_LAYER,
+        );
+
         for i in 0..5 {
             sectors.push(i.into());
             let data: Vec<u8> = (0..leaves)
@@ -504,8 +541,21 @@ mod tests {
                 .collect();
 
             let graph = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
-            let tree = graph.merkle_tree(data.as_slice()).unwrap();
-            trees.insert(i.into(), tree);
+
+            let cur_config =
+                StoreConfig::from_config(&config, format!("test-lc-tree-v1-{}", i), None);
+            let mut tree = graph
+                .merkle_tree(Some(cur_config.clone()), data.as_slice())
+                .unwrap();
+            let c = tree
+                .compact(cur_config.clone(), StoreConfigDataVersion::One as u32)
+                .unwrap();
+            assert_eq!(c, true);
+
+            let lctree = graph
+                .lcmerkle_tree(Some(cur_config), data.as_slice())
+                .unwrap();
+            trees.insert(i.into(), lctree);
         }
 
         let pub_params =

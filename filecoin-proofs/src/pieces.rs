@@ -652,7 +652,7 @@ mod tests {
         }
         assert_eq!(staged_sector.len(), u64::from(sector_size) as usize);
 
-        let data_tree = graph.merkle_tree(&staged_sector)?;
+        let data_tree = graph.merkle_tree(None, &staged_sector)?;
         let comm_d_root: Fr = data_tree.root().into();
         let comm_d = commitment_from_fr::<Bls12>(comm_d_root);
 
