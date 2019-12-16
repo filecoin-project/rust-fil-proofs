@@ -7,4 +7,6 @@ members = [
 ]
 
 [patch.crates-io]
-bellperson = { git = "https://github.com/finalitylabs/bellman", branch="fil-lock" }
+#bellperson = { git = "https://github.com/finalitylabs/bellman", branch="fil-lock" }
+bellperson = { git = "https://github.com/vmx/bellman", branch="gpu-lock-plus-fixes" }
+#bellperson = { git = "https://github.com/vmx/bellman", branch="gpu-lock" }
