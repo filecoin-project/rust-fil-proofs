@@ -211,6 +211,7 @@ use paired::{
 };
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
+use rayon::prelude::*;
 
 /// This is our assembly structure that we'll use to synthesize the
 /// circuit into a QAP.
@@ -389,8 +390,8 @@ impl MPCParameters {
             m *= 2;
             exp += 1;
 
-            // Powers of Tau ceremony can't support more than 2^21
-            if exp > 21 {
+            // Powers of Tau ceremony can't support more than 2^30
+            if exp > 30 {
                 return Err(SynthesisError::PolynomialDegreeTooLarge);
             }
         }
@@ -614,36 +615,36 @@ impl MPCParameters {
             gamma_g2: G2Affine::one(),
             delta_g1: G1Affine::one(),
             delta_g2: G2Affine::one(),
-            ic: ic.into_iter().map(|e| e.into_affine()).collect(),
+            ic: ic.into_par_iter().map(|e| e.into_affine()).collect(),
         };
 
         let params = Parameters {
             vk,
             h: Arc::new(h),
-            l: Arc::new(l.into_iter().map(|e| e.into_affine()).collect()),
+            l: Arc::new(l.into_par_iter().map(|e| e.into_affine()).collect()),
 
             // Filter points at infinity away from A/B queries
             a: Arc::new(
-                a_g1.into_iter()
+                a_g1.into_par_iter()
                     .filter(|e| !e.is_zero())
                     .map(|e| e.into_affine())
                     .collect(),
             ),
             b_g1: Arc::new(
-                b_g1.into_iter()
+                b_g1.into_par_iter()
                     .filter(|e| !e.is_zero())
                     .map(|e| e.into_affine())
                     .collect(),
             ),
             b_g2: Arc::new(
-                b_g2.into_iter()
+                b_g2.into_par_iter()
                     .filter(|e| !e.is_zero())
                     .map(|e| e.into_affine())
                     .collect(),
             ),
         };
 
-        let h = {
+        let cs_hash = {
             let sink = io::sink();
             let mut sink = HashWriter::new(sink);
 
@@ -651,9 +652,6 @@ impl MPCParameters {
 
             sink.into_hash()
         };
-
-        let mut cs_hash = [0; 64];
-        cs_hash.copy_from_slice(h.as_ref());
 
         Ok(MPCParameters {
             params,
@@ -709,19 +707,17 @@ impl MPCParameters {
             .unwrap();
 
             // Perform batch normalization
-            crossbeam::thread::scope(|scope| {
-                for projective in projective.chunks_mut(chunk_size) {
-                    scope.spawn(move |_| {
-                        C::Projective::batch_normalization(projective);
-                    });
-                }
-            })
-            .unwrap();
+            projective
+                .par_chunks_mut(chunk_size)
+                .for_each(|p| C::Projective::batch_normalization(p));
 
             // Turn it all back into affine points
-            for (projective, affine) in projective.iter().zip(bases.iter_mut()) {
-                *affine = projective.into_affine();
-            }
+            projective
+                .par_iter()
+                .zip(bases.par_iter_mut())
+                .for_each(|(projective, affine)| {
+                    *affine = projective.into_affine();
+                });
         }
 
         let delta_inv = privkey.delta.inverse().expect("nonzero");
@@ -742,10 +738,7 @@ impl MPCParameters {
             let sink = io::sink();
             let mut sink = HashWriter::new(sink);
             pubkey.write(&mut sink).unwrap();
-            let h = sink.into_hash();
-            let mut response = [0u8; 64];
-            response.copy_from_slice(h.as_ref());
-            response
+            sink.into_hash()
         }
     }
 
@@ -843,10 +836,7 @@ impl MPCParameters {
                 let sink = io::sink();
                 let mut sink = HashWriter::new(sink);
                 pubkey.write(&mut sink).unwrap();
-                let h = sink.into_hash();
-                let mut response = [0u8; 64];
-                response.copy_from_slice(h.as_ref());
-                result.push(response);
+                result.push(sink.into_hash());
             }
         }
 
@@ -1150,11 +1140,8 @@ pub fn verify_contribution(before: &MPCParameters, after: &MPCParameters) -> Res
     let sink = io::sink();
     let mut sink = HashWriter::new(sink);
     pubkey.write(&mut sink).unwrap();
-    let h = sink.into_hash();
-    let mut response = [0u8; 64];
-    response.copy_from_slice(h.as_ref());
 
-    Ok(response)
+    Ok(sink.into_hash())
 }
 
 /// Checks if pairs have the same ratio.
@@ -1258,11 +1245,10 @@ fn keypair<R: Rng>(rng: &mut R, current: &MPCParameters) -> (PublicKey, PrivateK
 
     // This avoids making a weird assumption about the hash into the
     // group.
-    let mut transcript = [0; 64];
-    transcript.copy_from_slice(h.as_ref());
+    let transcript = h;
 
     // Compute delta s-pair in G2
-    let r = hash_to_g2(h.as_ref()).into_affine();
+    let r = hash_to_g2(&h).into_affine();
     let r_delta = r.mul(delta).into_affine();
 
     (
