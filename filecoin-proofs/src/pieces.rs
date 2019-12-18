@@ -622,8 +622,8 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let graph = StackedBucketGraph::<DefaultPieceHasher>::new_stacked(
             u64::from(sector_size) as usize / NODE_SIZE,
-            WINDOW_DRG_DEGREE.load(Ordering::Relaxed),
-            WINDOW_EXP_DEGREE.load(Ordering::Relaxed),
+            WINDOW_DRG_DEGREE.load(Ordering::Relaxed) as usize,
+            WINDOW_EXP_DEGREE.load(Ordering::Relaxed) as usize,
             new_seed(),
         )?;
 

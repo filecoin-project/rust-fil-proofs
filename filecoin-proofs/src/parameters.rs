@@ -120,7 +120,7 @@ mod tests {
     #[test]
     fn partition_layer_challenges_test() {
         let f = |partitions| {
-            select_challenges(partitions, 12, LAYERS.load(Ordering::Relaxed))
+            select_challenges(partitions, 12, LAYERS.load(Ordering::Relaxed) as usize)
                 .unwrap()
                 .challenges_count_all()
         };
