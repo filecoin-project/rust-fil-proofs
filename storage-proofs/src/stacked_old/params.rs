@@ -4,8 +4,6 @@ use std::marker::PhantomData;
 
 use log::trace;
 use merkletree::merkle::get_merkle_tree_leafs;
-#[cfg(feature = "mem-trees")]
-use merkletree::store::VecStore;
 use merkletree::store::{DiskStore, Store, StoreConfig};
 use serde::{Deserialize, Serialize};
 
@@ -374,7 +372,6 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
         self.labels.column(column_index)
     }
 
-    #[cfg(not(feature = "mem-trees"))]
     pub fn delete(t_aux: TemporaryAux<H, G>) -> Result<()> {
         let tree_d_size = t_aux.tree_d_config.size.unwrap();
         let tree_d_store: DiskStore<G::Domain> =
@@ -411,32 +408,20 @@ pub struct TemporaryAuxCache<H: Hasher, G: Hasher> {
 impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
     pub fn new(t_aux: &TemporaryAux<H, G>) -> Result<Self> {
         let tree_d_size = t_aux.tree_d_config.size.unwrap();
-        #[cfg(not(feature = "mem-trees"))]
         let tree_d_store: DiskStore<G::Domain> =
             DiskStore::new_from_disk(tree_d_size, &t_aux.tree_d_config)?;
-        #[cfg(feature = "mem-trees")]
-        let tree_d_store: VecStore<G::Domain> =
-            VecStore::new_with_config(tree_d_size, t_aux.tree_d_config.clone())?;
         let tree_d: Tree<G> =
             MerkleTree::from_data_store(tree_d_store, get_merkle_tree_leafs(tree_d_size))?;
 
         let tree_c_size = t_aux.tree_c_config.size.unwrap();
-        #[cfg(not(feature = "mem-trees"))]
         let tree_c_store: DiskStore<H::Domain> =
             DiskStore::new_from_disk(tree_c_size, &t_aux.tree_c_config)?;
-        #[cfg(feature = "mem-trees")]
-        let tree_c_store: VecStore<H::Domain> =
-            VecStore::new_with_config(tree_c_size, t_aux.tree_c_config.clone())?;
         let tree_c: Tree<H> =
             MerkleTree::from_data_store(tree_c_store, get_merkle_tree_leafs(tree_c_size))?;
 
         let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
-        #[cfg(not(feature = "mem-trees"))]
         let tree_r_last_store: DiskStore<H::Domain> =
             DiskStore::new_from_disk(tree_r_last_size, &t_aux.tree_r_last_config)?;
-        #[cfg(feature = "mem-trees")]
-        let tree_r_last_store: VecStore<H::Domain> =
-            VecStore::new_with_config(tree_r_last_size, t_aux.tree_r_last_config.clone())?;
         let tree_r_last: Tree<H> = MerkleTree::from_data_store(
             tree_r_last_store,
             get_merkle_tree_leafs(tree_r_last_size),

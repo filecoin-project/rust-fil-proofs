@@ -337,7 +337,6 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
-    #[cfg(not(feature = "mem-trees"))]
     #[test]
     #[ignore]
     fn stacked_input_circuit_with_bls12_381() {
