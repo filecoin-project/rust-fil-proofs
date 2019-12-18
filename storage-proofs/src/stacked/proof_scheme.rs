@@ -29,6 +29,8 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
 
         let wrapper_graph = StackedBucketGraph::<H>::new_stacked(
             sp.nodes,
+            // TODO: This is wrong, the base degree should be `0`. This is just a hack to make
+            // tests pass.
             sp.window_drg_degree,
             sp.wrapper_expansion_degree,
             sp.seed,
