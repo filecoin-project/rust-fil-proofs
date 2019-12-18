@@ -13,7 +13,7 @@ use filecoin_proofs::parameters::post_public_params;
 use filecoin_proofs::types::PaddedBytesAmount;
 use filecoin_proofs::types::*;
 use filecoin_proofs::types::{PoStConfig, SectorSize};
-use filecoin_proofs::{generate_candidates, generate_post, verify_post, PoRepConfig};
+use filecoin_proofs::{generate_candidates, generate_post, seal_commit, verify_post, PoRepConfig};
 use storage_proofs::circuit::bench::BenchCS;
 use storage_proofs::circuit::election_post::{ElectionPoStCircuit, ElectionPoStCompound};
 use storage_proofs::compound_proof::CompoundProof;
@@ -25,12 +25,8 @@ use storage_proofs::measurements::Operation;
 use storage_proofs::measurements::OP_MEASUREMENTS;
 use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::proof::ProofScheme;
-use storage_proofs::sector::SectorId;
 
-use crate::shared::{
-    create_replicas, prove_replicas, CommitReplicaOutput, PreCommitReplicaOutput, CHALLENGE_COUNT,
-    PROVER_ID, RANDOMNESS,
-};
+use crate::shared::{create_replicas, CHALLENGE_COUNT, PROVER_ID, RANDOMNESS, TICKET_BYTES};
 use std::sync::atomic::Ordering;
 
 const SEED: [u8; 16] = [
@@ -216,33 +212,41 @@ pub fn run(
 
     let sector_size = SectorSize(inputs.sector_size_bytes);
 
-    let (cfg, mut created) = create_replicas(sector_size, 1);
-
-    let sector_id: SectorId = *created
-        .keys()
-        .nth(0)
-        .expect("create_replicas produced no replicas");
+    // One replica for each type of proof as they cannot be shared between several proofs
+    let num_replicas = [!skip_seal_proof, !skip_post_proof]
+        .iter()
+        .filter(|&x| *x)
+        .count();
+    let (cfg, mut created) = create_replicas(sector_size, num_replicas);
 
     if !skip_seal_proof {
-        let mut proved = prove_replicas(cfg, &created);
+        let (sector_id, replica_info) = created.pop().expect("no replicas left");
 
-        let seal_commit: CommitReplicaOutput = proved
-            .remove(&sector_id)
-            .expect("failed to get seal commit from map");
+        let measured = measure(|| {
+            seal_commit(
+                cfg,
+                replica_info.private_replica_info.cache_dir_path(),
+                PROVER_ID,
+                sector_id,
+                TICKET_BYTES,
+                RANDOMNESS,
+                replica_info.measurement.return_value,
+                &replica_info.piece_info,
+            )
+        })
+        .expect("failed to prove sector");
 
-        outputs.porep_proof_gen_cpu_time_ms = seal_commit.measurement.cpu_time.as_millis() as u64;
-        outputs.porep_proof_gen_wall_time_ms = seal_commit.measurement.wall_time.as_millis() as u64;
+        outputs.porep_proof_gen_cpu_time_ms = measured.cpu_time.as_millis() as u64;
+        outputs.porep_proof_gen_wall_time_ms = measured.wall_time.as_millis() as u64;
     }
 
-    let replica_info: PreCommitReplicaOutput = created
-        .remove(&sector_id)
-        .expect("failed to get replica from map");
-
-    // replica_info is moved into the PoSt scope
-    let encoding_wall_time_ms = replica_info.measurement.wall_time.as_millis() as u64;
-    let encoding_cpu_time_ms = replica_info.measurement.cpu_time.as_millis() as u64;
-
     if !skip_post_proof {
+        let (sector_id, replica_info) = created.pop().expect("no replicas left");
+
+        // replica_info is moved into the PoSt scope
+        let encoding_wall_time_ms = replica_info.measurement.wall_time.as_millis() as u64;
+        let encoding_cpu_time_ms = replica_info.measurement.cpu_time.as_millis() as u64;
+
         // Measure PoSt generation and verification.
         let post_config = PoStConfig {
             sector_size,
@@ -283,10 +287,10 @@ pub fn run(
 
         outputs.post_proof_gen_cpu_time_ms = gen_post_measurement.cpu_time.as_millis() as u64;
         outputs.post_proof_gen_wall_time_ms = gen_post_measurement.wall_time.as_millis() as u64;
-    }
 
-    outputs.encoding_wall_time_ms = encoding_wall_time_ms;
-    outputs.encoding_cpu_time_ms = encoding_cpu_time_ms;
+        outputs.encoding_wall_time_ms = encoding_wall_time_ms;
+        outputs.encoding_cpu_time_ms = encoding_cpu_time_ms;
+    }
 
     augment_with_op_measurements(&mut outputs);
     outputs.circuits = run_measure_circuits(&inputs);

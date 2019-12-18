@@ -1,4 +1,5 @@
 use std::io::{Seek, SeekFrom, Write};
+use std::sync::atomic::Ordering;
 
 use tempfile::NamedTempFile;
 
@@ -6,11 +7,9 @@ use fil_proofs_tooling::{measure, FuncMeasurement};
 use filecoin_proofs::constants::DEFAULT_POREP_PROOF_PARTITIONS;
 use filecoin_proofs::types::{PaddedBytesAmount, PoRepConfig, SectorSize, UnpaddedBytesAmount};
 use filecoin_proofs::{
-    add_piece, generate_piece_commitment, seal_commit, seal_pre_commit, PieceInfo,
-    PoRepProofPartitions, PrivateReplicaInfo, PublicReplicaInfo, SealCommitOutput,
-    SealPreCommitOutput,
+    add_piece, generate_piece_commitment, seal_pre_commit, PieceInfo, PoRepProofPartitions,
+    PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput,
 };
-use std::sync::atomic::Ordering;
 use storage_proofs::sector::SectorId;
 
 pub(super) const CHALLENGE_COUNT: u64 = 1;
@@ -23,10 +22,6 @@ pub struct PreCommitReplicaOutput {
     pub private_replica_info: PrivateReplicaInfo,
     pub public_replica_info: PublicReplicaInfo,
     pub measurement: FuncMeasurement<SealPreCommitOutput>,
-}
-
-pub struct CommitReplicaOutput {
-    pub measurement: FuncMeasurement<SealCommitOutput>,
 }
 
 pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> (NamedTempFile, PieceInfo) {
@@ -60,10 +55,7 @@ pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> (NamedTempFile, PieceIn
 pub fn create_replicas(
     sector_size: SectorSize,
     qty_sectors: usize,
-) -> (
-    PoRepConfig,
-    std::collections::BTreeMap<SectorId, PreCommitReplicaOutput>,
-) {
+) -> (PoRepConfig, Vec<(SectorId, PreCommitReplicaOutput)>) {
     let sector_size_unpadded_bytes_ammount =
         UnpaddedBytesAmount::from(PaddedBytesAmount::from(sector_size));
 
@@ -72,7 +64,7 @@ pub fn create_replicas(
         partitions: PoRepProofPartitions(DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed)),
     };
 
-    let mut out: std::collections::BTreeMap<SectorId, PreCommitReplicaOutput> = Default::default();
+    let mut out: Vec<(SectorId, PreCommitReplicaOutput)> = Default::default();
 
     for _ in 0..qty_sectors {
         let sector_id = SectorId::from(rand::random::<u64>());
@@ -126,7 +118,7 @@ pub fn create_replicas(
         let pub_info = PublicReplicaInfo::new(seal_pre_commit_output.return_value.comm_r)
             .expect("failed to create PublicReplicaInfo");
 
-        out.insert(
+        out.push((
             sector_id,
             PreCommitReplicaOutput {
                 piece_info: vec![piece_info],
@@ -134,35 +126,8 @@ pub fn create_replicas(
                 private_replica_info: priv_info,
                 public_replica_info: pub_info,
             },
-        );
+        ));
     }
 
     (porep_config, out)
-}
-
-pub fn prove_replicas(
-    cfg: PoRepConfig,
-    input: &std::collections::BTreeMap<SectorId, PreCommitReplicaOutput>,
-) -> std::collections::BTreeMap<SectorId, CommitReplicaOutput> {
-    let mut out: std::collections::BTreeMap<SectorId, CommitReplicaOutput> = Default::default();
-
-    for (k, v) in input.iter() {
-        let m = measure(|| {
-            seal_commit(
-                cfg,
-                v.private_replica_info.cache_dir_path(),
-                PROVER_ID,
-                *k,
-                TICKET_BYTES,
-                RANDOMNESS,
-                v.measurement.return_value.clone(),
-                &v.piece_info,
-            )
-        })
-        .expect("failed to prove sector");
-
-        out.insert(*k, CommitReplicaOutput { measurement: m });
-    }
-
-    out
 }
