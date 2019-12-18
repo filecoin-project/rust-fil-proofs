@@ -339,6 +339,7 @@ mod tests {
 
     #[cfg(not(feature = "mem-trees"))]
     #[test]
+    #[ignore]
     fn stacked_input_circuit_with_bls12_381() {
         let nodes = 5;
         let degree = BASE_DEGREE;
