@@ -49,4 +49,3 @@ rand_xorshift = "0.2.0"
 default = ["gpu", "measurements"]
 gpu = ["storage-proofs/gpu", "filecoin-proofs/gpu", "bellperson/gpu", "fil-sapling-crypto/gpu"]
 measurements = ["storage-proofs/measurements"]
-

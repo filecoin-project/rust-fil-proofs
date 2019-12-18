@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::io::{stdout, Seek, SeekFrom, Write};
+use std::sync::atomic::Ordering;
 
 use fil_proofs_tooling::{measure, Metadata};
 use filecoin_proofs::constants::{
@@ -15,7 +16,6 @@ use filecoin_proofs::{
 };
 use log::info;
 use serde::Serialize;
-use std::sync::atomic::Ordering;
 use storage_proofs::sector::SectorId;
 use tempfile::NamedTempFile;
 

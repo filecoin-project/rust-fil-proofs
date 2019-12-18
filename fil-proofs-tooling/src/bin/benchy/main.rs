@@ -1,6 +1,8 @@
-use crate::flarp::FlarpInputs;
-use clap::{value_t, App, Arg, SubCommand};
 use std::io::{stdin, stdout};
+
+use clap::{value_t, App, Arg, SubCommand};
+
+use crate::flarp::FlarpInputs;
 
 mod election_post;
 mod flarp;

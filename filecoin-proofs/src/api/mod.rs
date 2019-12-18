@@ -312,6 +312,7 @@ mod tests {
 
     use std::collections::BTreeMap;
     use std::io::{Seek, SeekFrom, Write};
+    use std::sync::atomic::Ordering;
     use std::sync::Once;
 
     use ff::Field;
@@ -326,7 +327,6 @@ mod tests {
         DEFAULT_POREP_PROOF_PARTITIONS, SECTOR_SIZE_ONE_KIB, SINGLE_PARTITION_PROOF_LEN,
     };
     use crate::types::{PoStConfig, SectorSize};
-    use std::sync::atomic::Ordering;
 
     static INIT_LOGGER: Once = Once::new();
     fn init_logger() {
