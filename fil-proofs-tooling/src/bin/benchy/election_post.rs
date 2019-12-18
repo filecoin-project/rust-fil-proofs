@@ -19,10 +19,8 @@ use std::sync::atomic::Ordering;
 use storage_proofs::sector::SectorId;
 use tempfile::NamedTempFile;
 
-// The seed for the rng used to generate which sectors to challenge.
-const CHALLENGE_SEED: [u8; 32] = [0; 32];
+use crate::shared::{CHALLENGE_COUNT, PROVER_ID, RANDOMNESS, TICKET_BYTES};
 
-const PROVER_ID: [u8; 32] = [0; 32];
 const SECTOR_ID: u64 = 0;
 
 #[derive(Serialize)]
@@ -105,7 +103,6 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
     };
     let cache_dir = tempfile::tempdir().unwrap();
     let sector_id = SectorId::from(SECTOR_ID);
-    let ticket = [0u8; 32];
 
     let seal_pre_commit_output = seal_pre_commit(
         porep_config,
@@ -114,7 +111,7 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
         sealed_file.path(),
         PROVER_ID,
         sector_id,
-        ticket,
+        TICKET_BYTES,
         &piece_infos,
     )?;
 
@@ -126,7 +123,7 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
         cache_dir.path(),
         PROVER_ID,
         sector_id,
-        ticket,
+        TICKET_BYTES,
         seed,
         seal_pre_commit_output,
         &piece_infos,
@@ -150,13 +147,11 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
         challenged_nodes: POST_CHALLENGED_NODES,
     };
 
-    let challenge_count = 1u64;
-
     let gen_candidates_measurement = measure(|| {
         generate_candidates(
             post_config,
-            &CHALLENGE_SEED,
-            challenge_count,
+            &RANDOMNESS,
+            CHALLENGE_COUNT,
             &priv_replica_info,
             PROVER_ID,
         )
@@ -168,7 +163,7 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
     let gen_post_measurement = measure(|| {
         generate_post(
             post_config,
-            &CHALLENGE_SEED,
+            &RANDOMNESS,
             &priv_replica_info,
             candidates
                 .iter()
@@ -185,8 +180,8 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
     let verify_post_measurement = measure(|| {
         verify_post(
             post_config,
-            &CHALLENGE_SEED,
-            challenge_count,
+            &RANDOMNESS,
+            CHALLENGE_COUNT,
             proof,
             &pub_replica_info,
             &candidates
