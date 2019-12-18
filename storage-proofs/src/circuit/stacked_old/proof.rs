@@ -338,9 +338,8 @@ mod tests {
     use rand_xorshift::XorShiftRng;
 
     #[test]
-    #[ignore]
     fn stacked_input_circuit_with_bls12_381() {
-        let nodes = 5;
+        let nodes = 8;
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
         let num_layers = 2;
