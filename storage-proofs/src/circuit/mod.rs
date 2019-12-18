@@ -9,6 +9,7 @@ pub mod pedersen;
 pub mod por;
 pub mod rational_post;
 pub mod stacked;
+pub mod stacked_old;
 pub mod uint64;
 pub mod variables;
 pub mod xor;
