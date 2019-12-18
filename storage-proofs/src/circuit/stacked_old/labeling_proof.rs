@@ -64,6 +64,7 @@ impl LabelingProof {
             cs.namespace(|| "create_label"),
             replica_id,
             parents_bits,
+            None,
             Some(node_num),
         )
     }

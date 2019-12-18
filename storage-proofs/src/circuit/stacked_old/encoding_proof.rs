@@ -59,6 +59,7 @@ impl EncodingProof {
             cs.namespace(|| "create_key"),
             replica_id,
             parents_bits,
+            None,
             Some(node_num),
         )
     }

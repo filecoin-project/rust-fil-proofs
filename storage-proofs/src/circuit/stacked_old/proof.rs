@@ -13,6 +13,7 @@ use crate::circuit::{
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph::{Graph, BASE_DEGREE};
+use crate::error::Result;
 use crate::fr32::fr_into_bytes;
 use crate::hasher::Hasher;
 use crate::merklepor;
@@ -205,7 +206,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         pub_in: &<StackedDrg<H, G> as ProofScheme>::PublicInputs,
         pub_params: &<StackedDrg<H, G> as ProofScheme>::PublicParams,
         k: Option<usize>,
-    ) -> Vec<Fr> {
+    ) -> Result<Vec<Fr>> {
         let graph = &pub_params.graph;
 
         let mut inputs = Vec::new();
@@ -219,8 +220,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         let por_params = merklepor::MerklePoR::<H>::setup(&merklepor::SetupParams {
             leaves: graph.size(),
             private: true,
-        })
-        .expect("setup failed");
+        })?;
 
         let generate_inclusion_inputs = |c: usize| {
             let pub_inputs = merklepor::PublicInputs::<H::Domain> {
@@ -235,34 +235,34 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
 
         for challenge in all_challenges.into_iter() {
             // comm_d_proof
-            inputs.extend(generate_inclusion_inputs(challenge));
+            inputs.extend(generate_inclusion_inputs(challenge)?);
 
             // replica column proof
             {
                 // c_x
-                inputs.extend(generate_inclusion_inputs(challenge));
+                inputs.extend(generate_inclusion_inputs(challenge)?);
 
                 // drg parents
                 let mut drg_parents = vec![0; graph.base_graph().degree()];
-                graph.base_graph().parents(challenge, &mut drg_parents);
+                graph.base_graph().parents(challenge, &mut drg_parents)?;
 
                 for parent in drg_parents.into_iter() {
-                    inputs.extend(generate_inclusion_inputs(parent as usize));
+                    inputs.extend(generate_inclusion_inputs(parent as usize)?);
                 }
 
                 // exp parents
                 let mut exp_parents = vec![0; graph.expansion_degree()];
                 graph.expanded_parents(challenge, &mut exp_parents);
                 for parent in exp_parents.into_iter() {
-                    inputs.extend(generate_inclusion_inputs(parent as usize));
+                    inputs.extend(generate_inclusion_inputs(parent as usize)?);
                 }
             }
 
             // final replica layer
-            inputs.extend(generate_inclusion_inputs(challenge));
+            inputs.extend(generate_inclusion_inputs(challenge)?);
         }
 
-        inputs
+        Ok(inputs)
     }
 
     fn circuit<'b>(
@@ -270,7 +270,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         _component_private_inputs: <StackedCircuit<'a, Bls12, H, G> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &'b <StackedDrg<H, G> as ProofScheme>::Proof,
         public_params: &'b <StackedDrg<H, G> as ProofScheme>::PublicParams,
-    ) -> StackedCircuit<'a, Bls12, H, G> {
+    ) -> Result<StackedCircuit<'a, Bls12, H, G>> {
         assert!(
             !vanilla_proof.is_empty(),
             "Cannot create a circuit with no vanilla proofs"
@@ -285,7 +285,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
             .all(|p| p.comm_r_last() == &comm_r_last));
         assert!(vanilla_proof.iter().all(|p| p.comm_c() == &comm_c));
 
-        StackedCircuit {
+        Ok(StackedCircuit {
             params: &*JJ_PARAMS,
             public_params: public_params.clone(),
             replica_id: Some(public_inputs.replica_id),
@@ -295,7 +295,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
             comm_c: Some(comm_c),
             proofs: vanilla_proof.iter().cloned().map(|p| p.into()).collect(),
             _e: PhantomData,
-        }
+        })
     }
 
     fn blank_circuit(
@@ -430,6 +430,7 @@ mod tests {
                 &proofs[0],
                 &pp,
             )
+            .expect("circuit failed")
             .synthesize(&mut cs.namespace(|| "stacked drgporep"))
             .expect("failed to synthesize circuit");
 
@@ -448,6 +449,7 @@ mod tests {
             &proofs[0],
             &pp,
         )
+        .expect("circuit failed")
         .synthesize(&mut cs.namespace(|| "stacked drgporep"))
         .expect("failed to synthesize circuit");
 
@@ -465,7 +467,8 @@ mod tests {
             _,
             StackedDrg<PedersenHasher, Sha256Hasher>,
             _,
-        >>::generate_public_inputs(&pub_inputs, &pp, None);
+        >>::generate_public_inputs(&pub_inputs, &pp, None)
+        .expect("failed to generate public inputs");
         let expected_inputs = cs.get_inputs();
 
         for ((input, label), generated_input) in
@@ -562,7 +565,8 @@ mod tests {
 
         {
             let (circuit, inputs) =
-                StackedCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);
+                StackedCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs)
+                    .unwrap();
 
             let mut cs = TestConstraintSystem::new();
 
@@ -583,7 +587,8 @@ mod tests {
         // Use this to debug differences between blank and regular circuit generation.
         {
             let (circuit1, _inputs) =
-                StackedCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs);
+                StackedCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs)
+                    .unwrap();
             let blank_circuit = <StackedCompound as CompoundProof<
                 _,
                 StackedDrg<H, Sha256Hasher>,
@@ -606,11 +611,12 @@ mod tests {
             }
         }
 
-        let blank_groth_params =
-            <StackedCompound as CompoundProof<_, StackedDrg<H, Sha256Hasher>, _>>::groth_params(
-                &public_params.vanilla_params,
-            )
-            .expect("failed to generate groth params");
+        let blank_groth_params = <StackedCompound as CompoundProof<
+            _,
+            StackedDrg<H, Sha256Hasher>,
+            _,
+        >>::groth_params(Some(rng), &public_params.vanilla_params)
+        .expect("failed to generate groth params");
 
         let proof = StackedCompound::prove(
             &public_params,
