@@ -29,7 +29,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
 
         let wrapper_graph = StackedBucketGraph::<H>::new_stacked(
             sp.nodes,
-            0,
+            sp.window_drg_degree,
             sp.wrapper_expansion_degree,
             sp.seed,
         )?;
