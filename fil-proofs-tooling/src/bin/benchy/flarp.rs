@@ -197,7 +197,7 @@ fn configure_global_config(inputs: &FlarpInputs) {
         .store(inputs.porep_partitions, Relaxed); // 10
     filecoin_proofs::constants::WRAPPER_EXP_DEGREE.store(inputs.wrapper_parents_all, Relaxed); // 8
     filecoin_proofs::constants::WINDOW_EXP_DEGREE.store(inputs.expander_parents, Relaxed); // 8
-    filecoin_proofs::constants::WINDOW_DRG_DEGREE.store(inputs.drg_parents, Relaxed); // 8
+    filecoin_proofs::constants::WINDOW_DRG_DEGREE.store(inputs.drg_parents, Relaxed); // 6
     filecoin_proofs::constants::POREP_WINDOW_MINIMUM_CHALLENGES
         .store(inputs.porep_challenges, Relaxed); // 50
     filecoin_proofs::constants::POREP_WRAPPER_MINIMUM_CHALLENGES
