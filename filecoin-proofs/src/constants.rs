@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{atomic::AtomicU8, atomic::AtomicU64, RwLock};
+use std::sync::{atomic::AtomicU64, atomic::AtomicU8, RwLock};
 
 use lazy_static::lazy_static;
 use storage_proofs::util::NODE_SIZE;
