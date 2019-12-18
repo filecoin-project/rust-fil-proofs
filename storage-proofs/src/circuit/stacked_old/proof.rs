@@ -496,7 +496,7 @@ mod tests {
     }
 
     fn stacked_test_compound<H: 'static + Hasher>() {
-        let nodes = 5;
+        let nodes = 8;
         let degree = 3;
         let expansion_degree = 2;
         let num_layers = 2;
