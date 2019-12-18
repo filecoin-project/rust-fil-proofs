@@ -30,7 +30,7 @@ pub struct CommitReplicaOutput {
 }
 
 pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> (NamedTempFile, PieceInfo) {
-    let buf: Vec<u8> = (0..usize::from(piece_bytes))
+    let buf: Vec<u8> = (0..u64::from(piece_bytes))
         .map(|_| rand::random::<u8>())
         .collect();
 

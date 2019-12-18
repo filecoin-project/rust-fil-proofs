@@ -30,7 +30,7 @@ pub fn public_params(
     )?)
 }
 
-pub fn window_size_nodes_for_sector_bytes(sector_size: PaddedBytesAmount) -> Result<usize> {
+pub fn window_size_nodes_for_sector_bytes(sector_size: PaddedBytesAmount) -> Result<u64> {
     use crate::constants::DEFAULT_WINDOWS;
     match DEFAULT_WINDOWS.read().unwrap().get(&u64::from(sector_size)) {
         Some(info) => Ok(info.window_size_nodes()),
@@ -58,16 +58,16 @@ pub fn setup_params(
 ) -> Result<stacked::SetupParams> {
     let window_challenges = select_challenges(
         partitions,
-        POREP_WINDOW_MINIMUM_CHALLENGES.load(Ordering::Relaxed),
-        LAYERS.load(Ordering::Relaxed),
+        POREP_WINDOW_MINIMUM_CHALLENGES.load(Ordering::Relaxed) as usize,
+        LAYERS.load(Ordering::Relaxed) as usize,
     )?;
     let wrapper_challenges = select_challenges(
         partitions,
-        POREP_WRAPPER_MINIMUM_CHALLENGES.load(Ordering::Relaxed),
-        LAYERS.load(Ordering::Relaxed),
+        POREP_WRAPPER_MINIMUM_CHALLENGES.load(Ordering::Relaxed) as usize,
+        LAYERS.load(Ordering::Relaxed) as usize,
     )?;
     let window_size_nodes = window_size_nodes_for_sector_bytes(sector_bytes)?;
-    let sector_bytes = usize::from(sector_bytes);
+    let sector_bytes = u64::from(sector_bytes);
 
     let config = StackedConfig {
         window_challenges,
@@ -87,15 +87,15 @@ pub fn setup_params(
         window_size_nodes * 32
     );
 
-    let nodes = sector_bytes / 32;
+    let nodes = (sector_bytes / 32) as usize;
     Ok(stacked::SetupParams {
         nodes,
-        window_drg_degree: WINDOW_DRG_DEGREE.load(Ordering::Relaxed),
-        window_expansion_degree: WINDOW_EXP_DEGREE.load(Ordering::Relaxed),
-        wrapper_expansion_degree: WRAPPER_EXP_DEGREE.load(Ordering::Relaxed),
+        window_drg_degree: WINDOW_DRG_DEGREE.load(Ordering::Relaxed) as usize,
+        window_expansion_degree: WINDOW_EXP_DEGREE.load(Ordering::Relaxed) as usize,
+        wrapper_expansion_degree: WRAPPER_EXP_DEGREE.load(Ordering::Relaxed) as usize,
         seed: DRG_SEED,
         config,
-        window_size_nodes,
+        window_size_nodes: window_size_nodes as usize,
     })
 }
 

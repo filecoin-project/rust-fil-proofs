@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{atomic::AtomicU8, atomic::AtomicUsize, RwLock};
+use std::sync::{atomic::AtomicU8, atomic::AtomicU64, RwLock};
 
 use lazy_static::lazy_static;
 use storage_proofs::util::NODE_SIZE;
@@ -16,15 +16,15 @@ pub const POST_CHALLENGE_COUNT: usize = 40;
 pub const POST_CHALLENGED_NODES: usize = 1;
 
 lazy_static! {
-    pub static ref LAYERS: AtomicUsize = AtomicUsize::new(4);
+    pub static ref LAYERS: AtomicU64 = AtomicU64::new(4);
     // 5 challenges per partition
-    pub static ref POREP_WINDOW_MINIMUM_CHALLENGES: AtomicUsize = AtomicUsize::new(50);
+    pub static ref POREP_WINDOW_MINIMUM_CHALLENGES: AtomicU64 = AtomicU64::new(50);
     // 5 challenges per partition
-    pub static ref POREP_WRAPPER_MINIMUM_CHALLENGES: AtomicUsize = AtomicUsize::new(50);
+    pub static ref POREP_WRAPPER_MINIMUM_CHALLENGES: AtomicU64 = AtomicU64::new(50);
 
-    pub static ref WINDOW_DRG_DEGREE: AtomicUsize = AtomicUsize::new(storage_proofs::drgraph::BASE_DEGREE);
-    pub static ref WINDOW_EXP_DEGREE: AtomicUsize = AtomicUsize::new(storage_proofs::stacked::EXP_DEGREE);
-    pub static ref WRAPPER_EXP_DEGREE: AtomicUsize = AtomicUsize::new(storage_proofs::stacked::EXP_DEGREE);
+    pub static ref WINDOW_DRG_DEGREE: AtomicU64 = AtomicU64::new(storage_proofs::drgraph::BASE_DEGREE as u64);
+    pub static ref WINDOW_EXP_DEGREE: AtomicU64 = AtomicU64::new(storage_proofs::stacked::EXP_DEGREE as u64);
+    pub static ref WRAPPER_EXP_DEGREE: AtomicU64 = AtomicU64::new(storage_proofs::stacked::EXP_DEGREE as u64);
     pub static ref DEFAULT_POREP_PROOF_PARTITIONS: AtomicU8 = AtomicU8::new(10);
 
     pub static ref DEFAULT_WINDOWS: RwLock<HashMap<u64, SectorInfo>> = RwLock::new({
@@ -76,12 +76,12 @@ pub const SINGLE_PARTITION_PROOF_LEN: usize = 192;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SectorInfo {
     pub size: u64,
-    pub window_size: usize,
+    pub window_size: u64,
 }
 
 impl SectorInfo {
-    pub fn window_size_nodes(&self) -> usize {
-        self.window_size / NODE_SIZE
+    pub fn window_size_nodes(&self) -> u64 {
+        self.window_size / NODE_SIZE as u64
     }
 }
 pub const MINIMUM_RESERVED_LEAVES_FOR_PIECE_IN_SECTOR: u64 = 4;
