@@ -99,6 +99,8 @@ pub struct FlarpOutputs {
     post_proof_gen_wall_time_ms: u64,
     post_read_challenged_range_cpu_time_ms: u64,
     post_read_challenged_range_time_ms: u64,
+    post_verify_cpu_time_ms: u64,
+    post_verify_wall_time_ms: u64,
     tree_r_last_cpu_time_ms: u64,
     tree_r_last_wall_time_ms: u64,
     window_comm_leaves_time_cpu_time_ms: u64,
@@ -307,6 +309,9 @@ pub fn run(
             verify_post_measurement.return_value,
             "generated PoSt was invalid"
         );
+
+        outputs.post_verify_cpu_time_ms = verify_post_measurement.cpu_time.as_millis() as u64;
+        outputs.post_verify_wall_time_ms = verify_post_measurement.wall_time.as_millis() as u64;
 
         outputs.encoding_wall_time_ms = encoding_wall_time_ms;
         outputs.encoding_cpu_time_ms = encoding_cpu_time_ms;
