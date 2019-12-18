@@ -56,10 +56,12 @@ impl CacheKey {
 pub struct SetupParams {
     /// Number of nodes.
     pub nodes: usize,
-    /// Base degree of DRG.
-    pub degree: usize,
-    /// Degree of th expander graph .
-    pub expansion_degree: usize,
+
+    pub window_drg_degree: usize,
+    pub window_expansion_degree: usize,
+
+    pub wrapper_expansion_degree: usize,
+
     /// Random seed
     pub seed: [u8; 28],
     /// Size of a window in nodes.

@@ -1,6 +1,7 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::prelude::*;
 use std::path::Path;
+use std::sync::atomic::Ordering;
 
 use anyhow::{ensure, Context, Result};
 use bincode::{deserialize, serialize};
@@ -389,7 +390,7 @@ pub fn verify_seal(
         &public_inputs,
         &proof,
         &ChallengeRequirements {
-            minimum_challenges: POREP_WINDOW_MINIMUM_CHALLENGES, // TODO: what do we want here?
+            minimum_challenges: POREP_WINDOW_MINIMUM_CHALLENGES.load(Ordering::Relaxed) as usize, // TODO: what do we want here?
         },
     )
     .map_err(Into::into)

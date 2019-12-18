@@ -296,12 +296,15 @@ pub fn get_aligned_source<T: Read>(
 mod tests {
     use super::*;
     use crate::api::util::commitment_from_fr;
+    use crate::constants::{WINDOW_DRG_DEGREE, WINDOW_EXP_DEGREE};
+
+    use std::sync::atomic::Ordering;
 
     use paired::bls12_381::{Bls12, Fr};
     use rand::{Rng, RngCore, SeedableRng};
     use rand_xorshift::XorShiftRng;
-    use storage_proofs::drgraph::{new_seed, Graph, BASE_DEGREE};
-    use storage_proofs::stacked::{StackedBucketGraph, EXP_DEGREE};
+    use storage_proofs::drgraph::{new_seed, Graph};
+    use storage_proofs::stacked::StackedBucketGraph;
 
     use std::io::{Seek, SeekFrom};
 
@@ -619,8 +622,8 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let graph = StackedBucketGraph::<DefaultPieceHasher>::new_stacked(
             u64::from(sector_size) as usize / NODE_SIZE,
-            BASE_DEGREE,
-            EXP_DEGREE,
+            WINDOW_DRG_DEGREE.load(Ordering::Relaxed) as usize,
+            WINDOW_EXP_DEGREE.load(Ordering::Relaxed) as usize,
             new_seed(),
         )?;
 

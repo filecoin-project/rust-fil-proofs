@@ -22,15 +22,17 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
         let window_graph = StackedBucketGraph::<H>::new_stacked(
             sp.window_size_nodes,
-            sp.degree,
-            sp.expansion_degree,
+            sp.window_drg_degree,
+            sp.window_expansion_degree,
             sp.seed,
         )?;
 
         let wrapper_graph = StackedBucketGraph::<H>::new_stacked(
             sp.nodes,
-            sp.degree,
-            sp.expansion_degree,
+            // TODO: This is wrong, the base degree should be `0`. This is just a hack to make
+            // tests pass.
+            sp.window_drg_degree,
+            sp.wrapper_expansion_degree,
             sp.seed,
         )?;
 

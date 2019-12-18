@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::prelude::*;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, ensure, Context, Result};
 use bincode::deserialize;
@@ -78,6 +78,10 @@ impl PrivateReplicaInfo {
             aux,
             cache_dir,
         })
+    }
+
+    pub fn cache_dir_path(&self) -> &Path {
+        self.cache_dir.as_path()
     }
 
     pub fn safe_comm_r(&self) -> Result<<DefaultTreeHasher as Hasher>::Domain> {
@@ -226,7 +230,7 @@ pub fn generate_candidates(
     let trees: BTreeMap<SectorId, Tree> = unique_trees_res.into_iter().collect::<Result<_, _>>()?;
 
     let candidates = election_post::generate_candidates::<DefaultTreeHasher>(
-        public_params.vanilla_params.sector_size,
+        &public_params.vanilla_params,
         &challenged_sectors,
         &trees,
         &prover_id,

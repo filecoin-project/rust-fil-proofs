@@ -1,7 +1,13 @@
+use std::io::{stdin, stdout};
+
 use clap::{value_t, App, Arg, SubCommand};
 
+use crate::flarp::FlarpInputs;
+
 mod election_post;
+mod flarp;
 mod hash_fns;
+mod shared;
 mod stacked;
 
 fn main() {
@@ -114,11 +120,27 @@ fn main() {
     let hash_cmd = SubCommand::with_name("hash-constraints")
         .about("Benchmark hash function inside of a circuit");
 
+    let flarp_cmd = SubCommand::with_name("flarp")
+        .about("Benchmark flarp")
+        .arg(
+            Arg::with_name("skip-seal-proof")
+                .long("skip-seal-proof")
+                .takes_value(false)
+                .help("skip generation (and verification) of seal proof"),
+        )
+        .arg(
+            Arg::with_name("skip-post-proof")
+                .long("skip-post-proof")
+                .takes_value(false)
+                .help("skip generation (and verification) of PoSt proof"),
+        );
+
     let matches = App::new("benchy")
         .version("0.1")
         .subcommand(stacked_cmd)
         .subcommand(election_post_cmd)
         .subcommand(hash_cmd)
+        .subcommand(flarp_cmd)
         .get_matches();
 
     match matches.subcommand() {
@@ -158,6 +180,19 @@ fn main() {
         }
         ("hash-constraints", Some(_m)) => {
             hash_fns::run().expect("hash-constraints failed");
+        }
+        ("flarp", Some(m)) => {
+            let inputs: FlarpInputs = serde_json::from_reader(stdin())
+                .expect("failed to deserialize stdin to FlarpInputs");
+
+            let outputs = flarp::run(
+                inputs,
+                m.is_present("skip-seal-proof"),
+                m.is_present("skip-post-proof"),
+            );
+
+            serde_json::to_writer(stdout(), &outputs)
+                .expect("failed to write FlarpOutput to stdout")
         }
         _ => panic!("carnation"),
     }
