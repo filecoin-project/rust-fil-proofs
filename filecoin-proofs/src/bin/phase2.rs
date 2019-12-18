@@ -7,6 +7,8 @@ use filecoin_proofs::constants::{
 };
 use filecoin_proofs::parameters::setup_params;
 use filecoin_proofs::types::*;
+use log::info;
+use rand::SeedableRng;
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::stacked::StackedDrg;
@@ -17,7 +19,7 @@ fn initial_setup() {
 
     // Generate params for PoRep
     {
-        println!("Creating params for PoRep");
+        info!("Creating params for PoRep");
 
         // TODO: allow for different sizes
         let porep_config = PoRepConfig {
@@ -59,20 +61,40 @@ fn contribute() {
     let params = File::create("params").unwrap();
     let mut params_reader = BufReader::with_capacity(1024 * 1024, params);
 
-    println!("reading params from disk");
+    info!("reading params from disk");
     let mut params = phase2::MPCParameters::read(&mut params_reader, true).unwrap();
 
-    let mut rng = rand::rngs::OsRng; // TODO: allow participant to input randomness instead
+    let seed = prompt_for_randomness();
+    let mut rng = rand_chacha::ChaChaRng::from_seed(seed);
 
     let contribution = params.contribute(&mut rng);
-    println!("contributed: {}", hex::encode(&contribution[..]));
+    info!("contributed: {}", hex::encode(&contribution[..]));
 
     // TODO: add verification check
 }
 
+fn prompt_for_randomness() -> [u8; 32] {
+    use dialoguer::{theme::ColorfulTheme, PasswordInput};
+
+    let raw = PasswordInput::with_theme(&ColorfulTheme::default())
+        .with_prompt("Please enter your randomness")
+        .interact()
+        .unwrap();
+
+    let hashed = blake2b_simd::blake2b(raw.as_bytes());
+
+    let mut seed = [0u8; 32];
+    seed.copy_from_slice(&hashed.as_ref()[..32]);
+    seed
+}
+
 fn main() {
-    println!("Phase2 begins");
     // TODO: make nice cli
+
+    simplelog::SimpleLogger::init(log::LevelFilter::Info, simplelog::Config::default())
+        .expect("failed to init logger");
+
+    info!("Phase2 begins");
 
     // setup only run once
     initial_setup();
@@ -80,7 +102,7 @@ fn main() {
     // contribute
     contribute();
 
-    println!("Phase2 has ended");
+    info!("Phase2 has ended");
 }
 
 // TODO: add method for verification
