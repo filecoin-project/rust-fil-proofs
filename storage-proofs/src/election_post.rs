@@ -19,7 +19,7 @@ use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::sector::*;
-use crate::stacked::hash::hash3;
+use crate::stacked::hash::hash2;
 use crate::util::NODE_SIZE;
 
 #[derive(Debug, Clone)]
@@ -67,7 +67,6 @@ pub struct PublicInputs<T: Domain> {
 pub struct PrivateInputs<H: Hasher> {
     pub tree: MerkleTree<H::Domain, H::Function>,
     pub comm_c: H::Domain,
-    pub comm_q: H::Domain,
     pub comm_r_last: H::Domain,
 }
 
@@ -100,7 +99,6 @@ pub struct Proof<H: Hasher> {
     inclusion_proofs: Vec<MerkleProof<H>>,
     pub ticket: [u8; 32],
     pub comm_c: H::Domain,
-    pub comm_q: H::Domain,
 }
 
 impl<H: Hasher> Proof<H> {
@@ -364,7 +362,6 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
             inclusion_proofs,
             ticket,
             comm_c: priv_inputs.comm_c,
-            comm_q: priv_inputs.comm_q,
         })
     }
 
@@ -373,16 +370,13 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
         pub_inputs: &Self::PublicInputs,
         proof: &Self::Proof,
     ) -> Result<bool> {
-        // verify that H(Comm_c || comm_q || Comm_r_last) == Comm_R
+        // verify that H(Comm_c || Comm_r_last) == Comm_R
         // comm_r_last is the root of the proof
         let comm_r_last = proof.inclusion_proofs[0].root();
         let comm_c = proof.comm_c;
-        let comm_q = proof.comm_q;
         let comm_r = &pub_inputs.comm_r;
 
-        if AsRef::<[u8]>::as_ref(&hash3(comm_c, comm_q, comm_r_last))
-            != AsRef::<[u8]>::as_ref(comm_r)
-        {
+        if AsRef::<[u8]>::as_ref(&hash2(comm_c, comm_r_last)) != AsRef::<[u8]>::as_ref(comm_r) {
             return Ok(false);
         }
 
@@ -466,8 +460,7 @@ mod tests {
         let tree = trees.remove(&candidate.sector_id).unwrap();
         let comm_r_last = tree.root();
         let comm_c = H::Domain::random(rng);
-        let comm_q = H::Domain::random(rng);
-        let comm_r = Fr::from(hash3(comm_c, comm_q, comm_r_last)).into();
+        let comm_r = Fr::from(hash2(comm_c, comm_r_last)).into();
 
         let pub_inputs = PublicInputs {
             randomness,
@@ -481,7 +474,6 @@ mod tests {
         let priv_inputs = PrivateInputs::<H> {
             tree,
             comm_c,
-            comm_q,
             comm_r_last,
         };
 
