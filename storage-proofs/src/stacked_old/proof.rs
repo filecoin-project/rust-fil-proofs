@@ -84,7 +84,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 trace!("proving partition {}/{}", k + 1, partition_count);
 
                 // Derive the set of challenges we are proving over.
-                let challenges = pub_inputs.all_challenges(layer_challenges, graph_size, Some(k));
+                let challenges = pub_inputs.challenges(layer_challenges, graph_size, Some(k));
 
                 // Stacked commitment specifics
                 challenges
@@ -138,19 +138,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         let mut encoding_proof = None;
 
                         for layer in 1..=layers {
-                            let include_challenge =
-                                layer_challenges.include_challenge_at_layer(layer, challenge_index);
-                            trace!(
-                                "  encoding proof layer {} (include: {})",
-                                layer,
-                                include_challenge
-                            );
-                            // Due to tapering for some layers and some challenges we do not
-                            // create an encoding proof.
-                            if !include_challenge {
-                                continue;
-                            }
-
+                            trace!("  encoding proof layer {}", layer,);
                             let parents_data: Vec<H::Domain> = if layer == 1 {
                                 let mut parents = vec![0; graph.base_graph().degree()];
                                 graph.base_parents(challenge, &mut parents)?;
