@@ -9,11 +9,11 @@ use log::info;
 use paired::bls12_381::Bls12;
 use storage_proofs::circuit::election_post::ElectionPoStCircuit;
 use storage_proofs::circuit::election_post::ElectionPoStCompound;
-use storage_proofs::circuit::stacked::StackedCompound;
+use storage_proofs::circuit::stacked_old::StackedCompound;
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::election_post::ElectionPoSt;
-use storage_proofs::stacked::StackedDrg;
+use storage_proofs::stacked_old::StackedDrg;
 
 use crate::constants::DefaultPieceHasher;
 use crate::parameters::{post_public_params, public_params};

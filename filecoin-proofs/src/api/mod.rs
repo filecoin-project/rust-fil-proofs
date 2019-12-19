@@ -6,8 +6,9 @@ use anyhow::{anyhow, ensure, Context, Result};
 use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
 use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::hasher::Hasher;
+use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
-use storage_proofs::stacked::{generate_replica_id, CacheKey, StackedDrg};
+use storage_proofs::stacked_old::{generate_replica_id, CacheKey, StackedDrg};
 use tempfile::tempfile;
 
 use crate::api::util::as_safe_commitment;
@@ -95,19 +96,20 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     let offset_padded: PaddedBytesAmount = UnpaddedBytesAmount::from(offset).into();
     let num_bytes_padded: PaddedBytesAmount = num_bytes.into();
 
-    let unsealed = StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::extract_range(
+    let unsealed_all = StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::extract_all(
         &pp,
         &replica_id,
         &data,
         Some(config),
-        offset_padded.into(),
-        num_bytes_padded.into(),
     )?;
+    let start: usize = offset_padded.into();
+    let end = start + usize::from(num_bytes_padded);
+    let unsealed = &unsealed_all[start..end];
 
     // If the call to `extract_range` was successful, the `unsealed` vector must
     // have a length which equals `num_bytes_padded`. The byte at its 0-index
     // byte will be the the byte at index `offset_padded` in the sealed sector.
-    let written = write_unpadded(&unsealed, &mut buf_writer, 0, num_bytes.into())
+    let written = write_unpadded(unsealed, &mut buf_writer, 0, num_bytes.into())
         .with_context(|| format!("could not write to output_path={:?}", output_path.as_ref()))?;
 
     Ok(UnpaddedBytesAmount(written as u64))
