@@ -14,6 +14,7 @@ use storage_proofs::circuit::stacked_old::StackedCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
 use storage_proofs::hasher::{Domain, Hasher};
+use storage_proofs::measurements::{measure_op, Operation::CommD};
 use storage_proofs::merkle::create_merkle_tree;
 use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
@@ -113,11 +114,14 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
     );
 
     info!("building merkle tree for the original data");
-    let data_tree = create_merkle_tree::<DefaultPieceHasher>(
-        Some(config.clone()),
-        compound_public_params.vanilla_params.graph.size(),
-        &data,
-    )?;
+
+    let data_tree = measure_op(CommD, || {
+        create_merkle_tree::<DefaultPieceHasher>(
+            Some(config.clone()),
+            compound_public_params.vanilla_params.graph.size(),
+            &data,
+        )
+    })?;
 
     let comm_d_root: Fr = data_tree.root().into();
     let comm_d = commitment_from_fr::<Bls12>(comm_d_root);
