@@ -214,25 +214,19 @@ pub fn run(
 
     let sector_size = SectorSize(inputs.sector_size_bytes);
 
-    // One replica for each type of proof as they cannot be shared between several proofs
-    let num_replicas = [!skip_seal_proof, !skip_post_proof]
-        .iter()
-        .filter(|&x| *x)
-        .count();
-    let (cfg, mut created) = create_replicas(sector_size, num_replicas);
+    let (cfg, mut created) = create_replicas(sector_size, 1);
+    let (sector_id, replica_info) = created.pop().unwrap();
 
     if !skip_seal_proof {
-        let (sector_id, replica_info) = created.pop().expect("no replicas left");
-
         let measured = measure(|| {
             seal_commit(
                 cfg,
-                replica_info.private_replica_info.cache_dir_path(),
+                &replica_info.private_replica_info.cache_dir_path(),
                 PROVER_ID,
                 sector_id,
                 TICKET_BYTES,
                 RANDOMNESS,
-                replica_info.measurement.return_value,
+                replica_info.measurement.return_value.clone(),
                 &replica_info.piece_info,
             )
         })
@@ -243,8 +237,6 @@ pub fn run(
     }
 
     if !skip_post_proof {
-        let (sector_id, replica_info) = created.pop().expect("no replicas left");
-
         // replica_info is moved into the PoSt scope
         let encoding_wall_time_ms = replica_info.measurement.wall_time.as_millis() as u64;
         let encoding_cpu_time_ms = replica_info.measurement.cpu_time.as_millis() as u64;
@@ -290,12 +282,14 @@ pub fn run(
         outputs.post_proof_gen_cpu_time_ms = gen_post_measurement.cpu_time.as_millis() as u64;
         outputs.post_proof_gen_wall_time_ms = gen_post_measurement.wall_time.as_millis() as u64;
 
+        let post_proof = &gen_post_measurement.return_value;
+
         let verify_post_measurement = measure(|| {
             verify_post(
                 post_config,
                 &RANDOMNESS,
                 CHALLENGE_COUNT,
-                &gen_post_measurement.return_value,
+                post_proof,
                 &vec![(sector_id, replica_info.public_replica_info.clone())]
                     .into_iter()
                     .collect(),
