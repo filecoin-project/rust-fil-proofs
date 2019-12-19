@@ -9,7 +9,7 @@ use crate::hasher::Domain;
 pub struct LayerChallenges {
     /// How many layers we are generating challenges for.
     layers: usize,
-    /// The maximum count of challenges (on layer 1).
+    /// The maximum count of challenges
     max_count: usize,
 }
 
@@ -29,20 +29,11 @@ impl LayerChallenges {
         assert!(layer > 0, "Layer starts at 1");
         assert!(layer <= self.layers, "Layer too large");
 
-        // TODO: proper tapering
-        if layer == self.layers {
-            self.max_count
-        } else {
-            self.max_count / 2
-        }
-    }
-
-    pub fn include_challenge_at_layer(&self, layer: usize, challenge_index: usize) -> bool {
-        self.challenges_count(layer) > challenge_index
+        self.max_count
     }
 
     /// Derive all challenges.
-    pub fn derive_all<D: Domain>(
+    pub fn derive<D: Domain>(
         &self,
         leaves: usize,
         replica_id: &D,
@@ -50,19 +41,6 @@ impl LayerChallenges {
         k: u8,
     ) -> Vec<usize> {
         self.derive_internal(self.challenges_count_all(), leaves, replica_id, seed, k)
-    }
-
-    /// Derive a set of challenges, for the given inputs.
-    pub fn derive<D: Domain>(
-        &self,
-        layer: usize,
-        leaves: usize,
-        replica_id: &D,
-        seed: &[u8; 32],
-        k: u8,
-    ) -> Vec<usize> {
-        let challenges_count = self.challenges_count(layer);
-        self.derive_internal(challenges_count, leaves, replica_id, seed, k)
     }
 
     pub fn derive_internal<D: Domain>(
@@ -126,10 +104,10 @@ mod test {
 
         let mut layers_with_duplicates = 0;
 
-        for layer in 1..=layers {
+        for _layer in 1..=layers {
             let mut histogram = HashMap::new();
             for k in 0..partitions {
-                let challenges = challenges.derive(layer, leaves, &replica_id, &seed, k as u8);
+                let challenges = challenges.derive(leaves, &replica_id, &seed, k as u8);
 
                 for challenge in challenges {
                     let counter = histogram.entry(challenge).or_insert(0);
@@ -162,9 +140,8 @@ mod test {
         let layers = 100;
         let total_challenges = n * partitions;
 
-        for layer in 1..=layers {
+        for _layer in 1..=layers {
             let one_partition_challenges = LayerChallenges::new(layers, total_challenges).derive(
-                layer,
                 leaves,
                 &replica_id,
                 &seed,
@@ -172,13 +149,7 @@ mod test {
             );
             let many_partition_challenges = (0..partitions)
                 .flat_map(|k| {
-                    LayerChallenges::new(layers, n).derive(
-                        layer,
-                        leaves,
-                        &replica_id,
-                        &seed,
-                        k as u8,
-                    )
+                    LayerChallenges::new(layers, n).derive(leaves, &replica_id, &seed, k as u8)
                 })
                 .collect::<Vec<_>>();
 

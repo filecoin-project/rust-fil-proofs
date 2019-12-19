@@ -126,24 +126,12 @@ impl<T: Domain, S: Domain> PublicInputs<T, S> {
     pub fn challenges(
         &self,
         layer_challenges: &LayerChallenges,
-        layer: usize,
         leaves: usize,
         partition_k: Option<usize>,
     ) -> Vec<usize> {
         let k = partition_k.unwrap_or(0);
 
-        layer_challenges.derive::<T>(layer, leaves, &self.replica_id, &self.seed, k as u8)
-    }
-
-    pub fn all_challenges(
-        &self,
-        layer_challenges: &LayerChallenges,
-        leaves: usize,
-        partition_k: Option<usize>,
-    ) -> Vec<usize> {
-        let k = partition_k.unwrap_or(0);
-
-        layer_challenges.derive_all::<T>(leaves, &self.replica_id, &self.seed, k as u8)
+        layer_challenges.derive::<T>(leaves, &self.replica_id, &self.seed, k as u8)
     }
 }
 
@@ -198,7 +186,6 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
         pub_params: &PublicParams<H>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         challenge: usize,
-        challenge_index: usize,
         graph: &StackedBucketGraph<H>,
     ) -> bool {
         let replica_id = &pub_inputs.replica_id;
@@ -225,7 +212,7 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
 
         check!(self.verify_final_replica_layer(challenge));
 
-        check!(self.verify_labels(replica_id, &pub_params.layer_challenges, challenge_index));
+        check!(self.verify_labels(replica_id, &pub_params.layer_challenges));
 
         trace!("verify encoding");
         check!(self.encoding_proof.verify::<G>(
@@ -238,34 +225,19 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
     }
 
     /// Verify all labels.
-    fn verify_labels(
-        &self,
-        replica_id: &H::Domain,
-        layer_challenges: &LayerChallenges,
-        challenge_index: usize,
-    ) -> bool {
+    fn verify_labels(&self, replica_id: &H::Domain, layer_challenges: &LayerChallenges) -> bool {
         // Verify Labels Layer 1..layers
         for layer in 1..=layer_challenges.layers() {
-            let expect_challenge =
-                layer_challenges.include_challenge_at_layer(layer, challenge_index);
-            trace!(
-                "verify labeling (layer: {} - expect_challenge: {})",
-                layer,
-                expect_challenge
-            );
+            trace!("verify labeling (layer: {})", layer,);
 
-            if expect_challenge {
-                check!(self.labeling_proofs.contains_key(&layer));
-                let labeling_proof = &self.labeling_proofs.get(&layer).unwrap();
-                let labeled_node = self
-                    .replica_column_proofs
-                    .c_x
-                    .get_node_at_layer(layer)
-                    .unwrap(); // FIXME: error handling
-                check!(labeling_proof.verify(replica_id, labeled_node));
-            } else {
-                check!(self.labeling_proofs.get(&layer).is_none());
-            }
+            check!(self.labeling_proofs.contains_key(&layer));
+            let labeling_proof = &self.labeling_proofs.get(&layer).unwrap();
+            let labeled_node = self
+                .replica_column_proofs
+                .c_x
+                .get_node_at_layer(layer)
+                .unwrap(); // FIXME: error handling
+            check!(labeling_proof.verify(replica_id, labeled_node));
         }
 
         true

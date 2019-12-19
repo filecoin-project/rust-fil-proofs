@@ -110,7 +110,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
             }
 
             let challenges =
-                pub_inputs.all_challenges(&pub_params.layer_challenges, graph.size(), Some(k));
+                pub_inputs.challenges(&pub_params.layer_challenges, graph.size(), Some(k));
 
             let valid = proofs.par_iter().enumerate().all(|(i, proof)| {
                 trace!("verify challenge {}/{}", i + 1, challenges.len());
@@ -127,7 +127,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
                     return false;
                 }
 
-                proof.verify(pub_params, pub_inputs, challenge, i, graph)
+                proof.verify(pub_params, pub_inputs, challenge, graph)
             });
 
             if !valid {
