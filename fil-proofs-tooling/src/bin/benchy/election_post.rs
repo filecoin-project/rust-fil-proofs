@@ -74,10 +74,9 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
 
     // Generate the data from which we will create a replica, we will then prove the continued
     // storage of that replica using the PoSt.
-    let piece_bytes: Vec<u8> = (0..usize::from(sector_size_unpadded_bytes_ammount))
-        .map(|_| rand::random::<u8>())
-        .collect();
-
+    let mut piece_bytes = vec![0u8; usize::from(sector_size_unpadded_bytes_ammount)];
+    rand::Rng::fill(&mut rand::thread_rng(), &mut piece_bytes[..]);
+    
     let mut piece_file = NamedTempFile::new()?;
     piece_file.write_all(&piece_bytes)?;
     piece_file.as_file_mut().sync_all()?;
