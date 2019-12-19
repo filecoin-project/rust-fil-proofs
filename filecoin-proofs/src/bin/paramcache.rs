@@ -10,12 +10,12 @@ use filecoin_proofs::types::*;
 use std::collections::HashSet;
 use std::sync::atomic::Ordering;
 use storage_proofs::circuit::election_post::{ElectionPoStCircuit, ElectionPoStCompound};
-use storage_proofs::circuit::stacked::StackedCompound;
+use storage_proofs::circuit::stacked_old::StackedCompound;
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::election_post::ElectionPoSt;
 use storage_proofs::hasher::pedersen::PedersenHasher;
 use storage_proofs::parameter_cache::CacheableParameters;
-use storage_proofs::stacked::StackedDrg;
+use storage_proofs::stacked_old::StackedDrg;
 
 const PUBLISHED_SECTOR_SIZES: [u64; 5] = [
     SECTOR_SIZE_ONE_KIB,

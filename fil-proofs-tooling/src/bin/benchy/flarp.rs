@@ -355,30 +355,23 @@ fn run_measure_circuits(i: &FlarpInputs) -> CircuitOutputs {
 }
 
 fn measure_porep_circuit(i: &FlarpInputs) -> usize {
-    use storage_proofs::circuit::stacked::StackedCompound;
+    use storage_proofs::circuit::stacked_old::StackedCompound;
     use storage_proofs::drgraph::new_seed;
-    use storage_proofs::stacked::{SetupParams, StackedConfig, StackedDrg};
+    use storage_proofs::stacked_old::{LayerChallenges, SetupParams, StackedDrg};
 
     let layers = i.stacked_layers as usize;
-    let window_challenge_count = i.porep_challenges as usize;
-    let wrapper_challenge_count = i.porep_challenges as usize;
-    let window_drg_degree = i.drg_parents as usize;
-    let window_expansion_degree = i.expander_parents as usize;
-    let wrapper_expansion_degree = i.wrapper_parents_all as usize;
-    let window_size_nodes = (i.window_size_bytes / 32) as usize;
+    let challenge_count = i.porep_challenges as usize;
+    let drg_degree = i.drg_parents as usize;
+    let expansion_degree = i.expander_parents as usize;
     let nodes = (i.sector_size_bytes / 32) as usize;
-
-    let config =
-        StackedConfig::new(layers, window_challenge_count, wrapper_challenge_count).unwrap();
+    let layer_challenges = LayerChallenges::new(layers, challenge_count);
 
     let sp = SetupParams {
         nodes,
-        window_drg_degree,
-        window_expansion_degree,
-        wrapper_expansion_degree,
+        degree: drg_degree,
+        expansion_degree,
         seed: new_seed(),
-        config,
-        window_size_nodes,
+        layer_challenges,
     };
 
     let pp = StackedDrg::<PedersenHasher, Sha256Hasher>::setup(&sp).unwrap();
@@ -478,8 +471,8 @@ fn generate_params(i: &FlarpInputs) {
 
 fn cache_porep_params(porep_config: PoRepConfig) {
     use filecoin_proofs::parameters::public_params;
-    use storage_proofs::circuit::stacked::StackedCompound;
-    use storage_proofs::stacked::StackedDrg;
+    use storage_proofs::circuit::stacked_old::StackedCompound;
+    use storage_proofs::stacked_old::StackedDrg;
 
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
