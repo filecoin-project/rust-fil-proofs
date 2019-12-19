@@ -417,7 +417,7 @@ mod tests {
         assert!(proofs_are_valid);
 
         let expected_inputs = 20;
-        let expected_constraints = 649_106;
+        let expected_constraints = 754_649;
 
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.
