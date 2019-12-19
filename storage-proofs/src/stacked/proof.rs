@@ -87,6 +87,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         };
 
         (0..partition_count)
+            .into_par_iter()
             .map(|k| {
                 trace!("proving partition {}/{}", k + 1, partition_count);
 
