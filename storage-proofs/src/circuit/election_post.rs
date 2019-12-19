@@ -11,7 +11,7 @@ use paired::bls12_381::{Bls12, Fr};
 use crate::circuit::constraint;
 use crate::circuit::pedersen::pedersen_md_no_padding;
 use crate::circuit::por::{PoRCircuit, PoRCompound};
-use crate::circuit::stacked::hash::hash3;
+use crate::circuit::stacked::hash::hash2;
 use crate::circuit::uint64::UInt64;
 use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
@@ -33,7 +33,6 @@ pub struct ElectionPoStCircuit<'a, E: JubjubEngine, H: Hasher> {
     pub params: &'a E::Params,
     pub comm_r: Option<E::Fr>,
     pub comm_c: Option<E::Fr>,
-    pub comm_q: Option<E::Fr>,
     pub comm_r_last: Option<E::Fr>,
     pub leafs: Vec<Option<E::Fr>>,
     #[allow(clippy::type_complexity)]
@@ -84,7 +83,7 @@ where
             private: true,
         };
 
-        // 1. Inputs for verifying comm_r = H(comm_c || comm_q || comm_r_last)
+        // 1. Inputs for verifying comm_r = H(comm_c || comm_r_last)
 
         inputs.push(pub_inputs.comm_r.into());
 
@@ -126,7 +125,6 @@ where
     ) -> Result<ElectionPoStCircuit<'a, Bls12, H>> {
         let comm_r = pub_in.comm_r.into();
         let comm_c = vanilla_proof.comm_c.into();
-        let comm_q = vanilla_proof.comm_q.into();
         let comm_r_last = vanilla_proof.comm_r_last().into();
 
         let leafs: Vec<_> = vanilla_proof
@@ -146,7 +144,6 @@ where
             leafs,
             comm_r: Some(comm_r),
             comm_c: Some(comm_c),
-            comm_q: Some(comm_q),
             comm_r_last: Some(comm_r_last),
             paths,
             partial_ticket: Some(pub_in.partial_ticket),
@@ -170,7 +167,6 @@ where
             params: &*JJ_PARAMS,
             comm_r: None,
             comm_c: None,
-            comm_q: None,
             comm_r_last: None,
             partial_ticket: None,
             leafs,
@@ -188,7 +184,6 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for ElectionPoStCircuit<'a, E, H
         let params = self.params;
         let comm_r = self.comm_r;
         let comm_c = self.comm_c;
-        let comm_q = self.comm_q;
         let comm_r_last = self.comm_r_last;
         let leafs = self.leafs;
         let paths = self.paths;
@@ -210,12 +205,6 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for ElectionPoStCircuit<'a, E, H
                 .ok_or_else(|| SynthesisError::AssignmentMissing)
         })?;
 
-        let comm_q_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_q"), || {
-            comm_q
-                .map(Into::into)
-                .ok_or_else(|| SynthesisError::AssignmentMissing)
-        })?;
-
         let comm_r_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_r"), || {
             comm_r
                 .map(Into::into)
@@ -224,30 +213,26 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for ElectionPoStCircuit<'a, E, H
 
         comm_r_num.inputize(cs.namespace(|| "comm_r_input"))?;
 
-        // Verify H(Comm_C || comm_q || comm_r_last) == comm_r
+        // Verify H(Comm_C || comm_r_last) == comm_r
         {
             // Allocate comm_c as booleans
             let comm_c_bits = comm_c_num.to_bits_le(cs.namespace(|| "comm_c_bits"))?;
-
-            // Allocate comm_q as booleans
-            let comm_q_bits = comm_q_num.to_bits_le(cs.namespace(|| "comm_q_bits"))?;
 
             // Allocate comm_r_last as booleans
             let comm_r_last_bits =
                 comm_r_last_num.to_bits_le(cs.namespace(|| "comm_r_last_bits"))?;
 
-            let hash_num = hash3(
-                cs.namespace(|| "H_comm_c_comm_q_comm_r_last"),
+            let hash_num = hash2(
+                cs.namespace(|| "H_comm_c_comm_r_last"),
                 params,
                 &comm_c_bits,
-                &comm_q_bits,
                 &comm_r_last_bits,
             )?;
 
             // Check actual equality
             constraint::equal(
                 cs,
-                || "enforce_comm_c_comm_q_comm_r_last_hash_comm_r",
+                || "enforce_comm_c_comm_r_last_hash_comm_r",
                 &comm_r_num,
                 &hash_num,
             );
@@ -362,7 +347,7 @@ mod tests {
     use crate::hasher::{pedersen::*, Domain};
     use crate::proof::{NoRequirements, ProofScheme};
     use crate::sector::SectorId;
-    use crate::stacked::hash::hash3;
+    use crate::stacked::hash::hash2;
 
     #[test]
     fn test_election_post_circuit() {
@@ -406,8 +391,7 @@ mod tests {
         let tree = trees.remove(&candidate.sector_id).unwrap();
         let comm_r_last = tree.root();
         let comm_c = PedersenDomain::random(rng);
-        let comm_q = PedersenDomain::random(rng);
-        let comm_r = Fr::from(hash3(comm_c, comm_q, comm_r_last)).into();
+        let comm_r = Fr::from(hash2(comm_c, comm_r_last)).into();
 
         let pub_inputs = election_post::PublicInputs {
             randomness,
@@ -421,7 +405,6 @@ mod tests {
         let priv_inputs = election_post::PrivateInputs::<PedersenHasher> {
             tree,
             comm_c,
-            comm_q,
             comm_r_last,
         };
 
@@ -453,7 +436,6 @@ mod tests {
             paths,
             comm_r: Some(comm_r.into()),
             comm_c: Some(comm_c.into()),
-            comm_q: Some(comm_q.into()),
             comm_r_last: Some(comm_r_last.into()),
             partial_ticket: Some(candidate.partial_ticket.into()),
             randomness: bytes_into_bits_opt(&randomness[..]),
@@ -541,8 +523,7 @@ mod tests {
         let tree = trees.remove(&candidate.sector_id).unwrap();
         let comm_r_last = tree.root();
         let comm_c = PedersenDomain::random(rng);
-        let comm_q = PedersenDomain::random(rng);
-        let comm_r = Fr::from(hash3(comm_c, comm_q, comm_r_last)).into();
+        let comm_r = Fr::from(hash2(comm_c, comm_r_last)).into();
 
         let pub_inputs = election_post::PublicInputs {
             randomness,
@@ -556,7 +537,6 @@ mod tests {
         let priv_inputs = election_post::PrivateInputs::<PedersenHasher> {
             tree,
             comm_c,
-            comm_q,
             comm_r_last,
         };
 

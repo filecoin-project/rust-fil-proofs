@@ -304,7 +304,7 @@ mod tests {
     use rand::{Rng, RngCore, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use storage_proofs::drgraph::{new_seed, Graph};
-    use storage_proofs::stacked::StackedBucketGraph;
+    use storage_proofs::stacked_old::StackedBucketGraph;
 
     use std::io::{Seek, SeekFrom};
 

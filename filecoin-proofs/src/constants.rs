@@ -23,8 +23,8 @@ lazy_static! {
     pub static ref POREP_WRAPPER_MINIMUM_CHALLENGES: AtomicU64 = AtomicU64::new(50);
 
     pub static ref WINDOW_DRG_DEGREE: AtomicU64 = AtomicU64::new(storage_proofs::drgraph::BASE_DEGREE as u64);
-    pub static ref WINDOW_EXP_DEGREE: AtomicU64 = AtomicU64::new(storage_proofs::stacked::EXP_DEGREE as u64);
-    pub static ref WRAPPER_EXP_DEGREE: AtomicU64 = AtomicU64::new(storage_proofs::stacked::EXP_DEGREE as u64);
+    pub static ref WINDOW_EXP_DEGREE: AtomicU64 = AtomicU64::new(storage_proofs::stacked_old::EXP_DEGREE as u64);
+    pub static ref WRAPPER_EXP_DEGREE: AtomicU64 = AtomicU64::new(storage_proofs::stacked_old::EXP_DEGREE as u64);
     pub static ref DEFAULT_POREP_PROOF_PARTITIONS: AtomicU8 = AtomicU8::new(10);
 
     pub static ref DEFAULT_WINDOWS: RwLock<HashMap<u64, SectorInfo>> = RwLock::new({
