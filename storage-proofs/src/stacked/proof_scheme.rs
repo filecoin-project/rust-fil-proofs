@@ -1,5 +1,6 @@
 use anyhow::ensure;
 use log::trace;
+use rayon::prelude::*;
 
 use crate::error::Result;
 use crate::hasher::Hasher;
