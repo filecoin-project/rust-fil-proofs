@@ -340,7 +340,7 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
         }
         self.tree_d_config.path = cp.clone();
         self.tree_r_last_config.path = cp.clone();
-        self.tree_c_config.path = cp.clone();
+        self.tree_c_config.path = cp;
     }
 
     pub fn labels_for_layer(&self, layer: usize) -> Result<DiskStore<H::Domain>> {
