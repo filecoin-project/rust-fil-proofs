@@ -19,7 +19,7 @@ use storage_proofs::fr32::bytes_into_fr;
 use storage_proofs::hasher::Hasher;
 use storage_proofs::proof::NoRequirements;
 use storage_proofs::sector::*;
-use storage_proofs::stacked::CacheKey;
+use storage_proofs::stacked_old::CacheKey;
 
 use crate::api::util::as_safe_commitment;
 use crate::caches::{get_post_params, get_post_verifying_key};
@@ -90,10 +90,6 @@ impl PrivateReplicaInfo {
 
     pub fn safe_comm_c(&self) -> Result<<DefaultTreeHasher as Hasher>::Domain> {
         Ok(self.aux.comm_c)
-    }
-
-    pub fn safe_comm_q(&self) -> Result<<DefaultTreeHasher as Hasher>::Domain> {
-        Ok(self.aux.comm_q)
     }
 
     pub fn safe_comm_r_last(&self) -> Result<<DefaultTreeHasher as Hasher>::Domain> {
@@ -306,12 +302,10 @@ pub fn generate_post(
             };
 
             let comm_c = replica.safe_comm_c()?;
-            let comm_q = replica.safe_comm_q()?;
             let comm_r_last = replica.safe_comm_r_last()?;
             let priv_inputs = election_post::PrivateInputs::<DefaultTreeHasher> {
                 tree,
                 comm_c,
-                comm_q,
                 comm_r_last,
             };
 
