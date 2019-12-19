@@ -79,7 +79,7 @@ where
     pub window_graph: StackedBucketGraph<H>,
     pub wrapper_graph: StackedBucketGraph<H>,
     /// Window size in nodes.
-    pub window_size: usize,
+    pub window_size_nodes: usize,
     _h: PhantomData<H>,
 }
 
@@ -91,23 +91,23 @@ where
         window_graph: StackedBucketGraph<H>,
         wrapper_graph: StackedBucketGraph<H>,
         config: StackedConfig,
-        window_size: usize,
+        window_size_nodes: usize,
     ) -> Self {
         PublicParams {
             window_graph,
             wrapper_graph,
             config,
-            window_size,
+            window_size_nodes,
             _h: PhantomData,
         }
     }
 
     pub fn window_size_nodes(&self) -> usize {
-        self.window_size
+        self.window_size_nodes
     }
 
     pub fn window_size_bytes(&self) -> usize {
-        self.window_size * NODE_SIZE
+        self.window_size_nodes * NODE_SIZE
     }
 
     pub fn num_windows(&self) -> usize {
@@ -129,7 +129,7 @@ where
             self.window_graph.identifier(),
             self.wrapper_graph.identifier(),
             self.config,
-            self.window_size,
+            self.window_size_nodes,
         )
     }
 
@@ -147,7 +147,7 @@ where
             other.window_graph.clone(),
             other.wrapper_graph.clone(),
             other.config.clone(),
-            other.window_size,
+            other.window_size_nodes,
         )
     }
 }
