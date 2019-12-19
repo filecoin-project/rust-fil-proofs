@@ -30,9 +30,7 @@ pub type ProverId = [u8; 32];
 pub type Ticket = [u8; 32];
 pub type Tree = MerkleTree<PedersenDomain, <PedersenHasher as Hasher>::Function>;
 
-// This is intentionally *not* deriving `Clone` as the commit deletes some of the data, hence it
-// shouldn't be re-used across commits
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SealPreCommitOutput {
     pub comm_r: Commitment,
     pub comm_d: Commitment,
