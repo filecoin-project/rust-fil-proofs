@@ -231,7 +231,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
             PoRCompound::<H>::generate_public_inputs(&pub_inputs, &por_params, k)
         };
 
-        let all_challenges = pub_in.all_challenges(&pub_params.layer_challenges, graph.size(), k);
+        let all_challenges = pub_in.challenges(&pub_params.layer_challenges, graph.size(), k);
 
         for challenge in all_challenges.into_iter() {
             // comm_d_proof
@@ -310,7 +310,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
             comm_r_last: None,
             comm_c: None,
             proofs: (0..public_params.layer_challenges.challenges_count_all())
-                .map(|challenge_index| Proof::empty(public_params, challenge_index))
+                .map(|_challenge_index| Proof::empty(public_params))
                 .collect(),
             _e: PhantomData,
         }

@@ -27,19 +27,11 @@ pub struct Proof<H: Hasher, G: Hasher> {
 
 impl<H: Hasher, G: Hasher> Proof<H, G> {
     /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty(params: &PublicParams<H>, challenge_index: usize) -> Self {
+    pub fn empty(params: &PublicParams<H>) -> Self {
         let layers = params.layer_challenges.layers();
 
         let mut labeling_proofs = Vec::with_capacity(layers);
         for layer in 1..=layers {
-            let include_challenge = params
-                .layer_challenges
-                .include_challenge_at_layer(layer, challenge_index);
-
-            if !include_challenge {
-                continue;
-            }
-
             labeling_proofs.push((layer, LabelingProof::empty(params, layer)));
         }
 
