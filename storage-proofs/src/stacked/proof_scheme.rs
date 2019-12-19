@@ -82,6 +82,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
         );
 
         (0..partition_count)
+            .into_par_iter()
             .map(|k| {
                 trace!("proving partition {}/{}", k + 1, partition_count);
                 Self::prove_single_partition(&pub_params, pub_inputs, &priv_inputs.t_aux, k)
