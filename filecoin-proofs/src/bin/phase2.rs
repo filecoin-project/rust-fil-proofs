@@ -2,6 +2,7 @@ use phase21 as phase2;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 
+use clap::{value_t, App, AppSettings, Arg, SubCommand};
 use filecoin_proofs::constants::{
     DefaultPieceHasher, DefaultTreeHasher, DEFAULT_POREP_PROOF_PARTITIONS, SECTOR_SIZE_ONE_KIB,
 };
@@ -13,8 +14,8 @@ use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::stacked::StackedDrg;
 
-fn initial_setup() {
-    let params = File::create("params").unwrap();
+fn initial_setup(params_path: &str) {
+    let params = File::create(params_path).unwrap();
     let mut params = BufWriter::with_capacity(1024 * 1024, params);
 
     // Generate params for PoRep
@@ -57,8 +58,8 @@ fn initial_setup() {
     // TODO: Generate params for PoSt
 }
 
-fn contribute() {
-    let params = File::create("params").unwrap();
+fn contribute(params_path: &str) {
+    let params = File::create(params_path).unwrap();
     let mut params_reader = BufReader::with_capacity(1024 * 1024, params);
 
     info!("reading params from disk");
@@ -88,21 +89,62 @@ fn prompt_for_randomness() -> [u8; 32] {
     seed
 }
 
-fn main() {
-    // TODO: make nice cli
+fn verify(params_path: &str) {
+    // TODO: add method for verification
+}
 
+fn main() {
     simplelog::SimpleLogger::init(log::LevelFilter::Info, simplelog::Config::default())
         .expect("failed to init logger");
 
-    info!("Phase2 begins");
+    let new_command = SubCommand::with_name("new").about("Create parameters").arg(
+        Arg::with_name("parameters")
+            .long("parameters")
+            .help("Path to parameters file"),
+    );
 
-    // setup only run once
-    initial_setup();
+    let contribute_command = SubCommand::with_name("contribute")
+        .about("Contribute to parameters")
+        .arg(
+            Arg::with_name("parameters")
+                .long("parameters")
+                .help("Path to parameters file"),
+        );
 
-    // contribute
-    contribute();
+    let verify_command = SubCommand::with_name("verify")
+        .about("Verify parameters")
+        .arg(
+            Arg::with_name("parameters")
+                .long("parameters")
+                .help("Path to parameters file"),
+        );
 
-    info!("Phase2 has ended");
+    let app = App::new("phase2")
+        .version("0.1")
+        .setting(AppSettings::ArgRequiredElseHelp)
+        .subcommand(new_command)
+        .subcommand(contribute_command)
+        .subcommand(verify_command);
+    let matches = app.get_matches();
+
+    match matches.subcommand() {
+        (command, Some(mm)) => {
+            let params_path = value_t!(mm, "parameters", String)
+                .expect("Could not convert `parameters` CLI argument to string");
+
+            match command {
+                "new" => {
+                    initial_setup(&params_path);
+                }
+                "contribute" => {
+                    contribute(&params_path);
+                }
+                "verify" => {
+                    verify(&params_path);
+                }
+                _ => (),
+            }
+        }
+        (_, None) => (),
+    }
 }
-
-// TODO: add method for verification
