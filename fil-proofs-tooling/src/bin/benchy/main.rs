@@ -125,6 +125,13 @@ fn main() -> Result<()> {
     let flarp_cmd = SubCommand::with_name("flarp")
         .about("Benchmark flarp")
         .arg(
+            Arg::with_name("config")
+                .long("config")
+                .takes_value(true)
+                .required(false)
+                .help("path to config.json"),
+        )
+        .arg(
             Arg::with_name("skip-seal-proof")
                 .long("skip-seal-proof")
                 .takes_value(false)
@@ -211,8 +218,15 @@ fn main() -> Result<()> {
             merkleproofs::run(size, proofs)?;
         }
         ("flarp", Some(m)) => {
-            let inputs: FlarpInputs = serde_json::from_reader(stdin())
-                .expect("failed to deserialize stdin to FlarpInputs");
+            let inputs: FlarpInputs = if m.is_present("config") {
+                let file = value_t!(m, "config", String).unwrap();
+                serde_json::from_reader(
+                    std::fs::File::open(&file).expect(&format!("invalid file {:?}", file)),
+                )
+            } else {
+                serde_json::from_reader(stdin())
+            }
+            .expect("failed to deserialize stdin to FlarpInputs");
 
             let outputs = flarp::run(
                 inputs,
