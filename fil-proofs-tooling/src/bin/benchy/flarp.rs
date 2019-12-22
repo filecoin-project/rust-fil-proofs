@@ -206,9 +206,9 @@ pub fn run(
     inputs: FlarpInputs,
     skip_seal_proof: bool,
     skip_post_proof: bool,
+    only_replicate: bool,
 ) -> Metadata<FlarpReport> {
     configure_global_config(&inputs);
-    generate_params(&inputs);
 
     let mut outputs = FlarpOutputs::default();
 
@@ -216,6 +216,13 @@ pub fn run(
 
     let (cfg, mut created) = create_replicas(sector_size, 1);
     let (sector_id, replica_info) = created.pop().unwrap();
+
+    if only_replicate {
+        return Metadata::wrap(FlarpReport { inputs, outputs })
+            .expect("failed to retrieve metadata");
+    }
+
+    generate_params(&inputs);
 
     if !skip_seal_proof {
         let measured = measure(|| {

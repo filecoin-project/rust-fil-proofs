@@ -135,6 +135,12 @@ fn main() -> Result<()> {
                 .long("skip-post-proof")
                 .takes_value(false)
                 .help("skip generation (and verification) of PoSt proof"),
+        )
+        .arg(
+            Arg::with_name("only-replicate")
+                .long("only-replicate")
+                .takes_value(false)
+                .help("only run replication"),
         );
 
     let merkleproof_cmd = SubCommand::with_name("merkleproofs")
@@ -212,6 +218,7 @@ fn main() -> Result<()> {
                 inputs,
                 m.is_present("skip-seal-proof"),
                 m.is_present("skip-post-proof"),
+                m.is_present("only-replicate"),
             );
 
             serde_json::to_writer(stdout(), &outputs)
