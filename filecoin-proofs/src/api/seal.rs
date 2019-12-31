@@ -422,6 +422,9 @@ pub fn seal_commit_phase2(
 
     let proof = MultiProof::new(groth_proofs, &groth_params.vk);
 
+    // Discard or compact cached MTs that are no longer needed.
+    TemporaryAux::<DefaultTreeHasher, DefaultPieceHasher>::compact(t_aux)?;
+
     let mut buf = Vec::with_capacity(
         SINGLE_PARTITION_PROOF_LEN * usize::from(PoRepProofPartitions::from(porep_config)),
     );
