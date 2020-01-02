@@ -211,7 +211,7 @@ fn do_the_work<H: 'static>(
         let (tau, (p_aux, t_aux)) = StackedDrg::<H, Blake2sHasher>::replicate(
             &pp,
             &replica_id,
-            &mut data,
+            (data.as_mut()).into(),
             None,
             Some(config.clone()),
         )

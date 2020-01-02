@@ -162,7 +162,7 @@ where
                 let (tau, (p_aux, t_aux)) = StackedDrg::<H, Sha256Hasher>::replicate(
                     &pp,
                     &replica_id,
-                    &mut data,
+                    (&mut data[..]).into(),
                     None,
                     Some(store_config.clone()),
                 )?;

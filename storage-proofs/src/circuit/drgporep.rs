@@ -572,7 +572,7 @@ mod tests {
         let (tau, aux) = drgporep::DrgPoRep::<PedersenHasher, _>::replicate(
             &pp,
             &replica_id.into(),
-            data.as_mut_slice(),
+            (&mut data[..]).into(),
             None,
             Some(config),
         )
@@ -784,7 +784,7 @@ mod tests {
         let (tau, aux) = drgporep::DrgPoRep::<H, _>::replicate(
             &public_params.vanilla_params,
             &replica_id.into(),
-            data.as_mut_slice(),
+            (&mut data[..]).into(),
             None,
             Some(config),
         )

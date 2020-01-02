@@ -85,10 +85,10 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
     // Zero-pad the data to the requested size by extending the underlying file if needed.
     f_data.set_len(sector_bytes as u64)?;
 
-    let mut data = unsafe {
+    let data = unsafe {
         MmapOptions::new()
             .map_mut(&f_data)
-            .with_context(|| format!("could mmap out_path={:?}", out_path.as_ref()))?
+            .with_context(|| format!("could not mmap out_path={:?}", out_path.as_ref()))?
     };
 
     let compound_setup_params = compound_proof::SetupParams {
@@ -123,6 +123,10 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
         )
     })?;
 
+    let mut data: storage_proofs::porep::Data<'_> = (data, out_path.as_ref().into()).into();
+
+    data.drop_data();
+
     let comm_d_root: Fr = data_tree.root().into();
     let comm_d = commitment_from_fr::<Bls12>(comm_d_root);
 
@@ -141,7 +145,7 @@ pub fn seal_pre_commit<R: AsRef<Path>, T: AsRef<Path>, S: AsRef<Path>>(
     let (tau, (p_aux, t_aux)) = StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::replicate(
         &compound_public_params.vanilla_params,
         &replica_id,
-        &mut data,
+        data,
         Some(data_tree),
         Some(config),
     )?;

@@ -21,6 +21,7 @@ use crate::measurements::Operation::{
     CommD, EncodeWindowTimeAll, GenerateTreeC, GenerateTreeRLast, WindowCommLeavesTime,
 };
 use crate::merkle::{MerkleProof, MerkleTree, Store};
+use crate::porep::Data;
 use crate::stacked::{
     challenges::LayerChallenges,
     column::Column,
@@ -617,7 +618,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     fn label_encode_all_windows(
         pub_params: &PublicParams<H>,
         replica_id: &<H as Hasher>::Domain,
-        data: &mut [u8],
+        data: &mut Data<'a>,
         config: StoreConfig,
     ) -> Result<(LabelsCache<H>, Labels<H>)> {
         trace!("encode_all_windows");
@@ -629,7 +630,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             "Invalid window size."
         );
 
-        let layer_size = data.len();
+        let layer_size = data.as_ref().len();
         let num_windows = pub_params.num_windows();
 
         let labels: Vec<Mutex<(DiskStore<_>, _)>> = (0..layers)
@@ -650,7 +651,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         (0..num_windows)
             .into_par_iter()
-            .zip(data.par_chunks_mut(pub_params.window_size_bytes()))
+            .zip(data.as_mut().par_chunks_mut(pub_params.window_size_bytes()))
             .try_for_each(|(window_index, data_chunk)| -> Result<()> {
                 let mut layer_labels = vec![0u8; pub_params.window_size_bytes()];
                 let mut parents = vec![0; window_graph.degree()];
@@ -808,7 +809,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     pub(crate) fn transform_and_replicate_layers(
         pub_params: &PublicParams<H>,
         replica_id: &<H as Hasher>::Domain,
-        data: &mut [u8],
+        mut data: Data<'a>,
         data_tree: Option<Tree<G>>,
         config: Option<StoreConfig>,
     ) -> Result<TransformedLayers<H, G>> {
@@ -823,7 +824,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         let wrapper_nodes_count = wrapper_graph.size();
         ensure!(
-            data.len() == wrapper_nodes_count * NODE_SIZE,
+            data.as_ref().len() == wrapper_nodes_count * NODE_SIZE,
             "Invalid data size."
         );
 
@@ -847,7 +848,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             Some(t) => {
                 trace!("using existing original data merkle tree");
                 ensure!(
-                    t.len() == 2 * (data.len() / NODE_SIZE) - 1,
+                    t.len() == 2 * (data.as_ref().len() / NODE_SIZE) - 1,
                     "Invalid data tree."
                 );
 
@@ -855,17 +856,20 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             }
             None => {
                 trace!("building merkle tree for the original data");
-                Ok(Self::build_tree::<G>(&data, Some(tree_d_config.clone()))?)
+                Ok(Self::build_tree::<G>(
+                    data.as_ref(),
+                    Some(tree_d_config.clone()),
+                )?)
             }
         })?;
 
         info!(
             "encoding {} windows",
-            data.len() / pub_params.window_size_bytes()
+            data.as_ref().len() / pub_params.window_size_bytes()
         );
 
         let (labels, label_configs) = measure_op(EncodeWindowTimeAll, || {
-            Self::label_encode_all_windows(pub_params, replica_id, data, config)
+            Self::label_encode_all_windows(pub_params, replica_id, &mut data, config)
         })?;
 
         // construct column hashes
@@ -875,7 +879,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         })?;
 
         info!("building tree_q");
-        let tree_q: Tree<H> = Self::build_tree::<H>(&data, Some(tree_q_config.clone()))?;
+        let tree_q: Tree<H> = Self::build_tree::<H>(data.as_ref(), Some(tree_q_config.clone()))?;
 
         info!("building tree_r_last");
         let tree_r_last: Tree<H> = measure_op(GenerateTreeRLast, || {
@@ -898,7 +902,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     for parent in &exp_parents {
                         // TODO Do proper error handling and not just `expect()`.
                         hasher.input(
-                            data_at_node(wrapper_layer, *parent as usize)
+                            data_at_node(wrapper_layer.as_ref(), *parent as usize)
                                 .expect("invalid node math"),
                         );
                     }
@@ -1091,7 +1095,7 @@ mod tests {
         StackedDrg::<H, Blake2sHasher>::replicate(
             &pp,
             &replica_id,
-            data_copy.as_mut_slice(),
+            (&mut data_copy[..]).into(),
             None,
             Some(config.clone()),
         )
@@ -1172,7 +1176,7 @@ mod tests {
         StackedDrg::<H, Blake2sHasher>::replicate(
             &pp,
             &replica_id,
-            data_copy.as_mut_slice(),
+            (&mut data_copy[..]).into(),
             None,
             Some(config.clone()),
         )
@@ -1257,7 +1261,7 @@ mod tests {
         let (tau, (p_aux, t_aux)) = StackedDrg::<H, Blake2sHasher>::replicate(
             &pp,
             &replica_id,
-            data_copy.as_mut_slice(),
+            (&mut data_copy[..]).into(),
             None,
             Some(config),
         )

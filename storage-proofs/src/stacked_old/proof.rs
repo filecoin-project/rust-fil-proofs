@@ -19,6 +19,7 @@ use crate::measurements::{
     },
 };
 use crate::merkle::{MerkleProof, MerkleTree, Store};
+use crate::porep::Data;
 use crate::stacked_old::{
     challenges::LayerChallenges,
     column::Column,
@@ -272,8 +273,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         // hash replica id
         base_hasher.input(AsRef::<[u8]>::as_ref(replica_id));
 
-        for i in 0..layers {
-            let layer = i + 1;
+        for layer in 1..=layers {
             info!("generating layer: {}", layer);
 
             for node in 0..graph.size() {
@@ -399,14 +399,11 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         Ok(hasher.finalize_bytes())
     }
 
-    // FIXME: Could simplify by removing the data_tree Option since
-    // we're passing the StoreConfig option which allows access to it
-    // now.
     pub(crate) fn transform_and_replicate_layers(
         graph: &StackedBucketGraph<H>,
         layer_challenges: &LayerChallenges,
         replica_id: &<H as Hasher>::Domain,
-        data: &mut [u8],
+        mut data: Data<'a>,
         data_tree: Option<Tree<G>>,
         config: Option<StoreConfig>,
     ) -> Result<TransformedLayers<H, G>> {
@@ -447,8 +444,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 }
                 None => {
                     trace!("building merkle tree for the original data");
+                    data.ensure_data().unwrap();
                     measure_op(CommD, || {
-                        Self::build_tree::<G>(&data, Some(tree_d_config.clone())).unwrap()
+                        Self::build_tree::<G>(data.as_ref(), Some(tree_d_config.clone())).unwrap()
                     })
                     // FIXME: error handling
                 }
@@ -476,10 +474,12 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         info!("encoding data");
                         let last_layer_labels = labels.labels_for_last_layer()?;
                         let size = Store::len(last_layer_labels);
+                        data.ensure_data()?;
+
                         last_layer_labels
                             .read_range(0..size)?
                             .into_par_iter()
-                            .zip(data.par_chunks_mut(NODE_SIZE))
+                            .zip(data.as_mut().par_chunks_mut(NODE_SIZE))
                             .for_each(|(key, data_node_bytes)| {
                                 let data_node = H::Domain::try_from_bytes(data_node_bytes).unwrap();
                                 let encoded_node = encode::<H::Domain>(key, data_node);
@@ -491,7 +491,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                         // Construct the final replica commitment.
                         info!("building tree_r_last");
-                        Self::build_tree::<H>(data, Some(tree_r_last_config.clone()))
+                        Self::build_tree::<H>(data.as_ref(), Some(tree_r_last_config.clone()))
                     })
                 });
 
@@ -690,7 +690,7 @@ mod tests {
         StackedDrg::<H, Blake2sHasher>::replicate(
             &pp,
             &replica_id,
-            data_copy.as_mut_slice(),
+            (&mut data_copy[..]).into(),
             None,
             Some(config.clone()),
         )
@@ -758,7 +758,7 @@ mod tests {
         let (tau, (p_aux, t_aux)) = StackedDrg::<H, Blake2sHasher>::replicate(
             &pp,
             &replica_id,
-            data_copy.as_mut_slice(),
+            (&mut data_copy[..]).into(),
             None,
             Some(config),
         )
