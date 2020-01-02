@@ -483,7 +483,7 @@ mod tests {
         let (tau, (p_aux, t_aux)) = StackedDrg::<PedersenHasher, Sha256Hasher>::replicate(
             &pp,
             &replica_id.into(),
-            data_copy.as_mut_slice(),
+            (&mut data_copy[..]).into(),
             None,
             Some(config),
         )
@@ -667,7 +667,7 @@ mod tests {
         let (tau, (p_aux, t_aux)) = StackedDrg::replicate(
             &public_params.vanilla_params,
             &replica_id.into(),
-            data_copy.as_mut_slice(),
+            (&mut data_copy[..]).into(),
             None,
             Some(config),
         )
