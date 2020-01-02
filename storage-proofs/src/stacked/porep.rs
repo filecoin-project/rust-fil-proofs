@@ -2,7 +2,7 @@ use crate::error::Result;
 use crate::hasher::Hasher;
 use crate::measurements::measure_op;
 use crate::measurements::Operation::PorepCommitTime;
-use crate::porep::PoRep;
+use crate::porep::{Data, PoRep};
 use crate::stacked::{
     params::{PersistentAux, PublicParams, Tau, TemporaryAux, Tree},
     proof::StackedDrg,
@@ -18,7 +18,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
     fn replicate(
         pp: &'a PublicParams<H>,
         replica_id: &H::Domain,
-        data: &mut [u8],
+        data: Data<'a>,
         data_tree: Option<Tree<G>>,
         config: Option<StoreConfig>,
     ) -> Result<(Self::Tau, Self::ProverAux)> {

@@ -1,4 +1,4 @@
-use std::io::{Seek, SeekFrom, Write};
+use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::sync::atomic::Ordering;
 
 use tempfile::NamedTempFile;
@@ -25,14 +25,15 @@ pub struct PreCommitReplicaOutput {
 }
 
 pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> (NamedTempFile, PieceInfo) {
-    let buf: Vec<u8> = (0..u64::from(piece_bytes))
-        .map(|_| rand::random::<u8>())
-        .collect();
-
     let mut file = NamedTempFile::new().expect("failed to create piece file");
+    let mut writer = BufWriter::new(&mut file);
 
-    file.write_all(&buf)
-        .expect("failed to write buffer to piece file");
+    for _ in 0..(u64::from(piece_bytes) as usize) {
+        writer
+            .write(&[rand::random::<u8>()][..])
+            .expect("failed to write buffer");
+    }
+    drop(writer);
 
     file.as_file_mut()
         .sync_all()
