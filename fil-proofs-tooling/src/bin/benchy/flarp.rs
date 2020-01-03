@@ -61,8 +61,8 @@ pub struct FlarpReport {
 
 #[derive(Default, Debug, Deserialize, Serialize)]
 pub struct FlarpInputs {
-    window_size_bytes: u64,
-    sector_size_bytes: u64,
+    window_size: String,
+    sector_size: String,
     drg_parents: u64,
     expander_parents: u64,
     porep_challenges: u64,
@@ -71,6 +71,16 @@ pub struct FlarpInputs {
     post_challenged_nodes: u64,
     stacked_layers: u64,
     wrapper_parents_all: u64,
+}
+
+impl FlarpInputs {
+    pub fn window_size_bytes(&self) -> u64 {
+        bytefmt::parse(&self.window_size).unwrap()
+    }
+
+    pub fn sector_size_bytes(&self) -> u64 {
+        bytefmt::parse(&self.sector_size).unwrap()
+    }
 }
 
 #[derive(Default, Debug, Serialize)]
@@ -183,10 +193,10 @@ fn configure_global_config(inputs: &FlarpInputs) {
         .expect("failed to acquire write lock on DEFAULT_WINDOWS");
 
     x.insert(
-        inputs.sector_size_bytes,
+        inputs.sector_size_bytes(),
         SectorInfo {
-            size: inputs.sector_size_bytes,        // 1024
-            window_size: inputs.window_size_bytes, // 512
+            size: inputs.sector_size_bytes(),        // 1024
+            window_size: inputs.window_size_bytes(), // 512
         },
     );
 
@@ -212,7 +222,7 @@ pub fn run(
 
     let mut outputs = FlarpOutputs::default();
 
-    let sector_size = SectorSize(inputs.sector_size_bytes);
+    let sector_size = SectorSize(inputs.sector_size_bytes());
 
     let (cfg, mut created) = create_replicas(sector_size, 1);
     let (sector_id, replica_info) = created.pop().unwrap();
@@ -364,7 +374,7 @@ fn measure_porep_circuit(i: &FlarpInputs) -> usize {
     let challenge_count = i.porep_challenges as usize;
     let drg_degree = i.drg_parents as usize;
     let expansion_degree = i.expander_parents as usize;
-    let nodes = (i.sector_size_bytes / 32) as usize;
+    let nodes = (i.sector_size_bytes() / 32) as usize;
     let layer_challenges = LayerChallenges::new(layers, challenge_count);
 
     let sp = SetupParams {
@@ -389,7 +399,7 @@ fn measure_post_circuit(i: &FlarpInputs) -> usize {
     use storage_proofs::election_post;
 
     let post_config = PoStConfig {
-        sector_size: SectorSize(i.sector_size_bytes),
+        sector_size: SectorSize(i.sector_size_bytes()),
         challenge_count: i.post_challenges as usize,
         challenged_nodes: i.post_challenged_nodes as usize,
     };
@@ -458,13 +468,13 @@ fn measure_kdf_circuit(i: &FlarpInputs) -> usize {
 fn generate_params(i: &FlarpInputs) {
     info!("generating params: porep");
     cache_porep_params(PoRepConfig {
-        sector_size: SectorSize(i.sector_size_bytes),
+        sector_size: SectorSize(i.sector_size_bytes()),
         partitions: PoRepProofPartitions(DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed)),
     });
 
     info!("generating params: post");
     cache_post_params(PoStConfig {
-        sector_size: SectorSize(i.sector_size_bytes),
+        sector_size: SectorSize(i.sector_size_bytes()),
         challenge_count: i.post_challenges as usize,
         challenged_nodes: i.post_challenged_nodes as usize,
     });

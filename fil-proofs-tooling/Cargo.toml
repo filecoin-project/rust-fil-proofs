@@ -44,6 +44,7 @@ bincode = "1.1.2"
 anyhow = "1.0.23"
 ff = "=0.5.0"
 rand_xorshift = "0.2.0"
+bytefmt = "0.1.7"
 
 [features]
 default = ["gpu", "measurements"]
