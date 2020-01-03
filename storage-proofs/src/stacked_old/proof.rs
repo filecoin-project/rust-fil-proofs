@@ -14,9 +14,7 @@ use crate::error::Result;
 use crate::hasher::{Domain, Hasher};
 use crate::measurements::{
     measure_op,
-    Operation::{
-        CommD, EncodeWindowTimeAll, GenerateTreeC, GenerateTreeRLast, WindowCommLeavesTime,
-    },
+    Operation::{CommD, EncodeWindowTimeAll, GenerateTreeRLast, WindowCommLeavesTime},
 };
 use crate::merkle::{MerkleProof, MerkleTree, Store};
 use crate::porep::Data;
@@ -248,14 +246,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         config: Option<StoreConfig>,
     ) -> Result<(LabelsCache<H>, Labels<H>)> {
         info!("generate labels");
-        use gperftools::profiler::PROFILER;
-        PROFILER
-            .lock()
-            .unwrap()
-            .start("./labeling.profile")
-            .unwrap();
-
         let layers = layer_challenges.layers();
+
         // For now, we require it due to changes in encodings structure.
         assert!(config.is_some());
         let config = config.unwrap();
@@ -328,8 +320,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             "Invalid amount of layers encoded expected"
         );
 
-        PROFILER.lock().unwrap().stop().unwrap();
-
         info!("Labels generated");
         Ok((
             LabelsCache::<H> {
@@ -370,18 +360,21 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         nodes_count: usize,
         layers: usize,
         labels: &LabelsCache<H>,
-    ) -> Result<Vec<[u8; 32]>> {
-        (0..nodes_count)
-            .into_par_iter()
-            .map(|i| Self::build_column_hash(layers, i, labels))
-            .collect()
+        tree_c_config: StoreConfig,
+    ) -> Result<Tree<H>> {
+        MerkleTree::from_par_iter_with_config(
+            (0..nodes_count)
+                .into_par_iter()
+                .map(|i| Self::build_column_hash(layers, i, labels).unwrap()),
+            tree_c_config,
+        )
     }
 
     fn build_column_hash(
         layers: usize,
         column_index: usize,
         labels: &LabelsCache<H>,
-    ) -> Result<[u8; 32]> {
+    ) -> Result<H::Domain> {
         let first_label = labels.labels_for_layer(1).read_at(column_index)?;
         let mut hasher = crate::crypto::pedersen::Hasher::new(AsRef::<[u8]>::as_ref(&first_label))?;
 
@@ -396,7 +389,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             hasher.update(AsRef::<[u8]>::as_ref(&label))?;
         }
 
-        Ok(hasher.finalize_bytes())
+        H::Domain::try_from_bytes(&hasher.finalize_bytes())
     }
 
     pub(crate) fn transform_and_replicate_layers(
@@ -426,104 +419,66 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let mut tree_c_config =
             StoreConfig::from_config(&config, CacheKey::CommCTree.to_string(), None);
 
-        let (labels, label_configs, column_hashes, tree_d) = crossbeam::thread::scope(|s| {
-            // Generate key layers.
-            let h = s.spawn(|_| {
-                measure_op(EncodeWindowTimeAll, || {
-                    Self::generate_labels(graph, layer_challenges, replica_id, Some(config.clone()))
-                })
-            });
+        // Generate key layers.
+        let (labels, label_configs) = measure_op(EncodeWindowTimeAll, || {
+            Self::generate_labels(graph, layer_challenges, replica_id, Some(config.clone()))
+        })?;
 
-            // Build the MerkleTree over the original data (if needed).
-            let tree_d = match data_tree {
-                Some(t) => {
-                    trace!("using existing original data merkle tree");
-                    assert_eq!(t.len(), 2 * (data.len() / NODE_SIZE) - 1);
+        // Build the MerkleTree over the original data (if needed).
+        let tree_d = match data_tree {
+            Some(t) => {
+                trace!("using existing original data merkle tree");
+                assert_eq!(t.len(), 2 * (data.len() / NODE_SIZE) - 1);
 
-                    t
-                }
-                None => {
-                    trace!("building merkle tree for the original data");
-                    data.ensure_data().unwrap();
-                    measure_op(CommD, || {
-                        Self::build_tree::<G>(data.as_ref(), Some(tree_d_config.clone())).unwrap()
-                    })
-                    // FIXME: error handling
-                }
-            };
+                t
+            }
+            None => {
+                trace!("building merkle tree for the original data");
+                data.ensure_data().unwrap();
+                measure_op(CommD, || {
+                    Self::build_tree::<G>(data.as_ref(), Some(tree_d_config.clone()))
+                })?
+            }
+        };
+        trace!("Retrieved MT for original data");
 
-            trace!("Retrieved MT for original data");
-            let (labels, label_configs) = h.join().unwrap().unwrap(); // FIXME: error handling
+        // construct column hashes
+        info!("building column hashes");
+        let tree_c = measure_op(WindowCommLeavesTime, || {
+            Self::build_column_hashes(nodes_count, layers, &labels, tree_c_config.clone())
+        })?;
 
-            // construct column hashes
-            info!("building column hashes");
-            let column_hashes = measure_op(WindowCommLeavesTime, || {
-                Self::build_column_hashes(nodes_count, layers, &labels)
-            })
-            .unwrap();
+        info!("tree_c done");
 
-            (labels, label_configs, column_hashes, tree_d)
-        })
-        .unwrap(); // FIXME: error handling
+        // Encode original data into the last layer.
+        let tree_r_last = measure_op(GenerateTreeRLast, || {
+            info!("encoding data");
+            let last_layer_labels = labels.labels_for_last_layer()?;
+            let size = Store::len(last_layer_labels);
+            data.ensure_data()?;
 
-        let (tree_r_last, tree_c, comm_r): (Tree<H>, Tree<H>, H::Domain) =
-            crossbeam::thread::scope(|s| -> Result<_> {
-                // Encode original data into the last layer.
-                let tree_r_last_handle = s.spawn(|_| {
-                    measure_op(GenerateTreeRLast, || {
-                        info!("encoding data");
-                        let last_layer_labels = labels.labels_for_last_layer()?;
-                        let size = Store::len(last_layer_labels);
-                        data.ensure_data()?;
+            last_layer_labels
+                .read_range(0..size)?
+                .into_par_iter()
+                .zip(data.as_mut().par_chunks_mut(NODE_SIZE))
+                .for_each(|(key, data_node_bytes)| {
+                    let data_node = H::Domain::try_from_bytes(data_node_bytes).unwrap();
+                    let encoded_node = encode::<H::Domain>(key, data_node);
 
-                        last_layer_labels
-                            .read_range(0..size)?
-                            .into_par_iter()
-                            .zip(data.as_mut().par_chunks_mut(NODE_SIZE))
-                            .for_each(|(key, data_node_bytes)| {
-                                let data_node = H::Domain::try_from_bytes(data_node_bytes).unwrap();
-                                let encoded_node = encode::<H::Domain>(key, data_node);
-
-                                // Store the result in the place of the original data.
-                                data_node_bytes
-                                    .copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
-                            });
-
-                        // Construct the final replica commitment.
-                        info!("building tree_r_last");
-                        Self::build_tree::<H>(data.as_ref(), Some(tree_r_last_config.clone()))
-                    })
+                    // Store the result in the place of the original data.
+                    data_node_bytes.copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
                 });
 
-                // Build the tree for CommC
-                let tree_c_config = tree_c_config.clone();
-                let tree_c_handle = s.spawn(move |_| {
-                    measure_op(GenerateTreeC, || {
-                        info!("building tree_c");
-                        let column_hashes_flat = unsafe {
-                            // Column_hashes is of type Vec<[u8; 32]>, so this is safe to do.
-                            // We do this to avoid unnecessary allocations.
-                            std::slice::from_raw_parts(
-                                column_hashes.as_ptr() as *const _,
-                                column_hashes.len() * 32,
-                            )
-                        };
-                        Self::build_tree::<H>(column_hashes_flat, Some(tree_c_config))
-                    })
-                });
+            // Construct the final replica commitment.
+            info!("building tree_r_last");
+            Self::build_tree::<H>(data.as_ref(), Some(tree_r_last_config.clone()))
+        })?;
 
-                let tree_c: Tree<H> = tree_c_handle.join().unwrap().unwrap(); // FIXME: error handling
-                info!("tree_c done");
-                let tree_r_last: Tree<H> = tree_r_last_handle.join().unwrap().unwrap(); // FIXME: error handling
-                info!("tree_r_last done");
+        drop(data);
+        info!("tree_r_last done");
 
-                // comm_r = H(comm_c || comm_r_last)
-                let comm_r: H::Domain = Fr::from(hash2(tree_c.root(), tree_r_last.root())).into();
-
-                Ok((tree_r_last, tree_c, comm_r))
-            })
-            .unwrap()
-            .unwrap(); // FIXME: error handling
+        // comm_r = H(comm_c || comm_r_last)
+        let comm_r: H::Domain = Fr::from(hash2(tree_c.root(), tree_r_last.root())).into();
 
         assert_eq!(tree_d.len(), tree_r_last.len());
         assert_eq!(tree_d.len(), tree_c.len());
