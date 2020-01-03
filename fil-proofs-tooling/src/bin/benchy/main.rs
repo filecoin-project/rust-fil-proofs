@@ -123,7 +123,7 @@ fn main() -> Result<()> {
         .about("Benchmark hash function inside of a circuit");
 
     let flarp_cmd = SubCommand::with_name("flarp")
-        .about("Benchmark flarp")
+        .about("Benchmark flarpy")
         .arg(
             Arg::with_name("config")
                 .long("config")
