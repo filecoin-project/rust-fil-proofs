@@ -9,56 +9,61 @@ use filecoin_proofs::constants::{
 use filecoin_proofs::parameters::setup_params;
 use filecoin_proofs::types::*;
 use log::info;
+use paired::bls12_381::Bls12;
 use rand::SeedableRng;
-use storage_proofs::circuit::stacked::StackedCompound;
+use storage_proofs::circuit::stacked::{StackedCircuit, StackedCompound};
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::stacked::StackedDrg;
+
+fn get_porep_circuit() -> StackedCircuit<'static, Bls12, DefaultTreeHasher, DefaultPieceHasher> {
+    // TODO: allow for different sizes
+
+    let porep_config = PoRepConfig {
+        sector_size: SectorSize(SECTOR_SIZE_ONE_KIB),
+        partitions: DEFAULT_POREP_PROOF_PARTITIONS,
+    };
+
+    let setup_params = compound_proof::SetupParams {
+        vanilla_params: setup_params(
+            PaddedBytesAmount::from(porep_config),
+            usize::from(PoRepProofPartitions::from(porep_config)),
+        )
+        .unwrap(),
+        partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
+    };
+
+    let public_params = <StackedCompound as CompoundProof<
+        _,
+        StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+        _,
+    >>::setup(&setup_params)
+    .expect("setup failed");
+
+    <StackedCompound as CompoundProof<
+            _,
+            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+            _,
+        >>::blank_circuit(&public_params.vanilla_params)
+}
 
 fn initial_setup(params_path: &str) {
     let params = File::create(params_path).unwrap();
     let mut params = BufWriter::with_capacity(1024 * 1024, params);
 
     // Generate params for PoRep
-    {
-        info!("Creating params for PoRep");
-
-        // TODO: allow for different sizes
-        let porep_config = PoRepConfig {
-            sector_size: SectorSize(SECTOR_SIZE_ONE_KIB),
-            partitions: DEFAULT_POREP_PROOF_PARTITIONS,
-        };
-
-        let setup_params = compound_proof::SetupParams {
-            vanilla_params: setup_params(
-                PaddedBytesAmount::from(porep_config),
-                usize::from(PoRepProofPartitions::from(porep_config)),
-            )
-            .unwrap(),
-            partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
-        };
-
-        let public_params = <StackedCompound as CompoundProof<
-            _,
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
-            _,
-        >>::setup(&setup_params)
-        .expect("setup failed");
-        let stacked_blank_circuit = <StackedCompound as CompoundProof<
-            _,
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
-            _,
-        >>::blank_circuit(&public_params.vanilla_params);
-
-        phase2::MPCParameters::new(stacked_blank_circuit)
-            .unwrap()
-            .write(&mut params)
-            .unwrap();
-    }
+    info!("Creating params for PoRep");
+    phase2::MPCParameters::new(get_porep_circuit())
+        .unwrap()
+        .write(&mut params)
+        .unwrap();
 
     // TODO: Generate params for PoSt
 }
 
 fn contribute(params_path: &str) {
+    // Contribution for PoRep
+
+    info!("Creating contribution for PoRep");
     let params = File::create(params_path).unwrap();
     let mut params_reader = BufReader::with_capacity(1024 * 1024, params);
 
@@ -71,7 +76,18 @@ fn contribute(params_path: &str) {
     let contribution = params.contribute(&mut rng);
     info!("contributed: {}", hex::encode(&contribution[..]));
 
-    // TODO: add verification check
+    info!("verifying contribution");
+    let verification_result = params
+        .verify(get_porep_circuit())
+        .expect("failed to verify");
+    assert!(
+        phase21::contains_contribution(&verification_result, &contribution),
+        "Invalid contribution"
+    );
+
+    info!("contribution success");
+
+    // TODO: Contribute for PoSt
 }
 
 fn prompt_for_randomness() -> [u8; 32] {
