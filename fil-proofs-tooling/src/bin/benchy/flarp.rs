@@ -228,6 +228,7 @@ pub fn run(
     let (sector_id, replica_info) = created.pop().unwrap();
 
     if only_replicate {
+        augment_with_op_measurements(&mut outputs);
         return Metadata::wrap(FlarpReport { inputs, outputs })
             .expect("failed to retrieve metadata");
     }
