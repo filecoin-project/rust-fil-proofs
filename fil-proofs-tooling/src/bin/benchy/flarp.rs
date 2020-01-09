@@ -467,15 +467,21 @@ fn measure_kdf_circuit(i: &FlarpInputs) -> usize {
 }
 
 fn generate_params(i: &FlarpInputs) {
-    info!("generating params: porep");
+    let sector_size = SectorSize(i.sector_size_bytes());
+    let partitions = PoRepProofPartitions(DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed));
+    info!(
+        "generating params: porep: (size: {:?}, partitions: {:?})",
+        &sector_size, &partitions
+    );
+
     cache_porep_params(PoRepConfig {
-        sector_size: SectorSize(i.sector_size_bytes()),
-        partitions: PoRepProofPartitions(DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed)),
+        sector_size,
+        partitions,
     });
 
     info!("generating params: post");
     cache_post_params(PoStConfig {
-        sector_size: SectorSize(i.sector_size_bytes()),
+        sector_size,
         challenge_count: i.post_challenges as usize,
         challenged_nodes: i.post_challenged_nodes as usize,
     });
