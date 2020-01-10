@@ -17,7 +17,7 @@ use rand::SeedableRng;
 use storage_proofs::circuit::election_post::{ElectionPoStCircuit, ElectionPoStCompound};
 use storage_proofs::circuit::stacked::{StackedCircuit, StackedCompound};
 use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::election_post::{self, ElectionPoSt};
+use storage_proofs::election_post::ElectionPoSt;
 use storage_proofs::stacked::StackedDrg;
 
 fn get_porep_circuit(
@@ -158,12 +158,54 @@ fn prompt_for_randomness() -> [u8; 32] {
     seed
 }
 
-fn verify_porep(sector_size: u64, params_path: &str) {
-    // TODO: add method for verification
-}
+fn verify_params_match_contributions(param_paths: &[&str], contribution_hashes: &[[u8; 64]]) {
+    let n_params = param_paths.len();
+    let n_contributions = contribution_hashes.len();
 
-fn verify_post(sector_size: u64, params_path: &str) {
-    // TODO: add method for verification
+    assert!(
+        n_params >= 2 && n_contributions >= 1,
+        "must supply at least one pair of parameters and a single contribution hash"
+    );
+
+    assert_eq!(
+        n_params,
+        n_contributions - 1,
+        "the number of contributions must be one less than the number of parameter files"
+    );
+
+    let mut contribution_hashes = contribution_hashes.iter();
+
+    for (contribution_index, param_pair) in param_paths.windows(2).enumerate() {
+        info!("verifying contribution {}", contribution_index);
+
+        let params_before = {
+            info!("reading 'before contribution' params from disk");
+            let path = param_pair[0];
+            let file = File::create(path).unwrap();
+            let mut reader = BufReader::with_capacity(1024 * 1024, file);
+            phase2::MPCParameters::read(&mut reader, true).unwrap()
+        };
+
+        let params_after = {
+            info!("reading 'after contribution' params from disk");
+            let path = param_pair[1];
+            let file = File::create(path).unwrap();
+            let mut reader = BufReader::with_capacity(1024 * 1024, file);
+            phase2::MPCParameters::read(&mut reader, true).unwrap()
+        };
+
+        let calculated_contribution_hash =
+            phase2::verify_contribution(&params_before, &params_after)
+                .expect("invalid contribution");
+
+        let supplied_contribution_hash = contribution_hashes.next().unwrap();
+
+        assert_eq!(
+            &calculated_contribution_hash[..],
+            &supplied_contribution_hash[..],
+            "contribution hashes do not match"
+        );
+    }
 }
 
 fn main() {
@@ -225,30 +267,28 @@ fn main() {
         );
 
     let verify_command = SubCommand::with_name("verify")
-        .about("Verify parameters")
-        .arg(
-            Arg::with_name("porep")
-                .long("porep")
-                .help("Verify PoRep parameters"),
-        )
-        .arg(
-            Arg::with_name("post")
-                .long("post")
-                .help("Verify PoSt parameters"),
-        )
-        .arg(
-            Arg::with_name("sector-size")
-                .long("sector-size")
-                .takes_value(true)
-                .case_insensitive(true)
-                .possible_values(&["1KiB", "16MiB", "256MiB", "1GiB", "32GiB"])
-                .default_value("1KiB")
-                .help("The proof's sector size"),
-        )
+        .about("Verify that a set of contributions match the provided parameters")
         .arg(
             Arg::with_name("parameters")
                 .long("parameters")
-                .help("Path to parameters file"),
+                .required(true)
+                .takes_value(true)
+                .value_delimiter(",")
+                // .min_values(2)
+                .help("Comma separated list (no whitespace between items) of paths to parameters files"),
+        )
+        .arg(
+            Arg::with_name("contributions")
+                .long("contributions")
+                .required(true)
+                .takes_value(true)
+                .case_insensitive(true)
+                .value_delimiter(",")
+                // .min_values(1)
+                .help("An ordered (from first to last) comma separated list (no whitespace between items) of hex-encoded
+                      contribution hashes - there should be no whitespace in any of the hex strings,
+                      each digest must be 128 characters long, digest strings can use upper or lower
+                      case hex characters"),
         );
 
     let app = App::new("phase2")
@@ -280,12 +320,13 @@ fn main() {
             let porep = mm.is_present("porep");
             let post = mm.is_present("post");
 
-            if !(porep ^ post) {
-                panic!("Please specify one and only one of the CLI flags `--porep` or `--post`");
-            }
-
             match command {
                 "new" => {
+                    assert!(
+                        porep ^ post,
+                        "must supply one and only one CLI flag `--porep` or `--post`"
+                    );
+
                     if porep {
                         initial_setup_porep(sector_size, &params_path);
                     } else {
@@ -293,6 +334,11 @@ fn main() {
                     }
                 }
                 "contribute" => {
+                    assert!(
+                        porep ^ post,
+                        "must supply one and only one CLI flag `--porep` or `--post`"
+                    );
+
                     if porep {
                         contribute_porep(sector_size, &params_path);
                     } else {
@@ -300,11 +346,23 @@ fn main() {
                     }
                 }
                 "verify" => {
-                    if porep {
-                        verify_porep(sector_size, &params_path);
-                    } else {
-                        verify_post(sector_size, &params_path);
-                    }
+                    let param_paths: Vec<&str> = mm.values_of("parameters").unwrap().collect();
+
+                    let contribution_hashes: Vec<[u8; 64]> = mm
+                        .values_of("contributions")
+                        .unwrap()
+                        .map(|hex_str| {
+                            let mut digest_bytes_arr = [0u8; 64];
+                            let digest_bytes_vec = hex::decode(hex_str).expect(&format!(
+                                "passed in contribution hash as an invalid hex string: {}",
+                                hex_str
+                            ));
+                            digest_bytes_arr.copy_from_slice(&digest_bytes_vec[..]);
+                            digest_bytes_arr
+                        })
+                        .collect();
+
+                    verify_params_match_contributions(&param_paths, &contribution_hashes);
                 }
                 _ => (),
             }
