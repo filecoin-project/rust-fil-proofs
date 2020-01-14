@@ -32,7 +32,7 @@ filecoin-proofs = { path = "../filecoin-proofs"}
 tempfile = "3.0.8"
 cpu-time = "1.0.0"
 git2 = "0.10.1"
-heim = "0.0"
+heim = "0.0.9"
 futures-preview = "0.3.0-alpha.17"
 raw-cpuid = "7.0.3"
 blake2s_simd = "0.5.6"
