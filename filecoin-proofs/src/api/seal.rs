@@ -32,7 +32,7 @@ pub use crate::pieces;
 pub use crate::pieces::verify_pieces;
 use crate::types::{
     Commitment, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, ProverId,
-    SealCommitOutput, SealPreCommitOutput, Ticket,
+    SealCommitOutput, SealPreCommitOutput, SectorSize, Ticket,
 };
 
 /// Seals the staged sector at `in_path` in place, saving the resulting replica to `out_path`.
@@ -312,8 +312,8 @@ pub fn seal_commit<T: AsRef<Path>>(
 ///
 /// * `porep_config` - this sector's porep config that contains the number of bytes in the sector.
 /// * `piece_infos` - the piece info (commitment and byte length) for each piece in this sector.
-pub fn compute_comm_d(porep_config: PoRepConfig, piece_infos: &[PieceInfo]) -> Result<Commitment> {
-    pieces::compute_comm_d(porep_config.sector_size, piece_infos)
+pub fn compute_comm_d(sector_size: SectorSize, piece_infos: &[PieceInfo]) -> Result<Commitment> {
+    pieces::compute_comm_d(sector_size, piece_infos)
 }
 
 /// Verifies the output of some previously-run seal operation.
