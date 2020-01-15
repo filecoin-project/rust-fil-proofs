@@ -246,7 +246,11 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         replica_id: &<H as Hasher>::Domain,
         with_hashing: bool,
         config: Option<StoreConfig>,
-    ) -> Result<(LabelsCache<H>, Labels<H>, Option<Vec<[u8; 32]>>)> {
+    ) -> Result<(
+        LabelsCache<H>,
+        Labels<H>,
+        Option<Vec<GenericArray<u8, <Sha256 as Digest>::OutputSize>>>,
+    )> {
         info!("generate labels");
         let layers = layer_challenges.layers();
         // For now, we require it due to changes in encodings structure.
@@ -259,8 +263,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let mut parents = vec![0; graph.degree()];
         let mut layer_labels = vec![0u8; layer_size];
 
-        use crate::crypto::pedersen::Hasher as PedersenHasher;
-
         let mut exp_parents_data: Option<Vec<u8>> = None;
 
         // setup hasher to reuse
@@ -268,58 +270,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         // hash replica id
         base_hasher.input(AsRef::<[u8]>::as_ref(replica_id));
 
-        enum Message {
-            Init(usize, GenericArray<u8, <Sha256 as Digest>::OutputSize>),
-            Hash(usize, GenericArray<u8, <Sha256 as Digest>::OutputSize>),
-            Done,
-        }
-
         let graph_size = graph.size();
 
-        // 1 less, to account for the thread we are on.
-        let chunks = std::cmp::min(graph_size / 4, num_cpus::get() - 1);
-        let chunk_len = (graph_size as f64 / chunks as f64).ceil() as usize;
-
-        // Construct column hashes on a background thread.
-        let cs_handle = if with_hashing {
-            info!("hashing columns with {} chunks", chunks);
-            let handles = (0..chunks)
-                .map(|i| {
-                    let (sender, receiver) = crossbeam::channel::unbounded();
-                    let handle = std::thread::spawn(move || {
-                        let mut column_hashes = Vec::with_capacity(chunk_len);
-                        loop {
-                            match receiver.recv().unwrap() {
-                                Message::Init(_node, ref hash) => {
-                                    // column_hashes.push(PedersenHasher::new(hash).unwrap());
-                                    let mut hasher = Sha256::new();
-                                    hasher.input(hash);
-                                    column_hashes.push(hasher);
-                                }
-                                Message::Hash(node, ref hash) => {
-                                    let ch = &mut column_hashes[node - i * chunk_len];
-                                    ch.input(hash); // FIXME: error handling
-                                }
-                                Message::Done => {
-                                    trace!("Finalizing column commitments {}", i);
-                                    return column_hashes
-                                        .into_iter()
-                                        .map(|h| {
-                                            let mut res = [0u8; 32];
-                                            res.copy_from_slice(&h.result());
-                                            res
-                                        })
-                                        .collect::<Vec<[u8; 32]>>();
-                                }
-                            }
-                        }
-                    });
-
-                    (handle, sender)
-                })
-                .collect::<Vec<_>>();
-
-            Some(handles)
+        let mut cs_handle = if with_hashing {
+            Some(vec![Sha256::new(); graph_size])
         } else {
             None
         };
@@ -343,31 +297,13 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 let start = data_at_node_offset(node);
                 let end = start + NODE_SIZE;
                 layer_labels[start..end].copy_from_slice(&key[..]);
-
-                if with_hashing {
-                    let sender_index = node / chunk_len;
-                    let sender = &cs_handle.as_ref().unwrap()[sender_index].1;
-                    if layer == 1 {
-                        // Initialize hashes on layer 1.
-                        sender
-                            .send(Message::Init(node, key))
-                            .expect("failed to init hasher");
-                    } else {
-                        // Update hashes for all other layers.
-                        sender
-                            .send(Message::Hash(node, key))
-                            .expect("failed to update hasher");
-                    }
-                }
             }
 
-            if with_hashing && layer == layers {
-                // Finalize column hashes.
-                for (_, sender) in cs_handle.as_ref().unwrap().iter() {
-                    sender
-                        .send(Message::Done)
-                        .expect("failed to finalize hasher");
-                }
+            if let Some(ref mut hashers) = cs_handle {
+                hashers
+                    .par_iter_mut()
+                    .zip(layer_labels.par_chunks(NODE_SIZE))
+                    .for_each(|(hasher, data)| hasher.input(data));
             }
 
             // NOTE: this means we currently keep 2x sector size around, to improve speed.
@@ -405,10 +341,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         );
 
         // Collect the column hashes from the spawned threads.
-        let column_hashes = cs_handle.map(|handles| {
-            handles
-                .into_iter()
-                .flat_map(|(h, _)| h.join().unwrap())
+        let column_hashes = cs_handle.map(|hashers| {
+            hashers
+                .into_par_iter()
+                .map(|hasher| hasher.result())
                 .collect()
         });
 
