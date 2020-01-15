@@ -58,7 +58,19 @@ where
     let cpu_time_start = ProcessTime::now();
     let wall_start_time = Instant::now();
 
+    #[cfg(feature = "profile")]
+    gperftools::profiler::PROFILER
+        .lock()
+        .unwrap()
+        .start(format!("./{:?}.profile", op))
+        .unwrap();
     let x = f();
+    #[cfg(feature = "profile")]
+    gperftools::profiler::PROFILER
+        .lock()
+        .unwrap()
+        .stop()
+        .unwrap();
 
     let opt_tx = OP_MEASUREMENTS
         .0
