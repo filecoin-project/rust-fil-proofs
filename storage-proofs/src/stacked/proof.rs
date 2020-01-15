@@ -291,17 +291,24 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         loop {
                             match receiver.recv().unwrap() {
                                 Message::Init(_node, ref hash) => {
-                                    column_hashes.push(PedersenHasher::new(hash).unwrap())
+                                    // column_hashes.push(PedersenHasher::new(hash).unwrap());
+                                    let mut hasher = Sha256::new();
+                                    hasher.input(hash);
+                                    column_hashes.push(hasher);
                                 }
                                 Message::Hash(node, ref hash) => {
                                     let ch = &mut column_hashes[node - i * chunk_len];
-                                    ch.update(hash).unwrap(); // FIXME: error handling
+                                    ch.input(hash); // FIXME: error handling
                                 }
                                 Message::Done => {
                                     trace!("Finalizing column commitments {}", i);
                                     return column_hashes
                                         .into_iter()
-                                        .map(|h| h.finalize_bytes())
+                                        .map(|h| {
+                                            let mut res = [0u8; 32];
+                                            res.copy_from_slice(&h.result());
+                                            res
+                                        })
                                         .collect::<Vec<[u8; 32]>>();
                                 }
                             }
@@ -578,18 +585,11 @@ pub fn create_key<H: Hasher>(
     layer_labels: &[u8],
     node: usize,
 ) -> Result<GenericArray<u8, <Sha256 as Digest>::OutputSize>> {
-    let mut inputs = if node > 0 {
-        if exp_parents_data.is_some() {
-            vec![0u8; graph.degree() * NODE_SIZE + 8]
-        } else {
-            vec![0u8; graph.base_graph().degree() * NODE_SIZE + 8]
-        }
-    } else {
-        (node as u64).to_be_bytes().to_vec()
-    };
-
     // hash parents for all non 0 nodes
     if node > 0 {
+        // TODO: make 37 be configurable
+        let mut inputs = vec![0u8; NODE_SIZE * 37 + 8];
+
         // hash node id
         inputs[..8].copy_from_slice(&(node as u64).to_be_bytes());
 
@@ -599,7 +599,6 @@ pub fn create_key<H: Hasher>(
         for (i, parent) in parents.iter().take(base_parents_count).enumerate() {
             let buf = data_at_node(&layer_labels, *parent as usize)?;
             inputs[8 + i * NODE_SIZE..8 + (i + 1) * NODE_SIZE].copy_from_slice(buf);
-            // hasher.input(buf);
         }
 
         // Expander parents
@@ -609,14 +608,19 @@ pub fn create_key<H: Hasher>(
                 let j = i + base_parents_count;
                 let buf = data_at_node(parents_data, *parent as usize)?;
                 inputs[8 + j * NODE_SIZE..8 + (j + 1) * NODE_SIZE].copy_from_slice(buf);
-                // hasher.input(&buf);
             }
         }
+
+        // TODO: repeat parents, instead of hashing 0s
+
+        hasher.input(&inputs);
+    } else {
+        hasher.input(&(node as u64).to_be_bytes()[..]);
     }
 
-    hasher.input(&inputs);
     // finalize the key
     let mut key = hasher.result();
+
     // strip last two bits, to ensure result is in Fr.
     key[31] &= 0b0011_1111;
 
