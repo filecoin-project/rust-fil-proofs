@@ -563,7 +563,7 @@ pub fn create_key<H: Hasher>(
     layer_labels[start..end].copy_from_slice(&hasher.result()[..]);
 
     // strip last two bits, to ensure result is in Fr.
-    layer_labels[end] &= 0b0011_1111;
+    layer_labels[end - 1] &= 0b0011_1111;
 
     Ok(())
 }
