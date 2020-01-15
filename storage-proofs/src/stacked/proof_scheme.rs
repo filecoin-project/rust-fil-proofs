@@ -1,5 +1,6 @@
 use anyhow::ensure;
 use log::trace;
+use rayon::prelude::*;
 
 use crate::error::Result;
 use crate::hasher::Hasher;
@@ -102,18 +103,12 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
             return Ok(false);
         };
 
-        for (k, proof) in partition_proofs.iter().enumerate() {
-            trace!(
-                "verifying partition proof {}/{}",
-                k + 1,
-                partition_proofs.len()
-            );
-            if !Self::verify_single_partition(pub_params, pub_inputs, proof, expected_comm_r, k)? {
-                return Ok(false);
-            }
-        }
+        let res = partition_proofs.par_iter().enumerate().all(|(k, proof)| {
+            Self::verify_single_partition(pub_params, pub_inputs, proof, expected_comm_r, k)
+                .unwrap_or(false)
+        });
 
-        Ok(true)
+        Ok(res)
     }
 
     fn with_partition(pub_in: Self::PublicInputs, k: Option<usize>) -> Self::PublicInputs {
