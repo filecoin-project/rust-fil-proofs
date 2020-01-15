@@ -28,7 +28,7 @@ clap = "2"
 colored = "1.6"
 aes = "0.3"
 block-modes = "0.3"
-sha2 = "0.8"
+sha2 = { git = "https://github.com/dignifiedquire/hashes", branch = "sha2-intrinsics" }
 pbr = "1.0"
 tempfile = "3"
 fs2 = "0.4"
@@ -63,6 +63,7 @@ asm = ["sha2/sha2-asm"]
 big-sector-sizes-bench = []
 gpu = ["bellperson/gpu", "fil-sapling-crypto/gpu"]
 measurements = []
+profile = ["measurements"]
 
 [dev-dependencies]
 proptest = "0.7"

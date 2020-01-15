@@ -291,17 +291,17 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         loop {
                             match receiver.recv().unwrap() {
                                 Message::Init(_node, ref hash) => {
-                                    column_hashes.push(PedersenHasher::new(hash))
+                                    column_hashes.push(PedersenHasher::new(hash).unwrap())
                                 }
                                 Message::Hash(node, ref hash) => {
-                                    let ch = column_hashes[node - i * chunk_len].as_mut().unwrap();
-                                    ch.update(hash).unwrap() // FIXME: error handling
+                                    let ch = &mut column_hashes[node - i * chunk_len];
+                                    ch.update(hash).unwrap(); // FIXME: error handling
                                 }
                                 Message::Done => {
                                     trace!("Finalizing column commitments {}", i);
                                     return column_hashes
                                         .into_iter()
-                                        .map(|h| h.unwrap().finalize_bytes()) // FIXME: error handling
+                                        .map(|h| h.finalize_bytes())
                                         .collect::<Vec<[u8; 32]>>();
                                 }
                             }
@@ -317,8 +317,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             None
         };
 
-        for i in 0..layers {
-            let layer = i + 1;
+        for layer in 1..=layers {
             info!("generating layer: {}", layer);
 
             for node in 0..graph.size() {

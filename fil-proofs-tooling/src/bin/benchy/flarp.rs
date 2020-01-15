@@ -36,14 +36,12 @@ const SEED: [u8; 16] = [
 echo '{
     "drg_parents": 6,
     "expander_parents": 8,
-    "graph_parents": 8,
     "porep_challenges": 50,
     "porep_partitions": 10,
     "post_challenged_nodes": 1,
     "post_challenges": 20,
-    "sector_size_bytes": 1024,
+    "sector_size": "1KiB",
     "stacked_layers": 4,
-    "wrapper_parents_all": 8
 }' > config.json
 
 cat config.json \
