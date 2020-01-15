@@ -209,10 +209,6 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
         expansion_degree: usize,
         seed: [u8; 28],
     ) -> Result<Self> {
-        if !cfg!(feature = "unchecked-degrees") {
-            ensure!(base_degree == BASE_DEGREE, "Base degree is wrong.");
-        }
-
         ensure!(expansion_degree == 0, "Expension degree must be zero.");
 
         Ok(BucketGraph {

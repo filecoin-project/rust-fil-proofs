@@ -91,11 +91,6 @@ where
         expansion_degree: usize,
         seed: [u8; 28],
     ) -> Result<Self> {
-        if !cfg!(feature = "unchecked-degrees") {
-            assert_eq!(base_degree, BASE_DEGREE, "Invalid base degree");
-            assert_eq!(expansion_degree, EXP_DEGREE, "Invalid expansion degree");
-        }
-
         let use_cache = settings::SETTINGS.lock().unwrap().maximize_caching;
 
         let base_graph = match base_graph {
