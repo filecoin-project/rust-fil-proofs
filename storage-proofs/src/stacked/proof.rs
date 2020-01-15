@@ -284,19 +284,14 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             for node in 0..graph.size() {
                 graph.parents(node, &mut parents)?;
 
-                let key = create_key(
+                create_key(
                     graph,
                     base_hasher.clone(),
                     &parents,
                     exp_parents_data.as_ref(),
-                    &layer_labels,
+                    &mut layer_labels,
                     node,
                 )?;
-
-                // store the newly generated key
-                let start = data_at_node_offset(node);
-                let end = start + NODE_SIZE;
-                layer_labels[start..end].copy_from_slice(&key[..]);
             }
 
             info!("  updating column hashes");
@@ -319,7 +314,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
             // Write the result to disk to avoid keeping it in memory all the time.
             let layer_config =
-                StoreConfig::from_config(&config, CacheKey::label_layer(layer), Some(layer_size));
+                StoreConfig::from_config(&config, CacheKey::label_layer(layer), Some(graph.size()));
 
             info!("  storing labels on disk");
             // Construct and persist the layer data.
@@ -329,7 +324,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 layer_config.clone(),
             )?;
             info!(
-                "Generated layer {} store with id {}",
+                "  generated layer {} store with id {}",
                 layer, layer_config.id
             );
 
@@ -525,11 +520,12 @@ pub fn create_key<H: Hasher>(
     mut hasher: Sha256,
     parents: &[u32],
     exp_parents_data: Option<&Vec<u8>>,
-    layer_labels: &[u8],
+    layer_labels: &mut [u8],
     node: usize,
-) -> Result<GenericArray<u8, <Sha256 as Digest>::OutputSize>> {
+) -> Result<()> {
     // hash parents for all non 0 nodes
     if node > 0 {
+        let layer_labels = &*layer_labels;
         // TODO: make 37 be configurable
         let mut inputs = vec![0u8; NODE_SIZE * 37 + 8];
 
@@ -561,13 +557,15 @@ pub fn create_key<H: Hasher>(
         hasher.input(&(node as u64).to_be_bytes()[..]);
     }
 
-    // finalize the key
-    let mut key = hasher.result();
+    // store the newly generated key
+    let start = data_at_node_offset(node);
+    let end = start + NODE_SIZE;
+    layer_labels[start..end].copy_from_slice(&hasher.result()[..]);
 
     // strip last two bits, to ensure result is in Fr.
-    key[31] &= 0b0011_1111;
+    layer_labels[end] &= 0b0011_1111;
 
-    Ok(key)
+    Ok(())
 }
 
 #[cfg(test)]
