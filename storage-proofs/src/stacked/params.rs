@@ -3,6 +3,7 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::path::Path;
 
+use anyhow::Context;
 use log::trace;
 use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{DiskStore, Store, StoreConfig};
@@ -392,26 +393,28 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
     pub fn new(t_aux: &TemporaryAux<H, G>) -> Result<Self> {
         let tree_d_size = t_aux.tree_d_config.size.unwrap();
         let tree_d_store: DiskStore<G::Domain> =
-            DiskStore::new_from_disk(tree_d_size, &t_aux.tree_d_config)?;
+            DiskStore::new_from_disk(tree_d_size, &t_aux.tree_d_config).context("tree_d_store")?;
         let tree_d: Tree<G> =
-            MerkleTree::from_data_store(tree_d_store, get_merkle_tree_leafs(tree_d_size))?;
+            MerkleTree::from_data_store(tree_d_store, get_merkle_tree_leafs(tree_d_size))
+                .context("tree_d")?;
 
         let tree_c_size = t_aux.tree_c_config.size.unwrap();
         let tree_c_store: DiskStore<H::Domain> =
-            DiskStore::new_from_disk(tree_c_size, &t_aux.tree_c_config)?;
+            DiskStore::new_from_disk(tree_c_size, &t_aux.tree_c_config).context("tree_c_store")?;
         let tree_c: Tree<H> =
-            MerkleTree::from_data_store(tree_c_store, get_merkle_tree_leafs(tree_c_size))?;
+            MerkleTree::from_data_store(tree_c_store, get_merkle_tree_leafs(tree_c_size))
+                .context("tree_c")?;
 
         let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
         let tree_r_last_store: DiskStore<H::Domain> =
-            DiskStore::new_from_disk(tree_r_last_size, &t_aux.tree_r_last_config)?;
-        let tree_r_last: Tree<H> = MerkleTree::from_data_store(
-            tree_r_last_store,
-            get_merkle_tree_leafs(tree_r_last_size),
-        )?;
+            DiskStore::new_from_disk(tree_r_last_size, &t_aux.tree_r_last_config)
+                .context("tree_r_last_store")?;
+        let tree_r_last: Tree<H> =
+            MerkleTree::from_data_store(tree_r_last_store, get_merkle_tree_leafs(tree_r_last_size))
+                .context("tree_r_last")?;
 
         Ok(TemporaryAuxCache {
-            labels: LabelsCache::new(&t_aux.labels)?,
+            labels: LabelsCache::new(&t_aux.labels).context("labels_cache")?,
             tree_d,
             tree_r_last,
             tree_c,

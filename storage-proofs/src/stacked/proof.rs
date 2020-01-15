@@ -489,7 +489,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 column_hashes
                     .into_par_iter()
                     .map(|chunk| H::Domain::try_from_bytes(&chunk[..]).unwrap()),
-                config,
+                tree_c_config.clone(),
             )
         })?;
         info!("tree_c done");
@@ -795,8 +795,8 @@ mod tests {
 
         // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
         // elements based on the configs stored in TemporaryAux.
-        let t_aux: TemporaryAuxCache<H, Blake2sHasher> =
-            TemporaryAuxCache::new(&t_aux).expect("failed to restore contents of t_aux");
+        let t_aux = TemporaryAuxCache::<H, Blake2sHasher>::new(&t_aux)
+            .expect("failed to restore contents of t_aux");
 
         let priv_inputs = PrivateInputs { p_aux, t_aux };
 
