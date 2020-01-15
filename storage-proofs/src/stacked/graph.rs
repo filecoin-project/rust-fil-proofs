@@ -44,12 +44,9 @@ impl ParentCache {
         self.cache[node as usize].is_some()
     }
 
-    pub fn read<F, T>(&self, node: u32, mut cb: F) -> T
-    where
-        F: FnMut(Option<&Vec<u32>>) -> T,
-    {
+    pub fn read(&self, node: u32) -> Option<&Vec<u32>> {
         assert!(node < self.cache_entries);
-        cb(self.cache[node as usize].as_ref())
+        self.cache[node as usize].as_ref()
     }
 
     pub fn write(&mut self, node: u32, parents: Vec<u32>) {
@@ -316,9 +313,8 @@ where
             .get(&self.id)
             .expect("Invalid cache construction");
 
-        cache.read(node as u32, |cache_parents| {
-            parents.copy_from_slice(cache_parents.expect("Invalid cache construction"));
-        });
+        let cache_parents = cache.read(node as u32);
+        parents.copy_from_slice(cache_parents.expect("Invalid cache construction"));
     }
 }
 
