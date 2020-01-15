@@ -1,19 +1,18 @@
 use std::sync::atomic::Ordering::Relaxed;
 
 use bellperson::Circuit;
-use log::info;
-use paired::bls12_381::Bls12;
-use rand::{rngs::OsRng, SeedableRng};
-use rand_xorshift::XorShiftRng;
-use serde::{Deserialize, Serialize};
-
 use fil_proofs_tooling::{measure, Metadata};
-use filecoin_proofs::constants::{SectorInfo, DEFAULT_POREP_PROOF_PARTITIONS};
+use filecoin_proofs::constants::DEFAULT_POREP_PROOF_PARTITIONS;
 use filecoin_proofs::parameters::post_public_params;
 use filecoin_proofs::types::PaddedBytesAmount;
 use filecoin_proofs::types::*;
 use filecoin_proofs::types::{PoStConfig, SectorSize};
 use filecoin_proofs::{generate_candidates, generate_post, seal_commit, verify_post, PoRepConfig};
+use log::info;
+use paired::bls12_381::Bls12;
+use rand::{rngs::OsRng, SeedableRng};
+use rand_xorshift::XorShiftRng;
+use serde::{Deserialize, Serialize};
 use storage_proofs::circuit::bench::BenchCS;
 use storage_proofs::circuit::election_post::{ElectionPoStCircuit, ElectionPoStCompound};
 use storage_proofs::compound_proof::CompoundProof;
@@ -44,7 +43,6 @@ echo '{
     "post_challenges": 20,
     "sector_size_bytes": 1024,
     "stacked_layers": 4,
-    "window_size_bytes": 512,
     "wrapper_parents_all": 8
 }' > config.json
 
@@ -61,7 +59,6 @@ pub struct FlarpReport {
 
 #[derive(Default, Debug, Deserialize, Serialize)]
 pub struct FlarpInputs {
-    window_size: String,
     sector_size: String,
     drg_parents: u64,
     expander_parents: u64,
@@ -70,14 +67,9 @@ pub struct FlarpInputs {
     post_challenges: u64,
     post_challenged_nodes: u64,
     stacked_layers: u64,
-    wrapper_parents_all: u64,
 }
 
 impl FlarpInputs {
-    pub fn window_size_bytes(&self) -> u64 {
-        bytefmt::parse(&self.window_size).unwrap()
-    }
-
     pub fn sector_size_bytes(&self) -> u64 {
         bytefmt::parse(&self.sector_size).unwrap()
     }
@@ -188,28 +180,12 @@ fn augment_with_op_measurements(mut output: &mut FlarpOutputs) {
 }
 
 fn configure_global_config(inputs: &FlarpInputs) {
-    let mut x = filecoin_proofs::constants::DEFAULT_WINDOWS
-        .write()
-        .expect("failed to acquire write lock on DEFAULT_WINDOWS");
-
-    x.insert(
-        inputs.sector_size_bytes(),
-        SectorInfo {
-            size: inputs.sector_size_bytes(),        // 1024
-            window_size: inputs.window_size_bytes(), // 512
-        },
-    );
-
-    filecoin_proofs::constants::LAYERS.store(inputs.stacked_layers, Relaxed); // 4
+    filecoin_proofs::constants::LAYERS.store(inputs.stacked_layers, Relaxed);
     filecoin_proofs::constants::DEFAULT_POREP_PROOF_PARTITIONS
-        .store(inputs.porep_partitions, Relaxed); // 10
-    filecoin_proofs::constants::WRAPPER_EXP_DEGREE.store(inputs.wrapper_parents_all, Relaxed); // 8
-    filecoin_proofs::constants::WINDOW_EXP_DEGREE.store(inputs.expander_parents, Relaxed); // 8
-    filecoin_proofs::constants::WINDOW_DRG_DEGREE.store(inputs.drg_parents, Relaxed); // 6
-    filecoin_proofs::constants::POREP_WINDOW_MINIMUM_CHALLENGES
-        .store(inputs.porep_challenges, Relaxed); // 50
-    filecoin_proofs::constants::POREP_WRAPPER_MINIMUM_CHALLENGES
-        .store(inputs.porep_challenges, Relaxed); // 50
+        .store(inputs.porep_partitions, Relaxed);
+    filecoin_proofs::constants::EXP_DEGREE.store(inputs.expander_parents, Relaxed);
+    filecoin_proofs::constants::DRG_DEGREE.store(inputs.drg_parents, Relaxed);
+    filecoin_proofs::constants::POREP_MINIMUM_CHALLENGES.store(inputs.porep_challenges, Relaxed);
 }
 
 pub fn run(
