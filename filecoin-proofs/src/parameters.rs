@@ -4,7 +4,7 @@ use anyhow::{anyhow, ensure, Result};
 use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::election_post::{self, ElectionPoSt};
 use storage_proofs::proof::ProofScheme;
-use storage_proofs::stacked_old::{self, LayerChallenges, StackedDrg};
+use storage_proofs::stacked::{self, LayerChallenges, StackedDrg};
 
 use crate::constants::{
     DefaultPieceHasher, LAYERS, POREP_WINDOW_MINIMUM_CHALLENGES, WINDOW_DRG_DEGREE,
@@ -23,7 +23,7 @@ pub type PostPublicParams = election_post::PublicParams;
 pub fn public_params(
     sector_bytes: PaddedBytesAmount,
     partitions: usize,
-) -> Result<stacked_old::PublicParams<DefaultTreeHasher>> {
+) -> Result<stacked::PublicParams<DefaultTreeHasher>> {
     StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::setup(&setup_params(
         sector_bytes,
         partitions,
@@ -55,7 +55,7 @@ pub fn post_setup_params(post_config: PoStConfig) -> PostSetupParams {
 pub fn setup_params(
     sector_bytes: PaddedBytesAmount,
     partitions: usize,
-) -> Result<stacked_old::SetupParams> {
+) -> Result<stacked::SetupParams> {
     let layer_challenges = select_challenges(
         partitions,
         POREP_WINDOW_MINIMUM_CHALLENGES.load(Ordering::Relaxed) as usize,
@@ -78,7 +78,7 @@ pub fn setup_params(
     );
 
     let nodes = (sector_bytes / 32) as usize;
-    Ok(stacked_old::SetupParams {
+    Ok(stacked::SetupParams {
         nodes,
         degree: WINDOW_DRG_DEGREE.load(Ordering::Relaxed) as usize,
         expansion_degree: WINDOW_EXP_DEGREE.load(Ordering::Relaxed) as usize,

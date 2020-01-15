@@ -152,6 +152,10 @@ impl<'a> Data<'a> {
         self.len
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
     /// Recover the data.
     pub fn ensure_data(&mut self) -> Result<()> {
         match self.raw {

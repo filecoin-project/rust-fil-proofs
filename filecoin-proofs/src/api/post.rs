@@ -19,7 +19,7 @@ use storage_proofs::fr32::bytes_into_fr;
 use storage_proofs::hasher::Hasher;
 use storage_proofs::proof::NoRequirements;
 use storage_proofs::sector::*;
-use storage_proofs::stacked_old::CacheKey;
+use storage_proofs::stacked::CacheKey;
 
 use crate::api::util::as_safe_commitment;
 use crate::caches::{get_post_params, get_post_verifying_key};

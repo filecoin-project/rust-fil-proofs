@@ -29,7 +29,6 @@ pub mod rational_post;
 pub mod sector;
 pub mod settings;
 pub mod stacked;
-pub mod stacked_old;
 pub mod util;
 
 pub(crate) const TEST_SEED: [u8; 16] = [

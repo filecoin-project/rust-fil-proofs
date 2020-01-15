@@ -10,7 +10,7 @@ use memmap::MmapOptions;
 use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
 use paired::bls12_381::{Bls12, Fr};
 use storage_proofs::circuit::multi_proof::MultiProof;
-use storage_proofs::circuit::stacked_old::StackedCompound;
+use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
 use storage_proofs::hasher::{Domain, Hasher};
@@ -18,7 +18,7 @@ use storage_proofs::measurements::{measure_op, Operation::CommD};
 use storage_proofs::merkle::create_merkle_tree;
 use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
-use storage_proofs::stacked_old::{
+use storage_proofs::stacked::{
     self, generate_replica_id, CacheKey, ChallengeRequirements, StackedDrg, Tau, TemporaryAux,
     TemporaryAuxCache,
 };
@@ -247,9 +247,9 @@ pub fn seal_commit<T: AsRef<Path>>(
         comm_d_safe,
     );
 
-    let public_inputs = stacked_old::PublicInputs {
+    let public_inputs = stacked::PublicInputs {
         replica_id,
-        tau: Some(stacked_old::Tau {
+        tau: Some(stacked::Tau {
             comm_d: comm_d_safe,
             comm_r: comm_r_safe,
         }),
@@ -257,7 +257,7 @@ pub fn seal_commit<T: AsRef<Path>>(
         seed,
     };
 
-    let private_inputs = stacked_old::PrivateInputs::<DefaultTreeHasher, DefaultPieceHasher> {
+    let private_inputs = stacked::PrivateInputs::<DefaultTreeHasher, DefaultPieceHasher> {
         p_aux,
         t_aux: t_aux_cache,
     };
@@ -370,7 +370,7 @@ pub fn verify_seal(
         StackedDrg<'_, DefaultTreeHasher, DefaultPieceHasher>,
     > = StackedCompound::setup(&compound_setup_params)?;
 
-    let public_inputs = stacked_old::PublicInputs::<
+    let public_inputs = stacked::PublicInputs::<
         <DefaultTreeHasher as Hasher>::Domain,
         <DefaultPieceHasher as Hasher>::Domain,
     > {

@@ -54,7 +54,7 @@ fn kdf_benchmark(c: &mut Criterion) {
                     hasher.input(AsRef::<[u8]>::as_ref(&replica_id));
                     hasher.input(&(1u64).to_be_bytes()[..]);
 
-                    black_box(create_key(&graph, hasher, &parents, None, &data, 1, 1))
+                    black_box(create_key(&graph, hasher, &parents, None, &data, 1))
                 })
             },
             degrees,
