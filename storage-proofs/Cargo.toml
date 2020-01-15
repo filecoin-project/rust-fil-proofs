@@ -61,9 +61,8 @@ default = ["gpu"]
 simd = []
 asm = ["sha2/sha2-asm"]
 big-sector-sizes-bench = []
-unchecked-degrees = []
 gpu = ["bellperson/gpu", "fil-sapling-crypto/gpu"]
-measurements = ["unchecked-degrees"]
+measurements = []
 
 [dev-dependencies]
 proptest = "0.7"

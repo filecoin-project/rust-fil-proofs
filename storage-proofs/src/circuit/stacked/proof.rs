@@ -94,12 +94,6 @@ impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G
 
         let graph = &public_params.graph;
         let params = &self.params;
-        // In most cases (the exception being during testing) we want to ensure that the base and
-        // expansion degrees are the optimal values.
-        if !cfg!(feature = "unchecked-degrees") {
-            assert_eq!(graph.base_graph().degree(), BASE_DEGREE);
-            assert_eq!(graph.expansion_degree(), EXP_DEGREE);
-        }
 
         // Allocate replica_id
         let replica_id_fr: Option<Fr> = replica_id.map(Into::into);
