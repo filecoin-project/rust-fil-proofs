@@ -1,14 +1,13 @@
 use std::sync::atomic::Ordering;
 
-use anyhow::{anyhow, ensure, Result};
+use anyhow::{ensure, Result};
 use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::election_post::{self, ElectionPoSt};
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::stacked::{self, LayerChallenges, StackedDrg};
 
 use crate::constants::{
-    DefaultPieceHasher, LAYERS, POREP_WINDOW_MINIMUM_CHALLENGES, WINDOW_DRG_DEGREE,
-    WINDOW_EXP_DEGREE,
+    DefaultPieceHasher, DRG_DEGREE, EXP_DEGREE, LAYERS, POREP_MINIMUM_CHALLENGES,
 };
 use crate::types::{PaddedBytesAmount, PoStConfig};
 
@@ -28,14 +27,6 @@ pub fn public_params(
         sector_bytes,
         partitions,
     )?)
-}
-
-pub fn window_size_nodes_for_sector_bytes(sector_size: PaddedBytesAmount) -> Result<u64> {
-    use crate::constants::DEFAULT_WINDOWS;
-    match DEFAULT_WINDOWS.read().unwrap().get(&u64::from(sector_size)) {
-        Some(info) => Ok(info.window_size_nodes()),
-        None => Err(anyhow!("Unknown sector size {:?}", sector_size)),
-    }
 }
 
 pub fn post_public_params(post_config: PoStConfig) -> Result<PostPublicParams> {
@@ -58,10 +49,9 @@ pub fn setup_params(
 ) -> Result<stacked::SetupParams> {
     let layer_challenges = select_challenges(
         partitions,
-        POREP_WINDOW_MINIMUM_CHALLENGES.load(Ordering::Relaxed) as usize,
+        POREP_MINIMUM_CHALLENGES.load(Ordering::Relaxed) as usize,
         LAYERS.load(Ordering::Relaxed) as usize,
     )?;
-    let window_size_nodes = window_size_nodes_for_sector_bytes(sector_bytes)?;
     let sector_bytes = u64::from(sector_bytes);
 
     ensure!(
@@ -70,18 +60,11 @@ pub fn setup_params(
         sector_bytes,
     );
 
-    ensure!(
-        sector_bytes % window_size_nodes * 32 == 0,
-        "sector_bytes ({}) must be a multiple of the window size ({})",
-        sector_bytes,
-        window_size_nodes * 32
-    );
-
     let nodes = (sector_bytes / 32) as usize;
     Ok(stacked::SetupParams {
         nodes,
-        degree: WINDOW_DRG_DEGREE.load(Ordering::Relaxed) as usize,
-        expansion_degree: WINDOW_EXP_DEGREE.load(Ordering::Relaxed) as usize,
+        degree: DRG_DEGREE.load(Ordering::Relaxed) as usize,
+        expansion_degree: EXP_DEGREE.load(Ordering::Relaxed) as usize,
         seed: DRG_SEED,
         layer_challenges,
     })

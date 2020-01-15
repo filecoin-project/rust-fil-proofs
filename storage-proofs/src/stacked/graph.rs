@@ -6,7 +6,7 @@ use lazy_static::lazy_static;
 use log::info;
 
 use crate::crypto::feistel::{self, FeistelPrecomputed};
-use crate::drgraph::{BucketGraph, Graph, BASE_DEGREE};
+use crate::drgraph::{BucketGraph, Graph};
 use crate::error::Result;
 use crate::hasher::Hasher;
 use crate::parameter_cache::ParameterSetMetadata;

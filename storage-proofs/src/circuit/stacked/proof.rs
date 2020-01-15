@@ -12,14 +12,14 @@ use crate::circuit::{
 };
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
-use crate::drgraph::{Graph, BASE_DEGREE};
+use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::fr32::fr_into_bytes;
 use crate::hasher::Hasher;
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
-use crate::stacked::{StackedDrg, EXP_DEGREE};
+use crate::stacked::StackedDrg;
 use crate::util::bytes_into_boolean_vec_be;
 
 /// Stacked DRG based Proof of Replication.
@@ -92,7 +92,6 @@ impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G
             ..
         } = self;
 
-        let graph = &public_params.graph;
         let params = &self.params;
 
         // Allocate replica_id
