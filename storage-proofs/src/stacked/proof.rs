@@ -299,12 +299,16 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 layer_labels[start..end].copy_from_slice(&key[..]);
             }
 
+            info!("  updating column hashes");
+
             if let Some(ref mut hashers) = cs_handle {
                 hashers
                     .par_iter_mut()
                     .zip(layer_labels.par_chunks(NODE_SIZE))
                     .for_each(|(hasher, data)| hasher.input(data));
             }
+
+            info!("  setting exp parents");
 
             // NOTE: this means we currently keep 2x sector size around, to improve speed.
             if let Some(ref mut exp_parents_data) = exp_parents_data {
@@ -317,16 +321,16 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             let layer_config =
                 StoreConfig::from_config(&config, CacheKey::label_layer(layer), Some(layer_size));
 
+            info!("  storing labels on disk");
             // Construct and persist the layer data.
             let layer_store: DiskStore<H::Domain> = DiskStore::new_from_slice_with_config(
                 layer_size,
                 &layer_labels,
                 layer_config.clone(),
             )?;
-            trace!(
+            info!(
                 "Generated layer {} store with id {}",
-                layer,
-                layer_config.id
+                layer, layer_config.id
             );
 
             // Track the layer specific store and StoreConfig for later retrieval.
@@ -340,6 +344,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             "Invalid amount of layers encoded expected"
         );
 
+        info!("finalizing labels");
+
         // Collect the column hashes from the spawned threads.
         let column_hashes = cs_handle.map(|hashers| {
             hashers
@@ -349,6 +355,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         });
 
         info!("Labels generated");
+
         Ok((
             LabelsCache::<H> {
                 labels,
