@@ -8,7 +8,7 @@ use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::hasher::Hasher;
 use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
-use storage_proofs::stacked_old::{generate_replica_id, CacheKey, StackedDrg};
+use storage_proofs::stacked::{generate_replica_id, CacheKey, StackedDrg};
 use tempfile::tempfile;
 
 use crate::api::util::as_safe_commitment;
@@ -556,7 +556,7 @@ mod tests {
         assert_eq!(contents.len(), 508);
         assert_eq!(&piece_bytes[508..], &contents[..]);
 
-        let computed_comm_d = compute_comm_d(config, &piece_infos)?;
+        let computed_comm_d = compute_comm_d(config.sector_size, &piece_infos)?;
 
         assert_eq!(
             comm_d, computed_comm_d,

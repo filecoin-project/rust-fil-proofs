@@ -23,23 +23,9 @@ fn main() {
                         .takes_value(true),
                 )
                 .arg(
-                    Arg::with_name("window-size")
-                        .long("window-size")
-                        .help("The window size in bytes")
-                        .default_value("4096")
-                        .takes_value(true),
-                )
-                .arg(
-                    Arg::with_name("wrapper-challenges")
-                        .long("wrapper-challenges")
-                        .help("How many wrapper challenges to execute")
-                        .default_value("1")
-                        .takes_value(true),
-                )
-                .arg(
-                    Arg::with_name("window-challenges")
-                        .long("window-challenges")
-                        .help("How many window challenges to execute")
+                    Arg::with_name("challenges")
+                        .long("challenges")
+                        .help("How many challenges to execute")
                         .default_value("1")
                         .takes_value(true),
                 )
@@ -161,16 +147,11 @@ fn main() {
             Ok(())
                 .and_then(|_| {
                     let layers = value_t!(m, "layers", usize)?;
-                    let window_size_bytes = value_t!(m, "window-size", usize)
-                        .expect("could not convert `window-size` CLI argument to `usize`");
-                    let window_size_nodes = window_size_bytes / 32;
 
                     stacked::run(stacked::RunOpts {
                         bench: m.is_present("bench"),
                         bench_only: m.is_present("bench-only"),
-                        window_size_nodes,
-                        window_challenges: value_t!(m, "window-challenges", usize)?,
-                        wrapper_challenges: value_t!(m, "wrapper-challenges", usize)?,
+                        challenges: value_t!(m, "challenges", usize)?,
                         circuit: m.is_present("circuit"),
                         dump: m.is_present("dump"),
                         extract: m.is_present("extract"),
@@ -198,7 +179,8 @@ fn main() {
             let inputs: FlarpInputs = if m.is_present("config") {
                 let file = value_t!(m, "config", String).unwrap();
                 serde_json::from_reader(
-                    std::fs::File::open(&file).expect(&format!("invalid file {:?}", file)),
+                    std::fs::File::open(&file)
+                        .unwrap_or_else(|_| panic!("invalid file {:?}", file)),
                 )
             } else {
                 serde_json::from_reader(stdin())

@@ -30,7 +30,7 @@ pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> (NamedTempFile, PieceIn
 
     for _ in 0..(u64::from(piece_bytes) as usize) {
         writer
-            .write(&[rand::random::<u8>()][..])
+            .write_all(&[rand::random::<u8>()][..])
             .expect("failed to write buffer");
     }
     drop(writer);

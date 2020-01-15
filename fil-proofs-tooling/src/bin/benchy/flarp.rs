@@ -367,9 +367,9 @@ fn run_measure_circuits(i: &FlarpInputs) -> CircuitOutputs {
 }
 
 fn measure_porep_circuit(i: &FlarpInputs) -> usize {
-    use storage_proofs::circuit::stacked_old::StackedCompound;
+    use storage_proofs::circuit::stacked::StackedCompound;
     use storage_proofs::drgraph::new_seed;
-    use storage_proofs::stacked_old::{LayerChallenges, SetupParams, StackedDrg};
+    use storage_proofs::stacked::{LayerChallenges, SetupParams, StackedDrg};
 
     let layers = i.stacked_layers as usize;
     let challenge_count = i.porep_challenges as usize;
@@ -489,8 +489,8 @@ fn generate_params(i: &FlarpInputs) {
 
 fn cache_porep_params(porep_config: PoRepConfig) {
     use filecoin_proofs::parameters::public_params;
-    use storage_proofs::circuit::stacked_old::StackedCompound;
-    use storage_proofs::stacked_old::StackedDrg;
+    use storage_proofs::circuit::stacked::StackedCompound;
+    use storage_proofs::stacked::StackedDrg;
 
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
