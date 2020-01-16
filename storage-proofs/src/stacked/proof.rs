@@ -267,14 +267,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         let graph_size = graph.size();
 
-        use crate::crypto::pedersen::Hasher as PedersenHasher;
-
-        let mut cs_handle = if with_hashing {
-            Some(vec![PedersenHasher::new_empty(); graph_size])
-        } else {
-            None
-        };
-
         for layer in 1..=layers {
             info!("generating layer: {}", layer);
 
@@ -286,15 +278,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     &mut layer_labels,
                     node,
                 )?;
-            }
-
-            info!("  updating column hashes");
-
-            if let Some(ref mut hashers) = cs_handle {
-                hashers
-                    .par_iter_mut()
-                    .zip(layer_labels.par_chunks(NODE_SIZE))
-                    .for_each(|(hasher, data)| hasher.update(data).unwrap());
             }
 
             info!("  setting exp parents");
@@ -333,17 +316,32 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             "Invalid amount of layers encoded expected"
         );
 
-        info!("finalizing labels");
-
-        // Collect the column hashes from the spawned threads.
-        let column_hashes = cs_handle.map(|hashers| {
-            hashers
-                .into_par_iter()
-                .map(|hasher| hasher.finalize_bytes())
-                .collect()
-        });
-
         info!("Labels generated");
+
+        use crate::crypto::pedersen::Hasher as PedersenHasher;
+
+        let column_hashes = if with_hashing {
+            let mut hashers = vec![PedersenHasher::new_empty(); graph_size];
+
+            for (i, store) in labels.iter().enumerate() {
+                info!("column hash {}", i + 1);
+
+                hashers.par_iter_mut().enumerate().for_each(|(i, hasher)| {
+                    hasher
+                        .update(AsRef::<[u8]>::as_ref(&store.read_at(i).unwrap()))
+                        .unwrap();
+                });
+            }
+            let res = hashers
+                .into_par_iter()
+                .map(|h| h.finalize_bytes())
+                .collect();
+            Some(res)
+        } else {
+            None
+        };
+
+        info!("column hashes generated");
 
         Ok((
             LabelsCache::<H> {
