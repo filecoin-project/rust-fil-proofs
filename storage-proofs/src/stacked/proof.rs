@@ -29,7 +29,7 @@ use crate::stacked::{
     },
     EncodingProof, LabelingProof,
 };
-use crate::util::{data_at_node, data_at_node_offset, NODE_SIZE};
+use crate::util::{data_at_node_offset, NODE_SIZE};
 
 #[derive(Debug)]
 pub struct StackedDrg<'a, H: 'a + Hasher, G: 'a + Hasher> {
@@ -260,7 +260,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let mut label_configs: Vec<StoreConfig> = Vec::with_capacity(layers);
 
         let layer_size = graph.size() * NODE_SIZE;
-        let mut parents = vec![0; graph.degree()];
         let mut layer_labels = vec![0u8; layer_size];
 
         let mut exp_parents_data: Option<Vec<u8>> = None;
@@ -282,12 +281,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             info!("generating layer: {}", layer);
 
             for node in 0..graph.size() {
-                graph.parents(node, &mut parents)?;
-
                 create_key(
                     graph,
                     base_hasher.clone(),
-                    &parents,
                     exp_parents_data.as_ref(),
                     &mut layer_labels,
                     node,
@@ -517,7 +513,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 pub fn create_key<H: Hasher>(
     graph: &StackedBucketGraph<H>,
     mut hasher: Sha256,
-    parents: &[u32],
     exp_parents_data: Option<&Vec<u8>>,
     layer_labels: &mut [u8],
     node: usize,
@@ -525,7 +520,6 @@ pub fn create_key<H: Hasher>(
     // hash parents for all non 0 nodes
     if node > 0 {
         let layer_labels = &*layer_labels;
-        let base_degree = graph.base_graph().degree();
 
         // TODO: make 37 be configurable
         let mut inputs = vec![0u8; NODE_SIZE * 37 + 8];
@@ -533,22 +527,12 @@ pub fn create_key<H: Hasher>(
         // hash node id
         inputs[..8].copy_from_slice(&(node as u64).to_be_bytes());
 
-        // Base parents
-        for (i, parent) in parents.iter().take(base_degree).enumerate() {
-            let buf = data_at_node(&layer_labels, *parent as usize)?;
-            let off = 8 + i * NODE_SIZE;
-            inputs[off..off + NODE_SIZE].copy_from_slice(buf);
-        }
-
-        // Expander parents
-        // This will happen for all layers > 1
-        if let Some(ref parents_data) = exp_parents_data {
-            for (i, parent) in parents.iter().enumerate().skip(base_degree) {
-                let buf = data_at_node(parents_data, *parent as usize)?;
-                let off = 8 + i * NODE_SIZE;
-                inputs[off..off + NODE_SIZE].copy_from_slice(buf);
-            }
-        }
+        graph.copy_parents_data(
+            node as u32,
+            layer_labels,
+            exp_parents_data,
+            &mut inputs[8..],
+        );
 
         // TODO: repeat parents, instead of hashing 0s
         hasher.input(&inputs);
