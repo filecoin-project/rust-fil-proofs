@@ -13,6 +13,7 @@ use crate::error::Result;
 use crate::hasher::Hasher;
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::settings;
+use crate::util::{data_at_node_offset, NODE_SIZE};
 
 /// The expansion degree used for Stacked Graphs.
 pub const EXP_DEGREE: usize = 8;
@@ -130,6 +131,55 @@ where
         }
 
         Ok(res)
+    }
+
+    pub fn copy_parents_data(
+        &self,
+        node: u32,
+        base_data: &[u8],
+        exp_data: Option<&Vec<u8>>,
+        target: &mut [u8],
+    ) {
+        if self.use_cache {
+            let cache_lock = PARENT_CACHE.read().unwrap();
+            let cache = cache_lock
+                .get(&self.sector_size())
+                .expect("Invalid cache construction");
+            let cache_parents = cache.read(node as u32);
+            self.copy_parents_data_inner(&cache_parents, base_data, exp_data, target);
+        } else {
+            let mut cache_parents = vec![0u32; self.degree()];
+            self.parents(node as usize, &mut cache_parents).unwrap();
+            self.copy_parents_data_inner(&cache_parents, base_data, exp_data, target);
+        }
+    }
+
+    fn copy_parents_data_inner(
+        &self,
+        cache_parents: &[u32],
+        base_data: &[u8],
+        exp_data: Option<&Vec<u8>>,
+        target: &mut [u8],
+    ) {
+        let base_degree = self.base_graph().degree();
+
+        // Base parents
+        for (i, parent) in cache_parents.iter().enumerate().take(base_degree) {
+            let node_off = data_at_node_offset(*parent as usize);
+            let off = i * NODE_SIZE;
+            target[off..off + NODE_SIZE]
+                .copy_from_slice(&base_data[node_off..node_off + NODE_SIZE]);
+        }
+
+        // Expander parents
+        if let Some(ref parents_data) = exp_data {
+            for (i, parent) in cache_parents.iter().enumerate().skip(base_degree) {
+                let node_off = data_at_node_offset(*parent as usize);
+                let off = i * NODE_SIZE;
+                target[off..off + NODE_SIZE]
+                    .copy_from_slice(&parents_data[node_off..node_off + NODE_SIZE]);
+            }
+        }
     }
 }
 
