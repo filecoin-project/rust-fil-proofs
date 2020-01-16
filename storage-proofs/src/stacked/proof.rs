@@ -529,23 +529,25 @@ pub fn create_key<H: Hasher>(
     if node > 0 {
         let layer_labels = &*layer_labels;
         let degree = graph.degree();
-        let base_parents_count = graph.base_graph().degree();
+        let base_degree = graph.base_graph().degree();
 
         // Base parents
-        for parent in parents.iter().take(base_parents_count) {
+        for parent in parents.iter().take(base_degree) {
             hasher.input(data_at_node(&layer_labels, *parent as usize)?);
         }
 
         // Expander parents
         // This will happen for all layers > 1
         if let Some(ref parents_data) = exp_parents_data {
-            for parent in parents.iter().skip(base_parents_count) {
+            for parent in parents.iter().skip(base_degree) {
                 hasher.input(data_at_node(parents_data, *parent as usize)?);
             }
-        }
 
-        // TODO: repeat parents, instead of hashing 0s
-        hasher.input(&vec![0u8; NODE_SIZE * (37 - degree)]);
+            // TODO: repeat parents, instead of hashing 0s
+            hasher.input(&vec![0u8; NODE_SIZE * (37 - degree)]);
+        } else {
+            hasher.input(&vec![0u8; NODE_SIZE * (37 - base_degree)]);
+        }
     }
 
     // store the newly generated key
