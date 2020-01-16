@@ -6,7 +6,7 @@ use merkletree::merkle::FromIndexedParallelIterator;
 use merkletree::store::{DiskStore, StoreConfig};
 use paired::bls12_381::Fr;
 use rayon::prelude::*;
-use sha2::{digest::generic_array::GenericArray, Digest, Sha256};
+use sha2::{Digest, Sha256};
 
 use crate::drgraph::Graph;
 use crate::encode::{decode, encode};
@@ -246,11 +246,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         replica_id: &<H as Hasher>::Domain,
         with_hashing: bool,
         config: Option<StoreConfig>,
-    ) -> Result<(
-        LabelsCache<H>,
-        Labels<H>,
-        Option<Vec<GenericArray<u8, <Sha256 as Digest>::OutputSize>>>,
-    )> {
+    ) -> Result<(LabelsCache<H>, Labels<H>, Option<Vec<[u8; 32]>>)> {
         info!("generate labels");
         let layers = layer_challenges.layers();
         // For now, we require it due to changes in encodings structure.
@@ -271,8 +267,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         let graph_size = graph.size();
 
+        use crate::crypto::pedersen::Hasher as PedersenHasher;
+
         let mut cs_handle = if with_hashing {
-            Some(vec![Sha256::new(); graph_size])
+            Some(vec![PedersenHasher::new_empty(); graph_size])
         } else {
             None
         };
@@ -296,7 +294,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 hashers
                     .par_iter_mut()
                     .zip(layer_labels.par_chunks(NODE_SIZE))
-                    .for_each(|(hasher, data)| hasher.input(data));
+                    .for_each(|(hasher, data)| hasher.update(data).unwrap());
             }
 
             info!("  setting exp parents");
@@ -341,7 +339,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let column_hashes = cs_handle.map(|hashers| {
             hashers
                 .into_par_iter()
-                .map(|hasher| hasher.result())
+                .map(|hasher| hasher.finalize_bytes())
                 .collect()
         });
 
