@@ -523,31 +523,38 @@ pub fn create_key<H: Hasher>(
     node: usize,
 ) -> Result<()> {
     // hash node id
-    hasher.input(&(node as u64).to_be_bytes()[..]);
 
     // hash parents for all non 0 nodes
     if node > 0 {
         let layer_labels = &*layer_labels;
-        let degree = graph.degree();
         let base_degree = graph.base_graph().degree();
 
+        // TODO: make 37 be configurable
+        let mut inputs = vec![0u8; NODE_SIZE * 37 + 8];
+
+        // hash node id
+        inputs[..8].copy_from_slice(&(node as u64).to_be_bytes());
+
         // Base parents
-        for parent in parents.iter().take(base_degree) {
-            hasher.input(data_at_node(&layer_labels, *parent as usize)?);
+        for (i, parent) in parents.iter().take(base_degree).enumerate() {
+            let buf = data_at_node(&layer_labels, *parent as usize)?;
+            inputs[8 + i * NODE_SIZE..8 + (i + 1) * NODE_SIZE].copy_from_slice(buf);
         }
 
         // Expander parents
         // This will happen for all layers > 1
         if let Some(ref parents_data) = exp_parents_data {
-            for parent in parents.iter().skip(base_degree) {
-                hasher.input(data_at_node(parents_data, *parent as usize)?);
+            for (i, parent) in parents.iter().skip(base_degree).enumerate() {
+                let j = i + base_degree;
+                let buf = data_at_node(parents_data, *parent as usize)?;
+                inputs[8 + j * NODE_SIZE..8 + (j + 1) * NODE_SIZE].copy_from_slice(buf);
             }
-
-            // TODO: repeat parents, instead of hashing 0s
-            hasher.input(&vec![0u8; NODE_SIZE * (37 - degree)]);
-        } else {
-            hasher.input(&vec![0u8; NODE_SIZE * (37 - base_degree)]);
         }
+
+        // TODO: repeat parents, instead of hashing 0s
+        hasher.input(&inputs);
+    } else {
+        hasher.input(&(node as u64).to_be_bytes()[..]);
     }
 
     // store the newly generated key
