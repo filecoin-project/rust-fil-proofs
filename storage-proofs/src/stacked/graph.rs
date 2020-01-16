@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
+use anyhow::ensure;
 use lazy_static::lazy_static;
 use log::info;
 use rayon::prelude::*;
@@ -19,8 +20,8 @@ const FEISTEL_KEYS: [feistel::Index; 4] = [1, 2, 3, 4];
 
 lazy_static! {
     // This parents cache is currently used for the full parents set.
-    // It is indexed by the `Graph.identifier`, to ensure that the right cache is used.
-    static ref PARENT_CACHE: Arc<RwLock<HashMap<String, ParentCache>>> = Arc::new(RwLock::new(HashMap::new()));
+    // It is indexed by the `sector size`, to ensure that the right cache is used.
+    static ref PARENT_CACHE: Arc<RwLock<HashMap<u64, ParentCache>>> = Arc::new(RwLock::new(HashMap::new()));
 }
 
 // StackedGraph will hold two different (but related) `ParentCache`,
@@ -113,14 +114,18 @@ where
         };
 
         if use_cache {
-            info!("using parents cache of unlimited size",);
-            assert!(nodes <= std::u32::MAX as usize);
+            info!("using parents cache of unlimited size");
+            ensure!(nodes <= std::u32::MAX as usize, "too many nodes");
 
-            if !PARENT_CACHE.read().unwrap().contains_key(&res.id) {
+            if !PARENT_CACHE
+                .read()
+                .unwrap()
+                .contains_key(&res.sector_size())
+            {
                 PARENT_CACHE
                     .write()
                     .unwrap()
-                    .insert(res.id.clone(), ParentCache::new(nodes as u32, &res)?);
+                    .insert(res.sector_size(), ParentCache::new(nodes as u32, &res)?);
             }
         }
 
@@ -174,7 +179,7 @@ where
         // Read from the cache
         let cache_lock = PARENT_CACHE.read().unwrap();
         let cache = cache_lock
-            .get(&self.id)
+            .get(&self.sector_size())
             .expect("Invalid cache construction");
 
         let cache_parents = cache.read(node as u32);
@@ -286,7 +291,7 @@ where
         // Read from the cache
         let cache_lock = PARENT_CACHE.read().unwrap();
         let cache = cache_lock
-            .get(&self.id)
+            .get(&self.sector_size())
             .expect("Invalid cache construction");
 
         let cache_parents = cache.read(node as u32);
@@ -308,7 +313,7 @@ where
         // Read from the cache
         let cache_lock = PARENT_CACHE.read().unwrap();
         let cache = cache_lock
-            .get(&self.id)
+            .get(&self.sector_size())
             .expect("Invalid cache construction");
 
         let cache_parents = cache.read(node as u32);
