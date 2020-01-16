@@ -3,6 +3,7 @@ use std::sync::{atomic::AtomicU64, atomic::AtomicU8};
 use lazy_static::lazy_static;
 use storage_proofs::util::NODE_SIZE;
 
+use crate::param::ParameterMap;
 use crate::types::UnpaddedBytesAmount;
 
 pub const SECTOR_SIZE_ONE_KIB: u64 = 1024;
@@ -22,6 +23,8 @@ lazy_static! {
     pub static ref EXP_DEGREE: AtomicU64 =
         AtomicU64::new(storage_proofs::stacked::EXP_DEGREE as u64);
     pub static ref DEFAULT_POREP_PROOF_PARTITIONS: AtomicU8 = AtomicU8::new(10);
+    pub static ref PARAMETERS: ParameterMap =
+        serde_json::from_str(include_str!("../parameters.json")).expect("Invalid parameters.json");
 }
 
 /// The size of a single snark proof.
