@@ -522,8 +522,6 @@ pub fn create_key<H: Hasher>(
     layer_labels: &mut [u8],
     node: usize,
 ) -> Result<()> {
-    // hash node id
-
     // hash parents for all non 0 nodes
     if node > 0 {
         let layer_labels = &*layer_labels;
@@ -538,16 +536,17 @@ pub fn create_key<H: Hasher>(
         // Base parents
         for (i, parent) in parents.iter().take(base_degree).enumerate() {
             let buf = data_at_node(&layer_labels, *parent as usize)?;
-            inputs[8 + i * NODE_SIZE..8 + (i + 1) * NODE_SIZE].copy_from_slice(buf);
+            let off = 8 + i * NODE_SIZE;
+            inputs[off..off + NODE_SIZE].copy_from_slice(buf);
         }
 
         // Expander parents
         // This will happen for all layers > 1
         if let Some(ref parents_data) = exp_parents_data {
-            for (i, parent) in parents.iter().skip(base_degree).enumerate() {
-                let j = i + base_degree;
+            for (i, parent) in parents.iter().enumerate().skip(base_degree) {
                 let buf = data_at_node(parents_data, *parent as usize)?;
-                inputs[8 + j * NODE_SIZE..8 + (j + 1) * NODE_SIZE].copy_from_slice(buf);
+                let off = 8 + i * NODE_SIZE;
+                inputs[off..off + NODE_SIZE].copy_from_slice(buf);
             }
         }
 
