@@ -296,7 +296,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             info!("  storing labels on disk");
             // Construct and persist the layer data.
             let layer_store: DiskStore<H::Domain> = DiskStore::new_from_slice_with_config(
-                layer_size,
+                graph.size(),
                 &layer_labels,
                 layer_config.clone(),
             )?;
