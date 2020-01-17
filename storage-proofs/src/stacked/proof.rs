@@ -18,13 +18,14 @@ use crate::measurements::{
 };
 use crate::merkle::{MerkleProof, MerkleTree, Store};
 use crate::porep::Data;
+use crate::porep::PoRep;
 use crate::stacked::{
     challenges::LayerChallenges,
     column::Column,
     graph::StackedBucketGraph,
     hash::hash2,
     params::{
-        get_node, CacheKey, Labels, LabelsCache, PersistentAux, Proof, PublicInputs,
+        get_node, CacheKey, Labels, LabelsCache, PersistentAux, Proof, PublicInputs, PublicParams,
         ReplicaColumnProof, Tau, TemporaryAux, TemporaryAuxCache, TransformedLayers, Tree,
     },
     EncodingProof, LabelingProof,
@@ -480,6 +481,28 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 _g: PhantomData,
             },
         ))
+    }
+
+    pub fn replicate_many(
+        pp: &'a PublicParams<H>,
+        replica_ids: &[H::Domain],
+        data: Vec<Data<'a>>,
+        data_trees: Vec<Tree<G>>,
+        configs: Vec<StoreConfig>,
+    ) -> Result<(
+        Vec<<Self as PoRep<'a, H, G>>::Tau>,
+        Vec<<Self as PoRep<'a, H, G>>::ProverAux>,
+    )> {
+        let result = replica_ids
+            .par_iter()
+            .zip(data.into_par_iter())
+            .zip(data_trees.into_par_iter())
+            .zip(configs.into_par_iter())
+            .map(|(((replica_id, data), data_tree), config)| {
+                Self::replicate(pp, replica_id, data, Some(data_tree), Some(config))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(result.into_iter().unzip())
     }
 }
 

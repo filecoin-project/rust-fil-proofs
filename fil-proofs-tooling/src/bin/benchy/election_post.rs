@@ -106,14 +106,17 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
 
     let seal_pre_commit_output = seal_pre_commit(
         porep_config,
-        cache_dir.path(),
-        staged_file.path(),
-        sealed_file.path(),
-        PROVER_ID,
-        sector_id,
-        TICKET_BYTES,
-        &piece_infos,
-    )?;
+        &[cache_dir.path().into()],
+        &[staged_file.path().into()],
+        &[sealed_file.path().into()],
+        &[PROVER_ID],
+        &[sector_id],
+        &[TICKET_BYTES],
+        &[piece_infos.clone()],
+    )?
+    .into_iter()
+    .next()
+    .unwrap();
 
     let seed = [0u8; 32];
     let comm_r = seal_pre_commit_output.comm_r;

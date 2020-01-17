@@ -48,7 +48,7 @@ rayon = "1.2.0"
 bytefmt = "0.1.7"
 
 [features]
-default = ["gpu", "measurements", "profile"]
+default = ["gpu", "measurements"]
 gpu = ["storage-proofs/gpu", "filecoin-proofs/gpu", "bellperson/gpu", "fil-sapling-crypto/gpu"]
 measurements = ["storage-proofs/measurements"]
 profile = ["storage-proofs/profile", "measurements"]

@@ -1,6 +1,7 @@
 use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::sync::atomic::Ordering;
 
+use log::info;
 use tempfile::NamedTempFile;
 
 use fil_proofs_tooling::{measure, FuncMeasurement};
@@ -21,7 +22,6 @@ pub struct PreCommitReplicaOutput {
     pub piece_info: Vec<PieceInfo>,
     pub private_replica_info: PrivateReplicaInfo,
     pub public_replica_info: PublicReplicaInfo,
-    pub measurement: FuncMeasurement<SealPreCommitOutput>,
 }
 
 pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> (NamedTempFile, PieceInfo) {
@@ -56,7 +56,12 @@ pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> (NamedTempFile, PieceIn
 pub fn create_replicas(
     sector_size: SectorSize,
     qty_sectors: usize,
-) -> (PoRepConfig, Vec<(SectorId, PreCommitReplicaOutput)>) {
+) -> (
+    PoRepConfig,
+    Vec<(SectorId, PreCommitReplicaOutput)>,
+    FuncMeasurement<Vec<SealPreCommitOutput>>,
+) {
+    info!("creating replicas: {:?} - {}", sector_size, qty_sectors);
     let sector_size_unpadded_bytes_ammount =
         UnpaddedBytesAmount::from(PaddedBytesAmount::from(sector_size));
 
@@ -66,22 +71,22 @@ pub fn create_replicas(
     };
 
     let mut out: Vec<(SectorId, PreCommitReplicaOutput)> = Default::default();
+    let mut sector_ids = Vec::new();
+    let mut cache_dirs = Vec::new();
+    let mut piece_infos = Vec::new();
+    let mut staged_files = Vec::new();
+    let mut sealed_files = Vec::new();
 
     for _ in 0..qty_sectors {
-        let sector_id = SectorId::from(rand::random::<u64>());
+        sector_ids.push(SectorId::from(rand::random::<u64>()));
 
-        let cache_dir = tempfile::tempdir().expect("failed to create cache dir");
+        cache_dirs.push(tempfile::tempdir().expect("failed to create cache dir"));
 
         let mut staged_file =
             NamedTempFile::new().expect("could not create temp file for staged sector");
 
         let sealed_file =
             NamedTempFile::new().expect("could not create temp file for sealed sector");
-
-        let sealed_path_string = sealed_file
-            .path()
-            .to_str()
-            .expect("file name is not a UTF-8 string");
 
         let (mut piece_file, piece_info) = create_piece(UnpaddedBytesAmount::from(
             PaddedBytesAmount::from(sector_size),
@@ -95,40 +100,69 @@ pub fn create_replicas(
         )
         .expect("failed to add piece to staged sector");
 
-        let seal_pre_commit_output = measure(|| {
-            seal_pre_commit(
-                porep_config,
-                cache_dir.path(),
-                staged_file.path(),
-                sealed_file.path(),
-                PROVER_ID,
-                sector_id,
-                TICKET_BYTES,
-                &[piece_info.clone()],
-            )
-        })
-        .expect("seal_pre_commit produced an error");
+        sealed_files.push(sealed_file);
+        staged_files.push(staged_file);
+        piece_infos.push(vec![piece_info]);
+    }
 
-        let priv_info = PrivateReplicaInfo::new(
-            sealed_path_string.to_string(),
-            seal_pre_commit_output.return_value.comm_r,
-            cache_dir.into_path(),
+    let seal_pre_commit_outputs = measure(|| {
+        seal_pre_commit(
+            porep_config,
+            &cache_dirs
+                .iter()
+                .map(|c| c.path().into())
+                .collect::<Vec<_>>(),
+            &staged_files
+                .iter()
+                .map(|c| c.path().into())
+                .collect::<Vec<_>>(),
+            &sealed_files
+                .iter()
+                .map(|c| c.path().into())
+                .collect::<Vec<_>>(),
+            &[PROVER_ID],
+            &sector_ids,
+            &[TICKET_BYTES],
+            &piece_infos,
         )
-        .expect("failed to create PrivateReplicaInfo");
+    })
+    .expect("seal_pre_commit produced an error");
 
-        let pub_info = PublicReplicaInfo::new(seal_pre_commit_output.return_value.comm_r)
-            .expect("failed to create PublicReplicaInfo");
+    let priv_infos = sealed_files
+        .iter()
+        .zip(seal_pre_commit_outputs.return_value.iter())
+        .zip(cache_dirs.into_iter())
+        .map(|((sealed_file, seal_pre_commit_output), cache_dir)| {
+            PrivateReplicaInfo::new(
+                sealed_file.path().to_str().unwrap().to_string(),
+                seal_pre_commit_output.comm_r,
+                cache_dir.into_path(),
+            )
+            .expect("failed to create PrivateReplicaInfo")
+        })
+        .collect::<Vec<_>>();
 
+    let pub_infos = seal_pre_commit_outputs
+        .return_value
+        .iter()
+        .map(|sp| PublicReplicaInfo::new(sp.comm_r).expect("failed to create PublicReplicaInfo"))
+        .collect::<Vec<_>>();
+
+    for (((sector_id, piece_info), priv_info), pub_info) in sector_ids
+        .into_iter()
+        .zip(piece_infos.into_iter())
+        .zip(priv_infos.into_iter())
+        .zip(pub_infos.into_iter())
+    {
         out.push((
             sector_id,
             PreCommitReplicaOutput {
-                piece_info: vec![piece_info],
-                measurement: seal_pre_commit_output,
+                piece_info,
                 private_replica_info: priv_info,
                 public_replica_info: pub_info,
             },
         ));
     }
 
-    (porep_config, out)
+    (porep_config, out, seal_pre_commit_outputs)
 }
