@@ -17,7 +17,6 @@ use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
 use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::measurements::{measure_op, Operation::CommD};
 use storage_proofs::merkle::create_merkle_tree;
-use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
 use storage_proofs::stacked::{
     self, generate_replica_id, CacheKey, ChallengeRequirements, StackedDrg, Tau, TemporaryAux,
@@ -59,6 +58,31 @@ pub fn seal_pre_commit(
     piece_infos: &[Vec<PieceInfo>],
 ) -> Result<Vec<SealPreCommitOutput>> {
     info!("seal_pre_commit: start");
+    ensure!(
+        in_paths.len() == out_paths.len(),
+        "inconsistent inputs, out_paths"
+    );
+    ensure!(
+        in_paths.len() == prover_ids.len(),
+        "inconsistent inputs, prover_ids"
+    );
+    ensure!(
+        in_paths.len() == cache_paths.len(),
+        "inconsistent inputs, cache_paths"
+    );
+    ensure!(
+        in_paths.len() == tickets.len(),
+        "inconsistent inputs, tickets"
+    );
+    ensure!(
+        in_paths.len() == sector_ids.len(),
+        "inconsistent inputs, sector_ids"
+    );
+    ensure!(
+        in_paths.len() == piece_infos.len(),
+        "inconsistent inputs, piece_infos"
+    );
+
     let sector_bytes = usize::from(PaddedBytesAmount::from(porep_config));
 
     in_paths.par_iter().zip(out_paths.par_iter()).try_for_each(
@@ -189,6 +213,9 @@ pub fn seal_pre_commit(
         .iter()
         .map(|tau| commitment_from_fr::<Bls12>(tau.comm_r.into()))
         .collect::<Vec<_>>();
+
+    ensure!(taus.len() == auxs.len(), "inconsistent outputs");
+    ensure!(taus.len() == in_paths.len(), "inconsistent outputs");
 
     info!("seal_pre_commit: end");
 

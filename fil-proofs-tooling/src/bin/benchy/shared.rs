@@ -1,7 +1,9 @@
 use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::sync::atomic::Ordering;
 
+use anyhow::Result;
 use log::info;
+use rayon::prelude::*;
 use tempfile::NamedTempFile;
 
 use fil_proofs_tooling::{measure, FuncMeasurement};
@@ -76,34 +78,41 @@ pub fn create_replicas(
     let mut piece_infos = Vec::new();
     let mut staged_files = Vec::new();
     let mut sealed_files = Vec::new();
+    let mut piece_files = Vec::new();
 
     for _ in 0..qty_sectors {
         sector_ids.push(SectorId::from(rand::random::<u64>()));
-
         cache_dirs.push(tempfile::tempdir().expect("failed to create cache dir"));
 
-        let mut staged_file =
+        let staged_file =
             NamedTempFile::new().expect("could not create temp file for staged sector");
 
         let sealed_file =
             NamedTempFile::new().expect("could not create temp file for sealed sector");
 
-        let (mut piece_file, piece_info) = create_piece(UnpaddedBytesAmount::from(
+        let (piece_file, piece_info) = create_piece(UnpaddedBytesAmount::from(
             PaddedBytesAmount::from(sector_size),
         ));
-
-        add_piece(
-            &mut piece_file,
-            &mut staged_file,
-            sector_size_unpadded_bytes_ammount,
-            &[],
-        )
-        .expect("failed to add piece to staged sector");
 
         sealed_files.push(sealed_file);
         staged_files.push(staged_file);
         piece_infos.push(vec![piece_info]);
+        piece_files.push(piece_file);
     }
+
+    piece_files
+        .into_par_iter()
+        .zip(staged_files.par_iter_mut())
+        .try_for_each(|(mut piece_file, mut staged_file)| -> Result<()> {
+            add_piece(
+                &mut piece_file,
+                &mut staged_file,
+                sector_size_unpadded_bytes_ammount,
+                &[],
+            )?;
+            Ok(())
+        })
+        .expect("failed to add piece");
 
     let seal_pre_commit_outputs = measure(|| {
         seal_pre_commit(
@@ -120,9 +129,9 @@ pub fn create_replicas(
                 .iter()
                 .map(|c| c.path().into())
                 .collect::<Vec<_>>(),
-            &[PROVER_ID],
+            &(0..qty_sectors).map(|_| PROVER_ID).collect::<Vec<_>>(),
             &sector_ids,
-            &[TICKET_BYTES],
+            &(0..qty_sectors).map(|_| TICKET_BYTES).collect::<Vec<_>>(),
             &piece_infos,
         )
     })

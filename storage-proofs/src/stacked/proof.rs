@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
+use anyhow::ensure;
 use log::{info, trace};
 use merkletree::merkle::FromIndexedParallelIterator;
 use merkletree::store::{DiskStore, StoreConfig};
@@ -493,15 +494,21 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         Vec<<Self as PoRep<'a, H, G>>::Tau>,
         Vec<<Self as PoRep<'a, H, G>>::ProverAux>,
     )> {
+        ensure!(replica_ids.len() == data.len(), "inconsistent inputs");
+        ensure!(replica_ids.len() == data_trees.len(), "inconsistent inputs");
+        ensure!(replica_ids.len() == configs.len(), "inconsistent inputs");
+
         let result = replica_ids
             .par_iter()
             .zip(data.into_par_iter())
             .zip(data_trees.into_par_iter())
             .zip(configs.into_par_iter())
             .map(|(((replica_id, data), data_tree), config)| {
+                info!("replicating {:?}", &replica_id);
                 Self::replicate(pp, replica_id, data, Some(data_tree), Some(config))
             })
             .collect::<Result<Vec<_>>>()?;
+
         Ok(result.into_iter().unzip())
     }
 }
