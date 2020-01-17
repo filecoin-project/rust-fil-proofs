@@ -407,24 +407,24 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let tree_c = measure_op(GenerateTreeC, || {
             info!("Building column hashes");
 
-            use crate::crypto::pedersen::Hasher as PedersenHasher;
-            let mut hashers = vec![PedersenHasher::new_empty(); graph.size()];
+            // use crate::crypto::pedersen::Hasher as PedersenHasher;
+            let mut hashers = vec![Sha256::new(); graph.size()];
 
             for layer in 1..=layers {
                 info!("column hash {}", layer);
                 let store = labels.labels_for_layer(layer);
 
                 hashers.par_iter_mut().enumerate().for_each(|(i, hasher)| {
-                    hasher
-                        .update(AsRef::<[u8]>::as_ref(&store.read_at(i).unwrap()))
-                        .unwrap();
+                    hasher.input(AsRef::<[u8]>::as_ref(&store.read_at(i).unwrap()));
                 });
             }
             info!("building tree_c");
             MerkleTree::<_, H::Function>::from_par_iter_with_config(
-                hashers
-                    .into_par_iter()
-                    .map(|h| h.finalize().unwrap().into()),
+                hashers.into_par_iter().map(|h| {
+                    let mut res = h.result();
+                    res[31] &= 0b0011_1111;
+                    H::Domain::try_from_bytes(&res).unwrap()
+                }),
                 tree_c_config.clone(),
             )
         })?;
