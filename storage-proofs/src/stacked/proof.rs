@@ -355,9 +355,36 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         graph: &StackedBucketGraph<H>,
         layer_challenges: &LayerChallenges,
         replica_id: &<H as Hasher>::Domain,
-        mut data: Data,
+        data: Data,
         data_tree: Option<Tree<G>>,
         config: Option<StoreConfig>,
+    ) -> Result<TransformedLayers<H, G>> {
+        let config = config.unwrap();
+
+        // Generate key layers.
+        let (labels, label_configs) = measure_op(EncodeWindowTimeAll, || {
+            Self::generate_labels(graph, layer_challenges, replica_id, Some(config.clone()))
+        })?;
+
+        Self::transform_and_replicate_layers_inner(
+            graph,
+            layer_challenges,
+            data,
+            data_tree,
+            config,
+            labels,
+            label_configs,
+        )
+    }
+
+    pub(crate) fn transform_and_replicate_layers_inner(
+        graph: &StackedBucketGraph<H>,
+        layer_challenges: &LayerChallenges,
+        mut data: Data,
+        data_tree: Option<Tree<G>>,
+        config: StoreConfig,
+        labels: LabelsCache<H>,
+        label_configs: Labels<H>,
     ) -> Result<TransformedLayers<H, G>> {
         trace!("transform_and_replicate_layers");
         let nodes_count = graph.size();
@@ -369,19 +396,12 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         // Generate all store configs that we need based on the
         // cache_path in the specified config.
-        assert!(config.is_some());
-        let config = config.unwrap();
         let mut tree_d_config =
             StoreConfig::from_config(&config, CacheKey::CommDTree.to_string(), None);
         let mut tree_r_last_config =
             StoreConfig::from_config(&config, CacheKey::CommRLastTree.to_string(), None);
         let mut tree_c_config =
             StoreConfig::from_config(&config, CacheKey::CommCTree.to_string(), None);
-
-        // Generate key layers.
-        let (labels, label_configs) = measure_op(EncodeWindowTimeAll, || {
-            Self::generate_labels(graph, layer_challenges, replica_id, Some(config.clone()))
-        })?;
 
         // Build the tree for CommC
         let tree_c = measure_op(GenerateTreeC, || {
@@ -498,18 +518,39 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         ensure!(replica_ids.len() == data_trees.len(), "inconsistent inputs");
         ensure!(replica_ids.len() == configs.len(), "inconsistent inputs");
 
-        let result = replica_ids
-            .par_iter()
-            .zip(data.into_par_iter())
-            .zip(data_trees.into_par_iter())
-            .zip(configs.into_par_iter())
-            .map(|(((replica_id, data), data_tree), config)| {
-                info!("replicating {:?}", &replica_id);
-                Self::replicate(pp, replica_id, data, Some(data_tree), Some(config))
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let labels = measure_op(EncodeWindowTimeAll, || {
+            replica_ids
+                .par_iter()
+                .zip(configs.clone().into_par_iter())
+                .map(|(replica_id, config)| {
+                    Self::generate_labels(&pp.graph, &pp.layer_challenges, replica_id, Some(config))
+                })
+        })
+        .collect::<Result<Vec<_>>>()?;
 
-        Ok(result.into_iter().unzip())
+        let mut taus = Vec::new();
+        let mut auxs = Vec::new();
+
+        for ((((labels, label_configs), data), data_tree), config) in labels
+            .into_iter()
+            .zip(data.into_iter())
+            .zip(data_trees.into_iter())
+            .zip(configs.into_iter())
+        {
+            let (a, b, c) = Self::transform_and_replicate_layers_inner(
+                &pp.graph,
+                &pp.layer_challenges,
+                data,
+                Some(data_tree),
+                config,
+                labels,
+                label_configs,
+            )?;
+            taus.push(a);
+            auxs.push((b, c));
+        }
+
+        Ok((taus, auxs))
     }
 }
 
