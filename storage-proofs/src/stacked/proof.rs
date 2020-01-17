@@ -218,8 +218,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         assert!(layers > 0);
 
         // generate labels
-        let (labels, _, _) =
-            Self::generate_labels(graph, layer_challenges, replica_id, false, config)?;
+        let (labels, _) = Self::generate_labels(graph, layer_challenges, replica_id, config)?;
 
         let last_layer_labels = labels.labels_for_last_layer()?;
         let size = merkletree::store::Store::len(last_layer_labels);
@@ -244,9 +243,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         graph: &StackedBucketGraph<H>,
         layer_challenges: &LayerChallenges,
         replica_id: &<H as Hasher>::Domain,
-        with_hashing: bool,
         config: Option<StoreConfig>,
-    ) -> Result<(LabelsCache<H>, Labels<H>, Option<Vec<[u8; 32]>>)> {
+    ) -> Result<(LabelsCache<H>, Labels<H>)> {
         info!("generate labels");
         let layers = layer_challenges.layers();
         // For now, we require it due to changes in encodings structure.
@@ -264,8 +262,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let mut base_hasher = Sha256::new();
         // hash replica id
         base_hasher.input(AsRef::<[u8]>::as_ref(replica_id));
-
-        let graph_size = graph.size();
 
         for layer in 1..=layers {
             info!("generating layer: {}", layer);
@@ -316,31 +312,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             "Invalid amount of layers encoded expected"
         );
 
-        info!("Labels generated");
-
-        use crate::crypto::pedersen::Hasher as PedersenHasher;
-
-        let column_hashes = if with_hashing {
-            let mut hashers = vec![PedersenHasher::new_empty(); graph_size];
-
-            for (i, store) in labels.iter().enumerate() {
-                info!("column hash {}", i + 1);
-
-                hashers.par_iter_mut().enumerate().for_each(|(i, hasher)| {
-                    hasher
-                        .update(AsRef::<[u8]>::as_ref(&store.read_at(i).unwrap()))
-                        .unwrap();
-                });
-            }
-            let res = hashers
-                .into_par_iter()
-                .map(|h| h.finalize_bytes())
-                .collect();
-            Some(res)
-        } else {
-            None
-        };
-
         info!("column hashes generated");
 
         Ok((
@@ -352,7 +323,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 labels: label_configs,
                 _h: PhantomData,
             },
-            column_hashes,
         ))
     }
 
@@ -407,25 +377,32 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             StoreConfig::from_config(&config, CacheKey::CommCTree.to_string(), None);
 
         // Generate key layers.
-        let (labels, label_configs, column_hashes) = measure_op(EncodeWindowTimeAll, || {
-            Self::generate_labels(
-                graph,
-                layer_challenges,
-                replica_id,
-                true,
-                Some(config.clone()),
-            )
+        let (labels, label_configs) = measure_op(EncodeWindowTimeAll, || {
+            Self::generate_labels(graph, layer_challenges, replica_id, Some(config.clone()))
         })?;
-        let column_hashes =
-            column_hashes.expect("must exist, as generate_labels was called with true");
 
         // Build the tree for CommC
         let tree_c = measure_op(GenerateTreeC, || {
+            info!("Building column hashes");
+
+            use crate::crypto::pedersen::Hasher as PedersenHasher;
+            let mut hashers = vec![PedersenHasher::new_empty(); graph.size()];
+
+            for layer in 1..=layers {
+                info!("column hash {}", layer);
+                let store = labels.labels_for_layer(layer);
+
+                hashers.par_iter_mut().enumerate().for_each(|(i, hasher)| {
+                    hasher
+                        .update(AsRef::<[u8]>::as_ref(&store.read_at(i).unwrap()))
+                        .unwrap();
+                });
+            }
             info!("building tree_c");
             MerkleTree::<_, H::Function>::from_par_iter_with_config(
-                column_hashes
+                hashers
                     .into_par_iter()
-                    .map(|chunk| H::Domain::try_from_bytes(&chunk[..]).unwrap()),
+                    .map(|h| h.finalize().unwrap().into()),
                 tree_c_config.clone(),
             )
         })?;
