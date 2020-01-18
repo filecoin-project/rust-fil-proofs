@@ -198,8 +198,7 @@ pub fn run(
 
     let sector_size = SectorSize(inputs.sector_size_bytes());
 
-    let (cfg, mut created, replica_measurement) = create_replicas(sector_size, 2);
-    let (sector_id, replica_info) = created.pop().unwrap();
+    let (cfg, created, replica_measurement) = create_replicas(sector_size, 2);
 
     if only_replicate {
         augment_with_op_measurements(&mut outputs);
@@ -210,13 +209,15 @@ pub fn run(
     generate_params(&inputs);
 
     if !skip_seal_proof {
-        for value in replica_measurement.return_value.iter() {
+        for (value, (sector_id, replica_info)) in
+            replica_measurement.return_value.iter().zip(created.iter())
+        {
             let measured = measure(|| {
                 seal_commit(
                     cfg,
                     &replica_info.private_replica_info.cache_dir_path(),
                     PROVER_ID,
-                    sector_id,
+                    *sector_id,
                     TICKET_BYTES,
                     RANDOMNESS,
                     value.clone(),
@@ -231,6 +232,8 @@ pub fn run(
     }
 
     if !skip_post_proof {
+        let (sector_id, replica_info) = &created[0];
+
         // replica_info is moved into the PoSt scope
         let encoding_wall_time_ms = replica_measurement.wall_time.as_millis() as u64;
         let encoding_cpu_time_ms = replica_measurement.cpu_time.as_millis() as u64;
@@ -247,7 +250,7 @@ pub fn run(
                 post_config,
                 &RANDOMNESS,
                 CHALLENGE_COUNT,
-                &vec![(sector_id, replica_info.private_replica_info.clone())]
+                &vec![(*sector_id, replica_info.private_replica_info.clone())]
                     .into_iter()
                     .collect(),
                 PROVER_ID,
@@ -264,7 +267,7 @@ pub fn run(
             generate_post(
                 post_config,
                 &RANDOMNESS,
-                &vec![(sector_id, replica_info.private_replica_info.clone())]
+                &vec![(*sector_id, replica_info.private_replica_info.clone())]
                     .into_iter()
                     .collect(),
                 candidates.clone(),
@@ -284,7 +287,7 @@ pub fn run(
                 &RANDOMNESS,
                 CHALLENGE_COUNT,
                 post_proof,
-                &vec![(sector_id, replica_info.public_replica_info.clone())]
+                &vec![(*sector_id, replica_info.public_replica_info.clone())]
                     .into_iter()
                     .collect(),
                 &candidates.clone(),
