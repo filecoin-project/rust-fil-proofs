@@ -33,6 +33,8 @@ use crate::stacked::{
 };
 use crate::util::{data_at_node_offset, NODE_SIZE};
 
+pub const TOTAL_PARENTS: usize = 37;
+
 #[derive(Debug)]
 pub struct StackedDrg<'a, H: 'a + Hasher, G: 'a + Hasher> {
     _a: PhantomData<&'a H>,
@@ -565,8 +567,7 @@ pub fn create_key<H: Hasher>(
     if node > 0 {
         let layer_labels = &*layer_labels;
 
-        // TODO: make 37 be configurable
-        let mut inputs = vec![0u8; NODE_SIZE * 37 + 8];
+        let mut inputs = vec![0u8; NODE_SIZE * TOTAL_PARENTS + 8];
 
         // hash node id
         inputs[..8].copy_from_slice(&(node as u64).to_be_bytes());

@@ -198,7 +198,7 @@ pub fn run(
 
     let sector_size = SectorSize(inputs.sector_size_bytes());
 
-    let (cfg, mut created, replica_measurement) = create_replicas(sector_size, 4);
+    let (cfg, mut created, replica_measurement) = create_replicas(sector_size, 2);
     let (sector_id, replica_info) = created.pop().unwrap();
 
     if only_replicate {
@@ -225,8 +225,8 @@ pub fn run(
             })
             .expect("failed to prove sector");
 
-            outputs.porep_proof_gen_cpu_time_ms = measured.cpu_time.as_millis() as u64;
-            outputs.porep_proof_gen_wall_time_ms = measured.wall_time.as_millis() as u64;
+            outputs.porep_proof_gen_cpu_time_ms += measured.cpu_time.as_millis() as u64;
+            outputs.porep_proof_gen_wall_time_ms += measured.wall_time.as_millis() as u64;
         }
     }
 

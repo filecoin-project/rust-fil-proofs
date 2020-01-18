@@ -11,7 +11,6 @@ use crate::error::Result;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::partitions;
 use crate::proof::ProofScheme;
-use crate::settings;
 
 #[derive(Clone)]
 pub struct SetupParams<'a, S: ProofScheme<'a>> {
@@ -38,8 +37,12 @@ pub trait CircuitComponent {
 /// See documentation at proof::ProofScheme for details.
 /// Implementations should generally only need to supply circuit and generate_public_inputs.
 /// The remaining trait methods are used internally and implement the necessary plumbing.
-pub trait CompoundProof<'a, E: JubjubEngine, S: ProofScheme<'a>, C: Circuit<E> + CircuitComponent>
-where
+pub trait CompoundProof<
+    'a,
+    E: JubjubEngine,
+    S: ProofScheme<'a>,
+    C: Circuit<E> + Send + CircuitComponent,
+> where
     S::Proof: Sync + Send,
     S::PublicParams: ParameterSetMetadata + Sync + Send,
     S::PublicInputs: Clone + Sync,
@@ -90,29 +93,16 @@ where
             S::verify_all_partitions(&pub_params.vanilla_params, &pub_in, &vanilla_proofs)?;
         ensure!(sanity_check, "sanity check failed");
 
-        // Use a custom pool for this, so we can control the number of threads being used.
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(settings::SETTINGS.lock().unwrap().num_proving_threads)
-            .build()
-            .context("failed to build thread pool")?;
-
         info!("snark_proof:start");
-        let groth_proofs: Result<Vec<_>> = pool.install(|| {
-            vanilla_proofs
-                .par_iter()
-                .map(|vanilla_proof| {
-                    Self::circuit_proof(
-                        pub_in,
-                        &vanilla_proof,
-                        &pub_params.vanilla_params,
-                        groth_params,
-                    )
-                })
-                .collect()
-        });
+        let groth_proofs = Self::circuit_proofs(
+            pub_in,
+            vanilla_proofs,
+            &pub_params.vanilla_params,
+            groth_params,
+        )?;
         info!("snark_proof:finish");
 
-        Ok(MultiProof::new(groth_proofs?, &groth_params.vk))
+        Ok(MultiProof::new(groth_proofs, &groth_params.vk))
     }
 
     // verify is equivalent to ProofScheme::verify.
@@ -151,32 +141,37 @@ where
     /// groth proof from it. It returns a groth proof.
     /// circuit_proof is used internally and should neither be called nor implemented outside of
     /// default trait methods.
-    fn circuit_proof(
+    fn circuit_proofs(
         pub_in: &S::PublicInputs,
-        vanilla_proof: &S::Proof,
+        vanilla_proof: Vec<S::Proof>,
         pub_params: &S::PublicParams,
         groth_params: &groth16::Parameters<E>,
-    ) -> Result<groth16::Proof<E>> {
+    ) -> Result<Vec<groth16::Proof<E>>> {
         let mut rng = OsRng;
 
-        // We need to make the circuit repeatedly because we can't clone it.
-        // Fortunately, doing so is cheap.
-        let make_circuit = || {
-            Self::circuit(
-                &pub_in,
-                C::ComponentPrivateInputs::default(),
-                &vanilla_proof,
-                &pub_params,
-            )
-        };
+        let circuits = vanilla_proof
+            .into_par_iter()
+            .map(|vanilla_proof| {
+                Self::circuit(
+                    &pub_in,
+                    C::ComponentPrivateInputs::default(),
+                    &vanilla_proof,
+                    &pub_params,
+                )
+            })
+            .collect::<Result<Vec<_>>>()?;
 
-        let groth_proof = groth16::create_random_proof(make_circuit()?, groth_params, &mut rng)?;
+        let groth_proofs = groth16::create_random_proof_many(circuits, groth_params, &mut rng)?;
 
-        let mut proof_vec = vec![];
-        groth_proof.write(&mut proof_vec)?;
-        let gp = groth16::Proof::<E>::read(&proof_vec[..])?;
-
-        Ok(gp)
+        groth_proofs
+            .into_iter()
+            .map(|groth_proof| {
+                let mut proof_vec = vec![];
+                groth_proof.write(&mut proof_vec)?;
+                let gp = groth16::Proof::<E>::read(&proof_vec[..])?;
+                Ok(gp)
+            })
+            .collect()
     }
 
     /// generate_public_inputs generates public inputs suitable for use as input during verification

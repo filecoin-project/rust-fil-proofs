@@ -1,11 +1,13 @@
-use log::trace;
-use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
+use log::trace;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::Hasher;
+use crate::stacked::TOTAL_PARENTS;
+use crate::util::NODE_SIZE;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LabelingProof<H: Hasher> {
@@ -35,6 +37,10 @@ impl<H: Hasher> LabelingProof<H> {
 
         for parent in &self.parents {
             hasher.input(AsRef::<[u8]>::as_ref(parent));
+        }
+
+        for _ in 0..(TOTAL_PARENTS - self.parents.len()) {
+            hasher.input(&[0u8; NODE_SIZE]);
         }
 
         bytes_into_fr_repr_safe(hasher.result().as_ref()).into()

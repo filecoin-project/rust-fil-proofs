@@ -7,8 +7,8 @@ use crate::circuit::{constraint, create_label::create_label as kdf, encode::enco
 use crate::drgraph::Graph;
 use crate::fr32::fr_into_bytes;
 use crate::hasher::Hasher;
-use crate::stacked::{EncodingProof as VanillaEncodingProof, PublicParams};
-use crate::util::bytes_into_boolean_vec_be;
+use crate::stacked::{EncodingProof as VanillaEncodingProof, PublicParams, TOTAL_PARENTS};
+use crate::util::{bytes_into_boolean_vec_be, NODE_SIZE};
 
 #[derive(Debug, Clone)]
 pub struct EncodingProof {
@@ -33,7 +33,7 @@ impl EncodingProof {
         parents: Vec<Option<Fr>>,
     ) -> Result<num::AllocatedNum<Bls12>, SynthesisError> {
         // get the parents into bits
-        let parents_bits: Vec<Vec<Boolean>> = parents
+        let mut parents_bits: Vec<Vec<Boolean>> = parents
             .iter()
             .enumerate()
             .map(|(i, val)| match val {
@@ -52,6 +52,10 @@ impl EncodingProof {
                 ),
             })
             .collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?;
+
+        while parents_bits.len() < TOTAL_PARENTS {
+            parents_bits.push(vec![Boolean::Constant(false); NODE_SIZE * 8]);
+        }
 
         let node_num = uint64::UInt64::alloc(cs.namespace(|| "node"), node)?;
 

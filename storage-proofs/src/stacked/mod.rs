@@ -22,5 +22,5 @@ pub use self::params::{
     generate_replica_id, CacheKey, PersistentAux, PrivateInputs, Proof, PublicInputs, PublicParams,
     ReplicaColumnProof, SetupParams, Tau, TemporaryAux, TemporaryAuxCache,
 };
-pub use self::proof::{create_key, StackedDrg};
+pub use self::proof::{create_key, StackedDrg, TOTAL_PARENTS};
 pub use labeling_proof::LabelingProof;
