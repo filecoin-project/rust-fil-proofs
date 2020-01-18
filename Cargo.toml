@@ -7,4 +7,5 @@ members = [
 ]
 
 [patch.crates-io]
-bellperson = { git = "https://github.com/filecoin-project/bellman.git", branch = "feat/prove-many" }
+bellperson = { path = "../../../opensource/bellperson" }
+#, git = "https://github.com/filecoin-project/bellman.git", branch = "feat/prove-many" }

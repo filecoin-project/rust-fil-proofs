@@ -80,13 +80,9 @@ where
             },
         )?;
 
-        let mut row_bits =
+        let row_bits =
             row_num.to_bits_be(cs.namespace(|| format!("hash_single_column_row_{}_bits", i)))?;
 
-        // pad to full bytes
-        while row_bits.len() % 8 > 0 {
-            row_bits.push(Boolean::Constant(false));
-        }
         bits.extend(row_bits);
     }
 
@@ -170,7 +166,7 @@ mod tests {
     fn test_hash_single_column_circuit() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        for _ in 0..10 {
+        for _ in 0..5 {
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
             let a = Fr::random(rng);
