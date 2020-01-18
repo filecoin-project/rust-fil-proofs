@@ -80,10 +80,19 @@ where
             },
         )?;
 
-        let row_bits =
-            row_num.to_bits_be(cs.namespace(|| format!("hash_single_column_row_{}_bits", i)))?;
+        let mut row_bits =
+            row_num.to_bits_le(cs.namespace(|| format!("hash_single_column_row_{}_bits", i)))?;
 
-        bits.extend(row_bits);
+        while row_bits.len() % 8 > 0 {
+            row_bits.push(Boolean::Constant(false));
+        }
+
+        bits.extend(
+            row_bits
+                .chunks(8)
+                .flat_map(|chunk| chunk.iter().rev())
+                .cloned(),
+        );
     }
 
     let alloc_bits = sha256_circuit(cs.namespace(|| "hash"), &bits[..])?;
@@ -166,7 +175,7 @@ mod tests {
     fn test_hash_single_column_circuit() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        for _ in 0..5 {
+        for _ in 0..1 {
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
             let a = Fr::random(rng);
@@ -182,7 +191,7 @@ mod tests {
             .expect("hash_single_column function failed");
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
-            assert_eq!(cs.num_constraints(), 45_380);
+            assert_eq!(cs.num_constraints(), 45_378);
 
             let expected: Fr = vanilla_hash_single_column(&[a_bytes, b_bytes]).into();
 

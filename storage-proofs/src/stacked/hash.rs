@@ -10,7 +10,6 @@ pub fn hash2<S: AsRef<[u8]>, T: AsRef<[u8]>>(a: S, b: T) -> PedersenDomain {
 
 /// Hash all elements in the given column.
 pub fn hash_single_column<T: AsRef<[u8]>>(column: &[T]) -> PedersenDomain {
-    // hash1(Bits::new_many(column.iter().map(|t| t.as_ref())))
     let mut hasher = sha2::Sha256::new();
     for t in column {
         hasher.input(t.as_ref());
