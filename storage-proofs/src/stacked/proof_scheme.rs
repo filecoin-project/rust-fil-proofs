@@ -1,8 +1,5 @@
 use log::trace;
-<<<<<<< HEAD
-=======
 use paired::bls12_381::Fr;
->>>>>>> feat: switch to SDR
 use rayon::prelude::*;
 
 use crate::drgraph::Graph;
@@ -94,7 +91,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
             return Ok(false);
         };
 
-        for (k, proofs) in partition_proofs.iter().enumerate() {
+        let res = partition_proofs.par_iter().enumerate().all(|(k, proofs)| {
             trace!(
                 "verifying partition proof {}/{}",
                 k + 1,
@@ -109,7 +106,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
             };
 
             if expected_comm_r != &actual_comm_r {
-                return Ok(false);
+                return false;
             }
 
             let challenges =
@@ -133,10 +130,8 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
                 proof.verify(pub_params, pub_inputs, challenge, graph)
             });
 
-            if !valid {
-                return Ok(false);
-            }
-        }
+            valid
+        });
 
         Ok(res)
     }
