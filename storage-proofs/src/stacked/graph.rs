@@ -367,7 +367,7 @@ where
             .expect("Invalid cache construction");
 
         let cache_parents = cache.read(node as u32);
-        parents.copy_from_slice(cache_parents);
+        parents.copy_from_slice(&cache_parents[self.base_graph().degree()..]);
     }
 }
 

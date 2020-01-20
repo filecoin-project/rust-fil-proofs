@@ -460,121 +460,121 @@ mod tests {
         }
     }
 
-    // #[test]
-    // #[ignore]
-    // fn test_seal_lifecycle() -> Result<()> {
-    //     init_logger();
+    #[test]
+    #[ignore]
+    fn test_seal_lifecycle() -> Result<()> {
+        init_logger();
 
-    //     let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-    //     let sector_size = SECTOR_SIZE_ONE_KIB;
+        let sector_size = SECTOR_SIZE_ONE_KIB;
 
-    //     let number_of_bytes_in_piece =
-    //         UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size.clone()));
+        let number_of_bytes_in_piece =
+            UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size.clone()));
 
-    //     let piece_bytes: Vec<u8> = (0..number_of_bytes_in_piece.0)
-    //         .map(|_| rand::random::<u8>())
-    //         .collect();
+        let piece_bytes: Vec<u8> = (0..number_of_bytes_in_piece.0)
+            .map(|_| rand::random::<u8>())
+            .collect();
 
-    //     let mut piece_file = NamedTempFile::new()?;
-    //     piece_file.write_all(&piece_bytes)?;
-    //     piece_file.as_file_mut().sync_all()?;
-    //     piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
+        let mut piece_file = NamedTempFile::new()?;
+        piece_file.write_all(&piece_bytes)?;
+        piece_file.as_file_mut().sync_all()?;
+        piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
 
-    //     let piece_info =
-    //         generate_piece_commitment(piece_file.as_file_mut(), number_of_bytes_in_piece)?;
-    //     piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
+        let piece_info =
+            generate_piece_commitment(piece_file.as_file_mut(), number_of_bytes_in_piece)?;
+        piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
 
-    //     let mut staged_sector_file = NamedTempFile::new()?;
-    //     add_piece(
-    //         &mut piece_file,
-    //         &mut staged_sector_file,
-    //         number_of_bytes_in_piece,
-    //         &[],
-    //     )?;
+        let mut staged_sector_file = NamedTempFile::new()?;
+        add_piece(
+            &mut piece_file,
+            &mut staged_sector_file,
+            number_of_bytes_in_piece,
+            &[],
+        )?;
 
-    //     let piece_infos = vec![piece_info];
+        let piece_infos = vec![piece_info];
 
-    //     let sealed_sector_file = NamedTempFile::new()?;
-    //     let mut unseal_file = NamedTempFile::new()?;
-    //     let config = PoRepConfig {
-    //         sector_size: SectorSize(sector_size.clone()),
-    //         partitions: PoRepProofPartitions(
-    //             DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed),
-    //         ),
-    //     };
+        let sealed_sector_file = NamedTempFile::new()?;
+        let mut unseal_file = NamedTempFile::new()?;
+        let config = PoRepConfig {
+            sector_size: SectorSize(sector_size.clone()),
+            partitions: PoRepProofPartitions(
+                DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed),
+            ),
+        };
 
-    //     let cache_dir = tempfile::tempdir().unwrap();
-    //     let prover_id = rng.gen();
-    //     let ticket = rng.gen();
-    //     let seed = rng.gen();
-    //     let sector_id = SectorId::from(12);
+        let cache_dir = tempfile::tempdir().unwrap();
+        let prover_id = rng.gen();
+        let ticket = rng.gen();
+        let seed = rng.gen();
+        let sector_id = SectorId::from(12);
 
-    //     let pre_commit_output = seal_pre_commit(
-    //         config,
-    //         cache_dir.path(),
-    //         &staged_sector_file.path(),
-    //         &sealed_sector_file.path(),
-    //         prover_id,
-    //         sector_id,
-    //         ticket,
-    //         &piece_infos,
-    //     )?;
+        let pre_commit_output = seal_pre_commit(
+            config,
+            cache_dir.path().to_path_buf(),
+            staged_sector_file.path().to_path_buf(),
+            sealed_sector_file.path().to_path_buf(),
+            prover_id,
+            sector_id,
+            ticket,
+            piece_infos.clone(),
+        )?;
 
-    //     let comm_d = pre_commit_output.comm_d.clone();
-    //     let comm_r = pre_commit_output.comm_r.clone();
+        let comm_d = pre_commit_output.comm_d.clone();
+        let comm_r = pre_commit_output.comm_r.clone();
 
-    //     let commit_output = seal_commit(
-    //         config,
-    //         cache_dir.path(),
-    //         prover_id,
-    //         sector_id,
-    //         ticket,
-    //         seed,
-    //         pre_commit_output,
-    //         &piece_infos,
-    //     )?;
+        let commit_output = seal_commit(
+            config,
+            cache_dir.path(),
+            prover_id,
+            sector_id,
+            ticket,
+            seed,
+            pre_commit_output,
+            &piece_infos,
+        )?;
 
-    //     let _ = get_unsealed_range(
-    //         config,
-    //         cache_dir.path(),
-    //         &sealed_sector_file.path(),
-    //         &unseal_file.path(),
-    //         prover_id,
-    //         sector_id,
-    //         comm_d,
-    //         ticket,
-    //         UnpaddedByteIndex(508),
-    //         UnpaddedBytesAmount(508),
-    //     )?;
+        let _ = get_unsealed_range(
+            config,
+            cache_dir.path(),
+            &sealed_sector_file.path(),
+            &unseal_file.path(),
+            prover_id,
+            sector_id,
+            comm_d,
+            ticket,
+            UnpaddedByteIndex(508),
+            UnpaddedBytesAmount(508),
+        )?;
 
-    //     let mut contents = vec![];
-    //     assert!(
-    //         unseal_file.read_to_end(&mut contents).is_ok(),
-    //         "failed to populate buffer with unsealed bytes"
-    //     );
-    //     assert_eq!(contents.len(), 508);
-    //     assert_eq!(&piece_bytes[508..], &contents[..]);
+        let mut contents = vec![];
+        assert!(
+            unseal_file.read_to_end(&mut contents).is_ok(),
+            "failed to populate buffer with unsealed bytes"
+        );
+        assert_eq!(contents.len(), 508);
+        assert_eq!(&piece_bytes[508..], &contents[..]);
 
-    //     let computed_comm_d = compute_comm_d(config.sector_size, &piece_infos)?;
+        let computed_comm_d = compute_comm_d(config.sector_size, &piece_infos)?;
 
-    //     assert_eq!(
-    //         comm_d, computed_comm_d,
-    //         "Computed and expected comm_d don't match."
-    //     );
+        assert_eq!(
+            comm_d, computed_comm_d,
+            "Computed and expected comm_d don't match."
+        );
 
-    //     let verified = verify_seal(
-    //         config,
-    //         comm_r,
-    //         comm_d,
-    //         prover_id,
-    //         sector_id,
-    //         ticket,
-    //         seed,
-    //         &commit_output.proof,
-    //     )?;
-    //     assert!(verified, "failed to verify valid seal");
+        let verified = verify_seal(
+            config,
+            comm_r,
+            comm_d,
+            prover_id,
+            sector_id,
+            ticket,
+            seed,
+            &commit_output.proof,
+        )?;
+        assert!(verified, "failed to verify valid seal");
 
-    //     Ok(())
-    // }
+        Ok(())
+    }
 }

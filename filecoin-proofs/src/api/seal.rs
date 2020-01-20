@@ -34,6 +34,39 @@ use crate::types::{
     SealCommitOutput, SealPreCommitOutput, SectorSize, Ticket,
 };
 
+#[allow(clippy::too_many_arguments)]
+pub fn seal_pre_commit(
+    porep_config: PoRepConfig,
+    cache_path: PathBuf,
+    in_path: PathBuf,
+    out_path: PathBuf,
+    prover_id: ProverId,
+    sector_id: SectorId,
+    ticket: Ticket,
+    piece_infos: Vec<PieceInfo>,
+) -> Result<SealPreCommitOutput> {
+    info!("seal_pre_commit: start");
+
+    // TODO: collect multiple to send to `_many`.
+    let res = seal_pre_commit_many(
+        porep_config,
+        &[cache_path],
+        &[in_path],
+        &[out_path],
+        &[prover_id],
+        &[sector_id],
+        &[ticket],
+        &[piece_infos],
+    )?;
+
+    info!("seal_pre_commit: end");
+
+    Ok(res
+        .into_iter()
+        .next()
+        .expect("invalid result returned from seal_pre_commit_many"))
+}
+
 /// Seals the staged sector at `in_path` in place, saving the resulting replica to `out_path`.
 ///
 /// # Arguments
@@ -47,7 +80,7 @@ use crate::types::{
 /// * `ticket` - the ticket that will be used to generate this sector's replica-id.
 /// * `piece_infos` - each piece's info (number of bytes and commitment) in this sector.
 #[allow(clippy::too_many_arguments)]
-pub fn seal_pre_commit(
+pub fn seal_pre_commit_many(
     porep_config: PoRepConfig,
     cache_paths: &[PathBuf],
     in_paths: &[PathBuf],
@@ -57,7 +90,7 @@ pub fn seal_pre_commit(
     tickets: &[Ticket],
     piece_infos: &[Vec<PieceInfo>],
 ) -> Result<Vec<SealPreCommitOutput>> {
-    info!("seal_pre_commit: start");
+    info!("seal_pre_commit_many: start");
     ensure!(
         in_paths.len() == out_paths.len(),
         "inconsistent inputs, out_paths"
@@ -217,7 +250,7 @@ pub fn seal_pre_commit(
     ensure!(taus.len() == auxs.len(), "inconsistent outputs");
     ensure!(taus.len() == in_paths.len(), "inconsistent outputs");
 
-    info!("seal_pre_commit: end");
+    info!("seal_pre_commit_many: end");
 
     cache_paths
         .into_par_iter()

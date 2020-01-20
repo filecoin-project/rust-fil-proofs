@@ -32,23 +32,6 @@ const SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
 ];
 
-/*
-echo '{
-    "drg_parents": 6,
-    "expander_parents": 8,
-    "porep_challenges": 50,
-    "porep_partitions": 10,
-    "post_challenged_nodes": 1,
-    "post_challenges": 20,
-    "sector_size": "1KiB",
-    "stacked_layers": 4,
-}' > config.json
-
-cat config.json \
-    | jq 'def round: . + 0.5 | floor; . | { "porep_partitions": .["porep_partitions"] | round, { "post_challenged_nodes": .["post_challenged_nodes"] | round, "post_challenges": .["post_challenges"] | round, "window_size_bytes": .["window_size_bytes"] | round, "sector_size_bytes": .["sector_size_bytes"] | round, "drg_parents": .["drg_parents"] | round, "expander_parents": .["expander_parents"] | round, "graph_parents": .["graph_parents"] | round, "porep_challenges": .["porep_challenges"] | round, "stacked_layers": .["stacked_layers"] | round, "wrapper_parents": .["wrapper_parents"] | round, "wrapper_parents_all": .["wrapper_parents_all"] | round }'\
-    | RUST_BACKTRACE=1 RUST_LOG=info cargo run --release --package fil-proofs-tooling --bin=benchy  -- flarp
-*/
-
 #[derive(Default, Debug, Serialize)]
 pub struct FlarpReport {
     inputs: FlarpInputs,
@@ -57,6 +40,7 @@ pub struct FlarpReport {
 
 #[derive(Default, Debug, Deserialize, Serialize)]
 pub struct FlarpInputs {
+    /// The size of sector.
     sector_size: String,
     drg_parents: u64,
     expander_parents: u64,
@@ -65,6 +49,8 @@ pub struct FlarpInputs {
     post_challenges: u64,
     post_challenged_nodes: u64,
     stacked_layers: u64,
+    /// How many sectors should be created in parallel.
+    num_sectors: u64,
 }
 
 impl FlarpInputs {
@@ -198,7 +184,10 @@ pub fn run(
 
     let sector_size = SectorSize(inputs.sector_size_bytes());
 
-    let (cfg, created, replica_measurement) = create_replicas(sector_size, 2);
+    assert!(inputs.num_sectors > 0, "Missing num_sectors");
+
+    let (cfg, created, replica_measurement) =
+        create_replicas(sector_size, inputs.num_sectors as usize);
 
     if only_replicate {
         augment_with_op_measurements(&mut outputs);

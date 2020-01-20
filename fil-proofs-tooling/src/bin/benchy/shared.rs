@@ -115,7 +115,7 @@ pub fn create_replicas(
         .expect("failed to add piece");
 
     let seal_pre_commit_outputs = measure(|| {
-        seal_pre_commit(
+        seal_pre_commit_many(
             porep_config,
             &cache_dirs
                 .iter()
