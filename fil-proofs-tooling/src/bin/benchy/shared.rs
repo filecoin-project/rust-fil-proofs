@@ -10,7 +10,7 @@ use fil_proofs_tooling::{measure, FuncMeasurement};
 use filecoin_proofs::constants::DEFAULT_POREP_PROOF_PARTITIONS;
 use filecoin_proofs::types::{PaddedBytesAmount, PoRepConfig, SectorSize, UnpaddedBytesAmount};
 use filecoin_proofs::{
-    add_piece, generate_piece_commitment, seal_pre_commit, PieceInfo, PoRepProofPartitions,
+    add_piece, generate_piece_commitment, seal_pre_commit_many, PieceInfo, PoRepProofPartitions,
     PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput,
 };
 use storage_proofs::sector::SectorId;
