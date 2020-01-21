@@ -513,3 +513,111 @@ pub fn verify_seal(
     )
     .map_err(Into::into)
 }
+
+/// Verifies a batch of outputs of some previously-run seal operations.
+///
+/// # Arguments
+///
+/// * `porep_config` - this sector's porep config that contains the number of bytes in this sector.
+/// * `[comm_r_ins]` - list of commitments to the sector's replica (`comm_r`).
+/// * `[comm_d_ins]` - list of commitments to the sector's data (`comm_d`).
+/// * `[prover_ids]` - list of prover-ids that sealed this sector.
+/// * `[sector_ids]` - list of the sector's sector-id.
+/// * `[tickets]` - list of tickets that was used to generate this sector's replica-id.
+/// * `[seeds]` - list of seeds used to derive the porep challenges.
+/// * `[proof_vecs]` - list of porep circuit proofs serialized into a vector of bytes.
+#[allow(clippy::too_many_arguments)]
+pub fn verify_batch_seal(
+    porep_config: PoRepConfig,
+    comm_r_ins: &[Commitment],
+    comm_d_ins: &[Commitment],
+    prover_ids: &[ProverId],
+    sector_ids: &[SectorId],
+    tickets: &[Ticket],
+    seeds: &[Ticket],
+    proof_vecs: &[&[u8]],
+) -> Result<bool> {
+    ensure!(!comm_r_ins.is_empty(), "Cannot prove empty batch");
+    let l = comm_r_ins.len();
+    ensure!(l == comm_d_ins.len(), "Inconsistent inputs");
+    ensure!(l == prover_ids.len(), "Inconsistent inputs");
+    ensure!(l == prover_ids.len(), "Inconsistent inputs");
+    ensure!(l == sector_ids.len(), "Inconsistent inputs");
+    ensure!(l == tickets.len(), "Inconsistent inputs");
+    ensure!(l == seeds.len(), "Inconsistent inputs");
+    ensure!(l == proof_vecs.len(), "Inconsistent inputs");
+
+    for comm_d_in in comm_d_ins {
+        ensure!(
+            comm_d_in != &[0; 32],
+            "Invalid all zero commitment (comm_d)"
+        );
+    }
+    for comm_r_in in comm_r_ins {
+        ensure!(
+            comm_r_in != &[0; 32],
+            "Invalid all zero commitment (comm_r)"
+        );
+    }
+
+    let sector_bytes = PaddedBytesAmount::from(porep_config);
+
+    let verifying_key = get_stacked_verifying_key(porep_config)?;
+    info!(
+        "got verifying key ({}) while verifying seal",
+        u64::from(sector_bytes)
+    );
+
+    let compound_setup_params = compound_proof::SetupParams {
+        vanilla_params: setup_params(
+            PaddedBytesAmount::from(porep_config),
+            usize::from(PoRepProofPartitions::from(porep_config)),
+        )?,
+        partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
+    };
+
+    let compound_public_params: compound_proof::PublicParams<
+        '_,
+        StackedDrg<'_, DefaultTreeHasher, DefaultPieceHasher>,
+    > = StackedCompound::setup(&compound_setup_params)?;
+
+    let mut public_inputs = Vec::with_capacity(l);
+    let mut proofs = Vec::with_capacity(l);
+
+    for i in 0..l {
+        let comm_r = as_safe_commitment(&comm_r_ins[i], "comm_r")?;
+        let comm_d = as_safe_commitment(&comm_d_ins[i], "comm_d")?;
+
+        let replica_id = generate_replica_id::<DefaultTreeHasher, _>(
+            &prover_ids[i],
+            sector_ids[i].into(),
+            &tickets[i],
+            comm_d,
+        );
+
+        public_inputs.push(stacked::PublicInputs::<
+            <DefaultTreeHasher as Hasher>::Domain,
+            <DefaultPieceHasher as Hasher>::Domain,
+        > {
+            replica_id,
+            tau: Some(Tau { comm_r, comm_d }),
+            seed: seeds[i],
+            k: None,
+        });
+        proofs.push(MultiProof::new_from_reader(
+            Some(usize::from(PoRepProofPartitions::from(porep_config))),
+            proof_vecs[i],
+            &verifying_key,
+        )?);
+    }
+
+    StackedCompound::batch_verify(
+        &compound_public_params,
+        &public_inputs,
+        &proofs,
+        &ChallengeRequirements {
+            minimum_challenges: POREP_WINDOW_MINIMUM_CHALLENGES.load(Ordering::Relaxed) as usize, // TODO: what do we want here?
+        },
+    )
+    .map_err(Into::into)
+}

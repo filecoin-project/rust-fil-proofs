@@ -112,11 +112,13 @@ pub trait CompoundProof<
         multi_proof: &MultiProof<'b, E>,
         requirements: &S::Requirements,
     ) -> Result<bool> {
+        ensure!(
+            multi_proof.circuit_proofs.len() == Self::partition_count(public_params),
+            "Inconsistent inputs"
+        );
+
         let vanilla_public_params = &public_params.vanilla_params;
-        let pvk = groth16::prepare_verifying_key(&multi_proof.verifying_key);
-        if multi_proof.circuit_proofs.len() != Self::partition_count(public_params) {
-            return Ok(false);
-        }
+        let pvk = groth16::prepare_batch_verifying_key(&multi_proof.verifying_key);
 
         if !<S as ProofScheme>::satisfies_requirements(
             &public_params.vanilla_params,
@@ -126,15 +128,76 @@ pub trait CompoundProof<
             return Ok(false);
         }
 
-        for (k, circuit_proof) in multi_proof.circuit_proofs.iter().enumerate() {
-            let inputs =
-                Self::generate_public_inputs(public_inputs, vanilla_public_params, Some(k))?;
+        let inputs: Vec<_> = (0..multi_proof.circuit_proofs.len())
+            .into_par_iter()
+            .map(|k| Self::generate_public_inputs(public_inputs, vanilla_public_params, Some(k)))
+            .collect::<Result<_>>()?;
+        let proofs: Vec<_> = multi_proof.circuit_proofs.iter().collect();
 
-            if !groth16::verify_proof(&pvk, &circuit_proof, inputs.as_slice())? {
+        let res = groth16::verify_proofs_batch(&pvk, &mut rand::rngs::OsRng, &proofs, &inputs)?;
+
+        Ok(res)
+    }
+
+    /// Efficiently verify multiple proofs.
+    fn batch_verify<'b>(
+        public_params: &PublicParams<'a, S>,
+        public_inputs: &[S::PublicInputs],
+        multi_proofs: &[MultiProof<'b, E>],
+        requirements: &S::Requirements,
+    ) -> Result<bool> {
+        ensure!(
+            public_inputs.len() == multi_proofs.len(),
+            "Inconsistent inputs"
+        );
+        for proof in multi_proofs {
+            ensure!(
+                proof.circuit_proofs.len() == Self::partition_count(public_params),
+                "Inconsistent inputs"
+            );
+        }
+        ensure!(!public_inputs.is_empty(), "Cannot verify empty proofs");
+
+        let vanilla_public_params = &public_params.vanilla_params;
+        // just use the first one, the must be equal any way
+        let pvk = groth16::prepare_batch_verifying_key(&multi_proofs[0].verifying_key);
+
+        for multi_proof in multi_proofs.iter() {
+            if !<S as ProofScheme>::satisfies_requirements(
+                &public_params.vanilla_params,
+                requirements,
+                multi_proof.circuit_proofs.len(),
+            ) {
                 return Ok(false);
             }
         }
-        Ok(true)
+
+        let inputs: Vec<_> = multi_proofs
+            .par_iter()
+            .zip(public_inputs.par_iter())
+            .flat_map(|(multi_proof, pub_inputs)| {
+                (0..multi_proof.circuit_proofs.len())
+                    .into_par_iter()
+                    .map(|k| {
+                        Self::generate_public_inputs(pub_inputs, vanilla_public_params, Some(k))
+                    })
+                    .collect::<Result<Vec<_>>>()
+                    .expect("Invalid public inputs") // TODO: improve error handling
+            })
+            .collect::<Vec<_>>();
+        let circuit_proofs: Vec<_> = multi_proofs
+            .iter()
+            .flat_map(|m| m.circuit_proofs.iter())
+            .collect();
+
+        let res = groth16::verify_proofs_batch(
+            &pvk,
+            &mut rand::rngs::OsRng,
+            &circuit_proofs[..],
+            &inputs,
+        )?;
+
+        Ok(res)
     }
 
     /// circuit_proof creates and synthesizes a circuit from concrete params/inputs, then generates a
