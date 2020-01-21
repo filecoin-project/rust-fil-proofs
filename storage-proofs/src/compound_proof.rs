@@ -224,7 +224,7 @@ pub trait CompoundProof<
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let groth_proofs = groth16::create_random_proof_many(circuits, groth_params, &mut rng)?;
+        let groth_proofs = groth16::create_random_proof_batch(circuits, groth_params, &mut rng)?;
 
         groth_proofs
             .into_iter()

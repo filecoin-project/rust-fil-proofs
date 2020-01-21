@@ -616,7 +616,7 @@ pub fn verify_batch_seal(
         &public_inputs,
         &proofs,
         &ChallengeRequirements {
-            minimum_challenges: POREP_WINDOW_MINIMUM_CHALLENGES.load(Ordering::Relaxed) as usize, // TODO: what do we want here?
+            minimum_challenges: POREP_MINIMUM_CHALLENGES.load(Ordering::Relaxed) as usize, // TODO: what do we want here?
         },
     )
     .map_err(Into::into)

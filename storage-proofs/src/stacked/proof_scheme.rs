@@ -1,3 +1,4 @@
+use anyhow::ensure;
 use log::trace;
 use paired::bls12_381::Fr;
 use rayon::prelude::*;
@@ -61,7 +62,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
         partition_count: usize,
     ) -> Result<Vec<Self::Proof>> {
         trace!("prove_all_partitions");
-        assert!(partition_count > 0);
+        ensure!(partition_count > 0, "partitions must not be 0");
 
         Self::prove_layers(
             &pub_params.graph,
@@ -112,7 +113,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
             let challenges =
                 pub_inputs.challenges(&pub_params.layer_challenges, graph.size(), Some(k));
 
-            let valid = proofs.par_iter().enumerate().all(|(i, proof)| {
+            proofs.par_iter().enumerate().all(|(i, proof)| {
                 trace!("verify challenge {}/{}", i + 1, challenges.len());
 
                 // Validate for this challenge
@@ -128,9 +129,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
                 }
 
                 proof.verify(pub_params, pub_inputs, challenge, graph)
-            });
-
-            valid
+            })
         });
 
         Ok(res)
