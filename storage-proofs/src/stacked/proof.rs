@@ -411,27 +411,33 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
             let sector_size = gsize * NODE_SIZE;
             let buffer_len = std::cmp::min(sector_size, 8 * 1024);
-            let mut buffer = vec![0u8; buffer_len];
+            let buffer_nodes = buffer_len / NODE_SIZE;
 
             // WARNING: uses a buffer of sector size
             let mut hashers = vec![Sha256::new(); gsize];
 
             for layer in 1..=layers {
                 info!("column hash {}", layer);
-                for i in 0..(sector_size / buffer_len) {
-                    let store = labels.labels_for_layer(layer);
 
-                    let start = i * (buffer_len / NODE_SIZE);
-                    let end = start + (buffer_len / NODE_SIZE);
-                    store.read_range_into(start, end, &mut buffer)?;
+                (0..(sector_size / buffer_len))
+                    .into_par_iter()
+                    .zip(hashers.par_chunks_mut(buffer_nodes))
+                    .try_for_each(|(i, hashers)| -> Result<()> {
+                        let mut buffer = vec![0u8; buffer_len];
+                        let store = labels.labels_for_layer(layer);
 
-                    hashers[start..end]
-                        .par_iter_mut()
-                        .zip(buffer.par_chunks(NODE_SIZE))
-                        .for_each(|(hasher, chunk)| {
-                            hasher.input(chunk);
-                        });
-                }
+                        let start = i * buffer_nodes;
+                        let end = start + buffer_nodes;
+                        store.read_range_into(start, end, &mut buffer)?;
+
+                        hashers
+                            .par_iter_mut()
+                            .zip(buffer.par_chunks(NODE_SIZE))
+                            .for_each(|(hasher, chunk)| {
+                                hasher.input(chunk);
+                            });
+                        Ok(())
+                    })?;
             }
 
             info!("building tree_c");
