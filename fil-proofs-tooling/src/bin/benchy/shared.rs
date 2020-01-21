@@ -27,6 +27,7 @@ pub struct PreCommitReplicaOutput {
 }
 
 pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> (NamedTempFile, PieceInfo) {
+    info!("create_piece");
     let mut file = NamedTempFile::new().expect("failed to create piece file");
     let mut writer = BufWriter::new(&mut file);
 
@@ -45,6 +46,7 @@ pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> (NamedTempFile, PieceIn
         .seek(SeekFrom::Start(0))
         .expect("failed to seek to beginning of piece file");
 
+    info!("generating piece commitment");
     let info = generate_piece_commitment(file.as_file_mut(), piece_bytes)
         .expect("failed to generate piece commitment");
 
@@ -80,7 +82,9 @@ pub fn create_replicas(
     let mut sealed_files = Vec::new();
     let mut piece_files = Vec::new();
 
-    for _ in 0..qty_sectors {
+    for i in 0..qty_sectors {
+        info!("creating sector {}/{}", i, qty_sectors);
+
         sector_ids.push(SectorId::from(rand::random::<u64>()));
         cache_dirs.push(tempfile::tempdir().expect("failed to create cache dir"));
 
@@ -100,6 +104,7 @@ pub fn create_replicas(
         piece_files.push(piece_file);
     }
 
+    info!("adding pieces");
     piece_files
         .into_par_iter()
         .zip(staged_files.par_iter_mut())

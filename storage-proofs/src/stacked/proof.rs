@@ -316,8 +316,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             "Invalid amount of layers encoded expected"
         );
 
-        info!("column hashes generated");
-
         Ok((
             LabelsCache::<H> {
                 labels,
@@ -409,17 +407,33 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let tree_c = measure_op(GenerateTreeC, || {
             info!("Building column hashes");
 
-            // use crate::crypto::pedersen::Hasher as PedersenHasher;
-            let mut hashers = vec![Sha256::new(); graph.size()];
+            let gsize = graph.size();
+
+            let sector_size = gsize * NODE_SIZE;
+            let buffer_len = std::cmp::min(sector_size, 8 * 1024);
+            let mut buffer = vec![0u8; buffer_len];
+
+            // WARNING: uses a buffer of sector size
+            let mut hashers = vec![Sha256::new(); gsize];
 
             for layer in 1..=layers {
                 info!("column hash {}", layer);
-                let store = labels.labels_for_layer(layer);
+                for i in 0..(sector_size / buffer_len) {
+                    let store = labels.labels_for_layer(layer);
 
-                hashers.par_iter_mut().enumerate().for_each(|(i, hasher)| {
-                    hasher.input(AsRef::<[u8]>::as_ref(&store.read_at(i).unwrap()));
-                });
+                    let start = i * (buffer_len / NODE_SIZE);
+                    let end = start + (buffer_len / NODE_SIZE);
+                    store.read_range_into(start, end, &mut buffer)?;
+
+                    hashers[start..end]
+                        .par_iter_mut()
+                        .zip(buffer.par_chunks(NODE_SIZE))
+                        .for_each(|(hasher, chunk)| {
+                            hasher.input(chunk);
+                        });
+                }
             }
+
             info!("building tree_c");
             MerkleTree::<_, H::Function>::from_par_iter_with_config(
                 hashers.into_par_iter().map(|h| {
@@ -516,6 +530,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         Vec<<Self as PoRep<'a, H, G>>::Tau>,
         Vec<<Self as PoRep<'a, H, G>>::ProverAux>,
     )> {
+        info!("replicate_many {}", replica_ids.len());
         ensure!(replica_ids.len() == data.len(), "inconsistent inputs");
         ensure!(replica_ids.len() == data_trees.len(), "inconsistent inputs");
         ensure!(replica_ids.len() == configs.len(), "inconsistent inputs");
@@ -527,8 +542,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 .map(|(replica_id, config)| {
                     Self::generate_labels(&pp.graph, &pp.layer_challenges, replica_id, Some(config))
                 })
-        })
-        .collect::<Result<Vec<_>>>()?;
+                .collect::<Result<Vec<_>>>()
+        })?;
 
         let mut taus = Vec::new();
         let mut auxs = Vec::new();

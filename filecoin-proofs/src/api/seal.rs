@@ -171,42 +171,43 @@ pub fn seal_pre_commit_many(
         _,
     >>::setup(&compound_setup_params)?;
 
-    let trees = datas
-        .into_par_iter()
-        .zip(cache_paths.into_par_iter())
-        .zip(out_paths.into_par_iter())
-        .map(|((data, cache_path), out_path)| {
-            // MT for original data is always named tree-d, and it will be
-            // referenced later in the process as such.
-            let config = StoreConfig::new(
-                cache_path,
-                CacheKey::CommDTree.to_string(),
-                DEFAULT_CACHED_ABOVE_BASE_LAYER,
-            );
-
-            info!("building merkle tree for the original data");
-
-            let data_tree = measure_op(CommD, || {
-                create_merkle_tree::<DefaultPieceHasher>(
+    info!("building merkle tree for the original data");
+    let trees = measure_op(CommD, || {
+        datas
+            .into_par_iter()
+            .zip(cache_paths.into_par_iter())
+            .zip(out_paths.into_par_iter())
+            .map(|((data, cache_path), out_path)| {
+                // MT for original data is always named tree-d, and it will be
+                // referenced later in the process as such.
+                let config = StoreConfig::new(
+                    cache_path,
+                    CacheKey::CommDTree.to_string(),
+                    DEFAULT_CACHED_ABOVE_BASE_LAYER,
+                );
+                let data_tree = create_merkle_tree::<DefaultPieceHasher>(
                     Some(config.clone()),
                     compound_public_params.vanilla_params.graph.size(),
                     &data,
-                )
-            })?;
+                )?;
 
-            let mut data: storage_proofs::porep::Data<'_> = (data, PathBuf::from(out_path)).into();
-            data.drop_data();
+                let mut data: storage_proofs::porep::Data<'_> =
+                    (data, PathBuf::from(out_path)).into();
+                data.drop_data();
 
-            let comm_d_root: Fr = data_tree.root().into();
-            let comm_d = commitment_from_fr::<Bls12>(comm_d_root);
+                let comm_d_root: Fr = data_tree.root().into();
+                let comm_d = commitment_from_fr::<Bls12>(comm_d_root);
 
-            Ok(((config, data_tree), (data, comm_d)))
-        })
-        .collect::<Result<Vec<_>>>()?;
+                Ok(((config, data_tree), (data, comm_d)))
+            })
+            .collect::<Result<Vec<_>>>()
+    })?;
 
     let (a, b): (Vec<_>, Vec<_>) = trees.into_iter().unzip();
     let (configs, data_trees) = a.into_iter().unzip();
     let (datas, comm_ds): (Vec<_>, Vec<_>) = b.into_iter().unzip();
+
+    info!("verifying pieces");
 
     comm_ds
         .par_iter()
