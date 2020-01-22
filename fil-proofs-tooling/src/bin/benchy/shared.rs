@@ -1,8 +1,8 @@
 use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::sync::atomic::Ordering;
 
-use anyhow::Result;
 use log::info;
+use rand::RngCore;
 use rayon::prelude::*;
 use tempfile::NamedTempFile;
 
@@ -29,14 +29,14 @@ pub struct PreCommitReplicaOutput {
 pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> (NamedTempFile, PieceInfo) {
     info!("create_piece");
     let mut file = NamedTempFile::new().expect("failed to create piece file");
-    let mut writer = BufWriter::new(&mut file);
-
-    for _ in 0..(u64::from(piece_bytes) as usize) {
+    {
+        let mut writer = BufWriter::new(&mut file);
+        let mut buffer = vec![0u8; u64::from(piece_bytes) as usize];
+        rand::thread_rng().fill_bytes(&mut buffer);
         writer
             .write_all(&[rand::random::<u8>()][..])
             .expect("failed to write buffer");
     }
-    drop(writer);
 
     file.as_file_mut()
         .sync_all()
@@ -77,10 +77,8 @@ pub fn create_replicas(
     let mut out: Vec<(SectorId, PreCommitReplicaOutput)> = Default::default();
     let mut sector_ids = Vec::new();
     let mut cache_dirs = Vec::new();
-    let mut piece_infos = Vec::new();
     let mut staged_files = Vec::new();
     let mut sealed_files = Vec::new();
-    let mut piece_files = Vec::new();
 
     for i in 0..qty_sectors {
         info!("creating sector {}/{}", i, qty_sectors);
@@ -94,30 +92,30 @@ pub fn create_replicas(
         let sealed_file =
             NamedTempFile::new().expect("could not create temp file for sealed sector");
 
-        let (piece_file, piece_info) = create_piece(UnpaddedBytesAmount::from(
-            PaddedBytesAmount::from(sector_size),
-        ));
-
         sealed_files.push(sealed_file);
         staged_files.push(staged_file);
-        piece_infos.push(vec![piece_info]);
-        piece_files.push(piece_file);
     }
 
-    info!("adding pieces");
-    piece_files
+    let (piece_files, piece_infos): (Vec<_>, Vec<_>) = (0..qty_sectors)
         .into_par_iter()
-        .zip(staged_files.par_iter_mut())
-        .try_for_each(|(mut piece_file, mut staged_file)| -> Result<()> {
-            add_piece(
-                &mut piece_file,
-                &mut staged_file,
-                sector_size_unpadded_bytes_ammount,
-                &[],
-            )?;
-            Ok(())
+        .map(|_i| {
+            let (piece_file, piece_info) = create_piece(UnpaddedBytesAmount::from(
+                PaddedBytesAmount::from(sector_size),
+            ));
+            (piece_file, vec![piece_info])
         })
-        .expect("failed to add piece");
+        .unzip();
+
+    info!("adding pieces");
+    for (mut piece_file, mut staged_file) in piece_files.into_iter().zip(staged_files.iter_mut()) {
+        add_piece(
+            &mut piece_file,
+            &mut staged_file,
+            sector_size_unpadded_bytes_ammount,
+            &[],
+        )
+        .unwrap();
+    }
 
     let seal_pre_commit_outputs = measure(|| {
         seal_pre_commit_many(
@@ -141,6 +139,8 @@ pub fn create_replicas(
         )
     })
     .expect("seal_pre_commit produced an error");
+
+    info!("collecting infos");
 
     let priv_infos = sealed_files
         .iter()
