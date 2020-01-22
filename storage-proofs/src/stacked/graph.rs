@@ -5,6 +5,7 @@ use std::sync::{Arc, RwLock};
 use anyhow::ensure;
 use lazy_static::lazy_static;
 use log::info;
+use merkletree::store::{DiskStore, Store};
 use rayon::prelude::*;
 
 use crate::crypto::feistel::{self, FeistelPrecomputed};
@@ -13,7 +14,7 @@ use crate::error::Result;
 use crate::hasher::Hasher;
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::settings;
-use crate::util::{data_at_node_offset, NODE_SIZE};
+use crate::util::NODE_SIZE;
 
 /// The expansion degree used for Stacked Graphs.
 pub const EXP_DEGREE: usize = 8;
@@ -136,8 +137,8 @@ where
     pub fn copy_parents_data(
         &self,
         node: u32,
-        base_data: &[u8],
-        exp_data: Option<&Vec<u8>>,
+        base_data: &DiskStore<H::Domain>,
+        exp_data: Option<&DiskStore<H::Domain>>,
         target: &mut [u8],
     ) {
         if self.use_cache {
@@ -157,27 +158,27 @@ where
     fn copy_parents_data_inner(
         &self,
         cache_parents: &[u32],
-        base_data: &[u8],
-        exp_data: Option<&Vec<u8>>,
+        base_data: &DiskStore<H::Domain>,
+        exp_data: Option<&DiskStore<H::Domain>>,
         target: &mut [u8],
     ) {
         let base_degree = self.base_graph().degree();
 
         // Base parents
         for (i, parent) in cache_parents.iter().enumerate().take(base_degree) {
-            let node_off = data_at_node_offset(*parent as usize);
             let off = i * NODE_SIZE;
-            target[off..off + NODE_SIZE]
-                .copy_from_slice(&base_data[node_off..node_off + NODE_SIZE]);
+            base_data
+                .read_into(*parent as usize, &mut target[off..off + NODE_SIZE])
+                .unwrap();
         }
 
         // Expander parents
         if let Some(ref parents_data) = exp_data {
             for (i, parent) in cache_parents.iter().enumerate().skip(base_degree) {
-                let node_off = data_at_node_offset(*parent as usize);
                 let off = i * NODE_SIZE;
-                target[off..off + NODE_SIZE]
-                    .copy_from_slice(&parents_data[node_off..node_off + NODE_SIZE]);
+                parents_data
+                    .read_into(*parent as usize, &mut target[off..off + NODE_SIZE])
+                    .unwrap();
             }
         }
     }
