@@ -33,9 +33,7 @@ pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> (NamedTempFile, PieceIn
         let mut writer = BufWriter::new(&mut file);
         let mut buffer = vec![0u8; u64::from(piece_bytes) as usize];
         rand::thread_rng().fill_bytes(&mut buffer);
-        writer
-            .write_all(&[rand::random::<u8>()][..])
-            .expect("failed to write buffer");
+        writer.write_all(&buffer).expect("failed to write buffer");
     }
 
     file.as_file_mut()
