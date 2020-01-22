@@ -105,7 +105,12 @@ pub fn create_replicas(
         .unzip();
 
     info!("adding pieces");
-    for (mut piece_file, mut staged_file) in piece_files.into_iter().zip(staged_files.iter_mut()) {
+    for (i, (mut piece_file, mut staged_file)) in piece_files
+        .into_iter()
+        .zip(staged_files.iter_mut())
+        .enumerate()
+    {
+        info!("add piece {}", i);
         add_piece(
             &mut piece_file,
             &mut staged_file,
