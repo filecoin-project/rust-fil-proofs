@@ -180,7 +180,7 @@ impl HashFunction<Sha256Domain> for Sha256Function {
         res
     }
 
-    fn hash_leaf_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+    fn hash_leaf_bits_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
         cs: CS,
         left: &[boolean::Boolean],
         right: &[boolean::Boolean],
@@ -302,7 +302,7 @@ mod tests {
     use rand_xorshift::XorShiftRng;
 
     #[test]
-    fn hash_leaf_circuit() {
+    fn hash_leaf_bits_circuit() {
         let mut cs = TestConstraintSystem::<Bls12>::new();
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
@@ -322,7 +322,7 @@ mod tests {
             bytes_into_boolean_vec(&mut cs, Some(right.as_slice()), 256).unwrap()
         };
 
-        let out = Sha256Function::hash_leaf_circuit(
+        let out = Sha256Function::hash_leaf_bits_circuit(
             cs.namespace(|| "hash_leaf_circuit"),
             &left_bits,
             &right_bits,

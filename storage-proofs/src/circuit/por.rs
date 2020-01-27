@@ -182,14 +182,11 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for PoRCircuit<'a, E, H> {
                     &cur_is_right,
                 )?;
 
-                let xl_bits = xl.to_bits_le(cs.namespace(|| "xl into bits"))?;
-                let xr_bits = xr.to_bits_le(cs.namespace(|| "xr into bits"))?;
-
                 // Compute the new subtree value
                 cur = H::Function::hash_leaf_circuit(
                     cs.namespace(|| "computation of pedersen hash"),
-                    &xl_bits,
-                    &xr_bits,
+                    &xl,
+                    &xr,
                     i,
                     params,
                 )?;

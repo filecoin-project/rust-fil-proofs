@@ -55,6 +55,19 @@ pub trait HashFunction<T: Domain>:
     }
 
     fn hash_leaf_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+        mut cs: CS,
+        left: &num::AllocatedNum<E>,
+        right: &num::AllocatedNum<E>,
+        height: usize,
+        params: &E::Params,
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+        let left_bits = left.to_bits_le(cs.namespace(|| "left num into bits"))?;
+        let right_bits = right.to_bits_le(cs.namespace(|| "right num into bits"))?;
+
+        Self::hash_leaf_bits_circuit(cs, &left_bits, &right_bits, height, params)
+    }
+
+    fn hash_leaf_bits_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
         cs: CS,
         left: &[boolean::Boolean],
         right: &[boolean::Boolean],
