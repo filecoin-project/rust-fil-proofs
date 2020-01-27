@@ -1,31 +1,31 @@
 use std::hash::Hasher as StdHasher;
 
+use super::types::MERKLE_TREE_ARITY;
+use crate::crypto::{create_label, sloth};
+use crate::error::{Error, Result};
+use crate::hasher::types::{PoseidonEngine, PoseidonWidth, POSEIDON_CONSTANTS};
+use crate::hasher::{Domain, HashFunction, Hasher};
 use anyhow::ensure;
 use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
-use ff::{Field, PrimeField, PrimeFieldRepr};
-use fil_sapling_crypto::circuit::pedersen_hash as pedersen_hash_circuit;
+use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
 use fil_sapling_crypto::jubjub::JubjubEngine;
-use fil_sapling_crypto::pedersen_hash::Personalization;
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
+use neptune::circuit::poseidon_hash;
+use neptune::poseidon::Poseidon;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 use serde::{Deserialize, Serialize};
 
-use crate::circuit::pedersen::pedersen_md_no_padding;
-use crate::crypto::{create_label, pedersen, sloth};
-use crate::error::{Error, Result};
-use crate::hasher::{Domain, HashFunction, Hasher};
-
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PedersenHasher {}
+pub struct PoseidonHasher {}
 
-impl Hasher for PedersenHasher {
-    type Domain = PedersenDomain;
-    type Function = PedersenFunction;
+impl Hasher for PoseidonHasher {
+    type Domain = PoseidonDomain;
+    type Function = PoseidonFunction;
 
     fn name() -> String {
-        "PedersenHasher".into()
+        "PoseidonHasher".into()
     }
 
     fn create_label(data: &[u8], m: usize) -> Result<Self::Domain> {
@@ -51,24 +51,24 @@ impl Hasher for PedersenHasher {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct PedersenFunction(Fr);
+pub struct PoseidonFunction(Fr);
 
-impl Default for PedersenFunction {
-    fn default() -> PedersenFunction {
-        PedersenFunction(Fr::from_repr(FrRepr::default()).expect("failed default"))
+impl Default for PoseidonFunction {
+    fn default() -> PoseidonFunction {
+        PoseidonFunction(Fr::from_repr(FrRepr::default()).expect("failed default"))
     }
 }
 
-impl Hashable<PedersenFunction> for Fr {
-    fn hash(&self, state: &mut PedersenFunction) {
+impl Hashable<PoseidonFunction> for Fr {
+    fn hash(&self, state: &mut PoseidonFunction) {
         let mut bytes = Vec::with_capacity(32);
         self.into_repr().write_le(&mut bytes).unwrap();
         state.write(&bytes);
     }
 }
 
-impl Hashable<PedersenFunction> for PedersenDomain {
-    fn hash(&self, state: &mut PedersenFunction) {
+impl Hashable<PoseidonFunction> for PoseidonDomain {
+    fn hash(&self, state: &mut PoseidonFunction) {
         let mut bytes = Vec::with_capacity(32);
         self.0
             .write_le(&mut bytes)
@@ -78,50 +78,50 @@ impl Hashable<PedersenFunction> for PedersenDomain {
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
-pub struct PedersenDomain(pub FrRepr);
+pub struct PoseidonDomain(pub FrRepr);
 
-impl AsRef<PedersenDomain> for PedersenDomain {
-    fn as_ref(&self) -> &PedersenDomain {
+impl AsRef<PoseidonDomain> for PoseidonDomain {
+    fn as_ref(&self) -> &PoseidonDomain {
         self
     }
 }
 
-impl std::hash::Hash for PedersenDomain {
+impl std::hash::Hash for PoseidonDomain {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         let raw: &[u64] = self.0.as_ref();
         std::hash::Hash::hash(raw, state);
     }
 }
 
-impl PartialEq for PedersenDomain {
+impl PartialEq for PoseidonDomain {
     fn eq(&self, other: &Self) -> bool {
         self.0.as_ref() == other.0.as_ref()
     }
 }
 
-impl Eq for PedersenDomain {}
+impl Eq for PoseidonDomain {}
 
-impl Default for PedersenDomain {
-    fn default() -> PedersenDomain {
-        PedersenDomain(FrRepr::default())
+impl Default for PoseidonDomain {
+    fn default() -> PoseidonDomain {
+        PoseidonDomain(FrRepr::default())
     }
 }
 
-impl Ord for PedersenDomain {
+impl Ord for PoseidonDomain {
     #[inline(always)]
-    fn cmp(&self, other: &PedersenDomain) -> ::std::cmp::Ordering {
+    fn cmp(&self, other: &PoseidonDomain) -> ::std::cmp::Ordering {
         (self.0).cmp(&other.0)
     }
 }
 
-impl PartialOrd for PedersenDomain {
+impl PartialOrd for PoseidonDomain {
     #[inline(always)]
-    fn partial_cmp(&self, other: &PedersenDomain) -> Option<::std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &PoseidonDomain) -> Option<::std::cmp::Ordering> {
         Some((self.0).cmp(&other.0))
     }
 }
 
-impl AsRef<[u8]> for PedersenDomain {
+impl AsRef<[u8]> for PoseidonDomain {
     #[inline]
     fn as_ref(&self) -> &[u8] {
         as_ref(&(self.0).0)
@@ -142,28 +142,27 @@ fn as_ref<'a>(src: &'a [u64; 4]) -> &'a [u8] {
     }
 }
 
-impl Domain for PedersenDomain {
+impl Domain for PoseidonDomain {
     // QUESTION: When, if ever, should serialize and into_bytes return different results?
     // The definitions here at least are equivalent.
+    // I'm taking one step toward resolving this by formalizing that equivalence while copying this base implementation from perdersen.rs. -porcuquine.
     fn serialize(&self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(PedersenDomain::byte_len());
-        self.0.write_le(&mut bytes).unwrap();
-        bytes
+        self.into_bytes()
     }
 
     fn into_bytes(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(PedersenDomain::byte_len());
+        let mut out = Vec::with_capacity(PoseidonDomain::byte_len());
         self.0.write_le(&mut out).unwrap();
 
         out
     }
 
     fn try_from_bytes(raw: &[u8]) -> Result<Self> {
-        ensure!(raw.len() == PedersenDomain::byte_len(), Error::BadFrBytes);
+        ensure!(raw.len() == PoseidonDomain::byte_len(), Error::BadFrBytes);
         let mut res: FrRepr = Default::default();
         res.read_le(raw)?;
 
-        Ok(PedersenDomain(res))
+        Ok(PoseidonDomain(res))
     }
 
     fn write_bytes(&self, dest: &mut [u8]) -> Result<()> {
@@ -177,13 +176,13 @@ impl Domain for PedersenDomain {
     }
 }
 
-impl Element for PedersenDomain {
+impl Element for PoseidonDomain {
     fn byte_len() -> usize {
         32
     }
 
     fn from_slice(bytes: &[u8]) -> Self {
-        match PedersenDomain::try_from_bytes(bytes) {
+        match PoseidonDomain::try_from_bytes(bytes) {
             Ok(res) => res,
             Err(err) => panic!(err),
         }
@@ -194,10 +193,10 @@ impl Element for PedersenDomain {
     }
 }
 
-impl StdHasher for PedersenFunction {
+impl StdHasher for PoseidonFunction {
     #[inline]
     fn write(&mut self, msg: &[u8]) {
-        self.0 = pedersen::pedersen(msg);
+        self.0 = Fr::from_repr(shared_hash(msg).0).unwrap();
     }
 
     #[inline]
@@ -206,41 +205,53 @@ impl StdHasher for PedersenFunction {
     }
 }
 
-impl HashFunction<PedersenDomain> for PedersenFunction {
-    fn hash(data: &[u8]) -> PedersenDomain {
-        pedersen::pedersen_md_no_padding(data).into()
+fn shared_hash(data: &[u8]) -> PoseidonDomain {
+    // FIXME: We shouldn't unwrap here, but doing otherwise will require an interface change.
+    // We could truncate so `bytes_into_frs` cannot fail, then ensure `data` is always `fr_safe`.
+    let preimage = data
+        .chunks(32)
+        .map(|ref chunk| {
+            <Bls12 as ff::ScalarEngine>::Fr::from_repr(PoseidonDomain::from_slice(chunk).0).unwrap()
+        })
+        .collect::<Vec<_>>();
+
+    shared_hash_frs(&preimage)
+}
+
+fn shared_hash_frs(preimage: &[<Bls12 as ff::ScalarEngine>::Fr]) -> PoseidonDomain {
+    let mut p = Poseidon::new_with_preimage(&preimage, &*POSEIDON_CONSTANTS);
+    let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
+    fr.into()
+}
+impl HashFunction<PoseidonDomain> for PoseidonFunction {
+    fn hash(data: &[u8]) -> PoseidonDomain {
+        shared_hash(data)
     }
 
-    fn hash_leaf_bits_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+    fn hash_leaf_circuit<E: JubjubEngine + PoseidonEngine, CS: ConstraintSystem<E>>(
         cs: CS,
-        left: &[boolean::Boolean],
-        right: &[boolean::Boolean],
+        left: &num::AllocatedNum<E>,
+        right: &num::AllocatedNum<E>,
         _height: usize,
-        params: &E::Params,
+        _params: &E::Params,
     ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError> {
-        let mut preimage: Vec<boolean::Boolean> = vec![];
-        preimage.extend_from_slice(left);
-        preimage.extend_from_slice(right);
+        let preimage = vec![left.clone(), right.clone()];
 
-        Ok(
-            pedersen_hash_circuit::pedersen_hash(cs, Personalization::None, &preimage, params)?
-                .get_x()
-                .clone(),
-        )
+        poseidon_hash::<CS, E, PoseidonWidth>(cs, preimage, E::PARAMETERS(MERKLE_TREE_ARITY))
     }
 
     fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
-        cs: CS,
-        bits: &[boolean::Boolean],
-        params: &E::Params,
+        _cs: CS,
+        _bits: &[boolean::Boolean],
+        _params: &E::Params,
     ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
-        pedersen_md_no_padding(cs, params, bits)
+        unimplemented!();
     }
 }
 
-impl LightAlgorithm<PedersenDomain> for PedersenFunction {
+impl LightAlgorithm<PoseidonDomain> for PoseidonFunction {
     #[inline]
-    fn hash(&mut self) -> PedersenDomain {
+    fn hash(&mut self) -> PoseidonDomain {
         self.0.into()
     }
 
@@ -249,93 +260,40 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
         self.0 = Fr::from_repr(FrRepr::from(0)).expect("failed 0");
     }
 
-    fn leaf(&mut self, leaf: PedersenDomain) -> PedersenDomain {
+    fn leaf(&mut self, leaf: PoseidonDomain) -> PoseidonDomain {
         leaf
     }
 
     fn node(
         &mut self,
-        left: PedersenDomain,
-        right: PedersenDomain,
+        left: PoseidonDomain,
+        right: PoseidonDomain,
         _height: usize,
-    ) -> PedersenDomain {
-        let node_bits = NodeBits::new(&(left.0).0[..], &(right.0).0[..]);
-
-        let digest = if cfg!(target_arch = "x86_64") {
-            use fil_sapling_crypto::pedersen_hash::pedersen_hash_bls12_381_with_precomp;
-            pedersen_hash_bls12_381_with_precomp::<_>(
-                Personalization::None,
-                node_bits,
-                &pedersen::JJ_PARAMS,
-            )
-        } else {
-            use fil_sapling_crypto::pedersen_hash::pedersen_hash;
-            pedersen_hash::<Bls12, _>(Personalization::None, node_bits, &pedersen::JJ_PARAMS)
-        };
-
-        digest.into_xy().0.into()
+    ) -> PoseidonDomain {
+        shared_hash_frs(&[
+            <Bls12 as ff::ScalarEngine>::Fr::from_repr(left.0).unwrap(),
+            <Bls12 as ff::ScalarEngine>::Fr::from_repr(right.0).unwrap(),
+        ])
     }
 }
 
-/// Helper to iterate over a pair of `Fr`.
-struct NodeBits<'a> {
-    // 256 bits
-    lhs: &'a [u64],
-    // 256 bits
-    rhs: &'a [u64],
-    index: usize,
-}
-
-impl<'a> NodeBits<'a> {
-    pub fn new(lhs: &'a [u64], rhs: &'a [u64]) -> Self {
-        NodeBits { lhs, rhs, index: 0 }
-    }
-}
-
-impl<'a> Iterator for NodeBits<'a> {
-    type Item = bool;
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.index < 255 {
-            // return lhs
-            let a = self.index / 64;
-            let b = self.index % 64;
-            let res = (self.lhs[a] & (1 << b)) != 0;
-            self.index += 1;
-            return Some(res);
-        }
-
-        if self.index < 2 * 255 {
-            // return rhs
-            let a = (self.index - 255) / 64;
-            let b = (self.index - 255) % 64;
-            let res = (self.rhs[a] & (1 << b)) != 0;
-            self.index += 1;
-            return Some(res);
-        }
-
-        None
-    }
-}
-
-impl From<Fr> for PedersenDomain {
+impl From<Fr> for PoseidonDomain {
     #[inline]
     fn from(val: Fr) -> Self {
-        PedersenDomain(val.into_repr())
+        PoseidonDomain(val.into_repr())
     }
 }
 
-impl From<FrRepr> for PedersenDomain {
+impl From<FrRepr> for PoseidonDomain {
     #[inline]
     fn from(val: FrRepr) -> Self {
-        PedersenDomain(val)
+        PoseidonDomain(val)
     }
 }
 
-impl From<PedersenDomain> for Fr {
+impl From<PoseidonDomain> for Fr {
     #[inline]
-    fn from(val: PedersenDomain) -> Self {
+    fn from(val: PoseidonDomain) -> Self {
         Fr::from_repr(val.0).unwrap()
     }
 }
@@ -345,38 +303,48 @@ mod tests {
     use super::*;
     use std::mem;
 
-    use merkletree::hash::Hashable;
-
     use crate::merkle::MerkleTree;
 
     #[test]
     fn test_path() {
-        let values = ["hello", "world", "you", "two"];
-        let t = MerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter()).unwrap();
+        let values = [
+            PoseidonDomain(Fr::one().into_repr()),
+            PoseidonDomain(Fr::one().into_repr()),
+            PoseidonDomain(Fr::one().into_repr()),
+            PoseidonDomain(Fr::one().into_repr()),
+        ];
 
-        let p = t.gen_proof(0).unwrap(); // create a proof for the first value = "hello"
+        let t =
+            MerkleTree::<PoseidonDomain, PoseidonFunction>::new(values.iter().map(|x| *x)).unwrap();
+
+        let p = t.gen_proof(0).unwrap(); // create a proof for the first value =k Fr::one()
+
         assert_eq!(*p.path(), vec![true, true]);
-        assert_eq!(p.validate::<PedersenFunction>(), true);
+        assert_eq!(p.validate::<PoseidonFunction>(), true);
     }
 
-    #[test]
-    fn test_pedersen_hasher() {
-        let values = ["hello", "world", "you", "two"];
+    // #[test]
+    // fn test_poseidon_quad() {
+    //     let leaves = [Fr::one(), Fr::zero(), Fr::zero(), Fr::one()];
 
-        let t = MerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter()).unwrap();
+    //     assert_eq!(Fr::zero().into_repr(), shared_hash_frs(&leaves[..]).0);
+    // }
+
+    #[test]
+    fn test_poseidon_hasher() {
+        let leaves = [
+            PoseidonDomain(Fr::one().into_repr()),
+            PoseidonDomain(Fr::zero().into_repr()),
+            PoseidonDomain(Fr::zero().into_repr()),
+            PoseidonDomain(Fr::one().into_repr()),
+        ];
+
+        let t =
+            MerkleTree::<PoseidonDomain, PoseidonFunction>::new(leaves.iter().map(|x| *x)).unwrap();
 
         assert_eq!(t.leafs(), 4);
 
-        let mut a = PedersenFunction::default();
-        let leaves: Vec<PedersenDomain> = values
-            .iter()
-            .map(|v| {
-                v.hash(&mut a);
-                let h = a.hash();
-                a.reset();
-                h
-            })
-            .collect();
+        let mut a = PoseidonFunction::default();
 
         assert_eq!(t.read_at(0).unwrap(), leaves[0]);
         assert_eq!(t.read_at(1).unwrap(), leaves[1]);
@@ -395,20 +363,20 @@ mod tests {
         a.reset();
 
         assert_eq!(
-            t.read_at(0).unwrap().0,
+            t.read_at(4).unwrap().0,
             FrRepr([
-                8141980337328041169,
-                4041086031096096197,
-                4135265344031344584,
-                7650472305044950055
+                0x86c43967576d8144,
+                0x02764fedd83eccdc,
+                0x8cf0fb1d8b18939c,
+                0x43c0481c01004590
             ])
         );
 
         let expected = FrRepr([
-            11371136130239400769,
-            4290566175630177573,
-            11576422143286805197,
-            2687080719931344767,
+            0x1de61734210b19f0,
+            0x5fdd9de9aeba506d,
+            0x3132a2fdf41b894f,
+            0x5ed726de4d7e79d3,
         ]);
         let actual = t.read_at(6).unwrap().0;
 
@@ -430,7 +398,7 @@ mod tests {
 
         for case in cases.into_iter() {
             let repr = FrRepr(case);
-            let val = PedersenDomain(repr);
+            let val = PoseidonDomain(repr);
 
             for _ in 0..100 {
                 assert_eq!(val.into_bytes(), val.into_bytes());
@@ -451,12 +419,12 @@ mod tests {
     #[test]
     fn test_serialize() {
         let repr = FrRepr([1, 2, 3, 4]);
-        let val = PedersenDomain(repr);
+        let val = PoseidonDomain(repr);
 
         let ser = serde_json::to_string(&val)
-            .expect("Failed to serialize `PedersenDomain` element to JSON string");
+            .expect("Failed to serialize `PoseidonDomain` element to JSON string");
         let val_back = serde_json::from_str(&ser)
-            .expect("Failed to deserialize JSON string to `PedersenDomain`");
+            .expect("Failed to deserialize JSON string to `PoseidonnDomain`");
 
         assert_eq!(val, val_back);
     }

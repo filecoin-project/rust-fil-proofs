@@ -51,11 +51,13 @@ num_cpus = "1.10.1"
 rand_xorshift = "0.2.0"
 rand_chacha = "0.2.1"
 hex = "0.4.0"
-generic-array = "0.12"
+generic-array = "0.13.2"
 anyhow = "1.0.23"
 thiserror = "1.0.6"
 cpu-time = "1.0.0"
-gperftools = "0.2.0"
+# neptune = "0.2.3"
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "multiple-arities" }
+
 
 [features]
 default = ["gpu"]

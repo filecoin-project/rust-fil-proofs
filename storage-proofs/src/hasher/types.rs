@@ -1,13 +1,46 @@
+use lazy_static::lazy_static;
+
 use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
 use fil_sapling_crypto::jubjub::JubjubEngine;
+use generic_array::typenum::{U3, U5, U9};
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
 use merkletree::merkle::Element;
-use paired::bls12_381::{Fr, FrRepr};
+use neptune::poseidon::PoseidonConstants;
+use paired::bls12_381::{Bls12, Fr, FrRepr};
+use paired::Engine;
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 
 use crate::error::Result;
+
+/// PoseidonWidth must be 1 + the desired arity.
+pub type PoseidonBinaryWidth = U3;
+pub type PoseidonQuadWidth = U5;
+pub type PoseidonOctWidth = U9;
+
+pub type PoseidonWidth = PoseidonBinaryWidth;
+
+/// Arity to use for hasher implementations (Poseidon) which are specialized at compile time.
+/// Must match PoseidonWidth
+pub const MERKLE_TREE_ARITY: usize = 2;
+
+lazy_static! {
+    pub static ref POSEIDON_CONSTANTS: PoseidonConstants<Bls12, PoseidonWidth> =
+        PoseidonConstants::new(MERKLE_TREE_ARITY);
+}
+
+pub trait PoseidonEngine: Engine {
+    #[allow(non_snake_case)]
+    fn PARAMETERS(arity: usize) -> &'static PoseidonConstants<Self, PoseidonWidth>;
+}
+
+impl PoseidonEngine for Bls12 {
+    fn PARAMETERS(arity: usize) -> &'static PoseidonConstants<Self, PoseidonWidth> {
+        assert_eq!(arity, MERKLE_TREE_ARITY);
+        &*POSEIDON_CONSTANTS
+    }
+}
 
 pub trait Domain:
     Ord
@@ -54,13 +87,28 @@ pub trait HashFunction<T: Domain>:
         a.hash()
     }
 
-    fn hash_leaf_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
-        cs: CS,
-        left: &[boolean::Boolean],
-        right: &[boolean::Boolean],
+    fn hash_leaf_circuit<E: JubjubEngine + PoseidonEngine, CS: ConstraintSystem<E>>(
+        mut cs: CS,
+        left: &num::AllocatedNum<E>,
+        right: &num::AllocatedNum<E>,
         height: usize,
         params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError>;
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+        let left_bits = left.to_bits_le(cs.namespace(|| "left num into bits"))?;
+        let right_bits = right.to_bits_le(cs.namespace(|| "right num into bits"))?;
+
+        Self::hash_leaf_bits_circuit(cs, &left_bits, &right_bits, height, params)
+    }
+
+    fn hash_leaf_bits_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+        _cs: CS,
+        _left: &[boolean::Boolean],
+        _right: &[boolean::Boolean],
+        _height: usize,
+        _params: &E::Params,
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+        unimplemented!();
+    }
 
     fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
         cs: CS,
