@@ -5,6 +5,3 @@ members = [
   "storage-proofs",
   "fil-proofs-tooling",
 ]
-
-[patch.crates-io]
-bellperson = { git = "https://github.com/filecoin-project/bellman.git", branch = "feat/prove-many" }
