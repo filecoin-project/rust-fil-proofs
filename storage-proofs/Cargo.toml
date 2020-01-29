@@ -54,7 +54,7 @@ generic-array = "0.12"
 anyhow = "1.0.23"
 thiserror = "1.0.6"
 cpu-time = "1.0.0"
-neptune = "0.2.0"
+neptune = { path = "../../neptune" }
 
 [features]
 default = ["gpu"]

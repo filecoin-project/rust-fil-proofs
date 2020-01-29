@@ -1,5 +1,6 @@
 use std::hash::Hasher as StdHasher;
 
+use super::types::MERKLE_TREE_ARITY;
 use crate::crypto::{create_label, sloth};
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
@@ -8,12 +9,18 @@ use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
 use fil_sapling_crypto::jubjub::JubjubEngine;
+use lazy_static::lazy_static;
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
 use neptune::circuit::poseidon_hash_simple;
-use neptune::poseidon::poseidon;
+use neptune::poseidon::{Poseidon, PoseidonConstants};
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 use serde::{Deserialize, Serialize};
+
+lazy_static! {
+    pub static ref POSEIDON_CONSTANTS: PoseidonConstants<Bls12> =
+        PoseidonConstants::new(MERKLE_TREE_ARITY);
+}
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PoseidonHasher {}
@@ -194,7 +201,7 @@ impl Element for PoseidonDomain {
 impl StdHasher for PoseidonFunction {
     #[inline]
     fn write(&mut self, msg: &[u8]) {
-        self.0 = Fr::from_repr(poseidon_hash(msg).0).unwrap();
+        self.0 = Fr::from_repr(shared_hash(msg).0).unwrap();
     }
 
     #[inline]
@@ -203,7 +210,7 @@ impl StdHasher for PoseidonFunction {
     }
 }
 
-fn poseidon_hash(data: &[u8]) -> PoseidonDomain {
+fn shared_hash(data: &[u8]) -> PoseidonDomain {
     // FIXME: We shouldn't unwrap here, but doing otherwise will require an interface change.
     // We could truncate so `bytes_into_frs` cannot fail, then ensure `data` is always `fr_safe`.
     let preimage = data
@@ -213,14 +220,17 @@ fn poseidon_hash(data: &[u8]) -> PoseidonDomain {
         })
         .collect::<Vec<_>>();
 
-    let fr: <Bls12 as ScalarEngine>::Fr = poseidon::<Bls12>(&preimage);
-    fr.into()
+    shared_hash_frs(&preimage)
 }
 
+fn shared_hash_frs(preimage: &[<Bls12 as ff::ScalarEngine>::Fr]) -> PoseidonDomain {
+    let mut p = Poseidon::new_with_preimage(&preimage, &*POSEIDON_CONSTANTS);
+    let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
+    fr.into()
+}
 impl HashFunction<PoseidonDomain> for PoseidonFunction {
-    //fn hash<E: JubjubEngine>(data: &[u8]) -> PoseidonDomain {
     fn hash(data: &[u8]) -> PoseidonDomain {
-        poseidon_hash(data)
+        shared_hash(data)
     }
 
     fn hash_leaf_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
@@ -265,13 +275,10 @@ impl LightAlgorithm<PoseidonDomain> for PoseidonFunction {
         right: PoseidonDomain,
         _height: usize,
     ) -> PoseidonDomain {
-        PoseidonDomain(
-            poseidon::<Bls12>(&[
-                <Bls12 as ff::ScalarEngine>::Fr::from_repr(left.0).unwrap(),
-                <Bls12 as ff::ScalarEngine>::Fr::from_repr(right.0).unwrap(),
-            ])
-            .into(),
-        )
+        shared_hash_frs(&[
+            <Bls12 as ff::ScalarEngine>::Fr::from_repr(left.0).unwrap(),
+            <Bls12 as ff::ScalarEngine>::Fr::from_repr(right.0).unwrap(),
+        ])
     }
 }
 
@@ -300,8 +307,6 @@ impl From<PoseidonDomain> for Fr {
 mod tests {
     use super::*;
     use std::mem;
-
-    use merkletree::hash::Hashable;
 
     use crate::merkle::MerkleTree;
 

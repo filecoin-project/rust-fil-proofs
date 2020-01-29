@@ -9,6 +9,9 @@ use serde::ser::Serialize;
 
 use crate::error::Result;
 
+/// Arity to use for hasher implementations (Poseidon) which are specialized at compile time.
+pub const MERKLE_TREE_ARITY: usize = 2;
+
 pub trait Domain:
     Ord
     + Copy
