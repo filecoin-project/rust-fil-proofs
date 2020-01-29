@@ -41,7 +41,7 @@ pub trait CompoundProof<
     'a,
     E: JubjubEngine,
     S: ProofScheme<'a>,
-    C: Circuit<E> + Send + CircuitComponent,
+    C: Circuit<E> + CircuitComponent + Send,
 > where
     S::Proof: Sync + Send,
     S::PublicParams: ParameterSetMetadata + Sync + Send,
