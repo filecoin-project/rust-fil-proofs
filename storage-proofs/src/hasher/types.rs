@@ -68,12 +68,14 @@ pub trait HashFunction<T: Domain>:
     }
 
     fn hash_leaf_bits_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
-        cs: CS,
-        left: &[boolean::Boolean],
-        right: &[boolean::Boolean],
-        height: usize,
-        params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError>;
+        _cs: CS,
+        _left: &[boolean::Boolean],
+        _right: &[boolean::Boolean],
+        _height: usize,
+        _params: &E::Params,
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+        unimplemented!();
+    }
 
     fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
         cs: CS,

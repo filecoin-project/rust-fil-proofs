@@ -184,7 +184,7 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for PoRCircuit<'a, E, H> {
 
                 // Compute the new subtree value
                 cur = H::Function::hash_leaf_circuit(
-                    cs.namespace(|| "computation of pedersen hash"),
+                    cs.namespace(|| "computation of commitment hash"),
                     &xl,
                     &xr,
                     i,
@@ -253,7 +253,7 @@ mod tests {
     use crate::crypto::pedersen::JJ_PARAMS;
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
-    use crate::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher};
+    use crate::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonHasher};
     use crate::merklepor;
     use crate::proof::ProofScheme;
     use crate::util::data_at_node;
@@ -340,6 +340,11 @@ mod tests {
     #[test]
     fn test_por_input_circuit_with_bls12_381_blake2s() {
         test_por_input_circuit_with_bls12_381::<Blake2sHasher>(64566);
+    }
+
+    #[test]
+    fn test_por_input_circuit_with_bls12_381_poseidon() {
+        test_por_input_circuit_with_bls12_381::<PoseidonHasher>(1290);
     }
 
     fn test_por_input_circuit_with_bls12_381<H: Hasher>(num_constraints: usize) {
