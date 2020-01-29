@@ -31,10 +31,23 @@ pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> (NamedTempFile, PieceIn
     let mut file = NamedTempFile::new().expect("failed to create piece file");
     {
         let mut writer = BufWriter::new(&mut file);
-        let mut buffer = vec![0u8; u64::from(piece_bytes) as usize];
+        let mut len = u64::from(piece_bytes) as usize;
+        let chunk_size = 8 * 1024 * 1024;
+        let mut buffer = vec![0u8; chunk_size];
         rand::thread_rng().fill_bytes(&mut buffer);
-        writer.write_all(&buffer).expect("failed to write buffer");
+
+        while len > 0 {
+            let to_write = std::cmp::min(len, chunk_size);
+            writer
+                .write_all(&buffer[..to_write])
+                .expect("failed to write buffer");
+            len -= to_write;
+        }
     }
+    assert_eq!(
+        u64::from(piece_bytes),
+        file.as_file().metadata().unwrap().len()
+    );
 
     file.as_file_mut()
         .sync_all()
