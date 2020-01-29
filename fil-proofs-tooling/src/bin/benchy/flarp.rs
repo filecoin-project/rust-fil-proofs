@@ -7,7 +7,10 @@ use filecoin_proofs::parameters::post_public_params;
 use filecoin_proofs::types::PaddedBytesAmount;
 use filecoin_proofs::types::*;
 use filecoin_proofs::types::{PoStConfig, SectorSize};
-use filecoin_proofs::{generate_candidates, generate_post, seal_commit, verify_post, PoRepConfig};
+use filecoin_proofs::{
+    generate_candidates, generate_post, seal_commit_phase1, seal_commit_phase2, verify_post,
+    PoRepConfig,
+};
 use log::info;
 use paired::bls12_381::Bls12;
 use rand::{rngs::OsRng, SeedableRng};
@@ -202,7 +205,7 @@ pub fn run(
             replica_measurement.return_value.iter().zip(created.iter())
         {
             let measured = measure(|| {
-                seal_commit(
+                let phase1_output = seal_commit_phase1(
                     cfg,
                     &replica_info.private_replica_info.cache_dir_path(),
                     PROVER_ID,
@@ -211,7 +214,8 @@ pub fn run(
                     RANDOMNESS,
                     value.clone(),
                     &replica_info.piece_info,
-                )
+                )?;
+                seal_commit_phase2(cfg, phase1_output, PROVER_ID, *sector_id)
             })
             .expect("failed to prove sector");
 

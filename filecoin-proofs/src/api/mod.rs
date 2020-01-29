@@ -531,7 +531,7 @@ mod tests {
         let comm_d = pre_commit_output.comm_d.clone();
         let comm_r = pre_commit_output.comm_r.clone();
 
-        let commit_output = seal_commit(
+        let phase1_output = seal_commit_phase1(
             config,
             cache_dir.path(),
             prover_id,
@@ -541,6 +541,7 @@ mod tests {
             pre_commit_output,
             &piece_infos,
         )?;
+        let commit_output = seal_commit_phase2(config, phase1_output, prover_id, sector_id)?;
 
         let _ = get_unsealed_range(
             config,

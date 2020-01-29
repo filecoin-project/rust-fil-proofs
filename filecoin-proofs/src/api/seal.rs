@@ -16,6 +16,7 @@ use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
 use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::measurements::{measure_op, Operation::CommD};
 use storage_proofs::merkle::create_merkle_tree;
+use storage_proofs::proof::ProofScheme;
 use storage_proofs::sector::SectorId;
 use storage_proofs::stacked::{
     self, generate_replica_id, CacheKey, ChallengeRequirements, StackedDrg, Tau, TemporaryAux,
@@ -30,7 +31,8 @@ pub use crate::pieces;
 pub use crate::pieces::verify_pieces;
 use crate::types::{
     Commitment, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, ProverId,
-    SealCommitOutput, SealPreCommitOutput, SealPreCommitPhase1Output, SectorSize, Ticket,
+    SealCommitOutput, SealCommitPhase1Output, SealPreCommitOutput, SealPreCommitPhase1Output,
+    SectorSize, Ticket,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -218,20 +220,8 @@ where
     Ok(SealPreCommitOutput { comm_r, comm_d })
 }
 
-/// Generates a proof for the pre committed sector.
-///
-/// # Arguments
-///
-/// * `porep_config` - porep configuration containing the number of bytes in this sector.
-/// * `cache_path` - path to a directory in which the sector data's Merkle Tree can be written.
-/// * `prover_id` - the prover-id that is sealing the sector.
-/// * `sector_id` - the sector-id of this sector.
-/// * `ticket` - the ticket that will be used to generate this sector's replica-id.
-/// * `seed` - the seed used to derive the porep challenges.
-/// * `pre_commit` - commitments to the sector data and its replica.
-/// * `piece_infos` - each piece's info (number of bytes and commitment) in this sector.
 #[allow(clippy::too_many_arguments)]
-pub fn seal_commit<T: AsRef<Path>>(
+pub fn seal_commit_phase1<T: AsRef<Path>>(
     porep_config: PoRepConfig,
     cache_path: T,
     prover_id: ProverId,
@@ -240,8 +230,8 @@ pub fn seal_commit<T: AsRef<Path>>(
     seed: Ticket,
     pre_commit: SealPreCommitOutput,
     piece_infos: &[PieceInfo],
-) -> Result<SealCommitOutput> {
-    info!("seal_commit:start");
+) -> Result<SealCommitPhase1Output> {
+    info!("seal_commit_phase1:start");
 
     let SealPreCommitOutput { comm_d, comm_r } = pre_commit;
 
@@ -306,6 +296,80 @@ pub fn seal_commit<T: AsRef<Path>>(
         t_aux: t_aux_cache,
     };
 
+    let compound_setup_params = compound_proof::SetupParams {
+        vanilla_params: setup_params(
+            PaddedBytesAmount::from(porep_config),
+            usize::from(PoRepProofPartitions::from(porep_config)),
+        )?,
+        partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
+    };
+
+    let compound_public_params = <StackedCompound as CompoundProof<
+        _,
+        StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+        _,
+    >>::setup(&compound_setup_params)?;
+
+    let vanilla_proofs = StackedDrg::prove_all_partitions(
+        &compound_public_params.vanilla_params,
+        &public_inputs,
+        &private_inputs,
+        StackedCompound::partition_count(&compound_public_params),
+    )?;
+
+    let sanity_check = StackedDrg::verify_all_partitions(
+        &compound_public_params.vanilla_params,
+        &public_inputs,
+        &vanilla_proofs,
+    )?;
+    ensure!(sanity_check, "Invalid vanilla proof generated");
+
+    info!("seal_commit_phase1:end");
+
+    Ok(SealCommitPhase1Output {
+        vanilla_proofs,
+        comm_r,
+        comm_d,
+        replica_id,
+        seed,
+        ticket,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn seal_commit_phase2(
+    porep_config: PoRepConfig,
+    phase1_output: SealCommitPhase1Output,
+    prover_id: ProverId,
+    sector_id: SectorId,
+) -> Result<SealCommitOutput> {
+    info!("seal_commit_phase2:start");
+
+    let SealCommitPhase1Output {
+        vanilla_proofs,
+        comm_d,
+        comm_r,
+        replica_id,
+        seed,
+        ticket,
+    } = phase1_output;
+
+    ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
+    ensure!(comm_r != [0; 32], "Invalid all zero commitment (comm_r)");
+
+    let comm_r_safe = as_safe_commitment(&comm_r, "comm_r")?;
+    let comm_d_safe = <DefaultPieceHasher as Hasher>::Domain::try_from_bytes(&comm_d)?;
+
+    let public_inputs = stacked::PublicInputs {
+        replica_id,
+        tau: Some(stacked::Tau {
+            comm_d: comm_d_safe,
+            comm_r: comm_r_safe,
+        }),
+        k: None,
+        seed,
+    };
+
     let groth_params = get_stacked_params(porep_config)?;
 
     info!(
@@ -321,17 +385,22 @@ pub fn seal_commit<T: AsRef<Path>>(
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };
 
-    let compound_public_params = StackedCompound::setup(&compound_setup_params)?;
+    let compound_public_params = <StackedCompound as CompoundProof<
+        _,
+        StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+        _,
+    >>::setup(&compound_setup_params)?;
 
-    let proof = StackedCompound::prove(
-        &compound_public_params,
+    info!("snark_proof:start");
+    let groth_proofs = StackedCompound::circuit_proofs(
         &public_inputs,
-        &private_inputs,
+        vanilla_proofs,
+        &compound_public_params.vanilla_params,
         &groth_params,
     )?;
+    info!("snark_proof:finish");
 
-    // Delete cached MTs that are no longer needed.
-    TemporaryAux::<DefaultTreeHasher, DefaultPieceHasher>::delete(t_aux)?;
+    let proof = MultiProof::new(groth_proofs, &groth_params.vk);
 
     let mut buf = Vec::with_capacity(
         SINGLE_PARTITION_PROOF_LEN * usize::from(PoRepProofPartitions::from(porep_config)),
@@ -353,7 +422,7 @@ pub fn seal_commit<T: AsRef<Path>>(
     )
     .context("post-seal verification sanity check failed")?;
 
-    info!("seal_commit:end");
+    info!("seal_commit_phase2:end");
 
     Ok(SealCommitOutput { proof: buf })
 }

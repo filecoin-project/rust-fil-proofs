@@ -11,9 +11,9 @@ use filecoin_proofs::types::{
     UnpaddedBytesAmount,
 };
 use filecoin_proofs::{
-    add_piece, generate_candidates, generate_piece_commitment, generate_post, seal_commit,
-    seal_pre_commit_phase1, seal_pre_commit_phase2, verify_post, PrivateReplicaInfo,
-    PublicReplicaInfo,
+    add_piece, generate_candidates, generate_piece_commitment, generate_post, seal_commit_phase1,
+    seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2, verify_post,
+    PrivateReplicaInfo, PublicReplicaInfo,
 };
 use log::info;
 use serde::Serialize;
@@ -125,7 +125,7 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
     let seed = [0u8; 32];
     let comm_r = seal_pre_commit_output.comm_r;
 
-    let _seal_commit_output = seal_commit(
+    let phase1_output = seal_commit_phase1(
         porep_config,
         cache_dir.path(),
         PROVER_ID,
@@ -135,6 +135,9 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
         seal_pre_commit_output,
         &piece_infos,
     )?;
+
+    let _seal_commit_output =
+        seal_commit_phase2(porep_config, phase1_output, PROVER_ID, sector_id)?;
 
     // Store the replica's private and publicly facing info for proving and verifying respectively.
     let mut pub_replica_info: BTreeMap<SectorId, PublicReplicaInfo> = BTreeMap::new();
