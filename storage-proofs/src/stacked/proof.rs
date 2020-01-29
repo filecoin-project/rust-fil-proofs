@@ -31,7 +31,7 @@ use crate::stacked::{
     },
     EncodingProof, LabelingProof,
 };
-use crate::util::NODE_SIZE;
+use crate::util::{data_at_node_offset, NODE_SIZE};
 
 pub const TOTAL_PARENTS: usize = 37;
 
@@ -257,35 +257,56 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let mut labels: Vec<DiskStore<H::Domain>> = Vec::with_capacity(layers);
         let mut label_configs: Vec<StoreConfig> = Vec::with_capacity(layers);
 
+        let layer_size = graph.size() * NODE_SIZE;
+        let mut layer_labels = vec![0u8; layer_size];
+
+        let mut exp_parents_data: Option<Vec<u8>> = None;
+
         // setup hasher to reuse
         let mut base_hasher = Sha256::new();
         // hash replica id
         base_hasher.input(AsRef::<[u8]>::as_ref(replica_id));
 
-        let mut exp_parents_data: Option<&DiskStore<H::Domain>> = None;
-
         for layer in 1..=layers {
             info!("generating layer: {}", layer);
-            // Write the result to disk to avoid keeping it in memory all the time.
-            let layer_config =
-                StoreConfig::from_config(&config, CacheKey::label_layer(layer), Some(graph.size()));
-
-            let mut layer_store: DiskStore<H::Domain> =
-                DiskStore::new_with_config(graph.size(), layer_config.clone())?;
 
             for node in 0..graph.size() {
                 create_key(
                     graph,
                     base_hasher.clone(),
-                    exp_parents_data,
-                    &mut layer_store,
+                    exp_parents_data.as_ref(),
+                    &mut layer_labels,
                     node,
                 )?;
             }
 
+            info!("  setting exp parents");
+
+            // NOTE: this means we currently keep 2x sector size around, to improve speed.
+            if let Some(ref mut exp_parents_data) = exp_parents_data {
+                exp_parents_data.copy_from_slice(&layer_labels);
+            } else {
+                exp_parents_data = Some(layer_labels.clone());
+            }
+
+            // Write the result to disk to avoid keeping it in memory all the time.
+            let layer_config =
+                StoreConfig::from_config(&config, CacheKey::label_layer(layer), Some(graph.size()));
+
+            info!("  storing labels on disk");
+            // Construct and persist the layer data.
+            let layer_store: DiskStore<H::Domain> = DiskStore::new_from_slice_with_config(
+                graph.size(),
+                &layer_labels,
+                layer_config.clone(),
+            )?;
+            info!(
+                "  generated layer {} store with id {}",
+                layer, layer_config.id
+            );
+
             // Track the layer specific store and StoreConfig for later retrieval.
             labels.push(layer_store);
-            exp_parents_data = labels.last();
             label_configs.push(layer_config);
         }
 
@@ -559,12 +580,14 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 pub fn create_key<H: Hasher>(
     graph: &StackedBucketGraph<H>,
     mut hasher: Sha256,
-    exp_parents_data: Option<&DiskStore<H::Domain>>,
-    layer_labels: &mut DiskStore<H::Domain>,
+    exp_parents_data: Option<&Vec<u8>>,
+    layer_labels: &mut [u8],
     node: usize,
 ) -> Result<()> {
     // hash parents for all non 0 nodes
     if node > 0 {
+        let layer_labels = &*layer_labels;
+
         let mut inputs = vec![0u8; NODE_SIZE * TOTAL_PARENTS + 8];
 
         // hash node id
@@ -584,11 +607,12 @@ pub fn create_key<H: Hasher>(
     }
 
     // store the newly generated key
-    let mut result = hasher.result();
-    // strip last two bits, to ensure result is in Fr.
-    result[31] &= 0b0011_1111;
+    let start = data_at_node_offset(node);
+    let end = start + NODE_SIZE;
+    layer_labels[start..end].copy_from_slice(&hasher.result()[..]);
 
-    layer_labels.copy_from_slice(&result[..], node)?;
+    // strip last two bits, to ensure result is in Fr.
+    layer_labels[end - 1] &= 0b0011_1111;
 
     Ok(())
 }
