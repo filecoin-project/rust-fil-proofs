@@ -536,6 +536,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         Ok(labels)
     }
 
+    #[allow(clippy::type_complexity)]
     /// Phase2 of replication.
     pub fn replicate_phase2(
         pp: &'a PublicParams<H>,
