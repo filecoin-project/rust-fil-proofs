@@ -39,3 +39,13 @@ pub struct SealPreCommitOutput {
 pub struct SealCommitOutput {
     pub proof: Vec<u8>,
 }
+
+pub type Labels = storage_proofs::stacked::Labels<crate::constants::DefaultTreeHasher>;
+
+#[derive(Debug)]
+pub struct SealPreCommitPhase1Output {
+    pub labels: Labels,
+    pub config: merkletree::store::StoreConfig,
+    pub comm_d: Commitment,
+    pub data_tree: storage_proofs::stacked::Tree<crate::constants::DefaultPieceHasher>,
+}

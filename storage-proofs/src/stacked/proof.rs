@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
-use anyhow::ensure;
 use log::{info, trace};
 use merkletree::merkle::FromIndexedParallelIterator;
 use merkletree::store::{DiskStore, StoreConfig};
@@ -222,7 +221,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         layer_challenges: &LayerChallenges,
         replica_id: &<H as Hasher>::Domain,
         data: &mut [u8],
-        config: Option<StoreConfig>,
+        config: StoreConfig,
     ) -> Result<()> {
         trace!("extract_and_invert_transform_layers");
 
@@ -255,13 +254,11 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         graph: &StackedBucketGraph<H>,
         layer_challenges: &LayerChallenges,
         replica_id: &<H as Hasher>::Domain,
-        config: Option<StoreConfig>,
+        config: StoreConfig,
     ) -> Result<(LabelsCache<H>, Labels<H>)> {
         info!("generate labels");
         let layers = layer_challenges.layers();
         // For now, we require it due to changes in encodings structure.
-        assert!(config.is_some());
-        let config = config.unwrap();
         let mut labels: Vec<DiskStore<H::Domain>> = Vec::with_capacity(layers);
         let mut label_configs: Vec<StoreConfig> = Vec::with_capacity(layers);
 
@@ -336,27 +333,19 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         ))
     }
 
-    fn build_tree<K: Hasher>(tree_data: &[u8], config: Option<StoreConfig>) -> Result<Tree<K>> {
+    fn build_tree<K: Hasher>(tree_data: &[u8], config: StoreConfig) -> Result<Tree<K>> {
         trace!("building tree (size: {})", tree_data.len());
 
         let leafs = tree_data.len() / NODE_SIZE;
         assert_eq!(tree_data.len() % NODE_SIZE, 0);
-        if let Some(config) = config {
-            MerkleTree::from_par_iter_with_config(
-                (0..leafs)
-                    .into_par_iter()
-                    // TODO proper error handling instead of `unwrap()`
-                    .map(|i| get_node::<K>(tree_data, i).unwrap()),
-                config,
-            )
-        } else {
-            MerkleTree::from_par_iter(
-                (0..leafs)
-                    .into_par_iter()
-                    // TODO proper error handling instead of `unwrap()`
-                    .map(|i| get_node::<K>(tree_data, i).unwrap()),
-            )
-        }
+
+        MerkleTree::from_par_iter_with_config(
+            (0..leafs)
+                .into_par_iter()
+                // TODO: proper error handling instead of `unwrap()`
+                .map(|i| get_node::<K>(tree_data, i).unwrap()),
+            config,
+        )
     }
 
     pub(crate) fn transform_and_replicate_layers(
@@ -365,13 +354,11 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         replica_id: &<H as Hasher>::Domain,
         data: Data,
         data_tree: Option<Tree<G>>,
-        config: Option<StoreConfig>,
+        config: StoreConfig,
     ) -> Result<TransformedLayers<H, G>> {
-        let config = config.unwrap();
-
         // Generate key layers.
-        let (labels, label_configs) = measure_op(EncodeWindowTimeAll, || {
-            Self::generate_labels(graph, layer_challenges, replica_id, Some(config.clone()))
+        let (_, labels) = measure_op(EncodeWindowTimeAll, || {
+            Self::generate_labels(graph, layer_challenges, replica_id, config.clone())
         })?;
 
         Self::transform_and_replicate_layers_inner(
@@ -381,7 +368,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             data_tree,
             config,
             labels,
-            label_configs,
         )
     }
 
@@ -391,7 +377,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         mut data: Data,
         data_tree: Option<Tree<G>>,
         config: StoreConfig,
-        labels: LabelsCache<H>,
         label_configs: Labels<H>,
     ) -> Result<TransformedLayers<H, G>> {
         trace!("transform_and_replicate_layers");
@@ -410,6 +395,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             StoreConfig::from_config(&config, CacheKey::CommRLastTree.to_string(), None);
         let mut tree_c_config =
             StoreConfig::from_config(&config, CacheKey::CommCTree.to_string(), None);
+
+        let labels = LabelsCache::new(&label_configs)?;
 
         // Build the tree for CommC
         let tree_c = measure_op(GenerateTreeC, || {
@@ -472,7 +459,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 trace!("building merkle tree for the original data");
                 data.ensure_data()?;
                 measure_op(CommD, || {
-                    Self::build_tree::<G>(data.as_ref(), Some(tree_d_config.clone()))
+                    Self::build_tree::<G>(data.as_ref(), tree_d_config.clone())
                 })?
             }
         };
@@ -534,54 +521,44 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         ))
     }
 
-    pub fn replicate_many(
+    /// Phase1 of replication.
+    pub fn replicate_phase1(
         pp: &'a PublicParams<H>,
-        replica_ids: &[H::Domain],
-        data: Vec<Data<'a>>,
-        data_trees: Vec<Tree<G>>,
-        configs: Vec<StoreConfig>,
-    ) -> Result<(
-        Vec<<Self as PoRep<'a, H, G>>::Tau>,
-        Vec<<Self as PoRep<'a, H, G>>::ProverAux>,
-    )> {
-        info!("replicate_many {}", replica_ids.len());
-        ensure!(replica_ids.len() == data.len(), "inconsistent inputs");
-        ensure!(replica_ids.len() == data_trees.len(), "inconsistent inputs");
-        ensure!(replica_ids.len() == configs.len(), "inconsistent inputs");
+        replica_id: &H::Domain,
+        config: StoreConfig,
+    ) -> Result<Labels<H>> {
+        info!("replicate_phase1");
 
-        let labels = measure_op(EncodeWindowTimeAll, || {
-            replica_ids
-                .par_iter()
-                .zip(configs.clone().into_par_iter())
-                .map(|(replica_id, config)| {
-                    Self::generate_labels(&pp.graph, &pp.layer_challenges, replica_id, Some(config))
-                })
-                .collect::<Result<Vec<_>>>()
+        let (_, labels) = measure_op(EncodeWindowTimeAll, || {
+            Self::generate_labels(&pp.graph, &pp.layer_challenges, replica_id, config)
         })?;
 
-        let mut taus = Vec::new();
-        let mut auxs = Vec::new();
+        Ok(labels)
+    }
 
-        for ((((labels, label_configs), data), data_tree), config) in labels
-            .into_iter()
-            .zip(data.into_iter())
-            .zip(data_trees.into_iter())
-            .zip(configs.into_iter())
-        {
-            let (a, b, c) = Self::transform_and_replicate_layers_inner(
-                &pp.graph,
-                &pp.layer_challenges,
-                data,
-                Some(data_tree),
-                config,
-                labels,
-                label_configs,
-            )?;
-            taus.push(a);
-            auxs.push((b, c));
-        }
+    /// Phase2 of replication.
+    pub fn replicate_phase2(
+        pp: &'a PublicParams<H>,
+        labels: Labels<H>,
+        data: Data<'a>,
+        data_tree: Tree<G>,
+        config: StoreConfig,
+    ) -> Result<(
+        <Self as PoRep<'a, H, G>>::Tau,
+        <Self as PoRep<'a, H, G>>::ProverAux,
+    )> {
+        info!("replicate_phase2");
 
-        Ok((taus, auxs))
+        let (tau, paux, taux) = Self::transform_and_replicate_layers_inner(
+            &pp.graph,
+            &pp.layer_challenges,
+            data,
+            Some(data_tree),
+            config,
+            labels,
+        )?;
+
+        Ok((tau, (paux, taux)))
     }
 }
 

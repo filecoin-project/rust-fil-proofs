@@ -12,7 +12,8 @@ use filecoin_proofs::types::{
 };
 use filecoin_proofs::{
     add_piece, generate_candidates, generate_piece_commitment, generate_post, seal_commit,
-    seal_pre_commit, verify_post, PrivateReplicaInfo, PublicReplicaInfo,
+    seal_pre_commit_phase1, seal_pre_commit_phase2, verify_post, PrivateReplicaInfo,
+    PublicReplicaInfo,
 };
 use log::info;
 use serde::Serialize;
@@ -104,15 +105,21 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
     let cache_dir = tempfile::tempdir().unwrap();
     let sector_id = SectorId::from(SECTOR_ID);
 
-    let seal_pre_commit_output = seal_pre_commit(
+    let phase1_output = seal_pre_commit_phase1(
         porep_config,
-        cache_dir.path().into(),
-        staged_file.path().into(),
-        sealed_file.path().into(),
+        cache_dir.path(),
+        staged_file.path(),
+        sealed_file.path(),
         PROVER_ID,
         sector_id,
         TICKET_BYTES,
-        piece_infos.clone(),
+        &piece_infos,
+    )?;
+    let seal_pre_commit_output = seal_pre_commit_phase2(
+        porep_config,
+        phase1_output,
+        cache_dir.path(),
+        sealed_file.path(),
     )?;
 
     let seed = [0u8; 32];

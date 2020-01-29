@@ -510,15 +510,22 @@ mod tests {
         let seed = rng.gen();
         let sector_id = SectorId::from(12);
 
-        let pre_commit_output = seal_pre_commit(
+        let phase1_output = seal_pre_commit_phase1(
             config,
-            cache_dir.path().to_path_buf(),
-            staged_sector_file.path().to_path_buf(),
-            sealed_sector_file.path().to_path_buf(),
+            cache_dir.path(),
+            staged_sector_file.path(),
+            sealed_sector_file.path(),
             prover_id,
             sector_id,
             ticket,
-            piece_infos.clone(),
+            &piece_infos,
+        )?;
+
+        let pre_commit_output = seal_pre_commit_phase2(
+            config,
+            phase1_output,
+            cache_dir.path(),
+            sealed_sector_file.path(),
         )?;
 
         let comm_d = pre_commit_output.comm_d.clone();

@@ -10,8 +10,8 @@ use fil_proofs_tooling::{measure, FuncMeasurement};
 use filecoin_proofs::constants::DEFAULT_POREP_PROOF_PARTITIONS;
 use filecoin_proofs::types::{PaddedBytesAmount, PoRepConfig, SectorSize, UnpaddedBytesAmount};
 use filecoin_proofs::{
-    add_piece, generate_piece_commitment, seal_pre_commit_many, PieceInfo, PoRepProofPartitions,
-    PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput,
+    add_piece, generate_piece_commitment, seal_pre_commit_phase1, seal_pre_commit_phase2,
+    PieceInfo, PoRepProofPartitions, PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput,
 };
 use storage_proofs::sector::SectorId;
 
@@ -121,25 +121,35 @@ pub fn create_replicas(
     }
 
     let seal_pre_commit_outputs = measure(|| {
-        seal_pre_commit_many(
-            porep_config,
-            &cache_dirs
-                .iter()
-                .map(|c| c.path().into())
-                .collect::<Vec<_>>(),
-            &staged_files
-                .iter()
-                .map(|c| c.path().into())
-                .collect::<Vec<_>>(),
-            &sealed_files
-                .iter()
-                .map(|c| c.path().into())
-                .collect::<Vec<_>>(),
-            &(0..qty_sectors).map(|_| PROVER_ID).collect::<Vec<_>>(),
-            &sector_ids,
-            &(0..qty_sectors).map(|_| TICKET_BYTES).collect::<Vec<_>>(),
-            &piece_infos,
-        )
+        let phase1s = cache_dirs
+            .par_iter()
+            .zip(staged_files.par_iter())
+            .zip(sealed_files.par_iter())
+            .zip(sector_ids.par_iter())
+            .zip(piece_infos.par_iter())
+            .map(
+                |((((cache_dir, staged_file), sealed_file), sector_id), piece_infos)| {
+                    seal_pre_commit_phase1(
+                        porep_config,
+                        cache_dir,
+                        staged_file,
+                        sealed_file,
+                        PROVER_ID,
+                        *sector_id,
+                        TICKET_BYTES,
+                        piece_infos,
+                    )
+                },
+            )
+            .collect::<Result<Vec<_>, _>>()?;
+
+        phase1s
+            .into_iter()
+            .enumerate()
+            .map(|(i, phase1)| {
+                seal_pre_commit_phase2(porep_config, phase1, &cache_dirs[i], &sealed_files[i])
+            })
+            .collect::<Result<Vec<_>, _>>()
     })
     .expect("seal_pre_commit produced an error");
 

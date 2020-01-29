@@ -25,7 +25,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
             replica_id,
             data,
             data_tree,
-            config,
+            config.expect("Missing config"),
         )?;
 
         Ok((tau, (p_aux, t_aux)))
@@ -44,7 +44,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
             &pp.layer_challenges,
             replica_id,
             &mut data,
-            config,
+            config.expect("Missing store config"),
         )?;
 
         Ok(data)
