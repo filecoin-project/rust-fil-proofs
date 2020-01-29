@@ -8,14 +8,15 @@ use sha2::{Digest, Sha256};
 
 use crate::error::*;
 use crate::fr32::bytes_into_fr_repr_safe;
-use crate::hasher::pedersen::PedersenHasher;
+use crate::hasher::poseidon::PoseidonHasher;
 use crate::hasher::Hasher;
 use crate::merkle::{create_merkle_tree, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::{data_at_node_offset, NODE_SIZE};
 
 /// The default hasher currently in use.
-pub type DefaultTreeHasher = PedersenHasher;
+pub type DefaultTreeHasher = PoseidonHasher;
+pub type DefaultTreeDomain = <DefaultTreeHasher as Hasher>::Domain;
 
 pub const PARALLEL_MERKLE: bool = true;
 
@@ -232,7 +233,7 @@ mod tests {
     use memmap::MmapOptions;
 
     use crate::drgraph::new_seed;
-    use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
 
     // Create and return an object of MmapMut backed by in-memory copy of data.
     pub fn mmap_from(data: &[u8]) -> MmapMut {
@@ -310,6 +311,11 @@ mod tests {
     #[test]
     fn gen_proof_pedersen() {
         gen_proof::<PedersenHasher>();
+    }
+
+    #[test]
+    fn gen_proof_poseidon() {
+        gen_proof::<PoseidonHasher>();
     }
 
     #[test]

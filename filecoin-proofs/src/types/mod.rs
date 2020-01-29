@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::hasher::Hasher;
 use storage_proofs::merkle::MerkleTree;
 use storage_proofs::stacked;
@@ -24,11 +23,17 @@ pub use self::sector_size::*;
 
 pub type Commitment = [u8; 32];
 pub type ChallengeSeed = [u8; 32];
-pub type PersistentAux = stacked::PersistentAux<PedersenDomain>;
-pub type TemporaryAux = stacked::TemporaryAux<PedersenHasher, crate::constants::DefaultPieceHasher>;
+pub type PersistentAux = stacked::PersistentAux<crate::constants::DefaultTreeDomain>;
+pub type TemporaryAux = stacked::TemporaryAux<
+    crate::constants::DefaultTreeHasher,
+    crate::constants::DefaultPieceHasher,
+>;
 pub type ProverId = [u8; 32];
 pub type Ticket = [u8; 32];
-pub type Tree = MerkleTree<PedersenDomain, <PedersenHasher as Hasher>::Function>;
+pub type Tree = MerkleTree<
+    crate::constants::DefaultTreeDomain,
+    <crate::constants::DefaultTreeHasher as Hasher>::Function,
+>;
 
 #[derive(Debug, Clone)]
 pub struct SealPreCommitOutput {

@@ -2,7 +2,7 @@ use std::sync::atomic::Ordering::Relaxed;
 
 use bellperson::Circuit;
 use fil_proofs_tooling::{measure, Metadata};
-use filecoin_proofs::constants::DEFAULT_POREP_PROOF_PARTITIONS;
+use filecoin_proofs::constants::{DefaultTreeHasher, DEFAULT_POREP_PROOF_PARTITIONS};
 use filecoin_proofs::parameters::post_public_params;
 use filecoin_proofs::types::PaddedBytesAmount;
 use filecoin_proofs::types::*;
@@ -20,7 +20,7 @@ use storage_proofs::circuit::bench::BenchCS;
 use storage_proofs::circuit::election_post::{ElectionPoStCircuit, ElectionPoStCompound};
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::election_post::ElectionPoSt;
-use storage_proofs::hasher::{PedersenHasher, Sha256Hasher};
+use storage_proofs::hasher::Sha256Hasher;
 #[cfg(feature = "measurements")]
 use storage_proofs::measurements::Operation;
 #[cfg(feature = "measurements")]
@@ -30,6 +30,8 @@ use storage_proofs::proof::ProofScheme;
 
 use crate::shared::{create_replicas, CHALLENGE_COUNT, PROVER_ID, RANDOMNESS, TICKET_BYTES};
 use std::sync::atomic::Ordering;
+
+type FlarpHasher = DefaultTreeHasher;
 
 const SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
@@ -358,11 +360,14 @@ fn measure_porep_circuit(i: &FlarpInputs) -> usize {
         layer_challenges,
     };
 
-    let pp = StackedDrg::<PedersenHasher, Sha256Hasher>::setup(&sp).unwrap();
+    let pp = StackedDrg::<FlarpHasher, Sha256Hasher>::setup(&sp).unwrap();
 
     let mut cs = BenchCS::<Bls12>::new();
-    <StackedCompound as CompoundProof<_, StackedDrg<PedersenHasher, Sha256Hasher>, _>>::blank_circuit(&pp)
-        .synthesize(&mut cs).unwrap();
+    <StackedCompound as CompoundProof<_, StackedDrg<FlarpHasher, Sha256Hasher>, _>>::blank_circuit(
+        &pp,
+    )
+    .synthesize(&mut cs)
+    .unwrap();
 
     cs.num_constraints()
 }
@@ -378,10 +383,10 @@ fn measure_post_circuit(i: &FlarpInputs) -> usize {
     };
 
     let vanilla_params = post_setup_params(post_config);
-    let pp = election_post::ElectionPoSt::<PedersenHasher>::setup(&vanilla_params).unwrap();
+    let pp = election_post::ElectionPoSt::<FlarpHasher>::setup(&vanilla_params).unwrap();
 
     let mut cs = BenchCS::<Bls12>::new();
-    ElectionPoStCompound::<PedersenHasher>::blank_circuit(&pp)
+    ElectionPoStCompound::<FlarpHasher>::blank_circuit(&pp)
         .synthesize(&mut cs)
         .unwrap();
 
@@ -473,7 +478,7 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     {
         let circuit = <StackedCompound as CompoundProof<
             _,
-            StackedDrg<PedersenHasher, Sha256Hasher>,
+            StackedDrg<FlarpHasher, Sha256Hasher>,
             _,
         >>::blank_circuit(&public_params);
         StackedCompound::get_param_metadata(circuit, &public_params)
@@ -482,7 +487,7 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     {
         let circuit = <StackedCompound as CompoundProof<
             _,
-            StackedDrg<PedersenHasher, Sha256Hasher>,
+            StackedDrg<FlarpHasher, Sha256Hasher>,
             _,
         >>::blank_circuit(&public_params);
         StackedCompound::get_groth_params(
@@ -495,7 +500,7 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     {
         let circuit = <StackedCompound as CompoundProof<
             _,
-            StackedDrg<PedersenHasher, Sha256Hasher>,
+            StackedDrg<FlarpHasher, Sha256Hasher>,
             _,
         >>::blank_circuit(&public_params);
 
@@ -509,26 +514,26 @@ fn cache_post_params(post_config: PoStConfig) {
     let post_public_params = post_public_params(post_config).unwrap();
 
     {
-        let post_circuit: ElectionPoStCircuit<Bls12, PedersenHasher> =
-            <ElectionPoStCompound<PedersenHasher> as CompoundProof<
+        let post_circuit: ElectionPoStCircuit<Bls12, FlarpHasher> =
+            <ElectionPoStCompound<FlarpHasher> as CompoundProof<
                 Bls12,
-                ElectionPoSt<PedersenHasher>,
-                ElectionPoStCircuit<Bls12, PedersenHasher>,
+                ElectionPoSt<FlarpHasher>,
+                ElectionPoStCircuit<Bls12, FlarpHasher>,
             >>::blank_circuit(&post_public_params);
-        let _ = <ElectionPoStCompound<PedersenHasher>>::get_param_metadata(
+        let _ = <ElectionPoStCompound<FlarpHasher>>::get_param_metadata(
             post_circuit,
             &post_public_params,
         )
         .expect("failed to get metadata");
     }
     {
-        let post_circuit: ElectionPoStCircuit<Bls12, PedersenHasher> =
-            <ElectionPoStCompound<PedersenHasher> as CompoundProof<
+        let post_circuit: ElectionPoStCircuit<Bls12, FlarpHasher> =
+            <ElectionPoStCompound<FlarpHasher> as CompoundProof<
                 Bls12,
-                ElectionPoSt<PedersenHasher>,
-                ElectionPoStCircuit<Bls12, PedersenHasher>,
+                ElectionPoSt<FlarpHasher>,
+                ElectionPoStCircuit<Bls12, FlarpHasher>,
             >>::blank_circuit(&post_public_params);
-        <ElectionPoStCompound<PedersenHasher>>::get_groth_params(
+        <ElectionPoStCompound<FlarpHasher>>::get_groth_params(
             Some(&mut XorShiftRng::from_seed(SEED)),
             post_circuit,
             &post_public_params,
@@ -536,15 +541,15 @@ fn cache_post_params(post_config: PoStConfig) {
         .expect("failed to get groth params");
     }
     {
-        let post_circuit: ElectionPoStCircuit<Bls12, PedersenHasher> =
-            <ElectionPoStCompound<PedersenHasher> as CompoundProof<
+        let post_circuit: ElectionPoStCircuit<Bls12, FlarpHasher> =
+            <ElectionPoStCompound<FlarpHasher> as CompoundProof<
                 Bls12,
-                ElectionPoSt<PedersenHasher>,
-                ElectionPoStCircuit<Bls12, PedersenHasher>,
+                ElectionPoSt<FlarpHasher>,
+                ElectionPoStCircuit<Bls12, FlarpHasher>,
             >>::blank_circuit(&post_public_params);
 
         let rando: Option<&mut OsRng> = None;
-        <ElectionPoStCompound<PedersenHasher>>::get_verifying_key(
+        <ElectionPoStCompound<FlarpHasher>>::get_verifying_key(
             rando,
             post_circuit,
             &post_public_params,
