@@ -41,11 +41,13 @@ pub struct SealCommitOutput {
 }
 
 pub type Labels = storage_proofs::stacked::Labels<crate::constants::DefaultTreeHasher>;
+pub type DataTree = storage_proofs::stacked::Tree<crate::constants::DefaultPieceHasher>;
+pub use merkletree::store::StoreConfig;
 
 #[derive(Debug)]
 pub struct SealPreCommitPhase1Output {
     pub labels: Labels,
-    pub config: merkletree::store::StoreConfig,
+    pub config: StoreConfig,
     pub comm_d: Commitment,
-    pub data_tree: storage_proofs::stacked::Tree<crate::constants::DefaultPieceHasher>,
+    pub data_tree: DataTree,
 }
