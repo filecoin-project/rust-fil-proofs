@@ -176,8 +176,16 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                                     .collect::<Result<_>>()?
                             };
 
-                            let proof =
-                                LabelingProof::<H>::new(challenge as u64, parents_data.clone());
+                            // repeat parents
+                            let mut parents_data_full = vec![Default::default(); TOTAL_PARENTS];
+                            for chunk in parents_data_full.chunks_mut(parents_data.len()) {
+                                chunk.copy_from_slice(&parents_data[..chunk.len()]);
+                            }
+
+                            let proof = LabelingProof::<H>::new(
+                                challenge as u64,
+                                parents_data_full.clone(),
+                            );
 
                             {
                                 let labeled_node = rpc.c_x.get_node_at_layer(layer)?;
@@ -192,7 +200,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                             if layer == layers {
                                 encoding_proof =
-                                    Some(EncodingProof::new(challenge as u64, parents_data));
+                                    Some(EncodingProof::new(challenge as u64, parents_data_full));
                             }
                         }
 
@@ -589,6 +597,11 @@ pub fn create_key<H: Hasher>(
         let layer_labels = &*layer_labels;
 
         let mut inputs = vec![0u8; NODE_SIZE * TOTAL_PARENTS + 8];
+        let real_parents_count = if exp_parents_data.is_some() {
+            graph.degree()
+        } else {
+            graph.base_graph().degree()
+        };
 
         // hash node id
         inputs[..8].copy_from_slice(&(node as u64).to_be_bytes());
@@ -600,7 +613,17 @@ pub fn create_key<H: Hasher>(
             &mut inputs[8..],
         );
 
-        // TODO: repeat parents, instead of hashing 0s
+        // Repeat parents
+        {
+            let (source, rest) = inputs.split_at_mut(NODE_SIZE * real_parents_count + 8);
+            let source = &source[8..];
+            debug_assert_eq!(source.len(), NODE_SIZE * real_parents_count);
+
+            for chunk in rest.chunks_mut(source.len()) {
+                chunk.copy_from_slice(&source[..chunk.len()]);
+            }
+        }
+
         hasher.input(&inputs);
     } else {
         hasher.input(&(node as u64).to_be_bytes()[..]);

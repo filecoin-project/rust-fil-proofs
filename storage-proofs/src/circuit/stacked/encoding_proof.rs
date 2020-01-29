@@ -4,11 +4,10 @@ use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::circuit::{constraint, create_label::create_label as kdf, encode::encode, uint64};
-use crate::drgraph::Graph;
 use crate::fr32::fr_into_bytes;
 use crate::hasher::Hasher;
 use crate::stacked::{EncodingProof as VanillaEncodingProof, PublicParams, TOTAL_PARENTS};
-use crate::util::{bytes_into_boolean_vec_be, NODE_SIZE};
+use crate::util::bytes_into_boolean_vec_be;
 
 #[derive(Debug, Clone)]
 pub struct EncodingProof {
@@ -18,10 +17,10 @@ pub struct EncodingProof {
 
 impl EncodingProof {
     /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty<H: Hasher>(params: &PublicParams<H>) -> Self {
+    pub fn empty<H: Hasher>(_params: &PublicParams<H>) -> Self {
         EncodingProof {
             node: None,
-            parents: vec![None; params.graph.degree()],
+            parents: vec![None; TOTAL_PARENTS],
         }
     }
 
@@ -33,12 +32,12 @@ impl EncodingProof {
         parents: Vec<Option<Fr>>,
     ) -> Result<num::AllocatedNum<Bls12>, SynthesisError> {
         // get the parents into bits
-        let mut parents_bits: Vec<Vec<Boolean>> = parents
-            .iter()
+        let parents_bits: Vec<Vec<Boolean>> = parents
+            .into_iter()
             .enumerate()
             .map(|(i, val)| match val {
                 Some(val) => {
-                    let bytes = fr_into_bytes::<Bls12>(val);
+                    let bytes = fr_into_bytes::<Bls12>(&val);
                     bytes_into_boolean_vec_be(
                         cs.namespace(|| format!("parents_{}_bits", i)),
                         Some(&bytes),
@@ -52,10 +51,6 @@ impl EncodingProof {
                 ),
             })
             .collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?;
-
-        while parents_bits.len() < TOTAL_PARENTS {
-            parents_bits.push(vec![Boolean::Constant(false); NODE_SIZE * 8]);
-        }
 
         let node_num = uint64::UInt64::alloc(cs.namespace(|| "node"), node)?;
 

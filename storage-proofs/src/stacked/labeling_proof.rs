@@ -6,8 +6,6 @@ use sha2::{Digest, Sha256};
 
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::Hasher;
-use crate::stacked::TOTAL_PARENTS;
-use crate::util::NODE_SIZE;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LabelingProof<H: Hasher> {
@@ -35,12 +33,10 @@ impl<H: Hasher> LabelingProof<H> {
         // node id
         hasher.input(&(self.node as u64).to_be_bytes());
 
+        // parents
         for parent in &self.parents {
-            hasher.input(AsRef::<[u8]>::as_ref(parent));
-        }
-
-        for _ in 0..(TOTAL_PARENTS - self.parents.len()) {
-            hasher.input(&[0u8; NODE_SIZE]);
+            let data = AsRef::<[u8]>::as_ref(parent);
+            hasher.input(data);
         }
 
         bytes_into_fr_repr_safe(hasher.result().as_ref()).into()
