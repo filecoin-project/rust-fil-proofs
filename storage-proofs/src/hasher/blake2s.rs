@@ -214,12 +214,22 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
             .into()
     }
 
+    fn hash2<S: AsRef<[u8]>, U: AsRef<[u8]>>(a: S, b: U) -> Blake2sDomain {
+        Blake2s::new()
+            .hash_length(32)
+            .to_state()
+            .update(a.as_ref())
+            .update(b.as_ref())
+            .finalize()
+            .into()
+    }
+
     fn hash_leaf_bits_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
-        cs: CS,
+        mut cs: CS,
         left: &[boolean::Boolean],
         right: &[boolean::Boolean],
-        _height: usize,
-        params: &E::Params,
+        _height: Option<usize>,
+        _params: &E::Params,
     ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
         let mut preimage: Vec<boolean::Boolean> = vec![];
 
@@ -233,17 +243,9 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
             preimage.push(boolean::Boolean::Constant(false));
         }
 
-        Self::hash_circuit(cs, &preimage[..], params)
-    }
-
-    fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
-        mut cs: CS,
-        bits: &[boolean::Boolean],
-        _params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
         let personalization = vec![0u8; 8];
         let alloc_bits =
-            blake2s_circuit::blake2s(cs.namespace(|| "hash"), &bits[..], &personalization)?;
+            blake2s_circuit::blake2s(cs.namespace(|| "hash"), &preimage[..], &personalization)?;
         let fr = match alloc_bits[0].get_value() {
             Some(_) => {
                 let bits = alloc_bits

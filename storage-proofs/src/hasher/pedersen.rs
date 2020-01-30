@@ -12,7 +12,6 @@ use merkletree::merkle::Element;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 use serde::{Deserialize, Serialize};
 
-use crate::circuit::pedersen::pedersen_md_no_padding;
 use crate::crypto::{create_label, pedersen, sloth};
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
@@ -211,30 +210,36 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         pedersen::pedersen_md_no_padding(data).into()
     }
 
+    /// Hash 2 individual elements.
+    fn hash2<S: AsRef<[u8]>, U: AsRef<[u8]>>(a: S, b: U) -> PedersenDomain {
+        pedersen::pedersen_bits(pedersen::Bits::new_many(
+            vec![a.as_ref(), b.as_ref()].into_iter(),
+        ))
+        .into()
+    }
+
     fn hash_leaf_bits_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
         cs: CS,
         left: &[boolean::Boolean],
         right: &[boolean::Boolean],
-        _height: usize,
+        _height: Option<usize>,
         params: &E::Params,
     ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError> {
-        let mut preimage: Vec<boolean::Boolean> = vec![];
+        let mut preimage = Vec::with_capacity(left.len() + right.len());
         preimage.extend_from_slice(left);
+        while preimage.len() % 8 != 0 {
+            preimage.push(boolean::Boolean::Constant(false));
+        }
         preimage.extend_from_slice(right);
+        while preimage.len() % 8 != 0 {
+            preimage.push(boolean::Boolean::Constant(false));
+        }
 
         Ok(
             pedersen_hash_circuit::pedersen_hash(cs, Personalization::None, &preimage, params)?
                 .get_x()
                 .clone(),
         )
-    }
-
-    fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
-        cs: CS,
-        bits: &[boolean::Boolean],
-        params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
-        pedersen_md_no_padding(cs, params, bits)
     }
 }
 
@@ -259,7 +264,9 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
         right: PedersenDomain,
         _height: usize,
     ) -> PedersenDomain {
-        let node_bits = NodeBits::new(&(left.0).0[..], &(right.0).0[..]);
+        let node_bits = pedersen::Bits::new_many(
+            vec![AsRef::<[u8]>::as_ref(&left), AsRef::<[u8]>::as_ref(&right)].into_iter(),
+        );
 
         let digest = if cfg!(target_arch = "x86_64") {
             use fil_sapling_crypto::pedersen_hash::pedersen_hash_bls12_381_with_precomp;
@@ -274,48 +281,6 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
         };
 
         digest.into_xy().0.into()
-    }
-}
-
-/// Helper to iterate over a pair of `Fr`.
-struct NodeBits<'a> {
-    // 256 bits
-    lhs: &'a [u64],
-    // 256 bits
-    rhs: &'a [u64],
-    index: usize,
-}
-
-impl<'a> NodeBits<'a> {
-    pub fn new(lhs: &'a [u64], rhs: &'a [u64]) -> Self {
-        NodeBits { lhs, rhs, index: 0 }
-    }
-}
-
-impl<'a> Iterator for NodeBits<'a> {
-    type Item = bool;
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.index < 255 {
-            // return lhs
-            let a = self.index / 64;
-            let b = self.index % 64;
-            let res = (self.lhs[a] & (1 << b)) != 0;
-            self.index += 1;
-            return Some(res);
-        }
-
-        if self.index < 2 * 255 {
-            // return rhs
-            let a = (self.index - 255) / 64;
-            let b = (self.index - 255) % 64;
-            let res = (self.rhs[a] & (1 << b)) != 0;
-            self.index += 1;
-            return Some(res);
-        }
-
-        None
     }
 }
 

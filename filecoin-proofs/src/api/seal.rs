@@ -12,7 +12,7 @@ use paired::bls12_381::{Bls12, Fr};
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::drgraph::{DefaultTreeHasher, Graph};
+use storage_proofs::drgraph::Graph;
 use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::measurements::{measure_op, Operation::CommD};
 use storage_proofs::merkle::create_merkle_tree;
@@ -25,7 +25,9 @@ use storage_proofs::stacked::{
 
 use crate::api::util::{as_safe_commitment, commitment_from_fr};
 use crate::caches::{get_stacked_params, get_stacked_verifying_key};
-use crate::constants::{DefaultPieceHasher, POREP_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN};
+use crate::constants::{
+    DefaultPieceHasher, DefaultTreeHasher, POREP_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN,
+};
 use crate::parameters::setup_params;
 pub use crate::pieces;
 pub use crate::pieces::verify_pieces;

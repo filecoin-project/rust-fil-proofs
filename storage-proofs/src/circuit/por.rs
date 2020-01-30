@@ -186,10 +186,10 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> Circuit<E> for PoRCircuit<
                 // Compute the new subtree value
                 cur = H::Function::hash_leaf_circuit(
                     cs.namespace(|| "computation of commitment hash"),
+                    params,
+                    Some(i),
                     &xl,
                     &xr,
-                    i,
-                    params,
                 )?;
                 auth_path_bits.push(cur_is_right);
             }
@@ -335,7 +335,7 @@ mod tests {
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_pedersen() {
-        test_por_input_circuit_with_bls12_381::<PedersenHasher>(4125);
+        test_por_input_circuit_with_bls12_381::<PedersenHasher>(4134);
     }
 
     #[test]
@@ -592,7 +592,7 @@ mod tests {
             assert!(cs.is_satisfied(), "constraints not satisfied");
 
             assert_eq!(cs.num_inputs(), 2, "wrong number of inputs");
-            assert_eq!(cs.num_constraints(), 4124, "wrong number of constraints");
+            assert_eq!(cs.num_constraints(), 4133, "wrong number of constraints");
 
             let auth_path_bits: Vec<bool> = proof
                 .proof

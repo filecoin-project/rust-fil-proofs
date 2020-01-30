@@ -8,14 +8,13 @@ use paired::bls12_381::{Bls12, Fr};
 
 use crate::circuit::constraint;
 use crate::circuit::por::{PoRCircuit, PoRCompound};
-use crate::circuit::stacked::hash::hash2;
 use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph;
 use crate::error::Result;
 use crate::hasher::types::PoseidonEngine;
-use crate::hasher::Hasher;
+use crate::hasher::{HashFunction, Hasher};
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
@@ -206,19 +205,12 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> Circuit<E> for RationalPoS
 
             // Verify H(Comm_C || comm_r_last) == comm_r
             {
-                // Allocate comm_c as booleansn
-                let comm_c_bits =
-                    comm_c_num.to_bits_le(cs.namespace(|| format!("comm_c_{}_bits", i)))?;
-
-                // Allocate comm_r_last as booleans
-                let comm_r_last_bits = comm_r_last_num
-                    .to_bits_le(cs.namespace(|| format!("comm_r_last_{}_bits", i)))?;
-
-                let hash_num = hash2(
+                let hash_num = H::Function::hash_leaf_circuit(
                     cs.namespace(|| format!("H_comm_c_comm_r_last_{}", i)),
                     params,
-                    &comm_c_bits,
-                    &comm_r_last_bits,
+                    None,
+                    &comm_c_num,
+                    &comm_r_last_num,
                 )?;
 
                 // Check actual equality
@@ -287,7 +279,6 @@ mod tests {
     use crate::proof::{NoRequirements, ProofScheme};
     use crate::rational_post::{self, derive_challenges, RationalPoSt};
     use crate::sector::OrderedSectorSet;
-    use crate::stacked::hash::hash2;
 
     #[test]
     fn test_rational_post_circuit_with_bls12_381() {
@@ -337,7 +328,7 @@ mod tests {
         let comm_rs: Vec<PedersenDomain> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| hash2(comm_c, comm_r_last).into())
+            .map(|(comm_c, comm_r_last)| PedersenFunction::hash2(comm_c, comm_r_last).into())
             .collect();
 
         let pub_inputs = rational_post::PublicInputs {
@@ -395,7 +386,7 @@ mod tests {
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
         assert_eq!(cs.num_inputs(), 5, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 16_496, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 16_526, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
         let generated_inputs = RationalPoStCompound::<PedersenHasher>::generate_public_inputs(
@@ -475,7 +466,7 @@ mod tests {
         let comm_rs: Vec<PedersenDomain> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| hash2(comm_c, comm_r_last).into())
+            .map(|(comm_c, comm_r_last)| PedersenFunction::hash2(comm_c, comm_r_last).into())
             .collect();
 
         let pub_inputs = rational_post::PublicInputs {

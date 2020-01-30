@@ -42,4 +42,4 @@ pub const MIN_PIECE_SIZE: UnpaddedBytesAmount = UnpaddedBytesAmount(127);
 /// The hasher used for creating comm_d.
 pub type DefaultPieceHasher = storage_proofs::hasher::Sha256Hasher;
 
-pub use storage_proofs::drgraph::{DefaultTreeDomain, DefaultTreeHasher};
+pub use storage_proofs::hasher::{DefaultTreeDomain, DefaultTreeHashFunction, DefaultTreeHasher};

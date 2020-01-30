@@ -7,12 +7,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::drgraph::graph_height;
 use crate::error::{Error, Result};
-use crate::hasher::{Domain, Hasher};
+use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::sector::*;
-use crate::stacked::hash::hash2;
 use crate::util::NODE_SIZE;
 
 #[derive(Debug, Clone)]
@@ -191,7 +190,8 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
             // comm_r_last is the root of the proof
             let comm_r_last = merkle_proof.root();
 
-            if AsRef::<[u8]>::as_ref(&hash2(comm_c, comm_r_last)) != AsRef::<[u8]>::as_ref(&comm_r)
+            if AsRef::<[u8]>::as_ref(&H::Function::hash2(comm_c, comm_r_last))
+                != AsRef::<[u8]>::as_ref(&comm_r)
             {
                 return Ok(false);
             }
@@ -355,7 +355,7 @@ mod tests {
         let comm_rs: Vec<H::Domain> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| Fr::from(hash2(comm_c, comm_r_last)).into())
+            .map(|(comm_c, comm_r_last)| H::Function::hash2(comm_c, comm_r_last))
             .collect();
 
         let pub_inputs = PublicInputs {
@@ -446,7 +446,7 @@ mod tests {
         let comm_rs: Vec<H::Domain> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| Fr::from(hash2(comm_c, comm_r_last)).into())
+            .map(|(comm_c, comm_r_last)| H::Function::hash2(comm_c, comm_r_last))
             .collect();
 
         let pub_inputs = PublicInputs::<H::Domain> {
@@ -525,7 +525,7 @@ mod tests {
         let comm_rs: Vec<H::Domain> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| Fr::from(hash2(comm_c, comm_r_last)).into())
+            .map(|(comm_c, comm_r_last)| H::Function::hash2(comm_c, comm_r_last))
             .collect();
 
         let pub_inputs = PublicInputs {
@@ -553,7 +553,7 @@ mod tests {
         let comm_rs: Vec<H::Domain> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| Fr::from(hash2(comm_c, comm_r_last)).into())
+            .map(|(comm_c, comm_r_last)| H::Function::hash2(comm_c, comm_r_last))
             .collect();
 
         let different_pub_inputs = PublicInputs {

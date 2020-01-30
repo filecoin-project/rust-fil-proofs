@@ -11,7 +11,6 @@ use paired::bls12_381::{Bls12, Fr};
 use crate::circuit::constraint;
 use crate::circuit::pedersen::pedersen_md_no_padding;
 use crate::circuit::por::{PoRCircuit, PoRCompound};
-use crate::circuit::stacked::hash::hash2;
 use crate::circuit::uint64::UInt64;
 use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
@@ -21,7 +20,7 @@ use crate::election_post::{self, ElectionPoSt};
 use crate::error::Result;
 use crate::fr32::fr_into_bytes;
 use crate::hasher::types::PoseidonEngine;
-use crate::hasher::Hasher;
+use crate::hasher::{HashFunction, Hasher};
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
@@ -216,18 +215,12 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> Circuit<E> for ElectionPoS
 
         // Verify H(Comm_C || comm_r_last) == comm_r
         {
-            // Allocate comm_c as booleans
-            let comm_c_bits = comm_c_num.to_bits_le(cs.namespace(|| "comm_c_bits"))?;
-
-            // Allocate comm_r_last as booleans
-            let comm_r_last_bits =
-                comm_r_last_num.to_bits_le(cs.namespace(|| "comm_r_last_bits"))?;
-
-            let hash_num = hash2(
+            let hash_num = H::Function::hash_leaf_circuit(
                 cs.namespace(|| "H_comm_c_comm_r_last"),
                 params,
-                &comm_c_bits,
-                &comm_r_last_bits,
+                None,
+                &comm_c_num,
+                &comm_r_last_num,
             )?;
 
             // Check actual equality
@@ -348,7 +341,6 @@ mod tests {
     use crate::hasher::{pedersen::*, Domain};
     use crate::proof::{NoRequirements, ProofScheme};
     use crate::sector::SectorId;
-    use crate::stacked::hash::hash2;
 
     #[test]
     fn test_election_post_circuit() {
@@ -392,7 +384,7 @@ mod tests {
         let tree = trees.remove(&candidate.sector_id).unwrap();
         let comm_r_last = tree.root();
         let comm_c = PedersenDomain::random(rng);
-        let comm_r = Fr::from(hash2(comm_c, comm_r_last)).into();
+        let comm_r = PedersenFunction::hash2(comm_c, comm_r_last);
 
         let pub_inputs = election_post::PublicInputs {
             randomness,
@@ -452,7 +444,7 @@ mod tests {
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
         assert_eq!(cs.num_inputs(), 43, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 333_753, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 334_353, "wrong number of constraints");
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
         let generated_inputs = ElectionPoStCompound::<PedersenHasher>::generate_public_inputs(
@@ -524,7 +516,7 @@ mod tests {
         let tree = trees.remove(&candidate.sector_id).unwrap();
         let comm_r_last = tree.root();
         let comm_c = PedersenDomain::random(rng);
-        let comm_r = Fr::from(hash2(comm_c, comm_r_last)).into();
+        let comm_r = Fr::from(PedersenFunction::hash2(comm_c, comm_r_last)).into();
 
         let pub_inputs = election_post::PublicInputs {
             randomness,

@@ -1,13 +1,12 @@
 use std::sync::atomic::Ordering;
 
 use anyhow::{ensure, Result};
-use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::election_post::{self, ElectionPoSt};
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::stacked::{self, LayerChallenges, StackedDrg};
 
 use crate::constants::{
-    DefaultPieceHasher, DRG_DEGREE, EXP_DEGREE, LAYERS, POREP_MINIMUM_CHALLENGES,
+    DefaultPieceHasher, DefaultTreeHasher, DRG_DEGREE, EXP_DEGREE, LAYERS, POREP_MINIMUM_CHALLENGES,
 };
 use crate::types::{PaddedBytesAmount, PoStConfig};
 

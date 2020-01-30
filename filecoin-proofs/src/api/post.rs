@@ -13,7 +13,6 @@ use rayon::prelude::*;
 use storage_proofs::circuit::election_post::ElectionPoStCompound;
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::election_post;
 use storage_proofs::fr32::bytes_into_fr;
 use storage_proofs::hasher::Hasher;
@@ -23,6 +22,7 @@ use storage_proofs::stacked::CacheKey;
 
 use crate::api::util::as_safe_commitment;
 use crate::caches::{get_post_params, get_post_verifying_key};
+use crate::constants::DefaultTreeHasher;
 use crate::parameters::post_setup_params;
 use crate::types::{
     ChallengeSeed, Commitment, PersistentAux, PoStConfig, ProverId, SectorSize, Tree,

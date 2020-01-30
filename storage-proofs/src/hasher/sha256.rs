@@ -180,12 +180,20 @@ impl HashFunction<Sha256Domain> for Sha256Function {
         res
     }
 
+    fn hash2<S: AsRef<[u8]>, U: AsRef<[u8]>>(a: S, b: U) -> Sha256Domain {
+        let hashed = Sha256::new().chain(a.as_ref()).chain(b.as_ref()).result();
+        let mut res = Sha256Domain::default();
+        res.0.copy_from_slice(&hashed[..]);
+        res.trim_to_fr32();
+        res
+    }
+
     fn hash_leaf_bits_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
-        cs: CS,
+        mut cs: CS,
         left: &[boolean::Boolean],
         right: &[boolean::Boolean],
-        _height: usize,
-        params: &E::Params,
+        _height: Option<usize>,
+        _params: &E::Params,
     ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
         let mut preimage: Vec<boolean::Boolean> = vec![];
 
@@ -213,15 +221,7 @@ impl HashFunction<Sha256Domain> for Sha256Function {
                 .cloned(),
         );
 
-        Self::hash_circuit(cs, &preimage[..], params)
-    }
-
-    fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
-        mut cs: CS,
-        bits: &[boolean::Boolean],
-        _params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
-        let alloc_bits = sha256_circuit(cs.namespace(|| "hash"), &bits[..])?;
+        let alloc_bits = sha256_circuit(cs.namespace(|| "hash"), &preimage[..])?;
         let fr = if alloc_bits[0].get_value().is_some() {
             let be_bits = alloc_bits
                 .iter()
@@ -326,7 +326,7 @@ mod tests {
             cs.namespace(|| "hash_leaf_circuit"),
             &left_bits,
             &right_bits,
-            height,
+            Some(height),
             &crypto::pedersen::JJ_PARAMS,
         )
         .expect("key derivation function failed");

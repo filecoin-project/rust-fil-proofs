@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, ensure, Context, Result};
 use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
-use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::hasher::Hasher;
 use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
@@ -13,7 +12,7 @@ use tempfile::tempfile;
 
 use crate::api::util::as_safe_commitment;
 use crate::constants::{
-    DefaultPieceHasher,
+    DefaultPieceHasher, DefaultTreeHasher,
     MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
 };
 use crate::fr32::{write_padded, write_unpadded};

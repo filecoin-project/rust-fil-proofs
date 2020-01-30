@@ -6,7 +6,7 @@ use crate::error::{Error, Result};
 use crate::hasher::types::{PoseidonEngine, PoseidonWidth, POSEIDON_CONSTANTS};
 use crate::hasher::{Domain, HashFunction, Hasher};
 use anyhow::ensure;
-use bellperson::gadgets::{boolean, num};
+use bellperson::gadgets::num;
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
 use fil_sapling_crypto::jubjub::JubjubEngine;
@@ -228,24 +228,26 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
         shared_hash(data)
     }
 
+    fn hash2<S: AsRef<[u8]>, U: AsRef<[u8]>>(a: S, b: U) -> PoseidonDomain {
+        let preimage = [
+            <Bls12 as ff::ScalarEngine>::Fr::from_repr(PoseidonDomain::from_slice(a.as_ref()).0)
+                .unwrap(),
+            <Bls12 as ff::ScalarEngine>::Fr::from_repr(PoseidonDomain::from_slice(b.as_ref()).0)
+                .unwrap(),
+        ];
+        shared_hash_frs(&preimage)
+    }
+
     fn hash_leaf_circuit<E: JubjubEngine + PoseidonEngine, CS: ConstraintSystem<E>>(
         cs: CS,
+        _params: &E::Params,
+        _height: Option<usize>,
         left: &num::AllocatedNum<E>,
         right: &num::AllocatedNum<E>,
-        _height: usize,
-        _params: &E::Params,
     ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError> {
         let preimage = vec![left.clone(), right.clone()];
 
         poseidon_hash::<CS, E, PoseidonWidth>(cs, preimage, E::PARAMETERS(MERKLE_TREE_ARITY))
-    }
-
-    fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
-        _cs: CS,
-        _bits: &[boolean::Boolean],
-        _params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
-        unimplemented!();
     }
 }
 

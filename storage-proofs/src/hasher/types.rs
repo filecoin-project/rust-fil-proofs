@@ -74,6 +74,8 @@ pub trait HashFunction<T: Domain>:
 {
     fn hash(data: &[u8]) -> T;
 
+    fn hash2<S: AsRef<[u8]>, U: AsRef<[u8]>>(a: S, b: U) -> T;
+
     fn hash_leaf(data: &dyn LightHashable<Self>) -> T {
         let mut a = Self::default();
         data.hash(&mut a);
@@ -89,10 +91,10 @@ pub trait HashFunction<T: Domain>:
 
     fn hash_leaf_circuit<E: JubjubEngine + PoseidonEngine, CS: ConstraintSystem<E>>(
         mut cs: CS,
+        params: &E::Params,
+        height: Option<usize>,
         left: &num::AllocatedNum<E>,
         right: &num::AllocatedNum<E>,
-        height: usize,
-        params: &E::Params,
     ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
         let left_bits = left.to_bits_le(cs.namespace(|| "left num into bits"))?;
         let right_bits = right.to_bits_le(cs.namespace(|| "right num into bits"))?;
@@ -104,17 +106,11 @@ pub trait HashFunction<T: Domain>:
         _cs: CS,
         _left: &[boolean::Boolean],
         _right: &[boolean::Boolean],
-        _height: usize,
+        _height: Option<usize>,
         _params: &E::Params,
     ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
         unimplemented!();
     }
-
-    fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
-        cs: CS,
-        bits: &[boolean::Boolean],
-        params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError>;
 }
 
 pub trait Hasher: Clone + ::std::fmt::Debug + Eq + Default + Send + Sync {
