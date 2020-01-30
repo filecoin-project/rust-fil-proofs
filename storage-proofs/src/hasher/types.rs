@@ -1,13 +1,34 @@
+use lazy_static::lazy_static;
+
 use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
 use merkletree::merkle::Element;
-use paired::bls12_381::{Fr, FrRepr};
+use neptune::poseidon::PoseidonConstants;
+use paired::bls12_381::{Bls12, Fr, FrRepr};
+use paired::Engine;
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 
 use crate::error::Result;
+
+lazy_static! {
+    pub static ref POSEIDON_CONSTANTS: PoseidonConstants<Bls12> =
+        PoseidonConstants::new(MERKLE_TREE_ARITY);
+}
+
+pub trait PoseidonEngine: Engine {
+    #[allow(non_snake_case)]
+    fn PARAMETERS(arity: usize) -> &'static PoseidonConstants<Self>;
+}
+
+impl PoseidonEngine for Bls12 {
+    fn PARAMETERS(arity: usize) -> &'static PoseidonConstants<Self> {
+        assert_eq!(arity, MERKLE_TREE_ARITY);
+        &*POSEIDON_CONSTANTS
+    }
+}
 
 /// Arity to use for hasher implementations (Poseidon) which are specialized at compile time.
 pub const MERKLE_TREE_ARITY: usize = 2;
@@ -57,7 +78,7 @@ pub trait HashFunction<T: Domain>:
         a.hash()
     }
 
-    fn hash_leaf_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+    fn hash_leaf_circuit<E: JubjubEngine + PoseidonEngine, CS: ConstraintSystem<E>>(
         mut cs: CS,
         left: &num::AllocatedNum<E>,
         right: &num::AllocatedNum<E>,

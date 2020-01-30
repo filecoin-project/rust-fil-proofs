@@ -3,24 +3,19 @@ use std::hash::Hasher as StdHasher;
 use super::types::MERKLE_TREE_ARITY;
 use crate::crypto::{create_label, sloth};
 use crate::error::{Error, Result};
+use crate::hasher::types::{PoseidonEngine, POSEIDON_CONSTANTS};
 use crate::hasher::{Domain, HashFunction, Hasher};
 use anyhow::ensure;
 use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
 use fil_sapling_crypto::jubjub::JubjubEngine;
-use lazy_static::lazy_static;
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
-use neptune::circuit::poseidon_hash_simple;
-use neptune::poseidon::{Poseidon, PoseidonConstants};
+use neptune::circuit::poseidon_hash;
+use neptune::poseidon::Poseidon;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 use serde::{Deserialize, Serialize};
-
-lazy_static! {
-    pub static ref POSEIDON_CONSTANTS: PoseidonConstants<Bls12> =
-        PoseidonConstants::new(MERKLE_TREE_ARITY);
-}
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PoseidonHasher {}
@@ -233,7 +228,7 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
         shared_hash(data)
     }
 
-    fn hash_leaf_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+    fn hash_leaf_circuit<E: JubjubEngine + PoseidonEngine, CS: ConstraintSystem<E>>(
         cs: CS,
         left: &num::AllocatedNum<E>,
         right: &num::AllocatedNum<E>,
@@ -242,7 +237,7 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
     ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError> {
         let preimage = vec![left.clone(), right.clone()];
 
-        poseidon_hash_simple::<CS, E>(cs, preimage)
+        poseidon_hash::<CS, E>(cs, preimage, E::PARAMETERS(MERKLE_TREE_ARITY))
     }
 
     fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(

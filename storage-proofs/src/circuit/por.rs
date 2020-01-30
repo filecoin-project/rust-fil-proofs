@@ -12,6 +12,7 @@ use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph::graph_height;
 use crate::error::Result;
+use crate::hasher::types::PoseidonEngine;
 use crate::hasher::{HashFunction, Hasher};
 use crate::merklepor::MerklePoR;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
@@ -128,7 +129,7 @@ where
     }
 }
 
-impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for PoRCircuit<'a, E, H> {
+impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> Circuit<E> for PoRCircuit<'a, E, H> {
     /// # Public Inputs
     ///
     /// This circuit expects the following public inputs.
@@ -212,7 +213,7 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for PoRCircuit<'a, E, H> {
     }
 }
 
-impl<'a, E: JubjubEngine, H: Hasher> PoRCircuit<'a, E, H> {
+impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> PoRCircuit<'a, E, H> {
     pub fn synthesize<CS>(
         mut cs: CS,
         params: &E::Params,

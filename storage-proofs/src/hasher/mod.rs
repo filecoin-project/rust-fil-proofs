@@ -3,7 +3,7 @@ pub mod pedersen;
 pub mod poseidon;
 pub mod sha256;
 
-mod types;
+pub mod types;
 
 pub use self::types::{Domain, HashFunction, Hasher};
 
