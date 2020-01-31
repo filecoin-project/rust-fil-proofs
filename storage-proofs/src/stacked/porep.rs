@@ -1,13 +1,10 @@
 use crate::error::Result;
 use crate::hasher::Hasher;
-use crate::measurements::measure_op;
-use crate::measurements::Operation::PorepCommitTime;
-use crate::porep::PoRep;
+use crate::porep::{Data, PoRep};
 use crate::stacked::{
     params::{PersistentAux, PublicParams, Tau, TemporaryAux, Tree},
     proof::StackedDrg,
 };
-use crate::util::NODE_SIZE;
 
 use merkletree::store::StoreConfig;
 
@@ -18,13 +15,18 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
     fn replicate(
         pp: &'a PublicParams<H>,
         replica_id: &H::Domain,
-        data: &mut [u8],
+        data: Data<'a>,
         data_tree: Option<Tree<G>>,
         config: Option<StoreConfig>,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
-        let (tau, p_aux, t_aux) = measure_op(PorepCommitTime, || {
-            Self::transform_and_replicate_layers(pp, replica_id, data, data_tree, config)
-        })?;
+        let (tau, p_aux, t_aux) = Self::transform_and_replicate_layers(
+            &pp.graph,
+            &pp.layer_challenges,
+            replica_id,
+            data,
+            data_tree,
+            config.expect("Missing config"),
+        )?;
 
         Ok((tau, (p_aux, t_aux)))
     }
@@ -37,22 +39,24 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
     ) -> Result<Vec<u8>> {
         let mut data = data.to_vec();
 
-        Self::extract_all_windows(pp, replica_id, &mut data, config)?;
+        Self::extract_and_invert_transform_layers(
+            &pp.graph,
+            &pp.layer_challenges,
+            replica_id,
+            &mut data,
+            config.expect("Missing store config"),
+        )?;
 
         Ok(data)
     }
 
     fn extract(
-        pp: &PublicParams<H>,
-        replica_id: &<H as Hasher>::Domain,
-        data: &[u8],
-        node: usize,
-        config: Option<StoreConfig>,
+        _pp: &PublicParams<H>,
+        _replica_id: &<H as Hasher>::Domain,
+        _data: &[u8],
+        _node: usize,
+        _config: Option<StoreConfig>,
     ) -> Result<Vec<u8>> {
-        let start = node * NODE_SIZE;
-        let num_bytes = NODE_SIZE;
-        let node = Self::extract_range(pp, replica_id, &data, config, start, num_bytes)?;
-
-        Ok(node)
+        unimplemented!();
     }
 }

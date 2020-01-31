@@ -3,7 +3,7 @@ use sha2::{Digest, Sha256};
 use std::hash::Hasher as StdHasher;
 
 use anyhow::ensure;
-use bellperson::gadgets::{boolean, multipack, num, sha256::sha256 as sha256_circuit};
+use bellperson::gadgets::{boolean, num, sha256::sha256 as sha256_circuit};
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::{Field, PrimeField, PrimeFieldRepr};
 use fil_sapling_crypto::jubjub::JubjubEngine;
@@ -221,26 +221,14 @@ impl HashFunction<Sha256Domain> for Sha256Function {
         bits: &[boolean::Boolean],
         _params: &E::Params,
     ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
-        let alloc_bits = sha256_circuit(cs.namespace(|| "hash"), &bits[..])?;
-        let fr = if alloc_bits[0].get_value().is_some() {
-            let be_bits = alloc_bits
-                .iter()
-                .map(|v| v.get_value().ok_or(SynthesisError::AssignmentMissing))
-                .collect::<std::result::Result<Vec<bool>, SynthesisError>>()?;
-
-            let le_bits = be_bits
-                .chunks(8)
-                .flat_map(|chunk| chunk.iter().rev())
-                .copied()
-                .take(E::Fr::CAPACITY as usize)
-                .collect::<Vec<bool>>();
-
-            Ok(multipack::compute_multipacking::<E>(&le_bits)[0])
-        } else {
-            Err(SynthesisError::AssignmentMissing)
-        };
-
-        num::AllocatedNum::<E>::alloc(cs.namespace(|| "result_num"), || fr)
+        let be_bits = sha256_circuit(cs.namespace(|| "hash"), &bits[..])?;
+        let le_bits = be_bits
+            .chunks(8)
+            .flat_map(|chunk| chunk.iter().rev())
+            .cloned()
+            .take(E::Fr::CAPACITY as usize)
+            .collect::<Vec<_>>();
+        crate::circuit::multipack::pack_bits(cs.namespace(|| "pack_le"), &le_bits)
     }
 }
 
@@ -332,7 +320,7 @@ mod tests {
         .expect("key derivation function failed");
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_constraints(), 45386);
+        assert_eq!(cs.num_constraints(), 45_387);
 
         let expected: Fr = Sha256Function::default()
             .node(left_fr.into(), right_fr.into(), height)

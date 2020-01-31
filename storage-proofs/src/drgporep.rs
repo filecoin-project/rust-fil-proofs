@@ -14,7 +14,7 @@ use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
-use crate::porep::{self, PoRep};
+use crate::porep::{self, Data, PoRep};
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::util::{data_at_node, data_at_node_offset, NODE_SIZE};
 
@@ -434,13 +434,13 @@ where
     fn replicate(
         pp: &Self::PublicParams,
         replica_id: &H::Domain,
-        data: &mut [u8],
+        mut data: Data<'a>,
         data_tree: Option<MerkleTree<H::Domain, H::Function>>,
         _config: Option<StoreConfig>,
     ) -> Result<(porep::Tau<H::Domain>, porep::ProverAux<H>)> {
         let tree_d = match data_tree {
             Some(tree) => tree,
-            None => pp.graph.merkle_tree(data)?,
+            None => pp.graph.merkle_tree(data.as_ref())?,
         };
 
         let graph = &pp.graph;
@@ -454,18 +454,18 @@ where
         let mut parents = vec![0; graph.degree()];
         for node in 0..graph.size() {
             graph.parents(node, &mut parents)?;
-            let key = graph.create_key(replica_id, node, &parents, data, None)?;
+            let key = graph.create_key(replica_id, node, &parents, data.as_ref(), None)?;
             let start = data_at_node_offset(node);
             let end = start + NODE_SIZE;
 
-            let node_data = H::Domain::try_from_bytes(&data[start..end])?;
+            let node_data = H::Domain::try_from_bytes(&data.as_ref()[start..end])?;
             let encoded = H::sloth_encode(key.as_ref(), &node_data)?;
 
-            encoded.write_bytes(&mut data[start..end])?;
+            encoded.write_bytes(&mut data.as_mut()[start..end])?;
         }
 
         let comm_d = tree_d.root();
-        let tree_r = pp.graph.merkle_tree(data)?;
+        let tree_r = pp.graph.merkle_tree(data.as_ref())?;
         let comm_r = tree_r.root();
 
         Ok((
@@ -645,7 +645,7 @@ mod tests {
         DrgPoRep::replicate(
             &pp,
             &replica_id,
-            &mut mmapped_data_copy,
+            (mmapped_data_copy.as_mut()).into(),
             None,
             Some(config.clone()),
         )
@@ -720,7 +720,7 @@ mod tests {
         DrgPoRep::replicate(
             &pp,
             &replica_id,
-            &mut mmapped_data_copy,
+            (mmapped_data_copy.as_mut()).into(),
             None,
             Some(config.clone()),
         )
@@ -817,7 +817,7 @@ mod tests {
             let (tau, aux) = DrgPoRep::<H, _>::replicate(
                 &pp,
                 &replica_id,
-                &mut mmapped_data_copy,
+                (mmapped_data_copy.as_mut()).into(),
                 None,
                 Some(config),
             )

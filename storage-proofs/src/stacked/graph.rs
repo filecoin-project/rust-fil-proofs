@@ -2,79 +2,67 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
-use anyhow::{ensure, Context};
+use anyhow::ensure;
 use lazy_static::lazy_static;
 use log::info;
+use rayon::prelude::*;
 
 use crate::crypto::feistel::{self, FeistelPrecomputed};
-use crate::drgraph::{BucketGraph, Graph, BASE_DEGREE};
+use crate::drgraph::{BucketGraph, Graph};
 use crate::error::Result;
 use crate::hasher::Hasher;
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::settings;
+use crate::util::{data_at_node_offset, NODE_SIZE};
 
 /// The expansion degree used for Stacked Graphs.
 pub const EXP_DEGREE: usize = 8;
+const FEISTEL_KEYS: [feistel::Index; 4] = [1, 2, 3, 4];
 
 lazy_static! {
-    // This parents cache is currently used for the *expanded parents only*, generated
-    // by the expensive Feistel operations in the Stacked, it doesn't contain the
-    // "base" (in the `Graph` terminology) parents, which are cheaper to compute.
-    // It is indexed by the `Graph.identifier`, to ensure that the right cache is used.
-    static ref PARENT_CACHE: Arc<RwLock<HashMap<String, ParentCache>>> = Arc::new(RwLock::new(HashMap::new()));
+    // This parents cache is currently used for the full parents set.
+    // It is indexed by the `sector size`, to ensure that the right cache is used.
+    static ref PARENT_CACHE: Arc<RwLock<HashMap<u64, ParentCache>>> = Arc::new(RwLock::new(HashMap::new()));
 }
 
 // StackedGraph will hold two different (but related) `ParentCache`,
 #[derive(Debug, Clone)]
 struct ParentCache {
-    cache: Vec<Option<Vec<u32>>>,
-    // Keep the size of the cache outside the lock to be easily accessible.
-    cache_entries: u32,
+    cache: Vec<Vec<u32>>,
 }
 
 impl ParentCache {
-    pub fn new(cache_entries: u32) -> Self {
-        ParentCache {
-            cache: vec![None; cache_entries as usize],
-            cache_entries,
-        }
-    }
-
-    pub fn contains(&self, node: u32) -> Result<bool> {
-        ensure!(
-            node < self.cache_entries,
-            "Cache does not contain node ({}).",
-            node
-        );
-        Ok(self.cache[node as usize].is_some())
-    }
-
-    pub fn read<F, T>(&self, node: u32, mut cb: F) -> Result<T>
+    pub fn new<H, G>(cache_entries: u32, graph: &StackedGraph<H, G>) -> Result<Self>
     where
-        F: FnMut(Option<&Vec<u32>>) -> Result<T>,
+        H: Hasher,
+        G: Graph<H> + ParameterSetMetadata + Send + Sync,
     {
-        ensure!(
-            node < self.cache_entries,
-            "Cache does not contain node ({}).",
-            node
-        );
-        Ok(cb(self.cache[node as usize].as_ref())?)
+        info!("filling parents cache");
+        let mut cache = vec![vec![0u32; graph.degree()]; cache_entries as usize];
+        let base_degree = graph.base_graph().degree();
+        let exp_degree = graph.expansion_degree();
+
+        cache
+            .par_iter_mut()
+            .enumerate()
+            .try_for_each(|(node, entry)| -> Result<()> {
+                graph
+                    .base_graph()
+                    .parents(node, &mut entry[..base_degree])?;
+                graph.generate_expanded_parents(
+                    node,
+                    &mut entry[base_degree..base_degree + exp_degree],
+                );
+                Ok(())
+            })?;
+
+        info!("cache filled");
+
+        Ok(ParentCache { cache })
     }
 
-    pub fn write(&mut self, node: u32, parents: Vec<u32>) -> Result<()> {
-        ensure!(
-            node < self.cache_entries,
-            "Cache does not contain node ({}).",
-            node
-        );
-
-        let old_value = std::mem::replace(&mut self.cache[node as usize], Some(parents));
-
-        debug_assert_eq!(old_value, None);
-        // We shouldn't be rewriting entries (with most likely the same values),
-        // this would be a clear indication of a bug.
-
-        Ok(())
+    pub fn read(&self, node: u32) -> &[u32] {
+        &self.cache[node as usize]
     }
 }
 
@@ -97,7 +85,7 @@ pub type StackedBucketGraph<H> = StackedGraph<H, BucketGraph<H>>;
 impl<H, G> StackedGraph<H, G>
 where
     H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
+    G: Graph<H> + ParameterSetMetadata + Sync + Send,
 {
     pub fn new(
         base_graph: Option<G>,
@@ -106,11 +94,6 @@ where
         expansion_degree: usize,
         seed: [u8; 28],
     ) -> Result<Self> {
-        if !cfg!(feature = "unchecked-degrees") {
-            ensure!(base_degree == BASE_DEGREE, "Invalid base degree");
-            ensure!(expansion_degree == EXP_DEGREE, "Invalid expansion degree");
-        }
-
         let use_cache = settings::SETTINGS.lock().unwrap().maximize_caching;
 
         let base_graph = match base_graph {
@@ -132,21 +115,71 @@ where
         };
 
         if use_cache {
-            info!("using parents cache of unlimited size",);
-            ensure!(
-                nodes <= std::u32::MAX as usize,
-                "Number of nodes must be less than 2^32."
-            );
+            info!("using parents cache of unlimited size");
+            ensure!(nodes <= std::u32::MAX as usize, "too many nodes");
 
-            if !PARENT_CACHE.read().unwrap().contains_key(&res.id) {
+            if !PARENT_CACHE
+                .read()
+                .unwrap()
+                .contains_key(&res.sector_size())
+            {
                 PARENT_CACHE
                     .write()
                     .unwrap()
-                    .insert(res.id.clone(), ParentCache::new(nodes as u32));
+                    .insert(res.sector_size(), ParentCache::new(nodes as u32, &res)?);
             }
         }
 
         Ok(res)
+    }
+
+    pub fn copy_parents_data(
+        &self,
+        node: u32,
+        base_data: &[u8],
+        exp_data: Option<&Vec<u8>>,
+        target: &mut [u8],
+    ) {
+        if self.use_cache {
+            let cache_lock = PARENT_CACHE.read().unwrap();
+            let cache = cache_lock
+                .get(&self.sector_size())
+                .expect("Invalid cache construction");
+            let cache_parents = cache.read(node as u32);
+            self.copy_parents_data_inner(&cache_parents, base_data, exp_data, target);
+        } else {
+            let mut cache_parents = vec![0u32; self.degree()];
+            self.parents(node as usize, &mut cache_parents).unwrap();
+            self.copy_parents_data_inner(&cache_parents, base_data, exp_data, target);
+        }
+    }
+
+    fn copy_parents_data_inner(
+        &self,
+        cache_parents: &[u32],
+        base_data: &[u8],
+        exp_data: Option<&Vec<u8>>,
+        target: &mut [u8],
+    ) {
+        let base_degree = self.base_graph().degree();
+
+        // Base parents
+        for (i, parent) in cache_parents.iter().enumerate().take(base_degree) {
+            let node_off = data_at_node_offset(*parent as usize);
+            let off = i * NODE_SIZE;
+            target[off..off + NODE_SIZE]
+                .copy_from_slice(&base_data[node_off..node_off + NODE_SIZE]);
+        }
+
+        // Expander parents
+        if let Some(ref parents_data) = exp_data {
+            for (i, parent) in cache_parents.iter().enumerate().skip(base_degree) {
+                let node_off = data_at_node_offset(*parent as usize);
+                let off = i * NODE_SIZE;
+                target[off..off + NODE_SIZE]
+                    .copy_from_slice(&parents_data[node_off..node_off + NODE_SIZE]);
+            }
+        }
     }
 }
 
@@ -167,7 +200,7 @@ where
 impl<H, G> Graph<H> for StackedGraph<H, G>
 where
     H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
+    G: Graph<H> + ParameterSetMetadata + Sync + Send,
 {
     type Key = Vec<u8>;
 
@@ -180,17 +213,27 @@ where
     }
 
     #[inline]
-    fn parents(&self, raw_node: usize, parents: &mut [u32]) -> Result<()> {
-        self.base_parents(raw_node, &mut parents[..self.base_graph().degree()])?;
+    fn parents(&self, node: usize, parents: &mut [u32]) -> Result<()> {
+        if !self.use_cache {
+            self.base_parents(node, &mut parents[..self.base_graph().degree()])?;
 
-        // expanded_parents takes raw_node
-        self.expanded_parents(
-            raw_node,
-            &mut parents
-                [self.base_graph().degree()..self.base_graph().degree() + self.expansion_degree()],
-        )?;
+            // expanded_parents takes raw_node
+            self.expanded_parents(
+                node,
+                &mut parents[self.base_graph().degree()
+                    ..self.base_graph().degree() + self.expansion_degree()],
+            );
+            return Ok(());
+        }
 
-        debug_assert!(parents.len() == self.degree());
+        // Read from the cache
+        let cache_lock = PARENT_CACHE.read().unwrap();
+        let cache = cache_lock
+            .get(&self.sector_size())
+            .expect("Invalid cache construction");
+
+        let cache_parents = cache.read(node as u32);
+        parents.copy_from_slice(cache_parents);
         Ok(())
     }
 
@@ -222,7 +265,7 @@ where
 impl<'a, H, G> StackedGraph<H, G>
 where
     H: Hasher,
-    G: Graph<H> + ParameterSetMetadata,
+    G: Graph<H> + ParameterSetMetadata + Sync + Send,
 {
     /// Assign one parent to `node` using a Chung's construction with a reversible
     /// permutation function from a Feistel cipher (controlled by `invert_permutation`).
@@ -252,33 +295,17 @@ where
         // with indexes bigger than 2 (if in the `forward` direction, smaller than 2 if the
         // inverse), will be removed.
         let a = (node * self.expansion_degree) as feistel::Index + i as feistel::Index;
-        let feistel_keys = &[1, 2, 3, 4];
 
         let transformed = feistel::permute(
             self.size() as feistel::Index * self.expansion_degree as feistel::Index,
             a,
-            feistel_keys,
+            &FEISTEL_KEYS,
             self.feistel_precomputed,
         );
         transformed as u32 / self.expansion_degree as u32
         // Collapse the output in the matrix search space to the row of the corresponding
         // node (losing the column information, that will be regenerated later when calling
         // back this function in the `reversed` direction).
-    }
-
-    // Read the `node` entry in the parents cache (which may not exist) for
-    // the current direction set in the graph and return a copy of it (or
-    // `None` to signal a cache miss).
-    fn contains_parents_cache(&self, node: usize) -> Result<bool> {
-        if self.use_cache {
-            if let Some(ref cache) = PARENT_CACHE.read().unwrap().get(&self.id) {
-                cache.contains(node as u32)
-            } else {
-                Ok(false)
-            }
-        } else {
-            Ok(false)
-        }
     }
 
     fn generate_expanded_parents(&self, node: usize, expanded_parents: &mut [u32]) {
@@ -297,55 +324,50 @@ where
         Self::new(None, nodes, base_degree, expansion_degree, seed)
     }
 
-    pub fn base_graph(&self) -> G {
-        self.base_graph.clone()
+    pub fn base_graph(&self) -> &G {
+        &self.base_graph
     }
 
     pub fn expansion_degree(&self) -> usize {
         self.expansion_degree
     }
 
-    pub fn base_parents(&self, raw_node: usize, parents: &mut [u32]) -> Result<()> {
-        self.base_graph().parents(raw_node, parents)
+    pub fn base_parents(&self, node: usize, parents: &mut [u32]) -> Result<()> {
+        if !self.use_cache {
+            // No cache usage, generate on demand.
+            return self.base_graph().parents(node, parents);
+        }
+
+        // Read from the cache
+        let cache_lock = PARENT_CACHE.read().unwrap();
+        let cache = cache_lock
+            .get(&self.sector_size())
+            .expect("Invalid cache construction");
+
+        let cache_parents = cache.read(node as u32);
+        parents.copy_from_slice(&cache_parents[..self.base_graph().degree()]);
+
+        Ok(())
     }
 
     /// Assign `self.expansion_degree` parents to `node` using an invertible permutation
     /// that is applied one way for the forward layers and one way for the reversed
     /// ones.
     #[inline]
-    pub fn expanded_parents(&self, node: usize, parents: &mut [u32]) -> Result<()> {
+    pub fn expanded_parents(&self, node: usize, parents: &mut [u32]) {
         if !self.use_cache {
             // No cache usage, generate on demand.
-            self.generate_expanded_parents(node, parents);
-            return Ok(());
+            return self.generate_expanded_parents(node, parents);
         }
 
-        // Check if we need to fill the cache.
-        if !self.contains_parents_cache(node)? {
-            // Cache is empty so we need to generate the parents.
-            let mut parents = vec![0; self.expansion_degree()];
-            self.generate_expanded_parents(node, &mut parents);
-
-            // Store the newly generated cached value.
-            let mut cache_lock = PARENT_CACHE.write().unwrap();
-            let cache = cache_lock
-                .get_mut(&self.id)
-                .context("Invalid cache construction")?;
-            cache.write(node as u32, parents)?;
-        }
-
-        // We made sure the cache is filled above, now we can return the value.
+        // Read from the cache
         let cache_lock = PARENT_CACHE.read().unwrap();
         let cache = cache_lock
-            .get(&self.id)
-            .context("Invalid cache construction")?;
+            .get(&self.sector_size())
+            .expect("Invalid cache construction");
 
-        cache.read(node as u32, |cache_parents| -> Result<_> {
-            parents.copy_from_slice(cache_parents.context("Invalid cache construction")?);
-            Ok(())
-        })?;
-
-        Ok(())
+        let cache_parents = cache.read(node as u32);
+        parents.copy_from_slice(&cache_parents[self.base_graph().degree()..]);
     }
 }
 

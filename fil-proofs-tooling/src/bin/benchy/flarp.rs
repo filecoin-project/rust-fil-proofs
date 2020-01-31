@@ -1,19 +1,21 @@
 use std::sync::atomic::Ordering::Relaxed;
 
 use bellperson::Circuit;
+use fil_proofs_tooling::{measure, Metadata};
+use filecoin_proofs::constants::POREP_PARTITIONS;
+use filecoin_proofs::parameters::post_public_params;
+use filecoin_proofs::types::PaddedBytesAmount;
+use filecoin_proofs::types::*;
+use filecoin_proofs::types::{PoStConfig, SectorSize};
+use filecoin_proofs::{
+    generate_candidates, generate_post, seal_commit_phase1, seal_commit_phase2, verify_post,
+    PoRepConfig,
+};
 use log::info;
 use paired::bls12_381::Bls12;
 use rand::{rngs::OsRng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use serde::{Deserialize, Serialize};
-
-use fil_proofs_tooling::{measure, Metadata};
-use filecoin_proofs::constants::{SectorInfo, DEFAULT_POREP_PROOF_PARTITIONS};
-use filecoin_proofs::parameters::post_public_params;
-use filecoin_proofs::types::PaddedBytesAmount;
-use filecoin_proofs::types::*;
-use filecoin_proofs::types::{PoStConfig, SectorSize};
-use filecoin_proofs::{generate_candidates, generate_post, seal_commit, verify_post, PoRepConfig};
 use storage_proofs::circuit::bench::BenchCS;
 use storage_proofs::circuit::election_post::{ElectionPoStCircuit, ElectionPoStCompound};
 use storage_proofs::compound_proof::CompoundProof;
@@ -27,31 +29,10 @@ use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::proof::ProofScheme;
 
 use crate::shared::{create_replicas, CHALLENGE_COUNT, PROVER_ID, RANDOMNESS, TICKET_BYTES};
-use std::sync::atomic::Ordering;
 
 const SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
 ];
-
-/*
-echo '{
-    "drg_parents": 6,
-    "expander_parents": 8,
-    "graph_parents": 8,
-    "porep_challenges": 50,
-    "porep_partitions": 10,
-    "post_challenged_nodes": 1,
-    "post_challenges": 20,
-    "sector_size_bytes": 1024,
-    "stacked_layers": 4,
-    "window_size_bytes": 512,
-    "wrapper_parents_all": 8
-}' > config.json
-
-cat config.json \
-    | jq 'def round: . + 0.5 | floor; . | { "porep_partitions": .["porep_partitions"] | round, { "post_challenged_nodes": .["post_challenged_nodes"] | round, "post_challenges": .["post_challenges"] | round, "window_size_bytes": .["window_size_bytes"] | round, "sector_size_bytes": .["sector_size_bytes"] | round, "drg_parents": .["drg_parents"] | round, "expander_parents": .["expander_parents"] | round, "graph_parents": .["graph_parents"] | round, "porep_challenges": .["porep_challenges"] | round, "stacked_layers": .["stacked_layers"] | round, "wrapper_parents": .["wrapper_parents"] | round, "wrapper_parents_all": .["wrapper_parents_all"] | round }'\
-    | RUST_BACKTRACE=1 RUST_LOG=info cargo run --release --package fil-proofs-tooling --bin=benchy  -- flarp
-*/
 
 #[derive(Default, Debug, Serialize)]
 pub struct FlarpReport {
@@ -61,8 +42,8 @@ pub struct FlarpReport {
 
 #[derive(Default, Debug, Deserialize, Serialize)]
 pub struct FlarpInputs {
-    window_size_bytes: u64,
-    sector_size_bytes: u64,
+    /// The size of sector.
+    sector_size: String,
     drg_parents: u64,
     expander_parents: u64,
     porep_challenges: u64,
@@ -70,7 +51,14 @@ pub struct FlarpInputs {
     post_challenges: u64,
     post_challenged_nodes: u64,
     stacked_layers: u64,
-    wrapper_parents_all: u64,
+    /// How many sectors should be created in parallel.
+    num_sectors: u64,
+}
+
+impl FlarpInputs {
+    pub fn sector_size_bytes(&self) -> u64 {
+        bytefmt::parse(&self.sector_size).unwrap()
+    }
 }
 
 #[derive(Default, Debug, Serialize)]
@@ -178,76 +166,74 @@ fn augment_with_op_measurements(mut output: &mut FlarpOutputs) {
 }
 
 fn configure_global_config(inputs: &FlarpInputs) {
-    let mut x = filecoin_proofs::constants::DEFAULT_WINDOWS
+    filecoin_proofs::constants::LAYERS.store(inputs.stacked_layers, Relaxed);
+    filecoin_proofs::constants::POREP_PARTITIONS
         .write()
-        .expect("failed to acquire write lock on DEFAULT_WINDOWS");
-
-    x.insert(
-        inputs.sector_size_bytes,
-        SectorInfo {
-            size: inputs.sector_size_bytes,        // 1024
-            window_size: inputs.window_size_bytes, // 512
-        },
-    );
-
-    filecoin_proofs::constants::LAYERS.store(inputs.stacked_layers, Relaxed); // 4
-    filecoin_proofs::constants::DEFAULT_POREP_PROOF_PARTITIONS
-        .store(inputs.porep_partitions, Relaxed); // 10
-    filecoin_proofs::constants::WRAPPER_EXP_DEGREE.store(inputs.wrapper_parents_all, Relaxed); // 8
-    filecoin_proofs::constants::WINDOW_EXP_DEGREE.store(inputs.expander_parents, Relaxed); // 8
-    filecoin_proofs::constants::WINDOW_DRG_DEGREE.store(inputs.drg_parents, Relaxed); // 6
-    filecoin_proofs::constants::POREP_WINDOW_MINIMUM_CHALLENGES
-        .store(inputs.porep_challenges, Relaxed); // 50
-    filecoin_proofs::constants::POREP_WRAPPER_MINIMUM_CHALLENGES
-        .store(inputs.porep_challenges, Relaxed); // 50
+        .unwrap()
+        .insert(inputs.sector_size_bytes(), inputs.porep_partitions);
+    filecoin_proofs::constants::EXP_DEGREE.store(inputs.expander_parents, Relaxed);
+    filecoin_proofs::constants::DRG_DEGREE.store(inputs.drg_parents, Relaxed);
+    filecoin_proofs::constants::POREP_MINIMUM_CHALLENGES
+        .write()
+        .unwrap()
+        .insert(inputs.sector_size_bytes(), inputs.porep_challenges);
 }
 
 pub fn run(
     inputs: FlarpInputs,
     skip_seal_proof: bool,
     skip_post_proof: bool,
+    only_replicate: bool,
 ) -> Metadata<FlarpReport> {
     configure_global_config(&inputs);
-    generate_params(&inputs);
 
     let mut outputs = FlarpOutputs::default();
 
-    let sector_size = SectorSize(inputs.sector_size_bytes);
+    let sector_size = SectorSize(inputs.sector_size_bytes());
 
-    // One replica for each type of proof as they cannot be shared between several proofs
-    let num_replicas = [!skip_seal_proof, !skip_post_proof]
-        .iter()
-        .filter(|&x| *x)
-        .count();
-    let (cfg, mut created) = create_replicas(sector_size, num_replicas);
+    assert!(inputs.num_sectors > 0, "Missing num_sectors");
+
+    let (cfg, created, replica_measurement) =
+        create_replicas(sector_size, inputs.num_sectors as usize);
+
+    if only_replicate {
+        augment_with_op_measurements(&mut outputs);
+        return Metadata::wrap(FlarpReport { inputs, outputs })
+            .expect("failed to retrieve metadata");
+    }
+
+    generate_params(&inputs);
 
     if !skip_seal_proof {
-        let (sector_id, replica_info) = created.pop().expect("no replicas left");
+        for (value, (sector_id, replica_info)) in
+            replica_measurement.return_value.iter().zip(created.iter())
+        {
+            let measured = measure(|| {
+                let phase1_output = seal_commit_phase1(
+                    cfg,
+                    &replica_info.private_replica_info.cache_dir_path(),
+                    PROVER_ID,
+                    *sector_id,
+                    TICKET_BYTES,
+                    RANDOMNESS,
+                    value.clone(),
+                    &replica_info.piece_info,
+                )?;
+                seal_commit_phase2(cfg, phase1_output, PROVER_ID, *sector_id)
+            })
+            .expect("failed to prove sector");
 
-        let measured = measure(|| {
-            seal_commit(
-                cfg,
-                replica_info.private_replica_info.cache_dir_path(),
-                PROVER_ID,
-                sector_id,
-                TICKET_BYTES,
-                RANDOMNESS,
-                replica_info.measurement.return_value,
-                &replica_info.piece_info,
-            )
-        })
-        .expect("failed to prove sector");
-
-        outputs.porep_proof_gen_cpu_time_ms = measured.cpu_time.as_millis() as u64;
-        outputs.porep_proof_gen_wall_time_ms = measured.wall_time.as_millis() as u64;
+            outputs.porep_proof_gen_cpu_time_ms += measured.cpu_time.as_millis() as u64;
+            outputs.porep_proof_gen_wall_time_ms += measured.wall_time.as_millis() as u64;
+        }
     }
 
     if !skip_post_proof {
-        let (sector_id, replica_info) = created.pop().expect("no replicas left");
+        let (sector_id, replica_info) = &created[0];
 
         // replica_info is moved into the PoSt scope
-        let encoding_wall_time_ms = replica_info.measurement.wall_time.as_millis() as u64;
-        let encoding_cpu_time_ms = replica_info.measurement.cpu_time.as_millis() as u64;
+        let encoding_wall_time_ms = replica_measurement.wall_time.as_millis() as u64;
+        let encoding_cpu_time_ms = replica_measurement.cpu_time.as_millis() as u64;
 
         // Measure PoSt generation and verification.
         let post_config = PoStConfig {
@@ -261,7 +247,7 @@ pub fn run(
                 post_config,
                 &RANDOMNESS,
                 CHALLENGE_COUNT,
-                &vec![(sector_id, replica_info.private_replica_info.clone())]
+                &vec![(*sector_id, replica_info.private_replica_info.clone())]
                     .into_iter()
                     .collect(),
                 PROVER_ID,
@@ -278,7 +264,7 @@ pub fn run(
             generate_post(
                 post_config,
                 &RANDOMNESS,
-                &vec![(sector_id, replica_info.private_replica_info.clone())]
+                &vec![(*sector_id, replica_info.private_replica_info.clone())]
                     .into_iter()
                     .collect(),
                 candidates.clone(),
@@ -290,13 +276,15 @@ pub fn run(
         outputs.post_proof_gen_cpu_time_ms = gen_post_measurement.cpu_time.as_millis() as u64;
         outputs.post_proof_gen_wall_time_ms = gen_post_measurement.wall_time.as_millis() as u64;
 
+        let post_proof = &gen_post_measurement.return_value;
+
         let verify_post_measurement = measure(|| {
             verify_post(
                 post_config,
                 &RANDOMNESS,
                 CHALLENGE_COUNT,
-                &gen_post_measurement.return_value,
-                &vec![(sector_id, replica_info.public_replica_info.clone())]
+                post_proof,
+                &vec![(*sector_id, replica_info.public_replica_info.clone())]
                     .into_iter()
                     .collect(),
                 &candidates.clone(),
@@ -357,28 +345,21 @@ fn run_measure_circuits(i: &FlarpInputs) -> CircuitOutputs {
 fn measure_porep_circuit(i: &FlarpInputs) -> usize {
     use storage_proofs::circuit::stacked::StackedCompound;
     use storage_proofs::drgraph::new_seed;
-    use storage_proofs::stacked::{SetupParams, StackedConfig, StackedDrg};
+    use storage_proofs::stacked::{LayerChallenges, SetupParams, StackedDrg};
 
     let layers = i.stacked_layers as usize;
-    let window_challenge_count = i.porep_challenges as usize;
-    let wrapper_challenge_count = i.porep_challenges as usize;
-    let window_drg_degree = i.drg_parents as usize;
-    let window_expansion_degree = i.expander_parents as usize;
-    let wrapper_expansion_degree = i.wrapper_parents_all as usize;
-    let window_size_nodes = (i.window_size_bytes / 32) as usize;
-    let nodes = (i.sector_size_bytes / 32) as usize;
-
-    let config =
-        StackedConfig::new(layers, window_challenge_count, wrapper_challenge_count).unwrap();
+    let challenge_count = i.porep_challenges as usize;
+    let drg_degree = i.drg_parents as usize;
+    let expansion_degree = i.expander_parents as usize;
+    let nodes = (i.sector_size_bytes() / 32) as usize;
+    let layer_challenges = LayerChallenges::new(layers, challenge_count);
 
     let sp = SetupParams {
         nodes,
-        window_drg_degree,
-        window_expansion_degree,
-        wrapper_expansion_degree,
+        degree: drg_degree,
+        expansion_degree,
         seed: new_seed(),
-        config,
-        window_size_nodes,
+        layer_challenges,
     };
 
     let pp = StackedDrg::<PedersenHasher, Sha256Hasher>::setup(&sp).unwrap();
@@ -395,7 +376,7 @@ fn measure_post_circuit(i: &FlarpInputs) -> usize {
     use storage_proofs::election_post;
 
     let post_config = PoStConfig {
-        sector_size: SectorSize(i.sector_size_bytes),
+        sector_size: SectorSize(i.sector_size_bytes()),
         challenge_count: i.post_challenges as usize,
         challenged_nodes: i.post_challenged_nodes as usize,
     };
@@ -462,15 +443,27 @@ fn measure_kdf_circuit(i: &FlarpInputs) -> usize {
 }
 
 fn generate_params(i: &FlarpInputs) {
-    info!("generating params: porep");
+    let sector_size = SectorSize(i.sector_size_bytes());
+    let partitions = PoRepProofPartitions(
+        *POREP_PARTITIONS
+            .read()
+            .unwrap()
+            .get(&i.sector_size_bytes())
+            .expect("unknown sector size"),
+    );
+    info!(
+        "generating params: porep: (size: {:?}, partitions: {:?})",
+        &sector_size, &partitions
+    );
+
     cache_porep_params(PoRepConfig {
-        sector_size: SectorSize(i.sector_size_bytes),
-        partitions: PoRepProofPartitions(DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed)),
+        sector_size,
+        partitions,
     });
 
     info!("generating params: post");
     cache_post_params(PoStConfig {
-        sector_size: SectorSize(i.sector_size_bytes),
+        sector_size,
         challenge_count: i.post_challenges as usize,
         challenged_nodes: i.post_challenged_nodes as usize,
     });

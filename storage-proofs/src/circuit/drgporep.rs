@@ -508,6 +508,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::circuit::metric::MetricCS;
     use crate::circuit::test::*;
     use crate::compound_proof;
     use crate::drgporep;
@@ -516,9 +517,11 @@ mod tests {
     use crate::hasher::{Blake2sHasher, Hasher, PedersenHasher};
     use crate::porep::PoRep;
     use crate::proof::{NoRequirements, ProofScheme};
+    use crate::stacked::CacheKey;
     use crate::util::data_at_node;
 
     use ff::Field;
+    use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
@@ -558,8 +561,6 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        use crate::stacked::CacheKey;
-        use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
         let cache_dir = tempfile::tempdir().unwrap();
         let config = StoreConfig::new(
             cache_dir.path(),
@@ -572,7 +573,7 @@ mod tests {
         let (tau, aux) = drgporep::DrgPoRep::<PedersenHasher, _>::replicate(
             &pp,
             &replica_id.into(),
-            data.as_mut_slice(),
+            (&mut data[..]).into(),
             None,
             Some(config),
         )
@@ -772,8 +773,6 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        use crate::stacked::CacheKey;
-        use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
         let cache_dir = tempfile::tempdir().unwrap();
         let config = StoreConfig::new(
             cache_dir.path(),
@@ -784,7 +783,7 @@ mod tests {
         let (tau, aux) = drgporep::DrgPoRep::<H, _>::replicate(
             &public_params.vanilla_params,
             &replica_id.into(),
-            data.as_mut_slice(),
+            (&mut data[..]).into(),
             None,
             Some(config),
         )
@@ -838,13 +837,12 @@ mod tests {
                 &public_params.vanilla_params,
             );
 
-            let mut cs_blank = TestConstraintSystem::new();
+            let mut cs_blank = MetricCS::new();
             blank_circuit
                 .synthesize(&mut cs_blank)
                 .expect("failed to synthesize blank circuit");
 
             let a = cs_blank.pretty_print_list();
-
             let b = cs.pretty_print_list();
 
             for (i, (a, b)) in a.chunks(100).zip(b.chunks(100)).enumerate() {

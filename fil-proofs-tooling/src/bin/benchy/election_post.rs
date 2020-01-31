@@ -1,18 +1,16 @@
 use std::collections::BTreeMap;
 use std::io::{stdout, Seek, SeekFrom, Write};
-use std::sync::atomic::Ordering;
 
 use fil_proofs_tooling::{measure, Metadata};
-use filecoin_proofs::constants::{
-    DEFAULT_POREP_PROOF_PARTITIONS, POST_CHALLENGED_NODES, POST_CHALLENGE_COUNT,
-};
+use filecoin_proofs::constants::{POREP_PARTITIONS, POST_CHALLENGED_NODES, POST_CHALLENGE_COUNT};
 use filecoin_proofs::types::{
     PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, SectorSize,
     UnpaddedBytesAmount,
 };
 use filecoin_proofs::{
-    add_piece, generate_candidates, generate_piece_commitment, generate_post, seal_commit,
-    seal_pre_commit, verify_post, PrivateReplicaInfo, PublicReplicaInfo,
+    add_piece, generate_candidates, generate_piece_commitment, generate_post, seal_commit_phase1,
+    seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2, verify_post,
+    PrivateReplicaInfo, PublicReplicaInfo,
 };
 use log::info;
 use serde::Serialize;
@@ -99,12 +97,18 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
     // Replicate the staged sector, write the replica file to `sealed_path`.
     let porep_config = PoRepConfig {
         sector_size: SectorSize(sector_size as u64),
-        partitions: PoRepProofPartitions(DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed)),
+        partitions: PoRepProofPartitions(
+            *POREP_PARTITIONS
+                .read()
+                .unwrap()
+                .get(&(sector_size as u64))
+                .unwrap(),
+        ),
     };
     let cache_dir = tempfile::tempdir().unwrap();
     let sector_id = SectorId::from(SECTOR_ID);
 
-    let seal_pre_commit_output = seal_pre_commit(
+    let phase1_output = seal_pre_commit_phase1(
         porep_config,
         cache_dir.path(),
         staged_file.path(),
@@ -114,11 +118,17 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
         TICKET_BYTES,
         &piece_infos,
     )?;
+    let seal_pre_commit_output = seal_pre_commit_phase2(
+        porep_config,
+        phase1_output,
+        cache_dir.path(),
+        sealed_file.path(),
+    )?;
 
     let seed = [0u8; 32];
     let comm_r = seal_pre_commit_output.comm_r;
 
-    let _seal_commit_output = seal_commit(
+    let phase1_output = seal_commit_phase1(
         porep_config,
         cache_dir.path(),
         PROVER_ID,
@@ -128,6 +138,9 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
         seal_pre_commit_output,
         &piece_infos,
     )?;
+
+    let _seal_commit_output =
+        seal_commit_phase2(porep_config, phase1_output, PROVER_ID, sector_id)?;
 
     // Store the replica's private and publicly facing info for proving and verifying respectively.
     let mut pub_replica_info: BTreeMap<SectorId, PublicReplicaInfo> = BTreeMap::new();

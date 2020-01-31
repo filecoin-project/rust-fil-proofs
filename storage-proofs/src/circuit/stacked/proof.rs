@@ -8,24 +8,26 @@ use paired::bls12_381::{Bls12, Fr};
 use crate::circuit::por::PoRCompound;
 use crate::circuit::{
     constraint,
-    stacked::{
-        hash::hash3,
-        params::{Proof, WindowProof, WrapperProof},
-    },
+    stacked::{hash::hash2, params::Proof},
 };
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
-use crate::drgraph::{Graph, BASE_DEGREE};
+use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::fr32::fr_into_bytes;
 use crate::hasher::Hasher;
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
-use crate::stacked::{StackedDrg, EXP_DEGREE, OPENINGS_PER_WINDOW};
+use crate::stacked::StackedDrg;
 use crate::util::bytes_into_boolean_vec_be;
 
 /// Stacked DRG based Proof of Replication.
+///
+/// # Fields
+///
+/// * `params` - parameters for the curve
+///
 pub struct StackedCircuit<'a, E: JubjubEngine, H: 'static + Hasher, G: 'static + Hasher> {
     params: &'a E::Params,
     public_params: <StackedDrg<'a, H, G> as ProofScheme<'a>>::PublicParams,
@@ -33,10 +35,10 @@ pub struct StackedCircuit<'a, E: JubjubEngine, H: 'static + Hasher, G: 'static +
     comm_d: Option<G::Domain>,
     comm_r: Option<H::Domain>,
     comm_r_last: Option<H::Domain>,
-    comm_q: Option<H::Domain>,
     comm_c: Option<H::Domain>,
-    window_proofs: Vec<WindowProof<H, G>>,
-    wrapper_proofs: Vec<WrapperProof<H>>,
+
+    // one proof per challenge
+    proofs: Vec<Proof<H, G>>,
 
     _e: PhantomData<E>,
 }
@@ -54,30 +56,22 @@ impl<'a, H: Hasher, G: 'static + Hasher> StackedCircuit<'a, Bls12, H, G> {
         replica_id: Option<H::Domain>,
         comm_d: Option<G::Domain>,
         comm_r: Option<H::Domain>,
-        proof: Proof<H, G>,
+        comm_r_last: Option<H::Domain>,
+        comm_c: Option<H::Domain>,
+        proofs: Vec<Proof<H, G>>,
     ) -> Result<(), SynthesisError>
     where
         CS: ConstraintSystem<Bls12>,
     {
-        let Proof {
-            window_proofs,
-            wrapper_proofs,
-            comm_c,
-            comm_r_last,
-            comm_q,
-        } = proof;
-
         let circuit = StackedCircuit::<'a, Bls12, H, G> {
             params,
             public_params,
             replica_id,
             comm_d,
             comm_r,
-            comm_c: comm_c.map(Into::into),
-            comm_q: comm_q.map(Into::into),
-            comm_r_last: comm_r_last.map(Into::into),
-            window_proofs,
-            wrapper_proofs,
+            comm_r_last,
+            comm_c,
+            proofs,
             _e: PhantomData,
         };
 
@@ -89,27 +83,16 @@ impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let StackedCircuit {
             public_params,
+            proofs,
             replica_id,
-            comm_d,
             comm_r,
-            window_proofs,
-            wrapper_proofs,
+            comm_d,
             comm_r_last,
             comm_c,
-            comm_q,
             ..
         } = self;
 
-        let graph = &public_params.window_graph;
         let params = &self.params;
-        let layers = public_params.config.layers();
-
-        // In most cases (the exception being during testing) we want to ensure that the base and
-        // expansion degrees are the optimal values.
-        if !cfg!(feature = "unchecked-degrees") {
-            assert_eq!(graph.base_graph().degree(), BASE_DEGREE);
-            assert_eq!(graph.expansion_degree(), EXP_DEGREE);
-        }
 
         // Allocate replica_id
         let replica_id_fr: Option<Fr> = replica_id.map(Into::into);
@@ -161,53 +144,32 @@ impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G
         // Allocate comm_c as booleans
         let comm_c_bits = comm_c_num.to_bits_le(cs.namespace(|| "comm_c_bits"))?;
 
-        // Allocate comm_q as Fr
-        let comm_q_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_q"), || {
-            comm_q
-                .map(Into::into)
-                .ok_or_else(|| SynthesisError::AssignmentMissing)
-        })?;
-
-        // Allocate comm_q as booleans
-        let comm_q_bits = comm_q_num.to_bits_le(cs.namespace(|| "comm_q_bits"))?;
-
-        // Verify comm_r = H(comm_c || comm_q || comm_r_last)
+        // Verify comm_r = H(comm_c || comm_r_last)
         {
-            let hash_num = hash3(
-                cs.namespace(|| "H_comm_c_comm_q_comm_r_last"),
+            let hash_num = hash2(
+                cs.namespace(|| "H_comm_c_comm_r_last"),
                 params,
                 &comm_c_bits,
-                &comm_q_bits,
                 &comm_r_last_bits,
             )?;
 
             // Check actual equality
             constraint::equal(
                 cs,
-                || "enforce comm_r = H(comm_c || comm_q || comm_r_last)",
+                || "enforce comm_r = H(comm_c || comm_r_last)",
                 &comm_r_num,
                 &hash_num,
             );
         }
 
-        for (i, proof) in window_proofs.into_iter().enumerate() {
+        for (i, proof) in proofs.into_iter().enumerate() {
             proof.synthesize(
-                &mut cs.namespace(|| format!("window_proof_challenge_{}", i)),
+                &mut cs.namespace(|| format!("challenge_{}", i)),
                 &self.params,
+                public_params.layer_challenges.layers(),
                 &comm_d_num,
                 &comm_c_num,
-                &comm_q_num,
-                &replica_id_bits,
-                layers,
-            )?;
-        }
-
-        for (i, proof) in wrapper_proofs.into_iter().enumerate() {
-            proof.synthesize(
-                &mut cs.namespace(|| format!("wrapper_proof_challenge_{}", i)),
-                &self.params,
-                &comm_q_num,
-                comm_r_last_num.clone(),
+                &comm_r_last_num,
                 &replica_id_bits,
             )?;
         }
@@ -229,19 +191,6 @@ impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata> CacheableParameter
     }
 }
 
-fn generate_inclusion_inputs<H: Hasher>(
-    por_params: &merklepor::PublicParams,
-    k: Option<usize>,
-    c: usize,
-) -> Result<Vec<Fr>> {
-    let pub_inputs = merklepor::PublicInputs::<H::Domain> {
-        challenge: c,
-        commitment: None,
-    };
-
-    PoRCompound::<H>::generate_public_inputs(&pub_inputs, por_params, k)
-}
-
 impl<'a, H: 'static + Hasher, G: 'static + Hasher>
     CompoundProof<'a, Bls12, StackedDrg<'a, H, G>, StackedCircuit<'a, Bls12, H, G>>
     for StackedCompound
@@ -251,8 +200,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         pub_params: &<StackedDrg<H, G> as ProofScheme>::PublicParams,
         k: Option<usize>,
     ) -> Result<Vec<Fr>> {
-        let window_graph = &pub_params.window_graph;
-        let wrapper_graph = &pub_params.wrapper_graph;
+        let graph = &pub_params.graph;
 
         let mut inputs = Vec::new();
 
@@ -262,94 +210,49 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         let comm_r = pub_in.tau.as_ref().expect("missing tau").comm_r;
         inputs.push(comm_r.into());
 
-        let window_por_params = merklepor::MerklePoR::<H>::setup(&merklepor::SetupParams {
-            leaves: window_graph.size(),
+        let por_params = merklepor::MerklePoR::<H>::setup(&merklepor::SetupParams {
+            leaves: graph.size(),
             private: true,
-        })
-        .expect("setup failed");
+        })?;
 
-        let wrapper_por_params = merklepor::MerklePoR::<H>::setup(&merklepor::SetupParams {
-            leaves: wrapper_graph.size(),
-            private: true,
-        })
-        .expect("setup failed");
+        let generate_inclusion_inputs = |c: usize| {
+            let pub_inputs = merklepor::PublicInputs::<H::Domain> {
+                challenge: c,
+                commitment: None,
+            };
 
-        let window_challenges =
-            pub_in.all_challenges(&pub_params.config.window_challenges, window_graph.size(), k)?;
+            PoRCompound::<H>::generate_public_inputs(&pub_inputs, &por_params, k)
+        };
 
-        for challenge in window_challenges.into_iter() {
-            for window_index in 0..OPENINGS_PER_WINDOW {
-                // comm_d_proof
-                let c = window_index * pub_params.window_size_nodes() + challenge;
-                inputs.extend(generate_inclusion_inputs::<G>(&wrapper_por_params, k, c)?);
-            }
+        let all_challenges = pub_in.challenges(&pub_params.layer_challenges, graph.size(), k);
 
-            for window_index in 0..OPENINGS_PER_WINDOW {
-                // comm_q_proof
-                let c = window_index * pub_params.window_size_nodes() + challenge;
-                inputs.extend(generate_inclusion_inputs::<H>(&wrapper_por_params, k, c)?);
-            }
+        for challenge in all_challenges.into_iter() {
+            // comm_d_proof
+            inputs.extend(generate_inclusion_inputs(challenge)?);
 
             // replica column proof
             {
                 // c_x
-                inputs.extend(generate_inclusion_inputs::<H>(
-                    &window_por_params,
-                    k,
-                    challenge,
-                )?);
+                inputs.extend(generate_inclusion_inputs(challenge)?);
 
                 // drg parents
-                let mut drg_parents = vec![0; window_graph.base_graph().degree()];
-                window_graph
-                    .base_graph()
-                    .parents(challenge, &mut drg_parents)?;
+                let mut drg_parents = vec![0; graph.base_graph().degree()];
+                graph.base_graph().parents(challenge, &mut drg_parents)?;
 
                 for parent in drg_parents.into_iter() {
-                    inputs.extend(generate_inclusion_inputs::<H>(
-                        &window_por_params,
-                        k,
-                        parent as usize,
-                    )?);
+                    inputs.extend(generate_inclusion_inputs(parent as usize)?);
                 }
 
                 // exp parents
-                let mut exp_parents = vec![0; window_graph.expansion_degree()];
-                window_graph.expanded_parents(challenge, &mut exp_parents)?;
+                let mut exp_parents = vec![0; graph.expansion_degree()];
+                graph.expanded_parents(challenge, &mut exp_parents);
                 for parent in exp_parents.into_iter() {
-                    inputs.extend(generate_inclusion_inputs::<H>(
-                        &window_por_params,
-                        k,
-                        parent as usize,
-                    )?);
+                    inputs.extend(generate_inclusion_inputs(parent as usize)?);
                 }
             }
-        }
 
-        let wrapper_challenges = pub_in.all_challenges(
-            &pub_params.config.wrapper_challenges,
-            wrapper_graph.size(),
-            k,
-        )?;
-
-        for challenge in wrapper_challenges.into_iter() {
-            // comm_r_last
-            inputs.extend(generate_inclusion_inputs::<H>(
-                &wrapper_por_params,
-                k,
-                challenge,
-            )?);
-
-            // comm_q_parents
-            let mut exp_parents = vec![0; wrapper_graph.expansion_degree()];
-            wrapper_graph.expanded_parents(challenge, &mut exp_parents)?;
-            for parent in exp_parents.into_iter() {
-                inputs.extend(generate_inclusion_inputs::<H>(
-                    &wrapper_por_params,
-                    k,
-                    parent as usize,
-                )?);
-            }
+            // final replica layer
+            inputs.extend(generate_inclusion_inputs(challenge)?);
         }
 
         Ok(inputs)
@@ -361,27 +264,29 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         vanilla_proof: &'b <StackedDrg<H, G> as ProofScheme>::Proof,
         public_params: &'b <StackedDrg<H, G> as ProofScheme>::PublicParams,
     ) -> Result<StackedCircuit<'a, Bls12, H, G>> {
+        assert!(
+            !vanilla_proof.is_empty(),
+            "Cannot create a circuit with no vanilla proofs"
+        );
+
+        let comm_r_last = *vanilla_proof[0].comm_r_last();
+        let comm_c = *vanilla_proof[0].comm_c();
+
+        // ensure consistency
+        assert!(vanilla_proof
+            .iter()
+            .all(|p| p.comm_r_last() == &comm_r_last));
+        assert!(vanilla_proof.iter().all(|p| p.comm_c() == &comm_c));
+
         Ok(StackedCircuit {
             params: &*JJ_PARAMS,
             public_params: public_params.clone(),
             replica_id: Some(public_inputs.replica_id),
             comm_d: public_inputs.tau.as_ref().map(|t| t.comm_d),
             comm_r: public_inputs.tau.as_ref().map(|t| t.comm_r),
-            comm_r_last: Some(vanilla_proof.comm_r_last),
-            comm_c: Some(vanilla_proof.comm_c),
-            comm_q: Some(vanilla_proof.comm_q),
-            window_proofs: vanilla_proof
-                .window_proofs
-                .iter()
-                .cloned()
-                .map(Into::into)
-                .collect(),
-            wrapper_proofs: vanilla_proof
-                .wrapper_proofs
-                .iter()
-                .cloned()
-                .map(Into::into)
-                .collect(),
+            comm_r_last: Some(comm_r_last),
+            comm_c: Some(comm_c),
+            proofs: vanilla_proof.iter().cloned().map(|p| p.into()).collect(),
             _e: PhantomData,
         })
     }
@@ -389,30 +294,17 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
     fn blank_circuit(
         public_params: &<StackedDrg<H, G> as ProofScheme>::PublicParams,
     ) -> StackedCircuit<'a, Bls12, H, G> {
-        let window_proofs = (0..public_params
-            .config
-            .window_challenges
-            .challenges_count_all())
-            .map(|challenge_index| WindowProof::empty(public_params, challenge_index))
-            .collect();
-        let wrapper_proofs = (0..public_params
-            .config
-            .wrapper_challenges
-            .challenges_count_all())
-            .map(|challenge_index| WrapperProof::empty(public_params, challenge_index))
-            .collect();
-
         StackedCircuit {
             params: &*JJ_PARAMS,
             public_params: public_params.clone(),
             replica_id: None,
             comm_d: None,
             comm_r: None,
-            window_proofs,
-            wrapper_proofs,
-            comm_c: None,
-            comm_q: None,
             comm_r_last: None,
+            comm_c: None,
+            proofs: (0..public_params.layer_challenges.challenges_count_all())
+                .map(|_challenge_index| Proof::empty(public_params))
+                .collect(),
             _e: PhantomData,
         }
     }
@@ -421,7 +313,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::circuit::bench::*;
     use crate::circuit::metric::*;
     use crate::circuit::test::*;
     use crate::compound_proof;
@@ -431,7 +322,8 @@ mod tests {
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
     use crate::stacked::{
-        ChallengeRequirements, PrivateInputs, PublicInputs, SetupParams, StackedConfig, EXP_DEGREE,
+        ChallengeRequirements, LayerChallenges, PrivateInputs, PublicInputs, SetupParams,
+        EXP_DEGREE,
     };
 
     use ff::Field;
@@ -439,16 +331,12 @@ mod tests {
     use rand_xorshift::XorShiftRng;
 
     #[test]
-    fn stacked_input_circuit() {
-        // femme::pretty::Logger::new()
-        //     .start(log::LevelFilter::Trace)
-        //     .ok();
-
-        let nodes = 8 * 32;
+    fn stacked_input_circuit_with_bls12_381() {
+        let nodes = 8;
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
         let num_layers = 2;
-        let config = StackedConfig::new(num_layers, 2, 3).unwrap();
+        let layer_challenges = LayerChallenges::new(num_layers, 1);
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
@@ -460,12 +348,10 @@ mod tests {
         let mut data_copy = data.clone();
         let sp = SetupParams {
             nodes,
-            window_drg_degree: degree,
-            window_expansion_degree: expansion_degree,
-            wrapper_expansion_degree: expansion_degree,
+            degree,
+            expansion_degree,
             seed: new_seed(),
-            config: config.clone(),
-            window_size_nodes: nodes / 2,
+            layer_challenges: layer_challenges.clone(),
         };
 
         // MT for original data is always named tree-d, and it will be
@@ -483,7 +369,7 @@ mod tests {
         let (tau, (p_aux, t_aux)) = StackedDrg::<PedersenHasher, Sha256Hasher>::replicate(
             &pp,
             &replica_id.into(),
-            data_copy.as_mut_slice(),
+            (&mut data_copy[..]).into(),
             None,
             Some(config),
         )
@@ -523,8 +409,8 @@ mod tests {
 
         assert!(proofs_are_valid);
 
-        let expected_inputs = 64;
-        let expected_constraints = 2_411_074;
+        let expected_inputs = 20;
+        let expected_constraints = 2_480_655;
 
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.
@@ -536,28 +422,7 @@ mod tests {
                 &proofs[0],
                 &pp,
             )
-            .expect("failed to create circuit")
-            .synthesize(&mut cs.namespace(|| "stacked drgporep"))
-            .expect("failed to synthesize circuit");
-
-            assert_eq!(cs.num_inputs(), expected_inputs, "wrong number of inputs");
-            assert_eq!(
-                cs.num_constraints(),
-                expected_constraints,
-                "wrong number of constraints"
-            );
-        }
-
-        {
-            // Verify that BenchCS returns the same metrics as TestConstraintSystem.
-            let mut cs = BenchCS::<Bls12>::new();
-
-            StackedCompound::circuit(
-                &pub_inputs,
-                <StackedCircuit<Bls12, PedersenHasher, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
-                &proofs[0],
-                &pp,
-            ).unwrap()
+            .expect("circuit failed")
             .synthesize(&mut cs.namespace(|| "stacked drgporep"))
             .expect("failed to synthesize circuit");
 
@@ -576,7 +441,7 @@ mod tests {
             &proofs[0],
             &pp,
         )
-        .expect("failed to create circuit")
+        .expect("circuit failed")
         .synthesize(&mut cs.namespace(|| "stacked drgporep"))
         .expect("failed to synthesize circuit");
 
@@ -595,19 +460,20 @@ mod tests {
             StackedDrg<PedersenHasher, Sha256Hasher>,
             _,
         >>::generate_public_inputs(&pub_inputs, &pp, None)
-        .unwrap();
+        .expect("failed to generate public inputs");
         let expected_inputs = cs.get_inputs();
+
+        for ((input, label), generated_input) in
+            expected_inputs.iter().skip(1).zip(generated_inputs.iter())
+        {
+            assert_eq!(input, generated_input, "{}", label);
+        }
 
         assert_eq!(
             generated_inputs.len(),
             expected_inputs.len() - 1,
             "inputs are not the same length"
         );
-        for ((input, label), generated_input) in
-            expected_inputs.iter().skip(1).zip(generated_inputs.iter())
-        {
-            assert_eq!(input, generated_input, "{}", label);
-        }
     }
 
     #[test]
@@ -616,18 +482,18 @@ mod tests {
         stacked_test_compound::<PedersenHasher>();
     }
 
-    // #[test]
-    // #[ignore] // Slow test – run only when compiled for release.
-    // fn test_stacked_compound_sha256() {
-    //     stacked_test_compound::<Sha256Hasher>();
-    // }
+    #[test]
+    #[ignore] // Slow test – run only when compiled for release.
+    fn test_stacked_compound_blake2s() {
+        stacked_test_compound::<Sha256Hasher>();
+    }
 
     fn stacked_test_compound<H: 'static + Hasher>() {
-        let nodes = 8 * 32;
+        let nodes = 8;
         let degree = 3;
         let expansion_degree = 2;
         let num_layers = 2;
-        let config = StackedConfig::new(num_layers, 3, 2).unwrap();
+        let layer_challenges = LayerChallenges::new(num_layers, 3);
         let partition_count = 1;
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
@@ -642,12 +508,10 @@ mod tests {
         let setup_params = compound_proof::SetupParams {
             vanilla_params: SetupParams {
                 nodes,
-                window_drg_degree: degree,
-                window_expansion_degree: expansion_degree,
-                wrapper_expansion_degree: expansion_degree,
+                degree,
+                expansion_degree,
                 seed: new_seed(),
-                config: config.clone(),
-                window_size_nodes: nodes / 2,
+                layer_challenges: layer_challenges.clone(),
             },
             partitions: Some(partition_count),
         };
@@ -667,7 +531,7 @@ mod tests {
         let (tau, (p_aux, t_aux)) = StackedDrg::replicate(
             &public_params.vanilla_params,
             &replica_id.into(),
-            data_copy.as_mut_slice(),
+            (&mut data_copy[..]).into(),
             None,
             Some(config),
         )
@@ -723,7 +587,7 @@ mod tests {
                 _,
             >>::blank_circuit(&public_params.vanilla_params);
 
-            let mut cs_blank = TestConstraintSystem::new();
+            let mut cs_blank = MetricCS::new();
             blank_circuit
                 .synthesize(&mut cs_blank)
                 .expect("failed to synthesize");

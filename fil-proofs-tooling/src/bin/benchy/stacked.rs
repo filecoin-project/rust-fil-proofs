@@ -22,7 +22,8 @@ use storage_proofs::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher, Sha2
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::stacked::{
-    self, CacheKey, ChallengeRequirements, StackedConfig, StackedDrg, TemporaryAuxCache, EXP_DEGREE,
+    self, CacheKey, ChallengeRequirements, LayerChallenges, StackedDrg, TemporaryAuxCache,
+    EXP_DEGREE,
 };
 use tempfile::TempDir;
 
@@ -46,7 +47,7 @@ fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> anyhow::Result<MmapM
 }
 
 fn dump_proof_bytes<H: Hasher>(
-    all_partition_proofs: &[stacked::Proof<H, Sha256Hasher>],
+    all_partition_proofs: &[Vec<stacked::Proof<H, Sha256Hasher>>],
 ) -> anyhow::Result<()> {
     let file = OpenOptions::new()
         .write(true)
@@ -62,10 +63,9 @@ fn dump_proof_bytes<H: Hasher>(
 #[derive(Clone, Debug)]
 struct Params {
     samples: usize,
-    window_size_nodes: usize,
     data_size: usize,
-    config: StackedConfig,
     partitions: usize,
+    layer_challenges: LayerChallenges,
     circuit: bool,
     groth: bool,
     bench: bool,
@@ -83,10 +83,9 @@ impl From<Params> for Inputs {
             partitions: p.partitions,
             hasher: p.hasher.clone(),
             samples: p.samples,
-            layers: p.config.layers(),
-            partition_challenges: p.config.window_challenges.challenges_count_all(),
-            total_challenges: p.config.window_challenges.challenges_count_all() * p.partitions,
-            config: p.config,
+            layers: p.layer_challenges.layers(),
+            partition_challenges: p.layer_challenges.challenges_count_all() / p.partitions,
+            total_challenges: p.layer_challenges.challenges_count_all(),
         }
     }
 }
@@ -108,7 +107,6 @@ where
         let Params {
             samples,
             data_size,
-            config,
             partitions,
             circuit,
             groth,
@@ -117,7 +115,7 @@ where
             use_tmp,
             dump_proofs,
             bench_only,
-            window_size_nodes,
+            layer_challenges,
             ..
         } = &params;
 
@@ -138,12 +136,10 @@ where
         let replica_id = H::Domain::random(rng);
         let sp = stacked::SetupParams {
             nodes,
-            window_drg_degree: BASE_DEGREE,
-            window_expansion_degree: EXP_DEGREE,
-            wrapper_expansion_degree: EXP_DEGREE,
+            degree: BASE_DEGREE,
+            expansion_degree: EXP_DEGREE,
             seed: new_seed(),
-            config: config.clone(),
-            window_size_nodes: *window_size_nodes,
+            layer_challenges: layer_challenges.clone(),
         };
 
         let pp = StackedDrg::<H, Sha256Hasher>::setup(&sp)?;
@@ -162,7 +158,7 @@ where
                 let (tau, (p_aux, t_aux)) = StackedDrg::<H, Sha256Hasher>::replicate(
                     &pp,
                     &replica_id,
-                    &mut data,
+                    (&mut data[..]).into(),
                     None,
                     Some(store_config.clone()),
                 )?;
@@ -436,7 +432,6 @@ struct Inputs {
     layers: usize,
     partition_challenges: usize,
     total_challenges: usize,
-    config: StackedConfig,
 }
 
 #[derive(Serialize, Default)]
@@ -482,9 +477,7 @@ impl Report {
 pub struct RunOpts {
     pub bench: bool,
     pub bench_only: bool,
-    pub window_size_nodes: usize,
-    pub window_challenges: usize,
-    pub wrapper_challenges: usize,
+    pub challenges: usize,
     pub circuit: bool,
     pub dump: bool,
     pub extract: bool,
@@ -498,12 +491,12 @@ pub struct RunOpts {
 }
 
 pub fn run(opts: RunOpts) -> anyhow::Result<()> {
-    let config = StackedConfig::new(opts.layers, opts.window_challenges, opts.wrapper_challenges)?;
+    let layer_challenges = LayerChallenges::new(opts.layers, opts.challenges);
 
     let params = Params {
-        config,
         data_size: opts.size * 1024,
         partitions: opts.partitions,
+        layer_challenges,
         use_tmp: !opts.no_tmp,
         dump_proofs: opts.dump,
         groth: opts.groth,
@@ -512,7 +505,6 @@ pub fn run(opts: RunOpts) -> anyhow::Result<()> {
         circuit: opts.circuit,
         extract: opts.extract,
         hasher: opts.hasher,
-        window_size_nodes: opts.window_size_nodes,
         samples: 5,
     };
 

@@ -43,38 +43,26 @@ impl<E: Engine> Default for BenchCS<E> {
 impl<E: Engine> ConstraintSystem<E> for BenchCS<E> {
     type Root = Self;
 
-    fn alloc<F, A, AR>(&mut self, _: A, f: F) -> Result<Variable, SynthesisError>
+    fn alloc<F, A, AR>(&mut self, _: A, _f: F) -> Result<Variable, SynthesisError>
     where
         F: FnOnce() -> Result<E::Fr, SynthesisError>,
         A: FnOnce() -> AR,
         AR: Into<String>,
     {
-        let r = match f() {
-            Ok(_) => 1,
-            Err(SynthesisError::AssignmentMissing) => 1,
-            Err(err) => {
-                return Err(err);
-            }
-        };
-        self.aux += r;
+        // don't invoke f, we just count
+        self.aux += 1;
 
         Ok(Variable::new_unchecked(Index::Aux(self.aux - 1)))
     }
 
-    fn alloc_input<F, A, AR>(&mut self, _: A, f: F) -> Result<Variable, SynthesisError>
+    fn alloc_input<F, A, AR>(&mut self, _: A, _f: F) -> Result<Variable, SynthesisError>
     where
         F: FnOnce() -> Result<E::Fr, SynthesisError>,
         A: FnOnce() -> AR,
         AR: Into<String>,
     {
-        let r = match f() {
-            Ok(_) => 1,
-            Err(SynthesisError::AssignmentMissing) => 1,
-            Err(err) => {
-                return Err(err);
-            }
-        };
-        self.inputs += r;
+        // don't invoke f, we just count
+        self.inputs += 1;
 
         Ok(Variable::new_unchecked(Index::Input(self.inputs - 1)))
     }

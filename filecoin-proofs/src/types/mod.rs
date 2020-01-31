@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::hasher::Hasher;
 use storage_proofs::merkle::MerkleTree;
@@ -29,15 +30,40 @@ pub type ProverId = [u8; 32];
 pub type Ticket = [u8; 32];
 pub type Tree = MerkleTree<PedersenDomain, <PedersenHasher as Hasher>::Function>;
 
-// This is intentionally *not* deriving `Clone` as the commit deletes some of the data, hence it
-// shouldn't be re-used across commits
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SealPreCommitOutput {
     pub comm_r: Commitment,
     pub comm_d: Commitment,
 }
 
+pub type VanillaSealProof = storage_proofs::stacked::Proof<
+    crate::constants::DefaultTreeHasher,
+    crate::constants::DefaultPieceHasher,
+>;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SealCommitPhase1Output {
+    pub vanilla_proofs: Vec<Vec<VanillaSealProof>>,
+    pub comm_r: Commitment,
+    pub comm_d: Commitment,
+    pub replica_id: <crate::constants::DefaultTreeHasher as Hasher>::Domain,
+    pub seed: Ticket,
+    pub ticket: Ticket,
+}
+
 #[derive(Clone, Debug)]
 pub struct SealCommitOutput {
     pub proof: Vec<u8>,
+}
+
+pub type Labels = storage_proofs::stacked::Labels<crate::constants::DefaultTreeHasher>;
+pub type DataTree = storage_proofs::stacked::Tree<crate::constants::DefaultPieceHasher>;
+pub use merkletree::store::StoreConfig;
+
+#[derive(Debug)]
+pub struct SealPreCommitPhase1Output {
+    pub labels: Labels,
+    pub config: StoreConfig,
+    pub comm_d: Commitment,
+    pub data_tree: DataTree,
 }
