@@ -1,10 +1,7 @@
 use bellperson::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
-use ff::{Field, PrimeField};
 use paired::Engine;
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
 use std::collections::HashMap;
-use std::fmt::Write;
 
 #[derive(Clone, Copy)]
 struct OrderedVariable(Variable);
@@ -69,81 +66,27 @@ impl<E: Engine> MetricCS<E> {
         self.inputs.len()
     }
 
-    pub fn pretty_print(&self) -> String {
-        let mut s = String::new();
+    pub fn pretty_print_list(&self) -> Vec<String> {
+        let mut result = Vec::new();
 
         for input in &self.inputs {
-            writeln!(s, "INPUT {}", input).unwrap();
+            result.push(format!("INPUT {}", input));
         }
-        write!(s, "\n\n").unwrap();
         for aux in &self.aux {
-            writeln!(s, "AUX {}", aux).unwrap();
+            result.push(format!("AUX {}", aux));
         }
-        write!(s, "\n\n").unwrap();
-
-        let negone = {
-            let mut tmp = E::Fr::one();
-            tmp.negate();
-            tmp
-        };
-
-        let powers_of_two = (0..E::Fr::NUM_BITS)
-            .map(|i| E::Fr::from_str("2").unwrap().pow(&[u64::from(i)]))
-            .collect::<Vec<_>>();
-
-        let _pp = |s: &mut String, lc: &LinearCombination<E>| {
-            write!(s, "(").unwrap();
-            let mut is_first = true;
-            for (var, coeff) in proc_lc::<E>(lc.as_ref()) {
-                if coeff == negone {
-                    write!(s, " - ").unwrap();
-                } else if !is_first {
-                    write!(s, " + ").unwrap();
-                }
-                is_first = false;
-
-                if coeff != E::Fr::one() && coeff != negone {
-                    for (i, x) in powers_of_two.iter().enumerate() {
-                        if x == &coeff {
-                            write!(s, "2^{} . ", i).unwrap();
-                            break;
-                        }
-                    }
-
-                    write!(s, "{} . ", coeff).unwrap();
-                }
-
-                match var.0.get_unchecked() {
-                    Index::Input(i) => {
-                        write!(s, "`{}`", &self.inputs[i]).unwrap();
-                    }
-                    Index::Aux(i) => {
-                        write!(s, "`{}`", &self.aux[i]).unwrap();
-                    }
-                }
-            }
-            if is_first {
-                // Nothing was visited, print 0.
-                write!(s, "0").unwrap();
-            }
-            write!(s, ")").unwrap();
-        };
 
         for &(ref _a, ref _b, ref _c, ref name) in &self.constraints {
-            writeln!(&mut s).unwrap();
-
-            write!(&mut s, "{}", name).unwrap();
-            // TODO: we are removing this for now
-            // pp(&mut s, a);
-            // write!(&mut s, " * ").unwrap();
-            // pp(&mut s, b);
-            // write!(&mut s, " = ").unwrap();
-            // pp(&mut s, c);
+            result.push(name.to_string());
         }
 
-        writeln!(&mut s).unwrap();
+        result
+    }
 
-        s
+    pub fn pretty_print(&self) -> String {
+        let res = self.pretty_print_list();
+
+        res.join("\n")
     }
 
     fn set_named_obj(&mut self, path: String, to: NamedObject) {
@@ -153,29 +96,6 @@ impl<E: Engine> MetricCS<E> {
 
         self.named_objects.insert(path, to);
     }
-}
-
-fn proc_lc<E: Engine>(terms: &[(Variable, E::Fr)]) -> BTreeMap<OrderedVariable, E::Fr> {
-    let mut map = BTreeMap::new();
-    for &(var, coeff) in terms {
-        map.entry(OrderedVariable(var))
-            .or_insert_with(E::Fr::zero)
-            .add_assign(&coeff);
-    }
-
-    // Remove terms that have a zero coefficient to normalize
-    let mut to_remove = vec![];
-    for (var, coeff) in map.iter() {
-        if coeff.is_zero() {
-            to_remove.push(var.clone())
-        }
-    }
-
-    for var in to_remove {
-        map.remove(&var);
-    }
-
-    map
 }
 
 impl<E: Engine> Default for MetricCS<E> {

@@ -410,7 +410,7 @@ mod tests {
         assert!(proofs_are_valid);
 
         let expected_inputs = 20;
-        let expected_constraints = 2_480_637;
+        let expected_constraints = 2_480_655;
 
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.
@@ -587,7 +587,7 @@ mod tests {
                 _,
             >>::blank_circuit(&public_params.vanilla_params);
 
-            let mut cs_blank = TestConstraintSystem::new();
+            let mut cs_blank = MetricCS::new();
             blank_circuit
                 .synthesize(&mut cs_blank)
                 .expect("failed to synthesize");

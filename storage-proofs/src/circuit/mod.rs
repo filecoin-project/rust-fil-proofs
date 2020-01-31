@@ -5,6 +5,7 @@ pub mod drgporep;
 pub mod election_post;
 pub mod encode;
 pub mod multi_proof;
+pub mod multipack;
 pub mod pedersen;
 pub mod por;
 pub mod rational_post;

@@ -112,6 +112,7 @@ where
             compound_public_params.vanilla_params.graph.size(),
             &data,
         )?;
+        drop(data);
 
         let comm_d_root: Fr = data_tree.root().into();
         let comm_d = commitment_from_fr::<Bls12>(comm_d_root);

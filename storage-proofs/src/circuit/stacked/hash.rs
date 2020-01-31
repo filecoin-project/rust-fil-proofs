@@ -1,14 +1,11 @@
-use bellperson::gadgets::{
-    boolean::Boolean,
-    sha256::sha256 as sha256_circuit,
-    {multipack, num},
-};
+use bellperson::gadgets::{boolean::Boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
-use ff::{Field, PrimeField};
+use ff::Field;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 
 use crate::circuit::pedersen::{pedersen_compression_num as pedersen, pedersen_md_no_padding};
 use crate::crypto::pedersen::PEDERSEN_BLOCK_SIZE;
+use crate::hasher::{sha256::Sha256Function, HashFunction};
 
 /// Hash two elements together.
 pub fn hash2<E, CS>(
@@ -63,7 +60,7 @@ where
 /// Hash a list of bits.
 pub fn hash_single_column<E, CS>(
     mut cs: CS,
-    _params: &E::Params,
+    params: &E::Params,
     rows: &[Option<E::Fr>],
 ) -> Result<num::AllocatedNum<E>, SynthesisError>
 where
@@ -95,26 +92,7 @@ where
         );
     }
 
-    let alloc_bits = sha256_circuit(cs.namespace(|| "hash"), &bits[..])?;
-    let fr = if alloc_bits[0].get_value().is_some() {
-        let be_bits = alloc_bits
-            .iter()
-            .map(|v| v.get_value().ok_or(SynthesisError::AssignmentMissing))
-            .collect::<Result<Vec<bool>, SynthesisError>>()?;
-
-        let le_bits = be_bits
-            .chunks(8)
-            .flat_map(|chunk| chunk.iter().rev())
-            .copied()
-            .take(E::Fr::CAPACITY as usize)
-            .collect::<Vec<bool>>();
-
-        Ok(multipack::compute_multipacking::<E>(&le_bits)[0])
-    } else {
-        Err(SynthesisError::AssignmentMissing)
-    };
-
-    num::AllocatedNum::<E>::alloc(cs.namespace(|| "result_num"), || fr)
+    Sha256Function::hash_circuit(cs, &bits, params)
 }
 
 #[cfg(test)]
@@ -191,7 +169,7 @@ mod tests {
             .expect("hash_single_column function failed");
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
-            assert_eq!(cs.num_constraints(), 45_378);
+            assert_eq!(cs.num_constraints(), 45_379);
 
             let expected: Fr = vanilla_hash_single_column(&[a_bytes, b_bytes]).into();
 

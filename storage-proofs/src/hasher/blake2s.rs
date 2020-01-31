@@ -2,7 +2,7 @@ use std::fmt;
 use std::hash::Hasher as StdHasher;
 
 use anyhow::ensure;
-use bellperson::gadgets::{blake2s as blake2s_circuit, boolean, multipack, num};
+use bellperson::gadgets::{blake2s as blake2s_circuit, boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
 use blake2s_simd::{Hash as Blake2sHash, Params as Blake2s, State};
 use ff::{Field, PrimeField, PrimeFieldRepr};
@@ -244,20 +244,8 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
         let personalization = vec![0u8; 8];
         let alloc_bits =
             blake2s_circuit::blake2s(cs.namespace(|| "hash"), &bits[..], &personalization)?;
-        let fr = match alloc_bits[0].get_value() {
-            Some(_) => {
-                let bits = alloc_bits
-                    .iter()
-                    .map(|v| v.get_value().ok_or(SynthesisError::AssignmentMissing))
-                    .collect::<std::result::Result<Vec<bool>, SynthesisError>>()?;
-                // TODO: figure out if we can avoid this
-                let frs = multipack::compute_multipacking::<E>(&bits);
-                Ok(frs[0])
-            }
-            None => Err(SynthesisError::AssignmentMissing),
-        };
 
-        num::AllocatedNum::<E>::alloc(cs.namespace(|| "num"), || fr)
+        crate::circuit::multipack::pack_bits(cs.namespace(|| "pack"), &alloc_bits)
     }
 }
 

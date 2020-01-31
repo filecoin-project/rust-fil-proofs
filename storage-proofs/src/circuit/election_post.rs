@@ -338,6 +338,7 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
+    use crate::circuit::metric::MetricCS;
     use crate::circuit::test::*;
     use crate::compound_proof;
     use crate::crypto::pedersen::JJ_PARAMS;
@@ -569,7 +570,7 @@ mod tests {
             let blank_circuit =
                 ElectionPoStCompound::<PedersenHasher>::blank_circuit(&pub_params.vanilla_params);
 
-            let mut cs_blank = TestConstraintSystem::new();
+            let mut cs_blank = MetricCS::new();
             blank_circuit
                 .synthesize(&mut cs_blank)
                 .expect("failed to synthesize");

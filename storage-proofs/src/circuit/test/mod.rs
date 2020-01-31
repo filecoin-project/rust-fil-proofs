@@ -337,14 +337,7 @@ impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
     {
         let index = self.aux.len();
         let path = compute_path(&self.current_namespace, &annotation().into());
-        let r = match f() {
-            Ok(res) => res,
-            Err(SynthesisError::AssignmentMissing) => E::Fr::zero(),
-            Err(err) => {
-                return Err(err);
-            }
-        };
-        self.aux.push((r, path.clone()));
+        self.aux.push((f()?, path.clone()));
         let var = Variable::new_unchecked(Index::Aux(index));
         self.set_named_obj(path, NamedObject::Var(var));
 
@@ -359,14 +352,7 @@ impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
     {
         let index = self.inputs.len();
         let path = compute_path(&self.current_namespace, &annotation().into());
-        let r = match f() {
-            Ok(res) => res,
-            Err(SynthesisError::AssignmentMissing) => E::Fr::zero(),
-            Err(err) => {
-                return Err(err);
-            }
-        };
-        self.inputs.push((r, path.clone()));
+        self.inputs.push((f()?, path.clone()));
         let var = Variable::new_unchecked(Index::Input(index));
         self.set_named_obj(path, NamedObject::Var(var));
 

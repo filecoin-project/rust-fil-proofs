@@ -342,7 +342,7 @@ mod tests {
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_blake2s() {
-        test_por_input_circuit_with_bls12_381::<Blake2sHasher>(64566);
+        test_por_input_circuit_with_bls12_381::<Blake2sHasher>(64_569);
     }
 
     fn test_por_input_circuit_with_bls12_381<H: Hasher>(num_constraints: usize) {
