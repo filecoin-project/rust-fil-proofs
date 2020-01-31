@@ -1,5 +1,4 @@
 use std::io::{BufWriter, Seek, SeekFrom, Write};
-use std::sync::atomic::Ordering;
 
 use log::info;
 use rand::RngCore;
@@ -7,7 +6,7 @@ use rayon::prelude::*;
 use tempfile::NamedTempFile;
 
 use fil_proofs_tooling::{measure, FuncMeasurement};
-use filecoin_proofs::constants::DEFAULT_POREP_PROOF_PARTITIONS;
+use filecoin_proofs::constants::POREP_PARTITIONS;
 use filecoin_proofs::types::{PaddedBytesAmount, PoRepConfig, SectorSize, UnpaddedBytesAmount};
 use filecoin_proofs::{
     add_piece, generate_piece_commitment, seal_pre_commit_phase1, seal_pre_commit_phase2,
@@ -82,7 +81,13 @@ pub fn create_replicas(
 
     let porep_config = PoRepConfig {
         sector_size,
-        partitions: PoRepProofPartitions(DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed)),
+        partitions: PoRepProofPartitions(
+            *POREP_PARTITIONS
+                .read()
+                .unwrap()
+                .get(&u64::from(sector_size))
+                .expect("unknown sector size"),
+        ),
     };
 
     let mut out: Vec<(SectorId, PreCommitReplicaOutput)> = Default::default();

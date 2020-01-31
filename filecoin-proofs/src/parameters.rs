@@ -49,7 +49,11 @@ pub fn setup_params(
 ) -> Result<stacked::SetupParams> {
     let layer_challenges = select_challenges(
         partitions,
-        POREP_MINIMUM_CHALLENGES.load(Ordering::Relaxed) as usize,
+        *POREP_MINIMUM_CHALLENGES
+            .read()
+            .unwrap()
+            .get(&u64::from(sector_bytes))
+            .expect("unknown sector size") as usize,
         LAYERS.load(Ordering::Relaxed) as usize,
     )?;
     let sector_bytes = u64::from(sector_bytes);

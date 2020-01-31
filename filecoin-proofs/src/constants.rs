@@ -1,4 +1,5 @@
-use std::sync::{atomic::AtomicU64, atomic::AtomicU8};
+use std::collections::HashMap;
+use std::sync::{atomic::AtomicU64, RwLock};
 
 use lazy_static::lazy_static;
 use storage_proofs::util::NODE_SIZE;
@@ -12,19 +13,41 @@ pub const SECTOR_SIZE_256_MIB: u64 = 1 << 28;
 pub const SECTOR_SIZE_1_GIB: u64 = 1 << 30;
 pub const SECTOR_SIZE_32_GIB: u64 = 1 << 35;
 
-pub const POST_CHALLENGE_COUNT: usize = 40;
+pub const POST_CHALLENGE_COUNT: usize = 65;
 pub const POST_CHALLENGED_NODES: usize = 1;
 
 lazy_static! {
     pub static ref LAYERS: AtomicU64 = AtomicU64::new(11);
-    pub static ref POREP_MINIMUM_CHALLENGES: AtomicU64 = AtomicU64::new(50);
     pub static ref DRG_DEGREE: AtomicU64 =
         AtomicU64::new(storage_proofs::drgraph::BASE_DEGREE as u64);
     pub static ref EXP_DEGREE: AtomicU64 =
         AtomicU64::new(storage_proofs::stacked::EXP_DEGREE as u64);
-    pub static ref DEFAULT_POREP_PROOF_PARTITIONS: AtomicU8 = AtomicU8::new(10);
     pub static ref PARAMETERS: ParameterMap =
         serde_json::from_str(include_str!("../parameters.json")).expect("Invalid parameters.json");
+    pub static ref POREP_MINIMUM_CHALLENGES: RwLock<HashMap<u64, u64>> = RwLock::new(
+        [
+            (SECTOR_SIZE_ONE_KIB, 2),
+            (SECTOR_SIZE_16_MIB, 2),
+            (SECTOR_SIZE_256_MIB, 2),
+            (SECTOR_SIZE_1_GIB, 2),
+            (SECTOR_SIZE_32_GIB, 50)
+        ]
+        .iter()
+        .copied()
+        .collect()
+    );
+    pub static ref POREP_PARTITIONS: RwLock<HashMap<u64, u8>> = RwLock::new(
+        [
+            (SECTOR_SIZE_ONE_KIB, 1),
+            (SECTOR_SIZE_16_MIB, 1),
+            (SECTOR_SIZE_256_MIB, 1),
+            (SECTOR_SIZE_1_GIB, 1),
+            (SECTOR_SIZE_32_GIB, 10)
+        ]
+        .iter()
+        .copied()
+        .collect()
+    );
 }
 
 /// The size of a single snark proof.

@@ -1,11 +1,8 @@
 use std::collections::BTreeMap;
 use std::io::{stdout, Seek, SeekFrom, Write};
-use std::sync::atomic::Ordering;
 
 use fil_proofs_tooling::{measure, Metadata};
-use filecoin_proofs::constants::{
-    DEFAULT_POREP_PROOF_PARTITIONS, POST_CHALLENGED_NODES, POST_CHALLENGE_COUNT,
-};
+use filecoin_proofs::constants::{POREP_PARTITIONS, POST_CHALLENGED_NODES, POST_CHALLENGE_COUNT};
 use filecoin_proofs::types::{
     PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, SectorSize,
     UnpaddedBytesAmount,
@@ -100,7 +97,13 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
     // Replicate the staged sector, write the replica file to `sealed_path`.
     let porep_config = PoRepConfig {
         sector_size: SectorSize(sector_size as u64),
-        partitions: PoRepProofPartitions(DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed)),
+        partitions: PoRepProofPartitions(
+            *POREP_PARTITIONS
+                .read()
+                .unwrap()
+                .get(&(sector_size as u64))
+                .unwrap(),
+        ),
     };
     let cache_dir = tempfile::tempdir().unwrap();
     let sector_id = SectorId::from(SECTOR_ID);

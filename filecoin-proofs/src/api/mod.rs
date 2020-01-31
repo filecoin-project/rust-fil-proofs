@@ -319,7 +319,6 @@ mod tests {
 
     use std::collections::BTreeMap;
     use std::io::{Seek, SeekFrom, Write};
-    use std::sync::atomic::Ordering;
     use std::sync::Once;
 
     use ff::Field;
@@ -330,9 +329,7 @@ mod tests {
     use storage_proofs::fr32::bytes_into_fr;
     use tempfile::NamedTempFile;
 
-    use crate::constants::{
-        DEFAULT_POREP_PROOF_PARTITIONS, SECTOR_SIZE_ONE_KIB, SINGLE_PARTITION_PROOF_LEN,
-    };
+    use crate::constants::{POREP_PARTITIONS, SECTOR_SIZE_ONE_KIB, SINGLE_PARTITION_PROOF_LEN};
     use crate::types::{PoStConfig, SectorSize};
 
     static INIT_LOGGER: Once = Once::new();
@@ -357,7 +354,11 @@ mod tests {
                 PoRepConfig {
                     sector_size: SectorSize(SECTOR_SIZE_ONE_KIB),
                     partitions: PoRepProofPartitions(
-                        DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed),
+                        *POREP_PARTITIONS
+                            .read()
+                            .unwrap()
+                            .get(&SECTOR_SIZE_ONE_KIB)
+                            .unwrap(),
                     ),
                 },
                 not_convertible_to_fr_bytes,
@@ -387,7 +388,11 @@ mod tests {
                 PoRepConfig {
                     sector_size: SectorSize(SECTOR_SIZE_ONE_KIB),
                     partitions: PoRepProofPartitions(
-                        DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed),
+                        *POREP_PARTITIONS
+                            .read()
+                            .unwrap()
+                            .get(&SECTOR_SIZE_ONE_KIB)
+                            .unwrap(),
                     ),
                 },
                 convertible_to_fr_bytes,
@@ -500,7 +505,7 @@ mod tests {
         let config = PoRepConfig {
             sector_size: SectorSize(sector_size.clone()),
             partitions: PoRepProofPartitions(
-                DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed),
+                *POREP_PARTITIONS.read().unwrap().get(&sector_size).unwrap(),
             ),
         };
 

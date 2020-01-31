@@ -2,7 +2,7 @@ use std::sync::atomic::Ordering::Relaxed;
 
 use bellperson::Circuit;
 use fil_proofs_tooling::{measure, Metadata};
-use filecoin_proofs::constants::DEFAULT_POREP_PROOF_PARTITIONS;
+use filecoin_proofs::constants::POREP_PARTITIONS;
 use filecoin_proofs::parameters::post_public_params;
 use filecoin_proofs::types::PaddedBytesAmount;
 use filecoin_proofs::types::*;
@@ -29,7 +29,6 @@ use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::proof::ProofScheme;
 
 use crate::shared::{create_replicas, CHALLENGE_COUNT, PROVER_ID, RANDOMNESS, TICKET_BYTES};
-use std::sync::atomic::Ordering;
 
 const SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
@@ -168,11 +167,16 @@ fn augment_with_op_measurements(mut output: &mut FlarpOutputs) {
 
 fn configure_global_config(inputs: &FlarpInputs) {
     filecoin_proofs::constants::LAYERS.store(inputs.stacked_layers, Relaxed);
-    filecoin_proofs::constants::DEFAULT_POREP_PROOF_PARTITIONS
-        .store(inputs.porep_partitions, Relaxed);
+    filecoin_proofs::constants::POREP_PARTITIONS
+        .write()
+        .unwrap()
+        .insert(inputs.sector_size_bytes(), inputs.porep_partitions);
     filecoin_proofs::constants::EXP_DEGREE.store(inputs.expander_parents, Relaxed);
     filecoin_proofs::constants::DRG_DEGREE.store(inputs.drg_parents, Relaxed);
-    filecoin_proofs::constants::POREP_MINIMUM_CHALLENGES.store(inputs.porep_challenges, Relaxed);
+    filecoin_proofs::constants::POREP_MINIMUM_CHALLENGES
+        .write()
+        .unwrap()
+        .insert(inputs.sector_size_bytes(), inputs.porep_challenges);
 }
 
 pub fn run(
@@ -440,7 +444,13 @@ fn measure_kdf_circuit(i: &FlarpInputs) -> usize {
 
 fn generate_params(i: &FlarpInputs) {
     let sector_size = SectorSize(i.sector_size_bytes());
-    let partitions = PoRepProofPartitions(DEFAULT_POREP_PROOF_PARTITIONS.load(Ordering::Relaxed));
+    let partitions = PoRepProofPartitions(
+        *POREP_PARTITIONS
+            .read()
+            .unwrap()
+            .get(&i.sector_size_bytes())
+            .expect("unknown sector size"),
+    );
     info!(
         "generating params: porep: (size: {:?}, partitions: {:?})",
         &sector_size, &partitions

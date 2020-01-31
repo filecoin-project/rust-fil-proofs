@@ -1,7 +1,6 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::Ordering;
 
 use anyhow::{ensure, Context, Result};
 use bincode::{deserialize, serialize};
@@ -512,7 +511,11 @@ pub fn verify_seal(
         &public_inputs,
         &proof,
         &ChallengeRequirements {
-            minimum_challenges: POREP_MINIMUM_CHALLENGES.load(Ordering::Relaxed) as usize,
+            minimum_challenges: *POREP_MINIMUM_CHALLENGES
+                .read()
+                .unwrap()
+                .get(&u64::from(SectorSize::from(porep_config)))
+                .expect("unknown sector size") as usize,
         },
     )
     .map_err(Into::into)
@@ -620,7 +623,11 @@ pub fn verify_batch_seal(
         &public_inputs,
         &proofs,
         &ChallengeRequirements {
-            minimum_challenges: POREP_MINIMUM_CHALLENGES.load(Ordering::Relaxed) as usize, // TODO: what do we want here?
+            minimum_challenges: *POREP_MINIMUM_CHALLENGES
+                .read()
+                .unwrap()
+                .get(&u64::from(SectorSize::from(porep_config)))
+                .expect("unknown sector size") as usize,
         },
     )
     .map_err(Into::into)
