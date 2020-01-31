@@ -358,18 +358,18 @@ mod tests {
         assert_eq!(
             t.read_at(4).unwrap().0,
             FrRepr([
-                0x27667a53c9973ad5,
-                0x7e0295caba457e67,
-                0xa20c36b1b4f719a8,
-                0x25b81b8c404581d5
+                0x86c43967576d8144,
+                0x02764fedd83eccdc,
+                0x8cf0fb1d8b18939c,
+                0x43c0481c01004590
             ])
         );
 
         let expected = FrRepr([
-            0x15f039c35270cef7,
-            0x66b6af463d76d9f6,
-            0x10b959b9478c32c7,
-            0x681da1446cf7b965,
+            0x1de61734210b19f0,
+            0x5fdd9de9aeba506d,
+            0x3132a2fdf41b894f,
+            0x5ed726de4d7e79d3,
         ]);
         let actual = t.read_at(6).unwrap().0;
 
