@@ -221,7 +221,6 @@ impl HashFunction<Sha256Domain> for Sha256Function {
         bits: &[boolean::Boolean],
         _params: &E::Params,
     ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
-
         let be_bits = sha256_circuit(cs.namespace(|| "hash"), &bits[..])?;
         let le_bits = be_bits
             .chunks(8)
