@@ -3,7 +3,7 @@ use std::hash::Hasher as StdHasher;
 use super::types::MERKLE_TREE_ARITY;
 use crate::crypto::{create_label, sloth};
 use crate::error::{Error, Result};
-use crate::hasher::types::{PoseidonEngine, POSEIDON_CONSTANTS};
+use crate::hasher::types::{PoseidonEngine, PoseidonWidth, POSEIDON_CONSTANTS};
 use crate::hasher::{Domain, HashFunction, Hasher};
 use anyhow::ensure;
 use bellperson::gadgets::{boolean, num};
@@ -237,7 +237,7 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
     ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError> {
         let preimage = vec![left.clone(), right.clone()];
 
-        poseidon_hash::<CS, E>(cs, preimage, E::PARAMETERS(MERKLE_TREE_ARITY))
+        poseidon_hash::<CS, E, PoseidonWidth>(cs, preimage, E::PARAMETERS(MERKLE_TREE_ARITY))
     }
 
     fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
@@ -322,6 +322,13 @@ mod tests {
         assert_eq!(*p.path(), vec![true, true]);
         assert_eq!(p.validate::<PoseidonFunction>(), true);
     }
+
+    // #[test]
+    // fn test_poseidon_quad() {
+    //     let leaves = [Fr::one(), Fr::zero(), Fr::zero(), Fr::one()];
+
+    //     assert_eq!(Fr::zero().into_repr(), shared_hash_frs(&leaves[..]).0);
+    // }
 
     #[test]
     fn test_poseidon_hasher() {

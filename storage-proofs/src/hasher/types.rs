@@ -3,6 +3,7 @@ use lazy_static::lazy_static;
 use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
 use fil_sapling_crypto::jubjub::JubjubEngine;
+use generic_array::typenum::{U3, U5, U9};
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
 use merkletree::merkle::Element;
 use neptune::poseidon::PoseidonConstants;
@@ -13,25 +14,33 @@ use serde::ser::Serialize;
 
 use crate::error::Result;
 
+/// PoseidonWidth must be 1 + the desired arity.
+pub type PoseidonBinaryWidth = U3;
+pub type PoseidonQuadWidth = U5;
+pub type PoseidonOctWidth = U9;
+
+pub type PoseidonWidth = PoseidonBinaryWidth;
+
+/// Arity to use for hasher implementations (Poseidon) which are specialized at compile time.
+/// Must match PoseidonWidth
+pub const MERKLE_TREE_ARITY: usize = 2;
+
 lazy_static! {
-    pub static ref POSEIDON_CONSTANTS: PoseidonConstants<Bls12> =
+    pub static ref POSEIDON_CONSTANTS: PoseidonConstants<Bls12, PoseidonWidth> =
         PoseidonConstants::new(MERKLE_TREE_ARITY);
 }
 
 pub trait PoseidonEngine: Engine {
     #[allow(non_snake_case)]
-    fn PARAMETERS(arity: usize) -> &'static PoseidonConstants<Self>;
+    fn PARAMETERS(arity: usize) -> &'static PoseidonConstants<Self, PoseidonWidth>;
 }
 
 impl PoseidonEngine for Bls12 {
-    fn PARAMETERS(arity: usize) -> &'static PoseidonConstants<Self> {
+    fn PARAMETERS(arity: usize) -> &'static PoseidonConstants<Self, PoseidonWidth> {
         assert_eq!(arity, MERKLE_TREE_ARITY);
         &*POSEIDON_CONSTANTS
     }
 }
-
-/// Arity to use for hasher implementations (Poseidon) which are specialized at compile time.
-pub const MERKLE_TREE_ARITY: usize = 2;
 
 pub trait Domain:
     Ord
