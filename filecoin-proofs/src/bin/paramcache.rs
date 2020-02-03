@@ -130,11 +130,6 @@ pub fn main() {
                 .help("A comma-separated list of sector sizes, in bytes, for which Groth parameters will be generated")
         )
         .arg(
-            Arg::with_name("predictable")
-                .long("predictable")
-                .help("When set the paramters will be seeded with a fixed value.")
-        )
-        .arg(
             Arg::with_name("only-election-post")
                 .long("only-election-post")
                 .help("Only generate parameters for election-post")
