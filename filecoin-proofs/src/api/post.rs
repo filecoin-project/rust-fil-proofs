@@ -7,7 +7,7 @@ use anyhow::{anyhow, ensure, Context, Result};
 use bincode::deserialize;
 use log::info;
 use merkletree::merkle::get_merkle_tree_leafs;
-use merkletree::store::{LevelCacheStore, Store, StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
+use merkletree::store::{LevelCacheStore, Store, StoreConfig};
 use paired::bls12_381::Bls12;
 use rayon::prelude::*;
 use storage_proofs::circuit::election_post::ElectionPoStCompound;
@@ -102,7 +102,7 @@ impl PrivateReplicaInfo {
         let mut config = StoreConfig::new(
             self.cache_dir_path(),
             CacheKey::CommRLastTree.to_string(),
-            2, //DEFAULT_CACHED_ABOVE_BASE_LAYER,
+            StoreConfig::default_cached_above_base_layer(tree_leafs),
         );
         config.size = Some(tree_size);
 

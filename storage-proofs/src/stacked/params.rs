@@ -376,10 +376,7 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
             tree_d.delete(t_aux.tree_d_config).context("tree_d")?;
 
             // If tree_d still existed and we just deleted it, compact tree_r_last here.
-            ensure!(
-                cached(&t_aux.tree_r_last_config),
-                "TreeRLast does not exist"
-            );
+            assert!(cached(&t_aux.tree_r_last_config));
             let tree_r_last_size = t_aux
                 .tree_r_last_config
                 .size
@@ -404,19 +401,6 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
                 MerkleTree::from_data_store(tree_c_store, get_merkle_tree_leafs(tree_c_size))
                     .context("tree_c")?;
             tree_c.delete(t_aux.tree_c_config).context("tree_c")?;
-        }
-
-        if cached(&t_aux.tree_q_config) {
-            let tree_q_size = t_aux
-                .tree_q_config
-                .size
-                .context("tree_q config has no size")?;
-            let tree_q_store: DiskStore<H::Domain> =
-                DiskStore::new_from_disk(tree_q_size, &t_aux.tree_q_config).context("tree_q")?;
-            let tree_q: Tree<H> =
-                MerkleTree::from_data_store(tree_q_store, get_merkle_tree_leafs(tree_q_size))
-                    .context("tree_q")?;
-            tree_q.delete(t_aux.tree_q_config).context("tree_q")?;
         }
 
         for i in 0..t_aux.labels.labels.len() {
