@@ -2,6 +2,8 @@
 
 mod api;
 mod caches;
+mod commitment_reader;
+mod pad_reader;
 
 pub mod constants;
 pub mod fr32;
@@ -13,7 +15,9 @@ pub mod singletons;
 pub mod types;
 
 pub use self::api::*;
+pub use self::commitment_reader::*;
 pub use self::constants::SINGLE_PARTITION_PROOF_LEN;
+pub use self::pad_reader::*;
 pub use self::param::{ParameterData, ParameterMap};
 pub use self::types::*;
 

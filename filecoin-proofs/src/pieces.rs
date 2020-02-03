@@ -182,7 +182,7 @@ fn join_piece_infos(mut left: PieceInfo, right: PieceInfo) -> Result<PieceInfo> 
     Ok(left)
 }
 
-fn piece_hash(a: &[u8], b: &[u8]) -> <DefaultPieceHasher as Hasher>::Domain {
+pub(crate) fn piece_hash(a: &[u8], b: &[u8]) -> <DefaultPieceHasher as Hasher>::Domain {
     let mut buf = [0u8; NODE_SIZE * 2];
     buf[..NODE_SIZE].copy_from_slice(a);
     buf[NODE_SIZE..].copy_from_slice(b);
@@ -306,8 +306,6 @@ mod tests {
     use rand_xorshift::XorShiftRng;
     use storage_proofs::drgraph::{new_seed, Graph};
     use storage_proofs::stacked::StackedBucketGraph;
-
-    use std::io::{Seek, SeekFrom};
 
     #[test]
     fn test_get_piece_alignment() {
@@ -634,15 +632,12 @@ mod tests {
 
         for (i, piece_size) in piece_sizes.iter().enumerate() {
             let piece_size_u = u64::from(*piece_size) as usize;
-            let mut piece_bytes = vec![1u8; piece_size_u];
+            let mut piece_bytes = vec![255u8; piece_size_u];
             rng.fill_bytes(&mut piece_bytes);
 
             let mut piece_file = std::io::Cursor::new(&mut piece_bytes);
 
-            let piece_info = crate::api::generate_piece_commitment(&mut piece_file, *piece_size)?;
-            piece_file.seek(SeekFrom::Start(0))?;
-
-            crate::api::add_piece(
+            let piece_info = crate::api::add_piece(
                 &mut piece_file,
                 &mut staged_sector_io,
                 *piece_size,

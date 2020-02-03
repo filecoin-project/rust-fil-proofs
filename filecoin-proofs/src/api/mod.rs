@@ -1,27 +1,27 @@
 use std::fs::File;
-use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, ensure, Context, Result};
+use anyhow::{ensure, Context, Result};
 use bincode::deserialize;
 use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{DiskStore, LevelCacheStore, StoreConfig};
 use storage_proofs::hasher::Hasher;
+use storage_proofs::measurements::{measure_op, Operation};
 use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
 use storage_proofs::stacked::{
     generate_replica_id, CacheKey, PersistentAux, StackedDrg, TemporaryAux, BINARY_ARITY, OCT_ARITY,
 };
-use tempfile::tempfile;
 
 use crate::api::util::{as_safe_commitment, get_tree_size};
+use crate::commitment_reader::CommitmentReader;
 use crate::constants::{
     DefaultPieceHasher, DefaultTreeHasher,
     MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
 };
-use crate::fr32::{write_padded, write_unpadded};
+use crate::fr32::write_unpadded;
 use crate::parameters::public_params;
-use crate::pieces::get_aligned_source;
 use crate::types::{
     Commitment, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, ProverId,
     SealPreCommitPhase1Output, Ticket, UnpaddedByteIndex, UnpaddedBytesAmount,
@@ -33,7 +33,7 @@ pub(crate) mod util;
 
 pub use self::post::*;
 pub use self::seal::*;
-use std::io;
+
 use storage_proofs::pieces::generate_piece_commitment_bytes_from_source;
 
 /// Unseals the sector at `sealed_path` and returns the bytes for a piece
@@ -135,40 +135,20 @@ pub fn generate_piece_commitment<T: std::io::Read>(
     source: T,
     piece_size: UnpaddedBytesAmount,
 ) -> Result<PieceInfo> {
-    ensure_piece_size(piece_size)?;
+    measure_op(Operation::GeneratePieceCommitment, || {
+        ensure_piece_size(piece_size)?;
 
-    let mut temp_piece_file = tempfile()?;
+        // send the source through the preprocessor
+        let source = std::io::BufReader::new(source);
+        let mut pad_reader = crate::pad_reader::PadReader::new(source);
 
-    // send the source through the preprocessor, writing output to temp file
-    let n = UnpaddedBytesAmount(
-        write_padded(source, &temp_piece_file).context("failed to write and preprocess bytes")?
-            as u64,
-    );
+        let commitment = generate_piece_commitment_bytes_from_source::<DefaultPieceHasher>(
+            &mut pad_reader,
+            PaddedBytesAmount::from(piece_size).into(),
+        )?;
 
-    if n == UnpaddedBytesAmount(0) {
-        return Err(anyhow!(
-            "generate_piece_commitment: read 0 bytes from source before EOF"
-        ));
-    }
-
-    if n != piece_size {
-        return Err(anyhow!(
-            "wrote ({:?}) but expected to write ({:?}) when preprocessing",
-            n,
-            piece_size
-        ));
-    }
-
-    temp_piece_file
-        .seek(SeekFrom::Start(0))
-        .with_context(|| format!("could not seek in temp_piece_file={:?}", temp_piece_file))?;
-
-    let commitment = generate_piece_commitment_bytes_from_source::<DefaultPieceHasher>(
-        &mut temp_piece_file,
-        PaddedBytesAmount::from(n).into(),
-    )?;
-
-    PieceInfo::new(commitment, piece_size)
+        PieceInfo::new(commitment, piece_size)
+    })
 }
 
 /// Computes a NUL-byte prefix and/or suffix for `source` using the provided
@@ -195,87 +175,47 @@ pub fn add_piece<R, W>(
     target: W,
     piece_size: UnpaddedBytesAmount,
     piece_lengths: &[UnpaddedBytesAmount],
-) -> Result<(UnpaddedBytesAmount, Commitment)>
+) -> Result<PieceInfo>
 where
     R: Read,
-    W: Read + Write + Seek,
+    W: Write,
 {
-    ensure_piece_size(piece_size)?;
+    measure_op(Operation::AddPiece, || {
+        ensure_piece_size(piece_size)?;
 
-    let (aligned_source_size, alignment, aligned_source) =
-        get_aligned_source(source, &piece_lengths, piece_size);
+        let source = std::io::BufReader::new(source);
+        let mut target = std::io::BufWriter::new(target);
 
-    // allows us to tee the source byte stream
-    let (mut pipe_r, pipe_w) = os_pipe::pipe().context("failed to create pipe")?;
+        let written_bytes = crate::pieces::sum_piece_bytes_with_alignment(&piece_lengths);
+        let piece_alignment = crate::pieces::get_piece_alignment(written_bytes, piece_size);
+        let pad_reader = crate::pad_reader::PadReader::new(source);
 
-    // all bytes read from the TeeReader are written to its writer, no bytes
-    // will be read from the TeeReader before they are written to its writer
-    let tee_r = tee::TeeReader::new(aligned_source, pipe_w);
-
-    // reads from tee_r block until the tee's source bytes can be written to its
-    // writer, so to prevent write_padded from blocking indefinitely, we need
-    // to spin up a separate thread (to read from the pipe which receives writes
-    // from the TeeReader)
-    let t_handle = std::thread::spawn(move || {
-        // discard n left-alignment bytes
-        let n = alignment.left_bytes.into();
-        io::copy(&mut pipe_r.by_ref().take(n), &mut io::sink())
-            .context("failed to skip alignment bytes")?;
-
-        // generate commitment for piece bytes
-        let result =
-            generate_piece_commitment(&mut pipe_r.by_ref().take(piece_size.into()), piece_size);
-
-        // drain the remaining bytes (all alignment) from the reader
-        std::io::copy(&mut pipe_r.by_ref(), &mut io::sink())
-            .context("failed to drain reader")
-            .and_then(|_| result)
-    });
-
-    // send the source through the preprocessor, writing output to target
-    let write_rslt = write_padded(tee_r, target).context("failed to write and preprocess bytes");
-
-    // block until piece commitment-generating thread returns
-    let join_rslt = t_handle
-        .join()
-        .map_err(|err| anyhow!("join piece commitment-generating thread failed: {:?}", err));
-
-    match (write_rslt, join_rslt) {
-        (Ok(n), Ok(Ok(r))) => {
-            ensure!(n != 0, "add_piece: read 0 bytes before EOF from source");
-
-            let n = UnpaddedBytesAmount(n as u64);
-
-            ensure!(
-                aligned_source_size == n,
-                "expected to write {:?} source bytes, but actually wrote {:?}",
-                aligned_source_size,
-                n
-            );
-
-            Ok((n, r.commitment))
+        // write left alignment
+        for _ in 0..usize::from(PaddedBytesAmount::from(piece_alignment.left_bytes)) {
+            target.write_all(&[0u8][..])?;
         }
-        (Ok(n), Ok(Err(err))) => {
-            let e = anyhow!(
-                "wrote {:?} to target but then failed to generate piece commitment: {:?}",
-                n,
-                err
-            );
-            Err(e)
+
+        let mut commitment_reader = CommitmentReader::new(pad_reader);
+        let n = std::io::copy(&mut commitment_reader, &mut target)
+            .context("failed to write and preprocess bytes")?;
+
+        ensure!(n != 0, "add_piece: read 0 bytes before EOF from source");
+        let n = PaddedBytesAmount(n as u64);
+        let n: UnpaddedBytesAmount = n.into();
+
+        ensure!(n == piece_size, "add_piece: invalid bytes amount written");
+
+        // write right alignment
+        for _ in 0..usize::from(PaddedBytesAmount::from(piece_alignment.right_bytes)) {
+            target.write_all(&[0u8][..])?;
         }
-        (Ok(n), Err(err)) => {
-            let e = anyhow!(
-                "wrote {:?} to target but then failed to generate piece commitment: {:?}",
-                n,
-                err
-            );
-            Err(e)
-        }
-        (Err(err), _) => {
-            let e = anyhow!("failed to write and preprocess: {:?}", err);
-            Err(e)
-        }
-    }
+
+        let commitment = commitment_reader.finish()?;
+        let mut comm = [0u8; 32];
+        comm.copy_from_slice(commitment.as_ref());
+
+        PieceInfo::new(comm, n)
+    })
 }
 
 fn ensure_piece_size(piece_size: UnpaddedBytesAmount) -> Result<()> {
@@ -313,10 +253,10 @@ pub fn write_and_preprocess<R, W>(
     source: R,
     target: W,
     piece_size: UnpaddedBytesAmount,
-) -> Result<(UnpaddedBytesAmount, Commitment)>
+) -> Result<PieceInfo>
 where
     R: Read,
-    W: Read + Write + Seek,
+    W: Write,
 {
     add_piece(source, target, piece_size, Default::default())
 }

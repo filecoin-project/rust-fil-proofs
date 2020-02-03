@@ -649,41 +649,6 @@ pub fn clear_right_bits(byte: &mut u8, offset: usize) {
     *(byte) &= !((1 << offset) - 1)
 }
 
-// In order to optimize alignment in the common case of writing from an aligned
-// start, we should make the chunk a multiple of 127 (4 full elements, see
-// `PaddingMap#alignment`). N was hand-tuned to do reasonably well in the
-// benchmarks.
-const N: usize = 1000;
-const CHUNK_SIZE: usize = 127 * N;
-
-pub fn write_padded<R, W>(mut source: R, mut target: W) -> io::Result<usize>
-where
-    R: Read,
-    W: Read + Write + Seek,
-{
-    let mut buffer = [0; CHUNK_SIZE];
-    let mut written = 0;
-
-    loop {
-        match source.read(&mut buffer) {
-            Ok(bytes_read) => {
-                if bytes_read == 0 {
-                    break;
-                }
-                written += write_padded_aux(&FR32_PADDING_MAP, &buffer[..bytes_read], &mut target)?;
-            }
-            Err(err) => {
-                if err.kind() == io::ErrorKind::Interrupted {
-                    continue;
-                }
-                return Err(err);
-            }
-        }
-    }
-
-    Ok(written)
-}
-
 /** Padding process.
 
 Read a `source` of raw byte-aligned data, pad it in a bit stream and
@@ -704,122 +669,6 @@ need to handle the potential bit-level misalignments:
   2. Incomplete data unit: we need to fill the rest of it and add the padding
      to form a element that would position the writer at the desired boundary.
 **/
-// TODO: Change name, this is the real write padded function, the previous one
-// just partition data in chunks.
-fn write_padded_aux<W>(padding_map: &PaddingMap, source: &[u8], mut target: W) -> io::Result<usize>
-where
-    W: Read + Write + Seek,
-{
-    // TODO: Check `source` length, if it's zero we should return here and avoid all
-    // the alignment calculations that will be worthless (because we wont' have any
-    // data with which to align).
-
-    let (padded_bytes, _, padded_bits) = padding_map.target_offsets(&mut target)?;
-
-    // (1): Overwrite the extra bits (if any): we actually don't write in-place, we
-    // remove the last byte and extract its valid bits to `last_bits` to be later
-    // rewritten with new data taken from the `source`.
-    let mut last_bits = BitVecLEu8::new();
-    if !padded_bits.is_byte_aligned() {
-        // Read the last incomplete byte and left the `target` positioned to overwrite
-        // it in the next `write_all`.
-        let last_byte = &mut [0u8; 1];
-        target.seek(SeekFrom::Start(padded_bytes - 1))?;
-        target.read_exact(last_byte)?;
-        target.seek(SeekFrom::Start(padded_bytes - 1))?;
-        // TODO: Can we use a relative `SeekFrom::End` seek to avoid
-        // setting our absolute `padded_bytes` position?
-
-        // Extract the valid bit from the last byte (the `bits` fraction
-        // of the `padded_bits` bit stream that doesn't complete a byte).
-        let mut last_byte_as_bitvec = BitVecLEu8::from(&last_byte[..]);
-        last_byte_as_bitvec.truncate(padded_bits.bits);
-        last_bits.extend(last_byte_as_bitvec);
-    };
-
-    // (2): Fill the current data unit adding `missing_data_bits` from the
-    // `source` (if available, or as many bits as we have).
-    let (_, missing_data_bits) = padding_map.next_boundary(&padded_bits);
-
-    // Check if we have enough `source_bits` to complete the data unit (and hence
-    // add the padding and complete the element) or if we'll use all the `source_bits`
-    // just to increase (but not complete) the current data unit (and hence we won't pad).
-    let source_bits = source.len() * 8;
-    let (data_bits_to_write, fills_data_unit) = if missing_data_bits <= source_bits {
-        (missing_data_bits, true)
-    } else {
-        (source_bits, false)
-    };
-    // TODO: What happens if we were already at the element boundary?
-    // Would this code write 0 (`data_bits_to_write`) bits and then
-    // add an extra padding?
-    last_bits.extend(
-        BitVecLEu8::from(source)
-            .into_iter()
-            .take(data_bits_to_write),
-    );
-
-    target.write_all(last_bits.as_ref())?;
-    // The `as_slice` conversion will byte-align the bit stream and implicitly
-    // add the padding bits (that by definition are the bits necessary to reach the byte
-    // boundary).
-    // TODO: Optimization: Remove the use of this `BitVecLEu8`. (Low priority, it's
-    // a corner case that doesn't take too much of the overall operations.)
-
-    // Now we are at the element boundary, write entire chunks of full data
-    // units with its padding.
-
-    // Estimate how many bytes we'll need for the `padded_output` to allocate
-    // them all at once.
-    let source_bits_left = source.len() * 8 - data_bits_to_write;
-    let padded_output_size =
-        BitByte::from_bits(padding_map.transform_bit_offset(source_bits_left, true)).bytes_needed();
-    let mut padded_output: Vec<u8> = Vec::with_capacity(padded_output_size);
-
-    if fills_data_unit {
-        // If we completed the previous element (`fills_data_unit`) then we may still have
-        // some data left to try to form full elements writing them as a whole in each
-        // iteration.
-
-        // Position the reader in the raw data source we're extracting bits from
-        // after the `data_bits_to_write` taken to complete the previous element.
-        let mut read_pos = data_bits_to_write;
-        // TODO: Rename `data_bits_to_write` (it's confusing outside of its context).
-
-        while read_pos < source_bits {
-            // TODO: Optimization: We can determine how many full data units are and
-            // avoid checks unrolling the incomplete data unit (last iteration) in
-            // a separate block. (Related to the `padded_output` optimization note.)
-
-            // Extract `data_bits` (or whatever we have left) from the `source` where
-            // the `read_pos` left off and reposition them at the byte boundary (setting
-            // `new_offset` to 0) since elements are byte-aligned.
-            // We're are doing an implicit padding in the shift process inside of
-            // `extract_bits_and_shift`: since this function returns the extracted data
-            // in a byte stream, filling the remaining bits with zeros, those bits will
-            // effectively become the padding bits.
-            padded_output.append(&mut extract_bits_and_shift(
-                source,
-                read_pos,
-                min(padding_map.data_bits, source_bits - read_pos),
-                0,
-            ));
-
-            read_pos += padding_map.data_bits;
-            // Position at the data that would start filling the next element (if this
-            // was the last element we had data for -and maybe it can be incomplete-
-            // this addition will break the loop).
-        }
-    }
-
-    // Check that our estimated size was correct.
-    debug_assert_eq!(padded_output.len(), padded_output_size);
-
-    target.write_all(&padded_output)?;
-
-    // Always return the expected number of bytes, since this function will fail if write_all does.
-    Ok(source.len())
-}
 
 // offset and num_bytes are based on the unpadded data, so
 // if [0, 1, ..., 255] was the original unpadded data, offset 3 and len 4 would return
@@ -1009,12 +858,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use itertools::Itertools;
-    use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
-    use std::io::Cursor;
-    use storage_proofs::fr32::bytes_into_fr;
 
     #[test]
     fn test_position() {
@@ -1116,207 +963,16 @@ mod tests {
         padded_data.into_boxed_slice()
     }
 
-    // `write_padded` for 151 bytes of 1s, check padding.
-    #[test]
-    fn test_write_padded() {
-        let mut data: Vec<u8> = vec![255u8; 151];
-        let buf = Vec::new();
-        let mut cursor = Cursor::new(buf);
-        let written = write_padded(&mut data[..].as_ref(), &mut cursor).unwrap();
-        let padded = cursor.into_inner();
-        assert_eq!(written, 151);
-        assert_eq!(
-            padded.len(),
-            FR32_PADDING_MAP.transform_byte_offset(151, true)
-        );
-
-        assert_eq!(&padded[0..31], &data[0..31]);
-        assert_eq!(padded[31], 0b0011_1111);
-        assert_eq!(padded[32], 0b1111_1111);
-        assert_eq!(&padded[33..63], vec![255u8; 30].as_slice());
-        assert_eq!(padded[63], 0b0011_1111);
-        assert_eq!(padded.into_boxed_slice(), bit_vec_padding(data));
-    }
-
-    // `write_padded` for 256 bytes of 1s, splitting it in two calls of 127 bytes,
-    // aligning the calls with the padded element boundaries, check padding.
-    #[test]
-    fn test_write_padded_multiple_aligned() {
-        let mut data = vec![255u8; 254];
-        let buf = Vec::new();
-        let mut cursor = Cursor::new(buf);
-        let mut written = write_padded(&mut data[0..127].as_ref(), &mut cursor).unwrap();
-        written += write_padded(&mut data[127..].as_ref(), &mut cursor).unwrap();
-        let padded = cursor.into_inner();
-
-        assert_eq!(written, 254);
-        assert_eq!(
-            padded.len(),
-            FR32_PADDING_MAP.transform_byte_offset(254, true)
-        );
-
-        assert_eq!(padded[127], 0b0011_1111);
-        assert_eq!(padded[128], 0b1111_1111);
-        assert_eq!(&padded[128..159], vec![255u8; 31].as_slice());
-        assert_eq!(padded.into_boxed_slice(), bit_vec_padding(data));
-    }
-
-    // `write_padded` for 265 bytes of 1s, splitting it in two calls of 128 bytes,
-    // aligning the calls with the padded element boundaries, check padding.
-    #[test]
-    fn test_write_padded_multiple_first_aligned() {
-        let mut data = vec![255u8; 265];
-        let buf = Vec::new();
-        let mut cursor = Cursor::new(buf);
-        let mut written = write_padded(&mut data[0..127].as_ref(), &mut cursor).unwrap();
-        written += write_padded(&mut data[127..].as_ref(), &mut cursor).unwrap();
-        let padded = cursor.into_inner();
-
-        assert_eq!(written, 265);
-        assert_eq!(
-            padded.len(),
-            FR32_PADDING_MAP.transform_byte_offset(265, true)
-        );
-
-        assert_eq!(padded[127], 0b0011_1111);
-        assert_eq!(padded[128], 0b1111_1111);
-        assert_eq!(&padded[128..159], vec![255u8; 31].as_slice());
-        assert_eq!(padded[data.len()], 0b1111_1111);
-        assert_eq!(padded.into_boxed_slice(), bit_vec_padding(data));
-    }
-
-    fn validate_fr32(bytes: &[u8]) {
-        for (i, chunk) in bytes.chunks(32).enumerate() {
-            let _ = bytes_into_fr::<Bls12>(chunk).expect(&format!(
-                "{}th chunk cannot be converted to valid Fr: {:?}",
-                i + 1,
-                chunk
-            ));
-        }
-    }
-
-    #[test]
-    fn test_write_padded_chained_byte_source() {
-        let random_bytes: Vec<u8> = (0..127).map(|_| rand::random::<u8>()).collect();
-
-        // read 127 bytes from a non-chained source
-        let (n, output_x) = {
-            let mut input_x = Cursor::new(random_bytes.clone());
-            let mut output_x = Cursor::new(Vec::new());
-
-            let n_x = write_padded(&mut input_x, &mut output_x).unwrap();
-            output_x.seek(SeekFrom::Start(0)).expect("could not seek");
-
-            let mut buf_x = Vec::new();
-            output_x.read_to_end(&mut buf_x).expect("could not seek");
-
-            (n_x, buf_x)
-        };
-
-        // read 127 bytes from a 32-byte buffer and then a 95-byte buffer
-        let (m, output_y) = {
-            let mut input_y =
-                Cursor::new(random_bytes.iter().take(32).cloned().collect::<Vec<u8>>()).chain(
-                    Cursor::new(random_bytes.iter().skip(32).cloned().collect::<Vec<u8>>()),
-                );
-
-            let mut output_y = Cursor::new(Vec::new());
-
-            let n_y = write_padded(&mut input_y, &mut output_y).unwrap();
-            output_y.seek(SeekFrom::Start(0)).expect("could not seek");
-
-            let mut buf_y = Vec::new();
-            output_y.read_to_end(&mut buf_y).expect("could not seek");
-
-            (n_y, buf_y)
-        };
-
-        assert_eq!(n, m, "should have written same number of bytes");
-        assert_eq!(output_x, output_y, "should have written same bytes")
-    }
-
-    // `write_padded` for 127 bytes of 1s, splitting it in two calls of varying
-    // sizes, from 0 to the full size, generating many unaligned calls, check padding.
-    #[test]
-    fn test_write_padded_multiple_unaligned() {
-        // Use 127 for this test because it unpads to 128 – a multiple of 32.
-        // Otherwise the last chunk will be too short and cannot be converted to Fr.
-        for i in 1..126 {
-            let mut data = vec![255u8; 127];
-            let buf = Vec::new();
-            let mut cursor = Cursor::new(buf);
-            let mut written = write_padded(&mut data[0..i].as_ref(), &mut cursor).unwrap();
-            written += write_padded(&mut data[i..].as_ref(), &mut cursor).unwrap();
-            let padded = cursor.into_inner();
-            validate_fr32(&padded);
-            assert_eq!(written, 127);
-            assert_eq!(
-                padded.len(),
-                FR32_PADDING_MAP.transform_byte_offset(127, true)
-            );
-
-            // Check bytes in the boundary between calls: `i` and `i-1`.
-            for offset in [i - 1, i].iter() {
-                if *offset % 32 == 31 {
-                    // Byte with padding.
-                    assert_eq!(padded[*offset], 0b0011_1111);
-                } else {
-                    assert_eq!(padded[*offset], 255u8);
-                }
-            }
-
-            assert_eq!(padded.into_boxed_slice(), bit_vec_padding(data));
-        }
-    }
-
-    // `write_padded` for a raw data stream of increasing values and specific
-    // outliers (0xFF, 9), check the content of the raw data encoded (with
-    // different alignments) in the padded layouts.
-    #[test]
-    fn test_write_padded_alt() {
-        let mut source = vec![
-            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-            25, 26, 27, 28, 29, 30, 31, 0xff, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-            16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 0xff, 9, 9,
-        ];
-        // FIXME: This doesn't exercise the ability to write a second time, which is the point of the extra_bytes in write_test.
-        source.extend(vec![9, 0xff]);
-
-        let buf = Vec::new();
-        let mut cursor = Cursor::new(buf);
-        write_padded(&mut source[..].as_ref(), &mut cursor).unwrap();
-        let buf = cursor.into_inner();
-
-        for i in 0..31 {
-            assert_eq!(buf[i], i as u8 + 1);
-        }
-        assert_eq!(buf[31], 63); // Six least significant bits of 0xff
-        assert_eq!(buf[32], (1 << 2) | 0b11); // 7
-        for i in 33..63 {
-            assert_eq!(buf[i], (i as u8 - 31) << 2);
-        }
-        assert_eq!(buf[63], (0x0f << 2)); // 4-bits of ones, half of 0xff, shifted by two, followed by two bits of 0-padding.
-        assert_eq!(buf[64], 0x0f | 9 << 4); // The last half of 0xff, 'followed' by 9.
-        assert_eq!(buf[65], 9 << 4); // A shifted 9.
-        assert_eq!(buf[66], 9 << 4); // Another.
-        assert_eq!(buf[67], 0xf0); // The final 0xff is split into two bytes. Here is the first half.
-        assert_eq!(buf[68], 0x0f); // And here is the second.
-
-        assert_eq!(buf.into_boxed_slice(), bit_vec_padding(source));
-    }
-
     // `write_padded` and `write_unpadded` for 1016 bytes of 1s, check the
     // recovered raw data.
     #[test]
     fn test_read_write_padded() {
         let len = 1016; // Use a multiple of 254.
-        let mut data = vec![255u8; len];
-        let buf = Vec::new();
-        let mut cursor = Cursor::new(buf);
-        let padded_written = write_padded(&mut data[..].as_ref(), &mut cursor).unwrap();
-        let padded = cursor.into_inner();
+        let data = vec![255u8; len];
+        let mut padded = Vec::new();
+        let mut reader = crate::pad_reader::PadReader::new(io::Cursor::new(&data));
+        reader.read_to_end(&mut padded).unwrap();
 
-        assert_eq!(padded_written, len);
         assert_eq!(
             padded.len(),
             FR32_PADDING_MAP.transform_byte_offset(len, true)
@@ -1336,11 +992,11 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let len = 1016;
-        let mut data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
-        let buf = Vec::new();
-        let mut cursor = Cursor::new(buf);
-        write_padded(&mut data[..].as_ref(), &mut cursor).unwrap();
-        let padded = cursor.into_inner();
+        let data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
+
+        let mut padded = Vec::new();
+        let mut reader = crate::pad_reader::PadReader::new(io::Cursor::new(&data));
+        reader.read_to_end(&mut padded).unwrap();
 
         {
             let mut unpadded = Vec::new();
