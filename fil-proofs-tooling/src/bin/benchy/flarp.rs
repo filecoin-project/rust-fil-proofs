@@ -13,8 +13,6 @@ use filecoin_proofs::{
 };
 use log::info;
 use paired::bls12_381::Bls12;
-use rand::{rngs::OsRng, SeedableRng};
-use rand_xorshift::XorShiftRng;
 use serde::{Deserialize, Serialize};
 use storage_proofs::circuit::bench::BenchCS;
 use storage_proofs::circuit::election_post::{ElectionPoStCircuit, ElectionPoStCompound};

@@ -160,19 +160,16 @@ pub fn main() {
         });
 
         if !only_election_post {
-            cache_porep_params(
-                is_predictable,
-                PoRepConfig {
-                    sector_size: SectorSize(sector_size),
-                    partitions: PoRepProofPartitions(
-                        *POREP_PARTITIONS
-                            .read()
-                            .unwrap()
-                            .get(&sector_size)
-                            .expect("missing sector size"),
-                    ),
-                },
-            );
+            cache_porep_params(PoRepConfig {
+                sector_size: SectorSize(sector_size),
+                partitions: PoRepProofPartitions(
+                    *POREP_PARTITIONS
+                        .read()
+                        .unwrap()
+                        .get(&sector_size)
+                        .expect("missing sector size"),
+                ),
+            });
         }
     }
 }
