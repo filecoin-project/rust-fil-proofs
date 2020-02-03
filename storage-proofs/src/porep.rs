@@ -37,7 +37,7 @@ pub struct PrivateInputs<'a> {
     pub replica: &'a [u8],
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ProverAux<H: Hasher> {
     pub tree_d: MerkleTree<H::Domain, H::Function>,
     pub tree_r: MerkleTree<H::Domain, H::Function>,

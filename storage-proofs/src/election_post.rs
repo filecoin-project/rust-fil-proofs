@@ -63,7 +63,7 @@ pub struct PublicInputs<T: Domain> {
     pub sector_challenge_index: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct PrivateInputs<H: Hasher> {
     pub tree: LCMerkleTree<H::Domain, H::Function>,
     pub comm_c: H::Domain,

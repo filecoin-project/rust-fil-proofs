@@ -265,7 +265,7 @@ mod tests {
     #[ignore] // Slow test – run only when compiled for release.
     fn por_test_compound() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
-        let leaves = 6;
+        let leaves = 8;
         let data: Vec<u8> = (0..leaves)
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
@@ -348,9 +348,9 @@ mod tests {
     fn test_por_input_circuit_with_bls12_381<H: Hasher>(num_constraints: usize) {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 6;
+        let leaves = 8;
 
-        for i in 0..6 {
+        for i in 0..leaves {
             // -- Basic Setup
 
             let data: Vec<u8> = (0..leaves)
@@ -455,7 +455,7 @@ mod tests {
 
     fn private_por_test_compound<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
-        let leaves = 6;
+        let leaves = 8;
         let data: Vec<u8> = (0..leaves)
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
@@ -525,9 +525,9 @@ mod tests {
     fn test_private_por_input_circuit_with_bls12_381() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 6;
+        let leaves = 8;
 
-        for i in 0..6 {
+        for i in 0..leaves {
             // -- Basic Setup
 
             let data: Vec<u8> = (0..leaves)

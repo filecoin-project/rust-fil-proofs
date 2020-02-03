@@ -261,7 +261,7 @@ mod tests {
     fn graph_bucket<H: Hasher>() {
         let degree = BASE_DEGREE;
 
-        for size in vec![3, 10, 200, 2000] {
+        for size in vec![4, 16, 256, 2048] {
             let g = BucketGraph::<H>::new(size, degree, 0, new_seed()).unwrap();
 
             assert_eq!(g.size(), size, "wrong nodes count");
@@ -311,8 +311,8 @@ mod tests {
     }
 
     fn gen_proof<H: Hasher>(config: Option<StoreConfig>) {
-        let g = BucketGraph::<H>::new(5, BASE_DEGREE, 0, new_seed()).unwrap();
-        let data = vec![2u8; NODE_SIZE * 5];
+        let g = BucketGraph::<H>::new(8, BASE_DEGREE, 0, new_seed()).unwrap();
+        let data = vec![2u8; NODE_SIZE * 8];
 
         let mmapped = &mmap_from(&data);
         let tree = g.merkle_tree(config, mmapped).unwrap();
