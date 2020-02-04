@@ -259,6 +259,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let in_memory = !crate::settings::SETTINGS.lock().unwrap().replicate_on_disk;
 
         if in_memory {
+            info!("generate_labels: memory");
             Self::generate_labels_inner::<merkletree::store::VecStore<H::Domain>>(
                 graph,
                 layer_challenges,
@@ -266,6 +267,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 config,
             )
         } else {
+            info!("generate_labels: disk");
             Self::generate_labels_inner::<DiskStore<H::Domain>>(
                 graph,
                 layer_challenges,
@@ -282,7 +284,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         replica_id: &<H as Hasher>::Domain,
         config: StoreConfig,
     ) -> Result<(LabelsCache<H>, Labels<H>)> {
-        info!("generate labels");
         let layers = layer_challenges.layers();
         // For now, we require it due to changes in encodings structure.
         let mut labels: Vec<DiskStore<H::Domain>> = Vec::with_capacity(layers);
