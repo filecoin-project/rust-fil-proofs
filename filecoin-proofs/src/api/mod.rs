@@ -444,6 +444,7 @@ mod tests {
                 sector_size: SectorSize(SECTOR_SIZE_ONE_KIB),
                 challenge_count: crate::constants::POST_CHALLENGE_COUNT,
                 challenged_nodes: crate::constants::POST_CHALLENGED_NODES,
+                priority: false,
             },
             &[0; 32],
             1,

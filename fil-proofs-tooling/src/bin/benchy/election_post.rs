@@ -158,6 +158,7 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
         sector_size: SectorSize(sector_size as u64),
         challenge_count: POST_CHALLENGE_COUNT,
         challenged_nodes: POST_CHALLENGED_NODES,
+        priority: true,
     };
 
     let gen_candidates_measurement = measure(|| {

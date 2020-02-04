@@ -14,6 +14,8 @@ pub struct PoStConfig {
     pub sector_size: SectorSize,
     pub challenge_count: usize,
     pub challenged_nodes: usize,
+    /// High priority (always runs on GPU) == true
+    pub priority: bool,
 }
 
 impl From<PoStConfig> for PaddedBytesAmount {

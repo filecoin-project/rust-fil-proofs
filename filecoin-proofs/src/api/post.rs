@@ -296,7 +296,7 @@ pub fn generate_post(
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
         partitions: None,
-        priority: true,
+        priority: post_config.priority,
     };
     let pub_params: compound_proof::PublicParams<election_post::ElectionPoSt<DefaultTreeHasher>> =
         ElectionPoStCompound::setup(&setup_params)?;
