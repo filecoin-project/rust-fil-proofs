@@ -497,6 +497,13 @@ impl<H: Hasher> Labels<H> {
 
         Column::new(node, rows)
     }
+
+    /// Update all configs to the new passed in root cache path.
+    pub fn update_root<P: AsRef<Path>>(&mut self, root: P) {
+        for config in &mut self.labels {
+            config.path = root.as_ref().into();
+        }
+    }
 }
 
 #[derive(Debug)]

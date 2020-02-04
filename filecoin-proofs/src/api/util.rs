@@ -4,7 +4,7 @@ use paired::Engine;
 use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes};
 use storage_proofs::hasher::Domain;
 
-use crate::types::Commitment;
+use crate::types::{Commitment, SectorSize};
 
 pub(crate) fn as_safe_commitment<H: Domain, T: AsRef<str>>(
     comm: &Commitment,
@@ -21,4 +21,11 @@ pub(crate) fn commitment_from_fr<E: Engine>(fr: E::Fr) -> Commitment {
         commitment[i] = *b;
     }
     commitment
+}
+
+pub(crate) fn get_tree_size<D: Domain>(sector_size: SectorSize) -> usize {
+    let sector_size = u64::from(sector_size);
+    let elems = sector_size as usize / std::mem::size_of::<D>();
+
+    2 * elems - 1
 }

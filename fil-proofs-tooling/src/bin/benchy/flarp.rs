@@ -166,7 +166,10 @@ fn augment_with_op_measurements(mut output: &mut FlarpOutputs) {
 }
 
 fn configure_global_config(inputs: &FlarpInputs) {
-    filecoin_proofs::constants::LAYERS.store(inputs.stacked_layers, Relaxed);
+    filecoin_proofs::constants::LAYERS
+        .write()
+        .unwrap()
+        .insert(inputs.sector_size_bytes(), inputs.stacked_layers as usize);
     filecoin_proofs::constants::POREP_PARTITIONS
         .write()
         .unwrap()

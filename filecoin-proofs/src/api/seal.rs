@@ -6,7 +6,8 @@ use anyhow::{ensure, Context, Result};
 use bincode::{deserialize, serialize};
 use log::info;
 use memmap::MmapOptions;
-use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
+use merkletree::merkle::{get_merkle_tree_leafs, MerkleTree};
+use merkletree::store::{DiskStore, Store, StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
 use paired::bls12_381::{Bls12, Fr};
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::stacked::StackedCompound;
@@ -22,7 +23,7 @@ use storage_proofs::stacked::{
     TemporaryAuxCache,
 };
 
-use crate::api::util::{as_safe_commitment, commitment_from_fr};
+use crate::api::util::{as_safe_commitment, commitment_from_fr, get_tree_size};
 use crate::caches::{get_stacked_params, get_stacked_verifying_key};
 use crate::constants::{DefaultPieceHasher, POREP_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN};
 use crate::parameters::setup_params;
@@ -98,7 +99,7 @@ where
     >>::setup(&compound_setup_params)?;
 
     info!("building merkle tree for the original data");
-    let (config, data_tree, comm_d) = measure_op(CommD, || -> Result<_> {
+    let (config, comm_d) = measure_op(CommD, || -> Result<_> {
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
         let config = StoreConfig::new(
@@ -115,8 +116,9 @@ where
 
         let comm_d_root: Fr = data_tree.root().into();
         let comm_d = commitment_from_fr::<Bls12>(comm_d_root);
+        drop(data_tree);
 
-        Ok((config, data_tree, comm_d))
+        Ok((config, comm_d))
     })?;
 
     info!("verifying pieces");
@@ -139,7 +141,6 @@ where
         labels,
         config,
         comm_d,
-        data_tree,
     })
 }
 
@@ -157,11 +158,13 @@ where
     info!("seal_pre_commit_phase2: start");
 
     let SealPreCommitPhase1Output {
-        labels,
+        mut labels,
         config,
         comm_d,
-        data_tree,
+        ..
     } = phase1_output;
+
+    labels.update_root(cache_path.as_ref());
 
     let f_data = OpenOptions::new()
         .read(true)
@@ -174,6 +177,23 @@ where
             .with_context(|| format!("could not mmap out_path={:?}", out_path.as_ref().display()))?
     };
     let data: storage_proofs::porep::Data<'_> = (data, PathBuf::from(out_path.as_ref())).into();
+
+    // Load data tree from disk
+    let data_tree = {
+        let config = StoreConfig::new(
+            cache_path.as_ref(),
+            CacheKey::CommDTree.to_string(),
+            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+        );
+
+        let tree_size =
+            get_tree_size::<<DefaultPieceHasher as Hasher>::Domain>(porep_config.sector_size);
+        let tree_leafs = get_merkle_tree_leafs(tree_size);
+
+        let store: DiskStore<<DefaultPieceHasher as Hasher>::Domain> =
+            DiskStore::new_from_disk(tree_size, &config)?;
+        MerkleTree::from_data_store(store, tree_leafs)
+    }?;
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: setup_params(

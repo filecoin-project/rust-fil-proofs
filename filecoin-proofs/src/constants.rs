@@ -17,13 +17,12 @@ pub const POST_CHALLENGE_COUNT: usize = 65;
 pub const POST_CHALLENGED_NODES: usize = 1;
 
 lazy_static! {
-    pub static ref LAYERS: AtomicU64 = AtomicU64::new(11);
+    pub static ref PARAMETERS: ParameterMap =
+        serde_json::from_str(include_str!("../parameters.json")).expect("Invalid parameters.json");
     pub static ref DRG_DEGREE: AtomicU64 =
         AtomicU64::new(storage_proofs::drgraph::BASE_DEGREE as u64);
     pub static ref EXP_DEGREE: AtomicU64 =
         AtomicU64::new(storage_proofs::stacked::EXP_DEGREE as u64);
-    pub static ref PARAMETERS: ParameterMap =
-        serde_json::from_str(include_str!("../parameters.json")).expect("Invalid parameters.json");
     pub static ref POREP_MINIMUM_CHALLENGES: RwLock<HashMap<u64, u64>> = RwLock::new(
         [
             (SECTOR_SIZE_ONE_KIB, 2),
@@ -43,6 +42,18 @@ lazy_static! {
             (SECTOR_SIZE_256_MIB, 1),
             (SECTOR_SIZE_1_GIB, 1),
             (SECTOR_SIZE_32_GIB, 10)
+        ]
+        .iter()
+        .copied()
+        .collect()
+    );
+    pub static ref LAYERS: RwLock<HashMap<u64, usize>> = RwLock::new(
+        [
+            (SECTOR_SIZE_ONE_KIB, 1),
+            (SECTOR_SIZE_16_MIB, 2),
+            (SECTOR_SIZE_256_MIB, 2),
+            (SECTOR_SIZE_1_GIB, 11),
+            (SECTOR_SIZE_32_GIB, 11)
         ]
         .iter()
         .copied()
