@@ -14,23 +14,19 @@ const SETTINGS_PATH: &str = "./rust-fil-proofs.config.toml";
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
-    pub maximize_caching: bool,
-    pub merkle_tree_path: String,
-    pub num_proving_threads: usize,
-    pub replicated_trees_dir: String,
+    /// Caches the DRG and Expander Graph nodes in memory.
+    pub cache_graph: bool,
     pub pedersen_hash_exp_window_size: u32,
-    // Generating MTs in parallel optimizes for speed while generating them
-    // in sequence (`false`) optimizes for memory.
+    /// If true, tries to offload as much as possible to disk, during replication.
+    pub replicate_on_disk: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            maximize_caching: false,
-            merkle_tree_path: "/tmp/merkle-trees".into(),
-            num_proving_threads: 1,
-            replicated_trees_dir: "".into(),
+            cache_graph: true,
             pedersen_hash_exp_window_size: 16,
+            replicate_on_disk: false,
         }
     }
 }

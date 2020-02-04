@@ -95,7 +95,7 @@ where
         expansion_degree: usize,
         seed: [u8; 28],
     ) -> Result<Self> {
-        let use_cache = settings::SETTINGS.lock().unwrap().maximize_caching;
+        let use_cache = settings::SETTINGS.lock().unwrap().cache_graph;
 
         let base_graph = match base_graph {
             Some(graph) => graph,

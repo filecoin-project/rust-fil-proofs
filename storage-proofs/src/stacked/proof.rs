@@ -256,16 +256,40 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         replica_id: &<H as Hasher>::Domain,
         config: StoreConfig,
     ) -> Result<(LabelsCache<H>, Labels<H>)> {
+        let in_memory = !crate::settings::SETTINGS.lock().unwrap().replicate_on_disk;
+
+        if in_memory {
+            Self::generate_labels_inner::<merkletree::store::VecStore<H::Domain>>(
+                graph,
+                layer_challenges,
+                replica_id,
+                config,
+            )
+        } else {
+            Self::generate_labels_inner::<DiskStore<H::Domain>>(
+                graph,
+                layer_challenges,
+                replica_id,
+                config,
+            )
+        }
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn generate_labels_inner<S: Store<H::Domain>>(
+        graph: &StackedBucketGraph<H>,
+        layer_challenges: &LayerChallenges,
+        replica_id: &<H as Hasher>::Domain,
+        config: StoreConfig,
+    ) -> Result<(LabelsCache<H>, Labels<H>)> {
         info!("generate labels");
         let layers = layer_challenges.layers();
         // For now, we require it due to changes in encodings structure.
         let mut labels: Vec<DiskStore<H::Domain>> = Vec::with_capacity(layers);
         let mut label_configs: Vec<StoreConfig> = Vec::with_capacity(layers);
 
-        use merkletree::store::VecStore;
-
-        let mut layer_labels = VecStore::new(graph.size())?;
-        let mut exp_parents_data: Option<VecStore<H::Domain>> = None;
+        let mut layer_labels = S::new(graph.size())?;
+        let mut exp_parents_data: Option<S> = None;
 
         // setup hasher to reuse
         let mut base_hasher = Sha256::new();
