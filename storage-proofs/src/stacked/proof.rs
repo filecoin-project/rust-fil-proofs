@@ -30,7 +30,7 @@ use crate::stacked::{
     },
     EncodingProof, LabelingProof,
 };
-use crate::util::{data_at_node_offset, NODE_SIZE};
+use crate::util::NODE_SIZE;
 
 pub const TOTAL_PARENTS: usize = 37;
 
@@ -262,10 +262,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let mut labels: Vec<DiskStore<H::Domain>> = Vec::with_capacity(layers);
         let mut label_configs: Vec<StoreConfig> = Vec::with_capacity(layers);
 
-        let layer_size = graph.size() * NODE_SIZE;
-        let mut layer_labels = vec![0u8; layer_size];
+        use merkletree::store::VecStore;
 
-        let mut exp_parents_data: Option<Vec<u8>> = None;
+        let mut layer_labels = VecStore::new(graph.size())?;
+        let mut exp_parents_data: Option<VecStore<H::Domain>> = None;
 
         // setup hasher to reuse
         let mut base_hasher = Sha256::new();
@@ -287,24 +287,24 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
             info!("  setting exp parents");
 
-            // NOTE: this means we currently keep 2x sector size around, to improve speed.
-            if let Some(ref mut exp_parents_data) = exp_parents_data {
-                exp_parents_data.copy_from_slice(&layer_labels);
-            } else {
-                exp_parents_data = Some(layer_labels.clone());
-            }
-
             // Write the result to disk to avoid keeping it in memory all the time.
             let layer_config =
                 StoreConfig::from_config(&config, CacheKey::label_layer(layer), Some(graph.size()));
 
             info!("  storing labels on disk");
             // Construct and persist the layer data.
-            let layer_store: DiskStore<H::Domain> = DiskStore::new_from_slice_with_config(
-                graph.size(),
-                &layer_labels,
-                layer_config.clone(),
-            )?;
+            let mut layer_store =
+                DiskStore::<H::Domain>::new_with_config(graph.size(), layer_config.clone())?;
+
+            // Avoid recomputing if we already have a valid store in this place
+            if !layer_store.loaded_from_disk() {
+                for (i, el) in layer_labels.iter().enumerate() {
+                    layer_store.write_at(*el, i)?;
+                }
+            }
+
+            exp_parents_data = Some(layer_labels.clone());
+
             info!(
                 "  generated layer {} store with id {}",
                 layer, layer_config.id
@@ -396,7 +396,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let mut tree_c_config =
             StoreConfig::from_config(&config, CacheKey::CommCTree.to_string(), None);
 
-        let labels = LabelsCache::new(&label_configs)?;
+        let labels = LabelsCache::new(&label_configs, |config| {
+            DiskStore::new_from_disk(config.size.unwrap(), config)
+        })?;
 
         // Build the tree for CommC
         let tree_c = measure_op(GenerateTreeC, || {
@@ -563,11 +565,11 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     }
 }
 
-pub fn create_key<H: Hasher>(
+pub fn create_key<H: Hasher, S: Store<H::Domain>>(
     graph: &StackedBucketGraph<H>,
     mut hasher: Sha256,
-    exp_parents_data: Option<&Vec<u8>>,
-    layer_labels: &mut [u8],
+    exp_parents_data: Option<&S>,
+    layer_labels: &mut S,
     node: usize,
 ) -> Result<()> {
     // hash parents for all non 0 nodes
@@ -589,7 +591,7 @@ pub fn create_key<H: Hasher>(
             layer_labels,
             exp_parents_data,
             &mut inputs[8..],
-        );
+        )?;
 
         // Repeat parents
         {
@@ -607,13 +609,12 @@ pub fn create_key<H: Hasher>(
         hasher.input(&(node as u64).to_be_bytes()[..]);
     }
 
-    // store the newly generated key
-    let start = data_at_node_offset(node);
-    let end = start + NODE_SIZE;
-    layer_labels[start..end].copy_from_slice(&hasher.result()[..]);
-
+    let mut res = hasher.result();
     // strip last two bits, to ensure result is in Fr.
-    layer_labels[end - 1] &= 0b0011_1111;
+    res[31] &= 0b0011_1111;
+
+    // store the newly generated key
+    layer_labels.copy_from_slice(&res, node)?;
 
     Ok(())
 }

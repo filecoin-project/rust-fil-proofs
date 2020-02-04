@@ -344,18 +344,6 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
         self.tree_c_config.path = cp;
     }
 
-    pub fn labels_for_layer(&self, layer: usize) -> Result<DiskStore<H::Domain>> {
-        self.labels.labels_for_layer(layer)
-    }
-
-    pub fn domain_node_at_layer(&self, layer: usize, node_index: u32) -> Result<H::Domain> {
-        Ok(self.labels_for_layer(layer)?.read_at(node_index as usize)?)
-    }
-
-    pub fn column(&self, column_index: u32) -> Result<Column<H>> {
-        self.labels.column(column_index)
-    }
-
     pub fn delete(t_aux: TemporaryAux<H, G>) -> Result<()> {
         let tree_d_size = t_aux.tree_d_config.size.unwrap();
         let tree_d_store: DiskStore<G::Domain> =
@@ -414,7 +402,10 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
                 .context("tree_r_last")?;
 
         Ok(TemporaryAuxCache {
-            labels: LabelsCache::new(&t_aux.labels).context("labels_cache")?,
+            labels: LabelsCache::new(&t_aux.labels, |config| {
+                DiskStore::new_from_disk(config.size.unwrap(), config)
+            })
+            .context("labels_cache")?,
             tree_d,
             tree_r_last,
             tree_c,
@@ -457,7 +448,7 @@ impl<H: Hasher> Labels<H> {
         self.labels.is_empty()
     }
 
-    pub fn labels_for_layer(&self, layer: usize) -> Result<DiskStore<H::Domain>> {
+    pub fn labels_for_layer(&self, layer: usize) -> &StoreConfig {
         assert!(layer != 0, "Layer cannot be 0");
         assert!(
             layer <= self.layers(),
@@ -467,35 +458,20 @@ impl<H: Hasher> Labels<H> {
         );
 
         let row_index = layer - 1;
-        let config = self.labels[row_index].clone();
+        let config = &self.labels[row_index];
         assert!(config.size.is_some());
 
-        DiskStore::new_from_disk(config.size.unwrap(), &config)
+        config
     }
 
     /// Returns label for the last layer.
-    pub fn labels_for_last_layer(&self) -> Result<DiskStore<H::Domain>> {
+    pub fn labels_for_last_layer(&self) -> &StoreConfig {
         self.labels_for_layer(self.labels.len() - 1)
     }
 
     /// How many layers are available.
     fn layers(&self) -> usize {
         self.labels.len()
-    }
-
-    /// Build the column for the given node.
-    pub fn column(&self, node: u32) -> Result<Column<H>> {
-        let rows = self
-            .labels
-            .iter()
-            .map(|label| {
-                assert!(label.size.is_some());
-                let store = DiskStore::new_from_disk(label.size.unwrap(), &label)?;
-                store.read_at(node as usize)
-            })
-            .collect::<Result<_>>()?;
-
-        Column::new(node, rows)
     }
 
     /// Update all configs to the new passed in root cache path.
@@ -507,20 +483,25 @@ impl<H: Hasher> Labels<H> {
 }
 
 #[derive(Debug)]
-pub struct LabelsCache<H: Hasher> {
-    pub labels: Vec<DiskStore<H::Domain>>,
+pub struct LabelsCache<H: Hasher, S: Store<H::Domain> = DiskStore<<H as Hasher>::Domain>> {
+    pub labels: Vec<S>,
     pub _h: PhantomData<H>,
 }
 
-impl<H: Hasher> LabelsCache<H> {
-    pub fn new(labels: &Labels<H>) -> Result<Self> {
-        let mut disk_store_labels: Vec<DiskStore<H::Domain>> = Vec::with_capacity(labels.len());
+impl<H: Hasher, S: Store<H::Domain>> LabelsCache<H, S> {
+    pub fn new<F>(labels: &Labels<H>, constructor: F) -> Result<Self>
+    where
+        F: Fn(&StoreConfig) -> Result<S>,
+    {
+        let mut store_labels: Vec<S> = Vec::with_capacity(labels.len());
         for i in 0..labels.len() {
-            disk_store_labels.push(labels.labels_for_layer(i + 1)?);
+            let config = labels.labels_for_layer(i + 1);
+            let store = constructor(config)?;
+            store_labels.push(store);
         }
 
         Ok(LabelsCache {
-            labels: disk_store_labels,
+            labels: store_labels,
             _h: PhantomData,
         })
     }
@@ -529,7 +510,7 @@ impl<H: Hasher> LabelsCache<H> {
         self.labels.len()
     }
 
-    pub fn labels_for_layer(&self, layer: usize) -> &DiskStore<H::Domain> {
+    pub fn labels_for_layer(&self, layer: usize) -> &S {
         assert!(layer != 0, "Layer cannot be 0");
         assert!(
             layer <= self.layers(),
@@ -543,7 +524,7 @@ impl<H: Hasher> LabelsCache<H> {
     }
 
     /// Returns the labels on the last layer.
-    pub fn labels_for_last_layer(&self) -> Result<&DiskStore<H::Domain>> {
+    pub fn labels_for_last_layer(&self) -> Result<&S> {
         Ok(&self.labels[self.labels.len() - 1])
     }
 
