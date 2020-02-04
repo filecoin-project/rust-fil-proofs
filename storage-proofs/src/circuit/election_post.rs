@@ -529,6 +529,7 @@ mod tests {
                 challenged_nodes: 1,
             },
             partitions: None,
+            priority: true,
         };
 
         let mut sectors: Vec<SectorId> = Vec::new();

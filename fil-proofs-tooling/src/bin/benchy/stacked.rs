@@ -341,6 +341,7 @@ fn do_circuit_work<H: 'static + Hasher>(
     let compound_public_params = compound_proof::PublicParams {
         vanilla_params: pp.clone(),
         partitions: Some(*partitions),
+        priority: false,
     };
 
     if *bench || *circuit || *bench_only {

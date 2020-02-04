@@ -16,12 +16,15 @@ use crate::proof::ProofScheme;
 pub struct SetupParams<'a, S: ProofScheme<'a>> {
     pub vanilla_params: <S as ProofScheme<'a>>::SetupParams,
     pub partitions: Option<usize>,
+    /// High priority (always runs on GPU) == true
+    pub priority: bool,
 }
 
 #[derive(Clone)]
 pub struct PublicParams<'a, S: ProofScheme<'a>> {
     pub vanilla_params: S::PublicParams,
     pub partitions: Option<usize>,
+    pub priority: bool,
 }
 
 /// CircuitComponent exists so parent components can pass private inputs to their subcomponents
@@ -56,6 +59,7 @@ pub trait CompoundProof<
         Ok(PublicParams {
             vanilla_params: S::setup(&sp.vanilla_params)?,
             partitions: sp.partitions,
+            priority: sp.priority,
         })
     }
 
@@ -99,6 +103,7 @@ pub trait CompoundProof<
             vanilla_proofs,
             &pub_params.vanilla_params,
             groth_params,
+            pub_params.priority,
         )?;
         info!("snark_proof:finish");
 
@@ -209,6 +214,7 @@ pub trait CompoundProof<
         vanilla_proof: Vec<S::Proof>,
         pub_params: &S::PublicParams,
         groth_params: &groth16::MappedParameters<E>,
+        priority: bool,
     ) -> Result<Vec<groth16::Proof<E>>> {
         let mut rng = OsRng;
 
@@ -224,7 +230,11 @@ pub trait CompoundProof<
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let groth_proofs = groth16::create_random_proof_batch(circuits, groth_params, &mut rng)?;
+        let groth_proofs = if priority {
+            groth16::create_random_proof_batch_in_priority(circuits, groth_params, &mut rng)?
+        } else {
+            groth16::create_random_proof_batch(circuits, groth_params, &mut rng)?
+        };
 
         groth_proofs
             .into_iter()

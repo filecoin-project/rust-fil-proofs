@@ -510,6 +510,7 @@ mod tests {
                 layer_challenges: layer_challenges.clone(),
             },
             partitions: Some(partition_count),
+            priority: false,
         };
 
         // MT for original data is always named tree-d, and it will be
