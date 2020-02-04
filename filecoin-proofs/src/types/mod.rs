@@ -60,10 +60,9 @@ pub type Labels = storage_proofs::stacked::Labels<crate::constants::DefaultTreeH
 pub type DataTree = storage_proofs::stacked::Tree<crate::constants::DefaultPieceHasher>;
 pub use merkletree::store::StoreConfig;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SealPreCommitPhase1Output {
     pub labels: Labels,
     pub config: StoreConfig,
     pub comm_d: Commitment,
-    pub data_tree: DataTree,
 }
