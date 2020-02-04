@@ -54,7 +54,11 @@ pub fn setup_params(
             .unwrap()
             .get(&u64::from(sector_bytes))
             .expect("unknown sector size") as usize,
-        LAYERS.load(Ordering::Relaxed) as usize,
+        *LAYERS
+            .read()
+            .unwrap()
+            .get(&u64::from(sector_bytes))
+            .expect("unknown sector size"),
     )?;
     let sector_bytes = u64::from(sector_bytes);
 
@@ -95,7 +99,7 @@ mod tests {
     #[test]
     fn partition_layer_challenges_test() {
         let f = |partitions| {
-            select_challenges(partitions, 12, LAYERS.load(Ordering::Relaxed) as usize)
+            select_challenges(partitions, 12, 11)
                 .unwrap()
                 .challenges_count_all()
         };
