@@ -154,7 +154,7 @@ While replicating and generating the Merkle Trees (MT) for the proof at the same
 One of the most computational expensive operations during replication (besides the encoding itself) is the generation of the indexes of the (expansion) parents in the Stacked graph, implemented through a Feistel cipher (used as a pseudorandom permutation). To reduce that time we provide a caching mechanism to generate them only once and reuse them throughout replication (across the different layers). Already built into the system it can be activated with the environmental variable
 
 ```
-FIL_PROOFS_MAXIMIZE_CACHING=1
+FIL_PROOFS_CACHE_GRAPH=1
 ```
 
 To check that it's working you can inspect the replication log to find `using parents cache of unlimited size`. As the log indicates, we don't have a fine grain control at the moment so it either stores all parents or none. This cache can add almost an entire sector size to the memory used during replication, if you can spare it though this setting is _very recommended_ as it has a considerable impact on replication time.

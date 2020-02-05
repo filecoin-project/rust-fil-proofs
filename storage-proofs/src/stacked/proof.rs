@@ -260,37 +260,29 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         if in_memory {
             info!("generate_labels: memory");
-            Self::generate_labels_inner::<merkletree::store::VecStore<H::Domain>>(
-                graph,
-                layer_challenges,
-                replica_id,
-                config,
-            )
+            Self::generate_labels_inner_mem(graph, layer_challenges, replica_id, config)
         } else {
             info!("generate_labels: disk");
-            Self::generate_labels_inner::<DiskStore<H::Domain>>(
-                graph,
-                layer_challenges,
-                replica_id,
-                config,
-            )
+            Self::generate_labels_inner_disk(graph, layer_challenges, replica_id, config)
         }
     }
 
     #[allow(clippy::type_complexity)]
-    fn generate_labels_inner<S: Store<H::Domain>>(
+    fn generate_labels_inner_mem(
         graph: &StackedBucketGraph<H>,
         layer_challenges: &LayerChallenges,
         replica_id: &<H as Hasher>::Domain,
         config: StoreConfig,
     ) -> Result<(LabelsCache<H>, Labels<H>)> {
+        use merkletree::store::VecStore;
+
         let layers = layer_challenges.layers();
         // For now, we require it due to changes in encodings structure.
         let mut labels: Vec<DiskStore<H::Domain>> = Vec::with_capacity(layers);
         let mut label_configs: Vec<StoreConfig> = Vec::with_capacity(layers);
 
-        let mut layer_labels = S::new(graph.size())?;
-        let mut exp_parents_data: Option<S> = None;
+        let mut layer_labels = VecStore::<H::Domain>::new(graph.size())?;
+        let mut exp_parents_data: Option<VecStore<H::Domain>> = None;
 
         // setup hasher to reuse
         let mut base_hasher = Sha256::new();
@@ -338,6 +330,72 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             // Track the layer specific store and StoreConfig for later retrieval.
             labels.push(layer_store);
             label_configs.push(layer_config);
+        }
+
+        assert_eq!(
+            labels.len(),
+            layers,
+            "Invalid amount of layers encoded expected"
+        );
+
+        Ok((
+            LabelsCache::<H> {
+                labels,
+                _h: PhantomData,
+            },
+            Labels::<H> {
+                labels: label_configs,
+                _h: PhantomData,
+            },
+        ))
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn generate_labels_inner_disk(
+        graph: &StackedBucketGraph<H>,
+        layer_challenges: &LayerChallenges,
+        replica_id: &<H as Hasher>::Domain,
+        config: StoreConfig,
+    ) -> Result<(LabelsCache<H>, Labels<H>)> {
+        let layers = layer_challenges.layers();
+        // For now, we require it due to changes in encodings structure.
+        let mut labels: Vec<DiskStore<H::Domain>> = Vec::with_capacity(layers);
+        let mut label_configs: Vec<StoreConfig> = Vec::with_capacity(layers);
+
+        let mut exp_parents_data: Option<&DiskStore<H::Domain>> = None;
+
+        // setup hasher to reuse
+        let mut base_hasher = Sha256::new();
+        // hash replica id
+        base_hasher.input(AsRef::<[u8]>::as_ref(replica_id));
+
+        for layer in 1..=layers {
+            info!("generating layer: {}", layer);
+            let layer_config =
+                StoreConfig::from_config(&config, CacheKey::label_layer(layer), Some(graph.size()));
+            let mut layer_store =
+                DiskStore::<H::Domain>::new_with_config(graph.size(), layer_config.clone())?;
+
+            if !layer_store.loaded_from_disk() {
+                for node in 0..graph.size() {
+                    create_key::<_, DiskStore<H::Domain>>(
+                        graph,
+                        base_hasher.clone(),
+                        exp_parents_data,
+                        &mut layer_store,
+                        node,
+                    )?;
+                }
+            }
+            info!(
+                "  generated layer {} store with id {}",
+                layer, layer_config.id
+            );
+
+            // Track the layer specific store and StoreConfig for later retrieval.
+            labels.push(layer_store);
+            label_configs.push(layer_config);
+            exp_parents_data = labels.last();
         }
 
         assert_eq!(
@@ -672,17 +730,27 @@ mod tests {
     }
 
     #[test]
-    fn extract_all_pedersen() {
+    fn extract_all_pedersen_disk() {
+        crate::settings::SETTINGS.lock().unwrap().replicate_on_disk = true;
+        test_extract_all::<PedersenHasher>();
+        crate::settings::SETTINGS.lock().unwrap().replicate_on_disk = false;
+    }
+
+    #[test]
+    fn extract_all_pedersen_mem() {
+        crate::settings::SETTINGS.lock().unwrap().replicate_on_disk = false;
         test_extract_all::<PedersenHasher>();
     }
 
     #[test]
-    fn extract_all_sha256() {
+    fn extract_all_sha256_mem() {
+        crate::settings::SETTINGS.lock().unwrap().replicate_on_disk = false;
         test_extract_all::<Sha256Hasher>();
     }
 
     #[test]
-    fn extract_all_blake2s() {
+    fn extract_all_blake2s_mem() {
+        crate::settings::SETTINGS.lock().unwrap().replicate_on_disk = false;
         test_extract_all::<Blake2sHasher>();
     }
 
@@ -727,7 +795,7 @@ mod tests {
             DEFAULT_CACHED_ABOVE_BASE_LAYER,
         );
 
-        StackedDrg::<H, Blake2sHasher>::replicate(
+        let (_, (_, t_aux)) = StackedDrg::<H, Blake2sHasher>::replicate(
             &pp,
             &replica_id,
             (&mut data_copy[..]).into(),
@@ -745,8 +813,33 @@ mod tests {
             Some(config.clone()),
         )
         .expect("failed to extract data");
+        assert_eq!(data, decoded_data);
+
+        // delete labels, and try extraction again
+        t_aux.delete().unwrap();
+
+        let decoded_data = StackedDrg::<H, Blake2sHasher>::extract_all(
+            &pp,
+            &replica_id,
+            data_copy.as_mut_slice(),
+            Some(config.clone()),
+        )
+        .expect("failed to extract data, round2");
 
         assert_eq!(data, decoded_data);
+    }
+
+    #[test]
+    fn prove_verify_fixed_32_4_mem() {
+        crate::settings::SETTINGS.lock().unwrap().replicate_on_disk = false;
+        prove_verify_fixed(4);
+    }
+
+    #[test]
+    fn prove_verify_fixed_32_4_disk() {
+        crate::settings::SETTINGS.lock().unwrap().replicate_on_disk = true;
+        prove_verify_fixed(4);
+        crate::settings::SETTINGS.lock().unwrap().replicate_on_disk = false;
     }
 
     fn prove_verify_fixed(n: usize) {
@@ -837,12 +930,6 @@ mod tests {
         .expect("failed to verify partition proofs");
 
         assert!(proofs_are_valid);
-    }
-
-    table_tests! {
-        prove_verify_fixed{
-           prove_verify_fixed_32_4(4);
-        }
     }
 
     #[test]
