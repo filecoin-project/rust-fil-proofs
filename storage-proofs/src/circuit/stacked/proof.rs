@@ -318,7 +318,7 @@ mod tests {
     use crate::compound_proof;
     use crate::drgraph::{new_seed, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{Hasher, PedersenHasher, Sha256Hasher};
+    use crate::hasher::{Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
     use crate::stacked::{
@@ -331,7 +331,16 @@ mod tests {
     use rand_xorshift::XorShiftRng;
 
     #[test]
-    fn stacked_input_circuit_with_bls12_381() {
+    fn stacked_input_circuit_pedersen() {
+        stacked_input_circuit::<PedersenHasher>(2_480_655);
+    }
+
+    #[test]
+    fn stacked_input_circuit_poseidon() {
+        stacked_input_circuit::<PoseidonHasher>(2_480_655);
+    }
+
+    fn stacked_input_circuit<H: Hasher + 'static>(expected_constraints: usize) {
         let nodes = 8;
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
@@ -365,8 +374,8 @@ mod tests {
             DEFAULT_CACHED_ABOVE_BASE_LAYER,
         );
 
-        let pp = StackedDrg::<PedersenHasher, Sha256Hasher>::setup(&sp).expect("setup failed");
-        let (tau, (p_aux, t_aux)) = StackedDrg::<PedersenHasher, Sha256Hasher>::replicate(
+        let pp = StackedDrg::<H, Sha256Hasher>::setup(&sp).expect("setup failed");
+        let (tau, (p_aux, t_aux)) = StackedDrg::<H, Sha256Hasher>::replicate(
             &pp,
             &replica_id.into(),
             (&mut data_copy[..]).into(),
@@ -378,31 +387,26 @@ mod tests {
 
         let seed = rng.gen();
 
-        let pub_inputs =
-            PublicInputs::<<PedersenHasher as Hasher>::Domain, <Sha256Hasher as Hasher>::Domain> {
-                replica_id: replica_id.into(),
-                seed,
-                tau: Some(tau.into()),
-                k: None,
-            };
+        let pub_inputs = PublicInputs::<<H as Hasher>::Domain, <Sha256Hasher as Hasher>::Domain> {
+            replica_id: replica_id.into(),
+            seed,
+            tau: Some(tau.into()),
+            k: None,
+        };
 
         // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
         // elements based on the configs stored in TemporaryAux.
         use crate::stacked::TemporaryAuxCache;
         let t_aux = TemporaryAuxCache::new(&t_aux).expect("failed to restore contents of t_aux");
 
-        let priv_inputs = PrivateInputs::<PedersenHasher, Sha256Hasher> {
+        let priv_inputs = PrivateInputs::<H, Sha256Hasher> {
             p_aux: p_aux.into(),
             t_aux: t_aux.into(),
         };
 
-        let proofs = StackedDrg::<PedersenHasher, Sha256Hasher>::prove_all_partitions(
-            &pp,
-            &pub_inputs,
-            &priv_inputs,
-            1,
-        )
-        .expect("failed to generate partition proofs");
+        let proofs =
+            StackedDrg::<H, Sha256Hasher>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, 1)
+                .expect("failed to generate partition proofs");
 
         let proofs_are_valid = StackedDrg::verify_all_partitions(&pp, &pub_inputs, &proofs)
             .expect("failed to verify partition proofs");
@@ -410,7 +414,6 @@ mod tests {
         assert!(proofs_are_valid);
 
         let expected_inputs = 20;
-        let expected_constraints = 2_480_655;
 
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.
@@ -418,7 +421,7 @@ mod tests {
 
             StackedCompound::circuit(
                 &pub_inputs,
-                <StackedCircuit<Bls12, PedersenHasher, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
+                <StackedCircuit<Bls12, H, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
                 &proofs[0],
                 &pp,
             )
@@ -437,7 +440,7 @@ mod tests {
 
         StackedCompound::circuit(
             &pub_inputs,
-            <StackedCircuit<Bls12, PedersenHasher, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
+            <StackedCircuit<Bls12, H, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
             &proofs[0],
             &pp,
         )
@@ -457,7 +460,7 @@ mod tests {
 
         let generated_inputs = <StackedCompound as CompoundProof<
             _,
-            StackedDrg<PedersenHasher, Sha256Hasher>,
+            StackedDrg<H, Sha256Hasher>,
             _,
         >>::generate_public_inputs(&pub_inputs, &pp, None)
         .expect("failed to generate public inputs");
@@ -484,8 +487,8 @@ mod tests {
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
-    fn test_stacked_compound_blake2s() {
-        stacked_test_compound::<Sha256Hasher>();
+    fn test_stacked_compound_poseidon() {
+        stacked_test_compound::<PoseidonHasher>();
     }
 
     fn stacked_test_compound<H: 'static + Hasher>() {
