@@ -11,11 +11,10 @@ use storage_proofs::circuit::election_post::ElectionPoStCircuit;
 use storage_proofs::circuit::election_post::ElectionPoStCompound;
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::CompoundProof;
-use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::election_post::ElectionPoSt;
 use storage_proofs::stacked::StackedDrg;
 
-use crate::constants::DefaultPieceHasher;
+use crate::constants::{DefaultPieceHasher, DefaultTreeHasher};
 use crate::parameters::{post_public_params, public_params};
 use crate::types::*;
 

@@ -5,9 +5,8 @@ pub mod sha256;
 
 pub mod types;
 
-pub use self::types::{Domain, HashFunction, Hasher};
-
-pub use self::blake2s::Blake2sHasher;
-pub use self::pedersen::PedersenHasher;
-pub use self::poseidon::PoseidonHasher;
-pub use self::sha256::Sha256Hasher;
+pub use self::blake2s::*;
+pub use self::pedersen::*;
+pub use self::poseidon::*;
+pub use self::sha256::*;
+pub use self::types::*;

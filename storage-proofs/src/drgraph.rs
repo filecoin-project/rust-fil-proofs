@@ -9,15 +9,10 @@ use sha2::{Digest, Sha256};
 
 use crate::error::*;
 use crate::fr32::bytes_into_fr_repr_safe;
-use crate::hasher::poseidon::PoseidonHasher;
 use crate::hasher::Hasher;
 use crate::merkle::{create_lcmerkle_tree, create_merkle_tree, LCMerkleTree, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::{data_at_node_offset, NODE_SIZE};
-
-/// The default hasher currently in use.
-pub type DefaultTreeHasher = PoseidonHasher;
-pub type DefaultTreeDomain = <DefaultTreeHasher as Hasher>::Domain;
 
 pub const PARALLEL_MERKLE: bool = true;
 

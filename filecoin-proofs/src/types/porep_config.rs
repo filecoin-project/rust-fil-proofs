@@ -4,10 +4,9 @@ use anyhow::Result;
 
 use paired::bls12_381::Bls12;
 use storage_proofs::circuit::stacked::{StackedCircuit, StackedCompound};
-use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::parameter_cache::{self, CacheableParameters};
 
-use crate::constants::DefaultPieceHasher;
+use crate::constants::{DefaultPieceHasher, DefaultTreeHasher};
 use crate::types::*;
 
 #[derive(Clone, Copy, Debug)]
