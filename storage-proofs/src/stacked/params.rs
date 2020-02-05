@@ -344,23 +344,23 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
         self.tree_c_config.path = cp;
     }
 
-    pub fn delete(t_aux: TemporaryAux<H, G>) -> Result<()> {
-        let tree_d_size = t_aux.tree_d_config.size.unwrap();
+    pub fn delete(&self) -> Result<()> {
+        let tree_d_size = self.tree_d_config.size.unwrap();
         let tree_d_store: DiskStore<G::Domain> =
-            DiskStore::new_from_disk(tree_d_size, &t_aux.tree_d_config)?;
+            DiskStore::new_from_disk(tree_d_size, &self.tree_d_config)?;
         let tree_d: Tree<G> =
             MerkleTree::from_data_store(tree_d_store, get_merkle_tree_leafs(tree_d_size))?;
-        tree_d.delete(t_aux.tree_d_config)?;
+        tree_d.delete(self.tree_d_config.clone())?;
 
-        let tree_c_size = t_aux.tree_c_config.size.unwrap();
+        let tree_c_size = self.tree_c_config.size.unwrap();
         let tree_c_store: DiskStore<H::Domain> =
-            DiskStore::new_from_disk(tree_c_size, &t_aux.tree_c_config)?;
+            DiskStore::new_from_disk(tree_c_size, &self.tree_c_config)?;
         let tree_c: Tree<H> =
             MerkleTree::from_data_store(tree_c_store, get_merkle_tree_leafs(tree_c_size))?;
-        tree_c.delete(t_aux.tree_c_config)?;
+        tree_c.delete(self.tree_c_config.clone())?;
 
-        for i in 0..t_aux.labels.labels.len() {
-            DiskStore::<H::Domain>::delete(t_aux.labels.labels[i].clone())?;
+        for i in 0..self.labels.labels.len() {
+            DiskStore::<H::Domain>::delete(self.labels.labels[i].clone())?;
         }
 
         Ok(())

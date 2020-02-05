@@ -272,19 +272,7 @@ pub fn seal_commit_phase1<T: AsRef<Path>>(
         deserialize(&p_aux_bytes)
     }?;
 
-    let t_aux = {
-        let mut t_aux_bytes = vec![];
-        let t_aux_path = cache_path.as_ref().join(CacheKey::TAux.to_string());
-        let mut f_t_aux = File::open(&t_aux_path)
-            .with_context(|| format!("could not open file t_aux={:?}", t_aux_path))?;
-        f_t_aux.read_to_end(&mut t_aux_bytes)?;
-
-        let mut res: TemporaryAux<_, _> = deserialize(&t_aux_bytes)?;
-
-        // Switch t_aux to the passed in cache_path
-        res.set_cache_path(cache_path);
-        res
-    };
+    let t_aux = get_taux(cache_path.as_ref())?;
 
     // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
     // elements based on the configs stored in TemporaryAux.
@@ -445,6 +433,29 @@ pub fn seal_commit_phase2(
     info!("seal_commit_phase2:end");
 
     Ok(SealCommitOutput { proof: buf })
+}
+
+/// Clear temporary files from the. MUST only be called after successfull pre_commit_phase1.
+pub fn seal_clear_cache<T: AsRef<Path>>(cache_path: T) -> Result<()> {
+    let t_aux = get_taux(cache_path)?;
+    t_aux.delete()?;
+    Ok(())
+}
+
+fn get_taux<T: AsRef<Path>>(
+    cache_path: T,
+) -> Result<TemporaryAux<DefaultTreeHasher, DefaultPieceHasher>> {
+    let mut t_aux_bytes = vec![];
+    let t_aux_path = cache_path.as_ref().join(CacheKey::TAux.to_string());
+    let mut f_t_aux = File::open(&t_aux_path)
+        .with_context(|| format!("could not open file t_aux={:?}", t_aux_path))?;
+    f_t_aux.read_to_end(&mut t_aux_bytes)?;
+
+    let mut res: TemporaryAux<_, _> = deserialize(&t_aux_bytes)?;
+
+    // Switch t_aux to the passed in cache_path
+    res.set_cache_path(cache_path);
+    Ok(res)
 }
 
 /// Computes a sectors's `comm_d` given its pieces.
