@@ -424,7 +424,7 @@ mod tests {
 
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::hasher::{PedersenHasher, PoseidonHasher};
 
     fn test_election_post<H: Hasher>() {
         use merkletree::store::{StoreConfig, StoreConfigDataVersion};
@@ -519,12 +519,7 @@ mod tests {
     }
 
     #[test]
-    fn election_post_sha256() {
-        test_election_post::<Sha256Hasher>();
-    }
-
-    #[test]
-    fn election_post_blake2s() {
-        test_election_post::<Blake2sHasher>();
+    fn election_post_poseidon() {
+        test_election_post::<PoseidonHasher>();
     }
 }

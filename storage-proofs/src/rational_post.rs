@@ -292,7 +292,9 @@ mod tests {
 
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{Blake2sHasher, HashFunction, PedersenHasher, Sha256Hasher};
+    use crate::hasher::{
+        Blake2sHasher, HashFunction, PedersenHasher, PoseidonHasher, Sha256Hasher,
+    };
     use crate::merkle::make_proof_for_test;
 
     fn test_rational_post<H: Hasher>() {
@@ -394,6 +396,11 @@ mod tests {
         test_rational_post::<Blake2sHasher>();
     }
 
+    #[test]
+    fn rational_post_poseidon() {
+        test_rational_post::<PoseidonHasher>();
+    }
+
     // Construct a proof that satisfies a cursory validation:
     // Data and proof are minimally consistent.
     // Proof root matches that requested in public inputs.
@@ -483,6 +490,11 @@ mod tests {
     #[test]
     fn rational_post_actually_validates_pedersen() {
         test_rational_post_validates::<PedersenHasher>();
+    }
+
+    #[test]
+    fn rational_post_actually_validates_poseidon() {
+        test_rational_post_validates::<PoseidonHasher>();
     }
 
     fn test_rational_post_validates_challenge_identity<H: Hasher>() {
@@ -582,6 +594,11 @@ mod tests {
     #[test]
     fn rational_post_actually_validates_challenge_identity_pedersen() {
         test_rational_post_validates_challenge_identity::<PedersenHasher>();
+    }
+
+    #[test]
+    fn rational_post_actually_validates_challenge_identity_poseidon() {
+        test_rational_post_validates_challenge_identity::<PoseidonHasher>();
     }
 
     #[test]

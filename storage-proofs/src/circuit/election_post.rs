@@ -336,6 +336,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use ff::Field;
+    use merkletree::store::{StoreConfig, StoreConfigDataVersion};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
@@ -346,15 +347,22 @@ mod tests {
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::election_post::{self, ElectionPoSt};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{pedersen::*, Domain};
+    use crate::hasher::{Domain, Hasher, PedersenHasher, PoseidonHasher};
     use crate::proof::{NoRequirements, ProofScheme};
     use crate::sector::SectorId;
     use crate::stacked::hash::hash2;
 
     #[test]
-    fn test_election_post_circuit() {
-        use merkletree::store::{StoreConfig, StoreConfigDataVersion};
+    fn test_election_post_circuit_pedersen() {
+        test_election_post_circuit::<PedersenHasher>(333_753);
+    }
 
+    #[test]
+    fn test_election_post_circuit_poseidon() {
+        test_election_post_circuit::<PoseidonHasher>(144_753);
+    }
+
+    fn test_election_post_circuit<H: Hasher>(expected_constraints: usize) {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 32;
@@ -387,7 +395,7 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
                 .collect();
 
-            let graph = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
+            let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
 
             let cur_config =
                 StoreConfig::from_config(&config, format!("test-lc-tree-v1-{}", i), None);
@@ -405,7 +413,7 @@ mod tests {
             trees.insert(i.into(), lctree);
         }
 
-        let candidates = election_post::generate_candidates::<PedersenHasher>(
+        let candidates = election_post::generate_candidates::<H>(
             &pub_params,
             &sectors,
             &trees,
@@ -417,7 +425,7 @@ mod tests {
         let candidate = &candidates[0];
         let tree = trees.remove(&candidate.sector_id).unwrap();
         let comm_r_last = tree.root();
-        let comm_c = PedersenDomain::random(rng);
+        let comm_c = H::Domain::random(rng);
         let comm_r = Fr::from(hash2(comm_c, comm_r_last)).into();
 
         let pub_inputs = election_post::PublicInputs {
@@ -429,16 +437,16 @@ mod tests {
             sector_challenge_index: 0,
         };
 
-        let priv_inputs = election_post::PrivateInputs::<PedersenHasher> {
+        let priv_inputs = election_post::PrivateInputs::<H> {
             tree,
             comm_c,
             comm_r_last,
         };
 
-        let proof = ElectionPoSt::<PedersenHasher>::prove(&pub_params, &pub_inputs, &priv_inputs)
+        let proof = ElectionPoSt::<H>::prove(&pub_params, &pub_inputs, &priv_inputs)
             .expect("proving failed");
 
-        let is_valid = ElectionPoSt::<PedersenHasher>::verify(&pub_params, &pub_inputs, &proof)
+        let is_valid = ElectionPoSt::<H>::verify(&pub_params, &pub_inputs, &proof)
             .expect("verification failed");
         assert!(is_valid);
 
@@ -457,7 +465,7 @@ mod tests {
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        let instance = ElectionPoStCircuit::<_, PedersenHasher> {
+        let instance = ElectionPoStCircuit::<_, H> {
             params: &*JJ_PARAMS,
             leafs,
             paths,
@@ -478,15 +486,16 @@ mod tests {
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
         assert_eq!(cs.num_inputs(), 43, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 333_753, "wrong number of constraints");
+        assert_eq!(
+            cs.num_constraints(),
+            expected_constraints,
+            "wrong number of constraints"
+        );
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
-        let generated_inputs = ElectionPoStCompound::<PedersenHasher>::generate_public_inputs(
-            &pub_inputs,
-            &pub_params,
-            None,
-        )
-        .unwrap();
+        let generated_inputs =
+            ElectionPoStCompound::<H>::generate_public_inputs(&pub_inputs, &pub_params, None)
+                .unwrap();
         let expected_inputs = cs.get_inputs();
 
         for ((input, label), generated_input) in
@@ -504,9 +513,17 @@ mod tests {
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
-    fn election_post_test_compound() {
-        use merkletree::store::{StoreConfig, StoreConfigDataVersion};
+    fn election_post_test_compound_pedersen() {
+        election_post_test_compound::<PedersenHasher>();
+    }
 
+    #[ignore] // Slow test – run only when compiled for release.
+    #[test]
+    fn election_post_test_compound_poseidon() {
+        election_post_test_compound::<PoseidonHasher>();
+    }
+
+    fn election_post_test_compound<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 32;
@@ -541,7 +558,7 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
                 .collect();
 
-            let graph = BucketGraph::<PedersenHasher>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
+            let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
 
             let cur_config =
                 StoreConfig::from_config(&config, format!("test-lc-tree-v1-{}", i), None);
@@ -559,10 +576,9 @@ mod tests {
             trees.insert(i.into(), lctree);
         }
 
-        let pub_params =
-            ElectionPoStCompound::<PedersenHasher>::setup(&setup_params).expect("setup failed");
+        let pub_params = ElectionPoStCompound::<H>::setup(&setup_params).expect("setup failed");
 
-        let candidates = election_post::generate_candidates::<PedersenHasher>(
+        let candidates = election_post::generate_candidates::<H>(
             &pub_params.vanilla_params,
             &sectors,
             &trees,
@@ -574,7 +590,7 @@ mod tests {
         let candidate = &candidates[0];
         let tree = trees.remove(&candidate.sector_id).unwrap();
         let comm_r_last = tree.root();
-        let comm_c = PedersenDomain::random(rng);
+        let comm_c = H::Domain::random(rng);
         let comm_r = Fr::from(hash2(comm_c, comm_r_last)).into();
 
         let pub_inputs = election_post::PublicInputs {
@@ -586,7 +602,7 @@ mod tests {
             sector_challenge_index: 0,
         };
 
-        let priv_inputs = election_post::PrivateInputs::<PedersenHasher> {
+        let priv_inputs = election_post::PrivateInputs::<H> {
             tree,
             comm_c,
             comm_r_last,
@@ -619,7 +635,7 @@ mod tests {
                 ElectionPoStCompound::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs)
                     .unwrap();
             let blank_circuit =
-                ElectionPoStCompound::<PedersenHasher>::blank_circuit(&pub_params.vanilla_params);
+                ElectionPoStCompound::<H>::blank_circuit(&pub_params.vanilla_params);
 
             let mut cs_blank = MetricCS::new();
             blank_circuit
@@ -637,7 +653,7 @@ mod tests {
             }
         }
         let blank_groth_params =
-            ElectionPoStCompound::<PedersenHasher>::groth_params(&pub_params.vanilla_params)
+            ElectionPoStCompound::<H>::groth_params(&pub_params.vanilla_params)
                 .expect("failed to generate groth params");
 
         let proof = ElectionPoStCompound::prove(
