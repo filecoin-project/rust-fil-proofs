@@ -28,7 +28,7 @@ pub const VERIFYING_KEY_EXT: &str = "vk";
 #[derive(Debug)]
 struct LockedFile(File);
 
-// TODO: use in memory lock as well, as file locks do not guarantee exclusive access acros OSes.
+// TODO: use in memory lock as well, as file locks do not guarantee exclusive access across OSes.
 
 impl LockedFile {
     pub fn open_exclusive_read<P: AsRef<Path>>(p: P) -> io::Result<Self> {

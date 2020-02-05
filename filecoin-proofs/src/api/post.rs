@@ -25,8 +25,7 @@ use crate::api::util::{as_safe_commitment, get_tree_size};
 use crate::caches::{get_post_params, get_post_verifying_key};
 use crate::parameters::post_setup_params;
 use crate::types::{
-    ChallengeSeed, Commitment, LCTree, PersistentAux, PoStConfig, ProverId, SectorSize,
-    TemporaryAux,
+    ChallengeSeed, Commitment, LCTree, PersistentAux, PoStConfig, ProverId, TemporaryAux,
 };
 
 pub use storage_proofs::election_post::Candidate;
