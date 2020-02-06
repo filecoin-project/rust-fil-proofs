@@ -337,7 +337,7 @@ mod tests {
 
     #[test]
     fn stacked_input_circuit_poseidon() {
-        stacked_input_circuit::<PoseidonHasher>(2_480_655);
+        stacked_input_circuit::<PoseidonHasher>(2_435_295);
     }
 
     fn stacked_input_circuit<H: Hasher + 'static>(expected_constraints: usize) {
