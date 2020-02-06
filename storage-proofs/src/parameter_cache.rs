@@ -179,11 +179,38 @@ where
             .or_else(|_| write_cached_metadata(&meta_path, Self::cache_meta(pub_params)))
     }
 
-    fn get_groth_params(_circuit: C, pub_params: &P) -> Result<groth16::MappedParameters<E>> {
+    fn get_groth_params(circuit: C, pub_params: &P) -> Result<groth16::MappedParameters<E>> {
         let id = Self::cache_identifier(pub_params);
-        // load Groth parameter mappings
+
+        // This is used for testing only, if parameters are otherwise unavailable.
+        let generate = || -> Result<_> {
+            use rand::SeedableRng;
+            use rand_xorshift::XorShiftRng;
+            use std::time::Instant;
+
+            info!("Actually generating groth params. (id: {})", &id);
+            let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+            let start = Instant::now();
+            let parameters = groth16::generate_random_parameters::<E, _, _>(circuit, rng)?;
+            let generation_time = start.elapsed();
+            info!(
+                "groth_parameter_generation_time: {:?} (id: {})",
+                generation_time, &id
+            );
+            Ok(parameters)
+        };
+
+        // load or generate Groth parameter mappings
         let cache_path = ensure_ancestor_dirs_exist(parameter_cache_params_path(&id))?;
-        Ok(read_cached_params(&cache_path)?)
+        match read_cached_params(&cache_path) {
+            Ok(x) => Ok(x),
+            Err(_) => {
+                write_cached_params(&cache_path, generate()?).unwrap_or_else(|e| {
+                    panic!("{}: failed to write generated parameters to cache", e)
+                });
+                Ok(read_cached_params(&cache_path)?)
+            }
+        }
     }
 
     fn get_verifying_key(circuit: C, pub_params: &P) -> Result<groth16::VerifyingKey<E>> {
