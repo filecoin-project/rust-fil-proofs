@@ -228,6 +228,13 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
         shared_hash(data)
     }
 
+    fn hash2(a: &PoseidonDomain, b: &PoseidonDomain) -> PoseidonDomain {
+        let mut p =
+            Poseidon::new_with_preimage(&[(*a).into(), (*b).into()][..], &*POSEIDON_CONSTANTS);
+        let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
+        fr.into()
+    }
+
     fn hash_leaf_circuit<E: JubjubEngine + PoseidonEngine, CS: ConstraintSystem<E>>(
         cs: CS,
         left: &num::AllocatedNum<E>,
@@ -246,6 +253,20 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
         _params: &E::Params,
     ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
         unimplemented!();
+    }
+
+    fn hash2_circuit<E, CS>(
+        cs: CS,
+        a: &num::AllocatedNum<E>,
+        b: &num::AllocatedNum<E>,
+        _params: &E::Params,
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError>
+    where
+        E: JubjubEngine + PoseidonEngine,
+        CS: ConstraintSystem<E>,
+    {
+        let preimage = vec![a.clone(), b.clone()];
+        poseidon_hash::<CS, E, PoseidonArity>(cs, preimage, E::PARAMETERS(MERKLE_TREE_ARITY))
     }
 }
 

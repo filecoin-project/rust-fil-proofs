@@ -13,13 +13,12 @@ use crate::crypto::pedersen::{pedersen_md_no_padding_bits, Bits};
 use crate::drgraph::graph_height;
 use crate::error::{Error, Result};
 use crate::fr32::fr_into_bytes;
-use crate::hasher::{Domain, Hasher};
+use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::measurements::{measure_op, Operation};
 use crate::merkle::{LCMerkleTree, MerkleProof};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::sector::*;
-use crate::stacked::hash::hash2;
 use crate::util::NODE_SIZE;
 
 #[derive(Debug, Clone)]
@@ -378,7 +377,9 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
         let comm_c = proof.comm_c;
         let comm_r = &pub_inputs.comm_r;
 
-        if AsRef::<[u8]>::as_ref(&hash2(comm_c, comm_r_last)) != AsRef::<[u8]>::as_ref(comm_r) {
+        if AsRef::<[u8]>::as_ref(&H::Function::hash2(&comm_c, comm_r_last))
+            != AsRef::<[u8]>::as_ref(comm_r)
+        {
             return Ok(false);
         }
 
@@ -487,7 +488,7 @@ mod tests {
         let tree = trees.remove(&candidate.sector_id).unwrap();
         let comm_r_last = tree.root();
         let comm_c = H::Domain::random(rng);
-        let comm_r = Fr::from(hash2(comm_c, comm_r_last)).into();
+        let comm_r = H::Function::hash2(&comm_c, &comm_r_last);
 
         let pub_inputs = PublicInputs {
             randomness,

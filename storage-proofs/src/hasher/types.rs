@@ -72,6 +72,7 @@ pub trait HashFunction<T: Domain>:
     Clone + ::std::fmt::Debug + Send + Sync + LightAlgorithm<T>
 {
     fn hash(data: &[u8]) -> T;
+    fn hash2(a: &T, b: &T) -> T;
 
     fn hash_leaf(data: &dyn LightHashable<Self>) -> T {
         let mut a = Self::default();
@@ -114,6 +115,16 @@ pub trait HashFunction<T: Domain>:
         bits: &[boolean::Boolean],
         params: &E::Params,
     ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError>;
+
+    fn hash2_circuit<E, CS>(
+        cs: CS,
+        a: &num::AllocatedNum<E>,
+        b: &num::AllocatedNum<E>,
+        params: &E::Params,
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError>
+    where
+        E: JubjubEngine + PoseidonEngine,
+        CS: ConstraintSystem<E>;
 }
 
 pub trait Hasher: Clone + ::std::fmt::Debug + Eq + Default + Send + Sync {

@@ -11,7 +11,6 @@ use paired::bls12_381::{Bls12, Fr};
 use crate::circuit::constraint;
 use crate::circuit::pedersen::pedersen_md_no_padding;
 use crate::circuit::por::{PoRCircuit, PoRCompound};
-use crate::circuit::stacked::hash::hash2;
 use crate::circuit::uint64::UInt64;
 use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
@@ -21,7 +20,7 @@ use crate::election_post::{self, ElectionPoSt};
 use crate::error::Result;
 use crate::fr32::fr_into_bytes;
 use crate::hasher::types::PoseidonEngine;
-use crate::hasher::Hasher;
+use crate::hasher::{HashFunction, Hasher};
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
@@ -216,18 +215,11 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> Circuit<E> for ElectionPoS
 
         // Verify H(Comm_C || comm_r_last) == comm_r
         {
-            // Allocate comm_c as booleans
-            let comm_c_bits = comm_c_num.to_bits_le(cs.namespace(|| "comm_c_bits"))?;
-
-            // Allocate comm_r_last as booleans
-            let comm_r_last_bits =
-                comm_r_last_num.to_bits_le(cs.namespace(|| "comm_r_last_bits"))?;
-
-            let hash_num = hash2(
+            let hash_num = H::Function::hash2_circuit(
                 cs.namespace(|| "H_comm_c_comm_r_last"),
+                &comm_c_num,
+                &comm_r_last_num,
                 params,
-                &comm_c_bits,
-                &comm_r_last_bits,
             )?;
 
             // Check actual equality
@@ -347,19 +339,18 @@ mod tests {
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::election_post::{self, ElectionPoSt};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{Domain, Hasher, PedersenHasher, PoseidonHasher};
+    use crate::hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher};
     use crate::proof::{NoRequirements, ProofScheme};
     use crate::sector::SectorId;
-    use crate::stacked::hash::hash2;
 
     #[test]
     fn test_election_post_circuit_pedersen() {
-        test_election_post_circuit::<PedersenHasher>(333_753);
+        test_election_post_circuit::<PedersenHasher>(333_750);
     }
 
     #[test]
     fn test_election_post_circuit_poseidon() {
-        test_election_post_circuit::<PoseidonHasher>(144_753);
+        test_election_post_circuit::<PoseidonHasher>(143_805);
     }
 
     fn test_election_post_circuit<H: Hasher>(expected_constraints: usize) {
@@ -426,7 +417,7 @@ mod tests {
         let tree = trees.remove(&candidate.sector_id).unwrap();
         let comm_r_last = tree.root();
         let comm_c = H::Domain::random(rng);
-        let comm_r = Fr::from(hash2(comm_c, comm_r_last)).into();
+        let comm_r = H::Function::hash2(&comm_c, &comm_r_last);
 
         let pub_inputs = election_post::PublicInputs {
             randomness,
@@ -591,7 +582,7 @@ mod tests {
         let tree = trees.remove(&candidate.sector_id).unwrap();
         let comm_r_last = tree.root();
         let comm_c = H::Domain::random(rng);
-        let comm_r = Fr::from(hash2(comm_c, comm_r_last)).into();
+        let comm_r = H::Function::hash2(&comm_c, &comm_r_last);
 
         let pub_inputs = election_post::PublicInputs {
             randomness,

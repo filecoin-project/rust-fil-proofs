@@ -8,14 +8,13 @@ use paired::bls12_381::{Bls12, Fr};
 
 use crate::circuit::constraint;
 use crate::circuit::por::{PoRCircuit, PoRCompound};
-use crate::circuit::stacked::hash::hash2;
 use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph;
 use crate::error::Result;
 use crate::hasher::types::PoseidonEngine;
-use crate::hasher::Hasher;
+use crate::hasher::{HashFunction, Hasher};
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
@@ -206,19 +205,11 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> Circuit<E> for RationalPoS
 
             // Verify H(Comm_C || comm_r_last) == comm_r
             {
-                // Allocate comm_c as booleansn
-                let comm_c_bits =
-                    comm_c_num.to_bits_le(cs.namespace(|| format!("comm_c_{}_bits", i)))?;
-
-                // Allocate comm_r_last as booleans
-                let comm_r_last_bits = comm_r_last_num
-                    .to_bits_le(cs.namespace(|| format!("comm_r_last_{}_bits", i)))?;
-
-                let hash_num = hash2(
+                let hash_num = H::Function::hash2_circuit(
                     cs.namespace(|| format!("H_comm_c_comm_r_last_{}", i)),
+                    &comm_c_num,
+                    &comm_r_last_num,
                     params,
-                    &comm_c_bits,
-                    &comm_r_last_bits,
                 )?;
 
                 // Check actual equality
@@ -283,20 +274,19 @@ mod tests {
     use crate::crypto::pedersen::JJ_PARAMS;
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{Domain, Hasher, PedersenHasher, PoseidonHasher};
+    use crate::hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher};
     use crate::proof::{NoRequirements, ProofScheme};
     use crate::rational_post::{self, derive_challenges, RationalPoSt};
     use crate::sector::OrderedSectorSet;
-    use crate::stacked::hash::hash2;
 
     #[test]
     fn test_rational_post_circuit_pedersen() {
-        test_rational_post_circuit::<PedersenHasher>(16_496);
+        test_rational_post_circuit::<PedersenHasher>(16_490);
     }
 
     #[test]
     fn test_rational_post_circuit_poseidon() {
-        test_rational_post_circuit::<PoseidonHasher>(7_046);
+        test_rational_post_circuit::<PoseidonHasher>(5_150);
     }
 
     fn test_rational_post_circuit<H: Hasher>(expected_constraints: usize) {
@@ -343,7 +333,7 @@ mod tests {
         let comm_rs: Vec<_> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| Fr::from(hash2(comm_c, comm_r_last)).into())
+            .map(|(comm_c, comm_r_last)| H::Function::hash2(comm_c, comm_r_last))
             .collect();
 
         let pub_inputs = rational_post::PublicInputs {
@@ -488,7 +478,7 @@ mod tests {
         let comm_rs: Vec<_> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| Fr::from(hash2(comm_c, comm_r_last)).into())
+            .map(|(comm_c, comm_r_last)| H::Function::hash2(comm_c, comm_r_last))
             .collect();
 
         let pub_inputs = rational_post::PublicInputs {

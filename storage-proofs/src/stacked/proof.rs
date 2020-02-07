@@ -4,14 +4,13 @@ use std::marker::PhantomData;
 use log::{info, trace};
 use merkletree::merkle::FromIndexedParallelIterator;
 use merkletree::store::{DiskStore, StoreConfig};
-use paired::bls12_381::Fr;
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 
 use crate::drgraph::Graph;
 use crate::encode::{decode, encode};
 use crate::error::Result;
-use crate::hasher::{Domain, Hasher};
+use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::measurements::{
     measure_op,
     Operation::{CommD, EncodeWindowTimeAll, GenerateTreeC, GenerateTreeRLast},
@@ -23,7 +22,6 @@ use crate::stacked::{
     challenges::LayerChallenges,
     column::Column,
     graph::StackedBucketGraph,
-    hash::hash2,
     params::{
         get_node, CacheKey, Labels, LabelsCache, PersistentAux, Proof, PublicInputs, PublicParams,
         ReplicaColumnProof, Tau, TemporaryAux, TemporaryAuxCache, TransformedLayers, Tree,
@@ -494,7 +492,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         data.drop_data();
 
         // comm_r = H(comm_c || comm_r_last)
-        let comm_r: H::Domain = Fr::from(hash2(tree_c.root(), tree_r_last.root())).into();
+        let comm_r: H::Domain = H::Function::hash2(&tree_c.root(), &tree_r_last.root());
 
         assert_eq!(tree_d.len(), tree_r_last.len());
         assert_eq!(tree_d.len(), tree_c.len());
@@ -624,7 +622,7 @@ mod tests {
     use super::*;
 
     use ff::Field;
-    use paired::bls12_381::Bls12;
+    use paired::bls12_381::{Bls12, Fr};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 

@@ -12,7 +12,7 @@ use merkletree::merkle::Element;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 use serde::{Deserialize, Serialize};
 
-use crate::circuit::pedersen::pedersen_md_no_padding;
+use crate::circuit::pedersen::{pedersen_compression_num, pedersen_md_no_padding};
 use crate::crypto::{create_label, pedersen, sloth};
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
@@ -211,6 +211,23 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         pedersen::pedersen_md_no_padding(data).into()
     }
 
+    fn hash2(a: &PedersenDomain, b: &PedersenDomain) -> PedersenDomain {
+        let data = NodeBits::new(&(a.0).0[..], &(b.0).0[..]);
+
+        let digest = if cfg!(target_arch = "x86_64") {
+            use fil_sapling_crypto::pedersen_hash::pedersen_hash_bls12_381_with_precomp;
+            pedersen_hash_bls12_381_with_precomp::<_>(
+                Personalization::None,
+                data,
+                &pedersen::JJ_PARAMS,
+            )
+        } else {
+            use fil_sapling_crypto::pedersen_hash::pedersen_hash;
+            pedersen_hash::<Bls12, _>(Personalization::None, data, &pedersen::JJ_PARAMS)
+        };
+        digest.into_xy().0.into()
+    }
+
     fn hash_leaf_bits_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
         cs: CS,
         left: &[boolean::Boolean],
@@ -235,6 +252,31 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         params: &E::Params,
     ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
         pedersen_md_no_padding(cs, params, bits)
+    }
+
+    fn hash2_circuit<E, CS>(
+        mut cs: CS,
+        a_num: &num::AllocatedNum<E>,
+        b_num: &num::AllocatedNum<E>,
+        params: &E::Params,
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError>
+    where
+        E: JubjubEngine,
+        CS: ConstraintSystem<E>,
+    {
+        // Allocate as booleans
+        let a = a_num.to_bits_le(cs.namespace(|| "a_bits"))?;
+        let b = b_num.to_bits_le(cs.namespace(|| "b_bits"))?;
+
+        let mut values = Vec::new();
+        values.extend_from_slice(&a);
+        values.extend_from_slice(&b);
+        if values.is_empty() {
+            // can happen with small layers
+            num::AllocatedNum::alloc(cs.namespace(|| "pedersen_hash1"), || Ok(E::Fr::zero()))
+        } else {
+            pedersen_compression_num(cs.namespace(|| "pedersen_hash1"), params, &values)
+        }
     }
 }
 
