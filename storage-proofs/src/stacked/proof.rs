@@ -406,20 +406,20 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
             // TODO: allow layer variation
             assert_eq!(layers, 11, "invalid number of layers");
-            // TODO: static constants
             let constants = &*crate::stacked::hash::POSEIDON_CONSTANTS_11;
-            let mut hasher = neptune::Poseidon::new(constants);
 
-            // TODO: parallelize
-
+            // TODO: better parallelization
             for i in 0..gsize {
-                for layer in 1..=layers {
-                    let store = labels.labels_for_layer(layer);
-                    hasher.input(store.read_at(i)?.into()).unwrap();
-                }
+                let data: Vec<_> = (1..=layers)
+                    .into_par_iter()
+                    .map(|layer| {
+                        let store = labels.labels_for_layer(layer);
+                        Ok(store.read_at(i)?.into())
+                    })
+                    .collect::<Result<_>>()?;
 
+                let mut hasher = neptune::Poseidon::new_with_preimage(&data, constants);
                 hashes.push(hasher.hash().into());
-                hasher.reset();
             }
 
             info!("building tree_c");
