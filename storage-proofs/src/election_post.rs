@@ -101,7 +101,7 @@ pub struct Proof<H: Hasher> {
 }
 
 impl<H: Hasher> Proof<H> {
-    pub fn leafs(&self) -> Vec<&H::Domain> {
+    pub fn leafs(&self) -> Vec<H::Domain> {
         self.inclusion_proofs
             .iter()
             .map(MerkleProof::leaf)

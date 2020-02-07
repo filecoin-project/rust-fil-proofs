@@ -315,7 +315,7 @@ commands:
   save_parameter_cache:
     steps:
       - save_cache:
-          key: proof-params-d-v21-{{ checksum "filecoin-proofs/parameters.json" }}-{{ arch }}
+          key: proof-params-e-v21-{{ checksum "filecoin-proofs/parameters.json" }}-{{ arch }}
           paths:
             - "~/paramcache.awesome"
             - "~/filecoin-proof-parameters/"
@@ -324,7 +324,7 @@ commands:
       - configure_environment_variables
       - restore_cache:
           keys:
-            - proof-params-d-v21-{{ checksum "filecoin-proofs/parameters.json" }}-{{ arch }}
+            - proof-params-e-v21-{{ checksum "filecoin-proofs/parameters.json" }}-{{ arch }}
   configure_environment_variables:
     steps:
       - run:

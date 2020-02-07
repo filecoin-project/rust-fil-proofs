@@ -402,44 +402,29 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
             let gsize = graph.size();
 
-            let sector_size = gsize * NODE_SIZE;
-            let buffer_len = std::cmp::min(sector_size, 8 * 1024);
-            let buffer_nodes = buffer_len / NODE_SIZE;
+            let mut hashes: Vec<H::Domain> = Vec::with_capacity(gsize);
 
-            // WARNING: uses a buffer of sector size
-            let mut hashers = vec![Sha256::new(); gsize];
+            // TODO: allow layer variation
+            assert_eq!(layers, 11, "invalid number of layers");
+            // TODO: static constants
+            let constants = &*crate::stacked::hash::POSEIDON_CONSTANTS_11;
+            let mut hasher = neptune::Poseidon::new(constants);
 
-            for layer in 1..=layers {
-                info!("column hash {}", layer);
+            // TODO: parallelize
 
-                (0..(sector_size / buffer_len))
-                    .into_par_iter()
-                    .zip(hashers.par_chunks_mut(buffer_nodes))
-                    .try_for_each(|(i, hashers)| -> Result<()> {
-                        let mut buffer = vec![0u8; buffer_len];
-                        let store = labels.labels_for_layer(layer);
+            for i in 0..gsize {
+                for layer in 1..=layers {
+                    let store = labels.labels_for_layer(layer);
+                    hasher.input(store.read_at(i)?.into()).unwrap();
+                }
 
-                        let start = i * buffer_nodes;
-                        let end = start + buffer_nodes;
-                        store.read_range_into(start, end, &mut buffer)?;
-
-                        hashers
-                            .par_iter_mut()
-                            .zip(buffer.par_chunks(NODE_SIZE))
-                            .for_each(|(hasher, chunk)| {
-                                hasher.input(chunk);
-                            });
-                        Ok(())
-                    })?;
+                hashes.push(hasher.hash().into());
+                hasher.reset();
             }
 
             info!("building tree_c");
             MerkleTree::<_, H::Function>::from_par_iter_with_config(
-                hashers.into_par_iter().map(|h| {
-                    let mut res = h.result();
-                    res[31] &= 0b0011_1111;
-                    H::Domain::try_from_bytes(&res).unwrap()
-                }),
+                hashes.into_par_iter(),
                 tree_c_config.clone(),
             )
         })?;
@@ -633,7 +618,7 @@ mod tests {
     use crate::proof::ProofScheme;
     use crate::stacked::{PrivateInputs, SetupParams, EXP_DEGREE};
 
-    const DEFAULT_STACKED_LAYERS: usize = 4;
+    const DEFAULT_STACKED_LAYERS: usize = 11;
 
     #[test]
     fn test_calculate_fixed_challenges() {

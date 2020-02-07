@@ -130,7 +130,7 @@ where
         let leafs: Vec<_> = vanilla_proof
             .leafs()
             .iter()
-            .map(|c| Some((**c).into()))
+            .map(|c| Some((*c).into()))
             .collect();
 
         let paths: Vec<Vec<_>> = vanilla_proof
@@ -452,7 +452,7 @@ mod tests {
                     .collect::<Vec<_>>()
             })
             .collect();
-        let leafs: Vec<_> = proof.leafs().iter().map(|l| Some((**l).into())).collect();
+        let leafs: Vec<_> = proof.leafs().iter().map(|l| Some((*l).into())).collect();
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
 

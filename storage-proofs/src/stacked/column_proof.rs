@@ -1,8 +1,8 @@
 use log::trace;
+use paired::bls12_381::Fr;
 use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
-use crate::hasher::pedersen::PedersenDomain;
 use crate::hasher::Hasher;
 use crate::merkle::{IncludedNode, MerkleProof};
 use crate::stacked::column::Column;
@@ -46,7 +46,7 @@ impl<H: Hasher> ColumnProof<H> {
         IncludedNode::new(*value)
     }
 
-    pub fn column_hash(&self) -> PedersenDomain {
+    pub fn column_hash(&self) -> Fr {
         self.column.hash()
     }
 
@@ -54,7 +54,7 @@ impl<H: Hasher> ColumnProof<H> {
         let c_i = self.column_hash();
 
         check_eq!(self.inclusion_proof.root(), expected_root);
-        check!(self.inclusion_proof.validate_data(c_i.as_ref()));
+        check!(self.inclusion_proof.validate_data(c_i.into()));
         check!(self.inclusion_proof.validate(challenge as usize));
 
         true

@@ -1,14 +1,20 @@
-use sha2::Digest;
+use lazy_static::lazy_static;
+use paired::bls12_381::Fr;
 
-use crate::hasher::{pedersen::PedersenDomain, Domain};
+lazy_static! {
+    pub static ref POSEIDON_CONSTANTS_11: neptune::poseidon::PoseidonConstants::<paired::bls12_381::Bls12, typenum::U11> =
+        neptune::poseidon::PoseidonConstants::new();
+}
 
 /// Hash all elements in the given column.
-pub fn hash_single_column<T: AsRef<[u8]>>(column: &[T]) -> PedersenDomain {
-    let mut hasher = sha2::Sha256::new();
+pub fn hash_single_column<T: Into<Fr> + Copy>(column: &[T]) -> Fr {
+    assert_eq!(column.len(), 11, "invalid column size");
+
+    let mut hasher = neptune::Poseidon::new(&*POSEIDON_CONSTANTS_11);
     for t in column {
-        hasher.input(t.as_ref());
+        let t_fr: Fr = (*t).into();
+        hasher.input(t_fr).unwrap();
     }
-    let mut res = hasher.result();
-    res[31] &= 0b0011_1111;
-    PedersenDomain::try_from_bytes(&res).unwrap()
+
+    hasher.hash()
 }

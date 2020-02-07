@@ -126,17 +126,17 @@ impl<H: Hasher> MerkleProof<H> {
     }
 
     /// Validates that the data hashes to the leaf of the merkle path.
-    pub fn validate_data(&self, data: &[u8]) -> bool {
+    pub fn validate_data(&self, data: H::Domain) -> bool {
         if !self.verify() {
             return false;
         }
 
-        self.leaf().into_bytes() == data
+        self.leaf() == data
     }
 
     /// Returns the hash of leaf that this MerkleProof represents.
-    pub fn leaf(&self) -> &H::Domain {
-        &self.leaf
+    pub fn leaf(&self) -> H::Domain {
+        self.leaf
     }
 
     /// Returns the root hash
@@ -145,7 +145,7 @@ impl<H: Hasher> MerkleProof<H> {
     }
 
     pub fn verified_leaf(&self) -> IncludedNode<H> {
-        IncludedNode::new(*self.leaf())
+        IncludedNode::new(self.leaf())
     }
 
     /// Returns the length of the proof. That is all path elements plus 1 for the
@@ -163,7 +163,7 @@ impl<H: Hasher> MerkleProof<H> {
             out.extend(Domain::serialize(hash));
             out.push(*is_right as u8);
         }
-        out.extend(Domain::serialize(self.leaf()));
+        out.extend(Domain::serialize(&self.leaf()));
         out.extend(Domain::serialize(self.root()));
 
         out
@@ -311,7 +311,7 @@ mod tests {
             assert!(mp.validate(i), "failed to validate valid merkle path");
             let data_slice = &data[i * node_size..(i + 1) * node_size].to_vec();
             assert!(
-                mp.validate_data(data_slice),
+                mp.validate_data(H::Domain::try_from_bytes(data_slice).unwrap()),
                 "failed to validate valid data"
             );
         }

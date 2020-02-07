@@ -323,19 +323,19 @@ mod tests {
 
     #[test]
     fn stacked_input_circuit_pedersen() {
-        stacked_input_circuit::<PedersenHasher>(2_480_652);
+        stacked_input_circuit::<PedersenHasher>(6_607_119);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon() {
-        stacked_input_circuit::<PoseidonHasher>(2_434_347);
+        stacked_input_circuit::<PoseidonHasher>(6_560_814);
     }
 
     fn stacked_input_circuit<H: Hasher + 'static>(expected_constraints: usize) {
         let nodes = 8;
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
-        let num_layers = 2;
+        let num_layers = 11;
         let layer_challenges = LayerChallenges::new(num_layers, 1);
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
@@ -486,7 +486,7 @@ mod tests {
         let nodes = 8;
         let degree = 3;
         let expansion_degree = 2;
-        let num_layers = 2;
+        let num_layers = 11;
         let layer_challenges = LayerChallenges::new(num_layers, 3);
         let partition_count = 1;
 
