@@ -293,7 +293,7 @@ mod tests {
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{
-        Blake2sHasher, HashFunction, PedersenHasher, PoseidonHasher, Sha256Hasher,
+        Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher,
     };
     use crate::merkle::make_proof_for_test;
 
@@ -411,12 +411,11 @@ mod tests {
         rng: &mut XorShiftRng,
     ) -> MerkleProof<H> {
         let bogus_leaf: H::Domain = H::Domain::random(rng);
-        let hashed_leaf = H::Function::hash_leaf(&bogus_leaf);
 
         make_proof_for_test(
             pub_inputs.comm_rs[0],
-            hashed_leaf,
-            vec![(hashed_leaf, true)],
+            bogus_leaf,
+            vec![(bogus_leaf, true)],
         )
     }
 
