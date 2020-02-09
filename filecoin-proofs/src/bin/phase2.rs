@@ -1,18 +1,25 @@
+/// # Build
+///
+/// ```
+/// # From the directory `rust-fil-proofs/filecoin-proofs`:
+/// $ cargo build --release --bin=phase2
+/// ```
+///
 /// # Usage
 ///
 /// ```
-/// $ ./phase2 new \
+/// $ ./target/release/phase2 new \
 ///     {--porep, --post} \
 ///     [--sector-size=<sector size abbreviation>] \
 ///     --parameters=<path to write params>
 ///
-/// $ ./phase2 contribute \
+/// $ ./target/release/phase2 contribute \
 ///     {--porep, --post} \
 ///     [--sector-size=<sector size abbreviation>] \
 ///     --parameters-before=<path to read params> \
 ///     --parameters-after=<path to write params>
 ///
-/// $ ./phase2 verify \
+/// $ ./target/release/phase2 verify \
 ///     --parameters=<comma separated list of paths to params> \
 ///     --contributions=<comma separated list of contribution digests>
 /// ```
@@ -113,7 +120,7 @@ fn initial_setup_post(sector_size: u64, params_path: &str) {
 
 fn contribute_porep(sector_size: u64, params_path_before: &str, params_path_after: &str) {
     info!("Creating contribution for PoRep");
-    let params_file = File::create(params_path_before).unwrap();
+    let params_file = File::open(params_path_before).unwrap();
     let mut params_reader = BufReader::with_capacity(1024 * 1024, params_file);
 
     info!("reading params from disk");
@@ -130,14 +137,14 @@ fn contribute_porep(sector_size: u64, params_path_before: &str, params_path_afte
     info!("verifying contribution");
     let all_contributions = params
         .verify(get_porep_circuit(sector_size))
-        .expect("params read from file are not valid for PoRep circuit");
+        .expect("invalid parameteres");
     assert!(
         phase2::contains_contribution(&all_contributions, &contribution),
         "Invalid contribution"
     );
     info!("contribution has been verified");
 
-    // Write the params with out contribution to disk.
+    // Write the params without contribution to disk.
     info!("writing new params to disk");
     let params_file = File::create(params_path_after).unwrap();
     let mut params_writer = BufWriter::with_capacity(1024 * 1024, params_file);
@@ -197,17 +204,9 @@ fn prompt_for_randomness() -> [u8; 32] {
 }
 
 fn verify_params_match_contributions(param_paths: &[&str], contribution_hashes: &[[u8; 64]]) {
-    let n_params = param_paths.len();
-    let n_contributions = contribution_hashes.len();
-
-    assert!(
-        n_params >= 2 && n_contributions >= 1,
-        "must supply at least one pair of parameters and a single contribution hash"
-    );
-
     assert_eq!(
-        n_params,
-        n_contributions - 1,
+        param_paths.len(),
+        contribution_hashes.len() - 1,
         "the number of contributions must be one less than the number of parameter files"
     );
 
@@ -281,6 +280,7 @@ fn main() {
             Arg::with_name("parameters")
                 .long("parameters")
                 .required(true)
+                .takes_value(true)
                 .help("Path to where the initial parameters file should be written"),
         );
 
@@ -315,12 +315,14 @@ fn main() {
             Arg::with_name("parameters-before")
                 .long("parameters-before")
                 .required(true)
+                .takes_value(true)
                 .help("Path to parameters file to read"),
         )
         .arg(
             Arg::with_name("parameters-after")
                 .long("parameters-after")
                 .required(true)
+                .takes_value(true)
                 .help("Path to parameters file to write to"),
         );
 
