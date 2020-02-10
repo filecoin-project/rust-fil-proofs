@@ -278,7 +278,6 @@ fn read_cached_metadata(cache_entry_path: &PathBuf) -> Result<CacheEntryMetadata
     })
 }
 
-#[allow(dead_code)]
 fn write_cached_metadata(
     cache_entry_path: &PathBuf,
     value: CacheEntryMetadata,
@@ -303,7 +302,6 @@ fn write_cached_verifying_key<E: JubjubEngine>(
     })
 }
 
-#[allow(dead_code)]
 fn write_cached_params<E: JubjubEngine>(
     cache_entry_path: &PathBuf,
     value: groth16::Parameters<E>,
