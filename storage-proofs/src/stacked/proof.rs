@@ -403,28 +403,41 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
             let gsize = graph.size();
 
-            let mut hashes: Vec<H::Domain> = Vec::with_capacity(gsize);
-
             // TODO: allow layer variation
             assert_eq!(layers, 11, "invalid number of layers");
-            let constants = &*crate::stacked::hash::POSEIDON_CONSTANTS_11;
+            let mut hashes: Vec<H::Domain> = vec![H::Domain::default(); gsize];
 
-            // TODO: better parallelization
-            // spawn n = num_cpus * 2 threads
-            // chunk into gsize / n chunks
-            // calculate all n chunks in parallel
-            for i in 0..gsize {
-                let data: Vec<_> = (1..=layers)
-                    .into_par_iter()
-                    .map(|layer| {
-                        let store = labels.labels_for_layer(layer);
-                        Ok(store.read_at(i)?.into())
-                    })
-                    .collect::<Result<_>>()?;
+            rayon::scope(|s| {
+                let constants = &*crate::stacked::hash::POSEIDON_CONSTANTS_11;
 
-                let mut hasher = Poseidon::new_with_preimage(&data, constants);
-                hashes.push(hasher.hash_in_mode(HashMode::OptimizedStatic).into());
-            }
+                // spawn n = num_cpus * 2 threads
+                let n = num_cpus::get() * 2;
+
+                // only split if we have at least two elements per thread
+                let num_chunks = if n > gsize * 2 { 1 } else { n };
+
+                // chunk into n chunks
+                let chunk_size = (gsize as f64 / num_chunks as f64).ceil() as usize;
+
+                // calculate all n chunks in parallel
+                for (chunk, hashes_chunk) in hashes.chunks_mut(chunk_size).enumerate() {
+                    let labels = &labels;
+
+                    s.spawn(move |_| {
+                        for i in 0..chunk_size {
+                            let data: Vec<_> = (1..=layers)
+                                .map(|layer| {
+                                    let store = labels.labels_for_layer(layer);
+                                    store.read_at(i + chunk * chunk_size).unwrap().into()
+                                })
+                                .collect();
+
+                            let mut hasher = Poseidon::new_with_preimage(&data, constants);
+                            hashes_chunk[i] = hasher.hash_in_mode(HashMode::OptimizedStatic).into();
+                        }
+                    });
+                }
+            });
 
             info!("building tree_c");
             MerkleTree::<_, H::Function>::from_par_iter_with_config(
