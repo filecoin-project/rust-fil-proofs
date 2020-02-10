@@ -4,7 +4,6 @@ use std::marker::PhantomData;
 use log::{info, trace};
 use merkletree::merkle::FromIndexedParallelIterator;
 use merkletree::store::{DiskStore, StoreConfig};
-use neptune::poseidon::{HashMode, Poseidon};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 
@@ -403,13 +402,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
             let gsize = graph.size();
 
-            // TODO: allow layer variation
-            assert_eq!(layers, 11, "invalid number of layers");
             let mut hashes: Vec<H::Domain> = vec![H::Domain::default(); gsize];
 
             rayon::scope(|s| {
-                let constants = &*crate::stacked::hash::POSEIDON_CONSTANTS_11;
-
                 // spawn n = num_cpus * 2 threads
                 let n = num_cpus::get() * 2;
 
@@ -432,8 +427,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                                 })
                                 .collect();
 
-                            let mut hasher = Poseidon::new_with_preimage(&data, constants);
-                            hashes_chunk[i] = hasher.hash_in_mode(HashMode::OptimizedStatic).into();
+                            hashes_chunk[i] =
+                                crate::stacked::hash::hash_single_column(&data).into();
                         }
                     });
                 }

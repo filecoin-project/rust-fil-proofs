@@ -37,7 +37,14 @@ impl<H: Hasher> Column<H> {
 
     /// Calculate the column hashes `C_i = H(E_i, O_i)` for the passed in column.
     pub fn hash(&self) -> Fr {
-        hash_single_column(&self.rows[..])
+        hash_single_column(
+            &self
+                .rows
+                .iter()
+                .copied()
+                .map(Into::into)
+                .collect::<Vec<_>>(),
+        )
     }
 
     pub fn get_node_at_layer(&self, layer: usize) -> Result<&H::Domain> {
