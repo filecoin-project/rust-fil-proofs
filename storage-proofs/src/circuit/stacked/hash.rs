@@ -6,13 +6,12 @@ use paired::bls12_381::{Bls12, Fr};
 /// Hash a list of bits.
 pub fn hash_single_column<CS>(
     mut cs: CS,
-    rows: &[Option<Fr>],
+    column: &[Option<Fr>],
 ) -> Result<num::AllocatedNum<Bls12>, SynthesisError>
 where
     CS: ConstraintSystem<Bls12>,
 {
-    assert_eq!(rows.len(), 11, "unsupported number of rows");
-    let rows = rows
+    let column = column
         .iter()
         .enumerate()
         .map(|(i, val)| {
@@ -22,11 +21,24 @@ where
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    poseidon_hash::<CS, Bls12, typenum::U11>(
-        cs,
-        rows,
-        &*crate::stacked::hash::POSEIDON_CONSTANTS_11,
-    )
+    match column.len() {
+        1 => poseidon_hash::<CS, Bls12, typenum::U1>(
+            cs,
+            column,
+            &*crate::stacked::hash::POSEIDON_CONSTANTS_1,
+        ),
+        2 => poseidon_hash::<CS, Bls12, typenum::U2>(
+            cs,
+            column,
+            &*crate::stacked::hash::POSEIDON_CONSTANTS_2,
+        ),
+        11 => poseidon_hash::<CS, Bls12, typenum::U11>(
+            cs,
+            column,
+            &*crate::stacked::hash::POSEIDON_CONSTANTS_11,
+        ),
+        _ => panic!("unsupported column size: {}", column.len()),
+    }
 }
 
 #[cfg(test)]
