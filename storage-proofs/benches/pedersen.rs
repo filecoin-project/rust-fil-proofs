@@ -91,7 +91,7 @@ fn pedersen_benchmark(c: &mut Criterion) {
 }
 
 fn pedersen_md_benchmark(c: &mut Criterion) {
-    let params = vec![32, 64, 10 * 32];
+    let params = vec![32, 2 * 32, 4 * 32, 8 * 32, 11 * 32];
 
     c.bench(
         "hash-pedersen-md",

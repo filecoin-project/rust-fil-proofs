@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 use log::{info, trace};
 use merkletree::merkle::FromIndexedParallelIterator;
 use merkletree::store::{DiskStore, StoreConfig};
+use neptune::poseidon::{HashMode, Poseidon};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 
@@ -409,6 +410,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             let constants = &*crate::stacked::hash::POSEIDON_CONSTANTS_11;
 
             // TODO: better parallelization
+            // spawn n = num_cpus * 2 threads
+            // chunk into gsize / n chunks
+            // calculate all n chunks in parallel
             for i in 0..gsize {
                 let data: Vec<_> = (1..=layers)
                     .into_par_iter()
@@ -418,8 +422,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     })
                     .collect::<Result<_>>()?;
 
-                let mut hasher = neptune::Poseidon::new_with_preimage(&data, constants);
-                hashes.push(hasher.hash().into());
+                let mut hasher = Poseidon::new_with_preimage(&data, constants);
+                hashes.push(hasher.hash_in_mode(HashMode::OptimizedStatic).into());
             }
 
             info!("building tree_c");

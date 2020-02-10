@@ -55,7 +55,7 @@ generic-array = "0.13.2"
 anyhow = "1.0.23"
 thiserror = "1.0.6"
 cpu-time = "1.0.0"
-neptune = "0.2.5"
+neptune = "0.3.1"
 typenum = "1.11.2"
 
 
