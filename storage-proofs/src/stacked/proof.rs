@@ -419,7 +419,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     let labels = &labels;
 
                     s.spawn(move |_| {
-                        for i in 0..chunk_size {
+                        for (i, hash) in hashes_chunk.iter_mut().enumerate() {
                             let data: Vec<_> = (1..=layers)
                                 .map(|layer| {
                                     let store = labels.labels_for_layer(layer);
@@ -427,8 +427,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                                 })
                                 .collect();
 
-                            hashes_chunk[i] =
-                                crate::stacked::hash::hash_single_column(&data).into();
+                            *hash = crate::stacked::hash::hash_single_column(&data).into();
                         }
                     });
                 }
