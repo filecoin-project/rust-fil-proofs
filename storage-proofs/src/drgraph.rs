@@ -311,8 +311,9 @@ mod tests {
     }
 
     fn gen_proof<H: Hasher>(config: Option<StoreConfig>) {
-        let g = BucketGraph::<H>::new(8, BASE_DEGREE, 0, new_seed()).unwrap();
-        let data = vec![2u8; NODE_SIZE * 8];
+        let leafs = 8;
+        let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, new_seed()).unwrap();
+        let data = vec![2u8; NODE_SIZE * leafs];
 
         let mmapped = &mmap_from(&data);
         let tree = g.merkle_tree(config, mmapped).unwrap();

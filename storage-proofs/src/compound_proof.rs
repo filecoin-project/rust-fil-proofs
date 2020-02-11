@@ -4,7 +4,7 @@ use anyhow::{ensure, Context};
 use bellperson::{groth16, Circuit};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use log::info;
-use rand::{rngs::OsRng, RngCore};
+use rand::rngs::OsRng;
 
 use crate::circuit::multi_proof::MultiProof;
 use crate::error::Result;
@@ -72,7 +72,7 @@ pub trait CompoundProof<
         pub_params: &PublicParams<'a, S>,
         pub_in: &S::PublicInputs,
         priv_in: &S::PrivateInputs,
-        groth_params: &'b groth16::Parameters<E>,
+        groth_params: &'b groth16::MappedParameters<E>,
     ) -> Result<MultiProof<'b, E>>
     where
         E::Params: Sync,
@@ -208,7 +208,7 @@ pub trait CompoundProof<
         pub_in: &S::PublicInputs,
         vanilla_proof: Vec<S::Proof>,
         pub_params: &S::PublicParams,
-        groth_params: &groth16::Parameters<E>,
+        groth_params: &groth16::MappedParameters<E>,
     ) -> Result<Vec<groth16::Proof<E>>> {
         let mut rng = OsRng;
 
@@ -259,18 +259,12 @@ pub trait CompoundProof<
 
     fn blank_circuit(public_params: &S::PublicParams) -> C;
 
-    fn groth_params<R: RngCore>(
-        rng: Option<&mut R>,
-        public_params: &S::PublicParams,
-    ) -> Result<groth16::Parameters<E>> {
-        Self::get_groth_params(rng, Self::blank_circuit(public_params), public_params)
+    fn groth_params(public_params: &S::PublicParams) -> Result<groth16::MappedParameters<E>> {
+        Self::get_groth_params(Self::blank_circuit(public_params), public_params)
     }
 
-    fn verifying_key<R: RngCore>(
-        rng: Option<&mut R>,
-        public_params: &S::PublicParams,
-    ) -> Result<groth16::VerifyingKey<E>> {
-        Self::get_verifying_key(rng, Self::blank_circuit(public_params), public_params)
+    fn verifying_key(public_params: &S::PublicParams) -> Result<groth16::VerifyingKey<E>> {
+        Self::get_verifying_key(Self::blank_circuit(public_params), public_params)
     }
 
     fn circuit_for_test(

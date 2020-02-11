@@ -297,11 +297,9 @@ mod tests {
                 &tree,
             );
 
-            let gparams = PoRCompound::<PedersenHasher>::groth_params(
-                Some(rng),
-                &public_params.vanilla_params,
-            )
-            .expect("failed to generate groth params");
+            let gparams =
+                PoRCompound::<PedersenHasher>::groth_params(&public_params.vanilla_params)
+                    .expect("failed to generate groth params");
 
             let proof = PoRCompound::<PedersenHasher>::prove(
                 &public_params,
@@ -486,9 +484,8 @@ mod tests {
                 &tree,
             );
 
-            let groth_params =
-                PoRCompound::<H>::groth_params(Some(rng), &public_params.vanilla_params)
-                    .expect("failed to generate groth params");
+            let groth_params = PoRCompound::<H>::groth_params(&public_params.vanilla_params)
+                .expect("failed to generate groth params");
 
             let proof = PoRCompound::<H>::prove(
                 &public_params,

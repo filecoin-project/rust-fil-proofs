@@ -7,6 +7,7 @@ use rayon::prelude::*;
 use storage_proofs::hasher::{Domain, Hasher, PedersenHasher};
 use storage_proofs::util::NODE_SIZE;
 
+#[allow(clippy::type_complexity)]
 fn generate_tree<R: Rng>(
     rng: &mut R,
     size: usize,
@@ -19,7 +20,7 @@ fn generate_tree<R: Rng>(
 > {
     let el = <PedersenHasher as Hasher>::Domain::random(rng);
     info!("create tree {} KiB", (size * NODE_SIZE) / 1024);
-    MerkleTree::from_par_iter((0..size).into_par_iter().map(|_| el.clone()))
+    MerkleTree::from_par_iter((0..size).into_par_iter().map(|_| el))
 }
 
 pub fn run(size: usize, proofs_count: usize) -> Result<()> {
