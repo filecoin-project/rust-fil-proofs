@@ -94,11 +94,12 @@ where
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };
 
-    let compound_public_params = <StackedCompound as CompoundProof<
-        _,
-        StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
-        _,
-    >>::setup(&compound_setup_params)?;
+    let compound_public_params =
+        <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
+            _,
+            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+            _,
+        >>::setup(&compound_setup_params)?;
 
     info!("building merkle tree for the original data");
     let (config, comm_d) = measure_op(CommD, || -> Result<_> {
@@ -205,11 +206,12 @@ where
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };
 
-    let compound_public_params = <StackedCompound as CompoundProof<
-        _,
-        StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
-        _,
-    >>::setup(&compound_setup_params)?;
+    let compound_public_params =
+        <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
+            _,
+            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+            _,
+        >>::setup(&compound_setup_params)?;
 
     let (tau, (p_aux, t_aux)) =
         StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::replicate_phase2(
@@ -326,11 +328,12 @@ pub fn seal_commit_phase1<T: AsRef<Path>>(
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };
 
-    let compound_public_params = <StackedCompound as CompoundProof<
-        _,
-        StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
-        _,
-    >>::setup(&compound_setup_params)?;
+    let compound_public_params =
+        <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
+            _,
+            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+            _,
+        >>::setup(&compound_setup_params)?;
 
     let vanilla_proofs = StackedDrg::prove_all_partitions(
         &compound_public_params.vanilla_params,
@@ -410,11 +413,12 @@ pub fn seal_commit_phase2(
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
     };
 
-    let compound_public_params = <StackedCompound as CompoundProof<
-        _,
-        StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
-        _,
-    >>::setup(&compound_setup_params)?;
+    let compound_public_params =
+        <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
+            _,
+            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+            _,
+        >>::setup(&compound_setup_params)?;
 
     info!("snark_proof:start");
     let groth_proofs = StackedCompound::circuit_proofs(

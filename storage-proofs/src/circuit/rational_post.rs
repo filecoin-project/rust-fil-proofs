@@ -45,7 +45,7 @@ impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata, H: Hasher>
     CacheableParameters<E, C, P> for RationalPoStCompound<H>
 {
     fn cache_prefix() -> String {
-        String::from("proof-of-spacetime-rational")
+        format!("proof-of-spacetime-rational-{}", H::name())
     }
 }
 

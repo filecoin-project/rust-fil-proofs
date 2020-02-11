@@ -346,8 +346,10 @@ fn do_circuit_work<H: 'static + Hasher>(
     if *bench || *circuit || *bench_only {
         info!("Generating blank circuit: start");
         let mut cs = BenchCS::<Bls12>::new();
-        <StackedCompound as CompoundProof<_, StackedDrg<H, Sha256Hasher>, _>>::blank_circuit(&pp)
-            .synthesize(&mut cs)?;
+        <StackedCompound<_, _> as CompoundProof<_, StackedDrg<H, Sha256Hasher>, _>>::blank_circuit(
+            &pp,
+        )
+        .synthesize(&mut cs)?;
 
         report.outputs.circuit_num_inputs = Some(cs.num_inputs() as u64);
         report.outputs.circuit_num_constraints = Some(cs.num_constraints() as u64);
@@ -362,10 +364,11 @@ fn do_circuit_work<H: 'static + Hasher>(
         // We should implement a method of CompoundProof, which will skip vanilla proving.
         // We should also allow the serialized vanilla proofs to be passed (as a file) to the example
         // and skip replication/vanilla-proving entirely.
-        let gparams =
-            <StackedCompound as CompoundProof<_, StackedDrg<H, Sha256Hasher>, _>>::groth_params(
-                &compound_public_params.vanilla_params,
-            )?;
+        let gparams = <StackedCompound<_, _> as CompoundProof<
+            _,
+            StackedDrg<H, Sha256Hasher>,
+            _,
+        >>::groth_params(&compound_public_params.vanilla_params)?;
 
         let multi_proof = {
             let FuncMeasurement {

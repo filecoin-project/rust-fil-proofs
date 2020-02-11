@@ -170,21 +170,23 @@ impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G
 }
 
 #[allow(dead_code)]
-pub struct StackedCompound {
+pub struct StackedCompound<H: Hasher, G: Hasher> {
     partitions: Option<usize>,
+    _h: PhantomData<H>,
+    _g: PhantomData<G>,
 }
 
-impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata> CacheableParameters<E, C, P>
-    for StackedCompound
+impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata, H: Hasher, G: Hasher>
+    CacheableParameters<E, C, P> for StackedCompound<H, G>
 {
     fn cache_prefix() -> String {
-        String::from("stacked-proof-of-replication")
+        format!("stacked-proof-of-replication-{}-{}", H::name(), G::name())
     }
 }
 
 impl<'a, H: 'static + Hasher, G: 'static + Hasher>
     CompoundProof<'a, Bls12, StackedDrg<'a, H, G>, StackedCircuit<'a, Bls12, H, G>>
-    for StackedCompound
+    for StackedCompound<H, G>
 {
     fn generate_public_inputs(
         pub_in: &<StackedDrg<H, G> as ProofScheme>::PublicInputs,
@@ -449,7 +451,7 @@ mod tests {
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
-        let generated_inputs = <StackedCompound as CompoundProof<
+        let generated_inputs = <StackedCompound<H, Sha256Hasher> as CompoundProof<
             _,
             StackedDrg<H, Sha256Hasher>,
             _,
@@ -575,7 +577,7 @@ mod tests {
             let (circuit1, _inputs) =
                 StackedCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs)
                     .unwrap();
-            let blank_circuit = <StackedCompound as CompoundProof<
+            let blank_circuit = <StackedCompound<H, Sha256Hasher> as CompoundProof<
                 _,
                 StackedDrg<H, Sha256Hasher>,
                 _,
@@ -597,11 +599,12 @@ mod tests {
             }
         }
 
-        let blank_groth_params =
-            <StackedCompound as CompoundProof<_, StackedDrg<H, Sha256Hasher>, _>>::groth_params(
-                &public_params.vanilla_params,
-            )
-            .expect("failed to generate groth params");
+        let blank_groth_params = <StackedCompound<H, Sha256Hasher> as CompoundProof<
+            _,
+            StackedDrg<H, Sha256Hasher>,
+            _,
+        >>::groth_params(&public_params.vanilla_params)
+        .expect("failed to generate groth params");
 
         let proof = StackedCompound::prove(
             &public_params,

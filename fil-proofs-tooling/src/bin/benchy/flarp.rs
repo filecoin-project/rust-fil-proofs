@@ -364,7 +364,7 @@ fn measure_porep_circuit(i: &FlarpInputs) -> usize {
     let pp = StackedDrg::<FlarpHasher, Sha256Hasher>::setup(&sp).unwrap();
 
     let mut cs = BenchCS::<Bls12>::new();
-    <StackedCompound as CompoundProof<_, StackedDrg<FlarpHasher, Sha256Hasher>, _>>::blank_circuit(
+    <StackedCompound<_, _> as CompoundProof<_, StackedDrg<FlarpHasher, Sha256Hasher>, _>>::blank_circuit(
         &pp,
     )
     .synthesize(&mut cs)
@@ -483,31 +483,31 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     .unwrap();
 
     {
-        let circuit = <StackedCompound as CompoundProof<
+        let circuit = <StackedCompound<_, _> as CompoundProof<
             _,
             StackedDrg<FlarpHasher, Sha256Hasher>,
             _,
         >>::blank_circuit(&public_params);
-        StackedCompound::get_param_metadata(circuit, &public_params)
+        StackedCompound::<FlarpHasher, Sha256Hasher>::get_param_metadata(circuit, &public_params)
             .expect("cannot get param metadata");
     }
     {
-        let circuit = <StackedCompound as CompoundProof<
+        let circuit = <StackedCompound<_, _> as CompoundProof<
             _,
             StackedDrg<FlarpHasher, Sha256Hasher>,
             _,
         >>::blank_circuit(&public_params);
-        StackedCompound::get_groth_params(circuit, &public_params)
+        StackedCompound::<FlarpHasher, Sha256Hasher>::get_groth_params(circuit, &public_params)
             .expect("failed to get groth params");
     }
     {
-        let circuit = <StackedCompound as CompoundProof<
+        let circuit = <StackedCompound<_, _> as CompoundProof<
             _,
             StackedDrg<FlarpHasher, Sha256Hasher>,
             _,
         >>::blank_circuit(&public_params);
 
-        StackedCompound::get_verifying_key(circuit, &public_params)
+        StackedCompound::<FlarpHasher, Sha256Hasher>::get_verifying_key(circuit, &public_params)
             .expect("failed to get verifying key");
     }
 }

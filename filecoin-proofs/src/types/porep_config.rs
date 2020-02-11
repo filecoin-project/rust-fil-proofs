@@ -52,11 +52,13 @@ impl PoRepConfig {
         let params =
             crate::parameters::public_params(self.sector_size.into(), self.partitions.into())?;
 
-        Ok(<StackedCompound as CacheableParameters<
-            Bls12,
-            StackedCircuit<_, DefaultTreeHasher, DefaultPieceHasher>,
-            _,
-        >>::cache_identifier(&params))
+        Ok(
+            <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CacheableParameters<
+                Bls12,
+                StackedCircuit<_, DefaultTreeHasher, DefaultPieceHasher>,
+                _,
+            >>::cache_identifier(&params),
+        )
     }
 
     pub fn get_cache_metadata_path(&self) -> Result<PathBuf> {

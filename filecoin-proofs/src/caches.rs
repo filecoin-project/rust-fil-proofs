@@ -85,7 +85,7 @@ pub fn get_stacked_params(porep_config: PoRepConfig) -> Result<Arc<Bls12GrothPar
     )?;
 
     let parameters_generator = || {
-        <StackedCompound as CompoundProof<
+        <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
             _,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
@@ -130,7 +130,7 @@ pub fn get_stacked_verifying_key(porep_config: PoRepConfig) -> Result<Arc<Bls12V
     )?;
 
     let vk_generator = || {
-        <StackedCompound as CompoundProof<
+        <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
             Bls12,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,

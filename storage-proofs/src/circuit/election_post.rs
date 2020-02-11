@@ -55,7 +55,7 @@ impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata, H: Hasher>
     CacheableParameters<E, C, P> for ElectionPoStCompound<H>
 {
     fn cache_prefix() -> String {
-        String::from("proof-of-spacetime-election")
+        format!("proof-of-spacetime-election-{}", H::name())
     }
 }
 
