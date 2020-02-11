@@ -184,14 +184,12 @@ where
 
         // This is used for testing only, if parameters are otherwise unavailable.
         let generate = || -> Result<_> {
-            use rand::SeedableRng;
-            use rand_xorshift::XorShiftRng;
             use std::time::Instant;
 
             info!("Actually generating groth params. (id: {})", &id);
-            let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+            let mut rng = rand::thread_rng();
             let start = Instant::now();
-            let parameters = groth16::generate_random_parameters::<E, _, _>(circuit, rng)?;
+            let parameters = groth16::generate_random_parameters::<E, _, _>(circuit, &mut rng)?;
             let generation_time = start.elapsed();
             info!(
                 "groth_parameter_generation_time: {:?} (id: {})",
