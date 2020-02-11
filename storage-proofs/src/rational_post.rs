@@ -316,8 +316,8 @@ mod tests {
 
         let graph1 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
         let graph2 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree1 = graph1.merkle_tree(data1.as_slice()).unwrap();
-        let tree2 = graph2.merkle_tree(data2.as_slice()).unwrap();
+        let tree1 = graph1.merkle_tree(None, data1.as_slice()).unwrap();
+        let tree2 = graph2.merkle_tree(None, data2.as_slice()).unwrap();
 
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
         let mut faults = OrderedSectorSet::new();
@@ -429,7 +429,7 @@ mod tests {
             .collect();
 
         let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree = graph.merkle_tree(data.as_slice()).unwrap();
+        let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
 
         let faults = OrderedSectorSet::new();
@@ -502,7 +502,7 @@ mod tests {
             .collect();
 
         let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree = graph.merkle_tree(data.as_slice()).unwrap();
+        let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
         let mut faults = OrderedSectorSet::new();
         faults.insert(1.into());

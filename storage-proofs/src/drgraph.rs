@@ -2,6 +2,7 @@ use std::cmp;
 use std::marker::PhantomData;
 
 use anyhow::ensure;
+use merkletree::store::StoreConfig;
 use rand::{rngs::OsRng, Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use sha2::{Digest, Sha256};
@@ -10,7 +11,7 @@ use crate::error::*;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::pedersen::PedersenHasher;
 use crate::hasher::Hasher;
-use crate::merkle::{create_merkle_tree, MerkleTree};
+use crate::merkle::{create_lcmerkle_tree, create_merkle_tree, LCMerkleTree, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::{data_at_node_offset, NODE_SIZE};
 
@@ -34,8 +35,21 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
     }
 
     /// Builds a merkle tree based on the given data.
-    fn merkle_tree<'a>(&self, data: &'a [u8]) -> Result<MerkleTree<H::Domain, H::Function>> {
-        create_merkle_tree::<H>(None, self.size(), data)
+    fn merkle_tree<'a>(
+        &self,
+        config: Option<StoreConfig>,
+        data: &'a [u8],
+    ) -> Result<MerkleTree<H::Domain, H::Function>> {
+        create_merkle_tree::<H>(config, self.size(), data)
+    }
+
+    /// Builds a merkle tree based on the given level cache data.
+    fn lcmerkle_tree<'a>(
+        &self,
+        config: Option<StoreConfig>,
+        data: &'a [u8],
+    ) -> Result<LCMerkleTree<H::Domain, H::Function>> {
+        create_lcmerkle_tree::<H>(config, self.size(), data)
     }
 
     /// Returns the merkle tree depth.
@@ -247,7 +261,7 @@ mod tests {
     fn graph_bucket<H: Hasher>() {
         let degree = BASE_DEGREE;
 
-        for size in vec![3, 10, 200, 2000] {
+        for size in vec![4, 16, 256, 2048] {
             let g = BucketGraph::<H>::new(size, degree, 0, new_seed()).unwrap();
 
             assert_eq!(g.size(), size, "wrong nodes count");
@@ -296,12 +310,12 @@ mod tests {
         graph_bucket::<PedersenHasher>();
     }
 
-    fn gen_proof<H: Hasher>() {
-        let g = BucketGraph::<H>::new(5, BASE_DEGREE, 0, new_seed()).unwrap();
-        let data = vec![2u8; NODE_SIZE * 5];
+    fn gen_proof<H: Hasher>(config: Option<StoreConfig>) {
+        let g = BucketGraph::<H>::new(8, BASE_DEGREE, 0, new_seed()).unwrap();
+        let data = vec![2u8; NODE_SIZE * 8];
 
         let mmapped = &mmap_from(&data);
-        let tree = g.merkle_tree(mmapped).unwrap();
+        let tree = g.merkle_tree(config, mmapped).unwrap();
         let proof = tree.gen_proof(2).unwrap();
 
         assert!(proof.validate::<H::Function>());
@@ -309,16 +323,16 @@ mod tests {
 
     #[test]
     fn gen_proof_pedersen() {
-        gen_proof::<PedersenHasher>();
+        gen_proof::<PedersenHasher>(None);
     }
 
     #[test]
     fn gen_proof_sha256() {
-        gen_proof::<Sha256Hasher>();
+        gen_proof::<Sha256Hasher>(None);
     }
 
     #[test]
     fn gen_proof_blake2s() {
-        gen_proof::<Blake2sHasher>();
+        gen_proof::<Blake2sHasher>(None);
     }
 }

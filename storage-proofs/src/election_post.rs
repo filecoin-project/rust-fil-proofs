@@ -15,7 +15,7 @@ use crate::error::{Error, Result};
 use crate::fr32::fr_into_bytes;
 use crate::hasher::{Domain, Hasher};
 use crate::measurements::{measure_op, Operation};
-use crate::merkle::{MerkleProof, MerkleTree};
+use crate::merkle::{LCMerkleTree, MerkleProof};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::sector::*;
@@ -63,9 +63,9 @@ pub struct PublicInputs<T: Domain> {
     pub sector_challenge_index: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct PrivateInputs<H: Hasher> {
-    pub tree: MerkleTree<H::Domain, H::Function>,
+    pub tree: LCMerkleTree<H::Domain, H::Function>,
     pub comm_c: H::Domain,
     pub comm_r_last: H::Domain,
 }
@@ -139,7 +139,7 @@ where
 pub fn generate_candidates<H: Hasher>(
     pub_params: &PublicParams,
     challenged_sectors: &[SectorId],
-    trees: &BTreeMap<SectorId, MerkleTree<H::Domain, H::Function>>,
+    trees: &BTreeMap<SectorId, LCMerkleTree<H::Domain, H::Function>>,
     prover_id: &[u8; 32],
     randomness: &[u8; 32],
 ) -> Result<Vec<Candidate>> {
@@ -166,7 +166,7 @@ pub fn generate_candidates<H: Hasher>(
 
 fn generate_candidate<H: Hasher>(
     pub_params: &PublicParams,
-    tree: &MerkleTree<H::Domain, H::Function>,
+    tree: &LCMerkleTree<H::Domain, H::Function>,
     prover_id: &[u8; 32],
     sector_id: SectorId,
     randomness: &[u8; 32],
@@ -345,9 +345,11 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
                     (0..pub_params.challenged_nodes)
                         .into_par_iter()
                         .map(move |i| {
-                            Ok(MerkleProof::new_from_proof(
-                                &tree.gen_proof(challenged_leaf_start as usize + i)?,
-                            ))
+                            let (proof, _) = tree.gen_proof_and_partial_tree(
+                                challenged_leaf_start as usize + i,
+                                2,
+                            )?;
+                            Ok(MerkleProof::new_from_proof(&proof))
                         })
                 })
                 .collect::<Result<Vec<_>>>()
@@ -425,6 +427,8 @@ mod tests {
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
 
     fn test_election_post<H: Hasher>() {
+        use merkletree::store::{StoreConfig, StoreConfigDataVersion};
+
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 32;
@@ -441,6 +445,16 @@ mod tests {
 
         let mut sectors: Vec<SectorId> = Vec::new();
         let mut trees = BTreeMap::new();
+
+        // Construct and store an MT using a named DiskStore.
+        let temp_dir = tempdir::TempDir::new("level_cache_tree_v1").unwrap();
+        let temp_path = temp_dir.path();
+        let config = StoreConfig::new(
+            &temp_path,
+            String::from("test-lc-tree-v1"),
+            StoreConfig::default_cached_above_base_layer(leaves as usize),
+        );
+
         for i in 0..5 {
             sectors.push(i.into());
             let data: Vec<u8> = (0..leaves)
@@ -448,8 +462,21 @@ mod tests {
                 .collect();
 
             let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
-            let tree = graph.merkle_tree(data.as_slice()).unwrap();
-            trees.insert(i.into(), tree);
+
+            let cur_config =
+                StoreConfig::from_config(&config, format!("test-lc-tree-v1-{}", i), None);
+            let mut tree = graph
+                .merkle_tree(Some(cur_config.clone()), data.as_slice())
+                .unwrap();
+            let c = tree
+                .compact(cur_config.clone(), StoreConfigDataVersion::One as u32)
+                .unwrap();
+            assert_eq!(c, true);
+
+            let lctree = graph
+                .lcmerkle_tree(Some(cur_config), data.as_slice())
+                .unwrap();
+            trees.insert(i.into(), lctree);
         }
 
         let candidates =

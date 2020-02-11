@@ -529,7 +529,7 @@ mod tests {
     fn drgporep_input_circuit_with_bls12_381() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let nodes = 12;
+        let nodes = 16;
         let degree = BASE_DEGREE;
         let challenge = 2;
 
@@ -742,7 +742,7 @@ mod tests {
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let nodes = 5;
+        let nodes = 8;
         let degree = BASE_DEGREE;
         let challenges = vec![1, 3];
 

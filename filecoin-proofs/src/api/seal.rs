@@ -105,7 +105,7 @@ where
         let config = StoreConfig::new(
             cache_path.as_ref(),
             CacheKey::CommDTree.to_string(),
-            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+            StoreConfig::default_cached_above_base_layer(sector_bytes),
         );
         let data_tree = create_merkle_tree::<DefaultPieceHasher>(
             Some(config.clone()),
@@ -343,6 +343,9 @@ pub fn seal_commit_phase1<T: AsRef<Path>>(
         &vanilla_proofs,
     )?;
     ensure!(sanity_check, "Invalid vanilla proof generated");
+
+    // Discard or compact cached MTs that are no longer needed.
+    TemporaryAux::<DefaultTreeHasher, DefaultPieceHasher>::compact(t_aux)?;
 
     info!("seal_commit_phase1:end");
 

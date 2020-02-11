@@ -436,11 +436,13 @@ where
         replica_id: &H::Domain,
         mut data: Data<'a>,
         data_tree: Option<MerkleTree<H::Domain, H::Function>>,
-        _config: Option<StoreConfig>,
+        config: Option<StoreConfig>,
     ) -> Result<(porep::Tau<H::Domain>, porep::ProverAux<H>)> {
+        use crate::stacked::CacheKey;
+
         let tree_d = match data_tree {
             Some(tree) => tree,
-            None => pp.graph.merkle_tree(data.as_ref())?,
+            None => pp.graph.merkle_tree(config.clone(), data.as_ref())?,
         };
 
         let graph = &pp.graph;
@@ -464,8 +466,17 @@ where
             encoded.write_bytes(&mut data.as_mut()[start..end])?;
         }
 
+        let tree_r_last_config = match config {
+            Some(config) => Some(StoreConfig::from_config(
+                &config,
+                CacheKey::CommRLastTree.to_string(),
+                None,
+            )),
+            None => None,
+        };
+
         let comm_d = tree_d.root();
-        let tree_r = pp.graph.merkle_tree(data.as_ref())?;
+        let tree_r = pp.graph.merkle_tree(tree_r_last_config, data.as_ref())?;
         let comm_r = tree_r.root();
 
         Ok((
@@ -614,7 +625,7 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let replica_id: H::Domain = H::Domain::random(rng);
-        let data = vec![2u8; 32 * 3];
+        let data = vec![2u8; 32 * 4];
         // create a copy, so we can compare roundtrips
         let mut mmapped_data_copy = file_backed_mmap_from(&data);
 
@@ -687,7 +698,7 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let replica_id: H::Domain = H::Domain::random(rng);
-        let nodes = 3;
+        let nodes = 4;
         let data = vec![2u8; 32 * nodes];
 
         // create a copy, so we can compare roundtrips
@@ -963,25 +974,25 @@ mod tests {
         prove_verify {
             prove_verify_32_2_1(2, 1);
 
-            prove_verify_32_3_1(3, 1);
-            prove_verify_32_3_2(3, 2);
+            prove_verify_32_3_1(4, 1);
+            prove_verify_32_3_2(4, 2);
 
-            prove_verify_32_10_1(10, 1);
-            prove_verify_32_10_2(10, 2);
-            prove_verify_32_10_3(10, 3);
-            prove_verify_32_10_4(10, 4);
-            prove_verify_32_10_5(10, 5);
+            prove_verify_32_10_1(16, 1);
+            prove_verify_32_10_2(16, 2);
+            prove_verify_32_10_3(16, 3);
+            prove_verify_32_10_4(16, 4);
+            prove_verify_32_10_5(16, 5);
         }
     }
 
     #[test]
     fn test_drgporep_verifies_using_challenge() {
-        prove_verify_wrong_challenge(5, 1);
+        prove_verify_wrong_challenge(8, 1);
     }
 
     #[test]
     fn test_drgporep_verifies_parents() {
         // Challenge a node (3) that doesn't have all the same parents.
-        prove_verify_wrong_parents(7, 4);
+        prove_verify_wrong_parents(8, 5);
     }
 }
