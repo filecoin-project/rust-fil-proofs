@@ -11,6 +11,7 @@ pub const SECTOR_SIZE_16_MIB: u64 = 1 << 24;
 pub const SECTOR_SIZE_256_MIB: u64 = 1 << 28;
 pub const SECTOR_SIZE_1_GIB: u64 = 1 << 30;
 pub const SECTOR_SIZE_32_GIB: u64 = 1 << 35;
+// pub const SECTOR_SIZE_64_GIB: u64 = 1 << 36;
 
 pub const POST_CHALLENGE_COUNT: usize = 40;
 pub const POST_CHALLENGED_NODES: usize = 1;
