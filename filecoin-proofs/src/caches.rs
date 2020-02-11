@@ -11,11 +11,10 @@ use storage_proofs::circuit::election_post::ElectionPoStCircuit;
 use storage_proofs::circuit::election_post::ElectionPoStCompound;
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::CompoundProof;
-use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::election_post::ElectionPoSt;
 use storage_proofs::stacked::StackedDrg;
 
-use crate::constants::DefaultPieceHasher;
+use crate::constants::{DefaultPieceHasher, DefaultTreeHasher};
 use crate::parameters::{post_public_params, public_params};
 use crate::types::*;
 
@@ -86,7 +85,7 @@ pub fn get_stacked_params(porep_config: PoRepConfig) -> Result<Arc<Bls12GrothPar
     )?;
 
     let parameters_generator = || {
-        <StackedCompound as CompoundProof<
+        <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
             _,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
@@ -131,7 +130,7 @@ pub fn get_stacked_verifying_key(porep_config: PoRepConfig) -> Result<Arc<Bls12V
     )?;
 
     let vk_generator = || {
-        <StackedCompound as CompoundProof<
+        <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
             Bls12,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,

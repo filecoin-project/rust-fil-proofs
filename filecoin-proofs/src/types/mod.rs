@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
-use storage_proofs::hasher::pedersen::{PedersenDomain, PedersenHasher};
 use storage_proofs::hasher::Hasher;
 use storage_proofs::merkle::{LCMerkleTree, MerkleTree};
 use storage_proofs::stacked;
+
+use crate::constants::{DefaultPieceHasher, DefaultTreeDomain, DefaultTreeHasher};
 
 mod bytes_amount;
 mod piece_info;
@@ -24,12 +25,12 @@ pub use self::sector_size::*;
 
 pub type Commitment = [u8; 32];
 pub type ChallengeSeed = [u8; 32];
-pub type PersistentAux = stacked::PersistentAux<PedersenDomain>;
-pub type TemporaryAux = stacked::TemporaryAux<PedersenHasher, crate::constants::DefaultPieceHasher>;
+pub type PersistentAux = stacked::PersistentAux<DefaultTreeDomain>;
+pub type TemporaryAux = stacked::TemporaryAux<DefaultTreeHasher, DefaultPieceHasher>;
 pub type ProverId = [u8; 32];
 pub type Ticket = [u8; 32];
-pub type Tree = MerkleTree<PedersenDomain, <PedersenHasher as Hasher>::Function>;
-pub type LCTree = LCMerkleTree<PedersenDomain, <PedersenHasher as Hasher>::Function>;
+pub type Tree = MerkleTree<DefaultTreeDomain, <DefaultTreeHasher as Hasher>::Function>;
+pub type LCTree = LCMerkleTree<DefaultTreeDomain, <DefaultTreeHasher as Hasher>::Function>;
 
 #[derive(Debug, Clone)]
 pub struct SealPreCommitOutput {
@@ -37,17 +38,14 @@ pub struct SealPreCommitOutput {
     pub comm_d: Commitment,
 }
 
-pub type VanillaSealProof = storage_proofs::stacked::Proof<
-    crate::constants::DefaultTreeHasher,
-    crate::constants::DefaultPieceHasher,
->;
+pub type VanillaSealProof = storage_proofs::stacked::Proof<DefaultTreeHasher, DefaultPieceHasher>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SealCommitPhase1Output {
     pub vanilla_proofs: Vec<Vec<VanillaSealProof>>,
     pub comm_r: Commitment,
     pub comm_d: Commitment,
-    pub replica_id: <crate::constants::DefaultTreeHasher as Hasher>::Domain,
+    pub replica_id: <DefaultTreeHasher as Hasher>::Domain,
     pub seed: Ticket,
     pub ticket: Ticket,
 }
@@ -57,8 +55,8 @@ pub struct SealCommitOutput {
     pub proof: Vec<u8>,
 }
 
-pub type Labels = storage_proofs::stacked::Labels<crate::constants::DefaultTreeHasher>;
-pub type DataTree = storage_proofs::stacked::Tree<crate::constants::DefaultPieceHasher>;
+pub type Labels = storage_proofs::stacked::Labels<DefaultTreeHasher>;
+pub type DataTree = storage_proofs::stacked::Tree<DefaultPieceHasher>;
 pub use merkletree::store::StoreConfig;
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -1,16 +1,14 @@
 use anyhow::ensure;
 use log::trace;
-use paired::bls12_381::Fr;
 use rayon::prelude::*;
 
 use crate::drgraph::Graph;
 use crate::error::Result;
-use crate::hasher::Hasher;
+use crate::hasher::{HashFunction, Hasher};
 use crate::proof::ProofScheme;
 use crate::stacked::{
     challenges::ChallengeRequirements,
     graph::StackedBucketGraph,
-    hash::hash2,
     params::{PrivateInputs, Proof, PublicInputs, PublicParams, SetupParams},
     proof::StackedDrg,
 };
@@ -103,7 +101,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for Stack
             let actual_comm_r: H::Domain = {
                 let comm_c = proofs[0].comm_c();
                 let comm_r_last = proofs[0].comm_r_last();
-                Fr::from(hash2(comm_c, comm_r_last)).into()
+                H::Function::hash2(comm_c, comm_r_last)
             };
 
             if expected_comm_r != &actual_comm_r {

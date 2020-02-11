@@ -36,31 +36,40 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     .unwrap();
 
     {
-        let circuit = <StackedCompound as CompoundProof<
+        let circuit = <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
             _,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
         >>::blank_circuit(&public_params);
-        let _ = StackedCompound::get_param_metadata(circuit, &public_params);
+        let _ = StackedCompound::<DefaultTreeHasher, DefaultPieceHasher>::get_param_metadata(
+            circuit,
+            &public_params,
+        );
     }
     {
-        let circuit = <StackedCompound as CompoundProof<
+        let circuit = <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
             _,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
         >>::blank_circuit(&public_params);
-        StackedCompound::get_groth_params(circuit, &public_params)
-            .expect("failed to get groth params");
+        StackedCompound::<DefaultTreeHasher, DefaultPieceHasher>::get_groth_params(
+            circuit,
+            &public_params,
+        )
+        .expect("failed to get groth params");
     }
     {
-        let circuit = <StackedCompound as CompoundProof<
+        let circuit = <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
             _,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
         >>::blank_circuit(&public_params);
 
-        StackedCompound::get_verifying_key(circuit, &public_params)
-            .expect("failed to get verifying key");
+        StackedCompound::<DefaultTreeHasher, DefaultPieceHasher>::get_verifying_key(
+            circuit,
+            &public_params,
+        )
+        .expect("failed to get verifying key");
     }
 }
 

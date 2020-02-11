@@ -214,7 +214,17 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
             .into()
     }
 
-    fn hash_leaf_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+    fn hash2(a: &Blake2sDomain, b: &Blake2sDomain) -> Blake2sDomain {
+        Blake2s::new()
+            .hash_length(32)
+            .to_state()
+            .update(a.as_ref())
+            .update(b.as_ref())
+            .finalize()
+            .into()
+    }
+
+    fn hash_leaf_bits_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
         cs: CS,
         left: &[boolean::Boolean],
         right: &[boolean::Boolean],
@@ -246,6 +256,35 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
             blake2s_circuit::blake2s(cs.namespace(|| "hash"), &bits[..], &personalization)?;
 
         crate::circuit::multipack::pack_bits(cs.namespace(|| "pack"), &alloc_bits)
+    }
+
+    fn hash2_circuit<E, CS>(
+        mut cs: CS,
+        a_num: &num::AllocatedNum<E>,
+        b_num: &num::AllocatedNum<E>,
+        params: &E::Params,
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError>
+    where
+        E: JubjubEngine,
+        CS: ConstraintSystem<E>,
+    {
+        // Allocate as booleans
+        let a = a_num.to_bits_le(cs.namespace(|| "a_bits"))?;
+        let b = b_num.to_bits_le(cs.namespace(|| "b_bits"))?;
+
+        let mut preimage: Vec<boolean::Boolean> = vec![];
+
+        preimage.extend_from_slice(&a);
+        while preimage.len() % 8 != 0 {
+            preimage.push(boolean::Boolean::Constant(false));
+        }
+
+        preimage.extend_from_slice(&b);
+        while preimage.len() % 8 != 0 {
+            preimage.push(boolean::Boolean::Constant(false));
+        }
+
+        Self::hash_circuit(cs, &preimage[..], params)
     }
 }
 

@@ -7,12 +7,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::drgraph::graph_height;
 use crate::error::{Error, Result};
-use crate::hasher::{Domain, Hasher};
+use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::sector::*;
-use crate::stacked::hash::hash2;
 use crate::util::NODE_SIZE;
 
 #[derive(Debug, Clone)]
@@ -72,7 +71,7 @@ pub struct Proof<H: Hasher> {
 }
 
 impl<H: Hasher> Proof<H> {
-    pub fn leafs(&self) -> Vec<&H::Domain> {
+    pub fn leafs(&self) -> Vec<H::Domain> {
         self.inclusion_proofs
             .iter()
             .map(MerkleProof::leaf)
@@ -191,7 +190,8 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
             // comm_r_last is the root of the proof
             let comm_r_last = merkle_proof.root();
 
-            if AsRef::<[u8]>::as_ref(&hash2(comm_c, comm_r_last)) != AsRef::<[u8]>::as_ref(&comm_r)
+            if AsRef::<[u8]>::as_ref(&H::Function::hash2(comm_c, &comm_r_last))
+                != AsRef::<[u8]>::as_ref(&comm_r)
             {
                 return Ok(false);
             }
@@ -292,7 +292,7 @@ mod tests {
 
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{Blake2sHasher, HashFunction, PedersenHasher, Sha256Hasher};
+    use crate::hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
     use crate::merkle::make_proof_for_test;
 
     fn test_rational_post<H: Hasher>() {
@@ -355,7 +355,7 @@ mod tests {
         let comm_rs: Vec<H::Domain> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| Fr::from(hash2(comm_c, comm_r_last)).into())
+            .map(|(comm_c, comm_r_last)| H::Function::hash2(comm_c, comm_r_last))
             .collect();
 
         let pub_inputs = PublicInputs {
@@ -394,6 +394,11 @@ mod tests {
         test_rational_post::<Blake2sHasher>();
     }
 
+    #[test]
+    fn rational_post_poseidon() {
+        test_rational_post::<PoseidonHasher>();
+    }
+
     // Construct a proof that satisfies a cursory validation:
     // Data and proof are minimally consistent.
     // Proof root matches that requested in public inputs.
@@ -404,13 +409,8 @@ mod tests {
         rng: &mut XorShiftRng,
     ) -> MerkleProof<H> {
         let bogus_leaf: H::Domain = H::Domain::random(rng);
-        let hashed_leaf = H::Function::hash_leaf(&bogus_leaf);
 
-        make_proof_for_test(
-            pub_inputs.comm_rs[0],
-            hashed_leaf,
-            vec![(hashed_leaf, true)],
-        )
+        make_proof_for_test(pub_inputs.comm_rs[0], bogus_leaf, vec![(bogus_leaf, true)])
     }
 
     fn test_rational_post_validates<H: Hasher>() {
@@ -446,7 +446,7 @@ mod tests {
         let comm_rs: Vec<H::Domain> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| Fr::from(hash2(comm_c, comm_r_last)).into())
+            .map(|(comm_c, comm_r_last)| H::Function::hash2(comm_c, comm_r_last))
             .collect();
 
         let pub_inputs = PublicInputs::<H::Domain> {
@@ -483,6 +483,11 @@ mod tests {
     #[test]
     fn rational_post_actually_validates_pedersen() {
         test_rational_post_validates::<PedersenHasher>();
+    }
+
+    #[test]
+    fn rational_post_actually_validates_poseidon() {
+        test_rational_post_validates::<PoseidonHasher>();
     }
 
     fn test_rational_post_validates_challenge_identity<H: Hasher>() {
@@ -525,7 +530,7 @@ mod tests {
         let comm_rs: Vec<H::Domain> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| Fr::from(hash2(comm_c, comm_r_last)).into())
+            .map(|(comm_c, comm_r_last)| H::Function::hash2(comm_c, comm_r_last))
             .collect();
 
         let pub_inputs = PublicInputs {
@@ -553,7 +558,7 @@ mod tests {
         let comm_rs: Vec<H::Domain> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| Fr::from(hash2(comm_c, comm_r_last)).into())
+            .map(|(comm_c, comm_r_last)| H::Function::hash2(comm_c, comm_r_last))
             .collect();
 
         let different_pub_inputs = PublicInputs {
@@ -582,6 +587,11 @@ mod tests {
     #[test]
     fn rational_post_actually_validates_challenge_identity_pedersen() {
         test_rational_post_validates_challenge_identity::<PedersenHasher>();
+    }
+
+    #[test]
+    fn rational_post_actually_validates_challenge_identity_poseidon() {
+        test_rational_post_validates_challenge_identity::<PoseidonHasher>();
     }
 
     #[test]

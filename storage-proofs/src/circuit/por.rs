@@ -12,6 +12,7 @@ use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph::graph_height;
 use crate::error::Result;
+use crate::hasher::types::PoseidonEngine;
 use crate::hasher::{HashFunction, Hasher};
 use crate::merklepor::MerklePoR;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
@@ -128,7 +129,7 @@ where
     }
 }
 
-impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for PoRCircuit<'a, E, H> {
+impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> Circuit<E> for PoRCircuit<'a, E, H> {
     /// # Public Inputs
     ///
     /// This circuit expects the following public inputs.
@@ -182,14 +183,11 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for PoRCircuit<'a, E, H> {
                     &cur_is_right,
                 )?;
 
-                let xl_bits = xl.to_bits_le(cs.namespace(|| "xl into bits"))?;
-                let xr_bits = xr.to_bits_le(cs.namespace(|| "xr into bits"))?;
-
                 // Compute the new subtree value
                 cur = H::Function::hash_leaf_circuit(
-                    cs.namespace(|| "computation of pedersen hash"),
-                    &xl_bits,
-                    &xr_bits,
+                    cs.namespace(|| "computation of commitment hash"),
+                    &xl,
+                    &xr,
                     i,
                     params,
                 )?;
@@ -215,7 +213,7 @@ impl<'a, E: JubjubEngine, H: Hasher> Circuit<E> for PoRCircuit<'a, E, H> {
     }
 }
 
-impl<'a, E: JubjubEngine, H: Hasher> PoRCircuit<'a, E, H> {
+impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> PoRCircuit<'a, E, H> {
     pub fn synthesize<CS>(
         mut cs: CS,
         params: &E::Params,
@@ -256,7 +254,7 @@ mod tests {
     use crate::crypto::pedersen::JJ_PARAMS;
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
-    use crate::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher};
+    use crate::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonHasher};
     use crate::merklepor;
     use crate::proof::ProofScheme;
     use crate::util::data_at_node;
@@ -341,6 +339,11 @@ mod tests {
     #[test]
     fn test_por_input_circuit_with_bls12_381_blake2s() {
         test_por_input_circuit_with_bls12_381::<Blake2sHasher>(64_569);
+    }
+
+    #[test]
+    fn test_por_input_circuit_with_bls12_381_poseidon() {
+        test_por_input_circuit_with_bls12_381::<PoseidonHasher>(1290);
     }
 
     fn test_por_input_circuit_with_bls12_381<H: Hasher>(num_constraints: usize) {
@@ -447,8 +450,8 @@ mod tests {
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
-    fn test_private_por_compound_blake2s() {
-        private_por_test_compound::<Blake2sHasher>();
+    fn test_private_por_compound_poseidon() {
+        private_por_test_compound::<PoseidonHasher>();
     }
 
     fn private_por_test_compound<H: Hasher>() {

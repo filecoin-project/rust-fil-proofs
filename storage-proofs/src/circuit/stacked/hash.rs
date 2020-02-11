@@ -1,117 +1,60 @@
-use bellperson::gadgets::{boolean::Boolean, num};
+use bellperson::gadgets::num;
 use bellperson::{ConstraintSystem, SynthesisError};
-use ff::Field;
-use fil_sapling_crypto::jubjub::JubjubEngine;
-
-use crate::circuit::pedersen::{pedersen_compression_num as pedersen, pedersen_md_no_padding};
-use crate::crypto::pedersen::PEDERSEN_BLOCK_SIZE;
-use crate::hasher::{sha256::Sha256Function, HashFunction};
-
-/// Hash two elements together.
-pub fn hash2<E, CS>(
-    mut cs: CS,
-    params: &E::Params,
-    first: &[Boolean],
-    second: &[Boolean],
-) -> Result<num::AllocatedNum<E>, SynthesisError>
-where
-    E: JubjubEngine,
-    CS: ConstraintSystem<E>,
-{
-    let mut values = Vec::new();
-    values.extend_from_slice(first);
-
-    // pad to full bytes
-    while values.len() % 8 > 0 {
-        values.push(Boolean::Constant(false));
-    }
-
-    values.extend_from_slice(second);
-    // pad to full bytes
-    while values.len() % 8 > 0 {
-        values.push(Boolean::Constant(false));
-    }
-
-    hash1(cs.namespace(|| "hash2"), params, &values)
-}
+use neptune::circuit::poseidon_hash;
+use paired::bls12_381::{Bls12, Fr};
 
 /// Hash a list of bits.
-pub fn hash1<E, CS>(
+pub fn hash_single_column<CS>(
     mut cs: CS,
-    params: &E::Params,
-    values: &[Boolean],
-) -> Result<num::AllocatedNum<E>, SynthesisError>
+    column: &[Option<Fr>],
+) -> Result<num::AllocatedNum<Bls12>, SynthesisError>
 where
-    E: JubjubEngine,
-    CS: ConstraintSystem<E>,
+    CS: ConstraintSystem<Bls12>,
 {
-    assert!(values.len() % 32 == 0, "input must be a multiple of 32bits");
+    let column = column
+        .iter()
+        .enumerate()
+        .map(|(i, val)| {
+            num::AllocatedNum::alloc(cs.namespace(|| format!("hash_num_row_{}", i)), || {
+                val.ok_or_else(|| SynthesisError::AssignmentMissing)
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
-    if values.is_empty() {
-        // can happen with small layers
-        num::AllocatedNum::alloc(cs.namespace(|| "hash1"), || Ok(E::Fr::zero()))
-    } else if values.len() > PEDERSEN_BLOCK_SIZE {
-        pedersen_md_no_padding(cs.namespace(|| "hash1"), params, values)
-    } else {
-        pedersen(cs.namespace(|| "hash1"), params, values)
+    match column.len() {
+        1 => poseidon_hash::<CS, Bls12, typenum::U1>(
+            cs,
+            column,
+            &*crate::stacked::hash::POSEIDON_CONSTANTS_1,
+        ),
+        2 => poseidon_hash::<CS, Bls12, typenum::U2>(
+            cs,
+            column,
+            &*crate::stacked::hash::POSEIDON_CONSTANTS_2,
+        ),
+        11 => poseidon_hash::<CS, Bls12, typenum::U11>(
+            cs,
+            column,
+            &*crate::stacked::hash::POSEIDON_CONSTANTS_11,
+        ),
+        _ => panic!("unsupported column size: {}", column.len()),
     }
-}
-
-/// Hash a list of bits.
-pub fn hash_single_column<E, CS>(
-    mut cs: CS,
-    params: &E::Params,
-    rows: &[Option<E::Fr>],
-) -> Result<num::AllocatedNum<E>, SynthesisError>
-where
-    E: JubjubEngine,
-    CS: ConstraintSystem<E>,
-{
-    let mut bits = Vec::new();
-    for (i, row) in rows.iter().enumerate() {
-        let row_num = num::AllocatedNum::alloc(
-            cs.namespace(|| format!("hash_single_column_row_{}_num", i)),
-            || {
-                row.map(Into::into)
-                    .ok_or_else(|| SynthesisError::AssignmentMissing)
-            },
-        )?;
-
-        let mut row_bits =
-            row_num.to_bits_le(cs.namespace(|| format!("hash_single_column_row_{}_bits", i)))?;
-
-        while row_bits.len() % 8 > 0 {
-            row_bits.push(Boolean::Constant(false));
-        }
-
-        bits.extend(
-            row_bits
-                .chunks(8)
-                .flat_map(|chunk| chunk.iter().rev())
-                .cloned(),
-        );
-    }
-
-    Sha256Function::hash_circuit(cs, &bits, params)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use bellperson::gadgets::boolean::Boolean;
     use bellperson::ConstraintSystem;
+    use ff::Field;
     use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
     use crate::circuit::test::TestConstraintSystem;
     use crate::crypto::pedersen::JJ_PARAMS;
-    use crate::fr32::fr_into_bytes;
-    use crate::stacked::hash::{
-        hash2 as vanilla_hash2, hash_single_column as vanilla_hash_single_column,
-    };
-    use crate::util::bytes_into_boolean_vec;
+    use crate::hasher::{HashFunction, Hasher, PedersenHasher};
+    use crate::stacked::hash::hash_single_column as vanilla_hash_single_column;
 
     #[test]
     fn test_hash2_circuit() {
@@ -120,26 +63,32 @@ mod tests {
         for _ in 0..10 {
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            let a_bytes = fr_into_bytes::<Bls12>(&Fr::random(rng));
-            let b_bytes = fr_into_bytes::<Bls12>(&Fr::random(rng));
+            let a = Fr::random(rng);
+            let b = Fr::random(rng);
 
-            let a_bits: Vec<Boolean> = {
+            let a_num = {
                 let mut cs = cs.namespace(|| "a");
-                bytes_into_boolean_vec(&mut cs, Some(a_bytes.as_slice()), a_bytes.len()).unwrap()
+                num::AllocatedNum::alloc(&mut cs, || Ok(a)).unwrap()
             };
 
-            let b_bits: Vec<Boolean> = {
+            let b_num = {
                 let mut cs = cs.namespace(|| "b");
-                bytes_into_boolean_vec(&mut cs, Some(b_bytes.as_slice()), b_bytes.len()).unwrap()
+                num::AllocatedNum::alloc(&mut cs, || Ok(b)).unwrap()
             };
 
-            let out = hash2(cs.namespace(|| "hash2"), &JJ_PARAMS, &a_bits, &b_bits)
-                .expect("hash2 function failed");
+            let out = <PedersenHasher as Hasher>::Function::hash2_circuit(
+                cs.namespace(|| "hash2"),
+                &a_num,
+                &b_num,
+                &JJ_PARAMS,
+            )
+            .expect("hash2 function failed");
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
-            assert_eq!(cs.num_constraints(), 1376);
+            assert_eq!(cs.num_constraints(), 1_371);
 
-            let expected: Fr = vanilla_hash2(&a_bytes, &b_bytes).into();
+            let expected: Fr =
+                <PedersenHasher as Hasher>::Function::hash2(&a.into(), &b.into()).into();
 
             assert_eq!(
                 expected,
@@ -156,22 +105,16 @@ mod tests {
         for _ in 0..1 {
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            let a = Fr::random(rng);
-            let b = Fr::random(rng);
-            let a_bytes = fr_into_bytes::<Bls12>(&a);
-            let b_bytes = fr_into_bytes::<Bls12>(&b);
+            let vals = vec![Fr::random(rng); 11];
+            let vals_opt = vals.iter().map(|v| Some(*v)).collect::<Vec<_>>();
 
-            let out = hash_single_column(
-                cs.namespace(|| "hash_single_column"),
-                &JJ_PARAMS,
-                &[Some(a), Some(b)],
-            )
-            .expect("hash_single_column function failed");
+            let out = hash_single_column(cs.namespace(|| "hash_single_column"), &vals_opt)
+                .expect("hash_single_column function failed");
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
-            assert_eq!(cs.num_constraints(), 45_379);
+            assert_eq!(cs.num_constraints(), 1_239);
 
-            let expected: Fr = vanilla_hash_single_column(&[a_bytes, b_bytes]).into();
+            let expected: Fr = vanilla_hash_single_column(&vals).into();
 
             assert_eq!(
                 expected,

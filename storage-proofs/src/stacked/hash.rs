@@ -1,25 +1,31 @@
-use sha2::Digest;
+use lazy_static::lazy_static;
+use neptune::poseidon::{Poseidon, PoseidonConstants};
+use paired::bls12_381::Fr;
 
-use crate::crypto::pedersen::{pedersen_md_no_padding_bits, Bits};
-use crate::hasher::{pedersen::PedersenDomain, Domain};
-
-/// Hash 2 individual elements.
-pub fn hash2<S: AsRef<[u8]>, T: AsRef<[u8]>>(a: S, b: T) -> PedersenDomain {
-    hash1(Bits::new_many(vec![a.as_ref(), b.as_ref()].into_iter()))
+lazy_static! {
+    pub static ref POSEIDON_CONSTANTS_1: PoseidonConstants::<paired::bls12_381::Bls12, typenum::U1> =
+        PoseidonConstants::new();
+    pub static ref POSEIDON_CONSTANTS_2: PoseidonConstants::<paired::bls12_381::Bls12, typenum::U2> =
+        PoseidonConstants::new();
+    pub static ref POSEIDON_CONSTANTS_11: PoseidonConstants::<paired::bls12_381::Bls12, typenum::U11> =
+        PoseidonConstants::new();
 }
 
 /// Hash all elements in the given column.
-pub fn hash_single_column<T: AsRef<[u8]>>(column: &[T]) -> PedersenDomain {
-    let mut hasher = sha2::Sha256::new();
-    for t in column {
-        hasher.input(t.as_ref());
+pub fn hash_single_column(column: &[Fr]) -> Fr {
+    match column.len() {
+        1 => {
+            let mut hasher = Poseidon::new_with_preimage(column, &*POSEIDON_CONSTANTS_1);
+            hasher.hash()
+        }
+        2 => {
+            let mut hasher = Poseidon::new_with_preimage(column, &*POSEIDON_CONSTANTS_2);
+            hasher.hash()
+        }
+        11 => {
+            let mut hasher = Poseidon::new_with_preimage(column, &*POSEIDON_CONSTANTS_11);
+            hasher.hash()
+        }
+        _ => panic!("unsupported column size: {}", column.len()),
     }
-    let mut res = hasher.result();
-    res[31] &= 0b0011_1111;
-    PedersenDomain::try_from_bytes(&res).unwrap()
-}
-
-/// Hash all elements in the given buffer
-pub fn hash1<'a, S: Iterator<Item = &'a [u8]>>(data: Bits<&'a [u8], S>) -> PedersenDomain {
-    pedersen_md_no_padding_bits(data).into()
 }

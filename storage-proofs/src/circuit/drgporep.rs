@@ -634,7 +634,7 @@ mod tests {
         assert!(
             proof_nc.nodes[0]
                 .proof
-                .validate_data(&fr_into_bytes::<Bls12>(&data_node.unwrap())),
+                .validate_data(data_node.unwrap().into()),
             "failed to verify data commitment with data"
         );
 

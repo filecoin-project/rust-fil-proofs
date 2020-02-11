@@ -218,8 +218,8 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
         trace!("verify encoding");
         check!(self.encoding_proof.verify::<G>(
             replica_id,
-            self.comm_r_last_proof.leaf(),
-            self.comm_d_proofs.leaf()
+            &self.comm_r_last_proof.leaf(),
+            &self.comm_d_proofs.leaf()
         ));
 
         true

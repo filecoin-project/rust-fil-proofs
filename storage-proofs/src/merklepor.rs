@@ -133,7 +133,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for MerklePoR<H> {
                 return Ok(false);
             }
         }
-        let data_valid = proof.proof.validate_data(&proof.data.into_bytes());
+        let data_valid = proof.proof.validate_data(proof.data);
         let path_valid = proof.proof.validate(pub_inputs.challenge);
 
         Ok(data_valid && path_valid)

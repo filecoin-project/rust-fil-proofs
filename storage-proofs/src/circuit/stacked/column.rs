@@ -42,8 +42,8 @@ impl Column {
     pub fn hash<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: CS,
-        params: &<Bls12 as JubjubEngine>::Params,
+        _params: &<Bls12 as JubjubEngine>::Params,
     ) -> Result<num::AllocatedNum<Bls12>, SynthesisError> {
-        hash_single_column(cs.namespace(|| "column_hash"), params, &self.rows)
+        hash_single_column(cs.namespace(|| "column_hash"), &self.rows)
     }
 }

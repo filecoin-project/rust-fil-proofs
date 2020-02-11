@@ -13,13 +13,12 @@ use crate::crypto::pedersen::{pedersen_md_no_padding_bits, Bits};
 use crate::drgraph::graph_height;
 use crate::error::{Error, Result};
 use crate::fr32::fr_into_bytes;
-use crate::hasher::{Domain, Hasher};
+use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::measurements::{measure_op, Operation};
 use crate::merkle::{LCMerkleTree, MerkleProof};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::sector::*;
-use crate::stacked::hash::hash2;
 use crate::util::NODE_SIZE;
 
 #[derive(Debug, Clone)]
@@ -102,7 +101,7 @@ pub struct Proof<H: Hasher> {
 }
 
 impl<H: Hasher> Proof<H> {
-    pub fn leafs(&self) -> Vec<&H::Domain> {
+    pub fn leafs(&self) -> Vec<H::Domain> {
         self.inclusion_proofs
             .iter()
             .map(MerkleProof::leaf)
@@ -378,7 +377,9 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
         let comm_c = proof.comm_c;
         let comm_r = &pub_inputs.comm_r;
 
-        if AsRef::<[u8]>::as_ref(&hash2(comm_c, comm_r_last)) != AsRef::<[u8]>::as_ref(comm_r) {
+        if AsRef::<[u8]>::as_ref(&H::Function::hash2(&comm_c, comm_r_last))
+            != AsRef::<[u8]>::as_ref(comm_r)
+        {
             return Ok(false);
         }
 
@@ -424,7 +425,7 @@ mod tests {
 
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::hasher::{PedersenHasher, PoseidonHasher};
 
     fn test_election_post<H: Hasher>() {
         use merkletree::store::{StoreConfig, StoreConfigDataVersion};
@@ -487,7 +488,7 @@ mod tests {
         let tree = trees.remove(&candidate.sector_id).unwrap();
         let comm_r_last = tree.root();
         let comm_c = H::Domain::random(rng);
-        let comm_r = Fr::from(hash2(comm_c, comm_r_last)).into();
+        let comm_r = H::Function::hash2(&comm_c, &comm_r_last);
 
         let pub_inputs = PublicInputs {
             randomness,
@@ -519,12 +520,7 @@ mod tests {
     }
 
     #[test]
-    fn election_post_sha256() {
-        test_election_post::<Sha256Hasher>();
-    }
-
-    #[test]
-    fn election_post_blake2s() {
-        test_election_post::<Blake2sHasher>();
+    fn election_post_poseidon() {
+        test_election_post::<PoseidonHasher>();
     }
 }

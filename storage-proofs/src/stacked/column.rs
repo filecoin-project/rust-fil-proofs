@@ -1,8 +1,8 @@
+use paired::bls12_381::Fr;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
 use crate::error::Result;
-use crate::hasher::pedersen::PedersenDomain;
 use crate::hasher::Hasher;
 use crate::merkle::MerkleProof;
 use crate::stacked::{column_proof::ColumnProof, hash::hash_single_column, params::Tree};
@@ -36,8 +36,15 @@ impl<H: Hasher> Column<H> {
     }
 
     /// Calculate the column hashes `C_i = H(E_i, O_i)` for the passed in column.
-    pub fn hash(&self) -> PedersenDomain {
-        hash_single_column(&self.rows[..])
+    pub fn hash(&self) -> Fr {
+        hash_single_column(
+            &self
+                .rows
+                .iter()
+                .copied()
+                .map(Into::into)
+                .collect::<Vec<_>>(),
+        )
     }
 
     pub fn get_node_at_layer(&self, layer: usize) -> Result<&H::Domain> {

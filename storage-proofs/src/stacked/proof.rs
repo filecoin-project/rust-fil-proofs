@@ -4,14 +4,13 @@ use std::marker::PhantomData;
 use log::{info, trace};
 use merkletree::merkle::FromIndexedParallelIterator;
 use merkletree::store::{DiskStore, StoreConfig};
-use paired::bls12_381::Fr;
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 
 use crate::drgraph::Graph;
 use crate::encode::{decode, encode};
 use crate::error::Result;
-use crate::hasher::{Domain, Hasher};
+use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::measurements::{
     measure_op,
     Operation::{CommD, EncodeWindowTimeAll, GenerateTreeC, GenerateTreeRLast},
@@ -23,7 +22,6 @@ use crate::stacked::{
     challenges::LayerChallenges,
     column::Column,
     graph::StackedBucketGraph,
-    hash::hash2,
     params::{
         get_node, CacheKey, Labels, LabelsCache, PersistentAux, Proof, PublicInputs, PublicParams,
         ReplicaColumnProof, Tau, TemporaryAux, TemporaryAuxCache, TransformedLayers, Tree,
@@ -404,44 +402,40 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
             let gsize = graph.size();
 
-            let sector_size = gsize * NODE_SIZE;
-            let buffer_len = std::cmp::min(sector_size, 8 * 1024);
-            let buffer_nodes = buffer_len / NODE_SIZE;
+            let mut hashes: Vec<H::Domain> = vec![H::Domain::default(); gsize];
 
-            // WARNING: uses a buffer of sector size
-            let mut hashers = vec![Sha256::new(); gsize];
+            rayon::scope(|s| {
+                // spawn n = num_cpus * 2 threads
+                let n = num_cpus::get() * 2;
 
-            for layer in 1..=layers {
-                info!("column hash {}", layer);
+                // only split if we have at least two elements per thread
+                let num_chunks = if n > gsize * 2 { 1 } else { n };
 
-                (0..(sector_size / buffer_len))
-                    .into_par_iter()
-                    .zip(hashers.par_chunks_mut(buffer_nodes))
-                    .try_for_each(|(i, hashers)| -> Result<()> {
-                        let mut buffer = vec![0u8; buffer_len];
-                        let store = labels.labels_for_layer(layer);
+                // chunk into n chunks
+                let chunk_size = (gsize as f64 / num_chunks as f64).ceil() as usize;
 
-                        let start = i * buffer_nodes;
-                        let end = start + buffer_nodes;
-                        store.read_range_into(start, end, &mut buffer)?;
+                // calculate all n chunks in parallel
+                for (chunk, hashes_chunk) in hashes.chunks_mut(chunk_size).enumerate() {
+                    let labels = &labels;
 
-                        hashers
-                            .par_iter_mut()
-                            .zip(buffer.par_chunks(NODE_SIZE))
-                            .for_each(|(hasher, chunk)| {
-                                hasher.input(chunk);
-                            });
-                        Ok(())
-                    })?;
-            }
+                    s.spawn(move |_| {
+                        for (i, hash) in hashes_chunk.iter_mut().enumerate() {
+                            let data: Vec<_> = (1..=layers)
+                                .map(|layer| {
+                                    let store = labels.labels_for_layer(layer);
+                                    store.read_at(i + chunk * chunk_size).unwrap().into()
+                                })
+                                .collect();
+
+                            *hash = crate::stacked::hash::hash_single_column(&data).into();
+                        }
+                    });
+                }
+            });
 
             info!("building tree_c");
             MerkleTree::<_, H::Function>::from_par_iter_with_config(
-                hashers.into_par_iter().map(|h| {
-                    let mut res = h.result();
-                    res[31] &= 0b0011_1111;
-                    H::Domain::try_from_bytes(&res).unwrap()
-                }),
+                hashes.into_par_iter(),
                 tree_c_config.clone(),
             )
         })?;
@@ -494,7 +488,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         data.drop_data();
 
         // comm_r = H(comm_c || comm_r_last)
-        let comm_r: H::Domain = Fr::from(hash2(tree_c.root(), tree_r_last.root())).into();
+        let comm_r: H::Domain = H::Function::hash2(&tree_c.root(), &tree_r_last.root());
 
         assert_eq!(tree_d.len(), tree_r_last.len());
         assert_eq!(tree_d.len(), tree_c.len());
@@ -536,6 +530,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         Ok(labels)
     }
 
+    #[allow(clippy::type_complexity)]
     /// Phase2 of replication.
     #[allow(clippy::type_complexity)]
     pub fn replicate_phase2(
@@ -623,7 +618,7 @@ mod tests {
     use super::*;
 
     use ff::Field;
-    use paired::bls12_381::Bls12;
+    use paired::bls12_381::{Bls12, Fr};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
@@ -634,7 +629,7 @@ mod tests {
     use crate::proof::ProofScheme;
     use crate::stacked::{PrivateInputs, SetupParams, EXP_DEGREE};
 
-    const DEFAULT_STACKED_LAYERS: usize = 4;
+    const DEFAULT_STACKED_LAYERS: usize = 11;
 
     #[test]
     fn test_calculate_fixed_challenges() {

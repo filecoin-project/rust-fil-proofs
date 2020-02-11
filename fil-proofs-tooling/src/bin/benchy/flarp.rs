@@ -2,7 +2,7 @@ use std::sync::atomic::Ordering::Relaxed;
 
 use bellperson::Circuit;
 use fil_proofs_tooling::{measure, Metadata};
-use filecoin_proofs::constants::POREP_PARTITIONS;
+use filecoin_proofs::constants::{DefaultTreeHasher, POREP_PARTITIONS};
 use filecoin_proofs::parameters::post_public_params;
 use filecoin_proofs::types::PaddedBytesAmount;
 use filecoin_proofs::types::*;
@@ -18,7 +18,7 @@ use storage_proofs::circuit::bench::BenchCS;
 use storage_proofs::circuit::election_post::{ElectionPoStCircuit, ElectionPoStCompound};
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::election_post::ElectionPoSt;
-use storage_proofs::hasher::{PedersenHasher, Sha256Hasher};
+use storage_proofs::hasher::Sha256Hasher;
 #[cfg(feature = "measurements")]
 use storage_proofs::measurements::Operation;
 #[cfg(feature = "measurements")]
@@ -28,25 +28,7 @@ use storage_proofs::proof::ProofScheme;
 
 use crate::shared::{create_replicas, CHALLENGE_COUNT, PROVER_ID, RANDOMNESS, TICKET_BYTES};
 
-/*
-echo '{
-    "drg_parents": 6,
-    "expander_parents": 8,
-    "graph_parents": 8,
-    "porep_challenges": 50,
-    "porep_partitions": 10,
-    "post_challenged_nodes": 1,
-    "post_challenges": 20,
-    "sector_size_bytes": 1024,
-    "stacked_layers": 4,
-    "window_size_bytes": 512,
-    "wrapper_parents_all": 8
-}' > config.json
-
-cat config.json \
-    | jq 'def round: . + 0.5 | floor; . | { "porep_partitions": .["porep_partitions"] | round, { "post_challenged_nodes": .["post_challenged_nodes"] | round, "post_challenges": .["post_challenges"] | round, "window_size_bytes": .["window_size_bytes"] | round, "sector_size_bytes": .["sector_size_bytes"] | round, "drg_parents": .["drg_parents"] | round, "expander_parents": .["expander_parents"] | round, "graph_parents": .["graph_parents"] | round, "porep_challenges": .["porep_challenges"] | round, "stacked_layers": .["stacked_layers"] | round, "wrapper_parents": .["wrapper_parents"] | round, "wrapper_parents_all": .["wrapper_parents_all"] | round }'\
-    | RUST_BACKTRACE=1 RUST_LOG=info cargo run --release --package fil-proofs-tooling --bin=benchy  -- flarp
-*/
+type FlarpHasher = DefaultTreeHasher;
 
 #[derive(Default, Debug, Serialize)]
 pub struct FlarpReport {
@@ -379,11 +361,14 @@ fn measure_porep_circuit(i: &FlarpInputs) -> usize {
         layer_challenges,
     };
 
-    let pp = StackedDrg::<PedersenHasher, Sha256Hasher>::setup(&sp).unwrap();
+    let pp = StackedDrg::<FlarpHasher, Sha256Hasher>::setup(&sp).unwrap();
 
     let mut cs = BenchCS::<Bls12>::new();
-    <StackedCompound as CompoundProof<_, StackedDrg<PedersenHasher, Sha256Hasher>, _>>::blank_circuit(&pp)
-        .synthesize(&mut cs).unwrap();
+    <StackedCompound<_, _> as CompoundProof<_, StackedDrg<FlarpHasher, Sha256Hasher>, _>>::blank_circuit(
+        &pp,
+    )
+    .synthesize(&mut cs)
+    .unwrap();
 
     cs.num_constraints()
 }
@@ -399,10 +384,10 @@ fn measure_post_circuit(i: &FlarpInputs) -> usize {
     };
 
     let vanilla_params = post_setup_params(post_config);
-    let pp = election_post::ElectionPoSt::<PedersenHasher>::setup(&vanilla_params).unwrap();
+    let pp = election_post::ElectionPoSt::<FlarpHasher>::setup(&vanilla_params).unwrap();
 
     let mut cs = BenchCS::<Bls12>::new();
-    ElectionPoStCompound::<PedersenHasher>::blank_circuit(&pp)
+    ElectionPoStCompound::<FlarpHasher>::blank_circuit(&pp)
         .synthesize(&mut cs)
         .unwrap();
 
@@ -498,31 +483,31 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     .unwrap();
 
     {
-        let circuit = <StackedCompound as CompoundProof<
+        let circuit = <StackedCompound<_, _> as CompoundProof<
             _,
-            StackedDrg<PedersenHasher, Sha256Hasher>,
+            StackedDrg<FlarpHasher, Sha256Hasher>,
             _,
         >>::blank_circuit(&public_params);
-        StackedCompound::get_param_metadata(circuit, &public_params)
+        StackedCompound::<FlarpHasher, Sha256Hasher>::get_param_metadata(circuit, &public_params)
             .expect("cannot get param metadata");
     }
     {
-        let circuit = <StackedCompound as CompoundProof<
+        let circuit = <StackedCompound<_, _> as CompoundProof<
             _,
-            StackedDrg<PedersenHasher, Sha256Hasher>,
+            StackedDrg<FlarpHasher, Sha256Hasher>,
             _,
         >>::blank_circuit(&public_params);
-        StackedCompound::get_groth_params(circuit, &public_params)
+        StackedCompound::<FlarpHasher, Sha256Hasher>::get_groth_params(circuit, &public_params)
             .expect("failed to get groth params");
     }
     {
-        let circuit = <StackedCompound as CompoundProof<
+        let circuit = <StackedCompound<_, _> as CompoundProof<
             _,
-            StackedDrg<PedersenHasher, Sha256Hasher>,
+            StackedDrg<FlarpHasher, Sha256Hasher>,
             _,
         >>::blank_circuit(&public_params);
 
-        StackedCompound::get_verifying_key(circuit, &public_params)
+        StackedCompound::<FlarpHasher, Sha256Hasher>::get_verifying_key(circuit, &public_params)
             .expect("failed to get verifying key");
     }
 }
@@ -531,40 +516,38 @@ fn cache_post_params(post_config: PoStConfig) {
     let post_public_params = post_public_params(post_config).unwrap();
 
     {
-        let post_circuit: ElectionPoStCircuit<Bls12, PedersenHasher> =
-            <ElectionPoStCompound<PedersenHasher> as CompoundProof<
+        let post_circuit: ElectionPoStCircuit<Bls12, FlarpHasher> =
+            <ElectionPoStCompound<FlarpHasher> as CompoundProof<
                 Bls12,
-                ElectionPoSt<PedersenHasher>,
-                ElectionPoStCircuit<Bls12, PedersenHasher>,
+                ElectionPoSt<FlarpHasher>,
+                ElectionPoStCircuit<Bls12, FlarpHasher>,
             >>::blank_circuit(&post_public_params);
-        let _ = <ElectionPoStCompound<PedersenHasher>>::get_param_metadata(
+        let _ = <ElectionPoStCompound<FlarpHasher>>::get_param_metadata(
             post_circuit,
             &post_public_params,
         )
         .expect("failed to get metadata");
     }
     {
-        let post_circuit: ElectionPoStCircuit<Bls12, PedersenHasher> =
-            <ElectionPoStCompound<PedersenHasher> as CompoundProof<
+        let post_circuit: ElectionPoStCircuit<Bls12, FlarpHasher> =
+            <ElectionPoStCompound<FlarpHasher> as CompoundProof<
                 Bls12,
-                ElectionPoSt<PedersenHasher>,
-                ElectionPoStCircuit<Bls12, PedersenHasher>,
+                ElectionPoSt<FlarpHasher>,
+                ElectionPoStCircuit<Bls12, FlarpHasher>,
             >>::blank_circuit(&post_public_params);
-        <ElectionPoStCompound<PedersenHasher>>::get_groth_params(post_circuit, &post_public_params)
+
+        <ElectionPoStCompound<FlarpHasher>>::get_groth_params(post_circuit, &post_public_params)
             .expect("failed to get groth params");
     }
     {
-        let post_circuit: ElectionPoStCircuit<Bls12, PedersenHasher> =
-            <ElectionPoStCompound<PedersenHasher> as CompoundProof<
+        let post_circuit: ElectionPoStCircuit<Bls12, FlarpHasher> =
+            <ElectionPoStCompound<FlarpHasher> as CompoundProof<
                 Bls12,
-                ElectionPoSt<PedersenHasher>,
-                ElectionPoStCircuit<Bls12, PedersenHasher>,
+                ElectionPoSt<FlarpHasher>,
+                ElectionPoStCircuit<Bls12, FlarpHasher>,
             >>::blank_circuit(&post_public_params);
 
-        <ElectionPoStCompound<PedersenHasher>>::get_verifying_key(
-            post_circuit,
-            &post_public_params,
-        )
-        .expect("failed to get verifying key");
+        <ElectionPoStCompound<FlarpHasher>>::get_verifying_key(post_circuit, &post_public_params)
+            .expect("failed to get verifying key");
     }
 }

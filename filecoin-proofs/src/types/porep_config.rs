@@ -4,10 +4,9 @@ use anyhow::Result;
 
 use paired::bls12_381::Bls12;
 use storage_proofs::circuit::stacked::{StackedCircuit, StackedCompound};
-use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::parameter_cache::{self, CacheableParameters};
 
-use crate::constants::DefaultPieceHasher;
+use crate::constants::{DefaultPieceHasher, DefaultTreeHasher};
 use crate::types::*;
 
 #[derive(Clone, Copy, Debug)]
@@ -53,11 +52,13 @@ impl PoRepConfig {
         let params =
             crate::parameters::public_params(self.sector_size.into(), self.partitions.into())?;
 
-        Ok(<StackedCompound as CacheableParameters<
-            Bls12,
-            StackedCircuit<_, DefaultTreeHasher, DefaultPieceHasher>,
-            _,
-        >>::cache_identifier(&params))
+        Ok(
+            <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CacheableParameters<
+                Bls12,
+                StackedCircuit<_, DefaultTreeHasher, DefaultPieceHasher>,
+                _,
+            >>::cache_identifier(&params),
+        )
     }
 
     pub fn get_cache_metadata_path(&self) -> Result<PathBuf> {

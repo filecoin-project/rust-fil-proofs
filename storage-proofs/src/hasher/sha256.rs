@@ -180,7 +180,18 @@ impl HashFunction<Sha256Domain> for Sha256Function {
         res
     }
 
-    fn hash_leaf_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+    fn hash2(a: &Sha256Domain, b: &Sha256Domain) -> Sha256Domain {
+        let hashed = Sha256::new()
+            .chain(AsRef::<[u8]>::as_ref(a))
+            .chain(AsRef::<[u8]>::as_ref(b))
+            .result();
+        let mut res = Sha256Domain::default();
+        res.0.copy_from_slice(&hashed[..]);
+        res.trim_to_fr32();
+        res
+    }
+
+    fn hash_leaf_bits_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
         cs: CS,
         left: &[boolean::Boolean],
         right: &[boolean::Boolean],
@@ -229,6 +240,49 @@ impl HashFunction<Sha256Domain> for Sha256Function {
             .take(E::Fr::CAPACITY as usize)
             .collect::<Vec<_>>();
         crate::circuit::multipack::pack_bits(cs.namespace(|| "pack_le"), &le_bits)
+    }
+
+    fn hash2_circuit<E, CS>(
+        mut cs: CS,
+        a_num: &num::AllocatedNum<E>,
+        b_num: &num::AllocatedNum<E>,
+        params: &E::Params,
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError>
+    where
+        E: JubjubEngine,
+        CS: ConstraintSystem<E>,
+    {
+        // Allocate as booleans
+        let a = a_num.to_bits_le(cs.namespace(|| "a_bits"))?;
+        let b = b_num.to_bits_le(cs.namespace(|| "b_bits"))?;
+
+        let mut preimage: Vec<boolean::Boolean> = vec![];
+
+        let mut a_padded = a.to_vec();
+        while a_padded.len() % 8 != 0 {
+            a_padded.push(boolean::Boolean::Constant(false));
+        }
+
+        preimage.extend(
+            a_padded
+                .chunks_exact(8)
+                .flat_map(|chunk| chunk.iter().rev())
+                .cloned(),
+        );
+
+        let mut b_padded = b.to_vec();
+        while b_padded.len() % 8 != 0 {
+            b_padded.push(boolean::Boolean::Constant(false));
+        }
+
+        preimage.extend(
+            b_padded
+                .chunks_exact(8)
+                .flat_map(|chunk| chunk.iter().rev())
+                .cloned(),
+        );
+
+        Self::hash_circuit(cs, &preimage[..], params)
     }
 }
 
@@ -290,7 +344,7 @@ mod tests {
     use rand_xorshift::XorShiftRng;
 
     #[test]
-    fn hash_leaf_circuit() {
+    fn hash_leaf_bits_circuit() {
         let mut cs = TestConstraintSystem::<Bls12>::new();
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
@@ -310,7 +364,7 @@ mod tests {
             bytes_into_boolean_vec(&mut cs, Some(right.as_slice()), 256).unwrap()
         };
 
-        let out = Sha256Function::hash_leaf_circuit(
+        let out = Sha256Function::hash_leaf_bits_circuit(
             cs.namespace(|| "hash_leaf_circuit"),
             &left_bits,
             &right_bits,

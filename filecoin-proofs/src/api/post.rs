@@ -13,8 +13,8 @@ use rayon::prelude::*;
 use storage_proofs::circuit::election_post::ElectionPoStCompound;
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::drgraph::DefaultTreeHasher;
 use storage_proofs::election_post;
+pub use storage_proofs::election_post::Candidate;
 use storage_proofs::fr32::bytes_into_fr;
 use storage_proofs::hasher::Hasher;
 use storage_proofs::proof::NoRequirements;
@@ -23,12 +23,11 @@ use storage_proofs::stacked::CacheKey;
 
 use crate::api::util::{as_safe_commitment, get_tree_size};
 use crate::caches::{get_post_params, get_post_verifying_key};
+use crate::constants::DefaultTreeHasher;
 use crate::parameters::post_setup_params;
 use crate::types::{
     ChallengeSeed, Commitment, LCTree, PersistentAux, PoStConfig, ProverId, TemporaryAux,
 };
-
-pub use storage_proofs::election_post::Candidate;
 
 /// The minimal information required about a replica, in order to be able to generate
 /// a PoSt over it.
