@@ -325,7 +325,7 @@ mod tests {
 
     #[test]
     fn gen_proof_poseidon() {
-        gen_proof::<PoseidonHasher>();
+        gen_proof::<PoseidonHasher>(None);
     }
 
     #[test]

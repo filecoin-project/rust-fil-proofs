@@ -450,8 +450,8 @@ mod tests {
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
-    fn test_private_por_compound_blake2s() {
-        private_por_test_compound::<Blake2sHasher>();
+    fn test_private_por_compound_poseidon() {
+        private_por_test_compound::<PoseidonHasher>();
     }
 
     fn private_por_test_compound<H: Hasher>() {
