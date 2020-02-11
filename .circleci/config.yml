@@ -310,7 +310,7 @@ commands:
             || (cargo build --release --all && find . -type f -name paramcache | xargs -I {} mv {} ~/paramcache.awesome)
       - run:
           name: Obtain filecoin groth parameters
-          command: ~/paramcache.awesome --params-for-sector-sizes='1024' --predictable
+          command: ~/paramcache.awesome --params-for-sector-sizes='1024' 
           no_output_timeout: 60m
   save_parameter_cache:
     steps:
