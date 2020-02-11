@@ -1,5 +1,5 @@
 use lazy_static::lazy_static;
-use neptune::poseidon::{HashMode, Poseidon, PoseidonConstants};
+use neptune::poseidon::{Poseidon, PoseidonConstants};
 use paired::bls12_381::Fr;
 
 lazy_static! {
@@ -16,15 +16,15 @@ pub fn hash_single_column(column: &[Fr]) -> Fr {
     match column.len() {
         1 => {
             let mut hasher = Poseidon::new_with_preimage(column, &*POSEIDON_CONSTANTS_1);
-            hasher.hash_in_mode(HashMode::OptimizedStatic)
+            hasher.hash()
         }
         2 => {
             let mut hasher = Poseidon::new_with_preimage(column, &*POSEIDON_CONSTANTS_2);
-            hasher.hash_in_mode(HashMode::OptimizedStatic)
+            hasher.hash()
         }
         11 => {
             let mut hasher = Poseidon::new_with_preimage(column, &*POSEIDON_CONSTANTS_11);
-            hasher.hash_in_mode(HashMode::OptimizedStatic)
+            hasher.hash()
         }
         _ => panic!("unsupported column size: {}", column.len()),
     }

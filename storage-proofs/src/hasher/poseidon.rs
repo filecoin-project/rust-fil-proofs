@@ -13,7 +13,7 @@ use fil_sapling_crypto::jubjub::JubjubEngine;
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
 use neptune::circuit::poseidon_hash;
-use neptune::poseidon::{HashMode, Poseidon};
+use neptune::poseidon::Poseidon;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 use serde::{Deserialize, Serialize};
 
@@ -220,7 +220,7 @@ fn shared_hash(data: &[u8]) -> PoseidonDomain {
 
 fn shared_hash_frs(preimage: &[<Bls12 as ff::ScalarEngine>::Fr]) -> PoseidonDomain {
     let mut p = Poseidon::new_with_preimage(&preimage, &*POSEIDON_CONSTANTS);
-    let fr: <Bls12 as ScalarEngine>::Fr = p.hash_in_mode(HashMode::OptimizedStatic);
+    let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
     fr.into()
 }
 
@@ -232,7 +232,7 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
     fn hash2(a: &PoseidonDomain, b: &PoseidonDomain) -> PoseidonDomain {
         let mut p =
             Poseidon::new_with_preimage(&[(*a).into(), (*b).into()][..], &*POSEIDON_CONSTANTS);
-        let fr: <Bls12 as ScalarEngine>::Fr = p.hash_in_mode(HashMode::OptimizedStatic);
+        let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
         fr.into()
     }
 
