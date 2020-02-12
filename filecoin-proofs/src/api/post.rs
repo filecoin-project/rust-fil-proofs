@@ -163,6 +163,9 @@ pub fn generate_candidates(
 ) -> Result<Vec<Candidate>> {
     info!("generate_candidates:start");
 
+    ensure!(!replicas.is_empty(), "Replicas must not be empty");
+    ensure!(challenge_count > 0, "Challenge count must be > 0");
+
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
@@ -279,6 +282,8 @@ pub fn generate_post(
 
     let sector_count = replicas.len() as u64;
     ensure!(sector_count > 0, "Must supply at least one replica");
+    ensure!(!winners.is_empty(), "Winners must not be empty");
+    ensure!(!replicas.is_empty(), "Replicas must not be empty");
 
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
@@ -360,6 +365,9 @@ pub fn verify_post(
 
     let sector_count = replicas.len() as u64;
     ensure!(sector_count > 0, "Must supply at least one replica");
+    ensure!(!winners.is_empty(), "Winners must not be empty");
+    ensure!(!proofs.is_empty(), "Proofs must not be empty");
+    ensure!(!replicas.is_empty(), "Replicas must not be empty");
     ensure!(
         winners.len() == proofs.len(),
         "Missmatch between winners and proofs"
