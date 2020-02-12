@@ -114,7 +114,6 @@ impl<'a, H: 'a + Hasher, U: 'a + typenum::Unsigned + Sync + Send + Clone> ProofS
         if let Some(ref commitment) = pub_inputs.commitment {
             ensure!(commitment == &tree.root(), Error::InvalidCommitment);
         }
-
         Ok(DataProof {
             proof: MerkleProof::new_from_proof(&tree.gen_proof(challenge)?),
             data: priv_inputs.leaf,
@@ -309,6 +308,11 @@ mod tests {
         test_merklepor_validates::<PoseidonHasher, typenum::U2>();
     }
 
+    #[test]
+    fn merklepor_actually_validates_poseidon_quad() {
+        test_merklepor_validates::<PoseidonHasher, typenum::U4>();
+    }
+
     fn test_merklepor_validates_challenge_identity<
         H: Hasher,
         U: typenum::Unsigned + 'static + Clone + Send + Sync,
@@ -371,5 +375,10 @@ mod tests {
     #[test]
     fn merklepor_actually_validates_challenge_identity_poseidon_binary() {
         test_merklepor_validates_challenge_identity::<PoseidonHasher, typenum::U2>();
+    }
+
+    #[test]
+    fn merklepor_actually_validates_challenge_identity_poseidon_quad() {
+        test_merklepor_validates_challenge_identity::<PoseidonHasher, typenum::U4>();
     }
 }

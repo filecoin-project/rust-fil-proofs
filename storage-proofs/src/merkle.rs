@@ -256,6 +256,7 @@ pub fn create_merkle_tree<H: Hasher, U: typenum::Unsigned>(
     size: usize,
     data: &[u8],
 ) -> Result<MerkleTree<H::Domain, H::Function, U>> {
+    dbg!("merkle tree", &size, &data.len(), U::to_usize());
     ensure!(
         data.len() == (NODE_SIZE * size) as usize,
         Error::InvalidMerkleTreeArgs(data.len(), NODE_SIZE, size)

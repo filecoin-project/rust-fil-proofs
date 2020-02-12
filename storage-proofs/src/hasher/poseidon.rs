@@ -3,7 +3,10 @@ use std::hash::Hasher as StdHasher;
 use super::types::MERKLE_TREE_ARITY;
 use crate::crypto::{create_label, sloth};
 use crate::error::{Error, Result};
-use crate::hasher::types::{PoseidonArity, PoseidonEngine, POSEIDON_CONSTANTS};
+use crate::hasher::types::{
+    PoseidonArity, PoseidonEngine, POSEIDON_CONSTANTS_1, POSEIDON_CONSTANTS_2,
+    POSEIDON_CONSTANTS_4, POSEIDON_CONSTANTS_8,
+};
 use crate::hasher::{Domain, HashFunction, Hasher};
 use anyhow::ensure;
 use bellperson::gadgets::{boolean, num};
@@ -219,9 +222,29 @@ fn shared_hash(data: &[u8]) -> PoseidonDomain {
 }
 
 fn shared_hash_frs(preimage: &[<Bls12 as ff::ScalarEngine>::Fr]) -> PoseidonDomain {
-    let mut p = Poseidon::new_with_preimage(&preimage, &*POSEIDON_CONSTANTS);
-    let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
-    fr.into()
+    match preimage.len() {
+        1 => {
+            let mut p = Poseidon::new_with_preimage(&preimage, &*POSEIDON_CONSTANTS_1);
+            let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
+            fr.into()
+        }
+        2 => {
+            let mut p = Poseidon::new_with_preimage(&preimage, &POSEIDON_CONSTANTS_2);
+            let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
+            fr.into()
+        }
+        4 => {
+            let mut p = Poseidon::new_with_preimage(&preimage, &POSEIDON_CONSTANTS_4);
+            let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
+            fr.into()
+        }
+        8 => {
+            let mut p = Poseidon::new_with_preimage(&preimage, &POSEIDON_CONSTANTS_8);
+            let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
+            fr.into()
+        }
+        _ => panic!("Unsupported arity for Poseidon hasher: {}", preimage.len()),
+    }
 }
 
 impl HashFunction<PoseidonDomain> for PoseidonFunction {
@@ -231,7 +254,7 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
 
     fn hash2(a: &PoseidonDomain, b: &PoseidonDomain) -> PoseidonDomain {
         let mut p =
-            Poseidon::new_with_preimage(&[(*a).into(), (*b).into()][..], &*POSEIDON_CONSTANTS);
+            Poseidon::new_with_preimage(&[(*a).into(), (*b).into()][..], &*POSEIDON_CONSTANTS_2);
         let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
         fr.into()
     }
@@ -298,9 +321,14 @@ impl LightAlgorithm<PoseidonDomain> for PoseidonFunction {
         ])
     }
 
-    fn multi_node(&mut self, parts: &[PoseidonDomain], height: usize) -> PoseidonDomain {
+    fn multi_node(&mut self, parts: &[PoseidonDomain], _height: usize) -> PoseidonDomain {
         match parts.len() {
-            2 => self.node(parts[0], parts[1], height),
+            1 | 2 | 4 | 8 => shared_hash_frs(
+                &parts
+                    .iter()
+                    .map(|x| <Bls12 as ff::ScalarEngine>::Fr::from_repr(x.0).unwrap())
+                    .collect::<Vec<_>>(),
+            ),
             arity => panic!("unsupported arity {}", arity),
         }
     }

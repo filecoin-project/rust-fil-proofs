@@ -25,6 +25,16 @@ pub type PoseidonArity = PoseidonBinaryArity;
 pub const MERKLE_TREE_ARITY: usize = 2;
 
 lazy_static! {
+    pub static ref POSEIDON_CONSTANTS_1: PoseidonConstants::<paired::bls12_381::Bls12, typenum::U1> =
+        PoseidonConstants::new();
+    pub static ref POSEIDON_CONSTANTS_2: PoseidonConstants::<paired::bls12_381::Bls12, typenum::U2> =
+        PoseidonConstants::new();
+    pub static ref POSEIDON_CONSTANTS_4: PoseidonConstants::<paired::bls12_381::Bls12, typenum::U4> =
+        PoseidonConstants::new();
+    pub static ref POSEIDON_CONSTANTS_8: PoseidonConstants::<paired::bls12_381::Bls12, typenum::U8> =
+        PoseidonConstants::new();
+    pub static ref POSEIDON_CONSTANTS_11: PoseidonConstants::<paired::bls12_381::Bls12, typenum::U11> =
+        PoseidonConstants::new();
     pub static ref POSEIDON_CONSTANTS: PoseidonConstants<Bls12, PoseidonArity> =
         PoseidonConstants::new();
 }
