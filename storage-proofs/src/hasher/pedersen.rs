@@ -319,6 +319,17 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
 
         digest.into_xy().0.into()
     }
+
+    fn multi_node(&mut self, parts: &[PedersenDomain], height: usize) -> PedersenDomain {
+        match parts.len() {
+            2 => self.node(parts[0], parts[1], height),
+            _ => {
+                use crate::crypto::pedersen::*;
+
+                pedersen_md_no_padding_bits(Bits::new_many(parts.iter())).into()
+            }
+        }
+    }
 }
 
 /// Helper to iterate over a pair of `Fr`.

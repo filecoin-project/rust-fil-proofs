@@ -308,6 +308,13 @@ impl Algorithm<Blake2sDomain> for Blake2sFunction {
         right.hash(self);
         self.hash()
     }
+
+    fn multi_node(&mut self, parts: &[Blake2sDomain], _height: usize) -> Blake2sDomain {
+        for part in parts {
+            part.hash(self)
+        }
+        self.hash()
+    }
 }
 
 impl From<[u8; 32]> for Blake2sDomain {

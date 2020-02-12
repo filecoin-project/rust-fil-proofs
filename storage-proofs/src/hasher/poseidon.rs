@@ -297,6 +297,13 @@ impl LightAlgorithm<PoseidonDomain> for PoseidonFunction {
             <Bls12 as ff::ScalarEngine>::Fr::from_repr(right.0).unwrap(),
         ])
     }
+
+    fn multi_node(&mut self, parts: &[PoseidonDomain], height: usize) -> PoseidonDomain {
+        match parts.len() {
+            2 => self.node(parts[0], parts[1], height),
+            arity => panic!("unsupported arity {}", arity),
+        }
+    }
 }
 
 impl From<Fr> for PoseidonDomain {

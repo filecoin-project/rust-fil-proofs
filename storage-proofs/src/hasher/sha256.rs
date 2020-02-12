@@ -310,6 +310,13 @@ impl Algorithm<Sha256Domain> for Sha256Function {
         right.hash(self);
         self.hash()
     }
+
+    fn multi_node(&mut self, parts: &[Sha256Domain], _height: usize) -> Sha256Domain {
+        for part in parts {
+            part.hash(self)
+        }
+        self.hash()
+    }
 }
 
 impl From<[u8; 32]> for Sha256Domain {
