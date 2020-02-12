@@ -32,9 +32,9 @@ use crate::parameters::setup_params;
 pub use crate::pieces;
 pub use crate::pieces::verify_pieces;
 use crate::types::{
-    Commitment, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, ProverId,
-    SealCommitOutput, SealCommitPhase1Output, SealPreCommitOutput, SealPreCommitPhase1Output,
-    SectorSize, Ticket,
+    Commitment, DataTree, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions,
+    ProverId, SealCommitOutput, SealCommitPhase1Output, SealPreCommitOutput,
+    SealPreCommitPhase1Output, SectorSize, Ticket, BINARY_ARITY, QUAD_ARITY,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -108,9 +108,9 @@ where
         let config = StoreConfig::new(
             cache_path.as_ref(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(sector_bytes),
+            StoreConfig::default_cached_above_base_layer(sector_bytes, QUAD_ARITY),
         );
-        let data_tree = create_merkle_tree::<DefaultPieceHasher>(
+        let data_tree: DataTree = create_merkle_tree::<DefaultPieceHasher, _>(
             Some(config.clone()),
             compound_public_params.vanilla_params.graph.size(),
             &data,
@@ -191,10 +191,10 @@ where
 
         let tree_size =
             get_tree_size::<<DefaultPieceHasher as Hasher>::Domain>(porep_config.sector_size);
-        let tree_leafs = get_merkle_tree_leafs(tree_size);
+        let tree_leafs = get_merkle_tree_leafs(tree_size, BINARY_ARITY);
 
         let store: DiskStore<<DefaultPieceHasher as Hasher>::Domain> =
-            DiskStore::new_from_disk(tree_size, &config)?;
+            DiskStore::new_from_disk(tree_size, BINARY_ARITY, &config)?;
         MerkleTree::from_data_store(store, tree_leafs)
     }?;
 

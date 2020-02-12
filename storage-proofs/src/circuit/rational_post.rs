@@ -30,7 +30,7 @@ pub struct RationalPoStCircuit<'a, E: JubjubEngine, H: Hasher> {
     pub comm_r_lasts: Vec<Option<E::Fr>>,
     pub leafs: Vec<Option<E::Fr>>,
     #[allow(clippy::type_complexity)]
-    pub paths: Vec<Vec<Option<(E::Fr, bool)>>>,
+    pub paths: Vec<Vec<Option<(E::Fr, usize)>>>,
     _h: PhantomData<H>,
 }
 
@@ -85,8 +85,11 @@ where
                 commitment: None,
                 challenge: challenge.leaf as usize,
             };
-            let por_inputs =
-                PoRCompound::<H>::generate_public_inputs(&por_pub_inputs, &por_pub_params, None)?;
+            let por_inputs = PoRCompound::<H, typenum::U2>::generate_public_inputs(
+                &por_pub_inputs,
+                &por_pub_params,
+                None,
+            )?;
 
             inputs.extend(por_inputs);
         }
@@ -221,7 +224,7 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> Circuit<E> for RationalPoS
                 );
             }
 
-            PoRCircuit::<E, H>::synthesize(
+            PoRCircuit::<E, H, typenum::U2>::synthesize(
                 cs.namespace(|| format!("challenge_inclusion{}", i)),
                 &params,
                 Root::Val(leafs[i]),
@@ -244,7 +247,7 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> RationalPoStCircuit<'a, E,
         comm_rs: Vec<Option<E::Fr>>,
         comm_cs: Vec<Option<E::Fr>>,
         comm_r_lasts: Vec<Option<E::Fr>>,
-        paths: Vec<Vec<Option<(E::Fr, bool)>>>,
+        paths: Vec<Vec<Option<(E::Fr, usize)>>>,
     ) -> Result<(), SynthesisError> {
         Self {
             params,

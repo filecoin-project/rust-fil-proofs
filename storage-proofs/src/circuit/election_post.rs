@@ -36,7 +36,7 @@ pub struct ElectionPoStCircuit<'a, E: JubjubEngine, H: Hasher> {
     pub comm_r_last: Option<E::Fr>,
     pub leafs: Vec<Option<E::Fr>>,
     #[allow(clippy::type_complexity)]
-    pub paths: Vec<Vec<Option<(E::Fr, bool)>>>,
+    pub paths: Vec<Vec<Option<(E::Fr, usize)>>>,
     pub partial_ticket: Option<E::Fr>,
     pub randomness: Vec<Option<bool>>,
     pub prover_id: Vec<Option<bool>>,
@@ -101,7 +101,7 @@ where
                     commitment: None,
                     challenge: challenged_leaf_start as usize + i,
                 };
-                let por_inputs = PoRCompound::<H>::generate_public_inputs(
+                let por_inputs = PoRCompound::<H, typenum::U4>::generate_public_inputs(
                     &por_pub_inputs,
                     &por_pub_params,
                     None,
@@ -233,7 +233,7 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> Circuit<E> for ElectionPoS
 
         // 2. Verify Inclusion Paths
         for (i, (leaf, path)) in leafs.iter().zip(paths.iter()).enumerate() {
-            PoRCircuit::<E, H>::synthesize(
+            PoRCircuit::<E, H, typenum::U4>::synthesize(
                 cs.namespace(|| format!("challenge_inclusion{}", i)),
                 &params,
                 Root::Val(*leaf),
@@ -340,6 +340,7 @@ mod tests {
     use crate::election_post::{self, ElectionPoSt};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher};
+    use crate::merkle::{QuadLCMerkleTree, QuadMerkleTree};
     use crate::proof::{NoRequirements, ProofScheme};
     use crate::sector::SectorId;
 
@@ -390,7 +391,7 @@ mod tests {
 
             let cur_config =
                 StoreConfig::from_config(&config, format!("test-lc-tree-v1-{}", i), None);
-            let mut tree = graph
+            let mut tree: QuadMerkleTree<_, _> = graph
                 .merkle_tree(Some(cur_config.clone()), data.as_slice())
                 .unwrap();
             let c = tree
@@ -398,7 +399,7 @@ mod tests {
                 .unwrap();
             assert_eq!(c, true);
 
-            let lctree = graph
+            let lctree: QuadLCMerkleTree<_, _> = graph
                 .lcmerkle_tree(Some(cur_config), data.as_slice())
                 .unwrap();
             trees.insert(i.into(), lctree);
@@ -553,7 +554,7 @@ mod tests {
 
             let cur_config =
                 StoreConfig::from_config(&config, format!("test-lc-tree-v1-{}", i), None);
-            let mut tree = graph
+            let mut tree: QuadMerkleTree<_, _> = graph
                 .merkle_tree(Some(cur_config.clone()), data.as_slice())
                 .unwrap();
             let c = tree
@@ -561,7 +562,7 @@ mod tests {
                 .unwrap();
             assert_eq!(c, true);
 
-            let lctree = graph
+            let lctree: QuadLCMerkleTree<_, _> = graph
                 .lcmerkle_tree(Some(cur_config), data.as_slice())
                 .unwrap();
             trees.insert(i.into(), lctree);

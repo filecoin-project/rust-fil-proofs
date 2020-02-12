@@ -203,7 +203,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         let comm_r = pub_in.tau.as_ref().expect("missing tau").comm_r;
         inputs.push(comm_r.into());
 
-        let por_params = merklepor::MerklePoR::<H>::setup(&merklepor::SetupParams {
+        let por_params = merklepor::MerklePoR::<H, typenum::U2>::setup(&merklepor::SetupParams {
             leaves: graph.size(),
             private: true,
         })?;
@@ -214,14 +214,23 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
                 commitment: None,
             };
 
-            PoRCompound::<H>::generate_public_inputs(&pub_inputs, &por_params, k)
+            PoRCompound::<H, typenum::U4>::generate_public_inputs(&pub_inputs, &por_params, k)
         };
 
         let all_challenges = pub_in.challenges(&pub_params.layer_challenges, graph.size(), k);
 
         for challenge in all_challenges.into_iter() {
             // comm_d_proof
-            inputs.extend(generate_inclusion_inputs(challenge)?);
+            let pub_inputs = merklepor::PublicInputs::<H::Domain> {
+                challenge,
+                commitment: None,
+            };
+
+            inputs.extend(PoRCompound::<H, typenum::U2>::generate_public_inputs(
+                &pub_inputs,
+                &por_params,
+                k,
+            )?);
 
             // replica column proof
             {

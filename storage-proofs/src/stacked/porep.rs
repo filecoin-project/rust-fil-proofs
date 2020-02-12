@@ -2,7 +2,7 @@ use crate::error::Result;
 use crate::hasher::Hasher;
 use crate::porep::{Data, PoRep};
 use crate::stacked::{
-    params::{PersistentAux, PublicParams, Tau, TemporaryAux, Tree},
+    params::{BinaryTree, PersistentAux, PublicParams, Tau, TemporaryAux},
     proof::StackedDrg,
 };
 
@@ -16,7 +16,7 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
         pp: &'a PublicParams<H>,
         replica_id: &H::Domain,
         data: Data<'a>,
-        data_tree: Option<Tree<G>>,
+        data_tree: Option<BinaryTree<G>>,
         config: Option<StoreConfig>,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let (tau, p_aux, t_aux) = Self::transform_and_replicate_layers(

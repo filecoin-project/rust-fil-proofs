@@ -15,7 +15,7 @@ use crate::measurements::{
     measure_op,
     Operation::{CommD, EncodeWindowTimeAll, GenerateTreeC, GenerateTreeRLast},
 };
-use crate::merkle::{MerkleProof, MerkleTree, Store};
+use crate::merkle::{MerkleProof, MerkleTree, QuadMerkleTree, Store};
 use crate::porep::Data;
 use crate::porep::PoRep;
 use crate::stacked::{
@@ -23,8 +23,9 @@ use crate::stacked::{
     column::Column,
     graph::StackedBucketGraph,
     params::{
-        get_node, CacheKey, Labels, LabelsCache, PersistentAux, Proof, PublicInputs, PublicParams,
-        ReplicaColumnProof, Tau, TemporaryAux, TemporaryAuxCache, TransformedLayers, Tree,
+        self, get_node, BinaryTree, CacheKey, Labels, LabelsCache, PersistentAux, Proof,
+        PublicInputs, PublicParams, ReplicaColumnProof, Tau, TemporaryAux, TemporaryAuxCache,
+        TransformedLayers,
     },
     EncodingProof, LabelingProof,
 };
@@ -300,6 +301,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             // Construct and persist the layer data.
             let layer_store: DiskStore<H::Domain> = DiskStore::new_from_slice_with_config(
                 graph.size(),
+                params::QUAD_ARITY,
                 &layer_labels,
                 layer_config.clone(),
             )?;
@@ -331,7 +333,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         ))
     }
 
-    fn build_tree<K: Hasher>(tree_data: &[u8], config: StoreConfig) -> Result<Tree<K>> {
+    fn build_binary_tree<K: Hasher>(
+        tree_data: &[u8],
+        config: StoreConfig,
+    ) -> Result<BinaryTree<K>> {
         trace!("building tree (size: {})", tree_data.len());
 
         let leafs = tree_data.len() / NODE_SIZE;
@@ -351,7 +356,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         layer_challenges: &LayerChallenges,
         replica_id: &<H as Hasher>::Domain,
         data: Data,
-        data_tree: Option<Tree<G>>,
+        data_tree: Option<BinaryTree<G>>,
         config: StoreConfig,
     ) -> Result<TransformedLayers<H, G>> {
         // Generate key layers.
@@ -373,7 +378,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         graph: &StackedBucketGraph<H>,
         layer_challenges: &LayerChallenges,
         mut data: Data,
-        data_tree: Option<Tree<G>>,
+        data_tree: Option<BinaryTree<G>>,
         config: StoreConfig,
         label_configs: Labels<H>,
     ) -> Result<TransformedLayers<H, G>> {
@@ -434,7 +439,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             });
 
             info!("building tree_c");
-            MerkleTree::<_, H::Function>::from_par_iter_with_config(
+            QuadMerkleTree::<_, H::Function>::from_par_iter_with_config(
                 hashes.into_par_iter(),
                 tree_c_config.clone(),
             )
@@ -453,7 +458,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 trace!("building merkle tree for the original data");
                 data.ensure_data()?;
                 measure_op(CommD, || {
-                    Self::build_tree::<G>(data.as_ref(), tree_d_config.clone())
+                    Self::build_binary_tree::<G>(data.as_ref(), tree_d_config.clone())
                 })?
             }
         };
@@ -475,7 +480,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     encode::<H::Domain>(key, data_node)
                 });
 
-            MerkleTree::<_, H::Function>::from_par_iter_with_config(
+            QuadMerkleTree::<_, H::Function>::from_par_iter_with_config(
                 encoded_data,
                 tree_r_last_config.clone(),
             )
@@ -537,7 +542,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         pp: &'a PublicParams<H>,
         labels: Labels<H>,
         data: Data<'a>,
-        data_tree: Tree<G>,
+        data_tree: BinaryTree<G>,
         config: StoreConfig,
     ) -> Result<(
         <Self as PoRep<'a, H, G>>::Tau,

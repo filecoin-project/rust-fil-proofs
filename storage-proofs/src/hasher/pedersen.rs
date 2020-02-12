@@ -391,15 +391,16 @@ mod tests {
 
     use merkletree::hash::Hashable;
 
-    use crate::merkle::MerkleTree;
+    use crate::merkle::BinaryMerkleTree;
 
     #[test]
     fn test_path() {
         let values = ["hello", "world", "you", "two"];
-        let t = MerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter()).unwrap();
+        let t =
+            BinaryMerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter()).unwrap();
 
         let p = t.gen_proof(0).unwrap(); // create a proof for the first value = "hello"
-        assert_eq!(*p.path(), vec![true, true]);
+        assert_eq!(*p.path(), vec![1, 1]);
         assert_eq!(p.validate::<PedersenFunction>(), true);
     }
 
@@ -407,7 +408,8 @@ mod tests {
     fn test_pedersen_hasher() {
         let values = ["hello", "world", "you", "two"];
 
-        let t = MerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter()).unwrap();
+        let t =
+            BinaryMerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter()).unwrap();
 
         assert_eq!(t.leafs(), 4);
 

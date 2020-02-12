@@ -27,6 +27,7 @@ use crate::constants::DefaultTreeHasher;
 use crate::parameters::post_setup_params;
 use crate::types::{
     ChallengeSeed, Commitment, LCTree, PersistentAux, PoStConfig, ProverId, TemporaryAux,
+    QUAD_ARITY,
 };
 
 /// The minimal information required about a replica, in order to be able to generate
@@ -100,12 +101,12 @@ impl PrivateReplicaInfo {
         let mut config = StoreConfig::new(
             self.cache_dir_path(),
             CacheKey::CommRLastTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(tree_leafs),
+            StoreConfig::default_cached_above_base_layer(tree_leafs, QUAD_ARITY),
         );
         config.size = Some(tree_size);
 
         let tree_r_last_store: LevelCacheStore<<DefaultTreeHasher as Hasher>::Domain, _> =
-            LevelCacheStore::new_from_disk(tree_size, &config)?;
+            LevelCacheStore::new_from_disk(tree_size, QUAD_ARITY, &config)?;
         let tree_r_last: LCTree =
             merkletree::merkle::MerkleTree::from_data_store(tree_r_last_store, tree_leafs)?;
 
@@ -205,7 +206,7 @@ pub fn generate_candidates(
     unique_challenged_replicas.dedup();
 
     let tree_size = get_tree_size::<<DefaultTreeHasher as Hasher>::Domain>(post_config.sector_size);
-    let tree_leafs = get_merkle_tree_leafs(tree_size);
+    let tree_leafs = get_merkle_tree_leafs(tree_size, QUAD_ARITY);
 
     let unique_trees_res: Vec<_> = unique_challenged_replicas
         .into_par_iter()
@@ -290,7 +291,7 @@ pub fn generate_post(
     let groth_params = get_post_params(post_config)?;
 
     let tree_size = get_tree_size::<<DefaultTreeHasher as Hasher>::Domain>(post_config.sector_size);
-    let tree_leafs = get_merkle_tree_leafs(tree_size);
+    let tree_leafs = get_merkle_tree_leafs(tree_size, QUAD_ARITY);
 
     let mut proofs = Vec::with_capacity(winners.len());
 

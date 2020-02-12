@@ -7,7 +7,7 @@ use crate::crypto;
 use crate::error;
 use crate::fr32::{bytes_into_fr, fr_into_bytes};
 use crate::hasher::pedersen::{PedersenDomain, PedersenFunction, PedersenHasher};
-use crate::merkle::{MerkleProof, MerkleTree};
+use crate::merkle::{MerkleProof, QuadMerkleTree};
 
 #[macro_export]
 macro_rules! table_tests {
@@ -27,13 +27,13 @@ macro_rules! table_tests {
 pub struct FakeDrgParams {
     pub replica_id: Fr,
     pub replica_nodes: Vec<Fr>,
-    pub replica_nodes_paths: Vec<Vec<Option<(Fr, bool)>>>,
+    pub replica_nodes_paths: Vec<Vec<Option<(Fr, usize)>>>,
     pub replica_root: Fr,
     pub replica_parents: Vec<Vec<Fr>>,
     #[allow(clippy::type_complexity)]
-    pub replica_parents_paths: Vec<Vec<Vec<Option<(Fr, bool)>>>>,
+    pub replica_parents_paths: Vec<Vec<Vec<Option<(Fr, usize)>>>>,
     pub data_nodes: Vec<Fr>,
-    pub data_nodes_paths: Vec<Vec<Option<(Fr, bool)>>>,
+    pub data_nodes_paths: Vec<Vec<Option<(Fr, usize)>>>,
     pub data_root: Fr,
 }
 
@@ -82,7 +82,7 @@ pub fn fake_drgpoprep_proof<R: Rng>(
     }
 
     // get commR
-    let subtree = MerkleTree::<PedersenDomain, PedersenFunction>::from_data(leaves).unwrap();
+    let subtree = QuadMerkleTree::<PedersenDomain, PedersenFunction>::from_data(leaves).unwrap();
     let subtree_root: Fr = subtree.root().into();
     let subtree_depth = subtree.height() - 1; // .height() inludes the leaf
     let remaining_depth = tree_depth - subtree_depth;
@@ -93,7 +93,7 @@ pub fn fake_drgpoprep_proof<R: Rng>(
     let replica_parents_paths: Vec<_> = (0..m)
         .map(|i| {
             let subtree_proof =
-                MerkleProof::<PedersenHasher>::new_from_proof(&subtree.gen_proof(i).unwrap());
+                MerkleProof::<PedersenHasher, _>::new_from_proof(&subtree.gen_proof(i).unwrap());
             let mut subtree_path = subtree_proof.as_options();
             subtree_path.extend(remaining_path.clone());
             subtree_path
@@ -101,8 +101,9 @@ pub fn fake_drgpoprep_proof<R: Rng>(
         .collect();
 
     let replica_node_path = {
-        let subtree_proof =
-            MerkleProof::<PedersenHasher>::new_from_proof(&subtree.gen_proof(challenge).unwrap());
+        let subtree_proof = MerkleProof::<PedersenHasher, _>::new_from_proof(
+            &subtree.gen_proof(challenge).unwrap(),
+        );
         let mut subtree_path = subtree_proof.as_options();
         subtree_path.extend(&remaining_path);
         subtree_path
@@ -136,8 +137,9 @@ pub fn random_merkle_path_with_value<R: Rng>(
     tree_depth: usize,
     value: &Fr,
     offset: usize,
-) -> (Vec<Option<(Fr, bool)>>, Fr) {
-    let auth_path: Vec<Option<(Fr, bool)>> = vec![Some((Fr::random(rng), rng.gen())); tree_depth];
+) -> (Vec<Option<(Fr, usize)>>, Fr) {
+    let auth_path: Vec<Option<(Fr, usize)>> =
+        vec![Some((Fr::random(rng), rng.gen_range(0, 2))); tree_depth];
 
     let mut cur = if offset == 0 {
         let bytes = fr_into_bytes::<Bls12>(&value);
@@ -147,10 +149,15 @@ pub fn random_merkle_path_with_value<R: Rng>(
     };
 
     for p in auth_path.clone().into_iter() {
-        let (uncle, is_right) = p.unwrap();
+        let (uncle, index) = p.unwrap();
         let mut lhs = cur;
         let mut rhs = uncle;
 
+        let is_right = match index {
+            0 => false,
+            1 => true,
+            _ => panic!("unsupported index"),
+        };
         if is_right {
             ::std::mem::swap(&mut lhs, &mut rhs);
         }
@@ -192,7 +199,7 @@ pub fn random_merkle_path_with_value<R: Rng>(
 pub fn random_merkle_path<R: Rng>(
     rng: &mut R,
     tree_depth: usize,
-) -> (Vec<Option<(Fr, bool)>>, Fr, Fr) {
+) -> (Vec<Option<(Fr, usize)>>, Fr, Fr) {
     let value = Fr::random(rng);
 
     let (path, root) = random_merkle_path_with_value(rng, tree_depth, &value, 0);

@@ -13,7 +13,7 @@ use crate::stacked::{ColumnProof as VanillaColumnProof, PublicParams};
 #[derive(Debug, Clone)]
 pub struct ColumnProof<H: Hasher> {
     column: Column,
-    inclusion_path: InclusionPath<H>,
+    inclusion_path: InclusionPath<H, typenum::U4>,
 }
 
 impl<H: Hasher> ColumnProof<H> {

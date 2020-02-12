@@ -19,46 +19,60 @@ use crate::util::{data_at_node, NODE_SIZE};
 use merkletree::merkle::FromIndexedParallelIterator;
 pub use merkletree::store::Store;
 
-type DiskStore<E> = merkletree::store::DiskStore<E>;
-pub type MerkleTree<T, A> = merkle::MerkleTree<T, A, DiskStore<T>>;
-pub type LCMerkleTree<T, A> = merkle::MerkleTree<T, A, LevelCacheStore<T, std::fs::File>>;
+pub type DiskStore<E> = merkletree::store::DiskStore<E>;
+
+pub type MerkleTree<T, A, U> = merkle::MerkleTree<T, A, DiskStore<T>, U>;
+pub type LCMerkleTree<T, A, U> = merkle::MerkleTree<T, A, LevelCacheStore<T, std::fs::File>, U>;
+
+pub type BinaryMerkleTree<T, A> = MerkleTree<T, A, typenum::U2>;
+pub type BinaryLCMerkleTree<T, A> = LCMerkleTree<T, A, typenum::U2>;
+
+pub type QuadMerkleTree<T, A> = MerkleTree<T, A, typenum::U4>;
+pub type QuadLCMerkleTree<T, A> = LCMerkleTree<T, A, typenum::U4>;
+
 pub type MerkleStore<T> = DiskStore<T>;
 
 /// Representation of a merkle proof.
 /// Each element in the `path` vector consists of a tuple `(hash, is_right)`, with `hash` being the the hash of the node at the current level and `is_right` a boolean indicating if the path is taking the right path.
 /// The first element is the hash of leaf itself, and the last is the root hash.
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct MerkleProof<H: Hasher> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MerkleProof<H: Hasher, U: typenum::Unsigned> {
     pub root: H::Domain,
-    path: Vec<(H::Domain, bool)>,
+    path: Vec<(H::Domain, usize)>,
     leaf: H::Domain,
 
     #[serde(skip)]
     _h: PhantomData<H>,
+    #[serde(skip)]
+    _u: PhantomData<U>,
 }
 
-pub fn make_proof_for_test<H: Hasher>(
+pub fn make_proof_for_test<H: Hasher, U: typenum::Unsigned>(
     root: H::Domain,
     leaf: H::Domain,
-    path: Vec<(H::Domain, bool)>,
-) -> MerkleProof<H> {
+    path: Vec<(H::Domain, usize)>,
+) -> MerkleProof<H, U> {
     MerkleProof {
         path,
         root,
         leaf,
         _h: PhantomData,
+        _u: PhantomData,
     }
 }
 
-impl<H: Hasher> MerkleProof<H> {
-    pub fn new(n: usize) -> MerkleProof<H> {
-        let mut m = MerkleProof::default();
-        m.path = vec![(Default::default(), false); n];
-
-        m
+impl<H: Hasher, U: typenum::Unsigned> MerkleProof<H, U> {
+    pub fn new(n: usize) -> MerkleProof<H, U> {
+        MerkleProof {
+            root: Default::default(),
+            path: vec![(Default::default(), 0); n],
+            leaf: Default::default(),
+            _h: PhantomData,
+            _u: PhantomData,
+        }
     }
 
-    pub fn new_from_proof(p: &proof::Proof<H::Domain>) -> MerkleProof<H> {
+    pub fn new_from_proof(p: &proof::Proof<H::Domain, U>) -> MerkleProof<H, U> {
         MerkleProof {
             path: p
                 .lemma()
@@ -70,19 +84,20 @@ impl<H: Hasher> MerkleProof<H> {
             root: p.root(),
             leaf: p.item(),
             _h: PhantomData,
+            _u: PhantomData,
         }
     }
 
     /// Convert the merkle path into the format expected by the circuits, which is a vector of options of the tuples.
     /// This does __not__ include the root and the leaf.
-    pub fn as_options(&self) -> Vec<Option<(Fr, bool)>> {
+    pub fn as_options(&self) -> Vec<Option<(Fr, usize)>> {
         self.path
             .iter()
             .map(|v| Some((v.0.into(), v.1)))
             .collect::<Vec<_>>()
     }
 
-    pub fn into_options_with_leaf(self) -> (Option<Fr>, Vec<Option<(Fr, bool)>>) {
+    pub fn into_options_with_leaf(self) -> (Option<Fr>, Vec<Option<(Fr, usize)>>) {
         let MerkleProof { leaf, path, .. } = self;
 
         (
@@ -91,7 +106,7 @@ impl<H: Hasher> MerkleProof<H> {
         )
     }
 
-    pub fn as_pairs(&self) -> Vec<(Fr, bool)> {
+    pub fn as_pairs(&self) -> Vec<(Fr, usize)> {
         self.path
             .iter()
             .map(|v| (v.0.into(), v.1))
@@ -104,7 +119,11 @@ impl<H: Hasher> MerkleProof<H> {
         self.root()
             == &(0..self.path.len()).fold(self.leaf, |h, i| {
                 a.reset();
-                let is_right = self.path[i].1;
+                let is_right = match self.path[i].1 {
+                    0 => false,
+                    1 => true,
+                    _ => panic!("unsupported arity"),
+                };
 
                 let (left, right) = if is_right {
                     (self.path[i].0, h)
@@ -169,7 +188,7 @@ impl<H: Hasher> MerkleProof<H> {
         out
     }
 
-    pub fn path(&self) -> &Vec<(H::Domain, bool)> {
+    pub fn path(&self) -> &Vec<(H::Domain, usize)> {
         &self.path
     }
 
@@ -177,7 +196,13 @@ impl<H: Hasher> MerkleProof<H> {
     /// This is useful for verifying that a supplied proof is actually relevant to a given challenge.
     pub fn proves_challenge(&self, challenge: usize) -> bool {
         let mut c = challenge;
-        for (_, is_right) in self.path().iter() {
+        for (_, index) in self.path().iter() {
+            let is_right = match index {
+                0 => false,
+                1 => true,
+                _ => panic!("unsupported arity"),
+            };
+
             if ((c & 1) == 1) ^ is_right {
                 return false;
             };
@@ -214,18 +239,23 @@ impl<H: Hasher> std::ops::Deref for IncludedNode<H> {
     }
 }
 
-fn path_index<T: Domain>(path: &[(T, bool)]) -> usize {
-    path.iter().rev().fold(0, |acc, (_, is_right)| {
-        (acc << 1) + if *is_right { 1 } else { 0 }
+fn path_index<T: Domain>(path: &[(T, usize)]) -> usize {
+    path.iter().rev().fold(0, |acc, (_, index)| {
+        let is_right = match index {
+            0 => false,
+            1 => true,
+            _ => panic!("unsupported arity"),
+        };
+        (acc << 1) + if is_right { 1 } else { 0 }
     })
 }
 
 /// Construct a new merkle tree.
-pub fn create_merkle_tree<H: Hasher>(
+pub fn create_merkle_tree<H: Hasher, U: typenum::Unsigned>(
     config: Option<StoreConfig>,
     size: usize,
     data: &[u8],
-) -> Result<MerkleTree<H::Domain, H::Function>> {
+) -> Result<MerkleTree<H::Domain, H::Function, U>> {
     ensure!(
         data.len() == (NODE_SIZE * size) as usize,
         Error::InvalidMerkleTreeArgs(data.len(), NODE_SIZE, size)
@@ -249,11 +279,11 @@ pub fn create_merkle_tree<H: Hasher>(
 }
 
 /// Construct a new level cache merkle tree.
-pub fn create_lcmerkle_tree<H: Hasher>(
+pub fn create_lcmerkle_tree<H: Hasher, U: typenum::Unsigned>(
     config: Option<StoreConfig>,
     size: usize,
     data: &[u8],
-) -> Result<LCMerkleTree<H::Domain, H::Function>> {
+) -> Result<LCMerkleTree<H::Domain, H::Function, U>> {
     ensure!(
         data.len() == (NODE_SIZE * size) as usize,
         Error::InvalidMerkleTreeArgs(data.len(), NODE_SIZE, size)
@@ -284,9 +314,9 @@ mod tests {
     use std::io::Write;
 
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
-    use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
 
-    fn merklepath<H: Hasher>() {
+    fn merklepath<H: Hasher, U: typenum::Unsigned>() {
         let leafs = 16;
         let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, new_seed()).unwrap();
         let mut rng = rand::thread_rng();
@@ -304,7 +334,7 @@ mod tests {
 
             assert!(proof.validate::<H::Function>());
             let len = proof.lemma().len();
-            let mp = MerkleProof::<H>::new_from_proof(&proof);
+            let mp = MerkleProof::<H, U>::new_from_proof(&proof);
 
             assert_eq!(mp.len(), len);
 
@@ -318,17 +348,42 @@ mod tests {
     }
 
     #[test]
-    fn merklepath_pedersen() {
-        merklepath::<PedersenHasher>();
+    fn merklepath_pedersen_binary() {
+        merklepath::<PedersenHasher, typenum::U2>();
     }
 
     #[test]
-    fn merklepath_sha256() {
-        merklepath::<Sha256Hasher>();
+    fn merklepath_sha256_binary() {
+        merklepath::<Sha256Hasher, typenum::U2>();
     }
 
     #[test]
-    fn merklepath_blake2s() {
-        merklepath::<Blake2sHasher>();
+    fn merklepath_blake2s_binary() {
+        merklepath::<Blake2sHasher, typenum::U2>();
+    }
+
+    #[test]
+    fn merklepath_poseidon_binary() {
+        merklepath::<PoseidonHasher, typenum::U2>();
+    }
+
+    #[test]
+    fn merklepath_poseidon_quad() {
+        merklepath::<PoseidonHasher, typenum::U4>();
+    }
+
+    #[test]
+    fn merklepath_pedersen_quad() {
+        merklepath::<PedersenHasher, typenum::U4>();
+    }
+
+    #[test]
+    fn merklepath_sha256_quad() {
+        merklepath::<Sha256Hasher, typenum::U4>();
+    }
+
+    #[test]
+    fn merklepath_blake2s_quad() {
+        merklepath::<Blake2sHasher, typenum::U4>();
     }
 }

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::drgraph::graph_height;
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::{MerkleProof, MerkleTree};
+use crate::merkle::{MerkleProof, QuadMerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::sector::*;
@@ -55,7 +55,7 @@ pub struct PublicInputs<'a, T: 'a + Domain> {
 
 #[derive(Debug, Clone)]
 pub struct PrivateInputs<'a, H: 'a + Hasher> {
-    pub trees: &'a BTreeMap<SectorId, &'a MerkleTree<H::Domain, H::Function>>,
+    pub trees: &'a BTreeMap<SectorId, &'a QuadMerkleTree<H::Domain, H::Function>>,
     pub comm_cs: &'a [H::Domain],
     pub comm_r_lasts: &'a [H::Domain],
 }
@@ -63,10 +63,10 @@ pub struct PrivateInputs<'a, H: 'a + Hasher> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proof<H: Hasher> {
     #[serde(bound(
-        serialize = "MerkleProof<H>: Serialize",
-        deserialize = "MerkleProof<H>: Deserialize<'de>"
+        serialize = "MerkleProof<H, typenum::U4>: Serialize",
+        deserialize = "MerkleProof<H, typenum::U4>: Deserialize<'de>"
     ))]
-    inclusion_proofs: Vec<MerkleProof<H>>,
+    inclusion_proofs: Vec<MerkleProof<H, typenum::U4>>,
     pub comm_cs: Vec<H::Domain>,
 }
 
@@ -85,7 +85,7 @@ impl<H: Hasher> Proof<H> {
             .collect()
     }
 
-    pub fn paths(&self) -> Vec<&Vec<(H::Domain, bool)>> {
+    pub fn paths(&self) -> Vec<&Vec<(H::Domain, usize)>> {
         self.inclusion_proofs
             .iter()
             .map(MerkleProof::path)
@@ -404,13 +404,13 @@ mod tests {
     // Proof root matches that requested in public inputs.
     // However, note that data has no relationship to anything,
     // and proof path does not actually prove that data was in the tree corresponding to expected root.
-    fn make_bogus_proof<H: Hasher>(
+    fn make_bogus_proof<H: Hasher, U: typenum::Unsigned>(
         pub_inputs: &PublicInputs<H::Domain>,
         rng: &mut XorShiftRng,
-    ) -> MerkleProof<H> {
+    ) -> MerkleProof<H, U> {
         let bogus_leaf: H::Domain = H::Domain::random(rng);
 
-        make_proof_for_test(pub_inputs.comm_rs[0], bogus_leaf, vec![(bogus_leaf, true)])
+        make_proof_for_test(pub_inputs.comm_rs[0], bogus_leaf, vec![(bogus_leaf, 1)])
     }
 
     fn test_rational_post_validates<H: Hasher>() {
@@ -429,7 +429,7 @@ mod tests {
             .collect();
 
         let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
+        let tree: QuadMerkleTree<_, _> = graph.merkle_tree(None, data.as_slice()).unwrap();
         let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
 
         let faults = OrderedSectorSet::new();
@@ -457,8 +457,8 @@ mod tests {
 
         let bad_proof = Proof {
             inclusion_proofs: vec![
-                make_bogus_proof::<H>(&pub_inputs, rng),
-                make_bogus_proof::<H>(&pub_inputs, rng),
+                make_bogus_proof::<H, typenum::U4>(&pub_inputs, rng),
+                make_bogus_proof::<H, typenum::U4>(&pub_inputs, rng),
             ],
             comm_cs,
         };

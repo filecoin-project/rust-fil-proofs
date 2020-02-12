@@ -18,9 +18,6 @@ pub use self::column::Column;
 pub use self::column_proof::ColumnProof;
 pub use self::encoding_proof::EncodingProof;
 pub use self::graph::{StackedBucketGraph, StackedGraph, EXP_DEGREE};
-pub use self::params::{
-    generate_replica_id, CacheKey, Labels, PersistentAux, PrivateInputs, Proof, PublicInputs,
-    PublicParams, ReplicaColumnProof, SetupParams, Tau, TemporaryAux, TemporaryAuxCache, Tree,
-};
+pub use self::params::*;
 pub use self::proof::{create_key, StackedDrg, TOTAL_PARENTS};
 pub use labeling_proof::LabelingProof;

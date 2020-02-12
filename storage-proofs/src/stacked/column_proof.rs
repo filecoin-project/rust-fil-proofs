@@ -15,14 +15,17 @@ pub struct ColumnProof<H: Hasher> {
     ))]
     pub(crate) column: Column<H>,
     #[serde(bound(
-        serialize = "MerkleProof<H>: Serialize",
-        deserialize = "MerkleProof<H>: Deserialize<'de>"
+        serialize = "MerkleProof<H, typenum::U4>: Serialize",
+        deserialize = "MerkleProof<H, typenum::U4>: Deserialize<'de>"
     ))]
-    pub(crate) inclusion_proof: MerkleProof<H>,
+    pub(crate) inclusion_proof: MerkleProof<H, typenum::U4>,
 }
 
 impl<H: Hasher> ColumnProof<H> {
-    pub fn from_column(column: Column<H>, inclusion_proof: MerkleProof<H>) -> Result<Self> {
+    pub fn from_column(
+        column: Column<H>,
+        inclusion_proof: MerkleProof<H, typenum::U4>,
+    ) -> Result<Self> {
         Ok(ColumnProof {
             column,
             inclusion_proof,

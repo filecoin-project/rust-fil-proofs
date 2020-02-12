@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use storage_proofs::hasher::Hasher;
-use storage_proofs::merkle::{LCMerkleTree, MerkleTree};
 use storage_proofs::stacked;
 
 use crate::constants::{DefaultPieceHasher, DefaultTreeDomain, DefaultTreeHasher};
@@ -29,8 +28,18 @@ pub type PersistentAux = stacked::PersistentAux<DefaultTreeDomain>;
 pub type TemporaryAux = stacked::TemporaryAux<DefaultTreeHasher, DefaultPieceHasher>;
 pub type ProverId = [u8; 32];
 pub type Ticket = [u8; 32];
-pub type Tree = MerkleTree<DefaultTreeDomain, <DefaultTreeHasher as Hasher>::Function>;
-pub type LCTree = LCMerkleTree<DefaultTreeDomain, <DefaultTreeHasher as Hasher>::Function>;
+
+pub type Tree = storage_proofs::stacked::QuadTree<DefaultTreeHasher>;
+pub type LCTree = storage_proofs::stacked::QuadLCTree<DefaultTreeHasher>;
+
+pub type Labels = storage_proofs::stacked::Labels<DefaultTreeHasher>;
+pub type DataTree = storage_proofs::stacked::BinaryTree<DefaultPieceHasher>;
+
+/// Arity for quad trees, used for comm_r_last.
+pub const QUAD_ARITY: usize = 4;
+
+/// Arity for quad trees, used for comm_r_last.
+pub const BINARY_ARITY: usize = 2;
 
 #[derive(Debug, Clone)]
 pub struct SealPreCommitOutput {
@@ -55,8 +64,6 @@ pub struct SealCommitOutput {
     pub proof: Vec<u8>,
 }
 
-pub type Labels = storage_proofs::stacked::Labels<DefaultTreeHasher>;
-pub type DataTree = storage_proofs::stacked::Tree<DefaultPieceHasher>;
 pub use merkletree::store::StoreConfig;
 
 #[derive(Debug, Serialize, Deserialize)]

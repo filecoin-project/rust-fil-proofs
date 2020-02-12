@@ -336,12 +336,14 @@ mod tests {
             PoseidonDomain(Fr::one().into_repr()),
         ];
 
-        let t =
-            MerkleTree::<PoseidonDomain, PoseidonFunction>::new(values.iter().map(|x| *x)).unwrap();
+        let t = MerkleTree::<PoseidonDomain, PoseidonFunction, typenum::U2>::new(
+            values.iter().map(|x| *x),
+        )
+        .unwrap();
 
         let p = t.gen_proof(0).unwrap(); // create a proof for the first value =k Fr::one()
 
-        assert_eq!(*p.path(), vec![true, true]);
+        assert_eq!(*p.path(), vec![1, 1]);
         assert_eq!(p.validate::<PoseidonFunction>(), true);
     }
 
@@ -361,8 +363,10 @@ mod tests {
             PoseidonDomain(Fr::one().into_repr()),
         ];
 
-        let t =
-            MerkleTree::<PoseidonDomain, PoseidonFunction>::new(leaves.iter().map(|x| *x)).unwrap();
+        let t = MerkleTree::<PoseidonDomain, PoseidonFunction, typenum::U2>::new(
+            leaves.iter().map(|x| *x),
+        )
+        .unwrap();
 
         assert_eq!(t.leafs(), 4);
 

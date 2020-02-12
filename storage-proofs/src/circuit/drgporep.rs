@@ -56,14 +56,14 @@ pub struct DrgPoRepCircuit<'a, H: Hasher> {
     params: &'a <Bls12 as JubjubEngine>::Params,
     replica_nodes: Vec<Option<Fr>>,
     #[allow(clippy::type_complexity)]
-    replica_nodes_paths: Vec<Vec<Option<(Fr, bool)>>>,
+    replica_nodes_paths: Vec<Vec<Option<(Fr, usize)>>>,
     replica_root: Root<Bls12>,
     replica_parents: Vec<Vec<Option<Fr>>>,
     #[allow(clippy::type_complexity)]
-    replica_parents_paths: Vec<Vec<Vec<Option<(Fr, bool)>>>>,
+    replica_parents_paths: Vec<Vec<Vec<Option<(Fr, usize)>>>>,
     data_nodes: Vec<Option<Fr>>,
     #[allow(clippy::type_complexity)]
-    data_nodes_paths: Vec<Vec<Option<(Fr, bool)>>>,
+    data_nodes_paths: Vec<Vec<Option<(Fr, usize)>>>,
     data_root: Root<Bls12>,
     replica_id: Option<Fr>,
     private: bool,
@@ -75,12 +75,12 @@ impl<'a, H: Hasher> DrgPoRepCircuit<'a, H> {
     pub fn synthesize<CS>(
         mut cs: CS,
         replica_nodes: Vec<Option<Fr>>,
-        replica_nodes_paths: Vec<Vec<Option<(Fr, bool)>>>,
+        replica_nodes_paths: Vec<Vec<Option<(Fr, usize)>>>,
         replica_root: Root<Bls12>,
         replica_parents: Vec<Vec<Option<Fr>>>,
-        replica_parents_paths: Vec<Vec<Vec<Option<(Fr, bool)>>>>,
+        replica_parents_paths: Vec<Vec<Vec<Option<(Fr, usize)>>>>,
         data_nodes: Vec<Option<Fr>>,
-        data_nodes_paths: Vec<Vec<Option<(Fr, bool)>>>,
+        data_nodes_paths: Vec<Vec<Option<(Fr, usize)>>>,
         data_root: Root<Bls12>,
         replica_id: Option<Fr>,
         private: bool,
@@ -185,7 +185,7 @@ where
                     commitment: comm_r,
                     challenge: node as usize,
                 };
-                let por_inputs = PoRCompound::<H>::generate_public_inputs(
+                let por_inputs = PoRCompound::<H, typenum::U2>::generate_public_inputs(
                     &por_pub_inputs,
                     &por_pub_params,
                     None,
@@ -199,8 +199,11 @@ where
                 challenge: *challenge,
             };
 
-            let por_inputs =
-                PoRCompound::<H>::generate_public_inputs(&por_pub_inputs, &por_pub_params, None)?;
+            let por_inputs = PoRCompound::<H, typenum::U2>::generate_public_inputs(
+                &por_pub_inputs,
+                &por_pub_params,
+                None,
+            )?;
             input.extend(por_inputs);
         }
         Ok(input)
@@ -418,7 +421,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
             // Inclusion checks
             {
                 let mut cs = cs.namespace(|| "inclusion_checks");
-                PoRCircuit::<_, H>::synthesize(
+                PoRCircuit::<_, H, typenum::U2>::synthesize(
                     cs.namespace(|| "replica_inclusion"),
                     &params,
                     Root::Val(*replica_node),
@@ -429,7 +432,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
 
                 // validate each replica_parents merkle proof
                 for j in 0..replica_parents.len() {
-                    PoRCircuit::<_, H>::synthesize(
+                    PoRCircuit::<_, H, typenum::U2>::synthesize(
                         cs.namespace(|| format!("parents_inclusion_{}", j)),
                         &params,
                         Root::Val(replica_parents[j]),
@@ -440,7 +443,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
                 }
 
                 // validate data node commitment
-                PoRCircuit::<_, H>::synthesize(
+                PoRCircuit::<_, H, typenum::U2>::synthesize(
                     cs.namespace(|| "data_inclusion"),
                     &params,
                     Root::Val(*data_node),
@@ -707,12 +710,12 @@ mod tests {
         DrgPoRepCircuit::<PedersenHasher>::synthesize(
             cs.namespace(|| "drgporep"),
             vec![Some(Fr::random(rng)); 1],
-            vec![vec![Some((Fr::random(rng), false)); tree_depth]; 1],
+            vec![vec![Some((Fr::random(rng), 0)); tree_depth]; 1],
             Root::Val(Some(Fr::random(rng))),
             vec![vec![Some(Fr::random(rng)); m]; 1],
-            vec![vec![vec![Some((Fr::random(rng), false)); tree_depth]; m]; 1],
+            vec![vec![vec![Some((Fr::random(rng), 0)); tree_depth]; m]; 1],
             vec![Some(Fr::random(rng)); 1],
-            vec![vec![Some((Fr::random(rng), false)); tree_depth]; 1],
+            vec![vec![Some((Fr::random(rng), 0)); tree_depth]; 1],
             Root::Val(Some(Fr::random(rng))),
             Some(Fr::random(rng)),
             false,
@@ -720,7 +723,7 @@ mod tests {
         .expect("failed to synthesize circuit");
 
         assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 380439, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 380_439, "wrong number of constraints");
     }
 
     #[test]

@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use crate::error::Result;
 use crate::hasher::Hasher;
 use crate::merkle::MerkleProof;
-use crate::stacked::{column_proof::ColumnProof, hash::hash_single_column, params::Tree};
+use crate::stacked::{column_proof::ColumnProof, hash::hash_single_column, params::QuadTree};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Column<H: Hasher> {
@@ -55,7 +55,7 @@ impl<H: Hasher> Column<H> {
     }
 
     /// Create a column proof for this column.
-    pub fn into_proof(self, tree_c: &Tree<H>) -> Result<ColumnProof<H>> {
+    pub fn into_proof(self, tree_c: &QuadTree<H>) -> Result<ColumnProof<H>> {
         let inclusion_proof =
             MerkleProof::new_from_proof(&tree_c.gen_proof(self.index() as usize)?);
         ColumnProof::<H>::from_column(self, inclusion_proof)

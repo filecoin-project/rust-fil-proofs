@@ -18,8 +18,8 @@ use crate::stacked::{
 
 #[derive(Debug, Clone)]
 pub struct Proof<H: Hasher, G: Hasher> {
-    pub comm_d_proof: InclusionPath<G>,
-    pub comm_r_last_proof: InclusionPath<H>,
+    pub comm_d_proof: InclusionPath<G, typenum::U2>,
+    pub comm_r_last_proof: InclusionPath<H, typenum::U4>,
     pub replica_column_proof: ReplicaColumnProof<H>,
     pub labeling_proofs: Vec<(usize, LabelingProof)>,
     pub encoding_proof: EncodingProof,
@@ -144,19 +144,22 @@ impl<H: Hasher, G: Hasher> From<VanillaProof<H, G>> for Proof<H, G> {
 }
 
 #[derive(Debug, Clone)]
-pub struct InclusionPath<H: Hasher> {
+pub struct InclusionPath<H: Hasher, U: typenum::Unsigned> {
     value: Option<Fr>,
-    auth_path: Vec<Option<(Fr, bool)>>,
+    auth_path: Vec<Option<(Fr, usize)>>,
     _h: PhantomData<H>,
+    _u: PhantomData<U>,
 }
 
-impl<H: Hasher> InclusionPath<H> {
+impl<H: Hasher, U: typenum::Unsigned> InclusionPath<H, U> {
     /// Create an empty proof, used in `blank_circuit`s.
     pub fn empty<G: Hasher>(graph: &impl Graph<G>) -> Self {
+        assert_eq!(U::to_usize(), 2, "only binary trees are supported atm");
         InclusionPath {
             value: None,
             auth_path: vec![None; graph.merkle_tree_depth() as usize],
             _h: PhantomData,
+            _u: PhantomData,
         }
     }
 
@@ -178,22 +181,25 @@ impl<H: Hasher> InclusionPath<H> {
         root: num::AllocatedNum<Bls12>,
         leaf: num::AllocatedNum<Bls12>,
     ) -> Result<(), SynthesisError> {
+        assert_eq!(U::to_usize(), 2, "only binary trees are supported atm");
+
         let InclusionPath { auth_path, .. } = self;
 
         let root = Root::from_allocated::<CS>(root);
         let value = Root::from_allocated::<CS>(leaf);
-        PoRCircuit::<Bls12, H>::synthesize(cs, params, value, auth_path, root, true)
+        PoRCircuit::<Bls12, H, U>::synthesize(cs, params, value, auth_path, root, true)
     }
 }
 
-impl<H: Hasher> From<MerkleProof<H>> for InclusionPath<H> {
-    fn from(other: MerkleProof<H>) -> Self {
+impl<H: Hasher, U: typenum::Unsigned> From<MerkleProof<H, U>> for InclusionPath<H, U> {
+    fn from(other: MerkleProof<H, U>) -> Self {
         let (value, auth_path) = other.into_options_with_leaf();
 
         InclusionPath {
             value,
             auth_path,
             _h: PhantomData,
+            _u: PhantomData,
         }
     }
 }
