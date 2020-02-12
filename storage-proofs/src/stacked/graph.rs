@@ -28,7 +28,11 @@ lazy_static! {
 // StackedGraph will hold two different (but related) `ParentCache`,
 #[derive(Debug, Clone)]
 struct ParentCache {
-    cache: Vec<Vec<u32>>,
+    /// This is a large list of fixed (parent) sized arrays.
+    /// `Vec<Vec<u32>>` was showing quite a large memory overhead, so this is layed out as a fixed boxed slice of memory.
+    cache: Box<[u32]>,
+    /// The size of a single slice in the cache.
+    degree: usize,
 }
 
 impl ParentCache {
@@ -38,12 +42,14 @@ impl ParentCache {
         G: Graph<H> + ParameterSetMetadata + Send + Sync,
     {
         info!("filling parents cache");
-        let mut cache = vec![vec![0u32; graph.degree()]; cache_entries as usize];
+        let degree = graph.degree();
+        let mut cache = vec![0u32; degree * cache_entries as usize];
+
         let base_degree = graph.base_graph().degree();
         let exp_degree = graph.expansion_degree();
 
         cache
-            .par_iter_mut()
+            .par_chunks_mut(degree)
             .enumerate()
             .try_for_each(|(node, entry)| -> Result<()> {
                 graph
@@ -58,11 +64,17 @@ impl ParentCache {
 
         info!("cache filled");
 
-        Ok(ParentCache { cache })
+        Ok(ParentCache {
+            cache: cache.into_boxed_slice(),
+            degree,
+        })
     }
 
+    /// Read a single cache element at position `node`.
     pub fn read(&self, node: u32) -> &[u32] {
-        &self.cache[node as usize]
+        let start = node as usize * self.degree;
+        let end = start + self.degree;
+        &self.cache[start..end]
     }
 }
 
