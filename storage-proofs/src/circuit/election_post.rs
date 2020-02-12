@@ -377,7 +377,7 @@ mod tests {
         let config = StoreConfig::new(
             &temp_path,
             String::from("test-lc-tree-v1"),
-            2, //DEFAULT_CACHED_ABOVE_BASE_LAYER,
+            StoreConfig::default_cached_above_base_layer(leaves as usize),
         );
 
         for i in 0..5 {
@@ -540,7 +540,7 @@ mod tests {
         let config = StoreConfig::new(
             &temp_path,
             String::from("test-lc-tree-v1"),
-            2, //DEFAULT_CACHED_ABOVE_BASE_LAYER,
+            StoreConfig::default_cached_above_base_layer(leaves as usize),
         );
 
         for i in 0..5 {

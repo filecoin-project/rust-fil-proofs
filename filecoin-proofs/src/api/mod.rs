@@ -3,14 +3,14 @@ use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, ensure, Context, Result};
-use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
+use merkletree::store::StoreConfig;
 use storage_proofs::hasher::Hasher;
 use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
 use storage_proofs::stacked::{generate_replica_id, CacheKey, StackedDrg};
 use tempfile::tempfile;
 
-use crate::api::util::as_safe_commitment;
+use crate::api::util::{as_safe_commitment, get_tree_leafs};
 use crate::constants::{
     DefaultPieceHasher, DefaultTreeHasher,
     MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
@@ -80,12 +80,14 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
         .with_context(|| format!("could not create output_path={:?}", output_path.as_ref()))?;
     let mut buf_writer = BufWriter::new(f_out);
 
+    let tree_leafs =
+        get_tree_leafs::<<DefaultPieceHasher as Hasher>::Domain>(porep_config.sector_size);
     // MT for original data is always named tree-d, and it will be
     // referenced later in the process as such.
     let config = StoreConfig::new(
         cache_path,
         CacheKey::CommDTree.to_string(),
-        DEFAULT_CACHED_ABOVE_BASE_LAYER,
+        StoreConfig::default_cached_above_base_layer(tree_leafs),
     );
     let pp = public_params(
         PaddedBytesAmount::from(porep_config),

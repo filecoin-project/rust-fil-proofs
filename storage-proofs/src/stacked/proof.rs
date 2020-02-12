@@ -656,8 +656,6 @@ mod tests {
     }
 
     fn test_extract_all<H: 'static + Hasher>() {
-        use merkletree::store::DEFAULT_CACHED_ABOVE_BASE_LAYER;
-
         // femme::pretty::Logger::new()
         //     .start(log::LevelFilter::Trace)
         //     .ok();
@@ -693,7 +691,7 @@ mod tests {
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+            StoreConfig::default_cached_above_base_layer(nodes),
         );
 
         StackedDrg::<H, Blake2sHasher>::replicate(
@@ -755,12 +753,11 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        use merkletree::store::DEFAULT_CACHED_ABOVE_BASE_LAYER;
         let cache_dir = tempfile::tempdir().unwrap();
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+            StoreConfig::default_cached_above_base_layer(n),
         );
 
         let pp = StackedDrg::<H, Blake2sHasher>::setup(&sp).expect("setup failed");
