@@ -78,8 +78,8 @@ impl<H: Hasher, U: typenum::Unsigned> MerkleProof<H, U> {
                 .lemma()
                 .iter()
                 .skip(1)
-                .zip(p.path().iter())
-                .map(|(hash, is_left)| (*hash, !is_left))
+                .copied()
+                .zip(p.path().iter().copied())
                 .collect::<Vec<_>>(),
             root: p.root(),
             leaf: p.item(),
@@ -115,14 +115,14 @@ impl<H: Hasher, U: typenum::Unsigned> MerkleProof<H, U> {
 
     fn verify(&self) -> bool {
         let mut a = H::Function::default();
-
+        dbg!(&self.path);
         self.root()
             == &(0..self.path.len()).fold(self.leaf, |h, i| {
                 a.reset();
                 let is_right = match self.path[i].1 {
                     0 => false,
                     1 => true,
-                    _ => panic!("unsupported arity"),
+                    arity => panic!("unsupported arity: {}", arity),
                 };
 
                 let (left, right) = if is_right {
