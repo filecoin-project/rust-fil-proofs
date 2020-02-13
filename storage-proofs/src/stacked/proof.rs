@@ -495,8 +495,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         // comm_r = H(comm_c || comm_r_last)
         let comm_r: H::Domain = H::Function::hash2(&tree_c.root(), &tree_r_last.root());
 
-        assert_eq!(tree_d.len(), tree_r_last.len());
-        assert_eq!(tree_d.len(), tree_c.len());
+        assert_eq!(tree_r_last.len(), tree_c.len());
         tree_d_config.size = Some(tree_d.len());
         tree_r_last_config.size = Some(tree_r_last.len());
         tree_c_config.size = Some(tree_c.len());
@@ -629,7 +628,7 @@ mod tests {
 
     use crate::drgraph::{new_seed, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
     use crate::stacked::{PrivateInputs, SetupParams, EXP_DEGREE};
@@ -660,6 +659,11 @@ mod tests {
         test_extract_all::<Blake2sHasher>();
     }
 
+    #[test]
+    fn extract_all_poseidon() {
+        test_extract_all::<PoseidonHasher>();
+    }
+
     fn test_extract_all<H: 'static + Hasher>() {
         use merkletree::store::DEFAULT_CACHED_ABOVE_BASE_LAYER;
 
@@ -669,7 +673,7 @@ mod tests {
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let replica_id: H::Domain = H::Domain::random(rng);
-        let nodes = 8;
+        let nodes = 16;
 
         let data: Vec<u8> = (0..nodes)
             .flat_map(|_| {
@@ -729,6 +733,7 @@ mod tests {
         test_prove_verify::<PedersenHasher>(n, challenges.clone());
         test_prove_verify::<Sha256Hasher>(n, challenges.clone());
         test_prove_verify::<Blake2sHasher>(n, challenges.clone());
+        test_prove_verify::<PoseidonHasher>(n, challenges.clone());
     }
 
     fn test_prove_verify<H: 'static + Hasher>(n: usize, challenges: LayerChallenges) {
@@ -815,7 +820,7 @@ mod tests {
 
     table_tests! {
         prove_verify_fixed{
-           prove_verify_fixed_32_4(4);
+           prove_verify_fixed_64_4(4);
         }
     }
 

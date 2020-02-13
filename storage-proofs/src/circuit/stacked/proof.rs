@@ -343,7 +343,7 @@ mod tests {
     }
 
     fn stacked_input_circuit<H: Hasher + 'static>(expected_constraints: usize) {
-        let nodes = 8;
+        let nodes = 16;
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
         let num_layers = 2;
@@ -494,7 +494,7 @@ mod tests {
     }
 
     fn stacked_test_compound<H: 'static + Hasher>() {
-        let nodes = 8;
+        let nodes = 16;
         let degree = 3;
         let expansion_degree = 2;
         let num_layers = 2;

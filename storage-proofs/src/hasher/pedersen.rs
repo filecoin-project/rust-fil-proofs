@@ -183,10 +183,7 @@ impl Element for PedersenDomain {
     }
 
     fn from_slice(bytes: &[u8]) -> Self {
-        match PedersenDomain::try_from_bytes(bytes) {
-            Ok(res) => res,
-            Err(err) => panic!(err),
-        }
+        PedersenDomain::try_from_bytes(bytes).expect("invalid bytes")
     }
 
     fn copy_to_slice(&self, bytes: &mut [u8]) {
