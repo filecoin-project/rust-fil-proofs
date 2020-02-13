@@ -399,9 +399,9 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
                 }
 
                 // validate the path length
-                if graph_height::<typenum::U4>(pub_params.sector_size as usize / NODE_SIZE)
-                    != merkle_proof.path().len()
-                {
+                let expected_path_length =
+                    graph_height::<typenum::U4>(pub_params.sector_size as usize / NODE_SIZE) - 1;
+                if expected_path_length != merkle_proof.path().len() {
                     return Ok(false);
                 }
 
@@ -433,11 +433,11 @@ mod tests {
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 32;
-        let sector_size = leaves * 32;
+        let leaves = 64;
+        let sector_size = leaves * NODE_SIZE;
 
         let pub_params = PublicParams {
-            sector_size,
+            sector_size: sector_size as u64,
             challenge_count: 40,
             challenged_nodes: 1,
         };
@@ -465,7 +465,7 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
                 .collect();
 
-            let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
+            let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
 
             let cur_config =
                 StoreConfig::from_config(&config, format!("test-lc-tree-v1-{}", i), None);
