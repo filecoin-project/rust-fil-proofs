@@ -30,7 +30,7 @@ pub struct RationalPoStCircuit<'a, E: JubjubEngine, H: Hasher> {
     pub comm_r_lasts: Vec<Option<E::Fr>>,
     pub leafs: Vec<Option<E::Fr>>,
     #[allow(clippy::type_complexity)]
-    pub paths: Vec<Vec<Option<(E::Fr, usize)>>>,
+    pub paths: Vec<Vec<Option<(Vec<E::Fr>, usize)>>>,
     _h: PhantomData<H>,
 }
 
@@ -125,7 +125,11 @@ where
         let paths: Vec<Vec<_>> = vanilla_proof
             .paths()
             .iter()
-            .map(|v| v.iter().map(|p| Some(((*p).0.into(), p.1))).collect())
+            .map(|v| {
+                v.iter()
+                    .map(|p| Some(((*p).0.iter().copied().map(Into::into).collect(), p.1)))
+                    .collect()
+            })
             .collect();
 
         Ok(RationalPoStCircuit {
@@ -143,7 +147,8 @@ where
         pub_params: &<RationalPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
     ) -> RationalPoStCircuit<'a, Bls12, H> {
         let challenges_count = pub_params.challenges_count;
-        let height = drgraph::graph_height(pub_params.sector_size as usize / NODE_SIZE);
+        let height =
+            drgraph::graph_height::<typenum::U2>(pub_params.sector_size as usize / NODE_SIZE);
 
         let comm_rs = vec![None; challenges_count];
         let comm_cs = vec![None; challenges_count];
@@ -247,7 +252,7 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> RationalPoStCircuit<'a, E,
         comm_rs: Vec<Option<E::Fr>>,
         comm_cs: Vec<Option<E::Fr>>,
         comm_r_lasts: Vec<Option<E::Fr>>,
-        paths: Vec<Vec<Option<(E::Fr, usize)>>>,
+        paths: Vec<Vec<Option<(Vec<E::Fr>, usize)>>>,
     ) -> Result<(), SynthesisError> {
         Self {
             params,
@@ -369,7 +374,7 @@ mod tests {
             .iter()
             .map(|p| {
                 p.iter()
-                    .map(|v| Some((v.0.into(), v.1)))
+                    .map(|v| Some((v.0.iter().copied().map(Into::into).collect(), v.1)))
                     .collect::<Vec<_>>()
             })
             .collect();

@@ -30,7 +30,7 @@ use crate::proof::ProofScheme;
 pub struct PoRCircuit<'a, E: JubjubEngine, H: Hasher, U: typenum::Unsigned> {
     params: &'a E::Params,
     value: Root<E>,
-    auth_path: Vec<Option<(E::Fr, usize)>>,
+    auth_path: Vec<Option<(Vec<E::Fr>, usize)>>,
     root: Root<E>,
     private: bool,
     _h: PhantomData<H>,
@@ -48,9 +48,12 @@ pub struct PoRCompound<H: Hasher, U: typenum::Unsigned> {
     _u: PhantomData<U>,
 }
 
-pub fn challenge_into_auth_path_bits(challenge: usize, leaves: usize) -> Vec<bool> {
+pub fn challenge_into_auth_path_bits<U: typenum::Unsigned>(
+    challenge: usize,
+    leaves: usize,
+) -> Vec<bool> {
     // FIXME: this needs to return Vec<usize> and support larger than arity 2
-    let height = graph_height(leaves);
+    let height = graph_height::<U>(leaves);
     let mut bits = Vec::new();
     let mut n = challenge;
     for _ in 0..height {
@@ -107,7 +110,7 @@ where
         PoRCircuit::<Bls12, H, U> {
             params: &*JJ_PARAMS,
             value: Root::Val(None),
-            auth_path: vec![None; graph_height(public_params.leaves)],
+            auth_path: vec![None; graph_height::<U>(public_params.leaves)],
             root: Root::Val(None),
             private: public_params.private,
             _h: PhantomData,
@@ -120,7 +123,8 @@ where
         pub_params: &<MerklePoR<H, U> as ProofScheme<'a>>::PublicParams,
         _k: Option<usize>,
     ) -> Result<Vec<Fr>> {
-        let auth_path_bits = challenge_into_auth_path_bits(pub_inputs.challenge, pub_params.leaves);
+        let auth_path_bits =
+            challenge_into_auth_path_bits::<U>(pub_inputs.challenge, pub_params.leaves);
         let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
 
         let mut inputs = Vec::new();
@@ -178,7 +182,7 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher, U: typenum::Unsigned> Circ
                 // depth of the tree.
                 let cur_is_right = boolean::Boolean::from(boolean::AllocatedBit::alloc(
                     cs.namespace(|| "position bit"),
-                    e.map(|e| match e.1 {
+                    e.as_ref().map(|e| match e.1 {
                         0 => false,
                         1 => true,
                         _ => panic!("unsupported arity"),
@@ -189,7 +193,9 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher, U: typenum::Unsigned> Circ
                 // at this depth.
                 let path_element =
                     num::AllocatedNum::alloc(cs.namespace(|| "path element"), || {
-                        Ok(e.ok_or(SynthesisError::AssignmentMissing)?.0)
+                        let values = e.ok_or(SynthesisError::AssignmentMissing)?.0;
+                        assert_eq!(values.len(), 1, "unsupported arity");
+                        Ok(values[0])
                     })?;
 
                 // Swap the two if the current subtree is on the right
@@ -237,7 +243,7 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher, U: typenum::Unsigned>
         mut cs: CS,
         params: &E::Params,
         value: Root<E>,
-        auth_path: Vec<Option<(E::Fr, usize)>>,
+        auth_path: Vec<Option<(Vec<E::Fr>, usize)>>,
         root: Root<E>,
         private: bool,
     ) -> Result<(), SynthesisError>

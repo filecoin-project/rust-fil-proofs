@@ -85,7 +85,7 @@ impl<H: Hasher> Proof<H> {
             .collect()
     }
 
-    pub fn paths(&self) -> Vec<&Vec<(H::Domain, usize)>> {
+    pub fn paths(&self) -> Vec<&Vec<(Vec<H::Domain>, usize)>> {
         self.inclusion_proofs
             .iter()
             .map(MerkleProof::path)
@@ -197,7 +197,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
             }
 
             // validate the path length
-            if graph_height(pub_params.sector_size as usize / NODE_SIZE)
+            if graph_height::<typenum::U2>(pub_params.sector_size as usize / NODE_SIZE)
                 != merkle_proof.path().len()
             {
                 return Ok(false);
@@ -410,7 +410,11 @@ mod tests {
     ) -> MerkleProof<H, U> {
         let bogus_leaf: H::Domain = H::Domain::random(rng);
 
-        make_proof_for_test(pub_inputs.comm_rs[0], bogus_leaf, vec![(bogus_leaf, 1)])
+        make_proof_for_test(
+            pub_inputs.comm_rs[0],
+            bogus_leaf,
+            vec![(vec![bogus_leaf; U::to_usize() - 1], 1)],
+        )
     }
 
     fn test_rational_post_validates<H: Hasher>() {

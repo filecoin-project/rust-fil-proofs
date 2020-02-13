@@ -36,7 +36,7 @@ pub struct ElectionPoStCircuit<'a, E: JubjubEngine, H: Hasher> {
     pub comm_r_last: Option<E::Fr>,
     pub leafs: Vec<Option<E::Fr>>,
     #[allow(clippy::type_complexity)]
-    pub paths: Vec<Vec<Option<(E::Fr, usize)>>>,
+    pub paths: Vec<Vec<Option<(Vec<E::Fr>, usize)>>>,
     pub partial_ticket: Option<E::Fr>,
     pub randomness: Vec<Option<bool>>,
     pub prover_id: Vec<Option<bool>>,
@@ -136,7 +136,11 @@ where
         let paths: Vec<Vec<_>> = vanilla_proof
             .paths()
             .iter()
-            .map(|v| v.iter().map(|p| Some(((*p).0.into(), p.1))).collect())
+            .map(|v| {
+                v.iter()
+                    .map(|p| Some(((*p).0.iter().copied().map(Into::into).collect(), p.1)))
+                    .collect()
+            })
             .collect();
 
         Ok(ElectionPoStCircuit {
@@ -158,7 +162,8 @@ where
         pub_params: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
     ) -> ElectionPoStCircuit<'a, Bls12, H> {
         let challenges_count = pub_params.challenged_nodes * pub_params.challenge_count;
-        let height = drgraph::graph_height(pub_params.sector_size as usize / NODE_SIZE);
+        let height =
+            drgraph::graph_height::<typenum::U2>(pub_params.sector_size as usize / NODE_SIZE);
 
         let leafs = vec![None; challenges_count];
         let paths = vec![vec![None; height]; challenges_count];
@@ -444,12 +449,12 @@ mod tests {
 
         // actual circuit test
 
-        let paths: Vec<_> = proof
+        let paths = proof
             .paths()
             .iter()
             .map(|p| {
                 p.iter()
-                    .map(|v| Some((v.0.into(), v.1)))
+                    .map(|v| Some((v.0.iter().copied().map(Into::into).collect(), v.1)))
                     .collect::<Vec<_>>()
             })
             .collect();

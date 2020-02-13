@@ -35,10 +35,10 @@ pub type MerkleStore<T> = DiskStore<T>;
 /// Representation of a merkle proof.
 /// Each element in the `path` vector consists of a tuple `(hash, is_right)`, with `hash` being the the hash of the node at the current level and `is_right` a boolean indicating if the path is taking the right path.
 /// The first element is the hash of leaf itself, and the last is the root hash.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct MerkleProof<H: Hasher, U: typenum::Unsigned> {
     pub root: H::Domain,
-    path: Vec<(H::Domain, usize)>,
+    path: Vec<(Vec<H::Domain>, usize)>,
     leaf: H::Domain,
 
     #[serde(skip)]
@@ -47,10 +47,22 @@ pub struct MerkleProof<H: Hasher, U: typenum::Unsigned> {
     _u: PhantomData<U>,
 }
 
+impl<H: Hasher, U: typenum::Unsigned> std::fmt::Debug for MerkleProof<H, U> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MerkleProof")
+            .field("root", &self.root)
+            .field("path", &self.path)
+            .field("leaf", &self.leaf)
+            .field("H", &H::name())
+            .field("U", &U::to_usize())
+            .finish()
+    }
+}
+
 pub fn make_proof_for_test<H: Hasher, U: typenum::Unsigned>(
     root: H::Domain,
     leaf: H::Domain,
-    path: Vec<(H::Domain, usize)>,
+    path: Vec<(Vec<H::Domain>, usize)>,
 ) -> MerkleProof<H, U> {
     MerkleProof {
         path,
@@ -73,12 +85,12 @@ impl<H: Hasher, U: typenum::Unsigned> MerkleProof<H, U> {
     }
 
     pub fn new_from_proof(p: &proof::Proof<H::Domain, U>) -> MerkleProof<H, U> {
+        let lemma = p.lemma();
+
         MerkleProof {
-            path: p
-                .lemma()
-                .iter()
-                .skip(1)
-                .copied()
+            path: lemma[1..lemma.len() - 1]
+                .chunks(U::to_usize() - 1)
+                .map(|chunk| chunk.to_vec())
                 .zip(p.path().iter().copied())
                 .collect::<Vec<_>>(),
             root: p.root(),
@@ -90,54 +102,51 @@ impl<H: Hasher, U: typenum::Unsigned> MerkleProof<H, U> {
 
     /// Convert the merkle path into the format expected by the circuits, which is a vector of options of the tuples.
     /// This does __not__ include the root and the leaf.
-    pub fn as_options(&self) -> Vec<Option<(Fr, usize)>> {
+    pub fn as_options(&self) -> Vec<Option<(Vec<Fr>, usize)>> {
         self.path
             .iter()
-            .map(|v| Some((v.0.into(), v.1)))
+            .map(|v| Some((v.0.iter().copied().map(Into::into).collect(), v.1)))
             .collect::<Vec<_>>()
     }
 
-    pub fn into_options_with_leaf(self) -> (Option<Fr>, Vec<Option<(Fr, usize)>>) {
+    pub fn into_options_with_leaf(self) -> (Option<Fr>, Vec<Option<(Vec<Fr>, usize)>>) {
         let MerkleProof { leaf, path, .. } = self;
 
         (
             Some(leaf.into()),
-            path.into_iter().map(|(a, b)| Some((a.into(), b))).collect(),
+            path.into_iter()
+                .map(|(a, b)| Some((a.iter().copied().map(Into::into).collect(), b)))
+                .collect(),
         )
     }
 
-    pub fn as_pairs(&self) -> Vec<(Fr, usize)> {
+    pub fn as_pairs(&self) -> Vec<(Vec<Fr>, usize)> {
         self.path
             .iter()
-            .map(|v| (v.0.into(), v.1))
+            .map(|v| (v.0.iter().copied().map(Into::into).collect(), v.1))
             .collect::<Vec<_>>()
     }
 
     fn verify(&self) -> bool {
         let mut a = H::Function::default();
         dbg!(&self.path);
-        self.root()
-            == &(0..self.path.len()).fold(self.leaf, |h, i| {
-                a.reset();
-                let is_right = match self.path[i].1 {
-                    0 => false,
-                    1 => true,
-                    arity => panic!("unsupported arity: {}", arity),
-                };
 
-                let (left, right) = if is_right {
-                    (self.path[i].0, h)
-                } else {
-                    (h, self.path[i].0)
-                };
+        let expected_root = (0..self.path.len()).fold(self.leaf, |h, i| {
+            a.reset();
 
-                a.node(left, right, i)
-            })
+            let index = self.path[i].1;
+            let mut nodes = self.path[i].0.clone();
+            nodes.insert(index, h);
+
+            a.multi_node(&nodes, i)
+        });
+
+        self.root() == &expected_root
     }
 
     /// Validates the MerkleProof and that it corresponds to the supplied node.
     pub fn validate(&self, node: usize) -> bool {
-        if path_index(&self.path) != node {
+        if self.path_index() != node {
             return false;
         }
 
@@ -178,8 +187,10 @@ impl<H: Hasher, U: typenum::Unsigned> MerkleProof<H, U> {
     pub fn serialize(&self) -> Vec<u8> {
         let mut out = Vec::new();
 
-        for (hash, is_right) in &self.path {
-            out.extend(Domain::serialize(hash));
+        for (hashes, is_right) in &self.path {
+            for hash in hashes {
+                out.extend(Domain::serialize(hash));
+            }
             out.push(*is_right as u8);
         }
         out.extend(Domain::serialize(&self.leaf()));
@@ -188,27 +199,21 @@ impl<H: Hasher, U: typenum::Unsigned> MerkleProof<H, U> {
         out
     }
 
-    pub fn path(&self) -> &Vec<(H::Domain, usize)> {
+    pub fn path(&self) -> &Vec<(Vec<H::Domain>, usize)> {
         &self.path
+    }
+
+    pub fn path_index(&self) -> usize {
+        self.path
+            .iter()
+            .rev()
+            .fold(0, |acc, (_, index)| (acc * U::to_usize()) + index)
     }
 
     /// proves_challenge returns true if this self.proof corresponds to challenge.
     /// This is useful for verifying that a supplied proof is actually relevant to a given challenge.
     pub fn proves_challenge(&self, challenge: usize) -> bool {
-        let mut c = challenge;
-        for (_, index) in self.path().iter() {
-            let is_right = match index {
-                0 => false,
-                1 => true,
-                _ => panic!("unsupported arity"),
-            };
-
-            if ((c & 1) == 1) ^ is_right {
-                return false;
-            };
-            c >>= 1;
-        }
-        true
+        self.path_index() == challenge
     }
 }
 
@@ -237,17 +242,6 @@ impl<H: Hasher> std::ops::Deref for IncludedNode<H> {
     fn deref(&self) -> &Self::Target {
         &self.value
     }
-}
-
-fn path_index<T: Domain>(path: &[(T, usize)]) -> usize {
-    path.iter().rev().fold(0, |acc, (_, index)| {
-        let is_right = match index {
-            0 => false,
-            1 => true,
-            _ => panic!("unsupported arity"),
-        };
-        (acc << 1) + if is_right { 1 } else { 0 }
-    })
 }
 
 /// Construct a new merkle tree.

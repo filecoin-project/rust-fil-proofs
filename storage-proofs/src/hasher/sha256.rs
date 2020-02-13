@@ -61,10 +61,14 @@ impl StdHasher for Sha256Function {
     }
 }
 
-#[derive(
-    Copy, Clone, PartialEq, Eq, Debug, PartialOrd, Ord, Default, Serialize, Deserialize, Hash,
-)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize, Hash)]
 pub struct Sha256Domain(pub [u8; 32]);
+
+impl std::fmt::Debug for Sha256Domain {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Sha256Domain({})", hex::encode(&self.0))
+    }
+}
 
 impl AsRef<Sha256Domain> for Sha256Domain {
     fn as_ref(&self) -> &Self {

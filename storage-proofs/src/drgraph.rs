@@ -50,8 +50,8 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
     }
 
     /// Returns the merkle tree depth.
-    fn merkle_tree_depth(&self) -> u64 {
-        graph_height(self.size()) as u64
+    fn merkle_tree_depth<U: typenum::Unsigned>(&self) -> u64 {
+        graph_height::<U>(self.size()) as u64
     }
 
     /// Returns a sorted list of all parents of this node. The parents may be repeated.
@@ -90,8 +90,8 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
     ) -> Result<Self::Key>;
 }
 
-pub fn graph_height(size: usize) -> usize {
-    (size as f64).log2().ceil() as usize
+pub fn graph_height<U: typenum::Unsigned>(number_of_leafs: usize) -> usize {
+    merkletree::merkle::get_merkle_tree_height(number_of_leafs, U::to_usize())
 }
 
 /// Bucket sampling algorithm.

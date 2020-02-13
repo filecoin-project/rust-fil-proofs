@@ -27,13 +27,13 @@ macro_rules! table_tests {
 pub struct FakeDrgParams {
     pub replica_id: Fr,
     pub replica_nodes: Vec<Fr>,
-    pub replica_nodes_paths: Vec<Vec<Option<(Fr, usize)>>>,
+    pub replica_nodes_paths: Vec<Vec<Option<(Vec<Fr>, usize)>>>,
     pub replica_root: Fr,
     pub replica_parents: Vec<Vec<Fr>>,
     #[allow(clippy::type_complexity)]
-    pub replica_parents_paths: Vec<Vec<Vec<Option<(Fr, usize)>>>>,
+    pub replica_parents_paths: Vec<Vec<Vec<Option<(Vec<Fr>, usize)>>>>,
     pub data_nodes: Vec<Fr>,
-    pub data_nodes_paths: Vec<Vec<Option<(Fr, usize)>>>,
+    pub data_nodes_paths: Vec<Vec<Option<(Vec<Fr>, usize)>>>,
     pub data_root: Fr,
 }
 
@@ -105,7 +105,7 @@ pub fn fake_drgpoprep_proof<R: Rng>(
             &subtree.gen_proof(challenge).unwrap(),
         );
         let mut subtree_path = subtree_proof.as_options();
-        subtree_path.extend(&remaining_path);
+        subtree_path.extend(remaining_path);
         subtree_path
     };
 
@@ -137,9 +137,9 @@ pub fn random_merkle_path_with_value<R: Rng>(
     tree_depth: usize,
     value: &Fr,
     offset: usize,
-) -> (Vec<Option<(Fr, usize)>>, Fr) {
-    let auth_path: Vec<Option<(Fr, usize)>> =
-        vec![Some((Fr::random(rng), rng.gen_range(0, 2))); tree_depth];
+) -> (Vec<Option<(Vec<Fr>, usize)>>, Fr) {
+    let auth_path: Vec<Option<(Vec<Fr>, usize)>> =
+        vec![Some((vec![Fr::random(rng)], rng.gen_range(0, 2))); tree_depth];
 
     let mut cur = if offset == 0 {
         let bytes = fr_into_bytes::<Bls12>(&value);
@@ -151,7 +151,7 @@ pub fn random_merkle_path_with_value<R: Rng>(
     for p in auth_path.clone().into_iter() {
         let (uncle, index) = p.unwrap();
         let mut lhs = cur;
-        let mut rhs = uncle;
+        let mut rhs = uncle[0];
 
         let is_right = match index {
             0 => false,
@@ -199,7 +199,7 @@ pub fn random_merkle_path_with_value<R: Rng>(
 pub fn random_merkle_path<R: Rng>(
     rng: &mut R,
     tree_depth: usize,
-) -> (Vec<Option<(Fr, usize)>>, Fr, Fr) {
+) -> (Vec<Option<(Vec<Fr>, usize)>>, Fr, Fr) {
     let value = Fr::random(rng);
 
     let (path, root) = random_merkle_path_with_value(rng, tree_depth, &value, 0);

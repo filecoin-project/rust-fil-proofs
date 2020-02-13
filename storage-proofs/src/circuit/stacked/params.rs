@@ -146,7 +146,7 @@ impl<H: Hasher, G: Hasher> From<VanillaProof<H, G>> for Proof<H, G> {
 #[derive(Debug, Clone)]
 pub struct InclusionPath<H: Hasher, U: typenum::Unsigned> {
     value: Option<Fr>,
-    auth_path: Vec<Option<(Fr, usize)>>,
+    auth_path: Vec<Option<(Vec<Fr>, usize)>>,
     _h: PhantomData<H>,
     _u: PhantomData<U>,
 }
@@ -157,7 +157,7 @@ impl<H: Hasher, U: typenum::Unsigned> InclusionPath<H, U> {
         assert_eq!(U::to_usize(), 2, "only binary trees are supported atm");
         InclusionPath {
             value: None,
-            auth_path: vec![None; graph.merkle_tree_depth() as usize],
+            auth_path: vec![None; graph.merkle_tree_depth::<U>() as usize],
             _h: PhantomData,
             _u: PhantomData,
         }

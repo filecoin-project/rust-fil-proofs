@@ -56,14 +56,14 @@ pub struct DrgPoRepCircuit<'a, H: Hasher> {
     params: &'a <Bls12 as JubjubEngine>::Params,
     replica_nodes: Vec<Option<Fr>>,
     #[allow(clippy::type_complexity)]
-    replica_nodes_paths: Vec<Vec<Option<(Fr, usize)>>>,
+    replica_nodes_paths: Vec<Vec<Option<(Vec<Fr>, usize)>>>,
     replica_root: Root<Bls12>,
     replica_parents: Vec<Vec<Option<Fr>>>,
     #[allow(clippy::type_complexity)]
-    replica_parents_paths: Vec<Vec<Vec<Option<(Fr, usize)>>>>,
+    replica_parents_paths: Vec<Vec<Vec<Option<(Vec<Fr>, usize)>>>>,
     data_nodes: Vec<Option<Fr>>,
     #[allow(clippy::type_complexity)]
-    data_nodes_paths: Vec<Vec<Option<(Fr, usize)>>>,
+    data_nodes_paths: Vec<Vec<Option<(Vec<Fr>, usize)>>>,
     data_root: Root<Bls12>,
     replica_id: Option<Fr>,
     private: bool,
@@ -75,12 +75,12 @@ impl<'a, H: Hasher> DrgPoRepCircuit<'a, H> {
     pub fn synthesize<CS>(
         mut cs: CS,
         replica_nodes: Vec<Option<Fr>>,
-        replica_nodes_paths: Vec<Vec<Option<(Fr, usize)>>>,
+        replica_nodes_paths: Vec<Vec<Option<(Vec<Fr>, usize)>>>,
         replica_root: Root<Bls12>,
         replica_parents: Vec<Vec<Option<Fr>>>,
-        replica_parents_paths: Vec<Vec<Vec<Option<(Fr, usize)>>>>,
+        replica_parents_paths: Vec<Vec<Vec<Option<(Vec<Fr>, usize)>>>>,
         data_nodes: Vec<Option<Fr>>,
-        data_nodes_paths: Vec<Vec<Option<(Fr, usize)>>>,
+        data_nodes_paths: Vec<Vec<Option<(Vec<Fr>, usize)>>>,
         data_root: Root<Bls12>,
         replica_id: Option<Fr>,
         private: bool,
@@ -315,7 +315,7 @@ where
     fn blank_circuit(
         public_params: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
     ) -> DrgPoRepCircuit<'a, H> {
-        let depth = public_params.graph.merkle_tree_depth() as usize;
+        let depth = public_params.graph.merkle_tree_depth::<typenum::U2>() as usize;
         let degree = public_params.graph.degree();
         let challenges_count = public_params.challenges_count;
 
@@ -704,18 +704,18 @@ mod tests {
         // 1 GB
         let n = (1 << 30) / 32;
         let m = BASE_DEGREE;
-        let tree_depth = graph_height(n);
+        let tree_depth = graph_height::<typenum::U2>(n);
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
         DrgPoRepCircuit::<PedersenHasher>::synthesize(
             cs.namespace(|| "drgporep"),
             vec![Some(Fr::random(rng)); 1],
-            vec![vec![Some((Fr::random(rng), 0)); tree_depth]; 1],
+            vec![vec![Some((vec![Fr::random(rng)], 0)); tree_depth]; 1],
             Root::Val(Some(Fr::random(rng))),
             vec![vec![Some(Fr::random(rng)); m]; 1],
-            vec![vec![vec![Some((Fr::random(rng), 0)); tree_depth]; m]; 1],
+            vec![vec![vec![Some((vec![Fr::random(rng)], 0)); tree_depth]; m]; 1],
             vec![Some(Fr::random(rng)); 1],
-            vec![vec![Some((Fr::random(rng), 0)); tree_depth]; 1],
+            vec![vec![Some((vec![Fr::random(rng)], 0)); tree_depth]; 1],
             Root::Val(Some(Fr::random(rng))),
             Some(Fr::random(rng)),
             false,

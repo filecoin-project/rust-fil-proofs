@@ -10,7 +10,7 @@ use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct DataProof<H: Hasher, U: typenum::Unsigned> {
     #[serde(bound(
         serialize = "MerkleProof<H, U>: Serialize",
@@ -18,6 +18,17 @@ pub struct DataProof<H: Hasher, U: typenum::Unsigned> {
     ))]
     pub proof: MerkleProof<H, U>,
     pub data: H::Domain,
+}
+
+impl<H: Hasher, U: typenum::Unsigned> std::fmt::Debug for DataProof<H, U> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MerkleProof")
+            .field("proof", &self.proof)
+            .field("data", &self.data)
+            .field("H", &H::name())
+            .field("U", &U::to_usize())
+            .finish()
+    }
 }
 
 /// The parameters shared between the prover and verifier.
@@ -114,8 +125,10 @@ impl<'a, H: 'a + Hasher, U: 'a + typenum::Unsigned + Sync + Send + Clone> ProofS
         if let Some(ref commitment) = pub_inputs.commitment {
             ensure!(commitment == &tree.root(), Error::InvalidCommitment);
         }
+        let proof = tree.gen_proof(challenge)?;
+
         Ok(DataProof {
-            proof: MerkleProof::new_from_proof(&tree.gen_proof(challenge)?),
+            proof: MerkleProof::new_from_proof(&proof),
             data: priv_inputs.leaf,
         })
     }
@@ -132,12 +145,14 @@ impl<'a, H: 'a + Hasher, U: 'a + typenum::Unsigned + Sync + Send + Clone> ProofS
                 None => true,
             };
 
-            let path_length_match = graph_height(pub_params.leaves) == proof.proof.path().len();
+            let expected_path_length = graph_height::<U>(pub_params.leaves) - 1;
+            let path_length_match = expected_path_length == proof.proof.path().len();
 
             if !(commitments_match && path_length_match) {
                 return Ok(false);
             }
         }
+
         let data_valid = proof.proof.validate_data(proof.data);
         let path_valid = proof.proof.validate(pub_inputs.challenge);
 
@@ -165,16 +180,17 @@ mod tests {
     fn test_merklepor<H: Hasher, U: 'static + typenum::Unsigned + Clone + Send + Sync>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
+        let leaves = 16;
         let pub_params = PublicParams {
-            leaves: 32,
+            leaves,
             private: false,
         };
 
-        let data: Vec<u8> = (0..32)
+        let data: Vec<u8> = (0..leaves)
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
-        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
+        let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {
@@ -254,7 +270,7 @@ mod tests {
             proof: make_proof_for_test(
                 pub_inputs.commitment.unwrap(),
                 hashed_leaf,
-                vec![(hashed_leaf, 1)],
+                vec![(vec![hashed_leaf; U::to_usize() - 1], 1)],
             ),
         }
     }
@@ -262,16 +278,17 @@ mod tests {
     fn test_merklepor_validates<H: Hasher, U: typenum::Unsigned + 'static + Clone + Sync + Send>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
+        let leaves = 64;
         let pub_params = PublicParams {
-            leaves: 32,
+            leaves,
             private: false,
         };
 
-        let data: Vec<u8> = (0..32)
+        let data: Vec<u8> = (0..leaves)
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
-        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
+        let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree: MerkleTree<_, _, U> = graph.merkle_tree(None, data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {
@@ -309,6 +326,21 @@ mod tests {
     }
 
     #[test]
+    fn merklepor_actually_validates_sha256_quad() {
+        test_merklepor_validates::<Sha256Hasher, typenum::U4>();
+    }
+
+    #[test]
+    fn merklepor_actually_validates_blake2s_quad() {
+        test_merklepor_validates::<Blake2sHasher, typenum::U4>();
+    }
+
+    #[test]
+    fn merklepor_actually_validates_pedersen_quad() {
+        test_merklepor_validates::<PedersenHasher, typenum::U4>();
+    }
+
+    #[test]
     fn merklepor_actually_validates_poseidon_quad() {
         test_merklepor_validates::<PoseidonHasher, typenum::U4>();
     }
@@ -319,16 +351,18 @@ mod tests {
     >() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
+        let leaves = 64;
+
         let pub_params = PublicParams {
-            leaves: 32,
+            leaves,
             private: false,
         };
 
-        let data: Vec<u8> = (0..32)
+        let data: Vec<u8> = (0..leaves)
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
-        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
+        let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {
@@ -375,6 +409,21 @@ mod tests {
     #[test]
     fn merklepor_actually_validates_challenge_identity_poseidon_binary() {
         test_merklepor_validates_challenge_identity::<PoseidonHasher, typenum::U2>();
+    }
+
+    #[test]
+    fn merklepor_actually_validates_challenge_identity_sha256_quad() {
+        test_merklepor_validates_challenge_identity::<Sha256Hasher, typenum::U4>();
+    }
+
+    #[test]
+    fn merklepor_actually_validates_challenge_identity_blake2s_quad() {
+        test_merklepor_validates_challenge_identity::<Blake2sHasher, typenum::U4>();
+    }
+
+    #[test]
+    fn merklepor_actually_validates_challenge_identity_pedersen_quad() {
+        test_merklepor_validates_challenge_identity::<PedersenHasher, typenum::U4>();
     }
 
     #[test]

@@ -119,7 +119,7 @@ impl<H: Hasher> Proof<H> {
             .collect()
     }
 
-    pub fn paths(&self) -> Vec<&Vec<(H::Domain, usize)>> {
+    pub fn paths(&self) -> Vec<&Vec<(Vec<H::Domain>, usize)>> {
         self.inclusion_proofs
             .iter()
             .map(MerkleProof::path)
@@ -399,7 +399,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
                 }
 
                 // validate the path length
-                if graph_height(pub_params.sector_size as usize / NODE_SIZE)
+                if graph_height::<typenum::U4>(pub_params.sector_size as usize / NODE_SIZE)
                     != merkle_proof.path().len()
                 {
                     return Ok(false);
