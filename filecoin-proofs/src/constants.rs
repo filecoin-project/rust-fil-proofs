@@ -30,7 +30,7 @@ lazy_static! {
             (SECTOR_SIZE_16_MIB, 2),
             (SECTOR_SIZE_256_MIB, 2),
             (SECTOR_SIZE_1_GIB, 2),
-            (SECTOR_SIZE_32_GIB, 50)
+            (SECTOR_SIZE_32_GIB, 138)
         ]
         .iter()
         .copied()
@@ -42,7 +42,7 @@ lazy_static! {
             (SECTOR_SIZE_16_MIB, 1),
             (SECTOR_SIZE_256_MIB, 1),
             (SECTOR_SIZE_1_GIB, 1),
-            (SECTOR_SIZE_32_GIB, 10)
+            (SECTOR_SIZE_32_GIB, 9)
         ]
         .iter()
         .copied()
@@ -53,7 +53,7 @@ lazy_static! {
             (SECTOR_SIZE_ONE_KIB, 1),
             (SECTOR_SIZE_16_MIB, 2),
             (SECTOR_SIZE_256_MIB, 2),
-            (SECTOR_SIZE_1_GIB, 11),
+            (SECTOR_SIZE_1_GIB, 2),
             (SECTOR_SIZE_32_GIB, 11)
         ]
         .iter()
