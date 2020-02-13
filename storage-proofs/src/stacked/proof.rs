@@ -381,6 +381,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let nodes_count = graph.size();
 
         assert_eq!(data.len(), nodes_count * NODE_SIZE);
+        info!("nodes count {}, data len {}", nodes_count, data.len());
 
         let layers = layer_challenges.layers();
         assert!(layers > 0);
@@ -495,6 +496,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         tree_d_config.size = Some(tree_d.len());
         tree_r_last_config.size = Some(tree_r_last.len());
         tree_c_config.size = Some(tree_c.len());
+        info!("tree d len {}", tree_d.len());
+        info!("tree c len {}", tree_c.len());
+        info!("tree r_last len {}", tree_r_last.len());
 
         Ok((
             Tau {

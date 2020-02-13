@@ -105,6 +105,23 @@ where
     let (config, comm_d) = measure_op(CommD, || -> Result<_> {
         let tree_leafs =
             get_tree_leafs::<<DefaultPieceHasher as Hasher>::Domain>(porep_config.sector_size);
+        ensure!(
+            compound_public_params.vanilla_params.graph.size() == tree_leafs,
+            "graph size and leaf size don't match"
+        );
+
+        info!(
+            "graph size {}, tree_leafs {}",
+            compound_public_params.vanilla_params.graph.size(),
+            tree_leafs
+        );
+        info!(
+            "seal phase 1: sector_size {}, tree size {}, tree leafs {}, cached above base {}",
+            u64::from(porep_config.sector_size),
+            get_tree_size::<<DefaultPieceHasher as Hasher>::Domain>(porep_config.sector_size),
+            tree_leafs,
+            StoreConfig::default_cached_above_base_layer(tree_leafs)
+        );
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
@@ -113,11 +130,8 @@ where
             CacheKey::CommDTree.to_string(),
             StoreConfig::default_cached_above_base_layer(tree_leafs),
         );
-        let data_tree = create_merkle_tree::<DefaultPieceHasher>(
-            Some(config.clone()),
-            compound_public_params.vanilla_params.graph.size(),
-            &data,
-        )?;
+        let data_tree =
+            create_merkle_tree::<DefaultPieceHasher>(Some(config.clone()), tree_leafs, &data)?;
         drop(data);
 
         let comm_d_root: Fr = data_tree.root().into();
@@ -191,6 +205,12 @@ where
         let tree_leafs =
             get_tree_leafs::<<DefaultPieceHasher as Hasher>::Domain>(porep_config.sector_size);
 
+        info!(
+            "seal phase 2: tree size {}, tree leafs {}, cached above base {}",
+            tree_size,
+            tree_leafs,
+            StoreConfig::default_cached_above_base_layer(tree_leafs)
+        );
         let config = StoreConfig::new(
             cache_path.as_ref(),
             CacheKey::CommDTree.to_string(),

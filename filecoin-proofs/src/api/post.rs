@@ -96,6 +96,12 @@ impl PrivateReplicaInfo {
 
     /// Generate the merkle tree of this particular replica.
     pub fn merkle_tree(&self, tree_size: usize, tree_leafs: usize) -> Result<LCTree> {
+        println!(
+            "POST: TREE SIZE {}, TREE LEAFS {}, CACHED ABOVE BASE {}",
+            tree_size,
+            tree_leafs,
+            StoreConfig::default_cached_above_base_layer(tree_leafs)
+        );
         let mut config = StoreConfig::new(
             self.cache_dir_path(),
             CacheKey::CommRLastTree.to_string(),
