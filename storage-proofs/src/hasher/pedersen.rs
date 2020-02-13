@@ -408,7 +408,7 @@ mod tests {
             BinaryMerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter()).unwrap();
 
         let p = t.gen_proof(0).unwrap(); // create a proof for the first value = "hello"
-        assert_eq!(*p.path(), vec![1, 1]);
+        assert_eq!(*p.path(), vec![0, 0]);
         assert_eq!(p.validate::<PedersenFunction>(), true);
     }
 

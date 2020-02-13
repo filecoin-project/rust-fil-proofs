@@ -178,7 +178,7 @@ impl<H: Hasher, U: typenum::Unsigned> MerkleProof<H, U> {
     /// Returns the length of the proof. That is all path elements plus 1 for the
     /// leaf and 1 for the root.
     pub fn len(&self) -> usize {
-        self.path.len() + 2
+        self.path.len() * (U::to_usize() - 1) + 2
     }
 
     /// Serialize into bytes.
@@ -329,7 +329,7 @@ mod tests {
             let len = proof.lemma().len();
             let mp = MerkleProof::<H, U>::new_from_proof(&proof);
 
-            assert_eq!(mp.len(), len);
+            assert_eq!(mp.len(), len, "invalid prof len");
 
             assert!(mp.validate(i), "failed to validate valid merkle path");
             let data_slice = &data[i * node_size..(i + 1) * node_size].to_vec();

@@ -308,7 +308,7 @@ mod tests {
     }
 
     fn gen_proof<H: Hasher, U: typenum::Unsigned>(config: Option<StoreConfig>) {
-        let leafs = 8;
+        let leafs = 16;
         let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, new_seed()).unwrap();
         let data = vec![2u8; NODE_SIZE * leafs];
 

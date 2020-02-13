@@ -378,7 +378,7 @@ mod tests {
 
         let p = t.gen_proof(0).unwrap(); // create a proof for the first value =k Fr::one()
 
-        assert_eq!(*p.path(), vec![1, 1]);
+        assert_eq!(*p.path(), vec![0, 0]);
         assert_eq!(p.validate::<PoseidonFunction>(), true);
     }
 
