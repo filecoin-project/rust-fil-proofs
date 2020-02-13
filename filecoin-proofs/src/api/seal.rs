@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
 use bincode::{deserialize, serialize};
-use log::info;
+use log::{info, trace};
 use memmap::MmapOptions;
 use merkletree::merkle::MerkleTree;
 use merkletree::store::{DiskStore, Store, StoreConfig};
@@ -110,12 +110,7 @@ where
             "graph size and leaf size don't match"
         );
 
-        info!(
-            "graph size {}, tree_leafs {}",
-            compound_public_params.vanilla_params.graph.size(),
-            tree_leafs
-        );
-        info!(
+        trace!(
             "seal phase 1: sector_size {}, tree size {}, tree leafs {}, cached above base {}",
             u64::from(porep_config.sector_size),
             get_tree_size::<<DefaultPieceHasher as Hasher>::Domain>(porep_config.sector_size),
@@ -205,7 +200,7 @@ where
         let tree_leafs =
             get_tree_leafs::<<DefaultPieceHasher as Hasher>::Domain>(porep_config.sector_size);
 
-        info!(
+        trace!(
             "seal phase 2: tree size {}, tree leafs {}, cached above base {}",
             tree_size,
             tree_leafs,

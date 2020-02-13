@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use std::path::Path;
 
 use anyhow::Context;
-use log::{info, trace};
+use log::trace;
 use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{DiskStore, Store, StoreConfig, StoreConfigDataVersion};
 use serde::{Deserialize, Serialize};
@@ -428,7 +428,7 @@ pub struct TemporaryAuxCache<H: Hasher, G: Hasher> {
 impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
     pub fn new(t_aux: &TemporaryAux<H, G>) -> Result<Self> {
         let tree_d_size = t_aux.tree_d_config.size.unwrap();
-        info!(
+        trace!(
             "Instantiating Tree D with size {} and leafs {}",
             tree_d_size,
             get_merkle_tree_leafs(tree_d_size)
@@ -440,7 +440,7 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
                 .context("tree_d")?;
 
         let tree_c_size = t_aux.tree_c_config.size.unwrap();
-        info!(
+        trace!(
             "Instantiating Tree C with size {} and leafs {}",
             tree_c_size,
             get_merkle_tree_leafs(tree_c_size)
@@ -452,7 +452,7 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
                 .context("tree_c")?;
 
         let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
-        info!(
+        trace!(
             "Instantiating Tree R Last with size {} and leafs {}",
             tree_r_last_size,
             get_merkle_tree_leafs(tree_r_last_size)

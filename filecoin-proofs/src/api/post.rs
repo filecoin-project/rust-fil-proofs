@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, ensure, Context, Result};
 use bincode::deserialize;
-use log::info;
+use log::{info, trace};
 use merkletree::store::{LevelCacheStore, Store, StoreConfig};
 use paired::bls12_381::Bls12;
 use rayon::prelude::*;
@@ -96,8 +96,8 @@ impl PrivateReplicaInfo {
 
     /// Generate the merkle tree of this particular replica.
     pub fn merkle_tree(&self, tree_size: usize, tree_leafs: usize) -> Result<LCTree> {
-        println!(
-            "POST: TREE SIZE {}, TREE LEAFS {}, CACHED ABOVE BASE {}",
+        trace!(
+            "post: tree size {}, tree leafs {}, cached above base {}",
             tree_size,
             tree_leafs,
             StoreConfig::default_cached_above_base_layer(tree_leafs)

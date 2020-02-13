@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 
 use anyhow::{bail, ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
-use log::info;
+use log::trace;
 use merkletree::store::StoreConfig;
 use paired::bls12_381::{Bls12, Fr};
 use rayon::prelude::*;
@@ -332,7 +332,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
         let tree = &priv_inputs.tree;
         let tree_leafs = tree.leafs();
 
-        info!(
+        trace!(
             "Generating proof for tree of len {} with leafs {}, and cached_layers {}",
             tree.len(),
             tree_leafs,
