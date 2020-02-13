@@ -4,10 +4,10 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
 use bincode::{deserialize, serialize};
-use log::info;
+use log::{info, trace};
 use memmap::MmapOptions;
-use merkletree::merkle::{get_merkle_tree_leafs, MerkleTree};
-use merkletree::store::{DiskStore, Store, StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
+use merkletree::merkle::MerkleTree;
+use merkletree::store::{DiskStore, Store, StoreConfig};
 use paired::bls12_381::{Bls12, Fr};
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::stacked::StackedCompound;
@@ -23,7 +23,7 @@ use storage_proofs::stacked::{
     TemporaryAuxCache,
 };
 
-use crate::api::util::{as_safe_commitment, commitment_from_fr, get_tree_size};
+use crate::api::util::{as_safe_commitment, commitment_from_fr, get_tree_leafs, get_tree_size};
 use crate::caches::{get_stacked_params, get_stacked_verifying_key};
 use crate::constants::{
     DefaultPieceHasher, DefaultTreeHasher, POREP_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN,
@@ -103,18 +103,30 @@ where
 
     info!("building merkle tree for the original data");
     let (config, comm_d) = measure_op(CommD, || -> Result<_> {
+        let tree_leafs =
+            get_tree_leafs::<<DefaultPieceHasher as Hasher>::Domain>(porep_config.sector_size);
+        ensure!(
+            compound_public_params.vanilla_params.graph.size() == tree_leafs,
+            "graph size and leaf size don't match"
+        );
+
+        trace!(
+            "seal phase 1: sector_size {}, tree size {}, tree leafs {}, cached above base {}",
+            u64::from(porep_config.sector_size),
+            get_tree_size::<<DefaultPieceHasher as Hasher>::Domain>(porep_config.sector_size),
+            tree_leafs,
+            StoreConfig::default_cached_above_base_layer(tree_leafs)
+        );
+
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
         let config = StoreConfig::new(
             cache_path.as_ref(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(sector_bytes),
+            StoreConfig::default_cached_above_base_layer(tree_leafs),
         );
-        let data_tree = create_merkle_tree::<DefaultPieceHasher>(
-            Some(config.clone()),
-            compound_public_params.vanilla_params.graph.size(),
-            &data,
-        )?;
+        let data_tree =
+            create_merkle_tree::<DefaultPieceHasher>(Some(config.clone()), tree_leafs, &data)?;
         drop(data);
 
         let comm_d_root: Fr = data_tree.root().into();
@@ -183,15 +195,22 @@ where
 
     // Load data tree from disk
     let data_tree = {
+        let tree_size =
+            get_tree_size::<<DefaultPieceHasher as Hasher>::Domain>(porep_config.sector_size);
+        let tree_leafs =
+            get_tree_leafs::<<DefaultPieceHasher as Hasher>::Domain>(porep_config.sector_size);
+
+        trace!(
+            "seal phase 2: tree size {}, tree leafs {}, cached above base {}",
+            tree_size,
+            tree_leafs,
+            StoreConfig::default_cached_above_base_layer(tree_leafs)
+        );
         let config = StoreConfig::new(
             cache_path.as_ref(),
             CacheKey::CommDTree.to_string(),
-            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+            StoreConfig::default_cached_above_base_layer(tree_leafs),
         );
-
-        let tree_size =
-            get_tree_size::<<DefaultPieceHasher as Hasher>::Domain>(porep_config.sector_size);
-        let tree_leafs = get_merkle_tree_leafs(tree_size);
 
         let store: DiskStore<<DefaultPieceHasher as Hasher>::Domain> =
             DiskStore::new_from_disk(tree_size, &config)?;

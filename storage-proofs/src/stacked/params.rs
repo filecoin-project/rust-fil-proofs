@@ -428,6 +428,11 @@ pub struct TemporaryAuxCache<H: Hasher, G: Hasher> {
 impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
     pub fn new(t_aux: &TemporaryAux<H, G>) -> Result<Self> {
         let tree_d_size = t_aux.tree_d_config.size.unwrap();
+        trace!(
+            "Instantiating Tree D with size {} and leafs {}",
+            tree_d_size,
+            get_merkle_tree_leafs(tree_d_size)
+        );
         let tree_d_store: DiskStore<G::Domain> =
             DiskStore::new_from_disk(tree_d_size, &t_aux.tree_d_config).context("tree_d_store")?;
         let tree_d: Tree<G> =
@@ -435,6 +440,11 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
                 .context("tree_d")?;
 
         let tree_c_size = t_aux.tree_c_config.size.unwrap();
+        trace!(
+            "Instantiating Tree C with size {} and leafs {}",
+            tree_c_size,
+            get_merkle_tree_leafs(tree_c_size)
+        );
         let tree_c_store: DiskStore<H::Domain> =
             DiskStore::new_from_disk(tree_c_size, &t_aux.tree_c_config).context("tree_c_store")?;
         let tree_c: Tree<H> =
@@ -442,6 +452,11 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
                 .context("tree_c")?;
 
         let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
+        trace!(
+            "Instantiating Tree R Last with size {} and leafs {}",
+            tree_r_last_size,
+            get_merkle_tree_leafs(tree_r_last_size)
+        );
         let tree_r_last_store: DiskStore<H::Domain> =
             DiskStore::new_from_disk(tree_r_last_size, &t_aux.tree_r_last_config)
                 .context("tree_r_last_store")?;

@@ -5,8 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, ensure, Context, Result};
 use bincode::deserialize;
-use log::info;
-use merkletree::merkle::get_merkle_tree_leafs;
+use log::{info, trace};
 use merkletree::store::{LevelCacheStore, Store, StoreConfig};
 use paired::bls12_381::Bls12;
 use rayon::prelude::*;
@@ -21,7 +20,7 @@ use storage_proofs::proof::NoRequirements;
 use storage_proofs::sector::*;
 use storage_proofs::stacked::CacheKey;
 
-use crate::api::util::{as_safe_commitment, get_tree_size};
+use crate::api::util::{as_safe_commitment, get_tree_leafs, get_tree_size};
 use crate::caches::{get_post_params, get_post_verifying_key};
 use crate::constants::DefaultTreeHasher;
 use crate::parameters::post_setup_params;
@@ -97,6 +96,12 @@ impl PrivateReplicaInfo {
 
     /// Generate the merkle tree of this particular replica.
     pub fn merkle_tree(&self, tree_size: usize, tree_leafs: usize) -> Result<LCTree> {
+        trace!(
+            "post: tree size {}, tree leafs {}, cached above base {}",
+            tree_size,
+            tree_leafs,
+            StoreConfig::default_cached_above_base_layer(tree_leafs)
+        );
         let mut config = StoreConfig::new(
             self.cache_dir_path(),
             CacheKey::CommRLastTree.to_string(),
@@ -208,7 +213,8 @@ pub fn generate_candidates(
     unique_challenged_replicas.dedup();
 
     let tree_size = get_tree_size::<<DefaultTreeHasher as Hasher>::Domain>(post_config.sector_size);
-    let tree_leafs = get_merkle_tree_leafs(tree_size);
+    let tree_leafs =
+        get_tree_leafs::<<DefaultTreeHasher as Hasher>::Domain>(post_config.sector_size);
 
     let unique_trees_res: Vec<_> = unique_challenged_replicas
         .into_par_iter()
@@ -295,7 +301,8 @@ pub fn generate_post(
     let groth_params = get_post_params(post_config)?;
 
     let tree_size = get_tree_size::<<DefaultTreeHasher as Hasher>::Domain>(post_config.sector_size);
-    let tree_leafs = get_merkle_tree_leafs(tree_size);
+    let tree_leafs =
+        get_tree_leafs::<<DefaultTreeHasher as Hasher>::Domain>(post_config.sector_size);
 
     let mut proofs = Vec::with_capacity(winners.len());
 

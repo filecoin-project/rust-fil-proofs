@@ -381,6 +381,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let nodes_count = graph.size();
 
         assert_eq!(data.len(), nodes_count * NODE_SIZE);
+        trace!("nodes count {}, data len {}", nodes_count, data.len());
 
         let layers = layer_challenges.layers();
         assert!(layers > 0);
@@ -492,9 +493,14 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         assert_eq!(tree_d.len(), tree_r_last.len());
         assert_eq!(tree_d.len(), tree_c.len());
+
         tree_d_config.size = Some(tree_d.len());
         tree_r_last_config.size = Some(tree_r_last.len());
         tree_c_config.size = Some(tree_c.len());
+
+        trace!("tree d len {}", tree_d.len());
+        trace!("tree c len {}", tree_c.len());
+        trace!("tree r_last len {}", tree_r_last.len());
 
         Ok((
             Tau {
@@ -656,8 +662,6 @@ mod tests {
     }
 
     fn test_extract_all<H: 'static + Hasher>() {
-        use merkletree::store::DEFAULT_CACHED_ABOVE_BASE_LAYER;
-
         // femme::pretty::Logger::new()
         //     .start(log::LevelFilter::Trace)
         //     .ok();
@@ -693,7 +697,7 @@ mod tests {
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+            StoreConfig::default_cached_above_base_layer(nodes),
         );
 
         StackedDrg::<H, Blake2sHasher>::replicate(
@@ -755,12 +759,11 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        use merkletree::store::DEFAULT_CACHED_ABOVE_BASE_LAYER;
         let cache_dir = tempfile::tempdir().unwrap();
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+            StoreConfig::default_cached_above_base_layer(n),
         );
 
         let pp = StackedDrg::<H, Blake2sHasher>::setup(&sp).expect("setup failed");

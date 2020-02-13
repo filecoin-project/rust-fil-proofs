@@ -521,7 +521,7 @@ mod tests {
     use crate::util::data_at_node;
 
     use ff::Field;
-    use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
+    use merkletree::store::StoreConfig;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
@@ -565,7 +565,7 @@ mod tests {
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+            StoreConfig::default_cached_above_base_layer(nodes),
         );
 
         let pp = drgporep::DrgPoRep::<PedersenHasher, BucketGraph<_>>::setup(&sp)
@@ -777,7 +777,7 @@ mod tests {
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+            StoreConfig::default_cached_above_base_layer(nodes),
         );
 
         let (tau, aux) = drgporep::DrgPoRep::<H, _>::replicate(

@@ -8,7 +8,7 @@ use chrono::Utc;
 use log::info;
 use memmap::MmapMut;
 use memmap::MmapOptions;
-use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
+use merkletree::store::StoreConfig;
 use paired::bls12_381::Bls12;
 use rand::Rng;
 use serde::Serialize;
@@ -119,19 +119,19 @@ where
             ..
         } = &params;
 
-        // MT for original data is always named tree-d, and it will be
-        // referenced later in the process as such.
-        let store_config = StoreConfig::new(
-            cache_dir.path(),
-            CacheKey::CommDTree.to_string(),
-            DEFAULT_CACHED_ABOVE_BASE_LAYER,
-        );
-
         let mut total_proving_wall_time = Duration::new(0, 0);
         let mut total_proving_cpu_time = Duration::new(0, 0);
 
         let rng = &mut rand::thread_rng();
         let nodes = data_size / 32;
+
+        // MT for original data is always named tree-d, and it will be
+        // referenced later in the process as such.
+        let store_config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            StoreConfig::default_cached_above_base_layer(nodes),
+        );
 
         let replica_id = H::Domain::random(rng);
         let sp = stacked::SetupParams {

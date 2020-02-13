@@ -25,7 +25,13 @@ pub(crate) fn commitment_from_fr<E: Engine>(fr: E::Fr) -> Commitment {
 
 pub(crate) fn get_tree_size<D: Domain>(sector_size: SectorSize) -> usize {
     let sector_size = u64::from(sector_size);
-    let elems = sector_size as usize / std::mem::size_of::<D>();
+    let elems = sector_size as usize / D::byte_len();
 
     2 * elems - 1
+}
+
+pub(crate) fn get_tree_leafs<D: Domain>(sector_size: SectorSize) -> usize {
+    let sector_size = u64::from(sector_size);
+
+    sector_size as usize / D::byte_len()
 }

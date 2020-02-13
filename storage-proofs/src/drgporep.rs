@@ -645,12 +645,11 @@ mod tests {
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
         use crate::stacked::CacheKey;
-        use merkletree::store::DEFAULT_CACHED_ABOVE_BASE_LAYER;
         let cache_dir = tempfile::tempdir().unwrap();
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+            StoreConfig::default_cached_above_base_layer(data.len() / 32),
         );
 
         DrgPoRep::replicate(
@@ -720,12 +719,11 @@ mod tests {
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
         use crate::stacked::CacheKey;
-        use merkletree::store::DEFAULT_CACHED_ABOVE_BASE_LAYER;
         let cache_dir = tempfile::tempdir().unwrap();
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+            StoreConfig::default_cached_above_base_layer(data.len() / 32),
         );
 
         DrgPoRep::replicate(
@@ -817,12 +815,11 @@ mod tests {
             // MT for original data is always named tree-d, and it will be
             // referenced later in the process as such.
             use crate::stacked::CacheKey;
-            use merkletree::store::DEFAULT_CACHED_ABOVE_BASE_LAYER;
             let cache_dir = tempfile::tempdir().unwrap();
             let config = StoreConfig::new(
                 cache_dir.path(),
                 CacheKey::CommDTree.to_string(),
-                DEFAULT_CACHED_ABOVE_BASE_LAYER,
+                StoreConfig::default_cached_above_base_layer(nodes),
             );
 
             let (tau, aux) = DrgPoRep::<H, _>::replicate(
