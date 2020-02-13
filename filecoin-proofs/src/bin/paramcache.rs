@@ -161,6 +161,7 @@ pub fn main() {
             sector_size: SectorSize(sector_size),
             challenge_count: POST_CHALLENGE_COUNT,
             challenged_nodes: POST_CHALLENGED_NODES,
+            priority: true,
         });
 
         if !only_election_post {

@@ -282,6 +282,7 @@ mod tests {
                     private: false,
                 },
                 partitions: None,
+                priority: false,
             };
             let public_params =
                 PoRCompound::<PedersenHasher>::setup(&setup_params).expect("setup failed");
@@ -475,6 +476,7 @@ mod tests {
                     private: true,
                 },
                 partitions: None,
+                priority: false,
             };
             let public_params = PoRCompound::<H>::setup(&setup_params).expect("setup failed");
 

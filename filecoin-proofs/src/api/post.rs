@@ -175,6 +175,7 @@ pub fn generate_candidates(
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
         partitions: None,
+        priority: false,
     };
     let public_params: compound_proof::PublicParams<
         election_post::ElectionPoSt<DefaultTreeHasher>,
@@ -295,6 +296,7 @@ pub fn generate_post(
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
         partitions: None,
+        priority: post_config.priority,
     };
     let pub_params: compound_proof::PublicParams<election_post::ElectionPoSt<DefaultTreeHasher>> =
         ElectionPoStCompound::setup(&setup_params)?;
@@ -385,6 +387,7 @@ pub fn verify_post(
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
         partitions: None,
+        priority: false,
     };
     let pub_params: compound_proof::PublicParams<election_post::ElectionPoSt<DefaultTreeHasher>> =
         ElectionPoStCompound::setup(&setup_params)?;

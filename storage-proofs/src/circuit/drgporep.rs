@@ -766,6 +766,7 @@ mod tests {
                 challenges_count: 2,
             },
             partitions: None,
+            priority: false,
         };
 
         let public_params =
@@ -812,6 +813,7 @@ mod tests {
                 challenges_count: 2,
             },
             partitions: None,
+            priority: false,
         };
 
         let public_params =

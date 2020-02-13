@@ -239,6 +239,7 @@ pub fn run(
             sector_size,
             challenge_count: inputs.post_challenges as usize,
             challenged_nodes: inputs.post_challenged_nodes as usize,
+            priority: true,
         };
 
         let gen_candidates_measurement = measure(|| {
@@ -381,6 +382,7 @@ fn measure_post_circuit(i: &FlarpInputs) -> usize {
         sector_size: SectorSize(i.sector_size_bytes()),
         challenge_count: i.post_challenges as usize,
         challenged_nodes: i.post_challenged_nodes as usize,
+        priority: true,
     };
 
     let vanilla_params = post_setup_params(post_config);
@@ -468,6 +470,7 @@ fn generate_params(i: &FlarpInputs) {
         sector_size,
         challenge_count: i.post_challenges as usize,
         challenged_nodes: i.post_challenged_nodes as usize,
+        priority: true,
     });
 }
 
