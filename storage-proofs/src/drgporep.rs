@@ -12,7 +12,7 @@ use crate::encode;
 use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Domain, Hasher};
-use crate::merkle::{BinaryMerkleTree, MerkleProof, MerkleTree, QuadMerkleTree};
+use crate::merkle::{BinaryMerkleTree, MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::{self, Data, PoRep};
 use crate::proof::{NoRequirements, ProofScheme};
@@ -28,7 +28,7 @@ pub struct PublicInputs<T: Domain> {
 #[derive(Debug)]
 pub struct PrivateInputs<'a, H: 'a + Hasher> {
     pub tree_d: &'a BinaryMerkleTree<H::Domain, H::Function>,
-    pub tree_r: &'a QuadMerkleTree<H::Domain, H::Function>,
+    pub tree_r: &'a BinaryMerkleTree<H::Domain, H::Function>,
 }
 
 #[derive(Clone, Debug)]
@@ -132,7 +132,7 @@ impl<H: Hasher, U: typenum::Unsigned> DataProof<H, U> {
     }
 }
 
-pub type ReplicaParents<H> = Vec<(u32, DataProof<H, typenum::U4>)>;
+pub type ReplicaParents<H> = Vec<(u32, DataProof<H, typenum::U2>)>;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Proof<H: Hasher> {
@@ -147,10 +147,10 @@ pub struct Proof<H: Hasher> {
     ))]
     pub replica_root: H::Domain,
     #[serde(bound(
-        serialize = "DataProof<H, typenum::U4>: Serialize",
-        deserialize = "DataProof<H, typenum::U4>: Deserialize<'de>"
+        serialize = "DataProof<H, typenum::U2>: Serialize",
+        deserialize = "DataProof<H, typenum::U2>: Deserialize<'de>"
     ))]
-    pub replica_nodes: Vec<DataProof<H, typenum::U4>>,
+    pub replica_nodes: Vec<DataProof<H, typenum::U2>>,
     #[serde(bound(
         serialize = "H::Domain: Serialize",
         deserialize = "H::Domain: Deserialize<'de>"
@@ -199,7 +199,7 @@ impl<H: Hasher> Proof<H> {
     }
 
     pub fn new(
-        replica_nodes: Vec<DataProof<H, typenum::U4>>,
+        replica_nodes: Vec<DataProof<H, typenum::U2>>,
         replica_parents: Vec<ReplicaParents<H>>,
         nodes: Vec<DataProof<H, typenum::U2>>,
     ) -> Proof<H> {
@@ -551,7 +551,7 @@ where
 
 pub fn decode_domain_block<H>(
     replica_id: &H::Domain,
-    tree: &QuadMerkleTree<H::Domain, H::Function>,
+    tree: &BinaryMerkleTree<H::Domain, H::Function>,
     node: usize,
     node_data: <H as Hasher>::Domain,
     parents: &[u32],

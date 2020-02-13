@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::{BinaryMerkleTree, QuadMerkleTree};
+use crate::merkle::BinaryMerkleTree;
 use crate::proof::ProofScheme;
 
 #[derive(Debug)]
@@ -40,13 +40,13 @@ pub struct PrivateInputs<'a> {
 #[derive(Debug)]
 pub struct ProverAux<H: Hasher> {
     pub tree_d: BinaryMerkleTree<H::Domain, H::Function>,
-    pub tree_r: QuadMerkleTree<H::Domain, H::Function>,
+    pub tree_r: BinaryMerkleTree<H::Domain, H::Function>,
 }
 
 impl<H: Hasher> ProverAux<H> {
     pub fn new(
         tree_d: BinaryMerkleTree<H::Domain, H::Function>,
-        tree_r: QuadMerkleTree<H::Domain, H::Function>,
+        tree_r: BinaryMerkleTree<H::Domain, H::Function>,
     ) -> Self {
         ProverAux { tree_d, tree_r }
     }

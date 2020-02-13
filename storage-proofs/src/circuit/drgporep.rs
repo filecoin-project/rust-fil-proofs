@@ -517,7 +517,7 @@ mod tests {
     use crate::drgporep;
     use crate::drgraph::{graph_height, new_seed, BucketGraph, BASE_DEGREE};
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
-    use crate::hasher::{Blake2sHasher, Hasher, PedersenHasher};
+    use crate::hasher::{Hasher, PedersenHasher, PoseidonHasher};
     use crate::porep::PoRep;
     use crate::proof::{NoRequirements, ProofScheme};
     use crate::stacked::CacheKey;
@@ -723,7 +723,7 @@ mod tests {
         .expect("failed to synthesize circuit");
 
         assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 380_439, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 391_431, "wrong number of constraints");
     }
 
     #[test]
@@ -734,8 +734,8 @@ mod tests {
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
-    fn test_drgporep_compound_blake2s() {
-        drgporep_test_compound::<Blake2sHasher>();
+    fn test_drgporep_compound_poseidon() {
+        drgporep_test_compound::<PoseidonHasher>();
     }
 
     fn drgporep_test_compound<H: Hasher>() {
