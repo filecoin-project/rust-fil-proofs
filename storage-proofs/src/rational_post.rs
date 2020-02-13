@@ -197,9 +197,10 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
             }
 
             // validate the path length
-            if graph_height::<typenum::U2>(pub_params.sector_size as usize / NODE_SIZE)
-                != merkle_proof.path().len()
-            {
+            let expected_path_length =
+                graph_height::<typenum::U4>(pub_params.sector_size as usize / NODE_SIZE) - 1;
+
+            if expected_path_length != merkle_proof.path().len() {
                 return Ok(false);
             }
 
@@ -298,8 +299,8 @@ mod tests {
     fn test_rational_post<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 32;
-        let sector_size = leaves * 32;
+        let leaves = 64;
+        let sector_size = leaves as u64 * 32;
         let challenges_count = 8;
 
         let pub_params = PublicParams {
@@ -314,12 +315,12 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
-        let graph1 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
-        let graph2 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
+        let graph1 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
+        let graph2 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree1 = graph1.merkle_tree(None, data1.as_slice()).unwrap();
         let tree2 = graph2.merkle_tree(None, data2.as_slice()).unwrap();
 
-        let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
+        let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
         let mut faults = OrderedSectorSet::new();
         faults.insert(139.into());
         faults.insert(1.into());
@@ -420,8 +421,8 @@ mod tests {
     fn test_rational_post_validates<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 32;
-        let sector_size = leaves * 32;
+        let leaves = 64;
+        let sector_size = leaves as u64 * 32;
         let challenges_count = 2;
         let pub_params = PublicParams {
             sector_size,
@@ -432,9 +433,9 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
-        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
+        let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree: QuadMerkleTree<_, _> = graph.merkle_tree(None, data.as_slice()).unwrap();
-        let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
+        let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
 
         let faults = OrderedSectorSet::new();
         let mut sectors = OrderedSectorSet::new();
@@ -497,8 +498,8 @@ mod tests {
     fn test_rational_post_validates_challenge_identity<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 32;
-        let sector_size = leaves * 32;
+        let leaves = 64;
+        let sector_size = leaves as u64 * 32;
         let challenges_count = 2;
 
         let pub_params = PublicParams {
@@ -510,9 +511,9 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
-        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
+        let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
-        let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
+        let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
         let mut faults = OrderedSectorSet::new();
         faults.insert(1.into());
         let mut sectors = OrderedSectorSet::new();
@@ -552,7 +553,7 @@ mod tests {
         let proof = RationalPoSt::<H>::prove(&pub_params, &pub_inputs, &priv_inputs)
             .expect("proving failed");
 
-        let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
+        let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
         let challenges =
             derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
         let comm_r_lasts = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();

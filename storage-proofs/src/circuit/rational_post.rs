@@ -300,8 +300,8 @@ mod tests {
     fn test_rational_post_circuit<H: Hasher>(expected_constraints: usize) {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 32;
-        let sector_size = leaves * 32;
+        let leaves = 16;
+        let sector_size = leaves as u64 * 32;
         let challenges_count = 2;
 
         let pub_params = rational_post::PublicParams {
@@ -309,17 +309,17 @@ mod tests {
             challenges_count,
         };
 
-        let data1: Vec<u8> = (0..32)
+        let data1: Vec<u8> = (0..leaves)
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
-        let data2: Vec<u8> = (0..32)
+        let data2: Vec<u8> = (0..leaves)
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
-        let graph1 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
+        let graph1 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree1 = graph1.merkle_tree(None, data1.as_slice()).unwrap();
 
-        let graph2 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
+        let graph2 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree2 = graph2.merkle_tree(None, data2.as_slice()).unwrap();
 
         let faults = OrderedSectorSet::new();
@@ -327,7 +327,7 @@ mod tests {
         sectors.insert(0.into());
         sectors.insert(1.into());
 
-        let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
+        let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
         let challenges =
             derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
         let comm_r_lasts_raw = vec![tree1.root(), tree2.root()];
@@ -439,8 +439,8 @@ mod tests {
     fn rational_post_test_compound<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 32;
-        let sector_size = leaves * 32;
+        let leaves = 16;
+        let sector_size = leaves as u64 * 32;
         let challenges_count = 2;
 
         let setup_params = compound_proof::SetupParams {
@@ -460,10 +460,10 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
-        let graph1 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
+        let graph1 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree1 = graph1.merkle_tree(None, data1.as_slice()).unwrap();
 
-        let graph2 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
+        let graph2 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree2 = graph2.merkle_tree(None, data2.as_slice()).unwrap();
 
         let faults = OrderedSectorSet::new();
@@ -471,7 +471,7 @@ mod tests {
         sectors.insert(0.into());
         sectors.insert(1.into());
 
-        let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
+        let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
         let challenges =
             derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
 
