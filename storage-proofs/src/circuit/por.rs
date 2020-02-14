@@ -693,22 +693,22 @@ mod tests {
 
     #[test]
     fn test_private_por_input_circuit_with_bls12_381_pedersen_binary() {
-        test_private_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U2>(4_124);
+        test_private_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U2>(8_246);
     }
 
     #[test]
     fn test_private_por_input_circuit_with_bls12_381_poseidon_binary() {
-        test_private_por_input_circuit_with_bls12_381::<PoseidonHasher, typenum::U2>(4_124);
+        test_private_por_input_circuit_with_bls12_381::<PoseidonHasher, typenum::U2>(2_576);
     }
 
     #[test]
     fn test_private_por_input_circuit_with_bls12_381_pedersen_quad() {
-        test_private_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U4>(4_124);
+        test_private_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U4>(12_410);
     }
 
     #[test]
     fn test_private_por_input_circuit_with_bls12_381_poseidon_quad() {
-        test_private_por_input_circuit_with_bls12_381::<PoseidonHasher, typenum::U4>(4_124);
+        test_private_por_input_circuit_with_bls12_381::<PoseidonHasher, typenum::U4>(1_868);
     }
 
     fn test_private_por_input_circuit_with_bls12_381<H: Hasher, U>(num_constraints: usize)
