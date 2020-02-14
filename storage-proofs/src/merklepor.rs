@@ -107,8 +107,6 @@ impl<'a, H: 'a + Hasher, U: 'a + typenum::Unsigned + Sync + Send + Clone> ProofS
 
     fn setup(sp: &SetupParams) -> Result<PublicParams> {
         // atm only binary trees are implemented
-        assert_eq!(U::to_usize(), 2);
-
         Ok(PublicParams {
             leaves: sp.leaves,
             private: sp.private,
