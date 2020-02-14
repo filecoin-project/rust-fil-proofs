@@ -428,7 +428,7 @@ mod tests {
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_sha256_binary() {
-        test_por_input_circuit_with_bls12_381::<Sha256Hasher, typenum::U2>(107_613);
+        test_por_input_circuit_with_bls12_381::<Sha256Hasher, typenum::U2>(272_295);
     }
 
     #[test]
@@ -438,7 +438,7 @@ mod tests {
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_pedersen_quad() {
-        test_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U4>(12_410);
+        test_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U4>(12_411);
     }
 
     #[test]
@@ -448,7 +448,7 @@ mod tests {
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_sha256_quad() {
-        test_por_input_circuit_with_bls12_381::<Sha256Hasher, typenum::U4>(107_613);
+        test_por_input_circuit_with_bls12_381::<Sha256Hasher, typenum::U4>(216_270);
     }
 
     #[test]
@@ -468,7 +468,7 @@ mod tests {
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_sha256_oct() {
-        test_por_input_circuit_with_bls12_381::<Sha256Hasher, typenum::U8>(107_613);
+        test_por_input_circuit_with_bls12_381::<Sha256Hasher, typenum::U8>(251_055);
     }
 
     #[test]
@@ -504,7 +504,7 @@ mod tests {
                 .collect();
 
             let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-            let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
+            let tree = graph.merkle_tree::<U>(None, data.as_slice()).unwrap();
 
             // -- MerklePoR
 

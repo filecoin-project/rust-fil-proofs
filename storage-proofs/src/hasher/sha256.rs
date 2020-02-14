@@ -203,12 +203,17 @@ impl HashFunction<Sha256Domain> for Sha256Function {
     ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
         let mut bits = Vec::with_capacity(leaves.len() * E::Fr::CAPACITY as usize);
         for (i, leaf) in leaves.iter().enumerate() {
-            bits.extend_from_slice(
-                &leaf.to_bits_le(cs.namespace(|| format!("{}_num_into_bits", i)))?,
-            );
-            while bits.len() % 8 != 0 {
-                bits.push(boolean::Boolean::Constant(false));
+            let mut padded = leaf.to_bits_le(cs.namespace(|| format!("{}_num_into_bits", i)))?;
+            while padded.len() % 8 != 0 {
+                padded.push(boolean::Boolean::Constant(false));
             }
+
+            bits.extend(
+                padded
+                    .chunks_exact(8)
+                    .flat_map(|chunk| chunk.iter().rev())
+                    .cloned(),
+            );
         }
         Self::hash_circuit(cs, &bits, params)
     }
