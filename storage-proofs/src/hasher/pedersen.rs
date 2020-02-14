@@ -271,7 +271,6 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         let mut values = Vec::new();
         values.extend_from_slice(&a);
         values.extend_from_slice(&b);
-        dbg!(values.len());
 
         if values.is_empty() {
             // can happen with small layers
