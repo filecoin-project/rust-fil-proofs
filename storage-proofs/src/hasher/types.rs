@@ -1,9 +1,12 @@
 use lazy_static::lazy_static;
 
+use crate::error::Result;
 use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
+use ff::ScalarEngine;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum::{U2, U4, U8};
+use generic_array::ArrayLength;
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
 use merkletree::merkle::Element;
 use neptune::poseidon::PoseidonConstants;
@@ -11,14 +14,16 @@ use paired::bls12_381::{Bls12, Fr, FrRepr};
 use paired::Engine;
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
-
-use crate::error::Result;
+use typenum::bit::B1;
+use typenum::marker_traits::Unsigned;
+use typenum::uint::{UInt, UTerm};
+use typenum::Add1;
 
 pub type PoseidonBinaryArity = U2;
 pub type PoseidonQuadArity = U4;
 pub type PoseidonOctArity = U8;
 
-pub type PoseidonArity = PoseidonBinaryArity;
+pub type PoseidonArity = PoseidonQuadArity;
 
 /// Arity to use for hasher implementations (Poseidon) which are specialized at compile time.
 /// Must match PoseidonArity
@@ -45,6 +50,8 @@ pub trait PoseidonEngine: Engine {
 }
 
 impl PoseidonEngine for Bls12 {
+    // FIXME
+    //    fn PARAMETERS<Arity>(arity: usize) -> &'static PoseidonConstants<Self, Arity> {
     fn PARAMETERS(arity: usize) -> &'static PoseidonConstants<Self, PoseidonArity> {
         assert_eq!(arity, MERKLE_TREE_ARITY);
         &*POSEIDON_CONSTANTS
@@ -108,6 +115,19 @@ pub trait HashFunction<T: Domain>:
         let right_bits = right.to_bits_le(cs.namespace(|| "right num into bits"))?;
 
         Self::hash_leaf_bits_circuit(cs, &left_bits, &right_bits, height, params)
+    }
+
+    fn hash_multi_leaf_circuit<E: JubjubEngine + PoseidonEngine, CS: ConstraintSystem<E>>(
+        cs: CS,
+        leaves: &[num::AllocatedNum<E>],
+        height: usize,
+        params: &E::Params,
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+        if leaves.len() == 2 {
+            Self::hash_leaf_circuit(cs, &leaves[0], &leaves[1], height, params)
+        } else {
+            unimplemented!()
+        }
     }
 
     fn hash_leaf_bits_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(

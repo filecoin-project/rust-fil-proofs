@@ -271,6 +271,22 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
         poseidon_hash::<CS, E, PoseidonArity>(cs, preimage, E::PARAMETERS(MERKLE_TREE_ARITY))
     }
 
+    fn hash_multi_leaf_circuit<E: JubjubEngine + PoseidonEngine, CS: ConstraintSystem<E>>(
+        cs: CS,
+        leaves: &[num::AllocatedNum<E>],
+        _height: usize,
+        _params: &E::Params,
+    ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+        poseidon_hash::<CS, E, PoseidonArity>(cs, leaves.to_vec(), E::PARAMETERS(MERKLE_TREE_ARITY))
+        // let arity = leaves.len();
+        // match arity {
+        //     1 => poseidon_hash::<CS, E, typenum::U1>(cs, leaves.to_vec(), E::PARAMETERS(arity)),
+        //     2 => poseidon_hash::<CS, E, typenum::U2>(cs, leaves.to_vec(), E::PARAMETERS(arity)),
+        //     4 => poseidon_hash::<CS, E, PoseidonQuadArity>(cs, leaves.to_vec(), E::PARAMETERS(arity)),
+        //     8 => poseidon_hash::<CS, E, typenum::U8>(cs, leaves.to_vec(), E::PARAMETERS(arity)),
+        // }
+    }
+
     fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
         _cs: CS,
         _bits: &[boolean::Boolean],

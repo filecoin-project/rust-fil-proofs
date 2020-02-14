@@ -1,12 +1,14 @@
 use std::marker::PhantomData;
 
 use anyhow::ensure;
-use bellperson::gadgets::{boolean, multipack, num};
+use bellperson::gadgets::boolean::{AllocatedBit, Boolean};
+use bellperson::gadgets::{multipack, num};
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::circuit::constraint;
+use crate::circuit::insertion::insert;
 use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
@@ -141,6 +143,21 @@ where
     }
 }
 
+// * Higher-arity Merkle circuit<
+// ** Arity = N
+// ** Bits = B = log2(N)
+// ** Preimage = [Fr1, Fr2, …, FrB]
+// ** Supplied hashes are vector of length B - 1.
+// ** Accumulated Hash = ACC
+// ** Construct a default preimage: [ACC, Fr2, …, FrB]
+// ** Use B bits to permute default preimage.
+// *** Interpret bits (perhaps reversed?) as follows:
+// **** If first bit is 1, swap first and second elements.
+// **** Then, if second bit is 1, swap first two elements with next two.
+// **** Then, if third bit is 1, swap first four elements with next four.
+// **** etc.
+// ** Set ACC = Hash(permuted preimage)
+
 impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher, U: typenum::Unsigned> Circuit<E>
     for PoRCircuit<'a, E, H, U>
 {
@@ -159,14 +176,16 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher, U: typenum::Unsigned> Circ
     where
         E: JubjubEngine,
     {
-        // atm only binary trees are implemented
-        assert_eq!(U::to_usize(), 2);
-
         let params = self.params;
         let value = self.value;
         let auth_path = self.auth_path;
         let root = self.root;
 
+        let arity = U::to_usize();
+        assert_eq!(1, arity.count_ones());
+        let log_arity = arity.trailing_zeros();
+
+        dbg!(&auth_path, &auth_path.len());
         {
             let value_num = value.allocated(cs.namespace(|| "value"))?;
 
@@ -177,44 +196,54 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher, U: typenum::Unsigned> Circ
             // Ascend the merkle tree authentication path
             for (i, e) in auth_path.into_iter().enumerate() {
                 let cs = &mut cs.namespace(|| format!("merkle tree hash {}", i));
+                let e = e.unwrap(); //FIXME
+                let index_bits = (0..log_arity)
+                    .map(|i| {
+                        Boolean::from(
+                            AllocatedBit::alloc(cs.namespace(|| format!("index bit {}", i)), {
+                                let bit = ((e.1 >> i) & 1) == 1;
+                                Some(bit)
+                            })
+                            .unwrap(),
+                        )
+                    })
+                    .collect::<Vec<_>>();
 
-                // Determines if the current subtree is the "right" leaf at this
-                // depth of the tree.
-                let cur_is_right = boolean::Boolean::from(boolean::AllocatedBit::alloc(
-                    cs.namespace(|| "position bit"),
-                    e.as_ref().map(|e| match e.1 {
-                        0 => false,
-                        1 => true,
-                        _ => panic!("unsupported arity"),
-                    }),
-                )?);
+                index_bits
+                    .iter()
+                    .for_each(|b| auth_path_bits.push(b.clone()));
 
                 // Witness the authentication path element adjacent
                 // at this depth.
-                let path_element =
-                    num::AllocatedNum::alloc(cs.namespace(|| "path element"), || {
-                        let values = e.ok_or(SynthesisError::AssignmentMissing)?.0;
-                        assert_eq!(values.len(), 1, "unsupported arity");
-                        Ok(values[0])
-                    })?;
+                let path_elements =
+                    e.0.iter()
+                        .enumerate()
+                        .map(|(i, elt)| {
+                            num::AllocatedNum::alloc(
+                                cs.namespace(|| format!("path element {}", i)),
+                                || Ok(*elt),
+                            )
+                            .unwrap() // FIXME
+                        })
+                        .collect::<Vec<_>>();
 
+                let inserted = insert(cs, &cur, &index_bits, &path_elements)?;
                 // Swap the two if the current subtree is on the right
-                let (xl, xr) = num::AllocatedNum::conditionally_reverse(
-                    cs.namespace(|| "conditional reversal of preimage"),
-                    &cur,
-                    &path_element,
-                    &cur_is_right,
-                )?;
+                // let (xl, xr) = num::AllocatedNum::conditionally_reverse(
+                //     cs.namespace(|| "conditional reversal of preimage"),
+                //     &cur,
+                //     &path_element,
+                //     &cur_is_right,
+                // )?;
 
                 // Compute the new subtree value
-                cur = H::Function::hash_leaf_circuit(
+                cur = H::Function::hash_multi_leaf_circuit(
                     cs.namespace(|| "computation of commitment hash"),
-                    &xl,
-                    &xr,
+                    &inserted,
                     i,
                     params,
                 )?;
-                auth_path_bits.push(cur_is_right);
+                //                auth_path_bits.push(cur_is_right);
             }
 
             // allocate input for is_right auth_path
@@ -386,9 +415,18 @@ mod tests {
     ) {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 8;
+        let arity = U::to_usize();
+        assert_eq!(1, arity.count_ones());
+        let arity_log = arity.trailing_zeros();
+
+        // Ensure arity will evenly fill tree.
+        let leaves = 8 << arity_log + 1;
 
         for i in 0..leaves {
+            // Force a chosen challenge for quad tests. FIXME: Remove
+            if arity == 4 && i != 3 {
+                continue;
+            }
             // -- Basic Setup
 
             let data: Vec<u8> = (0..leaves)

@@ -36,7 +36,6 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
         config: Option<StoreConfig>,
         data: &'a [u8],
     ) -> Result<MerkleTree<H::Domain, H::Function, U>> {
-        dbg!(U::to_usize(), data.len(), self.size());
         create_merkle_tree::<H, U>(config, self.size(), data)
     }
 
