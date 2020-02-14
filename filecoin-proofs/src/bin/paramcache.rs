@@ -10,7 +10,6 @@ use storage_proofs::circuit::election_post::{ElectionPoStCircuit, ElectionPoStCo
 use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::election_post::ElectionPoSt;
-use storage_proofs::hasher::pedersen::PedersenHasher;
 use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::stacked::StackedDrg;
 
@@ -83,37 +82,40 @@ fn cache_post_params(post_config: PoStConfig) {
     let post_public_params = post_public_params(post_config).unwrap();
 
     {
-        let post_circuit: ElectionPoStCircuit<Bls12, PedersenHasher> =
-            <ElectionPoStCompound<PedersenHasher> as CompoundProof<
+        let post_circuit: ElectionPoStCircuit<Bls12, DefaultTreeHasher> =
+            <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
                 Bls12,
-                ElectionPoSt<PedersenHasher>,
-                ElectionPoStCircuit<Bls12, PedersenHasher>,
+                ElectionPoSt<DefaultTreeHasher>,
+                ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
             >>::blank_circuit(&post_public_params);
-        let _ = <ElectionPoStCompound<PedersenHasher>>::get_param_metadata(
+        let _ = <ElectionPoStCompound<DefaultTreeHasher>>::get_param_metadata(
             post_circuit,
             &post_public_params,
         )
         .expect("failed to get metadata");
     }
     {
-        let post_circuit: ElectionPoStCircuit<Bls12, PedersenHasher> =
-            <ElectionPoStCompound<PedersenHasher> as CompoundProof<
+        let post_circuit: ElectionPoStCircuit<Bls12, DefaultTreeHasher> =
+            <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
                 Bls12,
-                ElectionPoSt<PedersenHasher>,
-                ElectionPoStCircuit<Bls12, PedersenHasher>,
+                ElectionPoSt<DefaultTreeHasher>,
+                ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
             >>::blank_circuit(&post_public_params);
-        <ElectionPoStCompound<PedersenHasher>>::get_groth_params(post_circuit, &post_public_params)
-            .expect("failed to get groth params");
+        <ElectionPoStCompound<DefaultTreeHasher>>::get_groth_params(
+            post_circuit,
+            &post_public_params,
+        )
+        .expect("failed to get groth params");
     }
     {
-        let post_circuit: ElectionPoStCircuit<Bls12, PedersenHasher> =
-            <ElectionPoStCompound<PedersenHasher> as CompoundProof<
+        let post_circuit: ElectionPoStCircuit<Bls12, DefaultTreeHasher> =
+            <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
                 Bls12,
-                ElectionPoSt<PedersenHasher>,
-                ElectionPoStCircuit<Bls12, PedersenHasher>,
+                ElectionPoSt<DefaultTreeHasher>,
+                ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
             >>::blank_circuit(&post_public_params);
 
-        <ElectionPoStCompound<PedersenHasher>>::get_verifying_key(
+        <ElectionPoStCompound<DefaultTreeHasher>>::get_verifying_key(
             post_circuit,
             &post_public_params,
         )
