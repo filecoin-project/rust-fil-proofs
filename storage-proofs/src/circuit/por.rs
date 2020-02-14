@@ -66,15 +66,24 @@ pub fn challenge_into_auth_path_bits<U: typenum::Unsigned>(
     challenge: usize,
     leaves: usize,
 ) -> Vec<bool> {
-    assert_eq!(U::to_usize(), 2, "unsupported arity");
-
-    // FIXME: this needs to return Vec<usize> and support larger than arity 2
     let height = graph_height::<U>(leaves);
+
     let mut bits = Vec::new();
     let mut n = challenge;
+    let arity = U::to_usize();
+
+    assert_eq!(1, arity.count_ones());
+    let log_arity = arity.trailing_zeros() as usize;
+
     for _ in 0..height {
-        bits.push(n & 1 == 1);
-        n >>= 1;
+        // Calculate the index
+        let index = n % arity;
+        n /= arity;
+
+        // turn the index into bits
+        for i in 0..log_arity {
+            bits.push((index >> i) & 1 == 1);
+        }
     }
     bits
 }
@@ -200,7 +209,6 @@ where
         assert_eq!(1, arity.count_ones());
         let log_arity = arity.trailing_zeros();
 
-        dbg!(&auth_path, &auth_path.len());
         {
             let value_num = value.allocated(cs.namespace(|| "value"))?;
 
@@ -327,7 +335,9 @@ mod tests {
     use crate::crypto::pedersen::JJ_PARAMS;
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
-    use crate::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonHasher};
+    use crate::hasher::{
+        Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher,
+    };
     use crate::merklepor;
     use crate::proof::ProofScheme;
     use crate::util::data_at_node;
@@ -336,7 +346,8 @@ mod tests {
     #[ignore] // Slow test – run only when compiled for release.
     fn por_test_compound() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
-        let leaves = 8;
+        let leaves = 64; // good for 2, 4 and 8
+
         let data: Vec<u8> = (0..leaves)
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
@@ -407,45 +418,37 @@ mod tests {
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_pedersen_binary() {
-        test_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U2>(6_873 /*4125*/);
+        test_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U2>(8_247);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_blake2s_binary() {
-        test_por_input_circuit_with_bls12_381::<Blake2sHasher, typenum::U2>(
-            107_613, /*64_569*/
-        );
+        test_por_input_circuit_with_bls12_381::<Blake2sHasher, typenum::U2>(129_135);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_sha256_binary() {
-        test_por_input_circuit_with_bls12_381::<Blake2sHasher, typenum::U2>(
-            107_613, /*64_569*/
-        );
+        test_por_input_circuit_with_bls12_381::<Sha256Hasher, typenum::U2>(107_613);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_poseidon_binary() {
-        test_por_input_circuit_with_bls12_381::<PoseidonHasher, typenum::U2>(1_290);
+        test_por_input_circuit_with_bls12_381::<PoseidonHasher, typenum::U2>(2_577);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_pedersen_quad() {
-        test_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U4>(6_873 /*4125*/);
+        test_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U4>(12_410);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_blake2s_quad() {
-        test_por_input_circuit_with_bls12_381::<Blake2sHasher, typenum::U4>(
-            107_613, /*64_569*/
-        );
+        test_por_input_circuit_with_bls12_381::<Blake2sHasher, typenum::U4>(130_308);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_sha256_quad() {
-        test_por_input_circuit_with_bls12_381::<Blake2sHasher, typenum::U4>(
-            107_613, /*64_569*/
-        );
+        test_por_input_circuit_with_bls12_381::<Sha256Hasher, typenum::U4>(107_613);
     }
 
     #[test]
@@ -455,26 +458,22 @@ mod tests {
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_pedersen_oct() {
-        test_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U8>(6_873 /*4125*/);
+        test_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U8>(19_357);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_blake2s_oct() {
-        test_por_input_circuit_with_bls12_381::<Blake2sHasher, typenum::U8>(
-            107_613, /*64_569*/
-        );
+        test_por_input_circuit_with_bls12_381::<Blake2sHasher, typenum::U8>(174_571);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_sha256_oct() {
-        test_por_input_circuit_with_bls12_381::<Blake2sHasher, typenum::U8>(
-            107_613, /*64_569*/
-        );
+        test_por_input_circuit_with_bls12_381::<Sha256Hasher, typenum::U8>(107_613);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_poseidon_oct() {
-        test_por_input_circuit_with_bls12_381::<PoseidonHasher, typenum::U8>(1_869);
+        test_por_input_circuit_with_bls12_381::<PoseidonHasher, typenum::U8>(2_065);
     }
 
     fn test_por_input_circuit_with_bls12_381<H: Hasher, U>(num_constraints: usize)
@@ -493,16 +492,11 @@ mod tests {
 
         let arity = U::to_usize();
         assert_eq!(1, arity.count_ones());
-        let arity_log = arity.trailing_zeros();
 
         // Ensure arity will evenly fill tree.
-        let leaves = 8 << arity_log + 1;
+        let leaves = 64; // good for 2, 4 and 8
 
         for i in 0..leaves {
-            // Force a chosen challenge for quad tests. FIXME: Remove
-            if arity == 4 && i != 3 {
-                continue;
-            }
             // -- Basic Setup
 
             let data: Vec<u8> = (0..leaves)
@@ -563,16 +557,8 @@ mod tests {
                 "wrong number of constraints"
             );
 
-            let auth_path_bits: Vec<bool> = proof
-                .proof
-                .path()
-                .iter()
-                .map(|(_, is_right)| match is_right {
-                    0 => false,
-                    1 => true,
-                    _ => panic!("unsupported arity"),
-                })
-                .collect();
+            let auth_path_bits =
+                challenge_into_auth_path_bits::<U>(pub_inputs.challenge, pub_params.leaves);
             let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
 
             let mut expected_inputs = Vec::new();
@@ -612,6 +598,12 @@ mod tests {
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
+    fn test_private_por_compound_pedersen_quad() {
+        private_por_test_compound::<PedersenHasher, typenum::U4>();
+    }
+
+    #[ignore] // Slow test – run only when compiled for release.
+    #[test]
     fn test_private_por_compound_poseidon_quad() {
         private_por_test_compound::<PoseidonHasher, typenum::U4>();
     }
@@ -629,7 +621,8 @@ mod tests {
         typenum::Add1<U>: generic_array::ArrayLength<Fr>,
     {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
-        let leaves = 8;
+        let leaves = 64; // good for 2, 4 and 8
+
         let data: Vec<u8> = (0..leaves)
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
@@ -699,10 +692,40 @@ mod tests {
     }
 
     #[test]
-    fn test_private_por_input_circuit_with_bls12_381() {
+    fn test_private_por_input_circuit_with_bls12_381_pedersen_binary() {
+        test_private_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U2>(4_124);
+    }
+
+    #[test]
+    fn test_private_por_input_circuit_with_bls12_381_poseidon_binary() {
+        test_private_por_input_circuit_with_bls12_381::<PoseidonHasher, typenum::U2>(4_124);
+    }
+
+    #[test]
+    fn test_private_por_input_circuit_with_bls12_381_pedersen_quad() {
+        test_private_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U4>(4_124);
+    }
+
+    #[test]
+    fn test_private_por_input_circuit_with_bls12_381_poseidon_quad() {
+        test_private_por_input_circuit_with_bls12_381::<PoseidonHasher, typenum::U4>(4_124);
+    }
+
+    fn test_private_por_input_circuit_with_bls12_381<H: Hasher, U>(num_constraints: usize)
+    where
+        U: typenum::Unsigned
+            + 'static
+            + Sync
+            + Send
+            + Clone
+            + std::ops::Add<typenum::B1>
+            + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
+        Bls12: PoseidonEngine<U>,
+        typenum::Add1<U>: generic_array::ArrayLength<Fr>,
+    {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 8;
+        let leaves = 64; // good for 2, 4 and 8
 
         for i in 0..leaves {
             // -- Basic Setup
@@ -711,8 +734,7 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
                 .collect();
 
-            let graph =
-                BucketGraph::<PedersenHasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
+            let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
             let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
 
             // -- MerklePoR
@@ -726,7 +748,7 @@ mod tests {
                 commitment: None,
             };
 
-            let priv_inputs = merklepor::PrivateInputs::<PedersenHasher, typenum::U2>::new(
+            let priv_inputs = merklepor::PrivateInputs::<H, U>::new(
                 bytes_into_fr::<Bls12>(
                     data_at_node(data.as_slice(), pub_inputs.challenge).unwrap(),
                 )
@@ -736,27 +758,19 @@ mod tests {
             );
 
             // create a non circuit proof
-            let proof = merklepor::MerklePoR::<PedersenHasher, typenum::U2>::prove(
-                &pub_params,
-                &pub_inputs,
-                &priv_inputs,
-            )
-            .expect("proving failed");
+            let proof = merklepor::MerklePoR::<H, U>::prove(&pub_params, &pub_inputs, &priv_inputs)
+                .expect("proving failed");
 
             // make sure it verifies
-            let is_valid = merklepor::MerklePoR::<PedersenHasher, typenum::U2>::verify(
-                &pub_params,
-                &pub_inputs,
-                &proof,
-            )
-            .expect("verification failed");
+            let is_valid = merklepor::MerklePoR::<H, U>::verify(&pub_params, &pub_inputs, &proof)
+                .expect("verification failed");
             assert!(is_valid, "failed to verify merklepor proof");
 
             // -- Circuit
 
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            let por = PoRCircuit::<typenum::U2, Bls12, PedersenHasher> {
+            let por = PoRCircuit::<U, Bls12, H> {
                 params: &JJ_PARAMS,
                 value: Root::Val(Some(proof.data.into())),
                 auth_path: proof.proof.as_options(),
@@ -770,18 +784,14 @@ mod tests {
             assert!(cs.is_satisfied(), "constraints not satisfied");
 
             assert_eq!(cs.num_inputs(), 2, "wrong number of inputs");
-            assert_eq!(cs.num_constraints(), 4124, "wrong number of constraints");
+            assert_eq!(
+                cs.num_constraints(),
+                num_constraints,
+                "wrong number of constraints"
+            );
 
-            let auth_path_bits: Vec<bool> = proof
-                .proof
-                .path()
-                .iter()
-                .map(|(_, is_right)| match is_right {
-                    0 => false,
-                    1 => true,
-                    _ => panic!("unsupported arity"),
-                })
-                .collect();
+            let auth_path_bits =
+                challenge_into_auth_path_bits::<U>(pub_inputs.challenge, pub_params.leaves);
             let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
 
             let mut expected_inputs = Vec::new();

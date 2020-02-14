@@ -231,13 +231,29 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         _height: usize,
         params: &E::Params,
     ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+        let is_binary = leaves.len() == 2;
+
         let mut bits = Vec::with_capacity(leaves.len() * E::Fr::CAPACITY as usize);
         for (i, leaf) in leaves.iter().enumerate() {
             bits.extend_from_slice(
                 &leaf.to_bits_le(cs.namespace(|| format!("{}_num_into_bits", i)))?,
             );
+            if !is_binary {
+                while bits.len() % 8 != 0 {
+                    bits.push(boolean::Boolean::Constant(false));
+                }
+            }
         }
-        Self::hash_circuit(cs, &bits, params)
+
+        if is_binary {
+            Ok(
+                pedersen_hash_circuit::pedersen_hash(cs, Personalization::None, &bits, params)?
+                    .get_x()
+                    .clone(),
+            )
+        } else {
+            Self::hash_circuit(cs, &bits, params)
+        }
     }
 
     fn hash_leaf_bits_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(

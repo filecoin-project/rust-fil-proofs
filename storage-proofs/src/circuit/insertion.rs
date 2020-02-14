@@ -47,9 +47,9 @@ pub fn insert<E: Engine, CS: ConstraintSystem<E>>(
             choices.push(rows[j][i].clone());
         }
 
-        choices.iter().for_each(|c| {
-            dbg!(&c.get_value());
-        });
+        // choices.iter().for_each(|c| {
+        //     dbg!(&c.get_value());
+        // });
 
         result.push(select(
             cs.namespace(|| format!("choice {}", i)),
