@@ -1,4 +1,5 @@
 mod constraint;
+mod insertion;
 
 pub mod create_label;
 pub mod drgporep;
