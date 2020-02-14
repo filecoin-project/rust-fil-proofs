@@ -431,6 +431,10 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::fs::File;
+    use std::io::prelude::*;
+
     use ff::Field;
     use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
@@ -461,15 +465,13 @@ mod tests {
         let mut sectors: Vec<SectorId> = Vec::new();
         let mut trees = BTreeMap::new();
 
-        // arity of the replica
-        let arity = 4;
         // Construct and store an MT using a named DiskStore.
-        let temp_dir = tempdir::TempDir::new("level_cache_tree_v1").unwrap();
+        let temp_dir = tempdir::TempDir::new("level_cache_tree").unwrap();
         let temp_path = temp_dir.path();
         let config = StoreConfig::new(
             &temp_path,
-            String::from("test-lc-tree-v1"),
-            StoreConfig::default_cached_above_base_layer(leaves as usize, arity),
+            String::from("test-lc-tree"),
+            StoreConfig::default_cached_above_base_layer(leaves as usize, OCT_ARITY),
         );
 
         for i in 0..5 {
@@ -480,18 +482,21 @@ mod tests {
 
             let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
 
-            let cur_config =
-                StoreConfig::from_config(&config, format!("test-lc-tree-v1-{}", i), None);
+            let replica_path = temp_path.join(format!("replica-path-{}", i));
+            let mut f = File::create(&replica_path).unwrap();
+            f.write_all(&data).unwrap();
+
+            let cur_config = StoreConfig::from_config(&config, format!("test-lc-tree-{}", i), None);
             let mut tree: OctMerkleTree<_, _> = graph
                 .merkle_tree(Some(cur_config.clone()), data.as_slice())
                 .unwrap();
             let c = tree
-                .compact(cur_config.clone(), StoreConfigDataVersion::One as u32)
+                .compact(cur_config.clone(), StoreConfigDataVersion::Two as u32)
                 .unwrap();
             assert_eq!(c, true);
 
             let lctree: OctLCMerkleTree<_, _> = graph
-                .lcmerkle_tree(Some(cur_config), data.as_slice())
+                .lcmerkle_tree(cur_config.clone(), &replica_path)
                 .unwrap();
             trees.insert(i.into(), lctree);
         }

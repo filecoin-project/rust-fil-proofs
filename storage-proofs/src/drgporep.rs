@@ -1,9 +1,11 @@
+use std::fs::OpenOptions;
 use std::marker::PhantomData;
+use std::path::PathBuf;
 
 use anyhow::{ensure, Context};
 use byteorder::{LittleEndian, WriteBytesExt};
 use generic_array::typenum;
-use merkletree::store::StoreConfig;
+use merkletree::store::{StoreConfig, StoreConfigDataVersion};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -13,7 +15,7 @@ use crate::encode;
 use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Domain, Hasher};
-use crate::merkle::{BinaryMerkleTree, MerkleProof, MerkleTree};
+use crate::merkle::{BinaryLCMerkleTree, BinaryMerkleTree, LCMerkleTree, MerkleProof};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::{self, Data, PoRep};
 use crate::proof::{NoRequirements, ProofScheme};
@@ -29,7 +31,8 @@ pub struct PublicInputs<T: Domain> {
 #[derive(Debug)]
 pub struct PrivateInputs<'a, H: 'a + Hasher> {
     pub tree_d: &'a BinaryMerkleTree<H::Domain, H::Function>,
-    pub tree_r: &'a BinaryMerkleTree<H::Domain, H::Function>,
+    pub tree_r: &'a BinaryLCMerkleTree<H::Domain, H::Function>,
+    pub tree_r_config_levels: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -282,11 +285,14 @@ where
 
             let tree_d = &priv_inputs.tree_d;
             let tree_r = &priv_inputs.tree_r;
+            let tree_r_config_levels = priv_inputs.tree_r_config_levels;
 
             let data = tree_r.read_at(challenge)?;
 
+            let (tree_proof, _) =
+                tree_r.gen_proof_and_partial_tree(challenge, tree_r_config_levels)?;
             replica_nodes.push(DataProof {
-                proof: MerkleProof::new_from_proof(&tree_r.gen_proof(challenge)?),
+                proof: MerkleProof::new_from_proof(&tree_proof),
                 data,
             });
 
@@ -296,7 +302,8 @@ where
 
             for p in &parents {
                 replica_parentsi.push((*p, {
-                    let proof = tree_r.gen_proof(*p as usize)?;
+                    let (proof, _) =
+                        tree_r.gen_proof_and_partial_tree(*p as usize, tree_r_config_levels)?;
                     DataProof {
                         proof: MerkleProof::new_from_proof(&proof),
                         data: tree_r.read_at(*p as usize)?,
@@ -306,7 +313,8 @@ where
 
             replica_parents.push(replica_parentsi);
 
-            let node_proof = tree_d.gen_proof(challenge)?;
+            let (node_proof, _) =
+                tree_d.gen_proof_and_partial_tree(challenge, tree_r_config_levels)?;
 
             {
                 // TODO: use this again, I can't make lifetimes work though atm and I do not know why
@@ -437,13 +445,16 @@ where
         replica_id: &H::Domain,
         mut data: Data<'a>,
         data_tree: Option<BinaryMerkleTree<H::Domain, H::Function>>,
-        config: Option<StoreConfig>,
+        config: StoreConfig,
+        replica_path: PathBuf,
     ) -> Result<(porep::Tau<H::Domain>, porep::ProverAux<H>)> {
         use crate::stacked::CacheKey;
+        use std::io::prelude::*;
+        use std::path::Path;
 
         let tree_d = match data_tree {
             Some(tree) => tree,
-            None => pp.graph.merkle_tree(config.clone(), data.as_ref())?,
+            None => pp.graph.merkle_tree(Some(config.clone()), data.as_ref())?,
         };
 
         let graph = &pp.graph;
@@ -467,18 +478,35 @@ where
             encoded.write_bytes(&mut data.as_mut()[start..end])?;
         }
 
-        let tree_r_last_config = match config {
-            Some(config) => Some(StoreConfig::from_config(
-                &config,
-                CacheKey::CommRLastTree.to_string(),
-                None,
-            )),
-            None => None,
-        };
+        let tree_r_last_config =
+            StoreConfig::from_config(&config, CacheKey::CommRLastTree.to_string(), None);
 
         let comm_d = tree_d.root();
-        let tree_r = pp.graph.merkle_tree(tree_r_last_config, data.as_ref())?;
+        let mut tree_r: BinaryMerkleTree<_, _> = pp
+            .graph
+            .merkle_tree(Some(tree_r_last_config.clone()), data.as_ref())?;
         let comm_r = tree_r.root();
+
+        // Write out the encoded data here.
+        let mut f = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(&replica_path)?;
+        f.write_all(&data.as_ref())?;
+
+        // Compact tree_r here.
+        tree_r.compact(
+            tree_r_last_config.clone(),
+            StoreConfigDataVersion::Two as u32,
+        )?;
+
+        ensure!(
+            Path::new(&replica_path).exists(),
+            "Replica data does not exist!"
+        );
+
+        let tree_r: BinaryLCMerkleTree<_, _> =
+            pp.graph.lcmerkle_tree(tree_r_last_config, &replica_path)?;
 
         Ok((
             porep::Tau::new(comm_d, comm_r),
@@ -552,7 +580,7 @@ where
 
 pub fn decode_domain_block<H>(
     replica_id: &H::Domain,
-    tree: &BinaryMerkleTree<H::Domain, H::Function>,
+    tree: &BinaryLCMerkleTree<H::Domain, H::Function>,
     node: usize,
     node_data: <H as Hasher>::Domain,
     parents: &[u32],
@@ -572,7 +600,7 @@ pub fn create_key_from_tree<H: Hasher, U: typenum::Unsigned>(
     id: &H::Domain,
     node: usize,
     parents: &[u32],
-    tree: &MerkleTree<H::Domain, H::Function, U>,
+    tree: &LCMerkleTree<H::Domain, H::Function, U>,
 ) -> Result<H::Domain> {
     let mut hasher = Sha256::new();
     hasher.input(AsRef::<[u8]>::as_ref(&id));
@@ -627,6 +655,7 @@ mod tests {
 
         let replica_id: H::Domain = H::Domain::random(rng);
         let data = vec![2u8; 32 * 4];
+
         // create a copy, so we can compare roundtrips
         let mut mmapped_data_copy = file_backed_mmap_from(&data);
 
@@ -653,12 +682,18 @@ mod tests {
             StoreConfig::default_cached_above_base_layer(data.len() / 32, BINARY_ARITY),
         );
 
+        // Generate a replica path.
+        let temp_dir = tempdir::TempDir::new("test-extract-all").unwrap();
+        let temp_path = temp_dir.path();
+        let replica_path = temp_path.join("replica-path");
+
         DrgPoRep::replicate(
             &pp,
             &replica_id,
             (mmapped_data_copy.as_mut()).into(),
             None,
-            Some(config.clone()),
+            config.clone(),
+            replica_path.clone(),
         )
         .expect("replication failed");
 
@@ -727,12 +762,18 @@ mod tests {
             StoreConfig::default_cached_above_base_layer(data.len() / 32, BINARY_ARITY),
         );
 
+        // Generate a replica path.
+        let temp_dir = tempdir::TempDir::new("test-extract").unwrap();
+        let temp_path = temp_dir.path();
+        let replica_path = temp_path.join("replica-path");
+
         DrgPoRep::replicate(
             &pp,
             &replica_id,
             (mmapped_data_copy.as_mut()).into(),
             None,
-            Some(config.clone()),
+            config.clone(),
+            replica_path.clone(),
         )
         .expect("replication failed");
 
@@ -823,12 +864,18 @@ mod tests {
                 StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
             );
 
+            // Generate a replica path.
+            let temp_dir = tempdir::TempDir::new("prove-verify-aux").unwrap();
+            let temp_path = temp_dir.path();
+            let replica_path = temp_path.join("replica-path");
+
             let (tau, aux) = DrgPoRep::<H, _>::replicate(
                 &pp,
                 &replica_id,
                 (mmapped_data_copy.as_mut()).into(),
                 None,
-                Some(config),
+                config,
+                replica_path.clone(),
             )
             .expect("replication failed");
 
@@ -846,6 +893,10 @@ mod tests {
             let priv_inputs = PrivateInputs::<H> {
                 tree_d: &aux.tree_d,
                 tree_r: &aux.tree_r,
+                tree_r_config_levels: StoreConfig::default_cached_above_base_layer(
+                    nodes,
+                    BINARY_ARITY,
+                ),
             };
 
             let real_proof =
@@ -970,16 +1021,16 @@ mod tests {
 
     table_tests! {
         prove_verify {
-            prove_verify_32_2_1(2, 1);
+            prove_verify_32_16_1(16, 1);
 
-            prove_verify_32_3_1(4, 1);
-            prove_verify_32_3_2(4, 2);
+            prove_verify_32_64_1(64, 1);
+            prove_verify_32_64_2(64, 2);
 
-            prove_verify_32_10_1(16, 1);
-            prove_verify_32_10_2(16, 2);
-            prove_verify_32_10_3(16, 3);
-            prove_verify_32_10_4(16, 4);
-            prove_verify_32_10_5(16, 5);
+            prove_verify_32_256_1(256, 1);
+            prove_verify_32_256_2(256, 2);
+            prove_verify_32_256_3(256, 3);
+            prove_verify_32_256_4(256, 4);
+            prove_verify_32_256_5(256, 5);
         }
     }
 

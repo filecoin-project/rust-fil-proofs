@@ -579,6 +579,11 @@ mod tests {
             StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
         );
 
+        // Generate a replica path.
+        let temp_dir = tempdir::TempDir::new("drgporep-input-circuit-with-bls12-381").unwrap();
+        let temp_path = temp_dir.path();
+        let replica_path = temp_path.join("replica-path");
+
         let pp = drgporep::DrgPoRep::<PedersenHasher, BucketGraph<_>>::setup(&sp)
             .expect("failed to create drgporep setup");
         let (tau, aux) = drgporep::DrgPoRep::<PedersenHasher, _>::replicate(
@@ -586,7 +591,8 @@ mod tests {
             &replica_id.into(),
             (&mut data[..]).into(),
             None,
-            Some(config),
+            config,
+            replica_path.clone(),
         )
         .expect("failed to replicate");
 
@@ -599,6 +605,7 @@ mod tests {
         let priv_inputs = drgporep::PrivateInputs::<PedersenHasher> {
             tree_d: &aux.tree_d,
             tree_r: &aux.tree_r,
+            tree_r_config_levels: StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
         };
 
         let proof_nc =
@@ -792,12 +799,18 @@ mod tests {
             StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
         );
 
+        // Generate a replica path.
+        let temp_dir = tempdir::TempDir::new("drgporep-test-compound").unwrap();
+        let temp_path = temp_dir.path();
+        let replica_path = temp_path.join("replica-path");
+
         let (tau, aux) = drgporep::DrgPoRep::<H, _>::replicate(
             &public_params.vanilla_params,
             &replica_id.into(),
             (&mut data[..]).into(),
             None,
-            Some(config),
+            config,
+            replica_path.clone(),
         )
         .expect("failed to replicate");
 
@@ -809,6 +822,7 @@ mod tests {
         let private_inputs = drgporep::PrivateInputs {
             tree_d: &aux.tree_d,
             tree_r: &aux.tree_r,
+            tree_r_config_levels: StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
         };
 
         // This duplication is necessary so public_params don't outlive public_inputs and private_inputs.

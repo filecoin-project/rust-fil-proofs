@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::error::Result;
 use crate::hasher::Hasher;
 use crate::porep::{Data, PoRep};
@@ -17,7 +19,8 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
         replica_id: &H::Domain,
         data: Data<'a>,
         data_tree: Option<BinaryTree<G>>,
-        config: Option<StoreConfig>,
+        config: StoreConfig,
+        replica_path: PathBuf,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let (tau, p_aux, t_aux) = Self::transform_and_replicate_layers(
             &pp.graph,
@@ -25,7 +28,8 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
             replica_id,
             data,
             data_tree,
-            config.expect("Missing config"),
+            config,
+            replica_path,
         )?;
 
         Ok((tau, (p_aux, t_aux)))

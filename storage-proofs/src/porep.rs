@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::BinaryMerkleTree;
+use crate::merkle::{BinaryLCMerkleTree, BinaryMerkleTree};
 use crate::proof::ProofScheme;
 
 #[derive(Debug)]
@@ -40,13 +40,13 @@ pub struct PrivateInputs<'a> {
 #[derive(Debug)]
 pub struct ProverAux<H: Hasher> {
     pub tree_d: BinaryMerkleTree<H::Domain, H::Function>,
-    pub tree_r: BinaryMerkleTree<H::Domain, H::Function>,
+    pub tree_r: BinaryLCMerkleTree<H::Domain, H::Function>,
 }
 
 impl<H: Hasher> ProverAux<H> {
     pub fn new(
         tree_d: BinaryMerkleTree<H::Domain, H::Function>,
-        tree_r: BinaryMerkleTree<H::Domain, H::Function>,
+        tree_r: BinaryLCMerkleTree<H::Domain, H::Function>,
     ) -> Self {
         ProverAux { tree_d, tree_r }
     }
@@ -203,7 +203,8 @@ pub trait PoRep<'a, H: Hasher, G: Hasher>: ProofScheme<'a> {
         replica_id: &H::Domain,
         data: Data<'a>,
         data_tree: Option<BinaryMerkleTree<G::Domain, G::Function>>,
-        config: Option<StoreConfig>,
+        config: StoreConfig,
+        replica_path: PathBuf,
     ) -> Result<(Self::Tau, Self::ProverAux)>;
 
     fn extract_all(

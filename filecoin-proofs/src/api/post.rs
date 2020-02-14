@@ -42,6 +42,8 @@ pub struct PrivateReplicaInfo {
     aux: PersistentAux,
     /// Contains sector-specific (e.g. merkle trees) assets
     cache_dir: PathBuf,
+    /// Contains sector-specific (e.g. base layer data) assets
+    replica_path: PathBuf,
 }
 
 impl std::cmp::Ord for PrivateReplicaInfo {
@@ -57,7 +59,12 @@ impl std::cmp::PartialOrd for PrivateReplicaInfo {
 }
 
 impl PrivateReplicaInfo {
-    pub fn new(access: String, comm_r: Commitment, cache_dir: PathBuf) -> Result<Self> {
+    pub fn new(
+        access: String,
+        comm_r: Commitment,
+        cache_dir: PathBuf,
+        replica_path: PathBuf,
+    ) -> Result<Self> {
         ensure!(comm_r != [0; 32], "Invalid all zero commitment (comm_r)");
 
         let aux = {
@@ -77,11 +84,16 @@ impl PrivateReplicaInfo {
             comm_r,
             aux,
             cache_dir,
+            replica_path,
         })
     }
 
     pub fn cache_dir_path(&self) -> &Path {
         self.cache_dir.as_path()
+    }
+
+    pub fn replica_path(&self) -> &Path {
+        self.replica_path.as_path()
     }
 
     pub fn safe_comm_r(&self) -> Result<<DefaultTreeHasher as Hasher>::Domain> {
@@ -224,8 +236,7 @@ pub fn generate_candidates(
     let unique_trees_res: Vec<_> = unique_challenged_replicas
         .into_par_iter()
         .map(|(id, replica)| {
-            // Ensure that any associated cached data persisted is
-            // discarded and our tree is compacted by this point.
+            // Ensure that any associated cached data persisted is discarded by this point.
             let t_aux = {
                 let mut aux_bytes = vec![];
                 let f_aux_path = replica.cache_dir_path().join(CacheKey::TAux.to_string());
@@ -238,7 +249,7 @@ pub fn generate_candidates(
                 deserialize(&aux_bytes)
             }?;
 
-            TemporaryAux::compact(t_aux)?;
+            TemporaryAux::clear_temp(t_aux)?;
 
             replica
                 .merkle_tree(tree_size, tree_leafs)

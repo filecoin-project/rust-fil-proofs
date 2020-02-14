@@ -1,20 +1,20 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::marker::PhantomData;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use generic_array::typenum;
 use log::trace;
 use merkletree::merkle::get_merkle_tree_leafs;
-use merkletree::store::{DiskStore, Store, StoreConfig, StoreConfigDataVersion};
+use merkletree::store::{DiskStore, Store, StoreConfig};
 use serde::{Deserialize, Serialize};
 
 use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Domain, Hasher};
-use crate::merkle::{LCMerkleTree, MerkleProof, MerkleTree};
+use crate::merkle::{create_lcmerkle_tree, LCMerkleTree, MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::stacked::{
     column::Column, column_proof::ColumnProof, graph::StackedBucketGraph, EncodingProof,
@@ -363,9 +363,9 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
         self.labels.column(column_index)
     }
 
-    // "Compact" will discard all persisted data that is no longer
-    // required and compact the remaining "tree_r_last" merkle tree.
-    pub fn compact(t_aux: TemporaryAux<H, G>) -> Result<()> {
+    // 'clear_temp' will discard all persisted merkle and layer data
+    // that is no longer required.
+    pub fn clear_temp(t_aux: TemporaryAux<H, G>) -> Result<()> {
         let cached = |config: &StoreConfig| {
             Path::new(&StoreConfig::data_path(&config.path, &config.id)).exists()
         };
@@ -384,21 +384,7 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
             )
             .context("tree_d")?;
             tree_d.delete(t_aux.tree_d_config).context("tree_d")?;
-
-            // If tree_d still existed and we just deleted it, compact tree_r_last here.
-            assert!(cached(&t_aux.tree_r_last_config));
-            let tree_r_last_size = t_aux
-                .tree_r_last_config
-                .size
-                .context("tree_r_last config has no size")?;
-            let mut tree_r_last_store: DiskStore<G::Domain> =
-                DiskStore::new_from_disk(tree_r_last_size, OCT_ARITY, &t_aux.tree_r_last_config)
-                    .context("tree_r_last")?;
-            tree_r_last_store.compact(
-                OCT_ARITY,
-                t_aux.tree_r_last_config.clone(),
-                StoreConfigDataVersion::One as u32,
-            )?;
+            trace!("tree d deleted");
         }
 
         if cached(&t_aux.tree_c_config) {
@@ -415,6 +401,7 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
             )
             .context("tree_c")?;
             tree_c.delete(t_aux.tree_c_config).context("tree_c")?;
+            trace!("tree c deleted");
         }
 
         for i in 0..t_aux.labels.labels.len() {
@@ -422,6 +409,7 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
             if cached(&cur_config) {
                 DiskStore::<H::Domain>::delete(cur_config)
                     .with_context(|| format!("labels {}", i))?;
+                trace!("layer {} deleted", i);
             }
         }
 
@@ -434,16 +422,24 @@ pub struct TemporaryAuxCache<H: Hasher, G: Hasher> {
     /// The encoded nodes for 1..layers.
     pub labels: LabelsCache<H>,
     pub tree_d: BinaryTree<G>,
-    pub tree_r_last: OctTree<H>,
+
+    // Notably this is a LevelCacheTree instead of a full merkle.
+    pub tree_r_last: OctLCTree<H>,
+
+    // Store the 'cached_above_base layers' value from the tree_r_last
+    // StoreConfig for later use (i.e. proof generation).
+    pub tree_r_last_config_levels: usize,
+
     pub tree_c: OctTree<H>,
     pub t_aux: TemporaryAux<H, G>,
+    pub replica_path: PathBuf,
 }
 
 impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
-    pub fn new(t_aux: &TemporaryAux<H, G>) -> Result<Self> {
+    pub fn new(t_aux: &TemporaryAux<H, G>, replica_path: PathBuf) -> Result<Self> {
         let tree_d_size = t_aux.tree_d_config.size.unwrap();
         trace!(
-            "Instantiating Tree D with size {} and leafs {}",
+            "Instantiating tree d with size {} and leafs {}",
             tree_d_size,
             get_merkle_tree_leafs(tree_d_size, BINARY_ARITY)
         );
@@ -458,7 +454,7 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
 
         let tree_c_size = t_aux.tree_c_config.size.unwrap();
         trace!(
-            "Instantiating Tree C with size {} and leafs {}",
+            "Instantiating tree c with size {} and leafs {}",
             tree_c_size,
             get_merkle_tree_leafs(tree_c_size, OCT_ARITY)
         );
@@ -473,24 +469,25 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
 
         let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
         trace!(
-            "Instantiating Tree R Last with size {} and leafs {}",
+            "Instantiating tree r last with size {} and leafs {}",
             tree_r_last_size,
             get_merkle_tree_leafs(tree_r_last_size, OCT_ARITY)
         );
-        let tree_r_last_store: DiskStore<H::Domain> =
-            DiskStore::new_from_disk(tree_r_last_size, OCT_ARITY, &t_aux.tree_r_last_config)
-                .context("tree_r_last_store")?;
-        let tree_r_last: OctTree<H> = MerkleTree::from_data_store(
-            tree_r_last_store,
+
+        let tree_r_last: OctLCTree<H> = create_lcmerkle_tree::<H, typenum::U8>(
+            t_aux.tree_r_last_config.clone(),
+            &replica_path,
             get_merkle_tree_leafs(tree_r_last_size, OCT_ARITY),
-        )
-        .context("tree_r_last")?;
+        )?;
+        let tree_r_last_config_levels = t_aux.tree_r_last_config.levels;
 
         Ok(TemporaryAuxCache {
             labels: LabelsCache::new(&t_aux.labels).context("labels_cache")?,
             tree_d,
             tree_r_last,
+            tree_r_last_config_levels,
             tree_c,
+            replica_path,
             t_aux: t_aux.clone(),
         })
     }

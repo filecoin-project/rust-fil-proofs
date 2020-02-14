@@ -1,5 +1,6 @@
 use std::cmp;
 use std::marker::PhantomData;
+use std::path::PathBuf;
 
 use anyhow::ensure;
 use generic_array::typenum;
@@ -41,12 +42,12 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
     }
 
     /// Builds a merkle tree based on the given level cache data.
-    fn lcmerkle_tree<'a, U: typenum::Unsigned>(
+    fn lcmerkle_tree<U: typenum::Unsigned>(
         &self,
-        config: Option<StoreConfig>,
-        data: &'a [u8],
+        config: StoreConfig,
+        replica_path: &PathBuf,
     ) -> Result<LCMerkleTree<H::Domain, H::Function, U>> {
-        create_lcmerkle_tree::<H, U>(config, self.size(), data)
+        create_lcmerkle_tree::<H, U>(config, replica_path, self.size())
     }
 
     /// Returns the merkle tree depth.

@@ -165,7 +165,13 @@ pub fn create_replicas(
             .into_iter()
             .enumerate()
             .map(|(i, phase1)| {
-                seal_pre_commit_phase2(porep_config, phase1, &cache_dirs[i], &sealed_files[i])
+                seal_pre_commit_phase2(
+                    porep_config,
+                    phase1,
+                    &cache_dirs[i],
+                    &staged_files[i],
+                    &sealed_files[i],
+                )
             })
             .collect::<Result<Vec<_>, _>>()
     })
@@ -177,14 +183,18 @@ pub fn create_replicas(
         .iter()
         .zip(seal_pre_commit_outputs.return_value.iter())
         .zip(cache_dirs.into_iter())
-        .map(|((sealed_file, seal_pre_commit_output), cache_dir)| {
-            PrivateReplicaInfo::new(
-                sealed_file.path().to_str().unwrap().to_string(),
-                seal_pre_commit_output.comm_r,
-                cache_dir.into_path(),
-            )
-            .expect("failed to create PrivateReplicaInfo")
-        })
+        .zip(staged_files.into_iter())
+        .map(
+            |(((sealed_file, seal_pre_commit_output), cache_dir), staged_file)| {
+                PrivateReplicaInfo::new(
+                    sealed_file.path().to_str().unwrap().to_string(),
+                    seal_pre_commit_output.comm_r,
+                    cache_dir.into_path(),
+                    staged_file.as_ref().to_path_buf(),
+                )
+                .expect("failed to create PrivateReplicaInfo")
+            },
+        )
         .collect::<Vec<_>>();
 
     let pub_infos = seal_pre_commit_outputs

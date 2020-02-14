@@ -122,6 +122,7 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
         porep_config,
         phase1_output,
         cache_dir.path(),
+        staged_file.path(),
         sealed_file.path(),
     )?;
 
@@ -131,6 +132,7 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
     let phase1_output = seal_commit_phase1(
         porep_config,
         cache_dir.path(),
+        staged_file.path(),
         PROVER_ID,
         sector_id,
         TICKET_BYTES,
@@ -150,7 +152,12 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
 
     priv_replica_info.insert(
         sector_id,
-        PrivateReplicaInfo::new(sealed_path_string, comm_r, cache_dir.into_path())?,
+        PrivateReplicaInfo::new(
+            sealed_path_string,
+            comm_r,
+            cache_dir.into_path(),
+            staged_file.as_ref().to_path_buf(),
+        )?,
     );
 
     // Measure PoSt generation and verification.

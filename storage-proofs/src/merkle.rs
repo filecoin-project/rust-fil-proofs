@@ -1,12 +1,14 @@
 #![allow(clippy::len_without_is_empty)]
 
 use std::marker::PhantomData;
+use std::path::PathBuf;
 
 use anyhow::ensure;
 use generic_array::typenum;
 use log::trace;
 use merkletree::hash::Algorithm;
 use merkletree::merkle;
+use merkletree::merkle::{get_merkle_tree_leafs, get_merkle_tree_len, FromIndexedParallelIterator};
 use merkletree::proof;
 use merkletree::store::{LevelCacheStore, StoreConfig};
 use paired::bls12_381::Fr;
@@ -18,8 +20,7 @@ use crate::hasher::{Domain, Hasher};
 use crate::util::{data_at_node, NODE_SIZE};
 
 // Reexport here, so we don't depend on merkletree directly in other places.
-use merkletree::merkle::FromIndexedParallelIterator;
-pub use merkletree::store::Store;
+pub use merkletree::store::{ExternalReader, Store};
 
 pub type DiskStore<E> = merkletree::store::DiskStore<E>;
 
@@ -288,33 +289,30 @@ pub fn create_merkle_tree<H: Hasher, U: typenum::Unsigned>(
     }
 }
 
-/// Construct a new level cache merkle tree.
+/// Construct a new level cache merkle tree, given the specified
+/// config and replica_path.
 pub fn create_lcmerkle_tree<H: Hasher, U: typenum::Unsigned>(
-    config: Option<StoreConfig>,
+    config: StoreConfig,
+    replica_path: &PathBuf,
     size: usize,
-    data: &[u8],
 ) -> Result<LCMerkleTree<H::Domain, H::Function, U>> {
-    ensure!(
-        data.len() == (NODE_SIZE * size) as usize,
-        Error::InvalidMerkleTreeArgs(data.len(), NODE_SIZE, size)
-    );
     trace!("create_lcmerkle_tree called with size {}", size);
 
-    let f = |i| {
-        // TODO Replace `expect()` with `context()` (problem is the parallel iterator)
-        let d = data_at_node(&data, i).expect("data_at_node math failed");
-        // TODO/FIXME: This can panic. FOR NOW, let's leave this since we're experimenting with
-        // optimization paths. However, we need to ensure that bad input will not lead to a panic
-        // that isn't caught by the FPS API.
-        // Unfortunately, it's not clear how to perform this error-handling in the parallel
-        // iterator case.
-        H::Domain::try_from_bytes(d).expect("failed to convert node data to domain element")
-    };
+    // This method requires the entire tree length.
+    let tree_size = get_merkle_tree_len(size, U::to_usize());
+    let tree_store: LevelCacheStore<H::Domain, _> = LevelCacheStore::new_from_disk_with_reader(
+        tree_size,
+        U::to_usize(),
+        &config,
+        ExternalReader::new_from_path(replica_path)?,
+    )?;
 
-    match config {
-        Some(x) => LCMerkleTree::from_par_iter_with_config((0..size).into_par_iter().map(f), x),
-        None => LCMerkleTree::from_par_iter((0..size).into_par_iter().map(f)),
-    }
+    ensure!(
+        size == get_merkle_tree_leafs(tree_size, U::to_usize()),
+        "Inconsistent lcmerkle tree"
+    );
+
+    LCMerkleTree::from_data_store(tree_store, get_merkle_tree_leafs(tree_size, U::to_usize()))
 }
 
 #[cfg(test)]
