@@ -146,7 +146,7 @@ where
             value: Root::Val(None),
             auth_path: vec![
                 (vec![None; U::to_usize() - 1], None);
-                graph_height::<U>(public_params.leaves)
+                graph_height::<U>(public_params.leaves) - 1
             ],
             root: Root::Val(None),
             private: public_params.private,
@@ -207,7 +207,7 @@ where
 
         let arity = U::to_usize();
         assert_eq!(1, arity.count_ones());
-        let log_arity = arity.trailing_zeros();
+        let log_arity = arity.trailing_zeros() as usize;
 
         {
             let value_num = value.allocated(cs.namespace(|| "value"))?;
@@ -219,21 +219,17 @@ where
             // Ascend the merkle tree authentication path
             for (i, e) in auth_path.into_iter().enumerate() {
                 let cs = &mut cs.namespace(|| format!("merkle tree hash {}", i));
-                let index_bits = (0..log_arity)
-                    .map(|i| -> Result<Boolean, SynthesisError> {
-                        let bit =
-                            AllocatedBit::alloc(cs.namespace(|| format!("index bit {}", i)), {
-                                let index = e.1.ok_or_else(|| SynthesisError::AssignmentMissing)?;
-                                let bit = ((index >> i) & 1) == 1;
-                                Some(bit)
-                            })?;
-                        Ok(Boolean::from(bit))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
 
-                index_bits
-                    .iter()
-                    .for_each(|b| auth_path_bits.push(b.clone()));
+                let mut index_bits = Vec::with_capacity(log_arity);
+                for i in 0..log_arity {
+                    let bit = AllocatedBit::alloc(cs.namespace(|| format!("index bit {}", i)), {
+                        e.1.map(|index| ((index >> i) & 1) == 1)
+                    })?;
+
+                    index_bits.push(Boolean::from(bit));
+                }
+
+                auth_path_bits.extend_from_slice(&index_bits);
 
                 // Witness the authentication path element adjacent
                 // at this depth.
@@ -264,7 +260,7 @@ where
                     i,
                     params,
                 )?;
-                //                auth_path_bits.push(cur_is_right);
+                // auth_path_bits.push(cur_is_right);
             }
 
             // allocate input for is_right auth_path
@@ -330,6 +326,7 @@ mod tests {
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
+    use crate::circuit::metric::*;
     use crate::circuit::test::*;
     use crate::compound_proof;
     use crate::crypto::pedersen::JJ_PARAMS;
@@ -354,66 +351,61 @@ mod tests {
         let graph = BucketGraph::<PedersenHasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
 
-        for i in 0..3 {
-            let public_inputs = merklepor::PublicInputs {
-                challenge: i,
-                commitment: Some(tree.root()),
-            };
+        let public_inputs = merklepor::PublicInputs {
+            challenge: 2,
+            commitment: Some(tree.root()),
+        };
 
-            let setup_params = compound_proof::SetupParams {
-                vanilla_params: merklepor::SetupParams {
-                    leaves,
-                    private: false,
-                },
-                partitions: None,
-            };
-            let public_params = PoRCompound::<PedersenHasher, typenum::U2>::setup(&setup_params)
-                .expect("setup failed");
+        let setup_params = compound_proof::SetupParams {
+            vanilla_params: merklepor::SetupParams {
+                leaves,
+                private: false,
+            },
+            partitions: None,
+        };
+        let public_params =
+            PoRCompound::<PedersenHasher, typenum::U2>::setup(&setup_params).expect("setup failed");
 
-            let private_inputs = merklepor::PrivateInputs::<PedersenHasher, typenum::U2>::new(
-                bytes_into_fr::<Bls12>(
-                    data_at_node(data.as_slice(), public_inputs.challenge).unwrap(),
-                )
+        let private_inputs = merklepor::PrivateInputs::<PedersenHasher, typenum::U2>::new(
+            bytes_into_fr::<Bls12>(data_at_node(data.as_slice(), public_inputs.challenge).unwrap())
                 .expect("failed to create Fr from node data")
                 .into(),
-                &tree,
-            );
+            &tree,
+        );
 
-            let gparams = PoRCompound::<PedersenHasher, typenum::U2>::groth_params(
-                &public_params.vanilla_params,
-            )
-            .expect("failed to generate groth params");
+        let gparams =
+            PoRCompound::<PedersenHasher, typenum::U2>::groth_params(&public_params.vanilla_params)
+                .expect("failed to generate groth params");
 
-            let proof = PoRCompound::<PedersenHasher, typenum::U2>::prove(
-                &public_params,
-                &public_inputs,
-                &private_inputs,
-                &gparams,
-            )
-            .expect("failed while proving");
+        let proof = PoRCompound::<PedersenHasher, typenum::U2>::prove(
+            &public_params,
+            &public_inputs,
+            &private_inputs,
+            &gparams,
+        )
+        .expect("failed while proving");
 
-            let verified = PoRCompound::<PedersenHasher, typenum::U2>::verify(
-                &public_params,
-                &public_inputs,
-                &proof,
-                &NoRequirements,
-            )
-            .expect("failed while verifying");
-            assert!(verified);
+        let verified = PoRCompound::<PedersenHasher, typenum::U2>::verify(
+            &public_params,
+            &public_inputs,
+            &proof,
+            &NoRequirements,
+        )
+        .expect("failed while verifying");
+        assert!(verified);
 
-            let (circuit, inputs) = PoRCompound::<PedersenHasher, typenum::U2>::circuit_for_test(
-                &public_params,
-                &public_inputs,
-                &private_inputs,
-            )
-            .unwrap();
+        let (circuit, inputs) = PoRCompound::<PedersenHasher, typenum::U2>::circuit_for_test(
+            &public_params,
+            &public_inputs,
+            &private_inputs,
+        )
+        .unwrap();
 
-            let mut cs = TestConstraintSystem::new();
+        let mut cs = TestConstraintSystem::new();
 
-            circuit.synthesize(&mut cs).expect("failed to synthesize");
-            assert!(cs.is_satisfied());
-            assert!(cs.verify(&inputs));
-        }
+        circuit.synthesize(&mut cs).expect("failed to synthesize");
+        assert!(cs.is_satisfied());
+        assert!(cs.verify(&inputs));
     }
 
     #[test]
@@ -653,40 +645,67 @@ mod tests {
                 &tree,
             );
 
-            let groth_params = PoRCompound::<H, U>::groth_params(&public_params.vanilla_params)
-                .expect("failed to generate groth params");
-
-            let proof = PoRCompound::<H, U>::prove(
-                &public_params,
-                &public_inputs,
-                &private_inputs,
-                &groth_params,
-            )
-            .expect("proving failed");
-
             {
-                let (circuit, inputs) = PoRCompound::<H, U>::circuit_for_test(
-                    &public_params,
-                    &public_inputs,
-                    &private_inputs,
-                )
-                .unwrap();
+                let (circuit, inputs) =
+                    PoRCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs)
+                        .unwrap();
 
                 let mut cs = TestConstraintSystem::new();
 
                 circuit.synthesize(&mut cs).expect("failed to synthesize");
 
-                assert!(cs.is_satisfied());
-                assert!(cs.verify(&inputs));
+                if !cs.is_satisfied() {
+                    panic!(
+                        "failed to satisfy: {:?}",
+                        cs.which_is_unsatisfied().unwrap()
+                    );
+                }
+                assert!(
+                    cs.verify(&inputs),
+                    "verification failed with TestContraintSystem and generated inputs"
+                );
             }
 
-            let verified = PoRCompound::<H, U>::verify(
+            // Use this to debug differences between blank and regular circuit generation.
+            {
+                let (circuit1, _inputs) =
+                    PoRCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs)
+                        .unwrap();
+                let blank_circuit =
+                    PoRCompound::<H, U>::blank_circuit(&public_params.vanilla_params);
+
+                let mut cs_blank = MetricCS::new();
+                blank_circuit
+                    .synthesize(&mut cs_blank)
+                    .expect("failed to synthesize");
+
+                let a = cs_blank.pretty_print_list();
+
+                let mut cs1 = TestConstraintSystem::new();
+                circuit1.synthesize(&mut cs1).expect("failed to synthesize");
+                let b = cs1.pretty_print_list();
+
+                for (i, (a, b)) in a.chunks(100).zip(b.chunks(100)).enumerate() {
+                    assert_eq!(a, b, "failed at chunk {}", i);
+                }
+            }
+
+            let blank_groth_params =
+                PoRCompound::<H, U>::groth_params(&public_params.vanilla_params)
+                    .expect("failed to generate groth params");
+
+            let proof = PoRCompound::prove(
                 &public_params,
                 &public_inputs,
-                &proof,
-                &NoRequirements,
+                &private_inputs,
+                &blank_groth_params,
             )
-            .expect("failed while verifying");
+            .expect("failed while proving");
+
+            let verified =
+                PoRCompound::verify(&public_params, &public_inputs, &proof, &NoRequirements)
+                    .expect("failed while verifying");
+
             assert!(verified);
         }
     }
