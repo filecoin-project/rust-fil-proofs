@@ -143,21 +143,6 @@ where
     }
 }
 
-// * Higher-arity Merkle circuit<
-// ** Arity = N
-// ** Bits = B = log2(N)
-// ** Preimage = [Fr1, Fr2, …, FrB]
-// ** Supplied hashes are vector of length B - 1.
-// ** Accumulated Hash = ACC
-// ** Construct a default preimage: [ACC, Fr2, …, FrB]
-// ** Use B bits to permute default preimage.
-// *** Interpret bits (perhaps reversed?) as follows:
-// **** If first bit is 1, swap first and second elements.
-// **** Then, if second bit is 1, swap first two elements with next two.
-// **** Then, if third bit is 1, swap first four elements with next four.
-// **** etc.
-// ** Set ACC = Hash(permuted preimage)
-
 impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher, U: typenum::Unsigned> Circuit<E>
     for PoRCircuit<'a, E, H, U>
 {

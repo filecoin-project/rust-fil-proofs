@@ -1,14 +1,5 @@
 //! Insertion Permutation
 //!
-//! Implements support for this plan. First line is context, and preimage is input to `insert`.
-//! ** Construct a default preimage: [ACC, Fr2, …, FrB]
-//! ** Use B bits to permute default preimage.
-//! *** Interpret bits (perhaps reversed?) as follows:
-//! **** If first bit is 1, swap first and second elements.
-//! **** Then, if second bit is 1, swap first two elements with next two.
-//! **** Then, if third bit is 1, swap first four elements with next four.
-//! **** etc.
-//! ** Set ACC = Hash(permuted preimage)
 
 use bellperson::gadgets::boolean::Boolean;
 use bellperson::gadgets::num::AllocatedNum;
