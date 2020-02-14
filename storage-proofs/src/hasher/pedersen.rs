@@ -225,6 +225,21 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         digest.into_xy().0.into()
     }
 
+    fn hash_multi_leaf_circuit<Arity, E: JubjubEngine, CS: ConstraintSystem<E>>(
+        mut cs: CS,
+        leaves: &[num::AllocatedNum<E>],
+        _height: usize,
+        params: &E::Params,
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+        let mut bits = Vec::with_capacity(leaves.len() * E::Fr::CAPACITY as usize);
+        for (i, leaf) in leaves.iter().enumerate() {
+            bits.extend_from_slice(
+                &leaf.to_bits_le(cs.namespace(|| format!("{}_num_into_bits", i)))?,
+            );
+        }
+        Self::hash_circuit(cs, &bits, params)
+    }
+
     fn hash_leaf_bits_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
         cs: CS,
         left: &[boolean::Boolean],

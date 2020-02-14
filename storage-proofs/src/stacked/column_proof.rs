@@ -6,6 +6,7 @@ use crate::error::Result;
 use crate::hasher::Hasher;
 use crate::merkle::{IncludedNode, MerkleProof};
 use crate::stacked::column::Column;
+use generic_array::typenum;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ColumnProof<H: Hasher> {

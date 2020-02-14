@@ -1,11 +1,10 @@
 use std::hash::Hasher as StdHasher;
 
-use super::types::MERKLE_TREE_ARITY;
 use crate::crypto::{create_label, sloth};
 use crate::error::{Error, Result};
 use crate::hasher::types::{
-    PoseidonArity, PoseidonEngine, POSEIDON_CONSTANTS_1, POSEIDON_CONSTANTS_2,
-    POSEIDON_CONSTANTS_4, POSEIDON_CONSTANTS_8,
+    PoseidonEngine, POSEIDON_CONSTANTS_1, POSEIDON_CONSTANTS_2, POSEIDON_CONSTANTS_4,
+    POSEIDON_CONSTANTS_8,
 };
 use crate::hasher::{Domain, HashFunction, Hasher};
 use anyhow::ensure;
@@ -13,6 +12,7 @@ use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
 use fil_sapling_crypto::jubjub::JubjubEngine;
+use generic_array::typenum;
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
 use neptune::circuit::poseidon_hash;
@@ -259,7 +259,7 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
         fr.into()
     }
 
-    fn hash_leaf_circuit<E: JubjubEngine + PoseidonEngine, CS: ConstraintSystem<E>>(
+    fn hash_leaf_circuit<E: JubjubEngine + PoseidonEngine<typenum::U2>, CS: ConstraintSystem<E>>(
         cs: CS,
         left: &num::AllocatedNum<E>,
         right: &num::AllocatedNum<E>,
@@ -268,23 +268,27 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
     ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError> {
         let preimage = vec![left.clone(), right.clone()];
 
-        poseidon_hash::<CS, E, PoseidonArity>(cs, preimage, E::PARAMETERS(MERKLE_TREE_ARITY))
+        poseidon_hash::<CS, E, typenum::U2>(cs, preimage, E::PARAMETERS())
     }
 
-    fn hash_multi_leaf_circuit<E: JubjubEngine + PoseidonEngine, CS: ConstraintSystem<E>>(
+    fn hash_multi_leaf_circuit<
+        Arity: 'static,
+        E: JubjubEngine + PoseidonEngine<Arity>,
+        CS: ConstraintSystem<E>,
+    >(
         cs: CS,
         leaves: &[num::AllocatedNum<E>],
         _height: usize,
         _params: &E::Params,
-    ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError> {
-        poseidon_hash::<CS, E, PoseidonArity>(cs, leaves.to_vec(), E::PARAMETERS(MERKLE_TREE_ARITY))
-        // let arity = leaves.len();
-        // match arity {
-        //     1 => poseidon_hash::<CS, E, typenum::U1>(cs, leaves.to_vec(), E::PARAMETERS(arity)),
-        //     2 => poseidon_hash::<CS, E, typenum::U2>(cs, leaves.to_vec(), E::PARAMETERS(arity)),
-        //     4 => poseidon_hash::<CS, E, PoseidonQuadArity>(cs, leaves.to_vec(), E::PARAMETERS(arity)),
-        //     8 => poseidon_hash::<CS, E, typenum::U8>(cs, leaves.to_vec(), E::PARAMETERS(arity)),
-        // }
+    ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError>
+    where
+        Arity: typenum::Unsigned
+            + std::ops::Add<typenum::B1>
+            + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
+        typenum::Add1<Arity>: generic_array::ArrayLength<E::Fr>,
+    {
+        let params = E::PARAMETERS();
+        poseidon_hash::<CS, E, Arity>(cs, leaves.to_vec(), params)
     }
 
     fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
@@ -302,11 +306,11 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
         _params: &E::Params,
     ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError>
     where
-        E: JubjubEngine + PoseidonEngine,
+        E: JubjubEngine + PoseidonEngine<typenum::U2>,
         CS: ConstraintSystem<E>,
     {
         let preimage = vec![a.clone(), b.clone()];
-        poseidon_hash::<CS, E, PoseidonArity>(cs, preimage, E::PARAMETERS(MERKLE_TREE_ARITY))
+        poseidon_hash::<CS, E, typenum::U2>(cs, preimage, E::PARAMETERS())
     }
 }
 

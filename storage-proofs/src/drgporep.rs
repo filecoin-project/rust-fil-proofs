@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use anyhow::{ensure, Context};
 use byteorder::{LittleEndian, WriteBytesExt};
+use generic_array::typenum;
 use merkletree::store::StoreConfig;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};

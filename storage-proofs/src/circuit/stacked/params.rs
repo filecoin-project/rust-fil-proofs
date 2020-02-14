@@ -3,14 +3,16 @@ use std::marker::PhantomData;
 use bellperson::gadgets::{boolean::Boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
 use fil_sapling_crypto::jubjub::JubjubEngine;
+use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
+use paired::Engine;
 
 use crate::circuit::stacked::{
     column_proof::ColumnProof, encoding_proof::EncodingProof, labeling_proof::LabelingProof,
 };
 use crate::circuit::{por::PoRCircuit, variables::Root};
 use crate::drgraph::Graph;
-use crate::hasher::Hasher;
+use crate::hasher::{Hasher, PoseidonArity, PoseidonEngine};
 use crate::merkle::MerkleProof;
 use crate::stacked::{
     Proof as VanillaProof, PublicParams, ReplicaColumnProof as VanillaReplicaColumnProof,
@@ -18,8 +20,8 @@ use crate::stacked::{
 
 #[derive(Debug, Clone)]
 pub struct Proof<H: Hasher, G: Hasher> {
-    pub comm_d_proof: InclusionPath<G, typenum::U2>,
-    pub comm_r_last_proof: InclusionPath<H, typenum::U4>,
+    pub comm_d_proof: InclusionPath<Bls12, G, typenum::U2>,
+    pub comm_r_last_proof: InclusionPath<Bls12, H, typenum::U4>,
     pub replica_column_proof: ReplicaColumnProof<H>,
     pub labeling_proofs: Vec<(usize, LabelingProof)>,
     pub encoding_proof: EncodingProof,
@@ -144,20 +146,39 @@ impl<H: Hasher, G: Hasher> From<VanillaProof<H, G>> for Proof<H, G> {
 }
 
 #[derive(Debug, Clone)]
-pub struct InclusionPath<H: Hasher, U: typenum::Unsigned> {
+pub struct InclusionPath<E: Engine, H: Hasher, U>
+where
+    U: typenum::Unsigned
+        + std::ops::Add<typenum::B1>
+        + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
+    typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
+{
     value: Option<Fr>,
-    auth_path: Vec<Option<(Vec<Fr>, usize)>>,
+    auth_path: Vec<(Vec<Option<Fr>>, Option<usize>)>,
+    _e: PhantomData<E>,
     _h: PhantomData<H>,
     _u: PhantomData<U>,
 }
 
-impl<H: Hasher, U: typenum::Unsigned> InclusionPath<H, U> {
+impl<U, H: Hasher> InclusionPath<Bls12, H, U>
+where
+    U: 'static
+        + typenum::Unsigned
+        + std::ops::Add<typenum::B1>
+        + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
+    Bls12: PoseidonEngine<U>,
+    typenum::Add1<U>: generic_array::ArrayLength<Fr>,
+{
     /// Create an empty proof, used in `blank_circuit`s.
     pub fn empty<G: Hasher>(graph: &impl Graph<G>) -> Self {
         assert_eq!(U::to_usize(), 2, "only binary trees are supported atm");
         InclusionPath {
             value: None,
-            auth_path: vec![None; graph.merkle_tree_depth::<U>() as usize],
+            auth_path: vec![
+                (vec![None; U::to_usize() - 1], None);
+                graph.merkle_tree_depth::<U>() as usize
+            ],
+            _e: PhantomData,
             _h: PhantomData,
             _u: PhantomData,
         }
@@ -187,17 +208,21 @@ impl<H: Hasher, U: typenum::Unsigned> InclusionPath<H, U> {
 
         let root = Root::from_allocated::<CS>(root);
         let value = Root::from_allocated::<CS>(leaf);
-        PoRCircuit::<Bls12, H, U>::synthesize(cs, params, value, auth_path, root, true)
+        PoRCircuit::<U, Bls12, H>::synthesize(cs, params, value, auth_path, root, true)
     }
 }
 
-impl<H: Hasher, U: typenum::Unsigned> From<MerkleProof<H, U>> for InclusionPath<H, U> {
+impl<E: Engine, H: Hasher, U: PoseidonArity<E>> From<MerkleProof<H, U>> for InclusionPath<E, H, U>
+where
+    typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
+{
     fn from(other: MerkleProof<H, U>) -> Self {
         let (value, auth_path) = other.into_options_with_leaf();
 
         InclusionPath {
             value,
             auth_path,
+            _e: PhantomData,
             _h: PhantomData,
             _u: PhantomData,
         }

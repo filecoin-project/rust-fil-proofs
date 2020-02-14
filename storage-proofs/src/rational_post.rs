@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 
 use anyhow::{bail, ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
+use generic_array::typenum;
 use serde::{Deserialize, Serialize};
 
 use crate::drgraph::graph_height;

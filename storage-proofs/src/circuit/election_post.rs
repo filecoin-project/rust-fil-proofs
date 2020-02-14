@@ -6,6 +6,7 @@ use bellperson::gadgets::{
 };
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use fil_sapling_crypto::jubjub::JubjubEngine;
+use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::circuit::constraint;
@@ -19,8 +20,7 @@ use crate::drgraph;
 use crate::election_post::{self, ElectionPoSt};
 use crate::error::Result;
 use crate::fr32::fr_into_bytes;
-use crate::hasher::types::PoseidonEngine;
-use crate::hasher::{HashFunction, Hasher};
+use crate::hasher::{HashFunction, Hasher, PoseidonEngine};
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
@@ -36,7 +36,7 @@ pub struct ElectionPoStCircuit<'a, E: JubjubEngine, H: Hasher> {
     pub comm_r_last: Option<E::Fr>,
     pub leafs: Vec<Option<E::Fr>>,
     #[allow(clippy::type_complexity)]
-    pub paths: Vec<Vec<Option<(Vec<E::Fr>, usize)>>>,
+    pub paths: Vec<Vec<(Vec<Option<E::Fr>>, Option<usize>)>>,
     pub partial_ticket: Option<E::Fr>,
     pub randomness: Vec<Option<bool>>,
     pub prover_id: Vec<Option<bool>>,
@@ -138,7 +138,12 @@ where
             .iter()
             .map(|v| {
                 v.iter()
-                    .map(|p| Some(((*p).0.iter().copied().map(Into::into).collect(), p.1)))
+                    .map(|p| {
+                        (
+                            (*p).0.iter().copied().map(Into::into).map(Some).collect(),
+                            Some(p.1),
+                        )
+                    })
                     .collect()
             })
             .collect();
@@ -166,7 +171,7 @@ where
             drgraph::graph_height::<typenum::U2>(pub_params.sector_size as usize / NODE_SIZE);
 
         let leafs = vec![None; challenges_count];
-        let paths = vec![vec![None; height]; challenges_count];
+        let paths = vec![vec![(vec![None], None); height]; challenges_count];
 
         ElectionPoStCircuit {
             params: &*JJ_PARAMS,
@@ -184,7 +189,12 @@ where
     }
 }
 
-impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> Circuit<E> for ElectionPoStCircuit<'a, E, H> {
+impl<
+        'a,
+        E: JubjubEngine + PoseidonEngine<typenum::U4> + PoseidonEngine<typenum::U2>,
+        H: Hasher,
+    > Circuit<E> for ElectionPoStCircuit<'a, E, H>
+{
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let params = self.params;
         let comm_r = self.comm_r;
@@ -238,7 +248,7 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> Circuit<E> for ElectionPoS
 
         // 2. Verify Inclusion Paths
         for (i, (leaf, path)) in leafs.iter().zip(paths.iter()).enumerate() {
-            PoRCircuit::<E, H, typenum::U4>::synthesize(
+            PoRCircuit::<typenum::U4, E, H>::synthesize(
                 cs.namespace(|| format!("challenge_inclusion{}", i)),
                 &params,
                 Root::Val(*leaf),
@@ -454,7 +464,12 @@ mod tests {
             .iter()
             .map(|p| {
                 p.iter()
-                    .map(|v| Some((v.0.iter().copied().map(Into::into).collect(), v.1)))
+                    .map(|v| {
+                        (
+                            v.0.iter().copied().map(Into::into).map(Some).collect(),
+                            Some(v.1),
+                        )
+                    })
                     .collect::<Vec<_>>()
             })
             .collect();

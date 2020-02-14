@@ -1,5 +1,6 @@
 use bellperson::gadgets::num;
 use bellperson::{ConstraintSystem, SynthesisError};
+use generic_array::typenum;
 use neptune::circuit::poseidon_hash;
 use paired::bls12_381::{Bls12, Fr};
 

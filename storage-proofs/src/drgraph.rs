@@ -2,6 +2,7 @@ use std::cmp;
 use std::marker::PhantomData;
 
 use anyhow::ensure;
+use generic_array::typenum;
 use merkletree::store::StoreConfig;
 use rand::{rngs::OsRng, Rng, SeedableRng};
 use rand_chacha::ChaChaRng;

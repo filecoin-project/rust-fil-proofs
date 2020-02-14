@@ -5,6 +5,7 @@ use bellperson::gadgets::boolean::{AllocatedBit, Boolean};
 use bellperson::gadgets::{multipack, num};
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use fil_sapling_crypto::jubjub::JubjubEngine;
+use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::circuit::constraint;
@@ -14,8 +15,7 @@ use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph::graph_height;
 use crate::error::Result;
-use crate::hasher::types::PoseidonEngine;
-use crate::hasher::{HashFunction, Hasher};
+use crate::hasher::{HashFunction, Hasher, PoseidonEngine};
 use crate::merklepor::MerklePoR;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
@@ -29,18 +29,30 @@ use crate::proof::ProofScheme;
 /// * `auth_path` - The authentication path of the leaf in the tree.
 /// * `root` - The merkle root of the tree.
 ///
-pub struct PoRCircuit<'a, E: JubjubEngine, H: Hasher, U: typenum::Unsigned> {
+pub struct PoRCircuit<'a, U, E: JubjubEngine + PoseidonEngine<U>, H: Hasher>
+where
+    U: 'static
+        + typenum::Unsigned
+        + std::ops::Add<typenum::B1>
+        + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
+    typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
+{
     params: &'a E::Params,
     value: Root<E>,
-    auth_path: Vec<Option<(Vec<E::Fr>, usize)>>,
+    auth_path: Vec<(Vec<Option<E::Fr>>, Option<usize>)>,
     root: Root<E>,
     private: bool,
     _h: PhantomData<H>,
     _u: PhantomData<U>,
 }
 
-impl<'a, E: JubjubEngine, H: Hasher, U: typenum::Unsigned> CircuitComponent
-    for PoRCircuit<'a, E, H, U>
+impl<'a, U, E: JubjubEngine + PoseidonEngine<U>, H: Hasher> CircuitComponent
+    for PoRCircuit<'a, U, E, H>
+where
+    U: typenum::Unsigned
+        + std::ops::Add<typenum::B1>
+        + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
+    typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
 {
     type ComponentPrivateInputs = Option<Root<E>>;
 }
@@ -54,6 +66,8 @@ pub fn challenge_into_auth_path_bits<U: typenum::Unsigned>(
     challenge: usize,
     leaves: usize,
 ) -> Vec<bool> {
+    assert_eq!(U::to_usize(), 2, "unsupported arity");
+
     // FIXME: this needs to return Vec<usize> and support larger than arity 2
     let height = graph_height::<U>(leaves);
     let mut bits = Vec::new();
@@ -74,17 +88,26 @@ impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata, H: Hasher, U: type
 }
 
 // can only implment for Bls12 because merklepor is not generic over the engine.
-impl<'a, H, U: 'a + typenum::Unsigned + Send + Sync + Clone>
-    CompoundProof<'a, Bls12, MerklePoR<H, U>, PoRCircuit<'a, Bls12, H, U>> for PoRCompound<H, U>
+impl<'a, H, U> CompoundProof<'a, Bls12, MerklePoR<H, U>, PoRCircuit<'a, U, Bls12, H>>
+    for PoRCompound<H, U>
 where
     H: 'a + Hasher,
+    U: 'a
+        + Clone
+        + Sync
+        + Send
+        + typenum::Unsigned
+        + std::ops::Add<typenum::B1>
+        + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
+    Bls12: PoseidonEngine<U>,
+    typenum::Add1<U>: generic_array::ArrayLength<Fr>,
 {
     fn circuit<'b>(
         public_inputs: &<MerklePoR<H, U> as ProofScheme<'a>>::PublicInputs,
-        _component_private_inputs: <PoRCircuit<'a, Bls12, H, U> as CircuitComponent>::ComponentPrivateInputs,
+        _component_private_inputs: <PoRCircuit<'a, U, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
         proof: &'b <MerklePoR<H, U> as ProofScheme<'a>>::Proof,
         public_params: &'b <MerklePoR<H, U> as ProofScheme<'a>>::PublicParams,
-    ) -> Result<PoRCircuit<'a, Bls12, H, U>> {
+    ) -> Result<PoRCircuit<'a, U, Bls12, H>> {
         let (root, private) = match (*public_inputs).commitment {
             None => (Root::Val(Some(proof.proof.root.into())), true),
             Some(commitment) => (Root::Val(Some(commitment.into())), false),
@@ -95,7 +118,7 @@ where
             "Inputs must be consistent with public params"
         );
 
-        Ok(PoRCircuit::<Bls12, H, U> {
+        Ok(PoRCircuit::<U, Bls12, H> {
             params: &*JJ_PARAMS,
             value: Root::Val(Some(proof.data.into())),
             auth_path: proof.proof.as_options(),
@@ -108,11 +131,14 @@ where
 
     fn blank_circuit(
         public_params: &<MerklePoR<H, U> as ProofScheme<'a>>::PublicParams,
-    ) -> PoRCircuit<'a, Bls12, H, U> {
-        PoRCircuit::<Bls12, H, U> {
+    ) -> PoRCircuit<'a, U, Bls12, H> {
+        PoRCircuit::<U, Bls12, H> {
             params: &*JJ_PARAMS,
             value: Root::Val(None),
-            auth_path: vec![None; graph_height::<U>(public_params.leaves)],
+            auth_path: vec![
+                (vec![None; U::to_usize() - 1], None);
+                graph_height::<U>(public_params.leaves)
+            ],
             root: Root::Val(None),
             private: public_params.private,
             _h: PhantomData,
@@ -143,8 +169,12 @@ where
     }
 }
 
-impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher, U: typenum::Unsigned> Circuit<E>
-    for PoRCircuit<'a, E, H, U>
+impl<'a, U, E: JubjubEngine + PoseidonEngine<U>, H: Hasher> Circuit<E> for PoRCircuit<'a, U, E, H>
+where
+    U: typenum::Unsigned
+        + std::ops::Add<typenum::B1>
+        + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
+    typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
 {
     /// # Public Inputs
     ///
@@ -181,18 +211,17 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher, U: typenum::Unsigned> Circ
             // Ascend the merkle tree authentication path
             for (i, e) in auth_path.into_iter().enumerate() {
                 let cs = &mut cs.namespace(|| format!("merkle tree hash {}", i));
-                let e = e.unwrap(); //FIXME
                 let index_bits = (0..log_arity)
-                    .map(|i| {
-                        Boolean::from(
+                    .map(|i| -> Result<Boolean, SynthesisError> {
+                        let bit =
                             AllocatedBit::alloc(cs.namespace(|| format!("index bit {}", i)), {
-                                let bit = ((e.1 >> i) & 1) == 1;
+                                let index = e.1.ok_or_else(|| SynthesisError::AssignmentMissing)?;
+                                let bit = ((index >> i) & 1) == 1;
                                 Some(bit)
-                            })
-                            .unwrap(),
-                        )
+                            })?;
+                        Ok(Boolean::from(bit))
                     })
-                    .collect::<Vec<_>>();
+                    .collect::<Result<Vec<_>, _>>()?;
 
                 index_bits
                     .iter()
@@ -206,11 +235,10 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher, U: typenum::Unsigned> Circ
                         .map(|(i, elt)| {
                             num::AllocatedNum::alloc(
                                 cs.namespace(|| format!("path element {}", i)),
-                                || Ok(*elt),
+                                || elt.ok_or_else(|| SynthesisError::AssignmentMissing),
                             )
-                            .unwrap() // FIXME
                         })
-                        .collect::<Vec<_>>();
+                        .collect::<Result<Vec<_>, _>>()?;
 
                 let inserted = insert(cs, &cur, &index_bits, &path_elements)?;
                 // Swap the two if the current subtree is on the right
@@ -250,14 +278,19 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher, U: typenum::Unsigned> Circ
     }
 }
 
-impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher, U: typenum::Unsigned>
-    PoRCircuit<'a, E, H, U>
+impl<'a, U, E: JubjubEngine + PoseidonEngine<U>, H: Hasher> PoRCircuit<'a, U, E, H>
+where
+    U: 'static
+        + typenum::Unsigned
+        + std::ops::Add<typenum::B1>
+        + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
+    typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
 {
     pub fn synthesize<CS>(
         mut cs: CS,
         params: &E::Params,
         value: Root<E>,
-        auth_path: Vec<Option<(Vec<E::Fr>, usize)>>,
+        auth_path: Vec<(Vec<Option<E::Fr>>, Option<usize>)>,
         root: Root<E>,
         private: bool,
     ) -> Result<(), SynthesisError>
@@ -265,7 +298,7 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher, U: typenum::Unsigned>
         E: JubjubEngine,
         CS: ConstraintSystem<E>,
     {
-        let por = PoRCircuit::<E, H, U> {
+        let por = PoRCircuit::<U, E, H> {
             params,
             value,
             auth_path,
@@ -374,30 +407,88 @@ mod tests {
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_pedersen_binary() {
-        test_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U2>(4125);
+        test_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U2>(6_873 /*4125*/);
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_blake2s_binary() {
-        test_por_input_circuit_with_bls12_381::<Blake2sHasher, typenum::U2>(64_569);
+        test_por_input_circuit_with_bls12_381::<Blake2sHasher, typenum::U2>(
+            107_613, /*64_569*/
+        );
+    }
+
+    #[test]
+    fn test_por_input_circuit_with_bls12_381_sha256_binary() {
+        test_por_input_circuit_with_bls12_381::<Blake2sHasher, typenum::U2>(
+            107_613, /*64_569*/
+        );
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_poseidon_binary() {
-        test_por_input_circuit_with_bls12_381::<PoseidonHasher, typenum::U2>(1290);
+        test_por_input_circuit_with_bls12_381::<PoseidonHasher, typenum::U2>(1_290);
+    }
+
+    #[test]
+    fn test_por_input_circuit_with_bls12_381_pedersen_quad() {
+        test_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U4>(6_873 /*4125*/);
+    }
+
+    #[test]
+    fn test_por_input_circuit_with_bls12_381_blake2s_quad() {
+        test_por_input_circuit_with_bls12_381::<Blake2sHasher, typenum::U4>(
+            107_613, /*64_569*/
+        );
+    }
+
+    #[test]
+    fn test_por_input_circuit_with_bls12_381_sha256_quad() {
+        test_por_input_circuit_with_bls12_381::<Blake2sHasher, typenum::U4>(
+            107_613, /*64_569*/
+        );
     }
 
     #[test]
     fn test_por_input_circuit_with_bls12_381_poseidon_quad() {
-        test_por_input_circuit_with_bls12_381::<PoseidonHasher, typenum::U4>(1290);
+        test_por_input_circuit_with_bls12_381::<PoseidonHasher, typenum::U4>(1_869);
     }
 
-    fn test_por_input_circuit_with_bls12_381<
-        H: Hasher,
-        U: typenum::Unsigned + 'static + Sync + Send + Clone,
-    >(
-        num_constraints: usize,
-    ) {
+    #[test]
+    fn test_por_input_circuit_with_bls12_381_pedersen_oct() {
+        test_por_input_circuit_with_bls12_381::<PedersenHasher, typenum::U8>(6_873 /*4125*/);
+    }
+
+    #[test]
+    fn test_por_input_circuit_with_bls12_381_blake2s_oct() {
+        test_por_input_circuit_with_bls12_381::<Blake2sHasher, typenum::U8>(
+            107_613, /*64_569*/
+        );
+    }
+
+    #[test]
+    fn test_por_input_circuit_with_bls12_381_sha256_oct() {
+        test_por_input_circuit_with_bls12_381::<Blake2sHasher, typenum::U8>(
+            107_613, /*64_569*/
+        );
+    }
+
+    #[test]
+    fn test_por_input_circuit_with_bls12_381_poseidon_oct() {
+        test_por_input_circuit_with_bls12_381::<PoseidonHasher, typenum::U8>(1_869);
+    }
+
+    fn test_por_input_circuit_with_bls12_381<H: Hasher, U>(num_constraints: usize)
+    where
+        U: typenum::Unsigned
+            + 'static
+            + Sync
+            + Send
+            + Clone
+            + std::ops::Add<typenum::B1>
+            + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
+        Bls12: PoseidonEngine<U>,
+        typenum::Add1<U>: generic_array::ArrayLength<Fr>,
+    {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let arity = U::to_usize();
@@ -452,7 +543,7 @@ mod tests {
             // -- Circuit
 
             let mut cs = TestConstraintSystem::<Bls12>::new();
-            let por = PoRCircuit::<Bls12, H, U> {
+            let por = PoRCircuit::<U, Bls12, H> {
                 params: &JJ_PARAMS,
                 value: Root::Val(Some(proof.data.into())),
                 auth_path: proof.proof.as_options(),
@@ -525,10 +616,18 @@ mod tests {
         private_por_test_compound::<PoseidonHasher, typenum::U4>();
     }
 
-    fn private_por_test_compound<
-        H: Hasher,
-        U: typenum::Unsigned + 'static + Sync + Send + Clone,
-    >() {
+    fn private_por_test_compound<H: Hasher, U>()
+    where
+        U: typenum::Unsigned
+            + 'static
+            + Sync
+            + Send
+            + Clone
+            + std::ops::Add<typenum::B1>
+            + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
+        Bls12: PoseidonEngine<U>,
+        typenum::Add1<U>: generic_array::ArrayLength<Fr>,
+    {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let leaves = 8;
         let data: Vec<u8> = (0..leaves)
@@ -657,7 +756,7 @@ mod tests {
 
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            let por = PoRCircuit::<Bls12, PedersenHasher, typenum::U2> {
+            let por = PoRCircuit::<typenum::U2, Bls12, PedersenHasher> {
                 params: &JJ_PARAMS,
                 value: Root::Val(Some(proof.data.into())),
                 auth_path: proof.proof.as_options(),

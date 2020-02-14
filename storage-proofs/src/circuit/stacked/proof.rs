@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use fil_sapling_crypto::jubjub::JubjubEngine;
+use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::circuit::por::PoRCompound;

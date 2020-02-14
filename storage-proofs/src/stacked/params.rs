@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 use std::path::Path;
 
 use anyhow::Context;
+use generic_array::typenum;
 use log::trace;
 use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{DiskStore, Store, StoreConfig, StoreConfigDataVersion};

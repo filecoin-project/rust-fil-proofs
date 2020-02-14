@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 
 use anyhow::{bail, ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
+use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};

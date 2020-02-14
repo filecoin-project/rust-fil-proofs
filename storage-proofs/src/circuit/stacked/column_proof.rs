@@ -1,6 +1,7 @@
 use bellperson::gadgets::num;
 use bellperson::{ConstraintSystem, SynthesisError};
 use fil_sapling_crypto::jubjub::JubjubEngine;
+use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::circuit::{
@@ -13,7 +14,7 @@ use crate::stacked::{ColumnProof as VanillaColumnProof, PublicParams};
 #[derive(Debug, Clone)]
 pub struct ColumnProof<H: Hasher> {
     column: Column,
-    inclusion_path: InclusionPath<H, typenum::U4>,
+    inclusion_path: InclusionPath<Bls12, H, typenum::U4>,
 }
 
 impl<H: Hasher> ColumnProof<H> {

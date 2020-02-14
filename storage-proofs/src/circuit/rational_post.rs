@@ -4,6 +4,7 @@ use anyhow::ensure;
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use fil_sapling_crypto::jubjub::JubjubEngine;
+use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::circuit::constraint;
@@ -13,8 +14,7 @@ use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph;
 use crate::error::Result;
-use crate::hasher::types::PoseidonEngine;
-use crate::hasher::{HashFunction, Hasher};
+use crate::hasher::{HashFunction, Hasher, PoseidonEngine};
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
@@ -30,7 +30,7 @@ pub struct RationalPoStCircuit<'a, E: JubjubEngine, H: Hasher> {
     pub comm_r_lasts: Vec<Option<E::Fr>>,
     pub leafs: Vec<Option<E::Fr>>,
     #[allow(clippy::type_complexity)]
-    pub paths: Vec<Vec<Option<(Vec<E::Fr>, usize)>>>,
+    pub paths: Vec<Vec<(Vec<Option<E::Fr>>, Option<usize>)>>,
     _h: PhantomData<H>,
 }
 
@@ -127,7 +127,12 @@ where
             .iter()
             .map(|v| {
                 v.iter()
-                    .map(|p| Some(((*p).0.iter().copied().map(Into::into).collect(), p.1)))
+                    .map(|p| {
+                        (
+                            (*p).0.iter().copied().map(Into::into).map(Some).collect(),
+                            Some(p.1),
+                        )
+                    })
                     .collect()
             })
             .collect();
@@ -154,7 +159,7 @@ where
         let comm_cs = vec![None; challenges_count];
         let comm_r_lasts = vec![None; challenges_count];
         let leafs = vec![None; challenges_count];
-        let paths = vec![vec![None; height]; challenges_count];
+        let paths = vec![vec![(vec![None; 1], None); height]; challenges_count];
 
         RationalPoStCircuit {
             params: &*JJ_PARAMS,
@@ -168,7 +173,9 @@ where
     }
 }
 
-impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> Circuit<E> for RationalPoStCircuit<'a, E, H> {
+impl<'a, E: JubjubEngine + PoseidonEngine<typenum::U2>, H: Hasher> Circuit<E>
+    for RationalPoStCircuit<'a, E, H>
+{
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let params = self.params;
         let comm_rs = self.comm_rs;
@@ -229,7 +236,7 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> Circuit<E> for RationalPoS
                 );
             }
 
-            PoRCircuit::<E, H, typenum::U2>::synthesize(
+            PoRCircuit::<typenum::U2, E, H>::synthesize(
                 cs.namespace(|| format!("challenge_inclusion{}", i)),
                 &params,
                 Root::Val(leafs[i]),
@@ -243,7 +250,7 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> Circuit<E> for RationalPoS
     }
 }
 
-impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> RationalPoStCircuit<'a, E, H> {
+impl<'a, E: JubjubEngine + PoseidonEngine<typenum::U2>, H: Hasher> RationalPoStCircuit<'a, E, H> {
     #[allow(clippy::type_complexity)]
     pub fn synthesize<CS: ConstraintSystem<E>>(
         cs: &mut CS,
@@ -252,7 +259,7 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> RationalPoStCircuit<'a, E,
         comm_rs: Vec<Option<E::Fr>>,
         comm_cs: Vec<Option<E::Fr>>,
         comm_r_lasts: Vec<Option<E::Fr>>,
-        paths: Vec<Vec<Option<(Vec<E::Fr>, usize)>>>,
+        paths: Vec<Vec<(Vec<Option<E::Fr>>, Option<usize>)>>,
     ) -> Result<(), SynthesisError> {
         Self {
             params,
@@ -374,7 +381,12 @@ mod tests {
             .iter()
             .map(|p| {
                 p.iter()
-                    .map(|v| Some((v.0.iter().copied().map(Into::into).collect(), v.1)))
+                    .map(|v| {
+                        (
+                            v.0.iter().copied().map(Into::into).map(Some).collect(),
+                            Some(v.1),
+                        )
+                    })
                     .collect::<Vec<_>>()
             })
             .collect();

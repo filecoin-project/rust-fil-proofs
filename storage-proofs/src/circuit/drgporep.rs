@@ -5,6 +5,7 @@ use bellperson::gadgets::boolean::Boolean;
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use fil_sapling_crypto::jubjub::JubjubEngine;
+use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::circuit::constraint;
@@ -56,14 +57,14 @@ pub struct DrgPoRepCircuit<'a, H: Hasher> {
     params: &'a <Bls12 as JubjubEngine>::Params,
     replica_nodes: Vec<Option<Fr>>,
     #[allow(clippy::type_complexity)]
-    replica_nodes_paths: Vec<Vec<Option<(Vec<Fr>, usize)>>>,
+    replica_nodes_paths: Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>,
     replica_root: Root<Bls12>,
     replica_parents: Vec<Vec<Option<Fr>>>,
     #[allow(clippy::type_complexity)]
-    replica_parents_paths: Vec<Vec<Vec<Option<(Vec<Fr>, usize)>>>>,
+    replica_parents_paths: Vec<Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>>,
     data_nodes: Vec<Option<Fr>>,
     #[allow(clippy::type_complexity)]
-    data_nodes_paths: Vec<Vec<Option<(Vec<Fr>, usize)>>>,
+    data_nodes_paths: Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>,
     data_root: Root<Bls12>,
     replica_id: Option<Fr>,
     private: bool,
@@ -75,12 +76,12 @@ impl<'a, H: Hasher> DrgPoRepCircuit<'a, H> {
     pub fn synthesize<CS>(
         mut cs: CS,
         replica_nodes: Vec<Option<Fr>>,
-        replica_nodes_paths: Vec<Vec<Option<(Vec<Fr>, usize)>>>,
+        replica_nodes_paths: Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>,
         replica_root: Root<Bls12>,
         replica_parents: Vec<Vec<Option<Fr>>>,
-        replica_parents_paths: Vec<Vec<Vec<Option<(Vec<Fr>, usize)>>>>,
+        replica_parents_paths: Vec<Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>>,
         data_nodes: Vec<Option<Fr>>,
-        data_nodes_paths: Vec<Vec<Option<(Vec<Fr>, usize)>>>,
+        data_nodes_paths: Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>,
         data_root: Root<Bls12>,
         replica_id: Option<Fr>,
         private: bool,
@@ -317,16 +318,20 @@ where
     ) -> DrgPoRepCircuit<'a, H> {
         let depth = public_params.graph.merkle_tree_depth::<typenum::U2>() as usize;
         let degree = public_params.graph.degree();
+        let arity = 2;
+
         let challenges_count = public_params.challenges_count;
 
         let replica_nodes = vec![None; challenges_count];
-        let replica_nodes_paths = vec![vec![None; depth]; challenges_count];
+        let replica_nodes_paths =
+            vec![vec![(vec![None; arity - 1], None); depth]; challenges_count];
 
         let replica_root = Root::Val(None);
         let replica_parents = vec![vec![None; degree]; challenges_count];
-        let replica_parents_paths = vec![vec![vec![None; depth]; degree]; challenges_count];
+        let replica_parents_paths =
+            vec![vec![vec![(vec![None; arity - 1], None); depth]; degree]; challenges_count];
         let data_nodes = vec![None; challenges_count];
-        let data_nodes_paths = vec![vec![None; depth]; challenges_count];
+        let data_nodes_paths = vec![vec![(vec![None; arity - 1], None); depth]; challenges_count];
         let data_root = Root::Val(None);
 
         DrgPoRepCircuit {
@@ -421,7 +426,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
             // Inclusion checks
             {
                 let mut cs = cs.namespace(|| "inclusion_checks");
-                PoRCircuit::<_, H, typenum::U2>::synthesize(
+                PoRCircuit::<typenum::U2, Bls12, H>::synthesize(
                     cs.namespace(|| "replica_inclusion"),
                     &params,
                     Root::Val(*replica_node),
@@ -432,7 +437,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
 
                 // validate each replica_parents merkle proof
                 for j in 0..replica_parents.len() {
-                    PoRCircuit::<_, H, typenum::U2>::synthesize(
+                    PoRCircuit::<typenum::U2, Bls12, H>::synthesize(
                         cs.namespace(|| format!("parents_inclusion_{}", j)),
                         &params,
                         Root::Val(replica_parents[j]),
@@ -443,7 +448,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
                 }
 
                 // validate data node commitment
-                PoRCircuit::<_, H, typenum::U2>::synthesize(
+                PoRCircuit::<typenum::U2, Bls12, H>::synthesize(
                     cs.namespace(|| "data_inclusion"),
                     &params,
                     Root::Val(*data_node),
@@ -710,12 +715,12 @@ mod tests {
         DrgPoRepCircuit::<PedersenHasher>::synthesize(
             cs.namespace(|| "drgporep"),
             vec![Some(Fr::random(rng)); 1],
-            vec![vec![Some((vec![Fr::random(rng)], 0)); tree_depth]; 1],
+            vec![vec![(vec![Some(Fr::random(rng))], Some(0)); tree_depth]; 1],
             Root::Val(Some(Fr::random(rng))),
             vec![vec![Some(Fr::random(rng)); m]; 1],
-            vec![vec![vec![Some((vec![Fr::random(rng)], 0)); tree_depth]; m]; 1],
+            vec![vec![vec![(vec![Some(Fr::random(rng))], Some(0)); tree_depth]; m]; 1],
             vec![Some(Fr::random(rng)); 1],
-            vec![vec![Some((vec![Fr::random(rng)], 0)); tree_depth]; 1],
+            vec![vec![(vec![Some(Fr::random(rng))], Some(0)); tree_depth]; 1],
             Root::Val(Some(Fr::random(rng))),
             Some(Fr::random(rng)),
             false,

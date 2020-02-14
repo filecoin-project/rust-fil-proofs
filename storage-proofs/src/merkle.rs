@@ -3,6 +3,7 @@
 use std::marker::PhantomData;
 
 use anyhow::ensure;
+use generic_array::typenum;
 use merkletree::hash::Algorithm;
 use merkletree::merkle;
 use merkletree::proof;
@@ -102,20 +103,30 @@ impl<H: Hasher, U: typenum::Unsigned> MerkleProof<H, U> {
 
     /// Convert the merkle path into the format expected by the circuits, which is a vector of options of the tuples.
     /// This does __not__ include the root and the leaf.
-    pub fn as_options(&self) -> Vec<Option<(Vec<Fr>, usize)>> {
+    pub fn as_options(&self) -> Vec<(Vec<Option<Fr>>, Option<usize>)> {
         self.path
             .iter()
-            .map(|v| Some((v.0.iter().copied().map(Into::into).collect(), v.1)))
+            .map(|v| {
+                (
+                    v.0.iter().copied().map(Into::into).map(Some).collect(),
+                    Some(v.1),
+                )
+            })
             .collect::<Vec<_>>()
     }
 
-    pub fn into_options_with_leaf(self) -> (Option<Fr>, Vec<Option<(Vec<Fr>, usize)>>) {
+    pub fn into_options_with_leaf(self) -> (Option<Fr>, Vec<(Vec<Option<Fr>>, Option<usize>)>) {
         let MerkleProof { leaf, path, .. } = self;
 
         (
             Some(leaf.into()),
             path.into_iter()
-                .map(|(a, b)| Some((a.iter().copied().map(Into::into).collect(), b)))
+                .map(|(a, b)| {
+                    (
+                        a.iter().copied().map(Into::into).map(Some).collect(),
+                        Some(b),
+                    )
+                })
                 .collect(),
         )
     }

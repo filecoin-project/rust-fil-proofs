@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use anyhow::ensure;
+use generic_array::typenum;
 use serde::{Deserialize, Serialize};
 
 use crate::drgraph::graph_height;
