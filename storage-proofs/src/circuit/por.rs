@@ -245,13 +245,6 @@ where
                         .collect::<Result<Vec<_>, _>>()?;
 
                 let inserted = insert(cs, &cur, &index_bits, &path_elements)?;
-                // Swap the two if the current subtree is on the right
-                // let (xl, xr) = num::AllocatedNum::conditionally_reverse(
-                //     cs.namespace(|| "conditional reversal of preimage"),
-                //     &cur,
-                //     &path_element,
-                //     &cur_is_right,
-                // )?;
 
                 // Compute the new subtree value
                 cur = H::Function::hash_multi_leaf_circuit(
@@ -260,7 +253,6 @@ where
                     i,
                     params,
                 )?;
-                // auth_path_bits.push(cur_is_right);
             }
 
             // allocate input for is_right auth_path
