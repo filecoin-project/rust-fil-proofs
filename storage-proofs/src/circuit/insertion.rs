@@ -9,7 +9,7 @@ use bellperson::{ConstraintSystem, SynthesisError};
 use ff::Field;
 use paired::Engine;
 
-/// Insert `element` after the nth element of `elements`, where `path_bits` represents n, least-significant bit first.
+/// Insert `element` after the nth 1-indexed element of `elements`, where `path_bits` represents n, least-significant bit first.
 /// The returned result contains a new vector of `AllocatedNum`s with `element` inserted, and constraints are enforced.
 /// `elements.len() + 1` must be a power of two.
 pub fn insert<E: Engine, CS: ConstraintSystem<E>>(
@@ -187,7 +187,7 @@ mod tests {
                 assert!(cs.is_satisfied());
                 assert_eq!(elements[index].get_value(), selected.get_value());
 
-                // One constraint per non-leaf node of a binary tree with size leaves.
+                // One constraint per non-leaf node of a binary tree with `size` leaves.
                 let expected_constraints = size - 1;
 
                 let actual_constraints = cs.num_constraints() - test_constraints;
