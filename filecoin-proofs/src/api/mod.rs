@@ -573,7 +573,7 @@ mod tests {
             "failed to populate buffer with unsealed bytes"
         );
         assert_eq!(contents.len(), 508);
-        assert_eq!(&piece_bytes[508..], &contents[..]);
+        assert_eq!(&piece_bytes[508..508 + 508], &contents[..]);
 
         let computed_comm_d = compute_comm_d(config.sector_size, &piece_infos)?;
 
