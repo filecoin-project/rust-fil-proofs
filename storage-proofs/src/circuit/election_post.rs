@@ -168,10 +168,10 @@ where
     ) -> ElectionPoStCircuit<'a, Bls12, H> {
         let challenges_count = pub_params.challenged_nodes * pub_params.challenge_count;
         let height =
-            drgraph::graph_height::<typenum::U2>(pub_params.sector_size as usize / NODE_SIZE);
+            drgraph::graph_height::<typenum::U4>(pub_params.sector_size as usize / NODE_SIZE);
 
         let leafs = vec![None; challenges_count];
-        let paths = vec![vec![(vec![None], None); height]; challenges_count];
+        let paths = vec![vec![(vec![None; 3], None); height - 1]; challenges_count];
 
         ElectionPoStCircuit {
             params: &*JJ_PARAMS,
@@ -570,7 +570,7 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
                 .collect();
 
-            let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
+            let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
 
             let cur_config =
                 StoreConfig::from_config(&config, format!("test-lc-tree-v1-{}", i), None);

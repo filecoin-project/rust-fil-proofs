@@ -171,12 +171,11 @@ where
 {
     /// Create an empty proof, used in `blank_circuit`s.
     pub fn empty<G: Hasher>(graph: &impl Graph<G>) -> Self {
-        assert_eq!(U::to_usize(), 2, "only binary trees are supported atm");
         InclusionPath {
             value: None,
             auth_path: vec![
                 (vec![None; U::to_usize() - 1], None);
-                graph.merkle_tree_depth::<U>() as usize
+                graph.merkle_tree_depth::<U>() as usize - 1
             ],
             _e: PhantomData,
             _h: PhantomData,
