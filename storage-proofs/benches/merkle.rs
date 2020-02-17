@@ -1,4 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
+use generic_array::typenum;
 use rand::{thread_rng, Rng};
 use storage_proofs::drgraph::{new_seed, Graph, BASE_DEGREE};
 use storage_proofs::hasher::blake2s::Blake2sHasher;

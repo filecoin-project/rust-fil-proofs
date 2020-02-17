@@ -159,7 +159,7 @@ where
         let comm_cs = vec![None; challenges_count];
         let comm_r_lasts = vec![None; challenges_count];
         let leafs = vec![None; challenges_count];
-        let paths = vec![vec![(vec![None; 1], None); height]; challenges_count];
+        let paths = vec![vec![(vec![None; 1], None); height - 1]; challenges_count];
 
         RationalPoStCircuit {
             params: &*JJ_PARAMS,
@@ -477,10 +477,14 @@ mod tests {
             .collect();
 
         let graph1 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree1 = graph1.merkle_tree(None, data1.as_slice()).unwrap();
+        let tree1 = graph1
+            .merkle_tree::<typenum::U2>(None, data1.as_slice())
+            .unwrap();
 
         let graph2 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree2 = graph2.merkle_tree(None, data2.as_slice()).unwrap();
+        let tree2 = graph2
+            .merkle_tree::<typenum::U2>(None, data2.as_slice())
+            .unwrap();
 
         let faults = OrderedSectorSet::new();
         let mut sectors = OrderedSectorSet::new();

@@ -324,14 +324,15 @@ where
 
         let replica_nodes = vec![None; challenges_count];
         let replica_nodes_paths =
-            vec![vec![(vec![None; arity - 1], None); depth]; challenges_count];
+            vec![vec![(vec![None; arity - 1], None); depth - 1]; challenges_count];
 
         let replica_root = Root::Val(None);
         let replica_parents = vec![vec![None; degree]; challenges_count];
         let replica_parents_paths =
-            vec![vec![vec![(vec![None; arity - 1], None); depth]; degree]; challenges_count];
+            vec![vec![vec![(vec![None; arity - 1], None); depth - 1]; degree]; challenges_count];
         let data_nodes = vec![None; challenges_count];
-        let data_nodes_paths = vec![vec![(vec![None; arity - 1], None); depth]; challenges_count];
+        let data_nodes_paths =
+            vec![vec![(vec![None; arity - 1], None); depth - 1]; challenges_count];
         let data_root = Root::Val(None);
 
         DrgPoRepCircuit {
@@ -516,6 +517,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::circuit::metric::MetricCS;
     use crate::circuit::test::*;
     use crate::compound_proof;
@@ -530,6 +532,7 @@ mod tests {
 
     use ff::Field;
     use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
+    use pretty_assertions::assert_eq;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
