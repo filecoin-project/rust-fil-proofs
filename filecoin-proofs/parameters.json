@@ -1,102 +1,102 @@
 {
-  "v20-proof-of-spacetime-election-5f585aca354eb68e411c8582ed0efd800792430e4e76d73468c4fc03f1a8d6d2.params": {
-    "cid": "QmX7tYeNPWae2fjZ3Am6GB9dmHvLqvoz8dKo3PR98VYxH9",
-    "digest": "39a9edec3355516674f0d12b926be493",
+  "v22-proof-of-spacetime-election-PoseidonHasher-0b0b9781bcb153efbb3cab4be3a792c4f555d4ab6f8dd62b27e1dcad08a34f22.params": {
+    "cid": "QmQ6dHcrtuXGpmsbZH72W223b3hdSKGtR9oaSMwsM9NkzD",
+    "digest": "a0799a458f44626bac7df3093b0294e4",
     "sector_size": 34359738368
   },
-  "v20-proof-of-spacetime-election-5f585aca354eb68e411c8582ed0efd800792430e4e76d73468c4fc03f1a8d6d2.vk": {
-    "cid": "QmbNGx7pNbGiEr8ykoHxVXHW2LNSmGdsxKtj1onZCyguCX",
-    "digest": "0227ae7df4f2affe529ebafbbc7540ee",
+  "v22-proof-of-spacetime-election-PoseidonHasher-0b0b9781bcb153efbb3cab4be3a792c4f555d4ab6f8dd62b27e1dcad08a34f22.vk": {
+    "cid": "QmS5Vxn9uzZfyGoZJHSj3ZDdEeRd8nEczqJR5CsQd7pSJG",
+    "digest": "ce4a1b197b23d0aa10315dbf9bc522a0",
     "sector_size": 34359738368
   },
-  "v20-proof-of-spacetime-election-a4e18190d4b4657ba1b4d08a341871b2a6f398e327cb9951b28ab141fbdbf49d.params": {
-    "cid": "QmRGZsNp4mp1cZshcXqt3VMuWscAEsiMa2iepF4CsWWoiv",
-    "digest": "991041a354b12c280542741f58c7f2ca",
+  "v22-proof-of-spacetime-election-PoseidonHasher-0ffac504e6feaec47f7baf3eb1b451690c0aa7e726b749cf030819f947d81bf7.params": {
+    "cid": "QmS8M8iXyAHApXBLdJ6st9PJhw36wHZtQ3dn2q47ZXuvWN",
+    "digest": "385b6a6e2748e56598685413bf3aaede",
     "sector_size": 1024
   },
-  "v20-proof-of-spacetime-election-a4e18190d4b4657ba1b4d08a341871b2a6f398e327cb9951b28ab141fbdbf49d.vk": {
-    "cid": "QmWpmrhCGVcfqLyqp5oGAnhPmCE5hGTPaauHi25mpQwRSU",
-    "digest": "91fac550e1f9bccab213830bb0c85bd6",
+  "v22-proof-of-spacetime-election-PoseidonHasher-0ffac504e6feaec47f7baf3eb1b451690c0aa7e726b749cf030819f947d81bf7.vk": {
+    "cid": "QmYSidQXSbuftzNnMiXsGV1hLAtsB94EPBHzH1LvXdWgn7",
+    "digest": "938abd0f3416c6ae1e8dd21fa4d92b4e",
     "sector_size": 1024
   },
-  "v20-proof-of-spacetime-election-a9eb6d90b896a282ec2d3a875c6143e3fcff778f0da1460709e051833651559b.params": {
-    "cid": "QmenSZXh1EsSyHiSRvA6wb8yaPhYBTjrKehJw96Px5HnN4",
-    "digest": "6322eacd2773163ddd51f9ca7d645fc4",
-    "sector_size": 1073741824
-  },
-  "v20-proof-of-spacetime-election-a9eb6d90b896a282ec2d3a875c6143e3fcff778f0da1460709e051833651559b.vk": {
-    "cid": "QmPvZoMKofw6eDhDg5ESJA2QAZP8HvM6qMQk7fw4pq9bQf",
-    "digest": "0df62745fceac922e3e70847cfc70b52",
-    "sector_size": 1073741824
-  },
-  "v20-proof-of-spacetime-election-bf872523641b1de33553db2a177df13e412d7b3b0103e6696ae0a1cf5d525259.params": {
-    "cid": "QmVibFqzkZoL8cwQmzj8njPokCQGCCx4pBcUH77bzgJgV9",
-    "digest": "de9d71e672f286706a1673bd57abdaac",
+  "v22-proof-of-spacetime-election-PoseidonHasher-9b5673a5c0df861151c2b8087fe4f0d8657558d07ce768b7067dab2eea76dad4.params": {
+    "cid": "QmX957ftCjZehyNSVUFLi6kqF7nsSh2gf2kNVgTekCA5K4",
+    "digest": "9b47a0e0da9350be2c5627d5b5c55ba1",
     "sector_size": 16777216
   },
-  "v20-proof-of-spacetime-election-bf872523641b1de33553db2a177df13e412d7b3b0103e6696ae0a1cf5d525259.vk": {
-    "cid": "QmZa5FX27XyiEXQQLQpHqtMJKLzrcY8wMuj3pxzmSimSyu",
-    "digest": "7f796d3a0f13499181e44b5eee0cc744",
+  "v22-proof-of-spacetime-election-PoseidonHasher-9b5673a5c0df861151c2b8087fe4f0d8657558d07ce768b7067dab2eea76dad4.vk": {
+    "cid": "QmSTTzD5jvqRzBGj67mzjj75WfAoG9ntkwq28u2ckh9odA",
+    "digest": "dee344a21099eb6487df78598ba59640",
     "sector_size": 16777216
   },
-  "v20-proof-of-spacetime-election-ffc3fb192364238b60977839d14e3154d4a98313e30d46694a12af54b6874975.params": {
-    "cid": "Qmbt2SWWAmMcYoY3DAiRDXA8fAuqdqRLWucJMSxYmzBCmN",
-    "digest": "151ae0ae183fc141e8c2bebc28e5cc10",
+  "v22-proof-of-spacetime-election-PoseidonHasher-cd7aba426e27fc8e65abd777be0908fb536aa550c09a00ebae7596206f83b107.params": {
+    "cid": "QmWaQ6bupbWM76ALbb61SkFmsKRGV9Rek9Y2ieGsJEyCgT",
+    "digest": "f91e462f2d21bd9ae4b21196b784f081",
+    "sector_size": 1073741824
+  },
+  "v22-proof-of-spacetime-election-PoseidonHasher-cd7aba426e27fc8e65abd777be0908fb536aa550c09a00ebae7596206f83b107.vk": {
+    "cid": "QmYxJeX37TLBjYz9kEKNBtwrM3SqRXGavHMWTCB8P2bhoH",
+    "digest": "c6467c4f0d70e0fbb23d705d1f5f0245",
+    "sector_size": 1073741824
+  },
+  "v22-proof-of-spacetime-election-PoseidonHasher-fe3e586b9bc36865d0fb0da9fd8d336b5ef10a0c1abf2a887ffca440b0cfe069.params": {
+    "cid": "QmbhQPh8Sahx3iW6pvZPj3EDSVjGMXmxwMv5TD8H4BFg3E",
+    "digest": "d6ffbfaf96b34ed8549db6d81c5e3efa",
     "sector_size": 268435456
   },
-  "v20-proof-of-spacetime-election-ffc3fb192364238b60977839d14e3154d4a98313e30d46694a12af54b6874975.vk": {
-    "cid": "QmUxvPu4xdVmjMFihUKoYyEdXBqxsXkvmxRweU7KouWHji",
-    "digest": "95eb89588e9d1832aca044c3a13178af",
+  "v22-proof-of-spacetime-election-PoseidonHasher-fe3e586b9bc36865d0fb0da9fd8d336b5ef10a0c1abf2a887ffca440b0cfe069.vk": {
+    "cid": "Qmc7yEwQG6qigYNMWrJBRfMwgaMoUW3XVdanPdnKCaeLiQ",
+    "digest": "2965f17ecc9ec6c9f5a27a4f4940b55c",
     "sector_size": 268435456
   },
-  "v20-stacked-proof-of-replication-117839dacd1ef31e5968a6fd13bcd6fa86638d85c40c9241a1d07c2a954eb89b.params": {
-    "cid": "QmQZe8eLo2xXbhSDxtyYZNqEjqjdcWGdADywECRvNEZQdX",
-    "digest": "fcd50e2e08a8560a6bb3418e883567ed",
+  "v22-stacked-proof-of-replication-PoseidonHasher-Sha256Hasher-2824c92b9812d2ef306376a6c96b6edab9247472bccf6485a64b7d6f7e1031cb.params": {
+    "cid": "QmUu5NCkCSwKXpHygPwamy2ZVgaqwUSe4UZUVGcoxxK1rX",
+    "digest": "03f9fbf59d4b028eefe62991244d314c",
     "sector_size": 268435456
   },
-  "v20-stacked-proof-of-replication-117839dacd1ef31e5968a6fd13bcd6fa86638d85c40c9241a1d07c2a954eb89b.vk": {
-    "cid": "Qme1hn6QT1covfoUFGDZkqoE1pMTax9FNW3nWWmTNqFe7y",
-    "digest": "872e244d86499fd659082e3bcf3f13e7",
+  "v22-stacked-proof-of-replication-PoseidonHasher-Sha256Hasher-2824c92b9812d2ef306376a6c96b6edab9247472bccf6485a64b7d6f7e1031cb.vk": {
+    "cid": "QmSZPeySPfL9HAiakDda9ZRFce8WqVMRANPo6jqrT7Byf7",
+    "digest": "48d7eb2efaf6786a893e40f655907814",
     "sector_size": 268435456
   },
-  "v20-stacked-proof-of-replication-b46f3a1051afbb67f70aae7082da95def62eee943662f3e1bf69837fb08aaae4.params": {
-    "cid": "QmSfrPDC9jwY4MKrjzhCqDBBAG44wSDM8oE5NuDwWSh2xN",
-    "digest": "0a338b941c5f17946340de5fc95cab30",
+  "v22-stacked-proof-of-replication-PoseidonHasher-Sha256Hasher-97898c09be471d01d125f93ba4dd8d1a5634e404c1c7d1ea21014d0c8656a29a.params": {
+    "cid": "QmcGxjoa7WU9cphRzRyHJ2aM1EsQdo7ZVPiCPVjbRShpH2",
+    "digest": "f9915452f4547bbb93663cec214626cd",
+    "sector_size": 1073741824
+  },
+  "v22-stacked-proof-of-replication-PoseidonHasher-Sha256Hasher-97898c09be471d01d125f93ba4dd8d1a5634e404c1c7d1ea21014d0c8656a29a.vk": {
+    "cid": "Qmc9tXAG99A8ykiV5AwXenKTfd2GXtLA6RdWYyhyT9J6c8",
+    "digest": "48c207aa03b9db61ed595b02ff380d80",
+    "sector_size": 1073741824
+  },
+  "v22-stacked-proof-of-replication-PoseidonHasher-Sha256Hasher-b9678fc0c28dfcec342ca4c7886020d583b16258c9bc93aafad679d09400e401.params": {
+    "cid": "QmUxFUyjutaf4yZwtjij7Gd5oxDqfHpLNVjBXaNLnbHPeB",
+    "digest": "3a648b28e0b2795f58868ef964af8e09",
+    "sector_size": 1024
+  },
+  "v22-stacked-proof-of-replication-PoseidonHasher-Sha256Hasher-b9678fc0c28dfcec342ca4c7886020d583b16258c9bc93aafad679d09400e401.vk": {
+    "cid": "Qmai7WbNjxW7MC8uQzXKeRBFdGLBSFMXx6m8c1dTiqtsrK",
+    "digest": "200daeec486802fc1310fbb5baad42d5",
+    "sector_size": 1024
+  },
+  "v22-stacked-proof-of-replication-PoseidonHasher-Sha256Hasher-f4bdecc971c681000d2e56d2e8f40877710978727ff383550bdc6202cdcdd9cd.params": {
+    "cid": "QmWcJUuJHyDZZWfmhq9nLVYAZxxCFozjD8axPYwUpk9HhL",
+    "digest": "337735473a92e4b4d9335180c5463340",
+    "sector_size": 16777216
+  },
+  "v22-stacked-proof-of-replication-PoseidonHasher-Sha256Hasher-f4bdecc971c681000d2e56d2e8f40877710978727ff383550bdc6202cdcdd9cd.vk": {
+    "cid": "QmUAcZ32NWndqMEuYs5HhULqw9XgbJnEsrSANXjs4YBJys",
+    "digest": "1bd4cddb08b94a1af8c63e7559e27a75",
+    "sector_size": 16777216
+  },
+  "v22-stacked-proof-of-replication-PoseidonHasher-Sha256Hasher-fc32be6028c2398175466f36fa36810842ae8948fae15c84454af5b61ca99e15.params": {
+    "cid": "QmNVR2z1aT6FQLFtx35AhJ8zyR8hyJyxTbxMx2NvUkDrky",
+    "digest": "41b102d948130449afbce487b16d148f",
     "sector_size": 34359738368
   },
-  "v20-stacked-proof-of-replication-b46f3a1051afbb67f70aae7082da95def62eee943662f3e1bf69837fb08aaae4.vk": {
-    "cid": "QmTDGynCmnbaZNBP3Bv3F3duC3ecKRubCKeMUiQQZYbGpF",
-    "digest": "c752e070a6b7aa8b79aa661a6b600b55",
+  "v22-stacked-proof-of-replication-PoseidonHasher-Sha256Hasher-fc32be6028c2398175466f36fa36810842ae8948fae15c84454af5b61ca99e15.vk": {
+    "cid": "QmbPxsRdS7yr6aEHXWDoRvMnvtz9LqTj7DAH4i7AyTetpq",
+    "digest": "70e806d302ee8828faa3b07d2dace2a8",
     "sector_size": 34359738368
-  },
-  "v20-stacked-proof-of-replication-e71093863cadc71de61f38311ee45816633973bbf34849316b147f8d2e66f199.params": {
-    "cid": "QmXjSSnMUnc7EjQBYtTHhvLU3kXJTbUyhVhJRSTRehh186",
-    "digest": "efa407fd09202dffd15799a8518e73d3",
-    "sector_size": 1024
-  },
-  "v20-stacked-proof-of-replication-e71093863cadc71de61f38311ee45816633973bbf34849316b147f8d2e66f199.vk": {
-    "cid": "QmYHW3zhQouDP4okFbXSsRMcZ8bokKGvzxqbv7ZrunPMiG",
-    "digest": "b2f09a0ccb62da28c890d5b881c8dcd2",
-    "sector_size": 1024
-  },
-  "v20-stacked-proof-of-replication-e99a585174b6a45b254ba4780d72c89ad808c305c6d11711009ade4f39dba8e9.params": {
-    "cid": "QmUhyfNeLb32LfSkjsUwTFYLXQGMj6JQ8daff4DdVMt79q",
-    "digest": "b53c1916a63839ec345aa2224e9198b7",
-    "sector_size": 1073741824
-  },
-  "v20-stacked-proof-of-replication-e99a585174b6a45b254ba4780d72c89ad808c305c6d11711009ade4f39dba8e9.vk": {
-    "cid": "QmWReGfbuoozNErbskmFvqV4q36BY6F2WWb4cVFc3zoYkA",
-    "digest": "20d58a3fae7343481f8298a2dd493dd7",
-    "sector_size": 1073741824
-  },
-  "v20-stacked-proof-of-replication-f571ee2386f4c65a68e802747f2d78691006fc81a67971c4d9641403fffece16.params": {
-    "cid": "QmSAHu14Pe8iav6BYCt9XkpHJ73XM7tcpY4d9JK9BST9HU",
-    "digest": "7698426202c7e07b26ef056d31485b3a",
-    "sector_size": 16777216
-  },
-  "v20-stacked-proof-of-replication-f571ee2386f4c65a68e802747f2d78691006fc81a67971c4d9641403fffece16.vk": {
-    "cid": "QmaKtFLShnhMGVn7P9UsHjkgqtqRFSwCStqqykBN7u8dax",
-    "digest": "834408e5c3fce6ec5d1bf64e64cee94e",
-    "sector_size": 16777216
   }
 }

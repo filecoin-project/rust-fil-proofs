@@ -465,6 +465,7 @@ mod tests {
                 challenges_count,
             },
             partitions: None,
+            priority: true,
         };
 
         let pub_params = RationalPoStCompound::<H>::setup(&setup_params).expect("setup failed");

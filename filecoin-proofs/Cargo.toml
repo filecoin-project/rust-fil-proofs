@@ -45,6 +45,7 @@ merkletree = "0.16.0"
 bincode = "1.1.2"
 anyhow = "1.0.23"
 rand_xorshift = "0.2.0"
+typenum = "1.11.2"
 
 [dependencies.reqwest]
 version = "0.9"

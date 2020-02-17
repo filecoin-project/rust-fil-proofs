@@ -3,14 +3,15 @@ use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, ensure, Context, Result};
-use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
+use merkletree::merkle::get_merkle_tree_leafs;
+use merkletree::store::StoreConfig;
 use storage_proofs::hasher::Hasher;
 use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
-use storage_proofs::stacked::{generate_replica_id, CacheKey, StackedDrg};
+use storage_proofs::stacked::{generate_replica_id, CacheKey, StackedDrg, BINARY_ARITY};
 use tempfile::tempfile;
 
-use crate::api::util::as_safe_commitment;
+use crate::api::util::{as_safe_commitment, get_tree_size};
 use crate::constants::{
     DefaultPieceHasher, DefaultTreeHasher,
     MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
@@ -80,12 +81,15 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
         .with_context(|| format!("could not create output_path={:?}", output_path.as_ref()))?;
     let mut buf_writer = BufWriter::new(f_out);
 
+    let tree_size =
+        get_tree_size::<<DefaultPieceHasher as Hasher>::Domain>(porep_config.sector_size);
+    let tree_leafs = get_merkle_tree_leafs(tree_size, BINARY_ARITY);
     // MT for original data is always named tree-d, and it will be
     // referenced later in the process as such.
     let config = StoreConfig::new(
-        cache_path,
+        cache_path.as_ref(),
         CacheKey::CommDTree.to_string(),
-        DEFAULT_CACHED_ABOVE_BASE_LAYER,
+        StoreConfig::default_cached_above_base_layer(tree_leafs, BINARY_ARITY),
     );
     let pp = public_params(
         PaddedBytesAmount::from(porep_config),
@@ -442,6 +446,7 @@ mod tests {
                 sector_size: SectorSize(SECTOR_SIZE_2_KIB),
                 challenge_count: crate::constants::POST_CHALLENGE_COUNT,
                 challenged_nodes: crate::constants::POST_CHALLENGED_NODES,
+                priority: false,
             },
             &[0; 32],
             1,

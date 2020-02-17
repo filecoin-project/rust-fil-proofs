@@ -5,6 +5,8 @@ use std::marker::PhantomData;
 use anyhow::{bail, ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
 use generic_array::typenum;
+use log::trace;
+use merkletree::store::StoreConfig;
 use paired::bls12_381::{Bls12, Fr};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -20,6 +22,7 @@ use crate::merkle::{MerkleProof, QuadLCMerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::sector::*;
+use crate::stacked::QUAD_ARITY;
 use crate::util::NODE_SIZE;
 
 #[derive(Debug, Clone)]
@@ -330,7 +333,14 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
     ) -> Result<Self::Proof> {
         // 1. Inclusions proofs of all challenged leafs in all challenged ranges
         let tree = &priv_inputs.tree;
+        let tree_leafs = tree.leafs();
 
+        trace!(
+            "Generating proof for tree of len {} with leafs {}, and cached_layers {}",
+            tree.len(),
+            tree_leafs,
+            StoreConfig::default_cached_above_base_layer(tree_leafs, QUAD_ARITY)
+        );
         let inclusion_proofs = measure_op(Operation::PostInclusionProofs, || {
             (0..pub_params.challenge_count)
                 .into_par_iter()
@@ -348,7 +358,9 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
                         .map(move |i| {
                             let (proof, _) = tree.gen_proof_and_partial_tree(
                                 challenged_leaf_start as usize + i,
-                                2,
+                                StoreConfig::default_cached_above_base_layer(
+                                    tree_leafs, QUAD_ARITY,
+                                ),
                             )?;
                             Ok(MerkleProof::new_from_proof(&proof))
                         })
@@ -431,7 +443,7 @@ mod tests {
     use crate::merkle::QuadMerkleTree;
 
     fn test_election_post<H: Hasher>() {
-        use merkletree::store::{StoreConfig, StoreConfigDataVersion};
+        use merkletree::store::StoreConfigDataVersion;
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 

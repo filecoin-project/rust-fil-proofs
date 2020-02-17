@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 
 use anyhow::ensure;
 use generic_array::typenum;
+use log::trace;
 use merkletree::hash::Algorithm;
 use merkletree::merkle;
 use merkletree::proof;
@@ -265,6 +266,7 @@ pub fn create_merkle_tree<H: Hasher, U: typenum::Unsigned>(
         data.len() == (NODE_SIZE * size) as usize,
         Error::InvalidMerkleTreeArgs(data.len(), NODE_SIZE, size)
     );
+    trace!("create_merkle_tree called with size {}", size);
 
     let f = |i| {
         // TODO Replace `expect()` with `context()` (problem is the parallel iterator)
@@ -293,6 +295,7 @@ pub fn create_lcmerkle_tree<H: Hasher, U: typenum::Unsigned>(
         data.len() == (NODE_SIZE * size) as usize,
         Error::InvalidMerkleTreeArgs(data.len(), NODE_SIZE, size)
     );
+    trace!("create_lcmerkle_tree called with size {}", size);
 
     let f = |i| {
         // TODO Replace `expect()` with `context()` (problem is the parallel iterator)

@@ -8,7 +8,7 @@ use chrono::Utc;
 use log::info;
 use memmap::MmapMut;
 use memmap::MmapOptions;
-use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
+use merkletree::store::StoreConfig;
 use paired::bls12_381::Bls12;
 use rand::Rng;
 use serde::Serialize;
@@ -23,7 +23,7 @@ use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::stacked::{
     self, CacheKey, ChallengeRequirements, LayerChallenges, StackedDrg, TemporaryAuxCache,
-    EXP_DEGREE,
+    BINARY_ARITY, EXP_DEGREE,
 };
 use tempfile::TempDir;
 
@@ -119,19 +119,19 @@ where
             ..
         } = &params;
 
-        // MT for original data is always named tree-d, and it will be
-        // referenced later in the process as such.
-        let store_config = StoreConfig::new(
-            cache_dir.path(),
-            CacheKey::CommDTree.to_string(),
-            DEFAULT_CACHED_ABOVE_BASE_LAYER,
-        );
-
         let mut total_proving_wall_time = Duration::new(0, 0);
         let mut total_proving_cpu_time = Duration::new(0, 0);
 
         let rng = &mut rand::thread_rng();
         let nodes = data_size / 32;
+
+        // MT for original data is always named tree-d, and it will be
+        // referenced later in the process as such.
+        let store_config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
+        );
 
         let replica_id = H::Domain::random(rng);
         let sp = stacked::SetupParams {
@@ -341,6 +341,7 @@ fn do_circuit_work<H: 'static + Hasher>(
     let compound_public_params = compound_proof::PublicParams {
         vanilla_params: pp.clone(),
         partitions: Some(*partitions),
+        priority: false,
     };
 
     if *bench || *circuit || *bench_only {

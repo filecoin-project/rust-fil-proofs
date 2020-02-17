@@ -358,6 +358,7 @@ mod tests {
     use crate::merkle::{QuadLCMerkleTree, QuadMerkleTree};
     use crate::proof::{NoRequirements, ProofScheme};
     use crate::sector::SectorId;
+    use crate::stacked::QUAD_ARITY;
 
     #[test]
     fn test_election_post_circuit_pedersen() {
@@ -393,7 +394,7 @@ mod tests {
         let config = StoreConfig::new(
             &temp_path,
             String::from("test-lc-tree-v1"),
-            2, //DEFAULT_CACHED_ABOVE_BASE_LAYER,
+            StoreConfig::default_cached_above_base_layer(leaves as usize, QUAD_ARITY),
         );
 
         for i in 0..5 {
@@ -550,6 +551,7 @@ mod tests {
                 challenged_nodes: 1,
             },
             partitions: None,
+            priority: true,
         };
 
         let mut sectors: Vec<SectorId> = Vec::new();
@@ -561,7 +563,7 @@ mod tests {
         let config = StoreConfig::new(
             &temp_path,
             String::from("test-lc-tree-v1"),
-            2, //DEFAULT_CACHED_ABOVE_BASE_LAYER,
+            StoreConfig::default_cached_above_base_layer(leaves as usize, QUAD_ARITY),
         );
 
         for i in 0..5 {

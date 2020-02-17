@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
 use bincode::{deserialize, serialize};
-use log::info;
+use log::{info, trace};
 use memmap::MmapOptions;
 use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{DiskStore, Store, StoreConfig};
@@ -32,9 +32,9 @@ use crate::parameters::setup_params;
 pub use crate::pieces;
 pub use crate::pieces::verify_pieces;
 use crate::types::{
-    Commitment, DataTree, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions,
-    ProverId, SealCommitOutput, SealCommitPhase1Output, SealPreCommitOutput,
-    SealPreCommitPhase1Output, SectorSize, Ticket, BINARY_ARITY, QUAD_ARITY,
+    Commitment, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, ProverId,
+    SealCommitOutput, SealCommitPhase1Output, SealPreCommitOutput, SealPreCommitPhase1Output,
+    SectorSize, Ticket, BINARY_ARITY,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -92,6 +92,7 @@ where
             usize::from(PoRepProofPartitions::from(porep_config)),
         )?,
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
+        priority: false,
     };
 
     let compound_public_params =
@@ -103,16 +104,32 @@ where
 
     info!("building merkle tree for the original data");
     let (config, comm_d) = measure_op(CommD, || -> Result<_> {
+        let tree_size =
+            get_tree_size::<<DefaultPieceHasher as Hasher>::Domain>(porep_config.sector_size);
+        let tree_leafs = get_merkle_tree_leafs(tree_size, BINARY_ARITY);
+        ensure!(
+            compound_public_params.vanilla_params.graph.size() == tree_leafs,
+            "graph size and leaf size don't match"
+        );
+
+        trace!(
+            "seal phase 1: sector_size {}, tree size {}, tree leafs {}, cached above base {}",
+            u64::from(porep_config.sector_size),
+            tree_size,
+            tree_leafs,
+            StoreConfig::default_cached_above_base_layer(tree_leafs, BINARY_ARITY)
+        );
+
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
         let config = StoreConfig::new(
             cache_path.as_ref(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(sector_bytes, QUAD_ARITY),
+            StoreConfig::default_cached_above_base_layer(tree_leafs, BINARY_ARITY),
         );
-        let data_tree: DataTree = create_merkle_tree::<DefaultPieceHasher, _>(
+        let data_tree = create_merkle_tree::<DefaultPieceHasher, typenum::U2>(
             Some(config.clone()),
-            compound_public_params.vanilla_params.graph.size(),
+            tree_leafs,
             &data,
         )?;
         drop(data);
@@ -160,8 +177,6 @@ where
 {
     info!("seal_pre_commit_phase2: start");
 
-    let sector_bytes = usize::from(PaddedBytesAmount::from(porep_config));
-
     let SealPreCommitPhase1Output {
         mut labels,
         config,
@@ -185,15 +200,21 @@ where
 
     // Load data tree from disk
     let data_tree = {
-        let config = StoreConfig::new(
-            cache_path.as_ref(),
-            CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(sector_bytes, BINARY_ARITY),
-        );
-
         let tree_size =
             get_tree_size::<<DefaultPieceHasher as Hasher>::Domain>(porep_config.sector_size);
         let tree_leafs = get_merkle_tree_leafs(tree_size, BINARY_ARITY);
+
+        trace!(
+            "seal phase 2: tree size {}, tree leafs {}, cached above base {}",
+            tree_size,
+            tree_leafs,
+            StoreConfig::default_cached_above_base_layer(tree_leafs, BINARY_ARITY)
+        );
+        let config = StoreConfig::new(
+            cache_path.as_ref(),
+            CacheKey::CommDTree.to_string(),
+            StoreConfig::default_cached_above_base_layer(tree_leafs, BINARY_ARITY),
+        );
 
         let store: DiskStore<<DefaultPieceHasher as Hasher>::Domain> =
             DiskStore::new_from_disk(tree_size, BINARY_ARITY, &config)?;
@@ -206,6 +227,7 @@ where
             usize::from(PoRepProofPartitions::from(porep_config)),
         )?,
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
+        priority: false,
     };
 
     let compound_public_params =
@@ -328,6 +350,7 @@ pub fn seal_commit_phase1<T: AsRef<Path>>(
             usize::from(PoRepProofPartitions::from(porep_config)),
         )?,
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
+        priority: false,
     };
 
     let compound_public_params =
@@ -413,6 +436,7 @@ pub fn seal_commit_phase2(
             usize::from(PoRepProofPartitions::from(porep_config)),
         )?,
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
+        priority: false,
     };
 
     let compound_public_params =
@@ -428,6 +452,7 @@ pub fn seal_commit_phase2(
         vanilla_proofs,
         &compound_public_params.vanilla_params,
         &groth_params,
+        compound_public_params.priority,
     )?;
     info!("snark_proof:finish");
 
@@ -507,6 +532,7 @@ pub fn verify_seal(
             usize::from(PoRepProofPartitions::from(porep_config)),
         )?,
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
+        priority: false,
     };
 
     let compound_public_params: compound_proof::PublicParams<
@@ -612,6 +638,7 @@ pub fn verify_batch_seal(
             usize::from(PoRepProofPartitions::from(porep_config)),
         )?,
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
+        priority: false,
     };
 
     let compound_public_params: compound_proof::PublicParams<

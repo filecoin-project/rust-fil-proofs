@@ -527,11 +527,11 @@ mod tests {
     use crate::hasher::{Hasher, PedersenHasher, PoseidonHasher};
     use crate::porep::PoRep;
     use crate::proof::{NoRequirements, ProofScheme};
-    use crate::stacked::CacheKey;
+    use crate::stacked::{CacheKey, BINARY_ARITY};
     use crate::util::data_at_node;
 
     use ff::Field;
-    use merkletree::store::{StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
+    use merkletree::store::StoreConfig;
     use pretty_assertions::assert_eq;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
@@ -576,7 +576,7 @@ mod tests {
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+            StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
         );
 
         let pp = drgporep::DrgPoRep::<PedersenHasher, BucketGraph<_>>::setup(&sp)
@@ -777,6 +777,7 @@ mod tests {
                 challenges_count: 2,
             },
             partitions: None,
+            priority: false,
         };
 
         let public_params =
@@ -788,7 +789,7 @@ mod tests {
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+            StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
         );
 
         let (tau, aux) = drgporep::DrgPoRep::<H, _>::replicate(
@@ -823,6 +824,7 @@ mod tests {
                 challenges_count: 2,
             },
             partitions: None,
+            priority: false,
         };
 
         let public_params =

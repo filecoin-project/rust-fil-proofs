@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, ensure, Context, Result};
 use bincode::deserialize;
-use log::info;
+use log::{info, trace};
 use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{LevelCacheStore, Store, StoreConfig};
 use paired::bls12_381::Bls12;
@@ -99,6 +99,12 @@ impl PrivateReplicaInfo {
 
     /// Generate the merkle tree of this particular replica.
     pub fn merkle_tree(&self, tree_size: usize, tree_leafs: usize) -> Result<LCTree> {
+        trace!(
+            "post: tree size {}, tree leafs {}, cached above base {}",
+            tree_size,
+            tree_leafs,
+            StoreConfig::default_cached_above_base_layer(tree_leafs, QUAD_ARITY)
+        );
         let mut config = StoreConfig::new(
             self.cache_dir_path(),
             CacheKey::CommRLastTree.to_string(),
@@ -164,10 +170,14 @@ pub fn generate_candidates(
 ) -> Result<Vec<Candidate>> {
     info!("generate_candidates:start");
 
+    ensure!(!replicas.is_empty(), "Replicas must not be empty");
+    ensure!(challenge_count > 0, "Challenge count must be > 0");
+
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
         partitions: None,
+        priority: false,
     };
     let public_params: compound_proof::PublicParams<
         election_post::ElectionPoSt<DefaultTreeHasher>,
@@ -280,11 +290,14 @@ pub fn generate_post(
 
     let sector_count = replicas.len() as u64;
     ensure!(sector_count > 0, "Must supply at least one replica");
+    ensure!(!winners.is_empty(), "Winners must not be empty");
+    ensure!(!replicas.is_empty(), "Replicas must not be empty");
 
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
         partitions: None,
+        priority: post_config.priority,
     };
     let pub_params: compound_proof::PublicParams<election_post::ElectionPoSt<DefaultTreeHasher>> =
         ElectionPoStCompound::setup(&setup_params)?;
@@ -361,6 +374,9 @@ pub fn verify_post(
 
     let sector_count = replicas.len() as u64;
     ensure!(sector_count > 0, "Must supply at least one replica");
+    ensure!(!winners.is_empty(), "Winners must not be empty");
+    ensure!(!proofs.is_empty(), "Proofs must not be empty");
+    ensure!(!replicas.is_empty(), "Replicas must not be empty");
     ensure!(
         winners.len() == proofs.len(),
         "Missmatch between winners and proofs"
@@ -371,6 +387,7 @@ pub fn verify_post(
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
         partitions: None,
+        priority: false,
     };
     let pub_params: compound_proof::PublicParams<election_post::ElectionPoSt<DefaultTreeHasher>> =
         ElectionPoStCompound::setup(&setup_params)?;
