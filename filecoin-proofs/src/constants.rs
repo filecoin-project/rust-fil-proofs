@@ -9,8 +9,8 @@ use crate::param::ParameterMap;
 use crate::types::UnpaddedBytesAmount;
 
 pub const SECTOR_SIZE_2_KIB: u64 = 2_048;
-pub const SECTOR_SIZE_8_MIB: u64 = 1 << 24;
-pub const SECTOR_SIZE_512_MIB: u64 = 1 << 30;
+pub const SECTOR_SIZE_8_MIB: u64 = 1 << 23;
+pub const SECTOR_SIZE_512_MIB: u64 = 1 << 29;
 pub const SECTOR_SIZE_32_GIB: u64 = 1 << 35;
 
 pub const POST_CHALLENGE_COUNT: usize = 65;
