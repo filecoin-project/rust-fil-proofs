@@ -27,12 +27,14 @@ macro_rules! table_tests {
 pub struct FakeDrgParams {
     pub replica_id: Fr,
     pub replica_nodes: Vec<Fr>,
+    #[allow(clippy::type_complexity)]
     pub replica_nodes_paths: Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>,
     pub replica_root: Fr,
     pub replica_parents: Vec<Vec<Fr>>,
     #[allow(clippy::type_complexity)]
     pub replica_parents_paths: Vec<Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>>,
     pub data_nodes: Vec<Fr>,
+    #[allow(clippy::type_complexity)]
     pub data_nodes_paths: Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>,
     pub data_root: Fr,
 }
@@ -132,6 +134,7 @@ pub fn fake_drgpoprep_proof<R: Rng>(
     }
 }
 
+#[allow(clippy::type_complexity)]
 pub fn random_merkle_path_with_value<R: Rng>(
     rng: &mut R,
     tree_depth: usize,
@@ -195,6 +198,7 @@ pub fn random_merkle_path_with_value<R: Rng>(
     (auth_path, cur)
 }
 
+#[allow(clippy::type_complexity)]
 pub fn random_merkle_path<R: Rng>(
     rng: &mut R,
     tree_depth: usize,

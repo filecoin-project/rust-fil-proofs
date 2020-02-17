@@ -586,6 +586,10 @@ impl<H: Hasher> LabelsCache<H> {
         self.labels.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.labels.is_empty()
+    }
+
     pub fn labels_for_layer(&self, layer: usize) -> &DiskStore<H::Domain> {
         assert!(layer != 0, "Layer cannot be 0");
         assert!(

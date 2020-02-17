@@ -39,6 +39,7 @@ where
 {
     params: &'a E::Params,
     value: Root<E>,
+    #[allow(clippy::type_complexity)]
     auth_path: Vec<(Vec<Option<E::Fr>>, Option<usize>)>,
     root: Root<E>,
     private: bool,
@@ -282,6 +283,7 @@ where
         + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
     typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
 {
+    #[allow(clippy::type_complexity)]
     pub fn synthesize<CS>(
         mut cs: CS,
         params: &E::Params,

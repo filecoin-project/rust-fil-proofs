@@ -115,6 +115,7 @@ impl<H: Hasher, U: typenum::Unsigned> MerkleProof<H, U> {
             .collect::<Vec<_>>()
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn into_options_with_leaf(self) -> (Option<Fr>, Vec<(Vec<Option<Fr>>, Option<usize>)>) {
         let MerkleProof { leaf, path, .. } = self;
 

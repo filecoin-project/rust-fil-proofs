@@ -120,6 +120,7 @@ impl<H: Hasher> Proof<H> {
             .collect()
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn paths(&self) -> Vec<&Vec<(Vec<H::Domain>, usize)>> {
         self.inclusion_proofs
             .iter()
