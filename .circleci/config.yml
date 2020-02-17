@@ -189,7 +189,7 @@ jobs:
       - run:
           name: Ensure existence of Groth parameters and keys on remote host
           command: |
-            ./fil-proofs-tooling/scripts/paramcache-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" "-z=$((1024*1024*1024))"
+            ./fil-proofs-tooling/scripts/paramcache-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" "-z=$((512*1024*1024))"
           no_output_timeout: 60m
       - run:
           name: Run hash-constraints benchmarks on remote host
@@ -206,13 +206,13 @@ jobs:
       - run:
           name: Run stacked benchmarks using 1GiB sectors
           command: |
-            ./fil-proofs-tooling/scripts/benchy-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" stacked --size=$((1024*1024)) > stacked-benchmarks.json
+            ./fil-proofs-tooling/scripts/benchy-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" stacked --size=$((2*1024*1024)) > stacked-benchmarks.json
             cat stacked-benchmarks.json
           no_output_timeout: 60m
       - run:
           name: Run Election PoST benchmarks using a 1GiB sector
           command: |
-            ./fil-proofs-tooling/scripts/benchy-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" election-post --size=$((1024*1024)) > election-post-benchmarks.json
+            ./fil-proofs-tooling/scripts/benchy-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" election-post --size=$((2*1024*1024)) > election-post-benchmarks.json
             cat election-post-benchmarks.json
           no_output_timeout: 60m
       - run:
@@ -310,7 +310,7 @@ commands:
             || (cargo build --release --all && find . -type f -name paramcache | xargs -I {} mv {} ~/paramcache.awesome)
       - run:
           name: Obtain filecoin groth parameters
-          command: ~/paramcache.awesome --params-for-sector-sizes='1024' 
+          command: ~/paramcache.awesome --params-for-sector-sizes='2048' 
           no_output_timeout: 60m
   save_parameter_cache:
     steps:
