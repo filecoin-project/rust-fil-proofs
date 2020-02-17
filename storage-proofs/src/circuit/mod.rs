@@ -1,4 +1,4 @@
-mod constraint;
+pub mod constraint;
 mod insertion;
 
 pub mod create_label;
